@@ -28,7 +28,7 @@ export default function SideNavigation() {
                 <Link
                   href="/"
                   className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname !== '/about' && pathname !== '/contact' && pathname !== '/projects' && pathname !== '/resume' && pathname !== '/Marvel' 
-                      ? 'text-sky-500 after:bg-sky-500'
+                      ? 'text-indigo-500 after:bg-indigo-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                     }`}
                 >
@@ -44,7 +44,7 @@ export default function SideNavigation() {
                 <Link
                   href="/projects"
                   className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname === '/projects' || pathname === '/Marvel' 
-                    ? 'text-sky-500 after:bg-sky-500'
+                    ? 'text-indigo-500 after:bg-indigo-500'
                     : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                     }`}
                 >
@@ -59,7 +59,7 @@ export default function SideNavigation() {
                 <Link
                   href="/resume"
                   className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname === '/resume'
-                    ? 'text-sky-500 after:bg-sky-500'
+                    ? 'text-indigo-500 after:bg-indigo-500'
                     : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                     }`}
                 >
@@ -74,7 +74,7 @@ export default function SideNavigation() {
                 <Link
                   href="/contact"
                   className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname === '/contact'
-                    ? 'text-sky-500 after:bg-sky-500'
+                    ? 'text-indigo-500 after:bg-indigo-500'
                     : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                     }`} 
                 >

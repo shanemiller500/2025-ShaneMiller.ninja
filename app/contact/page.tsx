@@ -154,7 +154,7 @@ export default function ContactFormLogin() {
                 name="subject"
                 type="text"
                 className="form-input w-full bg-gray-100 text-gray-800 placeholder-gray-500
-                           dark:brand-900 dark:text-gray-100 dark:placeholder-gray-400"
+                           dark:bg-brand-900 dark:text-gray-100 dark:placeholder-gray-400"
                 placeholder="Your Name"
                 value={formData.subject}
                 onChange={handleChange}
@@ -212,13 +212,13 @@ export default function ContactFormLogin() {
                 >
                   <span className="relative inline-flex items-center">
                     Submit
-                    <span
-                      className="ml-1 tracking-normal text-white/50 transition-transform group-hover:translate-x-0.5"
-                    >
-                      -&gt;
-                    </span>
+                  
                   </span>
                 </button>
+              
+                <p className="text-xs text-center mt-5 text-gray-500 dark:text-gray-400">
+                  Your message is never shared
+                </p>
               </div>
             
             </div>

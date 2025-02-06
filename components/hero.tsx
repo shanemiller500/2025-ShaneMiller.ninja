@@ -8,7 +8,7 @@ export default function Hero() {
         <div className="pt-8 pb-10">
           <Image className="rounded-full mb-5" src={HeroImage} width={56} height={56} priority alt="Me" />
           <h1 className="h1 font-aspekta mb-5">
-            <span className="inline-flex relative text-sky-500 before:absolute before:inset-0 before:bg-sky-200 dark:before:bg-sky-500 before:opacity-30 before:-z-10 before:-rotate-2 before:translate-y-1/4">
+            <span className="inline-flex relative text-indigo-500 before:absolute before:inset-0 before:bg-indigo-200 dark:before:bg-indigo-500 before:opacity-30 before:-z-10 before:-rotate-2 before:translate-y-1/4">
               Hello World
             </span>{' '}
               I'm Shane Miller

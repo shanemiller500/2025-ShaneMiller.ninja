@@ -1,17 +1,18 @@
-import ProjectCard from '../project-card'
+import ProjectCard from './project-card'
 import WidgetNewsletter from '@/components/widget-newsletter'
 import WidgetSponsor from '@/components/widget-sponsor'
 
-import Icon01 from '@/public/images/project-icon-01.svg'
-import Icon03 from '@/public/images/project-icon-03.svg'
+import Icon01 from '@/public/images/hmbco.png'
+import Icon03 from '@/public/images/the-new-york-stock-exchange-seeklogo.png'
 import Icon04 from '@/public/images/project-icon-04.svg'
-import Icon05 from '@/public/images/project-icon-05.svg'
+import Icon05 from '@/public/images/s-h-i-e-l-d-seeklogo.png'
 import Icon06 from '@/public/images/project-icon-06.svg'
-import Icon07 from '@/public/images/project-icon-07.svg'
-import Icon08 from '@/public/images/project-icon-08.svg'
+import Icon07 from '@/public/images/bitcoin-seeklogo.png'
+import Icon08 from '@/public/images/nasa-seeklogo.png'
+import Icon09 from '@/public/images/aic.png'
 
 export const metadata = {
-  title: 'Projects - DevSpace',
+  title: 'Projects - Shane Miller',
   description: 'Page description',
 }
 
@@ -87,7 +88,7 @@ export default function Projects() {
     },
     {
       id: 7,
-      icon: Icon08,
+      icon: Icon09,
       slug: '/Art',
       title: 'Art  Institute of Chicago',
       excerpt: 'Art  Institute of Chicago\'s open source API.',
@@ -99,7 +100,7 @@ export default function Projects() {
     <div className="grow md:flex space-y-8 md:space-y-0 md:space-x-8 pt-12 md:pt-16 pb-16 md:pb-20">
       { /* Middle area */ }
       <div className="grow">
-        <div className="max-w-[700px]">
+        <div className="">
           <section>
             {/* Page title */}
             <h1 className="h1 font-aspekta mb-12">Things I've built</h1>
@@ -131,12 +132,7 @@ export default function Projects() {
       </div>
 
       { /* Right sidebar */ }
-      <aside className="md:w-[240px] lg:w-[300px] shrink-0">
-        <div className="space-y-6">
-          <WidgetNewsletter />
-          <WidgetSponsor />
-        </div>
-      </aside>
+     
     </div>
   )
 }
