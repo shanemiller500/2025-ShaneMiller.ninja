@@ -1,2 +1,2 @@
 // utils/config.js
-export const API_TOKEN = 'coc0gt1r01qj8q79koh0coc0gt1r01qj8q79kohg';
+export const API_TOKEN = process.env.NEXT_PUBLIC_STOCK_API_KEY

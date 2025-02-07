@@ -21,6 +21,7 @@
     "chart.js": "^4.4.7",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
+    "dotenv": "^16.4.7",
     "leaflet": "^1.9.4",
     "next": "15.0.4",
     "next-mdx-remote": "^5.0.0",

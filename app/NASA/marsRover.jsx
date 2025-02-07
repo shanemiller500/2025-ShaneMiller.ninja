@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
+require('dotenv').config();
 
-const API_KEY = "mud9spxbq6i1MTj1Q52GKEzdL3wPgyeAeNo20dzB";
+
+const API_KEY = process.env.NEXT_PUBLIC_ISS_KEY;
 
 const MarsRoverPhotos = () => {
   const [solDay, setSolDay] = useState("");

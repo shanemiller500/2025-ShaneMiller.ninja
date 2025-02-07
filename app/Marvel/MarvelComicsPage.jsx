@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import CryptoJS from "crypto-js";
+require('dotenv').config();
+
 
 // Marvel API keys and endpoints
-const CUSTOM_PUBLIC_KEY = "6290afb298c151e1dd65994d6b75475d";
-const CUSTOM_PRIVATE_KEY = "30b26f71fe92998a8479ec02dd44a180ab67bb0d";
+const CUSTOM_PUBLIC_KEY = process.env.NEXT_PUBLIC_MARVEL_PUBLIC_KEY
+const CUSTOM_PRIVATE_KEY = process.env.NEXT_PUBLIC_MARVEL_PRIVATE_KEY
 const CUSTOM_API_URL = "https://gateway.marvel.com/v1/public/characters";
 const CUSTOM_API_URL1 = "https://gateway.marvel.com/v1/public/comics";
 

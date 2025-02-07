@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 
-const API_KEY = "mud9spxbq6i1MTj1Q52GKEzdL3wPgyeAeNo20dzB";
+const API_KEY = process.env.NEXT_PUBLIC_NASA_API_KEY;
 
 /**
  * Helper function to format a Date object as YYYY-MM-DD.
