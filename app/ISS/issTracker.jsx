@@ -8,7 +8,6 @@ const ISSTracker = () => {
   const mapRef = useRef(null); // Holds the Leaflet map instance
   const markerRef = useRef(null); // Holds the ISS marker
 
-  // State to hold the ISS data
   const [issData, setIssData] = useState({
     latitude: 0,
     longitude: 0,
@@ -17,10 +16,17 @@ const ISSTracker = () => {
     visibility: "",
   });
 
+  // Add a state to handle the window being available
+  const [isClient, setIsClient] = useState(false);
+
   useEffect(() => {
-    // Check if window is defined before using Leaflet
-    if (typeof window !== "undefined") {
-      // Initialize the map once the component mounts.
+    // Set isClient to true when the component is mounted (client-side)
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (isClient) {
+      // Now that we're on the client side, initialize the map
       mapRef.current = L.map("mapISS").setView([0, 0], 2);
 
       // Add OpenStreetMap tile layer.
@@ -71,7 +77,11 @@ const ISSTracker = () => {
         }
       };
     }
-  }, []); // Empty dependency array ensures this effect only runs on mount
+  }, [isClient]); // Only run this effect after `isClient` is true
+
+  if (!isClient) {
+    return null; // Don't render anything on the server-side
+  }
 
   return (
     <div className="p-4 dark:text-gray-100">
