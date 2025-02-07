@@ -15,10 +15,10 @@ export default function AboutPage() {
           
           { /* Middle area */}
           <div className="grow">
-            <div className="max-w-[700px]">
+            <div className="">
               <section>
                 <Image
-                  className="w-full"
+                  className=""
                   src={AboutImg}
     
                   alt="About"
@@ -29,25 +29,17 @@ export default function AboutPage() {
                     <h2 className="h3 font-aspekta text-slate-800 dark:text-slate-100">
                       Short Bio
                     </h2>
-                    <p>
+                    <p>A developer who’s been building web apps for the past 10 years. 
+                      I spent years at S&P Global as a Senior Software Engineer, and now I’m focused on U-Mail and ApplyPro,
+                       tools that help people write better and apply smarter.
                     </p>
+
                     <p>
+                    I like simple solutions, privacy-first design, and software that just works. Whether it’s refining user experiences or solving tricky problems, I build with efficiency and usability in mind.
+
+Need a developer who gets things done? Let’s talk.
 
                     </p>
-                  </div>
-                  <div className="space-y-4">
-                    <h2 className="h3 font-aspekta text-slate-800 dark:text-slate-100">
-                      Career
-                    </h2>
-                    <p>
-                      
-                    </p>
-                    <p>
-                     
-                    </p>
-                    <p>
-                    
-                     </p>
                   </div>
 
                 </div>
@@ -56,12 +48,12 @@ export default function AboutPage() {
           </div>
 
           { /* Right sidebar */}
-          {/* <aside className="md:w-[240px] lg:w-[300px] shrink-0">
+          <aside className="md:w-[240px] lg:w-[300px] shrink-0">
             <div className="space-y-6">
               <WidgetNewsletter />
               <WidgetSponsor />
             </div>
-          </aside> */}
+          </aside>
         </div>
       </div>
     </>

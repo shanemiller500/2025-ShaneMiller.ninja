@@ -11,44 +11,63 @@ const LiveStreamHeatmapSection = () => {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      socketRef.current = new WebSocket(`wss://ws.finnhub.io?token=${API_TOKEN}`);
+      // Delay the WebSocket initialization by 1 second.
+      const timerId = setTimeout(() => {
+        socketRef.current = new WebSocket(`wss://ws.finnhub.io?token=${API_TOKEN}`);
 
-      socketRef.current.onopen = () => {
-        console.info("Socket connection opened");
-        checkMarketStatus();
-      };
+        socketRef.current.onopen = () => {
+          console.info("Socket connection opened");
+          checkMarketStatus();
+        };
 
-      socketRef.current.onmessage = (event) => {
-        const response = JSON.parse(event.data);
-        if (response.type === "ping") {
-          // Ignore pings.
-        } else if (response.type === "trade" && response.data && response.data.length > 0) {
-          const tradeData = response.data[0];
-          const symbol = tradeData.s;
-          const tradePrice = parseFloat(tradeData.p);
-          setTradeInfoMap((prev) => {
-            const prevData = prev[symbol];
-            if (!prevData || tradeData.t > prevData.timestamp) {
+        socketRef.current.onmessage = (event) => {
+          const response = JSON.parse(event.data);
+          if (response.type === "ping") {
+            // Ignore pings.
+          } else if (response.type === "trade" && response.data && response.data.length > 0) {
+            const tradeData = response.data[0];
+            const symbol = tradeData.s;
+            const tradePrice = parseFloat(tradeData.p);
+
+            setTradeInfoMap((prev) => {
+              const prevData = prev[symbol];
+              // Determine the background color based on price change:
+              // - Green if the new price is higher than the previous price.
+              // - Red if the new price is lower.
+              // - Default neutral color if no previous data or no change.
+              let bgColor = "bg-gray-100 dark:bg-gray-600";
+              if (prevData) {
+                if (tradePrice > prevData.price) {
+                  bgColor = "bg-green-300 dark:bg-green-700";
+                } else if (tradePrice < prevData.price) {
+                  bgColor = "bg-red-300 dark:bg-red-700";
+                }
+              }
+
               return {
                 ...prev,
                 [symbol]: {
                   timestamp: tradeData.t,
                   price: tradePrice,
                   info: "$" + tradePrice.toFixed(2),
+                  bgColor, // dynamically set background color
                 },
               };
-            }
-            return prev;
-          });
-        }
-      };
+            });
+          }
+        };
 
-      socketRef.current.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
+        socketRef.current.onerror = (error) => {
+          console.error("WebSocket error:", error);
+        };
+      }, 1000); // 1-second delay
 
+      // Cleanup: clear the timeout and close the socket on unmount.
       return () => {
-        if (socketRef.current) socketRef.current.close();
+        clearTimeout(timerId);
+        if (socketRef.current) {
+          socketRef.current.close();
+        }
       };
     }
   }, []);
@@ -133,8 +152,11 @@ const LiveStreamHeatmapSection = () => {
   };
 
   return (
-    <section className="p-4  rounded ">
+    <section className="rounded p-4">
       <h2 className="text-2xl font-bold mb-4">Live Stream Heatmap</h2>
+      <p className="mb-4">
+        A live streaming heat map. This is live trades manipulating the color change; if the price goes up it is green, if it goes down from the last price red, no change it remains neutral.
+      </p>
       {marketStatus && (
         <div
           id="marketStatus"
@@ -147,16 +169,14 @@ const LiveStreamHeatmapSection = () => {
             : "The markets are now closed. Check back during market hours for the latest updates!"}
         </div>
       )}
-      <div id="tradeInfoGrid" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+      <div id="tradeInfoGrid" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-">
         {Object.keys(tradeInfoMap).map((symbol) => {
           const info = tradeInfoMap[symbol];
           return (
-            <div key={symbol} id={`tradeInfo_${symbol}`} className="p-4">
-              <div className=" rounded shadow p-4">
+            <div key={symbol} id={`tradeInfo_${symbol}`} className="p-1">
+              <div className={`text-center p-3 rounded ${info.bgColor}`}>
                 <h5 className="font-bold">{symbol}</h5>
-                <div className="mt-2 p-3 rounded bg-gray-100 dark:bg-gray-600">
-                  {info.info}
-                </div>
+                {info.info}
               </div>
             </div>
           );
