@@ -60,7 +60,7 @@ const ArtworksCarousel = () => {
           <img
             src={imageUrl}
             alt={currentArtwork.title}
-            className="w-full h-96 object-cover"
+            className="w-full object-cover"
           />
         ) : (
           <div className="w-full h-96 bg-gray-200 flex items-center justify-center">

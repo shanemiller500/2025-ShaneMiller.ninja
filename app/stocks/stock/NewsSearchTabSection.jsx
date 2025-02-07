@@ -40,7 +40,7 @@ const NewsSearchTabSection = () => {
   };
 
   return (
-    <section className="p-4 bg-white dark:bg-gray-800 rounded shadow">
+    <section className="p-4 rounded shadow">
       <h2 className="text-2xl font-bold mb-4">News Search</h2>
       <div className="flex flex-col sm:flex-row items-center gap-2 mb-4">
         <input
@@ -48,11 +48,11 @@ const NewsSearchTabSection = () => {
           value={symbol}
           placeholder="Enter stock symbol"
           onChange={(e) => setSymbol(e.target.value)}
-          className="p-2 border border-gray-300 rounded w-full sm:w-auto dark:bg-gray-700 dark:border-gray-600 focus:outline-none"
+          className="p-2 border border-gray-300 rounded w-full sm:w-auto dark:border-gray-600 focus:outline-none"
         />
         <button
           onClick={handleSearch}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none"
+          className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none"
         >
           Search News
         </button>
@@ -65,14 +65,14 @@ const NewsSearchTabSection = () => {
               {news.image && news.image !== "" && (
                 <img src={news.image} alt="News" className="w-full h-48 object-cover" />
               )}
-              <div className="p-4 bg-gray-100 dark:bg-gray-700">
+              <div className="p-4">
                 <h5 className="text-lg font-bold">{news.category}</h5>
                 <p className="text-sm">Released: {formatDate(news.datetime)}</p>
                 <p className="text-sm">Related: {news.related}</p>
                 <p className="text-sm">Source: {news.source}</p>
                 <p className="text-sm">Summary: {news.summary}</p>
                 <a
-                  className="text-blue-500 hover:underline"
+                  className="text-indigo-500 hover:underline"
                   href={news.url}
                   target="_blank"
                   rel="noopener noreferrer"

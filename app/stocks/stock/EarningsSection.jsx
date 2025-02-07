@@ -31,18 +31,18 @@ const EarningsSection = () => {
   );
 
   return (
-    <section className="p-4 bg-white dark:bg-gray-800 rounded shadow">
+    <section className="p-4 rounded shadow">
       <h2 className="text-2xl font-bold mb-4">Earnings Info</h2>
       <input
         type="text"
         placeholder="Search by ticker symbol"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        className="p-2 border border-gray-300 rounded w-full mb-4 dark:bg-gray-700 dark:border-gray-600 focus:outline-none"
+        className="p-2 border border-gray-300 rounded w-full mb-4  dark:border-gray-600 focus:outline-none"
       />
       <div className="overflow-x-auto">
         <table className="min-w-full border border-gray-300 dark:border-gray-700">
-          <thead className="bg-gray-100 dark:bg-gray-700">
+          <thead className="">
             <tr>
               <th className="p-2 text-sm font-semibold">Symbol</th>
               <th className="p-2 text-sm font-semibold">Date</th>

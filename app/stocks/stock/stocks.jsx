@@ -11,7 +11,7 @@ const DashboardTabs = () => {
   const [activeTab, setActiveTab] = useState("live");
 
   const baseTabClasses = "px-4 py-2 cursor-pointer";
-  const activeTabClasses = "border-b-2 border-blue-500 font-bold";
+  const activeTabClasses = "border-b-2 border-indigo-500 text-indigo-500 font-bold";
 
   return (
     <div className="max-w-6xl mx-auto p-4">

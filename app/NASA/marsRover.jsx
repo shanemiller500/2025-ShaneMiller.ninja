@@ -57,7 +57,7 @@ const MarsRoverPhotos = () => {
   };
 
   return (
-    <div className="p-4 dark:bg-gray-900 dark:text-gray-100">
+    <div className="p-4  dark:text-gray-100">
       <h2 className="text-3xl font-bold mb-4 text-center">Mars Rover Photos</h2>
       <div className="mb-4 flex flex-col sm:flex-row items-center gap-2">
         <input
@@ -69,7 +69,7 @@ const MarsRoverPhotos = () => {
         />
         <button
           onClick={searchPhotos}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none"
+          className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none"
         >
           Search
         </button>
@@ -89,7 +89,7 @@ const MarsRoverPhotos = () => {
           {photos.map((photo) => (
             <div
               key={photo.id}
-              className="w-80 border border-gray-300 rounded p-4 dark:border-gray-700 dark:bg-gray-800"
+              className="w-80 border border-gray-300 rounded p-4 dark:border-gray-700 "
             >
               <img
                 src={photo.img_src}

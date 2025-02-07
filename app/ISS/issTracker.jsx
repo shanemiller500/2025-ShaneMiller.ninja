@@ -73,14 +73,14 @@ const ISSTracker = () => {
   }, []);
 
   return (
-    <div className="p-4 dark:bg-gray-900 dark:text-gray-100">
+    <div className="p-4  dark:text-gray-100">
       <h2 className="text-2xl font-bold mb-4 text-center">ISS Tracker</h2>
       
       {/* Map container */}
-      <div id="mapISS" className="h-[400px] w-full rounded shadow-lg mb-4"></div>
+      <div id="mapISS" className="h-[600px] w-full rounded shadow-lg mb-4"></div>
       
       {/* ISS data display */}
-      <div id="issData" className="mt-4 p-4 bg-gray-100 dark:bg-gray-800 rounded shadow">
+      <div id="issData" className="mt-4 p-4  rounded">
         <p className="text-gray-700 dark:text-gray-300">
           <span className="font-semibold">Latitude:</span> {issData.latitude}
         </p>

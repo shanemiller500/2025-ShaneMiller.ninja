@@ -27,7 +27,7 @@ export default function SideNavigation() {
               <li className="py-2">
                 <Link
                   href="/"
-                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname !== '/about' && pathname !== '/contact' && pathname !== '/projects' && pathname !== '/resume' && pathname !== '/Marvel' 
+                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname !== '/about' && pathname !== '/contact' && pathname !== '/projects' && pathname !== '/resume' && pathname !== '/Bored' && pathname !== '/Marvel' && pathname !== '/stocks' && pathname !== '/Country' && pathname !== '/Crypto' && pathname !== '/ISS' && pathname !== '/Art' && pathname !== '/NASA'    
                       ? 'text-indigo-500 after:bg-indigo-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                     }`}
@@ -43,7 +43,7 @@ export default function SideNavigation() {
               <li className="py-2">
                 <Link
                   href="/projects"
-                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname === '/projects' || pathname === '/Marvel' 
+                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname === '/projects' || pathname === '/Marvel' || pathname === '/stocks' || pathname === '/Country' || pathname === '/Crypto' || pathname === '/Bored' || pathname === '/ISS' || pathname === '/Art' || pathname === '/NASA'   
                     ? 'text-indigo-500 after:bg-indigo-500'
                     : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                     }`}

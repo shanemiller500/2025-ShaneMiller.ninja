@@ -26,14 +26,14 @@ const IPOCalendarSection = () => {
   );
 
   return (
-    <section className="p-4 bg-white dark:bg-gray-800 rounded shadow">
+    <section className="p-4  rounded ">
       <h2 className="text-2xl font-bold mb-4">IPO Calendar</h2>
       <input
         type="text"
         placeholder="Search IPO events"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        className="p-2 border border-gray-300 rounded w-full mb-4 dark:bg-gray-700 dark:border-gray-600 focus:outline-none"
+        className="p-2 border border-gray-300 rounded w-full mb-4 dark:border-gray-600 focus:outline-none"
       />
       {filteredEvents.length === 0 ? (
         <p className="text-center">No data found.</p>

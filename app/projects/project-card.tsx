@@ -20,7 +20,7 @@ export default function ProjectCard({ item }: ItemProps) {
       <div className="flex flex-col h-full">
         <div className="grow">
           <div className="flex items-center justify-between space-x-2">
-            <div className="h-10 w-10 flex items-center justify-center border border-slate-200 dark:border-slate-700 rounded-full mb-2">
+            <div className="h-10 w-10 flex items-center justify-center border border-slate-200 dark:border-slate-700 rounded-full rounded mb-2">
               <Image src={item.icon} width={30} alt={item.title} />
             </div>
             {item.openSource && (

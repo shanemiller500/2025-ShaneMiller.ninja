@@ -34,11 +34,11 @@ const RandomAdvice = () => {
   };
 
   return (
-    <div className="p-4 bg-white dark:bg-gray-800 rounded shadow">
+    <div className="p-4">
       <h2 className="text-xl font-bold mb-4">Random Advice</h2>
       {loading ? (
         <div className="flex justify-center items-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
         </div>
       ) : (
         <div id="adviceContainer" className="mb-4">
@@ -50,7 +50,7 @@ const RandomAdvice = () => {
       <button
         id="getAdviceButton"
         onClick={refreshAdvice}
-        className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none"
+        className="mt-4 px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none"
       >
         Get New Advice
       </button>

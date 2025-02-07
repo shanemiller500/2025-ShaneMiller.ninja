@@ -79,7 +79,7 @@ const NasaPhotoOfTheDay = () => {
   }, []);
 
   return (
-    <div className="p-4 dark:bg-gray-900 dark:text-gray-100">
+    <div className="p-4  dark:text-gray-100">
       <h1 className="text-3xl font-bold mb-6 text-center">NASA Photo of the Day</h1>
 
       {/* Today’s Photo */}
@@ -108,7 +108,7 @@ const NasaPhotoOfTheDay = () => {
           {galleryData.map((item) => (
             <div
               key={item.date}
-              className="w-72 border border-gray-300 rounded overflow-hidden dark:border-gray-700 dark:bg-gray-800"
+              className="w-72 border border-gray-300 rounded overflow-hidden dark:border-gray-700 "
             >
               <img
                 src={item.hdurl || item.url}

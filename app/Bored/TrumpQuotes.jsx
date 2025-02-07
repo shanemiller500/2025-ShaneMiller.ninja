@@ -27,11 +27,11 @@ const TrumpQuotes = () => {
   }, []);
 
   return (
-    <div className="p-4 bg-white dark:bg-gray-800 rounded shadow">
+    <div className="p-4">
       <h2 className="text-xl font-bold mb-4">Trump Quote</h2>
       {loading ? (
         <div className="flex justify-center items-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
         </div>
       ) : quoteData ? (
         <div id="quote-container" className="space-y-2">
@@ -48,7 +48,7 @@ const TrumpQuotes = () => {
               href={quoteData._embedded.source[0].url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-500 hover:underline"
+              className="text-indigo-500 hover:underline"
             >
               Link
             </a>
@@ -65,7 +65,7 @@ const TrumpQuotes = () => {
       )}
       <button
         onClick={fetchRandomQuote}
-        className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none"
+        className="mt-4 px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none"
       >
         Refresh Quote
       </button>

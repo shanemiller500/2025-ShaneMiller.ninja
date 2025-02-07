@@ -46,11 +46,11 @@ const RandomActivity = () => {
   }, []);
 
   return (
-    <div className="p-4 bg-white dark:bg-gray-800 rounded shadow">
+    <div className="p-4 ">
       <h2 className="text-xl font-bold mb-4">Random Activity</h2>
       {loading ? (
         <div className="flex justify-center items-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
         </div>
       ) : activityData ? (
         <div className="space-y-2">
@@ -70,7 +70,7 @@ const RandomActivity = () => {
                 href={activityData.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-500 hover:underline"
+                className="text-indigo-500 hover:underline"
               >
                 {activityData.link}
               </a>
@@ -86,7 +86,7 @@ const RandomActivity = () => {
       <button
         id="getActivityButton"
         onClick={refreshActivity}
-        className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none"
+        className="mt-4 px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none"
       >
         Get New Activity
       </button>

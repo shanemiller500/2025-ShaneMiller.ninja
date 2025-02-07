@@ -108,7 +108,7 @@ const CryptoChartPrices = () => {
   };
 
   return (
-    <div className="p-4 bg-white dark:bg-gray-800 rounded shadow">
+    <div className="p-4 ">
       <h2 className="text-3xl font-bold text-center mb-4">Crypto Chart & Prices</h2>
       <form onSubmit={handleSearch} className="flex flex-col sm:flex-row items-center justify-center gap-2 mb-4">
         <input
@@ -118,7 +118,7 @@ const CryptoChartPrices = () => {
           onChange={(e) => setCryptoSymbol(e.target.value)}
           className="p-2 border border-gray-300 rounded w-full sm:w-auto dark:bg-gray-700 dark:border-gray-600 focus:outline-none"
         />
-        <button type="submit" className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none">
+        <button type="submit" className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none">
           Search
         </button>
       </form>
@@ -130,7 +130,7 @@ const CryptoChartPrices = () => {
         </div>
       )}
       {cryptoDetails && (
-        <div className="border rounded p-4 shadow dark:border-gray-700 dark:bg-gray-700">
+        <div className="border rounded p-4 shadow dark:border-gray-700 ">
           <h3 className="text-xl font-bold mb-2">
             {cryptoDetails.name} ({cryptoDetails.symbol})
           </h3>
@@ -191,7 +191,7 @@ const CryptoChartPrices = () => {
             href={cryptoDetails.explorer}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-500 hover:underline"
+            className="text-indigo-500 hover:underline"
           >
             {cryptoDetails.name} Blockchain Explorer
           </a>

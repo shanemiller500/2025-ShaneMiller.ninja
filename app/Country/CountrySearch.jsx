@@ -17,14 +17,10 @@ const CountrySearch = () => {
   const [filteredCountries, setFilteredCountries] = useState([]);
   const [mapUrl, setMapUrl] = useState("");
 
-  // Utility function: simulate a delay in milliseconds
-  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  // Fetch all countries on mount (with a simulated 2-second delay)
+  // Fetch all countries on mount
   useEffect(() => {
     const fetchCountries = async () => {
       try {
-        await delay(2000); // simulate delay
         const response = await fetch("https://restcountries.com/v3.1/all");
         const data = await response.json();
         setCountries(data);
@@ -60,7 +56,7 @@ const CountrySearch = () => {
   };
 
   return (
-    <div className="p-4 dark:bg-gray-900 dark:text-gray-100 min-h-screen">
+    <div className="p-4 dark:text-gray-100 min-h-screen">
       <h1 className="text-3xl font-bold mb-6 text-center">Country Search</h1>
 
       {initialLoading ? (
@@ -101,79 +97,145 @@ const CountrySearch = () => {
             </div>
           )}
 
-          {/* Display Filtered Country Results */}
-          <div
-            id="countryList"
-            className="flex flex-wrap gap-4 justify-center"
-          >
-            {filteredCountries.map((country) => (
-              <div
-                key={country.cca3}
-                className="country-info border border-gray-300 rounded p-4 w-72 dark:border-gray-700 dark:bg-gray-800"
-              >
-                <h3 className="text-xl font-semibold mb-2">
-                  {country.name.common}
-                </h3>
-                {country.flags && country.flags.png && (
-                  <img
-                    src={country.flags.png}
-                    alt={`${country.name.common} Flag`}
-                    className="w-full mb-2 object-cover rounded"
-                  />
-                )}
-                {country.flags && country.flags.alt && (
-                  <p className="text-sm">
-                    <strong>Flag details:</strong> {country.flags.alt}
-                  </p>
-                )}
-                {country.capital && (
-                  <p className="text-sm">
-                    <strong>Capital:</strong> {country.capital.join(", ")}
-                  </p>
-                )}
-                <p className="text-sm">
-                  <strong>Population:</strong> {country.population}
-                </p>
-                {country.continents && country.continents[0] && (
-                  <p className="text-sm">
-                    <strong>Continent:</strong> {country.continents[0]}
-                  </p>
-                )}
-                {country.languages && (
-                  <p className="text-sm">
-                    <strong>Languages:</strong>{" "}
-                    {Object.values(country.languages).join(", ")}
-                  </p>
-                )}
-                <p className="text-sm">
-                  <strong>UN Member:</strong>{" "}
-                  {country.unMember ? "Yes" : "No"}
-                </p>
-                {country.coatOfArms && country.coatOfArms.png && (
-                  <img
-                    src={country.coatOfArms.png}
-                    alt={`${country.name.common} Coat of Arms`}
-                    className="w-full mt-2 object-cover rounded"
-                  />
-                )}
+          {/* Display Filtered Country Results and Google Map */}
+          {filteredCountries.length > 0 ? (
+            // When a map URL is available, show the country list and map side by side on md screens and above
+            mapUrl ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 ">
+                {/* Country list */}
+                <div
+                  id="countryList"
+                  className="grid grid-cols-1 sm:grid-cols-2"
+                >
+                  {filteredCountries.map((country) => (
+                    <div
+                      key={country.cca3}
+                      className="border border-gray-300 rounded p-4 dark:border-gray-700"
+                    >
+                      <h3 className="text-xl font-semibold mb-2">
+                        {country.name.common}
+                      </h3>
+                      {country.flags && country.flags.png && (
+                        <img
+                          src={country.flags.png}
+                          alt={`${country.name.common} Flag`}
+                          className="w-full mb-2 object-cover rounded"
+                        />
+                      )}
+                      {country.flags && country.flags.alt && (
+                        <p className="text-sm">
+                          <strong>Flag details:</strong> {country.flags.alt}
+                        </p>
+                      )}
+                      {country.capital && (
+                        <p className="text-sm">
+                          <strong>Capital:</strong> {country.capital.join(", ")}
+                        </p>
+                      )}
+                      <p className="text-sm">
+                        <strong>Population:</strong> {country.population}
+                      </p>
+                      {country.continents && country.continents[0] && (
+                        <p className="text-sm">
+                          <strong>Continent:</strong> {country.continents[0]}
+                        </p>
+                      )}
+                      {country.languages && (
+                        <p className="text-sm">
+                          <strong>Languages:</strong>{" "}
+                          {Object.values(country.languages).join(", ")}
+                        </p>
+                      )}
+                      <p className="text-sm">
+                        <strong>UN Member:</strong>{" "}
+                        {country.unMember ? "Yes" : "No"}
+                      </p>
+                      {country.coatOfArms && country.coatOfArms.png && (
+                        <img
+                          src={country.coatOfArms.png}
+                          alt={`${country.name.common} Coat of Arms`}
+                          className="w-full mt-2 object-cover rounded"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {/* Google Map */}
+                <div className="mt-4 md:mt-0">
+                  <iframe
+                    id="countrySearchMap"
+                    title="Country Map"
+                    src={mapUrl}
+                    width="100%"
+                    height="400"
+                    className="border-0"
+                    allowFullScreen
+                    loading="lazy"
+                  ></iframe>
+                </div>
               </div>
-            ))}
-          </div>
-
-          {/* Display Google Map */}
-          {mapUrl && (
-            <div className="mt-8">
-              <iframe
-                id="countrySearchMap"
-                title="Country Map"
-                src={mapUrl}
-                width="100%"
-                height="400"
-                className="border-0"
-                allowFullScreen
-                loading="lazy"
-              ></iframe>
-            </div>
+            ) : (
+              // If no map is available, just show the country cards in a responsive grid.
+              <div
+                id="countryList"
+                className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"
+              >
+                {filteredCountries.map((country) => (
+                  <div
+                    key={country.cca3}
+                    className="border border-gray-300 rounded p-4 dark:border-gray-700"
+                  >
+                    <h3 className="text-xl font-semibold mb-2">
+                      {country.name.common}
+                    </h3>
+                    {country.flags && country.flags.png && (
+                      <img
+                        src={country.flags.png}
+                        alt={`${country.name.common} Flag`}
+                        className="w-full mb-2 object-cover rounded"
+                      />
+                    )}
+                    {country.flags && country.flags.alt && (
+                      <p className="text-sm">
+                        <strong>Flag details:</strong> {country.flags.alt}
+                      </p>
+                    )}
+                    {country.capital && (
+                      <p className="text-sm">
+                        <strong>Capital:</strong> {country.capital.join(", ")}
+                      </p>
+                    )}
+                    <p className="text-sm">
+                      <strong>Population:</strong> {country.population}
+                    </p>
+                    {country.continents && country.continents[0] && (
+                      <p className="text-sm">
+                        <strong>Continent:</strong> {country.continents[0]}
+                      </p>
+                    )}
+                    {country.languages && (
+                      <p className="text-sm">
+                        <strong>Languages:</strong>{" "}
+                        {Object.values(country.languages).join(", ")}
+                      </p>
+                    )}
+                    <p className="text-sm">
+                      <strong>UN Member:</strong>{" "}
+                      {country.unMember ? "Yes" : "No"}
+                    </p>
+                    {country.coatOfArms && country.coatOfArms.png && (
+                      <img
+                        src={country.coatOfArms.png}
+                        alt={`${country.name.common} Coat of Arms`}
+                        className="w-full mt-2 object-cover rounded"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            !searchLoading && <p className="text-center mt-4">No countries found.</p>
           )}
         </>
       )}

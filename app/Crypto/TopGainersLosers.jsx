@@ -53,7 +53,7 @@ const TopGainersLosers = () => {
     const changeIcon = change >= 0 ? "↑" : "↓";
     const textColor = change >= 0 ? "text-green-600" : "text-red-600";
     return (
-      <div key={crypto.id} className="border rounded p-4 shadow bg-white dark:bg-gray-800">
+      <div key={crypto.id} className="border rounded p-4 shadow">
         <h5 className={`font-bold ${textColor}`}>
           {crypto.name} ({crypto.symbol})
         </h5>
@@ -66,7 +66,7 @@ const TopGainersLosers = () => {
   };
 
   return (
-    <div className="p-4 bg-white dark:bg-gray-800 rounded shadow">
+    <div className="p-4 ">
       <h2 className="text-xl font-bold mb-4">Top Gainers</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         {topGainers.map(renderCard)}

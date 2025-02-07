@@ -133,7 +133,7 @@ const LiveStreamHeatmapSection = () => {
   };
 
   return (
-    <section className="p-4 bg-white dark:bg-gray-800 rounded shadow">
+    <section className="p-4  rounded ">
       <h2 className="text-2xl font-bold mb-4">Live Stream Heatmap</h2>
       {marketStatus && (
         <div
@@ -152,7 +152,7 @@ const LiveStreamHeatmapSection = () => {
           const info = tradeInfoMap[symbol];
           return (
             <div key={symbol} id={`tradeInfo_${symbol}`} className="p-4">
-              <div className="bg-white dark:bg-gray-700 rounded shadow p-4">
+              <div className=" rounded shadow p-4">
                 <h5 className="font-bold">{symbol}</h5>
                 <div className="mt-2 p-3 rounded bg-gray-100 dark:bg-gray-600">
                   {info.info}

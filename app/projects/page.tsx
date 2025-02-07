@@ -1,7 +1,4 @@
 import ProjectCard from './project-card'
-import WidgetNewsletter from '@/components/widget-newsletter'
-import WidgetSponsor from '@/components/widget-sponsor'
-
 import Icon01 from '@/public/images/hmbco.png'
 import Icon03 from '@/public/images/the-new-york-stock-exchange-seeklogo.png'
 import Icon04 from '@/public/images/project-icon-04.svg'
@@ -24,7 +21,7 @@ export default function Projects() {
       icon: Icon01,
       slug: 'https://holdmybeer.info',
       title: 'HoldMyBeer.info',
-      excerpt: 'Hold My Beer CO is a company focused on data privacy and enhanced security.',
+      excerpt: 'Hold My Beer CO is a company focused on data privacy and enhanced security. Here you will find applications like ApplyPro & UMail that have daily active users & test users on specific custom tools.',
 
     },
   ]
@@ -129,10 +126,7 @@ export default function Projects() {
             </div>
           </section>
         </div>
-      </div>
-
-      { /* Right sidebar */ }
-     
+      </div> 
     </div>
   )
 }

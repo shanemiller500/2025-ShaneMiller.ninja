@@ -95,7 +95,7 @@ const StockQuoteSection = () => {
   };
 
   return (
-    <section className="p-4 bg-white dark:bg-gray-800 rounded shadow mb-8">
+    <section className="p-4  rounded  mb-8">
       <h2 className="text-2xl font-bold mb-4">Stock Quote</h2>
       <div className="mb-4">
         <input
@@ -103,7 +103,7 @@ const StockQuoteSection = () => {
           value={symbolInput}
           onChange={(e) => setSymbolInput(e.target.value)}
           placeholder="Enter stock symbol"
-          className="p-2 border border-gray-300 rounded w-full md:w-1/3 dark:bg-gray-700 dark:border-gray-600"
+          className="p-2 border border-gray-300 rounded w-full text-brand-900 md:w-1/3 dark:border-gray-600"
         />
         {suggestions.length > 0 && (
           <ul className="list-none p-0 mt-2 border border-gray-200 rounded dark:border-gray-700">
@@ -124,7 +124,7 @@ const StockQuoteSection = () => {
       </div>
       <button
         onClick={handleSearch}
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none"
+        className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none"
       >
         Search
       </button>
@@ -199,7 +199,7 @@ const StockQuoteSection = () => {
               <h3 className="text-xl font-semibold mb-4">Latest News</h3>
               {newsData.slice(0, 5).map((newsItem, index) => (
                 <div key={index} className="mb-4 border border-gray-300 dark:border-gray-700 rounded overflow-hidden">
-                  <div className="p-4 bg-gray-100 dark:bg-gray-700">
+                  <div className="p-4 ">
                     <h5 className="text-lg font-semibold">{newsItem.headline}</h5>
                     <p className="text-sm">Release date: {formatDate(newsItem.datetime)}</p>
                     {newsItem.image && (
@@ -212,7 +212,7 @@ const StockQuoteSection = () => {
                     <p className="text-sm">{newsItem.summary}</p>
                     <p className="text-sm">Source: {newsItem.source}</p>
                     <a
-                      className="text-blue-500 hover:underline"
+                      className="text-indigo-500 hover:underline"
                       href={newsItem.url}
                       target="_blank"
                       rel="noopener noreferrer"
