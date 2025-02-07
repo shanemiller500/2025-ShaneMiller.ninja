@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Chart } from "chart.js/auto";
 
-const API_KEY = process.env.FINHUB-API_KEY;
+const API_KEY = process.env.NEXT_PUBLIC_FINHUB_API_KEY;
 
 const CryptoChartPrices = () => {
   const [cryptoSymbol, setCryptoSymbol] = useState("bitcoin");
