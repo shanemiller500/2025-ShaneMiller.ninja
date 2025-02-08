@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { FaRocket } from "react-icons/fa";
 
 // Helper function to format numeric values
 function formatSupplyValue(value) {
@@ -37,7 +39,11 @@ const TopGainersLosers = () => {
   }, []);
 
   if (loading) {
-    return <p className="text-center">Loading crypto data...</p>;
+    return (
+      <p className="text-center text-xl text-white pt-20">
+        Loading crypto data...
+      </p>
+    );
   }
 
   // Sort data by 24h percent change (descending)
@@ -51,29 +57,53 @@ const TopGainersLosers = () => {
   const renderCard = (crypto) => {
     const change = parseFloat(crypto.changePercent24Hr);
     const changeIcon = change >= 0 ? "↑" : "↓";
-    const textColor = change >= 0 ? "text-green-600" : "text-red-600";
+    const textColor = change >= 0 ? "text-green-400" : "text-red-400";
+
     return (
-      <div key={crypto.id} className="border rounded p-4 shadow">
-        <h5 className={`font-bold ${textColor}`}>
+      <motion.div
+        key={crypto.id}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-lg transform transition-all hover:shadow-2xl"
+      >
+        <h5 className={`font-bold text-lg mb-2 ${textColor}`}>
           {crypto.name} ({crypto.symbol})
         </h5>
-        <p>Price: $ {parseFloat(crypto.priceUsd).toFixed(2)}</p>
-        <p className={textColor}>
+        <p className="text-gray-700 dark:text-gray-300">
+          Price: $ {parseFloat(crypto.priceUsd).toFixed(2)}
+        </p>
+        <p className={`${textColor} font-semibold`}>
           24h Change: {formatSupplyValue(crypto.changePercent24Hr)}% {changeIcon}
         </p>
-      </div>
+      </motion.div>
     );
   };
 
   return (
-    <div className="p-4 ">
-      <h2 className="text-xl font-bold mb-4">Top Gainers</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-        {topGainers.map(renderCard)}
-      </div>
-      <h2 className="text-xl font-bold mb-4">Top Losers</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        {topLosers.map(renderCard)}
+    <div className="relative min-h-screen p-8 text-white overflow-hidden">
+
+      <div className="relative z-20">
+        <h2 className="text-3xl font-extrabold text-center mb-8">
+          Crypto Market Movers
+        </h2>
+
+        <section className="mb-12">
+          <h3 className="text-2xl font-bold mb-4 border-b pb-2 border-indigo-300">
+            Top Gainers
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            {topGainers.map(renderCard)}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="text-2xl font-bold mb-4 border-b pb-2 border-indigo-300">
+            Top Losers
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            {topLosers.map(renderCard)}
+          </div>
+        </section>
       </div>
     </div>
   );
