@@ -1,9 +1,10 @@
-"use client";
+'use client';
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import LiveStreamHeatmap from "./LiveStreamHeatmap"; // Adjust path if needed
 import TopGainersLosers from "./TopGainersLosers";
 import CryptoChartPrices from "./CryptoChartPrices";
+import { trackEvent } from '@/utils/mixpanel';
 
 const tabs = [
   { name: "Heatmap", component: <LiveStreamHeatmap /> },
@@ -11,8 +12,19 @@ const tabs = [
   { name: "Charts", component: <CryptoChartPrices /> },
 ];
 
-const CryptoDashboard = () => {
+const CryptoDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
+
+  // Track page view on component mount.
+  useEffect(() => {
+    trackEvent("CryptoDashboard Page Viewed", { page: "CryptoDashboard" });
+  }, []);
+
+  // Handler for tab clicks.
+  const handleTabClick = (index: number, tabName: string) => {
+    setActiveTab(index);
+    trackEvent("Tab Clicked", { tab: tabName, index });
+  };
 
   return (
     <div className="min-h-screen dark:text-gray-100 p-4 space-y-8">
@@ -27,7 +39,7 @@ const CryptoDashboard = () => {
                 ? "border-indigo-500 text-indigo-500"
                 : "border-transparent hover:border-gray-500"
             }`}
-            onClick={() => setActiveTab(index)}
+            onClick={() => handleTabClick(index, tab.name)}
           >
             {tab.name}
           </button>

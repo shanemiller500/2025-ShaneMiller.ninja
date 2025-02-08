@@ -1,13 +1,18 @@
-'use client'
+'use client';
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import Image from 'next/image'
-import HeroImage from '@/public/images/wedding.jpg'
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import Image from 'next/image';
+import HeroImage from '@/public/images/wedding.jpg';
+import { trackEvent } from '@/utils/mixpanel';
 
 export default function SideNavigation() {
+  const pathname = usePathname();
 
-  const pathname = usePathname()
+  // Helper function to track a click event
+  const handleNavClick = (label: string, route: string) => {
+    trackEvent('Navigation Clicked', { label, route });
+  };
 
   return (
     <div className="sticky top-0 w-16 md:w-24 shrink-0 h-screen overflow-y-auto no-scrollbar border-r border-slate-200 dark:border-slate-800">
@@ -15,8 +20,15 @@ export default function SideNavigation() {
         <div className="flex-1">
           {pathname !== '/' && (
             <div className="flex justify-center my-4">
-              <Link href="/">
-                <Image className="rounded-full" src={HeroImage} width={32} height={32} priority alt="Me" />
+              <Link href="/" onClick={() => handleNavClick('Home Avatar', '/')}>
+                <Image
+                  className="rounded-full"
+                  src={HeroImage}
+                  width={32}
+                  height={32}
+                  priority
+                  alt="Me"
+                />
               </Link>
             </div>
           )}
@@ -27,10 +39,23 @@ export default function SideNavigation() {
               <li className="py-2">
                 <Link
                   href="/"
-                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname !== '/about' && pathname !== '/contact' && pathname !== '/projects' && pathname !== '/resume' && pathname !== '/Bored' && pathname !== '/Marvel' && pathname !== '/stocks' && pathname !== '/Country' && pathname !== '/Crypto' && pathname !== '/ISS' && pathname !== '/Art' && pathname !== '/NASA'    
+                  onClick={() => handleNavClick('Home', '/')}
+                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${
+                    pathname !== '/about' &&
+                    pathname !== '/contact' &&
+                    pathname !== '/projects' &&
+                    pathname !== '/resume' &&
+                    pathname !== '/Bored' &&
+                    pathname !== '/Marvel' &&
+                    pathname !== '/stocks' &&
+                    pathname !== '/Country' &&
+                    pathname !== '/Crypto' &&
+                    pathname !== '/ISS' &&
+                    pathname !== '/Art' &&
+                    pathname !== '/NASA'
                       ? 'text-indigo-500 after:bg-indigo-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
-                    }`}
+                  }`}
                 >
                   <span className="sr-only">Home</span>
                   <svg className="fill-current" xmlns="http://www.w3.org/2000/svg" width="21" height="19">
@@ -43,10 +68,20 @@ export default function SideNavigation() {
               <li className="py-2">
                 <Link
                   href="/projects"
-                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname === '/projects' || pathname === '/Marvel' || pathname === '/stocks' || pathname === '/Country' || pathname === '/Crypto' || pathname === '/Bored' || pathname === '/ISS' || pathname === '/Art' || pathname === '/NASA'   
-                    ? 'text-indigo-500 after:bg-indigo-500'
-                    : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
-                    }`}
+                  onClick={() => handleNavClick('Projects', '/projects')}
+                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${
+                    pathname === '/projects' ||
+                    pathname === '/Marvel' ||
+                    pathname === '/stocks' ||
+                    pathname === '/Country' ||
+                    pathname === '/Crypto' ||
+                    pathname === '/Bored' ||
+                    pathname === '/ISS' ||
+                    pathname === '/Art' ||
+                    pathname === '/NASA'
+                      ? 'text-indigo-500 after:bg-indigo-500'
+                      : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
+                  }`}
                 >
                   <span className="sr-only">Projects</span>
                   <svg className="fill-current" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
@@ -55,13 +90,16 @@ export default function SideNavigation() {
                   </svg>
                 </Link>
               </li>
+
               <li className="py-2">
                 <Link
                   href="/resume"
-                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname === '/resume'
-                    ? 'text-indigo-500 after:bg-indigo-500'
-                    : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
-                    }`}
+                  onClick={() => handleNavClick('Resume', '/resume')}
+                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${
+                    pathname === '/resume'
+                      ? 'text-indigo-500 after:bg-indigo-500'
+                      : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
+                  }`}
                 >
                   <span className="sr-only">Resume</span>
                   <svg className="fill-current" xmlns="http://www.w3.org/2000/svg" width="18" height="20">
@@ -69,14 +107,17 @@ export default function SideNavigation() {
                     <path fillRule="nonzero" d="M2 6v12h14V6H2Zm16-2v16H0V4h18ZM2 2V0h14v2H2Z" />
                   </svg>
                 </Link>
-              </li>                            
+              </li>
+
               <li className="py-2">
                 <Link
                   href="/contact"
-                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${pathname === '/contact'
-                    ? 'text-indigo-500 after:bg-indigo-500'
-                    : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
-                    }`} 
+                  onClick={() => handleNavClick('Contact', '/contact')}
+                  className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${
+                    pathname === '/contact'
+                      ? 'text-indigo-500 after:bg-indigo-500'
+                      : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
+                  }`}
                 >
                   <span className="sr-only">Contact</span>
                   <svg className="fill-current" xmlns="http://www.w3.org/2000/svg" width="21" height="21">
@@ -90,5 +131,5 @@ export default function SideNavigation() {
         </div>
       </div>
     </div>
-  )
+  );
 }

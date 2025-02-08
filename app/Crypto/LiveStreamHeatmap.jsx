@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { trackEvent } from "@/utils/mixpanel";
 
 const LiveStreamHeatmap = () => {
   const [tradeInfoMap, setTradeInfoMap] = useState({});
@@ -137,6 +138,8 @@ const LiveStreamHeatmap = () => {
     const percentChange = assetMeta
       ? parseFloat(assetMeta.changePercent24Hr).toFixed(2)
       : "0.00";
+    const rank = assetMeta ? assetMeta.rank : "N/A";
+    const name = assetMeta ? assetMeta.name : "N/A";
 
     return (
       <motion.div
@@ -144,13 +147,29 @@ const LiveStreamHeatmap = () => {
         onClick={() => {
           if (assetMeta) {
             setSelectedAsset(assetMeta);
+            // Track the click and popup display event with Mixpanel
+            trackEvent("Crypto Asset Popup Displayed", {
+              assetId: assetMeta.id,
+              symbol: assetMeta.symbol,
+              name: assetMeta.name,
+              rank: assetMeta.rank,
+            });
           }
         }}
         className={`p-4 rounded shadow text-center text-white cursor-pointer ${bgColor}`}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
       >
-        <h5 className="font-bold text-lg mb-2">{displaySymbol}</h5>
+        <h5 className="font-bold text-lg mb-2">
+          {displaySymbol}{" "}
+          {assetMeta && (
+            <span className="text-xs font-normal">
+              Rank: {rank}
+              <br />
+              <span className="text-sm">{name}</span>
+            </span>
+          )}
+        </h5>
         <p className="text-sm">
           ${Number(price).toLocaleString("en-US", {
             minimumFractionDigits: 2,
