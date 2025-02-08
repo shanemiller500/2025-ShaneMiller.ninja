@@ -13,6 +13,12 @@ import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { trackEvent } from '@/utils/mixpanel';
 
+declare global {
+  interface Window {
+    gtag: (...args: any[]) => void;
+  }
+}
+
 const GA_TRACKING_ID = process.env.NEXT_PUBLIC_GA_ID; 
 
 const inter = Inter({
@@ -47,6 +53,16 @@ export default function RootLayout({
   useEffect(() => { 
     trackEvent('Page Viewed', { path: pathname }); 
   }, [pathname]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && typeof window.gtag === "function") {
+      window.gtag('config', GA_TRACKING_ID, {
+        page_path: pathname,
+      });
+    }
+  }, [pathname]);
+  
+  
 
   return (
     <html lang="en" suppressHydrationWarning>
