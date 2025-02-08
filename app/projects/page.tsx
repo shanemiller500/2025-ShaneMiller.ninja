@@ -28,6 +28,14 @@ export default function Projects() {
 
   const items02 = [
     {
+      id: 4,
+      icon: Icon07,
+      slug: '/Crypto',
+      title: 'Crypto Market Data',
+      excerpt: 'Crypto Market Data, Charts, and more.',
+      openSource: false,
+    },
+    {
       id: 0,
       icon: Icon03,
       slug: '/stocks',
@@ -59,14 +67,7 @@ export default function Projects() {
       excerpt: 'Fun things to do when you are bored using free APIs.',
       openSource: false,
     },
-    {
-      id: 4,
-      icon: Icon07,
-      slug: '/Crypto',
-      title: 'Crypto Market Data',
-      excerpt: 'Crypto Market Data, Charts, and more.',
-      openSource: false,
-    },
+   
     {
       id: 5,
       icon: Icon08,
