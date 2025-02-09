@@ -1,3 +1,6 @@
+'use client'
+
+import React, { useEffect } from 'react'
 import Education from '@/components/education'
 import Experience from '@/components/experience'
 import Recommendations from '@/components/recommendations'
@@ -10,14 +13,16 @@ import WidgetSkills6 from '@/components/widget-skills-6'
 import WidgetSkills7 from '@/components/widget-skills-7'
 import WidgetSkills8 from '@/components/widget-skills-8'
 import WidgetSkills9 from '@/components/widget-skills-9'
+import { trackEvent } from '@/utils/mixpanel'
 
-
-export const metadata = {
-  title: 'Resume - Shane-Miller',
-  description: 'Page description',
-}
 
 export default function Resume() {
+
+    // Track page view when the component mounts
+    useEffect(() => {
+      trackEvent("Resume Page Viewed", { page: "Resume" })
+    }, [])
+  
   return (
     <div className="grow md:flex space-y-8 md:space-y-0 md:space-x-8 pt-12 md:pt-16 pb-16 md:pb-20">
 

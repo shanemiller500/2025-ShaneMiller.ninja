@@ -1,10 +1,16 @@
-"use client";
+'use client'
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import MarvelCharactersPage from "./MarvelCharactersPage";
 import MarvelComicsPage from "./MarvelComicsPage";
+import { trackEvent } from "@/utils/mixpanel";
 
 const App = () => {
+  // Fire a page view event for Mixpanel on mount.
+  useEffect(() => {
+    trackEvent("Marvel API Page Viewed", { page: "Marvel API Page" });
+  }, []);
+
   // Define your tabs with a name and component for each tab.
   const tabs = [
     { name: "Marvel Characters", component: <MarvelCharactersPage /> },
@@ -13,6 +19,12 @@ const App = () => {
 
   // State to track the active tab index.
   const [activeTab, setActiveTab] = useState(0);
+
+  // Handler for tab clicks that fires a Mixpanel event and sets the active tab.
+  const handleTabClick = (index: number, tabName: string) => {
+    setActiveTab(index);
+    trackEvent("Marvel Tab Clicked", { tab: tabName });
+  };
 
   return (
     <div className="min-h-screen dark:text-gray-100 p-4 space-y-8">
@@ -28,7 +40,7 @@ const App = () => {
                 ? "border-indigo-500 text-indigo-500"
                 : "border-transparent hover:border-gray-500"
             }`}
-            onClick={() => setActiveTab(index)}
+            onClick={() => handleTabClick(index, tab.name)}
           >
             {tab.name}
           </button>

@@ -103,6 +103,14 @@ export default function Projects() {
       excerpt: "Art  Institute of Chicago's open source API.",
       openSource: false,
     },
+    {
+      id: 8,
+      icon: Icon04,
+      slug: '/cymatics',
+      title: 'Cymatics (Caution: Contains flashing lights!)',
+      excerpt: "  A fun side project using sound frequencies to make sand dance into cymatic patterns, still a work in progress! ",
+      openSource: false,
+    },
   ];
 
   // Handler to track a project click event.

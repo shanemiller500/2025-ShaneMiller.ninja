@@ -1,19 +1,24 @@
-"use client";
+'use client'
 
 import React, { useEffect, useState } from "react";
+import { trackEvent } from "@/utils/mixpanel";
 
 const ArtworksCarousel = () => {
   const [artworks, setArtworks] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Fetch artworks from the Art Institute API on mount
+  // Track the overall carousel view when component mounts.
+  useEffect(() => {
+    trackEvent("Artworks Carousel Viewed", { page: "Artworks Carousel" });
+  }, []);
+
+  // Fetch artworks from the Art Institute API on mount.
   useEffect(() => {
     const fetchArtworks = async () => {
       try {
         const response = await fetch("https://api.artic.edu/api/v1/artworks");
         const data = await response.json();
-        // Set the artworks array from the API response
         setArtworks(data.data || []);
       } catch (error) {
         console.error("Error fetching artworks:", error);
@@ -25,17 +30,34 @@ const ArtworksCarousel = () => {
     fetchArtworks();
   }, []);
 
-  // Handlers to go to the next or previous slide
+  // Track artwork view each time the active slide changes.
+  useEffect(() => {
+    if (!loading && artworks.length > 0) {
+      const currentArtwork = artworks[activeIndex];
+      trackEvent("Artwork Viewed", {
+        artworkId: currentArtwork.id,
+        title: currentArtwork.title,
+        artist: currentArtwork.artist_display,
+        index: activeIndex,
+      });
+    }
+  }, [activeIndex, loading, artworks]);
+
+  // Handlers to go to the next or previous slide with tracking.
   const nextSlide = () => {
-    setActiveIndex((prevIndex) =>
-      prevIndex === artworks.length - 1 ? 0 : prevIndex + 1
-    );
+    setActiveIndex((prevIndex) => {
+      const newIndex = prevIndex === artworks.length - 1 ? 0 : prevIndex + 1;
+      trackEvent("Next Slide Clicked", { previousIndex: prevIndex, newIndex });
+      return newIndex;
+    });
   };
 
   const prevSlide = () => {
-    setActiveIndex((prevIndex) =>
-      prevIndex === 0 ? artworks.length - 1 : prevIndex - 1
-    );
+    setActiveIndex((prevIndex) => {
+      const newIndex = prevIndex === 0 ? artworks.length - 1 : prevIndex - 1;
+      trackEvent("Previous Slide Clicked", { previousIndex: prevIndex, newIndex });
+      return newIndex;
+    });
   };
 
   if (loading) {
@@ -46,7 +68,7 @@ const ArtworksCarousel = () => {
     return <div className="text-center py-10">No artworks available</div>;
   }
 
-  // Get the current artwork and build its image URL
+  // Get the current artwork and build its image URL.
   const currentArtwork = artworks[activeIndex];
   const imageUrl = currentArtwork.image_id
     ? `https://www.artic.edu/iiif/2/${currentArtwork.image_id}/full/800,/0/default.jpg`

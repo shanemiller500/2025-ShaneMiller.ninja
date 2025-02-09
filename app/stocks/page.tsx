@@ -1,6 +1,8 @@
 import React from 'react';
 import FinnhubDashboard from './stock/stocks'; // adjust the path if needed
 
+
+
 const StocksPage = () => {
   return (
     <div>

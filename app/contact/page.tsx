@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { trackEvent } from '@/utils/mixpanel';
 
 interface ContactFormProps {
   onClose?: () => void;
@@ -126,6 +127,10 @@ export default function ContactFormLogin() {
       // Handle close case
     }
   }
+
+    useEffect(() => {
+      trackEvent('Contact Page Viewed', { page: 'Contact' });
+    }, []);
 
   return (
     <section className="text-gray-800 mt-40 dark:text-gray-100">
