@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { trackEvent } from '@/utils/mixpanel';
-
-interface ContactFormProps {
-  onClose?: () => void;
-}
+import MoodToneAssistant from './MoodToneAssistant';
+import LanguageAssistant from './LanguageAssistant';
+import WritingStyleAssistant from './WritingStyleAssistant';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faSpinner } from '@fortawesome/free-solid-svg-icons';
 
 interface ContactFormState {
   email: string;
@@ -23,149 +24,230 @@ export default function ContactFormLogin() {
     description: '',
     attachment: null,
   });
-
   const [statusMessage, setStatusMessage] = useState('');
   const [isPopupVisible, setIsPopupVisible] = useState(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [showMoodToneModal, setShowMoodToneModal] = useState(false);
+  const [showWritingStyleModal, setShowWritingStyleModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Update text and textarea fields
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Update file attachment field
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFormData((prev) => ({
-        ...prev,
-        attachment: e.target.files ? e.target.files[0] : null,
-      }));
+  // Auto-adjust the textarea height to be slightly bigger than its content.
+  useEffect(() => {
+    if (textAreaRef.current) {
+      textAreaRef.current.style.height = 'auto';
+      textAreaRef.current.style.height = textAreaRef.current.scrollHeight + 20 + 'px';
     }
+  }, [formData.description]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Form submit handler – sends the data to your API endpoint (which should use Nodemailer)
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({ ...prev, attachment: e.target.files ? e.target.files[0] : null }));
+  };
+
+  const showPopup = (message: string, success: boolean = false) => {
+    setStatusMessage(message);
+    setIsSuccess(success);
+    setIsPopupVisible(true);
+    setTimeout(() => {
+      setIsPopupVisible(false);
+    }, 4000);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Validate required fields: email and description
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const hasValidEmail = emailRegex.test(formData.email.trim());
-    const hasDescription = formData.description.trim() !== '';
-
-    if (!hasValidEmail || !hasDescription) {
-      setStatusMessage(
-        'Please fill in all required fields: Email and Description.'
-      );
+    if (!emailRegex.test(formData.email.trim()) || formData.description.trim() === '') {
+      showPopup('Please fill in all required fields: Email and Message.');
       setIsSuccess(false);
-      setIsPopupVisible(true);
       return;
     }
-
     try {
       const payload = new FormData();
-
-      // Dummy name and surname if needed by your API
       payload.append('name', 'Anonymous');
       payload.append('surname', 'Hidden');
-
       payload.append('email', formData.email);
       payload.append('topic', formData.topic.trim() || 'N/A');
       payload.append('subject', formData.subject.trim());
       payload.append('description', formData.description.trim());
-
       if (formData.attachment) {
         payload.append('attachment', formData.attachment);
       }
-
-      // Replace this URL with your own endpoint that uses Nodemailer
       const response = await fetch('https://u-mail.co/api/send-email/contact', {
         method: 'POST',
         body: payload,
       });
-
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Error: ${errorText}`);
       }
-
-      setStatusMessage('Message sent successfully!');
-      setIsSuccess(true);
-      setIsPopupVisible(true);
-
-      // Reset the form
-      setFormData({
-        email: '',
-        topic: '',
-        subject: '',
-        description: '',
-        attachment: null,
-      });
+      showPopup('Message sent successfully!', true);
+      setFormData({ email: '', topic: '', subject: '', description: '', attachment: null });
     } catch (error) {
       console.error(error);
-      setStatusMessage('An error occurred while sending the message.');
-      setIsSuccess(false);
-      setIsPopupVisible(true);
+      showPopup('An error occurred while sending the message.', false);
     }
   };
 
-  const handlePopupClose = () => {
-    setIsPopupVisible(false);
-    if (isSuccess) {
-      // Handle success case
+  // Default enhancement (professional message enhancement without mood & tone)
+  const displayEnhancedText = async () => {
+    if (!formData.description.trim()) {
+      showPopup('Add some text to enhance!');
+      return;
+    }
+    trackEvent('Default Enhance Button Clicked');
+    setShowMoodToneModal(false);
+    setIsLoading(true);
+    const startTime = Date.now();
+    try {
+      const response = await fetch('https://u-mail.co/api/text-enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: formData.description }),
+      });
+      if (!response.ok) {
+        throw new Error(`Error: ${response.statusText}`);
+      }
+      const data = await response.json();
+      const enhancedText = data.text ? data.text.trim() : formData.description;
+      setFormData(prev => ({ ...prev, description: enhancedText }));
+      showPopup('Message enhanced!', true);
+    } catch (error) {
+      console.error(error);
+      showPopup('An error occurred while enhancing the text.', false);
+    }
+    const elapsed = Date.now() - startTime;
+    const delay = Math.max(2000 - elapsed, 0);
+    setTimeout(() => setIsLoading(false), delay);
+  };
+
+  // Enhancement with mood & tone
+  const displayCustomEnhancedText = async (mood: string, tone: string) => {
+    if (!formData.description.trim()) {
+      showPopup('Add some text to enhance!');
+      return;
+    }
+    trackEvent('MoodTone Enhance Button Clicked', { mood, tone });
+    setShowMoodToneModal(false);
+    setIsLoading(true);
+    const startTime = Date.now();
+    try {
+      const response = await fetch('https://u-mail.co/api/custom-enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: formData.description, mood, tone }),
+      });
+      if (!response.ok) {
+        throw new Error(`Error: ${response.statusText}`);
+      }
+      const data = await response.json();
+      const enhancedText = data.text ? data.text.trim() : formData.description;
+      setFormData(prev => ({ ...prev, description: enhancedText }));
+      showPopup('Message enhanced with mood & tone!', true);
+    } catch (error) {
+      console.error(error);
+      showPopup('An error occurred while enhancing the text.', false);
+    }
+    const elapsed = Date.now() - startTime;
+    const delay = Math.max(2000 - elapsed, 0);
+    setTimeout(() => setIsLoading(false), delay);
+  };
+
+  // API call for writing style enhancement
+  const enhanceTextWithStyle = async (text: string, style: string): Promise<string> => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('https://u-mail.co/api/style-enhance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text, style }),
+      });
+      if (!response.ok) {
+        setIsLoading(false);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setIsLoading(false);
+      return data.enhancedText ? data.enhancedText.trim() : "No enhanced text found.";
+    } catch (error) {
+      console.error("Error enhancing text:", error);
+      showPopup("Error enhancing text.", false);
+      setIsLoading(false);
+      return "";
     }
   };
 
-  // Utility to close parent dialog if needed
-  function setIsOpen(value: boolean): void {
-    if (!value) {
-      // Handle close case
+  // Translate text to selected language
+  const handleLanguageTranslation = async (language: any) => {
+    if (!formData.description.trim()) {
+      showPopup('Add some text to translate!');
+      return;
     }
-  }
+    trackEvent('Language Translation Clicked', { language: language.name });
+    setShowLanguageModal(false);
+    setIsLoading(true);
+    const startTime = Date.now();
+    try {
+      const response = await fetch('https://u-mail.co/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: formData.description, language: language.code, context: language.context || '' }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      const translatedText = data.text ? data.text.trim() : formData.description;
+      setFormData(prev => ({ ...prev, description: translatedText }));
+      showPopup(`Message translated to ${language.name}!`, true);
+    } catch (error) {
+      console.error('Error translating text:', error);
+      showPopup('An error occurred during translation.', false);
+    }
+    const elapsed = Date.now() - startTime;
+    const delay = Math.max(2000 - elapsed, 0);
+    setTimeout(() => setIsLoading(false), delay);
+  };
 
-    useEffect(() => {
-      trackEvent('Contact Page Viewed', { page: 'Contact' });
-    }, []);
+  useEffect(() => {
+    trackEvent('Contact Page Viewed', { page: 'Contact' });
+  }, []);
 
   return (
-    <section className="text-gray-800 mt-40 dark:text-gray-100">
+    <section className="text-gray-800 mt-10 md:mt-40 dark:text-gray-100">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div>
           {/* Section header */}
           <div className="pb-5 text-center">
-            <h1 className="pb-5 font-nacelle text-4xl font-semibold md:text-5xl">
-             Say Hello
-            </h1>
- 
+            <h1 className="pb-5 font-nacelle text-3xl md:text-4xl lg:text-5xl font-semibold">Say Hello</h1>
+            <div className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            This contact page is powered by UMail 
           </div>
-
- 
-
+          </div>
           {/* The form */}
           <form className="mx-auto max-w-[640px]" onSubmit={handleSubmit}>
-
-                                 {/* Name (optional) */}
-                                 <div className="mt-4">
-              <label className="mb-1 block text-sm font-medium" htmlFor="subject">
-                Name
-              </label>
+            {/* Name */}
+            <div className="mt-4">
+              <label className="mb-1 block text-sm font-medium" htmlFor="subject">Name</label>
               <input
                 id="subject"
                 name="subject"
                 type="text"
-                className="form-input w-full bg-gray-100 text-gray-800 placeholder-gray-500
-                           dark:bg-brand-900 dark:text-gray-100 dark:placeholder-gray-400"
+                className="form-input w-full bg-gray-100 text-gray-800 placeholder-gray-500 dark:bg-brand-900 dark:text-gray-100 dark:placeholder-gray-400 p-2 rounded"
                 placeholder="Your Name"
                 value={formData.subject}
                 onChange={handleChange}
               />
             </div>
-            {/* EMAIL (required) */}
+            {/* Email */}
             <div className="mt-4">
               <label className="mb-1 block text-sm font-medium" htmlFor="email">
                 Email <span className="text-red-500">*</span>
@@ -174,98 +256,139 @@ export default function ContactFormLogin() {
                 id="email"
                 name="email"
                 type="email"
-                className="form-input w-full bg-gray-100 text-gray-800 placeholder-gray-500
-                           dark:bg-brand-900 dark:text-gray-100 dark:placeholder-gray-400"
+                className="form-input w-full bg-gray-100 text-gray-800 placeholder-gray-500 dark:bg-brand-900 dark:text-gray-100 dark:placeholder-gray-400 p-2 rounded"
                 placeholder="your.email@email.com"
                 value={formData.email}
                 onChange={handleChange}
                 required
               />
             </div>
-
-
-
-            {/* DESCRIPTION (required) */}
-            <div className="mt-4">
-              <label
-                className="mb-1 block text-sm font-medium"
-                htmlFor="description"
+            {/* Toolbar for assistants */}
+            <div className="mt-4 flex flex-col sm:flex-row sm:space-x-4">
+              <button
+                type="button"
+                onClick={() => { trackEvent('Language Modal Opened'); setShowLanguageModal(true); }}
+                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded mb-2 sm:mb-0 border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
               >
+                Change Language
+              </button>
+              <button
+                type="button"
+                onClick={() => { trackEvent('MoodTone Modal Opened'); setShowMoodToneModal(true); }}
+                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
+              >
+                Mood &amp; Tone
+              </button>
+              {/* NEW: Writing Style Button */}
+              <button
+                type="button"
+                onClick={() => { trackEvent('WritingStyle Modal Opened'); setShowWritingStyleModal(true); }}
+                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
+              >
+                Writing Style
+              </button>
+            </div>
+            {/* Description/Message */}
+            <div className="mt-4">
+              <label className="mb-1 block text-sm font-medium" htmlFor="description">
                 Message <span className="text-red-500">*</span>
               </label>
               <textarea
                 id="description"
                 name="description"
                 rows={5}
-                className="rounded w-full bg-gray-100 text-gray-800 placeholder-gray-500
-                           dark:bg-brand-900 dark:text-gray-100 dark:placeholder-gray-400"
-                placeholder="On the topic..."
+                ref={textAreaRef}
+                className="rounded w-full bg-gray-100 text-gray-800 placeholder-gray-500 dark:bg-brand-900 dark:text-gray-100 dark:placeholder-gray-400 p-2 resize-none"
+                placeholder="Your message..."
                 value={formData.description}
                 onChange={handleChange}
                 required
               />
             </div>
-
-            {/* SUBMIT + CLOSE */}
-            <div className="mt-8 p-10 flex w-full flex-col justify-between gap-5 md:flex-row md:items-center">
+            {/* File Attachment */}
+            <div className="mt-4">
+              <label className="mb-1 block text-sm font-medium" htmlFor="attachment">
+                Attachment
+              </label>
+              <input
+                id="attachment"
+                name="attachment"
+                type="file"
+                className="form-input w-full p-2"
+                onChange={handleFileChange}
+              />
+            </div>
+            {/* Submit Button */}
+            <div className="mt-8 p-10 flex flex-col md:flex-row md:items-center md:justify-between gap-5">
               <div className="flex-1">
                 <button
                   type="submit"
-                  className="btn group w-full bg-gradient-to-t from-indigo-600 to-indigo-500
-                             text-white shadow-[inset_0px_1px_0px_0px_theme(colors.white/.16)]
-                             hover:bg-[length:100%_150%] dark:from-indigo-700 dark:to-indigo-600"
+                  className="w-full bg-gradient-to-t from-indigo-600 to-indigo-500 text-white p-3 rounded shadow hover:from-indigo-700 hover:to-indigo-600 transition"
                 >
-                  <span className="relative inline-flex items-center">
-                    Submit
-                  
-                  </span>
+                  <span className="relative inline-flex items-center">Submit</span>
                 </button>
-              
                 <p className="text-xs text-center mt-5 text-gray-500 dark:text-gray-400">
                   Your message is never shared
                 </p>
               </div>
-            
             </div>
-
-            {/* POPUP NOTIFICATION */}
-            {isPopupVisible && (
-              <div className="fixed top-4 right-4 z-50 w-96">
-                <div
-                  className={`flex items-center justify-between px-4 py-3 rounded shadow-lg ${
-                    isSuccess
-                      ? 'bg-green-500 dark:bg-green-600'
-                      : 'bg-red-500 dark:bg-red-600'
-                  } text-white transition-transform duration-300 ease-in-out ${
-                    isPopupVisible ? 'translate-y-0' : '-translate-y-4'
-                  }`}
-                >
-                  <span>{statusMessage}</span>
-                  <button
-                    onClick={handlePopupClose}
-                    className="text-white focus:outline-none"
-                  >
-                    <svg
-                      className="h-6 w-6"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            )}
           </form>
+          {/* Popup Notification */}
+          {isPopupVisible && (
+            <div className="fixed top-4 right-4 z-50 w-80 md:w-96">
+              <div
+                className={`flex items-center justify-between px-4 py-3 rounded shadow-lg ${
+                  isSuccess ? 'bg-green-500 dark:bg-green-600' : 'bg-red-500 dark:bg-red-600'
+                } text-white transition-transform duration-300 ease-in-out`}
+              >
+                <span>{statusMessage}</span>
+                <button onClick={() => setIsPopupVisible(false)} className="text-white focus:outline-none">
+                  <svg
+                    className="h-6 w-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+          
         </div>
       </div>
+      {/* Spinner Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <FontAwesomeIcon icon={faSpinner} spin size="3x" className="text-white" />
+        </div>
+      )}
+      {/* Assistant Modals */}
+      {showLanguageModal && (
+        <LanguageAssistant
+          currentText={formData.description}
+          onTranslate={handleLanguageTranslation}
+          onClose={() => setShowLanguageModal(false)}
+        />
+      )}
+      {showMoodToneModal && (
+        <MoodToneAssistant
+          currentText={formData.description}
+          onEnhance={displayCustomEnhancedText}
+          onDefaultEnhance={displayEnhancedText}
+          onClose={() => setShowMoodToneModal(false)}
+        />
+      )}
+      {showWritingStyleModal && (
+        <WritingStyleAssistant
+          currentDescription={formData.description}
+          updateDescription={(newDescription: string) => setFormData(prev => ({ ...prev, description: newDescription }))}
+          setPopupMessageWithTimeout={(msg: string) => showPopup(msg, false)}
+          setShowWritingStyleModal={setShowWritingStyleModal}
+        />
+      )}
     </section>
   );
 }
