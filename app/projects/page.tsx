@@ -10,6 +10,7 @@ import Icon06 from '@/public/images/project-icon-06.svg';
 import Icon07 from '@/public/images/bitcoin-seeklogo.png';
 import Icon08 from '@/public/images/nasa-seeklogo.png';
 import Icon09 from '@/public/images/aic.png';
+import Icon10 from '@/public/images/spacex-logo.svg';
 import { trackEvent } from '@/utils/mixpanel';
 
 interface ProjectItem {
@@ -109,6 +110,14 @@ export default function Projects() {
       slug: '/cymatics',
       title: 'Cymatics (Caution: Contains flashing lights!)',
       excerpt: "  A fun side project using sound frequencies to make sand dance into cymatic patterns, still a work in progress! ",
+      openSource: false,
+    },
+    {
+      id: 9,
+      icon: Icon10,
+      slug: '/Spacex',
+      title: 'Space X API stuff',
+      excerpt: " Playing with the SpaceX API Nothing special here, just a fun project. Older info, and an un maitained API",
       openSource: false,
     },
   ];

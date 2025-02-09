@@ -9,7 +9,7 @@ const CymaticPage: React.FC = () => {
   // A ref for the container that will hold the Three.js canvas.
   const containerRef = useRef<HTMLDivElement>(null);
   // State for the simulation frequency and a loading flag.
-  const [frequency, setFrequency] = useState<number>(75);
+  const [frequency, setFrequency] = useState<number>(178);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Track page view.
