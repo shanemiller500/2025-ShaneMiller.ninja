@@ -24,7 +24,6 @@ export default function NewsPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  // Default to the first desired category; adjust as needed.
   const [selectedCategory, setSelectedCategory] = useState<string>(desiredCategories[0]);
   const [page, setPage] = useState<number>(1);
 
@@ -59,7 +58,8 @@ export default function NewsPage() {
 
         // Construct API URLs with language filtering.
         const newsApiUrl = `https://newsapi.org/v2/everything?q=latest&language=en&sortBy=publishedAt&pageSize=${limit}&page=${page}&apiKey=${newsApiKey}`;
-        const mediastackUrl = `http://api.mediastack.com/v1/news?access_key=${mediastackApiKey}&languages=en&limit=${limit}&offset=${offset}`;
+        // Note the change to HTTPS for MediaStack URL.
+        const mediastackUrl = `https://api.mediastack.com/v1/news?access_key=${mediastackApiKey}&languages=en&limit=${limit}&offset=${offset}`;
 
         // Fetch both APIs concurrently.
         const [newsApiResponse, mediastackResponse] = await Promise.all([
@@ -90,7 +90,7 @@ export default function NewsPage() {
           urlToImage: article.urlToImage,
           publishedAt: article.publishedAt,
           content: article.content,
-          // We'll reassign category based on keywords later.
+          // Default category; will be recategorized.
           category: 'News',
         }));
 
@@ -107,14 +107,14 @@ export default function NewsPage() {
           urlToImage: article.image || null,
           publishedAt: article.published_at,
           content: null,
-          // Use the provided category if available; otherwise default.
+          // Use provided category or default.
           category: article.category || 'News',
         }));
 
         // Combine both arrays.
         const combinedArticles = [...newsApiArticles, ...mediastackArticles];
 
-        // Re-categorize articles using simple keyword matching.
+        // Re-categorize articles based on keywords.
         const recategorizedArticles = combinedArticles.map((article) => {
           const lowerTitle = article.title.toLowerCase();
           const lowerDesc = article.description ? article.description.toLowerCase() : "";
@@ -174,7 +174,6 @@ export default function NewsPage() {
           ) {
             return { ...article, category: "Business" };
           } else {
-            // Default to "News" if no keywords match.
             return { ...article, category: "News" };
           }
         });
@@ -184,7 +183,6 @@ export default function NewsPage() {
           (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
         );
 
-        // Append new articles if page > 1; otherwise, set initial articles.
         setArticles((prevArticles) =>
           page === 1 ? recategorizedArticles : [...prevArticles, ...recategorizedArticles]
         );
