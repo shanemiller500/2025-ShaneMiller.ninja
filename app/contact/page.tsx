@@ -1,3 +1,4 @@
+// app/contact/page.tsx
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -5,6 +6,7 @@ import { trackEvent } from '@/utils/mixpanel';
 import MoodToneAssistant from './MoodToneAssistant';
 import LanguageAssistant from './LanguageAssistant';
 import WritingStyleAssistant from './WritingStyleAssistant';
+import TextRefinementAssistant from './TextRefinementAssistant';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faGlobe, faSmile, faPenNib } from '@fortawesome/free-solid-svg-icons';
 
@@ -35,6 +37,8 @@ export default function ContactFormLogin() {
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Ref to store the textarea selection range.
+  const textAreaSelectionRef = useRef<{ start: number; end: number } | null>(null);
 
   // Auto-adjust the textarea height.
   useEffect(() => {
@@ -49,7 +53,7 @@ export default function ContactFormLogin() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // This handler is used both for the file input and for drag-and-drop.
+  // Handler for file input and drag-and-drop.
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
@@ -101,9 +105,7 @@ export default function ContactFormLogin() {
     }
   };
 
-  // --- Enhancement Functions ---
-
-  // Default enhancement (without mood & tone)
+  // --- Enhancement Functions (unchanged) ---
   const displayEnhancedText = async () => {
     if (!formData.description.trim()) {
       showPopup('Add some text to enhance!');
@@ -135,7 +137,6 @@ export default function ContactFormLogin() {
     setTimeout(() => setIsLoading(false), delay);
   };
 
-  // Enhancement with mood & tone.
   const displayCustomEnhancedText = async (mood: string, tone: string) => {
     if (!formData.description.trim()) {
       showPopup('Add some text to enhance!');
@@ -167,17 +168,13 @@ export default function ContactFormLogin() {
     setTimeout(() => setIsLoading(false), delay);
   };
 
-  // --- Writing Style Enhancement Function ---
-  // This function now guarantees that the spinner remains visible for at least 3 seconds.
   const enhanceTextWithStyle = async (text: string, style: string): Promise<string> => {
     setIsLoading(true);
     const startTime = Date.now();
     try {
       const response = await fetch('https://u-mail.co/api/style-enhance', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, style }),
       });
       if (!response.ok) {
@@ -197,7 +194,6 @@ export default function ContactFormLogin() {
     }
   };
 
-  // Translate text to selected language.
   const handleLanguageTranslation = async (language: any) => {
     if (!formData.description.trim()) {
       showPopup('Add some text to translate!');
@@ -233,25 +229,22 @@ export default function ContactFormLogin() {
     trackEvent('Contact Page Viewed', { page: 'Contact' });
   }, []);
 
-  // --- Drag & Drop Handlers for Attachment ---
+  // --- Drag & Drop Handlers ---
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(true);
   };
-
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(true);
   };
-
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
   };
-
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -307,7 +300,6 @@ export default function ContactFormLogin() {
             </div>
             {/* Toolbar for assistants */}
             <div className="mt-4 flex flex-row space-x-4 justify-center">
-
               <button
                 type="button"
                 onClick={() => {
@@ -330,7 +322,6 @@ export default function ContactFormLogin() {
                 <FontAwesomeIcon icon={faPenNib} className="mr-2" />
                 <span className="hidden sm:inline">Writing Style</span>
               </button>
-
               <button
                 type="button"
                 onClick={() => {
@@ -342,6 +333,17 @@ export default function ContactFormLogin() {
                 <FontAwesomeIcon icon={faGlobe} className="mr-2" />
                 <span className="hidden sm:inline">Change Language</span>
               </button>
+              {/* Text Refinement Assistant */}
+              <TextRefinementAssistant
+                setPopupMessageWithTimeout={(msg: string) => showPopup(msg, false)}
+                globalLoading={isLoading}
+                setGlobalLoading={setIsLoading}
+                currentDescription={formData.description}
+                updateDescription={(newText: string) =>
+                  setFormData((prev) => ({ ...prev, description: newText }))
+                }
+                textAreaSelectionRef={textAreaSelectionRef}
+              />
             </div>
             {/* Description/Message */}
             <div className="mt-4">
@@ -353,6 +355,13 @@ export default function ContactFormLogin() {
                 name="description"
                 rows={5}
                 ref={textAreaRef}
+                onSelect={(e) => {
+                  const target = e.target as HTMLTextAreaElement;
+                  textAreaSelectionRef.current = {
+                    start: target.selectionStart,
+                    end: target.selectionEnd,
+                  };
+                }}
                 className="rounded w-full bg-gray-100 text-gray-800 placeholder-gray-500 dark:bg-brand-900 dark:text-gray-100 dark:placeholder-gray-400 p-2 resize-none"
                 placeholder="Your message..."
                 value={formData.description}
@@ -430,7 +439,7 @@ export default function ContactFormLogin() {
           )}
         </div>
       </div>
-      {/* Spinner Overlay */}
+      {/* Global Spinner Overlay */}
       {isLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <FontAwesomeIcon icon={faSpinner} spin size="3x" className="text-white" />
@@ -460,7 +469,7 @@ export default function ContactFormLogin() {
           }
           setPopupMessageWithTimeout={(msg: string) => showPopup(msg, false)}
           setShowWritingStyleModal={setShowWritingStyleModal}
-          enhanceTextWithStyle={enhanceTextWithStyle} // Pass the new prop here.
+          enhanceTextWithStyle={enhanceTextWithStyle}
         />
       )}
     </section>
