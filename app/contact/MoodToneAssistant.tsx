@@ -47,13 +47,13 @@ const MoodToneAssistant: React.FC<MoodToneAssistantProps> = ({ onEnhance, onDefa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded p-6 w-full max-w-md">
+      <div className="bg-white dark:bg-brand-900 rounded p-6 w-full max-w-md">
         <div className="flex justify-end">
           <button className="text-gray-700 dark:text-gray-300 text-2xl" onClick={onClose}>
             &times;
           </button>
         </div>
-        <h2 className="text-xl font-semibold mb-4 text-center">Select Mood &amp; Tone</h2>
+        <h2 className="text-xl font-semibold mb-4 text-center"></h2>
         {/* Default enhance button */}
         <button
           id="centeringClass"
@@ -65,7 +65,7 @@ const MoodToneAssistant: React.FC<MoodToneAssistantProps> = ({ onEnhance, onDefa
         </button>
         <p className="text-center text-sm text-gray-500 mb-4">OR</p>
         <div className="mb-4">
-          <label className="font-medium block mb-1">Select a Mood:</label>
+          <label className="font-medium block mb-1 text-center">Select a Mood:</label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -110,16 +110,10 @@ const MoodToneAssistant: React.FC<MoodToneAssistantProps> = ({ onEnhance, onDefa
               <FontAwesomeIcon icon={faHandshake} className="mr-1" /> Concerned
             </button>
           </div>
-          <input
-            type="text"
-            className="mt-2 w-full p-2 border rounded"
-            placeholder="Custom Mood"
-            value={customMood}
-            onChange={handleCustomMoodChange}
-          />
+         
         </div>
         <div className="mb-4">
-          <label className="font-medium block mb-1">Select a Tone:</label>
+          <label className="font-medium block mb-1 text-center">Select a Tone:</label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -164,13 +158,7 @@ const MoodToneAssistant: React.FC<MoodToneAssistantProps> = ({ onEnhance, onDefa
               Respectful
             </button>
           </div>
-          <input
-            type="text"
-            className="mt-2 w-full p-2 border rounded"
-            placeholder="Custom Tone"
-            value={customTone}
-            onChange={handleCustomToneChange}
-          />
+         
         </div>
         <button
           type="button"

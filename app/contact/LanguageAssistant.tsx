@@ -53,7 +53,7 @@ const LanguageAssistant: React.FC<LanguageAssistantProps> = ({ currentText, onTr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded p-6 w-full max-w-md">
+      <div className="bg-white dark:bg-brand-900 rounded p-6 w-full max-w-md">
         <div className="flex justify-end">
           <button className="text-gray-700 dark:text-gray-300 text-2xl" onClick={onClose}>
             &times;
@@ -66,7 +66,7 @@ const LanguageAssistant: React.FC<LanguageAssistantProps> = ({ currentText, onTr
               <li key={language.key}>
                 <button
                   type="button"
-                  className="flex items-center w-full p-2 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+                  className="flex items-center w-full p-2 bg-gray-200 dark:bg-brand-900 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
                   onClick={() => handleLanguageChange(language)}
                 >
                   <ReactCountryFlag

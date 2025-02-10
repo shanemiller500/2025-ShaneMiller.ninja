@@ -307,17 +307,7 @@ export default function ContactFormLogin() {
             </div>
             {/* Toolbar for assistants */}
             <div className="mt-4 flex flex-row space-x-4 justify-center">
-              <button
-                type="button"
-                onClick={() => {
-                  trackEvent('Language Modal Opened');
-                  setShowLanguageModal(true);
-                }}
-                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
-              >
-                <FontAwesomeIcon icon={faGlobe} className="mr-2" />
-                <span className="hidden sm:inline">Change Language</span>
-              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -339,6 +329,18 @@ export default function ContactFormLogin() {
               >
                 <FontAwesomeIcon icon={faPenNib} className="mr-2" />
                 <span className="hidden sm:inline">Writing Style</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  trackEvent('Language Modal Opened');
+                  setShowLanguageModal(true);
+                }}
+                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
+              >
+                <FontAwesomeIcon icon={faGlobe} className="mr-2" />
+                <span className="hidden sm:inline">Change Language</span>
               </button>
             </div>
             {/* Description/Message */}
