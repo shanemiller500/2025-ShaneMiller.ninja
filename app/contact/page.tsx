@@ -6,7 +6,7 @@ import MoodToneAssistant from './MoodToneAssistant';
 import LanguageAssistant from './LanguageAssistant';
 import WritingStyleAssistant from './WritingStyleAssistant';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { faSpinner, faGlobe, faSmile, faPenNib } from '@fortawesome/free-solid-svg-icons';
 
 interface ContactFormState {
   email: string;
@@ -31,10 +31,12 @@ export default function ContactFormLogin() {
   const [showMoodToneModal, setShowMoodToneModal] = useState(false);
   const [showWritingStyleModal, setShowWritingStyleModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-adjust the textarea height to be slightly bigger than its content.
+  // Auto-adjust the textarea height.
   useEffect(() => {
     if (textAreaRef.current) {
       textAreaRef.current.style.height = 'auto';
@@ -44,11 +46,15 @@ export default function ContactFormLogin() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  // This handler is used both for the file input and for drag-and-drop.
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, attachment: e.target.files ? e.target.files[0] : null }));
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setFormData((prev) => ({ ...prev, attachment: files[0] }));
+    }
   };
 
   const showPopup = (message: string, success: boolean = false) => {
@@ -95,7 +101,9 @@ export default function ContactFormLogin() {
     }
   };
 
-  // Default enhancement (professional message enhancement without mood & tone)
+  // --- Enhancement Functions ---
+
+  // Default enhancement (without mood & tone)
   const displayEnhancedText = async () => {
     if (!formData.description.trim()) {
       showPopup('Add some text to enhance!');
@@ -116,7 +124,7 @@ export default function ContactFormLogin() {
       }
       const data = await response.json();
       const enhancedText = data.text ? data.text.trim() : formData.description;
-      setFormData(prev => ({ ...prev, description: enhancedText }));
+      setFormData((prev) => ({ ...prev, description: enhancedText }));
       showPopup('Message enhanced!', true);
     } catch (error) {
       console.error(error);
@@ -127,7 +135,7 @@ export default function ContactFormLogin() {
     setTimeout(() => setIsLoading(false), delay);
   };
 
-  // Enhancement with mood & tone
+  // Enhancement with mood & tone.
   const displayCustomEnhancedText = async (mood: string, tone: string) => {
     if (!formData.description.trim()) {
       showPopup('Add some text to enhance!');
@@ -148,7 +156,7 @@ export default function ContactFormLogin() {
       }
       const data = await response.json();
       const enhancedText = data.text ? data.text.trim() : formData.description;
-      setFormData(prev => ({ ...prev, description: enhancedText }));
+      setFormData((prev) => ({ ...prev, description: enhancedText }));
       showPopup('Message enhanced with mood & tone!', true);
     } catch (error) {
       console.error(error);
@@ -159,9 +167,11 @@ export default function ContactFormLogin() {
     setTimeout(() => setIsLoading(false), delay);
   };
 
-  // API call for writing style enhancement
+  // --- Writing Style Enhancement Function ---
+  // This function now guarantees that the spinner remains visible for at least 3 seconds.
   const enhanceTextWithStyle = async (text: string, style: string): Promise<string> => {
     setIsLoading(true);
+    const startTime = Date.now();
     try {
       const response = await fetch('https://u-mail.co/api/style-enhance', {
         method: 'POST',
@@ -171,12 +181,14 @@ export default function ContactFormLogin() {
         body: JSON.stringify({ text, style }),
       });
       if (!response.ok) {
-        setIsLoading(false);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      setIsLoading(false);
-      return data.enhancedText ? data.enhancedText.trim() : "No enhanced text found.";
+      const enhancedText = data.enhancedText ? data.enhancedText.trim() : "No enhanced text found.";
+      const elapsed = Date.now() - startTime;
+      const delay = Math.max(3000 - elapsed, 0);
+      setTimeout(() => setIsLoading(false), delay);
+      return enhancedText;
     } catch (error) {
       console.error("Error enhancing text:", error);
       showPopup("Error enhancing text.", false);
@@ -185,7 +197,7 @@ export default function ContactFormLogin() {
     }
   };
 
-  // Translate text to selected language
+  // Translate text to selected language.
   const handleLanguageTranslation = async (language: any) => {
     if (!formData.description.trim()) {
       showPopup('Add some text to translate!');
@@ -206,7 +218,7 @@ export default function ContactFormLogin() {
       }
       const data = await response.json();
       const translatedText = data.text ? data.text.trim() : formData.description;
-      setFormData(prev => ({ ...prev, description: translatedText }));
+      setFormData((prev) => ({ ...prev, description: translatedText }));
       showPopup(`Message translated to ${language.name}!`, true);
     } catch (error) {
       console.error('Error translating text:', error);
@@ -221,6 +233,34 @@ export default function ContactFormLogin() {
     trackEvent('Contact Page Viewed', { page: 'Contact' });
   }, []);
 
+  // --- Drag & Drop Handlers for Attachment ---
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(true);
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setFormData((prev) => ({ ...prev, attachment: e.dataTransfer.files[0] }));
+    }
+  };
+
   return (
     <section className="text-gray-800 mt-10 md:mt-40 dark:text-gray-100">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -229,14 +269,16 @@ export default function ContactFormLogin() {
           <div className="pb-5 text-center">
             <h1 className="pb-5 font-nacelle text-3xl md:text-4xl lg:text-5xl font-semibold">Say Hello</h1>
             <div className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
-            This contact page is powered by UMail 
-          </div>
+              This contact page is powered by UMail
+            </div>
           </div>
           {/* The form */}
           <form className="mx-auto max-w-[640px]" onSubmit={handleSubmit}>
             {/* Name */}
             <div className="mt-4">
-              <label className="mb-1 block text-sm font-medium" htmlFor="subject">Name</label>
+              <label className="mb-1 block text-sm font-medium" htmlFor="subject">
+                Name
+              </label>
               <input
                 id="subject"
                 name="subject"
@@ -264,28 +306,39 @@ export default function ContactFormLogin() {
               />
             </div>
             {/* Toolbar for assistants */}
-            <div className="mt-4 flex flex-col sm:flex-row sm:space-x-4">
+            <div className="mt-4 flex flex-row space-x-4 justify-center">
               <button
                 type="button"
-                onClick={() => { trackEvent('Language Modal Opened'); setShowLanguageModal(true); }}
-                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded mb-2 sm:mb-0 border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
+                onClick={() => {
+                  trackEvent('Language Modal Opened');
+                  setShowLanguageModal(true);
+                }}
+                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
               >
-                Change Language
+                <FontAwesomeIcon icon={faGlobe} className="mr-2" />
+                <span className="hidden sm:inline">Change Language</span>
               </button>
               <button
                 type="button"
-                onClick={() => { trackEvent('MoodTone Modal Opened'); setShowMoodToneModal(true); }}
+                onClick={() => {
+                  trackEvent('MoodTone Modal Opened');
+                  setShowMoodToneModal(true);
+                }}
                 className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
               >
-                Mood &amp; Tone
+                <FontAwesomeIcon icon={faSmile} className="mr-2" />
+                <span className="hidden sm:inline">Mood &amp; Tone</span>
               </button>
-              {/* NEW: Writing Style Button */}
               <button
                 type="button"
-                onClick={() => { trackEvent('WritingStyle Modal Opened'); setShowWritingStyleModal(true); }}
+                onClick={() => {
+                  trackEvent('WritingStyle Modal Opened');
+                  setShowWritingStyleModal(true);
+                }}
                 className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
               >
-                Writing Style
+                <FontAwesomeIcon icon={faPenNib} className="mr-2" />
+                <span className="hidden sm:inline">Writing Style</span>
               </button>
             </div>
             {/* Description/Message */}
@@ -305,18 +358,35 @@ export default function ContactFormLogin() {
                 required
               />
             </div>
-            {/* File Attachment */}
+            {/* Drag & Drop File Attachment */}
             <div className="mt-4">
               <label className="mb-1 block text-sm font-medium" htmlFor="attachment">
                 Attachment
               </label>
-              <input
-                id="attachment"
-                name="attachment"
-                type="file"
-                className="form-input w-full p-2"
-                onChange={handleFileChange}
-              />
+              <div
+                className={`border-2 border-dashed rounded p-4 text-center cursor-pointer ${
+                  dragActive ? 'border-indigo-600 bg-gray-100' : 'border-gray-300'
+                }`}
+                onDragOver={handleDragOver}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {formData.attachment ? (
+                  <p>{formData.attachment.name}</p>
+                ) : (
+                  <p>Drag &amp; drop your file here, or click to select a file</p>
+                )}
+                <input
+                  type="file"
+                  id="attachment"
+                  name="attachment"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                />
+              </div>
             </div>
             {/* Submit Button */}
             <div className="mt-8 p-10 flex flex-col md:flex-row md:items-center md:justify-between gap-5">
@@ -356,7 +426,6 @@ export default function ContactFormLogin() {
               </div>
             </div>
           )}
-          
         </div>
       </div>
       {/* Spinner Overlay */}
@@ -384,9 +453,12 @@ export default function ContactFormLogin() {
       {showWritingStyleModal && (
         <WritingStyleAssistant
           currentDescription={formData.description}
-          updateDescription={(newDescription: string) => setFormData(prev => ({ ...prev, description: newDescription }))}
+          updateDescription={(newDescription: string) =>
+            setFormData((prev) => ({ ...prev, description: newDescription }))
+          }
           setPopupMessageWithTimeout={(msg: string) => showPopup(msg, false)}
           setShowWritingStyleModal={setShowWritingStyleModal}
+          enhanceTextWithStyle={enhanceTextWithStyle} // Pass the new prop here.
         />
       )}
     </section>
