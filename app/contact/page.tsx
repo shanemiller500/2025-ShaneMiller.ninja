@@ -395,10 +395,10 @@ export default function ContactFormLogin() {
                   type="submit"
                   className="w-full bg-gradient-to-t from-indigo-600 to-indigo-500 text-white p-3 rounded shadow hover:from-indigo-700 hover:to-indigo-600 transition"
                 >
-                  <span className="relative inline-flex items-center">Submit</span>
+                  <span className="relative inline-flex items-center">Send</span>
                 </button>
                 <p className="text-xs text-center mt-5 text-gray-500 dark:text-gray-400">
-                  Your message is never shared
+                  Your message data is never shared or used for AI/ML training purposes.
                 </p>
               </div>
             </div>
