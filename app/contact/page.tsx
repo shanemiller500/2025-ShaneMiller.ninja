@@ -1,6 +1,6 @@
 // app/contact/page.tsx
 'use client';
-
+import Image from 'next/image'
 import React, { useState, useEffect, useRef } from 'react';
 import { trackEvent } from '@/utils/mixpanel';
 import MoodToneAssistant from './MoodToneAssistant';
@@ -9,6 +9,7 @@ import WritingStyleAssistant from './WritingStyleAssistant';
 import TextRefinementAssistant from './TextRefinementAssistant';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faGlobe, faSmile, faPenNib } from '@fortawesome/free-solid-svg-icons';
+import UMail from '@/public/images/umailLogo.png'
 
 interface ContactFormState {
   email: string;
@@ -261,9 +262,15 @@ export default function ContactFormLogin() {
           {/* Section header */}
           <div className="pb-5 text-center">
             <h1 className="pb-5 font-nacelle text-3xl md:text-4xl lg:text-5xl font-semibold">Say Hello</h1>
-            <div className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
-              This contact page is powered by UMail
-            </div>
+            <div className="mt-8 flex justify-center items-center text-center text-sm text-gray-500 dark:text-gray-400">  This contact page is powered by&nbsp;<Image 
+                className="" 
+                src={UMail} 
+                alt="UMail Logo" 
+                width={20} 
+                height={20} 
+              />Mail
+            
+            </div>  
           </div>
           {/* The form */}
           <form className="mx-auto max-w-[640px]" onSubmit={handleSubmit}>
