@@ -327,7 +327,7 @@ const LiveStreamHeatmapSection = () => {
             : "The markets are now closed. Check back during market hours for the latest updates!"}
         </div>
       )}
-      <div id="tradeInfoGrid" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+      <div id="tradeInfoGrid" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-">
         {Object.keys(tradeInfoMap).map((symbol) => {
           const info = tradeInfoMap[symbol];
           return (

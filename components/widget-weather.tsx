@@ -1,0 +1,264 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/css';
+import Snowfall from 'react-snowfall';
+import Particles from 'react-tsparticles';
+
+type Weather = {
+  temperature: number;
+  windspeed: number;
+  winddirection: number;
+  weathercode: number;
+  time: string;
+};
+
+type ForecastDay = {
+  date: string;
+  temperature_max: number;
+  temperature_min: number;
+  weathercode: number;
+};
+
+export default function WidgetWeather() {
+  const [weather, setWeather] = useState<Weather | null>(null);
+  const [forecast, setForecast] = useState<ForecastDay[] | null>(null);
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Map weather codes to description and icon
+  const getWeatherInfo = (code: number) => {
+    if (code === 0) {
+      return { description: 'Clear Sky', icon: '☀️' };
+    } else if ([1, 2, 3].includes(code)) {
+      return { description: 'Partly Cloudy', icon: '⛅️' };
+    } else if ([45, 48].includes(code)) {
+      return { description: 'Fog', icon: '🌫️' };
+    } else if ([51, 53, 55].includes(code)) {
+      return { description: 'Drizzle', icon: '🌦️' };
+    } else if ([61, 63, 65].includes(code)) {
+      return { description: 'Rain', icon: '🌧️' };
+    } else if ([66, 67].includes(code)) {
+      return { description: 'Freezing Rain', icon: '🌧️' };
+    } else if ([71, 73, 75, 77].includes(code)) {
+      return { description: 'Snow Fall', icon: '❄️' };
+    } else if ([80, 81, 82].includes(code)) {
+      return { description: 'Rain Showers', icon: '🌦️' };
+    } else if ([85, 86].includes(code)) {
+      return { description: 'Snow Showers', icon: '❄️' };
+    } else if (code === 95) {
+      return { description: 'Thunderstorm', icon: '⛈️' };
+    } else if ([96, 99].includes(code)) {
+      return { description: 'Thunderstorm with Hail', icon: '⛈️' };
+    } else {
+      return { description: 'Unknown', icon: '❓' };
+    }
+  };
+
+  // Determine which weather effect to render based on the current weather code
+  let weatherEffect: 'snow' | 'rain' | 'sunny' | null = null;
+  if (weather) {
+    const code = weather.weathercode;
+    if ([71, 73, 75, 77, 85, 86].includes(code)) {
+      weatherEffect = 'snow';
+    } else if ([51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82, 96, 99].includes(code)) {
+      weatherEffect = 'rain';
+    } else if (code === 0) {
+      weatherEffect = 'sunny';
+    }
+  }
+
+  // Configuration for the rain particle effect using react-tsparticles
+  const rainConfig = {
+    particles: {
+      number: {
+        value: 150,
+        density: { enable: true, value_area: 800 },
+      },
+      color: { value: "#ffffff" },
+      shape: { type: "line" },
+      opacity: { value: 0.3 },
+      size: { value: 2, random: true },
+      move: {
+        enable: true,
+        speed: 10,
+        direction: "bottom" as const,
+        straight: false,
+        out_mode: "out" as const,
+      },
+    },
+    interactivity: { events: {} },
+    retina_detect: true,
+  };
+
+  // Get the user's location and fetch weather data from Open-Meteo
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser.');
+      setLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setCoords({ latitude, longitude });
+
+        fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`
+        )
+          .then((response) => response.json())
+          .then((data) => {
+            setWeather(data.current_weather);
+            if (data.daily) {
+              const forecastDays: ForecastDay[] = data.daily.time.map((date: string, index: number) => ({
+                date,
+                temperature_max: data.daily.temperature_2m_max[index],
+                temperature_min: data.daily.temperature_2m_min[index],
+                weathercode: data.daily.weathercode[index],
+              }));
+              // Limit forecast to 3 days
+              setForecast(forecastDays.slice(0, 5));
+            }
+            setLoading(false);
+          })
+          .catch(() => {
+            setError('Error fetching weather data.');
+            setLoading(false);
+          });
+      },
+      () => {
+        setError('Unable to retrieve your location.');
+        setLoading(false);
+      }
+    );
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="p-5">
+        <p>Loading weather...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-5">
+        <p className="text-red-500">{error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative rounded-lg dark:bg-gradient-to-t dark:from-slate-800 dark:to-slate-800/30 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5">
+      {/* Weather Animation Overlays */}
+      {weatherEffect === 'snow' && (
+        <div className="absolute inset-0 pointer-events-none">
+          <Snowfall snowflakeCount={200} />
+        </div>
+      )}
+      {weatherEffect === 'rain' && (
+        <Particles options={rainConfig} className="absolute inset-0 pointer-events-none" />
+      )}
+      {weatherEffect === 'sunny' && (
+        <div className="sunny-effect absolute inset-0 pointer-events-none"></div>
+      )}
+
+      {/* Main Content (placed above the effects) */}
+      <div className="relative z-10">
+        {/* Current Weather */}
+        <h2 className="text-xl font-semibold mb-4">Current Local Weather</h2>
+        {weather && (
+          <div className="flex items-center space-x-4">
+            <div className="text-5xl">{getWeatherInfo(weather.weathercode).icon}</div>
+            <div>
+              <p className="text-lg">{getWeatherInfo(weather.weathercode).description}</p>
+              <p className="text-sm">
+                Temperature: {weather.temperature}°C / {((weather.temperature * 9) / 5 + 32).toFixed(1)}°F
+              </p>
+              <p className="text-sm">Wind: {weather.windspeed} km/h</p>
+            </div>
+          </div>
+        )}
+
+        {/* 3-Day Interactive Forecast */}
+        {forecast && (
+          <>
+            <h3 className="text-lg font-semibold mt-6 mb-2">5-Day Forecast</h3>
+            <Swiper
+              spaceBetween={16}
+              slidesPerView={1}
+              breakpoints={{
+                640: { slidesPerView: 2 },
+                1024: { slidesPerView: 3 },
+              }}
+            >
+              {forecast.map((day) => (
+                <SwiperSlide key={day.date}>
+                  <div className="flex flex-col items-center p-4 rounded-md bg-gray-100 dark:bg-gray-800 hover:scale-105 transition-transform">
+                    <p className="font-medium">
+                      {new Date(day.date).toLocaleDateString(undefined, { weekday: 'short' })}
+                    </p>
+                    <div className="text-4xl">{getWeatherInfo(day.weathercode).icon}</div>
+                    <p className="text-sm">{getWeatherInfo(day.weathercode).description}</p>
+                    <p className="text-sm">
+                      {day.temperature_max}°C / {day.temperature_min}°C
+                    </p>
+                  </div>
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </>
+        )}
+
+        {/* Map */}
+        {coords && (
+          <>
+            <h3 className="text-lg font-semibold mt-6 mb-2">Location Map</h3>
+            <div className="mt-2">
+              <iframe
+                width="100%"
+                height="300"
+                frameBorder="0"
+                scrolling="no"
+                marginHeight={0}
+                marginWidth={0}
+                src={`https://www.openstreetmap.org/export/embed.html?bbox=${
+                  coords.longitude - 0.01
+                },${coords.latitude - 0.01},${coords.longitude + 0.01},${coords.latitude + 0.01}&layer=mapnik&marker=${coords.latitude},${coords.longitude}`}
+                title="User Location Map"
+              ></iframe>
+              <br />
+              <small>
+                <a
+                  href={`https://www.openstreetmap.org/?mlat=${coords.latitude}&mlon=${coords.longitude}#map=15/${coords.latitude}/${coords.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  View Larger Map
+                </a>
+              </small>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* CSS for the sunny effect */}
+      <style jsx>{`
+        .sunny-effect {
+          background: radial-gradient(circle, rgba(255,255,0,0.2), transparent 70%);
+          animation: pulse 3s infinite;
+        }
+        @keyframes pulse {
+          0% { opacity: 0.7; }
+          50% { opacity: 1; }
+          100% { opacity: 0.7; }
+        }
+      `}</style>
+    </div>
+  );
+}
