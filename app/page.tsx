@@ -1,6 +1,6 @@
 import Hero from '@/components/hero'
 import WidgetWeather from '@/components/widget-weather'
-import WidgetSponsor from '@/components/widget-sponsor'
+import WidgetNews from '@/components/widget-news'
 import Image from 'next/image'
 import AboutImg from '@/public/images/pumpkin.jpg'
 
@@ -51,7 +51,7 @@ Need a developer who gets things done? Let’s talk.
           <aside className="md:w-[240px] lg:w-[300px] shrink-0">
             <div className="space-y-6">
               <WidgetWeather />
-              <WidgetSponsor />
+              <WidgetNews />
             </div>
           </aside>
         </div>
