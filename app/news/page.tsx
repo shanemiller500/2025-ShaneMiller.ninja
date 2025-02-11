@@ -41,58 +41,26 @@ export default function NewsPage() {
       setError(null);
 
       try {
-        // Retrieve API keys from environment variables.
-        const newsApiKey = process.env.NEXT_PUBLIC_NEWS_API_KEY;
+        // Retrieve the MediaStack API key from environment variables.
         const mediastackApiKey = process.env.NEXT_PUBLIC_MEDIASTACK_ACCESS_KEY;
-
-        if (!newsApiKey) {
-          throw new Error('Missing NewsAPI API key in environment variables.');
-        }
         if (!mediastackApiKey) {
           throw new Error('Missing MediaStack API key in environment variables.');
         }
 
         // Define pagination values.
-        const limit = 50;
+        const limit = 100;
         const offset = (page - 1) * limit;
 
-        // Construct API URLs with language filtering.
-        const newsApiUrl = `https://newsapi.org/v2/everything?q=latest&language=en&sortBy=publishedAt&pageSize=${limit}&page=${page}&apiKey=${newsApiKey}`;
-        // Note the change to HTTPS for MediaStack URL.
+        // Construct MediaStack API URL with language filtering.
         const mediastackUrl = `https://api.mediastack.com/v1/news?access_key=${mediastackApiKey}&languages=en&limit=${limit}&offset=${offset}`;
 
-        // Fetch both APIs concurrently.
-        const [newsApiResponse, mediastackResponse] = await Promise.all([
-          fetch(newsApiUrl),
-          fetch(mediastackUrl),
-        ]);
-
-        if (!newsApiResponse.ok) {
-          throw new Error(`Error fetching news from NewsAPI: ${newsApiResponse.status}`);
-        }
-        if (!mediastackResponse.ok) {
-          throw new Error(`Error fetching news from MediaStack: ${mediastackResponse.status}`);
+        // Fetch the MediaStack API.
+        const response = await fetch(mediastackUrl);
+        if (!response.ok) {
+          throw new Error(`Error fetching news from MediaStack: ${response.status}`);
         }
 
-        const newsApiData = await newsApiResponse.json();
-        const mediastackData = await mediastackResponse.json();
-
-        // Map NewsAPI results into the Article interface.
-        const newsApiArticles: Article[] = (newsApiData.articles as any[]).map((article) => ({
-          source: {
-            id: article.source.id,
-            name: article.source.name,
-          },
-          author: article.author,
-          title: article.title,
-          description: article.description,
-          url: article.url,
-          urlToImage: article.urlToImage,
-          publishedAt: article.publishedAt,
-          content: article.content,
-          // Default category; will be recategorized.
-          category: 'News',
-        }));
+        const mediastackData = await response.json();
 
         // Map MediaStack results into the Article interface.
         const mediastackArticles: Article[] = (mediastackData.data as any[]).map((article) => ({
@@ -111,11 +79,8 @@ export default function NewsPage() {
           category: article.category || 'News',
         }));
 
-        // Combine both arrays.
-        const combinedArticles = [...newsApiArticles, ...mediastackArticles];
-
         // Re-categorize articles based on keywords.
-        const recategorizedArticles = combinedArticles.map((article) => {
+        const recategorizedArticles = mediastackArticles.map((article) => {
           const lowerTitle = article.title.toLowerCase();
           const lowerDesc = article.description ? article.description.toLowerCase() : "";
 
@@ -214,7 +179,7 @@ export default function NewsPage() {
     <div className="max-w-6xl mx-auto p-5">
       {/* Page Header */}
       <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6">
-       The Miller Gazette 
+        The Miller Gazette
       </h1>
 
       {error && <p className="text-red-600 mb-4">Error: {error}</p>}
@@ -248,13 +213,13 @@ export default function NewsPage() {
               key={`${selectedCategory}-${index}`}
               className="rounded-lg shadow-md overflow-hidden transition-transform duration-300 hover:scale-105"
             >
-              {article.urlToImage ? (
+              {article.urlToImage && (
                 <img
                   src={article.urlToImage}
                   alt={article.title}
                   className="w-full object-cover"
                 />
-              ) : null}
+              )}
               <div className="p-4">
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                   {article.title}
