@@ -163,7 +163,7 @@ export default function WidgetWeather() {
       )}
 
       {/* Map */}
-      {coords && (
+      {/* {coords && (
         <>
           <h3 className="text-lg font-semibold mt-6 mb-2">Location Map</h3>
           <div className="mt-2">
@@ -192,7 +192,7 @@ export default function WidgetWeather() {
             </small>
           </div>
         </>
-      )}
+      )} */}
     </div>
   );
 }
