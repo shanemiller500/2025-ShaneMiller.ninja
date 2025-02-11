@@ -215,7 +215,7 @@ export default function Results() {
         <div className="max-w-6xl mx-auto flex items-center justify-between w-full">
           <a href="/">
             <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-              Jaximus
+              Search results
             </h1>
           </a>
           <div className="flex space-x-4">

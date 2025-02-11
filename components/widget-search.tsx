@@ -3,7 +3,7 @@
 import React, { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-export default function Home() {
+export default function widgetSearch() {
   const [search, setSearch] = useState<string>("");
   const router = useRouter();
 
@@ -17,10 +17,11 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen text-gray-100">
-      <h1 className="text-6xl font-bold mb-10 text-indigo-500">AI Search Engine</h1>
-      <form onSubmit={handleSearch} className="w-full max-w-lg px-4">
-        <div className="flex items-center border border-gray-700 rounded-full px-5 py-3">
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5">
+
+<div className="flex flex-col items-center justify-center  text-gray-100">
+      <h1 className="font-bold text-indigo-500">AI Search </h1>
+      <form onSubmit={handleSearch} className="w-full  px-4">
           <input
             type="text"
             className="flex-grow bg-transparent outline-none px-2 text-gray-100 placeholder-gray-500"
@@ -30,12 +31,13 @@ export default function Home() {
           />
           <button
             type="submit"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full ml-2"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full mt-2 text-center"
           >
             Search
           </button>
-        </div>
+       
       </form>
+    </div>
     </div>
   );
 }
