@@ -36,8 +36,9 @@ export default function Resume() {
             {/* Page content */}
             <div className="text-slate-500 dark:text-slate-400 space-y-12">
 
-              <Education />
+        
               <Experience />
+              <Education />
               {/* <Recommendations />   */}
 
             </div>
