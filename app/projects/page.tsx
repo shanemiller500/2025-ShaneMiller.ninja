@@ -120,6 +120,22 @@ export default function Projects() {
       excerpt: " Playing with the SpaceX API Nothing special here, just a fun project. Older info, and an un maitained API",
       openSource: false,
     },
+    {
+      id: 10,
+      icon: Icon04,
+      slug: '/news',
+      title: 'Latest News',
+      excerpt: " Latest News from whatever APIs I can get it from",
+      openSource: false,
+    },
+    {
+      id: 11,
+      icon: Icon04,
+      slug: '/search',
+      title: 'AI Powered Search Engine',
+      excerpt: " An AI Ppowered search engine that gets to the point.",
+      openSource: false,
+    },
   ];
 
   // Handler to track a project click event.

@@ -46,12 +46,12 @@ const WidgetCrypto = () => {
     fetchMetaData();
   }, []);
 
-  // Compute the top 15 asset IDs based on their rank.
+  // Compute the top 10 asset IDs based on their rank.
   const top15AssetIds = Object.keys(metaData)
     .sort(
       (a, b) => parseInt(metaData[a].rank, 10) - parseInt(metaData[b].rank, 10)
     )
-    .slice(0, 15);
+    .slice(0, 10);
 
   // Subscribe to the WebSocket using only the top 15 ranked asset IDs,
   // delaying the connection by 2 seconds to prevent errors on page load.
@@ -212,7 +212,7 @@ const WidgetCrypto = () => {
 
       <div className="p-2">
         <p className="text-xs text-gray-500 text-center">
-          Top 15 Ranked Cryptos Live Pricing Data
+          Top 10 Ranked Cryptos Live Pricing Data
         </p>
       </div>
 

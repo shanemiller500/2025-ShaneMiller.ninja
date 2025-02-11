@@ -54,6 +54,9 @@ export default function SideNavigation() {
                     pathname !== '/Art' &&
                     pathname !== '/cymatics' &&
                     pathname !== '/Spacex' &&
+                    pathname !== '/news' &&
+                    pathname !== '/search' &&
+                    pathname !== '/results' &&
                     pathname !== '/NASA'
                       ? 'text-indigo-500 after:bg-indigo-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
@@ -82,6 +85,9 @@ export default function SideNavigation() {
                     pathname === '/Art' ||
                     pathname === '/cymatics' ||
                     pathname === '/Spacex' ||
+                    pathname === '/news' ||
+                    pathname === '/search' ||
+                    pathname === '/results' ||
                     pathname === '/NASA'
                       ? 'text-indigo-500 after:bg-indigo-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
