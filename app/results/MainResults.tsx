@@ -1,23 +1,11 @@
+// /components/MainResults.tsx
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 import { SearchHistoryItem } from "./Results";
 
-// Define types for image and link items (adjust if necessary)
-interface ImageItem {
-  imageURL: string;
-  url: string;
-  title?: string;
-}
-
-interface LinkItem {
-  url: string;
-  title: string;
-}
-
-// Define props for the MainResults component
 interface MainResultsProps {
   result: SearchHistoryItem;
   renderSummaryWithBuzzwords: (summary: string, keywords: string[]) => string;
@@ -37,15 +25,6 @@ export default function MainResults({
   followUpInput,
   setFollowUpInput,
 }: MainResultsProps) {
-  // Example carousel settings (if using a carousel library)
-  const [carouselSettings] = useState({
-    dots: true,
-    infinite: true,
-    speed: 500,
-    slidesToShow: 1,
-    slidesToScroll: 1,
-  });
-
   return (
     <>
       {/* Related Images */}
@@ -72,7 +51,7 @@ export default function MainResults({
       )}
 
       {/* Summary */}
-      <div className=" p-6 shadow-md rounded-md mb-5">
+      <div className="p-6 shadow-md rounded-md mb-5">
         <h2 className="text-xl font-semibold mb-4">Answer</h2>
         <div
           className="leading-relaxed"
@@ -87,7 +66,7 @@ export default function MainResults({
 
       {/* Wikipedia Information */}
       {result.wikipedia && (
-        <div className=" p-6 shadow-md rounded-md mb-5 mt-5">
+        <div className="p-6 shadow-md rounded-md mb-5 mt-5">
           <h2 className="text-2xl font-bold mb-4">
             {result.wikipedia.title} (From Wikipedia)
           </h2>
@@ -105,7 +84,7 @@ export default function MainResults({
 
       {/* Supporting Links */}
       {result.links.length > 0 && (
-        <div className=" p-6 mt-5 shadow-md rounded-md">
+        <div className="p-6 mt-5 shadow-md rounded-md">
           <h2 className="text-xl font-semibold mb-4">Supporting Links</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {result.links.map((link, linkIndex) => (
@@ -114,7 +93,7 @@ export default function MainResults({
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block p-4  rounded-md hover:shadow-lg"
+                className="block p-4 rounded-md hover:shadow-lg"
               >
                 <p className="text-indigo-600 dark:text-indigo-400 font-semibold">
                   {link.title}
@@ -130,7 +109,7 @@ export default function MainResults({
 
       {/* Follow-Up Suggestions */}
       {result.followUpQuestions.length > 0 && (
-        <div className=" p-6 mt-5 shadow-md rounded-md">
+        <div className="p-6 mt-5 shadow-md rounded-md">
           <h2 className="text-xl font-semibold mb-4">Follow-Up Questions</h2>
           <ul className="space-y-2">
             {result.followUpQuestions.map((question, questionIndex) => (
