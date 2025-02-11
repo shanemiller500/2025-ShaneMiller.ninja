@@ -24,18 +24,34 @@ export default function WidgetNews() {
   useEffect(() => {
     async function fetchNews() {
       try {
-        const apiKey = process.env.NEXT_PUBLIC_NEWS_API_KEY;
+        const apiKey = process.env.NEXT_PUBLIC_MEDIASTACK_ACCESS_KEY;
         if (!apiKey) {
-          throw new Error('Missing API key in environment variables.');
+          throw new Error('Missing MediaStack API key in environment variables.');
         }
         // Fetch only 5 articles for the widget.
-        const url = `https://newsapi.org/v2/everything?q=latest&sortBy=publishedAt&pageSize=5&apiKey=${apiKey}`;
+        const url = `https://api.mediastack.com/v1/news?access_key=${apiKey}&languages=en&limit=5`;
         const response = await fetch(url);
         if (!response.ok) {
           throw new Error(`Error fetching news: ${response.status}`);
         }
         const data = await response.json();
-        setArticles(data.articles as Article[]);
+
+        // Map MediaStack data to the Article interface.
+        const articlesData: Article[] = (data.data as any[]).map((article) => ({
+          source: {
+            id: null,
+            name: article.source || 'Unknown',
+          },
+          author: article.author || null,
+          title: article.title,
+          description: article.description,
+          url: article.url,
+          urlToImage: article.image || null,
+          publishedAt: article.published_at,
+          content: null,
+        }));
+
+        setArticles(articlesData);
       } catch (err: any) {
         console.error(err);
         setError(err.message);
