@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import Results from './Results';
 
-const StocksPage = () => {
+const ResultsPage = () => {
   return (
     <div>
       <Suspense fallback={<div>Loading...</div>}>
@@ -11,4 +11,4 @@ const StocksPage = () => {
   );
 };
 
-export default StocksPage;
+export default ResultsPage;
