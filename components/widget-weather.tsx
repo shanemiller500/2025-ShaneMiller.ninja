@@ -116,7 +116,7 @@ export default function WidgetWeather() {
   }
 
   return (
-    <div className="rounded-lg dark:bg-gradient-to-t dark:from-slate-800 dark:to-slate-800/30 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5">
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5">
       {/* Current Weather */}
       <h2 className="text-xl font-semibold mb-4">Your Current Weather</h2>
       {weather && (
@@ -146,7 +146,7 @@ export default function WidgetWeather() {
           >
             {forecast.map((day) => (
               <SwiperSlide key={day.date}>
-                <div className="flex flex-col items-center p-4 rounded-md bg-gray-100 dark:bg-gray-800 hover:scale-105 transition-transform">
+                <div className="flex flex-col items-center p-4 rounded-md rounded-lg border border-slate-200 dark:border-slate-800 hover:scale-105 transition-transform">
                   <p className="font-medium">
                     {new Date(day.date).toLocaleDateString(undefined, { weekday: 'short' })}
                   </p>
