@@ -1,130 +1,189 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 
-interface Article {
-  source: {
-    id: string | null;
-    name: string;
-  };
-  author: string | null;
-  title: string;
-  description: string;
-  url: string;
-  urlToImage: string | null;
+interface NewsItem {
+  articleId?: string; // Optional because cached items might lack an articleId.
+  headline: string;
+  source: string;
   publishedAt: string;
-  content: string | null;
+  thumbnail: string;
+  link: string;
 }
 
-export default function WidgetNews() {
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+const WidgetNews: React.FC = () => {
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [flashVisible, setFlashVisible] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
 
-  useEffect(() => {
-    async function fetchNews() {
-      try {
-        const apiKey = process.env.NEXT_PUBLIC_MEDIASTACK_ACCESS_KEY;
-        if (!apiKey) {
-          throw new Error('Missing MediaStack API key in environment variables.');
+  /**
+   * @param showSpinner - Pass true to show spinner overlay (used when refreshing).
+   */
+  const fetchNews = async (showSpinner: boolean = false) => {
+    if (showSpinner) setLoading(true);
+
+    // 1. Load cached news first (if available)
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem('breakingNewsCache');
+      if (cached) {
+        try {
+          const { timestamp, data } = JSON.parse(cached);
+          const now = Date.now();
+          // Use cached data if it's less than 2 hours old (7200000 ms)
+          if (now - timestamp < 7200000) {
+            setNews(data);
+          }
+        } catch (e) {
+          console.error('Error parsing cached news:', e);
         }
-        // Fetch only 5 articles for the widget.
-        const url = `https://api.mediastack.com/v1/news?access_key=${apiKey}&languages=en&limit=5`;
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`Error fetching news: ${response.status}`);
-        }
-        const data = await response.json();
-
-        // Map MediaStack data to the Article interface.
-        const articlesData: Article[] = (data.data as any[]).map((article) => ({
-          source: {
-            id: null,
-            name: article.source || 'Unknown',
-          },
-          author: article.author || null,
-          title: article.title,
-          description: article.description,
-          url: article.url,
-          urlToImage: article.image || null,
-          publishedAt: article.published_at,
-          content: null,
-        }));
-
-        setArticles(articlesData);
-      } catch (err: any) {
-        console.error(err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
       }
     }
+
+    // 2. Always call the API to fetch fresh news
+    try {
+      const response = await axios.get<{ results: NewsItem[] }>(
+        'http://localhost:3002/api/NewsAPI/breaking-news'
+      );
+      const newsData = response.data.results;
+
+      // Ensure each news item has a unique articleId.
+      const newsWithIds = newsData.map((item, index) => ({
+        ...item,
+        articleId: item.articleId || `${index}-${item.headline}`,
+      }));
+
+      // Update the news state with the fresh data.
+      setNews(newsWithIds);
+
+      // Cache the fresh news with a timestamp.
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(
+          'breakingNewsCache',
+          JSON.stringify({
+            timestamp: Date.now(),
+            data: newsWithIds,
+          })
+        );
+      }
+
+      // 3. Flash "Breaking News" for 5 seconds when fresh news loads.
+      setFlashVisible(true);
+      setTimeout(() => {
+        setFlashVisible(false);
+      }, 5000);
+    } catch (error: any) {
+      console.error('Error fetching breaking news:', error);
+      setErrorMsg('Failed to load breaking news.');
+    } finally {
+      if (showSpinner) setLoading(false);
+    }
+  };
+
+  // Initial load (without spinner)
+  useEffect(() => {
     fetchNews();
   }, []);
 
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5">
-      {/* Top header */}
-      <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">Latest News</h2>
-
-      {loading && <p>Loading news...</p>}
-      {error && <p className="text-red-600">Error: {error}</p>}
-      {!loading && !error && (
-        <div className="space-y-6">
-          {articles.map((article, index) => (
-            <div
-              key={index}
-              className="rounded-lg shadow-md overflow-hidden p-4 flex flex-col md:flex-row items-center transition-transform duration-300 hover:scale-105"
-            >
-              {/* Title & source */}
-              <div className="flex-grow md:ml-4 mt-4 md:mt-0">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                  {article.title}
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-300 mt-1">
-                  {article.source.name}
-                </p>
-              </div>
-
-              {/* "Read More" link for the article */}
-              <div className="mt-4 md:mt-0">
-                <a
-                  href={article.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center text-blue-600 dark:text-blue-400 hover:underline group text-sm"
-                >
-                  Read More
-                  <svg
-                    className="w-4 h-4 ml-1 transition-transform duration-300 transform group-hover:translate-x-1"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </a>
-              </div>
-            </div>
-          ))}
+    <div className="relative rounded-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5">
+      {/* Spinner Overlay for refresh load */}
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-50">
+          <svg
+            className="animate-spin h-8 w-8 text-white"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            ></circle>
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            ></path>
+          </svg>
         </div>
       )}
 
-      {/* Bottom link to the full news page */}
-      <div className="mt-4 text-center">
-        <a
-          href="/news"
-          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+      {/* Flash message: appears when fresh news loads */}
+      {flashVisible && (
+        <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-black text-center py-1 z-20">
+          Breaking News
+        </div>
+      )}
+
+      {/* Refresh button icon in the top-right corner */}
+      <div className="absolute top-0 right-0 p-2 z-20">
+        <button
+          onClick={() => fetchNews(true)}
+          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+          title="Refresh News"
         >
-          Read More News
-        </a>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m0 0A7.966 7.966 0 003 12a8 8 0 008 8 8 8 0 007.418-4.582M15 11V4m0 0l4 4m-4-4l-4 4"
+            />
+          </svg>
+        </button>
+      </div>
+
+      {/* News Content */}
+      <div className="mt-8">
+        {errorMsg ? (
+          <p>{errorMsg}</p>
+        ) : news.length > 0 ? (
+          <>
+            <ul>
+              {news.map((item, index) => (
+                <li key={item.articleId || index} className="mb-3">
+                  <a
+                    href={item.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold hover:underline"
+                  >
+                    {item.headline}
+                  </a>
+                  <p className="text-sm text-gray-600">
+                    {item.source} &mdash;{' '}
+                    {new Date(item.publishedAt).toLocaleString()}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4 text-center">
+              <a
+                href="/news"
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                Read More News
+              </a>
+            </div>
+          </>
+        ) : (
+          <p>Loading breaking news...</p>
+        )}
       </div>
     </div>
   );
-}
+};
+
+export default WidgetNews;

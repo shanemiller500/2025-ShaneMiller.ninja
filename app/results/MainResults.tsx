@@ -1,4 +1,3 @@
-// /components/MainResults.tsx
 "use client";
 
 import React from "react";
@@ -28,7 +27,7 @@ export default function MainResults({
   return (
     <>
       {/* Related Images */}
-      {result.images.length > 0 && (
+      {result.images && result.images.length > 0 && (
         <div className="mb-5">
           <h2 className="text-xl font-semibold mb-4">Related Images</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -40,8 +39,8 @@ export default function MainResults({
                 rel="noopener noreferrer"
               >
                 <img
-                  src={image.imageURL}
-                  alt={image.title || "Related image"}
+                  src={image.url}
+                  alt={image.description || "Related image"}
                   className="w-full h-48 object-cover rounded-md shadow-md"
                 />
               </a>
@@ -64,6 +63,42 @@ export default function MainResults({
         ></div>
       </div>
 
+      {/* Data Tables */}
+      {result.tables && result.tables.length > 0 && (
+        <div className="p-6 mt-5 shadow-md rounded-md">
+          <h2 className="text-xl font-semibold mb-4">Data Tables</h2>
+          {result.tables.map((table, tableIndex) => (
+            <div key={tableIndex} className="mb-4">
+              <h3 className="text-lg font-bold mb-2">{table.title}</h3>
+              <div className="overflow-auto">
+                <table className="min-w-full bg-white dark:bg-gray-800">
+                  <thead>
+                    <tr>
+                      {table.headers.map((header, headerIndex) => (
+                        <th key={headerIndex} className="px-4 py-2 border">
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {table.rows.map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={cellIndex} className="px-4 py-2 border">
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Wikipedia Information */}
       {result.wikipedia && (
         <div className="p-6 shadow-md rounded-md mb-5 mt-5">
@@ -83,7 +118,7 @@ export default function MainResults({
       )}
 
       {/* Supporting Links */}
-      {result.links.length > 0 && (
+      {result.links && result.links.length > 0 && (
         <div className="p-6 mt-5 shadow-md rounded-md">
           <h2 className="text-xl font-semibold mb-4">Supporting Links</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -108,7 +143,7 @@ export default function MainResults({
       )}
 
       {/* Follow-Up Suggestions */}
-      {result.followUpQuestions.length > 0 && (
+      {result.followUpQuestions && result.followUpQuestions.length > 0 && (
         <div className="p-6 mt-5 shadow-md rounded-md">
           <h2 className="text-xl font-semibold mb-4">Follow-Up Questions</h2>
           <ul className="space-y-2">

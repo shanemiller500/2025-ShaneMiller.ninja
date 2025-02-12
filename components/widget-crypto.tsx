@@ -244,7 +244,7 @@ const WidgetCrypto = () => {
       <div className="p-2">
         <p className="text-xs text-gray-500 text-center">
           See more crypto data{" "}
-          <a href="/Crypto" className="text-blue-500 underline">
+          <a href="/Crypto" className="text-indigo-500 underline">
             here
           </a>
           .

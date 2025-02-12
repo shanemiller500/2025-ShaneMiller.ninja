@@ -1,10 +1,8 @@
-// /components/Results.tsx
 "use client";
 
 import React, { useEffect, useState, FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import MainResults from "./MainResults";
-import FlightSearch from "./FlightSearch";
 
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
@@ -14,9 +12,9 @@ export interface SearchHistoryItem {
   query: string;
   summary: string;
   links: Array<{ url: string; title: string }>;
-  images: Array<{ imageURL: string; url: string; title?: string }>;
+  images: Array<{ url: string; description: string }>;
+  tables: Array<{ title: string; headers: string[]; rows: string[][] }>;
   followUpQuestions: string[];
-  placesPerKeyword: any[]; // Adjust as needed
   wikipedia:
     | {
         title: string;
@@ -29,10 +27,8 @@ export interface SearchHistoryItem {
       }
     | null;
   keywords: string[];
-  financeData: any;
   isFinanceRelated: boolean;
   isOpen: boolean;
-  activeTab: "main" | "flights";
 }
 
 const LOCAL_STORAGE_KEY = "searchHistory";
@@ -109,9 +105,6 @@ export default function Results() {
 
         const data = await res.json();
 
-        // Determine if flight tab should be available
-        const hasFlights = searchQuery.toLowerCase().includes("flight");
-
         // Update search history with new results as an accordion item
         setSearchHistory((prevHistory) => [
           {
@@ -119,14 +112,12 @@ export default function Results() {
             summary: data.summary || "",
             links: data.links || [],
             images: data.images || [],
+            tables: data.tables || [],
             followUpQuestions: data.followUpQuestions || [],
-            placesPerKeyword: data.placesPerKeyword || [],
             wikipedia: data.wikipedia || null,
             keywords: data.keywords || [],
-            financeData: data.financeData || null,
             isFinanceRelated: data.isFinanceRelated || false,
             isOpen: true, // new search is open by default
-            activeTab: "main",
           },
           // Close older items
           ...prevHistory.map((item) => ({ ...item, isOpen: false })),
@@ -159,15 +150,6 @@ export default function Results() {
     setSearchHistory((prevHistory) =>
       prevHistory.map((item, i) =>
         i === index ? { ...item, isOpen: !item.isOpen } : item
-      )
-    );
-  };
-
-  // Change active tab for a specific accordion item
-  const setActiveTabForItem = (index: number, tab: "main" | "flights") => {
-    setSearchHistory((prevHistory) =>
-      prevHistory.map((item, i) =>
-        i === index ? { ...item, activeTab: tab } : item
       )
     );
   };
@@ -274,44 +256,14 @@ export default function Results() {
             </div>
             {result.isOpen && (
               <div className="p-4">
-                {/* Tabs for Main Results and Flight Search if applicable */}
-                <div className="mb-4 flex border-b border-gray-200 dark:border-gray-700">
-                  <button
-                    className={`px-4 py-2 ${
-                      result.activeTab === "main"
-                        ? "border-b-2 border-indigo-600 dark:border-indigo-400"
-                        : "text-gray-600 dark:text-gray-400"
-                    }`}
-                    onClick={() => setActiveTabForItem(index, "main")}
-                  >
-                    Main Results
-                  </button>
-                  {result.query.toLowerCase().includes("flight") && (
-                    <button
-                      className={`px-4 py-2 ${
-                        result.activeTab === "flights"
-                          ? "border-b-2 border-indigo-600 dark:border-indigo-400"
-                          : "text-gray-600 dark:text-gray-400"
-                      }`}
-                      onClick={() => setActiveTabForItem(index, "flights")}
-                    >
-                      Flight Search
-                    </button>
-                  )}
-                </div>
-
-                {result.activeTab === "main" ? (
-                  <MainResults
-                    result={result}
-                    renderSummaryWithBuzzwords={renderSummaryWithBuzzwords}
-                    handleFollowUpClick={handleFollowUpClick}
-                    handleFollowUpSubmit={handleFollowUpSubmit}
-                    followUpInput={followUpInput}
-                    setFollowUpInput={setFollowUpInput}
-                  />
-                ) : (
-                  <FlightSearch />
-                )}
+                <MainResults
+                  result={result}
+                  renderSummaryWithBuzzwords={renderSummaryWithBuzzwords}
+                  handleFollowUpClick={handleFollowUpClick}
+                  handleFollowUpSubmit={handleFollowUpSubmit}
+                  followUpInput={followUpInput}
+                  setFollowUpInput={setFollowUpInput}
+                />
               </div>
             )}
           </div>

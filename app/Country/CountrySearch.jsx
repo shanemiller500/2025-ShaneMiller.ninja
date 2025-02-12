@@ -5,7 +5,7 @@ import React, { useEffect, useState } from "react";
 // A simple spinner using Tailwind's animate-spin utility
 const Spinner = () => (
   <div className="flex justify-center items-center">
-    <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500 dark:border-blue-300"></div>
+    <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-indigo-500 dark:border-indigo-300"></div>
   </div>
 );
 
@@ -84,7 +84,7 @@ const CountrySearch = () => {
             <button
               id="countrySearchInput"
               onClick={handleSearch}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none"
+              className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none"
             >
               Search
             </button>
