@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useState, useEffect } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -26,7 +26,7 @@ export default function WidgetWeather() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Map weather codes to description and icon
+  // Helper: Map weather codes to description and icon
   const getWeatherInfo = (code: number) => {
     if (code === 0) {
       return { description: 'Clear Sky', icon: '☀️' };
@@ -53,6 +53,25 @@ export default function WidgetWeather() {
     } else {
       return { description: 'Unknown', icon: '❓' };
     }
+  };
+
+  // Helper: Returns a gradient style for forecast cards based on weather code.
+  const getForecastCardStyle = (code: number) => {
+    if (code === 0) return { background: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)' };
+    if ([1, 2].includes(code)) return { background: 'linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%)' };
+    if (code === 3) return { background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' };
+    if ([45, 48].includes(code)) return { background: 'linear-gradient(135deg, #bdc3c7 0%, #2c3e50 100%)' };
+    if ([51, 53, 55, 61, 63, 65].includes(code))
+      return { background: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)' };
+    if ([66, 67].includes(code))
+      return { background: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)' };
+    if ([71, 73, 75, 77, 85, 86].includes(code))
+      return { background: 'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)' };
+    if ([80, 81, 82].includes(code))
+      return { background: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)' };
+    if ([95, 96, 99].includes(code))
+      return { background: 'linear-gradient(135deg, #fbd3e9 0%, #bb377d 100%)' };
+    return { background: 'linear-gradient(135deg, #ece9e6 0%, #ffffff 100%)' };
   };
 
   // Get user's location and fetch weather data
@@ -82,7 +101,7 @@ export default function WidgetWeather() {
                 temperature_min: data.daily.temperature_2m_min[index],
                 weathercode: data.daily.weathercode[index],
               }));
-              // Limit forecast to 3 days
+              // Limit forecast to 5 days
               setForecast(forecastDays.slice(0, 5));
             }
             setLoading(false);
@@ -102,7 +121,7 @@ export default function WidgetWeather() {
   if (loading) {
     return (
       <div className="p-5">
-        <p>Loading weather...</p>
+        <p className="text-gray-700 dark:text-gray-300">Loading weather...</p>
       </div>
     );
   }
@@ -116,26 +135,35 @@ export default function WidgetWeather() {
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5">
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5 bg-opacity-80">
       {/* Current Weather */}
-      <h2 className="text-xl font-semibold mb-4">Your Current Weather</h2>
+      <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-4">
+        Your Current Weather
+      </h2>
       {weather && (
         <div className="flex items-center space-x-4">
           <div className="text-5xl">{getWeatherInfo(weather.weathercode).icon}</div>
           <div>
-            <p className="text-lg">{getWeatherInfo(weather.weathercode).description}</p>
-            <p className="text-sm">
-              Temperature: {weather.temperature}°C / {((weather.temperature * 9) / 5 + 32).toFixed(1)}°F
+            <p className="text-lg text-gray-800 dark:text-gray-200">
+              {getWeatherInfo(weather.weathercode).description}
             </p>
-            <p className="text-sm">Wind: {weather.windspeed} km/h</p>
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              Temperature: {weather.temperature}°C /{' '}
+              {((weather.temperature * 9) / 5 + 32).toFixed(1)}°F
+            </p>
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              Wind: {weather.windspeed} km/h
+            </p>
           </div>
         </div>
       )}
 
-      {/* 3-Day Interactive Forecast */}
+      {/* 5-Day Interactive Forecast */}
       {forecast && (
         <>
-          <h3 className="text-lg font-semibold mt-6 mb-2">5-Day Forecast</h3>
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mt-6 mb-2">
+            5-Day Forecast
+          </h3>
           <Swiper
             spaceBetween={16}
             slidesPerView={1}
@@ -146,13 +174,18 @@ export default function WidgetWeather() {
           >
             {forecast.map((day) => (
               <SwiperSlide key={day.date}>
-                <div className="flex flex-col items-center p-4 rounded-md rounded-lg border border-slate-200 dark:border-slate-800 hover:scale-105 transition-transform">
-                  <p className="font-medium">
+                <div
+                  className="flex flex-col items-center p-4 rounded-md border transition-transform hover:scale-105"
+                  style={getForecastCardStyle(day.weathercode)}
+                >
+                  <p className="font-medium text-white">
                     {new Date(day.date).toLocaleDateString(undefined, { weekday: 'short' })}
                   </p>
-                  <div className="text-4xl">{getWeatherInfo(day.weathercode).icon}</div>
-                  <p className="text-sm">{getWeatherInfo(day.weathercode).description}</p>
-                  <p className="text-sm">
+                  <div className="text-4xl dark:text-white">{getWeatherInfo(day.weathercode).icon}</div>
+                  <p className="text-sm text-white">
+                    {getWeatherInfo(day.weathercode).description}
+                  </p>
+                  <p className="text-sm text-white">
                     {day.temperature_max}°C / {day.temperature_min}°C
                   </p>
                 </div>
@@ -162,37 +195,15 @@ export default function WidgetWeather() {
         </>
       )}
 
-      {/* Map */}
-      {/* {coords && (
-        <>
-          <h3 className="text-lg font-semibold mt-6 mb-2">Location Map</h3>
-          <div className="mt-2">
-            <iframe
-              width="100%"
-              height="300"
-              frameBorder="0"
-              scrolling="no"
-              marginHeight={0}
-              marginWidth={0}
-              src={`https://www.openstreetmap.org/export/embed.html?bbox=${
-                coords.longitude - 0.01
-              },${coords.latitude - 0.01},${coords.longitude + 0.01},${coords.latitude + 0.01}&layer=mapnik&marker=${coords.latitude},${coords.longitude}`}
-              title="User Location Map"
-            ></iframe>
-            <br />
-            <small>
-              <a
-                href={`https://www.openstreetmap.org/?mlat=${coords.latitude}&mlon=${coords.longitude}#map=15/${coords.latitude}/${coords.longitude}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                View Larger Map
-              </a>
-            </small>
-          </div>
-        </>
-      )} */}
+      <div className="p-2">
+        <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+          See more Weather data{" "}
+          <a href="/Weather" className="text-indigo-500 underline">
+            here
+          </a>
+          .
+        </p>
+      </div>
     </div>
   );
 }
