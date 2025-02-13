@@ -19,7 +19,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-gray-100 px-4">
+    <div className="flex flex-col items-center justify-center min-h-screen text-gray-100 px-4">
       <h1 className="text-4xl md:text-6xl font-bold mb-6 md:mb-10 text-indigo-500 text-center">
         AI Search Engine
       </h1>

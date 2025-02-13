@@ -17,21 +17,21 @@ export default function widgetSearch() {
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5">
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out pb-2">
 
 <div className="flex flex-col items-center justify-center  text-gray-100">
       <h1 className="font-bold text-indigo-500">AI Search </h1>
       <form onSubmit={handleSearch} className="w-full  px-4">
           <input
             type="text"
-            className="flex-grow bg-transparent outline-none px-2 text-gray-100 placeholder-gray-500"
+            className="flex-grow bg-transparent rounded-lg border border-slate-200 dark:border-slate-800 text-gray-100 placeholder-gray-500"
             placeholder="Search Anything"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <button
             type="submit"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full mt-2 text-center"
+            className="ml-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full mt-2 text-center"
           >
             Search
           </button>

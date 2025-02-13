@@ -207,7 +207,7 @@ export default function NewsPage() {
               className={`px-3 py-2 rounded whitespace-nowrap transition-colors ${
                 selectedCategory === category
                   ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-200 text-gray-800'
+                  : 'hover:bg-indigo-500 text-white'
               }`}
             >
               {category}
