@@ -3,6 +3,7 @@
 import React, { useEffect, useState, FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import MainResults from "./MainResults";
+import { trackEvent } from "@/utils/mixpanel";
 
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
@@ -88,6 +89,7 @@ export default function Results() {
 
     if (searchQuery) {
       setIsLoading(true);
+      trackEvent("AI Search Submitted", { query: searchQuery });
       try {
         const res = await fetch("https://u-mail.co/api/search", {
           method: "POST",
@@ -132,6 +134,7 @@ export default function Results() {
   };
 
   const handleFollowUpClick = async (question: string): Promise<void> => {
+    trackEvent("Follow Up Clicked", { question });
     await handleSearch(null, question);
   };
 
@@ -140,6 +143,7 @@ export default function Results() {
   ): Promise<void> => {
     e.preventDefault();
     if (followUpInput.trim()) {
+      trackEvent("Follow Up Submitted", { question: followUpInput.trim() });
       await handleSearch(null, followUpInput.trim());
       setFollowUpInput("");
     }
@@ -156,6 +160,7 @@ export default function Results() {
 
   // Clear search history manually
   const clearHistory = () => {
+    trackEvent("Clear History Clicked");
     setSearchHistory([]);
     localStorage.removeItem(LOCAL_STORAGE_KEY);
     localStorage.removeItem(LOCAL_STORAGE_TIMESTAMP_KEY);

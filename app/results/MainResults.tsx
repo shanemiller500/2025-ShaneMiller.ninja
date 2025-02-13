@@ -4,6 +4,7 @@ import React from "react";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 import { SearchHistoryItem } from "./Results";
+import { trackEvent } from "@/utils/mixpanel";
 
 interface MainResultsProps {
   result: SearchHistoryItem;
@@ -37,6 +38,9 @@ export default function MainResults({
                 href={image.url}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() =>
+                  trackEvent("Related Image Clicked", { url: image.url })
+                }
               >
                 <img
                   src={image.url}
@@ -111,6 +115,12 @@ export default function MainResults({
             target="_blank"
             rel="noopener noreferrer"
             className="text-indigo-600 dark:text-indigo-400 hover:underline"
+            onClick={() =>
+              trackEvent("Wikipedia Link Clicked", {
+                page: result.wikipedia!.content_urls.desktop.page,
+                title: result.wikipedia!.title,
+              })
+            }
           >
             Read more on Wikipedia
           </a>
@@ -129,6 +139,12 @@ export default function MainResults({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block p-4 rounded-md hover:shadow-lg"
+                onClick={() =>
+                  trackEvent("Supporting Link Clicked", {
+                    url: link.url,
+                    title: link.title,
+                  })
+                }
               >
                 <p className="text-indigo-600 dark:text-indigo-400 font-semibold">
                   {link.title}

@@ -2,6 +2,7 @@
 
 import React, { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { trackEvent } from "@/utils/mixpanel";
 
 export default function Home() {
   const [search, setSearch] = useState<string>("");
@@ -11,6 +12,7 @@ export default function Home() {
     e.preventDefault();
 
     if (search.trim()) {
+      trackEvent("Home AI Search Initiated", { query: search.trim() });
       // Redirect to the results page with the query in the URL
       router.push(`/results?query=${encodeURIComponent(search.trim())}`);
     }
