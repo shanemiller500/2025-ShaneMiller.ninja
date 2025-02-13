@@ -114,18 +114,15 @@ const WidgetNews: React.FC = () => {
         </div>
       )}
 
-      {/* Flash message: appears when fresh news loads */}
-      {flashVisible && (
-        <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-black text-center py-1 z-20">
+        <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-brand-900 text-center py-1 z-20">
           Breaking News
         </div>
-      )}
 
       {/* Refresh button icon in the top-right corner */}
       <div className="absolute top-0 right-0 p-2 z-20">
         <button
           onClick={() => fetchNews(true)}
-          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+          className="p-1 hover:text-gray-200 text-brand-900 rounded"
           title="Refresh News"
         >
           <svg

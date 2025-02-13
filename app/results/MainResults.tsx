@@ -30,7 +30,7 @@ export default function MainResults({
       {result.images && result.images.length > 0 && (
         <div className="mb-5">
           <h2 className="text-xl font-semibold mb-4">Related Images</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             {result.images.map((image, imageIndex) => (
               <a
                 key={imageIndex}
@@ -168,18 +168,18 @@ export default function MainResults({
               >
                 Got your own follow-up question?
               </label>
-              <div className="flex">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   id="followUpInput"
                   value={followUpInput}
                   onChange={(e) => setFollowUpInput(e.target.value)}
-                  className="flex-grow p-2 border border-gray-300 dark:border-gray-700 rounded-l-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 outline-none"
+                  className="flex-grow p-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 outline-none"
                   placeholder="Type your question here..."
                 />
                 <button
                   type="submit"
-                  className="bg-indigo-600 dark:bg-indigo-500 text-white px-4 py-2 rounded-r-md"
+                  className="bg-indigo-600 dark:bg-indigo-500 text-white px-4 py-2 rounded-md"
                 >
                   Ask
                 </button>

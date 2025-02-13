@@ -17,20 +17,22 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen text-gray-100">
-      <h1 className="text-6xl font-bold mb-10 text-indigo-500">AI Search Engine</h1>
-      <form onSubmit={handleSearch} className="w-full max-w-lg px-4">
-        <div className="flex items-center border border-gray-700 rounded-full px-5 py-3">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-gray-100 px-4">
+      <h1 className="text-4xl md:text-6xl font-bold mb-6 md:mb-10 text-indigo-500 text-center">
+        AI Search Engine
+      </h1>
+      <form onSubmit={handleSearch} className="w-full max-w-lg">
+        <div className="flex flex-col sm:flex-row items-center px-5 py-3">
           <input
             type="text"
-            className="flex-grow bg-transparent outline-none px-2 text-gray-100 placeholder-gray-500"
+            className="flex-grow bg-transparent border border-gray-700 rounded-full px-2 text-gray-100 placeholder-gray-500 w-full"
             placeholder="Search Anything"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <button
             type="submit"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full ml-2"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full mt-3 sm:mt-0 sm:ml-2"
           >
             Search
           </button>
