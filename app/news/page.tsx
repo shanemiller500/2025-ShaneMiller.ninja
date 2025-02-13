@@ -238,7 +238,7 @@ export default function NewsPage() {
                     <img
                       src={article.urlToImage}
                       alt={article.title}
-                      className="w-full h-full object-cover"
+                      className=""
                     />
                   </div>
                 )}
