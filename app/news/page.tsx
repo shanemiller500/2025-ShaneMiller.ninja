@@ -39,7 +39,7 @@ export default function NewsPage() {
   const [apiPage, setApiPage] = useState<number>(1);
   const [allMediaArticles, setAllMediaArticles] = useState<Article[]>([]);
   const [clientPage, setClientPage] = useState<number>(1);
-  const itemsPerPage = 8;
+  const itemsPerPage = 10;
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [finnhubArticles, setFinnhubArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -234,7 +234,7 @@ export default function NewsPage() {
                 className="rounded-lg shadow overflow-hidden transition-transform duration-300 hover:scale-105 "
               >
                 {article.urlToImage && (
-                  <div className="h-40 w-full overflow-hidden">
+                  <div className=" w-full overflow-hidden">
                     <img
                       src={article.urlToImage}
                       alt={article.title}
@@ -242,7 +242,7 @@ export default function NewsPage() {
                     />
                   </div>
                 )}
-                <div className="p-2">
+                <div className="p-3">
                   <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100">
                     {article.title}
                   </h3>
@@ -311,14 +311,14 @@ export default function NewsPage() {
           </p>
         )}
       </div>
-      <CryptoWidget />
+ 
         </div>
 
         {/* Aside Widgets (visible on all devices) */}
         <aside className="w-full lg:w-[300px] border-t pt-6 lg:border-t-0 lg:pt-0">
           <div className="space-y-6">
             <WidgetNews />
-
+            <CryptoWidget />
             <WidgetWeather />
           </div>
         </aside>
