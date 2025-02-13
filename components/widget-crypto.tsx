@@ -203,7 +203,7 @@ const WidgetCrypto = () => {
   const mod = (n: number, m: number) => ((n % m) + m) % m;
 
   return (
-    <div className="max-w-[810px] overflow-hidden relative">
+    <div className="max-w-[700px] overflow-hidden relative">
       {loading && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-indigo-500"></div>
