@@ -39,6 +39,8 @@ const WeatherPage: React.FC = () => {
       L.Icon.Default.mergeOptions({
         iconUrl: markerIconUrl,
         shadowUrl: markerShadowUrl,
+       responsive: true,
+        maintainAspectRatio: false,
       });
     }
   }, []);
@@ -107,9 +109,9 @@ const WeatherPage: React.FC = () => {
       );
       const data = await res.json();
       const elapsedTime = Date.now() - startTime;
-      if (elapsedTime < 2000) {
-        await new Promise((resolve) => setTimeout(resolve, 2000 - elapsedTime));
-      }
+      // Ensure a minimum wait time without negative delay
+      const waitTime = Math.max(0, 1000 - elapsedTime);
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
       setWeatherData(data);
     } catch (err) {
       console.error(err);
@@ -194,8 +196,8 @@ const WeatherPage: React.FC = () => {
               <div className="grid grid-cols-1 gap-8">
                 <div className="mt-2 dark:text-white">
                   <ToggleSwitch
-                    isOn={tempUnit === 'F'}
-                    onToggle={() => setTempUnit(tempUnit === 'C' ? 'F' : 'C')}
+                    isOn={tempUnit === "F"}
+                    onToggle={() => setTempUnit(tempUnit === "C" ? "F" : "C")}
                   />
                 </div>
                 <section className="p-6 rounded-lg shadow bg-opacity-80">
@@ -223,7 +225,7 @@ const WeatherPage: React.FC = () => {
                           initial={{ opacity: 0, x: 50 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ duration: 0.5 }}
-                          className="w-full md:w-1/2 h-56 rounded-lg overflow-hidden border mt-4 md:mt-0"
+                          className="w-full md:w-1/2 h-56 sm:h-64 rounded-lg overflow-hidden border mt-4 md:mt-0"
                         >
                           <LeafletMap location={selectedLocation} />
                         </motion.div>
