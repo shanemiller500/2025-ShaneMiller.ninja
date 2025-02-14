@@ -51,7 +51,7 @@ const WidgetNews: React.FC = () => {
     // Always call the API to fetch fresh news.
     try {
       const response = await axios.get<{ results: NewsItem[] }>(
-        'http://localhost:3002/api/NewsAPI/breaking-news'
+        'https://u-mail.co/api/NewsAPI/breaking-news'
       );
       const newsData = response.data.results;
 
