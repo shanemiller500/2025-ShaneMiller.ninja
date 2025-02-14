@@ -3,6 +3,7 @@ import WidgetWeather from '@/components/widget-weather'
 import WidgetNews from '@/components/widget-news'
 import CryptoWidget from '@/components/widget-crypto'
 import WidgetSearch from '@/components/widget-search'
+import Zoltars from '@/components/widget-zoltar'    
 import Image from 'next/image'
 import AboutImg from '@/public/images/pumpkin.jpg'
 
@@ -44,6 +45,7 @@ export default function AboutPage() {
                     </p>
 
                     <CryptoWidget />
+                    <Zoltars />
                   </div>
 
                 </div>
@@ -54,9 +56,9 @@ export default function AboutPage() {
           { /* Right sidebar */}
           <aside className="md:w-[240px] lg:w-[300px] shrink-0">
             <div className="space-y-6">
+            <WidgetSearch />
               <WidgetWeather />
-              <WidgetSearch />
-              <WidgetNews />
+           <WidgetNews />
             </div>
           </aside>
         </div>
