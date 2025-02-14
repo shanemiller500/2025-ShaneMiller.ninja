@@ -14,6 +14,7 @@ import WidgetSkills7 from '@/components/widget-skills-7'
 import WidgetSkills8 from '@/components/widget-skills-8'
 import WidgetSkills9 from '@/components/widget-skills-9'
 import { trackEvent } from '@/utils/mixpanel'
+import DownloadPDF from './downlaodPDF'
 
 
 export default function Resume() {
@@ -40,7 +41,9 @@ export default function Resume() {
               <Experience />
               <Education />
               {/* <Recommendations />   */}
-
+              <DownloadPDF />
+              
+              
             </div>
           </section>
 
