@@ -87,7 +87,7 @@ export default function RootLayout({
           </>
         )}
       </head>
-      <body className={`${inter.variable} ${aspekta.variable} font-inter antialiased bg-white text-brand-700 dark:bg-brand-900 dark:text-slate-200 tracking-tight`}>
+      <body className={`${inter.variable} ${aspekta.variable} font-inter antialiased bg-indigo-50 text-brand-700 dark:bg-brand-900 dark:text-slate-200 tracking-tight`}>
         <Theme>
           <div className="max-w-7xl mx-auto">
             <div className="min-h-screen flex">

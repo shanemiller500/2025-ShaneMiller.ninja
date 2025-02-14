@@ -1,18 +1,19 @@
 'use client'
 
 import React, { useState, useEffect } from "react";
-import TrumpQuotes from "./TrumpQuotes"; // Adjust the path if needed
+import TrumpQuotes from "./TrumpQuotes"; 
 import RandomActivity from "./RandomActivity";
 import ChuckNorrisQuotes from "./ChuckNorrisQuotes";
 import RandomAdvice from "./RandomAdvice";
 import { trackEvent } from "@/utils/mixpanel";
+import Zoltars from "@/components/widget-zoltar";
 
 const QuotesDashboard = () => {
   // Define tabs for each component.
   const tabs = [
-    { name: "Trump Quotes", component: <TrumpQuotes /> },
+
     { name: "Chuck Norris Quotes", component: <ChuckNorrisQuotes /> },
-    { name: "Random Activity", component: <RandomActivity /> },
+    { name: "Zoltar", component: <Zoltars /> },
     { name: "Random Advice", component: <RandomAdvice /> },
   ];
 

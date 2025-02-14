@@ -136,6 +136,14 @@ export default function Projects() {
       excerpt: " An AI Ppowered search engine that gets to the point.",
       openSource: false,
     },
+    {
+      id: 12,
+      icon: Icon04,
+      slug: '/Weather',
+      title: 'Check local weather.',
+      excerpt: " 7 Day hourly weather charts and more!",
+      openSource: false,
+    },
   ];
 
   // Handler to track a project click event.
