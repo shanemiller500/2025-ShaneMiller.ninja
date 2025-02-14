@@ -19,29 +19,36 @@ const WidgetNews: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
 
   /**
-   * @param showSpinner - Pass true to show spinner overlay (used when refreshing).
+   * Fetch news data.
+   * @param showSpinner - If true, shows a spinner and clears any cached data before fetching.
    */
   const fetchNews = async (showSpinner: boolean = false) => {
-    if (showSpinner) setLoading(true);
-
-    // 1. Load cached news first (if available)
-    if (typeof window !== 'undefined') {
-      const cached = localStorage.getItem('breakingNewsCache');
-      if (cached) {
-        try {
-          const { timestamp, data } = JSON.parse(cached);
-          const now = Date.now();
-          // Use cached data if it's less than 2 hours old (7200000 ms)
-          if (now - timestamp < 7200000) {
-            setNews(data);
+    if (showSpinner) {
+      setLoading(true);
+      // Clear the cache completely when refreshing.
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('breakingNewsCache');
+      }
+    } else {
+      // Try to load cached news if available and not older than 20 minutes.
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('breakingNewsCache');
+        if (cached) {
+          try {
+            const { timestamp, data } = JSON.parse(cached);
+            const now = Date.now();
+            // Use cached data if it's less than 20 minutes old (1,200,000 ms)
+            if (now - timestamp < 1200000) {
+              setNews(data);
+            }
+          } catch (e) {
+            console.error('Error parsing cached news:', e);
           }
-        } catch (e) {
-          console.error('Error parsing cached news:', e);
         }
       }
     }
 
-    // 2. Always call the API to fetch fresh news
+    // Always call the API to fetch fresh news.
     try {
       const response = await axios.get<{ results: NewsItem[] }>(
         'http://localhost:3002/api/NewsAPI/breaking-news'
@@ -54,7 +61,7 @@ const WidgetNews: React.FC = () => {
         articleId: item.articleId || `${index}-${item.headline}`,
       }));
 
-      // Update the news state with the fresh data.
+      // Update state with fresh data.
       setNews(newsWithIds);
 
       // Cache the fresh news with a timestamp.
@@ -68,7 +75,7 @@ const WidgetNews: React.FC = () => {
         );
       }
 
-      // 3. Flash "Breaking News" for 5 seconds when fresh news loads.
+      // Flash "Breaking News" for 5 seconds.
       setFlashVisible(true);
       setTimeout(() => {
         setFlashVisible(false);
@@ -81,14 +88,14 @@ const WidgetNews: React.FC = () => {
     }
   };
 
-  // Initial load (without spinner)
+  // Initial load (without spinner) – this may load cached data if available.
   useEffect(() => {
     fetchNews();
   }, []);
 
   return (
     <div className="relative rounded-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5">
-      {/* Spinner Overlay for refresh load */}
+      {/* Spinner overlay during refresh */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-50">
           <svg
@@ -114,9 +121,11 @@ const WidgetNews: React.FC = () => {
         </div>
       )}
 
+
         <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-brand-900 text-center py-1 z-20">
           Breaking News
         </div>
+  
 
       {/* Refresh button icon in the top-right corner */}
       <div className="absolute top-0 right-0 p-2 z-20">
