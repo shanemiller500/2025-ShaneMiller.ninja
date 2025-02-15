@@ -43,7 +43,7 @@ const ChuckNorrisQuotes = () => {
       <button
         id="getJokeButton"
         onClick={fetchJoke}
-        className="mt-4 px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none"
+        className="mt-4 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded hover:bg-gradient-to-r from-indigo-600 to-purple-600 focus:outline-none"
       >
         Get New Joke
       </button>

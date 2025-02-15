@@ -180,7 +180,7 @@ const CryptoChartPrices = () => {
           />
           <button
             type="submit"
-            className="w-full sm:w-auto px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none"
+            className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded hover:bg-gradient-to-r from-indigo-600 to-purple-600 focus:outline-none"
           >
             Search
           </button>
@@ -240,7 +240,7 @@ const CryptoChartPrices = () => {
                     {cryptoDetails.rank}
                   </dd>
                 </div>
-                <div className="px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 bg-white dark:bg-indigo-600">
+                <div className="px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 bg-white dark:bg-gradient-to-r from-indigo-600 to-purple-600">
                   <dt className="text-sm font-medium text-gray-500 dark:text-indigo-200">
                     Supply
                   </dt>
@@ -258,7 +258,7 @@ const CryptoChartPrices = () => {
                       : "N/A"}
                   </dd>
                 </div>
-                <div className="px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 bg-white dark:bg-indigo-600">
+                <div className="px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 bg-white dark:bg-gradient-to-r from-indigo-600 to-purple-600">
                   <dt className="text-sm font-medium text-gray-500 dark:text-indigo-200">
                     Market Cap (USD)
                   </dt>
@@ -280,7 +280,7 @@ const CryptoChartPrices = () => {
                     })}
                   </dd>
                 </div>
-                <div className="px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 bg-white dark:bg-indigo-600">
+                <div className="px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 bg-white dark:bg-gradient-to-r from-indigo-600 to-purple-600">
                   <dt className="text-sm font-medium text-gray-500 dark:text-indigo-200">
                     VWAP (24Hr)
                   </dt>

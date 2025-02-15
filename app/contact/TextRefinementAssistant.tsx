@@ -97,7 +97,7 @@ const TextRefinementAssistant: React.FC<TextRefinementAssistantProps> = ({
       type="button"
       onClick={fetchTextRefinement}
       disabled={globalLoading}
-      className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+      className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-gradient-to-r from-indigo-600 to-purple-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {globalLoading ? (
         <>

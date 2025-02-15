@@ -23,7 +23,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ isOn, onToggle }) => {
         <div className="w-10 h-4 bg-indigo-400 rounded-full shadow-inner"></div>
         <div
           className={`dot absolute w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ease-in-out -top-1 -left-1 ${
-            isOn ? 'transform translate-x-full bg-indigo-600' : ''
+            isOn ? 'transform translate-x-full bg-gradient-to-r from-indigo-600 to-purple-600' : ''
           }`}
         ></div>
       </div>

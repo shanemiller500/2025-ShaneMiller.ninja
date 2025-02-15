@@ -206,8 +206,8 @@ export default function NewsPage() {
               onClick={() => handleTabClick(category)}
               className={`px-3 py-2 rounded whitespace-nowrap transition-colors ${
                 selectedCategory === category
-                  ? 'bg-indigo-600 text-white'
-                  : 'hover:bg-indigo-500 text-white'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
+                  : 'hover:bg-gradient-to-r from-indigo-500 to-purple-500 text-white'
               }`}
             >
               {category}
@@ -290,14 +290,14 @@ export default function NewsPage() {
           <button
             onClick={handlePrevPage}
             disabled={clientPage === 1 || loading}
-            className="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Previous
           </button>
           <button
             onClick={handleNextPage}
             disabled={(clientPage === totalPages && !hasMore) || loading}
-            className="px-4 py-2 bg-indigo-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Next
           </button>

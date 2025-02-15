@@ -7,53 +7,53 @@ export default function WidgetSkills() {
           <div className="grow inline-flex mr-1 truncate">
             <span className="text-indigo-500 mr-2">—</span> <a className="font-aspekta font-[650] text-sm truncate">HTML5</a>
           </div>
-          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-indigo-500 before:w-[90%]" role="progressbar" aria-valuenow={90} aria-valuemin={0} aria-valuemax={100}></div>
+          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-gradient-to-r from-indigo-500 to-purple-500 before:w-[90%]" role="progressbar" aria-valuenow={90} aria-valuemin={0} aria-valuemax={100}></div>
         </li>
         <li className="flex justify-between items-center">
           <div className="grow inline-flex mr-1 truncate">
             <span className="text-indigo-500 mr-2">—</span> <a className="font-aspekta font-[650] text-sm truncate">CSS/Less/SASS</a>
           </div>
-          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-indigo-500 before:w-[90%]" role="progressbar" aria-valuenow={80} aria-valuemin={0} aria-valuemax={100}></div>
+          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-gradient-to-r from-indigo-500 to-purple-500 before:w-[90%]" role="progressbar" aria-valuenow={80} aria-valuemin={0} aria-valuemax={100}></div>
         </li>
         <li className="flex justify-between items-center">
           <div className="grow inline-flex mr-1 truncate">
             <span className="text-indigo-500 mr-2">—</span> <a className="font-aspekta font-[650] text-sm truncate">Bootstrap</a>
           </div>
-          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-indigo-500 before:w-[90%]" role="progressbar" aria-valuenow={60} aria-valuemin={0} aria-valuemax={100}></div>
+          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-gradient-to-r from-indigo-500 to-purple-500 before:w-[90%]" role="progressbar" aria-valuenow={60} aria-valuemin={0} aria-valuemax={100}></div>
         </li>
         <li className="flex justify-between items-center">
           <div className="grow inline-flex mr-1 truncate">
             <span className="text-indigo-500 mr-2">—</span> <a className="font-aspekta font-[650] text-sm truncate">Tailwind</a>
           </div>
-          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-indigo-500 before:w-[90%]" role="progressbar" aria-valuenow={40} aria-valuemin={0} aria-valuemax={100}></div>
+          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-gradient-to-r from-indigo-500 to-purple-500 before:w-[90%]" role="progressbar" aria-valuenow={40} aria-valuemin={0} aria-valuemax={100}></div>
         </li>
 
         <li className="flex justify-between items-center">
           <div className="grow inline-flex mr-1 truncate">
             <span className="text-indigo-500 mr-2">—</span> <a className="font-aspekta font-[650] text-sm truncate">JQuery</a>
           </div>
-          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-indigo-500 before:w-[80%]" role="progressbar" aria-valuenow={40} aria-valuemin={0} aria-valuemax={100}></div>
+          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-gradient-to-r from-indigo-500 to-purple-500 before:w-[80%]" role="progressbar" aria-valuenow={40} aria-valuemin={0} aria-valuemax={100}></div>
         </li>
 
         <li className="flex justify-between items-center">
           <div className="grow inline-flex mr-1 truncate">
             <span className="text-indigo-500 mr-2">—</span> <a className="font-aspekta font-[650] text-sm truncate">Vue.js</a>
           </div>
-          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-indigo-500 before:w-[70%]" role="progressbar" aria-valuenow={40} aria-valuemin={0} aria-valuemax={100}></div>
+          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-gradient-to-r from-indigo-500 to-purple-500 before:w-[70%]" role="progressbar" aria-valuenow={40} aria-valuemin={0} aria-valuemax={100}></div>
         </li>
        
         <li className="flex justify-between items-center">
           <div className="grow inline-flex mr-1 truncate">
             <span className="text-indigo-500 mr-2">—</span> <a className="font-aspekta font-[650] text-sm truncate">React.js</a>
           </div>
-          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-indigo-500 before:w-[90%]" role="progressbar" aria-valuenow={40} aria-valuemin={0} aria-valuemax={100}></div>
+          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-gradient-to-r from-indigo-500 to-purple-500 before:w-[90%]" role="progressbar" aria-valuenow={40} aria-valuemin={0} aria-valuemax={100}></div>
         </li>
 
         <li className="flex justify-between items-center">
           <div className="grow inline-flex mr-1 truncate">
             <span className="text-indigo-500 mr-2">—</span> <a className="font-aspekta font-[650] text-sm truncate">Next.js</a>
           </div>
-          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-indigo-500 before:w-[90%]" role="progressbar" aria-valuenow={40} aria-valuemin={0} aria-valuemax={100}></div>
+          <div className="shrink-0 relative w-20 h-1.5 bg-slate-200 dark:bg-slate-700 before:absolute before:inset-0 before:bg-gradient-to-r from-indigo-500 to-purple-500 before:w-[90%]" role="progressbar" aria-valuenow={40} aria-valuemin={0} aria-valuemax={100}></div>
         </li>
       </ul>
     </div>

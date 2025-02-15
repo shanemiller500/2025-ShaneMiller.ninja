@@ -258,7 +258,7 @@ const MarsRoverPhotos = () => {
         />
         <button
           onClick={searchPhotos}
-          className="bg-indigo-500 text-white rounded px-4 py-2 hover:bg-indigo-600 transition"
+          className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded px-4 py-2 hover:bg-gradient-to-r from-indigo-600 to-purple-600 transition"
         >
           Search
         </button>

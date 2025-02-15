@@ -313,7 +313,7 @@ export default function ContactFormLogin() {
                   trackEvent('MoodTone Modal Opened');
                   setShowMoodToneModal(true);
                 }}
-                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
+                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-gradient-to-r from-indigo-600 to-purple-600 hover:text-white transition"
               >
                 <FontAwesomeIcon icon={faSmile} className="mr-2" />
                 <span className="hidden sm:inline">Mood &amp; Tone</span>
@@ -324,7 +324,7 @@ export default function ContactFormLogin() {
                   trackEvent('WritingStyle Modal Opened');
                   setShowWritingStyleModal(true);
                 }}
-                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
+                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-gradient-to-r from-indigo-600 to-purple-600 hover:text-white transition"
               >
                 <FontAwesomeIcon icon={faPenNib} className="mr-2" />
                 <span className="hidden sm:inline">Writing Style</span>
@@ -335,7 +335,7 @@ export default function ContactFormLogin() {
                   trackEvent('Language Modal Opened');
                   setShowLanguageModal(true);
                 }}
-                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white transition"
+                className="btn btn-outline-primary btn-sm get-in-touch px-4 py-2 rounded border border-indigo-600 text-indigo-600 hover:bg-gradient-to-r from-indigo-600 to-purple-600 hover:text-white transition"
               >
                 <FontAwesomeIcon icon={faGlobe} className="mr-2" />
                 <span className="hidden sm:inline">Change Language</span>
@@ -411,7 +411,7 @@ export default function ContactFormLogin() {
               <div className="flex-1">
                 <button
                   type="submit"
-                  className="w-full bg-gradient-to-t from-indigo-600 to-indigo-500 text-white p-3 rounded shadow hover:from-indigo-700 hover:to-indigo-600 transition"
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-3 rounded shadow hover:from-indigo-700 hover:to-indigo-600 transition"
                 >
                   <span className="relative inline-flex items-center">Send</span>
                 </button>

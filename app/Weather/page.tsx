@@ -167,7 +167,7 @@ const WeatherPage: React.FC = () => {
                   />
                   <button
                     type="submit"
-                    className="px-4 py-3 bg-indigo-600 text-white rounded-r-md hover:bg-indigo-700 transition"
+                    className="px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-r-md hover:bg-indigo-700 transition"
                   >
                     Search
                   </button>
@@ -260,7 +260,7 @@ const WeatherPage: React.FC = () => {
                 </p>
                 <button
                   onClick={() => setShowModal(false)}
-                  className="w-full px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition"
+                  className="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded hover:bg-indigo-700 transition"
                 >
                   Close
                 </button>

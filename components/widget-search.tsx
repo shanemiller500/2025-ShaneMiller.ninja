@@ -31,7 +31,7 @@ export default function widgetSearch() {
           />
           <button
             type="submit"
-            className="ml-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full mt-2 text-center"
+            className="ml-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full mt-2 text-center"
           >
             Search
           </button>

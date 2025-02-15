@@ -57,7 +57,7 @@ const MoodToneAssistant: React.FC<MoodToneAssistantProps> = ({ onEnhance, onDefa
         {/* Default enhance button */}
         <button
           id="centeringClass"
-          className="btn btn-primary w-full py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition mb-4"
+          className="btn btn-primary w-full py-2 rounded bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:bg-indigo-700 transition mb-4"
           type="button"
           onClick={() => { trackEvent('Default Enhance Button Clicked'); onDefaultEnhance(); }}
         >
@@ -69,42 +69,42 @@ const MoodToneAssistant: React.FC<MoodToneAssistantProps> = ({ onEnhance, onDefa
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              className={`p-2 rounded ${selectedMood === 'Neutral' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedMood === 'Neutral' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleMoodChange('Neutral')}
             >
               <FontAwesomeIcon icon={faPeace} className="mr-1" /> Neutral
             </button>
             <button
               type="button"
-              className={`p-2 rounded ${selectedMood === 'Happy' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedMood === 'Happy' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleMoodChange('Happy')}
             >
               <FontAwesomeIcon icon={faSmile} className="mr-1" /> Happy
             </button>
             <button
               type="button"
-              className={`p-2 rounded ${selectedMood === 'Sad' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedMood === 'Sad' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleMoodChange('Sad')}
             >
               <FontAwesomeIcon icon={faFrown} className="mr-1" /> Sad
             </button>
             <button
               type="button"
-              className={`p-2 rounded ${selectedMood === 'Angry' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedMood === 'Angry' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleMoodChange('Angry')}
             >
               <FontAwesomeIcon icon={faAngry} className="mr-1" /> Angry
             </button>
             <button
               type="button"
-              className={`p-2 rounded ${selectedMood === 'Excited' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedMood === 'Excited' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleMoodChange('Excited')}
             >
               <FontAwesomeIcon icon={faLaugh} className="mr-1" /> Excited
             </button>
             <button
               type="button"
-              className={`p-2 rounded ${selectedMood === 'Concerned' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedMood === 'Concerned' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleMoodChange('Concerned')}
             >
               <FontAwesomeIcon icon={faHandshake} className="mr-1" /> Concerned
@@ -117,42 +117,42 @@ const MoodToneAssistant: React.FC<MoodToneAssistantProps> = ({ onEnhance, onDefa
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              className={`p-2 rounded ${selectedTone === 'Formal' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedTone === 'Formal' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleToneChange('Formal')}
             >
               Formal
             </button>
             <button
               type="button"
-              className={`p-2 rounded ${selectedTone === 'Informal' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedTone === 'Informal' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleToneChange('Informal')}
             >
               Informal
             </button>
             <button
               type="button"
-              className={`p-2 rounded ${selectedTone === 'Friendly' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedTone === 'Friendly' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleToneChange('Friendly')}
             >
               Friendly
             </button>
             <button
               type="button"
-              className={`p-2 rounded ${selectedTone === 'Serious' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedTone === 'Serious' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleToneChange('Serious')}
             >
               Serious
             </button>
             <button
               type="button"
-              className={`p-2 rounded ${selectedTone === 'Humorous' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedTone === 'Humorous' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleToneChange('Humorous')}
             >
               Humorous
             </button>
             <button
               type="button"
-              className={`p-2 rounded ${selectedTone === 'Respectful' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              className={`p-2 rounded ${selectedTone === 'Respectful' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               onClick={() => handleToneChange('Respectful')}
             >
               Respectful
@@ -162,7 +162,7 @@ const MoodToneAssistant: React.FC<MoodToneAssistantProps> = ({ onEnhance, onDefa
         </div>
         <button
           type="button"
-          className="btn btn-primary w-full py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition"
+          className="btn btn-primary w-full py-2 rounded bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:bg-indigo-700 transition"
           onClick={handleEnhanceClick}
         >
           Enhance with chosen Mood and Tone

@@ -34,7 +34,7 @@ export default function Home() {
           />
           <button
             type="submit"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full mt-3 sm:mt-0 sm:ml-2"
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full mt-3 sm:mt-0 sm:ml-2"
           >
             Search
           </button>

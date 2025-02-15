@@ -227,7 +227,7 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
               onClick={() => setSelectedDay(day)}
               className={`px-3 py-2 border rounded flex flex-col items-center text-xs min-w-[60px] ${
                 selectedDay === day
-                  ? 'bg-indigo-500 text-white'
+                  ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white'
                   : 'bg-white text-black dark:bg-indigo-900 dark:text-slate-200'
               }`}
             >

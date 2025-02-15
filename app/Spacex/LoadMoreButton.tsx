@@ -14,7 +14,7 @@ const LoadMoreButton: React.FC<LoadMoreButtonProps> = ({ visibleCount, totalCoun
     <div className="flex justify-center mt-4">
       <button
         onClick={onLoadMore}
-        className="bg-indigo-500 hover:bg-indigo-600 text-white py-2 px-4 rounded"
+        className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-2 px-4 rounded"
       >
         Load More
       </button>

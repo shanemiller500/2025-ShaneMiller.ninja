@@ -219,7 +219,7 @@ export default function Results() {
               />
               <button
                 type="submit"
-                className="bg-indigo-600 dark:bg-indigo-500 text-white px-4 py-1 rounded-full ml-2"
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 dark:bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-4 py-1 rounded-full ml-2"
                 disabled={isLoading}
               >
                 {isLoading ? "Searching..." : "Search"}

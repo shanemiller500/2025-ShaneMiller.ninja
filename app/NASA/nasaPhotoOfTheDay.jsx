@@ -264,7 +264,7 @@ const NasaPhotoOfTheDay = () => {
           <button
             onClick={handleLoadMore}
             disabled={loadingMore}
-            className="bg-indigo-500 text-white px-6 py-2 rounded shadow hover:bg-indigo-600 transition disabled:opacity-50"
+            className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-2 rounded shadow hover:bg-gradient-to-r from-indigo-600 to-purple-600 transition disabled:opacity-50"
           >
             {loadingMore ? "Loading More..." : "Load More Images"}
           </button>

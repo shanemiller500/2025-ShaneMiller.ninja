@@ -59,7 +59,7 @@ export default function SideNavigation() {
                     pathname !== '/results' &&
                     pathname !== '/Weather' &&
                     pathname !== '/NASA'
-                      ? 'text-indigo-500 after:bg-indigo-500'
+                      ? 'text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                   }`}
                 >
@@ -91,7 +91,7 @@ export default function SideNavigation() {
                     pathname === '/results' ||
                     pathname === '/Weather' ||
                     pathname === '/NASA'
-                      ? 'text-indigo-500 after:bg-indigo-500'
+                      ? 'text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                   }`}
                 >
@@ -109,7 +109,7 @@ export default function SideNavigation() {
                   onClick={() => handleNavClick('Resume', '/resume')}
                   className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${
                     pathname === '/resume'
-                      ? 'text-indigo-500 after:bg-indigo-500'
+                      ? 'text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                   }`}
                 >
@@ -127,7 +127,7 @@ export default function SideNavigation() {
                   onClick={() => handleNavClick('Contact', '/contact')}
                   className={`w-full h-6 flex items-center justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 ${
                     pathname === '/contact'
-                      ? 'text-indigo-500 after:bg-indigo-500'
+                      ? 'text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                   }`}
                 >

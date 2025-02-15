@@ -128,7 +128,7 @@ const MarvelAPIPage = () => {
           />
           <button
             type="submit"
-            className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 focus:outline-none"
+            className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded hover:bg-gradient-to-r from-indigo-600 to-purple-600 focus:outline-none"
           >
             Search Comics
           </button>
