@@ -19,7 +19,8 @@ declare global {
   }
 }
 
-const GA_TRACKING_ID = process.env.NEXT_PUBLIC_GA_ID; 
+
+const GA_TRACKING_ID = process.env.NEXT_PUBLIC_GA_ID;
 
 const inter = Inter({
   subsets: ['latin'],
@@ -50,8 +51,8 @@ export default function RootLayout({
   const pathname = usePathname();
 
   // Track page views with Mixpanel on route change.
-  useEffect(() => { 
-    trackEvent('Page Viewed', { path: pathname }); 
+  useEffect(() => {
+    trackEvent('Page Viewed', { path: pathname });
   }, [pathname]);
 
   useEffect(() => {
@@ -61,12 +62,29 @@ export default function RootLayout({
       });
     }
   }, [pathname]);
-  
-  
+
+
 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta charSet="UTF-8" />
+        <title>Shane Miller's Portfolio</title>
+        <meta name="description" content="Welcome to shanemiller.ninja Portfolio." />
+        <meta name="keywords" content="shanemiller, ninja, Portfolio," />
+        <meta name="author" content="Shane Miller" />
+
+        {/* Open Graph / Facebook */}
+        <meta property="og:title" content="shanemiller.ninja Website" />
+        <meta property="og:description" content="Discover shanemiller.ninja Website." />
+        <meta property="og:url" content="https://shanemiller.ninja" />
+        <meta property="og:type" content="website" />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="shanemiller.ninja Website" />
+        <meta name="twitter:description" content="Discover shanemiller.ninja Website." />
+
         {/* Google Analytics Setup */}
         {GA_TRACKING_ID && (
           <>
@@ -103,7 +121,7 @@ export default function RootLayout({
           </div>
           <Footer />
         </Theme>
-        <Analytics /> 
+        <Analytics />
       </body>
     </html>
   );
