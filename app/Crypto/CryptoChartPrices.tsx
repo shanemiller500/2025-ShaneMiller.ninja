@@ -4,6 +4,9 @@ import React, { useState, useEffect, useRef, FormEvent } from "react";
 import { Chart } from "chart.js/auto";
 import "chartjs-adapter-date-fns";
 import { format } from "date-fns";
+// Import and register the zoom plugin.
+import zoomPlugin from "chartjs-plugin-zoom";
+Chart.register(zoomPlugin);
 
 interface HistoryEntry {
   t: number;
@@ -285,7 +288,34 @@ const CryptoChartPrices: React.FC = () => {
               grid: { drawOnChartArea: false }
             }
           },
-          plugins: { legend: { position: "top" } }
+          plugins: {
+            legend: { position: "top" },
+            // Enable zooming and panning on the chart.
+            zoom: {
+              pan: {
+                enabled: true,
+                mode: "xy",
+                threshold: 5
+              },
+              zoom: {
+                wheel: {
+                  enabled: true
+                },
+                pinch: {
+                  enabled: true
+                },
+                mode: "xy"
+              }
+            }
+          },
+          // Optional: handle click events on data points.
+          onClick: (_: MouseEvent, activeEls: any[]) => {
+            if (activeEls.length > 0) {
+              const { index, datasetIndex } = activeEls[0];
+              const clickedPoint = data.datasets[datasetIndex].data[index];
+              alert(`Value: ${clickedPoint.y}\nTime: ${clickedPoint.x}`);
+            }
+          }
         };
       } else if (chartType === "radar") {
         // For radar charts, sample one point per hour.
@@ -472,6 +502,22 @@ const CryptoChartPrices: React.FC = () => {
           <div className="w-full h-72 md:h-96 mb-4">
             <canvas ref={canvasRef} className="w-full h-full"></canvas>
           </div>
+        )}
+        {/* Show Reset Zoom button for interactive time-series charts */}
+        {(chartType === "line" ||
+          chartType === "bar" ||
+          chartType === "scatter" ||
+          chartType === "bubble") &&
+          chartData.length > 0 && (
+            <div className="text-center mb-4">
+              <button
+                type="button"
+                onClick={() => (chartRef.current as any)?.resetZoom()}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none"
+              >
+                Reset Zoom
+              </button>
+            </div>
         )}
         {cryptoDetails && (
           <div className="mt-8">

@@ -31,6 +31,32 @@ const adjustDate = (date: Date): Date => {
 const convertTemp = (value: number, tempUnit: 'C' | 'F'): number =>
   tempUnit === 'F' ? value * 9 / 5 + 32 : value;
 
+// These helper functions convert the raw precipitation values
+// and then add a fixed offset and scaling factor for display purposes.
+// (The offset is used so that the precipitation datasets appear
+//  on different “levels” on the secondary axis.)
+const convertSnowfallDisplay = (value: number, tempUnit: 'C' | 'F'): number =>
+  tempUnit === 'F'
+    ? 2 + (value / 2.54) * 10  // convert cm to inches for display
+    : 2 + value * 10;
+
+const convertRainDisplay = (value: number, tempUnit: 'C' | 'F'): number =>
+  tempUnit === 'F'
+    ? 7 + (value / 25.4) * 3   // convert mm to inches for display
+    : 7 + value * 3;
+
+const convertShowersDisplay = (value: number, tempUnit: 'C' | 'F'): number =>
+  tempUnit === 'F'
+    ? 8 + (value / 25.4) * 3   // convert mm to inches for display
+    : 8 + value * 3;
+
+// For aggregated (actual) values we use these helper functions:
+const convertSnowfallAggregate = (value: number, tempUnit: 'C' | 'F'): number =>
+  tempUnit === 'F' ? value / 2.54 : value;
+
+const convertPrecipAggregate = (value: number, tempUnit: 'C' | 'F'): number =>
+  tempUnit === 'F' ? value / 25.4 : value;
+
 const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUnit }) => {
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstanceRef = useRef<Chart | null>(null);
@@ -83,9 +109,7 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
     let chartData: any;
     let options: any = {};
 
-    // We'll switch on the selected chart type.
     switch (chartType) {
-      // Time-series charts: each will display 4 datasets.
       case 'line':
       case 'bar': {
         chartData = {
@@ -100,24 +124,24 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
               yAxisID: 'yTemp',
             },
             {
-              label: 'Snowfall (cm)',
-              data: snowfalls.map((val) => 2 + val * 10),
+              label: `Snowfall (${tempUnit === 'F' ? 'in' : 'cm'})`,
+              data: snowfalls.map((val) => convertSnowfallDisplay(val, tempUnit)),
               borderColor: 'rgba(255, 206, 86, 1)',
               backgroundColor: 'rgba(255, 206, 86, 0.2)',
               tension: 0.3,
               yAxisID: 'yFixed',
             },
             {
-              label: 'Rain (mm)',
-              data: rains.map((val) => 7 + val * 3),
+              label: `Rain (${tempUnit === 'F' ? 'in' : 'mm'})`,
+              data: rains.map((val) => convertRainDisplay(val, tempUnit)),
               borderColor: 'rgba(255, 159, 64, 1)',
               backgroundColor: 'rgba(255, 159, 64, 0.2)',
               tension: 0.3,
               yAxisID: 'yFixed',
             },
             {
-              label: 'Showers (mm)',
-              data: showers.map((val) => 8 + val * 3),
+              label: `Showers (${tempUnit === 'F' ? 'in' : 'mm'})`,
+              data: showers.map((val) => convertShowersDisplay(val, tempUnit)),
               borderColor: 'rgba(201, 203, 207, 1)',
               backgroundColor: 'rgba(201, 203, 207, 0.2)',
               tension: 0.3,
@@ -156,9 +180,9 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
                 stepSize: 1,
                 callback: (value: number) => {
                   const fixedLabels: { [key: number]: string } = {
-                    2: 'Snowfall (cm)',
-                    7: 'Rain (mm)',
-                    8: 'Showers (mm)',
+                    2: `Snowfall (${tempUnit === 'F' ? 'in' : 'cm'})`,
+                    7: `Rain (${tempUnit === 'F' ? 'in' : 'mm'})`,
+                    8: `Showers (${tempUnit === 'F' ? 'in' : 'mm'})`,
                   };
                   return fixedLabels[value] || '';
                 },
@@ -183,7 +207,6 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
         break;
       }
       case 'scatter': {
-        // For scatter, each dataset is mapped to {x, y} points.
         chartData = {
           datasets: [
             {
@@ -195,18 +218,27 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
               backgroundColor: 'rgba(255, 99, 132, 0.6)',
             },
             {
-              label: 'Snowfall (cm)',
-              data: times.map((t, i) => ({ x: t, y: 2 + snowfalls[i] * 10 })),
+              label: `Snowfall (${tempUnit === 'F' ? 'in' : 'cm'})`,
+              data: times.map((t, i) => ({
+                x: t,
+                y: convertSnowfallDisplay(snowfalls[i], tempUnit),
+              })),
               backgroundColor: 'rgba(255, 206, 86, 0.6)',
             },
             {
-              label: 'Rain (mm)',
-              data: times.map((t, i) => ({ x: t, y: 7 + rains[i] * 3 })),
+              label: `Rain (${tempUnit === 'F' ? 'in' : 'mm'})`,
+              data: times.map((t, i) => ({
+                x: t,
+                y: convertRainDisplay(rains[i], tempUnit),
+              })),
               backgroundColor: 'rgba(255, 159, 64, 0.6)',
             },
             {
-              label: 'Showers (mm)',
-              data: times.map((t, i) => ({ x: t, y: 8 + showers[i] * 3 })),
+              label: `Showers (${tempUnit === 'F' ? 'in' : 'mm'})`,
+              data: times.map((t, i) => ({
+                x: t,
+                y: convertShowersDisplay(showers[i], tempUnit),
+              })),
               backgroundColor: 'rgba(201, 203, 207, 0.6)',
             },
           ],
@@ -230,7 +262,6 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
         break;
       }
       case 'bubble': {
-        // For bubble, we use the same datasets as scatter but with a fixed radius (or computed if desired)
         chartData = {
           datasets: [
             {
@@ -243,28 +274,28 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
               backgroundColor: 'rgba(255, 99, 132, 0.6)',
             },
             {
-              label: 'Snowfall (cm)',
+              label: `Snowfall (${tempUnit === 'F' ? 'in' : 'cm'})`,
               data: times.map((t, i) => ({
                 x: t,
-                y: 2 + snowfalls[i] * 10,
+                y: convertSnowfallDisplay(snowfalls[i], tempUnit),
                 r: 5,
               })),
               backgroundColor: 'rgba(255, 206, 86, 0.6)',
             },
             {
-              label: 'Rain (mm)',
+              label: `Rain (${tempUnit === 'F' ? 'in' : 'mm'})`,
               data: times.map((t, i) => ({
                 x: t,
-                y: 7 + rains[i] * 3,
+                y: convertRainDisplay(rains[i], tempUnit),
                 r: 5,
               })),
               backgroundColor: 'rgba(255, 159, 64, 0.6)',
             },
             {
-              label: 'Showers (mm)',
+              label: `Showers (${tempUnit === 'F' ? 'in' : 'mm'})`,
               data: times.map((t, i) => ({
                 x: t,
-                y: 8 + showers[i] * 3,
+                y: convertShowersDisplay(showers[i], tempUnit),
                 r: 5,
               })),
               backgroundColor: 'rgba(201, 203, 207, 0.6)',
@@ -290,8 +321,6 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
         break;
       }
       case 'radar': {
-        // For radar, we'll use the hour labels (formatted) as the common labels.
-        // Note: Radar charts are best with fewer points.
         const radarLabels = times.map((t) => format(t, 'ha'));
         chartData = {
           labels: radarLabels,
@@ -303,20 +332,20 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
               backgroundColor: 'rgba(255, 99, 132, 0.2)',
             },
             {
-              label: 'Snowfall (cm)',
-              data: snowfalls.map((val) => 2 + val * 10),
+              label: `Snowfall (${tempUnit === 'F' ? 'in' : 'cm'})`,
+              data: snowfalls.map((val) => convertSnowfallDisplay(val, tempUnit)),
               borderColor: 'rgba(255, 206, 86, 1)',
               backgroundColor: 'rgba(255, 206, 86, 0.2)',
             },
             {
-              label: 'Rain (mm)',
-              data: rains.map((val) => 7 + val * 3),
+              label: `Rain (${tempUnit === 'F' ? 'in' : 'mm'})`,
+              data: rains.map((val) => convertRainDisplay(val, tempUnit)),
               borderColor: 'rgba(255, 159, 64, 1)',
               backgroundColor: 'rgba(255, 159, 64, 0.2)',
             },
             {
-              label: 'Showers (mm)',
-              data: showers.map((val) => 8 + val * 3),
+              label: `Showers (${tempUnit === 'F' ? 'in' : 'mm'})`,
+              data: showers.map((val) => convertShowersDisplay(val, tempUnit)),
               borderColor: 'rgba(201, 203, 207, 1)',
               backgroundColor: 'rgba(201, 203, 207, 0.2)',
             },
@@ -331,7 +360,6 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
         };
         break;
       }
-      // For pie, doughnut, and polarArea, we aggregate the data for each metric.
       case 'pie':
       case 'doughnut':
       case 'polarArea': {
@@ -340,12 +368,19 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
           count > 0
             ? temperatures.reduce((sum, val) => sum + convertTemp(val, tempUnit), 0) / count
             : 0;
-        const totalSnowfall = snowfalls.reduce((sum, val) => sum + val, 0);
-        const totalRain = rains.reduce((sum, val) => sum + val, 0);
-        const totalShowers = showers.reduce((sum, val) => sum + val, 0);
+        const totalSnowfall = snowfalls.reduce((sum, val) => sum + convertSnowfallAggregate(val, tempUnit), 0);
+        const totalRain = rains.reduce((sum, val) => sum + convertPrecipAggregate(val, tempUnit), 0);
+        const totalShowers = showers.reduce((sum, val) => sum + convertPrecipAggregate(val, tempUnit), 0);
+
+        const aggregatedLabels = [
+          `Temperature (${tempUnit === 'F' ? '°F' : '°C'})`,
+          `Snowfall (${tempUnit === 'F' ? 'in' : 'cm'})`,
+          `Rain (${tempUnit === 'F' ? 'in' : 'mm'})`,
+          `Showers (${tempUnit === 'F' ? 'in' : 'mm'})`,
+        ];
 
         chartData = {
-          labels: ['Temperature', 'Snowfall', 'Rain', 'Showers'],
+          labels: aggregatedLabels,
           datasets: [
             {
               label: `Aggregated Data for ${selectedDay}`,
@@ -385,7 +420,7 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
       options,
     });
 
-    // Cleanup: destroy the chart on dependency changes.
+    // Cleanup on dependency change.
     return () => {
       if (chartInstanceRef.current) {
         chartInstanceRef.current.destroy();
@@ -404,29 +439,29 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
         <h3 className="text-xl font-semibold text-brand-900 dark:text-slate-200">
           7 Day Hourly Weather Chart
         </h3>
-        <div className="flex items-center">
-          <label htmlFor="chartType" className="mr-2 font-medium">
-            Chart Type:
-          </label>
-          <select
-            id="chartType"
-            value={chartType}
-            onChange={(e) => setChartType(e.target.value)}
-            className="border rounded p-1"
-          >
-            <option value="line">Line</option>
-            <option value="bar">Bar</option>
-            <option value="scatter">Scatter</option>
-            <option value="bubble">Bubble</option>
-            <option value="radar">Radar</option>
-            <option value="pie">Pie (Aggregated)</option>
-            <option value="doughnut">Doughnut (Aggregated)</option>
-            <option value="polarArea">Polar Area (Aggregated)</option>
-          </select>
-        </div>
+        <div className="flex flex-col sm:flex-row justify-end items-center mb-4 gap-4">
+            <label htmlFor="chartType" className="mr-2 font-medium">
+              Chart Type:
+            </label>
+            <select
+              id="chartType"
+              value={chartType}
+              onChange={(e) => setChartType(e.target.value)}
+              className="border rounded p-1 dark:bg-indigo-900 dark:border-indigo-700"
+            >
+              <option value="line">Line</option>
+              <option value="bar">Bar</option>
+              <option value="scatter">Scatter</option>
+              <option value="bubble">Bubble</option>
+              <option value="radar">Radar</option>
+              <option value="pie">Pie (Aggregated)</option>
+              <option value="doughnut">Doughnut (Aggregated)</option>
+              <option value="polarArea">Polar Area (Aggregated)</option>
+            </select>
+          </div>
       </div>
 
-      {/* Day Tabs (with display date adjusted by one day) */}
+      {/* Day Tabs */}
       <div className="mb-4 flex space-x-2 overflow-x-auto whitespace-nowrap">
         {uniqueDays.map((day) => {
           const dateObj = new Date(day);
