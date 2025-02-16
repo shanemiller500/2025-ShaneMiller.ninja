@@ -1,10 +1,12 @@
-'use client';
-
+"use client";
 import React, { useState, useEffect } from "react";
-import LiveStreamHeatmap from "./LiveStreamHeatmap"; // Adjust path if needed
-import TopGainersLosers from "./TopGainersLosers";
-import CryptoChartPrices from "./CryptoChartPrices";
+import dynamic from "next/dynamic";
 import { trackEvent } from '@/utils/mixpanel';
+
+// Dynamically import the components with SSR disabled
+const LiveStreamHeatmap = dynamic(() => import("./LiveStreamHeatmap"), { ssr: false });
+const TopGainersLosers = dynamic(() => import("./TopGainersLosers"), { ssr: false });
+const CryptoChartPrices = dynamic(() => import("./CryptoChartPrices"), { ssr: false });
 
 const tabs = [
   { name: "Heatmap", component: <LiveStreamHeatmap /> },
@@ -15,12 +17,10 @@ const tabs = [
 const CryptoDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
 
-  // Track page view on component mount.
   useEffect(() => {
     trackEvent("CryptoDashboard Page Viewed", { page: "CryptoDashboard" });
   }, []);
 
-  // Handler for tab clicks.
   const handleTabClick = (index: number, tabName: string) => {
     setActiveTab(index);
     trackEvent("Tab Clicked", { tab: tabName, index });
