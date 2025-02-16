@@ -12,6 +12,28 @@ import ToggleSwitch from './ToggleSwitch';
 import LeafletMap from './LeafletMap';
 import HourlyWeatherChart from './HourlyWeatherChart';
 
+// --- Icon Components ---
+
+const SunriseIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v4m0 0l3-3m-3 3l-3-3M5.5 14h13" />
+  </svg>
+);
+
+const SunsetIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 22v-4m0 0l3 3m-3-3l-3 3M18.5 10H5.5" />
+  </svg>
+);
+
+const WindArrowIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19V6m0 0l-5 5m5-5l5 5" />
+  </svg>
+);
+
+// --- Main Component ---
+
 const WeatherPage: React.FC = () => {
   const [mounted, setMounted] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -39,7 +61,7 @@ const WeatherPage: React.FC = () => {
       L.Icon.Default.mergeOptions({
         iconUrl: markerIconUrl,
         shadowUrl: markerShadowUrl,
-       responsive: true,
+        responsive: true,
         maintainAspectRatio: false,
       });
     }
@@ -135,6 +157,18 @@ const WeatherPage: React.FC = () => {
       : `${(temp * 9 / 5 + 32).toFixed(1)}°F`;
   };
 
+  // Compute current wind gust from hourly data (if available)
+  const windGust = (() => {
+    if (weatherData && weatherData.hourly && weatherData.current_weather) {
+      const currentTimeISO = (weatherData.current_weather as any).time;
+      const index = weatherData.hourly.time.indexOf(currentTimeISO);
+      if (index !== -1) {
+        return weatherData.hourly.wind_gusts_10m[index];
+      }
+    }
+    return null;
+  })();
+
   return (
     <div
       className="relative min-h-screen text-gray-900"
@@ -207,18 +241,71 @@ const WeatherPage: React.FC = () => {
                   </h2>
                   {weatherData.current_weather && (
                     <div className="flex flex-col md:flex-row items-center justify-between mb-6">
-                      <div className="flex items-center space-x-6">
-                        <div className="text-5xl dark:text-white">
-                          {getWeatherIcon(weatherData.current_weather.weathercode, 60)}
+                      <div className="flex flex-col">
+                        <div className="flex items-center space-x-6">
+                          <div className="text-5xl dark:text-white">
+                            {getWeatherIcon(weatherData.current_weather.weathercode, 60)}
+                          </div>
+                          <div>
+                            <p className="text-3xl font-medium text-brand-900 dark:text-slate-200">
+                              {convertTemperature(weatherData.current_weather.temperature)}
+                            </p>
+                            <p className="text-lg text-gray-600">
+                              Wind: {weatherData.current_weather.windspeed} km/h
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-3xl font-medium text-brand-900 dark:text-slate-200">
-                            {convertTemperature(weatherData.current_weather.temperature)}
-                          </p>
-                          <p className="text-lg text-gray-600">
-                            Wind: {weatherData.current_weather.windspeed} km/h
-                          </p>
-                        </div>
+                        {weatherData.daily?.sunrise && weatherData.daily?.sunset && (
+                          <div className="mt-4 flex flex-wrap gap-8">
+                            <div className="flex items-center">
+                              <SunriseIcon className="w-6 h-6 text-yellow-500" />
+                              <div className="ml-2">
+                                <p className="text-sm font-medium dark:text-slate-200">Sunrise</p>
+                                <p className="text-sm dark:text-slate-200">
+                                  {new Date(weatherData.daily.sunrise[0]).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center">
+                              <SunsetIcon className="w-6  h-6 text-orange-500" />
+                              <div className="ml-2">
+                                <p className="text-sm dark:text-slate-200 font-medium">Sunset</p>
+                                <p className="text-sm dark:text-slate-200">
+                                  {new Date(weatherData.daily.sunset[0]).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                            {/* <div className="flex items-center">
+                              <motion.div
+                                className="transform"
+                                style={{ originX: '50%', originY: '50%' }}
+                                animate={{
+                                  rotate: (weatherData.current_weather as any).winddirection,
+                                  y: [0, -5, 0],
+                                }}
+                                transition={{
+                                  repeat: Infinity,
+                                  duration: Math.max(
+                                    0.5,
+                                    3 - weatherData.current_weather.windspeed / 10
+                                  ),
+                                }}
+                              >
+                                <WindArrowIcon className="w-8 h-8 text-blue-500" />
+                              </motion.div>
+                              <div className="ml-2">
+                                <p className="text-sm font-medium">Wind Gusts</p>
+                                <p className="text-sm">{windGust ? `${windGust} km/h` : "N/A"}</p>
+                              </div>
+                            </div> */}
+                          </div>
+                        )}
                       </div>
                       {selectedLocation && (
                         <motion.div

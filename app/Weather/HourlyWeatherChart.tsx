@@ -439,7 +439,7 @@ const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUni
         <h3 className="text-xl font-semibold text-brand-900 dark:text-slate-200">
           7 Day Hourly Weather Chart
         </h3>
-        <div className="flex flex-col sm:flex-row justify-end items-center mb-4 gap-4">
+        <div className="flex flex-col sm:flex-row justify-end items-center mb-4 gap-4 dark:text-slate-200">
             <label htmlFor="chartType" className="mr-2 font-medium">
               Chart Type:
             </label>
