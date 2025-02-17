@@ -4,7 +4,14 @@ import React, { useState, useEffect, useRef } from "react";
 import { Chart } from "chart.js/auto";
 import "chartjs-adapter-date-fns"; // <-- Import date adapter for time scales
 import { API_TOKEN } from "@/utils/config";
-import { formatSupplyValue, formatDate, formatDateWeirdValue } from "@/utils/formatters";
+import {
+  formatSupplyValue,
+  formatDate,
+  formatDateWeirdValue,
+} from "@/utils/formatters";
+import MarketWidgets from "./MarketWidgets";
+import NewsWidget from "./NewsWidget";
+import LiveStreamTickerWidget from "./LiveStreamTickerWidget"; // NEW: Import the LiveStreamTickerWidget
 
 interface CandleData {
   c: number[]; // closing prices
@@ -33,7 +40,11 @@ const StockQuoteSection = () => {
   useEffect(() => {
     if (symbolInput.trim().length > 0) {
       const timer = setTimeout(() => {
-        fetch(`https://finnhub.io/api/v1/search?q=${encodeURIComponent(symbolInput)}&token=${API_TOKEN}`)
+        fetch(
+          `https://finnhub.io/api/v1/search?q=${encodeURIComponent(
+            symbolInput
+          )}&token=${API_TOKEN}`
+        )
           .then((res) => res.json())
           .then((data) => {
             if (data && data.result) {
@@ -72,12 +83,14 @@ const StockQuoteSection = () => {
   };
 
   // --- Main Search Handler with Local Storage Caching ---
-  const handleSearch = async () => {
-    if (!symbolInput) return;
+  // (Accepts an optional symbol parameter so that clicking a widget item can trigger a search)
+  const handleSearch = async (symbolParam?: string) => {
+    const symbolToSearch = symbolParam || symbolInput;
+    if (!symbolToSearch) return;
     setLoading(true);
     setError("");
 
-    const cacheKey = `stockSearchCache_${symbolInput.toUpperCase()}`;
+    const cacheKey = `stockSearchCache_${symbolToSearch.toUpperCase()}`;
     const cachedData = localStorage.getItem(cacheKey);
     if (cachedData) {
       const parsedCache = JSON.parse(cachedData);
@@ -86,25 +99,26 @@ const StockQuoteSection = () => {
         setStockData(parsedCache.stockData);
         setCandleData(parsedCache.candleData);
         setNewsData(parsedCache.newsData);
-        setCurrentSymbol(symbolInput.toUpperCase());
+        setCurrentSymbol(symbolToSearch.toUpperCase());
         setLoading(false);
         return;
       }
     }
 
     // Build API endpoints
-    const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${symbolInput}&token=${API_TOKEN}`;
-    const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbolInput}&token=${API_TOKEN}`;
-    const metricUrl = `https://finnhub.io/api/v1/stock/metric?symbol=${symbolInput}&metric=all&token=${API_TOKEN}`;
+    const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${symbolToSearch}&token=${API_TOKEN}`;
+    const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbolToSearch}&token=${API_TOKEN}`;
+    const metricUrl = `https://finnhub.io/api/v1/stock/metric?symbol=${symbolToSearch}&metric=all&token=${API_TOKEN}`;
     const marketStatusUrl = `https://finnhub.io/api/v1/stock/market-status?exchange=US&token=${API_TOKEN}`;
 
     try {
-      const [quoteData, profileData, metricData, marketStatusData] = await Promise.all([
-        fetch(quoteUrl).then((res) => res.json()),
-        fetch(profileUrl).then((res) => res.json()),
-        fetch(metricUrl).then((res) => res.json()),
-        fetch(marketStatusUrl).then((res) => res.json()),
-      ]);
+      const [quoteData, profileData, metricData, marketStatusData] =
+        await Promise.all([
+          fetch(quoteUrl).then((res) => res.json()),
+          fetch(profileUrl).then((res) => res.json()),
+          fetch(metricUrl).then((res) => res.json()),
+          fetch(marketStatusUrl).then((res) => res.json()),
+        ]);
 
       if (!profileData.name || !profileData.ticker) {
         setError("Invalid symbol or data not available.");
@@ -118,7 +132,10 @@ const StockQuoteSection = () => {
           : marketStatusData.isOpen && quoteData.c <= quoteData.o
           ? "red"
           : "#494949";
-      const iconClass = quoteData.c > quoteData.o ? "fa fa-angle-double-up" : "fa fa-angle-double-down";
+      const iconClass =
+        quoteData.c > quoteData.o
+          ? "fa fa-angle-double-up"
+          : "fa fa-angle-double-down";
 
       const stockInfo = {
         description: profileData.name,
@@ -131,19 +148,26 @@ const StockQuoteSection = () => {
         iconClass,
       };
       setStockData(stockInfo);
-      setCurrentSymbol(symbolInput.toUpperCase());
+      setCurrentSymbol(symbolToSearch.toUpperCase());
 
       // --- Fetch Candle Data (Last 30 Days) ---
       const nowUnix = Math.floor(Date.now() / 1000);
       const thirtyDaysAgo = nowUnix - 30 * 24 * 60 * 60;
-      const fetchedCandleData = await fetchCandleData(symbolInput, "D", thirtyDaysAgo, nowUnix);
+      const fetchedCandleData = await fetchCandleData(
+        symbolToSearch,
+        "D",
+        thirtyDaysAgo,
+        nowUnix
+      );
       setCandleData(fetchedCandleData);
 
       // --- Fetch Company News (Last 24 Hours) ---
-      const fromDate = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const fromDate = new Date(Date.now() - 86400000)
+        .toISOString()
+        .slice(0, 10);
       const toDate = new Date().toISOString().slice(0, 10);
       const newsResponse = await fetch(
-        `https://finnhub.io/api/v1/company-news?symbol=${symbolInput}&from=${fromDate}&to=${toDate}&token=${API_TOKEN}`
+        `https://finnhub.io/api/v1/company-news?symbol=${symbolToSearch}&from=${fromDate}&to=${toDate}&token=${API_TOKEN}`
       )
         .then((res) => res.json())
         .catch((err) => {
@@ -181,6 +205,13 @@ const StockQuoteSection = () => {
       const cacheKey = `stockSearchCache_${currentSymbol}`;
       localStorage.removeItem(cacheKey);
     }
+  };
+
+  // --- Handle ticker click from widgets ---
+  const handleTickerClick = (ticker: string) => {
+    setSymbolInput(ticker);
+    // Trigger search immediately using the selected ticker
+    handleSearch(ticker);
   };
 
   // --- Render Chart When Candle Data Updates ---
@@ -295,7 +326,7 @@ const StockQuoteSection = () => {
       {/* --- Action Buttons --- */}
       <div className="flex flex-wrap gap-2 mb-4">
         <button
-          onClick={handleSearch}
+          onClick={() => handleSearch()}
           className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded hover:from-indigo-600 hover:to-purple-600 focus:outline-none"
         >
           Search
@@ -307,6 +338,18 @@ const StockQuoteSection = () => {
           Clear
         </button>
       </div>
+
+      {/* --- Display Widgets When No Stock Data (Nothing Searched) --- */}
+      {!stockData && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <MarketWidgets onSelectTicker={handleTickerClick} />
+            <NewsWidget />
+          </div>
+          <LiveStreamTickerWidget />
+
+        </>
+      )}
 
       {loading && <p className="text-center mt-4">Loading...</p>}
       {error && <p className="text-center mt-4 text-red-500">{error}</p>}
@@ -327,7 +370,8 @@ const StockQuoteSection = () => {
                 )}
               </h2>
               <h2 className="text-2xl font-bold" style={{ color: stockData.priceColor }}>
-                ${formatSupplyValue(stockData.quoteData.c)} | {formatSupplyValue(stockData.quoteData.dp)}%{" "}
+                ${formatSupplyValue(stockData.quoteData.c)} |{" "}
+                {formatSupplyValue(stockData.quoteData.dp)}%{" "}
                 <i className={stockData.iconClass}></i>
               </h2>
               <p>
@@ -346,7 +390,8 @@ const StockQuoteSection = () => {
                       Current Price:
                     </td>
                     <td className="p-2 text-sm md:w-2/3" style={{ color: stockData.priceColor }}>
-                      ${formatSupplyValue(stockData.quoteData.c)} | {formatSupplyValue(stockData.quoteData.dp)}%{" "}
+                      ${formatSupplyValue(stockData.quoteData.c)} |{" "}
+                      {formatSupplyValue(stockData.quoteData.dp)}%{" "}
                       <i className={stockData.iconClass}></i>
                     </td>
                   </tr>
@@ -364,27 +409,39 @@ const StockQuoteSection = () => {
                   </tr>
                   <tr className="flex flex-col md:table-row">
                     <td className="p-2 text-sm font-semibold">52 Week High:</td>
-                    <td className="p-2 text-sm">${formatSupplyValue(stockData.metricData.metric["52WeekHigh"])}</td>
+                    <td className="p-2 text-sm">
+                      ${formatSupplyValue(stockData.metricData.metric["52WeekHigh"])}
+                    </td>
                   </tr>
                   <tr className="flex flex-col md:table-row">
                     <td className="p-2 text-sm font-semibold">52 Week High Date:</td>
-                    <td className="p-2 text-sm">{formatDateWeirdValue(stockData.metricData.metric["52WeekHighDate"])}</td>
+                    <td className="p-2 text-sm">
+                      {formatDateWeirdValue(stockData.metricData.metric["52WeekHighDate"])}
+                    </td>
                   </tr>
                   <tr className="flex flex-col md:table-row">
                     <td className="p-2 text-sm font-semibold">52 Week Low:</td>
-                    <td className="p-2 text-sm">${formatSupplyValue(stockData.metricData.metric["52WeekLow"])}</td>
+                    <td className="p-2 text-sm">
+                      ${formatSupplyValue(stockData.metricData.metric["52WeekLow"])}
+                    </td>
                   </tr>
                   <tr className="flex flex-col md:table-row">
                     <td className="p-2 text-sm font-semibold">52 Week Low Date:</td>
-                    <td className="p-2 text-sm">{formatDateWeirdValue(stockData.metricData.metric["52WeekLowDate"])}</td>
+                    <td className="p-2 text-sm">
+                      {formatDateWeirdValue(stockData.metricData.metric["52WeekLowDate"])}
+                    </td>
                   </tr>
                   <tr className="flex flex-col md:table-row">
                     <td className="p-2 text-sm font-semibold">Market Cap:</td>
-                    <td className="p-2 text-sm">${formatSupplyValue(stockData.metricData.metric["marketCapitalization"])}</td>
+                    <td className="p-2 text-sm">
+                      ${formatSupplyValue(stockData.metricData.metric["marketCapitalization"])}
+                    </td>
                   </tr>
                   <tr className="flex flex-col md:table-row">
                     <td className="p-2 text-sm font-semibold">EPS TTM:</td>
-                    <td className="p-2 text-sm">${formatSupplyValue(stockData.metricData.metric["epsTTM"])}</td>
+                    <td className="p-2 text-sm">
+                      ${formatSupplyValue(stockData.metricData.metric["epsTTM"])}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -396,47 +453,17 @@ const StockQuoteSection = () => {
             {/* --- Chart Section --- */}
             {candleData && (
               <div className="mb-6">
-                <h3 className="text-xl font-semibold mb-4">Historical Price (Last 30 Days)</h3>
+                <h3 className="text-xl font-semibold mb-4">
+                  Historical Price (Last 30 Days)
+                </h3>
                 <div className="relative w-full h-80">
                   <canvas ref={chartCanvasRef} className="w-full h-full" />
                 </div>
               </div>
             )}
 
-            {/* --- News Section --- */}
-            {newsData && newsData.length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-xl font-semibold mb-4">Latest News</h3>
-                {newsData.slice(0, 5).map((newsItem, index) => (
-                  <div
-                    key={index}
-                    className="mb-4 border border-gray-300 dark:border-gray-700 rounded overflow-hidden"
-                  >
-                    <div className="p-4">
-                      <h5 className="text-lg font-semibold">{newsItem.headline}</h5>
-                      <p className="text-sm">Release date: {formatDate(newsItem.datetime)}</p>
-                      {newsItem.image && (
-                        <img
-                          src={newsItem.image}
-                          alt="News"
-                          className="w-40 h-40 object-cover float-right ml-4 mb-2"
-                        />
-                      )}
-                      <p className="text-sm">{newsItem.summary}</p>
-                      <p className="text-sm">Source: {newsItem.source}</p>
-                      <a
-                        className="text-indigo-500 hover:underline"
-                        href={newsItem.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Read More
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* --- News Widget --- */}
+            <NewsWidget />
           </div>
         </div>
       )}

@@ -9,7 +9,7 @@ import LiveStreamHeatmapSection from "./LiveStreamHeatmapSection";
 import { trackEvent } from "@/utils/mixpanel";
 
 const DashboardTabs = () => {
-  const [activeTab, setActiveTab] = useState("live");
+  const [activeTab, setActiveTab] = useState("quote");
 
   const baseTabClasses = "px-4 py-2 cursor-pointer";
   const activeTabClasses = "border-b-2 border-indigo-500 text-indigo-500 font-bold";
@@ -29,18 +29,19 @@ const DashboardTabs = () => {
     <div className="max-w-6xl mx-auto p-4">
       <nav className="mb-4">
         <ul className="flex border-b border-gray-300 dark:border-gray-700">
+        <li
+            className={`${baseTabClasses} ${activeTab === "quote" && activeTabClasses}`}
+            onClick={() => handleTabClick("quote")}
+          >
+            Stock Quote
+          </li>
           <li
             className={`${baseTabClasses} ${activeTab === "live" && activeTabClasses}`}
             onClick={() => handleTabClick("live")}
           >
             Live stream heatmap
           </li>
-          <li
-            className={`${baseTabClasses} ${activeTab === "quote" && activeTabClasses}`}
-            onClick={() => handleTabClick("quote")}
-          >
-            Stock Quote
-          </li>
+         
           <li
             className={`${baseTabClasses} ${activeTab === "ipo" && activeTabClasses}`}
             onClick={() => handleTabClick("ipo")}
