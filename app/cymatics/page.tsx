@@ -3,21 +3,22 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+// (Optional) Your analytics/tracking utility.
 import { trackEvent } from "@/utils/mixpanel";
 
-const CymaticPage: React.FC = () => {
+const ChladniPage: React.FC = () => {
   // A ref for the container that will hold the Three.js canvas.
   const containerRef = useRef<HTMLDivElement>(null);
-  // State for the simulation frequency and a loading flag.
+  // Local state for the driving frequency and a loading flag.
   const [frequency, setFrequency] = useState<number>(178);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Track page view.
   useEffect(() => {
-    trackEvent("Cymatics Page Viewed", { page: "CymaticPage" });
+    trackEvent("Chladni Page Viewed", { page: "ChladniPage" });
   }, []);
 
-  // Show the spinner for 2 seconds then remove it.
+  // Show a spinner for 2 seconds then remove it.
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(false);
@@ -25,43 +26,37 @@ const CymaticPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Main simulation effect.
   useEffect(() => {
     if (loading) return;
     if (!containerRef.current) return;
 
-    // ======================================================================
-    // Define simulation parameters.
-    // ======================================================================
+    // ---------------------------------------------------------------------
+    // Simulation parameters 
+    // ---------------------------------------------------------------------
     const simulationParams: any = {
-      frequency: frequency,         // Hz – used for simulation & sound.
-      boardAmplitude: 5,            // Vertical displacement amplitude.
-      damping: 1,                   // Particle damping.
-      k: 0.34,                      // Wave number.
-      forceScale: 300,              // How strongly the board vibration pushes the sand.
-      randomFactor: 100,            // Extra multiplier for random perturbations.
-      numSand: 10000,               // Number of sand particles.
-      plateRadius: 50,              // For circle board.
-      plateShape: "circle",         // "circle" or "square".
-      plateSize: 100,               // For square board.
-      boardColor: "#333333",        // Initial board color.
-      particleColor: "#ffd700",     // Initial particle color.
-      boardCycle: false,            // Cycle board color.
-      particleCycle: false,         // Cycle particle color.
-      colorSpeed: 0.1               // Speed of color cycling.
+      frequency: frequency,         // Hz (driving frequency)
+      boardAmplitude: 5,            // Amplitude of the plate vibration.
+      damping: 0.95,                // Damping factor for the particles.
+      k: 0.1,                     // Spatial wave number (controls nodal density).
+      forceScale: 100,              // How strongly the board vibration “pulls” the particles.
+      numParticles: 5000,           // Number of sand particles.
+      plateShape: "square",         // "square" or "circle"
+      plateSize: 80,               // For a square plate.
+      plateRadius: 50,              // For a circular plate.
+      boardColor: "#333333",        // Plate color.
+      particleColor: "#ffd700",     // Particle color.
     };
 
-    // ======================================================================
+    // ---------------------------------------------------------------------
     // Three.js and simulation variables.
-    // ======================================================================
+    // ---------------------------------------------------------------------
     let scene: THREE.Scene,
       camera: THREE.PerspectiveCamera,
       renderer: THREE.WebGLRenderer,
       controls: OrbitControls;
     let particleSystem: THREE.Points;
     let positions: Float32Array;
-    let sandParticles: { x: number; z: number; vx: number; vz: number }[] = [];
-    const BOARD_SEGMENTS = 256;
+    let particles: { x: number; z: number; vx: number; vz: number }[] = [];
     let boardMesh: THREE.Mesh;
     let boardGeometry: THREE.BufferGeometry;
     let boardMaterial: THREE.MeshStandardMaterial;
@@ -69,19 +64,19 @@ const CymaticPage: React.FC = () => {
     let time = 0;
     let lastTime = performance.now();
     let animationId: number;
-    // Scale simulation frequency (omega) by dividing Hz by 1000.
+    // Compute the (angular) frequency for the time evolution.
+    // (We scale the Hz value so that the visual oscillation isn’t too rapid.)
     let omega = 2 * Math.PI * (simulationParams.frequency / 1000);
 
-    // A trippy additional light.
+    // Optional “trippy” point light.
     let pointLight: THREE.PointLight;
 
-    // Audio variables.
+    // ---------------------------------------------------------------------
+    // Audio (optional)
+    // ---------------------------------------------------------------------
     let audioCtx: AudioContext | null = null;
     let oscillator: OscillatorNode | null = null;
 
-    // ------------------------------
-    // Audio Control Functions
-    // ------------------------------
     const startSound = (freq: number) => {
       if (!audioCtx) {
         audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -92,7 +87,6 @@ const CymaticPage: React.FC = () => {
       }
       oscillator = audioCtx.createOscillator();
       oscillator.type = "sine";
-      // Use the simulation frequency (Hz) directly for sound.
       oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
       oscillator.connect(audioCtx.destination);
       oscillator.start();
@@ -108,24 +102,31 @@ const CymaticPage: React.FC = () => {
       }
     };
 
-    // ------------------------------
-    // Board Mesh Initialization
-    // ------------------------------
+    // ---------------------------------------------------------------------
+    // Board (Plate) Initialization
+    // ---------------------------------------------------------------------
     const initBoard = () => {
       if (boardMesh) {
         scene.remove(boardMesh);
       }
       if (simulationParams.plateShape === "circle") {
-        boardGeometry = new THREE.CircleGeometry(simulationParams.plateRadius, BOARD_SEGMENTS);
-        // Convert to BufferGeometry for vertex manipulation.
+        // Create a circular plate.
+        boardGeometry = new THREE.CircleGeometry(simulationParams.plateRadius, 256);
+        // Convert to BufferGeometry to allow vertex manipulation.
         const vertices: THREE.Vector3[] = [];
         const posAttr = boardGeometry.attributes.position;
         for (let i = 0; i < posAttr.count; i++) {
           vertices.push(new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)));
         }
         boardGeometry = new THREE.BufferGeometry().setFromPoints(vertices);
-      } else if (simulationParams.plateShape === "square") {
-        boardGeometry = new THREE.PlaneGeometry(simulationParams.plateSize, simulationParams.plateSize, BOARD_SEGMENTS, BOARD_SEGMENTS);
+      } else {
+        // Square plate.
+        boardGeometry = new THREE.PlaneGeometry(
+          simulationParams.plateSize,
+          simulationParams.plateSize,
+          256,
+          256
+        );
       }
       boardMaterial = new THREE.MeshStandardMaterial({
         color: new THREE.Color(simulationParams.boardColor),
@@ -133,91 +134,129 @@ const CymaticPage: React.FC = () => {
         flatShading: true,
       });
       boardMesh = new THREE.Mesh(boardGeometry, boardMaterial);
+      // Rotate to lie flat.
       boardMesh.rotation.x = -Math.PI / 2;
       scene.add(boardMesh);
     };
 
-    // ------------------------------
-    // Particle System Initialization
-    // ------------------------------
+    // ---------------------------------------------------------------------
+    // Particle (Sand) Initialization
+    // ---------------------------------------------------------------------
     const initParticles = () => {
-      sandParticles = [];
+      particles = [];
       const geometry = new THREE.BufferGeometry();
-      positions = new Float32Array(simulationParams.numSand * 3);
-      for (let i = 0; i < simulationParams.numSand; i++) {
+      positions = new Float32Array(simulationParams.numParticles * 3);
+      for (let i = 0; i < simulationParams.numParticles; i++) {
         let x = 0, z = 0;
         if (simulationParams.plateShape === "circle") {
+          // Uniformly distribute in a circle.
           const r = simulationParams.plateRadius * Math.sqrt(Math.random());
           const angle = Math.random() * Math.PI * 2;
           x = r * Math.cos(angle);
           z = r * Math.sin(angle);
-        } else if (simulationParams.plateShape === "square") {
+        } else {
+          // Uniformly distribute in a square.
           x = (Math.random() - 0.5) * simulationParams.plateSize;
           z = (Math.random() - 0.5) * simulationParams.plateSize;
         }
-        sandParticles.push({ x, z, vx: (Math.random() - 0.5) * 2, vz: (Math.random() - 0.5) * 2 });
+        particles.push({ x, z, vx: 0, vz: 0 });
         positions[3 * i] = x;
-        positions[3 * i + 1] = 0.5; // fixed y so sand "sits" on the board
+        positions[3 * i + 1] = 0.6; // Slightly above the plate.
         positions[3 * i + 2] = z;
       }
       geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       if (particleSystem) scene.remove(particleSystem);
       particleMaterial = new THREE.PointsMaterial({
         color: new THREE.Color(simulationParams.particleColor),
-        size: 1.2
+        size: 1.5
       });
       particleSystem = new THREE.Points(geometry, particleMaterial);
       scene.add(particleSystem);
     };
 
-    // ------------------------------
-    // Particle Update Function
-    // ------------------------------
+    // ---------------------------------------------------------------------
+    // Update the board vertices using a standing-wave mode shape.
+    //
+    // For a square plate, we use:
+    //   u(x,z,t) = A*cos(omega*t)*cos(k*x)*cos(k*z)
+    //
+    // For a circular plate, we use:
+    //   u(r,t) = A*cos(omega*t)*cos(k*r)
+    // ---------------------------------------------------------------------
+    const updateBoard = () => {
+      const posAttr = boardGeometry.attributes.position;
+      const vertex = new THREE.Vector3();
+      for (let i = 0; i < posAttr.count; i++) {
+        vertex.fromBufferAttribute(posAttr, i);
+        let newY = 0;
+        if (simulationParams.plateShape === "circle") {
+          const r = Math.sqrt(vertex.x * vertex.x + vertex.z * vertex.z);
+          newY = simulationParams.boardAmplitude * Math.cos(omega * time) * Math.cos(simulationParams.k * r);
+        } else {
+          newY = simulationParams.boardAmplitude * Math.cos(omega * time) *
+            Math.cos(simulationParams.k * vertex.x) *
+            Math.cos(simulationParams.k * vertex.z);
+        }
+        posAttr.setY(i, newY);
+      }
+      posAttr.needsUpdate = true;
+    };
+
+    // ---------------------------------------------------------------------
+    // Update particles – simulate the effect of the vibrating plate on the sand.
+    // ---------------------------------------------------------------------
     const updateParticles = (dt: number) => {
-      for (let i = 0; i < simulationParams.numSand; i++) {
-        const p = sandParticles[i];
+      // For efficiency, get the current cos(omega*t) term.
+      const temporalFactor = Math.cos(omega * time);
+
+      for (let i = 0; i < simulationParams.numParticles; i++) {
+        const p = particles[i];
+
+        let ax = 0;
+        let az = 0;
+
         if (simulationParams.plateShape === "circle") {
           let r = Math.sqrt(p.x * p.x + p.z * p.z);
-          if (r < 0.0001) r = 0.0001;
-          const waveDerivative = simulationParams.k * Math.cos(simulationParams.k * r - omega * time);
-          const ax = -simulationParams.forceScale * waveDerivative * (p.x / r);
-          const az = -simulationParams.forceScale * waveDerivative * (p.z / r);
-          p.vx += ax * dt;
-          p.vz += az * dt;
-          const randomPerturb = (simulationParams.frequency / 100) * (Math.random() - 0.5) * simulationParams.randomFactor;
-          p.vx += randomPerturb * dt;
-          p.vz += randomPerturb * dt;
-          p.vx *= simulationParams.damping;
-          p.vz *= simulationParams.damping;
-          p.x += p.vx * dt;
-          p.z += p.vz * dt;
-          r = Math.sqrt(p.x * p.x + p.z * p.z);
+          if (r < 0.0001) r = 0.0001; // avoid division by zero
+          const du_dr = -simulationParams.boardAmplitude * temporalFactor *
+            simulationParams.k * Math.sin(simulationParams.k * r);
+          ax = -simulationParams.forceScale * du_dr * (p.x / r);
+          az = -simulationParams.forceScale * du_dr * (p.z / r);
+        } else {
+          const du_dx = -simulationParams.boardAmplitude * temporalFactor *
+            simulationParams.k * Math.sin(simulationParams.k * p.x) * Math.cos(simulationParams.k * p.z);
+          const du_dz = -simulationParams.boardAmplitude * temporalFactor *
+            simulationParams.k * Math.cos(simulationParams.k * p.x) * Math.sin(simulationParams.k * p.z);
+          ax = -simulationParams.forceScale * du_dx;
+          az = -simulationParams.forceScale * du_dz;
+        }
+
+        // Update velocities using the computed acceleration.
+        p.vx += ax * dt;
+        p.vz += az * dt;
+
+        // Apply damping to simulate friction.
+        p.vx *= simulationParams.damping;
+        p.vz *= simulationParams.damping;
+
+        // Update positions.
+        p.x += p.vx * dt;
+        p.z += p.vz * dt;
+
+        // Constrain particles within the plate.
+        if (simulationParams.plateShape === "circle") {
+          let r = Math.sqrt(p.x * p.x + p.z * p.z);
           if (r > simulationParams.plateRadius) {
             const nx = p.x / r;
             const nz = p.z / r;
             const dot = p.vx * nx + p.vz * nz;
-            p.vx = p.vx - 2 * dot * nx;
-            p.vz = p.vz - 2 * dot * nz;
-            p.vx += (Math.random() - 0.5) * 2;
-            p.vz += (Math.random() - 0.5) * 2;
+            p.vx -= 2 * dot * nx;
+            p.vz -= 2 * dot * nz;
             p.x = nx * simulationParams.plateRadius;
             p.z = nz * simulationParams.plateRadius;
           }
-        } else if (simulationParams.plateShape === "square") {
+        } else {
           const half = simulationParams.plateSize / 2;
-          const waveDerivativeX = simulationParams.k * Math.cos(simulationParams.k * Math.abs(p.x) - omega * time);
-          const waveDerivativeZ = simulationParams.k * Math.cos(simulationParams.k * Math.abs(p.z) - omega * time);
-          const ax = -simulationParams.forceScale * waveDerivativeX * Math.sign(p.x);
-          const az = -simulationParams.forceScale * waveDerivativeZ * Math.sign(p.z);
-          p.vx += ax * dt;
-          p.vz += az * dt;
-          const randomPerturb = (simulationParams.frequency / 100) * (Math.random() - 0.5) * simulationParams.randomFactor;
-          p.vx += randomPerturb * dt;
-          p.vz += randomPerturb * dt;
-          p.vx *= simulationParams.damping;
-          p.vz *= simulationParams.damping;
-          p.x += p.vx * dt;
-          p.z += p.vz * dt;
           if (Math.abs(p.x) > half) {
             p.vx = -p.vx;
             p.x = Math.sign(p.x) * half;
@@ -227,31 +266,18 @@ const CymaticPage: React.FC = () => {
             p.z = Math.sign(p.z) * half;
           }
         }
+
+        // Update the positions array.
         positions[3 * i] = p.x;
-        positions[3 * i + 1] = 0.5;
+        positions[3 * i + 1] = 0.6;
         positions[3 * i + 2] = p.z;
       }
       (particleSystem.geometry as THREE.BufferGeometry).attributes.position.needsUpdate = true;
     };
 
-    // ------------------------------
-    // Board Update Function
-    // ------------------------------
-    const updateBoard = () => {
-      const posAttr = boardGeometry.attributes.position;
-      const vertex = new THREE.Vector3();
-      for (let i = 0; i < posAttr.count; i++) {
-        vertex.fromBufferAttribute(posAttr, i);
-        const rCorrected = Math.sqrt(vertex.x * vertex.x + (vertex.z || 0) * (vertex.z || 0));
-        const newY = simulationParams.boardAmplitude * Math.sin(simulationParams.k * rCorrected - omega * time);
-        posAttr.setY(i, newY);
-      }
-      posAttr.needsUpdate = true;
-    };
-
-    // ------------------------------
-    // Animation Loop
-    // ------------------------------
+    // ---------------------------------------------------------------------
+    // Animation loop
+    // ---------------------------------------------------------------------
     const animate = () => {
       animationId = requestAnimationFrame(animate);
       controls.update();
@@ -259,47 +285,18 @@ const CymaticPage: React.FC = () => {
       const dt = (now - lastTime) / 1000;
       lastTime = now;
       time += dt;
-      // Update omega from the current frequency.
+      // Update omega in case frequency changed.
       omega = 2 * Math.PI * (simulationParams.frequency / 1000);
 
-      // --------------------------
-      // Update Color Cycling for a Trippy Effect
-      // --------------------------
-      if (boardMaterial) {
-        if (simulationParams.boardCycle) {
-          const hsl = { h: 0, s: 0, l: 0 };
-          boardMaterial.color.getHSL(hsl);
-          hsl.h = (hsl.h + simulationParams.colorSpeed * dt) % 1;
-          boardMaterial.color.setHSL(hsl.h, hsl.s, hsl.l);
-        } else {
-          boardMaterial.color.set(simulationParams.boardColor);
-        }
-      }
-      if (particleMaterial) {
-        if (simulationParams.particleCycle) {
-          const hsl = { h: 0, s: 0, l: 0 };
-          particleMaterial.color.getHSL(hsl);
-          hsl.h = (hsl.h + simulationParams.colorSpeed * dt) % 1;
-          particleMaterial.color.setHSL(hsl.h, hsl.s, hsl.l);
-        } else {
-          particleMaterial.color.set(simulationParams.particleColor);
-        }
-      }
-      if (pointLight) {
-        const hsl = { h: 0, s: 0, l: 0 };
-        pointLight.color.getHSL(hsl);
-        hsl.h = (hsl.h + simulationParams.colorSpeed * dt) % 1;
-        pointLight.color.setHSL(hsl.h, hsl.s, hsl.l);
-      }
-
-      updateParticles(dt);
+      // Update the board and particles without any color cycling.
       updateBoard();
+      updateParticles(dt);
       renderer.render(scene, camera);
     };
 
-    // ------------------------------
-    // Scene Setup & Initialization
-    // ------------------------------
+    // ---------------------------------------------------------------------
+    // Scene setup and initialization
+    // ---------------------------------------------------------------------
     const initScene = () => {
       scene = new THREE.Scene();
 
@@ -328,12 +325,12 @@ const CymaticPage: React.FC = () => {
       directionalLight.position.set(50, 100, 50);
       scene.add(directionalLight);
 
-      // Additional trippy 3D effect: a point light that cycles colors.
+      // Static point light.
       pointLight = new THREE.PointLight(0xffffff, 1, 500);
       pointLight.position.set(0, 100, 0);
       scene.add(pointLight);
 
-      // Initialize the board and particle system.
+      // Initialize the plate and particles.
       initBoard();
       initParticles();
 
@@ -349,12 +346,12 @@ const CymaticPage: React.FC = () => {
       }
     };
 
-    // ------------------------------
-    // Dynamically import and set up dat.gui (client only)
-    // ------------------------------
+    // ---------------------------------------------------------------------
+    // Dynamically import dat.gui and add controls.
+    // ---------------------------------------------------------------------
     import("dat.gui").then(({ GUI }) => {
       if (GUI && GUI.prototype) {
-        // PATCH dat.gui's destroy() method to not remove its DOM element.
+        // Prevent dat.gui from removing its DOM element on destroy.
         GUI.prototype.destroy = function () {
           if (this.domElement) {
             this.domElement.style.display = "none";
@@ -362,60 +359,52 @@ const CymaticPage: React.FC = () => {
         };
       }
       const gui = new GUI();
+
       gui.add(simulationParams, "frequency", 1, 10000)
         .name("Frequency (Hz)")
         .onChange((value: number) => {
           simulationParams.frequency = value;
           omega = 2 * Math.PI * (simulationParams.frequency / 1000);
-          initParticles();
           trackEvent("Frequency Changed", { value });
         });
-      gui.add(simulationParams, "boardAmplitude", 0, 5)
-        .name("Board Amplitude")
+      gui.add(simulationParams, "boardAmplitude", 0, 20)
+        .name("Amplitude")
         .onChange((value: number) => {
           simulationParams.boardAmplitude = value;
-          trackEvent("Board Amplitude Changed", { value });
+          trackEvent("Amplitude Changed", { value });
         });
-      gui.add(simulationParams, "damping", 0.8, 1)
-        .name("Damping")
-        .onChange((value: number) => {
-          simulationParams.damping = value;
-          trackEvent("Damping Changed", { value });
-        });
-      gui.add(simulationParams, "k", 0.1, 1)
+      gui.add(simulationParams, "k", 0.01, 1)
         .name("Wave Number")
         .onChange((value: number) => {
           simulationParams.k = value;
           trackEvent("Wave Number Changed", { value });
         });
-      gui.add(simulationParams, "forceScale", 10, 300)
+      gui.add(simulationParams, "forceScale", 1, 300)
         .name("Force Scale")
         .onChange((value: number) => {
           simulationParams.forceScale = value;
           trackEvent("Force Scale Changed", { value });
         });
-      gui.add(simulationParams, "randomFactor", 1, 10)
-        .name("Random Factor")
+      gui.add(simulationParams, "damping", 0.5, 1)
+        .name("Damping")
         .onChange((value: number) => {
-          simulationParams.randomFactor = value;
-          trackEvent("Random Factor Changed", { value });
+          simulationParams.damping = value;
+          trackEvent("Damping Changed", { value });
         });
-      gui.add(simulationParams, "numSand", 1000, 50000).step(1000)
-        .name("Num Sand")
+      gui.add(simulationParams, "numParticles", 1000, 20000).step(1000)
+        .name("Num Particles")
         .onFinishChange((value: number) => {
-          simulationParams.numSand = value;
+          simulationParams.numParticles = value;
           initParticles();
-          trackEvent("Num Sand Changed", { value });
+          trackEvent("Num Particles Changed", { value });
         });
-      gui.add(simulationParams, "plateRadius", 10, 200)
-        .name("Plate Radius")
-        .onFinishChange((value: number) => {
-          simulationParams.plateRadius = value;
-          if (simulationParams.plateShape === "circle") {
-            initBoard();
-            initParticles();
-            trackEvent("Plate Radius Changed", { value });
-          }
+      gui.add(simulationParams, "plateShape", { Square: "square", Circle: "circle" })
+        .name("Plate Shape")
+        .onChange((value: string) => {
+          simulationParams.plateShape = value;
+          initBoard();
+          initParticles();
+          trackEvent("Plate Shape Changed", { value });
         });
       gui.add(simulationParams, "plateSize", 10, 200)
         .name("Square Size")
@@ -427,19 +416,21 @@ const CymaticPage: React.FC = () => {
             trackEvent("Square Size Changed", { value });
           }
         });
-      gui.add(simulationParams, "plateShape", { Circle: "circle", Square: "square" })
-        .name("Plate Shape")
-        .onChange((value: string) => {
-          simulationParams.plateShape = value;
-          initBoard();
-          initParticles();
-          trackEvent("Plate Shape Changed", { value });
+      gui.add(simulationParams, "plateRadius", 10, 200)
+        .name("Plate Radius")
+        .onFinishChange((value: number) => {
+          simulationParams.plateRadius = value;
+          if (simulationParams.plateShape === "circle") {
+            initBoard();
+            initParticles();
+            trackEvent("Plate Radius Changed", { value });
+          }
         });
       gui.addColor(simulationParams, "boardColor")
         .name("Board Color")
         .onFinishChange((value: string) => {
           simulationParams.boardColor = value;
-          if (!simulationParams.boardCycle && boardMaterial) {
+          if (boardMaterial) {
             boardMaterial.color.set(value);
           }
           trackEvent("Board Color Changed", { value });
@@ -448,36 +439,18 @@ const CymaticPage: React.FC = () => {
         .name("Particle Color")
         .onFinishChange((value: string) => {
           simulationParams.particleColor = value;
-          if (!simulationParams.particleCycle && particleMaterial) {
+          if (particleMaterial) {
             particleMaterial.color.set(value);
           }
           trackEvent("Particle Color Changed", { value });
         });
-      gui.add(simulationParams, "boardCycle")
-        .name("Board Cycle")
-        .onChange((value: boolean) => {
-          simulationParams.boardCycle = value;
-          trackEvent("Board Cycle Toggled", { value });
-        });
-      gui.add(simulationParams, "particleCycle")
-        .name("Particle Cycle")
-        .onChange((value: boolean) => {
-          simulationParams.particleCycle = value;
-          trackEvent("Particle Cycle Toggled", { value });
-        });
-      gui.add(simulationParams, "colorSpeed", 0, 1)
-        .name("Color Speed")
-        .onChange((value: number) => {
-          simulationParams.colorSpeed = value;
-          trackEvent("Color Speed Changed", { value });
-        });
-      // Add buttons to play and stop sound.
+      // Buttons for playing/stopping sound.
       gui.add({ playSound: () => { startSound(simulationParams.frequency); } }, "playSound")
         .name("Play Sound");
       gui.add({ stopSound: () => { stopSound(); } }, "stopSound")
         .name("Stop Sound");
 
-      // Optionally reparent the GUI's DOM element.
+      // Optionally reparent the dat.gui element.
       const guiContainer = document.getElementById("datgui-container");
       if (guiContainer) {
         gui.domElement.style.position = "static";
@@ -485,12 +458,14 @@ const CymaticPage: React.FC = () => {
       }
     });
 
+    // ---------------------------------------------------------------------
     // Initialize the scene.
+    // ---------------------------------------------------------------------
     initScene();
 
-    // ------------------------------
-    // Cleanup function.
-    // ------------------------------
+    // ---------------------------------------------------------------------
+    // Cleanup on unmount.
+    // ---------------------------------------------------------------------
     return () => {
       window.removeEventListener("resize", onWindowResize);
       cancelAnimationFrame(animationId);
@@ -506,15 +481,15 @@ const CymaticPage: React.FC = () => {
         oscillator.stop();
         oscillator.disconnect();
       }
-      // (The dynamically imported dat.gui instance will be cleaned up via its own destroy method.)
+      // dat.gui cleans itself up via its own destroy method.
     };
   }, [loading, frequency]);
 
   return (
-    <div className="relative w-1200 h-screen overflow-hidden">
-      {/* Container for the Three.js canvas */}
+    <div className="relative w-full h-screen overflow-hidden">
+      {/* Container for Three.js canvas */}
       <div ref={containerRef} className="w-full h-full" />
-      {/* Spinner overlay */}
+      {/* Loading spinner overlay */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center z-50">
           <svg className="animate-spin h-12 w-12 text-white" viewBox="0 0 24 24">
@@ -524,11 +499,11 @@ const CymaticPage: React.FC = () => {
         </div>
       )}
       {/* Container for dat.gui controls */}
-      <div className="absolute top-0 z-10 rounded text-black">
-        <div id="datgui-container" className="mt-4"></div>
+      <div className="absolute top-0 left-0 z-10 p-4">
+        <div id="datgui-container"></div>
       </div>
     </div>
   );
 };
 
-export default CymaticPage;
+export default ChladniPage;

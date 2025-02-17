@@ -148,9 +148,11 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
         onClick={() => onSelectTicker(item.symbol)}
       >
         <div className="font-bold">{item.symbol}</div>
-        <div>Price: ${c.toFixed(2)}</div>
         <div>
-          {arrow} <span className={dpClass}>{dp.toFixed(2)}%</span>
+          Price: <span className={dpClass}>${c.toFixed(2)}</span>
+        </div>
+        <div>
+          <span className={dpClass}>{arrow} {dp.toFixed(2)}%</span>
         </div>
         {t && (
           <div className="text-gray-500 mt-1">
@@ -176,10 +178,12 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
           <span className="font-bold">
             {index + 1}. {item.symbol}
           </span>
-          <span className="font-semibold">Price: ${c.toFixed(2)}</span>
+          <span className={`font-semibold ${dpClass}`}>Price: ${c.toFixed(2)}</span>
         </div>
         <div className="mb-1">
-          Change: {arrow} ${d.toFixed(2)} (<span className={dpClass}>{dp.toFixed(2)}%</span>)
+          <span className={dpClass}>
+            Change: {arrow} ${d.toFixed(2)} ({dp.toFixed(2)}%)
+          </span>
         </div>
         <div className="flex justify-between mb-1">
           <span>High: ${h.toFixed(2)}</span>
@@ -201,19 +205,18 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
   return (
     <div className="mt-8 space-y-6">
       {/* Market Status Banner */}
-{marketStatus && (
-  <div
-    className={`p-2 rounded text-sm ${
-      marketStatus.isOpen
-        ? "bg-green-100 dark:bg-green-800 text-green-900 dark:text-green-100"
-        : "bg-red-100 dark:bg-red-800 text-red-900 dark:text-red-100"
-    }`}
-  >
-    Market is {marketStatus.isOpen ? "Open" : "Closed"}{" "}
-    {marketStatus.t && `| ${formatDate(marketStatus.t, "short")}`}
-  </div>
-)}
-
+      {marketStatus && (
+        <div
+          className={`p-2 rounded text-sm ${
+            marketStatus.isOpen
+              ? "bg-green-100 dark:bg-green-800 text-green-900 dark:text-green-100"
+              : "bg-red-100 dark:bg-red-800 text-red-900 dark:text-red-100"
+          }`}
+        >
+          Market is {marketStatus.isOpen ? "Open" : "Closed"}{" "}
+          {marketStatus.t && `| ${formatDate(marketStatus.t, "short")}`}
+        </div>
+      )}
 
       {/* Top 10 Tickers along the top */}
       <div className="shadow rounded p-4">

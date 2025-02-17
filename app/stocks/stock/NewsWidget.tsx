@@ -54,14 +54,7 @@ const NewsWidget: React.FC = () => {
                   Read More
                 </a>
               </div>
-              <a
-                  className="text-indigo-500 hover:underline"
-                  href={news.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Read More
-                </a>
+              
             </div>
           ))
         ) : (
