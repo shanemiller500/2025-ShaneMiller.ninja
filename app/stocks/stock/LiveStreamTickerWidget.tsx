@@ -80,13 +80,12 @@ const LiveStreamTickerWidget: React.FC = () => {
     }
   }, []);
 
-  // Modified: Always subscribe to symbols regardless of market status.
+  // Always subscribe to symbols regardless of market status.
   const checkMarketStatus = () => {
     fetch(`https://finnhub.io/api/v1/stock/market-status?exchange=US&token=${API_TOKEN}`)
       .then((res) => res.json())
       .then((data) => {
         setMarketStatus(data);
-        // Always subscribe, even if market is closed.
         subscribeToSymbols();
       })
       .catch((error) =>
@@ -105,7 +104,13 @@ const LiveStreamTickerWidget: React.FC = () => {
   };
 
   return (
-    <section className="mt-6 p-4 rounded shadow ">
+    <section className="mt-6 p-4 rounded shadow bg-white dark:bg-gray-800 relative">
+      {/* Render red banner if markets are closed */}
+      {marketStatus && !marketStatus.isOpen && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-red-900 bg-opacity-80 animate-pulse">
+          <span className="text-white text-2xl font-bold">Markets are Closed</span>
+        </div>
+      )}
       <h2 className="text-xl font-bold mb-4">Live Stock Ticker</h2>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {topTenSymbols.map((symbol, index) => {
