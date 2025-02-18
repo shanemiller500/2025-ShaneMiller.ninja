@@ -42,21 +42,29 @@ const LiveStreamTickerWidget: React.FC = () => {
                 setTradeInfoMap((prev) => {
                   const prevData = prev[symbol];
                   // Determine background color based on price change:
-                  // Green if price goes up, Red if it goes down, Neutral otherwise.
+                  // Green if price goes up, Red if price goes down, Neutral otherwise.
                   let bgColor = "bg-gray-100 dark:bg-gray-600";
+                  let pctChange = 0;
+                  let arrow = "";
+                  let changeText = "";
                   if (prevData) {
                     if (tradePrice > prevData.price) {
                       bgColor = "bg-green-300 dark:bg-green-700";
                     } else if (tradePrice < prevData.price) {
                       bgColor = "bg-red-300 dark:bg-red-700";
                     }
+                    // Calculate the percentage change from the previous price.
+                    pctChange = ((tradePrice - prevData.price) / prevData.price) * 100;
+                    arrow = pctChange > 0 ? "▲" : pctChange < 0 ? "▼" : "";
+                    changeText = `(${arrow} ${Math.abs(pctChange).toFixed(2)}%)`;
                   }
+                  const infoStr = `$${tradePrice.toFixed(2)} ${changeText}`;
                   return {
                     ...prev,
                     [symbol]: {
                       timestamp: tradeData.t,
                       price: tradePrice,
-                      info: "$" + tradePrice.toFixed(2),
+                      info: infoStr,
                       bgColor,
                     },
                   };
@@ -104,7 +112,7 @@ const LiveStreamTickerWidget: React.FC = () => {
   };
 
   return (
-    <section className="mt-6 p-4 rounded shadow bg-white dark:bg-gray-800 relative">
+    <section className="mt-6 p-4 rounded shadow relative">
       {/* Render red banner if markets are closed */}
       {marketStatus && !marketStatus.isOpen && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-red-900 bg-opacity-80 animate-pulse">

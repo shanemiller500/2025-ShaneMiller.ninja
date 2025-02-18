@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { API_TOKEN } from "@/utils/config";
 import { formatDate } from "@/utils/formatters";
 
 interface QuoteData {
@@ -23,6 +22,8 @@ interface TickerData {
 interface MarketWidgetsProps {
   onSelectTicker: (ticker: string) => void;
 }
+
+const API_TOKEN = process.env.NEXT_PUBLIC_FINHUB_API_KEY2;
 
 const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
   const [marketStatus, setMarketStatus] = useState<{ isOpen: boolean; t?: number } | null>(null);
@@ -128,7 +129,7 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
     let intervalId: NodeJS.Timeout;
     fetchMarketData().then((isOpen) => {
       if (isOpen) {
-        intervalId = setInterval(fetchMarketData, 20000);
+        intervalId = setInterval(fetchMarketData, 200000);
       }
     });
     return () => {
