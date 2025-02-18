@@ -390,7 +390,6 @@ const StockQuoteSection = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <MarketWidgets onSelectTicker={handleTickerClick} />
             <div>
-              <FearGreedWidget index={fearGreedIndex} />
               <NewsWidget />
             </div>
           </div>
@@ -508,9 +507,6 @@ const StockQuoteSection = () => {
                 </div>
               </div>
             )}
-
-            {/* --- Fear & Greed Index Widget Above News --- */}
-            <FearGreedWidget index={fearGreedIndex} />
 
             {/* --- News Widget --- */}
             <NewsWidget />

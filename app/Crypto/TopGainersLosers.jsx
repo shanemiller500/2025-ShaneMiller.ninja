@@ -64,7 +64,7 @@ const TopGainersLosers = () => {
         key={crypto.id}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-lg transform transition-all hover:shadow-2xl"
+        className=" rounded-lg p-4 shadow-lg transform transition-all hover:shadow-2xl"
       >
         <h5 className={`font-bold text-lg mb-2 ${textColor}`}>
           {crypto.name} ({crypto.symbol})
@@ -83,12 +83,12 @@ const TopGainersLosers = () => {
     <div className="relative min-h-screen p-8 text-white overflow-hidden">
 
       <div className="relative z-20">
-        <h2 className="text-3xl font-extrabold text-center mb-8">
+        <h2 className="text-3xl font-extrabold text-brand-900 dark:text-white text-center mb-8">
           Crypto Market Movers
         </h2>
 
         <section className="mb-12">
-          <h3 className="text-2xl font-bold mb-4 border-b pb-2 border-indigo-300">
+          <h3 className="text-2xl text-brand-900 dark:text-white font-bold mb-4 border-b pb-2 border-indigo-300">
             Top Gainers
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
@@ -97,7 +97,7 @@ const TopGainersLosers = () => {
         </section>
 
         <section>
-          <h3 className="text-2xl font-bold mb-4 border-b pb-2 border-indigo-300">
+          <h3 className="text-2xl text-brand-900 dark:text-white font-bold mb-4 border-b pb-2 border-indigo-300">
             Top Losers
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">

@@ -185,6 +185,7 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
     const arrow = dp >= 0 ? "▲" : "▼";
     const dpClass = dp >= 0 ? "text-green-500" : "text-red-500";
     return (
+        
       <div
         key={item.symbol}
         className="cursor-pointer p-3 rounded shadow hover:shadow-xl transition transform hover:-translate-y-1 text-xs"
@@ -235,6 +236,7 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
           {marketStatus.t && `| ${formatDate(marketStatus.t, "short")}`}
         </div>
       )}
+              <FearGreedWidget index={fearGreedIndex} />
 
       {/* Overall Market Performance */}
       {topTen.length > 0 && (

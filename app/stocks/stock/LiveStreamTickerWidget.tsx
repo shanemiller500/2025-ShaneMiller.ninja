@@ -14,10 +14,23 @@ interface TradeInfo {
 const LiveStreamTickerWidget: React.FC = () => {
   const [tradeInfoMap, setTradeInfoMap] = useState<{ [symbol: string]: TradeInfo }>({});
   const [marketStatus, setMarketStatus] = useState<any>(null);
+  // Record when we first detect the market is closed
+  const [marketClosedAt, setMarketClosedAt] = useState<number | null>(null);
+  // This state is used to force a re-render so the banner updates with the current local time.
+  const [currentTime, setCurrentTime] = useState<number>(Date.now());
   const socketRef = useRef<WebSocket | null>(null);
 
   // Define the top ten symbols to subscribe to.
   const topTenSymbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "JPM", "V", "NFLX"];
+
+  useEffect(() => {
+    // Update currentTime every minute so the banner updates automatically.
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -94,6 +107,14 @@ const LiveStreamTickerWidget: React.FC = () => {
       .then((res) => res.json())
       .then((data) => {
         setMarketStatus(data);
+        // If the market is closed and we haven't recorded when it closed, record the current time.
+        if (!data.isOpen && marketClosedAt === null) {
+          setMarketClosedAt(Date.now());
+        }
+        // Reset if the market is open.
+        if (data.isOpen) {
+          setMarketClosedAt(null);
+        }
         subscribeToSymbols();
       })
       .catch((error) =>
@@ -111,14 +132,39 @@ const LiveStreamTickerWidget: React.FC = () => {
     });
   };
 
+  // Render overlay based on market status and the elapsed time since the market closed.
+  // For the first hour after the market is detected as closed,
+  // show a banner stating that it's after hours trading.
+  // After one hour, show a banner indicating the markets are closed.
+  const renderAfterHoursBanner = () => {
+    if (!marketStatus || marketStatus.isOpen || marketClosedAt === null) return null;
+
+    const elapsed = currentTime - marketClosedAt;
+    const oneHourInMs = 60 * 60 * 1000; // one hour in milliseconds
+
+    if (elapsed < oneHourInMs) {
+      return (
+        <div className="absolute inset-0 z-10 flex items-center justify-center ">
+          <p className="dark:text-white text-brand-900 text-2xl font-bold">
+            It's after hours trading now
+          </p>
+        </div>
+      );
+    } else {
+      return (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-red-900 bg-opacity-50 animate-pulse">
+          <p className="text-white text-2xl font-bold">
+            Markets are Closed 
+          </p>
+        </div>
+      );
+    }
+  };
+
   return (
     <section className="mt-6 p-4 rounded shadow relative">
-      {/* Render red banner if markets are closed */}
-      {marketStatus && !marketStatus.isOpen && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-red-900 bg-opacity-80 animate-pulse">
-          <span className="text-white text-2xl font-bold">Markets are Closed</span>
-        </div>
-      )}
+      {/* Render after hours banner */}
+      {renderAfterHoursBanner()}
       <h2 className="text-xl font-bold mb-4">Live Stock Ticker</h2>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {topTenSymbols.map((symbol, index) => {
