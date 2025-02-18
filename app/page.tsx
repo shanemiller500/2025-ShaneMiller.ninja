@@ -6,6 +6,7 @@ import WidgetSearch from '@/components/widget-search'
 import Zoltars from '@/components/widget-zoltar'    
 import Image from 'next/image'
 import AboutImg from '@/public/images/pumpkin.jpg'
+import StockWidget from '@/app/stocks/stock/LiveStreamTickerWidget'
 
 export default function AboutPage() {
   return (
@@ -43,8 +44,17 @@ export default function AboutPage() {
                       Need a developer who gets things done? Let’s talk.
 
                     </p>
-
-                    <CryptoWidget />
+                    <StockWidget />
+            
+      <div className="p-2">
+        <p className="text-xs text-gray-500 text-center">
+          See more stock market data{" "}
+          <a href="/stocks" className="text-indigo-500 underline">
+            here
+          </a>
+          .
+        </p>
+      </div>
                     <Zoltars />
                   </div>
 
@@ -58,6 +68,7 @@ export default function AboutPage() {
             <div className="space-y-6">
             <WidgetSearch />
               <WidgetWeather />
+              <CryptoWidget />
            <WidgetNews />
             </div>
           </aside>

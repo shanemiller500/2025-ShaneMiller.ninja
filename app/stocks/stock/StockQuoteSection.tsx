@@ -11,7 +11,8 @@ import {
 } from "@/utils/formatters";
 import MarketWidgets from "./MarketWidgets";
 import NewsWidget from "./NewsWidget";
-import LiveStreamTickerWidget from "./LiveStreamTickerWidget"; // NEW: Import the LiveStreamTickerWidget
+import LiveStreamTickerWidget from "./LiveStreamTickerWidget";
+import FearGreedWidget from "./FearGreedWidget";
 
 interface CandleData {
   c: number[]; // closing prices
@@ -32,9 +33,55 @@ const StockQuoteSection = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [currentSymbol, setCurrentSymbol] = useState("");
+  const [fearGreedIndex, setFearGreedIndex] = useState<number>(50);
 
   const chartCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartRef = useRef<Chart | null>(null);
+
+  // --- Define Top 10 Tickers for Overall Market Sentiment ---
+  const topTenTickers = [
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "TSLA",
+    "META",
+    "NVDA",
+    "BRK.B",
+    "JPM",
+    "V",
+  ];
+
+  // --- Fetch Overall Market Quotes for Fear & Greed Index ---
+  const fetchOverallMarketChange = async () => {
+    try {
+      const promises = topTenTickers.map((ticker) =>
+        fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_TOKEN}`).then(
+          (res) => res.json()
+        )
+      );
+      const results = await Promise.all(promises);
+      // Filter valid results (ensure current price exists)
+      const validResults = results.filter((data) => data && data.c !== undefined);
+      if (validResults.length > 0) {
+        // Calculate average percent change (dp)
+        const averageChange =
+          validResults.reduce((sum, data) => sum + data.dp, 0) / validResults.length;
+        // Map from -3% (Extreme Fear) to +3% (Extreme Greed)
+        let index = ((averageChange + 3) / 6) * 100;
+        if (index < 0) index = 0;
+        if (index > 100) index = 100;
+        setFearGreedIndex(index);
+      }
+    } catch (err) {
+      console.error("Error fetching overall market quotes:", err);
+    }
+  };
+
+  // --- Fetch Overall Market Change on Mount ---
+  useEffect(() => {
+    fetchOverallMarketChange();
+  }, []);
 
   // --- Autocomplete Suggestions (debounced) ---
   useEffect(() => {
@@ -83,7 +130,6 @@ const StockQuoteSection = () => {
   };
 
   // --- Main Search Handler with Local Storage Caching ---
-  // (Accepts an optional symbol parameter so that clicking a widget item can trigger a search)
   const handleSearch = async (symbolParam?: string) => {
     const symbolToSearch = symbolParam || symbolInput;
     if (!symbolToSearch) return;
@@ -210,7 +256,6 @@ const StockQuoteSection = () => {
   // --- Handle ticker click from widgets ---
   const handleTickerClick = (ticker: string) => {
     setSymbolInput(ticker);
-    // Trigger search immediately using the selected ticker
     handleSearch(ticker);
   };
 
@@ -344,10 +389,12 @@ const StockQuoteSection = () => {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <MarketWidgets onSelectTicker={handleTickerClick} />
-            <NewsWidget />
+            <div>
+              <FearGreedWidget index={fearGreedIndex} />
+              <NewsWidget />
+            </div>
           </div>
           <LiveStreamTickerWidget />
-
         </>
       )}
 
@@ -448,7 +495,7 @@ const StockQuoteSection = () => {
             </div>
           </div>
 
-          {/* --- Right Column: Chart & News --- */}
+          {/* --- Right Column: Chart, Fear & Greed Index, & News --- */}
           <div>
             {/* --- Chart Section --- */}
             {candleData && (
@@ -461,6 +508,9 @@ const StockQuoteSection = () => {
                 </div>
               </div>
             )}
+
+            {/* --- Fear & Greed Index Widget Above News --- */}
+            <FearGreedWidget index={fearGreedIndex} />
 
             {/* --- News Widget --- */}
             <NewsWidget />

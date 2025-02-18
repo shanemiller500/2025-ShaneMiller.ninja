@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { formatDate } from "@/utils/formatters";
+import FearGreedWidget from "./FearGreedWidget"; // Adjust the path as needed
 
 interface QuoteData {
   c: number; // current price
@@ -124,7 +125,7 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
     }
   };
 
-  // --- Auto-refresh every 20 seconds when market is open ---
+  // --- Auto-refresh every 200 seconds when market is open ---
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     fetchMarketData().then((isOpen) => {
@@ -136,6 +137,18 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
       if (intervalId) clearInterval(intervalId);
     };
   }, []);
+
+  // --- Calculate Overall Market Change based on Top 10 tickers ---
+  const overallMarketChange =
+    topTen.length > 0
+      ? topTen.reduce((sum, item) => sum + item.quote.dp, 0) / topTen.length
+      : 0;
+
+  // --- Calculate the Fear & Greed index ---
+  // Mapping overallMarketChange from -3% (Extreme Fear) to +3% (Extreme Greed)
+  let fearGreedIndex = ((overallMarketChange + 3) / 6) * 100;
+  if (fearGreedIndex < 0) fearGreedIndex = 0;
+  if (fearGreedIndex > 100) fearGreedIndex = 100;
 
   // --- Render small ticker box for Top 10 ---
   const renderSmallTicker = (item: TickerData, index: number) => {
@@ -153,7 +166,9 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
           Price: <span className={dpClass}>${c.toFixed(2)}</span>
         </div>
         <div>
-          <span className={dpClass}>{arrow} {dp.toFixed(2)}%</span>
+          <span className={dpClass}>
+            {arrow} {dp.toFixed(2)}%
+          </span>
         </div>
         {t && (
           <div className="text-gray-500 mt-1">
@@ -179,7 +194,9 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
           <span className="font-bold">
             {index + 1}. {item.symbol}
           </span>
-          <span className={`font-semibold ${dpClass}`}>Price: ${c.toFixed(2)}</span>
+          <span className={`font-semibold ${dpClass}`}>
+            Price: ${c.toFixed(2)}
+          </span>
         </div>
         <div className="mb-1">
           <span className={dpClass}>
@@ -219,7 +236,26 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
         </div>
       )}
 
-      {/* Top 10 Tickers along the top */}
+      {/* Overall Market Performance */}
+      {topTen.length > 0 && (
+        <div
+          className={`text-center text-sm font-semibold ${
+            overallMarketChange > 0
+              ? "text-green-600"
+              : overallMarketChange < 0
+              ? "text-red-600"
+              : "text-gray-600"
+          }`}
+        >
+          {overallMarketChange > 0
+            ? `Overall, the market is up today by ${overallMarketChange.toFixed(2)}%.`
+            : overallMarketChange < 0
+            ? `Overall, the market is down today by ${Math.abs(overallMarketChange).toFixed(2)}%.`
+            : "Overall, the market is unchanged today."}
+        </div>
+      )}
+
+      {/* Top 10 Tickers */}
       <div className="shadow rounded p-4">
         <h3 className="text-lg font-bold mb-4">Top 10 Tickers</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
@@ -227,7 +263,7 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
         </div>
       </div>
 
-      {/* Top Gainers and Top Losers side by side */}
+      {/* Top Gainers and Top Losers */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="shadow rounded p-4">
           <h3 className="text-lg font-bold mb-4">Top Gainers</h3>
