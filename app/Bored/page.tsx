@@ -8,7 +8,7 @@ import RandomAdvice from "./RandomAdvice";
 import { trackEvent } from "@/utils/mixpanel";
 import Zoltars from "@/components/widget-zoltar";
 
-const QuotesDashboard = () => {
+const BoredDashboard = () => {
   // Define tabs for each component.
   const tabs = [
 
@@ -22,18 +22,18 @@ const QuotesDashboard = () => {
 
   // Track page view on mount.
   useEffect(() => {
-    trackEvent("Quotes Dashboard Viewed", { page: "Quotes Dashboard" });
+    trackEvent("Bored Dashboard Viewed", { page: "Bored Dashboard" });
   }, []);
 
   // Handler for tab clicks that fires a tracking event and updates the active tab.
   const handleTabClick = (index: number, tabName: string) => {
     setActiveTab(index);
-    trackEvent("Quotes Dashboard Tab Clicked", { tab: tabName });
+    trackEvent("Bored Dashboard Tab Clicked", { tab: tabName });
   };
 
   return (
     <div className="min-h-screen dark:text-gray-100 p-4 space-y-8">
-      <h1 className="text-4xl font-bold text-center">Quotes Dashboard</h1>
+      <h1 className="text-4xl font-bold text-center">Bored Dashboard</h1>
 
       {/* Tab Buttons */}
       <div className="flex justify-center border-b border-gray-700">
@@ -58,4 +58,4 @@ const QuotesDashboard = () => {
   );
 };
 
-export default QuotesDashboard;
+export default BoredDashboard;

@@ -343,6 +343,7 @@ const StockQuoteSection = () => {
 
       {/* --- Search Input & Suggestions --- */}
       <div className="mb-4">
+        
         <input
           type="text"
           value={symbolInput}
@@ -364,9 +365,12 @@ const StockQuoteSection = () => {
                 {sugg}
               </li>
             ))}
+            
           </ul>
         )}
+
       </div>
+      
 
       {/* --- Action Buttons --- */}
       <div className="flex flex-wrap gap-2 mb-4">
