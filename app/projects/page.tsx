@@ -3,8 +3,11 @@
 import { useEffect } from 'react';
 import ProjectCard from './project-card';
 import Icon01 from '@/public/images/hmbco.png';
+import Icon02 from '@/public/images/project-icon-02.svg';
+import Icon12 from '@/public/images/project-icon-03.svg';
 import Icon03 from '@/public/images/the-new-york-stock-exchange-seeklogo.png';
 import Icon04 from '@/public/images/project-icon-04.svg';
+import Icon5 from '@/public/images/project-icon-05.svg';
 import Icon05 from '@/public/images/s-h-i-e-l-d-seeklogo.png';
 import Icon06 from '@/public/images/project-icon-06.svg';
 import Icon07 from '@/public/images/bitcoin-seeklogo.png';
@@ -106,10 +109,10 @@ export default function Projects() {
     },
     {
       id: 8,
-      icon: Icon04,
+      icon: Icon5,
       slug: '/cymatics',
-      title: 'Cymatics (Caution: Contains flashing lights!)',
-      excerpt: "  A fun side project using sound frequencies to make sand dance into cymatic patterns, still a work in progress! ",
+      title: 'Vibroacoustics & Geometry ',
+      excerpt: "Reveal geometry’s beauty in both vibrating patterns and four-dimensional forms. (Caution: Contains flashing lights!)",
       openSource: false,
     },
     {
@@ -122,7 +125,7 @@ export default function Projects() {
     },
     {
       id: 10,
-      icon: Icon04,
+      icon: Icon02,
       slug: '/news',
       title: 'Latest News',
       excerpt: " Latest News from whatever APIs I can get it from",
@@ -130,7 +133,7 @@ export default function Projects() {
     },
     {
       id: 11,
-      icon: Icon04,
+      icon: Icon12,
       slug: '/search',
       title: 'AI Powered Search Engine',
       excerpt: " An AI Ppowered search engine that gets to the point.",
@@ -138,7 +141,7 @@ export default function Projects() {
     },
     {
       id: 12,
-      icon: Icon04,
+      icon: Icon06,
       slug: '/Weather',
       title: 'Check local weather.',
       excerpt: " 7 Day hourly weather charts and more!",
