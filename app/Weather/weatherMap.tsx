@@ -366,31 +366,7 @@ const WeatherMap: React.FC = () => {
             align-items: center;
             margin: 0.5rem;
           }
-          /* Card Shapes Based on Weather Condition */
-          .card-clear {
-            clip-path: circle(50% at 50% 40%);
-          }
-          .card-partly {
-            clip-path: polygon(20% 50%, 40% 20%, 70% 20%, 80% 50%, 70% 80%, 40% 80%);
-          }
-          .card-overcast {
-            clip-path: polygon(10% 50%, 30% 10%, 70% 10%, 90% 50%, 70% 90%, 30% 90%);
-          }
-          .card-fog {
-            clip-path: polygon(10% 30%, 90% 20%, 80% 80%, 20% 90%);
-          }
-          .card-drizzle {
-            clip-path: polygon(50% 0%, 80% 40%, 70% 100%, 30% 100%, 20% 40%);
-          }
-          .card-rain {
-            clip-path: polygon(50% 0%, 85% 40%, 70% 100%, 30% 100%, 15% 40%);
-          }
-          .card-snow {
-            clip-path: polygon(50% 0%, 85% 25%, 85% 75%, 50% 100%, 15% 75%, 15% 25%);
-          }
-          .card-thunder {
-            clip-path: polygon(40% 0%, 60% 0%, 55% 40%, 75% 40%, 40% 100%, 45% 60%, 30% 60%);
-          }
+        
           /* Modal Popup Styling */
           @media (max-width: 640px) {
             .modal-content {
