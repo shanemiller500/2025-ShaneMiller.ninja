@@ -11,6 +11,7 @@ import WeatherSlider from './WeatherSlider';
 import ToggleSwitch from './ToggleSwitch';
 import LeafletMap from './LeafletMap';
 import HourlyWeatherChart from './HourlyWeatherChart';
+import WeatherMap from './weatherMap';
 
 // --- Icon Components ---
 
@@ -32,9 +33,10 @@ const WindArrowIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-// --- Main Component ---
+// --- Main WeatherPage Component ---
 
 const WeatherPage: React.FC = () => {
+  // General states
   const [mounted, setMounted] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState("");
@@ -46,13 +48,15 @@ const WeatherPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState<string>("");
   const [tempUnit, setTempUnit] = useState<'C' | 'F'>('C');
+  // New state to toggle the interactive map modal.
+  const [showWeatherMap, setShowWeatherMap] = useState(false);
 
-  // Mark component as mounted
+  // Mark component as mounted.
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Merge Leaflet icons (client-only)
+  // Merge Leaflet icons (client‑only).
   useEffect(() => {
     if (typeof window !== "undefined") {
       const L = require('leaflet');
@@ -67,13 +71,13 @@ const WeatherPage: React.FC = () => {
     }
   }, []);
 
-  // Update current time every second
+  // Update current time every second.
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Update background image when weatherData changes
+  // Update background image when weatherData changes.
   useEffect(() => {
     if (weatherData && weatherData.current_weather) {
       const bg = getBackgroundImage(weatherData.current_weather.weathercode);
@@ -81,7 +85,7 @@ const WeatherPage: React.FC = () => {
     }
   }, [weatherData]);
 
-  // Get user's location and fetch weather data
+  // Get user's location and fetch weather data.
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -131,7 +135,6 @@ const WeatherPage: React.FC = () => {
       );
       const data = await res.json();
       const elapsedTime = Date.now() - startTime;
-      // Ensure a minimum wait time without negative delay
       const waitTime = Math.max(0, 1000 - elapsedTime);
       await new Promise((resolve) => setTimeout(resolve, waitTime));
       setWeatherData(data);
@@ -157,7 +160,7 @@ const WeatherPage: React.FC = () => {
       : `${(temp * 9 / 5 + 32).toFixed(1)}°F`;
   };
 
-  // Compute current wind gust from hourly data (if available)
+  // Compute current wind gust from hourly data (if available).
   const windGust = (() => {
     if (weatherData && weatherData.hourly && weatherData.current_weather) {
       const currentTimeISO = (weatherData.current_weather as any).time;
@@ -190,7 +193,7 @@ const WeatherPage: React.FC = () => {
                   {currentTime.toLocaleDateString()} {currentTime.toLocaleTimeString()}
                 </p>
               </div>
-              <div className="mb-8">
+              <div className="mb-8 flex flex-col md:flex-row items-center gap-4">
                 <form onSubmit={handleSearch} className="flex max-w-md mx-auto">
                   <input
                     type="text"
@@ -220,6 +223,13 @@ const WeatherPage: React.FC = () => {
                     ))}
                   </ul>
                 )}
+                {/* New Interactive Weather Map button */}
+                <button
+                  onClick={() => setShowWeatherMap(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded hover:bg-indigo-700 transition"
+                >
+                  Interactive Weather Map
+                </button>
               </div>
             </div>
           </header>
@@ -270,9 +280,9 @@ const WeatherPage: React.FC = () => {
                               </div>
                             </div>
                             <div className="flex items-center">
-                              <SunsetIcon className="w-6  h-6 text-orange-500" />
+                              <SunsetIcon className="w-6 h-6 text-orange-500" />
                               <div className="ml-2">
-                                <p className="text-sm dark:text-slate-200 font-medium">Sunset</p>
+                                <p className="text-sm font-medium dark:text-slate-200">Sunset</p>
                                 <p className="text-sm dark:text-slate-200">
                                   {new Date(weatherData.daily.sunset[0]).toLocaleTimeString([], {
                                     hour: '2-digit',
@@ -281,29 +291,6 @@ const WeatherPage: React.FC = () => {
                                 </p>
                               </div>
                             </div>
-                            {/* <div className="flex items-center">
-                              <motion.div
-                                className="transform"
-                                style={{ originX: '50%', originY: '50%' }}
-                                animate={{
-                                  rotate: (weatherData.current_weather as any).winddirection,
-                                  y: [0, -5, 0],
-                                }}
-                                transition={{
-                                  repeat: Infinity,
-                                  duration: Math.max(
-                                    0.5,
-                                    3 - weatherData.current_weather.windspeed / 10
-                                  ),
-                                }}
-                              >
-                                <WindArrowIcon className="w-8 h-8 text-blue-500" />
-                              </motion.div>
-                              <div className="ml-2">
-                                <p className="text-sm font-medium">Wind Gusts</p>
-                                <p className="text-sm">{windGust ? `${windGust} km/h` : "N/A"}</p>
-                              </div>
-                            </div> */}
                           </div>
                         )}
                       </div>
@@ -355,6 +342,20 @@ const WeatherPage: React.FC = () => {
             </div>
           )}
           {loading && <LoadingSpinner />}
+        </div>
+      )}
+      {/* WeatherMap Modal */}
+      {showWeatherMap && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
+          <div className="relative w-full h-full">
+            <button
+              onClick={() => setShowWeatherMap(false)}
+              className="absolute top-4 right-4 z-10 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded hover:bg-indigo-700 transition"
+            >
+              Close Map
+            </button>
+            <WeatherMap />
+          </div>
         </div>
       )}
     </div>
