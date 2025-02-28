@@ -5,13 +5,15 @@ import { motion } from 'framer-motion';
 import { getBackgroundImage, getWeatherIcon } from './weatherHelpers';
 import { fetchLocationName } from './api';
 import { Location, WeatherData } from './types';
+import dynamic from 'next/dynamic';
+
 
 import LoadingSpinner from './LoadingSpinner';
 import WeatherSlider from './WeatherSlider';
 import ToggleSwitch from './ToggleSwitch';
 import LeafletMap from './LeafletMap';
 import HourlyWeatherChart from './HourlyWeatherChart';
-import WeatherMap from './weatherMap';
+const WeatherMap = dynamic(() => import('./weatherMap'), { ssr: false });
 
 // --- Icon Components ---
 
