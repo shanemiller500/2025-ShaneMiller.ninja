@@ -32,7 +32,7 @@ export interface Article {
   
     // If this page has not been fetched before, call the MediaStack API.
     if (page > cachedData.lastPage) {
-      const limit = 200;
+      const limit = 100;
       const offset = (page - 1) * limit;
       const mediastackUrl = `https://api.mediastack.com/v1/news?access_key=${mediastackApiKey}&languages=en&limit=${limit}&offset=${offset}`;
       const response = await fetch(mediastackUrl);

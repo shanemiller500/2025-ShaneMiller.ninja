@@ -45,9 +45,9 @@ const WeatherSlider: React.FC<WeatherSliderProps> = ({ daily, tempUnit }) => {
           transition={{ duration: 0.4 }}
         >
           <div
-            className="rounded-lg shadow p-4 flex flex-col items-center text-white"
-            style={getForecastCardStyle(daily.weathercode[index])}
-          >
+  style={getForecastCardStyle(daily.weathercode[index])}
+  className="rounded-lg border p-5 transition-all duration-300 ease-in-out"
+>
             <p className="font-medium">
               {new Date(time).toLocaleDateString()}
             </p>

@@ -40,19 +40,25 @@ export const getBackgroundImage = (code: number) => {
 };
 
 export const getForecastCardStyle = (code: number) => {
-  if (code === 0)
-    return { background: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)' };
-  if ([1, 2].includes(code))
-    return { background: 'linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%)' };
-  if (code === 3)
-    return { background: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' };
-  if ([45, 48].includes(code))
-    return { background: 'linear-gradient(135deg, #bdc3c7 0%, #2c3e50 100%)' };
-  if ([51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82].includes(code))
-    return { background: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)' };
-  if ([71, 73, 75, 77, 85, 86].includes(code))
-    return { background: 'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)' };
-  if ([95, 96, 99].includes(code))
-    return { background: 'linear-gradient(135deg, #fbd3e9 0%, #bb377d 100%)' };
-  return { background: 'linear-gradient(135deg, #ece9e6 0%, #ffffff 100%)' };
+  switch (true) {
+    case code === 0:
+      // Clear Sky - Sunny animation
+      return {
+        background: 'linear-gradient(135deg, #fceabb 0%, #f7b733 100%)',
+        animation: 'sunshine 10s infinite alternate ease-in-out'
+      };
+    case [1, 2, 3].includes(code):
+      return { background: 'linear-gradient(135deg, #83a4d4 0%, #b6fbff 100%)' }; // Cloudy
+    case [45, 48].includes(code):
+      return { background: 'linear-gradient(135deg, #d7d2cc 0%, #304352 100%)' }; // Foggy
+    case [51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82].includes(code):
+      return { background: 'linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)' }; // Rainy
+    case [71, 73, 75, 77, 85, 86].includes(code):
+      return { background: 'linear-gradient(135deg, #e6dada 0%, #bdc3c7 100%)' }; // Snowy
+    case [95, 96, 99].includes(code):
+      return { background: 'linear-gradient(135deg, #283048 0%, #859398 100%)' }; // Stormy
+    default:
+      return { background: 'linear-gradient(135deg, #ece9e6 0%, #ffffff 100%)' }; // Neutral
+  }
 };
+

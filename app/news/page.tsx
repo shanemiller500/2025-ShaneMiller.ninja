@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import mixpanel from 'mixpanel-browser';
 import { fetchMediaStackArticles } from './Mediastack-API-Call';
 import { fetchFinnhubArticles } from './Finnhub-API-Call';
+import { fetchUmailArticles } from './MoreNewsAPI';
 import WidgetNews from '@/components/widget-news';
 import WidgetWeather from '@/components/widget-weather';
 import CryptoWidget from '@/components/widget-crypto';
@@ -38,6 +39,7 @@ export default function NewsPage() {
   // --- API & Pagination State ---
   const [apiPage, setApiPage] = useState<number>(1);
   const [allMediaArticles, setAllMediaArticles] = useState<Article[]>([]);
+  const [umailArticles, setUmailArticles] = useState<Article[]>([]);
   const [clientPage, setClientPage] = useState<number>(1);
   const itemsPerPage = 10;
   const [hasMore, setHasMore] = useState<boolean>(true);
@@ -97,6 +99,19 @@ export default function NewsPage() {
     loadFinnhub();
   }, []);
 
+  // --- Fetch U‑mail Articles ---
+  useEffect(() => {
+    async function loadUmail() {
+      try {
+        const articles = await fetchUmailArticles();
+        setUmailArticles(articles);
+      } catch (err: any) {
+        console.error(err);
+      }
+    }
+    loadUmail();
+  }, []);
+
   // --- Reset client page when category changes ---
   useEffect(() => {
     setClientPage(1);
@@ -108,27 +123,41 @@ export default function NewsPage() {
     setSelectedCategory(category);
   };
 
+  // --- Helper to Remove Duplicate Articles by Title ---
+  function removeDuplicateArticles(articles: Article[]): Article[] {
+    return articles.filter((article, index, arr) =>
+      index === arr.findIndex((a) => a.title.toLowerCase() === article.title.toLowerCase())
+    );
+  }
+
   // --- Combine & Filter Articles ---
   let displayedArticles: Article[] = [];
   if (selectedCategory === 'Finance') {
     const mediaFinance = allMediaArticles.filter(
       (article) => article.category === 'Finance'
     );
-    const combined = [...mediaFinance, ...finnhubArticles];
-    displayedArticles = combined.filter(
-      (article, index, arr) =>
-        index ===
-        arr.findIndex(
-          (a) => a.title.toLowerCase() === article.title.toLowerCase()
-        )
-    );
+    // Combine MediaStack and Finnhub for Finance.
+    displayedArticles = removeDuplicateArticles([...mediaFinance, ...finnhubArticles]);
   } else if (selectedCategory === 'All') {
-    displayedArticles = allMediaArticles;
+    // Combine all sources for 'All' category.
+    displayedArticles = removeDuplicateArticles([
+      ...allMediaArticles,
+      ...finnhubArticles,
+      ...umailArticles,
+    ]);
   } else {
-    displayedArticles = allMediaArticles.filter(
-      (article) => article.category === selectedCategory
-    );
+    // For other categories, combine MediaStack and u‑mail articles.
+    displayedArticles = removeDuplicateArticles([
+      ...allMediaArticles.filter(
+        (article) => article.category === selectedCategory
+      ),
+      ...umailArticles.filter(
+        (article) => article.category === selectedCategory
+      ),
+    ]);
   }
+
+  // Sort articles by published date (newest first).
   displayedArticles.sort(
     (a, b) =>
       new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
@@ -231,10 +260,10 @@ export default function NewsPage() {
             return (
               <div
                 key={`${article.url}-${index}`}
-                className="rounded-lg shadow overflow-hidden transition-transform duration-300 hover:scale-105 "
+                className="rounded-lg shadow overflow-hidden transition-transform duration-300 hover:scale-105"
               >
                 {article.urlToImage && (
-                  <div className=" w-full overflow-hidden">
+                  <div className="w-full overflow-hidden">
                     <img
                       src={article.urlToImage}
                       alt={article.title}
@@ -286,32 +315,31 @@ export default function NewsPage() {
             </p>
           )}
           <div className="flex flex-col items-center gap-3 mt-6 pb-6">
-        <div className="flex gap-4">
-          <button
-            onClick={handlePrevPage}
-            disabled={clientPage === 1 || loading}
-            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          <button
-            onClick={handleNextPage}
-            disabled={(clientPage === totalPages && !hasMore) || loading}
-            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
-        <span className="text-sm text-gray-700">
-          Page {clientPage} of {totalPages || 1}
-        </span>
-        {loading && (
-          <p className="text-center text-gray-600 mt-2">
-            Loading more articles...
-          </p>
-        )}
-      </div>
- 
+            <div className="flex gap-4">
+              <button
+                onClick={handlePrevPage}
+                disabled={clientPage === 1 || loading}
+                className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={handleNextPage}
+                disabled={(clientPage === totalPages && !hasMore) || loading}
+                className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+            <span className="text-sm text-gray-700">
+              Page {clientPage} of {totalPages || 1}
+            </span>
+            {loading && (
+              <p className="text-center text-gray-600 mt-2">
+                Loading more articles...
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Aside Widgets (visible on all devices) */}
@@ -322,7 +350,7 @@ export default function NewsPage() {
             <WidgetWeather />
           </div>
         </aside>
-      </div>   
+      </div>
     </div>
   );
 }

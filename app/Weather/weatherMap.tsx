@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import Link from "next/link";
 
 // Interfaces for city and sidebar forecast data
 interface City {
@@ -69,7 +68,8 @@ const initialCities: City[] = [
   { name: "Baltimore", lat: 39.2904, lon: -76.6122 },
 ];
 
-// Mapping for human‐readable weather descriptions
+// Mapping for human‐r
+// eadable weather descriptions
 const weatherDescriptions: Record<string, string> = {
   clear: "Clear Sky",
   partly: "Partly Cloudy",
