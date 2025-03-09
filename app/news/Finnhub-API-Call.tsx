@@ -34,6 +34,11 @@ export async function fetchFinnhubArticles(): Promise<Article[]> {
 
     const finnhubData = await response.json();
 
+    // Ensure the data is in the expected array format.
+    if (!Array.isArray(finnhubData)) {
+      throw new Error('Unexpected data format from Finnhub API');
+    }
+
     const articles: Article[] = finnhubData.map((article: any) => ({
       source: {
         id: null,
@@ -46,10 +51,10 @@ export async function fetchFinnhubArticles(): Promise<Article[]> {
       urlToImage: article.image || null,
       publishedAt: new Date(article.datetime * 1000).toISOString(),
       content: null,
-      category: 'Finance',
+      category: 'Finance', // You can change this if you want a different category.
     }));
 
-    // Always update the cache after fetching
+    // Update the cache after fetching
     localStorage.setItem(
       CACHE_KEY,
       JSON.stringify({

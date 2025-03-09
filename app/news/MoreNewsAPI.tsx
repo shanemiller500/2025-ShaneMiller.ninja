@@ -1,6 +1,3 @@
-// Umail-API-Call.ts
-// This file fetches news articles from the u‑mail API route and maps them to our Article interface.
-
 export interface Article {
     source: {
       id: string | null;
@@ -11,9 +8,11 @@ export interface Article {
     description: string;
     url: string;
     urlToImage: string | null;
+    images: string[];      // additional field for all images
+    thumbnails: string[];  // additional field for thumbnails
     publishedAt: string;
     content: string | null;
-    category: string;
+    categories: string[];
   }
   
   export async function fetchUmailArticles(): Promise<Article[]> {
@@ -26,14 +25,17 @@ export interface Article {
       // Map each API result to our Article interface.
       const articles: Article[] = data.results.map((item: any) => ({
         source: { id: null, name: item.source },
-        author: null,
+        author: item.author,
         title: item.headline,
-        description: '',
+        description: item.description,
         url: item.link,
-        urlToImage: item.image,
+        // Use the main image if available, otherwise fallback to the first thumbnail.
+        urlToImage: item.image || (item.thumbnails && item.thumbnails.length > 0 ? item.thumbnails[0] : null),
+        images: item.images || [],
+        thumbnails: item.thumbnails || [],
         publishedAt: item.publishedAt,
-        content: null,
-        category: 'News', // Default category for u‑mail articles.
+        content: item.content,
+        categories: item.categories || [],
       }));
       return articles;
     } catch (error: any) {
