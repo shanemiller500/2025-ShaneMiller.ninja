@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
 interface NewsItem {
-  articleId?: string; // Optional because cached items might lack an articleId.
+  articleId?: string; // Optional because some items might lack an articleId.
   headline: string;
   source: string;
   publishedAt: string;
@@ -20,32 +20,11 @@ const WidgetNews: React.FC = () => {
 
   /**
    * Fetch news data.
-   * @param showSpinner - If true, shows a spinner and clears any cached data before fetching.
+   * @param showSpinner - If true, shows a spinner during refresh.
    */
   const fetchNews = async (showSpinner: boolean = false) => {
     if (showSpinner) {
       setLoading(true);
-      // Clear the cache completely when refreshing.
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('breakingNewsCache');
-      }
-    } else {
-      // Try to load cached news if available and not older than 20 minutes.
-      if (typeof window !== 'undefined') {
-        const cached = localStorage.getItem('breakingNewsCache');
-        if (cached) {
-          try {
-            const { timestamp, data } = JSON.parse(cached);
-            const now = Date.now();
-            // Use cached data if it's less than 20 minutes old (1,200,000 ms)
-            if (now - timestamp < 1200000) {
-              setNews(data);
-            }
-          } catch (e) {
-            console.error('Error parsing cached news:', e);
-          }
-        }
-      }
     }
 
     // Always call the API to fetch fresh news.
@@ -64,17 +43,6 @@ const WidgetNews: React.FC = () => {
       // Update state with fresh data.
       setNews(newsWithIds);
 
-      // Cache the fresh news with a timestamp.
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(
-          'breakingNewsCache',
-          JSON.stringify({
-            timestamp: Date.now(),
-            data: newsWithIds,
-          })
-        );
-      }
-
       // Flash "Breaking News" for 5 seconds.
       setFlashVisible(true);
       setTimeout(() => {
@@ -88,7 +56,7 @@ const WidgetNews: React.FC = () => {
     }
   };
 
-  // Initial load (without spinner) – this may load cached data if available.
+  // Initial load without spinner.
   useEffect(() => {
     fetchNews();
   }, []);
@@ -121,11 +89,9 @@ const WidgetNews: React.FC = () => {
         </div>
       )}
 
-
-        <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-brand-900 text-center py-1 z-20">
-          Breaking News
-        </div>
-  
+      <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-brand-900 text-center py-1 z-20">
+        Breaking News
+      </div>
 
       {/* Refresh button icon in the top-right corner */}
       <div className="absolute top-0 right-0 p-2 z-20">
