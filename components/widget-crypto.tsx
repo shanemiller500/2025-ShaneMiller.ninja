@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion, useMotionValue } from "framer-motion";
 
 const WidgetCrypto = () => {
@@ -9,7 +9,6 @@ const WidgetCrypto = () => {
   const [tradeInfoMap, setTradeInfoMap] = useState<{
     [id: string]: { price: number; prevPrice?: number };
   }>({});
-  const [loading, setLoading] = useState(true);
   const socketRef = useRef<WebSocket | null>(null);
 
   // For the scrolling ticker, we need the width (in px) of one set of cards.
@@ -25,7 +24,7 @@ const WidgetCrypto = () => {
   // Speed in pixels per second.
   const speed = 50;
 
-  // Fetch metadata from CoinCap's REST API.
+  // Fetch metadata (including initial price) from CoinCap's REST API.
   useEffect(() => {
     const fetchMetaData = async () => {
       try {
@@ -36,32 +35,44 @@ const WidgetCrypto = () => {
           metaMap[asset.id] = asset;
         });
         setMetaData(metaMap);
-        setLoading(false);
       } catch (error) {
         console.error("Error fetching metadata:", error);
-        setLoading(false);
       }
     };
 
     fetchMetaData();
   }, []);
 
-  // Compute the top 10 asset IDs based on their rank.
-  const top15AssetIds = Object.keys(metaData)
-    .sort(
-      (a, b) => parseInt(metaData[a].rank, 10) - parseInt(metaData[b].rank, 10)
-    )
-    .slice(0, 10);
+  // Compute the top 10 asset IDs based on their rank using useMemo.
+  const topAssetIds = useMemo(() => {
+    return Object.keys(metaData)
+      .sort(
+        (a, b) => parseInt(metaData[a].rank, 10) - parseInt(metaData[b].rank, 10)
+      )
+      .slice(0, 10);
+  }, [metaData]);
 
-  // Subscribe to the WebSocket using only the top 15 ranked asset IDs,
-  // delaying the connection by 2 seconds to prevent errors on page load.
+  // Once metadata is available, initialize tradeInfoMap with initial prices.
   useEffect(() => {
-    if (top15AssetIds.length === 0) return;
+    if (topAssetIds.length > 0 && Object.keys(tradeInfoMap).length === 0) {
+      const initialMap: { [id: string]: { price: number } } = {};
+      topAssetIds.forEach((id) => {
+        const asset = metaData[id];
+        if (asset && asset.priceUsd) {
+          initialMap[id] = { price: parseFloat(asset.priceUsd) };
+        }
+      });
+      setTradeInfoMap(initialMap);
+    }
+  }, [metaData, topAssetIds]);
+
+  // Subscribe to the WebSocket using only the top ranked asset IDs.
+  // The WebSocket connection is delayed slightly to ensure initial prices are loaded.
+  useEffect(() => {
+    if (topAssetIds.length === 0) return;
     const websocketTimeout = setTimeout(() => {
-      const assets = top15AssetIds.join(",");
-      const socket = new WebSocket(
-        `wss://ws.coincap.io/prices?assets=${assets}`
-      );
+      const assets = topAssetIds.join(",");
+      const socket = new WebSocket(`wss://ws.coincap.io/prices?assets=${assets}`);
       socketRef.current = socket;
 
       socket.onopen = () => {
@@ -84,36 +95,38 @@ const WidgetCrypto = () => {
       clearTimeout(websocketTimeout);
       if (socketRef.current) {
         socketRef.current.close();
+        socketRef.current = null;
       }
     };
-  }, [top15AssetIds]);
-
-  // Extra cleanup effect to ensure the WebSocket is closed when the route changes.
-  useEffect(() => {
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
-    };
-  }, []);
+  }, [topAssetIds]);
 
   // Update live price data while preserving the previous price.
+  // Only update when the price changes to avoid unnecessary re-renders.
   const updateTradeInfo = (id: string, price: number) => {
     setTradeInfoMap((prev) => {
-      const prevPrice = prev[id]?.price;
+      const current = prev[id];
+      if (current && current.price === price) return prev;
       return {
         ...prev,
-        [id]: { price, prevPrice },
+        [id]: { price, prevPrice: current?.price },
       };
     });
   };
 
-  // Measure the width of one set of cards (needed for the scrolling ticker).
+  // Measure the width of one set of cards (needed for the scrolling ticker)
+  // and update on window resize.
   useEffect(() => {
-    if (innerRef.current) {
-      setContentWidth(innerRef.current.offsetWidth);
-    }
-  }, [top15AssetIds]);
+    const measureWidth = () => {
+      if (innerRef.current) {
+        setContentWidth(innerRef.current.offsetWidth);
+      }
+    };
+    measureWidth();
+    window.addEventListener("resize", measureWidth);
+    return () => {
+      window.removeEventListener("resize", measureWidth);
+    };
+  }, [topAssetIds]);
 
   // Continuous auto-scrolling effect using requestAnimationFrame.
   useEffect(() => {
@@ -129,7 +142,6 @@ const WidgetCrypto = () => {
 
       // Only update the auto-scroll if the user is not dragging and contentWidth is known.
       if (!isDragging && contentWidth > 0) {
-        // Calculate the new x position based on elapsed time.
         let newX = x.get() - speed * (delta / 1000);
 
         // When newX goes beyond -contentWidth, wrap it back.
@@ -149,6 +161,9 @@ const WidgetCrypto = () => {
     return () => cancelAnimationFrame(animationFrame);
   }, [isDragging, contentWidth, x]);
 
+  // Helper: modulo function that works for negative numbers.
+  const mod = (n: number, m: number) => ((n % m) + m) % m;
+
   // Render a single "heatmap" style card.
   const renderCard = (id: string) => {
     const assetMeta = metaData[id];
@@ -163,6 +178,16 @@ const WidgetCrypto = () => {
         bgColor = "bg-green-500";
         arrowSymbol = "↑";
       } else if (price < prevPrice) {
+        bgColor = "bg-red-500";
+        arrowSymbol = "↓";
+      }
+    } else if (assetMeta) {
+      // Use 24Hr change to decide initial color.
+      const change = parseFloat(assetMeta.changePercent24Hr);
+      if (change > 0) {
+        bgColor = "bg-green-500";
+        arrowSymbol = "↑";
+      } else if (change < 0) {
         bgColor = "bg-red-500";
         arrowSymbol = "↓";
       }
@@ -190,8 +215,7 @@ const WidgetCrypto = () => {
               })} ${arrowSymbol}`}
             </>
           ) : (
-            // Small spinning icon to indicate loading.
-            <div className="inline-block animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-500"></div>
+            "Loading..."
           )}
         </div>
         <div className="text-xs">{percentChange}%</div>
@@ -199,17 +223,8 @@ const WidgetCrypto = () => {
     );
   };
 
-  // Helper: modulo function that works for negative numbers.
-  const mod = (n: number, m: number) => ((n % m) + m) % m;
-
   return (
     <div className="max-w-[700px] overflow-hidden relative">
-      {loading && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-indigo-500"></div>
-        </div>
-      )}
-
       <div className="p-2">
         <p className="text-xs text-gray-500 text-center">
           Top 10 Ranked Cryptos Live Pricing Data
@@ -233,11 +248,11 @@ const WidgetCrypto = () => {
       >
         {/* First copy (its width is measured) */}
         <div className="flex" ref={innerRef}>
-          {top15AssetIds.map((id) => renderCard(id))}
+          {topAssetIds.map((id) => renderCard(id))}
         </div>
         {/* Duplicate for a seamless loop */}
         <div className="flex">
-          {top15AssetIds.map((id) => renderCard(id))}
+          {topAssetIds.map((id) => renderCard(id))}
         </div>
       </motion.div>
 

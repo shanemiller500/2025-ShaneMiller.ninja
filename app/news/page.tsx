@@ -127,7 +127,7 @@ function FeaturedNewsSlider({ articles }: { articles: Article[] }) {
 
 export default function NewsPage() {
   const [apiPage, setApiPage] = useState<number>(1);
-  const itemsPerPage = 12;
+  const itemsPerPage = 30;
   const [allMediaArticles, setAllMediaArticles] = useState<Article[]>([]);
   const [umailArticles, setUmailArticles] = useState<Article[]>([]);
   const [finnhubArticles, setFinnhubArticles] = useState<Article[]>([]);
@@ -372,7 +372,7 @@ export default function NewsPage() {
               <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-gray-100">
                 Other News
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1 ">
                 {articlesWithoutImage.map((article, index) => {
                   const publishedDate = new Date(article.publishedAt);
                   const formattedDate = publishedDate.toLocaleDateString();
@@ -381,7 +381,7 @@ export default function NewsPage() {
                   return (
                     <div
                       key={`${article.url}-${index}`}
-                      className="rounded-lg shadow-lg overflow-hidden hover:scale-105 transform transition duration-300 p-4 flex flex-col justify-between"
+                      className="rounded-lg shadow-lg overflow-hidden hover:scale-105 transform transition duration-300 p-4 flex flex-col min-h-[10px]"
                     >
                       <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                         {article.title}
