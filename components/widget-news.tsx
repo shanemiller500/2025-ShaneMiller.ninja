@@ -130,7 +130,7 @@ const WidgetNews: React.FC = () => {
                     href={item.link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-bold hover:underline"
+                    className=" hover:underline"
                   >
                     {item.headline}
                   </a>

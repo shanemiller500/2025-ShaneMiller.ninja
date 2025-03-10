@@ -427,7 +427,7 @@ export default function NewsPage() {
                         key={`${article.url}-${index}`}
                         className="rounded-lg shadow-lg overflow-hidden hover:scale-105 transform transition duration-300 p-4 flex flex-col min-h-[10px]"
                       >
-                        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+                        <h3 className=" font-semibold text-gray-800 dark:text-gray-100">
                           {article.title}
                         </h3>
                         <p className="text-xs text-gray-500 dark:text-gray-300 mt-1">
