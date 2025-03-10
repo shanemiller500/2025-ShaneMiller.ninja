@@ -30,7 +30,7 @@ export interface Article {
 const desiredCategories = ['News', 'Sports', 'World', 'Finance', 'Business'];
 
 /**
- * smoothScrollToTop animates the scroll to top over a given duration (in ms).
+ * smoothScrollToTop animates scrolling to the top over a specified duration.
  */
 function smoothScrollToTop(duration = 1000) {
   const start = window.scrollY;
@@ -39,7 +39,7 @@ function smoothScrollToTop(duration = 1000) {
   function scroll() {
     const now = performance.now();
     const time = Math.min(1, (now - startTime) / duration);
-    // easeOutQuad
+    // easeOutQuad easing
     const easeOutQuad = time * (2 - time);
     window.scrollTo(0, Math.ceil((1 - easeOutQuad) * start));
     if (window.scrollY > 0) {
@@ -79,7 +79,7 @@ function FeaturedNewsSlider({ articles }: { articles: Article[] }) {
             >
               {article.urlToImage && (
                 <div className="relative">
-                  {/* Use a smaller height on mobile (h-38) and a larger one on small+ screens (sm:h-64) */}
+                  {/* Use a smaller height on mobile (h-38) and larger on small+ screens (sm:h-64) */}
                   <img
                     src={article.urlToImage}
                     alt={article.title}
@@ -244,12 +244,12 @@ export default function NewsPage() {
     loadUmail();
   }, []);
 
-  // Reset page when category changes
+  // Reset page when category changes.
   useEffect(() => {
     setClientPage(1);
   }, [selectedCategory]);
 
-  // Handle Tab Clicks
+  // Handle Tab Clicks.
   const handleTabClick = (category: string) => {
     setSelectedCategory(category);
   };
@@ -274,7 +274,8 @@ export default function NewsPage() {
       ? combinedArticles
       : combinedArticles.filter((article) =>
           article.categories.some(
-            (cat) => cat.toLowerCase() === selectedCategory.toLowerCase()
+            (cat) =>
+              typeof cat === 'string' && cat.toLowerCase() === selectedCategory.toLowerCase()
           )
         );
 
