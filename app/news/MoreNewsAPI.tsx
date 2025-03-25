@@ -2,14 +2,15 @@ export interface Article {
     source: {
       id: string | null;
       name: string;
+      image?: string | null;
     };
     author: string | null;
     title: string;
     description: string;
     url: string;
     urlToImage: string | null;
-    images: string[];      // additional field for all images
-    thumbnails: string[];  // additional field for thumbnails
+    images: string[];
+    thumbnails: string[];
     publishedAt: string;
     content: string | null;
     categories: string[];
@@ -22,9 +23,13 @@ export interface Article {
         throw new Error(`Error fetching news from u‑mail: ${response.status}`);
       }
       const data = await response.json();
-      // Map each API result to our Article interface.
+      // Map each API result to our Article interface, including the source image.
       const articles: Article[] = data.results.map((item: any) => ({
-        source: { id: null, name: item.source },
+        source: { 
+          id: null, 
+          name: item.source, 
+          image: item.sourceImage || null 
+        },
         author: item.author,
         title: item.headline,
         description: item.description,

@@ -1,110 +1,148 @@
 "use client";
 
-import React, { useState } from "react";
-import CryptoJS from "crypto-js";
-require('dotenv').config();
+import React, { useState, useEffect } from "react";
+import { searchMarvelCharacters } from "./marvelAPI";
 
+const preSearchSuggestions = [
+  "Spider-Man",
+  "Iron Man",
+  "Captain America",
+  "Hulk",
+  "Thor",
+  "Black Panther",
+];
 
-// Marvel API keys and endpoint for characters
-const CUSTOM_PUBLIC_KEY = process.env.NEXT_PUBLIC_MARVEL_PUBLIC_KEY
-const CUSTOM_PRIVATE_KEY = process.env.NEXT_PUBLIC_MARVEL_PRIVATE_KEY
-const CUSTOM_API_URL = "https://gateway.marvel.com/v1/public/characters";
+const Spinner = () => (
+  <div className="flex justify-center items-center my-4">
+    <svg
+      className="animate-spin h-8 w-8 text-indigo-500"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24">
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"></circle>
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+    </svg>
+  </div>
+);
 
-/**
- * Returns the current timestamp.
- * @returns {number}
- */
-const getTimestamp = () => new Date().getTime();
-
-/**
- * Returns the MD5 hash string needed for Marvel API authentication.
- * @param {number} timestamp
- * @returns {string}
- */
-const getHash = (timestamp) =>
-  CryptoJS.MD5(timestamp + CUSTOM_PRIVATE_KEY + CUSTOM_PUBLIC_KEY).toString();
-
-/**
- * Fetch Marvel character data that starts with the provided name.
- * @param {string} nameStartsWith
- * @returns {Promise<Object|null>}
- */
-export async function searchMarvelCharacters(nameStartsWith = "") {
-  const ts = getTimestamp();
-  const hash = getHash(ts);
-  const url = `${CUSTOM_API_URL}?ts=${ts}&apikey=${CUSTOM_PUBLIC_KEY}&hash=${hash}&nameStartsWith=${encodeURIComponent(
-    nameStartsWith
-  )}`;
-  try {
-    const response = await fetch(url);
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error fetching character data:", error);
-    return null;
-  }
-}
-
-/**
- * MarvelCharactersPage Component
- *
- * Provides a search form for Marvel characters and displays the search results.
- */
 const MarvelCharactersPage = () => {
   const [characterQuery, setCharacterQuery] = useState("");
   const [characterResults, setCharacterResults] = useState([]);
-  const [loadingCharacters, setLoadingCharacters] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleCharacterSearch = async (e) => {
-    e.preventDefault();
-    setLoadingCharacters(true);
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (characterQuery) {
+        handleSearch();
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [characterQuery]);
+
+  const handleSearch = async (e) => {
+    if (e) e.preventDefault();
+    setLoading(true);
     const data = await searchMarvelCharacters(characterQuery);
-    if (data && data.data && data.data.results) {
+    if (data?.data?.results) {
       setCharacterResults(data.data.results);
     } else {
       setCharacterResults([]);
     }
-    setLoadingCharacters(false);
+    setLoading(false);
+  };
+
+  const handlePreSearch = (query) => {
+    setCharacterQuery(query);
   };
 
   return (
-    <div className="p-4 dark:text-gray-100">
-      <h2 className="text-2xl font-bold mb-4">Marvel Characters</h2>
-      <form onSubmit={handleCharacterSearch} className="flex flex-col sm:flex-row gap-2 mb-4">
+    <div className="p-4">
+      <h2 className="text-3xl font-bold mb-4 text-center">Marvel Characters</h2>
+      <form
+        onSubmit={handleSearch}
+        className="flex flex-col sm:flex-row items-center justify-center gap-2 mb-4">
         <input
           type="text"
+          list="characterSuggestions"
           value={characterQuery}
           onChange={(e) => setCharacterQuery(e.target.value)}
-          placeholder="Enter character name..."
-          className="p-2 border border-gray-300 rounded w-full md:w-1/3 dark:bg-gray-700 dark:border-gray-600"
+          placeholder="Search for a character..."
+          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
+        <datalist id="characterSuggestions">
+          {preSearchSuggestions.map((suggestion, idx) => (
+            <option key={idx} value={suggestion} />
+          ))}
+        </datalist>
         <button
           type="submit"
-          className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded hover:bg-gradient-to-r from-indigo-600 to-purple-600 focus:outline-none"
-        >
-          Search Characters
+          className="px-6 py-3 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">
+          Search
         </button>
       </form>
-      {loadingCharacters ? (
-        <p className="text-center">Loading characters...</p>
+      <div className="flex flex-wrap justify-center gap-2 mb-4">
+        {preSearchSuggestions.map((suggestion, idx) => (
+          <button
+            key={idx}
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+            onClick={() => handlePreSearch(suggestion)}>
+            {suggestion}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <Spinner />
       ) : characterResults.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {characterResults.map((character) => (
-            <div key={character.id} className="border border-gray-300 rounded p-4 dark:border-gray-700">
-              <img
-                src={`${character.thumbnail.path}.${character.thumbnail.extension}`}
-                alt={character.name}
-                className="max-w-[150px] mx-auto"
-              />
-              <h3 className="text-xl font-semibold mt-2">{character.name}</h3>
-              <p className="text-sm">
+            <div
+              key={character.id}
+              className="border rounded-lg p-4 shadow hover:shadow-lg transition">
+              {character.thumbnail && (
+                <img
+                  src={`${character.thumbnail.path}.${character.thumbnail.extension}`}
+                  alt={character.name}
+                  className="w-full h-48 object-cover rounded"
+                />
+              )}
+              <h3 className="text-xl font-semibold mt-3">{character.name}</h3>
+              <p className="text-sm text-gray-600">
                 {character.description || "No description available."}
               </p>
+              <div className="mt-3">
+                <h4 className="font-bold">Comics:</h4>
+                <ul className="list-disc list-inside text-sm">
+                  {character.comics?.items.slice(0, 3).map((comic, idx) => (
+                    <li key={idx}>{comic.name}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="mt-3">
+                <h4 className="font-bold">Series:</h4>
+                <ul className="list-disc list-inside text-sm">
+                  {character.series?.items.slice(0, 3).map((serie, idx) => (
+                    <li key={idx}>{serie.name}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-center">No characters found.</p>
+        <p className="text-center text-gray-500">
+          No characters found. Try a different search.
+        </p>
       )}
     </div>
   );

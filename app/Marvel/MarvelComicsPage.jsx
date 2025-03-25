@@ -1,165 +1,125 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import CryptoJS from "crypto-js";
-require('dotenv').config();
+import { searchMarvelComics } from "./marvelAPI";
 
+const Spinner = () => (
+  <div className="flex justify-center items-center my-4">
+    <svg
+      className="animate-spin h-8 w-8 text-purple-500"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24">
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"></circle>
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+    </svg>
+  </div>
+);
 
-// Marvel API keys and endpoints
-const CUSTOM_PUBLIC_KEY = process.env.NEXT_PUBLIC_MARVEL_PUBLIC_KEY
-const CUSTOM_PRIVATE_KEY = process.env.NEXT_PUBLIC_MARVEL_PRIVATE_KEY
-const CUSTOM_API_URL = "https://gateway.marvel.com/v1/public/characters";
-const CUSTOM_API_URL1 = "https://gateway.marvel.com/v1/public/comics";
-
-/**
- * Returns the current timestamp.
- * @returns {number}
- */
-const getTimestamp = () => new Date().getTime();
-
-/**
- * Returns the MD5 hash string needed for Marvel API authentication.
- * @param {number} timestamp
- * @returns {string}
- */
-const getHash = (timestamp) =>
-  CryptoJS.MD5(timestamp + CUSTOM_PRIVATE_KEY + CUSTOM_PUBLIC_KEY).toString();
-
-/**
- * Fetch Marvel character data that starts with the provided name.
- * @param {string} nameStartsWith
- * @returns {Promise<Object|null>}
- */
-export async function searchMarvelCharacters(nameStartsWith = "") {
-  const ts = getTimestamp();
-  const hash = getHash(ts);
-  const url = `${CUSTOM_API_URL}?ts=${ts}&apikey=${CUSTOM_PUBLIC_KEY}&hash=${hash}&nameStartsWith=${encodeURIComponent(
-    nameStartsWith
-  )}`;
-  try {
-    const response = await fetch(url);
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error fetching character data:", error);
-    return null;
-  }
-}
-
-/**
- * Fetch Marvel comic data that starts with the provided title.
- * @param {string} titleStartsWith
- * @returns {Promise<Object|null>}
- */
-export async function searchComics(titleStartsWith = "") {
-  const ts = getTimestamp();
-  const hash = getHash(ts);
-  const url = `${CUSTOM_API_URL1}?apikey=${CUSTOM_PUBLIC_KEY}&ts=${ts}&hash=${hash}&titleStartsWith=${encodeURIComponent(
-    titleStartsWith
-  )}`;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error("Network response was not ok");
-    }
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error fetching comics:", error);
-    return null;
-  }
-}
-
-/**
- * MarvelAPIPage Component
- *
- * Provides two search forms—one for Marvel characters and one for comics—
- * and displays the search results.
- */
-const MarvelAPIPage = () => {
-  const [characterQuery, setCharacterQuery] = useState("");
-  const [characterResults, setCharacterResults] = useState([]);
+const MarvelComicsPage = () => {
   const [comicQuery, setComicQuery] = useState("");
   const [comicResults, setComicResults] = useState([]);
-  const [loadingCharacters, setLoadingCharacters] = useState(false);
-  const [loadingComics, setLoadingComics] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleCharacterSearch = async (e) => {
-    e.preventDefault();
-    setLoadingCharacters(true);
-    const data = await searchMarvelCharacters(characterQuery);
-    if (data && data.data && data.data.results) {
-      setCharacterResults(data.data.results);
-    } else {
-      setCharacterResults([]);
-    }
-    setLoadingCharacters(false);
-  };
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (comicQuery) {
+        handleSearch();
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comicQuery]);
 
-  const handleComicSearch = async (e) => {
-    e.preventDefault();
-    setLoadingComics(true);
-    const data = await searchComics(comicQuery);
-    if (data && data.data && data.data.results) {
+  const handleSearch = async (e) => {
+    if (e) e.preventDefault();
+    setLoading(true);
+    const data = await searchMarvelComics(comicQuery);
+    if (data?.data?.results) {
       setComicResults(data.data.results);
     } else {
       setComicResults([]);
     }
-    setLoadingComics(false);
+    setLoading(false);
   };
 
   return (
-    <div className="p-4 dark:text-gray-100">
-
-
-      {/* Marvel Comics Section */}
-      <section>
-        <h2 className="text-2xl font-bold mb-4">Marvel Comics</h2>
-        <form
-          onSubmit={handleComicSearch}
-          className="flex flex-col sm:flex-row gap-2 mb-4"
-        >
-          <input
-            type="text"
-            value={comicQuery}
-            onChange={(e) => setComicQuery(e.target.value)}
-            placeholder="Enter comic title..."
-            className="p-2 border border-gray-300 rounded w-full md:w-1/3 dark:bg-gray-700 dark:border-gray-600"
-          />
-          <button
-            type="submit"
-            className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded hover:bg-gradient-to-r from-indigo-600 to-purple-600 focus:outline-none"
-          >
-            Search Comics
-          </button>
-        </form>
-        {loadingComics ? (
-          <p className="text-center">Loading comics...</p>
-        ) : comicResults.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {comicResults.map((comic) => (
-              <div
-                key={comic.id}
-                className="border border-gray-300 rounded p-4 dark:border-gray-700"
-              >
+    <div className="p-4">
+      <h2 className="text-3xl font-bold mb-4 text-center">Marvel Comics</h2>
+      <form
+        onSubmit={handleSearch}
+        className="flex flex-col sm:flex-row items-center justify-center gap-2 mb-4">
+        <input
+          type="text"
+          value={comicQuery}
+          onChange={(e) => setComicQuery(e.target.value)}
+          placeholder="Search for a comic..."
+          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
+        <button
+          type="submit"
+          className="px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
+          Search
+        </button>
+      </form>
+      {loading ? (
+        <Spinner />
+      ) : comicResults.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {comicResults.map((comic) => (
+            <div
+              key={comic.id}
+              className="border rounded-lg p-4 shadow hover:shadow-lg transition">
+              {comic.thumbnail && (
                 <img
                   src={`${comic.thumbnail.path}.${comic.thumbnail.extension}`}
                   alt={comic.title}
-                  className="max-w-[150px] mx-auto"
+                  className="w-full h-48 object-cover rounded"
                 />
-                <h3 className="text-xl font-semibold mt-2">{comic.title}</h3>
-                <p className="text-sm">
-                  {comic.description || "No description available."}
-                </p>
+              )}
+              <h3 className="text-xl font-semibold mt-3">{comic.title}</h3>
+              <p className="text-sm text-gray-600">
+                {comic.description || "No description available."}
+              </p>
+              <p className="text-sm mt-2">
+                Page Count: {comic.pageCount || "N/A"}
+              </p>
+              <div className="mt-2">
+                <h4 className="font-bold">Dates:</h4>
+                {comic.dates?.slice(0, 2).map((dateObj, idx) => (
+                  <p key={idx} className="text-sm">
+                    {dateObj.type}:{" "}
+                    {new Date(dateObj.date).toLocaleDateString()}
+                  </p>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-center">No comics found.</p>
-        )}
-      </section>
+              <div className="mt-2">
+                <h4 className="font-bold">Prices:</h4>
+                {comic.prices?.map((priceObj, idx) => (
+                  <p key={idx} className="text-sm">
+                    {priceObj.type}: ${priceObj.price}
+                  </p>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-center text-gray-500">
+          No comics found. Try a different search.
+        </p>
+      )}
     </div>
   );
 };
 
-export default MarvelAPIPage;
+export default MarvelComicsPage;

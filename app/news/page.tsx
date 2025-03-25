@@ -4,28 +4,11 @@ import { useState, useEffect, useRef } from 'react';
 
 import { fetchMediaStackArticles } from './Mediastack-API-Call';
 import { fetchFinnhubArticles } from './Finnhub-API-Call';
-import { fetchUmailArticles } from './MoreNewsAPI';
+import { fetchUmailArticles, Article } from './MoreNewsAPI';
 import WidgetNews from '@/components/widget-news';
 import WidgetWeather from '@/components/widget-weather';
 import CryptoWidget from '@/components/widget-crypto';
 import WidgetSearch from '@/components/widget-search';
-
-export interface Article {
-  source: {
-    id: string | null;
-    name: string;
-  };
-  author: string | null;
-  title: string;
-  description: string;
-  url: string;
-  urlToImage: string | null;
-  images: string[];
-  thumbnails: string[];
-  publishedAt: string;
-  content: string | null;
-  categories: string[];
-}
 
 const desiredCategories = ['News', 'Sports', 'World', 'Finance', 'Business'];
 
@@ -79,7 +62,7 @@ function FeaturedNewsSlider({ articles }: { articles: Article[] }) {
             >
               {article.urlToImage && (
                 <div className="relative">
-                  {/* Use a smaller height on mobile (h-38) and larger on small+ screens (sm:h-64) */}
+                  {/* Use a smaller height on mobile and larger on small+ screens */}
                   <img
                     src={article.urlToImage}
                     alt={article.title}
@@ -103,9 +86,24 @@ function FeaturedNewsSlider({ articles }: { articles: Article[] }) {
                 <h3 className="font-bold text-gray-800 dark:text-gray-100">
                   {article.title}
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-300 mt-1">
-                  {article.source.name} &bull; {formattedDate} {formattedTime}
-                </p>
+                <div className="flex items-center space-x-2 mt-1">
+                  {article.source.image && (
+                    <img
+                      src={article.source.image}
+                      alt={article.source.name}
+                      className="w-8 h-8 object-contain"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://via.placeholder.com/32';
+                      }}
+                    />
+                  )}
+                  <span className="text-sm text-gray-500 dark:text-gray-300">
+                    {article.source.name}
+                  </span>
+                  <span className="text-sm text-gray-500 dark:text-gray-300">
+                    &bull; {formattedDate} {formattedTime}
+                  </span>
+                </div>
                 {article.author && (
                   <p className="text-sm text-gray-500 dark:text-gray-300 mt-1">
                     By {article.author}
@@ -175,11 +173,16 @@ export default function NewsPage() {
         }
         if (articles.length === 0) {
           const fetchedArticles = await fetchMediaStackArticles(apiPage);
-          articles = fetchedArticles.map((article) => ({
+          articles = fetchedArticles.map((article: any) => ({
             ...article,
             images: [],
             thumbnails: [],
-            categories: article.category ? [article.category] : ['News'],
+            categories:
+              article.categories && article.categories.length > 0
+                ? article.categories
+                : article.category
+                ? [article.category]
+                : ['News'],
           }));
           const dataToCache = {
             timestamp: new Date().getTime(),
@@ -190,11 +193,16 @@ export default function NewsPage() {
         if (articles.length === 0) {
           setHasMore(false);
         }
-        const articlesWithCategories = (articles as any[]).map((article) => ({
+        const articlesWithCategories = articles.map((article) => ({
           ...article,
           images: [],
           thumbnails: [],
-          categories: article.category ? [article.category] : ['News'],
+          categories:
+            article.categories && article.categories.length > 0
+              ? article.categories
+              : (article as any).category
+              ? [(article as any).category]
+              : ['News'],
         }));
         setAllMediaArticles((prev) => [...prev, ...articlesWithCategories]);
       } catch (err: any) {
@@ -212,11 +220,16 @@ export default function NewsPage() {
     async function loadFinnhub() {
       try {
         const articles = await fetchFinnhubArticles();
-        const articlesWithCategories = articles.map((article) => ({
+        const articlesWithCategories = articles.map((article: any) => ({
           ...article,
           images: [],
           thumbnails: [],
-          categories: article.category ? [article.category] : ['News'],
+          categories:
+            article.categories && article.categories.length > 0
+              ? article.categories
+              : article.category
+              ? [article.category]
+              : ['News'],
         }));
         setFinnhubArticles(articlesWithCategories);
       } catch (err: any) {
@@ -309,7 +322,6 @@ export default function NewsPage() {
 
   // Helper to change page.
   const scrollAndChangePage = (newClientPage: number, updateApi: boolean = false) => {
-    // Use our custom smooth scroll helper.
     smoothScrollToTop(1000);
     setIsTransitioning(true);
     setTimeout(() => {
@@ -427,12 +439,24 @@ export default function NewsPage() {
                         key={`${article.url}-${index}`}
                         className="rounded-lg shadow-lg overflow-hidden hover:scale-105 transform transition duration-300 p-4 flex flex-col min-h-[10px]"
                       >
-                        <h3 className=" font-semibold text-gray-800 dark:text-gray-100">
+                        <h3 className="font-semibold text-gray-800 dark:text-gray-100">
                           {article.title}
                         </h3>
-                        <p className="text-xs text-gray-500 dark:text-gray-300 mt-1">
-                          {article.source.name}
-                        </p>
+                        <div className="flex items-center space-x-2 mt-1">
+                          {article.source.image && (
+                            <img
+                              src={article.source.image}
+                              alt={article.source.name}
+                              className="w-8 h-8 object-contain"
+                              onError={(e) => {
+                                e.currentTarget.src = 'https://via.placeholder.com/32';
+                              }}
+                            />
+                          )}
+                          <span className="text-xs text-gray-500 dark:text-gray-300">
+                            {article.source.name}
+                          </span>
+                        </div>
                         <p className="text-xs text-gray-500 dark:text-gray-300 mt-1">
                           {formattedDate} {formattedTime}
                         </p>
