@@ -33,7 +33,7 @@ const LiveStreamHeatmap = () => {
   useEffect(() => {
     const fetchMetaData = async () => {
       try {
-        const response = await fetch("https://api.coincap.io/v2/assets");
+        const response = await fetch("https://api.coincap.io/v3/assets");
         const json = await response.json();
         const metaMap = {};
         json.data.forEach((asset) => {
@@ -51,7 +51,7 @@ const LiveStreamHeatmap = () => {
   // Delay WebSocket connection by 2 seconds to avoid initial errors.
   useEffect(() => {
     const websocketTimeout = setTimeout(() => {
-      const socket = new WebSocket("wss://ws.coincap.io/prices?assets=ALL");
+      const socket = new WebSocket("wss://wss.coincap.io/prices?assets=ALL");
       socketRef.current = socket;
 
       socket.onopen = () => {
