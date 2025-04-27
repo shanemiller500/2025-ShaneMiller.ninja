@@ -1,202 +1,161 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { trackEvent } from "@/utils/mixpanel";
+
+const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY;
 
 const LiveStreamHeatmap = () => {
   const [tradeInfoMap, setTradeInfoMap] = useState({});
   const [metaData, setMetaData] = useState({});
   const [selectedAsset, setSelectedAsset] = useState(null);
-  const [loadingSpinner, setLoadingSpinner] = useState(true);
+  const [loading, setLoading] = useState(true);
   const socketRef = useRef(null);
 
-  // Helper function to format large numbers (e.g. supply, maxSupply)
-  const formatLargeNumber = (numStr) => {
-    if (!numStr) return "N/A";
-    return parseFloat(numStr).toLocaleString("en-US", {
-      maximumFractionDigits: 0,
-    });
-  };
+  // 1) Load metadata for up to 2000 assets (so you get every rank)
+  useEffect(() => {
+    const fetchMeta = async () => {
+      try {
+        const res = await fetch(
+          `https://rest.coincap.io/v3/assets?limit=2000&apiKey=${API_KEY}`
+        );
+        const { data } = await res.json();
+        const map = {};
+        data.forEach((asset) => {
+          map[asset.id] = asset;
+        });
+        setMetaData(map);
+      } catch (err) {
+        console.error("Metadata fetch error:", err);
+      }
+    };
 
-  // Helper function to shorten the explorer URL to its hostname
+    fetchMeta();
+  }, []);
+
+  // 2) Once we have metadata, open the socket
+  useEffect(() => {
+    if (!Object.keys(metaData).length) return; // wait until metaData is populated
+
+    const socket = new WebSocket(
+      `wss://wss.coincap.io/prices?assets=ALL&apiKey=${API_KEY}`
+    );
+    socketRef.current = socket;
+
+    socket.onopen = () => console.log("WebSocket connected");
+    socket.onmessage = (evt) => {
+      const updates = JSON.parse(evt.data);
+      setTradeInfoMap((prev) => {
+        const next = { ...prev };
+        Object.entries(updates).forEach(([id, priceStr]) => {
+          const price = parseFloat(priceStr);
+          const prevPrice = prev[id]?.price;
+          next[id] = { price, prevPrice };
+        });
+        return next;
+      });
+      setLoading(false);
+    };
+    socket.onerror = (err) => console.error("WebSocket error:", err);
+
+    return () => socket.close();
+  }, [metaData]);
+
+  // 3) Sort asset IDs by rank whenever prices or metadata change
+  const sortedAssetIds = useMemo(() => {
+    return Object.keys(tradeInfoMap).sort((a, b) => {
+      const rA = metaData[a] ? +metaData[a].rank : Infinity;
+      const rB = metaData[b] ? +metaData[b].rank : Infinity;
+      return rA - rB;
+    });
+  }, [tradeInfoMap, metaData]);
+
+  const formatLargeNumber = (numStr) =>
+    numStr
+      ? parseFloat(numStr).toLocaleString("en-US", {
+          maximumFractionDigits: 0,
+        })
+      : "N/A";
+
   const shortenUrl = (url) => {
     try {
-      const { hostname } = new URL(url);
-      return hostname;
-    } catch (error) {
+      return new URL(url).hostname;
+    } catch {
       return url;
     }
   };
 
-  // Fetch metadata from CoinCap's REST API
-  useEffect(() => {
-    const fetchMetaData = async () => {
-      try {
-        const response = await fetch("https://api.coincap.io/v3/assets");
-        const json = await response.json();
-        const metaMap = {};
-        json.data.forEach((asset) => {
-          metaMap[asset.id] = asset;
-        });
-        setMetaData(metaMap);
-      } catch (error) {
-        console.error("Error fetching metadata:", error);
-      }
-    };
+  const handleClose = () => setSelectedAsset(null);
 
-    fetchMetaData();
-  }, []);
-
-  // Delay WebSocket connection by 2 seconds to avoid initial errors.
-  useEffect(() => {
-    const websocketTimeout = setTimeout(() => {
-      const socket = new WebSocket("wss://wss.coincap.io/prices?assets=ALL");
-      socketRef.current = socket;
-
-      socket.onopen = () => {
-        console.log("WebSocket connection established");
-      };
-
-      socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        for (const [id, price] of Object.entries(data)) {
-          updateTradeInfo(id, parseFloat(price));
-        }
-      };
-
-      socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
-    }, 2000);
-
-    return () => {
-      clearTimeout(websocketTimeout);
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
-    };
-  }, []);
-
-  // Show spinner overlay for 3 seconds on initial load
-  useEffect(() => {
-    const spinnerTimeout = setTimeout(() => {
-      setLoadingSpinner(false);
-    }, 3000);
-    return () => clearTimeout(spinnerTimeout);
-  }, []);
-
-  // Update live price data and keep track of previous price
-  const updateTradeInfo = (id, price) => {
-    setTradeInfoMap((prev) => {
-      const prevPrice = prev[id]?.price;
-      return {
-        ...prev,
-        [id]: {
-          price,
-          prevPrice,
-          // Format the trade price as currency with 2 decimal places and commas.
-          info: `$${Number(price).toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`,
-        },
-      };
-    });
-  };
-
-  // Handle closing the modal popup
-  const handleClose = () => {
-    setSelectedAsset(null);
-  };
-
-  // Sort the asset IDs by rank. Assets missing metadata will be placed at the end.
-  const sortedAssetIds = Object.keys(tradeInfoMap).sort((a, b) => {
-    const rankA = metaData[a] ? parseInt(metaData[a].rank, 10) : Infinity;
-    const rankB = metaData[b] ? parseInt(metaData[b].rank, 10) : Infinity;
-    return rankA - rankB;
-  });
-
-  // Render each asset card with arrow & % change info
-  const renderCard = (id) => {
-    const { price, prevPrice, info } = tradeInfoMap[id];
-    let bgColor = "bg-gray-300";
-    let arrowSymbol = "";
-    if (prevPrice !== undefined) {
-      if (price > prevPrice) {
-        bgColor = "bg-green-500";
-        arrowSymbol = "↑";
-      } else if (price < prevPrice) {
-        bgColor = "bg-red-500";
-        arrowSymbol = "↓";
-      }
-    }
-
-    // Use metadata to display a prettier symbol (falling back to the id if not available)
-    const assetMeta = metaData[id];
-    const displaySymbol = assetMeta ? assetMeta.symbol : id.toUpperCase();
-    const percentChange = assetMeta
-      ? parseFloat(assetMeta.changePercent24Hr).toFixed(2)
-      : "0.00";
-    const rank = assetMeta ? assetMeta.rank : "N/A";
-    const name = assetMeta ? assetMeta.name : "N/A";
-
+  if (loading) {
     return (
-      <motion.div
-        key={id}
-        onClick={() => {
-          if (assetMeta) {
-            setSelectedAsset(assetMeta);
-            // Track the click and popup display event with Mixpanel
-            trackEvent("Crypto Asset Popup Displayed", {
-              assetId: assetMeta.id,
-              symbol: assetMeta.symbol,
-              name: assetMeta.name,
-              rank: assetMeta.rank,
-            });
-          }
-        }}
-        className={`p-4 rounded shadow text-center text-white cursor-pointer ${bgColor}`}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        <h5 className="font-bold text-lg mb-2">
-          {displaySymbol}{" "}
-          {assetMeta && (
-            <span className="text-xs font-normal">
-              Rank: {rank}
-              <br />
-              <span className="text-sm">{name}</span>
-            </span>
-          )}
-        </h5>
-        <p className="text-sm">
-          ${Number(price).toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}{" "}
-          <span className="font-bold">{arrowSymbol}</span>
-        </p>
-        <p className="text-xs">{percentChange}%</p>
-      </motion.div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-indigo-500"></div>
+      </div>
     );
-  };
+  }
 
   return (
     <>
-      {loadingSpinner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-indigo-500"></div>
-        </div>
-      )}
-
       <div className="p-4 rounded shadow relative">
         <h2 className="text-xl font-bold mb-4">Live Stream Heatmap</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-          {sortedAssetIds.map(renderCard)}
+          {sortedAssetIds.map((id) => {
+            const { price, prevPrice } = tradeInfoMap[id] || {};
+            const md = metaData[id];
+            let bg = "bg-gray-300",
+              arrow = "";
+            if (prevPrice !== undefined) {
+              if (price > prevPrice) bg = "bg-green-500", (arrow = "↑");
+              else if (price < prevPrice) bg = "bg-red-500", (arrow = "↓");
+            }
+            const symbol = md?.symbol || id.toUpperCase();
+            const pct = md
+              ? parseFloat(md.changePercent24Hr).toFixed(2)
+              : "0.00";
+
+            return (
+              <motion.div
+                key={id}
+                onClick={() => {
+                  if (md) {
+                    setSelectedAsset(md);
+                    trackEvent("Crypto Asset Popup Displayed", {
+                      assetId: md.id,
+                      symbol: md.symbol,
+                      name: md.name,
+                      rank: md.rank,
+                    });
+                  }
+                }}
+                className={`p-4 rounded shadow text-center text-white cursor-pointer ${bg}`}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <h5 className="font-bold text-lg mb-2">
+                  {symbol}{" "}
+                  {md && (
+                    <span className="text-xs font-normal">
+                      Rank: {md.rank}
+                      <br />
+                      <span className="text-sm">{md.name}</span>
+                    </span>
+                  )}
+                </h5>
+                <p className="text-sm">
+                  ${price.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  <span className="font-bold">{arrow}</span>
+                </p>
+                <p className="text-xs">{pct}%</p>
+              </motion.div>
+            );
+          })}
         </div>
 
-        {/* Modal Popup */}
         <AnimatePresence>
           {selectedAsset && (
             <motion.div
@@ -216,9 +175,9 @@ const LiveStreamHeatmap = () => {
               >
                 <button
                   onClick={handleClose}
-                  className="absolute top-2 right-2 text-gray-600 hover:text-gray-800 focus:outline-none"
+                  className="absolute top-2 right-2 text-gray-600 hover:text-gray-800"
                 >
-                  &#x2715;
+                  ✕
                 </button>
                 <h3 className="text-xl font-bold mb-4">
                   {selectedAsset.name} ({selectedAsset.symbol})
@@ -226,93 +185,64 @@ const LiveStreamHeatmap = () => {
                 <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse">
                     <tbody>
-                      <tr className="border-b">
-                        <td className="px-4 py-2 font-bold">Rank:</td>
-                        <td className="px-4 py-2">{selectedAsset.rank}</td>
-                      </tr>
-                      <tr className="border-b">
-                        <td className="px-4 py-2 font-bold">Symbol:</td>
-                        <td className="px-4 py-2">{selectedAsset.symbol}</td>
-                      </tr>
-                      <tr className="border-b">
-                        <td className="px-4 py-2 font-bold">Name:</td>
-                        <td className="px-4 py-2">{selectedAsset.name}</td>
-                      </tr>
-                      <tr className="border-b">
-                        <td className="px-4 py-2 font-bold">Supply:</td>
-                        <td className="px-4 py-2">
-                          {selectedAsset.supply
-                            ? formatLargeNumber(selectedAsset.supply)
-                            : "N/A"}
-                        </td>
-                      </tr>
-                      <tr className="border-b">
-                        <td className="px-4 py-2 font-bold">Max Supply:</td>
-                        <td className="px-4 py-2">
-                          {selectedAsset.maxSupply
-                            ? formatLargeNumber(selectedAsset.maxSupply)
-                            : "N/A"}
-                        </td>
-                      </tr>
-                      <tr className="border-b">
-                        <td className="px-4 py-2 font-bold">
-                          Market Cap USD:
-                        </td>
-                        <td className="px-4 py-2">
-                          {selectedAsset.marketCapUsd
-                            ? `$${Number(selectedAsset.marketCapUsd).toLocaleString(
-                                "en-US",
-                                { maximumFractionDigits: 2 }
-                              )}`
-                            : "N/A"}
-                        </td>
-                      </tr>
-                      <tr className="border-b">
-                        <td className="px-4 py-2 font-bold">
-                          Volume (24Hr):
-                        </td>
-                        <td className="px-4 py-2">
-                          {selectedAsset.volumeUsd24Hr
-                            ? `$${Number(selectedAsset.volumeUsd24Hr).toLocaleString(
-                                "en-US",
-                                { maximumFractionDigits: 2 }
-                              )}`
-                            : "N/A"}
-                        </td>
-                      </tr>
-                      <tr className="border-b">
-                        <td className="px-4 py-2 font-bold">Price USD:</td>
-                        <td className="px-4 py-2">
-                          {selectedAsset.priceUsd
-                            ? `$${Number(selectedAsset.priceUsd).toLocaleString(
-                                "en-US",
-                                { maximumFractionDigits: 2 }
-                              )}`
-                            : "N/A"}
-                        </td>
-                      </tr>
-                      <tr className="border-b">
-                        <td className="px-4 py-2 font-bold">
-                          Change Percent (24Hr):
-                        </td>
-                        <td className="px-4 py-2">
-                          {selectedAsset.changePercent24Hr
-                            ? `${Number(selectedAsset.changePercent24Hr).toFixed(
-                                2
-                              )}%`
-                            : "N/A"}
-                        </td>
-                      </tr>
-                      <tr className="border-b">
-                        <td className="px-4 py-2 font-bold">VWAP (24Hr):</td>
-                        <td className="px-4 py-2">
-                          {selectedAsset.vwap24Hr
-                            ? Number(selectedAsset.vwap24Hr).toLocaleString("en-US", {
+                      {[
+                        ["Rank", selectedAsset.rank],
+                        ["Symbol", selectedAsset.symbol],
+                        ["Name", selectedAsset.name],
+                        ["Supply", formatLargeNumber(selectedAsset.supply)],
+                        ["Max Supply", formatLargeNumber(selectedAsset.maxSupply)],
+                        [
+                          "Market Cap USD",
+                          selectedAsset.marketCapUsd
+                            ? `$${Number(
+                                selectedAsset.marketCapUsd
+                              ).toLocaleString("en-US", {
+                                maximumFractionDigits: 2,
+                              })}`
+                            : "N/A",
+                        ],
+                        [
+                          "Volume (24Hr)",
+                          selectedAsset.volumeUsd24Hr
+                            ? `$${Number(
+                                selectedAsset.volumeUsd24Hr
+                              ).toLocaleString("en-US", {
+                                maximumFractionDigits: 2,
+                              })}`
+                            : "N/A",
+                        ],
+                        [
+                          "Price USD",
+                          selectedAsset.priceUsd
+                            ? `$${Number(
+                                selectedAsset.priceUsd
+                              ).toLocaleString("en-US", {
+                                maximumFractionDigits: 2,
+                              })}`
+                            : "N/A",
+                        ],
+                        [
+                          "Change % (24Hr)",
+                          `${Number(
+                            selectedAsset.changePercent24Hr
+                          ).toFixed(2)}%`,
+                        ],
+                        [
+                          "VWAP (24Hr)",
+                          selectedAsset.vwap24Hr
+                            ? Number(
+                                selectedAsset.vwap24Hr
+                              ).toLocaleString("en-US", {
                                 maximumFractionDigits: 2,
                               })
-                            : "N/A"}
-                        </td>
-                      </tr>
+                            : "N/A",
+                        ],
+                      ].map(([label, val]) => (
+                        <tr key={label} className="border-b">
+                          <td className="px-4 py-2 font-bold">{label}:</td>
+                          <td className="px-4 py-2">{val}</td>
+                        </tr>
+                      ))}
                       <tr>
                         <td className="px-4 py-2 font-bold">Explorer:</td>
                         <td className="px-4 py-2">
