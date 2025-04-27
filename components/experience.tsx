@@ -2,13 +2,42 @@ import Image from 'next/image'
 import ApplyPro from '@/public/images/applyprologo.png'
 import UMail from '@/public/images/umailLogo.png'
 import spgi from '@/public/images/sp-global-seeklogo.png'
+import DCI from '@/public/images/DCI.jpg'
 
 export default function Experience() {
   return (
     <div className="space-y-8">
       <h2 className="h3 font-aspekta text-slate-800 dark:text-slate-100">Experience</h2>
       <ul className="space-y-8">
-        
+
+          <li className="relative group">
+            <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
+              <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-indigo-50 rounded-full">
+                <Image
+                  className=""
+                  src={DCI}
+                  alt="Data Center Inc. Logo"
+                  width={46}
+                  height={46}
+                />
+              </div>
+              <div className="pl-20 space-y-1">
+                <div className="text-xs text-slate-500 uppercase">
+                  April 2025 <span className="text-slate-400 dark:text-slate-600">·</span> Present
+                </div>
+                <div className="font-aspekta font-[650] text-slate-800 dark:text-slate-100">
+                  Senior Software Engineer
+                </div>
+                <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                  Data Center Inc. (Remote) — Hutchinson, KS
+                </div>
+                <div className="text-sm text-slate-500 dark:text-slate-400">
+                  Serve as the critical interface between Support and Product Engineering for DCI’s GoBanking core and authoring detailed technical documentation for the platform’s mobile-banking, ATM, and card-reader components used by community financial institutions.
+                </div>
+              </div>
+            </div>
+          </li>
+
         {/* Item - ApplyPro.ai */}
         <li className="relative group">
           <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
