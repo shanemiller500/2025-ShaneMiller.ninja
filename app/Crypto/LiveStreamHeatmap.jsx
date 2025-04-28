@@ -6,6 +6,13 @@ import { trackEvent } from "@/utils/mixpanel";
 
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY;
 
+// 🔑 Make sure NEXT_PUBLIC_COINCAP_API_KEY is defined in .env.local
+if (!API_KEY) {
+  console.error(
+    "🚨 Missing CoinCap API key! Please set NEXT_PUBLIC_COINCAP_API_KEY in .env.local and restart."
+  );
+}
+
 const LiveStreamHeatmap = () => {
   const [tradeInfoMap, setTradeInfoMap] = useState({});
   const [metaData, setMetaData] = useState({});
@@ -13,16 +20,18 @@ const LiveStreamHeatmap = () => {
   const [loading, setLoading] = useState(true);
   const socketRef = useRef(null);
 
-  // 1) Load metadata for up to 2000 assets (so you get every rank)
+  // 1) Fetch metadata up to 2000 entries so we have every rank
   useEffect(() => {
     const fetchMeta = async () => {
+      if (!API_KEY) return;
       try {
         const res = await fetch(
           `https://rest.coincap.io/v3/assets?limit=2000&apiKey=${API_KEY}`
         );
-        const { data } = await res.json();
+        const json = await res.json();
+        const list = Array.isArray(json.data) ? json.data : [];
         const map = {};
-        data.forEach((asset) => {
+        list.forEach((asset) => {
           map[asset.id] = asset;
         });
         setMetaData(map);
@@ -30,13 +39,12 @@ const LiveStreamHeatmap = () => {
         console.error("Metadata fetch error:", err);
       }
     };
-
     fetchMeta();
   }, []);
 
-  // 2) Once we have metadata, open the socket
+  // 2) Once metadata is loaded, open the WebSocket
   useEffect(() => {
-    if (!Object.keys(metaData).length) return; // wait until metaData is populated
+    if (!API_KEY || !Object.keys(metaData).length) return;
 
     const socket = new WebSocket(
       `wss://wss.coincap.io/prices?assets=ALL&apiKey=${API_KEY}`
@@ -44,8 +52,17 @@ const LiveStreamHeatmap = () => {
     socketRef.current = socket;
 
     socket.onopen = () => console.log("WebSocket connected");
+    socket.onerror = (err) => console.error("WebSocket error:", err);
+
     socket.onmessage = (evt) => {
-      const updates = JSON.parse(evt.data);
+      let updates;
+      try {
+        updates = JSON.parse(evt.data);
+      } catch (e) {
+        console.error("Non-JSON WS message:", evt.data);
+        return;
+      }
+
       setTradeInfoMap((prev) => {
         const next = { ...prev };
         Object.entries(updates).forEach(([id, priceStr]) => {
@@ -55,14 +72,14 @@ const LiveStreamHeatmap = () => {
         });
         return next;
       });
+
       setLoading(false);
     };
-    socket.onerror = (err) => console.error("WebSocket error:", err);
 
     return () => socket.close();
   }, [metaData]);
 
-  // 3) Sort asset IDs by rank whenever prices or metadata change
+  // 3) Sort by rank whenever prices or metadata change
   const sortedAssetIds = useMemo(() => {
     return Object.keys(tradeInfoMap).sort((a, b) => {
       const rA = metaData[a] ? +metaData[a].rank : Infinity;
