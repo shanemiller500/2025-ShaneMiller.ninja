@@ -55,7 +55,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen dark:bg-gray-900 dark:text-gray-100 p-4">
+    <div className="min-h-screen  dark:text-gray-100 p-4">
       <h1 className="text-4xl font-bold text-center mb-8">
         Marvel Dashboard
       </h1>

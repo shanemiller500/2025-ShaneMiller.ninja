@@ -6,10 +6,10 @@ const PUBLIC_KEY = process.env.NEXT_PUBLIC_MARVEL_PUBLIC_KEY || "";
 const PRIVATE_KEY = process.env.NEXT_PUBLIC_MARVEL_PRIVATE_KEY || "";
 const BASE_URL = "https://gateway.marvel.com/v1/public";
 
-const getTimestamp = (): number => new Date().getTime();
+const getTimestamp = (): string => Date.now().toString();
 
-const getHash = (timestamp: number): string =>
-  CryptoJS.MD5(timestamp + PRIVATE_KEY + PUBLIC_KEY).toString();
+const getHash = (ts: string): string =>
+  CryptoJS.MD5(ts + PRIVATE_KEY + PUBLIC_KEY).toString();
 
 export async function fetchFromMarvel(
   endpoint: string,
@@ -19,20 +19,35 @@ export async function fetchFromMarvel(
     console.error("Marvel API keys are missing.");
     return null;
   }
+
   const ts = getTimestamp();
   const hash = getHash(ts);
-  let url = `${BASE_URL}/${endpoint}?ts=${ts}&apikey=${PUBLIC_KEY}&hash=${hash}`;
 
-  Object.keys(queryParams).forEach((key) => {
-    if (queryParams[key]) {
-      url += `&${key}=${encodeURIComponent(queryParams[key])}`;
-    }
+  const params = new URLSearchParams({
+    ts,
+    apikey: PUBLIC_KEY,
+    hash,
+    ...queryParams, // No manual encoding
   });
 
+  const url = `${BASE_URL}/${endpoint}?${params.toString()}`;
+  
+  // Must log and verify this URL manually
+  console.log("Marvel API URL:", url);
+
   try {
-    const response = await fetch(url);
-    const data = await response.json();
-    return data;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) {
+      const errorResponse = await response.text();
+      console.error(`Marvel API error: ${response.status}`, errorResponse);
+      return null;
+    }
+
+    return await response.json();
   } catch (error) {
     console.error(`Error fetching ${endpoint}:`, error);
     return null;
