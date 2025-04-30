@@ -3,222 +3,169 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion, useMotionValue } from "framer-motion";
 
+const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY;
+if (!API_KEY) {
+  console.error(
+    "🚨 Missing CoinCap API key! Please set NEXT_PUBLIC_COINCAP_API_KEY in .env.local and restart your dev server."
+  );
+}
+
 const WidgetCrypto = () => {
-  // Store metadata and live price info.
   const [metaData, setMetaData] = useState<{ [id: string]: any }>({});
   const [tradeInfoMap, setTradeInfoMap] = useState<{
     [id: string]: { price: number; prevPrice?: number };
   }>({});
   const socketRef = useRef<WebSocket | null>(null);
 
-  // For the scrolling ticker, we need the width (in px) of one set of cards.
   const innerRef = useRef<HTMLDivElement | null>(null);
   const [contentWidth, setContentWidth] = useState(0);
-
-  // A motion value to control the horizontal offset.
   const x = useMotionValue(0);
-
-  // State to track whether the user is dragging.
   const [isDragging, setIsDragging] = useState(false);
-
-  // Speed in pixels per second.
   const speed = 50;
 
-  // Fetch metadata (including initial price) from CoinCap's REST API.
+  // 1) Fetch top-10 assets by rank
   useEffect(() => {
-    const fetchMetaData = async () => {
+    if (!API_KEY) return;
+    const fetchMeta = async () => {
       try {
-        const response = await fetch("https://api.coincap.io/v2/assets");
-        const json = await response.json();
-        const metaMap: { [id: string]: any } = {};
-        json.data.forEach((asset: any) => {
-          metaMap[asset.id] = asset;
+        const res = await fetch(
+          `https://rest.coincap.io/v3/assets?limit=10&apiKey=${API_KEY}`
+        );
+        const json = await res.json();
+        const map: { [id: string]: any } = {};
+        (Array.isArray(json.data) ? json.data : []).forEach((asset: any) => {
+          map[asset.id] = asset;
         });
-        setMetaData(metaMap);
-      } catch (error) {
-        console.error("Error fetching metadata:", error);
+        setMetaData(map);
+      } catch (err) {
+        console.error("Error fetching metadata:", err);
       }
     };
-
-    fetchMetaData();
+    fetchMeta();
   }, []);
 
-  // Compute the top 10 asset IDs based on their rank using useMemo.
-  const topAssetIds = useMemo(() => {
-    return Object.keys(metaData)
-      .sort(
-        (a, b) => parseInt(metaData[a].rank, 10) - parseInt(metaData[b].rank, 10)
-      )
-      .slice(0, 10);
-  }, [metaData]);
+  // 2) Compute the top 10 IDs (they’re already sorted by rank from the API)
+  const topAssetIds = useMemo(() => Object.keys(metaData), [metaData]);
 
-  // Once metadata is available, initialize tradeInfoMap with initial prices.
+  // 3) Seed initial prices
   useEffect(() => {
-    if (topAssetIds.length > 0 && Object.keys(tradeInfoMap).length === 0) {
-      const initialMap: { [id: string]: { price: number } } = {};
+    if (topAssetIds.length && !Object.keys(tradeInfoMap).length) {
+      const initial: { [id: string]: { price: number } } = {};
       topAssetIds.forEach((id) => {
-        const asset = metaData[id];
-        if (asset && asset.priceUsd) {
-          initialMap[id] = { price: parseFloat(asset.priceUsd) };
-        }
+        const usd = metaData[id]?.priceUsd;
+        if (usd) initial[id] = { price: parseFloat(usd) };
       });
-      setTradeInfoMap(initialMap);
+      setTradeInfoMap(initial);
     }
   }, [metaData, topAssetIds]);
 
-  // Subscribe to the WebSocket using only the top ranked asset IDs.
-  // The WebSocket connection is delayed slightly to ensure initial prices are loaded.
+  // 4) Delay by 2s then open WS with only top 10 + apiKey
   useEffect(() => {
-    if (topAssetIds.length === 0) return;
-    const websocketTimeout = setTimeout(() => {
+    if (!API_KEY || !topAssetIds.length) return;
+    const timer = setTimeout(() => {
       const assets = topAssetIds.join(",");
-      const socket = new WebSocket(`wss://ws.coincap.io/prices?assets=${assets}`);
+      const socket = new WebSocket(
+        `wss://wss.coincap.io/prices?assets=${assets}&apiKey=${API_KEY}`
+      );
       socketRef.current = socket;
 
-      socket.onopen = () => {
-        console.log("WebSocket connection established (widget)");
-      };
+      socket.onopen = () =>
+        console.log("WebSocket connection established (WidgetCrypto)");
+      socket.onerror = (err) =>
+        console.error("WebSocket error in widget:", err);
 
-      socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        for (const [id, price] of Object.entries(data)) {
-          updateTradeInfo(id, parseFloat(price as string));
+      socket.onmessage = (evt) => {
+        let data: any;
+        try {
+          data = JSON.parse(evt.data);
+        } catch {
+          // ignore non-JSON messages (like “Unauthorized”)
+          return;
         }
-      };
-
-      socket.onerror = (error) => {
-        console.error("WebSocket error in widget:", error);
+        setTradeInfoMap((prev) => {
+          const next = { ...prev };
+          Object.entries(data).forEach(([id, priceStr]) => {
+            const price = parseFloat(priceStr as string);
+            const prevPrice = prev[id]?.price;
+            next[id] = { price, prevPrice };
+          });
+          return next;
+        });
       };
     }, 2000);
 
     return () => {
-      clearTimeout(websocketTimeout);
-      if (socketRef.current) {
-        socketRef.current.close();
-        socketRef.current = null;
-      }
+      clearTimeout(timer);
+      socketRef.current?.close();
+      socketRef.current = null;
     };
   }, [topAssetIds]);
 
-  // Update live price data while preserving the previous price.
-  // Only update when the price changes to avoid unnecessary re-renders.
-  const updateTradeInfo = (id: string, price: number) => {
-    setTradeInfoMap((prev) => {
-      const current = prev[id];
-      if (current && current.price === price) return prev;
-      return {
-        ...prev,
-        [id]: { price, prevPrice: current?.price },
-      };
-    });
-  };
-
-  // Measure the width of one set of cards (needed for the scrolling ticker)
-  // and update on window resize.
+  // 5) Measure width for marquee looping
   useEffect(() => {
-    const measureWidth = () => {
-      if (innerRef.current) {
-        setContentWidth(innerRef.current.offsetWidth);
-      }
+    const measure = () => {
+      if (innerRef.current) setContentWidth(innerRef.current.offsetWidth);
     };
-    measureWidth();
-    window.addEventListener("resize", measureWidth);
-    return () => {
-      window.removeEventListener("resize", measureWidth);
-    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
   }, [topAssetIds]);
 
-  // Continuous auto-scrolling effect using requestAnimationFrame.
+  // 6) Auto‐scroll with requestAnimationFrame
   useEffect(() => {
-    let animationFrame: number;
-    let lastTime: number | null = null;
-
-    const animate = (time: number) => {
-      if (lastTime === null) {
-        lastTime = time;
-      }
-      const delta = time - lastTime;
-      lastTime = time;
-
-      // Only update the auto-scroll if the user is not dragging and contentWidth is known.
+    let raf: number;
+    let last: number | null = null;
+    const animate = (t: number) => {
+      if (last === null) last = t;
+      const delta = t - last;
+      last = t;
       if (!isDragging && contentWidth > 0) {
         let newX = x.get() - speed * (delta / 1000);
-
-        // When newX goes beyond -contentWidth, wrap it back.
-        if (newX <= -contentWidth) {
-          newX = newX + contentWidth;
-        }
-        // Likewise, if newX is positive (e.g., if user dragged right), wrap it.
-        if (newX > 0) {
-          newX = newX - contentWidth;
-        }
+        if (newX <= -contentWidth) newX += contentWidth;
+        if (newX > 0) newX -= contentWidth;
         x.set(newX);
       }
-      animationFrame = requestAnimationFrame(animate);
+      raf = requestAnimationFrame(animate);
     };
-
-    animationFrame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animationFrame);
+    raf = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(raf);
   }, [isDragging, contentWidth, x]);
 
-  // Helper: modulo function that works for negative numbers.
-  const mod = (n: number, m: number) => ((n % m) + m) % m;
-
-  // Render a single "heatmap" style card.
+  // 7) Render one “card”
   const renderCard = (id: string) => {
-    const assetMeta = metaData[id];
-    const tradeInfo = tradeInfoMap[id] || {};
-    const { price, prevPrice } = tradeInfo;
-
-    // Set background color and arrow symbol based on price movement.
-    let bgColor = "bg-gray-300";
-    let arrowSymbol = "";
+    const md = metaData[id];
+    const ti = tradeInfoMap[id] || {};
+    const { price, prevPrice } = ti;
+    let bg = "bg-gray-300",
+      arrow = "";
     if (prevPrice !== undefined) {
-      if (price > prevPrice) {
-        bgColor = "bg-green-500";
-        arrowSymbol = "↑";
-      } else if (price < prevPrice) {
-        bgColor = "bg-red-500";
-        arrowSymbol = "↓";
-      }
-    } else if (assetMeta) {
-      // Use 24Hr change to decide initial color.
-      const change = parseFloat(assetMeta.changePercent24Hr);
-      if (change > 0) {
-        bgColor = "bg-green-500";
-        arrowSymbol = "↑";
-      } else if (change < 0) {
-        bgColor = "bg-red-500";
-        arrowSymbol = "↓";
-      }
+      if (price > prevPrice) bg = "bg-green-500", (arrow = "↑");
+      else if (price < prevPrice) bg = "bg-red-500", (arrow = "↓");
+    } else if (md) {
+      const change = parseFloat(md.changePercent24Hr);
+      if (change > 0) bg = "bg-green-500", (arrow = "↑");
+      else if (change < 0) bg = "bg-red-500", (arrow = "↓");
     }
-
-    const displaySymbol = assetMeta ? assetMeta.symbol : id.toUpperCase();
-    const rankText = assetMeta ? `#${assetMeta.rank}` : "#N/A";
-    const percentChange = assetMeta
-      ? parseFloat(assetMeta.changePercent24Hr).toFixed(2)
-      : "0.00";
+    const symbol = md?.symbol || id.toUpperCase();
+    const rankText = md ? `#${md.rank}` : "#N/A";
+    const pct = md ? parseFloat(md.changePercent24Hr).toFixed(2) : "0.00";
 
     return (
       <div
         key={id}
-        className={`p-2 m-1 rounded text-white text-center ${bgColor} whitespace-nowrap`}
+        className={`p-2 m-1 rounded text-white text-center ${bg} whitespace-nowrap`}
       >
         <div className="text-xs font-medium">{rankText}</div>
-        <div className="text-sm font-bold">{displaySymbol}</div>
+        <div className="text-sm font-bold">{symbol}</div>
         <div className="text-xs">
-          {price !== undefined ? (
-            <>
-              {`$${Number(price).toLocaleString("en-US", {
+          {price !== undefined
+            ? `$${price.toLocaleString("en-US", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
-              })} ${arrowSymbol}`}
-            </>
-          ) : (
-            "Loading..."
-          )}
+              })} ${arrow}`
+            : "Loading..."}
         </div>
-        <div className="text-xs">{percentChange}%</div>
+        <div className="text-xs">{pct}%</div>
       </div>
     );
   };
@@ -231,8 +178,6 @@ const WidgetCrypto = () => {
         </p>
       </div>
 
-      {/* The marquee container is draggable and uses the motion value x.
-          It contains two copies of the cards for a seamless looping effect. */}
       <motion.div
         className="flex cursor-grab"
         style={{ x }}
@@ -240,20 +185,16 @@ const WidgetCrypto = () => {
         onDragStart={() => setIsDragging(true)}
         onDragEnd={() => {
           setIsDragging(false);
-          // Normalize the position to keep it within [-contentWidth, 0)
-          const currentX = x.get();
-          const adjustedX = -mod(-currentX, contentWidth);
-          x.set(adjustedX);
+          // normalize within [-width, 0)
+          const mod = (n: number, m: number) => ((n % m) + m) % m;
+          const cur = x.get();
+          x.set(-mod(-cur, contentWidth));
         }}
       >
-        {/* First copy (its width is measured) */}
         <div className="flex" ref={innerRef}>
-          {topAssetIds.map((id) => renderCard(id))}
+          {topAssetIds.map(renderCard)}
         </div>
-        {/* Duplicate for a seamless loop */}
-        <div className="flex">
-          {topAssetIds.map((id) => renderCard(id))}
-        </div>
+        <div className="flex">{topAssetIds.map(renderCard)}</div>
       </motion.div>
 
       <div className="p-2">

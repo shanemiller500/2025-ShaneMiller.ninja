@@ -2,10 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { FaRocket } from "react-icons/fa";
 
-// Helper function to format numeric values
-function formatSupplyValue(value) {
+// Helper to format percentages and prices
+function formatValue(value) {
   const num = parseFloat(value);
   if (!isNaN(num)) {
     return num.toLocaleString("en-US", {
@@ -13,21 +12,37 @@ function formatSupplyValue(value) {
       minimumFractionDigits: 2,
     });
   }
-  return "Invalid value";
+  return "N/A";
+}
+
+const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY;
+if (!API_KEY) {
+  console.error(
+    "🚨 Missing CoinCap API key! Set NEXT_PUBLIC_COINCAP_API_KEY in .env.local and restart."
+  );
 }
 
 const TopGainersLosers = () => {
   const [cryptoData, setCryptoData] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Fetch full asset list from V3
   useEffect(() => {
+    if (!API_KEY) return;
+
     const fetchCryptoData = async () => {
       try {
-        const response = await fetch("https://api.coincap.io/v2/assets");
-        const data = await response.json();
-        setCryptoData(data.data);
-      } catch (error) {
-        console.error("Error fetching crypto data:", error);
+        const res = await fetch(
+          `https://rest.coincap.io/v3/assets?limit=2000&apiKey=${API_KEY}`
+        );
+        const json = await res.json();
+        if (Array.isArray(json.data)) {
+          setCryptoData(json.data);
+        } else {
+          console.error("Unexpected data format from CoinCap:", json);
+        }
+      } catch (err) {
+        console.error("Error fetching crypto data:", err);
       } finally {
         setLoading(false);
       }
@@ -46,34 +61,35 @@ const TopGainersLosers = () => {
     );
   }
 
-  // Sort data by 24h percent change (descending)
-  const sortedData = [...cryptoData].sort(
+  // Sort by 24h change
+  const sorted = [...cryptoData].sort(
     (a, b) =>
       parseFloat(b.changePercent24Hr) - parseFloat(a.changePercent24Hr)
   );
-  const topGainers = sortedData.slice(0, 15);
-  const topLosers = sortedData.slice(-15).reverse();
 
-  const renderCard = (crypto) => {
-    const change = parseFloat(crypto.changePercent24Hr);
-    const changeIcon = change >= 0 ? "↑" : "↓";
-    const textColor = change >= 0 ? "text-green-400" : "text-red-400";
+  const topGainers = sorted.slice(0, 15);
+  const topLosers = sorted.slice(-15).reverse();
 
+  const renderCard = (c) => {
+    const change = parseFloat(c.changePercent24Hr);
+    const positive = change >= 0;
     return (
       <motion.div
-        key={crypto.id}
+        key={c.id}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        className=" rounded-lg p-4 shadow-lg transform transition-all hover:shadow-2xl"
+        className={`rounded-lg p-4 shadow-lg transform transition-all hover:shadow-2xl ${
+          positive ? "bg-green-800" : "bg-red-800"
+        }`}
       >
-        <h5 className={`font-bold text-lg mb-2 ${textColor}`}>
-          {crypto.name} ({crypto.symbol})
+        <h5 className={`font-bold text-lg mb-2 ${positive ? "text-green-400" : "text-red-400"}`}>
+          {c.name} ({c.symbol})
         </h5>
-        <p className="text-gray-700 dark:text-gray-300">
-          Price: $ {parseFloat(crypto.priceUsd).toFixed(2)}
+        <p className="text-gray-200">
+          Price: $ {formatValue(c.priceUsd)}
         </p>
-        <p className={`${textColor} font-semibold`}>
-          24h Change: {formatSupplyValue(crypto.changePercent24Hr)}% {changeIcon}
+        <p className={`font-semibold ${positive ? "text-green-300" : "text-red-300"}`}>
+          24h Change: {formatValue(c.changePercent24Hr)}% {positive ? "↑" : "↓"}
         </p>
       </motion.div>
     );
@@ -81,14 +97,13 @@ const TopGainersLosers = () => {
 
   return (
     <div className="relative min-h-screen p-8 text-white overflow-hidden">
-
       <div className="relative z-20">
-        <h2 className="text-3xl font-extrabold text-brand-900 dark:text-white text-center mb-8">
+        <h2 className="text-3xl font-extrabold text-center mb-8">
           Crypto Market Movers
         </h2>
 
         <section className="mb-12">
-          <h3 className="text-2xl text-brand-900 dark:text-white font-bold mb-4 border-b pb-2 border-indigo-300">
+          <h3 className="text-2xl font-bold mb-4 border-b pb-2 border-indigo-300">
             Top Gainers
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
@@ -97,7 +112,7 @@ const TopGainersLosers = () => {
         </section>
 
         <section>
-          <h3 className="text-2xl text-brand-900 dark:text-white font-bold mb-4 border-b pb-2 border-indigo-300">
+          <h3 className="text-2xl font-bold mb-4 border-b pb-2 border-indigo-300">
             Top Losers
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
