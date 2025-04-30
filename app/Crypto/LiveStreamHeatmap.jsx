@@ -16,9 +16,10 @@ const LiveStreamHeatmap = () => {
   const [metaData, setMetaData] = useState({});
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [wsAvailable, setWsAvailable] = useState(true);
   const socketRef = useRef(null);
 
-  // 1) Fetch up to 2000 assets to get all ranks
+  // Fetch up to 2000 assets to get all ranks
   useEffect(() => {
     const fetchMeta = async () => {
       if (!API_KEY) return;
@@ -40,7 +41,7 @@ const LiveStreamHeatmap = () => {
     fetchMeta();
   }, []);
 
-  // 2) Delay WS connection by 2 seconds *after* metadata is loaded
+  // Attempt WebSocket connection after metadata loads
   useEffect(() => {
     if (!API_KEY || !Object.keys(metaData).length) return;
 
@@ -54,12 +55,22 @@ const LiveStreamHeatmap = () => {
       socket.onerror = (err) => console.error("WebSocket error:", err);
 
       socket.onmessage = (evt) => {
+        // detect unauthorized fallback
+        if (
+          typeof evt.data === "string" &&
+          evt.data.startsWith("Unauthorized")
+        ) {
+          console.warn("WebSocket not available:", evt.data);
+          setWsAvailable(false);
+          socket.close();
+          setLoading(false);
+          return;
+        }
         let updates;
         try {
           updates = JSON.parse(evt.data);
         } catch {
-          console.error("Non-JSON WS message:", evt.data);
-          return;
+          return; // ignore non-JSON
         }
         setTradeInfoMap((prev) => {
           const next = { ...prev };
@@ -80,7 +91,40 @@ const LiveStreamHeatmap = () => {
     };
   }, [metaData]);
 
-  // 3) Sort by rank whenever data updates
+  // Fallback to HTTP polling if WS is unavailable
+  useEffect(() => {
+    if (wsAvailable) return;
+    const fetchPrices = async () => {
+      if (!API_KEY) return;
+      try {
+        const res = await fetch(
+          `https://rest.coincap.io/v3/assets?limit=100&apiKey=${API_KEY}`
+        );
+        const json = await res.json();
+        const updates = {};
+        (json.data || []).forEach((asset) => {
+          updates[asset.id] = asset.priceUsd;
+        });
+        setTradeInfoMap((prev) => {
+          const next = { ...prev };
+          Object.entries(updates).forEach(([id, priceStr]) => {
+            const price = parseFloat(priceStr);
+            const prevPrice = prev[id]?.price;
+            next[id] = { price, prevPrice };
+          });
+          return next;
+        });
+        setLoading(false);
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+    };
+    fetchPrices();
+    const iv = setInterval(fetchPrices, 10000);
+    return () => clearInterval(iv);
+  }, [wsAvailable, metaData]);
+
+  // Sort by rank whenever data updates
   const sortedAssetIds = useMemo(() => {
     return Object.keys(tradeInfoMap).sort((a, b) => {
       const rA = metaData[a] ? +metaData[a].rank : Infinity;
@@ -117,6 +161,12 @@ const LiveStreamHeatmap = () => {
   return (
     <>
       <div className="p-4 rounded shadow relative">
+        {!wsAvailable && (
+          <div className="bg-yellow-100 text-yellow-800 p-2 rounded mb-4 text-center">
+            Real-time WebSocket data isn’t available on your plan. Prices
+            refresh every 10 seconds instead.
+          </div>
+        )}
         <h2 className="text-xl font-bold mb-4">Live Stream Heatmap</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
           {sortedAssetIds.map((id) => {
@@ -207,8 +257,14 @@ const LiveStreamHeatmap = () => {
                         ["Rank", selectedAsset.rank],
                         ["Symbol", selectedAsset.symbol],
                         ["Name", selectedAsset.name],
-                        ["Supply", formatLargeNumber(selectedAsset.supply)],
-                        ["Max Supply", formatLargeNumber(selectedAsset.maxSupply)],
+                        [
+                          "Supply",
+                          formatLargeNumber(selectedAsset.supply),
+                        ],
+                        [
+                          "Max Supply",
+                          formatLargeNumber(selectedAsset.maxSupply),
+                        ],
                         [
                           "Market Cap USD",
                           selectedAsset.marketCapUsd
