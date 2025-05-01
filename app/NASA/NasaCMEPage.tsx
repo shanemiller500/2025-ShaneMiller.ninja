@@ -113,13 +113,13 @@ const NasaDONKIPage = () => {
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-          className="border border-gray-300 rounded p-2"
+          className="border border-gray-300 rounded p-2 dark:bg-brand-900"
         />
         <input
           type="date"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
-          className="border border-gray-300 rounded p-2"
+          className="border border-gray-300 rounded p-2 dark:bg-brand-900"
         />
         <button
           type="submit"

@@ -38,7 +38,7 @@ const EarningsSection = () => {
         placeholder="Search by ticker symbol"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        className="p-2 border border-gray-300 rounded w-full mb-4  dark:border-gray-600 focus:outline-none"
+        className="p-2 border border-gray-300 rounded w-full mb-4  dark:border-gray-600 focus:outline-none dark:bg-brand-900"
       />
       <div className="overflow-x-auto">
         <table className="min-w-full border border-gray-300 dark:border-gray-700">

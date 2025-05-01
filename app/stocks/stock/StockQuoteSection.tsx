@@ -349,7 +349,7 @@ const StockQuoteSection = () => {
           value={symbolInput}
           onChange={(e) => setSymbolInput(e.target.value)}
           placeholder="Enter stock symbol"
-          className="p-2 border border-gray-300 rounded w-full md:w-1/3 dark:border-gray-600"
+          className="p-2 border border-gray-300 rounded w-full md:w-1/3 dark:border-gray-600 dark:bg-brand-900"
         />
         {suggestions.length > 0 && (
           <ul className="list-none p-0 mt-2 border border-gray-200 rounded dark:border-gray-700">

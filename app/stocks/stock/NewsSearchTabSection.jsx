@@ -48,7 +48,7 @@ const NewsSearchTabSection = () => {
           value={symbol}
           placeholder="Enter stock symbol"
           onChange={(e) => setSymbol(e.target.value)}
-          className="p-2 border border-gray-300 rounded w-full sm:w-auto dark:border-gray-600 focus:outline-none"
+          className="p-2 border border-gray-300 rounded w-full sm:w-auto dark:border-gray-600 focus:outline-none dark:bg-brand-900"
         />
         <button
           onClick={handleSearch}

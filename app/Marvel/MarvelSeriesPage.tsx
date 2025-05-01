@@ -63,7 +63,7 @@ const MarvelSeriesPage: React.FC = () => {
           value={seriesQuery}
           onChange={(e) => setSeriesQuery(e.target.value)}
           placeholder="Search for a series..."
-          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-brand-900"
         />
         <button
           type="submit"

@@ -2,6 +2,16 @@
 
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  FaDollarSign,
+  FaChartLine,
+  FaCoins,
+  FaDatabase,
+  FaWarehouse,
+  FaChartPie,
+  FaGlobeAmericas,
+  FaLink,
+} from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
 
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY;
@@ -11,7 +21,7 @@ if (!API_KEY) {
   );
 }
 
-const LiveStreamHeatmap = () => {
+export default function LiveStreamHeatmap() {
   const [tradeInfoMap, setTradeInfoMap] = useState({});
   const [metaData, setMetaData] = useState({});
   const [selectedAsset, setSelectedAsset] = useState(null);
@@ -19,352 +29,326 @@ const LiveStreamHeatmap = () => {
   const [wsAvailable, setWsAvailable] = useState(true);
   const socketRef = useRef(null);
 
-  // 1) Fetch up to 2000 assets to get all ranks, with 403 guard
+  // Formatters
+  const currencyFmt = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
+  const compactFmt = new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 2,
+  });
+  const formatUSD = (v) => (v != null ? currencyFmt.format(v) : "—");
+  const formatCompact = (v) => (v != null ? compactFmt.format(v) : "N/A");
+  const formatPct = (s) =>
+    s != null ? `${parseFloat(s).toFixed(2)}%` : "N/A";
+  const shortenUrl = (u) => {
+    try {
+      return new URL(u).hostname.replace(/^www\./, "");
+    } catch {
+      return u;
+    }
+  };
+
+  // 1) Fetch metadata
   useEffect(() => {
-    const fetchMeta = async () => {
+    let canceled = false;
+    (async () => {
       if (!API_KEY) return;
-
-      try {
-        const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=300&apiKey=${API_KEY}`
-        );
-        console.log("Meta fetch status:", res.status, res.statusText);
-
-        if (res.status === 403) {
-          const body = await res.text();
-          console.error(
-            "Metadata fetch 403 Forbidden: your API key is invalid or not enabled for this endpoint.\nResponse body:",
-            body
-          );
-          setWsAvailable(false);
-          setLoading(false);
-          return;
-        }
-
-        if (!res.ok) {
-          throw new Error(`Metadata fetch failed: ${res.statusText}`);
-        }
-
-        const json = await res.json();
-        const list = Array.isArray(json.data) ? json.data : [];
-        const map = {};
-        list.forEach((asset) => {
-          map[asset.id] = asset;
-        });
-        setMetaData(map);
-      } catch (err) {
-        console.error("Metadata fetch error:", err);
+      const res = await fetch(
+        `https://rest.coincap.io/v3/assets?limit=300&apiKey=${API_KEY}`
+      );
+      if (res.status === 403) {
+        setWsAvailable(false);
         setLoading(false);
+        return;
       }
+      const json = await res.json();
+      if (canceled) return;
+      const m = {};
+      (json.data || []).forEach((a) => (m[a.id] = a));
+      setMetaData(m);
+    })();
+    return () => {
+      canceled = true;
     };
-
-    fetchMeta();
   }, []);
 
-  // 2) Attempt WebSocket connection after metadata loads
+  // 2) WebSocket live updates
   useEffect(() => {
     if (!API_KEY || !Object.keys(metaData).length || !wsAvailable) return;
-
-    const timeout = setTimeout(() => {
-      const socket = new WebSocket(
+    const t = setTimeout(() => {
+      const ws = new WebSocket(
         `wss://wss.coincap.io/prices?assets=ALL&apiKey=${API_KEY}`
       );
-      socketRef.current = socket;
-
-      socket.onopen = () => console.log("WebSocket connected");
-      socket.onerror = (err) => console.error("WebSocket error:", err);
-
-      socket.onmessage = (evt) => {
+      socketRef.current = ws;
+      ws.onmessage = (e) => {
         if (
-          typeof evt.data === "string" &&
-          evt.data.startsWith("Unauthorized")
+          typeof e.data === "string" &&
+          e.data.startsWith("Unauthorized")
         ) {
-          console.warn("WebSocket not available for your plan:", evt.data);
           setWsAvailable(false);
-          socket.close();
+          ws.close();
           setLoading(false);
           return;
         }
-
-        let updates;
+        let up;
         try {
-          updates = JSON.parse(evt.data);
+          up = JSON.parse(e.data);
         } catch {
-          return; // ignore non-JSON
+          return;
         }
-
         setTradeInfoMap((prev) => {
-          const next = { ...prev };
-          Object.entries(updates).forEach(([id, priceStr]) => {
-            const price = parseFloat(priceStr);
-            const prevPrice = prev[id]?.price;
-            next[id] = { price, prevPrice };
+          const nxt = { ...prev };
+          Object.entries(up).forEach(([id, ps]) => {
+            const p = parseFloat(ps);
+            nxt[id] = { price: p, prev: prev[id]?.price };
           });
-          return next;
+          return nxt;
         });
         setLoading(false);
       };
     }, 2000);
-
     return () => {
-      clearTimeout(timeout);
+      clearTimeout(t);
       socketRef.current?.close();
     };
   }, [metaData, wsAvailable]);
 
-  // 3) Fallback to HTTP polling if WS is unavailable
+  // 3) HTTP polling fallback
   useEffect(() => {
     if (wsAvailable) return;
-
     const fetchPrices = async () => {
-      if (!API_KEY) return;
-      try {
-        const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=150&apiKey=${API_KEY}`
-        );
-        if (!res.ok) {
-          throw new Error(`Polling fetch failed: ${res.statusText}`);
-        }
-        const json = await res.json();
-        const updates = {};
-        (json.data || []).forEach((asset) => {
-          updates[asset.id] = asset.priceUsd;
+      const res = await fetch(
+        `https://rest.coincap.io/v3/assets?limit=150&apiKey=${API_KEY}`
+      );
+      const json = await res.json();
+      const upd = {};
+      (json.data || []).forEach((a) => (upd[a.id] = a.priceUsd));
+      setTradeInfoMap((prev) => {
+        const nxt = { ...prev };
+        Object.entries(upd).forEach(([id, ps]) => {
+          const p = parseFloat(ps);
+          nxt[id] = { price: p, prev: prev[id]?.price };
         });
-
-        setTradeInfoMap((prev) => {
-          const next = { ...prev };
-          Object.entries(updates).forEach(([id, priceStr]) => {
-            const price = parseFloat(priceStr);
-            const prevPrice = prev[id]?.price;
-            next[id] = { price, prevPrice };
-          });
-          return next;
-        });
-        setLoading(false);
-      } catch (err) {
-        console.error("Polling error:", err);
-      }
+        return nxt;
+      });
+      setLoading(false);
     };
-
     fetchPrices();
     const iv = setInterval(fetchPrices, 10000);
     return () => clearInterval(iv);
   }, [wsAvailable, metaData]);
 
-  // 4) Sort by rank whenever data updates
-  const sortedAssetIds = useMemo(() => {
+  // 4) Sort by rank
+  const sortedIds = useMemo(() => {
     return Object.keys(tradeInfoMap).sort((a, b) => {
-      const rA = metaData[a] ? +metaData[a].rank : Infinity;
-      const rB = metaData[b] ? +metaData[b].rank : Infinity;
+      const rA = +metaData[a]?.rank || Infinity;
+      const rB = +metaData[b]?.rank || Infinity;
       return rA - rB;
     });
   }, [tradeInfoMap, metaData]);
 
-  const formatLargeNumber = (numStr) =>
-    numStr
-      ? parseFloat(numStr).toLocaleString("en-US", {
-          maximumFractionDigits: 0,
-        })
-      : "N/A";
-
-  const shortenUrl = (url) => {
-    try {
-      return new URL(url).hostname;
-    } catch {
-      return url;
-    }
-  };
-
-  const handleClose = () => setSelectedAsset(null);
-
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-indigo-500"></div>
+      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+        <div className="animate-spin h-16 w-16 border-t-4 border-indigo-500 rounded-full" />
       </div>
     );
   }
 
   return (
-    <>
-      <div className="p-4 rounded shadow relative">
-        {!wsAvailable && (
-          <div className="bg-yellow-100 text-yellow-800 p-2 rounded mb-4 text-center">
-            Real-time WebSocket data isn’t available on your plan. Prices…
-            polling every 10s.
-          </div>
-        )}
-        <h2 className="text-xl font-bold mb-4">Live Stream Heatmap</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-          {sortedAssetIds.map((id) => {
-            const { price, prevPrice } = tradeInfoMap[id] || {};
-            const md = metaData[id];
-            let bg = "bg-gray-300",
-              arrow = "";
-            if (prevPrice !== undefined) {
-              if (price > prevPrice) bg = "bg-green-500", (arrow = "↑");
-              else if (price < prevPrice) bg = "bg-red-500", (arrow = "↓");
-            }
-            const symbol = md?.symbol || id.toUpperCase();
-            const pct = md
-              ? parseFloat(md.changePercent24Hr).toFixed(2)
-              : "0.00";
-
-            return (
-              <motion.div
-                key={id}
-                onClick={() => {
-                  if (md) {
-                    setSelectedAsset(md);
-                    trackEvent("Crypto Asset Popup Displayed", {
-                      assetId: md.id,
-                      symbol: md.symbol,
-                      name: md.name,
-                      rank: md.rank,
-                    });
-                  }
-                }}
-                className={`p-4 rounded shadow text-center text-white cursor-pointer ${bg}`}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <h5 className="font-bold text-lg mb-2">
-                  {symbol}{" "}
-                  {md && (
-                    <span className="text-xs font-normal">
-                      Rank: {md.rank}
-                      <br />
-                      <span className="text-sm">{md.name}</span>
-                    </span>
-                  )}
-                </h5>
-                <p className="text-sm">
-                  ${price.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  <span className="font-bold">{arrow}</span>
-                </p>
-                <p className="text-xs">{pct}%</p>
-              </motion.div>
-            );
-          })}
+    <div className="p-4 max-w-5xl mx-auto">
+      {!wsAvailable && (
+        <div className="mb-4 p-2 bg-yellow-100 text-yellow-800 rounded text-center">
+          WebSocket unavailable—polling every 10s.
         </div>
+      )}
 
-        <AnimatePresence>
-          {selectedAsset && (
+      <h2 className="text-2xl font-bold mb-4">Live Stream Heatmap</h2>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        {sortedIds.map((id) => {
+          const { price, prev } = tradeInfoMap[id] || {};
+          const md = metaData[id] || {};
+          let bg = "bg-gray-300",
+            arrow = "";
+          if (prev != null) {
+            if (price > prev) bg = "bg-green-500", (arrow = "↑");
+            else if (price < prev) bg = "bg-red-500", (arrow = "↓");
+          }
+          return (
             <motion.div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={handleClose}
+              key={id}
+              className={`${bg} text-white p-3 rounded-lg shadow relative cursor-pointer`}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                setSelectedAsset(md);
+                trackEvent("CryptoAssetClick", { id, ...md });
+              }}
             >
-              <motion.div
-                className="bg-white dark:bg-brand-900 p-6 rounded shadow-lg relative max-w-md w-full mx-4"
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.8, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  onClick={handleClose}
-                  className="absolute top-2 right-2 text-gray-600 hover:text-gray-800"
-                >
-                  ✕
-                </button>
-                <h3 className="text-xl font-bold mb-4">
-                  {selectedAsset.name} ({selectedAsset.symbol})
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse">
-                    <tbody>
-                      {[
-                        ["Rank", selectedAsset.rank],
-                        ["Symbol", selectedAsset.symbol],
-                        ["Name", selectedAsset.name],
-                        ["Supply", formatLargeNumber(selectedAsset.supply)],
-                        ["Max Supply", formatLargeNumber(selectedAsset.maxSupply)],
-                        [
-                          "Market Cap USD",
-                          selectedAsset.marketCapUsd
-                            ? `$${Number(
-                                selectedAsset.marketCapUsd
-                              ).toLocaleString("en-US", {
-                                maximumFractionDigits: 2,
-                              })}`
-                            : "N/A",
-                        ],
-                        [
-                          "Volume (24Hr)",
-                          selectedAsset.volumeUsd24Hr
-                            ? `$${Number(
-                                selectedAsset.volumeUsd24Hr
-                              ).toLocaleString("en-US", {
-                                maximumFractionDigits: 2,
-                              })}`
-                            : "N/A",
-                        ],
-                        [
-                          "Price USD",
-                          selectedAsset.priceUsd
-                            ? `$${Number(
-                                selectedAsset.priceUsd
-                              ).toLocaleString("en-US", {
-                                maximumFractionDigits: 2,
-                              })}`
-                            : "N/A",
-                        ],
-                        [
-                          "Change % (24Hr)",
-                          `${Number(
-                            selectedAsset.changePercent24Hr
-                          ).toFixed(2)}%`,
-                        ],
-                        [
-                          "VWAP (24Hr)",
-                          selectedAsset.vwap24Hr
-                            ? Number(
-                                selectedAsset.vwap24Hr
-                              ).toLocaleString("en-US", {
-                                maximumFractionDigits: 2,
-                              })
-                            : "N/A",
-                        ],
-                      ].map(([label, val]) => (
-                        <tr key={label} className="border-b">
-                          <td className="px-4 py-2 font-bold">{label}:</td>
-                          <td className="px-4 py-2">{val}</td>
-                        </tr>
-                      ))}
-                      <tr>
-                        <td className="px-4 py-2 font-bold">Explorer:</td>
-                        <td className="px-4 py-2">
-                          {selectedAsset.explorer ? (
-                            <a
-                              href={selectedAsset.explorer}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-indigo-500 underline"
-                            >
-                              {shortenUrl(selectedAsset.explorer)}
-                            </a>
-                          ) : (
-                            "N/A"
-                          )}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </motion.div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs bg-black bg-opacity-50 px-1 rounded">
+                  #{md.rank || "—"}
+                </span>
+                <span className="font-bold text-lg" title={md.name}>
+                  {md.symbol || id}
+                </span>
+              </div>
+              <div className="mt-1 text-sm">
+                {formatUSD(price)} <span className="font-bold">{arrow}</span>
+              </div>
+              <div className="text-xs">
+                {formatPct(md.changePercent24Hr)}
+              </div>
             </motion.div>
-          )}
-        </AnimatePresence>
+          );
+        })}
       </div>
-    </>
-  );
-};
 
-export default LiveStreamHeatmap;
+      <AnimatePresence>
+        {selectedAsset && (
+          <motion.div
+            className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedAsset(null)}
+          >
+            <motion.div
+              className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full max-w-md p-6 overflow-auto"
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                className="absolute top-4 right-4 text-indigo-500 hover:text-indigo-700"
+                onClick={() => setSelectedAsset(null)}
+              >
+                ✕
+              </button>
+
+              {/* Header: full name, symbol, rank */}
+              <h3 className="text-2xl font-bold mb-1">
+                {selectedAsset.name}
+              </h3>
+              <p className="text-indigo-500 mb-4">
+                {selectedAsset.symbol.toUpperCase()} &bull; Rank{" "}
+                {selectedAsset.rank}
+              </p>
+
+              {/* Metrics grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <Metric
+                  icon={
+                    <FaDollarSign className="text-indigo-500 text-base" />
+                  }
+                  label="Price"
+                  value={formatUSD(
+                    tradeInfoMap[selectedAsset.id]?.price
+                  )}
+                  valueColor={
+                    tradeInfoMap[selectedAsset.id]?.price >=
+                    tradeInfoMap[selectedAsset.id]?.prev
+                      ? "text-green-500"
+                      : "text-red-500"
+                  }
+                />
+                <Metric
+                  icon={
+                    <FaChartLine className="text-indigo-500 text-base" />
+                  }
+                  label="24h Change"
+                  value={formatPct(selectedAsset.changePercent24Hr)}
+                  valueColor={
+                    parseFloat(selectedAsset.changePercent24Hr) >= 0
+                      ? "text-green-500"
+                      : "text-red-500"
+                  }
+                />
+                <Metric
+                  icon={
+                    <FaChartPie className="text-indigo-500 text-base" />
+                  }
+                  label="Market Cap"
+                  value={formatCompact(
+                    parseFloat(selectedAsset.marketCapUsd)
+                  )}
+                />
+                <Metric
+                  icon={<FaCoins className="text-indigo-500 text-base" />}
+                  label="Volume (24h)"
+                  value={formatCompact(
+                    parseFloat(selectedAsset.volumeUsd24Hr)
+                  )}
+                />
+                <Metric
+                  icon={
+                    <FaDatabase className="text-indigo-500 text-base" />
+                  }
+                  label="Supply"
+                  value={formatCompact(
+                    parseFloat(selectedAsset.supply)
+                  )}
+                />
+                <Metric
+                  icon={
+                    <FaWarehouse className="text-indigo-500 text-base" />
+                  }
+                  label="Max Supply"
+                  value={formatCompact(
+                    parseFloat(selectedAsset.maxSupply || 0)
+                  )}
+                />
+                <Metric
+                  icon={
+                    <FaGlobeAmericas className="text-indigo-500 text-base" />
+                  }
+                  label="VWAP (24h)"
+                  value={
+                    selectedAsset.vwap24Hr
+                      ? parseFloat(selectedAsset.vwap24Hr).toFixed(2)
+                      : "N/A"
+                  }
+                />
+              </div>
+
+              {/* Explorer link */}
+              {selectedAsset.explorer && (
+                <div className="mt-4 text-center text-sm">
+                  <a
+                    href={selectedAsset.explorer}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-indigo-600 hover:underline"
+                  >
+                    <FaLink className="text-indigo-500" />{" "}
+                    {shortenUrl(selectedAsset.explorer)}
+                  </a>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// Metric card with optional colored value
+function Metric({ icon, label, value, valueColor = "text-gray-900" }) {
+  return (
+    <div className="flex items-center gap-2 bg-gray-100 p-2 rounded">
+      {icon}
+      <div className="flex flex-col">
+        <span className="text-xs text-gray-500">{label}</span>
+        <span className={`font-semibold ${valueColor}`}>{value}</span>
+      </div>
+    </div>
+  );
+}

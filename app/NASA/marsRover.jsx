@@ -254,7 +254,7 @@ const MarsRoverPhotos = () => {
           placeholder="Enter sol day (numeric)"
           value={solDay}
           onChange={(e) => setSolDay(e.target.value)}
-          className="border border-gray-300 rounded p-2 w-full sm:w-64 focus:outline-none dark:bg-gray-800 dark:border-gray-700"
+          className="border border-gray-300 rounded p-2 w-full sm:w-64 focus:outline-none dark:bg-brand-900 dark:border-gray-700"
         />
         <button
           onClick={searchPhotos}

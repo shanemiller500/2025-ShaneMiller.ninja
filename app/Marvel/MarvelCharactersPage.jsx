@@ -78,7 +78,7 @@ const MarvelCharactersPage = () => {
           value={characterQuery}
           onChange={(e) => setCharacterQuery(e.target.value)}
           placeholder="Search for a character..."
-          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-brand-900"
         />
         <datalist id="characterSuggestions">
           {preSearchSuggestions.map((suggestion, idx) => (

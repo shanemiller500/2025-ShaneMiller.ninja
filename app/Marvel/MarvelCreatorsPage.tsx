@@ -65,7 +65,7 @@ const MarvelCreatorsPage: React.FC = () => {
           value={creatorQuery}
           onChange={(e) => setCreatorQuery(e.target.value)}
           placeholder="Search for a creator..."
-          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-red-500"
+          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-brand-900"
         />
         <button
           type="submit"

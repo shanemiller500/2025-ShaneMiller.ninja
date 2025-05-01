@@ -65,7 +65,7 @@ const MarvelEventsPage: React.FC = () => {
           value={eventQuery}
           onChange={(e) => setEventQuery(e.target.value)}
           placeholder="Search for an event..."
-          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-green-500"
+          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-brand-900"
         />
         <button
           type="submit"

@@ -65,7 +65,7 @@ const MarvelStoriesPage: React.FC = () => {
           value={storyQuery}
           onChange={(e) => setStoryQuery(e.target.value)}
           placeholder="Search for a story..."
-          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:bg-brand-900"
         />
         <button
           type="submit"

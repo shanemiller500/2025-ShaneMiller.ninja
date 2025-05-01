@@ -63,7 +63,7 @@ const MarvelComicsPage = () => {
           value={comicQuery}
           onChange={(e) => setComicQuery(e.target.value)}
           placeholder="Search for a comic..."
-          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-brand-900"
         />
         <button
           type="submit"

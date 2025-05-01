@@ -74,7 +74,7 @@ const CountrySearch = () => {
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               list="countrySuggestions"
-              className="p-2 border border-gray-300 rounded w-full sm:w-auto dark:bg-gray-800 dark:border-gray-600 focus:outline-none"
+              className="p-2 border border-gray-300 rounded w-full sm:w-auto dark:bg-brand-900 dark:border-gray-600 focus:outline-none"
             />
             <datalist id="countrySuggestions">
               {countries.map((country) => (
