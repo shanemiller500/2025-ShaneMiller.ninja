@@ -26,7 +26,7 @@ const LiveStreamHeatmap = () => {
 
       try {
         const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=2000&apiKey=${API_KEY}`
+          `https://rest.coincap.io/v3/assets?limit=300&apiKey=${API_KEY}`
         );
         console.log("Meta fetch status:", res.status, res.statusText);
 
@@ -120,7 +120,7 @@ const LiveStreamHeatmap = () => {
       if (!API_KEY) return;
       try {
         const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=100&apiKey=${API_KEY}`
+          `https://rest.coincap.io/v3/assets?limit=150&apiKey=${API_KEY}`
         );
         if (!res.ok) {
           throw new Error(`Polling fetch failed: ${res.statusText}`);
