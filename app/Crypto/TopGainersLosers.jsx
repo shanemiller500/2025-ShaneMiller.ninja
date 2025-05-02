@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaDollarSign,
@@ -11,8 +11,9 @@ import {
   FaChartPie,
   FaGlobeAmericas,
   FaLink,
-  FaHashtag,
 } from "react-icons/fa";
+import { Chart } from "chart.js/auto";
+import "chartjs-adapter-date-fns";
 
 // Helper to format numbers
 function formatValue(value) {
@@ -30,9 +31,7 @@ function formatValue(value) {
 function formatPrice(value) {
   const num = parseFloat(value);
   if (isNaN(num)) return "N/A";
-  if (num > 0 && num < 0.01) {
-    return num.toString();
-  }
+  if (num > 0 && num < 0.01) return num.toString();
   return formatValue(value);
 }
 
@@ -48,13 +47,17 @@ export default function TopGainersLosers() {
   const [loading, setLoading] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState(null);
 
-  // Fetch assets once and every 15s
+  // Chart.js refs
+  const canvasRef = useRef(null);
+  const chartInstanceRef = useRef(null);
+
+  // Fetch top 200 assets by rank, refresh every 15s
   useEffect(() => {
     if (!API_KEY) return;
     const fetchCryptoData = async () => {
       try {
         const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=2000&apiKey=${API_KEY}`
+          `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`
         );
         const { data } = await res.json();
         setCryptoData(Array.isArray(data) ? data : []);
@@ -69,15 +72,65 @@ export default function TopGainersLosers() {
     return () => clearInterval(interval);
   }, []);
 
+  // Draw 24h chart when selectedAsset changes
+  useEffect(() => {
+    if (!selectedAsset) return;
+    const drawChart = async () => {
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.destroy();
+      }
+      const end = Date.now();
+      const start = end - 24 * 60 * 60 * 1000;
+      const res = await fetch(
+        `https://rest.coincap.io/v3/assets/${selectedAsset.id}/history?interval=m1&start=${start}&end=${end}&apiKey=${API_KEY}`
+      );
+      const json = await res.json();
+      const points = Array.isArray(json.data)
+        ? json.data.map((e) => ({
+            x: new Date(e.time),
+            y: parseFloat(e.priceUsd),
+          }))
+        : [];
+      const ctx = canvasRef.current.getContext("2d");
+      chartInstanceRef.current = new Chart(ctx, {
+        type: "line",
+        data: {
+          datasets: [
+            {
+              data: points,
+              borderColor: "#4cafd1",
+              backgroundColor: "rgba(76,175,209,0.2)",
+              pointRadius: 0,
+              fill: true,
+            },
+          ],
+        },
+        options: {
+          scales: {
+            x: {
+              type: "time",
+              time: { tooltipFormat: "MMM d, HH:mm" },
+              title: { display: true, text: "Time" },
+            },
+            y: { title: { display: true, text: "Price (USD)" } },
+          },
+          plugins: { legend: { display: false } },
+          maintainAspectRatio: false,
+        },
+      });
+    };
+    drawChart();
+  }, [selectedAsset]);
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-brand-900">
-        <p className="text-gray-600 dark:text-brand-200">Loading crypto data…</p>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+        <p className="text-gray-500 dark:text-gray-400">Loading crypto data…</p>
       </div>
     );
   }
 
-  // Sort by 24h change
+  // Sort top-200 slice by 24h change
   const sorted = [...cryptoData].sort(
     (a, b) =>
       parseFloat(b.changePercent24Hr) - parseFloat(a.changePercent24Hr)
@@ -88,21 +141,23 @@ export default function TopGainersLosers() {
   // Table section
   const Table = ({ title, rows }) => (
     <section className="mb-8">
-      <h3 className="text-xl font-semibold text-gray-800 dark:text-brand-100 mb-2 border-b border-gray-200 dark:border-brand-700 pb-1">
+      <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2 border-b border-gray-200 dark:border-gray-700 pb-1">
         {title}
       </h3>
       <div className="overflow-x-auto">
-        <table className="min-w-full bg-white dark:bg-brand-900 divide-y divide-gray-100 dark:divide-brand-700">
+        <table className="min-w-full dark:bg-brand-900 divide-y divide-gray-100 dark:divide-gray-700">
           <thead>
-            <tr className="bg-gray-50 dark:bg-brand-800">
-              {["#", "Symbol", "Price", "24h %"].map((h) => (
-                <th
-                  key={h}
-                  className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-brand-200 uppercase text-left"
-                >
-                  {h}
-                </th>
-              ))}
+            <tr className="bg-gray-100 dark:bg-indigo-700">
+              {["Rank", "Symbol", "Name", "Price (USD)", "24h Change"].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="px-4 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 uppercase text-left"
+                  >
+                    {h}
+                  </th>
+                )
+              )}
             </tr>
           </thead>
           <tbody>
@@ -112,25 +167,28 @@ export default function TopGainersLosers() {
               return (
                 <tr
                   key={c.id}
-                  className="hover:bg-gray-50 dark:hover:bg-brand-800 transition-colors cursor-pointer"
+                  className="hover:bg-gray-50 hover:bg-indigo-500 transition-colors cursor-pointer"
                   onClick={() => setSelectedAsset(c)}
                 >
-                  <td className="px-2 py-1 text-sm text-gray-700 dark:text-brand-100">
+                  <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-200">
                     {c.rank}
                   </td>
-                  <td className="px-2 py-1 text-sm text-gray-700 dark:text-brand-100">
+                  <td className="px-4 py-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
                     {c.symbol}
                   </td>
-                  <td className="px-2 py-1 text-sm text-gray-700 dark:text-brand-100">
+                  <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 italic">
+                    {c.name}
+                  </td>
+                  <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-200">
                     ${formatPrice(c.priceUsd)}
                   </td>
                   <td
-                    className={`px-2 py-1 text-sm font-medium ${
+                    className={`px-4 py-2 text-sm font-medium ${
                       positive ? "text-green-600" : "text-red-600"
                     }`}
                   >
                     {formatValue(c.changePercent24Hr)}%
-                    {" "}{positive ? "↑" : "↓"}
+                    {positive ? " ↑" : " ↓"}
                   </td>
                 </tr>
               );
@@ -142,26 +200,26 @@ export default function TopGainersLosers() {
   );
 
   return (
-    <div className="bg-white dark:bg-brand-900 min-h-screen py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-3xl font-bold text-gray-900 dark:text-brand-100 text-center mb-6">
+    <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto">
+        <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 text-center mb-6">
           Crypto Market Movers
         </h2>
 
-        <Table title="Top 15 Gainers" rows={topGainers} />
-        <Table title="Top 15 Losers" rows={topLosers} />
+        <Table title="Top 15 Gainers (of Top 200)" rows={topGainers} />
+        <Table title="Top 15 Losers (of Top 200)" rows={topLosers} />
 
         <AnimatePresence>
           {selectedAsset && (
             <motion.div
-              className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedAsset(null)}
             >
               <motion.div
-                className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full max-w-md p-6 overflow-auto"
+                className="relative bg-white dark:bg-brand-900 rounded-lg shadow-lg w-full max-w-md p-6 overflow-auto"
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 20, opacity: 0 }}
@@ -170,61 +228,68 @@ export default function TopGainersLosers() {
               >
                 {/* Close */}
                 <button
-                  className="absolute top-4 right-4 text-indigo-500 hover:text-indigo-700 text-xl"
+                  className="absolute top-4 right-4 text-indigo-600 hover:text-indigo-800 text-2xl"
                   onClick={() => setSelectedAsset(null)}
                 >
-                  ✕
+                  ×
                 </button>
 
                 {/* Header */}
-                <h3 className="text-2xl font-bold mb-1 text-gray-900 dark:text-brand-100">
+                <h3 className="text-2xl font-bold mb-1 text-gray-900 dark:text-gray-100">
                   {selectedAsset.name}
                 </h3>
-                <p className="text-indigo-500 mb-4">
-                  #{selectedAsset.rank} • {selectedAsset.symbol.toUpperCase()}
+                <p className="text-indigo-600 mb-4">
+                  #{selectedAsset.rank} &bull; {selectedAsset.symbol}
                 </p>
 
-                {/* Metric grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                {/* 24h Chart */}
+                <div className="w-full h-48 mb-4">
+                  <canvas ref={canvasRef} className="w-full h-full" />
+                </div>
+
+                {/* Metrics grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <Metric
-                    icon={<FaDollarSign className="text-indigo-500" />}
+                    icon={<FaDollarSign className="text-indigo-600" />}
                     label="Price"
                     value={`$${formatPrice(selectedAsset.priceUsd)}`}
                     valueColor={
                       parseFloat(selectedAsset.changePercent24Hr) >= 0
-                        ? "text-green-500"
-                        : "text-red-500"
+                        ? "text-green-600"
+                        : "text-red-600"
                     }
                   />
                   <Metric
-                    icon={<FaChartLine className="text-indigo-500" />}
+                    icon={<FaChartLine className="text-indigo-600" />}
                     label="24h Change"
                     value={`${formatValue(
                       selectedAsset.changePercent24Hr
                     )}%`}
                     valueColor={
                       parseFloat(selectedAsset.changePercent24Hr) >= 0
-                        ? "text-green-500"
-                        : "text-red-500"
+                        ? "text-green-600"
+                        : "text-red-600"
                     }
                   />
                   <Metric
-                    icon={<FaChartPie className="text-indigo-500" />}
+                    icon={<FaChartPie className="text-indigo-600" />}
                     label="Market Cap"
                     value={`$${formatValue(selectedAsset.marketCapUsd)}`}
                   />
                   <Metric
-                    icon={<FaCoins className="text-indigo-500" />}
+                    icon={<FaCoins className="text-indigo-600" />}
                     label="Volume (24h)"
-                    value={`$${formatValue(selectedAsset.volumeUsd24Hr)}`}
+                    value={`$${formatValue(
+                      selectedAsset.volumeUsd24Hr
+                    )}`}
                   />
                   <Metric
-                    icon={<FaDatabase className="text-indigo-500" />}
+                    icon={<FaDatabase className="text-indigo-600" />}
                     label="Supply"
                     value={formatValue(selectedAsset.supply)}
                   />
                   <Metric
-                    icon={<FaWarehouse className="text-indigo-500" />}
+                    icon={<FaWarehouse className="text-indigo-600" />}
                     label="Max Supply"
                     value={
                       selectedAsset.maxSupply
@@ -233,7 +298,7 @@ export default function TopGainersLosers() {
                     }
                   />
                   <Metric
-                    icon={<FaGlobeAmericas className="text-indigo-500" />}
+                    icon={<FaGlobeAmericas className="text-indigo-600" />}
                     label="VWAP (24h)"
                     value={
                       selectedAsset.vwap24Hr
@@ -245,14 +310,16 @@ export default function TopGainersLosers() {
 
                 {/* Explorer link */}
                 {selectedAsset.explorer && (
-                  <div className="mt-4 text-center text-sm">
+                  <div className="mt-6 text-center text-sm">
                     <a
                       href={selectedAsset.explorer}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 text-indigo-600 hover:underline"
                     >
-                      <FaLink /> {new URL(selectedAsset.explorer).hostname.replace(/^www\./, "")}
+                      <FaLink />{" "}
+                      {new URL(selectedAsset.explorer)
+                        .hostname.replace(/^www\./, "")}
                     </a>
                   </div>
                 )}

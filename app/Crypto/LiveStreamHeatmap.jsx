@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Chart } from "chart.js/auto";
+import "chartjs-adapter-date-fns";
 import {
   FaDollarSign,
   FaChartLine,
@@ -28,6 +30,10 @@ export default function LiveStreamHeatmap() {
   const [loading, setLoading] = useState(true);
   const [wsAvailable, setWsAvailable] = useState(true);
   const socketRef = useRef(null);
+
+  // Chart.js refs for the popup
+  const canvasRef = useRef(null);
+  const chartInstanceRef = useRef(null);
 
   // Formatters
   const currencyFmt = new Intl.NumberFormat("en-US", {
@@ -150,6 +156,56 @@ export default function LiveStreamHeatmap() {
     });
   }, [tradeInfoMap, metaData]);
 
+  // 5) Fetch and draw 24h chart when popup opens
+  useEffect(() => {
+    if (!selectedAsset) return;
+    const drawChart = async () => {
+      chartInstanceRef.current?.destroy();
+      const end = Date.now();
+      const start = end - 24 * 60 * 60 * 1000;
+      const res = await fetch(
+        `https://rest.coincap.io/v3/assets/${selectedAsset.id}/history?interval=m1&start=${start}&end=${end}&apiKey=${API_KEY}`
+      );
+      const json = await res.json();
+      const data = (json.data || []).map((e) => ({
+        x: new Date(e.time),
+        y: parseFloat(e.priceUsd),
+      }));
+      const ctx = canvasRef.current.getContext("2d");
+      chartInstanceRef.current = new Chart(ctx, {
+        type: "line",
+        data: {
+          datasets: [
+            {
+              label: "Price (USD)",
+              data,
+              borderColor: "rgb(75,192,192)",
+              backgroundColor: "rgba(75,192,192,0.2)",
+              pointRadius: 0,
+              fill: true,
+            },
+          ],
+        },
+        options: {
+          scales: {
+            x: {
+              type: "time",
+              time: { tooltipFormat: "MMM d, HH:mm" },
+              title: { display: true, text: "Time" },
+            },
+            y: {
+              title: { display: true, text: "Price (USD)" },
+            },
+          },
+          plugins: { legend: { display: false } },
+          elements: { line: { tension: 0.3 } },
+          maintainAspectRatio: false,
+        },
+      });
+    };
+    drawChart();
+  }, [selectedAsset]);
+
   if (loading) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
@@ -218,7 +274,7 @@ export default function LiveStreamHeatmap() {
             onClick={() => setSelectedAsset(null)}
           >
             <motion.div
-              className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full max-w-md p-6 overflow-auto"
+              className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full max-w-md p-6 pb-8 overflow-auto"
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 20, opacity: 0 }}
@@ -227,31 +283,32 @@ export default function LiveStreamHeatmap() {
             >
               {/* Close button */}
               <button
-                className="absolute top-4 right-4 text-indigo-500 hover:text-indigo-700"
+                className="absolute top-4 right-4 text-indigo-500 hover:text-indigo-700 text-xl"
                 onClick={() => setSelectedAsset(null)}
               >
                 ✕
               </button>
 
-              {/* Header: full name, symbol, rank */}
+              {/* Header */}
               <h3 className="text-2xl font-bold mb-1">
                 {selectedAsset.name}
               </h3>
               <p className="text-indigo-500 mb-4">
-                {selectedAsset.symbol.toUpperCase()} &bull; Rank{" "}
+                {selectedAsset.symbol.toUpperCase()} • Rank{" "}
                 {selectedAsset.rank}
               </p>
+
+              {/* Chart */}
+              <div className="w-full h-48 mb-4">
+                <canvas ref={canvasRef} className="w-full h-full" />
+              </div>
 
               {/* Metrics grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <Metric
-                  icon={
-                    <FaDollarSign className="text-indigo-500 text-base" />
-                  }
+                  icon={<FaDollarSign className="text-indigo-500 text-base" />}
                   label="Price"
-                  value={formatUSD(
-                    tradeInfoMap[selectedAsset.id]?.price
-                  )}
+                  value={formatUSD(tradeInfoMap[selectedAsset.id]?.price)}
                   valueColor={
                     tradeInfoMap[selectedAsset.id]?.price >=
                     tradeInfoMap[selectedAsset.id]?.prev
@@ -260,9 +317,7 @@ export default function LiveStreamHeatmap() {
                   }
                 />
                 <Metric
-                  icon={
-                    <FaChartLine className="text-indigo-500 text-base" />
-                  }
+                  icon={<FaChartLine className="text-indigo-500 text-base" />}
                   label="24h Change"
                   value={formatPct(selectedAsset.changePercent24Hr)}
                   valueColor={
@@ -272,9 +327,7 @@ export default function LiveStreamHeatmap() {
                   }
                 />
                 <Metric
-                  icon={
-                    <FaChartPie className="text-indigo-500 text-base" />
-                  }
+                  icon={<FaChartPie className="text-indigo-500 text-base" />}
                   label="Market Cap"
                   value={formatCompact(
                     parseFloat(selectedAsset.marketCapUsd)
@@ -288,18 +341,12 @@ export default function LiveStreamHeatmap() {
                   )}
                 />
                 <Metric
-                  icon={
-                    <FaDatabase className="text-indigo-500 text-base" />
-                  }
+                  icon={<FaDatabase className="text-indigo-500 text-base" />}
                   label="Supply"
-                  value={formatCompact(
-                    parseFloat(selectedAsset.supply)
-                  )}
+                  value={formatCompact(parseFloat(selectedAsset.supply))}
                 />
                 <Metric
-                  icon={
-                    <FaWarehouse className="text-indigo-500 text-base" />
-                  }
+                  icon={<FaWarehouse className="text-indigo-500 text-base" />}
                   label="Max Supply"
                   value={formatCompact(
                     parseFloat(selectedAsset.maxSupply || 0)
@@ -312,7 +359,7 @@ export default function LiveStreamHeatmap() {
                   label="VWAP (24h)"
                   value={
                     selectedAsset.vwap24Hr
-                      ? parseFloat(selectedAsset.vwap24Hr).toFixed(2)
+                      ? formatUSD(parseFloat(selectedAsset.vwap24Hr))
                       : "N/A"
                   }
                 />
