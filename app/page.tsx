@@ -61,11 +61,17 @@ export default function AboutPage() {
                     Short Bio
                   </h2>
                   <p>
-                    A developer who’s been building web apps for the past 10 years. I spent years at S&P Global as a Senior Software Engineer, and now I’m focused on U-Mail and ApplyPro, tools that help people write better and apply smarter.
+                    I’m a full-stack developer with a decade of experience delivering production grade web applications. After refining large scale platforms at S&amp;P Global, my current responsibilities include keeping banking software dependable as a Level&nbsp;2 Engineer at Data Center Inc. (DCI), expanding UMail with privacy-first features, and managing ApplyPro, a platform that helps users strengthen resumes and cover letters.
                   </p>
+
                   <p>
-                    I like simple solutions, privacy-first design, and software that just works. Whether it’s refining user experiences or solving tricky problems, I build with efficiency and usability in mind. Need a developer who gets things done? Let’s talk.
+                    Within UMail, I’m rolling out custom editions tailored to our clients needs, adding tools such as quick tone adjustments, one-click translations, and considerate auto-replies features designed to save time without compromising privacy.
                   </p>
+
+                  <p>
+                  I build lean, privacy tight software that just works. From polishing the user flow to crushing the hard bugs, I move fast and finish strong. Need results, not excuses? Let’s talk.
+                  </p>
+
                   <StockWidget />
                   <div className="p-2">
                     <p className="text-xs text-gray-500 text-center">

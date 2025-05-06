@@ -84,40 +84,39 @@ export default function LiveStreamHeatmap() {
   // 2) WebSocket live updates
   useEffect(() => {
     if (!API_KEY || !Object.keys(metaData).length || !wsAvailable) return;
-    const t = setTimeout(() => {
-      const ws = new WebSocket(
-        `wss://wss.coincap.io/prices?assets=ALL&apiKey=${API_KEY}`
-      );
-      socketRef.current = ws;
-      ws.onmessage = (e) => {
-        if (
-          typeof e.data === "string" &&
-          e.data.startsWith("Unauthorized")
-        ) {
-          setWsAvailable(false);
-          ws.close();
-          setLoading(false);
-          return;
-        }
-        let up;
-        try {
-          up = JSON.parse(e.data);
-        } catch {
-          return;
-        }
-        setTradeInfoMap((prev) => {
-          const nxt = { ...prev };
-          Object.entries(up).forEach(([id, ps]) => {
-            const p = parseFloat(ps);
-            nxt[id] = { price: p, prev: prev[id]?.price };
-          });
-          return nxt;
-        });
+    
+    const ws = new WebSocket(
+      `wss://wss.coincap.io/prices?assets=ALL&apiKey=${API_KEY}`
+    );
+    socketRef.current = ws;
+    ws.onmessage = (e) => {
+      if (
+        typeof e.data === "string" &&
+        e.data.startsWith("Unauthorized")
+      ) {
+        setWsAvailable(false);
+        ws.close();
         setLoading(false);
-      };
-    }, 2000);
+        return;
+      }
+      let up;
+      try {
+        up = JSON.parse(e.data);
+      } catch {
+        return;
+      }
+      setTradeInfoMap((prev) => {
+        const nxt = { ...prev };
+        Object.entries(up).forEach(([id, ps]) => {
+          const p = parseFloat(ps);
+          nxt[id] = { price: p, prev: prev[id]?.price };
+        });
+        return nxt;
+      });
+      setLoading(false);
+    };
+
     return () => {
-      clearTimeout(t);
       socketRef.current?.close();
     };
   }, [metaData, wsAvailable]);
