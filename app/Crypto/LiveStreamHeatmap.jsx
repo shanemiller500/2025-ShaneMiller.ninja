@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Chart } from "chart.js/auto";
 import "chartjs-adapter-date-fns";
@@ -84,16 +84,13 @@ export default function LiveStreamHeatmap() {
   // 2) WebSocket live updates
   useEffect(() => {
     if (!API_KEY || !Object.keys(metaData).length || !wsAvailable) return;
-    
+
     const ws = new WebSocket(
       `wss://wss.coincap.io/prices?assets=ALL&apiKey=${API_KEY}`
     );
     socketRef.current = ws;
     ws.onmessage = (e) => {
-      if (
-        typeof e.data === "string" &&
-        e.data.startsWith("Unauthorized")
-      ) {
+      if (typeof e.data === "string" && e.data.startsWith("Unauthorized")) {
         setWsAvailable(false);
         ws.close();
         setLoading(false);
@@ -205,6 +202,31 @@ export default function LiveStreamHeatmap() {
     drawChart();
   }, [selectedAsset]);
 
+  /* ------------------------------------------------------------------ */
+  /*                    Mixpanel popup open/close tracking               */
+  /* ------------------------------------------------------------------ */
+
+  // Track popup open
+  useEffect(() => {
+    if (selectedAsset) {
+      trackEvent("CryptoAssetPopupOpen", {
+        id: selectedAsset.id,
+        name: selectedAsset.name,
+        symbol: selectedAsset.symbol,
+        rank: selectedAsset.rank,
+      });
+    }
+  }, [selectedAsset]);
+
+  // Single handler so close actions all track the same event
+  const handleClosePopup = useCallback(() => {
+    if (selectedAsset) {
+      trackEvent("CryptoAssetPopupClose", { id: selectedAsset.id });
+    }
+    setSelectedAsset(null);
+  }, [selectedAsset]);
+  /* ------------------------------------------------------------------ */
+
   if (loading) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
@@ -270,7 +292,7 @@ export default function LiveStreamHeatmap() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setSelectedAsset(null)}
+            onClick={handleClosePopup}
           >
             <motion.div
               className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full max-w-md p-6 pb-8 overflow-auto"
@@ -283,7 +305,7 @@ export default function LiveStreamHeatmap() {
               {/* Close button */}
               <button
                 className="absolute top-4 right-4 text-indigo-500 hover:text-indigo-700 text-xl"
-                onClick={() => setSelectedAsset(null)}
+                onClick={handleClosePopup}
               >
                 ✕
               </button>

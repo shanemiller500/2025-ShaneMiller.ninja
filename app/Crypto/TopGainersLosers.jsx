@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaDollarSign,
@@ -14,6 +19,7 @@ import {
 } from "react-icons/fa";
 import { Chart } from "chart.js/auto";
 import "chartjs-adapter-date-fns";
+import { trackEvent } from "@/utils/mixpanel";  
 
 // Helper to format numbers
 function formatValue(value) {
@@ -122,9 +128,34 @@ export default function TopGainersLosers() {
     drawChart();
   }, [selectedAsset]);
 
+  /* ------------------------------------------------------------------ */
+  /*                    Mixpanel popup open/close tracking               */
+  /* ------------------------------------------------------------------ */
+
+  // Track popup open
+  useEffect(() => {
+    if (selectedAsset) {
+      trackEvent("CryptoAssetPopupOpen", {
+        id: selectedAsset.id,
+        name: selectedAsset.name,
+        symbol: selectedAsset.symbol,
+        rank: selectedAsset.rank,
+      });
+    }
+  }, [selectedAsset]);
+
+  // Unified close handler so all closes track
+  const handleClosePopup = useCallback(() => {
+    if (selectedAsset) {
+      trackEvent("CryptoAssetPopupClose", { id: selectedAsset.id });
+    }
+    setSelectedAsset(null);
+  }, [selectedAsset]);
+  /* ------------------------------------------------------------------ */
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-brand-900">
         <p className="text-gray-500 dark:text-gray-400">Loading crypto data…</p>
       </div>
     );
@@ -167,8 +198,11 @@ export default function TopGainersLosers() {
               return (
                 <tr
                   key={c.id}
-                  className="hover:bg-gray-50 hover:bg-indigo-500 transition-colors cursor-pointer"
-                  onClick={() => setSelectedAsset(c)}
+                  className="hover:bg-gray-50 dark:hover:bg-indigo-500 transition-colors cursor-pointer"
+                  onClick={() => {
+                    setSelectedAsset(c);
+                    trackEvent("CryptoAssetClick", { id: c.id, ...c });
+                  }}
                 >
                   <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-200">
                     {c.rank}
@@ -216,7 +250,7 @@ export default function TopGainersLosers() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setSelectedAsset(null)}
+              onClick={handleClosePopup}
             >
               <motion.div
                 className="relative bg-white dark:bg-brand-900 rounded-lg shadow-lg w-full max-w-md p-6 overflow-auto"
@@ -229,7 +263,7 @@ export default function TopGainersLosers() {
                 {/* Close */}
                 <button
                   className="absolute top-4 right-4 text-indigo-600 hover:text-indigo-800 text-2xl"
-                  onClick={() => setSelectedAsset(null)}
+                  onClick={handleClosePopup}
                 >
                   ×
                 </button>

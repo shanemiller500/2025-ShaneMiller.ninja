@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import CountrySearch from "./CountrySearch"; // Adjust the path if needed
+import CountrySearch from "./CountrySearch"; 
 import { trackEvent } from '@/utils/mixpanel';
 
 const CountrySearchPage = () => {

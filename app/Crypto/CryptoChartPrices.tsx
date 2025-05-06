@@ -9,6 +9,7 @@ import React, {
 import { Chart, ChartTypeRegistry } from "chart.js/auto";
 import "chartjs-adapter-date-fns";
 import zoomPlugin from "chartjs-plugin-zoom";
+import { trackEvent } from "@/utils/mixpanel"; 
 Chart.register(zoomPlugin);
 
 interface HistoryEntry {
@@ -126,6 +127,7 @@ const CryptoChartPrices: React.FC = () => {
     const details = await fetchCryptoDetails(assetId);
     setCryptoDetails(details);
     setLoadingChart(false);
+    trackEvent("CryptoChartLoaded", { id: assetId, timeFrame }); 
   }
 
   // When asset or timeframe changes
@@ -224,7 +226,8 @@ const CryptoChartPrices: React.FC = () => {
       onClick: (_: MouseEvent, items: any[]) => {
         if (!items.length) return;
         const { datasetIndex, index } = items[0];
-        const pt = cfgData.datasets[datasetIndex].data[index];
+        const pt = cfgData.datasets[datasetIndex].data[index] as any;
+        trackEvent("CryptoChartPointClick", { id: assetId, value: pt.y, time: pt.x }); 
         alert(`Value: ${pt.y}\nTime: ${pt.x}`);
       },
     };
@@ -235,7 +238,7 @@ const CryptoChartPrices: React.FC = () => {
         datasets: cfgData.datasets.map(dataset => ({
           ...dataset,
           data: dataset.data.map(pt => ({
-            x: pt.x.getTime(),
+            x: (pt as any).x.getTime(),
             y: pt.y,
             r: (pt as any).r
           }))
@@ -257,8 +260,10 @@ const CryptoChartPrices: React.FC = () => {
     if (id) {
       setError(null);
       setAssetId(id);
+      trackEvent("CryptoChartSearch", { query: query.trim(), id });
     } else {
       setError("Asset not found. Try BTC, ETH, etc.");
+      trackEvent("CryptoChartSearchFail", { query: query.trim() }); 
     }
   };
 
@@ -283,7 +288,10 @@ const CryptoChartPrices: React.FC = () => {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <button className="bg-indigo-600 text-white px-4 py-2 rounded">
+        <button
+          className="bg-indigo-600 text-white px-4 py-2 rounded"
+          onClick={() => trackEvent("CryptoChartSearchBtnClick")}
+        >
           Search
         </button>
       </form>
@@ -294,7 +302,10 @@ const CryptoChartPrices: React.FC = () => {
           <select
             className="border p-1 rounded dark:bg-brand-900"
             value={chartType}
-            onChange={(e) => setChartType(e.target.value)}
+            onChange={(e) => {
+              setChartType(e.target.value);
+              trackEvent("CryptoChartTypeChange", { chartType: e.target.value });
+            }}
           >
             <option value="line">Line</option>
             <option value="bar">Bar</option>
@@ -307,13 +318,14 @@ const CryptoChartPrices: React.FC = () => {
           </select>
         </div>
         <div>
-          <label className="mr-2 " >Time:</label>
+          <label className="mr-2 ">Time:</label>
           <select
             className="border p-1 rounded dark:bg-brand-900"
             value={timeFrame}
-            onChange={(e) =>
-              setTimeFrame(e.target.value as TimeFrameOption)
-            }
+            onChange={(e) => {
+              setTimeFrame(e.target.value as TimeFrameOption);
+              trackEvent("CryptoTimeFrameChange", { timeFrame: e.target.value }); 
+            }}
           >
             <option value="1h">1h</option>
             <option value="24h">24h</option>
@@ -343,7 +355,10 @@ const CryptoChartPrices: React.FC = () => {
         chartData.length > 0 && (
           <div className="text-center mb-6">
             <button
-              onClick={() => (chartRef.current as any)?.resetZoom()}
+              onClick={() => {
+                (chartRef.current as any)?.resetZoom();
+                trackEvent("CryptoChartResetZoom", { id: assetId }); 
+              }}
               className="px-4 py-2 bg-indigo-600 text-white rounded"
             >
               Reset Zoom
@@ -429,6 +444,7 @@ const CryptoChartPrices: React.FC = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-indigo-600 hover:underline"
+                onClick={() => trackEvent("CryptoExplorerClick", { id: assetId })} 
               >
                 View Explorer
               </a>
