@@ -218,7 +218,7 @@ export default function TopGainersLosers() {
           }}
         >
           <div className="flex items-center gap-1">
-            <span className="text-[9px] sm:text-xs bg-black/40 dark:text-brand-900 px-1 rounded">
+            <span className="text-[9px] sm:text-xs bg-black/40 px-1 rounded">
               #{c.rank}
             </span>
             <span className="font-bold text-sm sm:text-lg">{c.symbol}</span>
