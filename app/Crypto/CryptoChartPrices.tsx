@@ -345,7 +345,7 @@ const CryptoChartPrices: React.FC = () => {
       <div className="relative w-full h-64 sm:h-80 md:h-96 mb-6">
         <canvas ref={canvasRef} className="w-full h-full" />
         {loadingChart && (
-          <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center">
+          <div className="absolute inset-0  bg-opacity-75 flex items-center justify-center">
             Loading…
           </div>
         )}

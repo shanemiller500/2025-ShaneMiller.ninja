@@ -175,8 +175,8 @@ export default function LiveStreamHeatmap() {
             {
               label: "Price (USD)",
               data,
-              borderColor: "rgb(75,192,192)",
-              backgroundColor: "rgba(75,192,192,0.2)",
+              borderColor: "rgb(132, 226, 255)",
+              backgroundColor: "rgba(84, 75, 255, 0.62)",
               pointRadius: 0,
               fill: true,
             },
