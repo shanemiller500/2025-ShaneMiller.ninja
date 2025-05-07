@@ -81,6 +81,8 @@ export default function LiveStreamHeatmap() {
   const [wsClosed, setWsClosed] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [logos, setLogos] = useState<Record<string, string>>({}); // symbol → img
+  const [cgInfo, setCgInfo] = useState<Record<string, { high:number; low:number }>>({});
+
 
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -95,10 +97,15 @@ export default function LiveStreamHeatmap() {
         const res = await fetch(COINGECKO_TOP200);
         const json = await res.json();
         const map: Record<string, string> = {};
+        const inf: Record<string,{high:number;low:number}> = {};
+
         json.forEach((c: any) => {
+          const k = c.symbol.toLowerCase();
           map[c.symbol.toLowerCase()] = c.image;
+          inf[k]  = { high: c.high_24h, low: c.low_24h };
         });
         setLogos(map);
+        setCgInfo(inf);
       } catch {
         /* ignore */
       }
@@ -281,13 +288,13 @@ export default function LiveStreamHeatmap() {
       const pos = price != null && prev != null && price > prev;
       const neg = price != null && prev != null && price < prev;
       const bgRow =
-        pos ? "bg-green-500" : neg ? "bg-red-500" : "bg-white dark:bg-brand-900";
+        pos ? "bg-green-500" : neg ? "bg-red-500" : "bg-white dark:bg-gray-400";
       const logo = logos[md.symbol?.toLowerCase()];
 
       return (
         <tr
           key={id}
-          className={`transition-colors duration-500 ${bgRow} hover:bg-gray-50 dark:hover:bg-brand-900/10 cursor-pointer`}
+          className={` ${bgRow} hover:bg-gray-50 hover:text-brand-900 dark:hover:text-gray-50 dark:hover:bg-gray-600 cursor-pointer text-white shadow-[0_0_2px_white] dark:text-brand-900`}
           onClick={() => {
             setSelectedAsset(md);
             trackEvent("CryptoAssetClick", { id });
@@ -316,7 +323,7 @@ export default function LiveStreamHeatmap() {
             {formatUSD(price)}
           </td>
           <td
-            className={`px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm ${
+            className={`px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm  ${
               pos ? "text-green-700" : "text-red-700"
             }`}
           >
@@ -364,7 +371,7 @@ export default function LiveStreamHeatmap() {
 
         {/* grid / table */}
         {viewMode === "grid" ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 lg:grid-cols-5 xl:grid-cols-6">
             {sortedIds.map((id) => {
               const { price, prev } = tradeInfoMap[id] || {};
               const md = metaData[id] || {};
@@ -513,6 +520,19 @@ export default function LiveStreamHeatmap() {
                         : "text-red-500"
                     }
                   />
+ <Metric
+                      icon={<FaChartLine className="text-green-600"/>}
+                      label="High 24 h"
+                      value={formatUSD(cgInfo[selectedAsset.symbol.toLowerCase()].high)}
+                      valueColor="text-green-600"
+                    />
+                    <Metric
+                      icon={<FaChartLine className="text-red-600 rotate-180"/>}
+                      label="Low 24 h"
+                      value={formatUSD(cgInfo[selectedAsset.symbol.toLowerCase()].low)}
+                      valueColor="text-red-600"
+                    />
+                  
                   <Metric
                     icon={<FaChartPie className="text-indigo-500" />}
                     label="Market Cap"
@@ -533,15 +553,7 @@ export default function LiveStreamHeatmap() {
                     label="Max Supply"
                     value={formatCompact(+selectedAsset.maxSupply || 0)}
                   />
-                  <Metric
-                    icon={<FaGlobeAmericas className="text-indigo-500" />}
-                    label="VWAP (24 h)"
-                    value={
-                      selectedAsset.vwap24Hr
-                        ? formatUSD(+selectedAsset.vwap24Hr)
-                        : "N/A"
-                    }
-                  />
+                  
                 </div>
 
                 {/* explorer */}
