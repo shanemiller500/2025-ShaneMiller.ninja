@@ -35,11 +35,15 @@ const formatValue = (v: any) => {
         minimumFractionDigits: 2,
       });
 };
-const formatPrice = (v: any) => {
+
+const currencyFmt = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
+const formatUSD = (v: any) => {
   const n = parseFloat(v);
-  if (isNaN(n)) return "N/A";
-  if (n > 0 && n < 0.01) return n.toString();
-  return formatValue(v);
+  return isNaN(n) ? "—" : currencyFmt.format(n);
 };
 
 /* ---------- API constants ---------- */
@@ -224,7 +228,7 @@ export default function TopGainersLosers() {
             {c.name}
           </td>
           <td className="px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm">
-            ${formatPrice(c.priceUsd)}
+            {formatUSD(c.priceUsd)}
           </td>
           <td
             className={`px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm ${
@@ -276,7 +280,7 @@ export default function TopGainersLosers() {
             <span className="font-bold text-sm sm:text-lg">{c.symbol}</span>
           </div>
           <div className="mt-0.5 text-[11px] sm:text-sm">
-            ${formatPrice(c.priceUsd)}
+            {formatUSD(c.priceUsd)}
           </div>
           <div className="text-[9px] sm:text-xs opacity-80">
             {formatValue(change)}%
@@ -374,14 +378,14 @@ export default function TopGainersLosers() {
         <AnimatePresence>
           {selectedAsset && (
             <motion.div
-              className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3"
+              className="fixed inset-0 bg-black/60 flex items-start sm:items-center justify-center z-50 p-3 overflow-y-auto"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={closePopup}
             >
               <motion.div
-                className="relative bg-white dark:bg-brand-900 rounded-lg shadow-lg w-full max-w-sm sm:max-w-md px-4 py-5 sm:p-6 overflow-y-auto max-h-[90vh]"
+                className="relative bg-white dark:bg-brand-900 rounded-lg shadow-lg w-full max-w-sm sm:max-w-md h-full sm:h-auto max-h-[90vh] overflow-y-auto px-4 py-5 sm:p-6"
                 initial={{ y: 32, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 32, opacity: 0 }}
@@ -425,7 +429,7 @@ export default function TopGainersLosers() {
                   <Metric
                     icon={<FaDollarSign className="text-indigo-600" />}
                     label="Price"
-                    value={`$${formatPrice(selectedAsset.priceUsd)}`}
+                    value={formatUSD(selectedAsset.priceUsd)}
                     color={
                       parseFloat(selectedAsset.changePercent24Hr) >= 0
                         ? "text-green-600"
@@ -445,12 +449,12 @@ export default function TopGainersLosers() {
                   <Metric
                     icon={<FaChartPie className="text-indigo-600" />}
                     label="Market Cap"
-                    value={`$${formatValue(selectedAsset.marketCapUsd)}`}
+                    value={formatUSD(selectedAsset.marketCapUsd)}
                   />
                   <Metric
                     icon={<FaCoins className="text-indigo-600" />}
                     label="Volume (24h)"
-                    value={`$${formatValue(selectedAsset.volumeUsd24Hr)}`}
+                    value={formatUSD(selectedAsset.volumeUsd24Hr)}
                   />
                   <Metric
                     icon={<FaDatabase className="text-indigo-600" />}
@@ -463,7 +467,7 @@ export default function TopGainersLosers() {
                     value={
                       selectedAsset.maxSupply
                         ? formatValue(selectedAsset.maxSupply)
-                        : "N/A"
+                        : "—"
                     }
                   />
                   <Metric
@@ -472,7 +476,7 @@ export default function TopGainersLosers() {
                     value={
                       selectedAsset.vwap24Hr
                         ? formatValue(selectedAsset.vwap24Hr)
-                        : "N/A"
+                        : "—"
                     }
                   />
                 </div>
@@ -487,7 +491,10 @@ export default function TopGainersLosers() {
                       className="inline-flex items-center gap-2 text-indigo-600 hover:underline"
                     >
                       <FaLink />
-                      {new URL(selectedAsset.explorer).hostname.replace(/^www\./, "")}
+                      {new URL(selectedAsset.explorer).hostname.replace(
+                        /^www\./,
+                        ""
+                      )}
                     </a>
                   </div>
                 )}

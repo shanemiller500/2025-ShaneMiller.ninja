@@ -10,6 +10,8 @@ import {
   FaGrinStars,
   FaTimesCircle,
   FaCalendarAlt,
+  FaBars,
+  FaTimes,
 } from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
 
@@ -17,8 +19,8 @@ import { trackEvent } from "@/utils/mixpanel";
 type MoodInfo = {
   label: string;
   icon: typeof FaSmile;
-  color: string;          
-  bg: string;             
+  color: string;
+  bg: string;
   copy: string[];
 };
 
@@ -36,7 +38,6 @@ const moodMap = (v: number | null): MoodInfo => {
         "No reading at the moment; stay tuned for updates.",
       ],
     };
-
   if (v >= 75)
     return {
       label: "Extreme Greed",
@@ -50,7 +51,6 @@ const moodMap = (v: number | null): MoodInfo => {
         "Green lights everywhere—review your risk management.",
       ],
     };
-
   if (v >= 51)
     return {
       label: "Greed",
@@ -64,7 +64,6 @@ const moodMap = (v: number | null): MoodInfo => {
         "Mood is upbeat; stick to your trading plan.",
       ],
     };
-
   if (v >= 25)
     return {
       label: "Fear",
@@ -78,7 +77,6 @@ const moodMap = (v: number | null): MoodInfo => {
         "Swings feel larger now—keep emotions in check.",
       ],
     };
-
   return {
     label: "Extreme Fear",
     icon: FaAngry,
@@ -93,7 +91,7 @@ const moodMap = (v: number | null): MoodInfo => {
   };
 };
 
-/* ---------- gauge + popup ---------- */
+/* ---------- popup data ---------- */
 interface PopupData {
   title: string;
   score: number | null;
@@ -106,6 +104,7 @@ interface PopupData {
   end: string;
 }
 
+/* ---------- Gauge component ---------- */
 const Gauge = ({
   title,
   score,
@@ -115,9 +114,9 @@ const Gauge = ({
   score: number | null;
   open: (d: PopupData) => void;
 }) => {
-  const mood   = moodMap(score);
-  const pct    = score ?? 50;
-  const ring   = `conic-gradient(currentColor ${pct * 3.6}deg,#e5e7eb ${pct * 3.6}deg)`;
+  const mood = moodMap(score);
+  const pct = score ?? 50;
+  const ring = `conic-gradient(currentColor ${pct * 3.6}deg,#e5e7eb ${pct * 3.6}deg)`;
   const phrase = mood.copy[Math.floor(Math.random() * mood.copy.length)];
 
   const handle = () => {
@@ -127,8 +126,8 @@ const Gauge = ({
       label: mood.label,
       phrase,
       color: mood.color,
-      bg:    mood.bg,
-      icon:  mood.icon,
+      bg: mood.bg,
+      icon: mood.icon,
       start: "",
       end: "",
     });
@@ -136,44 +135,50 @@ const Gauge = ({
   };
 
   return (
-    <button
-      className={`flex flex-col items-center gap-2 p-4 max-w-xs transition-transform hover:scale-105 ${mood.color}`}
+    <div
       onClick={handle}
+      className={`cursor-pointer flex flex-col items-center gap-2 p-3 sm:p-4 transition-transform hover:scale-105 ${mood.color}`}
     >
-      <h4 className="font-semibold">{title}</h4>
+      <h4 className="font-semibold text-xs sm:text-sm">{title}</h4>
       <div
-        className="w-28 h-28 rounded-full flex items-center justify-center"
+        className="w-20 h-20 sm:w-28 sm:h-28 rounded-full flex items-center justify-center"
         style={{ backgroundImage: ring }}
       >
-        <div className="w-20 h-20 bg-white dark:bg-brand-900 rounded-full flex flex-col items-center justify-center">
-          <span className="text-2xl font-bold">{score ?? "--"}</span>
-          <span className="text-[10px]">{mood.label}</span>
+        <div className="w-14 h-14 sm:w-20 sm:h-20 bg-white dark:bg-gray-900 rounded-full flex flex-col items-center justify-center">
+          <span className="text-lg sm:text-2xl font-bold">
+            {score ?? "--"}
+          </span>
+          <span className="text-[9px] sm:text-[10px]">{mood.label}</span>
         </div>
       </div>
-      <mood.icon className="text-lg" />
-    </button>
+      <mood.icon className="text-base sm:text-lg" />
+    </div>
   );
 };
 
-const FearGreedIndexes = () => {
-  const [today, setToday]   = useState<number | null>(null);
-  const [week,  setWeek]    = useState<number | null>(null);
-  const [ytd,   setYtd]     = useState<number | null>(null);
-  const [year,  setYear]    = useState<number | null>(null);
-  const [popup, setPopup]   = useState<PopupData | null>(null);
+/* ---------- Main component ---------- */
+export default function FearGreedIndexes() {
+  const [today, setToday] = useState<number | null>(null);
+  const [week, setWeek] = useState<number | null>(null);
+  const [ytd, setYtd] = useState<number | null>(null);
+  const [year, setYear] = useState<number | null>(null);
+  const [popup, setPopup] = useState<PopupData | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  /* fetch */
+  /* fetch data */
   useEffect(() => {
     (async () => {
       try {
-        const now   = new Date();
-        const url   = `https://api.alternative.me/fng/?limit=400&format=json`;
-        const json  = await fetch(url).then(r => r.json());
-        type Row    = { value: string; timestamp: string };
+        const now = new Date();
+        const json = await fetch(
+          "https://api.alternative.me/fng/?limit=400&format=json"
+        ).then((r) => r.json());
+
+        type Row = { value: string; timestamp: string };
         const rows: Row[] = Array.isArray(json?.data) ? json.data : [];
         if (!rows.length) return;
 
-        const toNum  = (r: Row) => parseInt(r.value ?? "0", 10);
+        const toNum = (r: Row) => parseInt(r.value ?? "0", 10);
         const toDate = (ts: string) =>
           new Date(parseInt(ts, 10) * 1000).toLocaleDateString(undefined, {
             year: "numeric",
@@ -181,70 +186,114 @@ const FearGreedIndexes = () => {
             day: "numeric",
           });
 
-        /* Today */
         setToday(toNum(rows[0]));
 
-        /* Week average (yesterday-6) */
         const weekRows = rows.slice(1, 8);
         if (weekRows.length)
           setWeek(
-            Math.round(weekRows.map(toNum).reduce((s, v) => s + v, 0) / weekRows.length)
+            Math.round(
+              weekRows.map(toNum).reduce((s, v) => s + v, 0) / weekRows.length
+            )
           );
 
-        /* YTD average */
         const jan1 = new Date(now.getFullYear(), 0, 1).getTime() / 1000;
-        const ytdRows = rows.filter(r => parseInt(r.timestamp, 10) >= jan1);
+        const ytdRows = rows.filter((r) => parseInt(r.timestamp, 10) >= jan1);
         if (ytdRows.length)
           setYtd(
-            Math.round(ytdRows.map(toNum).reduce((s, v) => s + v, 0) / ytdRows.length)
+            Math.round(
+              ytdRows.map(toNum).reduce((s, v) => s + v, 0) / ytdRows.length
+            )
           );
 
-        /* 12-month average (last 365 values or all available) */
         const yearRows = rows.slice(0, 365);
         setYear(
-          Math.round(yearRows.map(toNum).reduce((s, v) => s + v, 0) / yearRows.length)
+          Math.round(
+            yearRows.map(toNum).reduce((s, v) => s + v, 0) / yearRows.length
+          )
         );
 
-        /* date helpers for popup */
-        const dateToday  = toDate(rows[0].timestamp);
-        const dateYest   = rows[1] ? toDate(rows[1].timestamp) : dateToday;
-        const dateWeekSt = weekRows.length ? toDate(weekRows[weekRows.length - 1].timestamp) : dateYest;
-        const dateYearSt = yearRows.length ? toDate(yearRows[yearRows.length - 1].timestamp) : dateToday;
-        const dateYTDSt  = new Date(now.getFullYear(), 0, 1).toLocaleDateString(undefined, {
-          year: "numeric", month: "short", day: "numeric",
+        const dateToday = toDate(rows[0].timestamp);
+        const dateYest = rows[1] ? toDate(rows[1].timestamp) : dateToday;
+        const dateWeekSt = weekRows.length
+          ? toDate(weekRows[weekRows.length - 1].timestamp)
+          : dateYest;
+        const dateYearSt = yearRows.length
+          ? toDate(yearRows[yearRows.length - 1].timestamp)
+          : dateToday;
+        const dateYTDSt = new Date(
+          now.getFullYear(),
+          0,
+          1
+        ).toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
         });
 
-        /* attach range info */
-        const withDates = (g: string, p: PopupData): PopupData => {
-          if (g === "Today")            { p.start = dateToday;  p.end = dateToday; }
-          else if (g === "Last 7 Days") { p.start = dateWeekSt; p.end = dateYest; }
-          else if (g === "Year-to-Date"){ p.start = dateYTDSt;  p.end = dateToday; }
-          else /* 12 Months */          { p.start = dateYearSt; p.end = dateToday; }
+        const withDates = (g: string, p: PopupData) => {
+          if (g === "Today") {
+            p.start = dateToday;
+            p.end = dateToday;
+          } else if (g === "Last 7 Days") {
+            p.start = dateWeekSt;
+            p.end = dateYest;
+          } else if (g === "Year-to-Date") {
+            p.start = dateYTDSt;
+            p.end = dateToday;
+          } else {
+            p.start = dateYearSt;
+            p.end = dateToday;
+          }
           return p;
         };
-        setPopupEnhancer(() => (d: PopupData) => setPopup(withDates(d.title, d)));
+
+        setPopupEnhancer(
+          () => (d: PopupData) => setPopup(withDates(d.title, d))
+        );
       } catch (err) {
         console.error("FGI fetch error:", err);
       }
     })();
   }, []);
 
-  /* stable setter once dates are known */
-  const [popupEnhancer, setPopupEnhancer] =
-    useState<(d: PopupData) => void>(() => setPopup);
+  const [popupEnhancer, setPopupEnhancer] = useState<
+    (d: PopupData) => void
+  >(() => setPopup);
 
   const close = useCallback(() => setPopup(null), []);
 
+  const gauges = (
+    <div className="flex flex-col lg:flex-row flex-wrap justify-center gap-4 sm:gap-6">
+      <Gauge title="Today" score={today} open={popupEnhancer} />
+      <Gauge title="Last 7 Days" score={week} open={popupEnhancer} />
+      <Gauge title="Year-to-Date" score={ytd} open={popupEnhancer} />
+      <Gauge title="12 Months" score={year} open={popupEnhancer} />
+    </div>
+  );
+
   return (
     <>
-      <div className="flex flex-col lg:flex-row flex-wrap justify-center gap-6">
-        <Gauge title="Today"          score={today} open={popupEnhancer} />
-        <Gauge title="Last 7 Days"    score={week}  open={popupEnhancer} />
-        <Gauge title="Year-to-Date"   score={ytd}   open={popupEnhancer} />
-        <Gauge title="12 Months"      score={year}  open={popupEnhancer} />
+      {/* Mobile hamburger with label */}
+      <div className="sm:hidden flex items-center justify-end p-2 gap-2">
+        <span className="text-xs italic text-gray-600 dark:text-gray-400">
+          View Gauges
+        </span>
+        <button onClick={() => setMobileOpen(!mobileOpen)}>
+          {mobileOpen ? (
+            <FaTimes className="text-2xl" />
+          ) : (
+            <FaBars className="text-2xl" />
+          )}
+        </button>
       </div>
 
-      {/* ------------ Popup ------------ */}
+      {/* Mobile gauges */}
+      {mobileOpen && <div className="sm:hidden px-2">{gauges}</div>}
+
+      {/* Desktop gauges */}
+      <div className="hidden sm:block">{gauges}</div>
+
+      {/* Popup */}
       <AnimatePresence>
         {popup && (
           <motion.div
@@ -255,17 +304,15 @@ const FearGreedIndexes = () => {
             onClick={close}
           >
             <motion.div
-              className={`relative w-full max-w-md overflow-hidden rounded-xl bg-white dark:bg-brand-900 border border-gray-200 dark:border-gray-700 shadow-2xl`}
+              className="relative w-full max-w-md overflow-hidden rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xl"
               initial={{ y: 40, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 40, opacity: 0 }}
               transition={{ type: "spring", stiffness: 300, damping: 25 }}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* accent bar */}
               <div className={`h-2 w-full ${popup.bg}`} />
 
-              {/* close button */}
               <button
                 className="absolute top-3 right-4 text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors"
                 aria-label="Close"
@@ -276,26 +323,26 @@ const FearGreedIndexes = () => {
 
               <div className="px-8 py-10 text-center">
                 <popup.icon
-                  className={`mx-auto mb-5 text-5xl drop-shadow-sm ${popup.color}`}                />
-
+                  className={`mx-auto mb-5 text-5xl drop-shadow-sm ${popup.color}`}
+                />
                 <h3 className="text-2xl font-extrabold tracking-tight mb-1">
                   {popup.title}
                 </h3>
-
                 <p className="mb-4 text-lg font-medium">
-                  <span className="text-4xl font-black">{popup.score}</span>{" "}
-                  – {popup.label}
+                  <span className="text-4xl font-black">{popup.score}</span> –{" "}
+                  {popup.label}
                 </p>
-
-                <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-300 flex items-center justify-center">
+                <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-300 flex items-center justify-center flex-wrap">
                   <FaCalendarAlt className="inline mr-2" />
                   {popup.start === popup.end ? (
                     `Date: ${popup.start}`
                   ) : (
-                    <>From {popup.start} to <FaCalendarAlt className="inline mx-1" /> {popup.end}</>
+                    <>
+                      From {popup.start} to{" "}
+                      <FaCalendarAlt className="inline mx-1" /> {popup.end}
+                    </>
                   )}
                 </p>
-
                 <p className="italic text-neutral-800 dark:text-neutral-200">
                   {popup.phrase}
                 </p>
@@ -306,6 +353,4 @@ const FearGreedIndexes = () => {
       </AnimatePresence>
     </>
   );
-};
-
-export default FearGreedIndexes;
+}

@@ -5,7 +5,6 @@ import React, {
   useState,
   useRef,
   useMemo,
-  useCallback,
   JSX,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -81,8 +80,9 @@ export default function LiveStreamHeatmap() {
   const [wsClosed, setWsClosed] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [logos, setLogos] = useState<Record<string, string>>({}); // symbol → img
-  const [cgInfo, setCgInfo] = useState<Record<string, { high:number; low:number }>>({});
-
+  const [cgInfo, setCgInfo] = useState<Record<string, { high: number; low: number }>>(
+    {}
+  );
 
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -97,12 +97,11 @@ export default function LiveStreamHeatmap() {
         const res = await fetch(COINGECKO_TOP200);
         const json = await res.json();
         const map: Record<string, string> = {};
-        const inf: Record<string,{high:number;low:number}> = {};
-
+        const inf: Record<string, { high: number; low: number }> = {};
         json.forEach((c: any) => {
           const k = c.symbol.toLowerCase();
-          map[c.symbol.toLowerCase()] = c.image;
-          inf[k]  = { high: c.high_24h, low: c.low_24h };
+          map[k] = c.image;
+          inf[k] = { high: c.high_24h, low: c.low_24h };
         });
         setLogos(map);
         setCgInfo(inf);
@@ -294,7 +293,7 @@ export default function LiveStreamHeatmap() {
       return (
         <tr
           key={id}
-          className={` ${bgRow} hover:bg-gray-50 hover:text-brand-900 dark:hover:text-gray-50 dark:hover:bg-gray-600 cursor-pointer text-white shadow-[0_0_2px_white] dark:text-brand-900`}
+          className={`${bgRow} hover:bg-gray-50 hover:text-brand-900 dark:hover:text-gray-50 dark:hover:bg-gray-600 cursor-pointer text-white shadow-[0_0_2px_white] dark:text-brand-900`}
           onClick={() => {
             setSelectedAsset(md);
             trackEvent("CryptoAssetClick", { id });
@@ -323,7 +322,7 @@ export default function LiveStreamHeatmap() {
             {formatUSD(price)}
           </td>
           <td
-            className={`px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm  ${
+            className={`px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm ${
               pos ? "text-green-700" : "text-red-700"
             }`}
           >
@@ -347,7 +346,7 @@ export default function LiveStreamHeatmap() {
       <div className="p-4 max-w-5xl mx-auto">
         {!wsAvailable && (
           <div className="mb-4 p-2 bg-yellow-100 text-yellow-800 rounded text-center">
-            WebSocket unavailable—polling every 10 s.
+            WebSocket unavailable—polling every 10&nbsp;s.
           </div>
         )}
 
@@ -448,18 +447,19 @@ export default function LiveStreamHeatmap() {
             </table>
           </div>
         )}
+
         {/* popup */}
         <AnimatePresence>
           {selectedAsset && (
             <motion.div
-              className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 bg-black/60 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedAsset(null)}
             >
               <motion.div
-                className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full max-w-md p-6 pb-8 overflow-auto"
+                className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full sm:max-w-md max-h-[90vh] h-full sm:h-auto p-6 pb-8 overflow-y-auto"
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 20, opacity: 0 }}
@@ -520,19 +520,22 @@ export default function LiveStreamHeatmap() {
                         : "text-red-500"
                     }
                   />
- <Metric
-                      icon={<FaChartLine className="text-green-600"/>}
-                      label="High 24 h"
-                      value={formatUSD(cgInfo[selectedAsset.symbol.toLowerCase()].high)}
-                      valueColor="text-green-600"
-                    />
-                    <Metric
-                      icon={<FaChartLine className="text-red-600 rotate-180"/>}
-                      label="Low 24 h"
-                      value={formatUSD(cgInfo[selectedAsset.symbol.toLowerCase()].low)}
-                      valueColor="text-red-600"
-                    />
-                  
+                  <Metric
+                    icon={<FaChartLine className="text-green-600" />}
+                    label="High 24 h"
+                    value={formatUSD(
+                      cgInfo[selectedAsset.symbol.toLowerCase()]?.high
+                    )}
+                    valueColor="text-green-600"
+                  />
+                  <Metric
+                    icon={<FaChartLine className="text-red-600 rotate-180" />}
+                    label="Low 24 h"
+                    value={formatUSD(
+                      cgInfo[selectedAsset.symbol.toLowerCase()]?.low
+                    )}
+                    valueColor="text-red-600"
+                  />
                   <Metric
                     icon={<FaChartPie className="text-indigo-500" />}
                     label="Market Cap"
@@ -553,7 +556,6 @@ export default function LiveStreamHeatmap() {
                     label="Max Supply"
                     value={formatCompact(+selectedAsset.maxSupply || 0)}
                   />
-                  
                 </div>
 
                 {/* explorer */}
@@ -588,7 +590,7 @@ export default function LiveStreamHeatmap() {
             </button>
             <h3 className="text-xl font-bold mb-4">WebSocket closed</h3>
             <p className="mb-6">
-              The live price stream ended automatically after 5 minutes.
+              The live price stream ended automatically after&nbsp;5&nbsp;minutes.
             </p>
             <button
               className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded"
