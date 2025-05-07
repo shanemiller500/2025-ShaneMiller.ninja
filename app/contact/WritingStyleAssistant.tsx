@@ -50,7 +50,7 @@ const WritingStyleAssistant: React.FC<WritingStyleAssistantProps> = ({
       setPopupMessageWithTimeout("Add some text to enhance!");
       return;
     }
-    // Log the event and call the parent’s API function.
+    // Log the event and call the parent's API function.
     trackEvent('Writing Style Selected', { style: style.name });
     const enhancedText = await enhanceTextWithStyle(currentDescription, style.name);
     if (enhancedText) {

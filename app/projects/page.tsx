@@ -112,7 +112,7 @@ export default function Projects() {
       icon: Icon5,
       slug: '/cymatics',
       title: 'Vibroacoustics & Geometry ',
-      excerpt: "Reveal geometry’s beauty in both vibrating patterns and four-dimensional forms. (Caution: Contains flashing lights!)",
+      excerpt: "Reveal geometry's beauty in both vibrating patterns and four-dimensional forms. (Caution: Contains flashing lights!)",
       openSource: false,
     },
     {

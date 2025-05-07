@@ -44,7 +44,7 @@ const WidgetCrypto = () => {
     fetchMeta();
   }, []);
 
-  // 2) Compute the top 10 IDs (they’re already sorted by rank from the API)
+  // 2) Compute the top 10 IDs (they're already sorted by rank from the API)
   const topAssetIds = useMemo(() => Object.keys(metaData), [metaData]);
 
   // 3) Seed initial prices

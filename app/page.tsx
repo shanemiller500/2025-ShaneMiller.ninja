@@ -61,15 +61,19 @@ export default function AboutPage() {
                     Short Bio
                   </h2>
                   <p>
-                    I’m a full-stack developer with a decade of experience delivering production grade web applications. After refining large scale platforms at S&amp;P Global, my current responsibilities include keeping banking software dependable as a Level&nbsp;2 Engineer at Data Center Inc. (DCI), expanding UMail with privacy-first features, and managing ApplyPro, a platform that helps users strengthen resumes and cover letters.
+                    I'm a full-stack developer with a decade of experience delivering production grade web applications. After refining large scale platforms at S&amp;P Global, my current responsibilities include keeping banking software dependable as a Level&nbsp;2 Engineer at Data Center Inc. (DCI), expanding UMail with privacy-first features, and managing ApplyPro, a platform that helps users strengthen resumes and cover letters.
                   </p>
 
                   <p>
-                    Within UMail, I’m rolling out custom editions tailored to our clients needs, adding tools such as quick tone adjustments, one-click translations, and considerate auto-replies features designed to save time without compromising privacy.
+                    After months of data research and user feedback, I'm rolling out ApplyPro V2, even if progress is slower while juggling a full-time day job. This release introduces interactive interview prep questions, sticky behavior for quick access, a cleaner, more intuitive user portal, and enhanced resume editing features, all crafted to streamline your job application process while keeping your data private.
                   </p>
 
                   <p>
-                  I build lean, privacy tight software that just works. From polishing the user flow to crushing the hard bugs, I move fast and finish strong. Need results, not excuses? Let’s talk.
+                    Within UMail, I'm rolling out custom editions tailored to our clients needs, adding tools such as quick tone adjustments, one-click translations, and considerate auto-replies features designed to save time without compromising privacy.
+                  </p>
+
+                  <p>
+                  I build lean, privacy tight software that just works. From polishing the user flow to crushing the hard bugs, I move fast and finish strong. Need results, not excuses? Let's talk.
                   </p>
 
                   <StockWidget />
@@ -82,7 +86,7 @@ export default function AboutPage() {
                       .
                     </p>
                   </div>
-                  <Zoltars />
+                  {/* <Zoltars /> */}
                 </div>
               </div>
             </section>

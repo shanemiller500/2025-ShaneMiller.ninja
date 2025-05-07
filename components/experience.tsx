@@ -32,7 +32,7 @@ export default function Experience() {
                   Data Center Inc. (Remote) — Hutchinson, KS
                 </div>
                 <div className="text-sm text-slate-500 dark:text-slate-400">
-                  Serve as the critical interface between Support and Product Engineering for DCI’s GoBanking core and authoring detailed technical documentation for the platform used by community financial institutions.
+                  Serve as the critical interface between Support and Product Engineering for DCI's GoBanking core and authoring detailed technical documentation for the platform used by community financial institutions.
                 </div>
               </div>
             </div>
