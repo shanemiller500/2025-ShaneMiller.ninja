@@ -304,7 +304,7 @@ export default function FearGreedIndexes() {
             onClick={close}
           >
             <motion.div
-              className="relative w-full max-w-md overflow-hidden rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xl"
+              className="relative w-full max-w-md overflow-hidden rounded-xl bg-white dark:bg-brand-900 border border-gray-200 dark:border-gray-700 shadow-2xl"
               initial={{ y: 40, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 40, opacity: 0 }}
