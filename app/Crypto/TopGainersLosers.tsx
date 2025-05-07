@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback, useMemo, JSX } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+  JSX,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaDollarSign,
@@ -18,7 +25,7 @@ import { Chart } from "chart.js/auto";
 import "chartjs-adapter-date-fns";
 import { trackEvent } from "@/utils/mixpanel";
 
-/* ---------- small helpers ---------- */
+/* ---------- helpers ---------- */
 const formatValue = (v: any) => {
   const n = parseFloat(v);
   return isNaN(n)
@@ -35,20 +42,41 @@ const formatPrice = (v: any) => {
   return formatValue(v);
 };
 
-/* -------- component starts --------- */
+/* ---------- API constants ---------- */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
+const COINGECKO_TOP200 =
+  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
 
+/* =================================================================== */
 export default function TopGainersLosers() {
   const [cryptoData, setCryptoData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState<any | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+  const [logos, setLogos] = useState<Record<string, string>>({}); // symbol → img
 
   /* chart refs */
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartRef = useRef<any>(null);
 
-  /* -------- fetch every 15 s -------- */
+  /* -------- preload CoinGecko logos (once) -------- */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(COINGECKO_TOP200);
+        const json = await res.json();
+        const map: Record<string, string> = {};
+        json.forEach((c: any) => {
+          map[c.symbol.toLowerCase()] = c.image;
+        });
+        setLogos(map);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
+
+  /* -------- fetch CoinCap prices every 15 s -------- */
   useEffect(() => {
     if (!API_KEY) return;
 
@@ -162,9 +190,11 @@ export default function TopGainersLosers() {
     </div>
   );
 
+  /* ------------- table row --------------- */
   const TableRows = ({ rows }: { rows: any[] }) =>
     rows.map((c) => {
       const pos = parseFloat(c.changePercent24Hr) >= 0;
+      const logo = logos[c.symbol.toLowerCase()];
       return (
         <tr
           key={c.id}
@@ -177,7 +207,17 @@ export default function TopGainersLosers() {
           <td className="px-2 sm:px-4 py-1 sm:py-2 text-[10px] sm:text-sm">
             {c.rank}
           </td>
-          <td className="px-2 sm:px-4 py-1 sm:py-2 font-semibold text-[11px] sm:text-sm">
+          <td className="px-2 sm:px-4 py-1 sm:py-2 flex items-center gap-1 font-semibold text-[11px] sm:text-sm">
+            {logo && (
+              <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
+                <img
+                  src={logo}
+                  alt={c.symbol}
+                  className="w-4 h-4 sm:w-5 sm:h-5"
+                  loading="lazy"
+                />
+              </span>
+            )}
             {c.symbol}
           </td>
           <td className="px-2 sm:px-4 py-1 sm:py-2 italic text-[11px] sm:text-sm">
@@ -197,6 +237,7 @@ export default function TopGainersLosers() {
       );
     });
 
+  /* ------------- grid card --------------- */
   const GridCards = ({ rows }: { rows: any[] }) =>
     rows.map((c) => {
       const change = parseFloat(c.changePercent24Hr);
@@ -206,6 +247,7 @@ export default function TopGainersLosers() {
           : change < 0
           ? "bg-red-500"
           : "bg-gray-400";
+      const logo = logos[c.symbol.toLowerCase()];
       return (
         <motion.div
           key={c.id}
@@ -221,6 +263,16 @@ export default function TopGainersLosers() {
             <span className="text-[9px] sm:text-xs bg-black/40 px-1 rounded">
               #{c.rank}
             </span>
+            {logo && (
+              <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
+                <img
+                  src={logo}
+                  alt={c.symbol}
+                  className="w-4 h-4 sm:w-5 sm:h-5"
+                  loading="lazy"
+                />
+              </span>
+            )}
             <span className="font-bold text-sm sm:text-lg">{c.symbol}</span>
           </div>
           <div className="mt-0.5 text-[11px] sm:text-sm">
@@ -274,13 +326,13 @@ export default function TopGainersLosers() {
                 </h2>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-100">
-                    <thead className="bg-gray-100">
+                    <thead className="bg-gray-100 text-brand-900">
                       <tr>
                         {["Rank", "Symbol", "Name", "Price (USD)", "24h %"].map(
                           (h) => (
                             <th
                               key={h}
-                              className="px-2 sm:px-4 py-1 sm:py-2 uppercase text-[9px] sm:text-xs text-left dark:text-brand-900"
+                              className="px-2 sm:px-4 py-1 sm:py-2 uppercase text-[9px] sm:text-xs text-left"
                             >
                               {h}
                             </th>
@@ -289,9 +341,7 @@ export default function TopGainersLosers() {
                       </tr>
                     </thead>
                     <tbody>
-                      <TableRows
-                        rows={idx === 0 ? topGainers : topLosers}
-                      />
+                      <TableRows rows={idx === 0 ? topGainers : topLosers} />
                     </tbody>
                   </table>
                 </div>
@@ -346,13 +396,23 @@ export default function TopGainersLosers() {
                   ×
                 </button>
 
-                {/* header */}
-                <h3 className="text-lg sm:text-2xl font-bold mb-1">
-                  {selectedAsset.name}
-                </h3>
+                {/* header with logo */}
+                <div className="flex items-center gap-2 mb-1">
+                  {logos[selectedAsset.symbol.toLowerCase()] && (
+                    <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[3px]">
+                      <img
+                        src={logos[selectedAsset.symbol.toLowerCase()]}
+                        alt={selectedAsset.symbol}
+                        className="w-6 h-6 sm:w-8 sm:h-8"
+                      />
+                    </span>
+                  )}
+                  <h3 className="text-lg sm:text-2xl font-bold">
+                    {selectedAsset.name}
+                  </h3>
+                </div>
                 <p className="text-indigo-600 mb-4 text-sm sm:text-base">
-                  #{selectedAsset.rank} •{" "}
-                  {selectedAsset.symbol.toUpperCase()}
+                  #{selectedAsset.rank} • {selectedAsset.symbol.toUpperCase()}
                 </p>
 
                 {/* 24-hour chart */}
@@ -375,9 +435,7 @@ export default function TopGainersLosers() {
                   <Metric
                     icon={<FaChartLine className="text-indigo-600" />}
                     label="24h Change"
-                    value={`${formatValue(
-                      selectedAsset.changePercent24Hr
-                    )}%`}
+                    value={`${formatValue(selectedAsset.changePercent24Hr)}%`}
                     color={
                       parseFloat(selectedAsset.changePercent24Hr) >= 0
                         ? "text-green-600"
@@ -392,9 +450,7 @@ export default function TopGainersLosers() {
                   <Metric
                     icon={<FaCoins className="text-indigo-600" />}
                     label="Volume (24h)"
-                    value={`$${formatValue(
-                      selectedAsset.volumeUsd24Hr
-                    )}`}
+                    value={`$${formatValue(selectedAsset.volumeUsd24Hr)}`}
                   />
                   <Metric
                     icon={<FaDatabase className="text-indigo-600" />}
@@ -431,8 +487,7 @@ export default function TopGainersLosers() {
                       className="inline-flex items-center gap-2 text-indigo-600 hover:underline"
                     >
                       <FaLink />
-                      {new URL(selectedAsset.explorer)
-                        .hostname.replace(/^www\./, "")}
+                      {new URL(selectedAsset.explorer).hostname.replace(/^www\./, "")}
                     </a>
                   </div>
                 )}
