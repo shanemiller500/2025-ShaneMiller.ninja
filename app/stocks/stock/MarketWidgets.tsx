@@ -18,6 +18,7 @@ interface QuoteData {
 interface TickerData {
   symbol: string;
   quote: QuoteData;
+  logo?: string;
 }
 
 interface MarketWidgetsProps {
@@ -67,53 +68,65 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
     "DELL",
   ];
 
+  // --- Helper to fetch both quote & profile (for logo) ---
+  const fetchTickerData = async (ticker: string): Promise<TickerData | null> => {
+    try {
+      const [quoteRes, profileRes] = await Promise.all([
+        fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_TOKEN}`),
+        fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${ticker}&token=${API_TOKEN}`),
+      ]);
+
+      const quote = await quoteRes.json();
+      const profile = await profileRes.json();
+
+      if (quote && quote.c !== undefined) {
+        return {
+          symbol: ticker,
+          quote,
+          logo: profile.logo,
+        };
+      }
+      return null;
+    } catch (err) {
+      console.error("Error fetching data for", ticker, err);
+      return null;
+    }
+  };
+
   // --- Fetch Market Data ---
   const fetchMarketData = async (): Promise<boolean> => {
     try {
-      const marketStatusUrl = `https://finnhub.io/api/v1/stock/market-status?exchange=US&token=${API_TOKEN}`;
-      const marketStatusRes = await fetch(marketStatusUrl);
-      const marketStatusData = await marketStatusRes.json();
-      setMarketStatus(marketStatusData);
-      const isOpen = marketStatusData.isOpen;
+      // Market status
+      const statusRes = await fetch(
+        `https://finnhub.io/api/v1/stock/market-status?exchange=US&token=${API_TOKEN}`
+      );
+      const statusData = await statusRes.json();
+      setMarketStatus(statusData);
+      const isOpen = statusData.isOpen;
 
-      const fetchQuote = async (ticker: string): Promise<TickerData | null> => {
-        try {
-          const res = await fetch(
-            `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_TOKEN}`
-          );
-          const data = await res.json();
-          if (data && data.c !== undefined) {
-            return { symbol: ticker, quote: data };
-          }
-          return null;
-        } catch (err) {
-          console.error("Error fetching quote for", ticker, err);
-          return null;
-        }
-      };
-
-      // Top 10 Tickers
-      const topTenPromises = topTenTickers.map((ticker) => fetchQuote(ticker));
-      const topTenResults = await Promise.all(topTenPromises);
+      // Top 10
+      const topTenResults = await Promise.all(
+        topTenTickers.map((t) => fetchTickerData(t))
+      );
       setTopTen(topTenResults.filter(Boolean) as TickerData[]);
 
-      // Potential gainers/losers
-      const potentialPromises = potentialTickers.map((ticker) => fetchQuote(ticker));
-      const potentialResults = await Promise.all(potentialPromises);
-      const validResults = potentialResults.filter(Boolean) as TickerData[];
+      // Potential universe
+      const potentialResults = await Promise.all(
+        potentialTickers.map((t) => fetchTickerData(t))
+      );
+      const valid = (potentialResults.filter(Boolean) as TickerData[]);
 
-      // Top Gainers: positive dp, descending order, top 5
-      const gainers = validResults
+      // Gainers / Losers
+      const gainers = valid
         .filter((item) => item.quote.dp > 0)
         .sort((a, b) => b.quote.dp - a.quote.dp)
         .slice(0, 5);
-      setTopGainers(gainers);
-
-      // Top Losers: negative dp, ascending order, top 5
-      const losers = validResults
+      const losers = valid
         .filter((item) => item.quote.dp < 0)
         .sort((a, b) => a.quote.dp - b.quote.dp)
         .slice(0, 5);
+
+      setTopGainers(gainers);
       setTopLosers(losers);
 
       setError("");
@@ -133,25 +146,17 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
         intervalId = setInterval(fetchMarketData, 200000);
       }
     });
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
+    return () => clearInterval(intervalId);
   }, []);
 
-  // --- Calculate Overall Market Change based on Top 10 tickers ---
+  // --- Overall Market Change & Fear/Greed ---
   const overallMarketChange =
     topTen.length > 0
       ? topTen.reduce((sum, item) => sum + item.quote.dp, 0) / topTen.length
       : 0;
 
-  // --- Calculate the Fear & Greed index ---
-  // Mapping overallMarketChange from -3% (Extreme Fear) to +3% (Extreme Greed)
-  let fearGreedIndex = ((overallMarketChange + 3) / 6) * 100;
-  if (fearGreedIndex < 0) fearGreedIndex = 0;
-  if (fearGreedIndex > 100) fearGreedIndex = 100;
-
-  // --- Render small ticker box for Top 10 ---
-  const renderSmallTicker = (item: TickerData, index: number) => {
+  // --- Render functions ---
+  const renderSmallTicker = (item: TickerData, idx: number) => {
     const { c, dp, t } = item.quote;
     const arrow = dp >= 0 ? "▲" : "▼";
     const dpClass = dp >= 0 ? "text-green-500" : "text-red-500";
@@ -161,62 +166,63 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
         className="cursor-pointer p-2 rounded shadow hover:shadow-xl transition transform hover:-translate-y-1 text-center text-xs"
         onClick={() => onSelectTicker(item.symbol)}
       >
+        {item.logo && (
+          <img
+            src={item.logo}
+            alt={`${item.symbol} logo`}
+            className="mx-auto mb-1 w-6 h-6 object-contain"
+          />
+        )}
         <div className="font-bold">{item.symbol}</div>
         <div>
-          Price: <span className={dpClass}>${c.toFixed(2)}</span>
+          <span className={dpClass}>${c.toFixed(2)}</span>
         </div>
         <div>
           <span className={dpClass}>
             {arrow} {dp.toFixed(2)}%
           </span>
         </div>
-        {t && (
-          <div className="text-gray-500 mt-1">
-            Last: {formatDate(t, "short")}
-          </div>
-        )}
+        {t && <div className="text-gray-500 mt-1">Last: {formatDate(t, "short")}</div>}
       </div>
     );
   };
 
-  // --- Render ticker card for Gainers/Losers ---
-  const renderTickerCard = (item: TickerData, index: number) => {
+  const renderTickerCard = (item: TickerData, idx: number) => {
     const { c, d, dp, h, l, o, pc, t } = item.quote;
     const arrow = dp >= 0 ? "▲" : "▼";
     const dpClass = dp >= 0 ? "text-green-500" : "text-red-500";
     return (
-        
       <div
         key={item.symbol}
         className="cursor-pointer p-3 rounded shadow hover:shadow-xl transition transform hover:-translate-y-1 text-xs"
         onClick={() => onSelectTicker(item.symbol)}
       >
-        <div className="flex justify-between items-center mb-1">
+        <div className="flex items-center mb-1">
+          {item.logo && (
+            <img
+              src={item.logo}
+              alt={`${item.symbol} logo`}
+              className="w-5 h-5 mr-2 object-contain"
+            />
+          )}
           <span className="font-bold">
-            {index + 1}. {item.symbol}
-          </span>
-          <span className={`font-semibold ${dpClass}`}>
-            Price: ${c.toFixed(2)}
+            {idx + 1}. {item.symbol}
           </span>
         </div>
         <div className="mb-1">
           <span className={dpClass}>
-            Change: {arrow} ${d.toFixed(2)} ({dp.toFixed(2)}%)
+            Price: ${c.toFixed(2)} ({arrow} ${d.toFixed(2)} / {dp.toFixed(2)}%)
           </span>
         </div>
         <div className="flex justify-between mb-1">
           <span>High: ${h.toFixed(2)}</span>
           <span>Low: ${l.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between mb-1">
           <span>Open: ${o.toFixed(2)}</span>
           <span>Prev: ${pc.toFixed(2)}</span>
         </div>
-        {t && (
-          <div className="mt-1 text-gray-500">
-            Last: {formatDate(t, "short")}
-          </div>
-        )}
+        {t && <div className="mt-1 text-gray-500">Last: {formatDate(t, "short")}</div>}
       </div>
     );
   };
@@ -236,7 +242,8 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
           {marketStatus.t && `| ${formatDate(marketStatus.t, "short")}`}
         </div>
       )}
-              <FearGreedWidget index={fearGreedIndex} />
+
+      <FearGreedWidget index={((overallMarketChange + 3) / 6) * 100} />
 
       {/* Overall Market Performance */}
       {topTen.length > 0 && (
@@ -261,7 +268,7 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
       <div className="shadow rounded p-4">
         <h3 className="text-lg font-bold mb-4">Top 10 Tickers</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-          {topTen.map((item, index) => renderSmallTicker(item, index))}
+          {topTen.map(renderSmallTicker)}
         </div>
       </div>
 
@@ -269,15 +276,11 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="shadow rounded p-4">
           <h3 className="text-lg font-bold mb-4">Top Gainers</h3>
-          <div className="space-y-3">
-            {topGainers.map((item, index) => renderTickerCard(item, index))}
-          </div>
+          <div className="space-y-3">{topGainers.map(renderTickerCard)}</div>
         </div>
         <div className="shadow rounded p-4">
           <h3 className="text-lg font-bold mb-4">Top Losers</h3>
-          <div className="space-y-3">
-            {topLosers.map((item, index) => renderTickerCard(item, index))}
-          </div>
+          <div className="space-y-3">{topLosers.map(renderTickerCard)}</div>
         </div>
       </div>
 
