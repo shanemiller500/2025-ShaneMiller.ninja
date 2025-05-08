@@ -258,6 +258,16 @@ export default function TopGainersLosers() {
       );
     });
 
+    function getHostname(urlStr: string): string | null {
+      try {
+        // if it doesn’t look absolute, assume https://
+        const absolute = urlStr.includes("://") ? urlStr : `https://${urlStr}`;
+        return new URL(absolute).hostname.replace(/^www\./, "");
+      } catch {
+        return null;
+      }
+    }
+
   const GridCards = ({ rows }: { rows: any[] }) =>
     rows.map((c) => {
       const change = parseFloat(c.changePercent24Hr);
@@ -580,23 +590,29 @@ export default function TopGainersLosers() {
                   />
                 </div>
 
-                {/* explorer */}
-                {selectedAsset.explorer && (
-                  <div className="mt-4 text-center text-[11px] sm:text-sm">
-                    <a
-                      href={selectedAsset.explorer}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-indigo-600 hover:underline hover:scale-105 transition-transform"
-                    >
-                      <FaLink />
-                      {new URL(
-                        selectedAsset.explorer
-                      )
-                        .hostname.replace(/^www\./, "")}
-                    </a>
-                  </div>
-                )}
+   {/* explorer */}
+{selectedAsset.explorer && (() => {
+  const host = getHostname(selectedAsset.explorer);
+  if (!host) return null;
+  // ensure the link itself also has a protocol
+  const href = selectedAsset.explorer.includes("://")
+    ? selectedAsset.explorer
+    : `https://${selectedAsset.explorer}`;
+  return (
+    <div className="mt-4 text-center text-[11px] sm:text-sm">
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 text-indigo-600 hover:underline hover:scale-105 transition-transform"
+      >
+        <FaLink />
+        {host}
+      </a>
+    </div>
+  );
+})()}
+
               </motion.div>
             </motion.div>
           )}
