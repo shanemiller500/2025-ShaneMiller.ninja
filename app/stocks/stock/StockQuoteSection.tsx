@@ -406,111 +406,84 @@ const StockQuoteSection = () => {
 
       {stockData && (
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* --- Left Column: Stock Info & Data Table --- */}
-          <div>
-            <div className="mb-4">
-              <h2 className="text-xl font-semibold flex items-center">
-                {stockData.description} ({stockData.stockSymbol})
-                {stockData.logo && (
-                  <img
-                    src={stockData.logo}
-                    alt="Stock Logo"
-                    className="ml-4 mt-2 w-16 h-16 object-contain"
-                  />
-                )}
-              </h2>
-              <h2 className="text-2xl font-bold" style={{ color: stockData.priceColor }}>
-                ${formatSupplyValue(stockData.quoteData.c)} |{" "}
-                {formatSupplyValue(stockData.quoteData.dp)}%{" "}
-                <i className={stockData.iconClass}></i>
-              </h2>
-              <p>
-                {stockData.marketStatusData.isOpen ? "Market Open" : "Market Closed"} | As of:{" "}
-                {formatDate(stockData.marketStatusData.t)}
-              </p>
-              <p>Exchange: {stockData.marketStatusData.exchange}</p>
-            </div>
+    
+    {/* — Stock Info Card (transparent background, professional table) — */}
+<div className="rounded-lg shadow-md p-6 max-w-4xl mx-auto">
+  {/* Header (unchanged) */}
+  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+    <div className="flex items-center space-x-4">
+      <div>
+        <h2 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-100">
+          {stockData.description} <span className="font-normal">({stockData.stockSymbol})</span>
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          {stockData.marketStatusData.isOpen ? "Market Open" : "Market Closed"} • As of{" "}
+          {formatDate(stockData.marketStatusData.t)}
+        </p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Exchange: {stockData.marketStatusData.exchange}
+        </p>
+      </div>
+      {stockData.logo && (
+        <img
+          src={stockData.logo}
+          alt="Stock Logo"
+          className="hidden sm:block w-12 h-12 md:w-16 md:h-16 object-contain rounded-full"
+        />
+      )}
+    </div>
+    <div className="mt-4 md:mt-0 text-right">
+      <p
+        className={`text-2xl font-bold ${
+          stockData.quoteData.dp >= 0 ? "text-green-600" : "text-red-600"
+        }`}
+      >
+        ${formatSupplyValue(stockData.quoteData.c)}
+      </p>
+      <p
+        className={`mt-1 text-sm font-semibold inline-flex items-center ${
+          stockData.quoteData.dp >= 0 ? "text-green-500" : "text-red-500"
+        }`}
+      >
+        {stockData.quoteData.dp >= 0 ? "+" : ""}
+        {formatSupplyValue(stockData.quoteData.dp)}% <i className={stockData.iconClass} />
+      </p>
+    </div>
+  </div>
 
-            {/* --- Data Table --- */}
-            <div className="overflow-x-auto mb-6">
-              <table className="min-w-full border border-gray-300 dark:border-gray-700">
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  <tr className="flex flex-col md:table-row">
-                    <td className="p-2 text-sm font-semibold md:w-1/3" style={{ color: stockData.priceColor }}>
-                      Current Price:
-                    </td>
-                    <td className="p-2 text-sm md:w-2/3" style={{ color: stockData.priceColor }}>
-                      ${formatSupplyValue(stockData.quoteData.c)} |{" "}
-                      {formatSupplyValue(stockData.quoteData.dp)}%{" "}
-                      <i className={stockData.iconClass}></i>
-                    </td>
-                  </tr>
-                  <tr className="flex flex-col md:table-row">
-                    <td className="p-2 text-sm font-semibold">Open Price:</td>
-                    <td className="p-2 text-sm">${formatSupplyValue(stockData.quoteData.o)}</td>
-                  </tr>
-                  <tr className="flex flex-col md:table-row">
-                    <td className="p-2 text-sm font-semibold">High Price:</td>
-                    <td className="p-2 text-sm">${formatSupplyValue(stockData.quoteData.h)}</td>
-                  </tr>
-                  <tr className="flex flex-col md:table-row">
-                    <td className="p-2 text-sm font-semibold">Low Price:</td>
-                    <td className="p-2 text-sm">${formatSupplyValue(stockData.quoteData.l)}</td>
-                  </tr>
-                  <tr className="flex flex-col md:table-row">
-                    <td className="p-2 text-sm font-semibold">52 Week High:</td>
-                    <td className="p-2 text-sm">
-                      ${formatSupplyValue(stockData.metricData.metric["52WeekHigh"])}
-                    </td>
-                  </tr>
-                  <tr className="flex flex-col md:table-row">
-                    <td className="p-2 text-sm font-semibold">52 Week High Date:</td>
-                    <td className="p-2 text-sm">
-                      {formatDateWeirdValue(stockData.metricData.metric["52WeekHighDate"])}
-                    </td>
-                  </tr>
-                  <tr className="flex flex-col md:table-row">
-                    <td className="p-2 text-sm font-semibold">52 Week Low:</td>
-                    <td className="p-2 text-sm">
-                      ${formatSupplyValue(stockData.metricData.metric["52WeekLow"])}
-                    </td>
-                  </tr>
-                  <tr className="flex flex-col md:table-row">
-                    <td className="p-2 text-sm font-semibold">52 Week Low Date:</td>
-                    <td className="p-2 text-sm">
-                      {formatDateWeirdValue(stockData.metricData.metric["52WeekLowDate"])}
-                    </td>
-                  </tr>
-                  <tr className="flex flex-col md:table-row">
-                    <td className="p-2 text-sm font-semibold">Market Cap:</td>
-                    <td className="p-2 text-sm">
-                      ${formatSupplyValue(stockData.metricData.metric["marketCapitalization"])}
-                    </td>
-                  </tr>
-                  <tr className="flex flex-col md:table-row">
-                    <td className="p-2 text-sm font-semibold">EPS TTM:</td>
-                    <td className="p-2 text-sm">
-                      ${formatSupplyValue(stockData.metricData.metric["epsTTM"])}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+  {/* Details Table */}
+  <div className="overflow-x-auto">
+    <table className="w-full table-auto border-collapse">
+      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+        {[
+          ["Current Price", `$${formatSupplyValue(stockData.quoteData.c)} • ${formatSupplyValue(stockData.quoteData.dp)}%`],
+          ["Open Price", `$${formatSupplyValue(stockData.quoteData.o)}`],
+          ["High Price", `$${formatSupplyValue(stockData.quoteData.h)}`],
+          ["Low Price", `$${formatSupplyValue(stockData.quoteData.l)}`],
+          ["52-Week High", `$${formatSupplyValue(stockData.metricData.metric["52WeekHigh"])}`],
+          ["52-Week High Date", formatDateWeirdValue(stockData.metricData.metric["52WeekHighDate"])],
+          ["52-Week Low", `$${formatSupplyValue(stockData.metricData.metric["52WeekLow"])}`],
+          ["52-Week Low Date", formatDateWeirdValue(stockData.metricData.metric["52WeekLowDate"])],
+          ["Market Cap", `$${formatSupplyValue(stockData.metricData.metric["marketCapitalization"])}`],
+          ["EPS (TTM)", `$${formatSupplyValue(stockData.metricData.metric["epsTTM"])}`],
+        ].map(([label, value]) => (
+          <tr key={label} className="grid grid-cols-2 md:table-row py-3">
+            <th className="text-left text-sm font-medium text-gray-500 dark:text-gray-400">
+              {label}
+            </th>
+            <td className="text-right text-sm text-gray-900 dark:text-gray-100">
+              {value}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
+
 
           {/* --- Right Column: Chart, Fear & Greed Index, & News --- */}
           <div>
-            {/* --- Chart Section --- */}
-            {candleData && (
-              <div className="mb-6">
-                <h3 className="text-xl font-semibold mb-4">
-                  Historical Price (Last 30 Days)
-                </h3>
-                <div className="relative w-full h-80">
-                  <canvas ref={chartCanvasRef} className="w-full h-full" />
-                </div>
-              </div>
-            )}
 
             {/* --- News Widget --- */}
             <NewsWidget />
