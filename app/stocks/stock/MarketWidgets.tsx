@@ -232,7 +232,7 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
               : "bg-red-100 dark:bg-red-800 text-red-900 dark:text-red-100"
           }`}
         >
-          Market is {marketStatus.isOpen ? "Open" : "Closed"}{" "}
+          Markets are {marketStatus.isOpen ? "Open" : "Closed"}{" "}
           {marketStatus.t && `| ${formatDate(marketStatus.t, "short")}`}
         </div>
       )}
@@ -250,10 +250,10 @@ const MarketWidgets: React.FC<MarketWidgetsProps> = ({ onSelectTicker }) => {
           }`}
         >
           {overallMarketChange > 0
-            ? `Overall, the market is up today by ${overallMarketChange.toFixed(2)}%.`
+            ? `Overall, the markets are up today by ${overallMarketChange.toFixed(2)}%.`
             : overallMarketChange < 0
-            ? `Overall, the market is down today by ${Math.abs(overallMarketChange).toFixed(2)}%.`
-            : "Overall, the market is unchanged today."}
+            ? `Overall, the markets are down today by ${Math.abs(overallMarketChange).toFixed(2)}%.`
+            : "Overall, the markets are unchanged today."}
         </div>
       )}
 

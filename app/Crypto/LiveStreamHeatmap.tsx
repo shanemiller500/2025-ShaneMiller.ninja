@@ -5,6 +5,7 @@ import React, {
   useState,
   useRef,
   useMemo,
+  useCallback,
   JSX,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,20 +25,15 @@ import {
 } from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
 
-/* ------------- helpers ------------- */
-const formatValue = (v: any) =>
-  isNaN(+v)
+/* ---------- helpers ---------- */
+const formatValue = (v: any) => {
+  const n = parseFloat(v);
+  return isNaN(n)
     ? "N/A"
-    : (+v).toLocaleString("en-US", {
+    : n.toLocaleString("en-US", {
         maximumFractionDigits: 2,
         minimumFractionDigits: 2,
       });
-
-const formatPrice = (v: any) => {
-  const n = +v;
-  if (isNaN(n)) return "N/A";
-  if (n > 0 && n < 0.01) return n.toString();
-  return formatValue(v);
 };
 
 const currencyFmt = new Intl.NumberFormat("en-US", {
@@ -45,12 +41,14 @@ const currencyFmt = new Intl.NumberFormat("en-US", {
   currency: "USD",
   maximumFractionDigits: 2,
 });
+const formatUSD = (v: any) => {
+  const n = parseFloat(v);
+  return isNaN(n) ? "—" : currencyFmt.format(n);
+};
 const compactFmt = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 2,
 });
-const formatUSD = (v: number | null | undefined) =>
-  v != null ? currencyFmt.format(v) : "—";
 const formatCompact = (v: number | null | undefined) =>
   v != null ? compactFmt.format(v) : "N/A";
 const formatPct = (s: any) =>
@@ -63,13 +61,13 @@ const shortenUrl = (u: string) => {
   }
 };
 
-/* ------------- API constants ------------- */
+/* ---------- API constants ---------- */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 const COINGECKO_TOP200 =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
 
-/* =================================================================== */
 export default function LiveStreamHeatmap() {
+  /* ---------- core state ---------- */
   const [tradeInfoMap, setTradeInfoMap] = useState<
     Record<string, { price: number; prev?: number }>
   >({});
@@ -79,18 +77,19 @@ export default function LiveStreamHeatmap() {
   const [wsAvailable, setWsAvailable] = useState(true);
   const [wsClosed, setWsClosed] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
-  const [logos, setLogos] = useState<Record<string, string>>({}); // symbol → img
-  const [cgInfo, setCgInfo] = useState<Record<string, { high: number; low: number }>>(
-    {}
-  );
+  const [logos, setLogos] = useState<Record<string, string>>({});
+  const [cgInfo, setCgInfo] = useState<Record<string, { high: number; low: number }>>({});
 
+  /* ---------- new chart state ---------- */
+  const [timeframe, setTimeframe] = useState<"1" | "7" | "30">("1");
+  const [chartLoading, setChartLoading] = useState(false);
+
+  /* ---------- refs ---------- */
   const socketRef = useRef<WebSocket | null>(null);
-
-  /* chart refs */
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstanceRef = useRef<any>(null);
 
-  /* ------------ preload CoinGecko logos ------------- */
+  /* -------- preload CoinGecko logos -------- */
   useEffect(() => {
     (async () => {
       try {
@@ -106,12 +105,12 @@ export default function LiveStreamHeatmap() {
         setLogos(map);
         setCgInfo(inf);
       } catch {
-        /* ignore */
+        // ignore
       }
     })();
   }, []);
 
-  /* ------------ fetch metadata ------------- */
+  /* -------- fetch CoinCap metadata -------- */
   useEffect(() => {
     let canceled = false;
     (async () => {
@@ -135,7 +134,7 @@ export default function LiveStreamHeatmap() {
     };
   }, []);
 
-  /* ------------ websocket stream ------------- */
+  /* -------- websocket stream -------- */
   useEffect(() => {
     if (!API_KEY || !Object.keys(metaData).length || !wsAvailable) return;
 
@@ -186,7 +185,7 @@ export default function LiveStreamHeatmap() {
     };
   }, [metaData, wsAvailable]);
 
-  /* ------------ polling fallback ------------- */
+  /* -------- polling fallback -------- */
   useEffect(() => {
     if (wsAvailable) return;
     const fetchPrices = async () => {
@@ -211,7 +210,7 @@ export default function LiveStreamHeatmap() {
     return () => clearInterval(iv);
   }, [wsAvailable]);
 
-  /* ------------ sorted ids (top 200) ------------- */
+  /* -------- sorted IDs -------- */
   const sortedIds = useMemo(() => {
     const all = Object.keys(tradeInfoMap).sort(
       (a, b) => (+metaData[a]?.rank || 9999) - (+metaData[b]?.rank || 9999)
@@ -219,120 +218,81 @@ export default function LiveStreamHeatmap() {
     return all.slice(0, 200);
   }, [tradeInfoMap, metaData]);
 
-  /* ------------ 24-hour chart ------------- */
+  /* -------- popup chart (1D/7D/30D) -------- */
   useEffect(() => {
     if (!selectedAsset) return;
-    (async () => {
-      chartInstanceRef.current?.destroy?.();
-      const end = Date.now();
-      const start = end - 864e5;
-      const res = await fetch(
-        `https://rest.coincap.io/v3/assets/${selectedAsset.id}/history?interval=m1&start=${start}&end=${end}&apiKey=${API_KEY}`
-      );
-      const json = await res.json();
-      const data = (json.data || []).map((p: any) => ({
-        x: new Date(p.time),
-        y: +p.priceUsd,
-      }));
-      const ctx = canvasRef.current!.getContext("2d")!;
-      chartInstanceRef.current = new Chart(ctx, {
-        type: "line",
-        data: {
-          datasets: [
-            {
-              data,
-              borderColor: "#84e2ff",
-              backgroundColor: "rgba(84,75,255,.6)",
-              pointRadius: 0,
-              fill: true,
-            },
-          ],
-        },
-        options: {
-          scales: { x: { type: "time" }, y: {} },
-          plugins: { legend: { display: false } },
-          elements: { line: { tension: 0.3 } },
-          maintainAspectRatio: false,
-        },
-      });
-    })();
-  }, [selectedAsset]);
+    chartInstanceRef.current?.destroy?.();
+    let cancelled = false;
+    setChartLoading(true);
 
-  /* ------------ metric widget ------------- */
+    (async () => {
+      try {
+        const end = Date.now();
+        const days = parseInt(timeframe, 10);
+        const start = end - days * 864e5;
+        const res = await fetch(
+          `https://rest.coincap.io/v3/assets/${selectedAsset.id}/history?interval=m1&start=${start}&end=${end}&apiKey=${API_KEY}`
+        );
+        const json = await res.json();
+        const points = (json.data || []).map((p: any) => ({
+          x: new Date(p.time),
+          y: parseFloat(p.priceUsd),
+        }));
+        const ctx = canvasRef.current!.getContext("2d")!;
+        chartInstanceRef.current = new Chart(ctx, {
+          type: "line",
+          data: {
+            datasets: [
+              {
+                data: points,
+                borderColor: "#84e2ff",
+                backgroundColor: "rgba(84,75,255,0.6)",
+                pointRadius: 0,
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { type: "time" }, y: {} },
+          },
+        });
+      } catch (e) {
+        console.error("Chart load error:", e);
+      } finally {
+        if (!cancelled) setTimeout(() => setChartLoading(false), 50);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAsset, timeframe]);
+
+  /* -------- Metric component -------- */
   const Metric = ({
     icon,
     label,
     value,
-    valueColor = "text-gray-900",
+    color = "text-gray-900",
   }: {
     icon: JSX.Element;
     label: string;
     value: string;
-    valueColor?: string;
+    color?: string;
   }) => (
-    <div className="flex items-center gap-2 bg-gray-100 p-2 rounded">
+    <div className="flex items-center gap-2 bg-gray-100 p-2 rounded hover:scale-105 transition-transform">
       {icon}
       <div className="flex flex-col">
-        <span className="text-xs text-gray-500">{label}</span>
-        <span className={`font-semibold ${valueColor}`}>{value}</span>
+        <span className="text-[10px] sm:text-xs text-gray-500">{label}</span>
+        <span className={`font-semibold ${color} text-xs sm:text-sm`}>{value}</span>
       </div>
     </div>
   );
 
-  /* ------------ table rows ------------- */
-  const TableRows = ({ rows }: { rows: string[] }) =>
-    rows.map((id) => {
-      const md = metaData[id] || {};
-      const { price, prev } = tradeInfoMap[id] || {};
-      const pos = price != null && prev != null && price > prev;
-      const neg = price != null && prev != null && price < prev;
-      const bgRow =
-        pos ? "bg-green-500" : neg ? "bg-red-500" : "bg-white dark:bg-gray-400";
-      const logo = logos[md.symbol?.toLowerCase()];
-
-      return (
-        <tr
-          key={id}
-          className={`${bgRow} hover:bg-gray-50 hover:text-brand-900 dark:hover:text-gray-50 dark:hover:bg-gray-600 cursor-pointer text-white shadow-[0_0_2px_white] dark:text-brand-900`}
-          onClick={() => {
-            setSelectedAsset(md);
-            trackEvent("CryptoAssetClick", { id });
-          }}
-        >
-          <td className="px-2 sm:px-4 py-1 sm:py-2 text-[10px] sm:text-sm">
-            {md.rank}
-          </td>
-          <td className="px-2 sm:px-4 py-1 sm:py-2 flex items-center gap-1 font-semibold text-[11px] sm:text-sm">
-            {logo && (
-              <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
-                <img
-                  src={logo}
-                  alt={md.symbol}
-                  className="w-4 h-4 sm:w-5 sm:h-5"
-                  loading="lazy"
-                />
-              </span>
-            )}
-            {md.symbol}
-          </td>
-          <td className="px-2 sm:px-4 py-1 sm:py-2 italic text-[11px] sm:text-sm">
-            {md.name}
-          </td>
-          <td className="px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm">
-            {formatUSD(price)}
-          </td>
-          <td
-            className={`px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm ${
-              pos ? "text-green-700" : "text-red-700"
-            }`}
-          >
-            {formatPct(md.changePercent24Hr)} {pos ? "↑" : neg ? "↓" : ""}
-          </td>
-        </tr>
-      );
-    });
-
-  /* ------------ loading ------------- */
+  /* -------- loading spinner -------- */
   if (loading)
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
@@ -340,7 +300,6 @@ export default function LiveStreamHeatmap() {
       </div>
     );
 
-  /* ------------ render ------------- */
   return (
     <>
       <div className="p-4 max-w-5xl mx-auto">
@@ -351,19 +310,21 @@ export default function LiveStreamHeatmap() {
         )}
 
         {/* header */}
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold">Live Stream Heatmap</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+            Live Stream Heatmap
+          </h2>
           <button
             onClick={() => {
               const next = viewMode === "grid" ? "table" : "grid";
               setViewMode(next);
               trackEvent("CryptoViewToggle", { view: next });
             }}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-2 rounded"
+            className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded-full shadow-sm hover:shadow-md transition-shadow duration-200"
           >
-            {viewMode === "grid" ? <FaTable /> : <FaThLarge />}
-            <span className="hidden sm:inline">
-              {viewMode === "grid" ? "Table" : "Grid"}
+            {viewMode === "grid" ? <FaTable className="w-5 h-5" /> : <FaThLarge className="w-5 h-5" />}
+            <span className="hidden sm:inline text-sm font-medium">
+              {viewMode === "grid" ? "Table View" : "Grid View"}
             </span>
           </button>
         </div>
@@ -406,20 +367,14 @@ export default function LiveStreamHeatmap() {
                         />
                       </span>
                     )}
-                    <span
-                      className="font-bold text-sm sm:text-lg"
-                      title={md.name}
-                    >
+                    <span className="font-bold text-sm sm:text-lg" title={md.name}>
                       {md.symbol || id}
                     </span>
                   </div>
                   <div className="mt-0.5 text-[11px] sm:text-sm">
-                    {formatUSD(price)}{" "}
-                    <span className="font-bold">{arrow}</span>
+                    {formatUSD(price)} <span className="font-bold">{arrow}</span>
                   </div>
-                  <div className="text-[9px] sm:text-xs">
-                    {formatPct(md.changePercent24Hr)}
-                  </div>
+                  <div className="text-[9px] sm:text-xs">{formatPct(md.changePercent24Hr)}</div>
                 </motion.div>
               );
             })}
@@ -429,20 +384,68 @@ export default function LiveStreamHeatmap() {
             <table className="min-w-full divide-y divide-gray-100">
               <thead className="bg-gray-100 text-brand-900">
                 <tr>
-                  {["Rank", "Symbol", "Name", "Price (USD)", "24 h %"].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        className="px-2 sm:px-4 py-1 sm:py-2 uppercase text-[9px] sm:text-xs text-left"
-                      >
-                        {h}
-                      </th>
-                    )
-                  )}
+                  {["Rank", "Symbol", "Name", "Price (USD)", "24 h %"].map((h) => (
+                    <th
+                      key={h}
+                      className="px-2 sm:px-4 py-1 sm:py-2 uppercase text-[9px] sm:text-xs text-left"
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                <TableRows rows={sortedIds} />
+                {sortedIds.map((id) => {
+                  const md = metaData[id] || {};
+                  const { price, prev } = tradeInfoMap[id] || {};
+                  const pos = price != null && prev != null && price > prev;
+                  const neg = price != null && prev != null && price < prev;
+                  const bgRow = pos
+                    ? "bg-green-500"
+                    : neg
+                    ? "bg-red-500"
+                    : "bg-white dark:bg-brand-900";
+                  const textColor = pos || neg ? "text-white" : "text-gray-900 dark:text-white";
+                  const logo = logos[md.symbol?.toLowerCase()];
+                  return (
+                    <tr
+                      key={id}
+                      className={`${bgRow} ${textColor} transition-transform duration-200 ease-out hover:scale-105 cursor-pointer`}
+                      onClick={() => {
+                        setSelectedAsset(md);
+                        trackEvent("CryptoAssetClick", { id });
+                      }}
+                    >
+                      <td className="px-2 sm:px-4 py-1 sm:py-2 text-[10px] sm:text-sm">{md.rank}</td>
+                      <td className="px-2 sm:px-4 py-1 sm:py-2 flex items-center gap-1 font-semibold text-[11px] sm:text-sm">
+                        {logo && (
+                          <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
+                            <img
+                              src={logo}
+                              alt={md.symbol}
+                              className="w-4 h-4 sm:w-5 sm:h-5"
+                              loading="lazy"
+                            />
+                          </span>
+                        )}
+                        {md.symbol}
+                      </td>
+                      <td className="px-2 sm:px-4 py-1 sm:py-2 italic text-[11px] sm:text-sm">
+                        {md.name}
+                      </td>
+                      <td className="px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm">
+                        {formatUSD(price)}
+                      </td>
+                      <td
+                        className={`px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm ${
+                          pos ? "text-green-700" : neg ? "text-red-700" : ""
+                        }`}
+                      >
+                        {formatPct(md.changePercent24Hr)} {pos ? "↑" : neg ? "↓" : ""}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -452,29 +455,29 @@ export default function LiveStreamHeatmap() {
         <AnimatePresence>
           {selectedAsset && (
             <motion.div
-              className="fixed inset-0 bg-black/60 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto"
+              className="fixed inset-0 bg-black/60 flex items-start sm:items-center justify-center z-50 p-3 overflow-y-auto"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedAsset(null)}
             >
               <motion.div
-                className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full sm:max-w-md max-h-[90vh] h-full sm:h-auto p-6 pb-8 overflow-y-auto"
-                initial={{ y: 20, opacity: 0 }}
+                className="relative bg-white dark:bg-brand-900 rounded-lg shadow-lg w-full max-w-sm sm:max-w-md max-h-[90vh] overflow-y-auto px-4 py-5 sm:p-6 hover:scale-[1.02] transition-transform"
+                initial={{ y: 32, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 20, opacity: 0 }}
+                exit={{ y: 32, opacity: 0 }}
                 transition={{ type: "spring", stiffness: 300 }}
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* close */}
                 <button
-                  className="absolute top-4 right-4 text-indigo-500 hover:text-indigo-700 text-xl"
+                  className="absolute top-3 right-4 text-indigo-600 hover:text-indigo-800 text-2xl hover:scale-110 transition-transform"
                   onClick={() => setSelectedAsset(null)}
                 >
                   ×
                 </button>
 
-                {/* header with logo */}
+                {/* header */}
                 <div className="flex items-center gap-2 mb-1">
                   {logos[selectedAsset.symbol.toLowerCase()] && (
                     <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[3px]">
@@ -485,89 +488,123 @@ export default function LiveStreamHeatmap() {
                       />
                     </span>
                   )}
-                  <h3 className="text-2xl font-bold">{selectedAsset.name}</h3>
+                  <h3 className="text-lg sm:text-2xl font-bold">{selectedAsset.name}</h3>
                 </div>
-                <p className="text-indigo-500 mb-4">
-                  {selectedAsset.symbol.toUpperCase()} • Rank{" "}
-                  {selectedAsset.rank}
+                <p className="text-indigo-600 mb-4 text-sm sm:text-base">
+                  #{selectedAsset.rank} • {selectedAsset.symbol.toUpperCase()}
                 </p>
 
+                {/* timeframe picks */}
+                <div className="flex gap-2 mb-3">
+                  {(
+                    [
+                      ["1", "1D"],
+                      ["7", "7D"],
+                      ["30", "30D"],
+                    ] as const
+                  ).map(([tf, label]) => (
+                    <button
+                      key={tf}
+                      onClick={() => setTimeframe(tf)}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                        timeframe === tf
+                          ? "bg-indigo-600 text-white"
+                          : "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
                 {/* chart */}
-                <div className="w-full h-48 mb-4">
+                <div className="relative w-full h-40 sm:h-48 mb-4">
+                  {chartLoading && (
+                    <div className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center z-10">
+                      <svg
+                        className="w-8 h-8 animate-spin text-indigo-600"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v8H4z"
+                        />
+                      </svg>
+                    </div>
+                  )}
                   <canvas ref={canvasRef} className="w-full h-full" />
                 </div>
 
                 {/* metrics */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] sm:text-sm">
                   <Metric
-                    icon={<FaDollarSign className="text-indigo-500" />}
+                    icon={<FaDollarSign className="text-indigo-600" />}
                     label="Price"
                     value={formatUSD(tradeInfoMap[selectedAsset.id]?.price)}
-                    valueColor={
+                    color={
                       (tradeInfoMap[selectedAsset.id]?.price ?? 0) >=
                       (tradeInfoMap[selectedAsset.id]?.prev ?? 0)
-                        ? "text-green-500"
-                        : "text-red-500"
+                        ? "text-green-600"
+                        : "text-red-600"
                     }
                   />
                   <Metric
-                    icon={<FaChartLine className="text-indigo-500" />}
-                    label="24 h Change"
-                    value={formatPct(selectedAsset.changePercent24Hr)}
-                    valueColor={
-                      +selectedAsset.changePercent24Hr >= 0
-                        ? "text-green-500"
-                        : "text-red-500"
+                    icon={<FaChartLine className="text-indigo-600" />}
+                    label="24h Change"
+                    value={`${formatValue(selectedAsset.changePercent24Hr)}%`}
+                    color={
+                      parseFloat(selectedAsset.changePercent24Hr) >= 0
+                        ? "text-green-600"
+                        : "text-red-600"
                     }
                   />
                   <Metric
-                    icon={<FaChartLine className="text-green-600" />}
-                    label="High 24 h"
-                    value={formatUSD(
-                      cgInfo[selectedAsset.symbol.toLowerCase()]?.high
-                    )}
-                    valueColor="text-green-600"
-                  />
-                  <Metric
-                    icon={<FaChartLine className="text-red-600 rotate-180" />}
-                    label="Low 24 h"
-                    value={formatUSD(
-                      cgInfo[selectedAsset.symbol.toLowerCase()]?.low
-                    )}
-                    valueColor="text-red-600"
-                  />
-                  <Metric
-                    icon={<FaChartPie className="text-indigo-500" />}
+                    icon={<FaChartPie className="text-indigo-600" />}
                     label="Market Cap"
                     value={formatCompact(+selectedAsset.marketCapUsd)}
                   />
                   <Metric
-                    icon={<FaCoins className="text-indigo-500" />}
-                    label="Volume (24 h)"
+                    icon={<FaCoins className="text-indigo-600" />}
+                    label="Volume (24h)"
                     value={formatCompact(+selectedAsset.volumeUsd24Hr)}
                   />
                   <Metric
-                    icon={<FaDatabase className="text-indigo-500" />}
+                    icon={<FaDatabase className="text-indigo-600" />}
                     label="Supply"
                     value={formatCompact(+selectedAsset.supply)}
                   />
                   <Metric
-                    icon={<FaWarehouse className="text-indigo-500" />}
+                    icon={<FaWarehouse className="text-indigo-600" />}
                     label="Max Supply"
-                    value={formatCompact(+selectedAsset.maxSupply || 0)}
+                    value={
+                      selectedAsset.maxSupply
+                        ? formatCompact(+selectedAsset.maxSupply)
+                        : "—"
+                    }
                   />
                 </div>
 
                 {/* explorer */}
                 {selectedAsset.explorer && (
-                  <div className="mt-4 text-center text-sm">
+                  <div className="mt-4 text-center text-[11px] sm:text-sm">
                     <a
                       href={selectedAsset.explorer}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-indigo-600 hover:underline"
+                      className="inline-flex items-center gap-2 text-indigo-600 hover:underline hover:scale-105 transition-transform"
                     >
-                      <FaLink className="text-indigo-500" />
+                      <FaLink />
                       {shortenUrl(selectedAsset.explorer)}
                     </a>
                   </div>

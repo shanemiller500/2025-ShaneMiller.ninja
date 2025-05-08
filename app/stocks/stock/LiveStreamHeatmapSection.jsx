@@ -323,7 +323,7 @@ const LiveStreamHeatmapSection = () => {
           className={`mb-4 p-2 rounded ${marketStatus.isOpen ? "bg-green-500" : "bg-red-500"} text-white`}
         >
           {marketStatus.isOpen
-            ? `Market is open | Current time: ${formatDate(marketStatus.t, "short")}`
+            ? `Markets are open | Current time: ${formatDate(marketStatus.t, "short")}`
             : "The markets are now closed. Check back during market hours for the latest updates!"}
         </div>
       )}

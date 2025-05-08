@@ -76,6 +76,14 @@ export default function AboutPage() {
                   I build lean, privacy tight software that just works. From polishing the user flow to crushing the hard bugs, I move fast and finish strong. Need results, not excuses? Let's talk.
                   </p>
 
+                  <p className="text-xs text-gray-500 text-center">
+                      See resume {" "}
+                      <a href="/resume" className="text-indigo-500 underline">
+                        here
+                      </a>
+                      .
+                    </p>
+
                   <StockWidget />
                   <div className="p-2">
                     <p className="text-xs text-gray-500 text-center">
