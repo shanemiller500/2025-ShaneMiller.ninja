@@ -285,7 +285,7 @@ const WidgetCrypto: React.FC = () => {
             <img
               src={logos[md.symbol.toLowerCase()]}
               alt={md.symbol}
-              className="w-4 h-4"
+              className="w-5 h-5 pr-1"
             />
           )}
           {md?.symbol.toUpperCase()}
