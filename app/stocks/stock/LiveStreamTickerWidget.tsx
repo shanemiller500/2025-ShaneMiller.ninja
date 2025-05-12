@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { API_TOKEN } from "@/utils/config";
-import { formatDate } from "@/utils/formatters";
 import { motion } from "framer-motion";
 
 interface TradeInfo {
@@ -13,30 +12,67 @@ interface TradeInfo {
   percentChange: number;
 }
 
+type MarketState = "open" | "premarket" | "afterhours" | "closed";
+
 const LiveStreamTickerWidget: React.FC = () => {
   const [tradeInfoMap, setTradeInfoMap] = useState<Record<string, TradeInfo>>({});
   const [symbolLogos, setSymbolLogos] = useState<Record<string, string>>({});
   const [symbolProfiles, setSymbolProfiles] = useState<Record<string, any>>({});
-  const [marketStatus, setMarketStatus] = useState<any>(null);
+  const [marketState, setMarketState] = useState<MarketState>("closed");
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
   const topTenSymbols = [
-    "AAPL", "MSFT", "AMZN", "GOOGL", "TSLA",
-    "META", "NVDA", "JPM", "V", "NFLX"
+    "AAPL",
+    "MSFT",
+    "AMZN",
+    "GOOGL",
+    "TSLA",
+    "META",
+    "NVDA",
+    "JPM",
+    "V",
+    "NFLX",
   ];
+
+  // Determine current market state based on New York time
+  const updateMarketState = () => {
+    const now = new Date();
+    const estNow = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const day = estNow.getDay(); // 0-Sun … 6-Sat
+    const mins = estNow.getHours() * 60 + estNow.getMinutes();
+    const preStart = 4 * 60; // 4 AM
+    const regOpen = 9 * 60 + 30; // 9:30 AM
+    const regClose = 16 * 60; // 4 PM
+    const aftEnd = 20 * 60; // 8 PM
+
+    let state: MarketState = "closed";
+    if (day !== 0 && day !== 6) {
+      if (mins >= regOpen && mins < regClose) state = "open";
+      else if (mins >= preStart && mins < regOpen) state = "premarket";
+      else if (mins >= regClose && mins < aftEnd) state = "afterhours";
+    }
+    setMarketState(state);
+  };
+
+  // Initial load & 1-min update
+  useEffect(() => {
+    updateMarketState();
+    const int = setInterval(updateMarketState, 60_000);
+    return () => clearInterval(int);
+  }, []);
 
   // Fetch logos and profiles on mount
   useEffect(() => {
     topTenSymbols.forEach((symbol, idx) => {
       setTimeout(() => {
         fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${API_TOKEN}`)
-          .then(res => res.json())
-          .then(profile => {
-            setSymbolLogos(prev => ({ ...prev, [symbol]: profile.logo }));
-            setSymbolProfiles(prev => ({ ...prev, [symbol]: profile }));
+          .then((res) => res.json())
+          .then((profile) => {
+            setSymbolLogos((prev) => ({ ...prev, [symbol]: profile.logo }));
+            setSymbolProfiles((prev) => ({ ...prev, [symbol]: profile }));
           })
-          .catch(err => console.error(`Profile fetch error for ${symbol}:`, err));
+          .catch((err) => console.error(`Profile fetch error for ${symbol}:`, err));
       }, idx * 200);
     });
   }, []);
@@ -46,12 +82,9 @@ const LiveStreamTickerWidget: React.FC = () => {
     const timer = setTimeout(() => {
       socketRef.current = new WebSocket(`wss://ws.finnhub.io?token=${API_TOKEN}`);
 
-      socketRef.current.onopen = () => {
-        console.info("Socket opened");
-        checkMarketStatus();
-      };
+      socketRef.current.onopen = () => console.info("Socket opened");
 
-      socketRef.current.onmessage = evt => {
+      socketRef.current.onmessage = (evt) => {
         const msg = JSON.parse(evt.data);
         if (msg.type === "trade" && msg.data?.length) {
           const trade = msg.data[0];
@@ -59,16 +92,14 @@ const LiveStreamTickerWidget: React.FC = () => {
           if (!topTenSymbols.includes(symbol)) return;
 
           const price = parseFloat(trade.p);
-          setTradeInfoMap(prev => {
+          setTradeInfoMap((prev) => {
             const prevEntry = prev[symbol];
             let bgColor = "bg-gray-100 dark:bg-gray-600";
             if (prevEntry) {
               if (price > prevEntry.price) bgColor = "bg-green-300 dark:bg-green-700";
               else if (price < prevEntry.price) bgColor = "bg-red-300 dark:bg-red-700";
             }
-            const pct = prevEntry
-              ? ((price - prevEntry.price) / prevEntry.price) * 100
-              : 0;
+            const pct = prevEntry ? ((price - prevEntry.price) / prevEntry.price) * 100 : 0;
 
             return {
               ...prev,
@@ -84,8 +115,15 @@ const LiveStreamTickerWidget: React.FC = () => {
         }
       };
 
-      socketRef.current.onerror = err => {
+      socketRef.current.onerror = (err) => {
         console.error("WebSocket error:", err);
+      };
+
+      // Subscribe once socket opens
+      socketRef.current.onopen = () => {
+        topTenSymbols.forEach((s) =>
+          socketRef.current?.send(JSON.stringify({ type: "subscribe", symbol: s }))
+        );
       };
     }, 1000);
 
@@ -95,25 +133,30 @@ const LiveStreamTickerWidget: React.FC = () => {
     };
   }, []);
 
-  // Market status & subscribe
-  const checkMarketStatus = () => {
-    fetch(`https://finnhub.io/api/v1/stock/market-status?exchange=US&token=${API_TOKEN}`)
-      .then(res => res.json())
-      .then(data => {
-        setMarketStatus(data);
-        if (data.isOpen) {
-          topTenSymbols.forEach(symbol => {
-            socketRef.current?.send(JSON.stringify({ type: "subscribe", symbol }));
-          });
-        }
-      })
-      .catch(err => console.error("Market status error:", err));
-  };
+  const banner =
+    marketState === "closed"
+      ? "Markets Closed"
+      : marketState === "premarket"
+      ? "Pre-Market Trading"
+      : marketState === "afterhours"
+      ? "After-Hours Trading"
+      : null;
+
+  const isClickable = marketState !== "closed";
 
   return (
     <section className="mt-6 p-4 rounded shadow relative">
       <h2 className="text-xl font-bold mb-4">Live Stock Ticker</h2>
 
+      {banner && (
+        <div
+          className={`mb-4 text-center font-semibold animate-pulse ${
+            marketState === "closed" ? "text-red-600" : "text-yellow-500"
+          }`}
+        >
+          {banner}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {topTenSymbols.map((symbol, idx) => {
@@ -121,10 +164,12 @@ const LiveStreamTickerWidget: React.FC = () => {
           return (
             <motion.div
               key={symbol}
-              className="p-2 text-center rounded cursor-pointer"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setSelectedSymbol(symbol)}
+              className={`p-2 text-center rounded transition ${
+                !isClickable ? "pointer-events-none opacity-60" : "cursor-pointer"
+              }`}
+              whileHover={isClickable ? { scale: 1.05 } : undefined}
+              whileTap={isClickable ? { scale: 0.95 } : undefined}
+              onClick={() => isClickable && setSelectedSymbol(symbol)}
             >
               {symbolLogos[symbol] && (
                 <img
@@ -133,13 +178,21 @@ const LiveStreamTickerWidget: React.FC = () => {
                   className="mx-auto mb-1 w-6 h-6 object-contain"
                 />
               )}
-              <div className="font-bold text-sm">{idx + 1}. {symbol}</div>
-              <div className={`${info?.bgColor ?? "bg-gray-100 dark:bg-gray-600"} mt-1 p-1 rounded text-sm`}>
+              <div className="font-bold text-sm">
+                {idx + 1}. {symbol}
+              </div>
+              <div
+                className={`${
+                  info?.bgColor ?? "bg-gray-100 dark:bg-gray-600"
+                } mt-1 p-1 rounded text-sm`}
+              >
                 {info?.info ?? "--"}
               </div>
-              <div className={`mt-1 text-sm font-semibold ${
-                info?.percentChange >= 0 ? "text-green-600" : "text-red-600"
-              }`}>
+              <div
+                className={`mt-1 text-sm font-semibold ${
+                  info?.percentChange >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
                 {info ? info.percentChange.toFixed(2) + "%" : ""}
               </div>
             </motion.div>
@@ -153,7 +206,9 @@ const LiveStreamTickerWidget: React.FC = () => {
             <button
               onClick={() => setSelectedSymbol(null)}
               className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl"
-            >×</button>
+            >
+              ×
+            </button>
 
             {symbolProfiles[selectedSymbol]?.logo && (
               <img
@@ -171,11 +226,13 @@ const LiveStreamTickerWidget: React.FC = () => {
               ${tradeInfoMap[selectedSymbol]?.price.toFixed(2)}
             </p>
 
-            <p className={`text-center font-semibold mb-2 ${
-              tradeInfoMap[selectedSymbol]?.percentChange >= 0
-                ? "text-green-600"
-                : "text-red-600"
-            }`}>
+            <p
+              className={`text-center font-semibold mb-2 ${
+                tradeInfoMap[selectedSymbol]?.percentChange >= 0
+                  ? "text-green-600"
+                  : "text-red-600"
+              }`}
+            >
               {tradeInfoMap[selectedSymbol]?.percentChange.toFixed(2)}%
             </p>
 

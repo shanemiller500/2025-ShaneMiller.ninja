@@ -64,8 +64,13 @@ const getBgClass = (code: number) => {
   return 'bg-gray-100 dark:bg-gray-700';
 };
 
+// ensure correct local-day mapping
 const formatDate = (dateString: string) =>
-  new Date(dateString).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  new Date(dateString + 'T00:00:00').toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 
 export default function WidgetWeather() {
   const [weather, setWeather] = useState<Weather | null>(null);
@@ -101,10 +106,12 @@ export default function WidgetWeather() {
           .then(res => res.json())
           .then(data => {
             setWeather(data.current_weather);
-            const today = new Date().toISOString().split('T')[0];
-            const upcoming = data.daily.time
+
+            // Use your corrected upcoming logic:
+            const todayStr = new Date().toISOString().split('T')[0];
+            const upcoming: ForecastDay[] = data.daily.time
               .map((date: string, idx: number) => ({ date, idx }))
-              .filter((d: { date: string; idx: number }) => d.date >= today)
+              .filter((d: { date: string; idx: number }) => d.date >= todayStr)
               .slice(0, 5)
               .map((d: { date: string; idx: number }) => ({
                 date: d.date,
@@ -112,6 +119,7 @@ export default function WidgetWeather() {
                 temperature_min: data.daily.temperature_2m_min[d.idx],
                 weathercode: data.daily.weathercode[d.idx],
               }));
+
             setForecast(upcoming);
             setLoading(false);
           })
@@ -141,7 +149,7 @@ export default function WidgetWeather() {
 
   if (loading) {
     return (
-      <div className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto transition-colors duration-300 ${containerBg}  ${borderClass}`}>        
+      <div className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto ${containerBg} ${borderClass}`}>
         <div className="text-center py-8 text-gray-500">Loading weather...</div>
         {viewMore}
       </div>
@@ -150,7 +158,7 @@ export default function WidgetWeather() {
 
   if (error || !weather) {
     return (
-      <div className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto transition-colors duration-300 ${containerBg}  ${borderClass}`}>        
+      <div className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto ${containerBg} ${borderClass}`}>
         <div className="text-center py-8 text-red-500">{error}</div>
         {viewMore}
       </div>
@@ -164,47 +172,71 @@ export default function WidgetWeather() {
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
-      className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto transition-all duration-500 ${containerBg}  ${borderClass}`}
+      className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto ${containerBg} ${borderClass}`}
     >
       <div className="flex justify-between items-center mb-2">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{location || 'Your Location'}</h2>
-        <span className="text-sm text-gray-500 dark:text-gray-200">{currentTime.toLocaleTimeString()}</span>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          {location || 'Your Location'}
+        </h2>
+        <span className="text-sm text-gray-500 dark:text-gray-200">
+          {currentTime.toLocaleTimeString()}
+        </span>
       </div>
+
       <div className="flex justify-between items-center mb-6">
-        <div className={`text-6xl ${primary} animate-bounce`}>
+        <div className={`text-6xl ${primary}`}>
           <Icon />
         </div>
         <div className="ml-4 text-gray-900 dark:text-gray-100">
           <p className="text-xl font-medium">{description}</p>
-          <p className="text-lg">{weather.temperature}°C / {(weather.temperature * 1.8 + 32).toFixed(1)}°F</p>
+          <p className="text-lg">
+            {weather.temperature}°C / {(weather.temperature * 1.8 + 32).toFixed(1)}°F
+          </p>
           <p className="text-sm">Wind: {weather.windspeed} km/h</p>
         </div>
       </div>
-      <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">5-Day Forecast</h3>
-      <Swiper spaceBetween={12} slidesPerView={3} breakpoints={{ 640: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } }}>
+
+      <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+        5-Day Forecast
+      </h3>
+      <Swiper
+        spaceBetween={10}
+        slidesPerView={2}
+        breakpoints={{
+          320: { slidesPerView: 2 },
+          640: { slidesPerView: 3 },
+          1024: { slidesPerView: 4 },
+        }}
+      >
         {forecast?.map((day, idx) => {
           const { description: dayDesc, Icon: DayIcon } = getWeatherInfo(day.weathercode);
           const bgClass = getBgClass(day.weathercode);
           const dayColor = getColorClass(day.weathercode);
+
           return (
             <SwiperSlide key={day.date}>
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.1 }}
-                className={`p-4 rounded-xl shadow-sm text-center ${bgClass}`}
+                className={`p-4 rounded-xl shadow-sm text-center flex flex-col justify-between h-52 w-30 ${bgClass}`}
               >
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{formatDate(day.date)}</p>
-                <div className={`my-2 text-5xl ${dayColor}`}>                  
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {formatDate(day.date)}
+                </p>
+                <div className={`my-2 text-4xl ${dayColor}`}>
                   <DayIcon />
                 </div>
                 <p className="text-sm text-gray-900 dark:text-gray-100">{dayDesc}</p>
-                <p className="text-sm mt-1 text-gray-900 dark:text-gray-100">H {day.temperature_max}°C L {day.temperature_min}°C</p>
+                <p className="text-xs mt-1 text-gray-900 dark:text-gray-100">
+                  H {day.temperature_max}°C &nbsp;L {day.temperature_min}°C
+                </p>
               </motion.div>
             </SwiperSlide>
           );
         })}
       </Swiper>
+
       {viewMore}
     </motion.div>
   );
