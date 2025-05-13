@@ -4,26 +4,17 @@ import React, {
   useEffect,
   useState,
   useRef,
-  useCallback,
   useMemo,
+  useCallback,
   JSX,
 } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  FaDollarSign,
-  FaChartLine,
-  FaCoins,
-  FaDatabase,
-  FaWarehouse,
-  FaChartPie,
-  FaGlobeAmericas,
-  FaLink,
   FaTable,
   FaThLarge,
 } from "react-icons/fa";
-import { Chart } from "chart.js/auto";
-import "chartjs-adapter-date-fns";
 import { trackEvent } from "@/utils/mixpanel";
+import CryptoAssetPopup from "../../utils/CryptoAssetPopup"; // <-- new import
 
 /* ---------- helpers ---------- */
 const formatValue = (v: any) => {
@@ -58,13 +49,6 @@ export default function TopGainersLosers() {
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [logos, setLogos] = useState<Record<string, string>>({});
 
-  const [timeframe, setTimeframe] = useState<"1" | "7" | "30">("1");
-  const [chartLoading, setChartLoading] = useState(false);
-
-  /* chart refs */
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const chartRef = useRef<any>(null);
-
   /* -------- preload CoinGecko logos -------- */
   useEffect(() => {
     (async () => {
@@ -77,7 +61,7 @@ export default function TopGainersLosers() {
         });
         setLogos(map);
       } catch {
-        // ignore
+        /* ignore */
       }
     })();
   }, []);
@@ -88,7 +72,7 @@ export default function TopGainersLosers() {
     const load = async () => {
       try {
         const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`
+          `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`,
         );
         const json = await res.json();
         setCryptoData(Array.isArray(json.data) ? json.data : []);
@@ -109,83 +93,12 @@ export default function TopGainersLosers() {
     () =>
       [...cryptoData].sort(
         (a, b) =>
-          parseFloat(b.changePercent24Hr) -
-          parseFloat(a.changePercent24Hr)
+          parseFloat(b.changePercent24Hr) - parseFloat(a.changePercent24Hr),
       ),
-    [cryptoData]
+    [cryptoData],
   );
   const topGainers = sorted.slice(0, 15);
   const topLosers = sorted.slice(-15).reverse();
-
-  /* ------------ popup chart -------------- */
-  useEffect(() => {
-    if (!selectedAsset) return;
-    chartRef.current?.destroy?.();
-    let cancelled = false;
-    setChartLoading(true);
-
-    (async () => {
-      try {
-        const end = Date.now();
-        const days = parseInt(timeframe, 10);
-        const start = end - days * 864e5;
-        const res = await fetch(
-          `https://rest.coincap.io/v3/assets/${selectedAsset.id}/history?interval=m1&start=${start}&end=${end}&apiKey=${API_KEY}`
-        );
-        const json = await res.json();
-        const points = (json.data || []).map((p: any) => ({
-          x: new Date(p.time),
-          y: parseFloat(p.priceUsd),
-        }));
-        if (canvasRef.current) {
-          const ctx = canvasRef.current.getContext("2d");
-          if (ctx) {
-            chartRef.current = new Chart(ctx, {
-              type: "line",
-              data: {
-                datasets: [
-                  {
-                    data: points,
-                    borderColor: "#84e2ff",
-                    backgroundColor: "rgba(84,75,255,0.6)",
-                    pointRadius: 0,
-                    fill: true,
-                  },
-                ],
-              },
-              options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: { x: { type: "time" }, y: {} },
-              },
-            });
-          }
-        }
-      } catch (e) {
-        console.error("Chart load error:", e);
-      } finally {
-        if (!cancelled) {
-          setTimeout(() => setChartLoading(false), 50);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedAsset, timeframe]);
-
-  /* -------- mixpanel + close -------- */
-  useEffect(() => {
-    if (selectedAsset)
-      trackEvent("CryptoAssetPopupOpen", { id: selectedAsset.id });
-  }, [selectedAsset]);
-
-  const closePopup = useCallback(() => {
-    if (selectedAsset)
-      trackEvent("CryptoAssetPopupClose", { id: selectedAsset.id });
-    setSelectedAsset(null);
-  }, [selectedAsset]);
 
   /* --------------- UI helpers --------------- */
   const Metric = ({
@@ -202,12 +115,8 @@ export default function TopGainersLosers() {
     <div className="flex items-center gap-2 bg-gray-100 p-2 rounded hover:scale-105 transition-transform">
       {icon}
       <div className="flex flex-col">
-        <span className="text-[10px] sm:text-xs text-gray-500">
-          {label}
-        </span>
-        <span className={`font-semibold ${color} text-xs sm:text-sm`}>
-          {value}
-        </span>
+        <span className="text-[10px] sm:text-xs text-gray-500">{label}</span>
+        <span className={`font-semibold ${color} text-xs sm:text-sm`}>{value}</span>
       </div>
     </div>
   );
@@ -225,9 +134,7 @@ export default function TopGainersLosers() {
             trackEvent("CryptoAssetClick", { id: c.id });
           }}
         >
-          <td className="px-2 sm:px-4 py-1 sm:py-2 text-[10px] sm:text-sm">
-            {c.rank}
-          </td>
+          <td className="px-2 sm:px-4 py-1 sm:py-2 text-[10px] sm:text-sm">{c.rank}</td>
           <td className="px-2 sm:px-4 py-1 sm:py-2 flex items-center gap-1 font-semibold text-[11px] sm:text-sm">
             {logo && (
               <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
@@ -258,25 +165,11 @@ export default function TopGainersLosers() {
       );
     });
 
-    function getHostname(urlStr: string): string | null {
-      try {
-        // if it doesn’t look absolute, assume https://
-        const absolute = urlStr.includes("://") ? urlStr : `https://${urlStr}`;
-        return new URL(absolute).hostname.replace(/^www\./, "");
-      } catch {
-        return null;
-      }
-    }
-
   const GridCards = ({ rows }: { rows: any[] }) =>
     rows.map((c) => {
       const change = parseFloat(c.changePercent24Hr);
       const bg =
-        change > 0
-          ? "bg-green-500"
-          : change < 0
-          ? "bg-red-500"
-          : "bg-gray-400";
+        change > 0 ? "bg-green-500" : change < 0 ? "bg-red-500" : "bg-gray-400";
       const logo = logos[c.symbol.toLowerCase()];
       return (
         <motion.div
@@ -303,13 +196,9 @@ export default function TopGainersLosers() {
                 />
               </span>
             )}
-            <span className="font-bold text-sm sm:text-lg">
-              {c.symbol}
-            </span>
+            <span className="font-bold text-sm sm:text-lg">{c.symbol}</span>
           </div>
-          <div className="mt-0.5 text-[11px] sm:text-sm">
-            {formatUSD(c.priceUsd)}
-          </div>
+          <div className="mt-0.5 text-[11px] sm:text-sm">{formatUSD(c.priceUsd)}</div>
           <div className="text-[9px] sm:text-xs opacity-80">
             {formatValue(change)}%
           </div>
@@ -340,11 +229,7 @@ export default function TopGainersLosers() {
             }}
             className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded-full shadow-sm hover:shadow-md transition-shadow duration-200"
           >
-            {viewMode === "table" ? (
-              <FaThLarge className="w-5 h-5" />
-            ) : (
-              <FaTable className="w-5 h-5" />
-            )}
+            {viewMode === "table" ? <FaThLarge className="w-5 h-5" /> : <FaTable className="w-5 h-5" />}
             <span className="hidden sm:inline text-sm font-medium">
               {viewMode === "table" ? "Grid View" : "Table View"}
             </span>
@@ -356,20 +241,12 @@ export default function TopGainersLosers() {
           <>
             {["Top 15 Gainers", "Top 15 Losers"].map((title, idx) => (
               <section className="mb-8" key={title}>
-                <h2 className="font-semibold text-lg sm:text-xl mb-1">
-                  {title}
-                </h2>
+                <h2 className="font-semibold text-lg sm:text-xl mb-1">{title}</h2>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-100">
                     <thead className="bg-gray-100 text-brand-900">
                       <tr>
-                        {[
-                          "Rank",
-                          "Symbol",
-                          "Name",
-                          "Price (USD)",
-                          "24h %",
-                        ].map((h) => (
+                        {["Rank", "Symbol", "Name", "Price (USD)", "24h %"].map((h) => (
                           <th
                             key={h}
                             className="px-2 sm:px-4 py-1 sm:py-2 uppercase text-[9px] sm:text-xs text-left"
@@ -380,9 +257,7 @@ export default function TopGainersLosers() {
                       </tr>
                     </thead>
                     <tbody>
-                      <TableRows
-                        rows={idx === 0 ? topGainers : topLosers}
-                      />
+                      <TableRows rows={idx === 0 ? topGainers : topLosers} />
                     </tbody>
                   </table>
                 </div>
@@ -392,17 +267,13 @@ export default function TopGainersLosers() {
         ) : (
           <>
             <section className="mb-8">
-              <h2 className="font-semibold text-lg sm:text-xl mb-3">
-                Top 15 Gainers
-              </h2>
+              <h2 className="font-semibold text-lg sm:text-xl mb-3">Top 15 Gainers</h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 <GridCards rows={topGainers} />
               </div>
             </section>
             <section className="mb-8">
-              <h2 className="font-semibold text-lg sm:text-xl mb-3">
-                Top 15 Losers
-              </h2>
+              <h2 className="font-semibold text-lg sm:text-xl mb-3">Top 15 Losers</h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 <GridCards rows={topLosers} />
               </div>
@@ -410,213 +281,12 @@ export default function TopGainersLosers() {
           </>
         )}
 
-        {/* popup */}
-        <AnimatePresence>
-          {selectedAsset && (
-            <motion.div
-              className="fixed inset-0 bg-black/60 flex items-start sm:items-center justify-center z-50 p-3 overflow-y-auto"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={closePopup}
-            >
-              <motion.div
-                className="relative bg-white dark:bg-brand-900 rounded-lg shadow-lg w-full max-w-sm sm:max-w-md h-full sm:h-auto max-h-[90vh] overflow-y-auto px-4 py-5 sm:p-6 hover:scale-102 transition-transform"
-                initial={{ y: 32, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 32, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 300 }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* close */}
-                <button
-                  className="absolute top-3 right-4 text-indigo-600 hover:text-indigo-800 text-2xl hover:scale-110 transition-transform"
-                  onClick={closePopup}
-                >
-                  ×
-                </button>
-
-                {/* header */}
-                <div className="flex items-center gap-2 mb-1">
-                  {logos[
-                    selectedAsset.symbol.toLowerCase()
-                  ] && (
-                    <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[3px]">
-                      <img
-                        src={
-                          logos[
-                            selectedAsset.symbol.toLowerCase()
-                          ]
-                        }
-                        alt={selectedAsset.symbol}
-                        className="w-6 h-6 sm:w-8 sm:h-8"
-                      />
-                    </span>
-                  )}
-                  <h3 className="text-lg sm:text-2xl font-bold">
-                    {selectedAsset.name}
-                  </h3>
-                </div>
-                <p className="text-indigo-600 mb-4 text-sm sm:text-base">
-                  #{selectedAsset.rank} •{" "}
-                  {selectedAsset.symbol.toUpperCase()}
-                </p>
-
-                {/* timeframe picks */}
-                <div className="flex gap-2 mb-3">
-                  {([
-                    ["1", "1D"],
-                    ["7", "7D"],
-                    ["30", "30D"],
-                  ] as const).map(([tf, label]) => (
-                    <button
-                      key={tf}
-                      onClick={() => setTimeframe(tf)}
-                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                        timeframe === tf
-                          ? "bg-indigo-600 text-white"
-                          : "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* chart */}
-                <div className="relative w-full h-40 sm:h-48 mb-4">
-                  {chartLoading && (
-                    <div className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center z-10">
-                      <svg
-                        className="w-8 h-8 animate-spin text-indigo-600"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8v8H4z"
-                        />
-                      </svg>
-                    </div>
-                  )}
-                  <canvas
-                    ref={canvasRef}
-                    className="w-full h-full"
-                  />
-                </div>
-
-                {/* metrics */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] sm:text-sm">
-                  <Metric
-                    icon={<FaDollarSign className="text-indigo-600" />}
-                    label="Price"
-                    value={formatUSD(
-                      selectedAsset.priceUsd
-                    )}
-                    color={
-                      parseFloat(
-                        selectedAsset.changePercent24Hr
-                      ) >= 0
-                        ? "text-green-600"
-                        : "text-red-600"
-                    }
-                  />
-                  <Metric
-                    icon={<FaChartLine className="text-indigo-600" />}
-                    label="24h Change"
-                    value={`${formatValue(
-                      selectedAsset.changePercent24Hr
-                    )}%`}
-                    color={
-                      parseFloat(
-                        selectedAsset.changePercent24Hr
-                      ) >= 0
-                        ? "text-green-600"
-                        : "text-red-600"
-                    }
-                  />
-                  <Metric
-                    icon={<FaChartPie className="text-indigo-600" />}
-                    label="Market Cap"
-                    value={formatUSD(
-                      selectedAsset.marketCapUsd
-                    )}
-                  />
-                  <Metric
-                    icon={<FaCoins className="text-indigo-600" />}
-                    label="Volume (24h)"
-                    value={formatUSD(
-                      selectedAsset.volumeUsd24Hr
-                    )}
-                  />
-                  <Metric
-                    icon={<FaDatabase className="text-indigo-600" />}
-                    label="Supply"
-                    value={formatValue(
-                      selectedAsset.supply
-                    )}
-                  />
-                  <Metric
-                    icon={<FaWarehouse className="text-indigo-600" />}
-                    label="Max Supply"
-                    value={
-                      selectedAsset.maxSupply
-                        ? formatValue(
-                            selectedAsset.maxSupply
-                          )
-                        : "—"
-                    }
-                  />
-                  <Metric
-                    icon={<FaGlobeAmericas className="text-indigo-600" />}
-                    label="VWAP (24h)"
-                    value={
-                      selectedAsset.vwap24Hr
-                        ? formatValue(
-                            selectedAsset.vwap24Hr
-                          )
-                        : "—"
-                    }
-                  />
-                </div>
-
-   {/* explorer */}
-{selectedAsset.explorer && (() => {
-  const host = getHostname(selectedAsset.explorer);
-  if (!host) return null;
-  // ensure the link itself also has a protocol
-  const href = selectedAsset.explorer.includes("://")
-    ? selectedAsset.explorer
-    : `https://${selectedAsset.explorer}`;
-  return (
-    <div className="mt-4 text-center text-[11px] sm:text-sm">
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 text-indigo-600 hover:underline hover:scale-105 transition-transform"
-      >
-        <FaLink />
-        {host}
-      </a>
-    </div>
-  );
-})()}
-
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* shared crypto popup */}
+        <CryptoAssetPopup
+          asset={selectedAsset}
+          logos={logos}
+          onClose={() => setSelectedAsset(null)}
+        />
       </div>
     </div>
   );
