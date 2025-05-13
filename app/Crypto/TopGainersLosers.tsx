@@ -14,7 +14,7 @@ import {
   FaThLarge,
 } from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
-import CryptoAssetPopup from "../../utils/CryptoAssetPopup"; // <-- new import
+import CryptoAssetPopup from "@/utils/CryptoAssetPopup"; // <-- new import
 
 /* ---------- helpers ---------- */
 const formatValue = (v: any) => {
