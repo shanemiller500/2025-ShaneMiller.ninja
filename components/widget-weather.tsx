@@ -204,8 +204,8 @@ export default function WidgetWeather() {
         slidesPerView={2}
         breakpoints={{
           320: { slidesPerView: 2 },
-          640: { slidesPerView: 3 },
-          1024: { slidesPerView: 4 },
+          640: { slidesPerView: 2 },
+          1024: { slidesPerView: 2 },
         }}
       >
         {forecast?.map((day, idx) => {

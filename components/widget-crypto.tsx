@@ -274,10 +274,14 @@ const WidgetCrypto: React.FC = () => {
     }
 
     return (
-      <div
+      <motion.div
         key={id}
         onClick={() => setSelectedAssetId(id)}
         className={`${bg} m-1 p-2 rounded text-white text-center cursor-pointer whitespace-nowrap`}
+        whileHover={{
+          scale: 1.05, // Increase size slightly on hover
+          transition: { duration: 0.2 }, // Smooth transition
+        }}
       >
         <div className="text-xs">#{md?.rank}</div>
         <div className="flex items-center justify-center font-bold text-sm p-1">
@@ -294,7 +298,7 @@ const WidgetCrypto: React.FC = () => {
           {price ? formatUSD(price) : "Loading..."}
         </div>
         <div className="text-xs">{formatPercent(md?.changePercent24Hr)}</div>
-      </div>
+      </motion.div>
     );
   };
 
