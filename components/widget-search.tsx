@@ -17,7 +17,7 @@ export default function widgetSearch() {
   };
 
   return (
-    <div className="rounded-lg rounded-2xl shadow-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out pb-2">
+    <div className="rounded-lg rounded-2xl bg-white shadow-lg dark:bg-brand-950 pb-2">
 
 <div className="flex flex-col items-center justify-center  text-gray-100">
       <h1 className="font-bold text-indigo-500">AI Search </h1>

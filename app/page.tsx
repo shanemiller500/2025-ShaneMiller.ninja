@@ -81,19 +81,11 @@ export default function AboutPage() {
                       <a href="/resume" className="text-indigo-500 underline">
                         here
                       </a>
-                      .
+                      
                     </p>
 
                   <StockWidget />
-                  <div className="p-2">
-                    <p className="text-xs text-gray-500 text-center">
-                      See more stock market data{" "}
-                      <a href="/stocks" className="text-indigo-500 underline">
-                        here
-                      </a>
-                      .
-                    </p>
-                  </div>
+                 
                   {/* <Zoltars /> */}
                 </div>
               </div>

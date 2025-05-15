@@ -140,16 +140,20 @@ export default function WidgetWeather() {
   const borderClass = primary.replace('text', 'border');
 
   const viewMore = (
-    <div className="mt-4 text-center">
-      <a href="/Weather" className="underline text-sm">
-        View more weather data here
+    <div className="p-2">
+    <p className="text-xs text-gray-500 text-center">
+      More weather {" "}
+      <a href="/Weather" className="text-indigo-500 underline">
+        here
       </a>
-    </div>
+      
+    </p>
+  </div>
   );
 
   if (loading) {
     return (
-      <div className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto ${containerBg} ${borderClass}`}>
+      <div className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto  ${containerBg} ${borderClass}`}>
         <div className="text-center py-8 text-gray-500">Loading weather...</div>
         {viewMore}
       </div>
@@ -172,7 +176,7 @@ export default function WidgetWeather() {
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
-      className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto ${containerBg} ${borderClass}`}
+      className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto bg-white dark:bg-brand-950 ${containerBg} ${borderClass}`}
     >
       <div className="flex justify-between items-center mb-2">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">

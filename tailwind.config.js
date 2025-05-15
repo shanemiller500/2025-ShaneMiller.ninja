@@ -28,7 +28,7 @@ module.exports = {
         },
 
         brand: {
-          50: '#F9FAFB',
+          50: 'gradient-to-r from-indigo-600 to-purple-600',
           100: '#F3F4F6',
           200: '#E5E7EB',
           300: '#BFC4CD',
@@ -38,7 +38,7 @@ module.exports = {
           700: '#374151',
           800: '#7F64BA', //Purple
           900: '#1D1D20', //background black
-          950: '#030712',
+          950: 'rgb(126 126 126 / 7%)',
         },
       },
       fontSize: {

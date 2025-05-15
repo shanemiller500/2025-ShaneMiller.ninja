@@ -22,12 +22,12 @@ export default function ProjectCard({ item, onClick }: ItemProps) {
     <Link
       href={item.slug}
       onClick={onClick}
-      className="rounded-lg border border-slate-200 hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700 transition-color ease-in-out p-5 group"
+      className="rounded-lg border border-indigo-200 hover:border-indigo-300 dark:border-indigo-800 dark:hover:border-indigo-700 transition-color ease-in-out p-5 group dark:bg-brand-950 bg-white shadow-lg hover:shadow-lg dark:hover:shadow-indigo-800"
     >
       <div className="flex flex-col h-full">
         <div className="grow">
           <div className="flex items-center justify-between space-x-2">
-            <div className="h-10 w-10 flex items-center justify-center border border-slate-200 dark:border-slate-700 rounded-full mb-2">
+            <div className="h-10 w-10 flex items-center justify-center border border-indigo-300 dark:border-indigo-700 rounded-full mb-2">
               <Image src={item.icon} width={30} alt={item.title} />
             </div>
             {item.openSource && (

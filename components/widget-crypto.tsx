@@ -544,11 +544,11 @@ const WidgetCrypto: React.FC = () => {
 
       <div className="p-2">
         <p className="text-xs text-gray-500 text-center">
-          See more{" "}
+          More Crypto data{" "}
           <a href="/Crypto" className="underline text-indigo-500">
             here
           </a>
-          .
+          
         </p>
       </div>
 

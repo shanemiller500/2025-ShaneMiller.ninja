@@ -62,7 +62,7 @@ const WidgetNews: React.FC = () => {
   }, []);
 
   return (
-    <div className="relative rounded-lg border border-slate-200 dark:border-slate-800 odd:-rotate-1 even:rotate-1 hover:rotate-0 transition-transform duration-700 hover:duration-100 ease-in-out p-5">
+    <div className="relative rounded-lg bg-white dark:bg-brand-950 p-5">
       {/* Spinner overlay during refresh */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-50">
@@ -141,14 +141,15 @@ const WidgetNews: React.FC = () => {
                 </li>
               ))}
             </ul>
-            <div className="mt-4 text-center">
-              <a
-                href="/news"
-                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
-              >
-                Read More News
-              </a>
-            </div>
+            <div className="p-2">
+                    <p className="text-xs text-gray-500 text-center">
+                      Read more News{" "}
+                      <a href="/news" className="text-indigo-500 underline">
+                        here
+                      </a>
+                      
+                    </p>
+                  </div>
           </>
         ) : (
           <p>Loading breaking news...</p>

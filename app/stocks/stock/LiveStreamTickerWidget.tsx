@@ -145,7 +145,7 @@ const LiveStreamTickerWidget: React.FC = () => {
   const isClickable = marketState !== "closed";
 
   return (
-    <section className="mt-6 p-4 rounded shadow relative">
+    <section className="mt-6 p-4 rounded shadow relative dark:bg-brand-950 bg-white">
       <h2 className="text-xl font-bold mb-4">Live Stock Ticker</h2>
 
       {banner && (
@@ -255,6 +255,16 @@ const LiveStreamTickerWidget: React.FC = () => {
           </div>
         </div>
       )}
+
+<div className="p-2">
+                    <p className="text-xs text-gray-500 text-center">
+                      See more stock market data{" "}
+                      <a href="/stocks" className="text-indigo-500 underline">
+                        here
+                      </a>
+                      
+                    </p>
+                  </div>
     </section>
   );
 };

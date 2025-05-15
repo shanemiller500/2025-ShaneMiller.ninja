@@ -1,549 +1,484 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { FaChevronDown } from 'react-icons/fa';
 
 import { fetchMediaStackArticles } from './Mediastack-API-Call';
-import { fetchFinnhubArticles } from './Finnhub-API-Call';
-import { fetchUmailArticles, Article } from './MoreNewsAPI';
-import WidgetNews from '@/components/widget-news';
+import { fetchFinnhubArticles   } from './Finnhub-API-Call';
+import { fetchUmailArticles     } from './MoreNewsAPI';
+
+import WidgetNews    from '@/components/widget-news';
 import WidgetWeather from '@/components/widget-weather';
-import CryptoWidget from '@/components/widget-crypto';
-import WidgetSearch from '@/components/widget-search';
+import CryptoWidget  from '@/components/widget-crypto';
+import WidgetSearch  from '@/components/widget-search';
 
-const desiredCategories = ['News', 'Sports', 'World', 'Finance', 'Business'];
+/* ────────────────────────────────────────────────────────────────── */
+/*  Helpers & constants                                              */
+/* ────────────────────────────────────────────────────────────────── */
 
-/**
- * smoothScrollToTop animates scrolling to the top over a specified duration.
- */
-function smoothScrollToTop(duration = 1000) {
-  const start = window.scrollY;
-  const startTime = performance.now();
-
-  function scroll() {
-    const now = performance.now();
-    const time = Math.min(1, (now - startTime) / duration);
-    // easeOutQuad easing
-    const easeOutQuad = time * (2 - time);
-    window.scrollTo(0, Math.ceil((1 - easeOutQuad) * start));
-    if (window.scrollY > 0) {
-      requestAnimationFrame(scroll);
-    }
-  }
-  requestAnimationFrame(scroll);
+export interface Article {
+  source: { id: string | null; name: string; image?: string | null };
+  author : string | null;
+  title  : string;
+  description: string;
+  url    : string;
+  urlToImage: string | null;
+  publishedAt: string;
+  content: string | null;
+  categories: string[];
 }
 
-// Featured News Slider – displays all articles with images.
-function FeaturedNewsSlider({ articles }: { articles: Article[] }) {
-  const sliderArticles = articles.slice(0, 5);
-  const [currentSlide, setCurrentSlide] = useState(0);
+function getDomain (url: string) {
+  try { return new URL(url).hostname; } catch { return ''; }
+}
 
+function smoothScrollToTop (d = 600) {
+  const start = window.scrollY;
+  const t0    = performance.now();
+  const step  = (now: number) => {
+    const p = Math.min(1, (now - t0) / d);
+    const ease = p * (2 - p);
+    window.scrollTo(0, Math.ceil((1 - ease) * start));
+    if (window.scrollY) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+const PER_PAGE     = 36;
+const FEATURED_MAX = 100;
+
+/* 1×1 grey SVG data URI */
+const PLACEHOLDER =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="100%" height="100%" fill="%23e5e7eb"/></svg>';
+
+/* session-level cache for Microlink OG images so we never re-fetch */
+const ogCache = new Map<string, string>();
+
+/* Microlink helpers */
+const ogImage = (url: string) =>
+  `https://api.microlink.io/?url=${encodeURIComponent(url)}&meta=false&embed=image.url`;
+
+const logoURL = (domain: string) => `https://logo.microlink.io/${domain}`;
+
+/* ────────────────────────────────────────────────────────────────── */
+/*  Page component                                                   */
+/* ────────────────────────────────────────────────────────────────── */
+
+export default function NewsPage () {
+  const [page,     setPage]     = useState(1);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+  const [fade,     setFade]     = useState(false);
+  const [providerFilter, setProviderFilter] = useState('All');
+
+  /* fetch news – no backend cache (client-side state is enough) */
   useEffect(() => {
-    if (sliderArticles.length === 0) return;
-    const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % sliderArticles.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [sliderArticles.length]);
+    let cancel = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [ms, fh, um] = await Promise.all([
+          fetchMediaStackArticles(page),
+          fetchFinnhubArticles(),
+          fetchUmailArticles()
+        ]);
+
+        if (cancel) return;
+
+        /* dedupe by title */
+        const map = new Map<string, Article>();
+        [...ms, ...fh, ...um].forEach(a => {
+          if (!map.has(a.title)) map.set(a.title, a);
+        });
+
+        setArticles(prev =>
+          [...prev, ...Array.from(map.values())]
+            .sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt))
+        );
+      } catch (err: any) {
+        console.error(err);
+        setError(err.message ?? 'Unknown error');
+      } finally {
+        if (!cancel) setLoading(false);
+      }
+    })();
+    return () => { cancel = true; };
+  }, [page]);
+
+  /* provider dropdown list */
+  const providers = useMemo(() => {
+    const names = new Set(articles.map(a => a.source.name));
+    return ['All', ...Array.from(names).sort()];
+  }, [articles]);
+
+  /* reset page when filter changes */
+  useEffect(() => setPage(1), [providerFilter]);
+
+  const filtered = providerFilter === 'All'
+    ? articles
+    : articles.filter(a => a.source.name === providerFilter);
+
+  const featured      = filtered.filter(a => a.urlToImage).slice(0, FEATURED_MAX);
+  const remainingNews = filtered.filter(a => !featured.includes(a));
+
+  const totalPages = Math.max(1, Math.ceil(remainingNews.length / PER_PAGE));
+  const startIdx   = (page - 1) * PER_PAGE;
+  const slice      = remainingNews.slice(startIdx, startIdx + PER_PAGE);
+
+  const turnPage = (n: number, getMore = false) => {
+    if (fade) return;
+    smoothScrollToTop();
+    setFade(true);
+    setTimeout(() => {
+      setPage(n);
+      setFade(false);
+    }, 350);
+    if (getMore) setPage(p => p + 1);
+  };
 
   return (
-    <div className="relative overflow-hidden">
-      <div
-        className="whitespace-nowrap transition-transform duration-700"
-        style={{ transform: `translateX(-${currentSlide * 100}%)` }}
-      >
-        {sliderArticles.map((article, index) => {
-          const publishedDate = new Date(article.publishedAt);
-          const formattedDate = publishedDate.toLocaleDateString();
-          const formattedTime = publishedDate.toLocaleTimeString();
-          return (
-            <div
-              key={`${article.url}-${index}`}
-              className="inline-block w-full rounded-lg shadow-xl overflow-hidden hover:scale-105 transform transition duration-300"
-            >
-              {article.urlToImage && (
-                <div className="relative">
-                  {/* Use a smaller height on mobile and larger on small+ screens */}
-                  <img
-                    src={article.urlToImage}
-                    alt={article.title}
-                    className="w-full h-38 sm:h-64 object-cover"
-                  />
-                  {article.thumbnails && article.thumbnails.length > 0 && (
-                    <div className="absolute bottom-0 left-0 right-0 flex justify-center space-x-2 p-2 bg-black bg-opacity-50">
-                      {article.thumbnails.map((thumb, i) => (
-                        <img
-                          key={i}
-                          src={thumb}
-                          alt={`Thumbnail ${i + 1}`}
-                          className="w-10 h-10 object-cover border border-white"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="p-6">
-                <h3 className="font-bold text-gray-800 dark:text-gray-100">
-                  {article.title}
-                </h3>
-                <div className="flex items-center space-x-2 mt-1">
-                  {article.source.image && (
-                    <img
-                      src={article.source.image}
-                      alt={article.source.name}
-                      className="w-8 h-8 object-contain"
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://via.placeholder.com/32';
-                      }}
-                    />
-                  )}
-                  <span className="text-sm text-gray-500 dark:text-gray-300">
-                    {article.source.name}
-                  </span>
-                  <span className="text-sm text-gray-500 dark:text-gray-300">
-                    &bull; {formattedDate} {formattedTime}
-                  </span>
-                </div>
-                {article.author && (
-                  <p className="text-sm text-gray-500 dark:text-gray-300 mt-1">
-                    By {article.author}
-                  </p>
-                )}
-                <div className="mt-4">
-                  <a
-                    href={article.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center text-indigo-600 dark:text-indigo-400 hover:underline"
-                  >
-                    Read More
-                    <svg
-                      className="w-4 h-4 ml-1 transition-transform duration-300 transform group-hover:translate-x-1"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </a>
-                </div>
-              </div>
+    <div className="max-w-6xl mx-auto w-full px-4 py-6">
+      <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-6">
+        The&nbsp;Miller&nbsp;Gazette
+      </h1>
+
+      {error && (
+        <p className="bg-red-100 text-red-700 p-3 mb-4 rounded font-medium">
+          {error}
+        </p>
+      )}
+
+      {/* search + provider dropdown */}
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <ProviderDropdown
+          options={providers}
+          value={providerFilter}
+          onChange={setProviderFilter}
+        />
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* ───── MAIN ───── */}
+        <section className="flex-1 w-full lg:max-w-[720px]">
+          {featured.length > 0 && <FeaturedSlider articles={featured} />}
+
+          <div
+            className={`transition-opacity duration-300 ${
+              fade ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {slice.map(a => <ArticleCard key={a.url} article={a} />)}
             </div>
-          );
-        })}
+
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              loading={loading}
+              onPrev={() => turnPage(page - 1)}
+              onNext={() => turnPage(page + 1, page === totalPages)}
+            />
+          </div>
+        </section>
+
+        {/* ───── SIDEBAR ───── */}
+        <aside className="w-full lg:w-[300px] space-y-6">
+          <WidgetSearch />
+          <WidgetWeather />
+          <CryptoWidget />
+          <WidgetNews />
+        </aside>
       </div>
     </div>
   );
 }
 
-export default function NewsPage() {
-  const [apiPage, setApiPage] = useState<number>(1);
-  const itemsPerPage = 30;
-  const [allMediaArticles, setAllMediaArticles] = useState<Article[]>([]);
-  const [umailArticles, setUmailArticles] = useState<Article[]>([]);
-  const [finnhubArticles, setFinnhubArticles] = useState<Article[]>([]);
-  const [clientPage, setClientPage] = useState<number>(1);
-  const [hasMore, setHasMore] = useState<boolean>(true);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>(desiredCategories[0]);
-  const [isTransitioning, setIsTransitioning] = useState<boolean>(false);
-  const contentRef = useRef<HTMLDivElement>(null);
+/* ────────────────────────────────────────────────────────────────── */
+/*  Sub-components                                                    */
+/* ────────────────────────────────────────────────────────────────── */
 
-  // Fetch MediaStack Articles (with caching)
-  useEffect(() => {
-    async function loadMediaStack() {
-      setLoading(true);
-      try {
-        const cacheKey = `mediastackArticles_page_${apiPage}`;
-        const cachedData = localStorage.getItem(cacheKey);
-        let articles: Article[] = [];
-        if (cachedData) {
-          const parsedData = JSON.parse(cachedData);
-          const now = new Date().getTime();
-          if (now - parsedData.timestamp < 24 * 60 * 60 * 1000) {
-            articles = parsedData.articles;
-          }
-        }
-        if (articles.length === 0) {
-          const fetchedArticles = await fetchMediaStackArticles(apiPage);
-          articles = fetchedArticles.map((article: any) => ({
-            ...article,
-            images: [],
-            thumbnails: [],
-            categories:
-              article.categories && article.categories.length > 0
-                ? article.categories
-                : article.category
-                ? [article.category]
-                : ['News'],
-          }));
-          const dataToCache = {
-            timestamp: new Date().getTime(),
-            articles,
-          };
-          localStorage.setItem(cacheKey, JSON.stringify(dataToCache));
-        }
-        if (articles.length === 0) {
-          setHasMore(false);
-        }
-        const articlesWithCategories = articles.map((article) => ({
-          ...article,
-          images: [],
-          thumbnails: [],
-          categories:
-            article.categories && article.categories.length > 0
-              ? article.categories
-              : (article as any).category
-              ? [(article as any).category]
-              : ['News'],
-        }));
-        setAllMediaArticles((prev) => [...prev, ...articlesWithCategories]);
-      } catch (err: any) {
-        console.error(err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadMediaStack();
-  }, [apiPage]);
+function ProviderDropdown ({
+  options,
+  value,
+  onChange
+}: {
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
-  // Fetch Finnhub Articles (no caching)
+  const toggle = () => setOpen(o => !o);
+  const close  = () => setOpen(false);
+
   useEffect(() => {
-    async function loadFinnhub() {
-      try {
-        const articles = await fetchFinnhubArticles();
-        const articlesWithCategories = articles.map((article: any) => ({
-          ...article,
-          images: [],
-          thumbnails: [],
-          categories:
-            article.categories && article.categories.length > 0
-              ? article.categories
-              : article.category
-              ? [article.category]
-              : ['News'],
-        }));
-        setFinnhubArticles(articlesWithCategories);
-      } catch (err: any) {
-        console.error(err);
-      }
-    }
-    loadFinnhub();
+    const click = (e: MouseEvent) =>
+      !btnRef.current?.parentElement?.contains(e.target as Node) && close();
+    const esc   = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    window.addEventListener('mousedown', click);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('mousedown', click);
+      window.removeEventListener('keydown', esc);
+    };
   }, []);
 
-  // Fetch U‑mail Articles (no caching)
-  useEffect(() => {
-    async function loadUmail() {
-      try {
-        const articles = await fetchUmailArticles();
-        const articlesWithCategories = articles.map((article: Article) => ({
-          ...article,
-          categories:
-            article.categories && article.categories.length > 0 ? article.categories : ['News'],
-        }));
-        setUmailArticles(articlesWithCategories);
-      } catch (err: any) {
-        console.error(err);
-      }
-    }
-    loadUmail();
-  }, []);
-
-  // Reset page when category changes.
-  useEffect(() => {
-    setClientPage(1);
-  }, [selectedCategory]);
-
-  // Handle Tab Clicks.
-  const handleTabClick = (category: string) => {
-    setSelectedCategory(category);
-  };
-
-  // Remove duplicate articles by title.
-  function removeDuplicateArticles(articles: Article[]): Article[] {
-    return articles.filter(
-      (article, index, arr) =>
-        index === arr.findIndex((a) => a.title.toLowerCase() === article.title.toLowerCase())
-    );
-  }
-
-  // Combine articles from all sources and filter by category.
-  const combinedArticles = removeDuplicateArticles([
-    ...allMediaArticles,
-    ...finnhubArticles,
-    ...umailArticles,
-  ]);
-
-  const filteredArticles =
-    selectedCategory === 'News'
-      ? combinedArticles
-      : combinedArticles.filter((article) =>
-          article.categories.some(
-            (cat) =>
-              typeof cat === 'string' && cat.toLowerCase() === selectedCategory.toLowerCase()
-          )
-        );
-
-  // Sort by newest first.
-  filteredArticles.sort(
-    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  const handleKey = useCallback(
+    (e: React.KeyboardEvent<HTMLUListElement>) => {
+      e.preventDefault();
+      const idx = options.indexOf(value);
+      if (e.key === 'ArrowDown') onChange(options[(idx + 1) % options.length]);
+      if (e.key === 'ArrowUp')   onChange(options[(idx - 1 + options.length) % options.length]);
+      if (e.key === 'Enter' || e.key === ' ') close();
+    },
+    [options, value, onChange]
   );
 
-  // Separate into featured (with images) and new news (without images).
-  const featuredArticles = filteredArticles.filter((article) => article.urlToImage);
-  const nonFeaturedArticles = filteredArticles.filter((article) => !article.urlToImage);
+  return (
+    <div className="relative">
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-brand-950 text-sm text-gray-800 dark:text-gray-100 shadow-sm hover:bg-gray-50 dark:hover:bg-brand-900 transition"
+      >
+        {value}
+        <FaChevronDown
+          className={`transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
 
-  // Paginate new news (non-featured articles).
-  const totalPages = Math.ceil(nonFeaturedArticles.length / itemsPerPage);
-  const paginatedNews = nonFeaturedArticles.slice(
-    (clientPage - 1) * itemsPerPage,
-    clientPage * itemsPerPage
+      {open && (
+        <ul
+          tabIndex={0}
+          onKeyDown={handleKey}
+          className="absolute mt-2 max-h-64 w-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-brand-950 shadow-lg ring-1 ring-black/5 focus:outline-none z-20"
+        >
+          {options.map(opt => (
+            <li
+              key={opt}
+              onClick={() => { onChange(opt); close(); }}
+              className={`px-4 py-2 cursor-pointer text-sm ${
+                opt === value
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-brand-900'
+              }`}
+            >
+              {opt}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
+}
 
-  // Headlines: first 15 of the paginated non‑featured articles.
-  const headlineArticles = paginatedNews.slice(0, 15);
-  const remainingOtherNews = paginatedNews.slice(15);
+/* Pagination */
+function Pagination ({
+  page,
+  totalPages,
+  loading,
+  onPrev,
+  onNext
+}: {
+  page: number;
+  totalPages: number;
+  loading: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-4 mt-8 pb-8">
+      <div className="flex gap-4">
+        <button
+          disabled={page === 1 || loading}
+          onClick={onPrev}
+          className="px-4 py-2 rounded text-white bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40"
+        >
+          Previous
+        </button>
+        <button
+          disabled={(page === totalPages && !loading) || loading}
+          onClick={onNext}
+          className="px-4 py-2 rounded text-white bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40"
+        >
+          Next
+        </button>
+      </div>
+      <span className="text-sm text-gray-700 dark:text-gray-300">
+        Page {page} / {totalPages}
+      </span>
+      {loading && <p className="text-gray-500 dark:text-gray-400">Loading…</p>}
+    </div>
+  );
+}
 
-  // Divide headlines into three columns.
-  const columnSize = Math.ceil(headlineArticles.length / 3);
-  const headlineColumns = [
-    headlineArticles.slice(0, columnSize),
-    headlineArticles.slice(columnSize, 2 * columnSize),
-    headlineArticles.slice(2 * columnSize),
-  ];
+/* ────────────────────────────────────────────────────────────────── */
+/*  Image wrappers                                                    */
+/* ────────────────────────────────────────────────────────────────── */
 
-  // Helper to change page.
-  const scrollAndChangePage = (newClientPage: number, updateApi: boolean = false) => {
-    smoothScrollToTop(1000);
-    setIsTransitioning(true);
-    setTimeout(() => {
-      if (updateApi) {
-        setApiPage((prev) => prev + 1);
-      }
-      setClientPage(newClientPage);
-      setIsTransitioning(false);
-    }, 1200);
-  };
+function ThumbImage ({ article, className }: { article: Article; className: string }) {
+  const domain = getDomain(article.url);
+  const [src, setSrc] = useState<string>(
+    article.urlToImage || ogCache.get(article.url) || ogImage(article.url)
+  );
+  const [stage, setStage] = useState(0); // 0=urlToImage/OG • 1=logo • 2=placeholder
 
-  const handlePrevPage = () => {
-    if (clientPage > 1 && !isTransitioning) {
-      scrollAndChangePage(clientPage - 1);
+  const handleError = () => {
+    if (stage === 0) {
+      // cache miss? then fall back to logo
+      setSrc(logoURL(domain));
+      setStage(1);
+    } else {
+      setSrc(PLACEHOLDER);
+      setStage(2);
     }
   };
 
-  const handleNextPage = () => {
-    if (!isTransitioning) {
-      if (clientPage < totalPages) {
-        scrollAndChangePage(clientPage + 1);
-      } else if (hasMore) {
-        scrollAndChangePage(clientPage + 1, true);
-      }
+  /* once Microlink succeeds, cache the resolved src */
+  useEffect(() => {
+    if (stage === 0 && src.startsWith('https://api.microlink.io')) {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => ogCache.set(article.url, src);
+    }
+  }, [src, stage, article.url]);
+
+  return (
+    <img
+      src={src}
+      onError={handleError}
+      alt={article.title}
+      className={className}
+    />
+  );
+}
+
+function LogoImage ({ article, className }: { article: Article; className?: string }) {
+  const domain = getDomain(article.url);
+  const [src, setSrc] = useState<string>(article.source.image || logoURL(domain));
+  const [failed, setFailed] = useState(false);
+
+  const handleError = () => {
+    if (!failed) {
+      setSrc(logoURL(domain));
+      setFailed(true);
+    } else {
+      setSrc(PLACEHOLDER);
     }
   };
 
   return (
-    <div ref={contentRef} className="max-w-6xl mx-auto w-full px-4 py-4">
-      {/* Page Header */}
-      <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-6">
-        The Miller Gazette
-      </h1>
-      {error && <p className="text-red-600 mb-4">Error: {error}</p>}
+    <img
+      src={src}
+      onError={handleError}
+      alt={article.source.name}
+      className={className ?? 'w-8 h-8 object-contain'}
+    />
+  );
+}
 
-      {/* Tab Bar & Search */}
-      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="flex gap-2 overflow-x-auto">
-          {desiredCategories.map((category) => (
-            <button
-              key={category}
-              onClick={() => handleTabClick(category)}
-              className={`px-4 py-2 rounded whitespace-nowrap transition-colors ${
-                selectedCategory === category
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
-                  : 'hover:bg-gradient-to-r from-indigo-500 to-purple-500 text-white'
-              }`}
-            >
-              {category}
-            </button>
-          ))}
-        </div>
-        <div className="flex-shrink-0">
-          <WidgetSearch />
-        </div>
-      </div>
+/* Featured slider */
+function FeaturedSlider ({ articles }: { articles: Article[] }) {
+  const [idx, setIdx] = useState(0);
+  const total = articles.length;
 
-      {/* Main Layout: News and Aside */}
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* News Content with fixed max width */}
-        <div className="flex-1 w-full lg:max-w-[700px]">
-          {/* Featured News always displayed at the top */}
-          {featuredArticles.length > 0 && (
-            <div className="mb-8">
-              <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-gray-100">
-                Featured News
-              </h2>
-              <FeaturedNewsSlider articles={featuredArticles} />
-            </div>
-          )}
+  useEffect(() => {
+    const id = setInterval(() => setIdx(i => (i + 1) % total), 6000);
+    return () => clearInterval(id);
+  }, [total]);
 
-          {/* New News (Headlines & Other News) with fade transition */}
-          <div
-            className={`transition-opacity duration-500 ${
-              isTransitioning ? 'opacity-0' : 'opacity-100'
-            }`}
+  const go = (n: number) => setIdx((idx + n + total) % total);
+
+  return (
+    <div className="mb-10 relative overflow-hidden rounded-lg shadow-lg">
+      <button
+        onClick={() => go(-1)}
+        className="absolute left-2 top-1/2 -translate-y-1/2 z-20 bg-black/40 text-white p-2 rounded-full hover:bg-black/60"
+      >
+        ‹
+      </button>
+      <button
+        onClick={() => go(1)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 z-20 bg-black/40 text-white p-2 rounded-full hover:bg-black/60"
+      >
+        ›
+      </button>
+
+      <span className="absolute top-2 right-3 z-20 bg-black/60 text-white text-xs py-1 px-2 rounded">
+        {idx + 1} / {total}
+      </span>
+
+      <div
+        className="whitespace-nowrap transition-transform duration-700"
+        style={{ transform: `translateX(-${idx * 100}%)` }}
+      >
+        {articles.map(a => (
+          <a
+            key={a.url}
+            href={a.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block w-full"
           >
-            {headlineArticles.length > 0 && (
-              <div className="mb-8">
-                <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-gray-100">
-                  Headlines
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {headlineColumns.map((column, colIndex) => (
-                    <div key={colIndex} className="flex flex-col space-y-2">
-                      {column.map((article, index) => (
-                        <a
-                          key={`${article.url}-${index}`}
-                          href={article.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-indigo-600 dark:text-indigo-400 hover:underline text-sm"
-                        >
-                          {article.title}
-                        </a>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {remainingOtherNews.length > 0 && (
-              <div className="mb-8">
-                <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-gray-100">
-                  Other News
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1">
-                  {remainingOtherNews.map((article, index) => {
-                    const publishedDate = new Date(article.publishedAt);
-                    const formattedDate = publishedDate.toLocaleDateString();
-                    const formattedTime = publishedDate.toLocaleTimeString();
-                    return (
-                      <div
-                        key={`${article.url}-${index}`}
-                        className="rounded-lg shadow-lg overflow-hidden hover:scale-105 transform transition duration-300 p-4 flex flex-col min-h-[10px]"
-                      >
-                        <h3 className="font-semibold text-gray-800 dark:text-gray-100">
-                          {article.title}
-                        </h3>
-                        <div className="flex items-center space-x-2 mt-1">
-                          {article.source.image && (
-                            <img
-                              src={article.source.image}
-                              alt={article.source.name}
-                              className="w-8 h-8 object-contain"
-                              onError={(e) => {
-                                e.currentTarget.src = 'https://via.placeholder.com/32';
-                              }}
-                            />
-                          )}
-                          <span className="text-xs text-gray-500 dark:text-gray-300">
-                            {article.source.name}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-300 mt-1">
-                          {formattedDate} {formattedTime}
-                        </p>
-                        {article.thumbnails && article.thumbnails.length > 0 && (
-                          <div className="mt-2 flex space-x-2">
-                            {article.thumbnails.map((thumb, idx) => (
-                              <img
-                                key={idx}
-                                src={thumb}
-                                alt={`Thumbnail ${idx + 1}`}
-                                className="w-8 h-8 object-cover border"
-                              />
-                            ))}
-                          </div>
-                        )}
-                        <div className="mt-3">
-                          <a
-                            href={article.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center text-indigo-600 dark:text-indigo-400 hover:underline text-xs"
-                          >
-                            Read More
-                            <svg
-                              className="w-3 h-3 ml-1 transition-transform duration-300 transform group-hover:translate-x-1"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                              xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
-                          </a>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {paginatedNews.length === 0 && (
-              <p className="text-center text-gray-600">No articles found.</p>
-            )}
-
-            {/* Pagination Controls */}
-            <div className="flex flex-col items-center gap-4 mt-8 pb-8">
-              <div className="flex gap-4">
-                <button
-                  onClick={handlePrevPage}
-                  disabled={clientPage === 1 || loading || isTransitioning}
-                  className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={handleNextPage}
-                  disabled={(clientPage === totalPages && !hasMore) || loading || isTransitioning}
-                  className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
-              <span className="text-sm text-gray-700">
-                Page {clientPage} of {totalPages || 1}
-              </span>
-              {loading && (
-                <p className="text-center text-gray-600 mt-2">Loading more articles...</p>
-              )}
+            <ThumbImage
+              article={a}
+              className="w-full h-44 sm:h-64 object-cover"
+            />
+            <div className="p-5 bg-white dark:bg-brand-950">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 line-clamp-2">
+                {a.title}
+              </h2>
+              <MetaLine article={a} />
             </div>
-          </div>
-        </div>
-
-        {/* Aside Widgets with fixed width on large screens; full width on mobile */}
-        <aside className="w-full lg:w-[300px] border-t pt-6 lg:border-t-0 lg:pt-0">
-          <div className="space-y-6">
-            <WidgetWeather />
-            <CryptoWidget />
-            <WidgetNews />
-          </div>
-        </aside>
+          </a>
+        ))}
       </div>
+    </div>
+  );
+}
+
+/* Article card */
+function ArticleCard ({ article }: { article: Article }) {
+  return (
+    <a
+      href={article.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block rounded-lg shadow hover:shadow-xl transition transform hover:scale-[1.02] bg-white dark:bg-brand-950"
+    >
+      <div className="p-4 flex flex-col gap-2">
+        <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm leading-snug line-clamp-3">
+          {article.title}
+        </h3>
+        <MetaLine article={article} small />
+      </div>
+    </a>
+  );
+}
+
+/* Meta line */
+function MetaLine ({
+  article,
+  small = false
+}: {
+  article: Article;
+  small?: boolean;
+}) {
+  return (
+    <div className={`flex flex-col ${small ? 'text-xs' : ''}`}>
+      <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+        <LogoImage article={article} />
+        <span>{article.source.name}</span>
+      </div>
+      <span className="text-gray-400 dark:text-gray-500 text-xs mt-1">
+        {new Date(article.publishedAt).toLocaleDateString()}{' '}
+        {new Date(article.publishedAt).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        })}
+      </span>
     </div>
   );
 }
