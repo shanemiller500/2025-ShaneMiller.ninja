@@ -63,6 +63,8 @@ export default function CryptoAssetPopup({
 }: Props) {
   const [timeframe, setTimeframe] = useState<"1" | "7" | "30">("1");
   const [chartLoading, setChartLoading] = useState(false);
+  const [timeframeChange, setTimeframeChange] = useState<number | null>(null);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartRef = useRef<Chart | null>(null);
 
@@ -80,11 +82,11 @@ export default function CryptoAssetPopup({
 
     destroyChart();
     setChartLoading(true);
+    setTimeframeChange(null);
 
     const ctrl = new AbortController();
     const { signal } = ctrl;
 
-    /* CoinCap interval map that always returns data */
     const interval =
       timeframe === "1" ? "m1" : timeframe === "7" ? "m30" : "h2";
 
@@ -114,6 +116,15 @@ export default function CryptoAssetPopup({
               ]; // fallback → flat line
 
         if (signal.aborted || !canvasRef.current) return;
+
+        // compute timeframe % change
+        const first = pts[0].y as number;
+        const last = pts[pts.length - 1].y as number;
+        if (!Number.isNaN(first) && first !== 0) {
+          setTimeframeChange(((last - first) / first) * 100);
+        } else {
+          setTimeframeChange(0);
+        }
 
         const ctx = canvasRef.current.getContext("2d")!;
         chartRef.current = new Chart(ctx, {
@@ -169,6 +180,29 @@ export default function CryptoAssetPopup({
     tradeInfo?.price != null ? tradeInfo.price : parseFloat(asset.priceUsd);
   const prevNum = tradeInfo?.prev ?? priceNum;
   const priceColor = priceNum >= prevNum ? "text-green-600" : "text-red-600";
+
+  const changeLabel =
+    timeframe === "1"
+      ? "24h Change"
+      : timeframe === "7"
+      ? "7D Change"
+      : "30D Change";
+
+  const changeValue =
+    timeframeChange != null
+      ? pct(timeframeChange)
+      : timeframe === "1"
+      ? pct(asset.changePercent24Hr)
+      : "—";
+
+  const changeColor =
+    timeframeChange != null
+      ? timeframeChange >= 0
+        ? "text-green-600"
+        : "text-red-600"
+      : parseFloat(asset.changePercent24Hr) >= 0
+      ? "text-green-600"
+      : "text-red-600";
 
   return (
     <AnimatePresence>
@@ -274,13 +308,9 @@ export default function CryptoAssetPopup({
             />
             <Metric
               icon={<FaChartLine className="text-indigo-600" />}
-              label="24h Change"
-              value={pct(asset.changePercent24Hr)}
-              color={
-                parseFloat(asset.changePercent24Hr) >= 0
-                  ? "text-green-600"
-                  : "text-red-600"
-              }
+              label={changeLabel}
+              value={changeValue}
+              color={changeColor}
             />
             <Metric
               icon={<FaChartPie className="text-indigo-600" />}

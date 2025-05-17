@@ -175,7 +175,7 @@ const LiveStreamTickerWidget: React.FC = () => {
                 <img
                   src={symbolLogos[symbol]}
                   alt={`${symbol} logo`}
-                  className="mx-auto mb-1 w-6 h-6 object-contain"
+                  className="mx-auto mb-1 w-8 h-8 object-contain"
                 />
               )}
               <div className="font-bold text-sm">

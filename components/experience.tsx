@@ -10,6 +10,8 @@ export default function Experience() {
       <h2 className="h3 font-aspekta text-slate-800 dark:text-slate-100">Experience</h2>
       <ul className="space-y-8">
 
+
+        {/* Item - Data Center Inc. */}
           <li className="relative group">
             <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
               <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-indigo-50 rounded-full">
@@ -32,7 +34,7 @@ export default function Experience() {
                   Data Center Inc. (Remote) — Hutchinson, KS
                 </div>
                 <div className="text-sm text-slate-500 dark:text-slate-400">
-                  Serve as the critical interface between Support and Product Engineering for DCI's GoBanking core and authoring detailed technical documentation for the platform used by community financial institutions.
+                A Level 2 Software Engineer on DCI's core product for community financial institutions, working in an Agile methodology with C# to design, implement, and optimize scalable features that power daily banking operations.
                 </div>
               </div>
             </div>

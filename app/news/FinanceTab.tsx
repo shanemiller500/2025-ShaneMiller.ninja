@@ -1,8 +1,8 @@
-// Filename: SportsTab.tsx
+// Filename: FinanceTab.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { fetchSportsNews } from './sportsNews';
+import { fetchFinanceNews } from './financeNews';
 
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                   */
@@ -10,17 +10,16 @@ import { fetchSportsNews } from './sportsNews';
 
 interface Article {
   source: { id: string | null; name: string };
-  title: string;
-  url: string;
-  urlToImage: string | null;
+  title : string;
+  url   : string;
+  urlToImage : string | null;
   publishedAt: string;
 }
 
 const LOGO_FALLBACK = '/images/wedding.jpg';
 
 function getDomain(url: string) {
-  try { return new URL(url).hostname; }
-  catch { return ''; }
+  try { return new URL(url).hostname; } catch { return ''; }
 }
 
 function smoothScrollToTop(d = 700) {
@@ -39,29 +38,19 @@ function smoothScrollToTop(d = 700) {
 /* ------------------------------------------------------------------ */
 
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
-const cachedData: Record<string, { ts: number; data: Article[] }> = {};
+let cachedFinance: { ts: number; data: Article[] } | null = null;
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                         */
 /* ------------------------------------------------------------------ */
 
 const PER_PAGE = 36;
-const CATEGORIES = [
-  { key: 'all',   label: 'Latest World Sports' },
-  { key: 'nba',   label: 'NBA' },
-  { key: 'nfl',   label: 'NFL' },
-  { key: 'mlb',   label: 'MLB' },
-  { key: 'nhl',   label: 'NHL' },
-  { key: 'soccer',label: 'Soccer' },
-  { key: 'ufc',   label: 'UFC' },
-];
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 
-export default function SportsTab() {
-  const [subTab,   setSubTab]   = useState<string>('all');
+export default function FinanceTab() {
   const [page,     setPage]     = useState(1);
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading,  setLoading]  = useState(false);
@@ -72,35 +61,19 @@ export default function SportsTab() {
   /* ---------------------- fetch + cache --------------------------- */
   useEffect(() => {
     let cancel = false;
-    setError(null);
 
     (async () => {
-      if (cachedData[subTab] && Date.now() - cachedData[subTab].ts < CACHE_TTL) {
-        setArticles(cachedData[subTab].data);
+      if (cachedFinance && Date.now() - cachedFinance.ts < CACHE_TTL) {
+        setArticles(cachedFinance.data);
         return;
       }
 
       setLoading(true);
       try {
-        let news: Article[];
-        if (subTab === 'all') {
-          news = await fetchSportsNews();
-        } else {
-          const res = await fetch(`https://u-mail.co/api/sportsByCategory/${subTab}`, { cache: 'no-store' });
-          if (!res.ok) throw new Error(`API ${subTab} error: ${res.status}`);
-          const json = await res.json();
-          news = (json.results as any[]).map(item => ({
-            title:       item.title,
-            url:         item.link,
-            urlToImage:  item.image ?? null,
-            publishedAt: item.publishedAt,
-            source:      { id: null, name: item.source },
-          }));
-        }
+        const financeNews = await fetchFinanceNews();
         if (!cancel) {
-          cachedData[subTab] = { ts: Date.now(), data: news };
-          setArticles(news);
-          setPage(1);
+          cachedFinance = { ts: Date.now(), data: financeNews };
+          setArticles(financeNews);
         }
       } catch (e: any) {
         console.error(e);
@@ -111,7 +84,7 @@ export default function SportsTab() {
     })();
 
     return () => { cancel = true; };
-  }, [subTab]);
+  }, []);
 
   /* ----------------------- paging helpers ------------------------- */
   const totalPages = Math.max(1, Math.ceil(articles.length / PER_PAGE));
@@ -132,27 +105,8 @@ export default function SportsTab() {
   return (
     <div ref={contentRef}>
       {error && (
-        <p className="bg-red-100 text-red-700 p-3 mb-4 rounded font-medium">
-          {error}
-        </p>
+        <p className="bg-red-100 text-red-700 p-3 mb-4 rounded font-medium">{error}</p>
       )}
-
-      {/* Sub-tabs */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {CATEGORIES.map(cat => (
-          <button
-            key={cat.key}
-            onClick={() => setSubTab(cat.key)}
-            className={`px-3 py-1 rounded ${
-              subTab === cat.key
-                ? 'bg-indigo-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300'
-            }`}
-          >
-            {cat.label}
-          </button>
-        ))}
-      </div>
 
       <section className="w-full">
         <div className={`transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'}`}>
@@ -183,7 +137,7 @@ export default function SportsTab() {
                         src={`https://logo.clearbit.com/${getDomain(a.url)}`}
                         onError={e => (e.currentTarget.src = LOGO_FALLBACK)}
                         alt={a.source.name}
-                        className="w-6 h-6 object-contain"
+                        className="w-10 h-10 object-contain"
                       />
                       <span>{a.source.name}</span>
                     </div>

@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useCallback,
   JSX,
+  startTransition,
 } from "react";
 import { motion, useMotionValue, AnimatePresence } from "framer-motion";
 import { Chart } from "chart.js/auto";
@@ -78,14 +79,12 @@ function CryptoAssetPopup({
   const chartRef = useRef<Chart | null>(null);
   const canvasKey = asset ? `${asset.id}-${timeframe}` : "placeholder";
 
-  /* destroy helper */
   const destroyChart = () => {
     chartRef.current?.destroy();
     chartRef.current = null;
     if (canvasRef.current) Chart.getChart(canvasRef.current)?.destroy();
   };
 
-  /* load chart ------------------------------------------------------ */
   useEffect(() => {
     if (!asset) return;
 
@@ -103,7 +102,7 @@ function CryptoAssetPopup({
         const start = end - parseInt(timeframe, 10) * 86_400_000;
         const res = await fetch(
           `https://rest.coincap.io/v3/assets/${asset.id}/history?interval=${interval}&start=${start}&end=${end}&apiKey=${API_KEY}`,
-          { signal },
+          { signal }
         );
         if (signal.aborted) return;
         const json = await res.json();
@@ -152,7 +151,6 @@ function CryptoAssetPopup({
   const prevNum = tradeInfo?.prev ?? priceNum;
   const priceColor = priceNum >= prevNum ? "text-green-600" : "text-red-600";
 
-  /* tiny metric card */
   const Metric = ({
     icon,
     label,
@@ -168,7 +166,9 @@ function CryptoAssetPopup({
       {icon}
       <div className="flex flex-col">
         <span className="text-[10px] sm:text-xs text-gray-500">{label}</span>
-        <span className={`font-semibold ${color} text-xs sm:text-sm`}>{value}</span>
+        <span className={`font-semibold ${color} text-xs sm:text-sm`}>
+          {value}
+        </span>
       </div>
     </div>
   );
@@ -192,15 +192,12 @@ function CryptoAssetPopup({
           transition={{ type: "spring", stiffness: 300 }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* close */}
           <button
             className="absolute top-3 right-4 text-indigo-600 hover:text-indigo-800 text-2xl hover:scale-110 transition-transform"
             onClick={onClose}
           >
             ×
           </button>
-
-          {/* header */}
           <div className="flex items-center gap-2 mb-1">
             {logo && (
               <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[3px]">
@@ -217,13 +214,8 @@ function CryptoAssetPopup({
             #{asset.rank} • {asset.symbol.toUpperCase()}
           </p>
 
-          {/* timeframe buttons */}
           <div className="flex gap-2 mb-3">
-            {([
-              ["1", "1D"],
-              ["7", "7D"],
-              ["30", "30D"],
-            ] as const).map(([tf, label]) => (
+            {(["1", "7", "30"] as const).map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
@@ -233,12 +225,11 @@ function CryptoAssetPopup({
                     : "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
                 }`}
               >
-                {label}
+                {tf === "1" ? "1D" : tf === "7" ? "7D" : "30D"}
               </button>
             ))}
           </div>
 
-          {/* chart */}
           <div className="relative w-full h-40 sm:h-48 mb-4">
             {chartLoading && (
               <div className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center z-10">
@@ -267,7 +258,6 @@ function CryptoAssetPopup({
             <canvas key={canvasKey} ref={canvasRef} className="w-full h-full" />
           </div>
 
-          {/* metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] sm:text-sm">
             <Metric
               icon={<FaDollarSign className="text-indigo-600" />}
@@ -312,7 +302,6 @@ function CryptoAssetPopup({
             />
           </div>
 
-          {/* explorer */}
           {asset.explorer &&
             (() => {
               const h = host(asset.explorer);
@@ -343,14 +332,13 @@ function CryptoAssetPopup({
 /* ------------------------------------------------------------------ */
 /*  WidgetCrypto main component                                       */
 /* ------------------------------------------------------------------ */
-
 const API_KEY_ENV = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 const COINGECKO_TOP200 =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
 
 if (!API_KEY_ENV) {
   console.error(
-    "🚨 Missing CoinCap API key! Please set NEXT_PUBLIC_COINCAP_API_KEY in .env.local and restart your dev server.",
+    "🚨 Missing CoinCap API key! Please set NEXT_PUBLIC_COINCAP_API_KEY in .env.local and restart your dev server."
   );
 }
 
@@ -371,13 +359,17 @@ const WidgetCrypto: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const speed = 50;
 
+  /* is-mounted flag for safe async state updates */
+  const isMounted = useRef(true);
+  useEffect(() => () => { isMounted.current = false; }, []);
+
   /* fetch initial CoinCap data */
   useEffect(() => {
     if (!API_KEY_ENV) return;
     (async () => {
       try {
         const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=10&apiKey=${API_KEY_ENV}`,
+          `https://rest.coincap.io/v3/assets?limit=10&apiKey=${API_KEY_ENV}`
         );
         const json = await res.json();
         const map: Record<string, any> = {};
@@ -408,38 +400,45 @@ const WidgetCrypto: React.FC = () => {
 
   /* seed initial prices */
   useEffect(() => {
-    if (topAssetIds.length && !Object.keys(tradeInfoMap).length) {
-      const initial: Record<string, { price: number }> = {};
+    if (!topAssetIds.length) return;
+    setTradeInfoMap((prev) => {
+      if (Object.keys(prev).length) return prev; // already seeded
+      const init: Record<string, { price: number }> = {};
       topAssetIds.forEach((id) => {
-        const usdPrice = parseFloat(metaData[id]?.priceUsd || "0");
-        initial[id] = { price: usdPrice };
+        init[id] = { price: parseFloat(metaData[id]?.priceUsd || "0") };
       });
-      setTradeInfoMap(initial);
-    }
+      return init;
+    });
   }, [topAssetIds, metaData]);
 
   /* live price stream */
   useEffect(() => {
     if (!API_KEY_ENV || !topAssetIds.length) return;
     const ws = new WebSocket(
-      `wss://wss.coincap.io/prices?assets=${topAssetIds.join(",")}&apiKey=${API_KEY_ENV}`,
+      `wss://wss.coincap.io/prices?assets=${topAssetIds.join(
+        ","
+      )}&apiKey=${API_KEY_ENV}`
     );
     socketRef.current = ws;
 
     ws.onmessage = (evt) => {
-      let data: any;
+      let data: Record<string, string>;
       try {
         data = JSON.parse(evt.data);
       } catch {
         return;
       }
-      setTradeInfoMap((prev) => {
-        const next = { ...prev };
-        Object.entries(data).forEach(([id, priceStr]) => {
-          const price = parseFloat(priceStr as string);
-          next[id] = { price, prevPrice: prev[id]?.price };
+
+      startTransition(() => {
+        if (!isMounted.current) return;
+        setTradeInfoMap((prev) => {
+          const next = { ...prev };
+          Object.entries(data).forEach(([id, p]) => {
+            const price = parseFloat(p);
+            next[id] = { price, prevPrice: prev[id]?.price };
+          });
+          return next;
         });
-        return next;
       });
     };
     return () => ws.close();
@@ -447,14 +446,15 @@ const WidgetCrypto: React.FC = () => {
 
   /* marquee size */
   useEffect(() => {
-    const measure = () =>
-      innerRef.current && setContentWidth(innerRef.current.offsetWidth);
+    const measure = () => {
+      if (innerRef.current) setContentWidth(innerRef.current.offsetWidth);
+    };
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [topAssetIds]);
 
-  /* marquee auto-scroll */
+  /* marquee auto-scroll (pause when popup open) */
   useEffect(() => {
     let raf: number;
     let last: number | null = null;
@@ -462,19 +462,19 @@ const WidgetCrypto: React.FC = () => {
       if (last === null) last = t;
       const delta = t - last;
       last = t;
-      if (!isDragging && contentWidth) {
-        let newX = x.get() - speed * (delta / 1000);
-        if (newX <= -contentWidth) newX += contentWidth;
-        if (newX > 0) newX -= contentWidth;
-        x.set(newX);
+      if (!isDragging && contentWidth && !selectedAssetId) {
+        const current = x.get();
+        let next = current - speed * (delta / 1000);
+        if (next <= -contentWidth) next += contentWidth;
+        if (next > 0) next -= contentWidth;
+        x.set(next);
       }
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [isDragging, contentWidth, x]);
+  }, [isDragging, contentWidth, selectedAssetId]); // <- fixed length
 
-  /* helpers */
   const closePopup = useCallback(() => setSelectedAssetId(null), []);
   const selectedAsset = selectedAssetId
     ? { ...metaData[selectedAssetId], id: selectedAssetId }
@@ -518,11 +518,12 @@ const WidgetCrypto: React.FC = () => {
     );
   };
 
-  /* render widget --------------------------------------------------- */
   return (
     <div className="max-w-[700px] overflow-hidden relative">
       <div className="p-2">
-        <p className="text-xs text-gray-500 text-center">Top 10 Ranked Cryptos</p>
+        <p className="text-xs text-gray-500 text-center">
+          Top 10 Ranked Cryptos
+        </p>
       </div>
 
       <motion.div
@@ -548,11 +549,9 @@ const WidgetCrypto: React.FC = () => {
           <a href="/Crypto" className="underline text-indigo-500">
             here
           </a>
-          
         </p>
       </div>
 
-      {/* popup */}
       <CryptoAssetPopup
         asset={selectedAsset}
         logos={logos}

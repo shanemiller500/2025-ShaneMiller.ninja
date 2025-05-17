@@ -1,8 +1,10 @@
+// Filename: page.tsx
 'use client';
 
 import { useState } from 'react';
-import NewsTab   from './NewsTab';
-import SportsTab from './SportsTab';
+import NewsTab     from './NewsTab';
+import SportsTab   from './SportsTab';
+import FinanceTab  from './FinanceTab';
 
 import WidgetNews    from '@/components/widget-news';
 import WidgetWeather from '@/components/widget-weather';
@@ -10,7 +12,7 @@ import CryptoWidget  from '@/components/widget-crypto';
 import WidgetSearch  from '@/components/widget-search';
 
 export default function Page() {
-  const [tab, setTab] = useState<'All' | 'Sports'>('All');
+  const [tab, setTab] = useState<'All' | 'Sports' | 'Finance'>('All');
 
   return (
     <div className="max-w-6xl mx-auto w-full px-4 py-6">
@@ -41,12 +43,28 @@ export default function Page() {
         >
           Sports&nbsp;News
         </button>
+        <button
+          onClick={() => setTab('Finance')}
+          className={`px-4 py-2 rounded ${
+            tab === 'Finance'
+              ? 'bg-indigo-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300'
+          }`}
+        >
+          Finance&nbsp;News
+        </button>
       </div>
 
       {/* Main row: active tab + sidebar ----------------------------- */}
       <div className="flex flex-col lg:flex-row gap-8">
         <main className="flex-1 w-full lg:max-w-[720px]">
-          {tab === 'All' ? <NewsTab /> : <SportsTab />}
+          {tab === 'All' ? (
+            <NewsTab />
+          ) : tab === 'Sports' ? (
+            <SportsTab />
+          ) : (
+            <FinanceTab />
+          )}
         </main>
 
         <aside className="w-full lg:w-[300px] space-y-6">
