@@ -16,24 +16,28 @@ interface Article {
   urlToImage: string | null;
   publishedAt: string;
 }
+
 interface GameTeam {
   name: string;
   score: string;
   logo: string;
 }
+
 interface Game {
   id: string;
   league: string;
   date: string;
-  status: string;
-  competition: string;
+  status: string;          // e.g. “3rd Q”, “Top 7th”, “1:45 2nd”, “Final”
+  competition: string;     // e.g. “Regular Season”
   homeTeam: GameTeam;
   awayTeam: GameTeam;
 }
 
 const LOGO_FALLBACK = '/images/wedding.jpg';
 const isLive = (s: string) =>
-  s.toLowerCase().includes('live') || s.toLowerCase().includes('in progress');
+  s.toLowerCase().includes('live') ||
+  s.toLowerCase().includes('in progress') ||
+  /[1-9](st|nd|rd|th)/i.test(s); // heuristic: quarter/inning notation
 
 const getDomain = (url: string) => {
   try {
@@ -44,50 +48,42 @@ const getDomain = (url: string) => {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Cache                                                             */
+/*  Cache & constants                                                 */
 /* ------------------------------------------------------------------ */
 
 const CACHE_TTL = 30 * 60 * 1000;
 const cachedNews: Record<string, { ts: number; data: Article[] }> = {};
 const cachedGames: Record<string, { ts: number; data: Game[] }> = {};
 
-/* ------------------------------------------------------------------ */
-/*  Constants                                                         */
-/* ------------------------------------------------------------------ */
-
 const PER_PAGE = 36;
 const CATEGORIES = [
-  { key: 'all', label: 'Latest World Sports' },
-  { key: 'nba', label: 'NBA' },
-  { key: 'nfl', label: 'NFL' },
-  { key: 'mlb', label: 'MLB' },
-  { key: 'nhl', label: 'NHL' },
+  { key: 'all',    label: 'Latest World Sports' },
+  { key: 'nba',    label: 'NBA' },
+  { key: 'nfl',    label: 'NFL' },
+  { key: 'mlb',    label: 'MLB' },
+  { key: 'nhl',    label: 'NHL' },
   { key: 'soccer', label: 'Soccer' },
-  { key: 'mma', label: 'MMA' },
-
+  { key: 'mma',    label: 'MMA' },
 ];
 
 /* ------------------------------------------------------------------ */
-/*  Main component                                                    */
+/*  Component                                                         */
 /* ------------------------------------------------------------------ */
 
 export default function SportsTab() {
-  /* ---------------- state ---------------- */
-  const [subTab, setSubTab] = useState('all');
-  const [page, setPage] = useState(1);
-
-  /* news */
+  /* ----- state ----- */
+  const [subTab, setSubTab]   = useState('all');
+  const [page, setPage]       = useState(1);
   const [articles, setArticles] = useState<Article[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
 
-  /* games */
-  const [games, setGames] = useState<Game[]>([]);
+  const [games, setGames]               = useState<Game[]>([]);
   const [gamesLoading, setGamesLoading] = useState(false);
-  const [gamesError, setGamesError] = useState<string | null>(null);
+  const [gamesError, setGamesError]     = useState<string | null>(null);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
 
-  /* ---------------- news fetch / cache ---------------- */
+  /* ----- fetch news ----- */
   useEffect(() => {
     let cancel = false;
     setError(null);
@@ -103,7 +99,7 @@ export default function SportsTab() {
         let news: Article[] = [];
         if (subTab === 'all') {
           news = await fetchSportsNews();
-        } else if (subTab !== 'boxing') {
+        } else {
           const res = await fetch(
             `https://u-mail.co/api/sportsByCategory/${subTab}`,
             { cache: 'no-store' }
@@ -129,18 +125,14 @@ export default function SportsTab() {
         if (!cancel) setLoading(false);
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [subTab]);
 
-  /* ---------------- game fetch / cache ---------------- */
+  /* ----- fetch games ----- */
   useEffect(() => {
-    if (subTab === 'all' || subTab === 'boxing') {
-      setGames([]);
-      return;
+    if (subTab === 'all') {
+      setGames([]); return;
     }
-
     let cancel = false;
     setGamesError(null);
 
@@ -166,23 +158,16 @@ export default function SportsTab() {
       }
     };
 
-    if (
-      !(cachedGames[subTab] && Date.now() - cachedGames[subTab].ts < CACHE_TTL)
-    ) {
+    if (!(cachedGames[subTab] && Date.now() - cachedGames[subTab].ts < CACHE_TTL))
       fetchGames();
-    } else {
-      setGames(cachedGames[subTab].data);
-    }
+    else setGames(cachedGames[subTab].data);
 
     const iv = setInterval(fetchGames, 60_000);
-    return () => {
-      cancel = true;
-      clearInterval(iv);
-    };
+    return () => { cancel = true; clearInterval(iv); };
   }, [subTab]);
 
   /* ------------------------------------------------------------------ */
-  /*  Scoreboard marquee logic (only if ≥3 games)                       */
+  /*  Marquee logic (only if ≥3 games)                                  */
   /* ------------------------------------------------------------------ */
 
   const useMarquee = games.length >= 3;
@@ -190,9 +175,8 @@ export default function SportsTab() {
   const [contentWidth, setContentWidth] = useState(0);
   const x = useMotionValue(0);
   const [isDragging, setIsDragging] = useState(false);
-  const speedPxPerSec = 10; // gentle crawl
+  const speed = 3; // px / sec gentle crawl
 
-  /* measure marquee content */
   useEffect(() => {
     if (!useMarquee) return;
     const measure = () => {
@@ -201,21 +185,16 @@ export default function SportsTab() {
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [games, useMarquee]);
+  }, [useMarquee, games]);
 
-  /* auto-scroll loop */
   useEffect(() => {
     if (!useMarquee || !contentWidth) return;
-    let raf: number;
-    let last: number | null = null;
+    let raf: number; let last: number | null = null;
     const step = (t: number) => {
       if (last == null) last = t;
-      const delta = t - last;
-      last = t;
-
+      const dt = t - last; last = t;
       if (!isDragging && !selectedGame) {
-        const cur = x.get();
-        let next = cur - speedPxPerSec * (delta / 1000);
+        let next = x.get() - speed * (dt / 1000);
         if (next <= -contentWidth) next += contentWidth;
         if (next > 0) next -= contentWidth;
         x.set(next);
@@ -227,63 +206,77 @@ export default function SportsTab() {
   }, [useMarquee, contentWidth, isDragging, selectedGame]);
 
   /* ------------------------------------------------------------------ */
-  /*  Helpers                                                           */
+  /*  Paging helpers                                                    */
   /* ------------------------------------------------------------------ */
 
   const totalPages = Math.max(1, Math.ceil(articles.length / PER_PAGE));
-  const slice = useMemo(
+  const visibleNews = useMemo(
     () => articles.slice((page - 1) * PER_PAGE, page * PER_PAGE),
     [articles, page]
   );
-  const turnPage = (n: number) => setPage(n);
 
-  const renderGameCard = (game: Game) => (
+  /* ------------------------------------------------------------------ */
+  /*  Render helpers                                                    */
+  /* ------------------------------------------------------------------ */
+
+  const GameBadge = ({ txt }: { txt: string }) => (
+    <span className="rounded bg-gray-200 px-1 text-[9px] font-semibold
+                     dark:bg-gray-700 dark:text-gray-300">
+      {txt}
+    </span>
+  );
+
+  const renderGameCard = (g: Game) => (
     <motion.div
-      key={game.id}
-      onClick={() => setSelectedGame(game)}
-      className="relative m-1 min-w-[220px] cursor-pointer rounded border
+      key={g.id}
+      onClick={() => setSelectedGame(g)}
+      className="relative m-1 min-w-[220px] cursor-pointer rounded border mt-3
                  bg-white p-2 text-xs shadow-sm transition hover:scale-[1.04]
                  dark:bg-brand-950"
       whileHover={{ scale: 1.06 }}
     >
-      {isLive(game.status) && (
-        <span className="absolute -top-2 -right-2 animate-pulse rounded bg-red-600 px-2 py-[1px] text-[10px] font-bold text-white">
+      {isLive(g.status) && (
+        <span className="absolute -top-2 -right-2 animate-pulse 
+                         rounded bg-red-600 px-2 py-[1px]
+                         text-[10px] font-bold text-white">
           LIVE
         </span>
       )}
+
       <div className="mb-1 flex items-center justify-between text-[11px]">
-        <span className="font-semibold">{game.league.toUpperCase()}</span>
+        <span className="font-semibold">{g.league.toUpperCase()}</span>
         <span className="text-gray-500">
-          {new Date(game.date).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
+          {new Date(g.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       </div>
-      <div className="mb-1 truncate text-[10px] text-gray-500">
-        {game.competition}
+
+      <div className="mb-1 flex items-center gap-1 truncate text-[10px] text-gray-500">
+        {g.competition}
+        {isLive(g.status) && <GameBadge txt={g.status} />}
       </div>
+
       {/* Away */}
       <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center gap-1">
-          <img src={game.awayTeam.logo} className="h-5 w-5 object-contain" />
-          <span className="font-medium">{game.awayTeam.name}</span>
+          <img src={g.awayTeam.logo} className="h-5 w-5 object-contain" />
+          <span className="font-medium">{g.awayTeam.name}</span>
         </div>
-        <span className="text-base font-bold">{game.awayTeam.score}</span>
+        <span className="text-base font-bold">{g.awayTeam.score}</span>
       </div>
+
       {/* Home */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1">
-          <img src={game.homeTeam.logo} className="h-5 w-5 object-contain" />
-          <span className="font-medium">{game.homeTeam.name}</span>
+          <img src={g.homeTeam.logo} className="h-5 w-5 object-contain" />
+          <span className="font-medium">{g.homeTeam.name}</span>
         </div>
-        <span className="text-base font-bold">{game.homeTeam.score}</span>
+        <span className="text-base font-bold">{g.homeTeam.score}</span>
       </div>
     </motion.div>
   );
 
   /* ------------------------------------------------------------------ */
-  /*  Render                                                            */
+  /*  JSX                                                               */
   /* ------------------------------------------------------------------ */
 
   return (
@@ -317,7 +310,6 @@ export default function SportsTab() {
         ) : games.length === 0 ? (
           <p className="text-sm">No games today.</p>
         ) : useMarquee ? (
-          /* >=3 games → marquee */
           <div className="relative overflow-hidden">
             <motion.div
               className="flex cursor-grab"
@@ -337,7 +329,6 @@ export default function SportsTab() {
             </motion.div>
           </div>
         ) : (
-          /* 1–2 games → simple flex (no scroll) */
           <div className="flex flex-wrap">{games.map(renderGameCard)}</div>
         )}
       </section>
@@ -351,7 +342,7 @@ export default function SportsTab() {
       <section>
         <div className={`transition-opacity duration-300 ${loading && 'opacity-50'}`}>
           <div className="columns-1 gap-2 space-y-2 sm:columns-2 md:columns-3">
-            {slice.map((a) => {
+            {visibleNews.map((a) => {
               const hasImg = !!a.urlToImage;
               return (
                 <a
@@ -394,13 +385,13 @@ export default function SportsTab() {
             page={page}
             totalPages={totalPages}
             loading={loading}
-            onPrev={() => turnPage(page - 1)}
-            onNext={() => turnPage(page + 1)}
+            onPrev={() => setPage(page - 1)}
+            onNext={() => setPage(page + 1)}
           />
         </div>
       </section>
 
-      {/* ---- game details modal ---- */}
+      {/* ---- game popup ---- */}
       {selectedGame && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
@@ -420,6 +411,7 @@ export default function SportsTab() {
                 </span>
               )}
             </div>
+
             <p className="mb-2 text-sm text-gray-400">
               {selectedGame.league.toUpperCase()} •{' '}
               {new Date(selectedGame.date).toLocaleString([], {
@@ -427,6 +419,14 @@ export default function SportsTab() {
                 timeStyle: 'short',
               })}
             </p>
+
+            {/* status / inning */}
+            {isLive(selectedGame.status) && (
+              <p className=" mb-4 text-sm font-semibold text-yellow-300">
+                Current&nbsp;Play: {selectedGame.status}
+              </p>
+            )}
+
             <p className="mb-4 text-sm text-gray-400">{selectedGame.competition}</p>
 
             <div className="space-y-3">
@@ -458,17 +458,10 @@ export default function SportsTab() {
 /*  Pagination                                                         */
 /* ------------------------------------------------------------------ */
 function Pagination({
-  page,
-  totalPages,
-  loading,
-  onPrev,
-  onNext,
+  page, totalPages, loading, onPrev, onNext,
 }: {
-  page: number;
-  totalPages: number;
-  loading: boolean;
-  onPrev: () => void;
-  onNext: () => void;
+  page: number; totalPages: number; loading: boolean;
+  onPrev: () => void; onNext: () => void;
 }) {
   return (
     <div className="mt-8 flex flex-col items-center gap-4 pb-8">
