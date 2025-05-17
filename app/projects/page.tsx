@@ -59,14 +59,16 @@ export default function Projects() {
       excerpt: 'Live streaming Heatmaps, Charts, stock quotes, earnings & IPOs.',
       openSource: false,
     },
+
     {
-      id: 1,
-      icon: Icon04,
-      slug: '/Country',
-      title: 'Country Search',
-      excerpt: 'Search for any Countries infomation',
+      id: 10,
+      icon: Icon02,
+      slug: '/news',
+      title: 'Latest News',
+      excerpt: " Latest News from whatever APIs I can get it from",
       openSource: false,
     },
+    
     {
       id: 2,
       icon: Icon05,
@@ -123,14 +125,7 @@ export default function Projects() {
       excerpt: " Playing with the SpaceX API Nothing special here, just a fun project. Older info, and an un maitained API",
       openSource: false,
     },
-    {
-      id: 10,
-      icon: Icon02,
-      slug: '/news',
-      title: 'Latest News',
-      excerpt: " Latest News from whatever APIs I can get it from",
-      openSource: false,
-    },
+  
     {
       id: 11,
       icon: Icon12,
@@ -145,6 +140,14 @@ export default function Projects() {
       slug: '/Weather',
       title: 'Check local weather.',
       excerpt: " 7 Day hourly weather charts and more!",
+      openSource: false,
+    },
+    {
+      id: 1,
+      icon: Icon04,
+      slug: '/Country',
+      title: 'Country Search',
+      excerpt: 'Search for any Countries infomation',
       openSource: false,
     },
   ];
