@@ -1,9 +1,8 @@
-// Filename: SportsTab.tsx
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, useMotionValue } from 'framer-motion';
-import { fetchSportsNews } from './sportsNews';
+import { useState, useEffect, useMemo } from 'react';
+import { fetchSportsNews }        from './sportsNews';
+import LiveScores                 from './LiveScores';
 
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                   */
@@ -17,47 +16,20 @@ interface Article {
   publishedAt: string;
 }
 
-interface GameTeam {
-  name: string;
-  score: string;
-  logo: string;
-}
-
-interface Game {
-  id: string;
-  league: string;
-  date: string;            // UI still uses `date`
-  status: string;
-  competition: string;
-  homeTeam: GameTeam;
-  awayTeam: GameTeam;
-}
-
 const LOGO_FALLBACK = '/images/wedding.jpg';
-
-/* ---------- status helpers ---------- */
-const isLive  = (s: string) => /live|in progress|[1-9](st|nd|rd|th)/i.test(s);
-const isFinal = (s: string) => /final|finished|ft/i.test(s);
 
 /* ---------- utilities ---------- */
 const getDomain = (u: string) => { try { return new URL(u).hostname; } catch { return ''; } };
-const getDateET = () => {
-  const iso = new Date().toLocaleDateString('en-US', {
-    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
-  });
-  const [mm, dd, yy] = iso.split('/');
-  return `${yy}${mm}${dd}`;
-};
 
 /* ------------------------------------------------------------------ */
 /*  Cache & constants                                                 */
 /* ------------------------------------------------------------------ */
 
 const CACHE_TTL = 30 * 60 * 1000;
-const cachedNews:  Record<string, { ts: number; data: Article[] }> = {};
-const cachedGames: Record<string, { ts: number; data: Game[] }>    = {};
 
-const PER_PAGE = 36;
+const cachedNews: Record<string, { ts: number; data: Article[] }> = {};
+
+const PER_PAGE   = 36;
 const CATEGORIES = [
   { key: 'all',    label: 'Latest World Sports' },
   { key: 'nba',    label: 'NBA'  },
@@ -79,11 +51,6 @@ export default function SportsTab() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
-
-  const [games, setGames]               = useState<Game[]>([]);
-  const [gamesLoading, setGamesLoading] = useState(false);
-  const [gamesError, setGamesError]     = useState<string | null>(null);
-  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
 
   /* ------------------------------------------------------------------ */
   /*  Fetch NEWS                                                        */
@@ -126,87 +93,6 @@ export default function SportsTab() {
   }, [subTab]);
 
   /* ------------------------------------------------------------------ */
-  /*  Fetch GAMES (maps startTime → date)                               */
-  /* ------------------------------------------------------------------ */
-  useEffect(() => {
-    if (subTab === 'all') { setGames([]); return; }
-
-    const dateET   = getDateET();
-    const cacheKey = `${subTab}-${dateET}`;
-    let cancel     = false;
-    setGamesError(null);
-
-    const fetchGames = async () => {
-      setGamesLoading(true);
-      try {
-        const url  = `https://u-mail.co/api/sportsGames/${subTab}?date=${dateET}`;
-        const res  = await fetch(url, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`Games API ${res.status}`);
-        const json = await res.json();
-        const raw  = json.games ?? json.results ?? [];
-
-        // 🔸 map .startTime → .date
-        const arr: Game[] = raw.map((g: any) => ({
-          ...g,
-          league: g.league ?? subTab,
-          date:   g.date ?? g.startTime ?? '',
-        }));
-
-        if (!cancel) {
-          cachedGames[cacheKey] = { ts: Date.now(), data: arr };
-          setGames(arr);
-        }
-      } catch (e: any) {
-        if (!cancel) setGamesError(e.message ?? 'Unknown error');
-      } finally { if (!cancel) setGamesLoading(false); }
-    };
-
-    if (!(cachedGames[cacheKey] && Date.now() - cachedGames[cacheKey].ts < CACHE_TTL))
-      fetchGames();
-    else setGames(cachedGames[cacheKey].data);
-
-    const iv = setInterval(fetchGames, 60_000);
-    return () => { cancel = true; clearInterval(iv); };
-  }, [subTab]);
-
-  /* ------------------------------------------------------------------ */
-  /*  Marquee logic                                                     */
-  /* ------------------------------------------------------------------ */
-
-  const useMarquee   = games.length >= 3;
-  const innerRef     = useRef<HTMLDivElement | null>(null);
-  const [contentW, setContentW] = useState(0);
-  const x            = useMotionValue(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const speed        = 20;
-
-  useEffect(() => {
-    if (!useMarquee) return;
-    const measure = () => { if (innerRef.current) setContentW(innerRef.current.offsetWidth); };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [useMarquee, games]);
-
-  useEffect(() => {
-    if (!useMarquee || !contentW) return;
-    let raf: number; let last: number | null = null;
-    const step = (t: number) => {
-      if (last == null) last = t;
-      const dt = t - last; last = t;
-      if (!isDragging && !selectedGame) {
-        let next = x.get() - speed * (dt / 1000);
-        if (next <= -contentW) next += contentW;
-        if (next > 0)          next -= contentW;
-        x.set(next);
-      }
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [useMarquee, contentW, isDragging, selectedGame]);
-
-  /* ------------------------------------------------------------------ */
   /*  Paging helpers                                                    */
   /* ------------------------------------------------------------------ */
 
@@ -216,69 +102,6 @@ export default function SportsTab() {
     for (const a of articles) if (!seen.has(a.url)) { seen.add(a.url); uniq.push(a); }
     return uniq.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   }, [articles, page]);
-
-  /* ------------------------------------------------------------------ */
-  /*  Render helpers                                                    */
-  /* ------------------------------------------------------------------ */
-
-  const GameBadge = ({ txt }: { txt: string }) => (
-    <span className="rounded bg-gray-200 px-1 text-[9px] font-semibold
-                     dark:bg-gray-700 dark:text-gray-300">{txt}</span>
-  );
-
-  const renderGameCard = (g: Game) => (
-    <motion.div
-      key={`${g.id}-${g.league}`}
-      onClick={() => setSelectedGame(g)}
-      className="relative m-1 mt-3 min-w-[220px] cursor-pointer rounded border
-                 bg-white p-2 text-xs shadow-sm transition hover:scale-[1.04]
-                 dark:bg-brand-950"
-      whileHover={{ scale: 1.06 }}
-    >
-      {isLive(g.status) && (
-        <span className="absolute -top-2 -right-2 animate-pulse rounded
-                         bg-red-600 px-2 py-[1px] text-[10px] font-bold text-white">
-          LIVE
-        </span>
-      )}
-      {!isLive(g.status) && isFinal(g.status) && (
-        <span className="absolute -top-2 -right-2 rounded bg-gray-700 px-2 py-[1px]
-                         text-[10px] font-bold text-white">
-          FINAL
-        </span>
-      )}
-
-      <div className="mb-1 flex items-center justify-between text-[11px]">
-        <span className="font-semibold">{g.league.toUpperCase()}</span>
-        <span className="text-gray-500">
-          {new Date(g.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
-      </div>
-
-      <div className="mb-1 flex items-center gap-1 truncate text-[10px] text-gray-500">
-        {g.competition}
-        {isLive(g.status) && <GameBadge txt={g.status} />}
-      </div>
-
-      {/* Away */}
-      <div className="mb-1 flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <img src={g.awayTeam.logo} className="h-5 w-5 object-contain" />
-          <span className="font-medium">{g.awayTeam.name}</span>
-        </div>
-        <span className="text-base font-bold">{g.awayTeam.score}</span>
-      </div>
-
-      {/* Home */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <img src={g.homeTeam.logo} className="h-5 w-5 object-contain" />
-          <span className="font-medium">{g.homeTeam.name}</span>
-        </div>
-        <span className="text-base font-bold">{g.homeTeam.score}</span>
-      </div>
-    </motion.div>
-  );
 
   /* ------------------------------------------------------------------ */
   /*  JSX                                                               */
@@ -316,38 +139,8 @@ export default function SportsTab() {
         ))}
       </div>
 
-      {/* ---- scoreboard ---- */}
-      <section className="mb-6 mt-4 sm:mt-6">
-        <h2 className="mb-2 text-lg font-medium">Today's Games</h2>
-        {gamesLoading ? (
-          <p className="text-sm">Loading games …</p>
-        ) : gamesError ? (
-          <p className="text-sm text-red-600">{gamesError}</p>
-        ) : games.length === 0 ? (
-          <p className="text-sm">No games today.</p>
-        ) : useMarquee ? (
-          <div className="relative overflow-hidden">
-            <motion.div
-              className="flex cursor-grab"
-              style={{ x }}
-              drag="x"
-              onDragStart={() => setIsDragging(true)}
-              onDragEnd={() => {
-                setIsDragging(false);
-                const mod = (n: number, m: number) => ((n % m) + m) % m;
-                x.set(-mod(-x.get(), contentW));
-              }}
-            >
-              <div className="flex" ref={innerRef}>
-                {games.map(renderGameCard)}
-              </div>
-              <div className="flex">{games.map(renderGameCard)}</div>
-            </motion.div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap">{games.map(renderGameCard)}</div>
-        )}
-      </section>
+      {/* ---- scoreboard (moved to its own component) ---- */}
+      <LiveScores sport={subTab} />
 
       {/* ---- news masonry ---- */}
       {error && (
@@ -407,64 +200,6 @@ export default function SportsTab() {
           />
         </div>
       </section>
-
-      {/* ---- game popup ---- */}
-      {selectedGame && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-          onClick={() => setSelectedGame(null)}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            className="w-full max-w-sm rounded-lg bg-brand-900 p-4 text-white shadow-lg"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {selectedGame.awayTeam.name} @ {selectedGame.homeTeam.name}
-              </h3>
-              {isLive(selectedGame.status) ? (
-                <span className="animate-pulse rounded bg-red-600 px-2 py-[1px] text-[11px] font-bold">LIVE</span>
-              ) : isFinal(selectedGame.status) ? (
-                <span className="rounded bg-gray-700 px-2 py-[1px] text-[11px] font-bold">FINAL</span>
-              ) : null}
-            </div>
-
-            <p className="mb-2 text-sm text-gray-400">
-              {selectedGame.league.toUpperCase()} •{' '}
-              {new Date(selectedGame.date).toLocaleString([], {
-                dateStyle: 'medium', timeStyle: 'short',
-              })}
-            </p>
-
-            {isLive(selectedGame.status) && (
-              <p className="mb-4 text-sm font-semibold text-yellow-300">
-                Current&nbsp;Play:&nbsp;{selectedGame.status}
-              </p>
-            )}
-
-            <p className="mb-4 text-sm text-gray-400">{selectedGame.competition}</p>
-
-            <div className="space-y-3">
-              {[selectedGame.awayTeam, selectedGame.homeTeam].map((t, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <img src={t.logo} className="h-6 w-6 object-contain" />
-                    <span className="font-medium">{t.name}</span>
-                  </div>
-                  <span className="text-xl font-bold">{t.score}</span>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setSelectedGame(null)}
-              className="mt-6 w-full rounded bg-indigo-600 py-2"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
