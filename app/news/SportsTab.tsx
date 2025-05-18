@@ -27,17 +27,23 @@ interface Game {
   id: string;
   league: string;
   date: string;
-  status: string;          // e.g. “3rd Q”, “Top 7th”, “1:45 2nd”, “Final”
+  status: string;          // e.g. “3rd Q”, “Top 7th”, “Final”
   competition: string;     // e.g. “Regular Season”
   homeTeam: GameTeam;
   awayTeam: GameTeam;
 }
 
 const LOGO_FALLBACK = '/images/wedding.jpg';
+
 const isLive = (s: string) =>
   s.toLowerCase().includes('live') ||
   s.toLowerCase().includes('in progress') ||
-  /[1-9](st|nd|rd|th)/i.test(s); // heuristic: quarter/inning notation
+  /[1-9](st|nd|rd|th)/i.test(s);
+
+const isFinal = (s: string) =>
+  s.toLowerCase().includes('final') ||
+  s.toLowerCase().includes('finished') ||
+  s.toLowerCase().includes('ft'); // “full-time” for soccer
 
 const getDomain = (url: string) => {
   try {
@@ -72,8 +78,8 @@ const CATEGORIES = [
 
 export default function SportsTab() {
   /* ----- state ----- */
-  const [subTab, setSubTab]   = useState('all');
-  const [page, setPage]       = useState(1);
+  const [subTab, setSubTab]     = useState('all');
+  const [page, setPage]         = useState(1);
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
@@ -143,10 +149,13 @@ export default function SportsTab() {
         const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) throw new Error(`Games API ${res.status}`);
         const json = await res.json();
-        const arr: Game[] = json.games.map((g: any) => ({
+
+        const raw = json.games ?? json.results ?? [];        // <— accept either field
+        const arr: Game[] = raw.map((g: any) => ({
           ...g,
           league: g.league ?? subTab,
         }));
+
         if (!cancel) {
           cachedGames[subTab] = { ts: Date.now(), data: arr };
           setGames(arr);
@@ -175,7 +184,7 @@ export default function SportsTab() {
   const [contentWidth, setContentWidth] = useState(0);
   const x = useMotionValue(0);
   const [isDragging, setIsDragging] = useState(false);
-  const speed = 3; // px / sec gentle crawl
+  const speed = 20; // px / sec gentle crawl
 
   useEffect(() => {
     if (!useMarquee) return;
@@ -210,10 +219,19 @@ export default function SportsTab() {
   /* ------------------------------------------------------------------ */
 
   const totalPages = Math.max(1, Math.ceil(articles.length / PER_PAGE));
-  const visibleNews = useMemo(
-    () => articles.slice((page - 1) * PER_PAGE, page * PER_PAGE),
-    [articles, page]
-  );
+
+  // deduplicate by URL before slicing
+  const visibleNews = useMemo(() => {
+    const uniq: Article[] = [];
+    const seen = new Set<string>();
+    for (const a of articles) {
+      if (!seen.has(a.url)) {
+        seen.add(a.url);
+        uniq.push(a);
+      }
+    }
+    return uniq.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  }, [articles, page]);
 
   /* ------------------------------------------------------------------ */
   /*  Render helpers                                                    */
@@ -228,7 +246,7 @@ export default function SportsTab() {
 
   const renderGameCard = (g: Game) => (
     <motion.div
-      key={g.id}
+      key={`${g.id}-${g.league}`}       // <— guard against duplicate IDs
       onClick={() => setSelectedGame(g)}
       className="relative m-1 min-w-[220px] cursor-pointer rounded border mt-3
                  bg-white p-2 text-xs shadow-sm transition hover:scale-[1.04]
@@ -236,10 +254,17 @@ export default function SportsTab() {
       whileHover={{ scale: 1.06 }}
     >
       {isLive(g.status) && (
-        <span className="absolute -top-2 -right-2 animate-pulse 
+        <span className="absolute -top-2 -right-2 animate-pulse
                          rounded bg-red-600 px-2 py-[1px]
                          text-[10px] font-bold text-white">
           LIVE
+        </span>
+      )}
+      {!isLive(g.status) && isFinal(g.status) && (
+        <span className="absolute -top-2 -right-2
+                         rounded bg-gray-700 px-2 py-[1px]
+                         text-[10px] font-bold text-white">
+          FINAL
         </span>
       )}
 
@@ -342,11 +367,11 @@ export default function SportsTab() {
       <section>
         <div className={`transition-opacity duration-300 ${loading && 'opacity-50'}`}>
           <div className="columns-1 gap-2 space-y-2 sm:columns-2 md:columns-3">
-            {visibleNews.map((a) => {
+            {visibleNews.map((a, i) => {
               const hasImg = !!a.urlToImage;
               return (
                 <a
-                  key={a.url}
+                  key={`${a.url}-${i}`}         
                   href={a.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -410,6 +435,11 @@ export default function SportsTab() {
                   LIVE
                 </span>
               )}
+              {!isLive(selectedGame.status) && isFinal(selectedGame.status) && (
+                <span className="rounded bg-gray-700 px-2 py-[1px] text-[11px] font-bold">
+                  FINAL
+                </span>
+              )}
             </div>
 
             <p className="mb-2 text-sm text-gray-400">
@@ -420,9 +450,8 @@ export default function SportsTab() {
               })}
             </p>
 
-            {/* status / inning */}
             {isLive(selectedGame.status) && (
-              <p className=" mb-4 text-sm font-semibold text-yellow-300">
+              <p className="mb-4 text-sm font-semibold text-yellow-300">
                 Current&nbsp;Play: {selectedGame.status}
               </p>
             )}

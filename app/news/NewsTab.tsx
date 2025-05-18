@@ -1,354 +1,255 @@
+// Filename: NewsTab.tsx
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { fetchMediaStackArticles } from './Mediastack-API-Call';
 import { fetchFinnhubArticles   } from './Finnhub-API-Call';
 import { fetchUmailArticles     } from './MoreNewsAPI';
 import { FaChevronDown          } from 'react-icons/fa';
 
 /* ------------------------------------------------------------------ */
-/*  Types / helpers                                                    */
+/*  Types                                                             */
 /* ------------------------------------------------------------------ */
-
 export interface Article {
-  source: { id: string | null; name: string; image?: string | null };
-  author : string | null;
-  title  : string;
-  description: string;
-  url    : string;
-  urlToImage: string | null;
-  publishedAt: string;
-  content: string | null;
-  categories: string[];
-}
-
-function getDomain(url: string) {
-  try { return new URL(url).hostname; } catch { return ''; }
-}
-
-function smoothScrollToTop(d = 700) {
-  const start = window.scrollY, t0 = performance.now();
-  const step  = (now: number) => {
-    const p = Math.min(1, (now - t0) / d);
-    const ease = p * (2 - p);
-    window.scrollTo(0, Math.ceil((1 - ease) * start));
-    if (window.scrollY) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
+  source:{id:string|null;name:string;image?:string|null};
+  author :string|null;
+  title  :string;
+  description:string;
+  url    :string;
+  urlToImage:string|null;
+  /* new optional arrays so we can reuse them later */
+  images?:string[];
+  thumbnails?:string[];
+  publishedAt:string;
+  content:string|null;
+  categories:(string|null|undefined|any)[];
 }
 
 /* ------------------------------------------------------------------ */
-/*  Cache (module-level, survives re-renders)                          */
+/*  Helpers & constants                                               */
 /* ------------------------------------------------------------------ */
+const getDomain=(u:string)=>{try{return new URL(u).hostname;}catch{return'';}};
+const firstImg =(html?:string|null)=>html?.match(/<img[^>]+src=['"]([^'"]+)['"]/i)?.[1]??null;
 
-const CACHE_TTL = 30 * 60 * 1000;          // 30 minutes
-let   cachedNews: { ts: number; data: Article[] } | null = null;
+const LOGO_FALLBACK='/images/wedding.jpg';
+const PLACEHOLDER  ='https://via.placeholder.com/600x350?text=No+Image';
+const CBS_THUMB    ='https://upload.wikimedia.org/wikipedia/commons/3/3f/CBS_News.svg';
+
+const PER_PAGE  =36;
+const CACHE_TTL =30*60*1000;
+const USA_ENDPOINT='https://u-mail.co/api/NewsAPI/us-news';
+
+/* date sort helper */
+const sortByDate=(arr:Article[])=>[...arr].sort(
+  (a,b)=>+new Date(b.publishedAt)-+new Date(a.publishedAt));
+
+/* simple U.S. filter */
+const isUSA=(a:Article)=>{
+  const cats=(Array.isArray(a.categories)?a.categories:[])
+    .filter((c):c is string=>typeof c==='string')
+    .map(c=>c.toLowerCase());
+  const host=getDomain(a.url).toLowerCase();
+  return cats.includes('us')||cats.includes('united states')||/\.us$/.test(host);
+};
+
+/* definitive image resolver */
+const getDisplayImage=(a:Article)=>{
+  if(a.urlToImage) return a.urlToImage;
+  if(a.images?.length)      return a.images[0];
+  if(a.thumbnails?.length)  return a.thumbnails[0];
+  const fromContent=firstImg(a.content);
+  if(fromContent) return fromContent;
+  if(getDomain(a.url).toLowerCase().includes('cbsnews.com')) return CBS_THUMB;
+  return null;
+};
 
 /* ------------------------------------------------------------------ */
-/*  Constants                                                          */
+/*  In-memory & localStorage caches                                   */
 /* ------------------------------------------------------------------ */
+let CACHE_ALL:{ts:number;data:Article[]} | null=null;
+let USA_CACHE :{ts:number;data:Article[]} | null=null;
+let USA_FETCH :Promise<void>|null=null;
 
-const PER_PAGE      = 36;
-const FEATURED_MAX  = 100;
-const LOGO_FALLBACK = '/images/wedding.jpg';
-const ARTICLE_PLACEHOLDER =
-  'https://via.placeholder.com/600x350?text=No+Image';
+/* restore USA cache from localStorage */
+try {
+    const raw = localStorage.getItem('usaNewsCache');
+    if (raw) {
+      const parsed = JSON.parse(raw) as { ts: number; data: Article[] };
+      if (parsed && Date.now() - parsed.ts < CACHE_TTL) USA_CACHE = parsed;
+      else localStorage.removeItem('usaNewsCache');
+    }
+}catch{/* ignore */}
 
 /* ------------------------------------------------------------------ */
-/*  Component                                                          */
+/*  Component                                                         */
 /* ------------------------------------------------------------------ */
+export default function NewsTab(){
+  const [region,setRegion]=useState<'All'|'USA'|'World'>('All');
+  const [provider,setProvider]=useState('All');
+  const [page,setPage]=useState(1);
+  const [fade,setFade]=useState(false);
 
-export default function NewsTab() {
-  const [page,           setPage]           = useState(1);
-  const [articles,       setArticles]       = useState<Article[]>([]);
-  const [loading,        setLoading]        = useState(false);
-  const [error,          setError]          = useState<string | null>(null);
-  const [fade,           setFade]           = useState(false);
-  const [providerFilter, setProviderFilter] = useState('All');
-  const contentRef = useRef<HTMLDivElement>(null);
+  const [articles,setArticles]=useState<Article[]>([]);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState<string|null>(null);
 
-  /* ---------------------- fetch + cache --------------------------- */
-  useEffect(() => {
-    let cancel = false;
-
-    (async () => {
-      /* if cache is fresh, use it and bail out early */
-      if (cachedNews && Date.now() - cachedNews.ts < CACHE_TTL) {
-        setArticles(sortByDate(cachedNews.data));
-        return;
+  /* -------- initial generic feeds -------- */
+  useEffect(()=>{let cancel=false;
+    (async()=>{
+      if(CACHE_ALL && Date.now()-CACHE_ALL.ts<CACHE_TTL){
+        setArticles(CACHE_ALL.data);return;
       }
-
       setLoading(true);
-      try {
-        const [ms, fh, um] = await Promise.all([
-          fetchMediaStackArticles(1), // ALWAYS first page; we'll paginate client-side
+      try{
+        const [ms,fh,um]=await Promise.allSettled([
+          fetchMediaStackArticles(1),
           fetchFinnhubArticles(),
           fetchUmailArticles(),
         ]);
-
-        let fetched = [...ms, ...fh, ...um];
-
-        /* dedupe by title */
-        const map = new Map<string, Article>();
-        fetched.forEach(a => { if (!map.has(a.title)) map.set(a.title, a); });
-
-        const sorted = sortByDate(Array.from(map.values()));
-
-        if (!cancel) {
-          /* store result in cache */
-          cachedNews = { ts: Date.now(), data: sorted };
-          setArticles(sorted);
-        }
-      } catch (e: any) {
-        console.error(e);
-        if (!cancel) setError(e.message ?? 'Unknown error');
-      } finally {
-        if (!cancel) setLoading(false);
-      }
+        const ok=(r:PromiseSettledResult<Article[]>)=>r.status==='fulfilled'?r.value:[];
+        const merged=sortByDate([...ok(ms),...ok(fh),...ok(um)]);
+        if(!cancel){CACHE_ALL={ts:Date.now(),data:merged};setArticles(merged);}
+      }catch(e:any){if(!cancel)setError(e.message??'Unknown error');}
+      finally{if(!cancel)setLoading(false);}
     })();
+    return()=>{cancel=true;};
+  },[]);
 
-    return () => { cancel = true; };
-  }, []); // ← runs only once (on mount)
+  /* -------- USA dedicated feed (once / 30 min, debounced) -------- */
+  useEffect(()=>{let cancel=false;
+    if(region!=='USA')return;
+    if(USA_CACHE && Date.now()-USA_CACHE.ts<CACHE_TTL)return;
 
-  /* helper to sort by published date */
-  const sortByDate = (arr: Article[]) =>
-    arr.sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
+    if(!USA_FETCH){
+      USA_FETCH=(async()=>{
+        try{
+          const res=await fetch(USA_ENDPOINT,{cache:'no-store'});
+          if(!res.ok)throw new Error(`US feed ${res.status}`);
+          const json=await res.json();
+          const data:Article[]=json.results.map((r:any)=>({
+            source:{id:null,name:getDomain(r.link),image:r.sourceImage},
+            author:r.author||null,
+            title:r.headline,
+            description:r.description,
+            url:r.link,
+            urlToImage:r.image ?? null,
+            images:Array.isArray(r.images)?r.images:[],
+            thumbnails:Array.isArray(r.thumbnails)?r.thumbnails:[],
+            publishedAt:r.publishedAt,
+            content:r.content,
+            categories:r.categories,
+          }));
+          USA_CACHE={ts:Date.now(),data};
+          localStorage.setItem('usaNewsCache',JSON.stringify(USA_CACHE));
+        }catch(e){console.warn('USA endpoint error:',(e as Error).message);}
+      })().finally(()=>{USA_FETCH=null;});
+    }
 
-  /* ---------------------- provider list ---------------------------- */
-  const providers = useMemo(() => {
-    const names = new Set(articles.map(a => a.source.name));
-    return ['All', ...Array.from(names).sort()];
-  }, [articles]);
+    USA_FETCH.then(()=>{if(!cancel) setArticles(a=>a);});
+    return()=>{cancel=true;};
+  },[region]);
 
-  /* reset to first page on provider change -------------------------- */
-  useEffect(() => setPage(1), [providerFilter]);
+  /* -------- combine & filter -------- */
+  const dataset=useMemo(()=>{
+    if(region==='USA'){
+      const extra=USA_CACHE?.data??[];
+      const fromGeneric=articles.filter(isUSA);
+      return sortByDate(Array.from(new Map([...extra,...fromGeneric].map(a=>[a.title,a])).values()));
+    }
+    if(region==='World') return articles.filter(a=>!isUSA(a));
+    return articles;
+  },[region,articles]);
 
-  /* --------------------- filtering / paging ------------------------ */
-  const filtered = providerFilter === 'All'
-    ? articles
-    : articles.filter(a => a.source.name === providerFilter);
+  const providers=useMemo(
+    ()=>['All',...Array.from(new Set(articles.map(a=>a.source.name))).sort()],
+    [articles]
+  );
 
-  const featured      = filtered.filter(a => a.urlToImage).slice(0, FEATURED_MAX);
-  const remainingNews = filtered.filter(a => !featured.includes(a));
+  const byProvider = provider==='All'?dataset:dataset.filter(a=>a.source.name===provider);
 
-  const totalPages = Math.max(1, Math.ceil(remainingNews.length / PER_PAGE));
-  const startIdx   = (page - 1) * PER_PAGE;
-  const slice      = remainingNews.slice(startIdx, startIdx + PER_PAGE);
+  /* featured + paging */
+  const featured=byProvider.filter(a=>getDisplayImage(a)).slice(0,100);
+  const rest    =byProvider.filter(a=>!featured.includes(a));
+  useEffect(()=>setPage(1),[region,provider]);
 
-  const turnPage = (n: number) => {
-    if (fade) return;
-    smoothScrollToTop();
+  const totalPages=Math.max(1,Math.ceil(rest.length/PER_PAGE));
+  const pageNews =rest.slice((page-1)*PER_PAGE,page*PER_PAGE);
+
+  const changePage=(n:number)=>{
+    if(fade)return;
+    window.scrollTo({top:0,behavior:'smooth'});
     setFade(true);
-    setTimeout(() => {
-      setPage(n);
-      setFade(false);
-    }, 400);
+    setTimeout(()=>{setPage(n);setFade(false);},400);
   };
 
-  /* ----------------------------- UI -------------------------------- */
-  return (
-    <div ref={contentRef}>
-      {error && (
-        <p className="bg-red-100 text-red-700 p-3 mb-4 rounded font-medium">{error}</p>
-      )}
+  /* ---------------- render ---------------- */
+  return(
+    <div>
+      {error&&<p className="mb-4 rounded bg-red-100 p-3 font-medium text-red-700">{error}</p>}
 
-      {/* search (left) + provider dropdown (right) */}
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        <ProviderDropdown
-          options={providers}
-          value={providerFilter}
-          onChange={setProviderFilter}
-        />
+      {/* region + provider */}
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        {(['All','USA','World'] as const).map(r=>(
+          <button key={r} onClick={()=>setRegion(r)}
+            className={`rounded-full px-3 py-1 text-sm ${region===r?'bg-indigo-600 text-white':'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200'}`}>
+            {r}
+          </button>
+        ))}
       </div>
 
-      {/* --------------------------- MAIN --------------------------- */}
-      <section className="w-full">
-        {featured.length > 0 && <FeaturedSlider articles={featured} />}
+      {featured.length>0&&<FeaturedSlider articles={featured}/>}
 
-        <div className={`transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'}`}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-            {slice.map(a => <ArticleCard key={a.url} article={a} />)}
-          </div>
-
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            loading={loading}
-            onPrev={() => turnPage(page - 1)}
-            onNext={() => turnPage(page + 1)}
-          />
+      <div className={`transition-opacity duration-300 ${fade?'opacity-0':'opacity-100'}`}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+          {pageNews.map(a=><ArticleCard key={a.url} article={a}/>)}
         </div>
-      </section>
-    </div>
-  );
-}
-
-
-/* ================================================================== */
-/*  Sub-components                                                     */
-/* ================================================================== */
-
-/* Provider dropdown ------------------------------------------------ */
-function ProviderDropdown({
-  options,
-  value,
-  onChange,
-}: {
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-
-  const toggle = () => setOpen(o => !o);
-  const close  = () => setOpen(false);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (!btnRef.current?.parentElement?.contains(e.target as Node)) close();
-    };
-    const esc = (e: KeyboardEvent) => (e.key === 'Escape' ? close() : void 0);
-    window.addEventListener('mousedown', handler);
-    window.addEventListener('keydown', esc);
-    return () => {
-      window.removeEventListener('mousedown', handler);
-      window.removeEventListener('keydown', esc);
-    };
-  }, []);
-
-  return (
-    <div className="relative">
-      <button
-        ref={btnRef}
-        onClick={toggle}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-brand-950 text-sm text-gray-800 dark:text-gray-100 shadow-sm hover:bg-gray-50 dark:hover:bg-brand-900 transition"
-      >
-        {value}
-        <FaChevronDown className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      {open && (
-        <ul
-          tabIndex={0}
-          className="absolute mt-2 max-h-64 w-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-brand-950 shadow-lg ring-1 ring-black/5 focus:outline-none z-20"
-        >
-          {options.map(opt => (
-            <li
-              key={opt}
-              onClick={() => { onChange(opt); close(); }}
-              className={`px-4 py-2 cursor-pointer text-sm ${
-                opt === value
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-brand-900'
-              }`}
-            >
-              {opt}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-/* Pagination controls --------------------------------------------- */
-function Pagination({
-  page,
-  totalPages,
-  loading,
-  onPrev,
-  onNext,
-}: {
-  page: number;
-  totalPages: number;
-  loading: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-4 mt-8 pb-8">
-      <div className="flex gap-4">
-        <button
-          disabled={page === 1 || loading}
-          onClick={onPrev}
-          className="px-4 py-2 rounded text-white bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40"
-        >
-          Previous
-        </button>
-        <button
-          disabled={(page === totalPages && !loading) || loading}
-          onClick={onNext}
-          className="px-4 py-2 rounded text-white bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40"
-        >
-          Next
-        </button>
+        <Pagination page={page} totalPages={totalPages} loading={loading}
+          onPrev={()=>changePage(page-1)} onNext={()=>changePage(page+1)}/>
       </div>
-      <span className="text-sm text-gray-700 dark:text-gray-300">
-        Page {page} / {totalPages}
-      </span>
-      {loading && <p className="text-gray-500 dark:text-gray-400">Loading…</p>}
     </div>
   );
 }
 
-/* Featured slider -------------------------------------------------- */
-function FeaturedSlider({ articles }: { articles: Article[] }) {
-  const [idx, setIdx] = useState(0);
-  const total = articles.length;
+/* =================================================================== */
+/*  UI sub-components                                                  */
+/* =================================================================== */
 
-  useEffect(() => {
-    const id = setInterval(() => setIdx(i => (i + 1) % total), 6_000);
-    return () => clearInterval(id);
-  }, [total]);
 
-  const go = (n: number) => setIdx((idx + n + total) % total);
+function Pagination({page,totalPages,loading,onPrev,onNext}:{page:number;totalPages:number;loading:boolean;onPrev:()=>void;onNext:()=>void;}){
+  return(
+    <div className="mt-8 flex flex-col items-center gap-4 pb-8">
+      <div className="flex gap-4">
+        <button disabled={page===1||loading} onClick={onPrev}
+          className="rounded bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-white disabled:opacity-40">Previous</button>
+        <button disabled={(page===totalPages&&!loading)||loading} onClick={onNext}
+          className="rounded bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-white disabled:opacity-40">Next</button>
+      </div>
+      <span className="text-sm text-gray-700 dark:text-gray-300">Page {page} / {totalPages}</span>
+      {loading&&<p className="text-gray-500 dark:text-gray-400">Loading…</p>}
+    </div>
+  );
+}
 
-  return (
-    <div className="mb-10 relative overflow-hidden rounded-lg shadow-lg">
-      {/* arrows */}
-      <button
-        onClick={() => go(-1)}
-        className="absolute left-2 top-1/2 -translate-y-1/2 z-20 bg-black/40 text-white p-2 rounded-full hover:bg-black/60"
-      >
-        ‹
-      </button>
-      <button
-        onClick={() => go(1)}
-        className="absolute right-2 top-1/2 -translate-y-1/2 z-20 bg-black/40 text-white p-2 rounded-full hover:bg-black/60"
-      >
-        ›
-      </button>
-
-      {/* indicator */}
-      <span className="absolute top-2 right-3 z-20 bg-black/60 text-white text-xs py-1 px-2 rounded">
-        {idx + 1} / {total}
-      </span>
-
-      {/* slides */}
-      <div
-        className="whitespace-nowrap transition-transform duration-700"
-        style={{ transform: `translateX(-${idx * 100}%)` }}
-      >
-        {articles.map(a => (
-          <a
-            key={a.url}
-            href={a.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block w-full"
-          >
-            <img
-              src={a.urlToImage ?? ARTICLE_PLACEHOLDER}
-              onError={e => (e.currentTarget.src = ARTICLE_PLACEHOLDER)}
-              alt={a.title}
-              className="w-full h-44 sm:h-64 object-cover"
-            />
-            <div className="p-5 bg-white dark:bg-brand-950">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 whitespace-normal line-clamp-2">
-                {a.title}
-              </h2>
-              <MetaLine article={a} />
+function FeaturedSlider({articles}:{articles:Article[]}){
+  const [idx,setIdx]=useState(0);
+  const total=articles.length;
+  useEffect(()=>{const id=setInterval(()=>setIdx(i=>(i+1)%total),6000);return()=>clearInterval(id);},[total]);
+  const move=(d:number)=>setIdx((idx+d+total)%total);
+  return(
+    <div className="relative mb-10 overflow-hidden rounded-lg shadow-lg">
+      <button onClick={()=>move(-1)}
+        className="absolute left-2 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 p-2 text-white hover:bg-black/60">‹</button>
+      <button onClick={()=>move(1)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 p-2 text-white hover:bg-black/60">›</button>
+      <span className="absolute right-3 top-2 z-20 rounded bg-black/60 py-1 px-2 text-xs text-white">{idx+1} / {total}</span>
+      <div className="whitespace-nowrap transition-transform duration-700" style={{transform:`translateX(-${idx*100}%)`}}>
+        {articles.map(a=>(
+          <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-block w-full">
+            <img src={getDisplayImage(a)??PLACEHOLDER} onError={e=>(e.currentTarget.src=PLACEHOLDER)}
+                 alt={a.title} className="h-44 w-full object-cover sm:h-64"/>
+            <div className="bg-white p-5 dark:bg-brand-950">
+              <h2 className="line-clamp-2 text-xl font-bold text-gray-800 dark:text-gray-100">{a.title}</h2>
+              <MetaLine article={a}/>
             </div>
           </a>
         ))}
@@ -357,48 +258,35 @@ function FeaturedSlider({ articles }: { articles: Article[] }) {
   );
 }
 
-/* Article card ----------------------------------------------------- */
-function ArticleCard({ article }: { article: Article }) {
-  return (
-    <a
-      href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block rounded-lg shadow hover:shadow-xl transition transform hover:scale-[1.02] bg-white dark:bg-brand-950"
-    >
-      <div className="p-4 flex flex-col gap-2">
-        <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm leading-snug line-clamp-3">
-          {article.title}
-        </h3>
-        <MetaLine article={article} small />
+function ArticleCard({article}:{article:Article}){
+  const imgSrc=getDisplayImage(article);
+  const hasImg=!!imgSrc;
+  return(
+    <a href={article.url} target="_blank" rel="noopener noreferrer"
+       className="block transform rounded-lg bg-white shadow transition hover:scale-[1.02] hover:shadow-xl dark:bg-brand-950">
+      {hasImg&&<img src={imgSrc!} alt={article.title}
+             onError={e=>(e.currentTarget.style.display='none')}
+             className="h-40 w-full object-cover sm:h-36"/>}
+      <div className={`flex flex-col gap-2 p-4 ${hasImg?'mt-1':''}`}>
+        <h3 className="line-clamp-3 text-sm font-semibold leading-snug text-gray-800 dark:text-gray-100">{article.title}</h3>
+        <MetaLine article={article} small/>
       </div>
     </a>
   );
 }
 
-/* Meta line -------------------------------------------------------- */
-function MetaLine({ article, small = false }: { article: Article; small?: boolean }) {
-  const logo =
-    article.source.image ??
-    `https://logo.clearbit.com/${getDomain(article.url)}`;
-
-  return (
-    <div className={`flex flex-col ${small ? 'text-xs' : ''}`}>
+function MetaLine({article,small=false}:{article:Article;small?:boolean}){
+  const logo=article.source.image??`https://logo.clearbit.com/${getDomain(article.url)}`;
+  return(
+    <div className={`flex flex-col ${small?'text-xs':''}`}>
       <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-        <img
-          src={logo}
-          onError={e => (e.currentTarget.src = LOGO_FALLBACK)}
-          alt={article.source.name}
-          className="w-8 h-8 object-contain"
-        />
+        <img src={logo} onError={e=>(e.currentTarget.src=LOGO_FALLBACK)}
+             alt={article.source.name} className="h-8 w-8 object-contain"/>
         <span>{article.source.name}</span>
       </div>
-      <span className="text-gray-400 dark:text-gray-500 text-xs mt-1">
+      <span className="mt-1 text-xs text-gray-400 dark:text-gray-500">
         {new Date(article.publishedAt).toLocaleDateString()}{' '}
-        {new Date(article.publishedAt).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        })}
+        {new Date(article.publishedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
       </span>
     </div>
   );
