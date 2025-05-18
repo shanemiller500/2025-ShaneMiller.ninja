@@ -26,31 +26,27 @@ interface GameTeam {
 interface Game {
   id: string;
   league: string;
-  date: string;
-  status: string;          // e.g. “3rd Q”, “Top 7th”, “Final”
-  competition: string;     // e.g. “Regular Season”
+  date: string;            // UI still uses `date`
+  status: string;
+  competition: string;
   homeTeam: GameTeam;
   awayTeam: GameTeam;
 }
 
 const LOGO_FALLBACK = '/images/wedding.jpg';
 
-const isLive = (s: string) =>
-  s.toLowerCase().includes('live') ||
-  s.toLowerCase().includes('in progress') ||
-  /[1-9](st|nd|rd|th)/i.test(s);
+/* ---------- status helpers ---------- */
+const isLive  = (s: string) => /live|in progress|[1-9](st|nd|rd|th)/i.test(s);
+const isFinal = (s: string) => /final|finished|ft/i.test(s);
 
-const isFinal = (s: string) =>
-  s.toLowerCase().includes('final') ||
-  s.toLowerCase().includes('finished') ||
-  s.toLowerCase().includes('ft'); // “full-time” for soccer
-
-const getDomain = (url: string) => {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return '';
-  }
+/* ---------- utilities ---------- */
+const getDomain = (u: string) => { try { return new URL(u).hostname; } catch { return ''; } };
+const getDateET = () => {
+  const iso = new Date().toLocaleDateString('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  const [mm, dd, yy] = iso.split('/');
+  return `${yy}${mm}${dd}`;
 };
 
 /* ------------------------------------------------------------------ */
@@ -58,18 +54,18 @@ const getDomain = (url: string) => {
 /* ------------------------------------------------------------------ */
 
 const CACHE_TTL = 30 * 60 * 1000;
-const cachedNews: Record<string, { ts: number; data: Article[] }> = {};
-const cachedGames: Record<string, { ts: number; data: Game[] }> = {};
+const cachedNews:  Record<string, { ts: number; data: Article[] }> = {};
+const cachedGames: Record<string, { ts: number; data: Game[] }>    = {};
 
 const PER_PAGE = 36;
 const CATEGORIES = [
   { key: 'all',    label: 'Latest World Sports' },
-  { key: 'nba',    label: 'NBA' },
-  { key: 'nfl',    label: 'NFL' },
-  { key: 'mlb',    label: 'MLB' },
-  { key: 'nhl',    label: 'NHL' },
+  { key: 'nba',    label: 'NBA'  },
+  { key: 'nfl',    label: 'NFL'  },
+  { key: 'mlb',    label: 'MLB'  },
+  { key: 'nhl',    label: 'NHL'  },
   { key: 'soccer', label: 'Soccer' },
-  { key: 'mma',    label: 'MMA' },
+  { key: 'mma',    label: 'MMA'  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -89,14 +85,15 @@ export default function SportsTab() {
   const [gamesError, setGamesError]     = useState<string | null>(null);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
 
-  /* ----- fetch news ----- */
+  /* ------------------------------------------------------------------ */
+  /*  Fetch NEWS                                                        */
+  /* ------------------------------------------------------------------ */
   useEffect(() => {
     let cancel = false;
     setError(null);
 
     if (cachedNews[subTab] && Date.now() - cachedNews[subTab].ts < CACHE_TTL) {
-      setArticles(cachedNews[subTab].data);
-      return;
+      setArticles(cachedNews[subTab].data); return;
     }
 
     setLoading(true);
@@ -106,130 +103,117 @@ export default function SportsTab() {
         if (subTab === 'all') {
           news = await fetchSportsNews();
         } else {
-          const res = await fetch(
-            `https://u-mail.co/api/sportsByCategory/${subTab}`,
-            { cache: 'no-store' }
-          );
+          const res  = await fetch(`https://u-mail.co/api/sportsByCategory/${subTab}`, { cache: 'no-store' });
           if (!res.ok) throw new Error(`API ${subTab} error: ${res.status}`);
           const json = await res.json();
-          news = (json.results as any[]).map((item) => ({
-            title: item.title,
-            url: item.link,
-            urlToImage: item.image ?? null,
-            publishedAt: item.publishedAt,
-            source: { id: null, name: item.source },
+          news = (json.results as any[]).map(it => ({
+            title: it.title,
+            url: it.link,
+            urlToImage: it.image ?? null,
+            publishedAt: it.publishedAt,
+            source: { id: null, name: it.source },
           }));
         }
         if (!cancel) {
           cachedNews[subTab] = { ts: Date.now(), data: news };
-          setArticles(news);
-          setPage(1);
+          setArticles(news); setPage(1);
         }
       } catch (e: any) {
         if (!cancel) setError(e.message ?? 'Unknown error');
-      } finally {
-        if (!cancel) setLoading(false);
-      }
+      } finally { if (!cancel) setLoading(false); }
     })();
     return () => { cancel = true; };
   }, [subTab]);
 
-  /* ----- fetch games ----- */
+  /* ------------------------------------------------------------------ */
+  /*  Fetch GAMES (maps startTime → date)                               */
+  /* ------------------------------------------------------------------ */
   useEffect(() => {
-    if (subTab === 'all') {
-      setGames([]); return;
-    }
-    let cancel = false;
+    if (subTab === 'all') { setGames([]); return; }
+
+    const dateET   = getDateET();
+    const cacheKey = `${subTab}-${dateET}`;
+    let cancel     = false;
     setGamesError(null);
 
     const fetchGames = async () => {
       setGamesLoading(true);
       try {
-        const url = `https://u-mail.co/api/sportsGames/${subTab}`;
-        const res = await fetch(url, { cache: 'no-store' });
+        const url  = `https://u-mail.co/api/sportsGames/${subTab}?date=${dateET}`;
+        const res  = await fetch(url, { cache: 'no-store' });
         if (!res.ok) throw new Error(`Games API ${res.status}`);
         const json = await res.json();
+        const raw  = json.games ?? json.results ?? [];
 
-        const raw = json.games ?? json.results ?? [];        // <— accept either field
+        // 🔸 map .startTime → .date
         const arr: Game[] = raw.map((g: any) => ({
           ...g,
           league: g.league ?? subTab,
+          date:   g.date ?? g.startTime ?? '',
         }));
 
         if (!cancel) {
-          cachedGames[subTab] = { ts: Date.now(), data: arr };
+          cachedGames[cacheKey] = { ts: Date.now(), data: arr };
           setGames(arr);
         }
       } catch (e: any) {
         if (!cancel) setGamesError(e.message ?? 'Unknown error');
-      } finally {
-        if (!cancel) setGamesLoading(false);
-      }
+      } finally { if (!cancel) setGamesLoading(false); }
     };
 
-    if (!(cachedGames[subTab] && Date.now() - cachedGames[subTab].ts < CACHE_TTL))
+    if (!(cachedGames[cacheKey] && Date.now() - cachedGames[cacheKey].ts < CACHE_TTL))
       fetchGames();
-    else setGames(cachedGames[subTab].data);
+    else setGames(cachedGames[cacheKey].data);
 
     const iv = setInterval(fetchGames, 60_000);
     return () => { cancel = true; clearInterval(iv); };
   }, [subTab]);
 
   /* ------------------------------------------------------------------ */
-  /*  Marquee logic (only if ≥3 games)                                  */
+  /*  Marquee logic                                                     */
   /* ------------------------------------------------------------------ */
 
-  const useMarquee = games.length >= 3;
-  const innerRef = useRef<HTMLDivElement | null>(null);
-  const [contentWidth, setContentWidth] = useState(0);
-  const x = useMotionValue(0);
+  const useMarquee   = games.length >= 3;
+  const innerRef     = useRef<HTMLDivElement | null>(null);
+  const [contentW, setContentW] = useState(0);
+  const x            = useMotionValue(0);
   const [isDragging, setIsDragging] = useState(false);
-  const speed = 20; // px / sec gentle crawl
+  const speed        = 20;
 
   useEffect(() => {
     if (!useMarquee) return;
-    const measure = () => {
-      if (innerRef.current) setContentWidth(innerRef.current.offsetWidth);
-    };
+    const measure = () => { if (innerRef.current) setContentW(innerRef.current.offsetWidth); };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, [useMarquee, games]);
 
   useEffect(() => {
-    if (!useMarquee || !contentWidth) return;
+    if (!useMarquee || !contentW) return;
     let raf: number; let last: number | null = null;
     const step = (t: number) => {
       if (last == null) last = t;
       const dt = t - last; last = t;
       if (!isDragging && !selectedGame) {
         let next = x.get() - speed * (dt / 1000);
-        if (next <= -contentWidth) next += contentWidth;
-        if (next > 0) next -= contentWidth;
+        if (next <= -contentW) next += contentW;
+        if (next > 0)          next -= contentW;
         x.set(next);
       }
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [useMarquee, contentWidth, isDragging, selectedGame]);
+  }, [useMarquee, contentW, isDragging, selectedGame]);
 
   /* ------------------------------------------------------------------ */
   /*  Paging helpers                                                    */
   /* ------------------------------------------------------------------ */
 
   const totalPages = Math.max(1, Math.ceil(articles.length / PER_PAGE));
-
-  // deduplicate by URL before slicing
   const visibleNews = useMemo(() => {
-    const uniq: Article[] = [];
-    const seen = new Set<string>();
-    for (const a of articles) {
-      if (!seen.has(a.url)) {
-        seen.add(a.url);
-        uniq.push(a);
-      }
-    }
+    const uniq: Article[] = []; const seen = new Set<string>();
+    for (const a of articles) if (!seen.has(a.url)) { seen.add(a.url); uniq.push(a); }
     return uniq.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   }, [articles, page]);
 
@@ -239,30 +223,26 @@ export default function SportsTab() {
 
   const GameBadge = ({ txt }: { txt: string }) => (
     <span className="rounded bg-gray-200 px-1 text-[9px] font-semibold
-                     dark:bg-gray-700 dark:text-gray-300">
-      {txt}
-    </span>
+                     dark:bg-gray-700 dark:text-gray-300">{txt}</span>
   );
 
   const renderGameCard = (g: Game) => (
     <motion.div
-      key={`${g.id}-${g.league}`}       // <— guard against duplicate IDs
+      key={`${g.id}-${g.league}`}
       onClick={() => setSelectedGame(g)}
-      className="relative m-1 min-w-[220px] cursor-pointer rounded border mt-3
+      className="relative m-1 mt-3 min-w-[220px] cursor-pointer rounded border
                  bg-white p-2 text-xs shadow-sm transition hover:scale-[1.04]
                  dark:bg-brand-950"
       whileHover={{ scale: 1.06 }}
     >
       {isLive(g.status) && (
-        <span className="absolute -top-2 -right-2 animate-pulse
-                         rounded bg-red-600 px-2 py-[1px]
-                         text-[10px] font-bold text-white">
+        <span className="absolute -top-2 -right-2 animate-pulse rounded
+                         bg-red-600 px-2 py-[1px] text-[10px] font-bold text-white">
           LIVE
         </span>
       )}
       {!isLive(g.status) && isFinal(g.status) && (
-        <span className="absolute -top-2 -right-2
-                         rounded bg-gray-700 px-2 py-[1px]
+        <span className="absolute -top-2 -right-2 rounded bg-gray-700 px-2 py-[1px]
                          text-[10px] font-bold text-white">
           FINAL
         </span>
@@ -306,19 +286,30 @@ export default function SportsTab() {
 
   return (
     <div className="pb-6">
-      {/* ---- sub-tabs ---- */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {CATEGORIES.map((c) => (
+
+      {/* ---- category selector ---- */}
+      {/* dropdown (mobile) */}
+      <select
+        value={subTab}
+        onChange={e => setSubTab(e.target.value)}
+        className="block w-full rounded bg-gray-200 px-3 py-2 text-sm text-gray-800
+                   focus:outline-none dark:bg-gray-700 dark:text-gray-100 sm:hidden"
+      >
+        {CATEGORIES.map(c => (
+          <option key={c.key} value={c.key}>{c.label}</option>
+        ))}
+      </select>
+
+      {/* pill buttons (≥sm) */}
+      <div className="mt-3 hidden flex-wrap gap-2 sm:flex">
+        {CATEGORIES.map(c => (
           <button
             key={c.key}
             onClick={() => setSubTab(c.key)}
-            className={`basis-1/2 sm:basis-auto flex-grow sm:flex-grow-0
-              rounded px-2 py-1 text-xs sm:px-3 sm:text-sm
-              ${
-                subTab === c.key
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200'
-              }`}
+            className={`rounded px-3 py-1 text-sm
+              ${subTab === c.key
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200'}`}
           >
             {c.label}
           </button>
@@ -326,7 +317,7 @@ export default function SportsTab() {
       </div>
 
       {/* ---- scoreboard ---- */}
-      <section className="mb-6">
+      <section className="mb-6 mt-4 sm:mt-6">
         <h2 className="mb-2 text-lg font-medium">Today's Games</h2>
         {gamesLoading ? (
           <p className="text-sm">Loading games …</p>
@@ -344,7 +335,7 @@ export default function SportsTab() {
               onDragEnd={() => {
                 setIsDragging(false);
                 const mod = (n: number, m: number) => ((n % m) + m) % m;
-                x.set(-mod(-x.get(), contentWidth));
+                x.set(-mod(-x.get(), contentW));
               }}
             >
               <div className="flex" ref={innerRef}>
@@ -360,9 +351,7 @@ export default function SportsTab() {
 
       {/* ---- news masonry ---- */}
       {error && (
-        <p className="mb-4 rounded bg-red-100 p-3 font-medium text-red-700">
-          {error}
-        </p>
+        <p className="mb-4 rounded bg-red-100 p-3 font-medium text-red-700">{error}</p>
       )}
       <section>
         <div className={`transition-opacity duration-300 ${loading && 'opacity-50'}`}>
@@ -371,18 +360,20 @@ export default function SportsTab() {
               const hasImg = !!a.urlToImage;
               return (
                 <a
-                  key={`${a.url}-${i}`}         
+                  key={`${a.url}-${i}`}
                   href={a.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="break-inside-avoid block transform rounded-lg bg-white shadow transition hover:scale-[1.02] hover:shadow-xl dark:bg-brand-950"
+                  className="break-inside-avoid block transform rounded-lg bg-white
+                             shadow transition hover:scale-[1.02] hover:shadow-xl
+                             dark:bg-brand-950"
                 >
                   {hasImg && (
                     <img
                       src={a.urlToImage!}
                       alt={a.title}
                       className="h-40 w-full object-cover sm:h-36"
-                      onError={(e) => (e.currentTarget.style.display = 'none')}
+                      onError={e => (e.currentTarget.style.display = 'none')}
                     />
                   )}
                   <div className={`p-4 ${hasImg ? 'mt-1' : ''}`}>
@@ -391,14 +382,15 @@ export default function SportsTab() {
                         src={`https://logo.clearbit.com/${getDomain(a.url)}`}
                         alt={a.source.name}
                         className="h-6 w-6 object-contain"
-                        onError={(e) => (e.currentTarget.src = LOGO_FALLBACK)}
+                        onError={e => (e.currentTarget.src = LOGO_FALLBACK)}
                       />
                       <span className="truncate max-w-[140px]">{a.source.name}</span>
                     </div>
                     <span className="text-xs text-gray-400 dark:text-gray-500">
                       {new Date(a.publishedAt).toLocaleDateString()}
                     </span>
-                    <h3 className="line-clamp-3 text-sm font-semibold leading-snug text-gray-800 dark:text-gray-100">
+                    <h3 className="line-clamp-3 text-sm font-semibold leading-snug
+                                   text-gray-800 dark:text-gray-100">
                       {a.title}
                     </h3>
                   </div>
@@ -423,36 +415,30 @@ export default function SportsTab() {
           onClick={() => setSelectedGame(null)}
         >
           <div
-            onClick={(e) => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
             className="w-full max-w-sm rounded-lg bg-brand-900 p-4 text-white shadow-lg"
           >
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-lg font-semibold">
                 {selectedGame.awayTeam.name} @ {selectedGame.homeTeam.name}
               </h3>
-              {isLive(selectedGame.status) && (
-                <span className="animate-pulse rounded bg-red-600 px-2 py-[1px] text-[11px] font-bold">
-                  LIVE
-                </span>
-              )}
-              {!isLive(selectedGame.status) && isFinal(selectedGame.status) && (
-                <span className="rounded bg-gray-700 px-2 py-[1px] text-[11px] font-bold">
-                  FINAL
-                </span>
-              )}
+              {isLive(selectedGame.status) ? (
+                <span className="animate-pulse rounded bg-red-600 px-2 py-[1px] text-[11px] font-bold">LIVE</span>
+              ) : isFinal(selectedGame.status) ? (
+                <span className="rounded bg-gray-700 px-2 py-[1px] text-[11px] font-bold">FINAL</span>
+              ) : null}
             </div>
 
             <p className="mb-2 text-sm text-gray-400">
               {selectedGame.league.toUpperCase()} •{' '}
               {new Date(selectedGame.date).toLocaleString([], {
-                dateStyle: 'medium',
-                timeStyle: 'short',
+                dateStyle: 'medium', timeStyle: 'short',
               })}
             </p>
 
             {isLive(selectedGame.status) && (
               <p className="mb-4 text-sm font-semibold text-yellow-300">
-                Current&nbsp;Play: {selectedGame.status}
+                Current&nbsp;Play:&nbsp;{selectedGame.status}
               </p>
             )}
 
