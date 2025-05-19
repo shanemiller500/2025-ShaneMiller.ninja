@@ -86,7 +86,6 @@ export default function AboutPage() {
 
                   <StockWidget />
                  
-                  {/* <Zoltars /> */}
                 </div>
               </div>
             </section>

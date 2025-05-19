@@ -178,7 +178,7 @@ export default function WidgetWeather() {
       transition={{ duration: 0.5 }}
       className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto bg-white dark:bg-brand-950 ${containerBg} ${borderClass}`}
     >
-      <div className="flex justify-between items-center mb-2">
+      <div className="justify-between items-center mb-2">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
           {location || 'Your Location'}
         </h2>
