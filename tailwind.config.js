@@ -67,5 +67,12 @@ module.exports = {
   plugins: [
     require('@tailwindcss/forms'),
     require('@tailwindcss/typography'),
+    function ({ addUtilities }) {
+      addUtilities({
+        '.bg-brand-gradient': {
+          '@apply bg-gradient-to-r from-indigo-600 to-purple-600': {},
+        },
+      });
+    },
   ],
 };

@@ -5,7 +5,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { fetchMediaStackArticles } from './Mediastack-API-Call';
 import { fetchFinnhubArticles   } from './Finnhub-API-Call';
 import { fetchUmailArticles     } from './MoreNewsAPI';
-import { FaChevronDown          } from 'react-icons/fa';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -32,7 +31,7 @@ const getDomain=(u:string)=>{try{return new URL(u).hostname;}catch{return'';}};
 const firstImg =(html?:string|null)=>html?.match(/<img[^>]+src=['"]([^'"]+)['"]/i)?.[1]??null;
 
 const LOGO_FALLBACK='/images/wedding.jpg';
-const PLACEHOLDER  ='https://via.placeholder.com/600x350?text=No+Image';
+
 const CBS_THUMB    ='https://upload.wikimedia.org/wikipedia/commons/3/3f/CBS_News.svg';
 
 const PER_PAGE  =36;
@@ -191,7 +190,7 @@ export default function NewsTab(){
       <div className="mb-6 flex flex-wrap items-center gap-4">
         {(['All','USA','World'] as const).map(r=>(
           <button key={r} onClick={()=>setRegion(r)}
-            className={`rounded-full px-3 py-1 text-sm ${region===r?'bg-indigo-600 text-white':'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200'}`}>
+            className={`rounded-full px-3 py-1 text-sm ${region===r?'bg-brand-gradient text-white':'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200'}`}>
             {r}
           </button>
         ))}
@@ -200,7 +199,7 @@ export default function NewsTab(){
       {featured.length>0&&<FeaturedSlider articles={featured}/>}
 
       <div className={`transition-opacity duration-300 ${fade?'opacity-0':'opacity-100'}`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2">
           {pageNews.map(a=><ArticleCard key={a.url} article={a}/>)}
         </div>
         <Pagination page={page} totalPages={totalPages} loading={loading}
@@ -243,9 +242,9 @@ function FeaturedSlider({articles}:{articles:Article[]}){
         className="absolute right-2 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 p-2 text-white hover:bg-black/60">›</button>
       <span className="absolute right-3 top-2 z-20 rounded bg-black/60 py-1 px-2 text-xs text-white">{idx+1} / {total}</span>
       <div className="whitespace-nowrap transition-transform duration-700" style={{transform:`translateX(-${idx*100}%)`}}>
-        {articles.map(a=>(
-          <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-block w-full">
-            <img src={getDisplayImage(a)??PLACEHOLDER} onError={e=>(e.currentTarget.src=PLACEHOLDER)}
+        {articles.map((a, idx)=>(
+          <a key={`${a.url}-${idx}`} href={`${a.url}-${idx}`} target="_blank" rel="noopener noreferrer" className="inline-block w-full">
+            <img src={getDisplayImage(a) ?? undefined} onError={e=>(e.currentTarget.style.display='none')}
                  alt={a.title} className="h-44 w-full object-cover sm:h-64"/>
             <div className="bg-white p-5 dark:bg-brand-950">
               <h2 className="line-clamp-2 text-xl font-bold text-gray-800 dark:text-gray-100">{a.title}</h2>
@@ -282,7 +281,7 @@ function MetaLine({article,small=false}:{article:Article;small?:boolean}){
       <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
         <img src={logo} onError={e=>(e.currentTarget.src=LOGO_FALLBACK)}
              alt={article.source.name} className="h-8 w-8 object-contain"/>
-        <span>{article.source.name}</span>
+        <span className='truncate max-w-[140px]'>{article.source.name}</span>
       </div>
       <span className="mt-1 text-xs text-gray-400 dark:text-gray-500">
         {new Date(article.publishedAt).toLocaleDateString()}{' '}

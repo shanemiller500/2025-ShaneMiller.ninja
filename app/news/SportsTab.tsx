@@ -131,7 +131,7 @@ export default function SportsTab() {
             onClick={() => setSubTab(c.key)}
             className={`rounded px-3 py-1 text-sm
               ${subTab === c.key
-                ? 'bg-indigo-600 text-white'
+                ? 'bg-brand-gradient text-white'
                 : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200'}`}
           >
             {c.label}
@@ -148,7 +148,7 @@ export default function SportsTab() {
       )}
       <section>
         <div className={`transition-opacity duration-300 ${loading && 'opacity-50'}`}>
-          <div className="columns-1 gap-2 space-y-2 sm:columns-2 md:columns-3">
+          <div className="columns-2 gap-2 space-y-2 sm:columns-2 md:columns-3">
             {visibleNews.map((a, i) => {
               const hasImg = !!a.urlToImage;
               return (

@@ -111,7 +111,7 @@ export default function FinanceTab() {
       <section className="w-full">
         <div className={`transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'}`}>
           {/* Masonry columns */}
-          <div className="columns-1 sm:columns-2 md:columns-3 gap-2 space-y-2">
+          <div className="columns-2 sm:columns-2 md:columns-3 gap-2 space-y-2">
             {slice.map(a => {
               const hasImage = !!a.urlToImage;
               return (
@@ -139,7 +139,7 @@ export default function FinanceTab() {
                         alt={a.source.name}
                         className="w-10 h-10 object-contain"
                       />
-                      <span>{a.source.name}</span>
+                      <span className='truncate max-w-[140px]' >{a.source.name}</span>
                     </div>
 
                     <span className="text-xs text-gray-400 dark:text-gray-500">
