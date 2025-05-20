@@ -169,7 +169,12 @@ export default function SportsTab() {
                       onError={e => (e.currentTarget.style.display = 'none')}
                     />
                   )}
+                  
                   <div className={`p-4 ${hasImg ? 'mt-1' : ''}`}>
+                  <h3 className="line-clamp-3 text-sm font-semibold leading-snug
+                                   text-gray-800 dark:text-gray-100 mb-2">
+                      {a.title}
+                    </h3>
                     <div className="mb-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                       <img
                         src={`https://logo.clearbit.com/${getDomain(a.url)}`}
@@ -180,12 +185,11 @@ export default function SportsTab() {
                       <span className="truncate max-w-[140px]">{a.source.name}</span>
                     </div>
                     <span className="text-xs text-gray-400 dark:text-gray-500">
-                      {new Date(a.publishedAt).toLocaleDateString()}
+                      {new Date(a.publishedAt).toLocaleDateString()}{' '}
+                      {new Date(a.publishedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
                     </span>
-                    <h3 className="line-clamp-3 text-sm font-semibold leading-snug
-                                   text-gray-800 dark:text-gray-100">
-                      {a.title}
-                    </h3>
+                   
+               
                   </div>
                 </a>
               );

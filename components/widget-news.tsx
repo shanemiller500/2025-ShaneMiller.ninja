@@ -1,155 +1,148 @@
-"use client";
+'use client';
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { motion } from 'framer-motion';          // ← NEW
+
+/* ------------------------------------------------------------------ */
+/*  Types & helpers                                                   */
+/* ------------------------------------------------------------------ */
 
 interface NewsItem {
-  articleId?: string; // Optional because some items might lack an articleId.
-  headline: string;
-  source: string;
+  articleId?: string;
+  headline  : string;
+  source    : string;
   publishedAt: string;
-  thumbnail: string;
-  link: string;
+  link      : string;
+  sourceImage?: string;
 }
 
+const LOGO_FALLBACK =
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
+
+/* ------------------------------------------------------------------ */
+/*  Animation variants                                                */
+/* ------------------------------------------------------------------ */
+const fadeIn = {
+  hidden : { opacity: 0, translateY: 10 },
+  visible: (i = 1) => ({
+    opacity   : 1,
+    translateY: 0,
+    transition: { delay: i * 0.05, duration: 0.4, ease: 'easeOut' },
+  }),
+};
+
 const WidgetNews: React.FC = () => {
-  const [news, setNews] = useState<NewsItem[]>([]);
-  const [flashVisible, setFlashVisible] = useState<boolean>(false);
-  const [errorMsg, setErrorMsg] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [news,    setNews   ] = useState<NewsItem[]>([]);
+  const [errorMsg,setError  ] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  /**
-   * Fetch news data.
-   * @param showSpinner - If true, shows a spinner during refresh.
-   */
-  const fetchNews = async (showSpinner: boolean = false) => {
-    if (showSpinner) {
-      setLoading(true);
-    }
-
-    // Always call the API to fetch fresh news.
+  const fetchNews = async (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
     try {
-      const response = await axios.get<{ results: NewsItem[] }>(
+      const { data } = await axios.get<{ results: NewsItem[] }>(
         'https://u-mail.co/api/NewsAPI/breaking-news'
       );
-      const newsData = response.data.results;
-
-      // Ensure each news item has a unique articleId.
-      const newsWithIds = newsData.map((item, index) => ({
+      const items = data.results.map((item, i) => ({
         ...item,
-        articleId: item.articleId || `${index}-${item.headline}`,
+        articleId: item.articleId || `${i}-${item.headline}`,
       }));
-
-      // Update state with fresh data.
-      setNews(newsWithIds);
-
-      // Flash "Breaking News" for 5 seconds.
-      setFlashVisible(true);
-      setTimeout(() => {
-        setFlashVisible(false);
-      }, 5000);
-    } catch (error: any) {
-      console.error('Error fetching breaking news:', error);
-      setErrorMsg('Failed to load breaking news.');
+      setNews(items);
+    } catch (err: any) {
+      console.error('Error fetching breaking news:', err);
+      setError('Failed to load breaking news.');
     } finally {
       if (showSpinner) setLoading(false);
     }
   };
 
-  // Initial load without spinner.
-  useEffect(() => {
-    fetchNews();
-  }, []);
+  useEffect(() => { fetchNews(); }, []);
 
+  /* ------------------------------------------------------------------ */
   return (
-    <div className="relative rounded-lg bg-white dark:bg-brand-950 p-5">
-      {/* Spinner overlay during refresh */}
+    <div className="relative rounded-lg bg-white dark:bg-brand-950 p-5 overflow-hidden">
+      {/* overlay spinner */}
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-50">
-          <svg
-            className="animate-spin h-8 w-8 text-white"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            ></circle>
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            ></path>
+        <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/50">
+          <svg className="animate-spin h-8 w-8 text-white" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
           </svg>
         </div>
       )}
 
-      <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-brand-900 text-center py-1 z-20">
-        Breaking News
+      {/* flashing banner */}
+      <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-brand-900 text-center py-1 z-20 animate-pulse">
+        Breaking&nbsp;News
       </div>
 
-      {/* Refresh button icon in the top-right corner */}
+      {/* refresh button */}
       <div className="absolute top-0 right-0 p-2 z-20">
         <button
           onClick={() => fetchNews(true)}
           className="p-1 hover:text-gray-200 text-brand-900 rounded"
           title="Refresh News"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 4v5h.582m0 0A7.966 7.966 0 003 12a8 8 0 008 8 8 8 0 007.418-4.582M15 11V4m0 0l4 4m-4-4l-4 4"
-            />
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 4v5h.582A8 8 0 003 12a8 8 0 008 8 8 8 0 007.418-4.582M15 11V4l4 4m-4-4l-4 4"/>
           </svg>
         </button>
       </div>
 
-      {/* News Content */}
-      <div className="mt-8">
+      {/* news list */}
+      <div className="mt-8 space-y-2">
         {errorMsg ? (
           <p>{errorMsg}</p>
-        ) : news.length > 0 ? (
+        ) : news.length ? (
           <>
             <ul>
-              {news.map((item, index) => (
-                <li key={item.articleId || index} className="mb-3">
+              {news.map((item, idx) => (
+                <motion.li
+                  key={item.articleId!}
+                  custom={idx}
+                  variants={fadeIn}
+                  initial="hidden"
+                  animate="visible"
+                  whileHover={{
+                    scale   : 1.02,
+                    y       : -2,
+                    boxShadow:
+                      '0 6px 14px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.08)',
+                  }}
+                  className="bg-gray-50 dark:bg-brand-900/20 rounded-md px-3 py-2 transition-colors"
+                >
                   <a
                     href={item.link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className=" hover:underline"
+                    className="flex items-start space-x-3 hover:underline"
                   >
-                    {item.headline}
+                    <img
+                      src={item.sourceImage || LOGO_FALLBACK}
+                      alt={item.source}
+                      className="w-6 h-6 object-contain mt-0.5 flex-shrink-0"
+                      loading="lazy"
+                    />
+                    <div>
+                      <h4 className="font-medium leading-snug">{item.headline}</h4>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        {item.source} &mdash;{' '}
+                        {new Date(item.publishedAt).toLocaleString()}
+                      </p>
+                    </div>
                   </a>
-                  <p className="text-sm text-gray-600">
-                    {item.source} &mdash;{' '}
-                    {new Date(item.publishedAt).toLocaleString()}
-                  </p>
-                </li>
+                </motion.li>
               ))}
             </ul>
-            <div className="p-2">
-                    <p className="text-xs text-gray-500 text-center">
-                      Read more News{" "}
-                      <a href="/news" className="text-indigo-500 underline">
-                        here
-                      </a>
-                      
-                    </p>
-                  </div>
+
+            <div className="pt-3">
+              <p className="text-xs text-gray-500 text-center">
+                Read more News&nbsp;
+                <a href="/news" className="text-indigo-500 underline">here</a>
+              </p>
+            </div>
           </>
         ) : (
           <p>Loading breaking news...</p>

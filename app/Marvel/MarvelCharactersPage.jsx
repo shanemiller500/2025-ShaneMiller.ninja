@@ -78,7 +78,7 @@ const MarvelCharactersPage = () => {
           value={characterQuery}
           onChange={(e) => setCharacterQuery(e.target.value)}
           placeholder="Search for a character..."
-          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-brand-900"
+          className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-brand-950"
         />
         <datalist id="characterSuggestions">
           {preSearchSuggestions.map((suggestion, idx) => (
@@ -104,7 +104,7 @@ const MarvelCharactersPage = () => {
       {loading ? (
         <Spinner />
       ) : characterResults.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 dark:bg-brand-950 bg-white">
           {characterResults.map((character) => (
             <div
               key={character.id}

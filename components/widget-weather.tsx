@@ -53,15 +53,15 @@ const getColorClass = (code: number) => {
 };
 
 const getBgClass = (code: number) => {
-  if (code === 0) return 'bg-yellow-100 dark:bg-yellow-900';
-  if ([1, 2, 3].includes(code)) return 'bg-gray-200 dark:bg-gray-700';
-  if ([45, 48].includes(code)) return 'bg-gray-300 dark:bg-gray-600';
-  if ([51, 53, 55].includes(code)) return 'bg-blue-100 dark:bg-blue-900';
-  if ([61, 63, 65, 80, 81, 82].includes(code)) return 'bg-blue-200 dark:bg-blue-900';
-  if ([66, 67].includes(code)) return 'bg-blue-200 dark:bg-blue-900';
-  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'bg-blue-50 dark:bg-blue-700';
-  if ([95, 96, 99].includes(code)) return 'bg-purple-200 dark:bg-purple-900';
-  return 'bg-gray-100 dark:bg-gray-700';
+  if (code === 0) return 'bg-yellow-100 ';
+  if ([1, 2, 3].includes(code)) return 'bg-gray-200';
+  if ([45, 48].includes(code)) return 'bg-gray-300 ';
+  if ([51, 53, 55].includes(code)) return 'bg-blue-100 ';
+  if ([61, 63, 65, 80, 81, 82].includes(code)) return 'bg-blue-200 ';
+  if ([66, 67].includes(code)) return 'bg-blue-200';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'bg-blue-50';
+  if ([95, 96, 99].includes(code)) return 'bg-purple-200 ';
+  return 'bg-gray-100 ';
 };
 
 // ensure correct local-day mapping
@@ -225,14 +225,14 @@ export default function WidgetWeather() {
                 transition={{ delay: idx * 0.1 }}
                 className={`p-4 rounded-xl shadow-sm text-center flex flex-col justify-between h-52 w-30 ${bgClass}`}
               >
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <p className="text-sm font-medium text-gray-900 ">
                   {formatDate(day.date)}
                 </p>
                 <div className={`my-2 text-4xl ${dayColor}`}>
                   <DayIcon />
                 </div>
-                <p className="text-sm text-gray-900 dark:text-gray-100">{dayDesc}</p>
-                <p className="text-xs mt-1 text-gray-900 dark:text-gray-100">
+                <p className="text-sm text-gray-900 ">{dayDesc}</p>
+                <p className="text-xs mt-1 text-gray-900 ">
                   H {day.temperature_max}°C &nbsp;L {day.temperature_min}°C
                 </p>
               </motion.div>

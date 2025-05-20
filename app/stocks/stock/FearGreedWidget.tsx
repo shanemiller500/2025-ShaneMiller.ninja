@@ -18,11 +18,11 @@ const FearGreedWidget: React.FC<FearGreedWidgetProps> = ({ index }) => {
   const label = getFearGreedLabel(index);
 
   return (
-    <div className="p-4">
+    <div className="p-4 shadow rounded dark:bg-brand-950 bg-white">
       <div className="text-center text-sm font-semibold mb-2">
         Fear and Greed Index: {index.toFixed(0)} ({label})
       </div>
-      <div className="w-full mt-2">
+      <div className="w-full mt-2 ">
         <div className="relative h-4 rounded-full bg-gradient-to-r from-red-500 via-gray-300 to-green-500">
           {/* Marker positioned according to the index value */}
           <div

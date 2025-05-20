@@ -26,7 +26,7 @@ const NewsWidget: React.FC = () => {
     <section className="p-4 rounded shadow ">
       <h2 className="text-2xl font-bold mb-4">Latest Finance News</h2>
       {loading && <p className="text-center">Loading news...</p>}
-      <div className="space-y-4">
+      <div className="space-y-4 dark:bg-brand-950 bg-white">
         {newsList && newsList.length > 0 ? (
           newsList.map((news, index) => (
             <div

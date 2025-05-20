@@ -33,14 +33,14 @@ const IPOCalendarSection = () => {
         placeholder="Search IPO events"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        className="p-2 border border-gray-300 rounded w-full mb-4 dark:border-gray-600 focus:outline-none dark:bg-brand-900"
+        className="p-2 border border-gray-300 rounded w-full mb-4 dark:border-gray-600 focus:outline-none dark:bg-brand-950"
       />
       {filteredEvents.length === 0 ? (
         <p className="text-center">No data found.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {filteredEvents.map((event, index) => (
-            <div key={index} className="border border-gray-300 dark:border-gray-700 rounded p-4">
+            <div key={index} className="border border-gray-300 dark:border-gray-700 rounded p-4 dark:bg-brand-950 bg-white">
               <h5 className="text-lg font-bold mb-2">{event.name}</h5>
               <p className="text-sm mb-1">Date: {event.date}</p>
               <p className="text-sm mb-1">Exchange: {event.exchange}</p>

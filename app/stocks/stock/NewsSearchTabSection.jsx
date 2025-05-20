@@ -48,7 +48,7 @@ const NewsSearchTabSection = () => {
           value={symbol}
           placeholder="Enter stock symbol"
           onChange={(e) => setSymbol(e.target.value)}
-          className="p-2 border border-gray-300 rounded w-full sm:w-auto dark:border-gray-600 focus:outline-none dark:bg-brand-900"
+          className="p-2 border border-gray-300 rounded w-full sm:w-auto dark:border-gray-600 focus:outline-none dark:bg-brand-950"
         />
         <button
           onClick={handleSearch}
@@ -61,7 +61,7 @@ const NewsSearchTabSection = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {newsList && newsList.length > 0 ? (
           newsList.map((news, index) => (
-            <div key={index} className="border border-gray-300 dark:border-gray-700 rounded overflow-hidden">
+            <div key={index} className="border border-gray-300 dark:border-gray-700 rounded overflow-hidden dark:bg-brand-950 bg-white">
               {news.image && news.image !== "" && (
                 <img src={news.image} alt="News" className="w-full h-48 object-cover" />
               )}
