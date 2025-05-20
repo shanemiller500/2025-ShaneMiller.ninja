@@ -3,6 +3,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { fetchFinanceNews } from './financeNews';
+import StockWidget from '@/app/stocks/stock/LiveStreamTickerWidget';
+
 
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                   */
@@ -103,14 +105,17 @@ export default function FinanceTab() {
 
   /* ----------------------------- UI -------------------------------- */
   return (
+    
     <div ref={contentRef}>
       {error && (
         <p className="bg-red-100 text-red-700 p-3 mb-4 rounded font-medium">{error}</p>
       )}
 
       <section className="w-full">
-        <div className={`transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'}`}>
+      <StockWidget />
+        <div className={`transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'} mt-2`}>
           {/* Masonry columns */}
+         
           <div className="columns-2 sm:columns-2 md:columns-3 gap-2 space-y-2">
             {slice.map(a => {
               const hasImage = !!a.urlToImage;

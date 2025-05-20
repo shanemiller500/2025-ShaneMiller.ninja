@@ -179,7 +179,7 @@ const LiveStreamTickerWidget: React.FC = () => {
                 />
               )}
               <div className="font-bold text-sm">
-                {idx + 1}. {symbol}
+                {symbol}
               </div>
               <div
                 className={`${

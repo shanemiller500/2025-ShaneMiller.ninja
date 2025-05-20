@@ -11,6 +11,8 @@ import WidgetNews    from '@/components/widget-news';
 import WidgetWeather from '@/components/widget-weather';
 import CryptoWidget  from '@/components/widget-crypto';
 import WidgetSearch  from '@/components/widget-search';
+import StockWidget from '@/app/stocks/stock/LiveStreamTickerWidget';
+
 
 /* lucide icons */
 import { Newspaper, Trophy, LineChart } from 'lucide-react';
@@ -108,6 +110,7 @@ export default function Page() {
         <aside className="w-full space-y-6 lg:w-[300px]">
           <WidgetSearch />
           <WidgetWeather />
+          <StockWidget />
           <CryptoWidget />
           <WidgetNews />
         </aside>
