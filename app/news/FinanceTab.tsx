@@ -112,7 +112,7 @@ export default function FinanceTab() {
       )}
 
       <section className="w-full">
-      <StockWidget />
+      {/* <StockWidget /> */}
         <div className={`transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'} mt-2`}>
           {/* Masonry columns */}
          

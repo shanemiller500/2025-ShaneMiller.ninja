@@ -1,497 +1,296 @@
-"use client";
+// Filename: StockQuoteSection.tsx
+'use client';
 
-import React, { useState, useEffect, useRef } from "react";
-import { Chart } from "chart.js/auto";
-import "chartjs-adapter-date-fns"; // <-- Import date adapter for time scales
-import { API_TOKEN } from "@/utils/config";
+import React, { useState, useEffect, useRef } from 'react';
+import { Chart }                 from 'chart.js/auto';
+import 'chartjs-adapter-date-fns';
+
+import { API_TOKEN }             from '@/utils/config';
 import {
   formatSupplyValue,
   formatDate,
   formatDateWeirdValue,
-} from "@/utils/formatters";
-import MarketWidgets from "./MarketWidgets";
-import NewsWidget from "./NewsWidget";
-import LiveStreamTickerWidget from "./LiveStreamTickerWidget";
-import FearGreedWidget from "./FearGreedWidget";
+} from '@/utils/formatters';
 
+import MarketWidgets             from './MarketWidgets';
+import NewsWidget                from './NewsWidget';
+import LiveStreamTickerWidget    from './LiveStreamTickerWidget';
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                             */
+/* ------------------------------------------------------------------ */
 interface CandleData {
-  c: number[]; // closing prices
-  h: number[]; // high prices
-  l: number[]; // low prices
-  o: number[]; // open prices
-  s: string;   // status ("ok" if successful)
-  t: number[]; // timestamps (unix seconds)
-  v: number[]; // volumes
+  c: number[]; h: number[]; l: number[]; o: number[]; s: string; t: number[]; v: number[];
+}
+interface QuoteData {
+  c:number; d:number; dp:number; h:number; l:number; o:number; pc:number; v:number; t:number;
 }
 
-const StockQuoteSection = () => {
-  const [symbolInput, setSymbolInput] = useState("");
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [stockData, setStockData] = useState<any>(null);
-  const [newsData, setNewsData] = useState<any[]>([]);
-  const [candleData, setCandleData] = useState<CandleData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [currentSymbol, setCurrentSymbol] = useState("");
-  const [fearGreedIndex, setFearGreedIndex] = useState<number>(50);
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                           */
+/* ------------------------------------------------------------------ */
+const fmt = (v: number|undefined|null, d=2)=>
+  v==null||isNaN(v as any)?'—':parseFloat(v.toString()).toFixed(d);
 
-  const chartCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const chartRef = useRef<Chart | null>(null);
+const gridRow=(k:string,v:string|React.ReactNode)=>(
+  <div key={k} className="flex justify-between gap-4 border-b pb-1 text-sm dark:border-gray-700">
+    <span className="text-gray-500 dark:text-gray-400">{k}</span>
+    <span className="font-medium text-gray-800 dark:text-gray-100 text-right">{v}</span>
+  </div>
+);
 
-  // --- Define Top 10 Tickers for Overall Market Sentiment ---
-  const topTenTickers = [
-    "AAPL",
-    "MSFT",
-    "GOOGL",
-    "AMZN",
-    "TSLA",
-    "META",
-    "NVDA",
-    "BRK.B",
-    "JPM",
-    "V",
-  ];
+const btnPrimary   = 'px-4 py-2 rounded text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:brightness-110 focus:outline-none';
+const btnSecondary = 'px-4 py-2 rounded bg-gray-300 text-gray-700 hover:bg-gray-400 focus:outline-none';
 
-  // --- Fetch Overall Market Quotes for Fear & Greed Index ---
-  const fetchOverallMarketChange = async () => {
-    try {
-      const promises = topTenTickers.map((ticker) =>
-        fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_TOKEN}`).then(
-          (res) => res.json()
-        )
-      );
-      const results = await Promise.all(promises);
-      // Filter valid results (ensure current price exists)
-      const validResults = results.filter((data) => data && data.c !== undefined);
-      if (validResults.length > 0) {
-        // Calculate average percent change (dp)
-        const averageChange =
-          validResults.reduce((sum, data) => sum + data.dp, 0) / validResults.length;
-        // Map from -3% (Extreme Fear) to +3% (Extreme Greed)
-        let index = ((averageChange + 3) / 6) * 100;
-        if (index < 0) index = 0;
-        if (index > 100) index = 100;
-        setFearGreedIndex(index);
-      }
-    } catch (err) {
-      console.error("Error fetching overall market quotes:", err);
-    }
+const fmtDateTime = (ms:number) =>
+  new Intl.DateTimeFormat('en-US', { dateStyle:'medium', timeStyle:'short' }).format(ms);
+
+/* ---------- helpers for News cards ---------- */
+const timeAgo=(ms:number)=>{
+  const d=Date.now()-ms;
+  if(d<60_000)   return `${Math.floor(d/1_000)} s ago`;
+  if(d<3_600_000)return `${Math.floor(d/60_000)} m ago`;
+  if(d<86_400_000)return `${Math.floor(d/3_600_000)} h ago`;
+  return formatDate(ms);
+};
+const logoFromUrl=(url?:string)=>{
+  try{const h=new URL(url??'').hostname.replace(/^www\./,'');
+      return h?`https://logo.clearbit.com/${h}?size=64`:'';}
+  catch{return'';}
+};
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                         */
+/* ------------------------------------------------------------------ */
+export default function StockQuoteSection() {
+  const [symbolInput,setSymbolInput]=useState('');
+  const [suggestions,setSuggestions]=useState<string[]>([]);
+  const [stockData,setStockData]=useState<{profile:any;quote:QuoteData;metric:any}|null>(null);
+  const [candleData,setCandleData]=useState<CandleData|null>(null);
+  const [newsData,setNewsData]=useState<any[]>([]);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState('');
+
+  const chartCanvasRef=useRef<HTMLCanvasElement|null>(null);
+  const chartRef=useRef<Chart|null>(null);
+
+  /* ------------- autocomplete ---------------- */
+  useEffect(()=>{
+    if(!symbolInput.trim()){setSuggestions([]);return;}
+    const t=setTimeout(async()=>{
+      const data=await fetch(`https://finnhub.io/api/v1/search?q=${symbolInput}&token=${API_TOKEN}`)
+        .then(r=>r.json()).catch(()=>({result:[]}));
+      setSuggestions(data.result?.slice(0,6).map((i:any)=>i.symbol)??[]);
+    },300);
+    return()=>clearTimeout(t);
+  },[symbolInput]);
+
+  const metric=(k:string)=>stockData?.metric?.metric?.[k];
+
+  const handleSearch=async(sym?:string)=>{
+    const symbol=(sym??symbolInput).trim().toUpperCase();
+    if(!symbol) return;
+    setLoading(true);setError('');
+    try{
+      const [quote,profile,metricData]=await Promise.all([
+        fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${API_TOKEN}`).then(r=>r.json()),
+        fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${API_TOKEN}`).then(r=>r.json()),
+        fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${symbol}&metric=all&token=${API_TOKEN}`).then(r=>r.json()),
+      ]);
+      if(!profile.name) throw new Error('Invalid symbol');
+
+      const now=Math.floor(Date.now()/1000);
+      const from=now-30*86400;
+      const candles: CandleData|null=await fetch(
+        `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=D&from=${from}&to=${now}&token=${API_TOKEN}`
+      ).then(r=>r.json()).then(d=>d.s==='ok'?d:null).catch(()=>null);
+
+      const toDate=new Date().toISOString().slice(0,10);
+      const fromDate=new Date(Date.now()-86400000).toISOString().slice(0,10);
+      const news=await fetch(
+        `https://finnhub.io/api/v1/company-news?symbol=${symbol}&from=${fromDate}&to=${toDate}&token=${API_TOKEN}`
+      ).then(r=>r.json()).catch(()=>[]);
+
+      setStockData({profile,quote,metric:metricData});
+      setCandleData(candles);
+      setNewsData(news);
+    }catch(e:any){setError(e.message??'Error fetching data');}
+    finally{setLoading(false);}
+  };
+  const handleClear=()=>{
+    setSymbolInput('');setSuggestions([]);setStockData(null);
+    setCandleData(null);setNewsData([]);setError('');
   };
 
-  // --- Fetch Overall Market Change on Mount ---
-  useEffect(() => {
-    fetchOverallMarketChange();
-  }, []);
+  /* ------------- chart render -------------- */
+  useEffect(()=>{
+    if(!chartCanvasRef.current||!candleData?.t?.length) return;
+    chartRef.current?.destroy();
+    const ctx=chartCanvasRef.current.getContext('2d');if(!ctx)return;
+    chartRef.current=new Chart(ctx,{
+      type:'line',
+      data:{labels:candleData.t.map(t=>new Date(t*1000)),
+            datasets:[{label:'Close',data:candleData.c,
+                       borderColor:'#4F46E5',backgroundColor:'rgba(99,102,241,.12)',
+                       fill:true,tension:.2}]},
+      options:{responsive:true,maintainAspectRatio:false,
+               scales:{x:{type:'time',time:{unit:'day',displayFormats:{day:'MMM d'}}}},
+               plugins:{legend:{display:false}}},
+    });
+  },[candleData]);
 
-  // --- Autocomplete Suggestions (debounced) ---
-  useEffect(() => {
-    if (symbolInput.trim().length > 0) {
-      const timer = setTimeout(() => {
-        fetch(
-          `https://finnhub.io/api/v1/search?q=${encodeURIComponent(
-            symbolInput
-          )}&token=${API_TOKEN}`
-        )
-          .then((res) => res.json())
-          .then((data) => {
-            if (data && data.result) {
-              setSuggestions(data.result.map((item: any) => item.symbol));
-            }
-          })
-          .catch((err) => console.error(err));
-      }, 300);
-      return () => clearTimeout(timer);
-    } else {
-      setSuggestions([]);
-    }
-  }, [symbolInput]);
+  /* --------------------------- UI --------------------------- */
+  return(
+    <section className="p-4 space-y-10">
+      <h2 className="text-2xl font-bold">Stock Quote</h2>
 
-  // --- Fetch Candle Data Helper ---
-  const fetchCandleData = (
-    symbol: string,
-    resolution: string,
-    from: number,
-    to: number
-  ): Promise<CandleData | null> => {
-    const candleUrl = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${to}&token=${API_TOKEN}`;
-    return fetch(candleUrl)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.s === "ok") {
-          return data;
-        } else {
-          return null;
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        return null;
-      });
-  };
-
-  // --- Main Search Handler with Local Storage Caching ---
-  const handleSearch = async (symbolParam?: string) => {
-    const symbolToSearch = symbolParam || symbolInput;
-    if (!symbolToSearch) return;
-    setLoading(true);
-    setError("");
-
-    const cacheKey = `stockSearchCache_${symbolToSearch.toUpperCase()}`;
-    const cachedData = localStorage.getItem(cacheKey);
-    if (cachedData) {
-      const parsedCache = JSON.parse(cachedData);
-      const oneDay = 24 * 60 * 60 * 1000;
-      if (Date.now() - parsedCache.timestamp < oneDay) {
-        setStockData(parsedCache.stockData);
-        setCandleData(parsedCache.candleData);
-        setNewsData(parsedCache.newsData);
-        setCurrentSymbol(symbolToSearch.toUpperCase());
-        setLoading(false);
-        return;
-      }
-    }
-
-    // Build API endpoints
-    const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${symbolToSearch}&token=${API_TOKEN}`;
-    const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbolToSearch}&token=${API_TOKEN}`;
-    const metricUrl = `https://finnhub.io/api/v1/stock/metric?symbol=${symbolToSearch}&metric=all&token=${API_TOKEN}`;
-    const marketStatusUrl = `https://finnhub.io/api/v1/stock/market-status?exchange=US&token=${API_TOKEN}`;
-
-    try {
-      const [quoteData, profileData, metricData, marketStatusData] =
-        await Promise.all([
-          fetch(quoteUrl).then((res) => res.json()),
-          fetch(profileUrl).then((res) => res.json()),
-          fetch(metricUrl).then((res) => res.json()),
-          fetch(marketStatusUrl).then((res) => res.json()),
-        ]);
-
-      if (!profileData.name || !profileData.ticker) {
-        setError("Invalid symbol or data not available.");
-        setLoading(false);
-        return;
-      }
-
-      const priceColor =
-        marketStatusData.isOpen && quoteData.c > quoteData.o
-          ? "green"
-          : marketStatusData.isOpen && quoteData.c <= quoteData.o
-          ? "red"
-          : "#494949";
-      const iconClass =
-        quoteData.c > quoteData.o
-          ? "fa fa-angle-double-up"
-          : "fa fa-angle-double-down";
-
-      const stockInfo = {
-        description: profileData.name,
-        stockSymbol: profileData.ticker,
-        logo: profileData.logo,
-        quoteData,
-        metricData,
-        marketStatusData,
-        priceColor,
-        iconClass,
-      };
-      setStockData(stockInfo);
-      setCurrentSymbol(symbolToSearch.toUpperCase());
-
-      // --- Fetch Candle Data (Last 30 Days) ---
-      const nowUnix = Math.floor(Date.now() / 1000);
-      const thirtyDaysAgo = nowUnix - 30 * 24 * 60 * 60;
-      const fetchedCandleData = await fetchCandleData(
-        symbolToSearch,
-        "D",
-        thirtyDaysAgo,
-        nowUnix
-      );
-      setCandleData(fetchedCandleData);
-
-      // --- Fetch Company News (Last 24 Hours) ---
-      const fromDate = new Date(Date.now() - 86400000)
-        .toISOString()
-        .slice(0, 10);
-      const toDate = new Date().toISOString().slice(0, 10);
-      const newsResponse = await fetch(
-        `https://finnhub.io/api/v1/company-news?symbol=${symbolToSearch}&from=${fromDate}&to=${toDate}&token=${API_TOKEN}`
-      )
-        .then((res) => res.json())
-        .catch((err) => {
-          console.error(err);
-          return [];
-        });
-      setNewsData(newsResponse);
-
-      // Save to local storage with a timestamp
-      const cacheToSave = {
-        timestamp: Date.now(),
-        stockData: stockInfo,
-        candleData: fetchedCandleData,
-        newsData: newsResponse,
-      };
-      localStorage.setItem(cacheKey, JSON.stringify(cacheToSave));
-
-      setLoading(false);
-    } catch (err) {
-      console.error(err);
-      setError("Error fetching data.");
-      setLoading(false);
-    }
-  };
-
-  // --- Clear Search Handler ---
-  const handleClear = () => {
-    setSymbolInput("");
-    setSuggestions([]);
-    setStockData(null);
-    setNewsData([]);
-    setCandleData(null);
-    setError("");
-    if (currentSymbol) {
-      const cacheKey = `stockSearchCache_${currentSymbol}`;
-      localStorage.removeItem(cacheKey);
-    }
-  };
-
-  // --- Handle ticker click from widgets ---
-  const handleTickerClick = (ticker: string) => {
-    setSymbolInput(ticker);
-    handleSearch(ticker);
-  };
-
-  // --- Render Chart When Candle Data Updates ---
-  useEffect(() => {
-    if (
-      chartCanvasRef.current &&
-      candleData &&
-      candleData.t &&
-      candleData.c &&
-      candleData.t.length > 0
-    ) {
-      const ctx = chartCanvasRef.current.getContext("2d");
-      if (!ctx) return;
-
-      // Destroy previous chart if exists
-      if (chartRef.current) {
-        chartRef.current.destroy();
-      }
-
-      // Determine time unit based on the data range
-      let timeUnit: "minute" | "day" = "day";
-      const diff = candleData.t[candleData.t.length - 1] - candleData.t[0];
-      if (diff < 6 * 60 * 60) {
-        timeUnit = "minute";
-      }
-
-      // Prepare labels and data points
-      const labels = candleData.t.map((timestamp) => new Date(timestamp * 1000));
-      const dataPoints = candleData.c;
-
-      chartRef.current = new Chart(ctx, {
-        type: "line",
-        data: {
-          labels,
-          datasets: [
-            {
-              label: "Closing Price (USD)",
-              data: dataPoints,
-              borderColor: "rgb(75, 192, 192)",
-              backgroundColor: "rgba(75, 192, 192, 0.1)",
-              fill: true,
-              tension: 0.1,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { position: "top" },
-          },
-          scales: {
-            x: {
-              type: "time",
-              time: {
-                unit: timeUnit,
-                tooltipFormat: timeUnit === "day" ? "MMM d, yyyy" : "HH:mm",
-                displayFormats: {
-                  day: "MMM d",
-                  minute: "HH:mm",
-                },
-              },
-              title: { display: true, text: "Date" },
-            },
-            y: {
-              title: { display: true, text: "Price (USD)" },
-            },
-          },
-        },
-      });
-    }
-  }, [candleData]);
-
-  // --- Determine Price Color for Text ---
-  const priceColorClass =
-    stockData &&
-    parseFloat(stockData.quoteData.c) >= parseFloat(stockData.quoteData.o)
-      ? "text-green-500"
-      : "text-red-500";
-
-  return (
-    <section className="p-4 rounded mb-8">
-      <h2 className="text-2xl font-bold mb-4">Stock Quote</h2>
-
-      {/* --- Search Input & Suggestions --- */}
-      <div className="mb-4">
-        
+      {/* search */}
+      <div className="space-y-2">
         <input
-          type="text"
           value={symbolInput}
-          onChange={(e) => setSymbolInput(e.target.value)}
-          placeholder="Enter stock symbol"
-          className="p-2 border border-gray-300 rounded w-full md:w-1/3 dark:border-gray-600 dark:bg-brand-900"
+          onChange={e=>setSymbolInput(e.target.value)}
+          placeholder="Enter symbol (e.g., AAPL)"
+          className="p-2 w-full border rounded dark:bg-brand-900 dark:border-gray-600"
         />
-        {suggestions.length > 0 && (
-          <ul className="list-none p-0 mt-2 border border-gray-200 rounded dark:border-gray-700">
-            {suggestions.map((sugg, index) => (
-              <li
-                key={index}
-                className="cursor-pointer p-2 hover:bg-gray-100 dark:hover:bg-gray-600"
-                onClick={() => {
-                  setSymbolInput(sugg);
-                  setSuggestions([]);
-                }}
-              >
-                {sugg}
+        {!!suggestions.length&&(
+          <ul className="border rounded divide-y dark:border-gray-700 max-h-48 overflow-auto bg-white dark:bg-brand-900">
+            {suggestions.map(s=>(
+              <li key={s} className="p-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                  onClick={()=>{setSymbolInput(s);setSuggestions([]);}}>
+                {s}
               </li>
             ))}
-            
           </ul>
         )}
-
-      </div>
-      
-
-      {/* --- Action Buttons --- */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        <button
-          onClick={() => handleSearch()}
-          className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded hover:from-indigo-600 hover:to-purple-600 focus:outline-none"
-        >
-          Search
-        </button>
-        <button
-          onClick={handleClear}
-          className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 focus:outline-none"
-        >
-          Clear
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button onClick={()=>handleSearch()} className={`${btnPrimary} w-full sm:w-auto`}>Search</button>
+          <button onClick={handleClear}       className={`${btnSecondary} w-full sm:w-auto`}>Clear</button>
+        </div>
       </div>
 
-      {/* --- Display Widgets When No Stock Data (Nothing Searched) --- */}
-      {!stockData && (
+      {/* default widgets */}
+      {!stockData&&!loading&&(
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <MarketWidgets onSelectTicker={handleTickerClick} />
-            <div>
-              <NewsWidget />
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <MarketWidgets onSelectTicker={t=>{setSymbolInput(t);handleSearch(t);}}/>
+            <NewsWidget/>
           </div>
-          <LiveStreamTickerWidget />
+          {/* <LiveStreamTickerWidget/> */}
         </>
       )}
 
-      {loading && <p className="text-center mt-4">Loading...</p>}
-      {error && <p className="text-center mt-4 text-red-500">{error}</p>}
+      {loading&&<p className="text-center">Loading…</p>}
+      {error&&<p className="text-center text-red-500">{error}</p>}
 
-      {stockData && (
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-    
-    {/* — Stock Info Card (transparent background, professional table) — */}
-<div className="rounded-lg shadow-md p-6 max-w-4xl mx-auto">
-  {/* Header (unchanged) */}
-  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
-    <div className="flex items-center space-x-4">
-      <div>
-        <h2 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-100">
-          {stockData.description} <span className="font-normal">({stockData.stockSymbol})</span>
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {stockData.marketStatusData.isOpen ? "Market Open" : "Market Closed"} • As of{" "}
-          {formatDate(stockData.marketStatusData.t)}
-        </p>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Exchange: {stockData.marketStatusData.exchange}
-        </p>
-      </div>
-      {stockData.logo && (
-        <img
-          src={stockData.logo}
-          alt="Stock Logo"
-          className="hidden sm:block w-12 h-12 md:w-16 md:h-16 object-contain rounded-full"
-        />
-      )}
-    </div>
-    <div className="mt-4 md:mt-0 text-right">
-      <p
-        className={`text-2xl font-bold ${
-          stockData.quoteData.dp >= 0 ? "text-green-600" : "text-red-600"
-        }`}
-      >
-        ${formatSupplyValue(stockData.quoteData.c)}
-      </p>
-      <p
-        className={`mt-1 text-sm font-semibold inline-flex items-center ${
-          stockData.quoteData.dp >= 0 ? "text-green-500" : "text-red-500"
-        }`}
-      >
-        {stockData.quoteData.dp >= 0 ? "+" : ""}
-        {formatSupplyValue(stockData.quoteData.dp)}% <i className={stockData.iconClass} />
-      </p>
-    </div>
-  </div>
+      {/* data + chart + news */}
+      {stockData&&(
+        <div className="space-y-10">
 
-  {/* Details Table */}
-  <div className="overflow-x-auto">
-    <table className="w-full table-auto border-collapse">
-      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-        {[
-          ["Current Price", `$${formatSupplyValue(stockData.quoteData.c)} • ${formatSupplyValue(stockData.quoteData.dp)}%`],
-          ["Open Price", `$${formatSupplyValue(stockData.quoteData.o)}`],
-          ["High Price", `$${formatSupplyValue(stockData.quoteData.h)}`],
-          ["Low Price", `$${formatSupplyValue(stockData.quoteData.l)}`],
-          ["52-Week High", `$${formatSupplyValue(stockData.metricData.metric["52WeekHigh"])}`],
-          ["52-Week High Date", formatDateWeirdValue(stockData.metricData.metric["52WeekHighDate"])],
-          ["52-Week Low", `$${formatSupplyValue(stockData.metricData.metric["52WeekLow"])}`],
-          ["52-Week Low Date", formatDateWeirdValue(stockData.metricData.metric["52WeekLowDate"])],
-          ["Market Cap", `$${formatSupplyValue(stockData.metricData.metric["marketCapitalization"])}`],
-          ["EPS (TTM)", `$${formatSupplyValue(stockData.metricData.metric["epsTTM"])}`],
-        ].map(([label, value]) => (
-          <tr key={label} className="grid grid-cols-2 md:table-row py-3">
-            <th className="text-left text-sm font-medium text-gray-500 dark:text-gray-400">
-              {label}
-            </th>
-            <td className="text-right text-sm text-gray-900 dark:text-gray-100">
-              {value}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
+          {/* info card */}
+          <div className="rounded-lg shadow-md p-6 bg-white dark:bg-brand-950">
+            <div className="flex flex-col sm:flex-row sm:justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-semibold">
+                  {stockData.profile.name}
+                  <span className="font-normal text-gray-500"> ({stockData.profile.ticker})</span>
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">  As of {fmtDateTime((stockData.quote.t ?? Date.now()/1000) * 1000)}
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Exchange: {stockData.profile.exchange}
+                </p>
+              </div>
+              {stockData.profile.logo&&(
+                <img src={stockData.profile.logo} alt="logo"
+                     className="w-16 h-16 object-contain rounded-full self-start sm:self-center"/>
+              )}
+            </div>
 
+            {/* price */}
+            <div className="mt-4 flex flex-wrap items-baseline gap-2">
+              <span className="text-3xl font-extrabold">${formatSupplyValue(stockData.quote.c)}</span>
+              <span className={`${stockData.quote.dp>=0?'text-green-600':'text-red-600'} font-semibold`}>
+                {stockData.quote.dp>=0?'+':''}{formatSupplyValue(stockData.quote.dp)}%
+              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                Vol {formatSupplyValue(stockData.quote.v)}
+              </span>
+            </div>
 
-          {/* --- Right Column: Chart, Fear & Greed Index, & News --- */}
-          <div>
+            {/* metrics */}
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+              {[
+                ['Open',`$${formatSupplyValue(stockData.quote.o)}`],
+                ['High',`$${formatSupplyValue(stockData.quote.h)}`],
+                ['Low',`$${formatSupplyValue(stockData.quote.l)}`],
+                ['Market Cap',`$${formatSupplyValue(metric('marketCapitalization'))}`],
+                ['Shares Out.',`${formatSupplyValue(metric('sharesOutstanding'))}`],
+                ['P/E (TTM)',fmt(metric('peTTM'))],
+                ['P/S (TTM)',fmt(metric('psTTM'))],
+                ['Dividend Yield',`${fmt(metric('currentDividendYieldTTM'))}%`],
+                ['Beta',fmt(metric('beta'))],
+                ['50-Day MA',`$${formatSupplyValue(metric('50DayMovingAverage'))}`],
+                ['52-Wk High',`$${formatSupplyValue(metric('52WeekHigh'))}`],
+                ['High Date',formatDateWeirdValue(metric('52WeekHighDate'))],
+                ['52-Wk Low',`$${formatSupplyValue(metric('52WeekLow'))}`],
+                ['Low Date',formatDateWeirdValue(metric('52WeekLowDate'))],
+              ].map(([k,v])=>gridRow(k as string,v))}
+            </div>
+          </div>
 
-            {/* --- News Widget --- */}
-            <NewsWidget />
+          {/* chart */}
+          {candleData&&(
+            <div className="relative h-60 sm:h-72 md:h-80 w-full">
+              <canvas ref={chartCanvasRef} className="w-full h-full"/>
+            </div>
+          )}
+
+          {/* news */}
+          <div className="space-y-4">
+            <h4 className="text-xl font-semibold">Latest News</h4>
+
+            {newsData.length===0&&(
+              <p className="text-gray-500 dark:text-gray-400">No recent news for this ticker.</p>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {newsData.map(n=>{
+                const imgAvail=typeof n.image==='string'&&n.image.trim();
+                const headline=n.headline??n.title??'Untitled article';
+                const publishedMs=((n.datetime??0)*1000)||Date.parse(n.datetime);
+                const srcLogo=logoFromUrl(n.url);
+                return(
+                  <a key={n.id??n.url} href={n.url} target="_blank" rel="noopener noreferrer"
+                     className="flex flex-col sm:flex-row gap-3 p-4 rounded-lg border dark:border-gray-700
+                                hover:shadow-md bg-white dark:bg-brand-950 transition">
+                    {imgAvail&&(
+                      <img src={n.image} alt=""
+                           className="w-full sm:w-24 h-40 sm:h-24 object-cover rounded-md shrink-0"
+                           onError={e=>(e.currentTarget.style.display='none')}/>
+                    )}
+
+                    <div className="flex flex-col justify-between flex-1 min-w-0">
+                      <p className="font-medium text-sm leading-snug line-clamp-2">{headline}</p>
+
+                      <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        {srcLogo&&(
+                          <img src={srcLogo} alt="" className="w-4 h-4 rounded-sm"
+                               onError={e=>(e.currentTarget.style.display='none')}/>
+                        )}
+                        <span className="truncate max-w-[6rem] md:max-w-none">
+                          {new URL(n.url).hostname.replace(/^www\./,'')}
+                        </span>
+                        <span className="mx-1">·</span>
+                        <span>{timeAgo(publishedMs)}</span>
+                      </div>
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
     </section>
   );
-};
-
-export default StockQuoteSection;
+}
