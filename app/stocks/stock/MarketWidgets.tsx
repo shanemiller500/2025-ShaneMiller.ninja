@@ -308,7 +308,7 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
           )}
 
           {/* Top 10 Tickers */}
-          <div className="shadow rounded p-4">
+          <div className="shadow rounded p-4 dark:bg-brand-950 bg-white">
             <h3 className="text-lg font-bold mb-4">Top 10 Tickers</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 dark:bg-brand-950 bg-white">
               {topTen.map(renderSmallTicker)}
@@ -317,13 +317,13 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
 
           {/* Top Gainers and Top Losers */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="shadow rounded p-4">
+            <div className="shadow rounded p-4 dark:bg-brand-950 bg-white">
               <h3 className="text-lg font-bold mb-4">Top Gainers</h3>
               <div className="space-y-3 dark:bg-brand-950 bg-white">
                 {topGainers.map(renderTickerCard)}
               </div>
             </div>
-            <div className="shadow rounded p-4">
+            <div className="shadow rounded p-4 dark:bg-brand-950 bg-white">
               <h3 className="text-lg font-bold mb-4">Top Losers</h3>
               <div className="space-y-3 dark:bg-brand-950 bg-white">
                 {topLosers.map(renderTickerCard)}

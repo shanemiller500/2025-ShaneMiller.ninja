@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Chart } from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 import { API_TOKEN } from '@/utils/config';
 import {
@@ -116,56 +118,61 @@ export default function StockQuoteSection() {
 
   const getMetric = (k: string) => stockData?.metric?.metric?.[k] ?? null;
 
-const handleSearch = async (sym?: string) => {
-  const symbol = (sym ?? symbolInput).trim().toUpperCase();
-  if (!symbol) return;
+  const handleSearch = async (sym?: string) => {
+    const symbol = (sym ?? symbolInput).trim().toUpperCase();
+    if (!symbol) return;
 
-  setLoading(true);
-  setError('');
-  setNewsPage(1);
+    setLoading(true);
+    setError('');
+    setNewsPage(1);
 
-  try {
-    const [quote, profile, metricData, news] = await Promise.all([
-      fetch(`${PROXY_BASE}/quote/${symbol}`).then((r) => (r.ok ? r.json() : null)),
-      fetch(`${PROXY_BASE}/profile/${symbol}`).then((r) => (r.ok ? r.json() : null)),
-      fetch(`${PROXY_BASE}/metric/${symbol}`).then((r) => (r.ok ? r.json() : null)),
-      fetch(`${PROXY_BASE}/news/${symbol}`).then((r) => (r.ok ? r.json() : [])),
-    ]);
+    try {
+      const [quote, profile, metricData, news] = await Promise.all([
+        fetch(`${PROXY_BASE}/quote/${symbol}`).then((r) => (r.ok ? r.json() : null)),
+        fetch(`${PROXY_BASE}/profile/${symbol}`).then((r) => (r.ok ? r.json() : null)),
+        fetch(`${PROXY_BASE}/metric/${symbol}`).then((r) => (r.ok ? r.json() : null)),
+        fetch(`${PROXY_BASE}/news/${symbol}`).then((r) => (r.ok ? r.json() : [])),
+      ]);
 
-    // ─── ADD THIS ─────────────────────────────────────────────────────────
-    if (!quote) {
-      throw new Error(`No quote data for “${symbol}”`);
+      // ─── HANDLE MISSING OR ZEROED QUOTE ────────────────────────────────
+      if (!quote || typeof quote.c !== 'number' || quote.c <= 0) {
+        toast.error(`No data found for “${symbol}.” Try another symbol.`);
+        setStockData(null);
+        setNewsData([]);
+        setShowModal(false);
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
+      // existing profile‐fallback logic
+      let profileData = profile || {};
+      if (!profileData.name) {
+        console.warn(`No profile name for "${symbol}", falling back to symbol`);
+        profileData = {
+          ...profileData,
+          name: symbol,
+          ticker: symbol,
+          exchange: profileData.exchange ?? '',
+          logo: profileData.logo ?? '',
+        };
+      }
+
+      setStockData({ profile: profileData, quote, metric: metricData });
+      setNewsData(Array.isArray(news) ? news : []);
+      setShowModal(true);
+      setSymbolInput('');
+      setSuggestions([]);
+    } catch (err: any) {
+      console.error('Search failed:', err);
+      toast.error(err.message || 'Something went wrong. Please try again.');
+      setError(err.message || 'Error fetching data');
+      setStockData(null);
+      setNewsData([]);
+      setShowModal(false);
+    } finally {
+      setLoading(false);
     }
-    // ──────────────────────────────────────────────────────────────────────
-
-    // your existing profile‐fallback logic
-    let profileData = profile || {};
-    if (!profileData.name) {
-      console.warn(`No profile name for "${symbol}", falling back to symbol`);
-      profileData = {
-        ...profileData,
-        name: symbol,
-        ticker: symbol,
-        exchange: profileData.exchange ?? '',
-        logo:    profileData.logo     ?? '',
-      };
-    }
-
-    setStockData({ profile: profileData, quote, metric: metricData });
-    setNewsData(Array.isArray(news) ? news : []);
-    setShowModal(true);
-    setSymbolInput('');
-    setSuggestions([]);
-  } catch (err: any) {
-    console.error('Search failed:', err);
-    setError(err.message || 'Error fetching data');
-    setStockData(null);
-    setNewsData([]);
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   const handleClear = () => {
     setSymbolInput('');
@@ -217,6 +224,15 @@ const handleSearch = async (sym?: string) => {
 
   return (
     <section className="p-4 space-y-10">
+      <ToastContainer
+        position="top-right"
+        autoClose={4000}
+        hideProgressBar
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+      />
+
       <h2 className="text-2xl font-bold">Stock Quote</h2>
 
       {/* search */}
@@ -309,7 +325,11 @@ const handleSearch = async (sym?: string) => {
               <span className="text-3xl font-extrabold">
                 ${formatSupplyValue(stockData.quote.c)}
               </span>
-              <span className={`${stockData.quote.dp >= 0 ? 'text-green-600' : 'text-red-600'} font-semibold`}>
+              <span
+                className={`${
+                  stockData.quote.dp >= 0 ? 'text-green-600' : 'text-red-600'
+                } font-semibold`}
+              >
                 {stockData.quote.dp >= 0 ? '+' : ''}
                 {formatSupplyValue(stockData.quote.dp)}%
               </span>
@@ -321,13 +341,17 @@ const handleSearch = async (sym?: string) => {
                 ['Open', `$${formatSupplyValue(stockData.quote.o)}`],
                 ['High', `$${formatSupplyValue(stockData.quote.h)}`],
                 ['Low', `$${formatSupplyValue(stockData.quote.l)}`],
-                ['Market Cap', `$${formatSupplyValue(getMetric('marketCapitalization'))}`],
-                //  ['Shares Out.', formatSupplyValue(getMetric('sharesOutstanding'))],
+                [
+                  'Market Cap',
+                  `$${formatSupplyValue(getMetric('marketCapitalization'))}`,
+                ],
                 ['P/E (TTM)', fmt(getMetric('peTTM'))],
                 ['P/S (TTM)', fmt(getMetric('psTTM'))],
-                ['Dividend Yield', `${fmt(getMetric('currentDividendYieldTTM'))}%`],
+                [
+                  'Dividend Yield',
+                  `${fmt(getMetric('currentDividendYieldTTM'))}%`,
+                ],
                 ['Beta', fmt(getMetric('beta'))],
-                // ['50-Day MA', `$${formatSupplyValue(getMetric('50DayMovingAverage'))}`],
                 ['52-Wk High', `$${formatSupplyValue(getMetric('52WeekHigh'))}`],
                 ['High Date', formatDateWeirdValue(getMetric('52WeekHighDate'))],
                 ['52-Wk Low', `$${formatSupplyValue(getMetric('52WeekLow'))}`],
@@ -346,14 +370,18 @@ const handleSearch = async (sym?: string) => {
             <div className="mt-6 space-y-4">
               <h4 className="text-xl font-semibold">Latest News</h4>
               {paginatedNews.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400">No recent news for this ticker.</p>
+                <p className="text-gray-500 dark:text-gray-400">
+                  No recent news for this ticker.
+                </p>
               ) : (
                 <>
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {paginatedNews.map((n, i) => {
-                      const imgAvail = typeof n.image === 'string' && n.image.trim();
+                      const imgAvail =
+                        typeof n.image === 'string' && n.image.trim();
                       const headline = n.headline ?? n.title ?? 'Untitled article';
-                      const publishedMs = (n.datetime ?? 0) * 1000 || Date.parse(n.datetime);
+                      const publishedMs =
+                        (n.datetime ?? 0) * 1000 || Date.parse(n.datetime);
                       const srcLogo = logoFromUrl(n.url);
                       return (
                         <a
@@ -368,18 +396,24 @@ const handleSearch = async (sym?: string) => {
                               src={n.image}
                               alt=""
                               className="w-full sm:w-24 h-40 sm:h-24 object-cover rounded-md shrink-0"
-                              onError={(e) => (e.currentTarget.style.display = 'none')}
+                              onError={(e) =>
+                                (e.currentTarget.style.display = 'none')
+                              }
                             />
                           )}
                           <div className="flex flex-col justify-between flex-1 min-w-0">
-                            <p className="font-medium text-sm leading-snug line-clamp-2">{headline}</p>
+                            <p className="font-medium text-sm leading-snug line-clamp-2">
+                              {headline}
+                            </p>
                             <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
                               {srcLogo && (
                                 <img
                                   src={srcLogo}
                                   alt=""
                                   className="w-4 h-4 rounded-sm"
-                                  onError={(e) => (e.currentTarget.style.display = 'none')}
+                                  onError={(e) =>
+                                    (e.currentTarget.style.display = 'none')
+                                  }
                                 />
                               )}
                               <span className="truncate max-w-[6rem] md:max-w-none">
@@ -397,7 +431,7 @@ const handleSearch = async (sym?: string) => {
                     <button
                       disabled={newsPage === 1}
                       onClick={() => setNewsPage((p) => p - 1)}
-                      className="px-3 py-1 bg-brand-gradient rounded disabled:opacity-50"
+                      className="px-3 py-1 bg-brand-gradient rounded disabled:opacity-50 text-white"
                     >
                       Prev
                     </button>
@@ -407,7 +441,7 @@ const handleSearch = async (sym?: string) => {
                     <button
                       disabled={newsPage === totalPages}
                       onClick={() => setNewsPage((p) => p + 1)}
-                      className="px-3 py-1 bg-brand-gradient rounded disabled:opacity-50"
+                      className="px-3 py-1 bg-brand-gradient rounded disabled:opacity-50 text-white"
                     >
                       Next
                     </button>
@@ -421,7 +455,7 @@ const handleSearch = async (sym?: string) => {
 
       {/* DISCLAIMER */}
       <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-6">
-        DISCLAIMER: All displayed stock quotes are delayed by a minimum of 15 minutes.
+        DISCLAIMER: All displayed stock quote data is delayed by a minimum of 15 minutes.
       </p>
     </section>
   );
