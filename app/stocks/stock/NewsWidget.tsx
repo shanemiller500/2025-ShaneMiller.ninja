@@ -31,7 +31,7 @@ const getDomain = (url: string) => {
 /* ------------------------------------------------------------------ */
 /*  Constants                                                         */
 /* ------------------------------------------------------------------ */
-const PER_PAGE = 26;
+const PER_PAGE = 22;
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -100,7 +100,7 @@ export default function NewsWidget() {
       )}
 
       <div className={`transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'}`}>
-        <div className="columns-2 sm:columns-2 md:columns-3 gap-2 space-y-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-2 dark:bg-brand-950 bg-white">
           {slice.map((n) => {
             const hasImage = !!n.urlToImage;
             return (
@@ -120,7 +120,7 @@ export default function NewsWidget() {
                   />
                 )}
 
-                <div className={`p-4 flex flex-col gap-1 ${hasImage ? 'mt-1' : ''}`}>
+                <div className={`p-4 flex flex-col sm gap-1 ${hasImage ? 'mt-1' : ''}`}>
                   <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                     <img
                       src={`https://logo.clearbit.com/${getDomain(n.url)}`}

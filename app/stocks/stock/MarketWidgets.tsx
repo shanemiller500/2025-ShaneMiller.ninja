@@ -30,7 +30,7 @@ const CACHE_TTL = 15 * 60 * 1000; // 15 minutes in ms
 
 const topTenTickers = [
   "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA",
-  "META", "NVDA", "BRK.B", "JPM", "V",
+  "META", "NVDA", "BRK.B", "JPM", "V", "IBM","ORCL",
 ];
 const potentialTickers = [
   "AMD","NFLX","SQ","ZM","SHOP","TWLO","DOCU","FVRR","SPOT","INTC",
@@ -229,13 +229,11 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
           {item.logo && (
             <img
               src={item.logo}
-              alt={`${item.symbol} logo`}
+              alt={`${item.symbol} logo`} 
               className="w-5 h-5 mr-2 object-contain"
             />
           )}
-          <span className="font-bold">
-            {idx + 1}. {item.symbol}
-          </span>
+          
         </div>
         <div className="mb-1">
           <span className={dpClass}>
@@ -309,14 +307,14 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
 
           {/* Top 10 Tickers */}
           <div className="shadow rounded p-4 dark:bg-brand-950 bg-white">
-            <h3 className="text-lg font-bold mb-4">Top 10 Tickers</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 dark:bg-brand-950 bg-white">
+            <h3 className="text-lg font-bold mb-4">Top Tickers</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1 dark:bg-brand-950 bg-white">
               {topTen.map(renderSmallTicker)}
             </div>
           </div>
 
           {/* Top Gainers and Top Losers */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
             <div className="shadow rounded p-4 dark:bg-brand-950 bg-white">
               <h3 className="text-lg font-bold mb-4">Top Gainers</h3>
               <div className="space-y-3 dark:bg-brand-950 bg-white">
