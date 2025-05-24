@@ -38,6 +38,7 @@ const potentialTickers = [
 ];
 
 export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
+  const [loading, setLoading] = useState(true);
   const [marketStatus, setMarketStatus] = useState<{ isOpen: boolean; t?: number } | null>(null);
   const [topTen, setTopTen] = useState<TickerData[]>([]);
   const [topGainers, setTopGainers] = useState<TickerData[]>([]);
@@ -73,24 +74,20 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
     };
   } | null> => {
     try {
-      // Market status
       const statusRes = await fetch(
         `https://u-mail.co/api/finnhubProxy/market-status?exchange=US`
       );
       const statusData = await statusRes.json();
       const isOpen = !!statusData.isOpen;
 
-      // Top 10
       const topTenResults = (
         await Promise.all(topTenTickers.map(fetchTickerData))
       ).filter((x): x is TickerData => !!x);
 
-      // Potential universe
       const potentialResults = (
         await Promise.all(potentialTickers.map(fetchTickerData))
       ).filter((x): x is TickerData => !!x);
 
-      // Gainers / Losers
       const gainers = potentialResults
         .filter((i) => i.quote.dp > 0)
         .sort((a, b) => b.quote.dp - a.quote.dp)
@@ -101,7 +98,6 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
         .sort((a, b) => a.quote.dp - b.quote.dp)
         .slice(0, 5);
 
-      // Update UI state
       setMarketStatus(statusData);
       setTopTen(topTenResults);
       setTopGainers(gainers);
@@ -124,7 +120,6 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
     }
   };
 
-  // On mount: load cache or fetch, then schedule 15m refresh
   useEffect(() => {
     const loadCache = (): boolean => {
       try {
@@ -162,11 +157,13 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
     };
 
     const init = async () => {
+      setLoading(true);
       const haveCache = loadCache();
       if (!haveCache) {
         const res = await fetchMarketData();
         if (res) saveCache(res.data);
       }
+      setLoading(false);
       // schedule refresh every 15 minutes
       const id = setInterval(async () => {
         const res = await fetchMarketData();
@@ -178,7 +175,6 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
     init();
   }, []);
 
-  // Compute overall market change for Fear & Greed
   const overallMarketChange =
     topTen.length > 0
       ? topTen.reduce((sum, item) => sum + item.quote.dp, 0) / topTen.length
@@ -264,73 +260,80 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
   };
 
   return (
-    <div className="mt-8 space-y-6">
-      {/* Market Status Banner */}
-      {marketStatus && (
-        <div
-          className={`p-2 rounded text-sm ${
-            marketStatus.isOpen
-              ? "bg-green-100 dark:bg-green-800 text-green-900 dark:text-green-100"
-              : "bg-red-100 dark:bg-red-800 text-red-900 dark:text-red-100"
-          }`}
-        >
-          Markets are {marketStatus.isOpen ? "Open" : "Closed"}{" "}
-          {marketStatus.t && `| ${formatDate(marketStatus.t, "short")}`}
+    <>
+      {loading ? (
+        <div className="flex justify-center items-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-indigo-500"></div>
+        </div>
+      ) : (
+        <div className="mt-8 space-y-6">
+          {/* Market Status Banner */}
+          {marketStatus && (
+            <div
+              className={`p-2 rounded text-sm ${
+                marketStatus.isOpen
+                  ? "bg-green-100 dark:bg-green-800 text-green-900 dark:text-green-100"
+                  : "bg-red-100 dark:bg-red-800 text-red-900 dark:text-red-100"
+              }`}
+            >
+              Markets are {marketStatus.isOpen ? "Open" : "Closed"}{" "}
+              {marketStatus.t && `| ${formatDate(marketStatus.t, "short")}`}
+            </div>
+          )}
+
+          {/* Fear & Greed */}
+          <FearGreedWidget index={((overallMarketChange + 3) / 6) * 100} />
+
+          {/* Overall Market Performance */}
+          {topTen.length > 0 && (
+            <div
+              className={`text-center text-sm font-semibold ${
+                overallMarketChange > 0
+                  ? "text-green-600"
+                  : overallMarketChange < 0
+                  ? "text-red-600"
+                  : "text-gray-600"
+              }`}
+            >
+              {overallMarketChange > 0
+                ? `Overall, the markets are up today by ${overallMarketChange.toFixed(
+                    2
+                  )}%.`
+                : overallMarketChange < 0
+                ? `Overall, the markets are down today by ${Math.abs(
+                    overallMarketChange
+                  ).toFixed(2)}%.`
+                : "Overall, the markets are unchanged today."}
+            </div>
+          )}
+
+          {/* Top 10 Tickers */}
+          <div className="shadow rounded p-4">
+            <h3 className="text-lg font-bold mb-4">Top 10 Tickers</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 dark:bg-brand-950 bg-white">
+              {topTen.map(renderSmallTicker)}
+            </div>
+          </div>
+
+          {/* Top Gainers and Top Losers */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="shadow rounded p-4">
+              <h3 className="text-lg font-bold mb-4">Top Gainers</h3>
+              <div className="space-y-3 dark:bg-brand-950 bg-white">
+                {topGainers.map(renderTickerCard)}
+              </div>
+            </div>
+            <div className="shadow rounded p-4">
+              <h3 className="text-lg font-bold mb-4">Top Losers</h3>
+              <div className="space-y-3 dark:bg-brand-950 bg-white">
+                {topLosers.map(renderTickerCard)}
+              </div>
+            </div>
+          </div>
+
+          {error && <p className="text-red-500">{error}</p>}
         </div>
       )}
-
-      {/* Fear & Greed */}
-      <FearGreedWidget index={((overallMarketChange + 3) / 6) * 100} />
-
-      {/* Overall Market Performance */}
-      {topTen.length > 0 && (
-        <div
-          className={`text-center text-sm font-semibold ${
-            overallMarketChange > 0
-              ? "text-green-600"
-              : overallMarketChange < 0
-              ? "text-red-600"
-              : "text-gray-600"
-          }`}
-        >
-          {overallMarketChange > 0
-            ? `Overall, the markets are up today by ${overallMarketChange.toFixed(
-                2
-              )}%.`
-            : overallMarketChange < 0
-            ? `Overall, the markets are down today by ${Math.abs(
-                overallMarketChange
-              ).toFixed(2)}%.`
-            : "Overall, the markets are unchanged today."}
-        </div>
-      )}
-
-      {/* Top 10 Tickers */}
-      <div className="shadow rounded p-4">
-        <h3 className="text-lg font-bold mb-4">Top 10 Tickers</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 dark:bg-brand-950 bg-white">
-          {topTen.map(renderSmallTicker)}
-        </div>
-      </div>
-
-      {/* Top Gainers and Top Losers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="shadow rounded p-4">
-          <h3 className="text-lg font-bold mb-4">Top Gainers</h3>
-          <div className="space-y-3 dark:bg-brand-950 bg-white">
-            {topGainers.map(renderTickerCard)}
-          </div>
-        </div>
-        <div className="shadow rounded p-4">
-          <h3 className="text-lg font-bold mb-4">Top Losers</h3>
-          <div className="space-y-3 dark:bg-brand-950 bg-white">
-            {topLosers.map(renderTickerCard)}
-          </div>
-        </div>
-      </div>
-
-      {error && <p className="text-red-500">{error}</p>}
-    </div>
+    </>
   );
 }
-

@@ -132,7 +132,7 @@ export default function NewsWidget() {
                   </div>
 
                   <span className="text-xs text-gray-400 dark:text-gray-500">
-                    {formatDate(n.publishedAt)}
+                   {formatDate(Date.parse(n.publishedAt))}
                   </span>
 
                   <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm leading-snug line-clamp-3">

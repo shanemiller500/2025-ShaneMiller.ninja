@@ -1,14 +1,8 @@
-// Filename: EarningsSection.tsx
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { API_TOKEN } from '@/utils/config';
 import { formatSupplyValue } from '@/utils/formatters';
-import { FaExternalLinkAlt } from 'react-icons/fa';
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
 interface EarningsItem {
   symbol          : string;
   date            : string;
@@ -19,52 +13,46 @@ interface EarningsItem {
   epsSurprise?    : number | null;
   quarter         : string;
   hour            : 'bmo' | 'amc' | '' | null;
-  /* client-side additions */
-  logo?           : string;
-  weburl?         : string;
-  _logoFetched?   : boolean;   // internal flag: logo already fetched
 }
 
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                           */
-/* ------------------------------------------------------------------ */
 const fmtDate = (iso: string) =>
   new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     .format(new Date(iso));
 
-const PER_PAGE_OPTIONS = [20, 50, 100, -1]; // -1 == “All”
+const PER_PAGE_OPTIONS = [20, 50, 100, -1];
+const PROXY_BASE       = 'https://u-mail.co/api/finnhubProxy';
 
-/* ------------------------------------------------------------------ */
-/*  Component                                                         */
-/* ------------------------------------------------------------------ */
 const EarningsSection: React.FC = () => {
-  const [raw,        setRaw]        = useState<EarningsItem[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [search,     setSearch]     = useState('');
-  const [perPage,    setPerPage]    = useState<number>(20);
-  const [page,       setPage]       = useState(1);
+  const [raw,     setRaw]     = useState<EarningsItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search,  setSearch]  = useState('');
+  const [perPage, setPerPage] = useState<number>(20);
+  const [page,    setPage]    = useState(1);
 
-  /* ---------------------- initial fetch (data only) -------------- */
+  // 1) Fetch earnings calendar via our proxy
   useEffect(() => {
     (async () => {
       try {
         const today = new Date();
-        const from  = new Date(today); from.setMonth(from.getMonth() - 1);
-        const to    = new Date(today); to.setMonth(to.getMonth() + 1);
+        const from  = new Date(today);
+        from.setMonth(from.getMonth() - 1);
+        const to    = new Date(today);
+        to.setMonth(to.getMonth() + 1);
 
-        const url = `https://finnhub.io/api/v1/calendar/earnings?from=${from
-          .toISOString()
-          .slice(0, 10)}&to=${to.toISOString().slice(0, 10)}&token=${API_TOKEN}`;
+        const resp = await fetch(
+          `${PROXY_BASE}/calendar/earnings?from=${
+            from.toISOString().slice(0,10)
+          }&to=${to.toISOString().slice(0,10)}`
+        );
+        const data = await resp.json();
+        if (!data?.earningsCalendar?.length) {
+          setLoading(false);
+          return;
+        }
 
-        const data = await fetch(url).then(r => r.json());
-
-        if (!data?.earningsCalendar?.length) { setLoading(false); return; }
-
-        /* sort by: logo items later, so we’ll resort after logos fetched */
         data.earningsCalendar.sort((a: EarningsItem, b: EarningsItem) =>
           a.date.localeCompare(b.date)
         );
-
         setRaw(data.earningsCalendar);
       } catch (e) {
         console.error('Earnings fetch error:', e);
@@ -74,58 +62,31 @@ const EarningsSection: React.FC = () => {
     })();
   }, []);
 
-  /* ---------------------- filtered list -------------------------- */
+  // 2) Filter by search term
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return raw;
-    return raw.filter(e => e.symbol.toLowerCase().includes(q));
+    return q
+      ? raw.filter(e => e.symbol.toLowerCase().includes(q))
+      : raw;
   }, [raw, search]);
 
-  /* ---------------------- logo lazy-fetch per page --------------- */
-  useEffect(() => {
-    if (loading) return;
+  // 3) No more logo/profile fetch
 
-    const start = (page - 1) * (perPage === -1 ? filtered.length : perPage);
-    const end   = perPage === -1 ? filtered.length : start + perPage;
-    const slice = filtered.slice(start, end);
+  // 4) No reordering by logo—just use filtered directly
+  const ordered = filtered;
 
-    slice.forEach(async (ev) => {
-      if (ev._logoFetched || ev.logo) return;
-      try {
-        const p = await fetch(
-          `https://finnhub.io/api/v1/stock/profile2?symbol=${ev.symbol}&token=${API_TOKEN}`
-        ).then(r => r.json());
-        ev.logo   = p.logo   || '';
-        ev.weburl = p.weburl || '';
-      } catch {/* ignore */}
-      ev._logoFetched = true;
-      // Trigger re-render
-      setRaw(r => [...r]);
-    });
-  }, [filtered, page, perPage, loading]);
-
-  /* ---------------------- reorder: logos first ------------------- */
-  const ordered = useMemo(() => {
-    const withLogo    = filtered.filter(e => e.logo);
-    const withoutLogo = filtered.filter(e => !e.logo);
-    return [...withLogo, ...withoutLogo];
-  }, [filtered]);
-
-  /* ---------------------- pagination calc ------------------------ */
+  // 5) Pagination maths
   const perPageEff  = perPage === -1 ? ordered.length : perPage;
   const totalPages  = Math.max(1, Math.ceil(ordered.length / perPageEff));
   const clampedPage = Math.min(page, totalPages);
   const start       = (clampedPage - 1) * perPageEff;
   const visible     = ordered.slice(start, start + perPageEff);
 
-  /* ---------------------- UI ------------------------------------- */
   return (
     <section className="p-4 space-y-6 rounded">
       <h2 className="text-2xl font-bold">Upcoming Earnings</h2>
 
-      {/* controls row */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        {/* search */}
         <input
           type="text"
           placeholder="Search ticker…"
@@ -133,11 +94,8 @@ const EarningsSection: React.FC = () => {
           onChange={e => { setSearch(e.target.value); setPage(1); }}
           className="p-2 border rounded w-full sm:w-64 dark:border-gray-600 dark:bg-brand-950 focus:outline-none"
         />
-
-
       </div>
 
-      {/* list */}
       {loading ? (
         <p className="text-center">Loading…</p>
       ) : ordered.length === 0 ? (
@@ -154,38 +112,13 @@ const EarningsSection: React.FC = () => {
                            hover:-translate-y-1 hover:scale-[1.015] hover:shadow-lg
                            active:scale-95"
               >
-                {/* logo */}
-                {ev.logo && (
-                  <img
-                    src={ev.logo}
-                    alt=""
-                    className="w-14 h-14 object-contain rounded-md opacity-0
-                               transition-opacity duration-300 hover:scale-105"
-                    onLoad={e => (e.currentTarget.style.opacity = '1')}
-                    onError={e => (e.currentTarget.style.display = 'none')}
-                  />
-                )}
-
-                {/* header row */}
-                <div className="flex items-center gap-1">
-                  <h3 className="font-semibold">{ev.symbol}</h3>
-                  {ev.weburl && (
-                    <a
-                      href={ev.weburl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-indigo-600 dark:text-indigo-400 hover:underline"
-                    >
-                      <FaExternalLinkAlt className="w-3 h-3 inline-block" />
-                    </a>
-                  )}
-                </div>
+                <h3 className="font-semibold">{ev.symbol}</h3>
 
                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                  {fmtDate(ev.date)} {ev.hour === 'bmo' ? '(BMO)' : ev.hour === 'amc' ? '(AMC)' : ''}
+                  {fmtDate(ev.date)}{' '}
+                  {ev.hour === 'bmo' ? '(BMO)' : ev.hour === 'amc' ? '(AMC)' : ''}
                 </p>
 
-                {/* mini grid */}
                 <div className="grid grid-cols-2 gap-1 w-full text-xs">
                   <div className="flex flex-col">
                     <span className="text-gray-500 dark:text-gray-400">EPS Est.</span>
@@ -213,7 +146,6 @@ const EarningsSection: React.FC = () => {
                   </div>
                 </div>
 
-                {/* surprise */}
                 {ev.epsSurprise != null && (
                   <span
                     className={`inline-block px-2 py-0.5 rounded text-xs font-medium mt-1
@@ -223,8 +155,7 @@ const EarningsSection: React.FC = () => {
                                   ? 'bg-red-100 text-red-800 dark:bg-red-600/20 dark:text-red-300'
                                   : 'bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-300'}`}
                   >
-                    Surprise {ev.epsSurprise > 0 ? '+' : ''}
-                    {formatSupplyValue(ev.epsSurprise)}
+                    Surprise {ev.epsSurprise > 0 ? '+' : ''}{formatSupplyValue(ev.epsSurprise)}
                   </span>
                 )}
 
@@ -233,41 +164,42 @@ const EarningsSection: React.FC = () => {
             ))}
           </div>
 
-          {/* pagination controls */}
-          {perPage !== -1 && totalPages > 1 && (
-            <div className="flex justify-center items-center gap-2 mt-4">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={clampedPage === 1}
-                className="px-3 py-1 border rounded disabled:opacity-40 dark:border-gray-600 bg-brand-gradient text-white"
-              >
-                Prev
-              </button>
-              <span className="text-sm">
-                Page {clampedPage} / {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={clampedPage === totalPages}
-                className="px-3 py-1 border rounded disabled:opacity-40 dark:border-gray-600 bg-brand-gradient text-white"
-              >
-                Next
-              </button>
+          {/* pagination + per-page selector */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+            {perPage !== -1 && totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={clampedPage === 1}
+                  className="px-3 py-1 border rounded disabled:opacity-40 dark:border-gray-600"
+                >
+                  Prev
+                </button>
+                <span className="text-sm">
+                  Page {clampedPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={clampedPage === totalPages}
+                  className="px-3 py-1 border rounded disabled:opacity-40 dark:border-gray-600"
+                >
+                  Next
+                </button>
+              </div>
+            )}
 
-                      {/* per-page selector */}
-        <select
-          value={perPage}
-          onChange={e => { setPerPage(parseInt(e.target.value)); setPage(1); }}
-          className="p-2 border rounded w-28 dark:border-gray-600 dark:bg-brand-950 focus:outline-none"
-        >
-          {PER_PAGE_OPTIONS.map(opt => (
-            <option key={opt} value={opt}>
-              {opt === -1 ? 'All' : opt} / page
-            </option>
-          ))}
-        </select>
-            </div>
-          )}
+            <select
+              value={perPage}
+              onChange={e => { setPerPage(parseInt(e.target.value)); setPage(1); }}
+              className="p-2 border rounded w-28 dark:border-gray-600 dark:bg-brand-950 focus:outline-none"
+            >
+              {PER_PAGE_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>
+                  {opt === -1 ? 'All' : opt} / page
+                </option>
+              ))}
+            </select>
+          </div>
         </>
       )}
     </section>
