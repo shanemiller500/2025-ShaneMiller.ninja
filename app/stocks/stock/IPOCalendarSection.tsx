@@ -85,7 +85,7 @@ const IPOCalendarSection: React.FC = () => {
     <section className="p-4 space-y-6 rounded">
       <h2 className="text-2xl font-bold">IPO Calendar</h2>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
         <input
           type="text"
           placeholder="Search by company or ticker…"
@@ -94,17 +94,7 @@ const IPOCalendarSection: React.FC = () => {
           className="p-2 border rounded w-full sm:w-72 dark:border-gray-600 dark:bg-brand-950 focus:outline-none"
         />
 
-        <select
-          value={perPage}
-          onChange={e => { setPerPage(+e.target.value); setPage(1); }}
-          className="p-2 border rounded w-28 dark:border-gray-600 dark:bg-brand-950 focus:outline-none"
-        >
-          {PER_PAGE_OPTIONS.map(opt => (
-            <option key={opt} value={opt}>
-              {opt === -1 ? 'All' : opt} / page
-            </option>
-          ))}
-        </select>
+
       </div>
 
       {loading ? (
@@ -113,7 +103,7 @@ const IPOCalendarSection: React.FC = () => {
         <p className="text-center">No matching IPOs.</p>
       ) : (
         <>
-          <div className="grid gap-2 grid-cols-2 md:grid-cols-4">
+          <div className="grid gap-2 grid-cols-1 md:grid-cols-4">
             {visible.map((ev, idx) => (
               <div
                 key={`${ev.symbol}-${ev.date}-${idx}`}
@@ -170,10 +160,25 @@ const IPOCalendarSection: React.FC = () => {
               >
                 Next
               </button>
+                      <select
+          value={perPage}
+          onChange={e => { setPerPage(+e.target.value); setPage(1); }}
+          className="p-2 border rounded w-28 dark:border-gray-600 dark:bg-brand-950 focus:outline-none"
+        >
+          {PER_PAGE_OPTIONS.map(opt => (
+            <option key={opt} value={opt}>
+              {opt === -1 ? 'All' : opt} / page
+            </option>
+          ))}
+        </select>
             </div>
+            
           )}
+        
         </>
+        
       )}
+      
     </section>
   );
 };
