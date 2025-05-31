@@ -16,7 +16,7 @@ export default function Experience() {
             <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
               <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-indigo-50 rounded-full">
                 <Image
-                  className=""
+                  className="object-contain"
                   src={DCI}
                   alt="Data Center Inc. Logo"
                   width={46}
@@ -45,7 +45,7 @@ export default function Experience() {
           <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
             <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-indigo-50  rounded-full">
               <Image 
-                className="" 
+                className="object-contain" 
                 src={ApplyPro} 
                 alt="ApplyPro Logo" 
                 width={46} 
@@ -70,7 +70,7 @@ export default function Experience() {
           <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
             <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-indigo-50  rounded-full">
             <Image 
-                className="" 
+                className="object-contain" 
                 src={UMail} 
                 alt="UMail Logo" 
                 width={46} 
@@ -95,9 +95,9 @@ export default function Experience() {
           <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
             <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-indigo-50  rounded-full">
             <Image 
-                className="" 
+                className="object-contain" 
                 src={spgi} 
-                alt="ApplyPro Logo" 
+                alt="S&P Global Logo" 
                 width={47} 
                 height={47} 
               />
@@ -120,7 +120,7 @@ export default function Experience() {
           <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
             <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-indigo-50  rounded-full">
             <Image 
-                className="" 
+                className="object-contain" 
                 src={spgi} 
                 alt="ApplyPro Logo" 
                 width={47} 
@@ -145,7 +145,7 @@ export default function Experience() {
           <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8">
             <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-indigo-50 s rounded-full">
             <Image 
-                className="" 
+                className="object-contain" 
                 src={spgi} 
                 alt="ApplyPro Logo" 
                 width={47} 

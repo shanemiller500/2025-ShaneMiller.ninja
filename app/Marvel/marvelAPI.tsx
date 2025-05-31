@@ -32,8 +32,6 @@ export async function fetchFromMarvel(
 
   const url = `${BASE_URL}/${endpoint}?${params.toString()}`;
   
-  // Must log and verify this URL manually
-  console.log("Marvel API URL:", url);
 
   try {
     const response = await fetch(url, {

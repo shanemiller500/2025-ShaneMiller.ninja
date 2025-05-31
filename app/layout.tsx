@@ -12,6 +12,8 @@ import { Analytics } from "@vercel/analytics/react";
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { trackEvent } from '@/utils/mixpanel';
+import ConsoleGreeting from '@/components/ConsoleGreeting'
+
 
 declare global {
   interface Window {
@@ -107,6 +109,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} ${aspekta.variable} font-inter antialiased bg-indigo-50 text-brand-700 dark:bg-brand-900 dark:text-slate-200 tracking-tight`}>
         <Theme>
+        <ConsoleGreeting />
           <div className="max-w-7xl mx-auto">
             <div className="min-h-screen flex">
               <SideNavigation />
