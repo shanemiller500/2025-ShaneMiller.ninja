@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import NewsTab    from './NewsTab';
+import NewsTab    from './AllNewsTab';
 import SportsTab  from './SportsTab';
 import FinanceTab from './FinanceTab';
 

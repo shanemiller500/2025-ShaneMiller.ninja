@@ -7,8 +7,7 @@ import { motion } from 'framer-motion';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-import StockQuoteModal from './StockQuoteModal';          // ⬅️  REUSABLE POPUP
-
+import StockQuoteModal from './StockQuoteModal';          
 /* ------------------------------------------------------------------ */
 /*  Constants                                                         */
 /* ------------------------------------------------------------------ */
