@@ -110,7 +110,7 @@ const SportsTab = () => {
       {error && <p className="mb-4 rounded bg-red-100 p-3 font-medium text-red-700">{error}</p>}
 
       {topStrip.length > 0 && (
-        <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-10 grid gap-1 sm:grid-cols-2 lg:grid-cols-4">
           {topStrip.map((a, i) => {
             const logo = `https://logo.clearbit.com/${getDomain(a.url)}`
             return (
@@ -131,7 +131,7 @@ const SportsTab = () => {
       )}
 
       <section className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
-        <div className="columns-1 gap-4 sm:columns-2 lg:columns-3">
+        <div className="columns-1 gap-2 sm:columns-2 lg:columns-3">
           {pageNews.map((a, i) => {
             const img = a.urlToImage
             const logo = `https://logo.clearbit.com/${getDomain(a.url)}`
@@ -140,7 +140,7 @@ const SportsTab = () => {
                 {img ? (
                   <div className="relative h-48 w-full bg-cover bg-center" style={{ backgroundImage: `url('${img}')` }}>
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />
-                    <div className="absolute bottom-0 z-10 flex flex-col gap-2 p-4 text-white">
+                    <div className="absolute bottom-0 z-10 flex flex-col gap-1 p-4 text-white">
                       <h3 className="line-clamp-3 text-sm font-semibold leading-snug">{a.title}</h3>
                       <div className="flex items-center gap-2 text-xs">
                         <img src={logo} onError={e => ((e.currentTarget.src = LOGO_FALLBACK))} alt={a.source.name} className="h-4 w-4 object-contain" />

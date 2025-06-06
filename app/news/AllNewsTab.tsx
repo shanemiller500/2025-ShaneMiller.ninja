@@ -186,7 +186,7 @@ export default function NewsTab() {
 
   const topStrip = useMemo(() => {
     // first four articles that actually have an image, keep order
-    return byProvider.filter(a => getDisplayImage(a)).slice(0, 4);
+    return byProvider.filter(a => getDisplayImage(a)).slice(0, 1);
   }, [byProvider]);
 
   const rest = useMemo(() => {
@@ -252,7 +252,7 @@ export default function NewsTab() {
       </div>
 
       {/* headline strip with images */}
-      <div className="mb-10 grid gap-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-10 grid gap-1 sm:grid-cols-2 lg:grid-cols-1">
         {topStrip.map((a, idx) => {
           const bg   = getDisplayImage(a);
           const logo = a.source.image ?? `https://logo.clearbit.com/${getDomain(a.url)}`;
@@ -297,10 +297,10 @@ export default function NewsTab() {
                     className="h-4 w-4 flex-shrink-0 object-contain"
                   />
                   <span className="truncate max-w-[90px]">{a.source.name}</span>
-                  <span className="opacity-70">•</span>
+                  {/* <span className="opacity-70">•</span>
                   <time dateTime={a.publishedAt} className="opacity-70">
                     {new Date(a.publishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </time>
+                  </time> */}
                 </div>
               </div>
             </a>
@@ -311,7 +311,7 @@ export default function NewsTab() {
       {/* masonry-style dynamic grid */}
       <div
   className={`
-    grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2
+    grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1
     grid-flow-row-dense    
     transition-opacity duration-300
     ${fade ? 'opacity-0' : 'opacity-100'}

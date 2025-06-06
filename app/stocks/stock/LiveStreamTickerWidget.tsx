@@ -245,7 +245,7 @@ const LiveStreamTickerWidget: React.FC = () => {
     <>
       <ToastContainer position="top-right" autoClose={4000} hideProgressBar pauseOnHover />
       <section className="mt-6 p-4 rounded shadow relative dark:bg-brand-950 bg-white">
-        <h2 className="text-xl font-bold mb-4">Live Stock Ticker</h2>
+        <h2 className="text-xl font-bold mb-4 text-center">Live Stock Ticker</h2>
 
         {banner && (
           <div
@@ -274,12 +274,12 @@ const LiveStreamTickerWidget: React.FC = () => {
                   <img
                     src={symbolLogos[sym]}
                     alt={`${sym} logo`}
-                    className="mx-auto mb-1 w-8 h-8 object-contain"
+                    className="mx-auto w-8 h-8 object-contain"
                   />
                 )}
                 <div className="font-bold text-sm">{sym}</div>
                 <div
-                  className={`${info?.bgColor ?? 'bg-gray-100 dark:bg-gray-600'} mt-1 p-1 rounded text-sm`}
+                  className={`${info?.bgColor ?? 'bg-gray-100 dark:bg-gray-600'} mt- p-1 rounded text-sm`}
                 >
                   {info?.info ?? '--'}
                 </div>
@@ -295,7 +295,7 @@ const LiveStreamTickerWidget: React.FC = () => {
           })}
         </div>
 
-        <div className="p-2 mt-4">
+        <div className="">
           <p className="text-xs text-gray-500 text-center">
             See more stock market data{' '}
             <a href="/stocks" className="text-indigo-500 underline">

@@ -17,16 +17,6 @@ import {
 import { trackEvent } from "@/utils/mixpanel";
 import CryptoAssetPopup from "@/utils/CryptoAssetPopup"; // <-- new import
 
-/* ---------- helpers ---------- */
-const formatValue = (v: any) => {
-  const n = parseFloat(v);
-  return isNaN(n)
-    ? "N/A"
-    : n.toLocaleString("en-US", {
-        maximumFractionDigits: 2,
-        minimumFractionDigits: 2,
-      });
-};
 
 const currencyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -39,13 +29,6 @@ const formatUSD = (v: any) => {
 };
 const formatPct = (s: any) =>
   s != null ? `${parseFloat(String(s)).toFixed(2)}%` : "N/A";
-const shortenUrl = (u: string) => {
-  try {
-    return new URL(u).hostname.replace(/^www\./, "");
-  } catch {
-    return u;
-  }
-};
 
 /* ---------- API constants ---------- */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
@@ -303,7 +286,7 @@ export default function LiveStreamHeatmap() {
                   <div className="mt-0.5 text-[11px] sm:text-sm">
                     {formatUSD(price)} <span className="font-bold">{arrow}</span>
                   </div>
-                  <div className="text-[9px] sm:text-xs">{formatPct(md.changePercent24Hr)}</div>
+                  <div className="text-[9px] sm:text-xs">{formatPct(md.changePercent24Hr)} </div>
                 </motion.div>
               );
             })}
@@ -406,7 +389,7 @@ export default function LiveStreamHeatmap() {
               The live price stream ended automatically after&nbsp;5&nbsp;minutes.
             </p>
             <button
-              className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded"
+              className="px-4 py-2 bg-brand-gradient hover:bg-indigo-600 text-white rounded"
               onClick={() => window.location.reload()}
             >
               Start Stream Again

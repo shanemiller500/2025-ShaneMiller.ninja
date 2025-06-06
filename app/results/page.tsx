@@ -1,14 +1,8 @@
-import React, { Suspense } from 'react';
-import Results from './Results';
+// app/(ai-search)/page.tsx
+"use client";
 
-const ResultsPage = () => {
-  return (
-    <div>
-      <Suspense fallback={<div>Loading...</div>}>
-        <Results />
-      </Suspense>
-    </div>
-  );
-};
+import Results from "./Results";
 
-export default ResultsPage;
+export default function Page() {
+  return <Results />;
+}
