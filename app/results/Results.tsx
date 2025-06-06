@@ -204,3 +204,4 @@ export default function Results() {
     </>
   );
 }
+export const dynamic = "force-dynamic";
