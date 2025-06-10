@@ -50,12 +50,20 @@ const isUSA = (a: Article) => {
          /\.us$/.test(host);
 };
 
-const getDisplayImage = (a: Article) => {
-  if (a.urlToImage)        return a.urlToImage;
-  if (a.images?.length)    return a.images[0];
-  if (a.thumbnails?.length)return a.thumbnails[0];
-  const c = firstImg(a.content);
-  if (c) return c;
+const getDisplayImage = (a: Article & { image?: string }) => {
+  const sources = [
+    a.urlToImage,
+    a.image,               
+    a.images?.[0],
+    a.thumbnails?.[0],
+    firstImg(a.content),
+  ].filter(Boolean) as string[];
+
+  for (let src of sources) {
+    if (src.startsWith('http://')) src = src.replace('http://', 'https://');
+    if (src) return src;
+  }
+
   if (getDomain(a.url).includes('cbsnews.com')) return CBS_THUMB;
   return null;
 };
@@ -185,7 +193,7 @@ export default function NewsTab() {
     provider === 'All' ? dataset : dataset.filter((a) => a.source.name === provider);
 
   const topStrip = useMemo(() => {
-    // first four articles that actually have an image, keep order
+    // first one article that actually have an image, keep order
     return byProvider.filter(a => getDisplayImage(a)).slice(0, 1);
   }, [byProvider]);
 

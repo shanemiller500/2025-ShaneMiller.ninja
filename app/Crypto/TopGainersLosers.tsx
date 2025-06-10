@@ -227,7 +227,7 @@ export default function TopGainersLosers() {
               setViewMode(next);
               trackEvent("CryptoViewToggle", { view: next });
             }}
-            className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded-full shadow-sm hover:shadow-md transition-shadow duration-200"
+            className="flex items-center gap-2 bg-brand-gradient border border-gray-300 dark:border-gray-600 text-white px-4 py-2 rounded-full shadow-sm hover:shadow-md transition-shadow duration-200"
           >
             {viewMode === "table" ? <FaThLarge className="w-5 h-5" /> : <FaTable className="w-5 h-5" />}
             <span className="hidden sm:inline text-sm font-medium">

@@ -1,18 +1,19 @@
-"use client";
+'use client';
 
-import React, { useEffect } from "react";
-import CountrySearch from "./CountrySearch"; 
+import React, { useEffect } from 'react';
+import CountrySearch from './CountrySearch';
 import { trackEvent } from '@/utils/mixpanel';
 
-const CountrySearchPage = () => {
+const CountrySearchPage: React.FC = () => {
+  useEffect(() => {
+    trackEvent('Country Page Viewed', { page: 'Country' });
+  }, []);
 
-    useEffect(() => {
-      trackEvent('Country Page Viewed', { page: 'Country' });
-    }, []);
   return (
-    <div>
+    <main className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50
+                     dark:from-brand-950 dark:to-brand-900">
       <CountrySearch />
-    </div>
+    </main>
   );
 };
 

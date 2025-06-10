@@ -27,7 +27,7 @@ export default function Home() {
         <div className="flex flex-col sm:flex-row items-center px-5 py-3">
           <input
             type="text"
-            className="flex-grow bg-transparent border border-gray-700 rounded-full px-2 text-gray-100 placeholder-gray-500 w-full"
+            className="flex-grow  border border-gray-700 rounded-full px-2 text-brand-900 dark:text-gray-100 placeholder-gray-500 w-full dark:bg-brand-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             placeholder="Search Anything"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

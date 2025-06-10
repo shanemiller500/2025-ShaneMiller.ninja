@@ -131,12 +131,12 @@ const SportsTab = () => {
       )}
 
       <section className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
-        <div className="columns-1 gap-2 sm:columns-2 lg:columns-3">
+        <div className="columns-1 gap-2 sm:columns-2 lg:columns-2">
           {pageNews.map((a, i) => {
             const img = a.urlToImage
             const logo = `https://logo.clearbit.com/${getDomain(a.url)}`
             return (
-              <a key={`${a.url}-${i}`} href={a.url} target="_blank" rel="noopener noreferrer" className="mb-4 inline-block w-full break-inside-avoid overflow-hidden rounded-lg shadow hover:shadow-lg bg-white dark:bg-brand-950 transition">
+              <a key={`${a.url}-${i}`} href={a.url} target="_blank" rel="noopener noreferrer" className=" inline-block w-full break-inside-avoid overflow-hidden rounded-lg shadow hover:shadow-lg bg-white dark:bg-brand-950 transition">
                 {img ? (
                   <div className="relative h-48 w-full bg-cover bg-center" style={{ backgroundImage: `url('${img}')` }}>
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />

@@ -52,7 +52,7 @@ export default function SideNavigation() {
                     pathname !== '/Crypto' &&
                     pathname !== '/ISS' &&
                     pathname !== '/Art' &&
-                    pathname !== '/cymatics' &&
+                    pathname !== '/Vibroacoustics' &&
                     pathname !== '/Spacex' &&
                     pathname !== '/news' &&
                     pathname !== '/search' &&
@@ -84,7 +84,7 @@ export default function SideNavigation() {
                     pathname === '/Bored' ||
                     pathname === '/ISS' ||
                     pathname === '/Art' ||
-                    pathname === '/cymatics' ||
+                    pathname === '/Vibroacoustics' ||
                     pathname === '/Spacex' ||
                     pathname === '/news' ||
                     pathname === '/search' ||

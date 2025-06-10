@@ -14,8 +14,8 @@ const Page: React.FC = () => {
           onClick={() => setActiveTab("chladni")}
           className={`px-4 py-2 rounded-t transition-colors ${
             activeTab === "chladni"
-              ? "bg-indigo-800 border-b-2 border-indigo-500"
-              : "bg-indigo-700 hover:bg-indigo-600"
+              ? "bg-brand-gradient border-b-2 border-indigo-500"
+              : "bg-indigo-300 hover:bg-brand-gradient"
           }`}
         >
           Chladni
@@ -24,8 +24,8 @@ const Page: React.FC = () => {
           onClick={() => setActiveTab("tesseract")}
           className={`px-4 py-2 rounded-t transition-colors ${
             activeTab === "tesseract"
-              ? "bg-indigo-800 border-b-2 border-indigo-500"
-              : "bg-indigo-700 hover:bg-indigo-600"
+              ? "bg-brand-gradient border-b-2 border-indigo-500"
+              : "bg-indigo-300 hover:bg-brand-gradient"
           }`}
         >
           Tesseract 4D
