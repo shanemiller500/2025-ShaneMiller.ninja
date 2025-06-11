@@ -248,33 +248,36 @@ export default function CountrySearch() {
         </button>
       </div>
 
-      {/* ---------------- country tiles ---------------- */}
-      {initial ? (
-        <Spinner />
-      ) : (
-        <div className="mb-12 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {(results.length ? results : mini.slice(0, 8)).map((c) => (
-            <div
-              key={c.cca3}
-              onClick={() => {
-                loadDetails(c.cca3);
-                setResults([]);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="cursor-pointer rounded border bg-white/70 p-3 shadow transition hover:shadow-md dark:bg-brand-950"
-            >
-              {c.flags?.png && (
-                <img
-                  src={c.flags.png}
-                  alt={c.flags.alt}
-                  className="mb-1 h-8 w-12 rounded-sm object-cover"
-                />
-              )}
-              <span className="text-xs sm:text-sm">{c.name.common}</span>
-            </div>
-          ))}
-        </div>
-      )}
+{/* ---------------- country tiles ---------------- */}
+{initial ? (
+  <Spinner />
+) : (
+  <div className="mb-12 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+    {(results.length ? results : mini.slice(0, 8)).map((c) => (
+      <div
+        key={c.cca3}
+        onClick={() => {
+          loadDetails(c.cca3);
+          setResults([]);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        className="cursor-pointer rounded-lg border bg-white/30 dark:bg-black/30 bg-cover bg-center p-0 shadow transition hover:shadow-lg relative overflow-hidden"
+        style={{
+          backgroundImage: c.flags?.png
+            ? `url(${c.flags.png})`
+            : undefined,
+        }}
+      >
+        {/* semi-opaque overlay so text is legible */}
+        <div className="absolute inset-0 bg-black/30" />
+        <span className="relative z-10 block w-full py-2 text-center text-sm font-medium text-white">
+          {c.name.common}
+        </span>
+      </div>
+    ))}
+  </div>
+)}
+
 
       {/* ---------------- detail panel ---------------- */}
       {full && extras && (

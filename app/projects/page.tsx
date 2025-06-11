@@ -68,6 +68,14 @@ export default function Projects() {
       excerpt: " Latest News from whatever APIs I can get it from",
       openSource: false,
     },
+        {
+      id: 1,
+      icon: Icon04,
+      slug: '/Country',
+      title: 'Country Search',
+      excerpt: 'Search for any Countries infomation',
+      openSource: false,
+    },
     
     {
       id: 2,
@@ -140,14 +148,6 @@ export default function Projects() {
       slug: '/Weather',
       title: 'Check local weather.',
       excerpt: " 7 Day hourly weather charts and more!",
-      openSource: false,
-    },
-    {
-      id: 1,
-      icon: Icon04,
-      slug: '/Country',
-      title: 'Country Search',
-      excerpt: 'Search for any Countries infomation',
       openSource: false,
     },
   ];
