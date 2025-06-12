@@ -253,7 +253,7 @@ export default function CountrySearch() {
   <Spinner />
 ) : (
   <div className="mb-12 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-    {(results.length ? results : mini.slice(0, 8)).map((c) => (
+    {(results.length ? results : mini.slice(0, 12)).map((c) => (
       <div
         key={c.cca3}
         onClick={() => {
@@ -261,7 +261,7 @@ export default function CountrySearch() {
           setResults([]);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
-        className="cursor-pointer rounded-lg border bg-white/30 dark:bg-black/30 bg-cover bg-center p-0 shadow transition hover:shadow-lg relative overflow-hidden"
+        className="cursor-pointer rounded-lg border bg-white/30 dark:bg-black/30 bg-cover bg-center p-0 shadow transition hover:shadow-lg relative overflow-hidden "
         style={{
           backgroundImage: c.flags?.png
             ? `url(${c.flags.png})`
@@ -357,36 +357,49 @@ export default function CountrySearch() {
                 />
               </div>
 
-              {/* neighbors */}
-              {neighbors.length > 0 && (
-                <>
-                  <h3 className="mb-2 font-semibold">
-                    Neighboring Countries
-                  </h3>
-                  <div className="mb-6 flex gap-2 overflow-x-auto">
-                    {neighbors.map((n) => (
-                      <div
-                        key={n.cca3}
-                        onClick={() => {
-                          loadDetails(n.cca3);
-                          setResults([]);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className="flex cursor-pointer flex-col items-center rounded bg-white p-2 shadow transition hover:shadow-lg dark:bg-brand-950"
-                      >
-                        {n.flags?.png && (
-                          <img
-                            src={n.flags.png}
-                            alt={n.name.common}
-                            className="mb-1 h-auto w-12 rounded object-cover"
-                          />
-                        )}
-                        <span className="text-xs">{n.name.common}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
+ {/* ---------------- neighbors ---------------- */}
+{neighbors.length > 0 && (
+  <>
+    <h3 className="mb-2 font-semibold">
+      Neighboring Countries
+    </h3>
+    <div className="mb-6 flex gap-2 overflow-x-auto">
+      {neighbors.map((n) => (
+        <div
+          key={n.cca3}
+          onClick={() => {
+            loadDetails(n.cca3);
+            setResults([]);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className="
+            relative
+            flex-shrink-0
+            w-24 h-16
+            cursor-pointer
+            overflow-hidden
+            rounded-lg
+            shadow
+            transition hover:shadow-lg
+            bg-contain bg-center bg-no-repeat
+          "
+          style={{
+            backgroundImage: n.flags?.png
+              ? `url(${n.flags.png})`
+              : undefined,
+          }}
+        >
+          {/* dark overlay for readability */}
+          <div className="absolute inset-0 bg-black/30" />
+          {/* country name */}
+          <span className="absolute bottom-1 w-full text-center text-xs font-medium text-white">
+            {n.name.common}
+          </span>
+        </div>
+      ))}
+    </div>
+  </>
+)}
 
               {/* top sights */}
               {topSights.length > 0 && (

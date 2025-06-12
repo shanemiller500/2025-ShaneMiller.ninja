@@ -45,11 +45,10 @@ const aspekta = localFont({
   display: 'swap',
 });
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+
+
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   // Track page views with Mixpanel on route change.

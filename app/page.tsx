@@ -5,10 +5,9 @@ import WidgetWeather from '@/components/widget-weather';
 import WidgetNews from '@/components/widget-news';
 import CryptoWidget from '@/components/widget-crypto';
 import WidgetSearch from '@/components/widget-search';
-import Zoltars from '@/components/widget-zoltar';
 import Image from 'next/image';
 import StockWidget from '@/app/stocks/stock/LiveStreamTickerWidget';
-
+import FlightSearch from './Country/FlightSearch';
 // Import your images
 import HeroImage from '@/public/images/pumpkin.jpg';
 import SecondImage from '@/public/images/cabin.jpg';
@@ -86,7 +85,7 @@ export default function AboutPage() {
                     </p>
 
                   <StockWidget />
-                 
+                   <FlightSearch full={null} />
                 </div>
               </div>
             </section>
@@ -100,6 +99,7 @@ export default function AboutPage() {
               <WidgetWeather />
               <CryptoWidget />
               <WidgetNews />
+            
             </div>
           </aside>
         </div>
