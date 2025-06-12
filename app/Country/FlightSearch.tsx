@@ -123,7 +123,7 @@ interface FlightOption {
 /*  FlightSearch component                                            */
 /* ================================================================== */
 export default function FlightSearch({ full = null }: { full?: FullCountry | null }) {
-  const API_BASE = 'http://localhost:3002' //'https://u-mail.co'
+  const API_BASE = 'https://u-mail.co'
 
   /* ------------- form state -------------------------------------- */
   const [from, setFrom] = useState('')
