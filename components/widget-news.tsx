@@ -2,8 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { motion } from 'framer-motion';          // ← NEW
-
+import { motion } from 'framer-motion';         
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                   */
 /* ------------------------------------------------------------------ */
@@ -60,7 +59,7 @@ const WidgetNews: React.FC = () => {
 
   /* ------------------------------------------------------------------ */
   return (
-    <div className="relative rounded-lg bg-white dark:bg-brand-950 p-5 overflow-hidden">
+    <div className="relative rounded-lg bg-white dark:bg-brand-950 p-5 overflow-hidden rounded shadow ">
       {/* overlay spinner */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/50">

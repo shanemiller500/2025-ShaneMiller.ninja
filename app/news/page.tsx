@@ -12,6 +12,8 @@ import WidgetWeather from '@/components/widget-weather';
 import CryptoWidget  from '@/components/widget-crypto';
 import WidgetSearch  from '@/components/widget-search';
 import StockWidget from '@/app/stocks/stock/LiveStreamTickerWidget';
+import FlightSearch from '@/app/Country/FlightSearch';
+
 
 
 /* lucide icons */
@@ -110,8 +112,9 @@ export default function Page() {
         <aside className="w-full space-y-6 lg:w-[300px]">
           <WidgetSearch />
           <WidgetWeather />
+                    <CryptoWidget />
+          <FlightSearch full={null} />
           <StockWidget />
-          <CryptoWidget />
           <WidgetNews />
         </aside>
       </div>

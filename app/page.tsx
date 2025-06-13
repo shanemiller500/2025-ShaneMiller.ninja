@@ -8,7 +8,6 @@ import WidgetSearch from '@/components/widget-search';
 import Image from 'next/image';
 import StockWidget from '@/app/stocks/stock/LiveStreamTickerWidget';
 import FlightSearch from './Country/FlightSearch';
-// Import your images
 import HeroImage from '@/public/images/pumpkin.jpg';
 import SecondImage from '@/public/images/cabin.jpg';
 import ThirdImage from '@/public/images/wedding.jpg';
@@ -55,7 +54,7 @@ export default function AboutPage() {
               </div>
 
               {/* Page content */}
-              <div className="text-slate-500 dark:text-slate-400 space-y-8">
+              <div className="text-slate-500 dark:text-slate-400 space-y-8 pt-10">
                 <div className="space-y-4">
                   <h2 className="h3 font-aspekta text-slate-800 dark:text-slate-100">
                     Short Bio
@@ -76,7 +75,7 @@ export default function AboutPage() {
                   I build lean, privacy tight software that just works. From polishing the user flow to crushing the hard bugs, I move fast and finish strong. Need results, not excuses? Let's talk.
                   </p>
 
-                  <p className="text-xs text-gray-500 text-center">
+                  <p className="text-xs text-gray-500 text-center pb-10">
                       See resume {" "}
                       <a href="/resume" className="text-indigo-500 underline">
                         here
@@ -85,7 +84,7 @@ export default function AboutPage() {
                     </p>
 
                   <StockWidget />
-                   <FlightSearch full={null} />
+                  
                 </div>
               </div>
             </section>
@@ -96,8 +95,10 @@ export default function AboutPage() {
           <aside className="md:w-[240px] lg:w-[300px] shrink-0">
             <div className="space-y-6">
               <WidgetSearch />
+                      
               <WidgetWeather />
               <CryptoWidget />
+               <FlightSearch full={null} />
               <WidgetNews />
             
             </div>

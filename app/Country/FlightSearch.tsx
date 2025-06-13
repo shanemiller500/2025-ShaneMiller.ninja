@@ -65,38 +65,47 @@ const Counter = ({
   set: (n: number) => void
   min: number
 }) => (
-  <div className="flex items-center justify-between rounded-md border border-brand-300/70
-                  bg-white/40 px-3 py-1.5 text-sm backdrop-blur
-                  dark:border-brand-700/60 dark:bg-brand-900/40">
-    <span className="text-brand-800 dark:text-brand-200">{label}</span>
+  <div className="w-full rounded-md border border-brand-300/70 bg-white/40
+                  px-2 py-1.5 text-xs backdrop-blur
+                  dark:border-brand-700/60 dark:bg-brand-900/40
+                  sm:px-3 sm:text-sm">
 
-    <div className="flex items-center ">
-      <button
-        aria-label={`Decrease ${label}`}
-        onClick={() => set(Math.max(min, val - 1))}
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-brand-400
-                   text-base leading-none text-brand-600 hover:bg-brand-100
-                   dark:border-brand-600 dark:text-brand-200 dark:hover:bg-brand-800/50"
-      >
-        –
-      </button>
+    <div className="flex items-center justify-between">
+      {/* label */}
+      <span className="text-brand-800 dark:text-brand-200">{label}</span>
 
-      <span className="w-5 text-center font-medium text-brand-900 dark:text-brand-100">
-        {val}
-      </span>
+      {/* – value + */}
+      <div className="flex items-center gap-1 sm:gap-2">
+        <button
+          aria-label={`Decrease ${label}`}
+          onClick={() => set(Math.max(min, val - 1))}
+          className="flex h-6 w-6 items-center justify-center rounded-full border border-brand-400
+                     text-sm leading-none text-brand-600 hover:bg-brand-100
+                     dark:border-brand-600 dark:text-brand-200 dark:hover:bg-brand-800/50
+                     sm:h-8 sm:w-8 sm:text-base"
+        >
+          –
+        </button>
 
-      <button
-        aria-label={`Increase ${label}`}
-        onClick={() => set(val + 1)}
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-brand-400
-                   text-base leading-none text-brand-600 hover:bg-brand-100
-                   dark:border-brand-600 dark:text-brand-200 dark:hover:bg-brand-800/50"
-      >
-        +
-      </button>
+        <span className="min-w-[1.6rem] text-center font-semibold text-brand-900 dark:text-brand-100 sm:min-w-[2rem]">
+          {val}
+        </span>
+
+        <button
+          aria-label={`Increase ${label}`}
+          onClick={() => set(val + 1)}
+          className="flex h-6 w-6 items-center justify-center rounded-full border border-brand-400
+                     text-sm leading-none text-brand-600 hover:bg-brand-100
+                     dark:border-brand-600 dark:text-brand-200 dark:hover:bg-brand-800/50
+                     sm:h-8 sm:w-8 sm:text-base"
+        >
+          +
+        </button>
+      </div>
     </div>
   </div>
 )
+
 
 
 /* ---------- detailed types reflecting new /api/flights output ----- */
@@ -402,7 +411,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
         </select>
 
         {/* counters – mobile-friendly single column */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid gap-1 sm:grid-cols-1">
           <Counter label="Adults"   val={adults}   set={setAdults}   min={1} />
           <Counter label="Children" val={children} set={setChildren} min={0} />
           <Counter label="Infants"  val={infants}  set={setInfants}  min={0} />

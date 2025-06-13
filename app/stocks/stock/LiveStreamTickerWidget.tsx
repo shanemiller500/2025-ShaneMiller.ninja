@@ -84,7 +84,8 @@ const LiveStreamTickerWidget: React.FC = () => {
   /* ------------------------------------------------------------------ */
   /*  Effects                                                           */
   /* ------------------------------------------------------------------ */
-  // 0️⃣  Initial last-price fetch (so we still have data when markets are closed)
+
+  // 0️⃣ Initial last-price fetch
   useEffect(() => {
     TOP_TEN_SYMBOLS.forEach((sym, i) => {
       setTimeout(() => {
@@ -115,14 +116,14 @@ const LiveStreamTickerWidget: React.FC = () => {
     });
   }, []);
 
-  // 1️⃣  Market clock
+  // 1️⃣ Market clock
   useEffect(() => {
     updateMarketState();
     const int = setInterval(updateMarketState, 60_000);
     return () => clearInterval(int);
   }, []);
 
-  // 2️⃣  Load static logos / profiles once
+  // 2️⃣ Static logos / profiles
   useEffect(() => {
     TOP_TEN_SYMBOLS.forEach((sym, i) => {
       setTimeout(() => {
@@ -133,11 +134,11 @@ const LiveStreamTickerWidget: React.FC = () => {
             setSymbolProfiles((prev) => ({ ...prev, [sym]: p }));
           })
           .catch((err) => console.error(`Profile fetch error for ${sym}:`, err));
-      }, i * 200); // gentle rate-limit spacing
+      }, i * 200);
     });
   }, []);
 
-  // 3️⃣  Real-time trade WebSocket
+  // 3️⃣ Real-time WebSocket
   useEffect(() => {
     const timer = setTimeout(() => {
       socketRef.current = new WebSocket(`wss://ws.finnhub.io?token=${API_TOKEN}`);
@@ -164,7 +165,13 @@ const LiveStreamTickerWidget: React.FC = () => {
 
           return {
             ...prev,
-            [sym]: { timestamp: t, price, info: `$${price.toFixed(2)}`, bgColor, percentChange: pct },
+            [sym]: {
+              timestamp: t,
+              price,
+              info: `$${price.toFixed(2)}`,
+              bgColor,
+              percentChange: pct,
+            },
           };
         });
       };
@@ -183,7 +190,7 @@ const LiveStreamTickerWidget: React.FC = () => {
   }, []);
 
   /* ------------------------------------------------------------------ */
-  /*  Modal fetch                                                       */
+  /*  Modal helpers                                                     */
   /* ------------------------------------------------------------------ */
   const openSymbolModal = async (sym: string) => {
     setModalLoading(true);
@@ -244,6 +251,7 @@ const LiveStreamTickerWidget: React.FC = () => {
   return (
     <>
       <ToastContainer position="top-right" autoClose={4000} hideProgressBar pauseOnHover />
+
       <section className="mt-6 p-4 rounded shadow relative dark:bg-brand-950 bg-white">
         <h2 className="text-xl font-bold mb-4 text-center">Live Stock Ticker</h2>
 
@@ -257,56 +265,62 @@ const LiveStreamTickerWidget: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-3">
+        {/* ➊ tighter grid, more columns, smaller gap */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-4 gap-1">
           {TOP_TEN_SYMBOLS.map((sym) => {
             const info = tradeInfoMap[sym];
+
             return (
               <motion.div
                 key={sym}
                 onClick={() => openSymbolModal(sym)}
-                className={`p-2 text-center rounded transition ${
-                  isMarketClosed ? 'opacity-60' : 'cursor-pointer'
-                }`}
+                className={`relative aspect-square rounded overflow-hidden transition ${
+                  isMarketClosed ? 'opacity-80' : 'cursor-pointer'
+                } bg-white dark:bg-brand-900`}
+                style={{
+                  /* ➋ smaller logo inside each square */
+                  backgroundImage: `url(${symbolLogos[sym] || ''})`,
+                  backgroundSize: '70%',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'center',
+                }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                {symbolLogos[sym] && (
-                  <img
-                    src={symbolLogos[sym]}
-                    alt={`${sym} logo`}
-                    className="mx-auto w-8 h-8 object-contain"
-                  />
-                )}
-                <div className="font-bold text-sm">{sym}</div>
+                {/* Bottom strip */}
                 <div
-                  className={`${info?.bgColor ?? 'bg-gray-100 dark:bg-gray-600'} mt- p-1 rounded text-sm`}
-                >
-                  {info?.info ?? '--'}
-                </div>
-                <div
-                  className={`mt-1 text-sm font-semibold ${
-                    info?.percentChange >= 0 ? 'text-green-600' : 'text-red-600'
+                  className={`absolute bottom-0 left-0 right-0 flex justify-between items-center px-1 py-0.5 text-xs font-semibold bg-opacity-80 ${
+                    info?.bgColor ?? 'bg-gray-100 dark:bg-gray-600'
                   }`}
                 >
-                  {info ? info.percentChange.toFixed(2) + '%' : ''}
+                  <span className="text-gray-900 dark:text-white">
+                    {info?.info ?? '--'}
+                  </span>
+                  <span
+                    className={`${
+                      info?.percentChange >= 0
+                        ? 'text-green-800 dark:text-green-200'
+                        : 'text-red-800 dark:text-red-200'
+                    }`}
+                  >
+                    {info ? info.percentChange.toFixed(2) + '%' : ''}
+                  </span>
                 </div>
               </motion.div>
             );
           })}
         </div>
 
-        <div className="">
-          <p className="text-xs text-gray-500 text-center">
-            See more stock market data{' '}
-            <a href="/stocks" className="text-indigo-500 underline">
-              here
-            </a>
-            .
-          </p>
-        </div>
+        <p className="mt-4 text-xs text-gray-500 text-center">
+          See more stock market data{' '}
+          <a href="/stocks" className="text-indigo-500 underline">
+            here
+          </a>
+          .
+        </p>
       </section>
 
-      {/* Loading overlay for modal fetch */}
+      {/* Loading overlay */}
       {modalLoading && (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
           <p className="text-white text-lg">Loading…</p>

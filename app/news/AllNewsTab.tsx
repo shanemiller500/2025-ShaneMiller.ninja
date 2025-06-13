@@ -50,22 +50,29 @@ const isUSA = (a: Article) => {
          /\.us$/.test(host);
 };
 
+const bad = (s?: string | null) =>
+  !s || ['none', 'null', 'n/a'].includes(s.toLowerCase());
+
+const normalize = (s: string) => {
+  if (s.startsWith('//'))     return `https:${s}`;
+  if (s.startsWith('http://')) return s.replace('http://', 'https://');
+  return s;
+};
+
 const getDisplayImage = (a: Article & { image?: string }) => {
   const sources = [
     a.urlToImage,
-    a.image,               
+    a.image,
     a.images?.[0],
     a.thumbnails?.[0],
     firstImg(a.content),
-  ].filter(Boolean) as string[];
+  ]
+    .filter((s): s is string => !bad(s))
+    .map(normalize);
 
-  for (let src of sources) {
-    if (src.startsWith('http://')) src = src.replace('http://', 'https://');
-    if (src) return src;
-  }
+  if (sources.length) return sources[0];
 
-  if (getDomain(a.url).includes('cbsnews.com')) return CBS_THUMB;
-  return null;
+  return getDomain(a.url).includes('cbsnews.com') ? CBS_THUMB : null;
 };
 
 /* ------------------------------------------------------------------ */
@@ -217,6 +224,15 @@ export default function NewsTab() {
     }, 400);
   };
 
+  useEffect(() => {
+  console.table(
+    dataset.slice(0, 20).map(a => ({
+      title: a.title.slice(0, 30),
+      img:   getDisplayImage(a),
+    }))
+  );
+}, [dataset]);
+
   /* ---------------- Render ---------------- */
   return (
     <div className="mx-auto max-w-7xl px-4">
@@ -280,17 +296,19 @@ export default function NewsTab() {
               className="relative block h-40 overflow-hidden rounded-lg shadow hover:shadow-lg"
             >
               {/* background image */}
-              {bg ? (
-                <div
-                  className="absolute inset-0 bg-cover bg-center"
-                  style={{ backgroundImage: `url('${bg}')` }}
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-200 dark:bg-brand-950">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">No image</span>
-                </div>
-              )}
-
+               {bg ? (
+    <img
+      src={bg}
+      alt={a.title}
+      referrerPolicy="no-referrer"
+      onError={e => (e.currentTarget.src = LOGO_FALLBACK)}
+      className="absolute inset-0 h-full w-full object-cover"
+    />
+  ) : (
+    <div className="absolute inset-0 flex items-center justify-center …">
+      <span className="text-sm …">No image</span>
+    </div>
+  )}
               {/* dark gradient overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />
 
