@@ -4,6 +4,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L, { Map as LeafletMap, Marker, CircleMarker, Polyline } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+import leafletTerminator from 'leaflet-terminator';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /* ------------------------------------------------------------------ */
@@ -17,7 +19,6 @@ const ISS_LOGO =
 const NASA_FALLBACK =
   'https://www.nasa.gov/sites/default/files/thumbnails/image/nasa_logo.png';
 
-/* ---------- flag helper ---------- */
 const FLAG_MAP: Record<string, string> = {
   USA: 'us', RUS: 'ru', CHN: 'cn', JPN: 'jp',
   CAN: 'ca', FRA: 'fr', GBR: 'gb', IND: 'in',
@@ -29,27 +30,35 @@ const flagUrl = (cc?: string | null) =>
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
 interface LLAstro {
-  id                     : number;
-  name                   : string;
-  nationality            : string | null;
-  date_of_birth          : string | null;
-  profile_image_thumbnail: string | null;
-  profile_image          : string | null;
-  spacecraft?: { space_station?: { name: string | null } | null } | null;
-  agency?                : { name?: string; country_code?: string | null } | null;
-  flights_count?         : number;
-  landings_count?        : number;
-  spacewalks_count?      : number;
-  time_in_space?         : string | null;
-  eva_time?              : string | null;
-  first_flight?          : string | null;
-  last_flight?           : string | null;
-  wiki?                  : string | null;
-  bio?                   : string | null;
+  id: number;
+  name: string;
+  nationality?: string;
+  profile_image?: string | null;
+  profile_image_thumbnail?: string | null;
+  date_of_birth?: string;
+  agency?: {
+    name?: string;
+    country_code?: string;
+  } | null;
+  spacecraft?: {
+    space_station?: {
+      name?: string;
+    } | null;
+  } | null;
+  flights_count?: number;
+  landings_count?: number;
+  spacewalks_count?: number;
+  time_in_space?: string;
+  eva_time?: string;
+  first_flight?: string;
+  last_flight?: string;
+  wiki?: string;
+  bio?: string;
 }
-interface LLRes { count: number; results: LLAstro[] }
+interface LLRes    { count: number; results: LLAstro[] }
 interface Telemetry {
-  latitude: number; longitude: number; altitude: number; velocity: number; visibility: string;
+  latitude: number; longitude: number; altitude: number;
+  velocity: number; visibility: string;
 }
 interface CachedStart { latitude: number; longitude: number; ts: number }
 
@@ -57,13 +66,12 @@ interface CachedStart { latitude: number; longitude: number; ts: number }
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 const ISSTracker: React.FC = () => {
-  /* ---------- refs ---------- */
-  const mapRef   = useRef<LeafletMap | null>(null);
-  const issRef   = useRef<Marker | null>(null);
-  const startRef = useRef<CircleMarker | null>(null);
-  const trailRef = useRef<Polyline | null>(null);
+  const mapRef        = useRef<LeafletMap | null>(null);
+  const issRef        = useRef<Marker | null>(null);
+  const startRef      = useRef<CircleMarker | null>(null);
+  const trailRef      = useRef<Polyline | null>(null);
+  const terminatorRef = useRef<L.GeoJSON | null>(null);
 
-  /* ---------- state ---------- */
   const [mounted, setMounted] = useState(false);
   const [tele, setTele]       = useState<Telemetry>({
     latitude: 0, longitude: 0, altitude: 0, velocity: 0, visibility: '—',
@@ -73,18 +81,21 @@ const ISSTracker: React.FC = () => {
   const [spaceCrew, setSpaceCrew] = useState<LLAstro[]>([]);
   const [selected,  setSelected]  = useState<LLAstro | null>(null);
 
-  /* ---------- cache restore ---------- */
+  // Restore any saved start position
   useEffect(() => {
     setMounted(true);
     const raw = localStorage.getItem(START_CACHE_KEY);
     if (raw) {
       const c: CachedStart = JSON.parse(raw);
-      if (Date.now() - c.ts <= START_TTL_MS) setStartPos({ lat: c.latitude, lon: c.longitude });
-      else localStorage.removeItem(START_CACHE_KEY);
+      if (Date.now() - c.ts <= START_TTL_MS) {
+        setStartPos({ lat: c.latitude, lon: c.longitude });
+      } else {
+        localStorage.removeItem(START_CACHE_KEY);
+      }
     }
   }, []);
 
-  /* ---------- crew (Launch Library) ---------- */
+  // Fetch current crew once
   useEffect(() => {
     if (!mounted) return;
     fetch('https://ll.thespacedevs.com/2.2.0/astronaut/?in_space=true')
@@ -96,71 +107,127 @@ const ISSTracker: React.FC = () => {
       .catch(() => {});
   }, [mounted]);
 
-  /* ---------- map + live ISS ---------- */
+  // Initialize map + terminator + ISS ticker exactly once
   useEffect(() => {
     if (!mounted) return;
 
-    mapRef.current = L.map('mapISS', { zoomControl: false, attributionControl: false })
-                    .setView([0, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(mapRef.current);
+    // --- map setup ---
+    const map = L.map('mapISS', {
+      zoomControl: false,
+      attributionControl: false,
+      worldCopyJump: true,
+      minZoom: 0,
+      maxZoom: 18,
+    }).setView([0, 0], 2);
+    mapRef.current = map;
 
-    if (startPos) spawnStart(startPos.lat, startPos.lon);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      minZoom: 0,
+      noWrap: false,
+    }).addTo(map);
 
-    const icon = L.icon({ iconUrl: '/images/world.png', iconSize: [36, 36], iconAnchor: [18, 18] });
+    // --- day/night terminator ---
+    const refreshTerminator = () => {
+      if (terminatorRef.current) {
+        map.removeLayer(terminatorRef.current);
+      }
+      terminatorRef.current = leafletTerminator(new Date()) as L.GeoJSON;
+      terminatorRef.current.setStyle({
+        fillColor: '#000', color: '#000', fillOpacity: 0.45,
+        weight: 0, interactive: true,
+      });
+      terminatorRef.current.bindTooltip('Night side of Earth', {
+        direction: 'center',
+        sticky: false,
+        className: 'bg-brand-900/80 text-white rounded px-2 py-1',
+      });
+      terminatorRef.current.addTo(map);
+    };
+    refreshTerminator();
+    const termID = setInterval(refreshTerminator, 60_000);
 
+    // --- ISS icon setup ---
+    const icon = L.icon({
+      iconUrl: ISS_LOGO,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+    });
+
+    // --- telemetry tick ---
     const tick = async () => {
       try {
         const d: Telemetry =
-          await fetch('https://api.wheretheiss.at/v1/satellites/25544').then(r => r.json());
+          await fetch('https://api.wheretheiss.at/v1/satellites/25544')
+            .then(r => r.json());
         setTele(d);
         const { latitude: lat, longitude: lon } = d;
 
-        if (!startPos) {
-          setStartPos({ lat, lon }); cacheStart(lat, lon); spawnStart(lat, lon);
+        // First spawn or move ISS marker
+        if (!issRef.current) {
+          issRef.current = L.marker([lat, lon], { icon }).addTo(map);
+        } else {
+          issRef.current.setLatLng([lat, lon]);
         }
 
-        issRef.current
-          ? issRef.current.setLatLng([lat, lon])
-          : (issRef.current = L.marker([lat, lon], { icon }).addTo(mapRef.current!));
+        // First spawn or extend trail
+        if (!trailRef.current) {
+          trailRef.current = L.polyline([[lat, lon]], {
+            color: '#000', weight: 2, dashArray: '4 6'
+          }).addTo(map);
+        } else {
+          trailRef.current.addLatLng([lat, lon]);
+        }
 
-        trailRef.current
-          ? trailRef.current.addLatLng([lat, lon])
-          : (trailRef.current = L.polyline(
-              [[startPos?.lat ?? lat, startPos?.lon ?? lon], [lat, lon]],
-              { color: '#1D1D20', weight: 2, dashArray: '4 6' }
-            ).addTo(mapRef.current!));
+        // Pan smoothly
+        map.panTo([lat, lon], { animate: true, duration: 0.75 });
 
-        mapRef.current!.panTo([lat, lon], { animate: true, duration: 0.75 });
-      } catch {}
+        // If we didn’t yet have a startPos, capture this as session start
+        if (!startPos) {
+          setStartPos({ lat, lon });
+          localStorage.setItem(
+            START_CACHE_KEY,
+            JSON.stringify({ latitude: lat, longitude: lon, ts: Date.now() })
+          );
+        }
+      } catch {
+        // swallow errors
+      }
     };
 
+    // Kick it off immediately and then every 10s
     tick();
-    const id = setInterval(tick, 10_000);
-    return () => { clearInterval(id); mapRef.current?.remove(); };
-  }, [mounted, startPos]);
+    const issID = setInterval(tick, 10_000);
+
+    return () => {
+      clearInterval(issID);
+      clearInterval(termID);
+      map.remove();
+    };
+  }, [mounted]);
+
+  // If a saved startPos appears, spawn that marker once
+  useEffect(() => {
+    if (mapRef.current && startPos && !startRef.current) {
+      startRef.current = L.circleMarker([startPos.lat, startPos.lon], {
+        radius: 6, color: 'black', weight: 2, fillOpacity: 0.85,
+      })
+        .bindTooltip('Session start', { direction: 'top', offset: L.point(0, -4) })
+        .addTo(mapRef.current);
+    }
+  }, [startPos]);
 
   if (!mounted) return null;
 
-  /* ---------- helpers ---------- */
-  const cacheStart = (lat: number, lon: number) =>
-    localStorage.setItem(START_CACHE_KEY, JSON.stringify({ latitude: lat, longitude: lon, ts: Date.now() } as CachedStart));
-
-  const spawnStart = (lat: number, lon: number) =>
-    (startRef.current = L.circleMarker([lat, lon], {
-      radius: 6, color: '#e11d48', weight: 2, fillOpacity: 0.85,
-    }).bindTooltip('Session start', { direction: 'top', offset: L.point(0, -4) })
-      .addTo(mapRef.current!));
-
-  /* ---------------------------------------------------------------- */
-  /*  Render                                                          */
-  /* ---------------------------------------------------------------- */
   return (
     <motion.div
-      className="flex flex-col gap-8 px-4 pb-14 max-w-5xl mx-auto"
-      initial={{ opacity: 0, y: 25 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
+      className="flex flex-col gap-6 sm:gap-8 px-2 sm:px-4 pb-14 max-w-5xl mx-auto"
+      initial={{ opacity: 0, y: 25 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
     >
       {/* hero */}
-      <figure className="overflow-hidden rounded-xl shadow-lg bg-white flex items-center justify-center h-32">
+      <figure className="overflow-hidden rounded-xl shadow-lg bg-white flex items-center justify-center h-28 sm:h-32">
         <img
           src={ISS_LOGO}
           onError={(e) => ((e.target as HTMLImageElement).src = NASA_FALLBACK)}
@@ -169,20 +236,30 @@ const ISSTracker: React.FC = () => {
         />
       </figure>
 
-      <h1 className="text-center text-3xl font-extrabold tracking-tight text-brand-900 dark:text-white">
+      <h1 className="text-center text-2xl sm:text-3xl font-extrabold tracking-tight text-brand-900 dark:text-white">
         International&nbsp;Space&nbsp;Station&nbsp;Tracker
       </h1>
 
       {/* map */}
       <div
         id="mapISS"
-        className="relative z-0 w-full h-[60vh] sm:h-[500px] rounded-lg shadow-lg ring-1 ring-brand-200 dark:ring-brand-800"
+        className="
+          relative z-0 w-full
+          h-[55vh] xs:h-[60vh] sm:h-[500px]
+          rounded-lg shadow-lg ring-1 ring-brand-200 dark:ring-brand-800
+        "
       />
 
       {/* telemetry */}
       <motion.div
-        className="grid grid-cols-2 sm:grid-cols-3 gap-4 rounded-lg bg-white/70 dark:bg-brand-900/70 backdrop-blur p-4 text-sm md:text-base"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }}
+        className="
+          grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-5 gap-4
+          rounded-lg bg-white/70 dark:bg-brand-900/70
+          backdrop-blur p-4 text-sm
+        "
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.35 }}
       >
         <Stat label="Latitude"   value={tele.latitude .toFixed(3)} unit="°"    />
         <Stat label="Longitude"  value={tele.longitude.toFixed(3)} unit="°"    />
@@ -194,14 +271,19 @@ const ISSTracker: React.FC = () => {
       {/* crew cards */}
       {crewTotal !== null && (
         <motion.div
-          className="rounded-lg bg-white/80 dark:bg-brand-900/80 backdrop-blur p-6 shadow-md"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+          className="rounded-lg bg-white/80 dark:bg-brand-900/80 backdrop-blur p-4 xs:p-5 sm:p-6 shadow-md"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
         >
-          <h2 className="text-xl font-bold mb-4 text-brand-900 dark:text-white">
+          <h2 className="text-lg sm:text-xl font-bold mb-4 text-brand-900 dark:text-white">
             Humans in Space ({crewTotal})
           </h2>
-
-          <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(150px,1fr))]">
+          <div className="
+              grid gap-2
+              grid-cols-[repeat(auto-fill,minmax(110px,1fr))]
+              sm:grid-cols-[repeat(auto-fill,minmax(140px,1fr))]
+            ">
             {spaceCrew.map(a => (
               <button
                 key={a.id}
@@ -209,38 +291,36 @@ const ISSTracker: React.FC = () => {
                 className="group relative rounded-lg border border-brand-200 dark:border-brand-950
                            bg-white dark:bg-brand-900/60 p-3 flex flex-col items-center text-center
                            shadow-sm transition-transform duration-200 ease-out
-                           hover:-translate-y-1.5 hover:shadow-xl focus:outline-none"
+                           hover:-translate-y-1 hover:shadow-xl focus:outline-none"
               >
-                {/* flag */}
                 {flagUrl(a.agency?.country_code) && (
                   <img
                     src={flagUrl(a.agency?.country_code)!}
                     alt={a.nationality ?? ''}
-                    className="absolute top-2 right-2 h-5 w-7 rounded-sm shadow"
+                    className="absolute top-1.5 right-1.5 h-4 w-6 rounded-sm shadow"
                   />
                 )}
-
-                {/* astronaut photo */}
                 <img
                   src={a.profile_image_thumbnail ?? 'https://via.placeholder.com/96x96.png?text=No+Image'}
                   alt={a.name}
-                  className="w-20 h-20 rounded-full object-cover mb-3 shadow group-hover:scale-105 transition-transform duration-200"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover mb-2 sm:mb-3
+                             shadow group-hover:scale-105 transition-transform duration-200"
                 />
-
-                <p className="text-sm font-semibold text-brand-900 dark:text-white">
+                <p className="text-[13px] sm:text-sm font-semibold text-brand-900 dark:text-white line-clamp-2">
                   {a.name}
                 </p>
                 {a.nationality && (
-                  <p className="text-xs text-brand-900 dark:text-white/80">{a.nationality}</p>
+                  <p className="text-[11px] sm:text-xs text-brand-900 dark:text-white/80">
+                    {a.nationality}
+                  </p>
                 )}
                 {a.spacecraft?.space_station?.name && (
-                  <p className="text-[11px] mt-1 text-brand-900 dark:text-white/60">
+                  <p className="text-[10px] sm:text-[11px] mt-0.5 text-brand-900 dark:text-white/60 line-clamp-2">
                     {a.spacecraft.space_station.name}
                   </p>
                 )}
               </button>
             ))}
-
             {spaceCrew.length === 0 && (
               <p className="col-span-full text-center text-brand-900 dark:text-white">
                 No current crew data.
@@ -250,32 +330,34 @@ const ISSTracker: React.FC = () => {
         </motion.div>
       )}
 
-      {/* ----- modal ----- */}
+      {/* modal */}
       <AnimatePresence>
         {selected && (
           <motion.div
-            className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/30 backdrop-blur-sm"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/30 backdrop-blur-sm p-2 xs:p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
           >
             <motion.div
-              className="relative w-[95%] max-w-xl rounded-xl bg-white dark:bg-brand-900 p-6 shadow-xl"
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }} transition={{ duration: 0.2 }}
+              className="relative w-full max-w-sm xs:max-w-md sm:max-w-lg max-h-[95vh] overflow-y-auto
+                         rounded-xl bg-white dark:bg-brand-900 p-5 xs:p-6 shadow-xl"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ duration: 0.2 }}
             >
-              {/* close btn */}
               <button
                 onClick={() => setSelected(null)}
-                className="absolute -top-3 -right-3 h-8 w-8 rounded-full bg-brand-600
-                           text-white text-sm flex items-center justify-center shadow-lg
+                className="absolute -top-3 -right-3 h-9 w-9 rounded-full bg-brand-600
+                           text-white text-xl leading-none flex items-center justify-center shadow-lg
                            hover:bg-brand-950 focus:outline-none"
                 aria-label="Close"
               >
-                ✕
+                ×
               </button>
 
-              {/* Header */}
               <div className="flex flex-col items-center mb-6">
-                {/* flag */}
                 {flagUrl(selected.agency?.country_code) && (
                   <img
                     src={flagUrl(selected.agency?.country_code)!}
@@ -283,36 +365,35 @@ const ISSTracker: React.FC = () => {
                     className="h-6 w-9 rounded-sm shadow self-end"
                   />
                 )}
-
-                {/* portrait */}
                 <img
-                  src={selected.profile_image ?? selected.profile_image_thumbnail ?? 'https://via.placeholder.com/160x160.png?text=No+Image'}
+                  src={
+                    selected.profile_image ??
+                    selected.profile_image_thumbnail ??
+                    'https://via.placeholder.com/160x160.png?text=No+Image'
+                  }
                   alt={selected.name}
                   className="mx-auto mb-3 h-32 w-32 rounded-full object-cover shadow"
                 />
-
-                <h3 className="text-xl font-bold text-brand-900 dark:text-white text-center">
+                <h3 className="text-lg sm:text-xl font-bold text-brand-900 dark:text-white text-center">
                   {selected.name}
                 </h3>
               </div>
 
-              {/* Info + Bio in grid */}
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* left column – details */}
-                <div className="text-[15px] space-y-1 text-brand-900 dark:text-white">
-                  {selected.nationality && <Detail label="Nationality" value={selected.nationality} />}
-                  {selected.date_of_birth && <Detail label="Born" value={selected.date_of_birth} />}
-                  {selected.agency?.name && <Detail label="Agency" value={selected.agency.name} />}
+              <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+                <div className="text-[14px] sm:text-[15px] space-y-1 text-brand-900 dark:text-white">
+                  {selected.nationality    && <Detail label="Nationality" value={selected.nationality} />}
+                  {selected.date_of_birth   && <Detail label="Born"        value={selected.date_of_birth} />}
+                  {selected.agency?.name    && <Detail label="Agency"      value={selected.agency.name} />}
                   {selected.spacecraft?.space_station?.name && (
                     <Detail label="Station" value={selected.spacecraft.space_station.name} />
                   )}
-                  {selected.flights_count !== undefined && <Detail label="Flights" value={selected.flights_count} />}
-                  {selected.landings_count !== undefined && <Detail label="Landings" value={selected.landings_count} />}
-                  {selected.spacewalks_count !== undefined && <Detail label="Spacewalks" value={selected.spacewalks_count} />}
-                  {selected.time_in_space && <Detail label="Time in Space" value={selected.time_in_space} />}
-                  {selected.eva_time && <Detail label="EVA Time" value={selected.eva_time} />}
-                  {selected.first_flight && <Detail label="First Flight" value={selected.first_flight} />}
-                  {selected.last_flight && <Detail label="Last Flight" value={selected.last_flight} />}
+                  {selected.flights_count   !== undefined && <Detail label="Flights"    value={selected.flights_count} />}
+                  {selected.landings_count  !== undefined && <Detail label="Landings"   value={selected.landings_count} />}
+                  {selected.spacewalks_count!== undefined && <Detail label="Spacewalks" value={selected.spacewalks_count} />}
+                  {selected.time_in_space   && <Detail label="Time in Space" value={selected.time_in_space} />}
+                  {selected.eva_time        && <Detail label="EVA Time"      value={selected.eva_time} />}
+                  {selected.first_flight    && <Detail label="First Flight"  value={selected.first_flight} />}
+                  {selected.last_flight     && <Detail label="Last Flight"   value={selected.last_flight} />}
                   {selected.wiki && (
                     <p className="pt-1">
                       <a
@@ -326,10 +407,8 @@ const ISSTracker: React.FC = () => {
                     </p>
                   )}
                 </div>
-
-                {/* right column – bio */}
                 {selected.bio && (
-                  <p className="text-sm leading-relaxed text-brand-900 dark:text-white/80 whitespace-pre-line">
+                  <p className="text-[13px] sm:text-sm leading-relaxed text-brand-900 dark:text-white/80 whitespace-pre-line">
                     {selected.bio}
                   </p>
                 )}
@@ -346,20 +425,17 @@ const ISSTracker: React.FC = () => {
 interface StatProps { label: string; value: string; unit: string }
 const Stat: React.FC<StatProps> = ({ label, value, unit }) => (
   <div className="flex flex-col items-start">
-    <span className="text-[11px] uppercase tracking-wide text-brand-900 dark:text-white">
+    <span className="text-[10px] xs:text-[11px] uppercase tracking-wide text-brand-900 dark:text-white">
       {label}
     </span>
-    <span className="text-lg font-semibold text-brand-900 dark:text-white">
-      {value}
-      {unit && <span className="text-xs font-normal pl-0.5">{unit}</span>}
+    <span className="text-base xs:text-lg font-semibold text-brand-900 dark:text-white">
+      {value}{unit && <span className="text-xs font-normal pl-0.5">{unit}</span>}
     </span>
   </div>
 );
 
 const Detail: React.FC<{ label: string; value: string | number }> = ({ label, value }) => (
-  <p>
-    <strong>{label}:</strong> {value}
-  </p>
+  <p><strong>{label}:</strong> {value}</p>
 );
 
 export default ISSTracker;
