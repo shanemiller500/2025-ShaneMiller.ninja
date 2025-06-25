@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { motion } from 'framer-motion';         
+import { motion, type Variants } from 'framer-motion';
+
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                   */
 /* ------------------------------------------------------------------ */
@@ -22,11 +23,12 @@ const LOGO_FALLBACK =
 /* ------------------------------------------------------------------ */
 /*  Animation variants                                                */
 /* ------------------------------------------------------------------ */
-const fadeIn = {
-  hidden : { opacity: 0, translateY: 10 },
+
+const fadeIn: Variants = {
+  hidden: { opacity: 0, y: 10 },
   visible: (i = 1) => ({
-    opacity   : 1,
-    translateY: 0,
+    opacity: 1,
+    y: 0,
     transition: { delay: i * 0.05, duration: 0.4, ease: 'easeOut' },
   }),
 };
