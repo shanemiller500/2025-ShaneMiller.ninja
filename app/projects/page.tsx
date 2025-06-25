@@ -76,29 +76,31 @@ export default function Projects() {
       excerpt: 'Search for any Countries infomation',
       openSource: false,
     },
+
+        {
+      id: 5,
+      icon: Icon08,
+      slug: '/ISS',
+      title: 'Track The ISS',
+      excerpt: 'Track the ISS as it moves around the planet',
+      openSource: false,
+    },
     
+    {
+      id: 11,
+      icon: Icon12,
+      slug: '/search',
+      title: 'AI Powered Search Engine',
+      excerpt: " An AI Ppowered search engine that gets to the point.",
+      openSource: false,
+    },
+
     {
       id: 2,
       icon: Icon05,
       slug: '/Marvel',
       title: 'Marvel API',
       excerpt: 'Lookup Comics, Characters, Creators, Events, Series, and Stories.',
-      openSource: false,
-    },
-    {
-      id: 3,
-      icon: Icon06,
-      slug: '/Bored',
-      title: 'Bored?',
-      excerpt: 'Fun things to do when you are bored using free APIs.',
-      openSource: false,
-    },
-    {
-      id: 5,
-      icon: Icon08,
-      slug: '/ISS',
-      title: 'Track The ISS',
-      excerpt: 'Track the ISS as it moves around the planet',
       openSource: false,
     },
     {
@@ -133,21 +135,22 @@ export default function Projects() {
       excerpt: " Playing with the SpaceX API Nothing special here, just a fun project. Older info, and an un maitained API",
       openSource: false,
     },
-  
-    {
-      id: 11,
-      icon: Icon12,
-      slug: '/search',
-      title: 'AI Powered Search Engine',
-      excerpt: " An AI Ppowered search engine that gets to the point.",
-      openSource: false,
-    },
+
     {
       id: 12,
       icon: Icon06,
       slug: '/Weather',
       title: 'Check local weather.',
       excerpt: " 7 Day hourly weather charts and more!",
+      openSource: false,
+    },
+
+        {
+      id: 3,
+      icon: Icon06,
+      slug: '/Bored',
+      title: 'Bored?',
+      excerpt: 'Fun things to do when you are bored using free APIs.',
       openSource: false,
     },
   ];
