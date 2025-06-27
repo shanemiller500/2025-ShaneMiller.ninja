@@ -58,7 +58,8 @@ export default function SideNavigation() {
                     pathname !== '/search' &&
                     pathname !== '/results' &&
                     pathname !== '/Weather' &&
-                    pathname !== '/NASA'
+                    pathname !== '/NASA'  &&
+                    pathname !== '/PrettyPrint'
                       ? 'text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                   }`}
@@ -90,7 +91,8 @@ export default function SideNavigation() {
                     pathname === '/search' ||
                     pathname === '/results' ||
                     pathname === '/Weather' ||
-                    pathname === '/NASA'
+                    pathname === '/NASA' ||
+                    pathname === '/PrettyPrint'
                       ? 'text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500'
                       : 'text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400'
                   }`}

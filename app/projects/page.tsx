@@ -119,6 +119,14 @@ export default function Projects() {
       excerpt: "Art  Institute of Chicago's open source API.",
       openSource: false,
     },
+         {
+      id: 13,
+      icon: Icon04,
+      slug: '/PrettyPrint',
+      title: 'JSON Pretty Print',
+      excerpt: 'Input raw JSON and get a pretty printed version with syntax highlighting.',
+      openSource: false,
+    },
     {
       id: 8,
       icon: Icon5,
@@ -153,6 +161,8 @@ export default function Projects() {
       excerpt: 'Fun things to do when you are bored using free APIs.',
       openSource: false,
     },
+
+
   ];
 
   // Handler to track a project click event.
