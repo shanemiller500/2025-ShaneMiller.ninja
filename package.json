@@ -32,6 +32,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.7",
     "framer-motion": "^12.19.1",
+    "json5": "^2.2.3",
     "leaflet": "^1.9.4",
     "leaflet-terminator": "^0.1.0",
     "lucide-react": "^0.511.0",

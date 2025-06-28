@@ -91,7 +91,7 @@ export default function Projects() {
       icon: Icon12,
       slug: '/search',
       title: 'AI Powered Search Engine',
-      excerpt: " An AI Ppowered search engine that gets to the point.",
+      excerpt: " An AI Powered search engine that gets to the point.",
       openSource: false,
     },
 
@@ -123,8 +123,8 @@ export default function Projects() {
       id: 13,
       icon: Icon04,
       slug: '/PrettyPrint',
-      title: 'JSON Pretty Print',
-      excerpt: 'Input raw JSON and get a pretty printed version with syntax highlighting.',
+      title: 'AI Powered JSON prettifier',
+      excerpt: 'Paste any JSON no matter how messy or malformed and receive a formatted, syntax highlighted version with clear error corrections.',
       openSource: false,
     },
     {
