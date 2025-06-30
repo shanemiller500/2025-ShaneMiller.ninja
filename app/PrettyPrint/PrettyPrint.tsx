@@ -35,9 +35,9 @@ export default function PrettyPrint() {
 }`
   };
   const invalidExamples: Record<string,string> = {
-    'Unquoted keys': '{foo: 1, bar: 2}',
-    'Trailing comma': '{"foo": 1,}',
-    'Missing comma': '{"foo":1 "bar":2}',
+    'Unquoted keys'  : '{foo: 1, bar: 2}',
+    'Trailing comma' : '{"foo": 1,}',
+    'Missing comma'  : '{"foo":1 "bar":2}',
     'Large malformed': `{ user: { id: 1,, name: "Alice", roles: ['admin','editor',], active: true, profile: { bio: "Loves coding", location "Wonderland", stats: { posts: 42, followers: 1000,, following: 150 } }, orders: [ { orderId: 1001, items: ["book","pen"], total: 29.99, }, { orderId: 1002, items: ["notebook"), total: 9.5 } ], createdAt: "2025-06-27T12:00:00Z" }
 `
   };
@@ -48,7 +48,7 @@ export default function PrettyPrint() {
       /("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
       m => {
         let cls = 'text-emerald-400';
-        if (/^"/.test(m))            cls = /:$/.test(m)  ? 'text-sky-400' : 'text-pink-400';
+        if (/^"/.test(m))             cls = /:$/.test(m) ? 'text-sky-400' : 'text-pink-400';
         else if (/true|false/.test(m)) cls = 'text-yellow-300';
         else if (/null/.test(m))       cls = 'text-gray-400';
         return `<span class="${cls}">${m}</span>`;
@@ -75,8 +75,7 @@ export default function PrettyPrint() {
   const handleCopy = () => {
     navigator.clipboard.writeText(rawPretty).then(() => {
       setCopyLabel('Copied!');
-      // revert label after 10s
-      setTimeout(() => setCopyLabel('Copy'), 10000);
+      setTimeout(() => setCopyLabel('Copy'), 10_000);
     });
   };
 
@@ -85,42 +84,46 @@ export default function PrettyPrint() {
     setFixLog([]);
     setLoading(true);
     try {
-      // try API
-      const res = await fetch('https://u-mail.co/api/jsonFormatter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ json: input })
-      });
-      const data = await res.json();
-      if (res.ok && data.formattedJson) {
-        setPretty(syntaxHighlight(data.formattedJson));
-        setRawPretty(data.formattedJson);
-        setFixLog(data.fixLog);
-        setStatus('api');
-        return;
-      }
-      throw new Error(data.error || 'Bad API response');
-    } catch {
-      // fallback: strict parse
+      /* 1 — strict JSON.parse */
       try {
         const f = JSON.stringify(JSON.parse(input), null, 2);
         setPretty(syntaxHighlight(f));
         setRawPretty(f);
         setStatus('ok');
-        return;
-      } catch { /* */ }
-      // JSON5 parse
+        return;                                    // ✅ valid JSON – stop here
+      } catch { /* malformed, keep going */ }
+
+      /* 2 — JSON5 parse (common minor issues) */
       if (JSON5) {
         try {
           const f = JSON.stringify(JSON5.parse(input), null, 2);
           setPretty(syntaxHighlight(f));
           setRawPretty(f);
           setStatus('fixed');
-          setFixLog(['Parsed with JSON5 (allows single quotes, trailing commas, etc.).']);
-          return;
-        } catch { /* */ }
+          setFixLog(['Parsed with JSON5 (single quotes, trailing commas, comments…).']);
+          return;                                  // ✅ fixed locally – stop here
+        } catch { /* still malformed */ }
       }
-      // loose fallback
+
+      /* 3 — call external fixer API only now */
+      try {
+        const res  = await fetch('https://u-mail.co/api/jsonFormatter', {
+          method : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body   : JSON.stringify({ json: input })
+        });
+        const data = await res.json();
+        if (res.ok && data.formattedJson) {
+          setPretty(syntaxHighlight(data.formattedJson));
+          setRawPretty(data.formattedJson);
+          setFixLog(data.fixLog ?? []);
+          setStatus('api');
+          return;                                  // ✅ API fixed – stop here
+        }
+        throw new Error(data.error || 'Bad API response');
+      } catch { /* API failed, fall through */ }
+
+      /* 4 — best-effort loose formatter */
       const l = looseFormat(input.trim());
       setPretty(syntaxHighlight(l));
       setRawPretty(l);
@@ -134,6 +137,7 @@ export default function PrettyPrint() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 space-y-8">
+      {/* --- UI below unchanged --- */}
       {/* title */}
       <header className="text-center">
         <h1 className="text-3xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
