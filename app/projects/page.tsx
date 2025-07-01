@@ -94,6 +94,14 @@ export default function Projects() {
       excerpt: " An AI Powered search engine that gets to the point.",
       openSource: false,
     },
+            {
+      id: 13,
+      icon: Icon04,
+      slug: '/PrettyPrint',
+      title: 'AI Powered JSON/XML prettifier',
+      excerpt: 'Paste any JSON or XML no matter how messy or malformed and receive a formatted, syntax highlighted version with clear error corrections.',
+      openSource: false,
+    },
 
     {
       id: 2,
@@ -119,14 +127,7 @@ export default function Projects() {
       excerpt: "Art  Institute of Chicago's open source API.",
       openSource: false,
     },
-         {
-      id: 13,
-      icon: Icon04,
-      slug: '/PrettyPrint',
-      title: 'AI Powered JSON prettifier',
-      excerpt: 'Paste any JSON no matter how messy or malformed and receive a formatted, syntax highlighted version with clear error corrections.',
-      openSource: false,
-    },
+ 
     {
       id: 8,
       icon: Icon5,
