@@ -55,6 +55,7 @@ const ISSTracker: React.FC = () => {
   const startRef      = useRef<CircleMarker | null>(null);
   const trailSegsRef  = useRef<Polyline[]>([]);
   const terminatorRef = useRef<L.GeoJSON | null>(null);
+  const startSavedRef = useRef(false);
 
   const [mounted, setMounted] = useState(false);
   const [tele, setTele]       = useState<Telemetry>({
@@ -76,14 +77,39 @@ const ISSTracker: React.FC = () => {
     }
   }, []);
 
+      /* close modal on Esc */
+    useEffect(() => {
+      const handleKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setSelected(null);
+      };
+      document.addEventListener('keydown', handleKey);
+      return () => document.removeEventListener('keydown', handleKey);
+    }, [selected]);
+
   /* ---------------- fetch crew once -------------------- */
   useEffect(() => {
     if (!mounted) return;
-    fetch('https://ll.thespacedevs.com/2.2.0/astronaut/?in_space=true')
+    fetch('https://ll.thespacedevs.com/2.2.0/astronaut/?in_space=true&limit=100')
       .then(r => r.json())
       .then((d: LLRes) => { setCrewTotal(d.count); setSpaceCrew(d.results); })
       .catch(() => {});
   }, [mounted]);
+
+  /* ------------------------------------------------------------------ */
+/*  Seed trail with cached session-start position                     */
+/* ------------------------------------------------------------------ */
+useEffect(() => {
+  if (!startPos || !mapRef.current) return;        // need both map + cached point
+  if (trailSegsRef.current.length) return;         // don’t run twice
+
+  const seg = L.polyline(
+    [[startPos.lat, startPos.lon]],
+    { color: '#6366f1', weight: 2, dashArray: '4 6' }
+  ).addTo(mapRef.current);
+
+  trailSegsRef.current.push(seg);                  // first segment seeded
+}, [startPos]);
+
 
   /* ---------------- init map + overlays ---------------- */
   useEffect(() => {
@@ -161,9 +187,10 @@ const ISSTracker: React.FC = () => {
         map.panTo([lat, lon], { animate: true, duration: 0.75 });
 
         /* cache session start */
-        if (!startPos) {
+        if(!startSavedRef.current) {
           setStartPos({ lat, lon });
           localStorage.setItem(START_CACHE_KEY, JSON.stringify({ latitude: lat, longitude: lon, ts: Date.now() }));
+          startSavedRef.current = true;
         }
       } catch {/* swallow */}
     };
@@ -171,7 +198,7 @@ const ISSTracker: React.FC = () => {
     const issID = setInterval(tick, 10_000);
 
     return () => { clearInterval(issID); clearInterval(termID); map.remove(); };
-  }, [mounted, startPos]);
+  }, [mounted]);
 
   /* ------------- cached session start marker ---------- */
   useEffect(() => {
@@ -255,19 +282,21 @@ const ISSTracker: React.FC = () => {
         {selected && (
           <motion.div
             className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/30 backdrop-blur-sm p-2 xs:p-4"
+             onClick={() => setSelected(null)}
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           >
             <motion.div
+            onClick={(e) => e.stopPropagation()}  
               className="relative w-full max-w-sm xs:max-w-md sm:max-w-lg max-h-[95vh] overflow-y-auto rounded-xl bg-white dark:bg-brand-900 p-5 xs:p-6 shadow-xl"
               initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} transition={{ duration: 0.2 }}
-            >
+            > 
+            {flagUrl(selected.agency?.country_code) && <img src={flagUrl(selected.agency?.country_code)!} alt={selected.nationality ?? ''} className="h-15 w-14 rounded-sm shadow left-0" />}
               <button
                 onClick={() => setSelected(null)}
-                className="absolute -top-3 -right-3 h-9 w-9 rounded-full bg-brand-600 text-white text-xl leading-none flex items-center justify-center shadow-lg hover:bg-brand-950 focus:outline-none"
+                className="absolute -top-0 -right-0 h-6 w-6 rounded-full bg-brand-600 text-white text-xl leading-none flex items-center justify-center shadow-lg hover:bg-brand-950 focus:outline-none mt-2 mr-2 transition-colors duration-200"
                 aria-label="Close"
               >×</button>
               <div className="flex flex-col items-center mb-6">
-                {flagUrl(selected.agency?.country_code) && <img src={flagUrl(selected.agency?.country_code)!} alt={selected.nationality ?? ''} className="h-6 w-9 rounded-sm shadow self-end" />}
                 <img src={selected.profile_image ?? selected.profile_image_thumbnail ?? 'https://via.placeholder.com/160x160.png?text=No+Image'} alt={selected.name} className="mx-auto mb-3 h-32 w-32 rounded-full object-cover shadow" />
                 <h3 className="text-lg sm:text-xl font-bold text-brand-900 dark:text-white text-center">{selected.name}</h3>
               </div>
