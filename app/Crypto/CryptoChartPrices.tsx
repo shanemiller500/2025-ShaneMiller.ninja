@@ -6,7 +6,9 @@ import React, {
   useRef,
   FormEvent,
   useCallback,
+  useMemo,
 } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Chart,
   ChartTypeRegistry,
@@ -16,12 +18,24 @@ import {
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
+  Filler,
+  CategoryScale,
 } from "chart.js/auto";
 import zoomPlugin from "chartjs-plugin-zoom";
 import "chartjs-adapter-date-fns";
 import { trackEvent } from "@/utils/mixpanel";
 
-Chart.register(TimeScale, LinearScale, PointElement, LineElement, zoomPlugin);
+Chart.register(
+  TimeScale,
+  LinearScale,
+  CategoryScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Filler,
+  zoomPlugin,
+);
 
 /* ------------------------------------------------------------------ */
 /*                               Types                                */
@@ -30,6 +44,7 @@ interface HistoryEntry {
   t: number;
   y: number;
 }
+
 interface CryptoAsset {
   id: string;
   name: string;
@@ -44,6 +59,7 @@ interface CryptoAsset {
   changePercent24Hr: string;
   explorer?: string;
 }
+
 type TimeFrameOption = "1h" | "24h" | "7d" | "30d";
 
 /* ------------------------------------------------------------------ */
@@ -53,13 +69,30 @@ const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 const COINGECKO_TOP200 =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
 
-const formatUSD = (n: number) =>
-  n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+const currencyFmt = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
 
-const percentColor = (v: number) => (v >= 0 ? "text-green-500" : "text-red-500");
+const compactFmt = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 2,
+});
+
+const usd = (n: number | null | undefined) =>
+  typeof n === "number" && Number.isFinite(n) ? currencyFmt.format(n) : "—";
+
+const compact = (n: number | null | undefined) =>
+  typeof n === "number" && Number.isFinite(n) ? compactFmt.format(n) : "—";
+
+const pctText = (n: number | null | undefined) =>
+  typeof n === "number" && Number.isFinite(n) ? `${n.toFixed(2)}%` : "—";
+
+const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
+
+const percentClass = (v: number) =>
+  v >= 0 ? "text-green-600 dark:text-green-300" : "text-red-600 dark:text-red-300";
 
 /* ------------------------------------------------------------------ */
 /*                           Main component                           */
@@ -68,12 +101,18 @@ const CryptoChartPrices: React.FC = () => {
   /* ---------------- state ---------------- */
   const [query, setQuery] = useState("bitcoin");
   const [assetId, setAssetId] = useState("bitcoin");
+
   const [chartData, setChartData] = useState<HistoryEntry[]>([]);
   const [cryptoDetails, setCryptoDetails] = useState<CryptoAsset | null>(null);
+
   const [loadingChart, setLoadingChart] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep chartType, but make the “default” experience feel premium:
+  // - For non-line types, we still render, but we keep the tooltip + zoom sane.
   const [chartType, setChartType] = useState<keyof ChartTypeRegistry>("line");
   const [timeFrame, setTimeFrame] = useState<TimeFrameOption>("24h");
+
   const [logos, setLogos] = useState<Record<string, string>>({}); // symbol → imageURL
 
   /* ---------------- refs ---------------- */
@@ -87,8 +126,8 @@ const CryptoChartPrices: React.FC = () => {
         const res = await fetch(COINGECKO_TOP200);
         const json = await res.json();
         const map: Record<string, string> = {};
-        json.forEach((c: any) => {
-          map[c.symbol.toLowerCase()] = c.image;
+        (json || []).forEach((c: any) => {
+          if (c?.symbol) map[String(c.symbol).toLowerCase()] = c.image;
         });
         setLogos(map);
       } catch {
@@ -101,32 +140,30 @@ const CryptoChartPrices: React.FC = () => {
   const resolveAssetId = useCallback(async (q: string): Promise<string | null> => {
     if (!API_KEY) return null;
     const res = await fetch(
-      `https://rest.coincap.io/v3/assets?search=${encodeURIComponent(
-        q
-      )}&apiKey=${API_KEY}`
+      `https://rest.coincap.io/v3/assets?search=${encodeURIComponent(q)}&apiKey=${API_KEY}`,
     );
     if (!res.ok) return null;
     const json = await res.json();
-    const list: CryptoAsset[] = json.data;
+    const list: CryptoAsset[] = json?.data || [];
     if (!list.length) return null;
+
     const lower = q.toLowerCase();
     const exact =
       list.find(
         (a) =>
-          a.id.toLowerCase() === lower ||
-          a.symbol.toLowerCase() === lower ||
-          a.name.toLowerCase() === lower
+          a.id?.toLowerCase?.() === lower ||
+          a.symbol?.toLowerCase?.() === lower ||
+          a.name?.toLowerCase?.() === lower,
       ) || list[0];
-    return exact.id;
+
+    return exact?.id || null;
   }, []);
 
   /* ---------------- history fetcher ---------------- */
-  async function fetchSeries(
-    id: string,
-    tf: TimeFrameOption
-  ): Promise<HistoryEntry[]> {
+  async function fetchSeries(id: string, tf: TimeFrameOption): Promise<HistoryEntry[]> {
     if (!API_KEY) return [];
     let ms: number, interval: string;
+
     switch (tf) {
       case "1h":
         ms = 3600e3;
@@ -144,63 +181,122 @@ const CryptoChartPrices: React.FC = () => {
         ms = 30 * 24 * 3600e3;
         interval = "d1";
     }
+
     const end = Date.now();
     const start = end - ms;
+
     const res = await fetch(
-      `https://rest.coincap.io/v3/assets/${id}/history?interval=${interval}&start=${start}&end=${end}&apiKey=${API_KEY}`
+      `https://rest.coincap.io/v3/assets/${id}/history?interval=${interval}&start=${start}&end=${end}&apiKey=${API_KEY}`,
     );
     if (!res.ok) return [];
+
     const json = await res.json();
-    return (json.data || []).map((e: any) => ({
-      t: e.time,
-      y: parseFloat(e.priceUsd),
-    }));
+    const raw = json?.data || [];
+
+    const pts: HistoryEntry[] = raw
+      .map((e: any) => ({
+        t: Number(e.time),
+        y: parseFloat(e.priceUsd),
+      }))
+      .filter((p: HistoryEntry) => Number.isFinite(p.t) && Number.isFinite(p.y));
+
+    return pts;
   }
 
   /* ---------------- details fetcher ---------------- */
   async function fetchDetails(id: string) {
     if (!API_KEY) return null;
-    const res = await fetch(
-      `https://rest.coincap.io/v3/assets/${id}?apiKey=${API_KEY}`
-    );
+    const res = await fetch(`https://rest.coincap.io/v3/assets/${id}?apiKey=${API_KEY}`);
     if (!res.ok) return null;
     const json = await res.json();
-    return json.data as CryptoAsset;
+    return (json?.data || null) as CryptoAsset | null;
   }
 
   /* ---------------- chart+details update ---------------- */
   async function updateChart() {
     setLoadingChart(true);
-    const [data, details] = await Promise.all([
-      fetchSeries(assetId, timeFrame),
-      fetchDetails(assetId),
-    ]);
-    setChartData(data);
-    setCryptoDetails(details);
-    setLoadingChart(false);
-    trackEvent("CryptoChartLoaded", { id: assetId, timeFrame });
+    setError(null);
+
+    try {
+      const [data, details] = await Promise.all([fetchSeries(assetId, timeFrame), fetchDetails(assetId)]);
+      setChartData(data);
+      setCryptoDetails(details);
+
+      trackEvent("CryptoChartLoaded", { id: assetId, timeFrame, points: data.length });
+      if (!data.length) setError("No chart data returned for that timeframe.");
+    } catch (e: any) {
+      setError("Failed to load chart data.");
+      console.error("Crypto chart load error:", e);
+    } finally {
+      setLoadingChart(false);
+    }
   }
 
   useEffect(() => {
     updateChart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetId, timeFrame]);
 
-  /* ---------------- percent helper ---------------- */
+  /* ---------------- derived metrics ---------------- */
+  const derived = useMemo(() => {
+    if (!chartData.length) {
+      return {
+        first: null as number | null,
+        last: null as number | null,
+        hi: null as number | null,
+        lo: null as number | null,
+        rangePct: null as number | null,
+        changePct: null as number | null,
+      };
+    }
+
+    const first = chartData[0].y;
+    const last = chartData[chartData.length - 1].y;
+    let hi = -Infinity;
+    let lo = Infinity;
+
+    for (const p of chartData) {
+      if (p.y > hi) hi = p.y;
+      if (p.y < lo) lo = p.y;
+    }
+
+    const changePct = first ? ((last - first) / first) * 100 : null;
+    const rangePct = lo ? ((hi - lo) / lo) * 100 : null;
+
+    return {
+      first,
+      last,
+      hi: Number.isFinite(hi) ? hi : null,
+      lo: Number.isFinite(lo) ? lo : null,
+      rangePct,
+      changePct,
+    };
+  }, [chartData]);
+
+  /* ---------------- percent series ---------------- */
   const pctSeries = (d: HistoryEntry[]) => {
     if (!d.length) return [];
     const first = d[0].y;
+    if (!first) return [];
     return d.map((pt) => ({ t: pt.t, y: ((pt.y - first) / first) * 100 }));
   };
 
   /* ---------------- chart render ---------------- */
   useEffect(() => {
-    if (!canvasRef.current || !chartData.length) return;
+    if (!canvasRef.current) return;
+
+    // If no data, destroy existing chart and stop
+    if (!chartData.length) {
+      chartRef.current?.destroy();
+      chartRef.current = null;
+      return;
+    }
 
     chartRef.current?.destroy();
     const ctx = canvasRef.current.getContext("2d");
     if (!ctx) return;
 
-    /* dynamic axis formatting */
+    // axis formatting based on timeframe
     let unit: "minute" | "hour" | "day" = "hour";
     let maxTicks = 8;
     if (timeFrame === "1h") {
@@ -209,22 +305,29 @@ const CryptoChartPrices: React.FC = () => {
     } else if (timeFrame === "7d") {
       unit = "day";
       maxTicks = 7;
+    } else if (timeFrame === "30d") {
+      unit = "day";
+      maxTicks = 8;
     }
+
+    const pricePts = chartData.map((p) => ({ x: new Date(p.t), y: p.y }));
+    const pctPts = pctSeries(chartData).map((p) => ({ x: new Date(p.t), y: p.y }));
+
+    const isLineLike = ["line", "bar", "scatter", "bubble"].includes(chartType);
 
     const lineDataset = (label: string, pts: any, color: string): ChartDataset =>
       ({
         label,
         data: pts,
         borderColor: color,
-        backgroundColor: color.replace("rgb(", "rgba(").replace(")", ",0.12)"),
+        // fill only when line-like
+        fill: label.includes("Price") && chartType === "line",
+        backgroundColor: color.replace("rgb(", "rgba(").replace(")", ",0.14)"),
         pointRadius: chartType === "scatter" ? 3 : 0,
         showLine: chartType !== "scatter",
         tension: 0.25,
         yAxisID: label.includes("%") ? "y2" : "y1",
       } as ChartDataset);
-
-    const pricePts  = chartData.map((p) => ({ x: new Date(p.t), y: p.y }));
-    const pctPts    = pctSeries(chartData).map((p) => ({ x: new Date(p.t), y: p.y }));
 
     const dataCfg = {
       datasets: [
@@ -236,35 +339,54 @@ const CryptoChartPrices: React.FC = () => {
     const cfgOpts: any = {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 250 },
       interaction: { mode: "nearest", intersect: false },
-      scales: {
-        x: {
-          type: "time",
-          time: { unit },
-          ticks: { maxTicksLimit: maxTicks, color: "#888" },
-          grid: { color: "" },
-        },
-        y1: { position: "left", grid: { color: "" }, ticks: { color: "#38a1db" } },
-        y2: {
-          position: "right",
-          grid: { drawOnChartArea: false },
-          ticks: { color: "#e53e3e", callback: (v: any) => `${v}%` },
-        },
-      },
+      scales: isLineLike
+        ? {
+            x: {
+              type: "time",
+              time: { unit },
+              ticks: { maxTicksLimit: maxTicks, color: "#888" },
+              grid: { color: "rgba(0,0,0,0.05)" },
+            },
+            y1: {
+              position: "left",
+              grid: { color: "rgba(0,0,0,0.05)" },
+              ticks: {
+                color: "#38a1db",
+                callback: (v: any) => usd(Number(v)),
+              },
+            },
+            y2: {
+              position: "right",
+              grid: { drawOnChartArea: false },
+              ticks: { color: "#e53e3e", callback: (v: any) => `${v}%` },
+            },
+          }
+        : undefined,
       plugins: {
+        legend: { display: false },
         tooltip: {
           callbacks: {
             label: (ctx: TooltipItem<"line">) =>
-              ctx.dataset.label +
-              ": " +
-              (ctx.dataset.label?.includes("%")
-                ? `${ctx.parsed.y.toFixed(2)}%`
-                : `$${formatUSD(ctx.parsed.y)}`),
+              `${ctx.dataset.label}: ${
+                ctx.dataset.label?.includes("%")
+                  ? `${ctx.parsed.y.toFixed(2)}%`
+                  : usd(ctx.parsed.y)
+              }`,
           },
         },
         zoom: {
-          pan: { enabled: true, mode: "xy" },
-          zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "xy" },
+          pan: { enabled: isLineLike, mode: "xy" },
+          zoom: {
+            wheel: { enabled: isLineLike },
+            pinch: { enabled: isLineLike },
+            mode: "xy",
+          },
+          limits: {
+            y: { min: "original", max: "original" },
+            x: { min: "original", max: "original" },
+          },
         },
       },
     };
@@ -279,14 +401,20 @@ const CryptoChartPrices: React.FC = () => {
   /* ---------------- search handler ---------------- */
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
-    const id = await resolveAssetId(query.trim());
+    const q = query.trim();
+    if (!q) return;
+
+    setLoadingChart(true);
+
+    const id = await resolveAssetId(q);
     if (id) {
       setError(null);
       setAssetId(id);
-      trackEvent("CryptoChartSearch", { query: query.trim(), id });
+      trackEvent("CryptoChartSearch", { query: q, id });
     } else {
-      setError("Asset not found. Try BTC, ETH, etc.");
-      trackEvent("CryptoChartSearchFail", { query: query.trim() });
+      setLoadingChart(false);
+      setError("Asset not found. Try BTC, ETH, SOL, etc.");
+      trackEvent("CryptoChartSearchFail", { query: q });
     }
   };
 
@@ -295,180 +423,237 @@ const CryptoChartPrices: React.FC = () => {
     cryptoDetails?.symbol &&
     logos[cryptoDetails.symbol.toLowerCase()]?.replace("large", "thumb");
 
+  const change24h = cryptoDetails ? parseFloat(cryptoDetails.changePercent24Hr) : null;
+
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold text-center mb-4">Charts & Metrics</h2>
+    <div className="mx-auto max-w-4xl p-4">
+      {/* header */}
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {logoURL ? (
+            <img
+              src={logoURL}
+              alt={cryptoDetails?.symbol || "crypto"}
+              className="h-9 w-9 rounded-full bg-white p-1 ring-1 ring-black/5"
+              loading="lazy"
+            />
+          ) : (
+            <div className="h-9 w-9 rounded-full bg-gray-100 dark:bg-brand-900 ring-1 ring-black/5" />
+          )}
+
+          <div>
+            <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+              {cryptoDetails ? `${cryptoDetails.name} (${cryptoDetails.symbol.toUpperCase()})` : "Charts & Metrics"}
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Search any CoinCap asset • zoom + pan supported
+            </p>
+          </div>
+        </div>
+
+        {/* status */}
+        <div className="text-right">
+          <div className="text-xs text-gray-500 dark:text-gray-400">24h</div>
+          <div className={`text-sm font-bold ${change24h == null ? "text-gray-400" : percentClass(change24h)}`}>
+            {change24h == null ? "—" : pctText(change24h)}
+          </div>
+        </div>
+      </div>
 
       {/* search */}
-      <form
-        onSubmit={handleSearch}
-        className="flex flex-col sm:flex-row items-center gap-2 mb-6"
-      >
-        <input
-          className="border p-2 flex-1 rounded dark:bg-brand-900 dark:text-white"
-          placeholder="e.g. bitcoin or BTC"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+      <form onSubmit={handleSearch} className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <input
+            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm
+                       placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500
+                       dark:border-white/10 dark:bg-brand-950 dark:text-white dark:placeholder:text-gray-500"
+            placeholder="Search (e.g. bitcoin, BTC, ethereum)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {error && (
+            <div className="mt-1 text-xs text-red-600 dark:text-red-300">{error}</div>
+          )}
+        </div>
+
         <button
-          className="bg-indigo-600 text-white px-4 py-2 rounded"
+          type="submit"
+          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500
+                     focus:outline-none focus:ring-2 focus:ring-indigo-500"
           onClick={() => trackEvent("CryptoChartSearchBtnClick")}
         >
           Search
         </button>
       </form>
 
-      {/* selectors */}
-      <div className="flex flex-col sm:flex-row justify-end gap-4 mb-4">
-        <select
-          className="border p-1 rounded dark:bg-brand-900"
-          value={chartType}
-          onChange={(e) => {
-            setChartType(e.target.value as keyof ChartTypeRegistry);
-            trackEvent("CryptoChartTypeChange", { chartType: e.target.value });
-          }}
-        >
-          {[
-            "line",
-            "bar",
-            "scatter",
-            "bubble",
-            "radar",
-            "pie",
-            "doughnut",
-            "polarArea",
-          ].map((t) => (
-            <option key={t}>{t}</option>
+      {/* controls */}
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex overflow-hidden rounded-xl border border-gray-200 dark:border-white/10">
+          {(["1h", "24h", "7d", "30d"] as TimeFrameOption[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => {
+                setTimeFrame(t);
+                trackEvent("CryptoTimeFrameChange", { timeFrame: t });
+              }}
+              className={`px-3 py-2 text-xs font-semibold transition ${
+                timeFrame === t
+                  ? "bg-indigo-600 text-white"
+                  : "bg-white text-gray-700 hover:bg-gray-50 dark:bg-brand-950 dark:text-gray-200 dark:hover:bg-brand-900/40"
+              }`}
+            >
+              {t.toUpperCase()}
+            </button>
           ))}
-        </select>
+        </div>
 
-        <select
-          className="border p-1 rounded dark:bg-brand-900"
-          value={timeFrame}
-          onChange={(e) => {
-            setTimeFrame(e.target.value as TimeFrameOption);
-            trackEvent("CryptoTimeFrameChange", { timeFrame: e.target.value });
-          }}
-        >
-          {["1h", "24h", "7d", "30d"].map((t) => (
-            <option key={t}>{t}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm
+                       dark:border-white/10 dark:bg-brand-950 dark:text-gray-200"
+            value={chartType}
+            onChange={(e) => {
+              const v = e.target.value as keyof ChartTypeRegistry;
+              setChartType(v);
+              trackEvent("CryptoChartTypeChange", { chartType: v });
+            }}
+          >
+            {["line", "bar", "scatter", "bubble"].map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => {
+              chartRef.current?.resetZoom();
+              trackEvent("CryptoChartResetZoom", { id: assetId });
+            }}
+            disabled={!chartData.length}
+            className={`rounded-xl px-3 py-2 text-xs font-semibold shadow-sm transition ${
+              chartData.length
+                ? "bg-gray-900 text-white hover:bg-gray-800 dark:bg-white/10 dark:hover:bg-white/15"
+                : "bg-gray-200 text-gray-500 dark:bg-white/5 dark:text-gray-500 cursor-not-allowed"
+            }`}
+          >
+            Reset zoom
+          </button>
+        </div>
+      </div>
+
+      {/* quick stats */}
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-950">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400">Last</div>
+          <div className="text-sm font-bold text-gray-900 dark:text-white">
+            {derived.last == null ? "—" : usd(derived.last)}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-950">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400">High</div>
+          <div className="text-sm font-bold text-gray-900 dark:text-white">
+            {derived.hi == null ? "—" : usd(derived.hi)}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-950">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400">Low</div>
+          <div className="text-sm font-bold text-gray-900 dark:text-white">
+            {derived.lo == null ? "—" : usd(derived.lo)}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-950">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400">Range</div>
+          <div className="text-sm font-bold text-gray-900 dark:text-white">
+            {derived.rangePct == null ? "—" : pctText(derived.rangePct)}
+          </div>
+        </div>
       </div>
 
       {/* chart */}
-      <div className="relative w-full h-64 sm:h-80 md:h-96 mb-6 border rounded">
-        <canvas ref={canvasRef} className="w-full h-full" />
-        {loadingChart && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/70 dark:bg-brand-900/70">
-            Loading…
-          </div>
-        )}
-      </div>
+      <div className="relative h-72 w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-950 sm:h-80 md:h-96">
+        <canvas ref={canvasRef} className="h-full w-full" />
 
-      {/* reset zoom */}
-      {["line", "bar", "scatter", "bubble"].includes(chartType) &&
-        chartData.length > 0 && (
-          <div className="text-center mb-6">
-            <button
-              onClick={() => {
-                chartRef.current?.resetZoom();
-                trackEvent("CryptoChartResetZoom", { id: assetId });
-              }}
-              className="px-4 py-2 bg-indigo-600 text-white rounded"
+        <AnimatePresence>
+          {loadingChart && (
+            <motion.div
+              className="absolute inset-0 flex items-center justify-center bg-white/70 dark:bg-brand-950/70 backdrop-blur"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
             >
-              Reset Zoom
-            </button>
-          </div>
-        )}
+              <div className="rounded-xl bg-white/80 px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-black/5 dark:bg-black/30 dark:text-white dark:ring-white/10">
+                Loading…
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* details */}
       {cryptoDetails && (
-        <div className="overflow-x-auto">
-          <div className="flex items-center gap-3 mb-3">
-            {logoURL && (
-              <img
-                src={logoURL}
-                alt={cryptoDetails.symbol}
-                className="w-8 h-8"
-              />
-            )}
-            <h3 className="text-xl font-bold">
-              {cryptoDetails.name} ({cryptoDetails.symbol})
-            </h3>
+        <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-brand-950">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Rank</div>
+              <div className="text-sm font-bold text-gray-900 dark:text-white">
+                #{cryptoDetails.rank}
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Market cap</div>
+              <div className="text-sm font-bold text-gray-900 dark:text-white">
+                {compact(parseFloat(cryptoDetails.marketCapUsd))}
+              </div>
+            </div>
           </div>
 
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <tbody className="divide-y">
-              <tr>
-                <td className="px-4 py-2 font-medium">Rank</td>
-                <td className="px-4 py-2">{cryptoDetails.rank}</td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2 font-medium">Price (USD)</td>
-                <td className={`px-4 py-2 ${percentColor(
-                  parseFloat(cryptoDetails.changePercent24Hr)
-                )}`}>
-                  ${formatUSD(parseFloat(cryptoDetails.priceUsd))}
-                </td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2 font-medium">% Change (24h)</td>
-                <td className={percentColor(
-                  parseFloat(cryptoDetails.changePercent24Hr)
-                ) + " px-4 py-2"}>
-                  {parseFloat(cryptoDetails.changePercent24Hr).toFixed(2)}%
-                </td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2 font-medium">Market Cap</td>
-                <td className="px-4 py-2">
-                  ${formatUSD(parseFloat(cryptoDetails.marketCapUsd))}
-                </td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2 font-medium">Supply</td>
-                <td className="px-4 py-2">
-                  {parseFloat(cryptoDetails.supply).toLocaleString()}
-                </td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2 font-medium">Max Supply</td>
-                <td className="px-4 py-2">
-                  {cryptoDetails.maxSupply
-                    ? parseFloat(cryptoDetails.maxSupply).toLocaleString()
-                    : "N/A"}
-                </td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2 font-medium">Volume (24h)</td>
-                <td className="px-4 py-2">
-                  ${formatUSD(parseFloat(cryptoDetails.volumeUsd24Hr))}
-                </td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2 font-medium">VWAP (24h)</td>
-                <td className="px-4 py-2">
-                  {cryptoDetails.vwap24Hr
-                    ? `$${formatUSD(parseFloat(cryptoDetails.vwap24Hr))}`
-                    : "N/A"}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-xl bg-gray-50 p-3 dark:bg-white/5">
+              <div className="text-[11px] text-gray-500 dark:text-gray-400">Price</div>
+              <div className="text-sm font-bold text-gray-900 dark:text-white">
+                {usd(parseFloat(cryptoDetails.priceUsd))}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-gray-50 p-3 dark:bg-white/5">
+              <div className="text-[11px] text-gray-500 dark:text-gray-400">24h</div>
+              <div className={`text-sm font-bold ${percentClass(parseFloat(cryptoDetails.changePercent24Hr))}`}>
+                {pctText(parseFloat(cryptoDetails.changePercent24Hr))}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-gray-50 p-3 dark:bg-white/5">
+              <div className="text-[11px] text-gray-500 dark:text-gray-400">Volume</div>
+              <div className="text-sm font-bold text-gray-900 dark:text-white">
+                {compact(parseFloat(cryptoDetails.volumeUsd24Hr))}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-gray-50 p-3 dark:bg-white/5">
+              <div className="text-[11px] text-gray-500 dark:text-gray-400">Supply</div>
+              <div className="text-sm font-bold text-gray-900 dark:text-white">
+                {compact(parseFloat(cryptoDetails.supply))}
+              </div>
+            </div>
+          </div>
 
           {cryptoDetails.explorer && (
             <div className="mt-4 text-center">
               <a
                 href={cryptoDetails.explorer}
                 target="_blank"
-                className="text-indigo-600 hover:underline"
                 rel="noopener noreferrer"
-                onClick={() =>
-                  trackEvent("CryptoExplorerClick", { id: assetId })
-                }
+                className="text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-300"
+                onClick={() => trackEvent("CryptoExplorerClick", { id: assetId })}
               >
-                View Explorer
+                View explorer
               </a>
             </div>
           )}

@@ -67,12 +67,7 @@ interface PopupProps {
 
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 
-function CryptoAssetPopup({
-  asset,
-  logos,
-  onClose,
-  tradeInfo,
-}: PopupProps) {
+function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: PopupProps) {
   const [timeframe, setTimeframe] = useState<"1" | "7" | "30">("1");
   const [chartLoading, setChartLoading] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -93,8 +88,7 @@ function CryptoAssetPopup({
 
     const ctrl = new AbortController();
     const { signal } = ctrl;
-    const interval =
-      timeframe === "1" ? "m1" : timeframe === "7" ? "m30" : "h2";
+    const interval = timeframe === "1" ? "m1" : timeframe === "7" ? "m30" : "h2";
 
     (async () => {
       try {
@@ -102,7 +96,7 @@ function CryptoAssetPopup({
         const start = end - parseInt(timeframe, 10) * 86_400_000;
         const res = await fetch(
           `https://rest.coincap.io/v3/assets/${asset.id}/history?interval=${interval}&start=${start}&end=${end}&apiKey=${API_KEY}`,
-          { signal }
+          { signal },
         );
         if (signal.aborted) return;
         const json = await res.json();
@@ -338,15 +332,17 @@ const COINGECKO_TOP200 =
 
 if (!API_KEY_ENV) {
   console.error(
-    "🚨 Missing CoinCap API key! Please set NEXT_PUBLIC_COINCAP_API_KEY in .env.local and restart your dev server."
+    "🚨 Missing CoinCap API key! Please set NEXT_PUBLIC_COINCAP_API_KEY in .env.local and restart your dev server.",
   );
 }
 
+type TradeState = { price: number; prev?: number; bump?: number };
+
 const WidgetCrypto: React.FC = () => {
   const [metaData, setMetaData] = useState<Record<string, any>>({});
-  const [tradeInfoMap, setTradeInfoMap] = useState<
-    Record<string, { price: number; prevPrice?: number }>
-  >({});
+  const [tradeInfoMap, setTradeInfoMap] = useState<Record<string, TradeState>>(
+    {},
+  );
   const socketRef = useRef<WebSocket | null>(null);
 
   const [logos, setLogos] = useState<Record<string, string>>({});
@@ -361,7 +357,11 @@ const WidgetCrypto: React.FC = () => {
 
   /* is-mounted flag for safe async state updates */
   const isMounted = useRef(true);
-  useEffect(() => () => { isMounted.current = false; }, []);
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   /* fetch initial CoinCap data */
   useEffect(() => {
@@ -369,7 +369,7 @@ const WidgetCrypto: React.FC = () => {
     (async () => {
       try {
         const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=10&apiKey=${API_KEY_ENV}`
+          `https://rest.coincap.io/v3/assets?limit=10&apiKey=${API_KEY_ENV}`,
         );
         const json = await res.json();
         const map: Record<string, any> = {};
@@ -401,11 +401,13 @@ const WidgetCrypto: React.FC = () => {
   /* seed initial prices */
   useEffect(() => {
     if (!topAssetIds.length) return;
+
     setTradeInfoMap((prev) => {
       if (Object.keys(prev).length) return prev; // already seeded
-      const init: Record<string, { price: number }> = {};
+      const init: Record<string, TradeState> = {};
       topAssetIds.forEach((id) => {
-        init[id] = { price: parseFloat(metaData[id]?.priceUsd || "0") };
+        const p = parseFloat(metaData[id]?.priceUsd || "0");
+        init[id] = { price: Number.isFinite(p) ? p : 0, prev: undefined, bump: 0 };
       });
       return init;
     });
@@ -414,10 +416,11 @@ const WidgetCrypto: React.FC = () => {
   /* live price stream */
   useEffect(() => {
     if (!API_KEY_ENV || !topAssetIds.length) return;
+
     const ws = new WebSocket(
       `wss://wss.coincap.io/prices?assets=${topAssetIds.join(
-        ","
-      )}&apiKey=${API_KEY_ENV}`
+        ",",
+      )}&apiKey=${API_KEY_ENV}`,
     );
     socketRef.current = ws;
 
@@ -431,16 +434,22 @@ const WidgetCrypto: React.FC = () => {
 
       startTransition(() => {
         if (!isMounted.current) return;
+
         setTradeInfoMap((prev) => {
           const next = { ...prev };
           Object.entries(data).forEach(([id, p]) => {
             const price = parseFloat(p);
-            next[id] = { price, prevPrice: prev[id]?.price };
+            if (!Number.isFinite(price)) return;
+
+            const old = prev[id]?.price;
+            const bump = (prev[id]?.bump || 0) + 1;
+            next[id] = { price, prev: old, bump };
           });
           return next;
         });
       });
     };
+
     return () => ws.close();
   }, [topAssetIds]);
 
@@ -458,10 +467,12 @@ const WidgetCrypto: React.FC = () => {
   useEffect(() => {
     let raf: number;
     let last: number | null = null;
+
     const step = (t: number) => {
       if (last === null) last = t;
       const delta = t - last;
       last = t;
+
       if (!isDragging && contentWidth && !selectedAssetId) {
         const current = x.get();
         let next = current - speed * (delta / 1000);
@@ -469,8 +480,10 @@ const WidgetCrypto: React.FC = () => {
         if (next > 0) next -= contentWidth;
         x.set(next);
       }
+
       raf = requestAnimationFrame(step);
     };
+
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [isDragging, contentWidth, selectedAssetId]); // <- fixed length
@@ -482,35 +495,58 @@ const WidgetCrypto: React.FC = () => {
 
   const renderCard = (id: string) => {
     const md = metaData[id];
-    const ti = tradeInfoMap[id] || {};
+    const ti = tradeInfoMap[id] || ({} as TradeState);
+
     const price = ti.price;
-    const prev = ti.prevPrice;
-    let bg = "bg-gray-400 dark:bg-gray-600";
-    if (prev !== undefined) {
-      bg =
-        price > prev
-          ? "bg-green-500 dark:bg-green-700"
-          : price < prev
-          ? "bg-red-500 dark:bg-red-700"
-          : "bg-gray-500 dark:bg-gray-600";
-    }
+    const prev = ti.prev;
+    const bump = ti.bump || 0;
+
+    const pct24 = parseFloat(String(md?.changePercent24Hr ?? ""));
+    const pctPos = Number.isFinite(pct24) && pct24 > 0;
+    const pctNeg = Number.isFinite(pct24) && pct24 < 0;
+
+    // ✅ ALWAYS color immediately:
+    // - If we have prev, use tick direction
+    // - Else, use 24h% sign so it starts green/red right away
+    const pos = prev != null ? price > prev : pctPos;
+    const neg = prev != null ? price < prev : pctNeg;
+
+    const bg = pos
+      ? "bg-green-500 dark:bg-green-700"
+      : neg
+        ? "bg-red-500 dark:bg-red-700"
+        : "bg-gray-500 dark:bg-gray-600";
+
+    const logo = logos[md?.symbol?.toLowerCase?.()] || null;
+
     return (
       <motion.div
         key={id}
         onClick={() => setSelectedAssetId(id)}
-        className={`${bg} m-1 p-2 rounded text-white text-center cursor-pointer whitespace-nowrap`}
+        className={`${bg} relative overflow-hidden m-1 p-2 rounded text-white text-center cursor-pointer whitespace-nowrap`}
         whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
       >
+        {/* ✅ Flash overlay on every tick */}
+        {prev != null && bump > 0 && (
+          <motion.div
+            key={`${id}-${bump}`}
+            className="absolute inset-0 rounded pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.55, 0], scale: [1, 1.03, 1] }}
+            transition={{ duration: 0.32, ease: "easeOut" }}
+            style={{
+              background: price > prev ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.35)",
+              mixBlendMode: "overlay",
+            }}
+          />
+        )}
+
         <div className="text-xs">#{md?.rank}</div>
         <div className="flex items-center justify-center font-bold text-sm p-1">
-          {logos[md?.symbol.toLowerCase()] && (
-            <img
-              src={logos[md.symbol.toLowerCase()]}
-              alt={md.symbol}
-              className="w-5 h-5 pr-1"
-            />
+          {logo && (
+            <img src={logo} alt={md.symbol} className="w-5 h-5 pr-1" />
           )}
-          {md?.symbol.toUpperCase()}
+          {md?.symbol?.toUpperCase?.()}
         </div>
         <div className="text-xs">{usd(price)}</div>
         <div className="text-xs">{pct(md?.changePercent24Hr)}</div>
@@ -521,9 +557,7 @@ const WidgetCrypto: React.FC = () => {
   return (
     <div className="max-w-[700px] overflow-hidden relative">
       <div className="p-2">
-        <p className="text-xs text-gray-500 text-center">
-          Top 10 Ranked Cryptos
-        </p>
+        <p className="text-xs text-gray-500 text-center">Top 10 Ranked Cryptos</p>
       </div>
 
       <motion.div
@@ -556,7 +590,11 @@ const WidgetCrypto: React.FC = () => {
         asset={selectedAsset}
         logos={logos}
         onClose={closePopup}
-        tradeInfo={selectedAsset ? tradeInfoMap[selectedAsset.id] : undefined}
+        tradeInfo={
+          selectedAsset
+            ? { price: tradeInfoMap[selectedAsset.id]?.price, prev: tradeInfoMap[selectedAsset.id]?.prev }
+            : undefined
+        }
       />
     </div>
   );

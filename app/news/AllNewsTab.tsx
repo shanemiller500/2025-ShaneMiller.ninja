@@ -1,61 +1,51 @@
 /* eslint-disable @next/next/no-img-element */
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { fetchMediaStackArticles } from './Mediastack-API-Call';
-import { fetchFinnhubArticles }    from './Finnhub-API-Call';
-import { fetchUmailArticles }      from './MoreNewsAPI';
-import { trackEvent }             from '@/utils/mixpanel';
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { fetchMediaStackArticles } from "./Mediastack-API-Call";
+import { fetchFinnhubArticles } from "./Finnhub-API-Call";
+import { fetchUmailArticles } from "./MoreNewsAPI";
+import { trackEvent } from "@/utils/mixpanel";
 
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                   */
 /* ------------------------------------------------------------------ */
 export interface Article {
-  source      : { id: string | null; name: string; image?: string | null };
-  author      : string | null;
-  title       : string;
-  description : string;
-  url         : string;
-  urlToImage  : string | null;
-  images?     : string[];
-  thumbnails? : string[];
-  publishedAt : string;
-  content     : string | null;
-  categories  : (string | null | undefined | any)[];
+  source: { id: string | null; name: string; image?: string | null };
+  author: string | null;
+  title: string;
+  description: string;
+  url: string;
+  urlToImage: string | null;
+  images?: string[];
+  thumbnails?: string[];
+  publishedAt: string;
+  content: string | null;
+  categories: (string | null | undefined | any)[];
 }
 
+const LOGO_FALLBACK = "/images/wedding.jpg";
+const CBS_THUMB = "https://upload.wikimedia.org/wikipedia/commons/3/3f/CBS_News.svg";
+const PER_PAGE = 36;
+const CACHE_TTL = 30 * 60 * 1000; // 30 min
+const USA_ENDPOINT = "https://u-mail.co/api/NewsAPI/us-news";
+
 const getDomain = (u: string) => {
-  try { return new URL(u).hostname.replace(/^www\./, ''); }
-  catch { return ''; }
+  try {
+    return new URL(u).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 };
-const firstImg   = (html?: string | null) =>
+
+const firstImg = (html?: string | null) =>
   html?.match(/<img[^>]+src=['"]([^'"]+)['"]/i)?.[1] ?? null;
 
-const LOGO_FALLBACK  = '/images/wedding.jpg';
-const CBS_THUMB      = 'https://upload.wikimedia.org/wikipedia/commons/3/3f/CBS_News.svg';
-const PER_PAGE       = 36;
-const CACHE_TTL      = 30 * 60 * 1000;                // 30 min
-const USA_ENDPOINT   = 'https://u-mail.co/api/NewsAPI/us-news';
-
-const sortByDate = (arr: Article[]) =>
-  [...arr].sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
-
-const isUSA = (a: Article) => {
-  const cats = (Array.isArray(a.categories) ? a.categories : [])
-    .filter((c): c is string => typeof c === 'string')
-    .map((c) => c.toLowerCase());
-  const host = getDomain(a.url).toLowerCase();
-  return cats.includes('us') ||
-         cats.includes('united states') ||
-         /\.us$/.test(host);
-};
-
-const bad = (s?: string | null) =>
-  !s || ['none', 'null', 'n/a'].includes(s.toLowerCase());
+const bad = (s?: string | null) => !s || ["none", "null", "n/a"].includes(String(s).toLowerCase());
 
 const normalize = (s: string) => {
-  if (s.startsWith('//'))     return `https:${s}`;
-  if (s.startsWith('http://')) return s.replace('http://', 'https://');
+  if (s.startsWith("//")) return `https:${s}`;
+  if (s.startsWith("http://")) return s.replace("http://", "https://");
   return s;
 };
 
@@ -71,52 +61,88 @@ const getDisplayImage = (a: Article & { image?: string }) => {
     .map(normalize);
 
   if (sources.length) return sources[0];
+  return getDomain(a.url).includes("cbsnews.com") ? CBS_THUMB : null;
+};
 
-  return getDomain(a.url).includes('cbsnews.com') ? CBS_THUMB : null;
+const sortByDate = (arr: Article[]) =>
+  [...arr].sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
+
+const isUSA = (a: Article) => {
+  const cats = (Array.isArray(a.categories) ? a.categories : [])
+    .filter((c): c is string => typeof c === "string")
+    .map((c) => c.toLowerCase());
+  const host = getDomain(a.url).toLowerCase();
+  return cats.includes("us") || cats.includes("united states") || /\.us$/.test(host);
+};
+
+const stableKey = (a: Article) => {
+  // url is best; fallback keeps duplicates under control.
+  const u = a.url?.trim();
+  if (u) return u;
+  return `${a.title}-${a.publishedAt}`;
+};
+
+const uniqByKey = (arr: Article[]) => {
+  const m = new Map<string, Article>();
+  for (const a of arr) {
+    const k = stableKey(a);
+    if (!m.has(k)) m.set(k, a);
+  }
+  return Array.from(m.values());
 };
 
 /* ------------------------------------------------------------------ */
-/*  Simple caches                                                     */
+/*  Simple caches (memory)                                            */
 /* ------------------------------------------------------------------ */
 let CACHE_ALL: { ts: number; data: Article[] } | null = null;
-let USA_CACHE : { ts: number; data: Article[] } | null = null;
-let USA_FETCH : Promise<void> | null            = null;
-
-try {
-  const raw = localStorage.getItem('usaNewsCache');
-  if (raw) {
-    const parsed = JSON.parse(raw) as { ts: number; data: Article[] };
-    if (Date.now() - parsed.ts < CACHE_TTL) USA_CACHE = parsed;
-  }
-} catch {/* ignore */}
+let USA_CACHE: { ts: number; data: Article[] } | null = null;
+let USA_FETCH: Promise<void> | null = null;
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 export default function NewsTab() {
   /* interface state */
-  const [region,    setRegion]   = useState<'All' | 'USA' | 'World'>('All');
-  const [provider,  setProvider] = useState('All');
-  const [page,      setPage]     = useState(1);
-  const [fade,      setFade]     = useState(false);
+  const [region, setRegion] = useState<"All" | "USA" | "World">("All");
+  const [provider, setProvider] = useState("All");
+  const [page, setPage] = useState(1);
+  const [fade, setFade] = useState(false);
 
   /* data state */
-  const [articles, setArticles]  = useState<Article[]>([]);
-  const [loading,  setLoading]   = useState(false);
-  const [error,    setError]     = useState<string | null>(null);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  /* ─────────── mount ─────────── */
-  useEffect(() => { trackEvent('NewsTab Loaded'); }, []);
+  /* localStorage: hydrate USA cache client-side safely */
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("usaNewsCache");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { ts: number; data: Article[] };
+      if (Date.now() - parsed.ts < CACHE_TTL) USA_CACHE = parsed;
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
-  /* ─────────── initial feed ─────────── */
+  /* mount */
+  useEffect(() => {
+    trackEvent("NewsTab Loaded");
+  }, []);
+
+  /* initial feed */
   useEffect(() => {
     let cancel = false;
+
     (async () => {
       if (CACHE_ALL && Date.now() - CACHE_ALL.ts < CACHE_TTL) {
         setArticles(CACHE_ALL.data);
         return;
       }
+
       setLoading(true);
+      setError(null);
+
       try {
         const [ms, fh, um] = await Promise.allSettled([
           fetchMediaStackArticles(1),
@@ -124,150 +150,175 @@ export default function NewsTab() {
           fetchUmailArticles(),
         ]);
 
-        const ok = (r: PromiseSettledResult<Article[]>) =>
-          r.status === 'fulfilled' ? r.value : [];
+        const ok = (r: PromiseSettledResult<Article[]>) => (r.status === "fulfilled" ? r.value : []);
 
-        const merged = sortByDate([...ok(ms), ...ok(fh), ...ok(um)]);
+        const merged = sortByDate(uniqByKey([...ok(ms), ...ok(fh), ...ok(um)]));
+
         if (!cancel) {
           CACHE_ALL = { ts: Date.now(), data: merged };
           setArticles(merged);
         }
       } catch (e: any) {
-        if (!cancel) setError(e.message ?? 'Unknown error');
+        if (!cancel) setError(e?.message ?? "Unknown error");
       } finally {
         if (!cancel) setLoading(false);
       }
     })();
-    return () => { cancel = true; };
+
+    return () => {
+      cancel = true;
+    };
   }, []);
 
-  /* ─────────── USA-only feed ─────────── */
+  /* USA-only feed (adds extra USA endpoint data) */
   useEffect(() => {
     let cancel = false;
-    if (region !== 'USA') return;
+    if (region !== "USA") return;
+
     if (USA_CACHE && Date.now() - USA_CACHE.ts < CACHE_TTL) return;
 
     if (!USA_FETCH) {
       USA_FETCH = (async () => {
         try {
-          const res = await fetch(USA_ENDPOINT, { cache: 'no-store' });
+          const res = await fetch(USA_ENDPOINT, { cache: "no-store" });
           if (!res.ok) throw new Error(`US feed ${res.status}`);
           const json = await res.json();
-          const data: Article[] = json.results.map((r: any) => ({
-            source: { id: null, name: getDomain(r.link), image: r.sourceImage },
-            author      : r.author || null,
-            title       : r.headline,
-            description : r.description,
-            url         : r.link,
-            urlToImage  : r.image ?? null,
-            images      : r.images,
-            thumbnails  : r.thumbnails,
-            publishedAt : r.publishedAt,
-            content     : r.content,
-            categories  : r.categories,
+
+          const data: Article[] = (json?.results || []).map((r: any) => ({
+            source: { id: null, name: getDomain(r.link), image: r.sourceImage ?? null },
+            author: r.author || null,
+            title: r.headline,
+            description: r.description,
+            url: r.link,
+            urlToImage: r.image ?? null,
+            images: r.images,
+            thumbnails: r.thumbnails,
+            publishedAt: r.publishedAt,
+            content: r.content,
+            categories: r.categories || [],
           }));
+
           USA_CACHE = { ts: Date.now(), data };
-          localStorage.setItem('usaNewsCache', JSON.stringify(USA_CACHE));
+          try {
+            localStorage.setItem("usaNewsCache", JSON.stringify(USA_CACHE));
+          } catch {
+            /* ignore */
+          }
         } catch (e) {
-          console.warn('USA endpoint error:', (e as Error).message);
+          // don’t hard-fail the whole UI if USA feed fails
+          console.warn("USA endpoint error:", (e as Error).message);
         }
-      })().finally(() => { USA_FETCH = null; });
+      })().finally(() => {
+        USA_FETCH = null;
+      });
     }
-    USA_FETCH.then(() => !cancel && setArticles((a) => a));
-    return () => { cancel = true; };
+
+    USA_FETCH.then(() => {
+      if (!cancel) setArticles((a) => a); // trigger re-render to include USA_CACHE
+    });
+
+    return () => {
+      cancel = true;
+    };
   }, [region]);
 
-  /* ─────────── combine & filter ─────────── */
+  /* combine & filter */
   const dataset = useMemo(() => {
-    if (region === 'USA') {
-      const extra   = USA_CACHE?.data ?? [];
+    if (region === "USA") {
+      const extra = USA_CACHE?.data ?? [];
       const generic = articles.filter(isUSA);
-      return sortByDate(
-        Array.from(new Map([...extra, ...generic].map((a) => [a.title, a])).values())
-      );
+      return sortByDate(uniqByKey([...extra, ...generic]));
     }
-    if (region === 'World') return articles.filter((a) => !isUSA(a));
+    if (region === "World") return articles.filter((a) => !isUSA(a));
     return articles;
   }, [region, articles]);
 
-  /* provider list */
+  /* provider list (based on *all* articles, not filtered dataset) */
   const providers = useMemo(
-    () => ['All', ...Array.from(new Set(articles.map(a => a.source.name))).sort()],
-    [articles]
+    () => ["All", ...Array.from(new Set(articles.map((a) => a.source.name))).sort()],
+    [articles],
   );
 
-  const byProvider =
-    provider === 'All' ? dataset : dataset.filter((a) => a.source.name === provider);
+  const byProvider = useMemo(
+    () => (provider === "All" ? dataset : dataset.filter((a) => a.source.name === provider)),
+    [provider, dataset],
+  );
 
-  const topStrip = useMemo(() => {
-    // first one article that actually have an image, keep order
-    return byProvider.filter(a => getDisplayImage(a)).slice(0, 1);
+  /* hero/top strip = first article that has an image */
+  const hero = useMemo(() => {
+    const firstWithImg = byProvider.find((a) => !!getDisplayImage(a));
+    return firstWithImg ?? null;
   }, [byProvider]);
 
+  /* rest excludes hero by stable key */
   const rest = useMemo(() => {
-    return byProvider.filter(a => !topStrip.includes(a));
-  }, [byProvider, topStrip]);
+    if (!hero) return byProvider;
+    const heroKey = stableKey(hero);
+    return byProvider.filter((a) => stableKey(a) !== heroKey);
+  }, [byProvider, hero]);
 
   useEffect(() => setPage(1), [region, provider]);
 
   const totalPages = Math.max(1, Math.ceil(rest.length / PER_PAGE));
-  const pageNews   = rest.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const safePage = Math.min(page, totalPages);
+  const pageNews = rest.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
 
-  const changePage = (n: number) => {
-    if (fade) return;
-    trackEvent('News Page Changed', { page: n });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setFade(true);
-    setTimeout(() => {
-      setPage(n);
-      setFade(false);
-    }, 400);
-  };
+  const changePage = useCallback(
+    (n: number) => {
+      if (fade) return;
+      const next = Math.max(1, Math.min(n, totalPages));
+      if (next === safePage) return;
 
-  useEffect(() => {
-  console.table(
-    dataset.slice(0, 20).map(a => ({
-      title: a.title.slice(0, 30),
-      img:   getDisplayImage(a),
-    }))
+      trackEvent("News Page Changed", { page: next });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      setFade(true);
+      window.setTimeout(() => {
+        setPage(next);
+        setFade(false);
+      }, 220);
+    },
+    [fade, totalPages, safePage],
   );
-}, [dataset]);
 
   /* ---------------- Render ---------------- */
   return (
-    <div className="mx-auto max-w-7xl px-4">
+    <div className="mx-auto max-w-7xl px-4 pb-10">
       {error && (
-        <p className="mb-6 rounded border border-red-300 bg-red-50 p-3 text-red-700 dark:bg-red-900 dark:text-red-200">
+        <p className="mb-6 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
           {error}
         </p>
       )}
 
       {/* region + provider */}
-      <div className="mb-10 flex flex-wrap items-center gap-4">
-        {(['All', 'USA', 'World'] as const).map((r) => (
-          <button
-            key={r}
-            onClick={() => {
-              setRegion(r);
-              trackEvent('News Region Changed', { region: r });
-            }}
-            className={`rounded-full px-4 py-1 text-sm font-medium transition ${
-              region === r
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
-                : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-            }`}
-          >
-            {r}
-          </button>
-        ))}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="inline-flex overflow-hidden rounded-full border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-950">
+          {(["All", "USA", "World"] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => {
+                setRegion(r);
+                trackEvent("News Region Changed", { region: r });
+              }}
+              className={`px-4 py-2 text-xs font-semibold transition sm:text-sm ${
+                region === r
+                  ? "bg-indigo-600 text-white"
+                  : "bg-transparent text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/5"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
 
         <select
           value={provider}
           onChange={(e) => {
             setProvider(e.target.value);
-            trackEvent('News Provider Changed', { provider: e.target.value });
+            trackEvent("News Provider Changed", { provider: e.target.value });
           }}
-          className="ml-auto rounded border border-gray-300 bg-white px-3 py-1 text-sm dark:border-gray-600 dark:bg-brand-900 dark:text-gray-100"
+          className="ml-auto rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm
+                     dark:border-white/10 dark:bg-brand-950 dark:text-gray-200 sm:text-sm"
         >
           {providers.map((p) => (
             <option key={p}>{p}</option>
@@ -275,101 +326,48 @@ export default function NewsTab() {
         </select>
       </div>
 
-      {/* headline strip with images */}
-      <div className="mb-10 grid gap-1 sm:grid-cols-2 lg:grid-cols-1">
-        {topStrip.map((a, idx) => {
-          const bg   = getDisplayImage(a);
-          const logo = a.source.image ?? `https://logo.clearbit.com/${getDomain(a.url)}`;
-          const onClick = () => trackEvent('Article Clicked', {
-            title  : a.title,
-            url    : a.url,
-            source : a.source.name,
-            strip  : true,
-          });
-          return (
-            <a
-              key={`${a.url}-${idx}`}
-              href={a.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={onClick}
-              className="relative block h-40 overflow-hidden rounded-lg shadow hover:shadow-lg"
-            >
-              {/* background image */}
-               {bg ? (
-    <img
-      src={bg}
-      alt={a.title}
-      referrerPolicy="no-referrer"
-      onError={e => (e.currentTarget.src = LOGO_FALLBACK)}
-      className="absolute inset-0 h-full w-full object-cover"
-    />
-  ) : (
-    <div className="absolute inset-0 flex items-center justify-center …">
-      <span className="text-sm …">No image</span>
-    </div>
-  )}
-              {/* dark gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />
+      {/* HERO */}
+      {hero ? (
+        <HeroCard article={hero} />
+      ) : (
+        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-600 shadow-sm dark:border-white/10 dark:bg-brand-950 dark:text-gray-300">
+          {loading ? "Loading top stories…" : "No stories found."}
+        </div>
+      )}
 
-              {/* headline + meta */}
-              <div className="absolute inset-x-0 bottom-0 z-10 p-3 text-white">
-                <h3 className="line-clamp-2 text-sm font-semibold">{a.title}</h3>
-                <div className="mt-2 flex items-center gap-2 text-xs">
-                  <img
-                    src={logo}
-                    onError={(e) => (e.currentTarget.src = LOGO_FALLBACK)}
-                    alt={a.source.name}
-                    className="h-4 w-4 flex-shrink-0 object-contain"
-                  />
-                  <span className="truncate max-w-[90px]">{a.source.name}</span>
-                  {/* <span className="opacity-70">•</span>
-                  <time dateTime={a.publishedAt} className="opacity-70">
-                    {new Date(a.publishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </time> */}
-                </div>
-              </div>
-            </a>
-          );
-        })}
-      </div>
-
-      {/* masonry-style dynamic grid */}
+      {/* grid */}
       <div
-  className={`
-    grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1
-    grid-flow-row-dense    
-    transition-opacity duration-300
-    ${fade ? 'opacity-0' : 'opacity-100'}
-  `}
->
-  {pageNews.map((a, idx) => {
-    const img = getDisplayImage(a);
+        className={`
+          mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3
+          transition-opacity duration-200
+          ${fade ? "opacity-0" : "opacity-100"}
+        `}
+      >
+        {loading && articles.length === 0
+          ? Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)
+          : pageNews.map((a, idx) => {
+              const img = getDisplayImage(a);
+              let spanClass = "col-span-1";
+              if (img) {
+                if (idx % 12 === 0) spanClass = "lg:col-span-2";
+                else if (idx % 7 === 0) spanClass = "sm:col-span-2";
+              }
 
-    /* -------------------------------------------------
-       Variable width (only columns, let row height auto)
-       ------------------------------------------------- */
-    let spanClass = 'col-span-1';
-    if (img) {
-      if (idx % 10 === 0)      spanClass = 'lg:col-span-3 sm:col-span-2';
-      else if (idx % 5 === 0)  spanClass = 'sm:col-span-2';
-    }
-
-    return (
-      <div key={`${a.url}-${idx}`} className={spanClass}>
-        <ArticleCard article={a} />
+              return (
+                <div key={stableKey(a)} className={spanClass}>
+                  <ArticleCard article={a} />
+                </div>
+              );
+            })}
       </div>
-    );
-  })}
-</div>
 
       {/* pagination */}
       <Pagination
-        page={page}
+        page={safePage}
         totalPages={totalPages}
         loading={loading}
-        onPrev={() => changePage(page - 1)}
-        onNext={() => changePage(page + 1)}
+        onPrev={() => changePage(safePage - 1)}
+        onNext={() => changePage(safePage + 1)}
       />
     </div>
   );
@@ -378,6 +376,7 @@ export default function NewsTab() {
 /* =================================================================== */
 /*  Sub-components                                                     */
 /* =================================================================== */
+
 function Pagination({
   page,
   totalPages,
@@ -392,47 +391,113 @@ function Pagination({
   onNext: () => void;
 }) {
   return (
-    <div className="mt-12 flex flex-col items-center gap-6 pb-10">
-      <div className="flex gap-6">
+    <div className="mt-10 flex flex-col items-center gap-4">
+      <div className="flex items-center gap-3">
         <button
           disabled={page === 1 || loading}
           onClick={onPrev}
-          className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-2 text-white disabled:opacity-40"
+          className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 disabled:opacity-40
+                     dark:bg-white/10 dark:hover:bg-white/15"
         >
           Previous
         </button>
+
         <button
-          disabled={(page === totalPages && !loading) || loading}
+          disabled={page === totalPages || loading}
           onClick={onNext}
-          className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-2 text-white disabled:opacity-40"
+          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-40"
         >
           Next
         </button>
       </div>
-      <span className="text-sm text-gray-700 dark:text-gray-300">
-        Page {page} / {totalPages}
-      </span>
-      {loading && (
-        <p className="animate-pulse text-gray-500 dark:text-gray-400">Loading…</p>
-      )}
+
+      <div className="text-xs text-gray-600 dark:text-gray-300">
+        Page <span className="font-semibold">{page}</span> / {totalPages}
+        {loading && <span className="ml-2 animate-pulse text-gray-500">Loading…</span>}
+      </div>
     </div>
   );
 }
 
-/* ---------------- ArticleCard ---------------- */
-function ArticleCard({ article }: { article: Article }) {
-  const img  = getDisplayImage(article);
-  const logo = article.source.image ?? `https://logo.clearbit.com/${getDomain(article.url)}`;
+function HeroCard({ article }: { article: Article }) {
+  const bg = getDisplayImage(article);
+  const domain = getDomain(article.url);
+  const logo = article.source.image ?? `https://logo.clearbit.com/${domain}`;
 
-  const handleClick = () =>
-    trackEvent('Article Clicked', {
-      title  : article.title,
-      url    : article.url,
-      source : article.source.name,
-      strip  : false,
+  const onClick = () =>
+    trackEvent("Article Clicked", {
+      title: article.title,
+      url: article.url,
+      source: article.source.name,
+      strip: true,
     });
 
-  /* background-image card when we have one */
+  return (
+    <a
+      href={article.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={onClick}
+      className="group relative block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm
+                 hover:shadow-md dark:border-white/10 dark:bg-brand-950"
+    >
+      <div className="relative h-52 sm:h-64">
+        {bg ? (
+          <img
+            src={bg}
+            alt={article.title}
+            referrerPolicy="no-referrer"
+            onError={(e) => (e.currentTarget.src = LOGO_FALLBACK)}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-white/5">
+            <span className="text-sm text-gray-500">No image</span>
+          </div>
+        )}
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/0" />
+
+        <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+          <h3 className="line-clamp-2 text-base font-semibold leading-snug sm:text-lg">
+            {article.title}
+          </h3>
+
+          <div className="mt-2 flex items-center gap-2 text-xs">
+            <img
+              src={logo}
+              onError={(e) => (e.currentTarget.src = LOGO_FALLBACK)}
+              alt={article.source.name}
+              className="h-4 w-4 flex-shrink-0 rounded bg-white/10 object-contain"
+            />
+            <span className="max-w-[160px] truncate">{article.source.name || domain}</span>
+            <span className="opacity-70">•</span>
+            <time dateTime={article.publishedAt} className="opacity-80">
+              {new Date(article.publishedAt).toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
+            </time>
+          </div>
+        </div>
+      </div>
+    </a>
+  );
+}
+
+function ArticleCard({ article }: { article: Article }) {
+  const img = getDisplayImage(article);
+  const domain = getDomain(article.url);
+  const logo = article.source.image ?? `https://logo.clearbit.com/${domain}`;
+
+  const handleClick = () =>
+    trackEvent("Article Clicked", {
+      title: article.title,
+      url: article.url,
+      source: article.source.name,
+      strip: false,
+    });
+
   if (img) {
     return (
       <a
@@ -440,59 +505,44 @@ function ArticleCard({ article }: { article: Article }) {
         target="_blank"
         rel="noopener noreferrer"
         onClick={handleClick}
-        className="inline-block w-full break-inside-avoid overflow-hidden rounded-lg shadow hover:shadow-lg"
+        className="group block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md
+                   dark:border-white/10 dark:bg-brand-950"
       >
-        <div
-          className="relative h-48 w-full bg-cover bg-center"
-          style={{ backgroundImage: `url('${img}')` }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/0" />
-          <div className="absolute bottom-0 z-10 flex flex-col gap-2 p-4 text-white">
-            <h3 className="line-clamp-3 text-sm font-semibold leading-snug">
-              {article.title}
-            </h3>
-            <div className="flex items-center gap-2 text-xs">
-              <img
-                src={logo}
-                onError={(e) => (e.currentTarget.src = LOGO_FALLBACK)}
-                alt={article.source.name}
-                className="h-4 w-4 object-contain"
-              />
-              <span className="truncate max-w-[100px]">{article.source.name}</span>
-              <span className="opacity-70">•</span>
-              <time
-                dateTime={article.publishedAt}
-                className="opacity-70 whitespace-nowrap"
-              >
-                {new Date(article.publishedAt).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day  : 'numeric',
-                })}
-              </time>
-            </div>
+        <div className="relative h-44">
+          <img
+            src={img}
+            alt={article.title}
+            referrerPolicy="no-referrer"
+            onError={(e) => (e.currentTarget.src = LOGO_FALLBACK)}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/0" />
+          <div className="absolute bottom-0 p-3 text-white">
+            <h3 className="line-clamp-3 text-sm font-semibold leading-snug">{article.title}</h3>
+            <MetaLine article={article} logo={logo} light />
           </div>
         </div>
       </a>
     );
   }
 
-  /* original no-image fallback card */
   return (
     <a
       href={article.url}
       target="_blank"
       rel="noopener noreferrer"
       onClick={handleClick}
-      className="inline-block w-full break-inside-avoid overflow-hidden rounded-lg bg-white shadow hover:shadow-lg dark:bg-brand-950"
+      className="group block overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md
+                 dark:border-white/10 dark:bg-brand-950"
     >
-      <div className="flex flex-col gap-2 p-4">
-        <h3 className="line-clamp-3 text-base font-semibold leading-snug text-gray-800 dark:text-gray-100">
-          {article.title}
-        </h3>
-        <p className="line-clamp-3 text-sm text-gray-600 dark:text-gray-400">
-          {article.description}
-        </p>
-        <MetaLine article={article} small />
+      <h3 className="line-clamp-3 text-sm font-semibold leading-snug text-gray-900 dark:text-white">
+        {article.title}
+      </h3>
+      <p className="mt-2 line-clamp-3 text-sm text-gray-600 dark:text-gray-400">
+        {article.description}
+      </p>
+      <div className="mt-3">
+        <MetaLine article={article} logo={logo} />
       </div>
     </a>
   );
@@ -500,33 +550,45 @@ function ArticleCard({ article }: { article: Article }) {
 
 function MetaLine({
   article,
-  small = false,
+  logo,
+  light = false,
 }: {
   article: Article;
-  small?: boolean;
+  logo: string;
+  light?: boolean;
 }) {
-  const logo = article.source.image ?? `https://logo.clearbit.com/${getDomain(article.url)}`;
+  const textClass = light ? "text-white/90" : "text-gray-700 dark:text-gray-300";
+  const subClass = light ? "text-white/70" : "text-gray-500 dark:text-gray-400";
+
   return (
-    <div className={`flex items-center gap-3 ${small ? 'text-xs' : 'text-sm'}`}>
+    <div className={`mt-2 flex items-center gap-2 text-xs ${textClass}`}>
       <img
         src={logo}
         onError={(e) => (e.currentTarget.src = LOGO_FALLBACK)}
         alt={article.source.name}
-        className="h-8 w-8 flex-shrink-0 object-contain"
+        className="h-4 w-4 flex-shrink-0 rounded bg-white/10 object-contain"
       />
-      <span className="truncate max-w-[140px] font-medium text-gray-700 dark:text-gray-300">
-        {article.source.name}
-      </span>
-      <span className="text-gray-400 dark:text-gray-500">•</span>
-      <time
-        dateTime={article.publishedAt}
-        className="whitespace-nowrap text-gray-500 dark:text-gray-400"
-      >
+      <span className="max-w-[140px] truncate font-medium">{article.source.name}</span>
+      <span className={subClass}>•</span>
+      <time dateTime={article.publishedAt} className={`whitespace-nowrap ${subClass}`}>
         {new Date(article.publishedAt).toLocaleDateString(undefined, {
-          month: 'short',
-          day  : 'numeric',
+          month: "short",
+          day: "numeric",
         })}
       </time>
+    </div>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <div className="animate-pulse overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-950">
+      <div className="h-40 bg-gray-100 dark:bg-white/5" />
+      <div className="p-4">
+        <div className="h-3 w-3/4 rounded bg-gray-100 dark:bg-white/5" />
+        <div className="mt-2 h-3 w-2/3 rounded bg-gray-100 dark:bg-white/5" />
+        <div className="mt-4 h-3 w-1/3 rounded bg-gray-100 dark:bg-white/5" />
+      </div>
     </div>
   );
 }

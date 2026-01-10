@@ -1,9 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { Swiper, SwiperSlide } from 'swiper/react';
-import 'swiper/css';
-import { motion } from 'framer-motion';
+import React, { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import {
   WiDaySunny,
   WiCloud,
@@ -12,234 +10,361 @@ import {
   WiRain,
   WiSnow,
   WiThunderstorm,
-} from 'react-icons/wi';
+  WiStrongWind,
+  WiHumidity,
+  WiRaindrops,
+} from "react-icons/wi";
 
-type Weather = {
-  temperature: number;
-  windspeed: number;
-  winddirection: number;
+type CurrentWeather = {
+  temperature: number; // °C
+  windspeed: number; // km/h
+  winddirection: number; // degrees
   weathercode: number;
+  time: string; // ISO
 };
 
 type ForecastDay = {
-  date: string;
-  temperature_max: number;
-  temperature_min: number;
+  date: string; // YYYY-MM-DD
+  temperature_max: number; // °C
+  temperature_min: number; // °C
   weathercode: number;
 };
 
-const getWeatherInfo = (code: number) => {
-  if (code === 0) return { description: 'Clear Sky', Icon: WiDaySunny };
-  if ([1, 2, 3].includes(code)) return { description: 'Partly Cloudy', Icon: WiCloud };
-  if ([45, 48].includes(code)) return { description: 'Foggy', Icon: WiFog };
-  if ([51, 53, 55].includes(code)) return { description: 'Drizzle', Icon: WiSprinkle };
-  if ([61, 63, 65, 80, 81, 82].includes(code)) return { description: 'Rain', Icon: WiRain };
-  if ([66, 67].includes(code)) return { description: 'Freezing Rain', Icon: WiRain };
-  if ([71, 73, 75, 77, 85, 86].includes(code)) return { description: 'Snow', Icon: WiSnow };
-  if ([95, 96, 99].includes(code)) return { description: 'Thunderstorm', Icon: WiThunderstorm };
-  return { description: 'Unknown', Icon: WiDaySunny };
+type HourPoint = {
+  time: string; // ISO
+  temperature: number; // °C
+  weathercode: number;
+  pop?: number; // %
 };
 
-const getColorClass = (code: number) => {
-  if (code === 0) return 'text-yellow-500';
-  if ([1, 2, 3].includes(code)) return 'text-gray-500';
-  if ([45, 48].includes(code)) return 'text-gray-400';
-  if ([51, 53, 55].includes(code)) return 'text-blue-400';
-  if ([61, 63, 65, 80, 81, 82].includes(code)) return 'text-blue-600';
-  if ([66, 67].includes(code)) return 'text-blue-600';
-  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'text-blue-300';
-  if ([95, 96, 99].includes(code)) return 'text-purple-700';
-  return 'text-gray-500';
-};
-
-const getBgClass = (code: number) => {
-  if (code === 0) return 'bg-yellow-100 ';
-  if ([1, 2, 3].includes(code)) return 'bg-gray-200';
-  if ([45, 48].includes(code)) return 'bg-gray-300 ';
-  if ([51, 53, 55].includes(code)) return 'bg-blue-100 ';
-  if ([61, 63, 65, 80, 81, 82].includes(code)) return 'bg-blue-200 ';
-  if ([66, 67].includes(code)) return 'bg-blue-200';
-  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'bg-blue-50';
-  if ([95, 96, 99].includes(code)) return 'bg-purple-200 ';
-  return 'bg-gray-100 ';
-};
-
-// ensure correct local-day mapping
-const formatDate = (dateString: string) =>
-  new Date(dateString + 'T00:00:00').toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
+const cToF = (c: number) => c * 1.8 + 32;
+const fmtHour = (iso: string) =>
+  new Date(iso).toLocaleTimeString(undefined, { hour: "numeric" });
+const fmtDay = (dateString: string) =>
+  new Date(dateString + "T00:00:00").toLocaleDateString(undefined, {
+    weekday: "short",
   });
 
+const getWeatherInfo = (code: number) => {
+  if (code === 0) return { description: "Clear", Icon: WiDaySunny };
+  if ([1, 2, 3].includes(code)) return { description: "Cloudy", Icon: WiCloud };
+  if ([45, 48].includes(code)) return { description: "Fog", Icon: WiFog };
+  if ([51, 53, 55].includes(code))
+    return { description: "Drizzle", Icon: WiSprinkle };
+  if ([61, 63, 65, 80, 81, 82].includes(code))
+    return { description: "Rain", Icon: WiRain };
+  if ([66, 67].includes(code))
+    return { description: "Freezing Rain", Icon: WiRain };
+  if ([71, 73, 75, 77, 85, 86].includes(code))
+    return { description: "Snow", Icon: WiSnow };
+  if ([95, 96, 99].includes(code))
+    return { description: "Storm", Icon: WiThunderstorm };
+  return { description: "Weather", Icon: WiDaySunny };
+};
+
+const bgFor = (code: number) => {
+  if (code === 0) return "bg-gradient-to-br from-sky-500 to-amber-300";
+  if ([1, 2, 3].includes(code))
+    return "bg-gradient-to-br from-slate-600 to-sky-400";
+  if ([45, 48].includes(code))
+    return "bg-gradient-to-br from-gray-600 to-slate-400";
+  if ([51, 53, 55].includes(code))
+    return "bg-gradient-to-br from-sky-700 to-blue-400";
+  if ([61, 63, 65, 80, 81, 82, 66, 67].includes(code))
+    return "bg-gradient-to-br from-blue-900 to-sky-500";
+  if ([71, 73, 75, 77, 85, 86].includes(code))
+    return "bg-gradient-to-br from-indigo-900 to-sky-300";
+  if ([95, 96, 99].includes(code))
+    return "bg-gradient-to-br from-purple-900 to-slate-700";
+  return "bg-gradient-to-br from-slate-700 to-slate-500";
+};
+
+function MiniStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-white backdrop-blur">
+      <span className="text-2xl">{icon}</span>
+      <div className="leading-tight">
+        <div className="text-[10px] opacity-80">{label}</div>
+        <div className="text-sm font-semibold">{value}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function WidgetWeather() {
-  const [weather, setWeather] = useState<Weather | null>(null);
-  const [forecast, setForecast] = useState<ForecastDay[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [location, setLocation] = useState<string>('');
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const [locationLabel, setLocationLabel] = useState("Your Location");
+  const [current, setCurrent] = useState<CurrentWeather | null>(null);
+  const [forecast, setForecast] = useState<ForecastDay[]>([]);
+  const [hourly, setHourly] = useState<HourPoint[]>([]);
+  const [meta, setMeta] = useState<{ humidity?: number; pop?: number }>({});
 
+  const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    fetch('https://ipapi.co/json/')
-      .then(res => res.json())
-      .then(data => setLocation(`${data.city}, ${data.region}`))
-      .catch(() => setLocation(''));
+    const t = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(t);
   }, []);
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      setError('Geolocation not supported');
+      setError("Geolocation not supported");
       setLoading(false);
       return;
     }
+
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude}&longitude=${coords.longitude}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`
-        )
-          .then(res => res.json())
-          .then(data => {
-            setWeather(data.current_weather);
+      async ({ coords }) => {
+        try {
+          const { latitude, longitude } = coords;
 
-            // Use your corrected upcoming logic:
-            const todayStr = new Date().toISOString().split('T')[0];
-            const upcoming: ForecastDay[] = data.daily.time
-              .map((date: string, idx: number) => ({ date, idx }))
-              .filter((d: { date: string; idx: number }) => d.date >= todayStr)
-              .slice(0, 5)
-              .map((d: { date: string; idx: number }) => ({
-                date: d.date,
-                temperature_max: data.daily.temperature_2m_max[d.idx],
-                temperature_min: data.daily.temperature_2m_min[d.idx],
-                weathercode: data.daily.weathercode[d.idx],
-              }));
+          // nice label (optional)
+          try {
+            const geo = await fetch(
+              `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${latitude}&longitude=${longitude}&language=en&format=json`,
+            ).then((r) => r.json());
+            const place = geo?.results?.[0];
+            if (place?.name) {
+              const region = place?.admin1 ? `, ${place.admin1}` : "";
+              setLocationLabel(`${place.name}${region}`);
+            }
+          } catch {
+            /* ignore */
+          }
 
-            setForecast(upcoming);
-            setLoading(false);
-          })
-          .catch(() => {
-            setError('Failed to fetch weather');
-            setLoading(false);
+          const res = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}` +
+              `&current_weather=true` +
+              `&hourly=temperature_2m,weathercode,precipitation_probability,relativehumidity_2m` +
+              `&daily=weathercode,temperature_2m_max,temperature_2m_min` +
+              `&timezone=auto`,
+          );
+          const data = await res.json();
+
+          const cw: CurrentWeather | null = data?.current_weather ?? null;
+          setCurrent(cw);
+
+          const todayStr = new Date().toISOString().split("T")[0];
+          const days: ForecastDay[] = (data?.daily?.time || [])
+            .map((date: string, idx: number) => ({ date, idx }))
+            .filter((d: any) => d.date >= todayStr)
+            .slice(0, 5)
+            .map((d: any) => ({
+              date: d.date,
+              temperature_max: data.daily.temperature_2m_max[d.idx],
+              temperature_min: data.daily.temperature_2m_min[d.idx],
+              weathercode: data.daily.weathercode[d.idx],
+            }));
+          setForecast(days);
+
+          // next 6 hours
+          const times: string[] = data?.hourly?.time || [];
+          const temps: number[] = data?.hourly?.temperature_2m || [];
+          const codes: number[] = data?.hourly?.weathercode || [];
+          const pops: number[] = data?.hourly?.precipitation_probability || [];
+          const hums: number[] = data?.hourly?.relativehumidity_2m || [];
+
+          const nowMs = Date.now();
+          let startIdx = 0;
+          for (let i = 0; i < times.length; i++) {
+            if (new Date(times[i]).getTime() >= nowMs) {
+              startIdx = i;
+              break;
+            }
+          }
+
+          const hrs: HourPoint[] = [];
+          for (let i = startIdx; i < Math.min(startIdx + 6, times.length); i++) {
+            hrs.push({
+              time: times[i],
+              temperature: temps[i],
+              weathercode: codes[i],
+              pop: pops?.[i],
+            });
+          }
+          setHourly(hrs);
+
+          setMeta({
+            pop: pops?.[startIdx],
+            humidity: hums?.[startIdx],
           });
+
+          setLoading(false);
+        } catch (e) {
+          console.error(e);
+          setError("Failed to fetch weather");
+          setLoading(false);
+        }
       },
       () => {
-        setError('Unable to retrieve location');
+        setError("Unable to retrieve location");
         setLoading(false);
-      }
+      },
+      { enableHighAccuracy: true, timeout: 10_000 },
     );
   }, []);
 
-  const containerBg = 'dark:bg-brand-900';
-  const primary = weather ? getColorClass(weather.weathercode) : 'text-gray-500';
-  const borderClass = primary.replace('text', 'border');
-
   const viewMore = (
-    <div className="p-2">
-    <p className="text-xs text-gray-500 text-center">
-      More weather {" "}
-      <a href="/Weather" className="text-indigo-500 underline">
-        here
-      </a>
-      
-    </p>
-  </div>
+    <div className="p-2 bg-black/20">
+      <p className="text-xs text-center text-white/80">
+        More weather{" "}
+        <a href="/Weather" className="underline text-white">
+          here
+        </a>
+      </p>
+    </div>
   );
 
   if (loading) {
     return (
-      <div className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto  ${containerBg} ${borderClass}`}>
-        <div className="text-center py-8 text-gray-500">Loading weather...</div>
+      <div className="max-w-md mx-auto rounded-2xl overflow-hidden shadow-lg bg-slate-900">
+        <div className="p-5 text-white/70">Loading weather…</div>
         {viewMore}
       </div>
     );
   }
 
-  if (error || !weather) {
+  if (error || !current) {
     return (
-      <div className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto ${containerBg} ${borderClass}`}>
-        <div className="text-center py-8 text-red-500">{error}</div>
+      <div className="max-w-md mx-auto rounded-2xl overflow-hidden shadow-lg bg-slate-900">
+        <div className="p-5 text-red-300 text-center">{error || "No data"}</div>
         {viewMore}
       </div>
     );
   }
 
-  const { description, Icon } = getWeatherInfo(weather.weathercode);
+  const { description, Icon } = getWeatherInfo(current.weathercode);
+  const bg = bgFor(current.weathercode);
+
+  const hi = forecast?.[0]?.temperature_max;
+  const lo = forecast?.[0]?.temperature_min;
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.5 }}
-      className={`rounded-2xl shadow-lg p-6 max-w-md mx-auto bg-white dark:bg-brand-950 ${containerBg} ${borderClass}`}
+      initial={{ opacity: 0, scale: 0.985, y: 6 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className={`max-w-md mx-auto rounded-2xl overflow-hidden shadow-lg ${bg}`}
     >
-      <div className="justify-between items-center mb-2">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-          {location || 'Your Location'}
-        </h2>
-        <span className="text-sm text-gray-500 dark:text-gray-200">
-          {currentTime.toLocaleTimeString()}
-        </span>
-      </div>
-
-      <div className="flex justify-between items-center mb-6">
-        <div className={`text-6xl ${primary}`}>
-          <Icon />
+      <div className="p-5 text-white">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-sm font-semibold">{locationLabel}</div>
+            <div className="text-xs opacity-80">
+              {now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+            </div>
+          </div>
+          <div className="text-right text-xs opacity-85">{description}</div>
         </div>
-        <div className="ml-4 text-gray-900 dark:text-gray-100">
-          <p className="text-xl font-medium">{description}</p>
-          <p className="text-lg">
-            {weather.temperature}°C / {(weather.temperature * 1.8 + 32).toFixed(1)}°F
-          </p>
-          <p className="text-sm">Wind: {weather.windspeed} km/h</p>
+
+        {/* Current */}
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="text-5xl drop-shadow">
+              <Icon />
+            </div>
+            <div>
+              <div className="text-4xl font-extrabold leading-none">
+                {Math.round(cToF(current.temperature))}°
+              </div>
+              <div className="text-xs opacity-85">
+                H {hi != null ? `${Math.round(cToF(hi))}°` : "—"} • L{" "}
+                {lo != null ? `${Math.round(cToF(lo))}°` : "—"}
+              </div>
+            </div>
+          </div>
+
+          <div className="text-right text-xs opacity-85">
+            Wind {Math.round(current.windspeed)} km/h
+          </div>
         </div>
-      </div>
 
-      <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
-        5-Day Forecast
-      </h3>
-      <Swiper
-        spaceBetween={10}
-        slidesPerView={2}
-        breakpoints={{
-          320: { slidesPerView: 2 },
-          640: { slidesPerView: 2 },
-          1024: { slidesPerView: 2 },
-        }}
-      >
-        {forecast?.map((day, idx) => {
-          const { description: dayDesc, Icon: DayIcon } = getWeatherInfo(day.weathercode);
-          const bgClass = getBgClass(day.weathercode);
-          const dayColor = getColorClass(day.weathercode);
+        {/* Mini stats */}
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <MiniStat
+            icon={<WiRaindrops />}
+            label="Precip"
+            value={
+              meta.pop != null && Number.isFinite(meta.pop)
+                ? `${Math.round(meta.pop)}%`
+                : "—"
+            }
+          />
+          <MiniStat
+            icon={<WiHumidity />}
+            label="Humidity"
+            value={
+              meta.humidity != null && Number.isFinite(meta.humidity)
+                ? `${Math.round(meta.humidity)}%`
+                : "—"
+            }
+          />
+          <MiniStat
+            icon={<WiStrongWind />}
+            label="Dir"
+            value={`${Math.round(current.winddirection)}°`}
+          />
+        </div>
 
-          return (
-            <SwiperSlide key={day.date}>
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                className={`p-4 rounded-xl shadow-sm text-center flex flex-col justify-between h-52 w-30 ${bgClass}`}
-              >
-                <p className="text-sm font-medium text-gray-900 ">
-                  {formatDate(day.date)}
-                </p>
-                <div className={`my-2 text-4xl ${dayColor}`}>
-                  <DayIcon />
+        {/* Hourly */}
+        <div className="mt-4">
+          <div className="text-sm font-semibold mb-2">Next hours</div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {hourly.map((h) => {
+              const { Icon: HIcon } = getWeatherInfo(h.weathercode);
+              return (
+                <div
+                  key={h.time}
+                  className="min-w-[64px] rounded-xl bg-white/15 backdrop-blur px-2 py-2 text-center"
+                >
+                  <div className="text-[10px] opacity-80">{fmtHour(h.time)}</div>
+                  <div className="text-2xl my-1">
+                    <HIcon />
+                  </div>
+                  <div className="text-sm font-semibold">
+                    {Math.round(cToF(h.temperature))}°
+                  </div>
                 </div>
-                <p className="text-sm text-gray-900 ">{dayDesc}</p>
-                <p className="text-xs mt-1 text-gray-900 ">
-                  H {day.temperature_max}°C &nbsp;L {day.temperature_min}°C
-                </p>
-              </motion.div>
-            </SwiperSlide>
-          );
-        })}
-      </Swiper>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 5-day compact list */}
+        <div className="mt-4 space-y-2">
+          {forecast.map((d) => {
+            const { Icon: DIcon } = getWeatherInfo(d.weathercode);
+            return (
+              <div
+                key={d.date}
+                className="flex items-center justify-between rounded-xl bg-white/10 px-3 py-2"
+              >
+                <div className="w-10 text-sm font-semibold">{fmtDay(d.date)}</div>
+                <div className="text-2xl opacity-95">
+                  <DIcon />
+                </div>
+                <div className="text-sm font-semibold">
+                  {Math.round(cToF(d.temperature_max))}°
+                  <span className="opacity-70 font-normal">
+                    {" "}
+                    / {Math.round(cToF(d.temperature_min))}°
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {viewMore}
     </motion.div>

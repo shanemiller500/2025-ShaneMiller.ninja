@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { motion, type Variants } from 'framer-motion';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
+import { motion, type Variants } from "framer-motion";
 
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                   */
@@ -10,18 +10,35 @@ import { motion, type Variants } from 'framer-motion';
 
 interface NewsItem {
   articleId?: string;
-  headline  : string;
-  source    : string;
+  headline: string;
+  source: string;
   publishedAt: string;
-  link      : string;
+  link: string;
   sourceImage?: string;
 }
 
 const LOGO_FALLBACK =
   'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
 
+const clamp2 = (s: string) => (s?.length > 160 ? s.slice(0, 157) + "…" : s);
+
+const timeAgo = (iso: string) => {
+  const d = new Date(iso);
+  const t = d.getTime();
+  if (!Number.isFinite(t)) return "";
+  const diff = Date.now() - t;
+  const s = Math.max(0, Math.floor(diff / 1000));
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  return `${days}d ago`;
+};
+
 /* ------------------------------------------------------------------ */
-/*  Animation variants                                                */
+/*  Animations                                                       */
 /* ------------------------------------------------------------------ */
 
 const fadeIn: Variants = {
@@ -29,124 +46,280 @@ const fadeIn: Variants = {
   visible: (i = 1) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.05, duration: 0.4, ease: 'easeOut' },
+    transition: { delay: i * 0.05, duration: 0.35, ease: "easeOut" },
   }),
 };
 
+const shimmer: Variants = {
+  hidden: { opacity: 0.6 },
+  visible: {
+    opacity: 1,
+    transition: { duration: 0.8, repeat: Infinity, repeatType: "mirror" },
+  },
+};
+
+function SkeletonRow() {
+  return (
+    <motion.div
+      variants={shimmer}
+      initial="hidden"
+      animate="visible"
+      className="rounded-xl border border-white/10 bg-white/5 p-3"
+    >
+      <div className="flex items-start gap-3">
+        <div className="h-8 w-8 rounded-full bg-white/10" />
+        <div className="flex-1">
+          <div className="h-3 w-11/12 rounded bg-white/10" />
+          <div className="mt-2 h-3 w-9/12 rounded bg-white/10" />
+          <div className="mt-3 h-2 w-5/12 rounded bg-white/10" />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                        */
+/* ------------------------------------------------------------------ */
+
 const WidgetNews: React.FC = () => {
-  const [news,    setNews   ] = useState<NewsItem[]>([]);
-  const [errorMsg,setError  ] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [errorMsg, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchNews = async (showSpinner = false) => {
-    if (showSpinner) setLoading(true);
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
+
+    if (showSpinner) setRefreshing(true);
+    setError("");
+
     try {
       const { data } = await axios.get<{ results: NewsItem[] }>(
-        'https://u-mail.co/api/NewsAPI/breaking-news'
+        "https://u-mail.co/api/NewsAPI/breaking-news",
+        { signal: abortRef.current.signal as any },
       );
-      const items = data.results.map((item, i) => ({
-        ...item,
-        articleId: item.articleId || `${i}-${item.headline}`,
-      }));
+
+      const items = (data?.results || [])
+        .filter((x) => x?.headline && x?.link)
+        .map((item, i) => ({
+          ...item,
+          articleId: item.articleId || `${i}-${item.headline}`,
+        }));
+
       setNews(items);
     } catch (err: any) {
-      console.error('Error fetching breaking news:', err);
-      setError('Failed to load breaking news.');
+      if (axios.isCancel?.(err) || err?.name === "CanceledError") return;
+      console.error("Error fetching breaking news:", err);
+      setError("Failed to load breaking news.");
     } finally {
-      if (showSpinner) setLoading(false);
+      setLoading(false);
+      if (showSpinner) setRefreshing(false);
     }
   };
 
-  useEffect(() => { fetchNews(); }, []);
+  useEffect(() => {
+    fetchNews(false);
+    return () => abortRef.current?.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  /* ------------------------------------------------------------------ */
+  // keep "time ago" labels fresh without re-fetching
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => forceTick((n) => n + 1), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  const topStory = news[0] ?? null;
+  const rest = useMemo(() => news.slice(1, 7), [news]);
+
   return (
-    <div className="relative rounded-lg bg-white dark:bg-brand-950 p-5 overflow-hidden rounded shadow ">
-      {/* overlay spinner */}
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/50">
-          <svg className="animate-spin h-8 w-8 text-white" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-          </svg>
+    <div className="relative overflow-hidden rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white dark:bg-brand-950 shadow-sm">
+      {/* top glow */}
+      <div className="pointer-events-none absolute -top-24 left-1/2 h-48 w-[520px] -translate-x-1/2 rounded-full bg-indigo-500/20 blur-3xl" />
+
+      {/* header */}
+      <div className="relative px-5 pt-5 pb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full bg-yellow-300/90 px-3 py-1 text-[11px] font-semibold text-brand-900 shadow-sm">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-70" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                </span>
+                Breaking News
+              </span>
+              {news.length > 0 && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {news.length} stories
+                </span>
+              )}
+            </div>
+
+           
+          </div>
+
+          {/* refresh */}
+          <button
+            onClick={() => fetchNews(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 px-3 py-2 text-xs font-semibold text-gray-800 dark:text-white hover:bg-white dark:hover:bg-white/10 transition"
+            title="Refresh News"
+          >
+            <svg
+              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582A8 8 0 003 12a8 8 0 008 8 8 8 0 007.418-4.582M15 11V4l4 4m-4-4l-4 4"
+              />
+            </svg>
+            Refresh
+          </button>
         </div>
-      )}
-
-      {/* flashing banner */}
-      <div className="absolute top-0 left-0 right-0 bg-yellow-400 text-brand-900 text-center py-1 z-20 animate-pulse">
-        Breaking&nbsp;News
       </div>
 
-      {/* refresh button */}
-      <div className="absolute top-0 right-0 p-2 z-20">
-        <button
-          onClick={() => fetchNews(true)}
-          className="p-1 hover:text-gray-200 text-brand-900 rounded"
-          title="Refresh News"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M4 4v5h.582A8 8 0 003 12a8 8 0 008 8 8 8 0 007.418-4.582M15 11V4l4 4m-4-4l-4 4"/>
-          </svg>
-        </button>
-      </div>
-
-      {/* news list */}
-      <div className="mt-8 space-y-2">
+      {/* content */}
+      <div className="px-5 pb-4">
         {errorMsg ? (
-          <p>{errorMsg}</p>
+          <div className="rounded-2xl border border-red-200/60 bg-red-50 p-4 text-sm text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
+            {errorMsg}
+            <div className="mt-3">
+              <button
+                onClick={() => fetchNews(true)}
+                className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 transition"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        ) : loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonRow key={i} />
+            ))}
+          </div>
         ) : news.length ? (
           <>
-            <ul>
-              {news.map((item, idx) => (
+            {/* top story */}
+            {topStory && (
+              <motion.a
+                href={topStory.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group block rounded-2xl border border-gray-200/70 dark:border-white/10 bg-gradient-to-br from-gray-50 to-white dark:from-white/5 dark:to-white/0 p-4 hover:shadow-md transition"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ scale: 1.01 }}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/10">
+                    <img
+                      src={topStory.sourceImage || LOGO_FALLBACK}
+                      alt={topStory.source}
+                      className="h-full w-full object-contain p-1.5"
+                      loading="lazy"
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                        {topStory.source}
+                        <span className="mx-2 opacity-50">•</span>
+                        <span className="font-medium opacity-80">
+                          {timeAgo(topStory.publishedAt)}
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-300 opacity-0 group-hover:opacity-100 transition">
+                        Top story →
+                      </span>
+                    </div>
+
+                    <div className="mt-1 text-sm font-bold text-gray-900 dark:text-white leading-snug">
+                      {topStory.headline}
+                    </div>
+
+                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {new Date(topStory.publishedAt).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              </motion.a>
+            )}
+
+            {/* list */}
+            <ul className="mt-3 space-y-2">
+              {rest.map((item, idx) => (
                 <motion.li
                   key={item.articleId!}
                   custom={idx}
                   variants={fadeIn}
                   initial="hidden"
                   animate="visible"
-                  whileHover={{
-                    scale   : 1.02,
-                    y       : -2,
-                    boxShadow:
-                      '0 6px 14px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.08)',
-                  }}
-                  className="bg-gray-50 dark:bg-brand-900/20 rounded-md px-3 py-2 transition-colors"
+                  className="rounded-xl border border-gray-200/70 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition"
                 >
                   <a
                     href={item.link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-start space-x-3 hover:underline"
+                    className="flex items-start gap-3 px-3 py-3"
                   >
-                    <img
-                      src={item.sourceImage || LOGO_FALLBACK}
-                      alt={item.source}
-                      className="w-6 h-6 object-contain mt-0.5 flex-shrink-0"
-                      loading="lazy"
-                    />
-                    <div>
-                      <h4 className="font-medium leading-snug">{item.headline}</h4>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">
-                        {item.source} &mdash;{' '}
-                        {new Date(item.publishedAt).toLocaleString()}
-                      </p>
+                    <div className="relative mt-0.5 h-8 w-8 shrink-0 overflow-hidden rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/10">
+                      <img
+                        src={item.sourceImage || LOGO_FALLBACK}
+                        alt={item.source}
+                        className="h-full w-full object-contain p-1.5"
+                        loading="lazy"
+                      />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">
+                        {clamp2(item.headline)}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        {item.source}
+                        <span className="mx-2 opacity-50">•</span>
+                        {timeAgo(item.publishedAt)}
+                      </div>
                     </div>
                   </a>
                 </motion.li>
               ))}
             </ul>
 
-            <div className="pt-3">
-              <p className="text-xs text-gray-500 text-center">
-                Read more News&nbsp;
-                <a href="/news" className="text-indigo-500 underline">here</a>
+            {/* footer */}
+            <div className="pt-4">
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                Read more news{" "}
+                <a href="/news" className="text-indigo-600 dark:text-indigo-300 underline">
+                  here
+                </a>
               </p>
             </div>
           </>
         ) : (
-          <p>Loading breaking news...</p>
+          <div className="rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 text-center text-sm text-gray-600 dark:text-gray-300">
+            No headlines right now.
+            <div className="mt-3">
+              <button
+                onClick={() => fetchNews(true)}
+                className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

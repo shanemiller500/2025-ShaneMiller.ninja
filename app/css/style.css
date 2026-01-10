@@ -91,4 +91,5 @@
     0%, 100% { transform: rotate(-5deg); }
     50% { transform: rotate(5deg); }
   }
-  
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
