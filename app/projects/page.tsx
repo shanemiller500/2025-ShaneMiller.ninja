@@ -163,6 +163,16 @@ export default function Projects() {
       openSource: false,
     },
 
+{
+  id: 14,
+  icon: Icon5,
+  slug: "https://epstein-library-search.vercel.app/",
+  title: "Epstein Files Library",
+  excerpt:
+    "A searchable library of DOJ, FBI, and House Oversight documents related to Jeffrey Epstein’s criminal case and investigations.",
+  openSource: false,
+},
+
 
   ];
 

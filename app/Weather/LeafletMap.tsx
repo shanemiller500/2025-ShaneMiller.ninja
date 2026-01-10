@@ -1,16 +1,14 @@
-// app/Weather/components/LeafletMap.tsx
-
 "use client";
 
-import React, { useEffect } from 'react';
-import dynamic from 'next/dynamic';
-import 'leaflet/dist/leaflet.css';
-import { Location } from './types';
+import React, { useEffect } from "react";
+import dynamic from "next/dynamic";
+import "leaflet/dist/leaflet.css";
+import { Location } from "./types";
 
 const LeafletMapComponent: React.FC<{ location: Location }> = ({ location }) => {
-  const { MapContainer, TileLayer, Marker, Popup, useMap } = require('react-leaflet');
-  const React = require('react');
-  const { useEffect } = React;
+  // react-leaflet only on client (dynamic wrapper below)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { MapContainer, TileLayer, Marker, Popup, useMap } = require("react-leaflet");
 
   const RecenterMap = ({ lat, lng }: { lat: number; lng: number }) => {
     const map = useMap();
@@ -31,19 +29,19 @@ const LeafletMapComponent: React.FC<{ location: Location }> = ({ location }) => 
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution="&copy; OpenStreetMap contributors"
       />
+
       <Marker position={[location.latitude, location.longitude]}>
         <Popup>
-          {location.name}{location.country ? `, ${location.country}` : ""}
+          {location.name}
+          {location.country ? `, ${location.country}` : ""}
         </Popup>
       </Marker>
+
       <RecenterMap lat={location.latitude} lng={location.longitude} />
     </MapContainer>
   );
 };
 
-const LeafletMap = dynamic(
-  () => Promise.resolve(LeafletMapComponent),
-  { ssr: false }
-);
+const LeafletMap = dynamic(() => Promise.resolve(LeafletMapComponent), { ssr: false });
 
 export default LeafletMap;

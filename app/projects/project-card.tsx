@@ -18,10 +18,14 @@ interface ItemProps {
 }
 
 export default function ProjectCard({ item, onClick }: ItemProps) {
+  const isExternal = item.slug.startsWith("https://");
+
   return (
     <Link
-      href={item.slug}
-      onClick={onClick}
+     href={item.slug}
+  target={isExternal ? "_blank" : undefined}
+  rel={isExternal ? "noopener noreferrer" : undefined}
+  onClick={onClick}
       className="rounded-lg dark:hover:border-indigo-700 transition-color ease-in-out p-5 group dark:bg-brand-950 bg-white shadow-lg hover:shadow-lg dark:hover:shadow-indigo-800"
     >
       <div className="flex flex-col h-full">
