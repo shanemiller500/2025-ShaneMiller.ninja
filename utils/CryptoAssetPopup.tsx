@@ -76,6 +76,21 @@ export default function CryptoAssetPopup({
     if (canvasRef.current) Chart.getChart(canvasRef.current)?.destroy();
   };
 
+  useEffect(() => {
+  // Lock background scroll while modal is open (fixes iOS/Android modal scroll issues)
+  const prevOverflow = document.body.style.overflow;
+  const prevTouchAction = document.body.style.touchAction;
+
+  document.body.style.overflow = "hidden";
+  document.body.style.touchAction = "none";
+
+  return () => {
+    document.body.style.overflow = prevOverflow;
+    document.body.style.touchAction = prevTouchAction;
+  };
+}, []);
+
+
   /* load chart ------------------------------------------------------ */
   useEffect(() => {
     if (!asset) return;
@@ -165,7 +180,7 @@ export default function CryptoAssetPopup({
     value: string;
     color?: string;
   }) => (
-    <div className="flex items-center gap-2 bg-gray-100 p-2 rounded hover:scale-105 transition-transform">
+    <div className="flex items-center gap-2 border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5 p-2 rounded hover:scale-105 transition-transform">
       {icon}
       <div className="flex flex-col">
         <span className="text-[10px] sm:text-xs text-gray-500">{label}</span>
@@ -204,77 +219,122 @@ export default function CryptoAssetPopup({
       ? "text-green-600"
       : "text-red-600";
 
-  return (
-    <AnimatePresence>
+return (
+  <AnimatePresence>
+    <motion.div
+      key="popup-bg"
+      className="fixed inset-0 z-50 bg-black/60 p-3 flex items-center justify-center"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
       <motion.div
-        key="popup-bg"
-        className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3 overflow-y-auto"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
+        key="popup-card"
+        className="relative w-full max-w-sm sm:max-w-md max-h-[90svh] rounded-2xl bg-white dark:bg-brand-900 shadow-xl border border-black/10 dark:border-white/10 overflow-hidden flex flex-col"
+        initial={{ y: 32, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 32, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 300 }}
+        onClick={(e) => e.stopPropagation()}
       >
-        <motion.div
-          key="popup-card"
-          className="relative bg-white dark:bg-brand-900 rounded-lg shadow-lg w-full max-w-sm sm:max-w-md max-h-[90vh] overflow-y-auto px-4 py-5 sm:p-6 hover:scale-[1.02] transition-transform"
-          initial={{ y: 32, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 32, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 300 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* close */}
+        {/* close */}
+        <div className="absolute top-3 right-3 z-10">
           <button
-            className="absolute top-3 right-4 text-indigo-600 hover:text-indigo-800 text-2xl hover:scale-110 transition-transform"
+            type="button"
+            className="h-10 w-10 rounded-full bg-white/80 dark:bg-white/10 backdrop-blur flex items-center justify-center text-gray-700 dark:text-white hover:bg-white dark:hover:bg-white/15 shadow border border-black/5 dark:border-white/10"
             onClick={onClose}
+            aria-label="Close"
           >
-            ×
+            <span className="text-2xl leading-none">×</span>
           </button>
+        </div>
 
+        {/* SCROLL AREA */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-5 sm:p-6">
           {/* header */}
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 pr-10">
             {logo && (
-              <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[3px]">
+              <span className="inline-flex items-center justify-center rounded-full p-[3px] bg-white/80 dark:bg-white/10 border border-black/5 dark:border-white/10 shadow-sm">
                 <img
                   src={logo}
                   alt={asset.symbol}
-                  className="w-6 h-6 sm:w-8 sm:h-8"
+                  className="w-7 h-7 sm:w-9 sm:h-9"
                 />
               </span>
             )}
-            <h3 className="text-lg sm:text-2xl font-bold">{asset.name}</h3>
+            <div className="min-w-0">
+              <h3 className="text-lg sm:text-2xl font-extrabold text-gray-900 dark:text-white truncate">
+                {asset.name}
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-white/70">
+                #{asset.rank} • {asset.symbol.toUpperCase()}
+              </p>
+            </div>
           </div>
-          <p className="text-indigo-600 mb-4 text-sm sm:text-base">
-            #{asset.rank} • {asset.symbol.toUpperCase()}
-          </p>
 
-          {/* timeframe buttons */}
-          <div className="flex gap-2 mb-3">
-            {([
-              ["1", "1D"],
-              ["7", "7D"],
-              ["30", "30D"],
-            ] as const).map(([tf, label]) => (
-              <button
-                key={tf}
-                onClick={() => setTimeframe(tf)}
-                className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                  timeframe === tf
-                    ? "bg-indigo-600 text-white"
-                    : "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          {/* timeframe pills */}
+          <div className="mt-4">
+            <div className="inline-flex w-full sm:w-auto rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.06] p-1">
+              {(
+                [
+                  ["1", "1D"],
+                  ["7", "7D"],
+                  ["30", "30D"],
+                ] as const
+              ).map(([tf, label]) => {
+                const active = timeframe === tf;
+
+                return (
+                  <button
+                    key={tf}
+                    type="button"
+                    onClick={() => setTimeframe(tf)}
+                    aria-pressed={active}
+                    className={`
+                      relative flex-1 sm:flex-none
+                      px-4 py-2 text-xs font-extrabold rounded-xl
+                      transition
+                      focus:outline-none
+                      ${
+                        active
+                          ? "text-indigo-700 dark:text-indigo-200"
+                          : "text-gray-700 dark:text-white/75 hover:text-gray-900 dark:hover:text-white"
+                      }
+                    `}
+                  >
+                    {active && (
+                      <span
+                        className="
+                          absolute inset-0 -z-10 rounded-xl
+                          bg-indigo-600/15 dark:bg-indigo-400/15
+                          ring-1 ring-indigo-600/25 dark:ring-indigo-300/25
+                          shadow-sm
+                        "
+                      />
+                    )}
+                    {!active && (
+                      <span
+                        className="
+                          absolute inset-0 -z-10 rounded-xl
+                          opacity-0 hover:opacity-100 transition
+                          bg-white/70 dark:bg-white/10
+                        "
+                      />
+                    )}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* chart */}
-          <div className="relative w-full h-40 sm:h-48 mb-4">
+          <div className="relative w-full h-44 sm:h-52 mt-4 rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5 overflow-hidden shadow-sm">
             {chartLoading && (
-              <div className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center z-10">
+              <div className="absolute inset-0 bg-white/60 dark:bg-black/40 flex items-center justify-center z-10">
                 <svg
-                  className="w-8 h-8 animate-spin text-indigo-600"
+                  className="w-8 h-8 animate-spin text-indigo-600 dark:text-indigo-300"
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
                   viewBox="0 0 24 24"
@@ -295,47 +355,54 @@ export default function CryptoAssetPopup({
                 </svg>
               </div>
             )}
-            <canvas key={canvasKey} ref={canvasRef} className="w-full h-full" />
+            <div className="h-full w-full p-3">
+              <canvas key={canvasKey} ref={canvasRef} className="w-full h-full" />
+            </div>
           </div>
 
           {/* metrics grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] sm:text-sm">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] sm:text-sm ">
             <Metric
-              icon={<FaDollarSign className="text-indigo-600" />}
+              icon={<FaDollarSign className="text-indigo-600 dark:text-indigo-300" />}
               label="Price"
               value={usd(priceNum)}
               color={priceColor}
             />
             <Metric
-              icon={<FaChartLine className="text-indigo-600" />}
+              icon={<FaChartLine className="text-indigo-600 dark:text-indigo-300" />}
               label={changeLabel}
               value={changeValue}
               color={changeColor}
             />
             <Metric
-              icon={<FaChartPie className="text-indigo-600" />}
+              icon={<FaChartPie className="text-indigo-600 dark:text-indigo-300" />}
               label="Market Cap"
               value={compact(asset.marketCapUsd)}
+              color="text-gray-900 dark:text-white"
             />
             <Metric
-              icon={<FaCoins className="text-indigo-600" />}
+              icon={<FaCoins className="text-indigo-600 dark:text-indigo-300" />}
               label="Volume (24h)"
               value={compact(asset.volumeUsd24Hr)}
+              color="text-gray-900 dark:text-white"
             />
             <Metric
-              icon={<FaDatabase className="text-indigo-600" />}
+              icon={<FaDatabase className="text-indigo-600 dark:text-indigo-300" />}
               label="Supply"
               value={compact(asset.supply)}
+              color="text-gray-900 dark:text-white"
             />
             <Metric
-              icon={<FaWarehouse className="text-indigo-600" />}
+              icon={<FaWarehouse className="text-indigo-600 dark:text-indigo-300" />}
               label="Max Supply"
               value={asset.maxSupply ? compact(asset.maxSupply) : "—"}
+              color="text-gray-900 dark:text-white"
             />
             <Metric
-              icon={<FaGlobeAmericas className="text-indigo-600" />}
+              icon={<FaGlobeAmericas className="text-indigo-600 dark:text-indigo-300" />}
               label="VWAP (24h)"
               value={asset.vwap24Hr ? compact(asset.vwap24Hr) : "—"}
+              color="text-gray-900 dark:text-white"
             />
           </div>
 
@@ -347,22 +414,35 @@ export default function CryptoAssetPopup({
               const href = asset.explorer.includes("://")
                 ? asset.explorer
                 : `https://${asset.explorer}`;
+
               return (
-                <div className="mt-4 text-center text-[11px] sm:text-sm">
+                <div className="mt-5 flex justify-center">
                   <a
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-indigo-600 hover:underline hover:scale-105 transition-transform"
+                    className="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/5 px-4 py-2 text-xs font-extrabold text-indigo-700 dark:text-indigo-200 hover:bg-white dark:hover:bg-white/10 shadow-sm transition"
                   >
-                    <FaLink />
+                    <FaLink className="text-indigo-600 dark:text-indigo-300" />
                     {h}
                   </a>
                 </div>
               );
             })()}
-        </motion.div>
+
+          {/* bottom close (nice on mobile) */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-6 w-full rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.04] dark:bg-white/[0.06] py-3 text-sm font-extrabold text-gray-900 dark:text-white hover:bg-black/[0.06] dark:hover:bg-white/[0.10] shadow-sm transition"
+          >
+            Close
+          </button>
+        </div>
       </motion.div>
-    </AnimatePresence>
-  );
+    </motion.div>
+  </AnimatePresence>
+);
+
+
 }

@@ -215,40 +215,64 @@ const LiveStreamTickerWidget: React.FC = () => {
   useEffect(() => {
     if (!API_TOKEN) return;
 
-    const connect = () => {
+    let stopped = false;
+
+    const safeClose = (sock: WebSocket | null) => {
+      if (!sock) return;
       try {
-        socketRef.current?.close();
+        // Only close if it’s not already closed
+        if (sock.readyState === WebSocket.OPEN || sock.readyState === WebSocket.CONNECTING) {
+          sock.close();
+        }
       } catch {
         /* ignore */
       }
+    };
+
+    const connect = () => {
+      if (stopped) return;
+
+      // Close any previous socket before replacing it
+      safeClose(socketRef.current);
 
       const ws = new WebSocket(`wss://ws.finnhub.io?token=${API_TOKEN}`);
       socketRef.current = ws;
 
       ws.onopen = () => {
+        if (stopped) return;
         setWsConnected(true);
-        SYMBOLS.forEach((s) => ws.send(JSON.stringify({ type: "subscribe", symbol: s })));
+        SYMBOLS.forEach((s) => {
+          try {
+            ws.send(JSON.stringify({ type: "subscribe", symbol: s }));
+          } catch {
+            /* ignore */
+          }
+        });
       };
 
       ws.onclose = () => {
+        if (stopped) return;
         setWsConnected(false);
 
         // reconnect after a short delay (don’t spam)
         if (reconnectRef.current) window.clearTimeout(reconnectRef.current);
-        reconnectRef.current = window.setTimeout(() => connect(), 2500);
+        reconnectRef.current = window.setTimeout(() => {
+          if (!stopped) connect();
+        }, 2500);
       };
 
       ws.onerror = (e) => {
+        if (stopped) return;
         setWsConnected(false);
         console.error("WebSocket error:", e);
-        try {
-          ws.close();
-        } catch {
-          /* ignore */
-        }
+
+        // Don’t call ws.close() blindly — it can fire while already closing/closed
+        safeClose(ws);
       };
 
       ws.onmessage = (evt) => {
+        if (stopped) return;
+
         let msg: any;
         try {
           msg = JSON.parse(evt.data);
@@ -257,7 +281,6 @@ const LiveStreamTickerWidget: React.FC = () => {
         }
         if (msg?.type !== "trade" || !Array.isArray(msg.data) || !msg.data.length) return;
 
-        // Finnhub can batch multiple symbols; apply all
         const updates = msg.data as Array<{ s: string; p: number; t: number }>;
 
         setTradeInfoMap((prev) => {
@@ -272,10 +295,10 @@ const LiveStreamTickerWidget: React.FC = () => {
 
             const prevEntry = prev[sym];
             const prevTick = prevEntry?.price;
-            const prevClose = prevEntry?.prevClose; // keep daily reference if we have it
+            const prevClose = prevEntry?.prevClose;
 
-            // if we don't have prevClose yet, fall back to previous tick for % (better than 0)
-            const base = typeof prevClose === "number" && prevClose > 0 ? prevClose : prevTick;
+            const base =
+              typeof prevClose === "number" && prevClose > 0 ? prevClose : prevTick;
 
             const percentChange =
               typeof base === "number" && base > 0 ? ((price - base) / base) * 100 : 0;
@@ -305,17 +328,23 @@ const LiveStreamTickerWidget: React.FC = () => {
       };
     };
 
+    // slight delay is fine, but don’t reconnect after unmount
     const t = window.setTimeout(connect, 500);
+
     return () => {
+      stopped = true;
       window.clearTimeout(t);
-      if (reconnectRef.current) window.clearTimeout(reconnectRef.current);
-      try {
-        socketRef.current?.close();
-      } catch {
-        /* ignore */
+
+      if (reconnectRef.current) {
+        window.clearTimeout(reconnectRef.current);
+        reconnectRef.current = null;
       }
+
+      safeClose(socketRef.current);
+      socketRef.current = null;
     };
   }, []);
+
 
   /* ------------------------------------------------------------------ */
   /*  Modal helpers                                                     */
@@ -513,7 +542,7 @@ const LiveStreamTickerWidget: React.FC = () => {
                   </AnimatePresence>
 
                   {/* bottom strip */}
-                  <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between gap-2 px-2 py-1.5 bg-white/75 dark:bg-black/30 backdrop-blur">
+                  <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between gap-2 px-2 py-1.5 bg-white/75 dark:bg-black/30">
                     <span className="text-[11px] font-semibold text-gray-900 dark:text-white">
                       {priceText}
                     </span>
