@@ -128,14 +128,14 @@ export default function Projects() {
       openSource: false,
     },
  
-    {
-      id: 8,
-      icon: Icon5,
-      slug: '/Vibroacoustics',
-      title: 'Vibroacoustics & Geometry ',
-      excerpt: "Reveal geometry's beauty in both vibrating patterns and four-dimensional forms. (Caution: Contains flashing lights!)",
-      openSource: false,
-    },
+    // {
+    //   id: 8,
+    //   icon: Icon5,
+    //   slug: '/Vibroacoustics',
+    //   title: 'Vibroacoustics & Geometry ',
+    //   excerpt: "Reveal geometry's beauty in both vibrating patterns and four-dimensional forms. (Caution: Contains flashing lights!)",
+    //   openSource: false,
+    // },
     {
       id: 9,
       icon: Icon10,

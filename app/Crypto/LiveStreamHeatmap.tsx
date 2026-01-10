@@ -1,22 +1,10 @@
 "use client";
 
-import React, {
-  useEffect,
-  useState,
-  useRef,
-  useMemo,
-  JSX,
-  useCallback,
-} from "react";
+import React, { useEffect, useState, useRef, useMemo, JSX } from "react";
 import { motion } from "framer-motion";
-import {
-
-  FaTable,
-  FaThLarge,
-} from "react-icons/fa";
+import { FaTable, FaThLarge } from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
-import CryptoAssetPopup from "@/utils/CryptoAssetPopup"; // <-- new import
-
+import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
 
 const currencyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -38,9 +26,10 @@ const COINGECKO_TOP200 =
 export default function LiveStreamHeatmap() {
   /* ---------- core state ---------- */
   const [tradeInfoMap, setTradeInfoMap] = useState<
-    Record<string, { price: number; prev?: number }>
+    Record<string, { price: number; prev?: number; bump?: number }>
   >({});
   const [metaData, setMetaData] = useState<Record<string, any>>({});
+  const [topIds, setTopIds] = useState<string[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [wsAvailable, setWsAvailable] = useState(true);
@@ -63,7 +52,8 @@ export default function LiveStreamHeatmap() {
         const map: Record<string, string> = {};
         const inf: Record<string, { high: number; low: number }> = {};
         json.forEach((c: any) => {
-          const k = c.symbol.toLowerCase();
+          const k = c.symbol?.toLowerCase?.();
+          if (!k) return;
           map[k] = c.image;
           inf[k] = { high: c.high_24h, low: c.low_24h };
         });
@@ -75,40 +65,84 @@ export default function LiveStreamHeatmap() {
     })();
   }, []);
 
-  /* -------- fetch CoinCap metadata -------- */
+  /* -------- bootstrap CoinCap metadata + initial prices (FAST initial render) -------- */
   useEffect(() => {
     let canceled = false;
+
     (async () => {
-      if (!API_KEY) return;
-      const res = await fetch(
-        `https://rest.coincap.io/v3/assets?limit=201&apiKey=${API_KEY}`,
-      );
-      if (res.status === 403) {
+      if (!API_KEY) {
         setWsAvailable(false);
         setLoading(false);
         return;
       }
-      const json = await res.json();
-      if (canceled) return;
-      const m: Record<string, any> = {};
-      (json.data || []).forEach((a: any) => (m[a.id] = a));
-      setMetaData(m);
+
+      try {
+        const res = await fetch(
+          `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`,
+        );
+
+        if (res.status === 403) {
+          setWsAvailable(false);
+          setLoading(false);
+          return;
+        }
+
+        const json = await res.json();
+        if (canceled) return;
+
+        const m: Record<string, any> = {};
+        const initialPrices: Record<
+          string,
+          { price: number; prev?: number; bump?: number }
+        > = {};
+        const ids: string[] = [];
+
+        (json.data || []).forEach((a: any) => {
+          if (!a?.id) return;
+          m[a.id] = a;
+          ids.push(a.id);
+
+          const p = parseFloat(a.priceUsd);
+          if (!Number.isNaN(p)) {
+            // prev stays undefined so WS/timer can still compare "old -> new"
+            // but colors will be based on changePercent24Hr until prev exists
+            initialPrices[a.id] = { price: p, prev: undefined, bump: 0 };
+          }
+        });
+
+        ids.sort((a, b) => (+m[a]?.rank || 9999) - (+m[b]?.rank || 9999));
+
+        setMetaData(m);
+        setTopIds(ids.slice(0, 200));
+        setTradeInfoMap((prev) => ({ ...prev, ...initialPrices }));
+        setLoading(false);
+      } catch {
+        if (!canceled) setLoading(false);
+      }
     })();
+
     return () => {
       canceled = true;
     };
   }, []);
 
-  /* -------- websocket stream -------- */
+  /* -------- websocket stream (subscribe ONLY to top 200) -------- */
   useEffect(() => {
-    if (!API_KEY || !Object.keys(metaData).length || !wsAvailable) return;
+    if (!API_KEY || !topIds.length || !wsAvailable) return;
 
+    // close previous socket if any
+    socketRef.current?.close();
+    setWsClosed(false);
+
+    const assetsParam = topIds.join(",");
     const ws = new WebSocket(
-      `wss://wss.coincap.io/prices?assets=ALL&apiKey=${API_KEY}`,
+      `wss://wss.coincap.io/prices?assets=${encodeURIComponent(
+        assetsParam,
+      )}&apiKey=${API_KEY}`,
     );
     socketRef.current = ws;
 
-    const wsTimeout = setTimeout(() => {
+    const wsTimeout = window.setTimeout(() => {
       if (socketRef.current?.readyState === WebSocket.OPEN) {
         socketRef.current.close();
       }
@@ -121,69 +155,105 @@ export default function LiveStreamHeatmap() {
         setLoading(false);
         return;
       }
-      let up;
+
+      let up: Record<string, string> | null = null;
       try {
         up = JSON.parse(e.data);
       } catch {
         return;
       }
+      if (!up) return;
+
+      // ✅ Immediate updates + bump counter (forces flash per tick)
       setTradeInfoMap((prev) => {
         const nxt = { ...prev };
-        Object.entries(up).forEach(([id, ps]) => {
-          if (!metaData[id] || +metaData[id].rank > 200) return;
+        for (const [id, ps] of Object.entries(up)) {
           const p = parseFloat(ps as string);
-          nxt[id] = { price: p, prev: prev[id]?.price };
-        });
+          if (!Number.isFinite(p)) continue;
+
+          const old = prev[id]?.price;
+          const nextBump = (prev[id]?.bump || 0) + 1;
+          nxt[id] = { price: p, prev: old, bump: nextBump };
+        }
         return nxt;
       });
+
       setLoading(false);
     };
 
     ws.onclose = () => {
-      clearTimeout(wsTimeout);
+      window.clearTimeout(wsTimeout);
       setWsClosed(true);
     };
 
     return () => {
-      clearTimeout(wsTimeout);
+      window.clearTimeout(wsTimeout);
       socketRef.current?.close();
     };
-  }, [metaData, wsAvailable]);
+  }, [topIds, wsAvailable]);
 
-  /* -------- polling fallback -------- */
+  /* -------- polling fallback (free tier has NO websocket) -------- */
   useEffect(() => {
     if (wsAvailable) return;
+    if (!API_KEY) return;
+
     const fetchPrices = async () => {
-      const res = await fetch(
-        `https://rest.coincap.io/v3/assets?limit=201&apiKey=${API_KEY}`,
-      );
-      const json = await res.json();
-      const upd: Record<string, any> = {};
-      (json.data || []).forEach((a: any) => (upd[a.id] = a.priceUsd));
-      setTradeInfoMap((prev) => {
-        const nxt = { ...prev };
-        Object.entries(upd).forEach(([id, ps]) => {
-          const p = parseFloat(ps as string);
-          nxt[id] = { price: p, prev: prev[id]?.price };
+      try {
+        const res = await fetch(
+          `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`,
+        );
+        const json = await res.json();
+
+        const upd: Record<string, number> = {};
+        const m: Record<string, any> = {};
+        const ids: string[] = [];
+
+        (json.data || []).forEach((a: any) => {
+          if (!a?.id) return;
+          m[a.id] = a;
+          ids.push(a.id);
+
+          const p = parseFloat(a.priceUsd);
+          if (Number.isFinite(p)) upd[a.id] = p;
         });
-        return nxt;
-      });
-      setLoading(false);
+
+        ids.sort((a, b) => (+m[a]?.rank || 9999) - (+m[b]?.rank || 9999));
+        setTopIds(ids.slice(0, 200));
+        setMetaData((prev) => ({ ...prev, ...m }));
+
+        // ✅ Apply updates + bump counter (forces flash per poll tick)
+        setTradeInfoMap((prev) => {
+          const nxt = { ...prev };
+          for (const [id, p] of Object.entries(upd)) {
+            const old = prev[id]?.price;
+            const nextBump = (prev[id]?.bump || 0) + 1;
+            nxt[id] = { price: p, prev: old, bump: nextBump };
+          }
+          return nxt;
+        });
+
+        setLoading(false);
+      } catch {
+        setLoading(false);
+      }
     };
+
     fetchPrices();
-    const iv = setInterval(fetchPrices, 10_000);
-    return () => clearInterval(iv);
+    const iv = window.setInterval(fetchPrices, 5_000);
+    return () => window.clearInterval(iv);
   }, [wsAvailable]);
 
   /* -------- sorted IDs -------- */
   const sortedIds = useMemo(() => {
+    if (topIds.length) return topIds.slice(0, 200);
+
     const all = Object.keys(tradeInfoMap).sort(
       (a, b) => (+metaData[a]?.rank || 9999) - (+metaData[b]?.rank || 9999),
     );
     return all.slice(0, 200);
-  }, [tradeInfoMap, metaData]);
+  }, [topIds, tradeInfoMap, metaData]);
 
-  /* -------- Metric component -------- */
+  /* -------- Metric component (kept though unused) -------- */
   const Metric = ({
     icon,
     label,
@@ -199,7 +269,9 @@ export default function LiveStreamHeatmap() {
       {icon}
       <div className="flex flex-col">
         <span className="text-[10px] sm:text-xs text-gray-500">{label}</span>
-        <span className={`font-semibold ${color} text-xs sm:text-sm`}>{value}</span>
+        <span className={`font-semibold ${color} text-xs sm:text-sm`}>
+          {value}
+        </span>
       </div>
     </div>
   );
@@ -217,7 +289,7 @@ export default function LiveStreamHeatmap() {
       <div className="p-4 max-w-5xl mx-auto">
         {!wsAvailable && (
           <div className="mb-4 p-2 bg-yellow-100 text-yellow-800 rounded text-center">
-            WebSocket unavailable—polling every 10&nbsp;s.
+            WebSocket unavailable—polling every 5&nbsp;s.
           </div>
         )}
 
@@ -234,7 +306,11 @@ export default function LiveStreamHeatmap() {
             }}
             className="flex items-center gap-2 bg-brand-gradient border border-gray-300 dark:border-gray-600 text-white px-4 py-2 rounded-full shadow-sm hover:shadow-md transition-shadow duration-200"
           >
-            {viewMode === "grid" ? <FaTable className="w-5 h-5" /> : <FaThLarge className="w-5 h-5" />}
+            {viewMode === "grid" ? (
+              <FaTable className="w-5 h-5" />
+            ) : (
+              <FaThLarge className="w-5 h-5" />
+            )}
             <span className="hidden sm:inline text-sm font-medium">
               {viewMode === "grid" ? "Table View" : "Grid View"}
             </span>
@@ -245,19 +321,41 @@ export default function LiveStreamHeatmap() {
         {viewMode === "grid" ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 lg:grid-cols-5 xl:grid-cols-6">
             {sortedIds.map((id) => {
-              const { price, prev } = tradeInfoMap[id] || {};
+              const { price, prev, bump } = tradeInfoMap[id] || {};
               const md = metaData[id] || {};
-              let bg = "bg-gray-300",
-                arrow = "";
-              if (prev != null) {
-                if (price > prev) (bg = "bg-green-500"), (arrow = "↑");
-                else if (price < prev) (bg = "bg-red-500"), (arrow = "↓");
+
+              const pct = parseFloat(String(md.changePercent24Hr ?? ""));
+              const pctPos = Number.isFinite(pct) && pct > 0;
+              const pctNeg = Number.isFinite(pct) && pct < 0;
+
+              let bg = "bg-gray-300";
+              let arrow = "";
+
+              // ✅ Always red/green immediately:
+              // If prev exists, use tick direction; else use 24h % sign.
+              if (prev != null && price != null) {
+                if (price > prev) {
+                  bg = "bg-green-500";
+                  arrow = "↑";
+                } else if (price < prev) {
+                  bg = "bg-red-500";
+                  arrow = "↓";
+                } else {
+                  bg = pctPos ? "bg-green-500" : pctNeg ? "bg-red-500" : "bg-gray-300";
+                }
+              } else {
+                bg = pctPos ? "bg-green-500" : pctNeg ? "bg-red-500" : "bg-gray-300";
               }
+
               const logo = logos[md.symbol?.toLowerCase()];
+
+              const tickPos = prev != null && price != null && price > prev;
+              const tickNeg = prev != null && price != null && price < prev;
+
               return (
                 <motion.div
                   key={id}
-                  className={`${bg} text-white p-2 sm:p-3 rounded-lg shadow cursor-pointer`}
+                  className={`${bg} relative overflow-hidden text-white p-2 sm:p-3 rounded-lg shadow cursor-pointer`}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => {
@@ -265,10 +363,33 @@ export default function LiveStreamHeatmap() {
                     trackEvent("CryptoAssetClick", { id, ...md });
                   }}
                 >
+                  {/* ✅ Flash overlay on every tick (or on first render we keep it off) */}
+                  {prev != null && price != null && bump != null && bump > 0 && (
+                    <motion.div
+                      key={`${id}-${bump}`} // forces animation replay per update
+                      className="absolute inset-0 rounded-lg pointer-events-none"
+                      initial={{ opacity: 0 }}
+                      animate={{
+                        opacity: [0, 0.55, 0],
+                        scale: [1, 1.02, 1],
+                      }}
+                      transition={{ duration: 0.35, ease: "easeOut" }}
+                      style={{
+                        background: tickPos
+                          ? "rgba(255,255,255,0.9)"
+                          : tickNeg
+                            ? "rgba(0,0,0,0.35)"
+                            : "transparent",
+                        mixBlendMode: "overlay",
+                      }}
+                    />
+                  )}
+
                   <div className="flex items-center gap-1">
                     <span className="text-[9px] sm:text-xs bg-black/40 px-1 rounded">
                       #{md.rank || "—"}
                     </span>
+
                     {logo && (
                       <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
                         <img
@@ -279,14 +400,25 @@ export default function LiveStreamHeatmap() {
                         />
                       </span>
                     )}
-                    <span className="font-bold text-sm sm:text-lg" title={md.name}>
+
+                    <span
+                      className="font-bold text-sm sm:text-lg"
+                      title={md.name}
+                    >
                       {md.symbol || id}
                     </span>
                   </div>
+
                   <div className="mt-0.5 text-[11px] sm:text-sm">
-                    {formatUSD(price)} <span className="font-bold">{arrow}</span>
+                    {formatUSD(price)}{" "}
+                    <span className="font-bold">
+                      {arrow || (pctPos ? "↑" : pctNeg ? "↓" : "")}
+                    </span>
                   </div>
-                  <div className="text-[9px] sm:text-xs">{formatPct(md.changePercent24Hr)} </div>
+
+                  <div className="text-[9px] sm:text-xs">
+                    {formatPct(md.changePercent24Hr)}
+                  </div>
                 </motion.div>
               );
             })}
@@ -296,39 +428,77 @@ export default function LiveStreamHeatmap() {
             <table className="min-w-full divide-y divide-gray-100">
               <thead className="bg-gray-100 text-brand-900">
                 <tr>
-                  {["Rank", "Symbol", "Name", "Price (USD)", "24 h %"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-2 sm:px-4 py-1 sm:py-2 uppercase text-[9px] sm:text-xs text-left"
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  {["Rank", "Symbol", "Name", "Price (USD)", "24 h %"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        className="px-2 sm:px-4 py-1 sm:py-2 uppercase text-[9px] sm:text-xs text-left"
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {sortedIds.map((id) => {
                   const md = metaData[id] || {};
-                  const { price, prev } = tradeInfoMap[id] || {};
-                  const pos = price != null && prev != null && price > prev;
-                  const neg = price != null && prev != null && price < prev;
+                  const { price, prev, bump } = tradeInfoMap[id] || {};
+
+                  const pct = parseFloat(String(md.changePercent24Hr ?? ""));
+                  const pctPos = Number.isFinite(pct) && pct > 0;
+                  const pctNeg = Number.isFinite(pct) && pct < 0;
+
+                  const tickPos = price != null && prev != null && price > prev;
+                  const tickNeg = price != null && prev != null && price < prev;
+
+                  // ✅ Always red/green immediately
+                  const pos = prev != null ? tickPos : pctPos;
+                  const neg = prev != null ? tickNeg : pctNeg;
+
                   const bgRow = pos
                     ? "bg-green-500"
                     : neg
-                    ? "bg-red-500"
-                    : "bg-white dark:bg-brand-900";
-                  const textColor = pos || neg ? "text-white" : "text-gray-900 dark:text-white";
+                      ? "bg-red-500"
+                      : "bg-gray-300";
+
+                  const textColor =
+                    pos || neg ? "text-white" : "text-gray-900 dark:text-white";
+
                   const logo = logos[md.symbol?.toLowerCase()];
+
                   return (
                     <tr
                       key={id}
-                      className={`${bgRow} ${textColor} transition-transform duration-200 ease-out hover:scale-105 cursor-pointer`}
+                      className={`${bgRow} ${textColor} relative overflow-hidden transition-transform duration-200 ease-out hover:scale-105 cursor-pointer`}
                       onClick={() => {
                         setSelectedAsset(md);
                         trackEvent("CryptoAssetClick", { id });
                       }}
                     >
-                      <td className="px-2 sm:px-4 py-1 sm:py-2 text-[10px] sm:text-sm">{md.rank}</td>
+                      {/* ✅ Flash overlay only when we have tick direction */}
+                      {prev != null && price != null && bump != null && bump > 0 && (
+                        <motion.td
+                          key={`${id}-${bump}`}
+                          className="absolute inset-0 p-0 m-0 border-0 pointer-events-none"
+                          colSpan={5}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: [0, 0.45, 0] }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          style={{
+                            background: tickPos
+                              ? "rgba(255,255,255,0.75)"
+                              : tickNeg
+                                ? "rgba(0,0,0,0.25)"
+                                : "transparent",
+                            mixBlendMode: "overlay",
+                          }}
+                        />
+                      )}
+
+                      <td className="px-2 sm:px-4 py-1 sm:py-2 text-[10px] sm:text-sm">
+                        {md.rank}
+                      </td>
                       <td className="px-2 sm:px-4 py-1 sm:py-2 flex items-center gap-1 font-semibold text-[11px] sm:text-sm">
                         {logo && (
                           <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
@@ -348,12 +518,9 @@ export default function LiveStreamHeatmap() {
                       <td className="px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm">
                         {formatUSD(price)}
                       </td>
-                      <td
-                        className={`px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm ${
-                          pos ? "text-green-700" : neg ? "text-red-700" : ""
-                        }`}
-                      >
-                        {formatPct(md.changePercent24Hr)} {pos ? "↑" : neg ? "↓" : ""}
+                      <td className="px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm">
+                        {formatPct(md.changePercent24Hr)}{" "}
+                        {tickPos ? "↑" : tickNeg ? "↓" : pctPos ? "↑" : pctNeg ? "↓" : ""}
                       </td>
                     </tr>
                   );
@@ -368,13 +535,11 @@ export default function LiveStreamHeatmap() {
           asset={selectedAsset}
           logos={logos}
           onClose={() => setSelectedAsset(null)}
-          tradeInfo={
-            selectedAsset ? tradeInfoMap[selectedAsset.id] : undefined
-          }
+          tradeInfo={selectedAsset ? tradeInfoMap[selectedAsset.id] : undefined}
         />
       </div>
 
-      {/* websocket-closed popup (unchanged) */}
+      {/* websocket-closed popup */}
       {wsClosed && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full max-w-sm p-6 text-center">

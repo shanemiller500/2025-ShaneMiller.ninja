@@ -59,21 +59,22 @@ export default function AboutPage() {
                   <h2 className="h3 font-aspekta text-slate-800 dark:text-slate-100">
                     Short Bio
                   </h2>
-                  <p>
-                    I'm a full-stack developer with a decade of experience delivering production grade web applications. After refining large scale platforms at S&amp;P Global, my current responsibilities include keeping banking software dependable as a Level&nbsp;2 Engineer at Data Center Inc. (DCI), expanding UMail with privacy-first features, and managing ApplyPro, a platform that helps users strengthen resumes and cover letters.
-                  </p>
+               <p>
+  I’m a full-stack developer with 10+ years of experience shipping production grade web applications. I’ve worked on large scale platforms at S&amp;P Global and currently keep mission-critical banking software reliable as an Engineer at Data Center Inc. (DCI). Alongside that, I build and run privacy-first products like UMail and ApplyPro.
+</p>
 
-                  <p>
-                    After months of data research and user feedback, I'm rolling out ApplyPro V2, even if progress is slower while juggling a full-time day job. This release introduces interactive interview prep questions, sticky behavior for quick access, a cleaner, more intuitive user portal, and enhanced resume editing features, all crafted to streamline your job application process while keeping your data private.
-                  </p>
+<p>
+  ApplyPro V2 is my latest release built from real user feedback. It adds interactive interview prep, a cleaner portal, smarter resume editing, and fast access tools designed to help people apply better, faster, and with their data kept private.
+</p>
 
-                  <p>
-                    Within UMail, I'm rolling out custom editions tailored to our clients needs, adding tools such as quick tone adjustments, one-click translations, and considerate auto-replies features designed to save time without compromising privacy.
-                  </p>
+<p>
+  With UMail, I focus on practical automation: tone adjustments, one click translations, and thoughtful auto replies that save time without sacrificing trust.
+</p>
 
-                  <p>
-                  I build lean, privacy tight software that just works. From polishing the user flow to crushing the hard bugs, I move fast and finish strong. Need results, not excuses? Let's talk.
-                  </p>
+<p>
+  I build lean, privacy-tight software that works. I care about clean UX, solid architecture, and finishing what I start. If you’re looking for someone who delivers not hand-waving, let’s talk.
+</p>
+
 
                   <p className="text-xs text-gray-500 text-center pb-10">
                       See resume {" "}
