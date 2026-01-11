@@ -405,79 +405,84 @@ export default function TopGainersLosers() {
     </div>
   );
 
-  const renderGrid = (rows: any[]) => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-      {rows.map((c) => {
-        const change = parseFloat(c?.changePercent24Hr ?? "0");
-        const pos = Number.isFinite(change) && change >= 0;
-        const neg = Number.isFinite(change) && change < 0;
+const renderGrid = (rows: any[]) => (
+  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 lg:grid-cols-5 xl:grid-cols-6">
+    {rows.map((c) => {
+      const change = parseFloat(c?.changePercent24Hr ?? "0");
+      const pos = Number.isFinite(change) && change > 0;
+      const neg = Number.isFinite(change) && change < 0;
 
-        // keep your heatmap punch
-        const bg = pos ? "bg-green-500" : neg ? "bg-red-500" : "bg-gray-400";
+      // ✅ heat map background (do NOT change)
+      const bg = pos ? "bg-green-500" : neg ? "bg-red-500" : "bg-gray-300";
 
-        const logo = logos[String(c?.symbol ?? "").toLowerCase()];
-        const bump = tickMap[c?.id]?.bump || 0;
+      const logo = logos[String(c?.symbol ?? "").toLowerCase()];
+      const bump = tickMap[c?.id]?.bump || 0;
 
-        return (
-          <motion.button
-            key={`${c?.id}-${bump}`}
-            type="button"
-            onClick={() => openAsset(c)}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.98 }}
-            className={cn(
-              "relative text-left overflow-hidden rounded-2xl p-3 shadow-sm ring-1 ring-black/10 dark:ring-white/10",
-              bg,
-            )}
-            initial={false}
-            animate={{
-              filter: bump ? "brightness(1.08)" : "brightness(1)",
-            }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-          >
-            <div className="pointer-events-none absolute inset-0 bg-black/10" />
+      return (
+        <motion.div
+          key={`${c?.id}-${bump}`}
+          className={`${bg} relative overflow-hidden text-white p-2 sm:p-3 rounded-lg shadow cursor-pointer`}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => openAsset(c)}
+        >
+          {/* (optional) subtle flash like heatmap — safe in grid */}
+          {bump > 0 && (
+            <motion.div
+              key={`${c?.id}-flash-${bump}`}
+              className="absolute inset-0 rounded-lg pointer-events-none"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.35, 0], scale: [1, 1.02, 1] }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+              style={{
+                background: pos
+                  ? "rgba(255,255,255,0.85)"
+                  : neg
+                    ? "rgba(0,0,0,0.30)"
+                    : "transparent",
+                mixBlendMode: "overlay",
+              }}
+            />
+          )}
 
-            <div className="relative flex items-center gap-2">
-              <span className="rounded-lg bg-black/35 px-2 py-0.5 text-[10px] font-extrabold text-white">
-                #{c?.rank ?? "—"}
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] sm:text-xs bg-black/40 px-1 rounded">
+              #{c?.rank ?? "—"}
+            </span>
+
+            {logo && (
+              <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
+                <img
+                  src={logo}
+                  alt={c?.symbol}
+                  className="w-4 h-4 sm:w-5 sm:h-5"
+                  loading="lazy"
+                />
               </span>
+            )}
 
-              {logo ? (
-                <span className="inline-flex items-center justify-center rounded-full bg-white/90 p-[2px] ring-1 ring-black/10">
-                  <img src={logo} alt={c?.symbol} className="h-5 w-5" loading="lazy" />
-                </span>
-              ) : (
-                <span className="h-5 w-5 rounded-full bg-white/30" />
-              )}
+            <span className="font-bold text-sm sm:text-lg" title={c?.name}>
+              {c?.symbol ?? "—"}
+            </span>
+          </div>
 
-              <div className="ml-auto inline-flex items-center gap-1 rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-extrabold text-white">
-                {pos ? <FaArrowUp /> : <FaArrowDown />}
-                {formatPct(change)}
-              </div>
-            </div>
+          <div className="mt-0.5 text-[11px] sm:text-sm">{formatUSD(c?.priceUsd)}</div>
 
-            <div className="relative mt-2">
-              <div className="text-base sm:text-lg font-black text-white">
-                {c?.symbol ?? "—"}
-              </div>
-              <div className="mt-0.5 text-[12px] font-semibold text-white/90 line-clamp-1">
-                {c?.name ?? "—"}
-              </div>
-              <div className="mt-1 text-[12px] font-extrabold text-white">
-                {formatUSD(c?.priceUsd)}
-              </div>
-            </div>
-          </motion.button>
-        );
-      })}
+          <div className="text-[9px] sm:text-xs">
+            {formatPct(change)} {pos ? "↑" : neg ? "↓" : ""}
+          </div>
+        </motion.div>
+      );
+    })}
 
-      {rows.length === 0 && (
-        <div className="col-span-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 text-sm text-gray-700 dark:text-white/70">
-          No matches in the top 15.
-        </div>
-      )}
-    </div>
-  );
+    {rows.length === 0 && (
+      <div className="col-span-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 text-sm text-gray-700 dark:text-white/70">
+        No matches in the top 15.
+      </div>
+    )}
+  </div>
+);
+
 
   if (loading) {
     return (
@@ -544,7 +549,7 @@ export default function TopGainersLosers() {
               </button>
 
               {/* Tabs */}
-              <div className="inline-flex w-full sm:w-auto rounded-2xl p-1 bg-black/[0.03] dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10">
+              <div className="inline-flex w-full sm:w-auto rounded-2xl gap-2 p-1 bg-black/[0.03] dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10">
                 <SegButton
                   active={tab === "gainers"}
                   label="Gainers"
