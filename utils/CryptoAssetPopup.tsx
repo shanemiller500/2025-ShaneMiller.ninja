@@ -76,20 +76,14 @@ export default function CryptoAssetPopup({
     if (canvasRef.current) Chart.getChart(canvasRef.current)?.destroy();
   };
 
+  // lock body scroll behind modal
   useEffect(() => {
-  // Lock background scroll while modal is open (fixes iOS/Android modal scroll issues)
-  const prevOverflow = document.body.style.overflow;
-  const prevTouchAction = document.body.style.touchAction;
-
-  document.body.style.overflow = "hidden";
-  document.body.style.touchAction = "none";
-
-  return () => {
-    document.body.style.overflow = prevOverflow;
-    document.body.style.touchAction = prevTouchAction;
-  };
-}, []);
-
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
 
   /* load chart ------------------------------------------------------ */
   useEffect(() => {
@@ -184,7 +178,9 @@ export default function CryptoAssetPopup({
       {icon}
       <div className="flex flex-col">
         <span className="text-[10px] sm:text-xs text-gray-500">{label}</span>
-        <span className={`font-semibold ${color} text-xs sm:text-sm`}>{value}</span>
+        <span className={`font-semibold ${color} text-xs sm:text-sm`}>
+          {value}
+        </span>
       </div>
     </div>
   );
@@ -200,15 +196,15 @@ export default function CryptoAssetPopup({
     timeframe === "1"
       ? "24h Change"
       : timeframe === "7"
-      ? "7D Change"
-      : "30D Change";
+        ? "7D Change"
+        : "30D Change";
 
   const changeValue =
     timeframeChange != null
       ? pct(timeframeChange)
       : timeframe === "1"
-      ? pct(asset.changePercent24Hr)
-      : "—";
+        ? pct(asset.changePercent24Hr)
+        : "—";
 
   const changeColor =
     timeframeChange != null
@@ -216,233 +212,250 @@ export default function CryptoAssetPopup({
         ? "text-green-600"
         : "text-red-600"
       : parseFloat(asset.changePercent24Hr) >= 0
-      ? "text-green-600"
-      : "text-red-600";
+        ? "text-green-600"
+        : "text-red-600";
 
-return (
-  <AnimatePresence>
-    <motion.div
-      key="popup-bg"
-      className="fixed inset-0 z-50 bg-black/60 p-3 flex items-center justify-center"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onClick={onClose}
-    >
+  // explorer helper
+  const explorerHost = asset.explorer ? host(asset.explorer) : null;
+  const explorerHref =
+    asset.explorer && explorerHost
+      ? asset.explorer.includes("://")
+        ? asset.explorer
+        : `https://${asset.explorer}`
+      : null;
+
+  return (
+    <AnimatePresence>
       <motion.div
-        key="popup-card"
-        className="relative w-full max-w-sm sm:max-w-md max-h-[90svh] rounded-2xl bg-white dark:bg-brand-900 shadow-xl border border-black/10 dark:border-white/10 overflow-hidden flex flex-col"
-        initial={{ y: 32, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 32, opacity: 0 }}
-        transition={{ type: "spring", stiffness: 300 }}
-        onClick={(e) => e.stopPropagation()}
+        key="popup-bg"
+        className="fixed inset-0 z-50 bg-black/60 overflow-y-auto"
+        style={{
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+        }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        // close only when clicking the backdrop itself
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
       >
-        {/* close */}
-        <div className="absolute top-3 right-3 z-10">
-          <button
-            type="button"
-            className="h-10 w-10 rounded-full bg-white/80 dark:bg-white/10 backdrop-blur flex items-center justify-center text-gray-700 dark:text-white hover:bg-white dark:hover:bg-white/15 shadow border border-black/5 dark:border-white/10"
-            onClick={onClose}
-            aria-label="Close"
+        {/* ✅ Centered container */}
+        <div className="min-h-[100svh] w-full flex items-center justify-center px-3 py-3 sm:p-6">
+          <motion.div
+            key="popup-card"
+            className="
+              relative w-full max-w-md
+              sm:rounded-2xl rounded-2xl
+              bg-white dark:bg-brand-900
+              border border-black/10 dark:border-white/10
+              shadow-2xl overflow-hidden
+              flex flex-col min-h-0
+              max-h-[calc(100svh-24px)] sm:max-h-[85svh]
+            "
+            initial={{ y: 32, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 32, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <span className="text-2xl leading-none">×</span>
-          </button>
-        </div>
+            {/* Sticky top bar */}
+            <div className="sticky top-0 z-20 border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur">
+              <div className="px-4 py-3 sm:px-6 sm:py-4 flex items-center gap-3">
+                {logo ? (
+                  <span className="inline-flex items-center justify-center rounded-full p-[3px] bg-white/80 dark:bg-white/10 border border-black/5 dark:border-white/10 shadow-sm">
+                    <img
+                      src={logo}
+                      alt={asset.symbol}
+                      className="w-8 h-8 sm:w-9 sm:h-9"
+                    />
+                  </span>
+                ) : (
+                  <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/5 dark:bg-white/10" />
+                )}
 
-        {/* SCROLL AREA */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-5 sm:p-6">
-          {/* header */}
-          <div className="flex items-center gap-2 mb-1 pr-10">
-            {logo && (
-              <span className="inline-flex items-center justify-center rounded-full p-[3px] bg-white/80 dark:bg-white/10 border border-black/5 dark:border-white/10 shadow-sm">
-                <img
-                  src={logo}
-                  alt={asset.symbol}
-                  className="w-7 h-7 sm:w-9 sm:h-9"
-                />
-              </span>
-            )}
-            <div className="min-w-0">
-              <h3 className="text-lg sm:text-2xl font-extrabold text-gray-900 dark:text-white truncate">
-                {asset.name}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-white/70">
-                #{asset.rank} • {asset.symbol.toUpperCase()}
-              </p>
-            </div>
-          </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2 min-w-0">
+                    <h3 className="text-base sm:text-xl font-extrabold text-gray-900 dark:text-white truncate">
+                      {asset.name}
+                    </h3>
+                    <span className="shrink-0 text-xs sm:text-sm font-bold text-gray-500 dark:text-white/60">
+                      {asset.symbol.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-gray-600 dark:text-white/70">
+                    Rank #{asset.rank}
+                  </p>
+                </div>
 
-          {/* timeframe pills */}
-          <div className="mt-4">
-            <div className="inline-flex w-full sm:w-auto rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.06] p-1">
-              {(
-                [
-                  ["1", "1D"],
-                  ["7", "7D"],
-                  ["30", "30D"],
-                ] as const
-              ).map(([tf, label]) => {
-                const active = timeframe === tf;
-
-                return (
-                  <button
-                    key={tf}
-                    type="button"
-                    onClick={() => setTimeframe(tf)}
-                    aria-pressed={active}
-                    className={`
-                      relative flex-1 sm:flex-none
-                      px-4 py-2 text-xs font-extrabold rounded-xl
-                      transition
-                      focus:outline-none
-                      ${
-                        active
-                          ? "text-indigo-700 dark:text-indigo-200"
-                          : "text-gray-700 dark:text-white/75 hover:text-gray-900 dark:hover:text-white"
-                      }
-                    `}
-                  >
-                    {active && (
-                      <span
-                        className="
-                          absolute inset-0 -z-10 rounded-xl
-                          bg-indigo-600/15 dark:bg-indigo-400/15
-                          ring-1 ring-indigo-600/25 dark:ring-indigo-300/25
-                          shadow-sm
-                        "
-                      />
-                    )}
-                    {!active && (
-                      <span
-                        className="
-                          absolute inset-0 -z-10 rounded-xl
-                          opacity-0 hover:opacity-100 transition
-                          bg-white/70 dark:bg-white/10
-                        "
-                      />
-                    )}
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* chart */}
-          <div className="relative w-full h-44 sm:h-52 mt-4 rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5 overflow-hidden shadow-sm">
-            {chartLoading && (
-              <div className="absolute inset-0 bg-white/60 dark:bg-black/40 flex items-center justify-center z-10">
-                <svg
-                  className="w-8 h-8 animate-spin text-indigo-600 dark:text-indigo-300"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
+                <button
+                  type="button"
+                  className="h-10 w-10 rounded-full bg-white/80 dark:bg-white/10 backdrop-blur flex items-center justify-center text-gray-700 dark:text-white hover:bg-white dark:hover:bg-white/15 shadow border border-black/5 dark:border-white/10"
+                  onClick={onClose}
+                  aria-label="Close"
                 >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8H4z"
-                  />
-                </svg>
+                  <span className="text-2xl leading-none">×</span>
+                </button>
               </div>
-            )}
-            <div className="h-full w-full p-3">
-              <canvas key={canvasKey} ref={canvasRef} className="w-full h-full" />
+
+              {/* Timeframe pills */}
+              <div className="px-4 pb-3 sm:px-6 sm:pb-4">
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ["1", "1D"],
+                      ["7", "7D"],
+                      ["30", "30D"],
+                    ] as const
+                  ).map(([tf, label]) => {
+                    const active = timeframe === tf;
+                    return (
+                      <button
+                        key={tf}
+                        type="button"
+                        onClick={() => setTimeframe(tf)}
+                        aria-pressed={active}
+                        className={`
+                          relative rounded-2xl px-3 py-2 text-xs font-extrabold
+                          border transition
+                          ${
+                            active
+                              ? "bg-indigo-600 text-white border-indigo-600 shadow"
+                              : "bg-black/[0.03] dark:bg-white/[0.06] text-gray-900 dark:text-white border-black/10 dark:border-white/10 hover:bg-black/[0.06] dark:hover:bg-white/[0.10]"
+                          }
+                        `}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* metrics grid */}
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] sm:text-sm ">
-            <Metric
-              icon={<FaDollarSign className="text-indigo-600 dark:text-indigo-300" />}
-              label="Price"
-              value={usd(priceNum)}
-              color={priceColor}
-            />
-            <Metric
-              icon={<FaChartLine className="text-indigo-600 dark:text-indigo-300" />}
-              label={changeLabel}
-              value={changeValue}
-              color={changeColor}
-            />
-            <Metric
-              icon={<FaChartPie className="text-indigo-600 dark:text-indigo-300" />}
-              label="Market Cap"
-              value={compact(asset.marketCapUsd)}
-              color="text-gray-900 dark:text-white"
-            />
-            <Metric
-              icon={<FaCoins className="text-indigo-600 dark:text-indigo-300" />}
-              label="Volume (24h)"
-              value={compact(asset.volumeUsd24Hr)}
-              color="text-gray-900 dark:text-white"
-            />
-            <Metric
-              icon={<FaDatabase className="text-indigo-600 dark:text-indigo-300" />}
-              label="Supply"
-              value={compact(asset.supply)}
-              color="text-gray-900 dark:text-white"
-            />
-            <Metric
-              icon={<FaWarehouse className="text-indigo-600 dark:text-indigo-300" />}
-              label="Max Supply"
-              value={asset.maxSupply ? compact(asset.maxSupply) : "—"}
-              color="text-gray-900 dark:text-white"
-            />
-            <Metric
-              icon={<FaGlobeAmericas className="text-indigo-600 dark:text-indigo-300" />}
-              label="VWAP (24h)"
-              value={asset.vwap24Hr ? compact(asset.vwap24Hr) : "—"}
-              color="text-gray-900 dark:text-white"
-            />
-          </div>
+            {/* ✅ THIS is the scroll container (works on iOS) */}
+            <div
+              className="flex-1 min-h-0 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
+              style={{
+                WebkitOverflowScrolling: "touch",
+                overscrollBehavior: "contain",
+                touchAction: "pan-y",
+              }}
+            >
+              {/* chart */}
+              <div className="relative w-full h-48 sm:h-56 rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5 overflow-hidden shadow-sm">
+                {chartLoading && (
+                  <div className="absolute inset-0 bg-white/60 dark:bg-black/40 flex items-center justify-center z-10">
+                    <svg
+                      className="w-8 h-8 animate-spin text-indigo-600 dark:text-indigo-300"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8v8H4z"
+                      />
+                    </svg>
+                  </div>
+                )}
+                <div className="h-full w-full p-3">
+                  <canvas
+                    key={canvasKey}
+                    ref={canvasRef}
+                    className="w-full h-full"
+                  />
+                </div>
+              </div>
 
-          {/* explorer */}
-          {asset.explorer &&
-            (() => {
-              const h = host(asset.explorer);
-              if (!h) return null;
-              const href = asset.explorer.includes("://")
-                ? asset.explorer
-                : `https://${asset.explorer}`;
+              {/* key numbers */}
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px]">
+                <Metric
+                  icon={<FaDollarSign className="text-indigo-600 dark:text-indigo-300" />}
+                  label="Price"
+                  value={usd(priceNum)}
+                  color={priceColor}
+                />
+                <Metric
+                  icon={<FaChartLine className="text-indigo-600 dark:text-indigo-300" />}
+                  label={changeLabel}
+                  value={changeValue}
+                  color={changeColor}
+                />
+                <Metric
+                  icon={<FaChartPie className="text-indigo-600 dark:text-indigo-300" />}
+                  label="Market Cap"
+                  value={compact(asset.marketCapUsd)}
+                  color="text-gray-900 dark:text-white"
+                />
+                <Metric
+                  icon={<FaCoins className="text-indigo-600 dark:text-indigo-300" />}
+                  label="Volume (24h)"
+                  value={compact(asset.volumeUsd24Hr)}
+                  color="text-gray-900 dark:text-white"
+                />
+                <Metric
+                  icon={<FaDatabase className="text-indigo-600 dark:text-indigo-300" />}
+                  label="Supply"
+                  value={compact(asset.supply)}
+                  color="text-gray-900 dark:text-white"
+                />
+                <Metric
+                  icon={<FaWarehouse className="text-indigo-600 dark:text-indigo-300" />}
+                  label="Max Supply"
+                  value={asset.maxSupply ? compact(asset.maxSupply) : "—"}
+                  color="text-gray-900 dark:text-white"
+                />
+                <Metric
+                  icon={<FaGlobeAmericas className="text-indigo-600 dark:text-indigo-300" />}
+                  label="VWAP (24h)"
+                  value={asset.vwap24Hr ? compact(asset.vwap24Hr) : "—"}
+                  color="text-gray-900 dark:text-white"
+                />
+              </div>
 
-              return (
+              {/* explorer */}
+              {explorerHost && explorerHref && (
                 <div className="mt-5 flex justify-center">
                   <a
-                    href={href}
+                    href={explorerHref}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/5 px-4 py-2 text-xs font-extrabold text-indigo-700 dark:text-indigo-200 hover:bg-white dark:hover:bg-white/10 shadow-sm transition"
                   >
                     <FaLink className="text-indigo-600 dark:text-indigo-300" />
-                    {h}
+                    {explorerHost}
                   </a>
                 </div>
-              );
-            })()}
+              )}
 
-          {/* bottom close (nice on mobile) */}
-          <button
-            type="button"
-            onClick={onClose}
-            className="mt-6 w-full rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.04] dark:bg-white/[0.06] py-3 text-sm font-extrabold text-gray-900 dark:text-white hover:bg-black/[0.06] dark:hover:bg-white/[0.10] shadow-sm transition"
-          >
-            Close
-          </button>
+              {/* breathing room so content doesn't tuck under sticky footer */}
+              <div className="h-24 sm:h-20" />
+            </div>
+
+            {/* Sticky bottom bar */}
+            <div className="sticky bottom-0 z-20 bg-white/92 dark:bg-brand-900/92 backdrop-blur border-t border-black/10 dark:border-white/10 px-4 py-3 sm:px-6">
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full rounded-2xl bg-indigo-600 text-white py-3 text-sm font-extrabold shadow hover:bg-indigo-700 transition"
+              >
+                Close
+              </button>
+            </div>
+          </motion.div>
         </div>
       </motion.div>
-    </motion.div>
-  </AnimatePresence>
-);
-
-
+    </AnimatePresence>
+  );
 }
