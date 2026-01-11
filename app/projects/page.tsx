@@ -103,22 +103,22 @@ export default function Projects() {
       openSource: false,
     },
 
-    {
-      id: 2,
-      icon: Icon05,
-      slug: '/Marvel',
-      title: 'Marvel API',
-      excerpt: 'Lookup Comics, Characters, Creators, Events, Series, and Stories.',
-      openSource: false,
-    },
-    {
-      id: 6,
-      icon: Icon08,
-      slug: '/NASA',
-      title: 'NASA API',
-      excerpt: 'NASA photo of the day & Mars Rover photos.',
-      openSource: false,
-    },
+    // {
+    //   id: 2,
+    //   icon: Icon05,
+    //   slug: '/Marvel',
+    //   title: 'Marvel API',
+    //   excerpt: 'Lookup Comics, Characters, Creators, Events, Series, and Stories.',
+    //   openSource: false,
+    // },
+    // {
+    //   id: 6,
+    //   icon: Icon08,
+    //   slug: '/NASA',
+    //   title: 'NASA API',
+    //   excerpt: 'NASA photo of the day & Mars Rover photos.',
+    //   openSource: false,
+    // },
     {
       id: 7,
       icon: Icon09,
