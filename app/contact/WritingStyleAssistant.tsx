@@ -1,7 +1,10 @@
-'use client';
+// app/contact/WritingStyleAssistant.tsx
+"use client";
 
-import React from 'react';
-import { trackEvent } from '@/utils/mixpanel';
+import React, { useMemo, useState } from "react";
+import { trackEvent } from "@/utils/mixpanel";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faSearch, faPenNib } from "@fortawesome/free-solid-svg-icons";
 
 interface Style {
   name: string;
@@ -16,23 +19,23 @@ interface WritingStyleAssistantProps {
 }
 
 const styles: Style[] = [
-  { name: 'Descriptive' },
-  { name: 'Analytical' },
-  { name: 'Poetic' },
-  { name: 'Innovative' },
-  { name: 'Inclusive' },
-  { name: 'Creative' },
-  { name: 'Empathetic' },
-  { name: 'Energetic' },
-  { name: 'Narrative' },
-  { name: 'Engaging' },
-  { name: 'Inspirational' },
-  { name: 'Optimistic' },
-  { name: 'Visionary' },
-  { name: 'Motivational' },
-  { name: 'Persuasive' },
-  { name: 'Witty' },
-  { name: 'Insightful' },
+  { name: "Descriptive" },
+  { name: "Analytical" },
+  { name: "Poetic" },
+  { name: "Innovative" },
+  { name: "Inclusive" },
+  { name: "Creative" },
+  { name: "Empathetic" },
+  { name: "Energetic" },
+  { name: "Narrative" },
+  { name: "Engaging" },
+  { name: "Inspirational" },
+  { name: "Optimistic" },
+  { name: "Visionary" },
+  { name: "Motivational" },
+  { name: "Persuasive" },
+  { name: "Witty" },
+  { name: "Insightful" },
 ];
 
 const WritingStyleAssistant: React.FC<WritingStyleAssistantProps> = ({
@@ -42,55 +45,84 @@ const WritingStyleAssistant: React.FC<WritingStyleAssistantProps> = ({
   setShowWritingStyleModal,
   enhanceTextWithStyle,
 }) => {
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return styles;
+    return styles.filter((s) => s.name.toLowerCase().includes(q));
+  }, [query]);
 
   const handleStyleChange = async (style: Style) => {
-    // Close the modal immediately.
     setShowWritingStyleModal(false);
+
     if (!currentDescription.trim()) {
       setPopupMessageWithTimeout("Add some text to enhance!");
       return;
     }
-    // Log the event and call the parent's API function.
-    trackEvent('Writing Style Selected', { style: style.name });
+
+    trackEvent("Writing Style Selected", { style: style.name });
     const enhancedText = await enhanceTextWithStyle(currentDescription, style.name);
-    if (enhancedText) {
-      updateDescription(enhancedText);
-    }
+    if (enhancedText) updateDescription(enhancedText);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white dark:bg-brand-900 rounded p-6 w-full max-w-md">
-        <div className="flex justify-end">
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Select Writing Style"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) setShowWritingStyleModal(false);
+      }}
+    >
+      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-brand-900">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-white/10">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Select writing style</h2>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Pick a vibe. We’ll rewrite the message.</p>
+          </div>
           <button
             type="button"
-            className="text-gray-700 dark:text-gray-300 text-2xl"
+            className="rounded-xl px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:text-gray-200 dark:hover:bg-white/10"
             aria-label="Close"
             onClick={() => setShowWritingStyleModal(false)}
           >
-            &times;
+            ✕
           </button>
         </div>
-        <h2 className="text-xl font-semibold mb-4 text-center">Select Writing Style</h2>
-        <div className="max-h-64 overflow-y-auto">
-          <ul className="space-y-2">
-            {styles.map((style, index) => (
-              <li key={index}>
-                <button
-                  type="button"
-                  className="flex items-center w-full p-2 bg-gray-200 dark:bg-brand-900 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
-                  onClick={() => handleStyleChange(style)}
-                >
-                  {style.name}
-                </button>
-              </li>
-            ))}
-          </ul>
+
+        <div className="p-5">
+    
+
+          <div className="mt-4 max-h-[320px] overflow-y-auto pr-1">
+            <ul className="space-y-2">
+              {filtered.map((style) => (
+                <li key={style.name}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:hover:bg-white/10"
+                    onClick={() => handleStyleChange(style)}
+                  >
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5">
+                      <FontAwesomeIcon icon={faPenNib} className="text-gray-700 dark:text-gray-200" />
+                    </span>
+                    <span className="flex-1">{style.name}</span>
+                  </button>
+                </li>
+              ))}
+
+              {filtered.length === 0 && (
+                <li className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
+                  No matches. Try a different search.
+                </li>
+              )}
+            </ul>
+          </div>
         </div>
       </div>
     </div>
   );
-  
 };
 
 export default WritingStyleAssistant;
