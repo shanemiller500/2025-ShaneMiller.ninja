@@ -126,6 +126,66 @@ export default function LiveStreamHeatmap() {
     };
   }, []);
 
+    /* ✅ HARD FIX: force-enable scroll on html/body while this page is mounted */
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      htmlHeight: html.style.height,
+      htmlPosition: html.style.position,
+      bodyOverflow: body.style.overflow,
+      bodyHeight: body.style.height,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyWidth: body.style.width,
+      bodyTouchAction: (body.style as any).touchAction,
+    };
+
+    // Nuke common "modal left me locked" settings
+    html.style.overflow = "auto";
+    html.style.height = "auto";
+    html.style.position = "static";
+
+    body.style.overflow = "auto";
+    body.style.height = "auto";
+    body.style.position = "static";
+    body.style.top = "";
+    body.style.width = "auto";
+    (body.style as any).touchAction = "pan-y";
+
+    // Also remove any scroll-behavior traps
+    // (If another component set overflow hidden via class on <html>, this still helps.)
+    const unlock = () => {
+      html.style.overflow = "auto";
+      body.style.overflow = "auto";
+      (body.style as any).touchAction = "pan-y";
+    };
+
+    // Re-apply a couple times in case another component runs after mount
+    const t1 = window.setTimeout(unlock, 0);
+    const t2 = window.setTimeout(unlock, 50);
+    const t3 = window.setTimeout(unlock, 250);
+
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+
+      html.style.overflow = prev.htmlOverflow;
+      html.style.height = prev.htmlHeight;
+      html.style.position = prev.htmlPosition;
+
+      body.style.overflow = prev.bodyOverflow;
+      body.style.height = prev.bodyHeight;
+      body.style.position = prev.bodyPosition;
+      body.style.top = prev.bodyTop;
+      body.style.width = prev.bodyWidth;
+      (body.style as any).touchAction = prev.bodyTouchAction;
+    };
+  }, []);
+
   /* -------- websocket stream (subscribe ONLY to top 200) -------- */
   useEffect(() => {
     if (!API_KEY || !topIds.length || !wsAvailable) return;
