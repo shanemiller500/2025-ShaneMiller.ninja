@@ -379,7 +379,7 @@ export default function CryptoAssetPopup({
               </div>
 
               {/* key numbers */}
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px]">
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-2 gap-3 text-[12px]">
                 <Metric
                   icon={<FaDollarSign className="text-indigo-600 dark:text-indigo-300" />}
                   label="Price"

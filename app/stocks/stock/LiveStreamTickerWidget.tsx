@@ -115,7 +115,7 @@ const LiveStreamTickerWidget: React.FC = () => {
   const [selectedStockData, setSelectedStockData] = useState<any | null>(null);
   const [selectedNewsData, setSelectedNewsData] = useState<any[]>([]);
   const [modalLoading, setModalLoading] = useState(false);
-
+  const stoppedRef = useRef(false);
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<number | null>(null);
 
@@ -212,138 +212,169 @@ const LiveStreamTickerWidget: React.FC = () => {
   /* ------------------------------------------------------------------ */
   /*  WebSocket (with light reconnect)                                   */
   /* ------------------------------------------------------------------ */
-  useEffect(() => {
-    if (!API_TOKEN) return;
+/* ------------------------------------------------------------------ */
+/*  WebSocket (with light reconnect)                                   */
+/* ------------------------------------------------------------------ */
+useEffect(() => {
+  if (!API_TOKEN) return;
 
-    let stopped = false;
+  // IMPORTANT for Next.js Fast Refresh: refs can survive hot reload
+  stoppedRef.current = false;
 
-    const safeClose = (sock: WebSocket | null) => {
-      if (!sock) return;
-      try {
-        // Only close if it’s not already closed
-        if (sock.readyState === WebSocket.OPEN || sock.readyState === WebSocket.CONNECTING) {
-          sock.close();
-        }
-      } catch {
-        /* ignore */
+  const safeClose = (sock: WebSocket | null) => {
+    if (!sock) return;
+    try {
+      // Only close if it’s not already closed
+      if (sock.readyState === WebSocket.OPEN || sock.readyState === WebSocket.CONNECTING) {
+        sock.close();
       }
-    };
+    } catch {
+      /* ignore */
+    }
+  };
 
-    const connect = () => {
-      if (stopped) return;
+  const connect = () => {
+    if (stoppedRef.current) return;
 
-      // Close any previous socket before replacing it
-      safeClose(socketRef.current);
+    safeClose(socketRef.current);
 
-      const ws = new WebSocket(`wss://ws.finnhub.io?token=${API_TOKEN}`);
-      socketRef.current = ws;
+    const ws = new WebSocket(`wss://ws.finnhub.io?token=${API_TOKEN}`);
+    socketRef.current = ws;
 
-      ws.onopen = () => {
-        if (stopped) return;
-        setWsConnected(true);
-        SYMBOLS.forEach((s) => {
-          try {
-            ws.send(JSON.stringify({ type: "subscribe", symbol: s }));
-          } catch {
-            /* ignore */
-          }
-        });
-      };
+    ws.onopen = () => {
+      if (stoppedRef.current) return;
+      setWsConnected(true);
 
-      ws.onclose = () => {
-        if (stopped) return;
-        setWsConnected(false);
-
-        // reconnect after a short delay (don’t spam)
-        if (reconnectRef.current) window.clearTimeout(reconnectRef.current);
-        reconnectRef.current = window.setTimeout(() => {
-          if (!stopped) connect();
-        }, 2500);
-      };
-
-      ws.onerror = (e) => {
-        if (stopped) return;
-        setWsConnected(false);
-        console.error("WebSocket error:", e);
-
-        // Don’t call ws.close() blindly — it can fire while already closing/closed
-        safeClose(ws);
-      };
-
-      ws.onmessage = (evt) => {
-        if (stopped) return;
-
-        let msg: any;
+      SYMBOLS.forEach((s) => {
         try {
-          msg = JSON.parse(evt.data);
+          ws.send(JSON.stringify({ type: "subscribe", symbol: s }));
         } catch {
-          return;
+          /* ignore */
         }
-        if (msg?.type !== "trade" || !Array.isArray(msg.data) || !msg.data.length) return;
-
-        const updates = msg.data as Array<{ s: string; p: number; t: number }>;
-
-        setTradeInfoMap((prev) => {
-          const next = { ...prev };
-
-          for (const u of updates) {
-            const sym = u.s;
-            if (!SYMBOLS.includes(sym as SymbolT)) continue;
-
-            const price = Number(u.p);
-            if (!Number.isFinite(price) || price <= 0) continue;
-
-            const prevEntry = prev[sym];
-            const prevTick = prevEntry?.price;
-            const prevClose = prevEntry?.prevClose;
-
-            const base =
-              typeof prevClose === "number" && prevClose > 0 ? prevClose : prevTick;
-
-            const percentChange =
-              typeof base === "number" && base > 0 ? ((price - base) / base) * 100 : 0;
-
-            const dir: TradeInfo["dir"] =
-              typeof prevTick === "number"
-                ? price > prevTick
-                  ? "up"
-                  : price < prevTick
-                  ? "down"
-                  : "flat"
-                : prevEntry?.dir ?? "flat";
-
-            next[sym] = {
-              timestamp: u.t || Date.now(),
-              price,
-              prevClose,
-              prevTick,
-              percentChange,
-              dir,
-              flashKey: Date.now(),
-            };
-          }
-
-          return next;
-        });
-      };
+      });
     };
 
-    // slight delay is fine, but don’t reconnect after unmount
-    const t = window.setTimeout(connect, 500);
+    ws.onclose = (evt) => {
+      if (stoppedRef.current) return;
+      setWsConnected(false);
 
-    return () => {
-      stopped = true;
-      window.clearTimeout(t);
-
-      if (reconnectRef.current) {
-        window.clearTimeout(reconnectRef.current);
-        reconnectRef.current = null;
+      // This is where you actually get useful info:
+      // common codes: 1006 (abnormal), 1008 (policy/token), 1011 (server)
+      if (process.env.NODE_ENV === "development") {
+        console.warn("Finnhub WS closed:", { code: evt.code, reason: evt.reason });
       }
 
-      safeClose(socketRef.current);
-      socketRef.current = null;
+      if (reconnectRef.current) window.clearTimeout(reconnectRef.current);
+      reconnectRef.current = window.setTimeout(() => {
+        if (!stoppedRef.current) connect();
+      }, 2500);
     };
-  }, []);
+
+    ws.onerror = () => {
+      if (stoppedRef.current) return;
+
+      // Don't use console.error here — it triggers the big red overlay + extension stack.
+      // Also: WS "error" events rarely include details (often just {}).
+      setWsConnected(false);
+
+      if (process.env.NODE_ENV === "development") {
+        console.warn("Finnhub WS error (no details available)");
+      }
+
+      // Let onclose drive reconnect. Some browsers won't fire onclose unless you close.
+      safeClose(ws);
+    };
+
+    ws.onmessage = (evt) => {
+      if (stoppedRef.current) return;
+
+      let msg: any;
+      try {
+        msg = JSON.parse(evt.data);
+      } catch {
+        return;
+      }
+
+      // Finnhub can send error payloads as messages
+      if (msg?.type === "error") {
+        setWsConnected(false);
+
+        // optional: show a toast once in a while, not on every tick
+        // toast.error(msg?.msg || "Live stream error");
+
+        if (process.env.NODE_ENV === "development") {
+          console.warn("Finnhub message error:", msg);
+        }
+
+        safeClose(ws);
+        return;
+      }
+
+      if (msg?.type !== "trade" || !Array.isArray(msg.data) || !msg.data.length) return;
+
+      const updates = msg.data as Array<{ s: string; p: number; t: number }>;
+
+      setTradeInfoMap((prev) => {
+        const next = { ...prev };
+
+        for (const u of updates) {
+          const sym = u.s;
+          if (!SYMBOLS.includes(sym as SymbolT)) continue;
+
+          const price = Number(u.p);
+          if (!Number.isFinite(price) || price <= 0) continue;
+
+          const prevEntry = prev[sym];
+          const prevTick = prevEntry?.price;
+          const prevClose = prevEntry?.prevClose;
+
+          const base =
+            typeof prevClose === "number" && prevClose > 0 ? prevClose : prevTick;
+
+          const percentChange =
+            typeof base === "number" && base > 0 ? ((price - base) / base) * 100 : 0;
+
+          const dir: TradeInfo["dir"] =
+            typeof prevTick === "number"
+              ? price > prevTick
+                ? "up"
+                : price < prevTick
+                ? "down"
+                : "flat"
+              : prevEntry?.dir ?? "flat";
+
+          next[sym] = {
+            timestamp: u.t || Date.now(),
+            price,
+            prevClose,
+            prevTick,
+            percentChange,
+            dir,
+            flashKey: Date.now(),
+          };
+        }
+
+        return next;
+      });
+    };
+  };
+
+  const t = window.setTimeout(connect, 500);
+
+  return () => {
+    stoppedRef.current = true;
+
+    window.clearTimeout(t);
+
+    if (reconnectRef.current) {
+      window.clearTimeout(reconnectRef.current);
+      reconnectRef.current = null;
+    }
+
+    safeClose(socketRef.current);
+  };
+}, []);
+
 
 
   /* ------------------------------------------------------------------ */
@@ -517,15 +548,15 @@ const LiveStreamTickerWidget: React.FC = () => {
                     <img
                       src={logo || LOGO_FALLBACK}
                       alt={sym}
-                      className="h-12 w-12 object-contain opacity-80"
+                      className="h-13 w-13 object-contain opacity-80"
                       loading="lazy"
                     />
                   </div>
 
                   {/* ticker symbol (top-left) */}
-                  <div className="absolute left-2 top-2 rounded-md bg-white/70 dark:bg-black/25 px-2 py-1 text-[11px] font-extrabold tracking-wide text-gray-900 dark:text-white ring-1 ring-black/5 dark:ring-white/10">
+                  {/* <div className="absolute left-2 top-2 rounded-md bg-white/70 dark:bg-black/25 px-2 py-1 text-[11px] font-extrabold tracking-wide text-gray-900 dark:text-white ring-1 ring-black/5 dark:ring-white/10">
                     {sym}
-                  </div>
+                  </div> */}
 
                   {/* flash overlay (every update) */}
                   <AnimatePresence initial={false}>
