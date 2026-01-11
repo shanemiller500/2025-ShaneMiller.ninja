@@ -89,10 +89,27 @@ const compact = (n: number | null | undefined) =>
 const pctText = (n: number | null | undefined) =>
   typeof n === "number" && Number.isFinite(n) ? `${n.toFixed(2)}%` : "—";
 
-const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
-
 const percentClass = (v: number) =>
   v >= 0 ? "text-green-600 dark:text-green-300" : "text-red-600 dark:text-red-300";
+
+/** mobile-ish heuristic (Chart.js is canvas, so we need our own breakpoint) */
+const isMobileViewport = () =>
+  typeof window !== "undefined" && window.matchMedia?.("(max-width: 640px)")?.matches;
+
+/** short $ formatter for axis ticks (less words on mobile) */
+const axisUsd = (v: number, mobile: boolean) => {
+  if (!Number.isFinite(v)) return "—";
+  if (!mobile) return usd(v);
+
+  const abs = Math.abs(v);
+  // show compact like $12.3k, $4.5M
+  if (abs >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
+  // small numbers: keep it tight
+  if (abs >= 1) return `$${v.toFixed(2)}`;
+  return `$${v.toPrecision(2)}`;
+};
 
 /* ------------------------------------------------------------------ */
 /*                           Main component                           */
@@ -108,16 +125,25 @@ const CryptoChartPrices: React.FC = () => {
   const [loadingChart, setLoadingChart] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep chartType, but make the “default” experience feel premium:
-  // - For non-line types, we still render, but we keep the tooltip + zoom sane.
   const [chartType, setChartType] = useState<keyof ChartTypeRegistry>("line");
   const [timeFrame, setTimeFrame] = useState<TimeFrameOption>("24h");
 
   const [logos, setLogos] = useState<Record<string, string>>({}); // symbol → imageURL
 
+  /* ✅ viewport state so we can re-render chart options on resize */
+  const [isMobile, setIsMobile] = useState(false);
+
   /* ---------------- refs ---------------- */
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
+
+  /* ---------------- viewport watcher ---------------- */
+  useEffect(() => {
+    const set = () => setIsMobile(isMobileViewport());
+    set();
+    window.addEventListener("resize", set, { passive: true } as any);
+    return () => window.removeEventListener("resize", set as any);
+  }, []);
 
   /* ---------------- logo preload (once) ---------------- */
   useEffect(() => {
@@ -218,7 +244,10 @@ const CryptoChartPrices: React.FC = () => {
     setError(null);
 
     try {
-      const [data, details] = await Promise.all([fetchSeries(assetId, timeFrame), fetchDetails(assetId)]);
+      const [data, details] = await Promise.all([
+        fetchSeries(assetId, timeFrame),
+        fetchDetails(assetId),
+      ]);
       setChartData(data);
       setCryptoDetails(details);
 
@@ -298,16 +327,17 @@ const CryptoChartPrices: React.FC = () => {
 
     // axis formatting based on timeframe
     let unit: "minute" | "hour" | "day" = "hour";
-    let maxTicks = 8;
+    let maxTicks = isMobile ? 4 : 8;
+
     if (timeFrame === "1h") {
       unit = "minute";
-      maxTicks = 6;
+      maxTicks = isMobile ? 3 : 6;
     } else if (timeFrame === "7d") {
       unit = "day";
-      maxTicks = 7;
+      maxTicks = isMobile ? 4 : 7;
     } else if (timeFrame === "30d") {
       unit = "day";
-      maxTicks = 8;
+      maxTicks = isMobile ? 4 : 8;
     }
 
     const pricePts = chartData.map((p) => ({ x: new Date(p.t), y: p.y }));
@@ -320,66 +350,101 @@ const CryptoChartPrices: React.FC = () => {
         label,
         data: pts,
         borderColor: color,
-        // fill only when line-like
         fill: label.includes("Price") && chartType === "line",
         backgroundColor: color.replace("rgb(", "rgba(").replace(")", ",0.14)"),
-        pointRadius: chartType === "scatter" ? 3 : 0,
+        pointRadius: chartType === "scatter" ? (isMobile ? 2 : 3) : 0,
         showLine: chartType !== "scatter",
         tension: 0.25,
         yAxisID: label.includes("%") ? "y2" : "y1",
+        borderWidth: isMobile ? 2 : 2,
       } as ChartDataset);
 
     const dataCfg = {
       datasets: [
-        lineDataset("Price (USD)", pricePts, "rgb(56,161,219)"),
-        lineDataset("Change (%)", pctPts, "rgb(229,62,62)"),
+        lineDataset("Price", pricePts, "rgb(56,161,219)"),
+        lineDataset("%", pctPts, "rgb(229,62,62)"),
       ],
     };
 
     const cfgOpts: any = {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 250 },
+      animation: { duration: isMobile ? 180 : 250 },
       interaction: { mode: "nearest", intersect: false },
+
+      // ✅ better mobile padding so labels don't collide / clip
+      layout: {
+        padding: {
+          left: isMobile ? 4 : 8,
+          right: isMobile ? 4 : 8,
+          top: isMobile ? 6 : 10,
+          bottom: isMobile ? 2 : 6,
+        },
+      },
+
       scales: isLineLike
         ? {
-            x: {
-              type: "time",
-              time: { unit },
-              ticks: { maxTicksLimit: maxTicks, color: "#888" },
-              grid: { color: "rgba(0,0,0,0.05)" },
-            },
+          x: {
+  type: "time",
+  time: { unit },
+
+  // ✅ no bottom labels (numbers)
+  ticks: { display: false },
+
+  // ✅ keep vertical gridlines if you want them (optional)
+  grid: { color: "rgba(0,0,0,0.05)" },
+
+  // ✅ no bottom axis line
+  border: { display: false },
+},
+
             y1: {
               position: "left",
               grid: { color: "rgba(0,0,0,0.05)" },
               ticks: {
                 color: "#38a1db",
-                callback: (v: any) => usd(Number(v)),
+                padding: isMobile ? 4 : 6,
+                font: { size: isMobile ? 10 : 12, weight: "700" },
+                maxTicksLimit: isMobile ? 4 : 6,
+                callback: (v: any) => axisUsd(Number(v), isMobile),
               },
             },
             y2: {
               position: "right",
               grid: { drawOnChartArea: false },
-              ticks: { color: "#e53e3e", callback: (v: any) => `${v}%` },
+              ticks: {
+                color: "#e53e3e",
+                padding: isMobile ? 4 : 6,
+                font: { size: isMobile ? 10 : 12, weight: "700" },
+                maxTicksLimit: isMobile ? 4 : 6,
+                callback: (v: any) => `${Number(v).toFixed(isMobile ? 0 : 1)}%`,
+              },
             },
           }
         : undefined,
+
       plugins: {
         legend: { display: false },
         tooltip: {
+          // ✅ bigger touch target on mobile
+          padding: isMobile ? 10 : 8,
+          titleFont: { size: isMobile ? 12 : 12, weight: "700" },
+          bodyFont: { size: isMobile ? 12 : 12, weight: "700" },
           callbacks: {
             label: (ctx: TooltipItem<"line">) =>
               `${ctx.dataset.label}: ${
-                ctx.dataset.label?.includes("%")
+                String(ctx.dataset.label).includes("%")
                   ? `${ctx.parsed.y.toFixed(2)}%`
                   : usd(ctx.parsed.y)
               }`,
           },
         },
+
+        // ✅ make mobile zoom less annoying: allow pinch, but disable wheel
         zoom: {
           pan: { enabled: isLineLike, mode: "xy" },
           zoom: {
-            wheel: { enabled: isLineLike },
+            wheel: { enabled: isLineLike && !isMobile },
             pinch: { enabled: isLineLike },
             mode: "xy",
           },
@@ -396,7 +461,12 @@ const CryptoChartPrices: React.FC = () => {
       data: dataCfg,
       options: cfgOpts,
     });
-  }, [chartData, chartType, timeFrame]);
+
+    return () => {
+      chartRef.current?.destroy();
+      chartRef.current = null;
+    };
+  }, [chartData, chartType, timeFrame, isMobile]);
 
   /* ---------------- search handler ---------------- */
   const handleSearch = async (e: FormEvent) => {
@@ -443,7 +513,9 @@ const CryptoChartPrices: React.FC = () => {
 
           <div>
             <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-              {cryptoDetails ? `${cryptoDetails.name} (${cryptoDetails.symbol.toUpperCase()})` : "Charts & Metrics"}
+              {cryptoDetails
+                ? `${cryptoDetails.name} (${cryptoDetails.symbol.toUpperCase()})`
+                : "Charts & Metrics"}
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Search any CoinCap asset • zoom + pan supported
@@ -454,7 +526,11 @@ const CryptoChartPrices: React.FC = () => {
         {/* status */}
         <div className="text-right">
           <div className="text-xs text-gray-500 dark:text-gray-400">24h</div>
-          <div className={`text-sm font-bold ${change24h == null ? "text-gray-400" : percentClass(change24h)}`}>
+          <div
+            className={`text-sm font-bold ${
+              change24h == null ? "text-gray-400" : percentClass(change24h)
+            }`}
+          >
             {change24h == null ? "—" : pctText(change24h)}
           </div>
         </div>
@@ -471,9 +547,7 @@ const CryptoChartPrices: React.FC = () => {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          {error && (
-            <div className="mt-1 text-xs text-red-600 dark:text-red-300">{error}</div>
-          )}
+          {error && <div className="mt-1 text-xs text-red-600 dark:text-red-300">{error}</div>}
         </div>
 
         <button
@@ -601,9 +675,7 @@ const CryptoChartPrices: React.FC = () => {
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <div className="text-xs text-gray-500 dark:text-gray-400">Rank</div>
-              <div className="text-sm font-bold text-gray-900 dark:text-white">
-                #{cryptoDetails.rank}
-              </div>
+              <div className="text-sm font-bold text-gray-900 dark:text-white">#{cryptoDetails.rank}</div>
             </div>
 
             <div className="text-right">

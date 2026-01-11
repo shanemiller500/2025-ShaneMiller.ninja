@@ -1,53 +1,130 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, {
-  useEffect,
-  useState,
-  useRef,
-  useMemo,
-  useCallback,
-  JSX,
-} from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   FaTable,
   FaThLarge,
+  FaArrowUp,
+  FaArrowDown,
+  FaSyncAlt,
+  FaSearch,
+  FaTrophy,
+  FaSkullCrossbones,
 } from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
-import CryptoAssetPopup from "@/utils/CryptoAssetPopup"; // <-- new import
+import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
 
 /* ---------- helpers ---------- */
-const formatValue = (v: any) => {
-  const n = parseFloat(v);
-  return isNaN(n)
-    ? "N/A"
-    : n.toLocaleString("en-US", {
-        maximumFractionDigits: 2,
-        minimumFractionDigits: 2,
-      });
-};
-
 const currencyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 2,
 });
+
 const formatUSD = (v: any) => {
   const n = parseFloat(v);
-  return isNaN(n) ? "—" : currencyFmt.format(n);
+  return Number.isFinite(n) ? currencyFmt.format(n) : "—";
 };
+
+const formatPct = (v: any) => {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? `${n.toFixed(2)}%` : "—";
+};
+
+function cn(...xs: Array<string | false | null | undefined>) {
+  return xs.filter(Boolean).join(" ");
+}
 
 /* ---------- API constants ---------- */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 const COINGECKO_TOP200 =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
 
+/* ---------- small UI pieces ---------- */
+function Pill({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "up" | "down";
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-extrabold ring-1",
+        tone === "up" &&
+          "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/20",
+        tone === "down" &&
+          "bg-rose-500/10 text-rose-700 ring-rose-500/20 dark:bg-rose-400/10 dark:text-rose-200 dark:ring-rose-300/20",
+        tone === "neutral" &&
+          "bg-black/[0.03] text-gray-700 ring-black/10 dark:bg-white/[0.06] dark:text-white/75 dark:ring-white/10",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function SegButton({
+  active,
+  label,
+  icon,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "relative flex-1 sm:flex-none rounded-xl px-4 py-2 text-xs font-extrabold transition",
+        "ring-1 ring-black/10 dark:ring-white/10",
+        active
+          ? "bg-indigo-600/15 text-indigo-800 dark:text-indigo-200"
+          : "bg-white/70 dark:bg-white/[0.06] text-gray-700 dark:text-white/70 hover:text-gray-900 dark:hover:text-white",
+      )}
+    >
+      <span className="inline-flex items-center gap-2">
+        <span className="text-indigo-600 dark:text-indigo-300">{icon}</span>
+        {label}
+      </span>
+    </button>
+  );
+}
+
 export default function TopGainersLosers() {
   const [cryptoData, setCryptoData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [selectedAsset, setSelectedAsset] = useState<any | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+
   const [logos, setLogos] = useState<Record<string, string>>({});
+  const [tab, setTab] = useState<"gainers" | "losers">("gainers");
+  const [query, setQuery] = useState("");
+  const [lastUpdated, setLastUpdated] = useState<number>(0);
+
+  // flash support (NO invalid <div> inside <tr>)
+  const [tickMap, setTickMap] = useState<Record<string, { price?: number; bump?: number }>>({});
+
+  /* ✅ FIX SCROLL: if any modal/popup previously left body locked, unlock it on this page */
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    const prevTouch = document.body.style.touchAction;
+    document.body.style.overflow = "auto";
+    document.body.style.touchAction = "auto";
+    return () => {
+      document.body.style.overflow = prev;
+      document.body.style.touchAction = prevTouch;
+    };
+  }, []);
 
   /* -------- preload CoinGecko logos -------- */
   useEffect(() => {
@@ -56,8 +133,9 @@ export default function TopGainersLosers() {
         const res = await fetch(COINGECKO_TOP200);
         const json = await res.json();
         const map: Record<string, string> = {};
-        json.forEach((c: any) => {
-          map[c.symbol.toLowerCase()] = c.image;
+        (json || []).forEach((c: any) => {
+          const k = c?.symbol?.toLowerCase?.();
+          if (k) map[k] = c.image;
         });
         setLogos(map);
       } catch {
@@ -66,222 +144,460 @@ export default function TopGainersLosers() {
     })();
   }, []);
 
+      /* ✅ HARD FIX: force-enable scroll on html/body while this page is mounted */
+    useEffect(() => {
+      const html = document.documentElement;
+      const body = document.body;
+  
+      const prev = {
+        htmlOverflow: html.style.overflow,
+        htmlHeight: html.style.height,
+        htmlPosition: html.style.position,
+        bodyOverflow: body.style.overflow,
+        bodyHeight: body.style.height,
+        bodyPosition: body.style.position,
+        bodyTop: body.style.top,
+        bodyWidth: body.style.width,
+        bodyTouchAction: (body.style as any).touchAction,
+      };
+  
+      // Nuke common "modal left me locked" settings
+      html.style.overflow = "auto";
+      html.style.height = "auto";
+      html.style.position = "static";
+  
+      body.style.overflow = "auto";
+      body.style.height = "auto";
+      body.style.position = "static";
+      body.style.top = "";
+      body.style.width = "auto";
+      (body.style as any).touchAction = "pan-y";
+  
+      // Also remove any scroll-behavior traps
+      // (If another component set overflow hidden via class on <html>, this still helps.)
+      const unlock = () => {
+        html.style.overflow = "auto";
+        body.style.overflow = "auto";
+        (body.style as any).touchAction = "pan-y";
+      };
+  
+      // Re-apply a couple times in case another component runs after mount
+      const t1 = window.setTimeout(unlock, 0);
+      const t2 = window.setTimeout(unlock, 50);
+      const t3 = window.setTimeout(unlock, 250);
+  
+      return () => {
+        window.clearTimeout(t1);
+        window.clearTimeout(t2);
+        window.clearTimeout(t3);
+  
+        html.style.overflow = prev.htmlOverflow;
+        html.style.height = prev.htmlHeight;
+        html.style.position = prev.htmlPosition;
+  
+        body.style.overflow = prev.bodyOverflow;
+        body.style.height = prev.bodyHeight;
+        body.style.position = prev.bodyPosition;
+        body.style.top = prev.bodyTop;
+        body.style.width = prev.bodyWidth;
+        (body.style as any).touchAction = prev.bodyTouchAction;
+      };
+    }, []);
+
   /* -------- fetch CoinCap prices every 15s -------- */
   useEffect(() => {
-    if (!API_KEY) return;
+    if (!API_KEY) {
+      setLoading(false);
+      return;
+    }
+
+    let canceled = false;
+
     const load = async () => {
       try {
         const res = await fetch(
           `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`,
         );
         const json = await res.json();
-        setCryptoData(Array.isArray(json.data) ? json.data : []);
+        const rows = Array.isArray(json.data) ? json.data : [];
+        if (canceled) return;
+
+        // bump flashes when price changes per asset
+        setTickMap((prev) => {
+          const next = { ...prev };
+          for (const c of rows) {
+            const id = c?.id;
+            if (!id) continue;
+            const p = parseFloat(c?.priceUsd);
+            if (!Number.isFinite(p)) continue;
+
+            const old = prev[id]?.price;
+            const changed = old != null && p !== old;
+            next[id] = {
+              price: p,
+              bump: changed ? (prev[id]?.bump || 0) + 1 : prev[id]?.bump || 0,
+            };
+          }
+          return next;
+        });
+
+        setCryptoData(rows);
+        setLastUpdated(Date.now());
       } catch (e) {
         console.error("CoinCap fetch error:", e);
-        setCryptoData([]);
+        if (!canceled) setCryptoData([]);
       } finally {
-        setLoading(false);
+        if (!canceled) setLoading(false);
       }
     };
+
     load();
     const iv = setInterval(load, 15000);
-    return () => clearInterval(iv);
+
+    return () => {
+      canceled = true;
+      clearInterval(iv);
+    };
   }, []);
 
   /* ------------ derived lists ------------- */
-  const sorted = useMemo(
-    () =>
-      [...cryptoData].sort(
-        (a, b) =>
-          parseFloat(b.changePercent24Hr) - parseFloat(a.changePercent24Hr),
-      ),
-    [cryptoData],
-  );
+  const sorted = useMemo(() => {
+    const list = Array.isArray(cryptoData) ? cryptoData : [];
+    return [...list].sort(
+      (a, b) =>
+        parseFloat(b?.changePercent24Hr ?? "0") -
+        parseFloat(a?.changePercent24Hr ?? "0"),
+    );
+  }, [cryptoData]);
+
   const topGainers = sorted.slice(0, 15);
   const topLosers = sorted.slice(-15).reverse();
 
-  /* --------------- UI helpers --------------- */
-  const Metric = ({
-    icon,
-    label,
-    value,
-    color = "text-gray-900",
-  }: {
-    icon: JSX.Element;
-    label: string;
-    value: string;
-    color?: string;
-  }) => (
-    <div className="flex items-center gap-2 bg-gray-100 p-2 rounded hover:scale-105 transition-transform">
-      {icon}
-      <div className="flex flex-col">
-        <span className="text-[10px] sm:text-xs text-gray-500">{label}</span>
-        <span className={`font-semibold ${color} text-xs sm:text-sm`}>{value}</span>
-      </div>
+  const activeRows = tab === "gainers" ? topGainers : topLosers;
+
+  const filteredActive = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return activeRows;
+
+    return activeRows.filter((c) => {
+      const sym = String(c?.symbol ?? "").toLowerCase();
+      const name = String(c?.name ?? "").toLowerCase();
+      return sym.includes(q) || name.includes(q);
+    });
+  }, [activeRows, query]);
+
+  const updatedLabel = useMemo(() => {
+    if (!lastUpdated) return "—";
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(lastUpdated);
+  }, [lastUpdated]);
+
+  const openAsset = (c: any) => {
+    setSelectedAsset(c);
+    trackEvent("CryptoAssetClick", { id: c?.id, symbol: c?.symbol, tab });
+  };
+
+  const renderTable = (rows: any[]) => (
+    <div className="overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
+      <table className="min-w-full divide-y divide-black/5 dark:divide-white/10">
+        <thead className="bg-black/[0.03] dark:bg-white/[0.06]">
+          <tr>
+            {["Rank", "Symbol", "Name", "Price", "24h"].map((h) => (
+              <th
+                key={h}
+                className="px-3 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60"
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody className="divide-y divide-black/5 dark:divide-white/10">
+          {rows.map((c) => {
+            const change = parseFloat(c?.changePercent24Hr ?? "0");
+            const pos = Number.isFinite(change) && change >= 0;
+            const neg = Number.isFinite(change) && change < 0;
+
+            const logo = logos[String(c?.symbol ?? "").toLowerCase()];
+            const bump = tickMap[c?.id]?.bump || 0;
+
+            // ✅ motion.tr is still a <tr> — children are ONLY <td>, so no hydration error
+            return (
+              <motion.tr
+                key={`${c?.id}-${bump}`} // replay flash on bump changes
+                className="cursor-pointer transition hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
+                onClick={() => openAsset(c)}
+                initial={false}
+                animate={{
+                  backgroundColor: bump
+                    ? pos
+                      ? "rgba(16,185,129,0.18)"
+                      : neg
+                        ? "rgba(244,63,94,0.18)"
+                        : "rgba(0,0,0,0)"
+                    : "rgba(0,0,0,0)",
+                }}
+                transition={{ duration: 0.35, ease: "easeOut" }}
+              >
+                <td className="px-3 sm:px-4 py-2 text-[11px] sm:text-sm font-semibold text-gray-700 dark:text-white/75">
+                  {c?.rank ?? "—"}
+                </td>
+
+                <td className="px-3 sm:px-4 py-2">
+                  <div className="flex items-center gap-2">
+                    {logo ? (
+                      <span className="inline-flex items-center justify-center rounded-full bg-white/90 dark:bg-white/10 p-[2px] ring-1 ring-black/10 dark:ring-white/10">
+                        <img
+                          src={logo}
+                          alt={c?.symbol}
+                          className="h-5 w-5 sm:h-6 sm:w-6"
+                          loading="lazy"
+                        />
+                      </span>
+                    ) : (
+                      <span className="h-5 w-5 sm:h-6 sm:w-6 rounded-full bg-black/10 dark:bg-white/10" />
+                    )}
+                    <div className="font-extrabold text-[12px] sm:text-sm text-gray-900 dark:text-white">
+                      {c?.symbol ?? "—"}
+                    </div>
+                  </div>
+                </td>
+
+                <td className="px-3 sm:px-4 py-2">
+                  <div className="text-[12px] sm:text-sm font-semibold text-gray-800 dark:text-white/80 line-clamp-1">
+                    {c?.name ?? "—"}
+                  </div>
+                </td>
+
+                <td className="px-3 sm:px-4 py-2 text-[12px] sm:text-sm font-extrabold text-gray-900 dark:text-white">
+                  {formatUSD(c?.priceUsd)}
+                </td>
+
+                <td className="px-3 sm:px-4 py-2">
+                  <div
+                    className={cn(
+                      "inline-flex items-center gap-2 text-[12px] sm:text-sm font-extrabold",
+                      pos
+                        ? "text-green-600 dark:text-green-300"
+                        : "text-red-600 dark:text-red-300",
+                    )}
+                  >
+                    {pos ? <FaArrowUp /> : <FaArrowDown />}
+                    {formatPct(c?.changePercent24Hr)}
+                  </div>
+                </td>
+              </motion.tr>
+            );
+          })}
+
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={5} className="px-4 py-4 text-sm text-gray-600 dark:text-white/70">
+                No matches in the top 15.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 
-  const TableRows = ({ rows }: { rows: any[] }) =>
-    rows.map((c) => {
-      const pos = parseFloat(c.changePercent24Hr) >= 0;
-      const logo = logos[c.symbol.toLowerCase()];
-      return (
-        <tr
-          key={c.id}
-          className="transition-transform duration-200 ease-in hover:scale-95 cursor-pointer"
-          onClick={() => {
-            setSelectedAsset(c);
-            trackEvent("CryptoAssetClick", { id: c.id });
-          }}
-        >
-          <td className="px-2 sm:px-4 py-1 sm:py-2 text-[10px] sm:text-sm">{c.rank}</td>
-          <td className="px-2 sm:px-4 py-1 sm:py-2 flex items-center gap-1 font-semibold text-[11px] sm:text-sm">
-            {logo && (
-              <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
-                <img
-                  src={logo}
-                  alt={c.symbol}
-                  className="w-4 h-4 sm:w-5 sm:h-5"
-                  loading="lazy"
-                />
-              </span>
+  const renderGrid = (rows: any[]) => (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+      {rows.map((c) => {
+        const change = parseFloat(c?.changePercent24Hr ?? "0");
+        const pos = Number.isFinite(change) && change >= 0;
+        const neg = Number.isFinite(change) && change < 0;
+
+        // keep your heatmap punch
+        const bg = pos ? "bg-green-500" : neg ? "bg-red-500" : "bg-gray-400";
+
+        const logo = logos[String(c?.symbol ?? "").toLowerCase()];
+        const bump = tickMap[c?.id]?.bump || 0;
+
+        return (
+          <motion.button
+            key={`${c?.id}-${bump}`}
+            type="button"
+            onClick={() => openAsset(c)}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.98 }}
+            className={cn(
+              "relative text-left overflow-hidden rounded-2xl p-3 shadow-sm ring-1 ring-black/10 dark:ring-white/10",
+              bg,
             )}
-            {c.symbol}
-          </td>
-          <td className="px-2 sm:px-4 py-1 sm:py-2 italic text-[11px] sm:text-sm">
-            {c.name}
-          </td>
-          <td className="px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm">
-            {formatUSD(c.priceUsd)}
-          </td>
-          <td
-            className={`px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm ${
-              pos ? "text-green-600" : "text-red-600"
-            }`}
+            initial={false}
+            animate={{
+              filter: bump ? "brightness(1.08)" : "brightness(1)",
+            }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
           >
-            {formatValue(c.changePercent24Hr)}% {pos ? "↑" : "↓"}
-          </td>
-        </tr>
-      );
-    });
+            <div className="pointer-events-none absolute inset-0 bg-black/10" />
 
-  const GridCards = ({ rows }: { rows: any[] }) =>
-    rows.map((c) => {
-      const change = parseFloat(c.changePercent24Hr);
-      const bg =
-        change > 0 ? "bg-green-500" : change < 0 ? "bg-red-500" : "bg-gray-400";
-      const logo = logos[c.symbol.toLowerCase()];
-      return (
-        <motion.div
-          key={c.id}
-          className={`${bg} text-white p-2 sm:p-3 rounded-lg shadow cursor-pointer`}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            setSelectedAsset(c);
-            trackEvent("CryptoAssetClick", { id: c.id });
-          }}
-        >
-          <div className="flex items-center gap-1">
-            <span className="text-[9px] sm:text-xs bg-black/40 px-1 rounded">
-              #{c.rank}
-            </span>
-            {logo && (
-              <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
-                <img
-                  src={logo}
-                  alt={c.symbol}
-                  className="w-4 h-4 sm:w-5 sm:h-5"
-                  loading="lazy"
-                />
+            <div className="relative flex items-center gap-2">
+              <span className="rounded-lg bg-black/35 px-2 py-0.5 text-[10px] font-extrabold text-white">
+                #{c?.rank ?? "—"}
               </span>
-            )}
-            <span className="font-bold text-sm sm:text-lg">{c.symbol}</span>
-          </div>
-          <div className="mt-0.5 text-[11px] sm:text-sm">{formatUSD(c.priceUsd)}</div>
-          <div className="text-[9px] sm:text-xs opacity-80">
-            {formatValue(change)}%
-          </div>
-        </motion.div>
-      );
-    });
 
-  if (loading)
+              {logo ? (
+                <span className="inline-flex items-center justify-center rounded-full bg-white/90 p-[2px] ring-1 ring-black/10">
+                  <img src={logo} alt={c?.symbol} className="h-5 w-5" loading="lazy" />
+                </span>
+              ) : (
+                <span className="h-5 w-5 rounded-full bg-white/30" />
+              )}
+
+              <div className="ml-auto inline-flex items-center gap-1 rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-extrabold text-white">
+                {pos ? <FaArrowUp /> : <FaArrowDown />}
+                {formatPct(change)}
+              </div>
+            </div>
+
+            <div className="relative mt-2">
+              <div className="text-base sm:text-lg font-black text-white">
+                {c?.symbol ?? "—"}
+              </div>
+              <div className="mt-0.5 text-[12px] font-semibold text-white/90 line-clamp-1">
+                {c?.name ?? "—"}
+              </div>
+              <div className="mt-1 text-[12px] font-extrabold text-white">
+                {formatUSD(c?.priceUsd)}
+              </div>
+            </div>
+          </motion.button>
+        );
+      })}
+
+      {rows.length === 0 && (
+        <div className="col-span-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 text-sm text-gray-700 dark:text-white/70">
+          No matches in the top 15.
+        </div>
+      )}
+    </div>
+  );
+
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p>Loading crypto data…</p>
+      <div className="min-h-[70vh] flex items-center justify-center px-4">
+        <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
+          <div className="text-sm font-extrabold text-gray-900 dark:text-white">
+            Loading crypto data…
+          </div>
+          <div className="mt-2 h-2 w-56 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+            <motion.div
+              className="h-full w-1/2 bg-indigo-500/60"
+              initial={{ x: "-100%" }}
+              animate={{ x: "200%" }}
+              transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
+            />
+          </div>
+        </div>
       </div>
     );
+  }
 
   return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-5xl mx-auto">
-        {/* header */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-            Crypto Market Movers
-          </h1>
-          <button
-            onClick={() => {
-              const next = viewMode === "table" ? "grid" : "table";
-              setViewMode(next);
-              trackEvent("CryptoViewToggle", { view: next });
-            }}
-            className="flex items-center gap-2 bg-brand-gradient border border-gray-300 dark:border-gray-600 text-white px-4 py-2 rounded-full shadow-sm hover:shadow-md transition-shadow duration-200"
-          >
-            {viewMode === "table" ? <FaThLarge className="w-5 h-5" /> : <FaTable className="w-5 h-5" />}
-            <span className="hidden sm:inline text-sm font-medium">
-              {viewMode === "table" ? "Grid View" : "Table View"}
-            </span>
-          </button>
+    // ✅ scroll-safe padding + no overflow-hidden anywhere
+    <div className="min-h-screen px-4 py-6 pb-24">
+      <div className="mx-auto max-w-5xl">
+        {/* Header */}
+        <div className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-5 shadow-sm">
+          <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
+            <div className="absolute -top-16 -left-20 h-60 w-60 rounded-full bg-indigo-400/20 blur-3xl" />
+            <div className="absolute -bottom-20 -right-16 h-64 w-64 rounded-full bg-fuchsia-400/20 blur-3xl" />
+          </div>
+
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+                Crypto Market Movers
+              </h1>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Pill tone="neutral">
+                  <FaSyncAlt className="opacity-80" />
+                  Updates every 15s
+                </Pill>
+                <Pill tone="neutral">Last: {updatedLabel}</Pill>
+                <Pill tone={tab === "gainers" ? "up" : "down"}>
+                  {tab === "gainers" ? <FaTrophy /> : <FaSkullCrossbones />}
+                  {tab === "gainers" ? "Top gainers" : "Top losers"}
+                </Pill>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:items-end gap-3">
+              {/* View toggle */}
+              <button
+                onClick={() => {
+                  const next = viewMode === "table" ? "grid" : "table";
+                  setViewMode(next);
+                  trackEvent("CryptoViewToggle", { view: next });
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-extrabold text-white shadow-sm ring-1 ring-black/10 dark:ring-white/10 bg-brand-gradient hover:opacity-95 active:scale-[0.99] transition"
+              >
+                {viewMode === "table" ? <FaThLarge className="w-4 h-4" /> : <FaTable className="w-4 h-4" />}
+                <span>{viewMode === "table" ? "Grid view" : "Table view"}</span>
+              </button>
+
+              {/* Tabs */}
+              <div className="inline-flex w-full sm:w-auto rounded-2xl p-1 bg-black/[0.03] dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10">
+                <SegButton
+                  active={tab === "gainers"}
+                  label="Gainers"
+                  icon={<FaArrowUp />}
+                  onClick={() => {
+                    setTab("gainers");
+                    setQuery("");
+                    trackEvent("CryptoMoversTab", { tab: "gainers" });
+                  }}
+                />
+                <SegButton
+                  active={tab === "losers"}
+                  label="Losers"
+                  icon={<FaArrowDown />}
+                  onClick={() => {
+                    setTab("losers");
+                    setQuery("");
+                    trackEvent("CryptoMoversTab", { tab: "losers" });
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="relative mt-4">
+            <div className="flex items-center gap-2 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-black/20 px-3 py-2">
+              <FaSearch className="text-gray-500 dark:text-white/45" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter top 15 by symbol or name…"
+                className="flex-1 bg-transparent outline-none text-sm text-gray-900 placeholder:text-gray-400 dark:text-white dark:placeholder:text-white/35"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="rounded-xl px-3 py-2 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/60 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10]"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* table / grid */}
-        {viewMode === "table" ? (
-          <>
-            {["Top 15 Gainers", "Top 15 Losers"].map((title, idx) => (
-              <section className="mb-8" key={title}>
-                <h2 className="font-semibold text-lg sm:text-xl mb-1">{title}</h2>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-100">
-                    <thead className="bg-gray-100 text-brand-900">
-                      <tr>
-                        {["Rank", "Symbol", "Name", "Price (USD)", "24h %"].map((h) => (
-                          <th
-                            key={h}
-                            className="px-2 sm:px-4 py-1 sm:py-2 uppercase text-[9px] sm:text-xs text-left"
-                          >
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <TableRows rows={idx === 0 ? topGainers : topLosers} />
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            ))}
-          </>
-        ) : (
-          <>
-            <section className="mb-8">
-              <h2 className="font-semibold text-lg sm:text-xl mb-3">Top 15 Gainers</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                <GridCards rows={topGainers} />
-              </div>
-            </section>
-            <section className="mb-8">
-              <h2 className="font-semibold text-lg sm:text-xl mb-3">Top 15 Losers</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                <GridCards rows={topLosers} />
-              </div>
-            </section>
-          </>
-        )}
+        {/* Content */}
+        <div className="mt-5">
+          {viewMode === "table" ? renderTable(filteredActive) : renderGrid(filteredActive)}
+        </div>
 
-        {/* shared crypto popup */}
+        {/* Popup */}
         <CryptoAssetPopup
           asset={selectedAsset}
           logos={logos}
