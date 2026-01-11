@@ -24,7 +24,7 @@ export default function widgetSearch() {
       <form onSubmit={handleSearch} className="w-full  px-4">
           <input
             type="text"
-            className="flex-grow bg-transparent rounded-lg border border-slate-200 dark:border-slate-800 text-gray-100 placeholder-gray-500"
+            className="flex-grow bg-transparent rounded-lg border border-slate-200 dark:border-slate-800 text-black dark:text-gray-100 placeholder-gray-500"
             placeholder="Search Anything"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

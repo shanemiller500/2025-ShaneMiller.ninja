@@ -483,112 +483,130 @@ export default function LiveStreamHeatmap() {
               );
             })}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-100">
-              <thead className="bg-gray-100 text-brand-900">
-                <tr>
-                  {["Rank", "Symbol", "Name", "Price (USD)", "24 h %"].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        className="px-2 sm:px-4 py-1 sm:py-2 uppercase text-[9px] sm:text-xs text-left"
-                      >
-                        {h}
-                      </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {sortedIds.map((id) => {
-                  const md = metaData[id] || {};
-                  const { price, prev, bump } = tradeInfoMap[id] || {};
+       ) : (
+  <div className="overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
+    <table className="min-w-full divide-y divide-black/5 dark:divide-white/10">
+      <thead className="bg-black/[0.03] dark:bg-white/[0.06]">
+        <tr>
+          {["Rank", "Symbol", "Name", "Price", "24h"].map((h) => (
+            <th
+              key={h}
+              className="px-3 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60"
+            >
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
 
-                  const pct = parseFloat(String(md.changePercent24Hr ?? ""));
-                  const pctPos = Number.isFinite(pct) && pct > 0;
-                  const pctNeg = Number.isFinite(pct) && pct < 0;
+      <tbody className="divide-y divide-black/5 dark:divide-white/10">
+        {sortedIds.map((id) => {
+          const md = metaData[id] || {};
+          const { price, prev, bump } = tradeInfoMap[id] || {};
 
-                  const tickPos = price != null && prev != null && price > prev;
-                  const tickNeg = price != null && prev != null && price < prev;
+          const pct = parseFloat(String(md.changePercent24Hr ?? ""));
+          const pctPos = Number.isFinite(pct) && pct > 0;
+          const pctNeg = Number.isFinite(pct) && pct < 0;
 
-                  // ✅ Always red/green immediately
-                  const pos = prev != null ? tickPos : pctPos;
-                  const neg = prev != null ? tickNeg : pctNeg;
+          const tickPos = price != null && prev != null && price > prev;
+          const tickNeg = price != null && prev != null && price < prev;
 
-                  const bgRow = pos
-                    ? "bg-green-500"
+          // ✅ Always red/green immediately (tick direction if available, else 24h sign)
+          const pos = prev != null ? tickPos : pctPos;
+          const neg = prev != null ? tickNeg : pctNeg;
+
+          const logo = logos[String(md.symbol ?? "").toLowerCase()];
+
+          return (
+            <motion.tr
+              key={`${id}-${bump ?? 0}`} // replay flash on bump changes
+              className="cursor-pointer transition hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
+              onClick={() => {
+                setSelectedAsset(md);
+                trackEvent("CryptoAssetClick", { id });
+              }}
+              initial={false}
+              animate={{
+                backgroundColor: bump
+                  ? pos
+                    ? "rgba(16,185,129,0.18)"
                     : neg
-                      ? "bg-red-500"
-                      : "bg-gray-300";
+                      ? "rgba(244,63,94,0.18)"
+                      : "rgba(0,0,0,0)"
+                  : "rgba(0,0,0,0)",
+              }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              <td className="px-3 sm:px-4 py-2 text-[11px] sm:text-sm font-semibold text-gray-700 dark:text-white/75">
+                {md.rank ?? "—"}
+              </td>
 
-                  const textColor =
-                    pos || neg ? "text-white" : "text-gray-900 dark:text-white";
+              <td className="px-3 sm:px-4 py-2">
+                <div className="flex items-center gap-2">
+                  {logo ? (
+                    <span className="inline-flex items-center justify-center rounded-full bg-white/90 dark:bg-white/10 p-[2px] ring-1 ring-black/10 dark:ring-white/10">
+                      <img
+                        src={logo}
+                        alt={md.symbol}
+                        className="h-5 w-5 sm:h-6 sm:w-6"
+                        loading="lazy"
+                      />
+                    </span>
+                  ) : (
+                    <span className="h-5 w-5 sm:h-6 sm:w-6 rounded-full bg-black/10 dark:bg-white/10" />
+                  )}
 
-                  const logo = logos[md.symbol?.toLowerCase()];
+                  <div className="font-extrabold text-[12px] sm:text-sm text-gray-900 dark:text-white">
+                    {md.symbol ?? id}
+                  </div>
+                </div>
+              </td>
 
-                  return (
-                    <tr
-                      key={id}
-                      className={`${bgRow} ${textColor} relative overflow-hidden transition-transform duration-200 ease-out hover:scale-105 cursor-pointer`}
-                      onClick={() => {
-                        setSelectedAsset(md);
-                        trackEvent("CryptoAssetClick", { id });
-                      }}
-                    >
-                      {/* ✅ Flash overlay only when we have tick direction */}
-                      {prev != null && price != null && bump != null && bump > 0 && (
-                        <motion.td
-                          key={`${id}-${bump}`}
-                          className="absolute inset-0 p-0 m-0 border-0 pointer-events-none"
-                          colSpan={5}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: [0, 0.45, 0] }}
-                          transition={{ duration: 0.3, ease: "easeOut" }}
-                          style={{
-                            background: tickPos
-                              ? "rgba(255,255,255,0.75)"
-                              : tickNeg
-                                ? "rgba(0,0,0,0.25)"
-                                : "transparent",
-                            mixBlendMode: "overlay",
-                          }}
-                        />
-                      )}
+              <td className="px-3 sm:px-4 py-2">
+                <div className="text-[12px] sm:text-sm font-semibold text-gray-800 dark:text-white/80 line-clamp-1">
+                  {md.name ?? "—"}
+                </div>
+              </td>
 
-                      <td className="px-2 sm:px-4 py-1 sm:py-2 text-[10px] sm:text-sm">
-                        {md.rank}
-                      </td>
-                      <td className="px-2 sm:px-4 py-1 sm:py-2 flex items-center gap-1 font-semibold text-[11px] sm:text-sm">
-                        {logo && (
-                          <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
-                            <img
-                              src={logo}
-                              alt={md.symbol}
-                              className="w-4 h-4 sm:w-5 sm:h-5"
-                              loading="lazy"
-                            />
-                          </span>
-                        )}
-                        {md.symbol}
-                      </td>
-                      <td className="px-2 sm:px-4 py-1 sm:py-2 italic text-[11px] sm:text-sm">
-                        {md.name}
-                      </td>
-                      <td className="px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm">
-                        {formatUSD(price)}
-                      </td>
-                      <td className="px-2 sm:px-4 py-1 sm:py-2 text-[11px] sm:text-sm">
-                        {formatPct(md.changePercent24Hr)}{" "}
-                        {tickPos ? "↑" : tickNeg ? "↓" : pctPos ? "↑" : pctNeg ? "↓" : ""}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+              <td className="px-3 sm:px-4 py-2 text-[12px] sm:text-sm font-extrabold text-gray-900 dark:text-white">
+                {formatUSD(price)}
+              </td>
+
+              <td className="px-3 sm:px-4 py-2">
+                <div
+                  className={[
+                    "inline-flex items-center gap-2 text-[12px] sm:text-sm font-extrabold",
+                    pos
+                      ? "text-green-600 dark:text-green-300"
+                      : neg
+                        ? "text-red-600 dark:text-red-300"
+                        : "text-gray-700 dark:text-white/70",
+                  ].join(" ")}
+                >
+                  <span aria-hidden>
+                    {pos ? "↑" : neg ? "↓" : ""}
+                  </span>
+                  {formatPct(md.changePercent24Hr)}
+                </div>
+              </td>
+            </motion.tr>
+          );
+        })}
+
+        {sortedIds.length === 0 && (
+          <tr>
+            <td
+              colSpan={5}
+              className="px-4 py-4 text-sm text-gray-600 dark:text-white/70"
+            >
+              No rows to show.
+            </td>
+          </tr>
         )}
+      </tbody>
+    </table>
+  </div>
+)}
 
         {/* shared crypto popup */}
         <CryptoAssetPopup

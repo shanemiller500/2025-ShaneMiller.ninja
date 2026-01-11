@@ -200,274 +200,320 @@ const WeatherPage: React.FC = () => {
     return null
   }, [weatherData])
 
-  return (
-    <div
-      className="relative min-h-screen text-gray-900"
-      style={{
-        backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }}
-    >
-      {/* overlay */}
-      <div className="absolute inset-0 bg-black/45" />
+return (
+  <div
+    className="relative min-h-screen text-gray-900 dark:text-white"
+    style={{
+      backgroundImage: backgroundImage ? `url(${backgroundImage})` : "none",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+    }}
+  >
+    {/* overlay (light + dark) */}
+    <div className="absolute inset-0 bg-white/70 dark:bg-black/45" />
 
-      {!mounted ? (
-        <div style={{ minHeight: '100vh' }} />
-      ) : (
-        <div className="relative z-10">
-          {/* Top bar */}
-          <header className="sticky top-0 z-30 border-b border-white/10 bg-black/30 backdrop-blur-xl">
-            <div className="mx-auto max-w-7xl px-4 py-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-                      Weather
-                      <span className="ml-2 inline-block rounded-full bg-white/10 px-2 py-1 align-middle text-xs font-semibold text-white/90">
-                        Live
-                      </span>
-                    </h1>
-                    <p className="mt-1 text-xs font-semibold text-white/70">{fmtDateTime(currentTime)}</p>
-                  </div>
-
-                  <div className="mt-1 flex items-center gap-3 md:hidden">
-                    <ToggleSwitch
-                      isOn={tempUnit === 'F'}
-                      onToggle={() => setTempUnit(tempUnit === 'C' ? 'F' : 'C')}
-                    />
-                  </div>
+    {!mounted ? (
+      <div style={{ minHeight: "100vh" }} />
+    ) : (
+      <div className="relative z-10">
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 border-b border-black/10 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-black/30">
+          <div className="mx-auto max-w-7xl px-4 py-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-3xl">
+                    Weather
+                    <span className="ml-2 inline-block rounded-full bg-black/5 px-2 py-1 align-middle text-xs font-semibold text-gray-900/90 dark:bg-white/10 dark:text-white/90">
+                      Live
+                    </span>
+                  </h1>
+                  <p className="mt-1 text-xs font-semibold text-gray-700/70 dark:text-white/70">
+                    {fmtDateTime(currentTime)}
+                  </p>
                 </div>
 
-                {/* Search + Actions */}
-                <div className="flex w-full flex-col gap-3 md:max-w-[560px] md:flex-row md:items-center md:justify-end">
-                  <form onSubmit={handleSearch} className="relative flex w-full">
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => {
-                        setSearchTerm(e.target.value)
-                        setSearchOpen(true)
-                      }}
-                      onFocus={() => setSearchOpen(true)}
-                      placeholder="Search city, state, country…"
-                      className="w-full rounded-l-xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/50 outline-none
-                                 focus:border-white/30 focus:bg-white/15"
-                    />
-                    <button
-                      type="submit"
-                      className="rounded-r-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 text-sm font-bold text-white hover:opacity-95"
-                    >
-                      Search
-                    </button>
-
-                    {/* dropdown */}
-                    {searchOpen && searchResults.length > 0 && (
-                      <div className="absolute left-0 top-[54px] z-40 w-full overflow-hidden rounded-2xl border border-white/10 bg-black/80 backdrop-blur-xl">
-                        <div className="max-h-[320px] overflow-y-auto">
-                          {searchResults.map((result) => (
-                            <button
-                              key={result.id || `${result.name}-${result.latitude}-${result.longitude}`}
-                              type="button"
-                              onClick={() => handleSelectLocation(result)}
-                              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm text-white/90 hover:bg-white/10"
-                            >
-                              <span className="font-semibold">
-                                {result.name}
-                                {result.country ? `, ${result.country}` : ''}
-                              </span>
-                              <span className="text-xs font-semibold text-white/50">
-                                {result.latitude.toFixed(2)}, {result.longitude.toFixed(2)}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </form>
-
-                  <div className="hidden items-center gap-3 md:flex">
-                    <ToggleSwitch
-                      isOn={tempUnit === 'F'}
-                      onToggle={() => setTempUnit(tempUnit === 'C' ? 'F' : 'C')}
-                    />
-
-                    <button
-                      onClick={() => setShowWeatherMap(true)}
-                      className="rounded-xl bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/15"
-                      type="button"
-                    >
-                      Map
-                    </button>
-                  </div>
-
-                  <div className="md:hidden">
-                    <button
-                      onClick={() => setShowWeatherMap(true)}
-                      className="w-full rounded-xl bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/15"
-                      type="button"
-                    >
-                      Open Weather Map
-                    </button>
-                  </div>
+                <div className="mt-1 flex items-center gap-3 md:hidden">
+                  <ToggleSwitch
+                    isOn={tempUnit === "F"}
+                    onToggle={() => setTempUnit(tempUnit === "C" ? "F" : "C")}
+                  />
                 </div>
               </div>
 
-              {error && (
-                <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">
-                  {error}
-                </div>
-              )}
-            </div>
-          </header>
+              {/* Search + Actions */}
+              <div className="flex w-full flex-col gap-3 md:max-w-[560px] md:flex-row md:items-center md:justify-end">
+                <form onSubmit={handleSearch} className="relative flex w-full">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setSearchOpen(true);
+                    }}
+                    onFocus={() => setSearchOpen(true)}
+                    placeholder="Search city, state, country…"
+                    className="w-full rounded-l-xl border border-black/10 bg-white/70 px-4 py-3 text-sm font-semibold text-gray-900 placeholder:text-gray-500 outline-none
+                               focus:border-black/20 focus:bg-white
+                               dark:border-white/10 dark:bg-white/10 dark:text-white dark:placeholder:text-white/50 dark:focus:border-white/30 dark:focus:bg-white/15"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-r-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 text-sm font-bold text-white hover:opacity-95"
+                  >
+                    Search
+                  </button>
 
-          <main className="mx-auto max-w-7xl px-4 py-6">
-            {/* loading state */}
-            {loading && (
-              <div className="mb-5 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white/80">
-                Loading weather…
+                  {/* dropdown */}
+                  {searchOpen && searchResults.length > 0 && (
+                    <div className="absolute left-0 top-[54px] z-40 w-full overflow-hidden rounded-2xl border border-black/10 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-black/80">
+                      <div className="max-h-[320px] overflow-y-auto">
+                        {searchResults.map((result) => (
+                          <button
+                            key={
+                              result.id ||
+                              `${result.name}-${result.latitude}-${result.longitude}`
+                            }
+                            type="button"
+                            onClick={() => handleSelectLocation(result)}
+                            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm text-gray-900 hover:bg-black/[0.04]
+                                       dark:text-white/90 dark:hover:bg-white/10"
+                          >
+                            <span className="font-semibold">
+                              {result.name}
+                              {result.country ? `, ${result.country}` : ""}
+                            </span>
+                            <span className="text-xs font-semibold text-gray-500 dark:text-white/50">
+                              {result.latitude.toFixed(2)},{" "}
+                              {result.longitude.toFixed(2)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </form>
+
+                <div className="hidden items-center gap-3 md:flex">
+                  <ToggleSwitch
+                    isOn={tempUnit === "F"}
+                    onToggle={() => setTempUnit(tempUnit === "C" ? "F" : "C")}
+                  />
+
+                  <button
+                    onClick={() => setShowWeatherMap(true)}
+                    className="rounded-xl bg-black/[0.04] px-4 py-3 text-sm font-bold text-gray-900 hover:bg-black/[0.07]
+                               dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+                    type="button"
+                  >
+                    Map
+                  </button>
+                </div>
+
+                <div className="md:hidden">
+                  <button
+                    onClick={() => setShowWeatherMap(true)}
+                    className="w-full rounded-xl bg-black/[0.04] px-4 py-3 text-sm font-bold text-gray-900 hover:bg-black/[0.07]
+                               dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+                    type="button"
+                  >
+                    Open Weather Map
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-700 dark:text-red-100">
+                {error}
               </div>
             )}
+          </div>
+        </header>
 
-            {/* Main content */}
-            {weatherData && selectedLocation && (
-              <div className="grid grid-cols-1 gap-6">
-                {/* Hero Card */}
-                <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-2xl backdrop-blur-xl">
-                  <div className="p-5 sm:p-6">
-                    <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <h2 className="text-2xl font-extrabold text-white sm:text-3xl">{heroTitle}</h2>
-                            <p className="mt-1 text-sm font-semibold text-white/70">
-                              Updated: {(weatherData.current_weather as any)?.time ? fmtTime((weatherData.current_weather as any).time) : '—'}
-                            </p>
-                          </div>
+        <main className="mx-auto max-w-7xl px-4 py-6">
+          {/* loading state */}
+          {loading && (
+            <div className="mb-5 rounded-2xl border border-black/10 bg-white/70 px-4 py-3 text-sm font-semibold text-gray-800
+                            dark:border-white/10 dark:bg-white/10 dark:text-white/80">
+              Loading weather…
+            </div>
+          )}
 
-                          {/* Big icon */}
-                          {weatherData.current_weather && (
-                            <div className="text-5xl text-white">
-                              {getWeatherIcon(weatherData.current_weather.weathercode, 64)}
-                            </div>
-                          )}
+          {/* Main content */}
+          {weatherData && selectedLocation && (
+            <div className="grid grid-cols-1 gap-6">
+              {/* Hero Card */}
+              <section className="overflow-hidden rounded-3xl border border-black/10 bg-white/70 shadow-2xl backdrop-blur-xl
+                                  dark:border-white/10 dark:bg-white/10">
+                <div className="p-5 sm:p-6">
+                  <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white sm:text-3xl">
+                            {heroTitle}
+                          </h2>
+                          <p className="mt-1 text-sm font-semibold text-gray-700/70 dark:text-white/70">
+                            Updated:{" "}
+                            {(weatherData.current_weather as any)?.time
+                              ? fmtTime((weatherData.current_weather as any).time)
+                              : "—"}
+                          </p>
                         </div>
 
-                        {/* Main stats row */}
+                        {/* Big icon */}
                         {weatherData.current_weather && (
-                          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                              <div className="text-xs font-bold text-white/60">Temp</div>
-                              <div className="mt-1 text-xl font-extrabold text-white">
-                                {convertTemperature(weatherData.current_weather.temperature)}
-                              </div>
-                              <div className="mt-1 text-xs font-semibold text-white/60">Feels like: —</div>
-                            </div>
-
-                            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                              <div className="text-xs font-bold text-white/60">Wind</div>
-                              <div className="mt-1 text-xl font-extrabold text-white">
-                                {weatherData.current_weather.windspeed} km/h
-                              </div>
-                              <div className="mt-1 text-xs font-semibold text-white/60">
-                                Gust: {windGust ?? '—'}
-                              </div>
-                            </div>
-
-                            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                              <div className="text-xs font-bold text-white/60">Sunrise</div>
-                              <div className="mt-2 flex items-center gap-2 text-white">
-                                <SunriseIcon className="h-5 w-5 text-yellow-300" />
-                                <span className="text-sm font-extrabold">
-                                  {weatherData.daily?.sunrise?.[0] ? fmtTime(weatherData.daily.sunrise[0]) : '—'}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                              <div className="text-xs font-bold text-white/60">Sunset</div>
-                              <div className="mt-2 flex items-center gap-2 text-white">
-                                <SunsetIcon className="h-5 w-5 text-orange-300" />
-                                <span className="text-sm font-extrabold">
-                                  {weatherData.daily?.sunset?.[0] ? fmtTime(weatherData.daily.sunset[0]) : '—'}
-                                </span>
-                              </div>
-                            </div>
+                          <div className="text-5xl text-gray-900 dark:text-white">
+                            {getWeatherIcon(
+                              weatherData.current_weather.weathercode,
+                              64,
+                            )}
                           </div>
                         )}
-
-                        <div className="mt-5 text-xs font-semibold text-white/60">
-                          Tip: Swipe charts, tap forecast cards, and open the map for radar layers.
-                        </div>
                       </div>
 
-                      {/* mini map */}
-                      {selectedLocation && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.35 }}
-                          className="h-56 w-full overflow-hidden rounded-2xl border border-white/10 bg-black/20 md:w-[360px]"
-                        >
-                          <LeafletMap location={selectedLocation} />
-                        </motion.div>
-                      )}
-                    </div>
-                  </div>
+                      {/* Main stats row */}
+                      {weatherData.current_weather && (
+                        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          <div className="rounded-2xl border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-black/20">
+                            <div className="text-xs font-bold text-gray-600 dark:text-white/60">
+                              Temp
+                            </div>
+                            <div className="mt-1 text-xl font-extrabold text-gray-900 dark:text-white">
+                              {convertTemperature(
+                                weatherData.current_weather.temperature,
+                              )}
+                            </div>
+                            <div className="mt-1 text-xs font-semibold text-gray-600 dark:text-white/60">
+                              Feels like: —
+                            </div>
+                          </div>
 
-                  {/* Divider */}
-                  <div className="h-px w-full bg-white/10" />
+                          <div className="rounded-2xl border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-black/20">
+                            <div className="text-xs font-bold text-gray-600 dark:text-white/60">
+                              Wind
+                            </div>
+                            <div className="mt-1 text-xl font-extrabold text-gray-900 dark:text-white">
+                              {weatherData.current_weather.windspeed} km/h
+                            </div>
+                            <div className="mt-1 text-xs font-semibold text-gray-600 dark:text-white/60">
+                              Gust: {windGust ?? "—"}
+                            </div>
+                          </div>
 
-                  {/* Chart + Forecast */}
-                  <div className="p-5 sm:p-6">
-                    {weatherData.hourly?.time && (
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <HourlyWeatherChart hourly={weatherData.hourly as any} tempUnit={tempUnit} />
-                      </div>
-                    )}
+                          <div className="rounded-2xl border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-black/20">
+                            <div className="text-xs font-bold text-gray-600 dark:text-white/60">
+                              Sunrise
+                            </div>
+                            <div className="mt-2 flex items-center gap-2 text-gray-900 dark:text-white">
+                              <SunriseIcon className="h-5 w-5 text-yellow-500 dark:text-yellow-300" />
+                              <span className="text-sm font-extrabold">
+                                {weatherData.daily?.sunrise?.[0]
+                                  ? fmtTime(weatherData.daily.sunrise[0])
+                                  : "—"}
+                              </span>
+                            </div>
+                          </div>
 
-                    {weatherData.daily?.time && (
-                      <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="mb-3 flex items-end justify-between gap-3">
-                          <div>
-                            <h3 className="text-lg font-extrabold text-white">7-Day Forecast</h3>
-                            <p className="mt-1 text-xs font-semibold text-white/60">Swipe on mobile • Dots for paging</p>
+                          <div className="rounded-2xl border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-black/20">
+                            <div className="text-xs font-bold text-gray-600 dark:text-white/60">
+                              Sunset
+                            </div>
+                            <div className="mt-2 flex items-center gap-2 text-gray-900 dark:text-white">
+                              <SunsetIcon className="h-5 w-5 text-orange-500 dark:text-orange-300" />
+                              <span className="text-sm font-extrabold">
+                                {weatherData.daily?.sunset?.[0]
+                                  ? fmtTime(weatherData.daily.sunset[0])
+                                  : "—"}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        <WeatherSlider daily={weatherData.daily} tempUnit={tempUnit} />
+                      )}
+
+                      <div className="mt-5 text-xs font-semibold text-gray-600 dark:text-white/60">
+                        Tip: Swipe charts, tap forecast cards, and open the map
+                        for radar layers.
                       </div>
+                    </div>
+
+                    {/* mini map */}
+                    {selectedLocation && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.35 }}
+                        className="h-56 w-full overflow-hidden rounded-2xl border border-black/10 bg-black/[0.03]
+                                   dark:border-white/10 dark:bg-black/20 md:w-[360px]"
+                      >
+                        <LeafletMap location={selectedLocation} />
+                      </motion.div>
                     )}
                   </div>
-                </section>
-              </div>
-            )}
-          </main>
+                </div>
 
-          {loading && <LoadingSpinner />}
-        </div>
-      )}
+                {/* Divider */}
+                <div className="h-px w-full bg-black/10 dark:bg-white/10" />
 
-      {/* WeatherMap Modal */}
-      {showWeatherMap && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-          <div className="relative h-full w-full">
-            <div className="absolute left-0 top-0 z-10 flex w-full items-center justify-between gap-2 p-3">
-              <div className="rounded-2xl border border-white/10 bg-black/50 px-4 py-2 text-sm font-bold text-white backdrop-blur-xl">
-                Interactive Weather Map
-              </div>
-              <button
-                onClick={() => setShowWeatherMap(false)}
-                className="rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-bold text-white hover:opacity-95"
-              >
-                Close
-              </button>
+                {/* Chart + Forecast */}
+                <div className="p-5 sm:p-6">
+                  {weatherData.hourly?.time && (
+                    <div className="rounded-2xl border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-black/20">
+                      <HourlyWeatherChart
+                        hourly={weatherData.hourly as any}
+                        tempUnit={tempUnit}
+                      />
+                    </div>
+                  )}
+
+                  {weatherData.daily?.time && (
+                    <div className="mt-6 rounded-2xl border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-black/20">
+                      <div className="mb-3 flex items-end justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-extrabold text-gray-900 dark:text-white">
+                            7-Day Forecast
+                          </h3>
+                          <p className="mt-1 text-xs font-semibold text-gray-600 dark:text-white/60">
+                            Swipe on mobile • Dots for paging
+                          </p>
+                        </div>
+                      </div>
+                      <WeatherSlider daily={weatherData.daily} tempUnit={tempUnit} />
+                    </div>
+                  )}
+                </div>
+              </section>
             </div>
-            <WeatherMap onClose={() => setShowWeatherMap(false)} />
+          )}
+        </main>
+
+        {loading && <LoadingSpinner />}
+      </div>
+    )}
+
+    {/* WeatherMap Modal */}
+    {showWeatherMap && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+        <div className="relative h-full w-full">
+          <div className="absolute left-0 top-0 z-10 flex w-full items-center justify-between gap-2 p-3">
+            <div className="rounded-2xl border border-white/10 bg-black/50 px-4 py-2 text-sm font-bold text-white backdrop-blur-xl">
+              Interactive Weather Map
+            </div>
+            <button
+              onClick={() => setShowWeatherMap(false)}
+              className="rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-bold text-white hover:opacity-95"
+            >
+              Close
+            </button>
           </div>
+          <WeatherMap onClose={() => setShowWeatherMap(false)} />
         </div>
-      )}
-    </div>
-  )
+      </div>
+    )}
+  </div>
+);
+
 }
 
 export default WeatherPage

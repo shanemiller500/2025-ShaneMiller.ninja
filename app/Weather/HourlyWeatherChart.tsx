@@ -365,20 +365,20 @@ const uniqueDays = useMemo(() => {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }} className="w-full">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-sm font-extrabold text-white">Hourly Chart</h3>
-          <p className="mt-1 text-xs font-semibold text-white/60">Pick a day • Change chart type</p>
+          <h3 className="text-sm font-extrabold dark:text-white">Hourly Chart</h3>
+          <p className="mt-1 text-xs font-semibold dark:text-white/60">Pick a day • Change chart type</p>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-          <label htmlFor="chartType" className="text-xs font-bold text-white/70">
+          <label htmlFor="chartType" className="text-xs font-bold dark:text-white/70">
             Chart
           </label>
           <select
             id="chartType"
             value={chartType}
             onChange={(e) => setChartType(e.target.value)}
-            className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-bold text-white outline-none
-                       hover:bg-black/40 focus:border-white/25"
+            className="rounded-xl border border-white/10 dark:bg-black/30 px-3 py-2 text-xs font-bold dark:text-white outline-none
+                       hover:dark:bg-black/40 focus:border-white/25"
           >
             <option value="line">Line</option>
             <option value="bar">Bar</option>
@@ -416,7 +416,7 @@ const uniqueDays = useMemo(() => {
       </div>
 
       {/* Chart */}
-      <div className="relative h-[360px] w-full overflow-hidden rounded-2xl border border-white/10 bg-black/25 p-3 sm:h-[420px]">
+      <div className="relative h-[360px] w-full overflow-hidden rounded-2xl border border-white/ bg-black/5 p-3 sm:h-[420px]">
         <canvas ref={chartRef} />
       </div>
     </motion.div>
