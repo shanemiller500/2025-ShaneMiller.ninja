@@ -567,29 +567,7 @@ export default function TopGainersLosers() {
                 />
               </div>
             </div>
-          </div>
-
-          {/* Search */}
-          <div className="relative mt-4">
-            <div className="flex items-center gap-2 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-black/20 px-3 py-2">
-              <FaSearch className="text-gray-500 dark:text-white/45" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Filter top 15 by symbol or name…"
-                className="flex-1 bg-transparent outline-none text-sm text-gray-900 placeholder:text-gray-400 dark:text-white dark:placeholder:text-white/35"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  className="rounded-xl px-3 py-2 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/60 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10]"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
+          </div>          
         </div>
 
         {/* Content */}
