@@ -60,7 +60,7 @@ export default function AboutPage() {
                     Short Bio
                   </h2>
                <p>
-  I’m a full-stack developer with 10+ years of experience shipping production grade web applications. I’ve worked on large scale platforms at S&amp;P Global and currently keep mission-critical banking software reliable as an Engineer at Data Center Inc. (DCI). Alongside that, I build and run privacy-first products like UMail and ApplyPro.
+  I’m a full-stack developer with 10+ years of experience producing production grade web applications. I’ve worked on large scale platforms at S&amp;P Global and currently keep mission-critical banking software reliable as an Engineer at Data Center Inc. (DCI). Alongside that, I build and run privacy-first products like UMail and ApplyPro.
 </p>
 
 <p>
