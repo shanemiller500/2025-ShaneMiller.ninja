@@ -9,11 +9,10 @@ import React, {
   JSX,
   startTransition,
 } from "react";
-import { motion, useMotionValue, AnimatePresence } from "framer-motion";
+import { motion, useMotionValue } from "framer-motion";
 import { Chart } from "chart.js/auto";
 import "chartjs-adapter-date-fns";
 import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
-
 
 /* ------------------------------------------------------------------ */
 /*  Shared helpers (currency, percent, etc.)                          */
@@ -45,8 +44,6 @@ const host = (u: string) => {
     return null;
   }
 };
-
-
 
 /* ------------------------------------------------------------------ */
 /*  WidgetCrypto main component                                       */
@@ -132,7 +129,11 @@ const WidgetCrypto: React.FC = () => {
       const init: Record<string, TradeState> = {};
       topAssetIds.forEach((id) => {
         const p = parseFloat(metaData[id]?.priceUsd || "0");
-        init[id] = { price: Number.isFinite(p) ? p : 0, prev: undefined, bump: 0 };
+        init[id] = {
+          price: Number.isFinite(p) ? p : 0,
+          prev: undefined,
+          bump: 0,
+        };
       });
       return init;
     });
@@ -143,9 +144,7 @@ const WidgetCrypto: React.FC = () => {
     if (!API_KEY_ENV || !topAssetIds.length) return;
 
     const ws = new WebSocket(
-      `wss://wss.coincap.io/prices?assets=${topAssetIds.join(
-        ",",
-      )}&apiKey=${API_KEY_ENV}`,
+      `wss://wss.coincap.io/prices?assets=${topAssetIds.join(",")}&apiKey=${API_KEY_ENV}`,
     );
     socketRef.current = ws;
 
@@ -211,7 +210,7 @@ const WidgetCrypto: React.FC = () => {
 
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [isDragging, contentWidth, selectedAssetId]); // <- fixed length
+  }, [isDragging, contentWidth, selectedAssetId]);
 
   const closePopup = useCallback(() => setSelectedAssetId(null), []);
   const selectedAsset = selectedAssetId
@@ -219,39 +218,32 @@ const WidgetCrypto: React.FC = () => {
     : null;
 
   const renderCard = (id: string) => {
-    const md = metaData[id];
+    const md = metaData[id] || {};
     const ti = tradeInfoMap[id] || ({} as TradeState);
 
     const price = ti.price;
     const prev = ti.prev;
     const bump = ti.bump || 0;
 
-    const pct24 = parseFloat(String(md?.changePercent24Hr ?? ""));
-    const pctPos = Number.isFinite(pct24) && pct24 > 0;
-    const pctNeg = Number.isFinite(pct24) && pct24 < 0;
+    // ✅ YOUR RULE:
+    // If % string starts with "-" (or numeric < 0) => red, else green.
+    const pct24Num = parseFloat(String(md?.changePercent24Hr ?? "0"));
+    const isRed = Number.isFinite(pct24Num) ? pct24Num < 0 : false;
 
-    // ✅ ALWAYS color immediately:
-    // - If we have prev, use tick direction
-    // - Else, use 24h% sign so it starts green/red right away
-    const pos = prev != null ? price > prev : pctPos;
-    const neg = prev != null ? price < prev : pctNeg;
+    // ✅ inline style so it ALWAYS applies
+    const bgColor = isRed ? "rgb(239 68 68)" : "rgb(34 197 94)"; // red-500 / green-500
 
-    const bg = pos
-      ? "bg-green-500 dark:bg-green-700"
-      : neg
-        ? "bg-red-500 dark:bg-red-700"
-        : "bg-gray-500 dark:bg-gray-600";
-
-    const logo = logos[md?.symbol?.toLowerCase?.()] || null;
+    const logo = logos[String(md?.symbol ?? "").toLowerCase()] || null;
 
     return (
       <motion.div
         key={id}
         onClick={() => setSelectedAssetId(id)}
-        className={`${bg} relative overflow-hidden m-1 p-2 rounded text-white text-center cursor-pointer whitespace-nowrap`}
+        className="relative overflow-hidden m-1 p-2 rounded text-white text-center cursor-pointer whitespace-nowrap"
+        style={{ backgroundColor: bgColor }}
         whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
       >
-        {/* ✅ Flash overlay on every tick */}
+        {/* optional flash (kept exactly like you had it) */}
         {prev != null && bump > 0 && (
           <motion.div
             key={`${id}-${bump}`}
@@ -260,7 +252,10 @@ const WidgetCrypto: React.FC = () => {
             animate={{ opacity: [0, 0.55, 0], scale: [1, 1.03, 1] }}
             transition={{ duration: 0.32, ease: "easeOut" }}
             style={{
-              background: price > prev ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.35)",
+              background:
+                price > (prev ?? price)
+                  ? "rgba(255,255,255,0.9)"
+                  : "rgba(0,0,0,0.35)",
               mixBlendMode: "overlay",
             }}
           />
@@ -268,9 +263,7 @@ const WidgetCrypto: React.FC = () => {
 
         <div className="text-xs">#{md?.rank}</div>
         <div className="flex items-center justify-center font-bold text-sm p-1">
-          {logo && (
-            <img src={logo} alt={md.symbol} className="w-5 h-5 pr-1" />
-          )}
+          {logo && <img src={logo} alt={md.symbol} className="w-5 h-5 pr-1" />}
           {md?.symbol?.toUpperCase?.()}
         </div>
         <div className="text-xs">{usd(price)}</div>
@@ -312,17 +305,16 @@ const WidgetCrypto: React.FC = () => {
       </div>
 
       {selectedAsset && (
-  <CryptoAssetPopup
-    asset={selectedAsset}
-    logos={logos}
-    onClose={closePopup}
-    tradeInfo={{
-      price: tradeInfoMap[selectedAsset.id]?.price,
-      prev: tradeInfoMap[selectedAsset.id]?.prev,
-    }}
-  />
-)}
-
+        <CryptoAssetPopup
+          asset={selectedAsset}
+          logos={logos}
+          onClose={closePopup}
+          tradeInfo={{
+            price: tradeInfoMap[selectedAsset.id]?.price,
+            prev: tradeInfoMap[selectedAsset.id]?.prev,
+          }}
+        />
+      )}
     </div>
   );
 };
