@@ -291,6 +291,7 @@ export default function FearGreedIndexes() {
       {mobileOpen && <div className="sm:hidden px-2">{gauges}</div>}
 
       {/* Desktop gauges */}
+      
       <div className="hidden sm:block">{gauges}</div>
 
       {/* Popup */}

@@ -206,7 +206,7 @@ export default function LiveStreamHeatmap() {
       if (socketRef.current?.readyState === WebSocket.OPEN) {
         socketRef.current.close();
       }
-    }, 300_000);
+    }, 600_000);
 
     ws.onmessage = (e) => {
       if (typeof e.data === "string" && e.data.startsWith("Unauthorized")) {
@@ -629,7 +629,7 @@ export default function LiveStreamHeatmap() {
             </button>
             <h3 className="text-xl font-bold mb-4">WebSocket closed</h3>
             <p className="mb-6">
-              The live price stream ended automatically after&nbsp;5&nbsp;minutes.
+              The live price stream ended automatically after&nbsp;10&nbsp;minutes.
             </p>
             <button
               className="px-4 py-2 bg-brand-gradient hover:bg-indigo-600 text-white rounded"

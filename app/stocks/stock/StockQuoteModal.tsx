@@ -739,8 +739,12 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
               >
                 Close
               </button>
-            </div>
 
+              
+            </div>
+<p className="text-xs text-gray-600 dark:text-white/60 text-center">
+        DISCLAIMER: All displayed stock quote data is delayed by a minimum of 15 minutes.
+      </p>
             <div className="h-2" />
           </div>
         </div>

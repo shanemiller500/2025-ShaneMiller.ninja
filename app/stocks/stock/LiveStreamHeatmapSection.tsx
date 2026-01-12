@@ -182,88 +182,144 @@ const LiveStreamHeatmapSection: React.FC = () => {
   /* ------------------------------------------------------------------ */
   /*  Render                                                            */
   /* ------------------------------------------------------------------ */
-  return (
-    <>
-      <ToastContainer position="top-right" autoClose={4000} hideProgressBar pauseOnHover />
+return (
+  <>
+    <ToastContainer
+      position="top-right"
+      autoClose={3500}
+      hideProgressBar
+      pauseOnHover
+      theme="dark"
+    />
 
-      {loadingSpinner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-indigo-500"></div>
+    {/* Page */}
+    <section className="mx-auto max-w-6xl px-4 py-4 pb-24">
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-5 shadow-sm">
+        {/* ambient blobs */}
+        <div className="pointer-events-none absolute inset-0 opacity-50 dark:opacity-40">
+          <div className="absolute -top-16 -left-20 h-56 w-56 rounded-full bg-indigo-400/20 blur-3xl" />
+          <div className="absolute -bottom-20 -right-16 h-64 w-64 rounded-full bg-fuchsia-400/20 blur-3xl" />
         </div>
-      )}
 
-      <section className="rounded p-4 relative">
-        <h2 className="text-2xl font-bold mb-4">Live Stream Heatmap</h2>
-        <p className="mb-4">
-          Live trades color the grid: <span className="text-green-600 font-semibold">green</span> for up,
-          <span className="text-red-600 font-semibold"> red</span> for down.
-        </p>
-
-        {marketStatus && (
-          <div
-            id="marketStatus"
-            className={`mb-4 p-2 rounded ${
-              marketStatus.isOpen ? 'bg-green-500' : 'bg-red-500'
-            } text-white`}
-          >
-            {marketStatus.isOpen
-              ? `Markets are open | Current time: ${formatDate(marketStatus.t, 'short')}`
-              : 'The markets are now closed. Check back during market hours!'}
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+              Live Stream Heatmap
+            </h2>
+            <p className="mt-2 text-sm font-semibold text-gray-700 dark:text-white/70">
+              Real-time price movement. Tap a tile for details.
+            </p>
           </div>
-        )}
 
-        <div
-          id="tradeInfoGrid"
-          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
-        >
-          {Object.entries(tradeInfoMap).map(([sym, info]) => (
-            <motion.div
-              key={sym}
-              className="p-1 cursor-pointer"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => openSymbolModal(sym)}
+          {marketStatus && (
+            <span
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-extrabold ring-1 ${
+                marketStatus.isOpen
+                  ? "bg-emerald-500/15 text-emerald-800 ring-emerald-500/30 dark:text-emerald-200"
+                  : "bg-rose-500/15 text-rose-800 ring-rose-500/30 dark:text-rose-200"
+              }`}
             >
-              <div className={`${info.bgColor} text-center p-3 rounded`}>
-                {symbolLogos[sym] && (
-                  <img
-                    src={symbolLogos[sym]}
-                    alt={`${sym} logo`}
-                    className="h-8 w-auto mx-auto mb-1"
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  marketStatus.isOpen ? "bg-emerald-500" : "bg-rose-500"
+                }`}
+              />
+              {marketStatus.isOpen ? "Markets Open" : "Markets Closed"}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div className="mt-4 rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-3 sm:p-4 shadow-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
+          {Object.entries(tradeInfoMap).map(([sym, info]) => {
+            const logo = symbolLogos[sym];
+            const up = info.percentChange >= 0;
+
+            return (
+              <motion.button
+                key={sym}
+                type="button"
+                onClick={() => openSymbolModal(sym)}
+                whileTap={{ scale: 0.97 }}
+                whileHover={{ scale: 1.03 }}
+                className="relative overflow-hidden rounded-2xl p-3 sm:p-4 text-left shadow-sm ring-1 ring-black/10 dark:ring-white/10"
+              >
+                {/* logo background */}
+                {logo && (
+                  <div
+                    className="absolute inset-0 bg-center bg-no-repeat bg-contain opacity-[0.22] dark:opacity-[0.22]"
+                    style={{ backgroundImage: `url(${logo})` }}
                   />
                 )}
-                <h5 className="font-bold">{sym}</h5>
-                <div>{info.info}</div>
+
+                {/* color wash */}
                 <div
-                  className={`mt-1 font-semibold ${
-                    info.percentChange >= 0 ? 'text-green-600' : 'text-red-600'
+                  className={`absolute inset-0 ${
+                    up
+                      ? "bg-emerald-500/15 dark:bg-emerald-600/20"
+                      : "bg-rose-500/15 dark:bg-rose-600/20"
                   }`}
-                >
-                  {info.percentChange.toFixed(2)}%
+                />
+
+                {/* content */}
+                <div className="relative">
+                  <div className="flex items-start justify-between gap-1">
+                    <div>
+                      <div className="text-sm sm:text-base font-extrabold text-gray-900 dark:text-white">
+                        {sym}
+                      </div>
+                      <div className="text-[10px] sm:text-xs font-semibold text-gray-700 dark:text-white/70 line-clamp-1">
+                        {symbolProfiles[sym]?.name || ""}
+                      </div>
+                    </div>
+
+                    <span
+                      className={`shrink-0 rounded-full px-1 py-1 text-[9px] font-extrabold ring-1 ${
+                        up
+                          ? "bg-emerald-500/20 text-emerald-900 ring-emerald-500/30 dark:text-emerald-200"
+                          : "bg-rose-500/20 text-rose-900 ring-rose-500/30 dark:text-rose-200"
+                      }`}
+                    >
+                      {info.percentChange.toFixed(2)}%
+                    </span>
+                  </div>
+
+                  <div className="mt-3 text-lg sm:text-xl font-black text-gray-900 dark:text-white">
+                    {info.info}
+                  </div>
+
+                  
                 </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.button>
+            );
+          })}
         </div>
-      </section>
+      </div>
+    </section>
 
-      {/* Loading overlay for modal fetch */}
-      {modalLoading && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
-          <p className="text-white text-lg">Loading…</p>
+    {/* Modal loading */}
+    {modalLoading && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="rounded-2xl bg-white/10 p-4 shadow-xl ring-1 ring-white/10">
+          <div className="animate-spin h-10 w-10 border-t-4 border-indigo-400 rounded-full" />
         </div>
-      )}
+      </div>
+    )}
 
-      {/* Shared popup component */}
-      {selectedSymbol && selectedStockData && (
-        <StockQuoteModal
-          stockData={selectedStockData}
-          newsData={selectedNewsData}
-          onClose={closeModal}
-        />
-      )}
-    </>
-  );
+    {selectedSymbol && selectedStockData && (
+      <StockQuoteModal
+        stockData={selectedStockData}
+        newsData={selectedNewsData}
+        onClose={closeModal}
+      />
+    )}
+  </>
+);
+
+
 };
 
 export default LiveStreamHeatmapSection;
