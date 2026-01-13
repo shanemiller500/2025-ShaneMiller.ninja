@@ -6,16 +6,19 @@ import { Inter } from "next/font/google";
 import localFont from "next/font/local";
 import Theme from "./theme-provider";
 import SideNavigation from "@/components/ui/side-navigation";
-import Header from "@/components/ui/header";
 import Footer from "@/components/ui/footer";
 import { Analytics } from "@vercel/analytics/react";
 import { useEffect, useState, Fragment } from "react";
 import { usePathname } from "next/navigation";
 import { trackEvent } from "@/utils/mixpanel";
 import ConsoleGreeting from "@/components/ConsoleGreeting";
+import Image from "next/image";
+import Link from "next/link";
 
 import { Dialog, Transition } from "@headlessui/react";
 import { Menu, X } from "lucide-react";
+
+import ThemeToggle from "@/components/ui/theme-toggle";
 
 declare global {
   interface Window {
@@ -44,22 +47,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // close drawer on route change
   useEffect(() => {
     setMobileNavOpen(false);
   }, [pathname]);
 
-  // Mixpanel page view
   useEffect(() => {
     trackEvent("Page Viewed", { path: pathname });
   }, [pathname]);
 
-  // GA page view
   useEffect(() => {
     if (typeof window !== "undefined" && typeof window.gtag === "function") {
       window.gtag("config", GA_TRACKING_ID, { page_path: pathname });
     }
   }, [pathname]);
+
+  const handleNavClick = (label: string, route: string) => {
+    trackEvent("Navigation Clicked", { label, route });
+  };
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -150,11 +154,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       leaveFrom="translate-x-0"
                       leaveTo="-translate-x-full"
                     >
-                      <Dialog.Panel className="relative flex w-[86%] max-w-sm flex-col bg-white shadow-xl dark:bg-brand-900">
+                      <Dialog.Panel className="">
                         <div className="flex items-center justify-between px-4 py-4 border-b border-black/5 dark:border-white/10 dark:bg-brand-900 bg-indigo-50">
-                          <div className="text-sm font-extrabold text-brand-900 dark:text-white ">
-                            Menu
-                          </div>
+                          {/* ✅ Avatar (shows on any route except "/") */}
+                          {pathname !== "/" && (
+                            <div className="shrink-0">
+                              <Link
+                                href="/"
+                                onClick={() => handleNavClick("Home Avatar", "/")}
+                                aria-label="Go home"
+                              >
+                                <Image
+                                  className="rounded-full object-cover"
+                                  src="/images/wedding.jpg"
+                                  width={32}
+                                  height={32}
+                                  priority
+                                  alt="Me"
+                                />
+                              </Link>
+                            </div>
+                          )}
+
+                      
+
                           <button
                             type="button"
                             onClick={() => setMobileNavOpen(false)}
@@ -165,7 +188,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                           </button>
                         </div>
 
-                        {/* Your existing sidebar component */}
                         <div className="flex-1 overflow-y-auto overscroll-contain ">
                           <SideNavigation />
                         </div>
@@ -192,14 +214,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         aria-label="Open menu"
                       >
                         <Menu className="h-4 w-4" />
-                        Menu
+                        
                       </button>
 
-                     
+                      <div className="ml-auto">
+                        <ThemeToggle />
+                      </div>
                     </div>
                   </div>
 
-                  <Header />
+                  {/* Desktop top-right toggle */}
+                  <div className="hidden lg:flex pt-4 items-center justify-end">
+                    <ThemeToggle />
+                  </div>
+
                   {children}
                 </div>
               </main>

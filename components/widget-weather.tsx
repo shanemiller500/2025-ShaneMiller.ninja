@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   WiDaySunny,
   WiCloud,
@@ -14,6 +14,7 @@ import {
   WiHumidity,
   WiRaindrops,
 } from "react-icons/wi";
+import { ChevronDown } from "lucide-react";
 
 type CurrentWeather = {
   temperature: number; // °C
@@ -110,6 +111,11 @@ export default function WidgetWeather() {
   const [meta, setMeta] = useState<{ humidity?: number; pop?: number }>({});
 
   const [now, setNow] = useState(() => new Date());
+
+  // dropdown state (declared here so it never breaks hook order)
+  const [daysOpen, setDaysOpen] = useState(false);
+
+
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(t);
@@ -213,15 +219,18 @@ export default function WidgetWeather() {
     );
   }, []);
 
-  const viewMore = (
-    <div className="p-2 bg-white/30 dark:bg-black/30">
-      <p className="text-xs text-center text-gray-900 dark:text-white">
-        More weather{" "}
-        <a href="/Weather" className="underline text-gray-900 dark:text-white">
-          here
-        </a>
-      </p>
-    </div>
+  const viewMore = useMemo(
+    () => (
+      <div className="p-2 bg-white/30 dark:bg-black/30">
+        <p className="text-xs text-center text-gray-900 dark:text-white">
+          More weather{" "}
+          <a href="/Weather" className="underline text-gray-900 dark:text-white">
+            here
+          </a>
+        </p>
+      </div>
+    ),
+    [],
   );
 
   if (loading) {
@@ -261,7 +270,10 @@ export default function WidgetWeather() {
           <div>
             <div className="text-sm font-semibold">{locationLabel}</div>
             <div className="text-xs opacity-80">
-              {now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+              {now.toLocaleTimeString(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
             </div>
           </div>
           <div className="text-right text-xs opacity-85">{description}</div>
@@ -340,29 +352,60 @@ export default function WidgetWeather() {
           </div>
         </div>
 
-        {/* 5-day compact list */}
-        <div className="mt-4 space-y-2">
-          {forecast.map((d) => {
-            const { Icon: DIcon } = getWeatherInfo(d.weathercode);
-            return (
-              <div
-                key={d.date}
-                className="flex items-center justify-between rounded-xl bg-white/10 px-3 py-2"
+        {/* 5-day dropdown */}
+        <div className="mt-4 overflow-hidden rounded-2xl border border-white/20 bg-white/10">
+          <button
+            type="button"
+            onClick={() => setDaysOpen((v) => !v)}
+            className="flex w-full items-center justify-between px-3 py-2"
+            aria-expanded={daysOpen}
+          >
+            <div className="text-sm font-semibold">Next 5 days</div>
+            <ChevronDown
+              className={`h-4 w-4 opacity-90 transition-transform ${
+                daysOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          <AnimatePresence initial={false}>
+            {daysOpen && (
+              <motion.div
+                key="days"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                className="overflow-hidden"
               >
-                <div className="w-10 text-sm font-semibold">{fmtDay(d.date)}</div>
-                <div className="text-2xl opacity-95">
-                  <DIcon />
+                <div className="space-y-2 px-3 pb-3">
+                  {forecast.map((d) => {
+                    const { Icon: DIcon } = getWeatherInfo(d.weathercode);
+                    return (
+                      <div
+                        key={d.date}
+                        className="flex items-center justify-between rounded-xl bg-white/10 px-3 py-2"
+                      >
+                        <div className="w-10 text-sm font-semibold">
+                          {fmtDay(d.date)}
+                        </div>
+                        <div className="text-2xl opacity-95">
+                          <DIcon />
+                        </div>
+                        <div className="text-sm font-semibold">
+                          {Math.round(cToF(d.temperature_max))}°
+                          <span className="opacity-70 font-normal">
+                            {" "}
+                            / {Math.round(cToF(d.temperature_min))}°
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="text-sm font-semibold">
-                  {Math.round(cToF(d.temperature_max))}°
-                  <span className="opacity-70 font-normal">
-                    {" "}
-                    / {Math.round(cToF(d.temperature_min))}°
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 

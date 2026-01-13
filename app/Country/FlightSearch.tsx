@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowRight,
   ArrowLeftRight,
@@ -65,8 +66,7 @@ const addDaysISO = (iso: string, days: number) =>
   new Date(new Date(iso).getTime() + days * 864e5).toISOString().slice(0, 10);
 const tomorrow = (iso: string) => addDaysISO(iso, 1);
 
-const isIata = (s: string) =>
-  /^[A-Z]{3}$/.test((s || "").trim().toUpperCase());
+const isIata = (s: string) => /^[A-Z]{3}$/.test((s || "").trim().toUpperCase());
 const safeUpper3 = (s: string) =>
   (s || "").replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase();
 
@@ -187,7 +187,6 @@ function AirportTypeahead({
                 dark:border-white/10 dark:bg-brand-900
               "
             >
-              {/* MOBILE: make it scrollable + touch friendly */}
               <div
                 className="
                   max-h-[52vh] overflow-y-auto overscroll-contain
@@ -316,11 +315,7 @@ const cabinPillClass = (active: boolean) =>
 /* ================================================================== */
 /*  FlightSearch component                                            */
 /* ================================================================== */
-export default function FlightSearch({
-  full = null,
-}: {
-  full?: FullCountry | null;
-}) {
+export default function FlightSearch({ full = null }: { full?: FullCountry | null }) {
   const API_BASE = "https://u-mail.co";
 
   const [from, setFrom] = useState("");
@@ -333,7 +328,33 @@ export default function FlightSearch({
   const [children, setChildren] = useState(0);
   const [infants, setInfants] = useState(0);
   const [seniors, setSeniors] = useState(0);
+
+  // desktop travellers accordion
   const [showDetails, setShowDetails] = useState(false);
+
+  // mobile travellers sheet
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
+
+  // mobile form accordion (inline, NOT overlay)
+  const [mobileFormOpen, setMobileFormOpen] = useState(false);
+
+  // track mobile
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mq = window.matchMedia("(max-width: 639px)");
+    const apply = () => setIsMobile(mq.matches);
+
+    apply();
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+    else mq.addListener(apply);
+
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", apply);
+      else mq.removeListener(apply);
+    };
+  }, []);
 
   const [readyList, setReadyList] = useState(false);
   useEffect(() => {
@@ -345,6 +366,7 @@ export default function FlightSearch({
       const raw = localStorage.getItem(LS_KEY);
       if (!raw) return;
       const s = JSON.parse(raw);
+
       if (typeof s?.from === "string") setFrom(safeUpper3(s.from));
       if (typeof s?.to === "string") setTo(safeUpper3(s.to));
       if (typeof s?.trip === "string" && (s.trip === "round" || s.trip === "oneway"))
@@ -406,7 +428,7 @@ export default function FlightSearch({
       return;
     }
     if (trip === "round" && (!ret || ret <= depart)) setRet(tomorrow(depart));
-  }, [trip]);
+  }, [trip]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onDepart = (d: string) => {
     setDepart(d);
@@ -435,22 +457,11 @@ export default function FlightSearch({
     (trip === "oneway" || ret > depart);
 
   useEffect(() => {
-    if (!from && !to) {
-      setFormError("");
-      return;
-    }
-    if (from && !isIata(from)) {
-      setFormError("From must be a 3-letter airport code (IATA).");
-      return;
-    }
-    if (to && !isIata(to)) {
-      setFormError("To must be a 3-letter airport code (IATA).");
-      return;
-    }
-    if (trip === "round" && depart && ret && ret <= depart) {
-      setFormError("Return date must be after departure.");
-      return;
-    }
+    if (!from && !to) return setFormError("");
+    if (from && !isIata(from)) return setFormError("From must be a 3-letter airport code (IATA).");
+    if (to && !isIata(to)) return setFormError("To must be a 3-letter airport code (IATA).");
+    if (trip === "round" && depart && ret && ret <= depart)
+      return setFormError("Return date must be after departure.");
     setFormError("");
   }, [from, to, trip, depart, ret]);
 
@@ -514,6 +525,132 @@ export default function FlightSearch({
     return `${paxTotal} traveller${paxTotal !== 1 ? "s" : ""} · ${cabinLabel} · ${tripLabel}`;
   }, [paxTotal, cabin, trip]);
 
+  // leaving mobile -> close mobile-only UI
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileFormOpen(false);
+      setMobileDetailsOpen(false);
+    }
+  }, [isMobile]);
+
+  // ✅ IMPORTANT: only lock scroll for the OVERLAY sheet (mobileDetailsOpen).
+  // DO NOT lock scroll for the inline accordion (mobileFormOpen).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (!(isMobile && mobileDetailsOpen)) return;
+
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isMobile, mobileDetailsOpen]);
+
+  const SearchBlock = (
+    <div className="border-t border-brand-100 px-5 py-6 dark:border-white/10 sm:px-6">
+      <motion.button
+        whileHover={allGood && !loading ? { scale: 1.01 } : {}}
+        whileTap={allGood && !loading ? { scale: 0.985 } : {}}
+        onClick={runSearch}
+        disabled={!allGood || loading}
+        type="button"
+        className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-extrabold
+          shadow-lg transition focus:outline-none focus:ring-2 focus:ring-offset-2
+          ${
+            allGood && !loading
+              ? "bg-gradient-to-r from-indigo-600 to-indigo-500 text-white hover:from-indigo-500 hover:to-indigo-500 focus:ring-indigo-500"
+              : "cursor-not-allowed bg-brand-300 text-brand-600 dark:bg-brand-800/60 dark:text-brand-500"
+          }`}
+      >
+        {loading ? (
+          <span className="inline-flex items-center gap-2">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            Searching…
+          </span>
+        ) : (
+          <>
+            Search flights
+            <ArrowRight className="h-4 w-4" />
+          </>
+        )}
+      </motion.button>
+
+      <p className="mt-3 text-center text-[11px] text-brand-600 dark:text-brand-300">
+        Tip: try <span className="font-extrabold">DEN</span> →{" "}
+        <span className="font-extrabold">LHR</span>
+      </p>
+    </div>
+  );
+
+  const DesktopInputs = (
+    <div className="grid gap-4 px-5 pb-6 sm:grid-cols-2 sm:px-6">
+      <AirportTypeahead
+        label="From"
+        value={from}
+        setValue={setFrom}
+        placeholder="DEN or Denver"
+        airportsReady={readyList}
+        allAirports={airports}
+        rightAccessory={
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            type="button"
+            onClick={swap}
+            title="Swap"
+            className="rounded-full border border-brand-300 bg-white/70 p-2 text-brand-700 shadow-sm
+                       hover:bg-white hover:text-brand-900
+                       dark:border-brand-700 dark:bg-brand-900/60 dark:text-brand-200 dark:hover:bg-brand-900"
+          >
+            <ArrowLeftRight className="h-4 w-4" />
+          </motion.button>
+        }
+      />
+
+      <AirportTypeahead
+        label="To"
+        value={to}
+        setValue={setTo}
+        placeholder="LAX or Los Angeles"
+        airportsReady={readyList}
+        allAirports={airports}
+      />
+
+      <label className="flex flex-col">
+        <span className="mb-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+          Depart
+        </span>
+        <input
+          type="date"
+          value={depart}
+          min={isoToday()}
+          onChange={(e) => onDepart(e.target.value)}
+          onFocus={(e) => (e.target as HTMLInputElement).showPicker?.()}
+          className="rounded-xl border border-brand-300/80 bg-white/70 px-3 py-2.5 text-sm text-brand-900 shadow-sm backdrop-blur
+                     focus:outline-none focus:ring-2 focus:ring-indigo-500
+                     dark:border-brand-700/70 dark:bg-brand-900/60 dark:text-brand-100"
+        />
+      </label>
+
+      {trip === "round" && (
+        <label className="flex flex-col">
+          <span className="mb-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+            Return
+          </span>
+          <input
+            type="date"
+            value={ret}
+            min={tomorrow(depart || isoToday())}
+            onChange={(e) => setRet(e.target.value)}
+            onFocus={(e) => (e.target as HTMLInputElement).showPicker?.()}
+            className="rounded-xl border border-brand-300/80 bg-white/70 px-3 py-2.5 text-sm text-brand-900 shadow-sm backdrop-blur
+                       focus:outline-none focus:ring-2 focus:ring-indigo-500
+                       dark:border-brand-700/70 dark:bg-brand-900/60 dark:text-brand-100"
+          />
+        </label>
+      )}
+    </div>
+  );
+
   return (
     <section
       className="
@@ -523,14 +660,13 @@ export default function FlightSearch({
         dark:border-brand-800/30 dark:bg-brand-900
       "
     >
-      {/* subtle top glow */}
       <div className="pointer-events-none absolute -top-24 left-1/2 h-48 w-[520px] -translate-x-1/2 rounded-full bg-indigo-500/15 blur-3xl" />
 
       {/* header */}
       <header className="flex flex-col gap-3 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
           <h2 className="text-base font-extrabold tracking-tight text-brand-900 dark:text-white">
-            Find a flight
+            Search for a flight
           </h2>
 
           <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-brand-200/70 bg-white/60 px-3 py-1 text-[11px] font-semibold text-brand-700 shadow-sm backdrop-blur dark:border-white/10 dark:bg-brand-900/40 dark:text-brand-200">
@@ -559,205 +695,361 @@ export default function FlightSearch({
         </div>
       </header>
 
-      {/* core inputs */}
-      <div className="grid gap-4 px-5 pb-6 sm:grid-cols-2 sm:px-6">
-        <AirportTypeahead
-          label="From"
-          value={from}
-          setValue={setFrom}
-          placeholder="DEN or Denver"
-          airportsReady={readyList}
-          allAirports={airports}
-          rightAccessory={
-            <motion.button
-              whileTap={{ scale: 0.94 }}
-              type="button"
-              onClick={swap}
-              title="Swap"
-              className="rounded-full border border-brand-300 bg-white/70 p-2 text-brand-700 shadow-sm
-                         hover:bg-white hover:text-brand-900
-                         dark:border-brand-700 dark:bg-brand-900/60 dark:text-brand-200 dark:hover:bg-brand-900"
-            >
-              <ArrowLeftRight className="h-4 w-4" />
-            </motion.button>
-          }
-        />
-
-        <AirportTypeahead
-          label="To"
-          value={to}
-          setValue={setTo}
-          placeholder="LAX or Los Angeles"
-          airportsReady={readyList}
-          allAirports={airports}
-        />
-
-        <label className="flex flex-col">
-          <span className="mb-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
-            Depart
-          </span>
-          <input
-            type="date"
-            value={depart}
-            min={isoToday()}
-            onChange={(e) => onDepart(e.target.value)}
-            onFocus={(e) => (e.target as HTMLInputElement).showPicker?.()}
-            className="rounded-xl border border-brand-300/80 bg-white/70 px-3 py-2.5 text-sm text-brand-900 shadow-sm backdrop-blur
-                       focus:outline-none focus:ring-2 focus:ring-indigo-500
-                       dark:border-brand-700/70 dark:bg-brand-900/60 dark:text-brand-100"
-          />
-        </label>
-
-        {trip === "round" && (
-          <label className="flex flex-col">
-            <span className="mb-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
-              Return
-            </span>
-            <input
-              type="date"
-              value={ret}
-              min={tomorrow(depart || isoToday())}
-              onChange={(e) => setRet(e.target.value)}
-              onFocus={(e) => (e.target as HTMLInputElement).showPicker?.()}
-              className="rounded-xl border border-brand-300/80 bg-white/70 px-3 py-2.5 text-sm text-brand-900 shadow-sm backdrop-blur
-                         focus:outline-none focus:ring-2 focus:ring-indigo-500
-                         dark:border-brand-700/70 dark:bg-brand-900/60 dark:text-brand-100"
-            />
-          </label>
-        )}
-      </div>
-
-      {/* inline form error */}
-      <AnimatePresence>
-        {formError && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            className="px-5 pb-2 sm:px-6"
-          >
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
-              {formError}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* travellers & cabin */}
-      <button
-        type="button"
-        onClick={() => setShowDetails((p) => !p)}
-        className="flex w-full items-center justify-between border-t border-brand-200/70 px-5 py-4
-                   text-sm font-extrabold text-brand-800 transition hover:bg-brand-50
-                   dark:border-white/10 dark:text-brand-200 dark:hover:bg-white/5 sm:px-6"
-      >
-        <span className="inline-flex items-center gap-2">
-          <Armchair className="h-4 w-4" />
-          Travellers &amp; cabin
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 transition-transform ${showDetails ? "rotate-180" : ""}`}
-        />
-      </button>
-
-      <AnimatePresence initial={false}>
-        {showDetails && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 260, damping: 28 }}
-            className="overflow-hidden border-t border-brand-100 dark:border-white/10"
-          >
-            <div className="space-y-4 px-5 py-5 sm:px-6">
-              <div>
-                <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-brand-600 dark:text-brand-300">
-                  Cabin
-                </div>
-                <div className="grid gap-2 grid-cols-1 sm:grid-cols-4">
-                  {(Object.keys(cabinMeta) as Cabin[]).map((c) => {
-                    const active = cabin === c;
-                    return (
-                      <motion.button
-                        key={c}
-                        whileHover={{ y: -1 }}
-                        whileTap={{ scale: 0.98 }}
-                        type="button"
-                        onClick={() => setCabin(c)}
-                        className={cabinPillClass(active)}
-                      >
-                        <div className="text-sm font-extrabold">{cabinMeta[c].title}</div>
-                        <div
-                          className={`text-xs font-semibold ${
-                            active ? "text-white/85" : "text-brand-600 dark:text-brand-300"
-                          }`}
-                        >
-                          {cabinMeta[c].sub}
-                        </div>
-
-                        {!active && (
-                          <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-black/5 dark:ring-white/5" />
-                        )}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-brand-600 dark:text-brand-300">
-                  Travellers
-                </div>
-                <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
-                  <Stepper label="Adults" desc="Age 16+" val={adults} set={setAdults} min={1} />
-                  <Stepper label="Children" desc="Age 2–15" val={children} set={setChildren} min={0} />
-                  <Stepper label="Infants" desc="Under 2" val={infants} set={setInfants} min={0} />
-                  <Stepper label="Seniors" desc="Flexible fares" val={seniors} set={setSeniors} min={0} />
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-brand-200/60 bg-white/60 p-3 text-xs font-semibold text-brand-700 shadow-sm backdrop-blur dark:border-white/10 dark:bg-brand-900/40 dark:text-brand-200">
-                You’ll see real booking links in the results. No spam, no weird redirects.
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* search button */}
-      <div className="border-t border-brand-100 px-5 py-6 dark:border-white/10 sm:px-6">
-        <motion.button
-          whileHover={allGood && !loading ? { scale: 1.01 } : {}}
-          whileTap={allGood && !loading ? { scale: 0.985 } : {}}
-          onClick={runSearch}
-          disabled={!allGood || loading}
+      {/* ============================= */}
+      {/* MOBILE: accordion form (<sm)  */}
+      {/* ============================= */}
+      <div className="sm:hidden border-t border-brand-200/70 dark:border-white/10">
+        <button
           type="button"
-          className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-extrabold
-            shadow-lg transition focus:outline-none focus:ring-2 focus:ring-offset-2
-            ${
-              allGood && !loading
-                ? "bg-gradient-to-r from-indigo-600 to-indigo-500 text-white hover:from-indigo-500 hover:to-indigo-500 focus:ring-indigo-500"
-                : "cursor-not-allowed bg-brand-300 text-brand-600 dark:bg-brand-800/60 dark:text-brand-500"
-            }`}
+          onClick={() => setMobileFormOpen((p) => !p)}
+          className="flex w-full items-center justify-between px-5 py-4
+                     text-sm font-extrabold text-brand-800 transition hover:bg-brand-50
+                     dark:text-brand-200 dark:hover:bg-white/5"
         >
-          {loading ? (
-            <span className="inline-flex items-center gap-2">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              Searching…
+          <span className="inline-flex items-center gap-2">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-xl border border-black/10 bg-white/70 text-[11px] font-extrabold text-brand-900 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-white">
+              ✈
             </span>
-          ) : (
-            <>
-              Search flights
-              <ArrowRight className="h-4 w-4" />
-            </>
-          )}
-        </motion.button>
+            Flight details
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 transition-transform ${mobileFormOpen ? "rotate-180" : ""}`}
+          />
+        </button>
 
-        <p className="mt-3 text-center text-[11px] text-brand-600 dark:text-brand-300">
-          Tip: try <span className="font-extrabold">DEN</span> →{" "}
-          <span className="font-extrabold">LHR</span>
-        </p>
+        <AnimatePresence initial={false}>
+          {mobileFormOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 28 }}
+              className="overflow-hidden"
+            >
+              {/* inputs */}
+              <div className="grid gap-4 px-5 pb-5">
+                <AirportTypeahead
+                  label="From"
+                  value={from}
+                  setValue={setFrom}
+                  placeholder="DEN or Denver"
+                  airportsReady={readyList}
+                  allAirports={airports}
+                  rightAccessory={
+                    <motion.button
+                      whileTap={{ scale: 0.94 }}
+                      type="button"
+                      onClick={swap}
+                      title="Swap"
+                      className="rounded-full border border-brand-300 bg-white/70 p-2 text-brand-700 shadow-sm
+                                 hover:bg-white hover:text-brand-900
+                                 dark:border-brand-700 dark:bg-brand-900/60 dark:text-brand-200 dark:hover:bg-brand-900"
+                    >
+                      <ArrowLeftRight className="h-4 w-4" />
+                    </motion.button>
+                  }
+                />
+
+                <AirportTypeahead
+                  label="To"
+                  value={to}
+                  setValue={setTo}
+                  placeholder="LAX or Los Angeles"
+                  airportsReady={readyList}
+                  allAirports={airports}
+                />
+
+                <label className="flex flex-col">
+                  <span className="mb-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+                    Depart
+                  </span>
+                  <input
+                    type="date"
+                    value={depart}
+                    min={isoToday()}
+                    onChange={(e) => onDepart(e.target.value)}
+                    onFocus={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                    className="rounded-xl border border-brand-300/80 bg-white/70 px-3 py-2.5 text-sm text-brand-900 shadow-sm backdrop-blur
+                               focus:outline-none focus:ring-2 focus:ring-indigo-500
+                               dark:border-brand-700/70 dark:bg-brand-900/60 dark:text-brand-100"
+                  />
+                </label>
+
+                {trip === "round" && (
+                  <label className="flex flex-col">
+                    <span className="mb-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+                      Return
+                    </span>
+                    <input
+                      type="date"
+                      value={ret}
+                      min={tomorrow(depart || isoToday())}
+                      onChange={(e) => setRet(e.target.value)}
+                      onFocus={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                      className="rounded-xl border border-brand-300/80 bg-white/70 px-3 py-2.5 text-sm text-brand-900 shadow-sm backdrop-blur
+                                 focus:outline-none focus:ring-2 focus:ring-indigo-500
+                                 dark:border-brand-700/70 dark:bg-brand-900/60 dark:text-brand-100"
+                    />
+                  </label>
+                )}
+              </div>
+
+              {/* error */}
+              <AnimatePresence>
+                {formError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    className="px-5 pb-4"
+                  >
+                    <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
+                      {formError}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* travellers button (opens sheet) */}
+              <button
+                type="button"
+                onClick={() => setMobileDetailsOpen(true)}
+                className="flex w-full items-center justify-between border-t border-brand-200/70 px-5 py-4
+                           text-sm font-extrabold text-brand-800 transition hover:bg-brand-50
+                           dark:border-white/10 dark:text-brand-200 dark:hover:bg-white/5"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Armchair className="h-4 w-4" />
+                  Travellers &amp; cabin
+                </span>
+                <ChevronDown className="h-4 w-4" />
+              </button>
+
+              {/* ✅ Search button + tip INSIDE mobile accordion */}
+              {SearchBlock}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
+
+      {/* ============================= */}
+      {/* DESKTOP: normal layout (sm+)  */}
+      {/* ============================= */}
+      <div className="hidden sm:block">
+        {DesktopInputs}
+
+        <AnimatePresence>
+          {formError && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="px-5 pb-2 sm:px-6"
+            >
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
+                {formError}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Travellers & cabin (desktop accordion) */}
+        <button
+          type="button"
+          onClick={() => setShowDetails((p) => !p)}
+          className="flex w-full items-center justify-between border-t border-brand-200/70 px-5 py-4
+                     text-sm font-extrabold text-brand-800 transition hover:bg-brand-50
+                     dark:border-white/10 dark:text-brand-200 dark:hover:bg-white/5 sm:px-6"
+        >
+          <span className="inline-flex items-center gap-2">
+            <Armchair className="h-4 w-4" />
+            Travellers &amp; cabin
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 transition-transform ${showDetails ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        <AnimatePresence initial={false}>
+          {showDetails && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 28 }}
+              className="overflow-hidden border-t border-brand-100 dark:border-white/10"
+            >
+              <div className="space-y-4 px-6 py-5">
+                {/* cabin cards */}
+                <div>
+                  <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-brand-600 dark:text-brand-300">
+                    Cabin
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    {(Object.keys(cabinMeta) as Cabin[]).map((c) => {
+                      const active = cabin === c;
+                      return (
+                        <motion.button
+                          key={c}
+                          whileHover={{ y: -1 }}
+                          whileTap={{ scale: 0.98 }}
+                          type="button"
+                          onClick={() => setCabin(c)}
+                          className={cabinPillClass(active)}
+                        >
+                          <div className="text-sm font-extrabold">{cabinMeta[c].title}</div>
+                          <div
+                            className={`text-xs font-semibold ${
+                              active ? "text-white/85" : "text-brand-600 dark:text-brand-300"
+                            }`}
+                          >
+                            {cabinMeta[c].sub}
+                          </div>
+
+                          {!active && (
+                            <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-black/5 dark:ring-white/5" />
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* travellers */}
+                <div>
+                  <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-brand-600 dark:text-brand-300">
+                    Travellers
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Stepper label="Adults" desc="Age 16+" val={adults} set={setAdults} min={1} />
+                    <Stepper label="Children" desc="Age 2–15" val={children} set={setChildren} min={0} />
+                    <Stepper label="Infants" desc="Under 2" val={infants} set={setInfants} min={0} />
+                    <Stepper label="Seniors" desc="Flexible fares" val={seniors} set={setSeniors} min={0} />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-brand-200/60 bg-white/60 p-3 text-xs font-semibold text-brand-700 shadow-sm backdrop-blur dark:border-white/10 dark:bg-brand-900/40 dark:text-brand-200">
+                  You’ll see real booking links in the results. No spam, no weird redirects.
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ✅ Desktop search button (only desktop) */}
+        {SearchBlock}
+      </div>
+
+      {/* ============================= */}
+      {/* MOBILE: Travellers sheet      */}
+      {/* ============================= */}
+      {typeof window !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isMobile && mobileDetailsOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="sm:hidden fixed inset-0 z-[9999]"
+              >
+                {/* backdrop */}
+                <motion.button
+                  type="button"
+                  aria-label="Close travellers and cabin"
+                  onClick={() => setMobileDetailsOpen(false)}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                />
+
+                {/* sheet */}
+                <motion.div
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                  className="absolute bottom-0 left-0 right-0 rounded-t-3xl border border-black/10
+                             bg-white/95 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-brand-900/95"
+                >
+                  <div className="px-5 pt-3 pb-4 border-b border-black/5 dark:border-white/10">
+                    <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-black/15 dark:bg-white/15" />
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-extrabold text-brand-900 dark:text-white">
+                        Travellers &amp; cabin
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMobileDetailsOpen(false)}
+                        className="rounded-xl border border-black/10 bg-white/70 px-3 py-1.5 text-xs font-extrabold text-brand-900 shadow-sm
+                                   hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    className="max-h-[70vh] overflow-y-auto overscroll-contain px-5 py-5"
+                    style={{ WebkitOverflowScrolling: "touch" }}
+                  >
+                    <div>
+                      <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-brand-600 dark:text-brand-300">
+                        Cabin
+                      </div>
+                      <div className="grid gap-2 grid-cols-2">
+                        {(Object.keys(cabinMeta) as Cabin[]).map((c) => {
+                          const active = cabin === c;
+                          return (
+                            <motion.button
+                              key={c}
+                              whileTap={{ scale: 0.98 }}
+                              type="button"
+                              onClick={() => setCabin(c)}
+                              className={cabinPillClass(active)}
+                            >
+                              <div className="text-sm font-extrabold">{cabinMeta[c].title}</div>
+                              <div
+                                className={`text-xs font-semibold ${
+                                  active ? "text-white/85" : "text-brand-600 dark:text-brand-300"
+                                }`}
+                              >
+                                {cabinMeta[c].sub}
+                              </div>
+                              {!active && (
+                                <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-black/5 dark:ring-white/5" />
+                              )}
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-brand-600 dark:text-brand-300">
+                        Travellers
+                      </div>
+                      <div className="grid gap-2">
+                        <Stepper label="Adults" desc="Age 16+" val={adults} set={setAdults} min={1} />
+                        <Stepper label="Children" desc="Age 2–15" val={children} set={setChildren} min={0} />
+                        <Stepper label="Infants" desc="Under 2" val={infants} set={setInfants} min={0} />
+                        <Stepper label="Seniors" desc="Flexible fares" val={seniors} set={setSeniors} min={0} />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-brand-200/60 bg-white/60 p-3 text-xs font-semibold text-brand-700 shadow-sm backdrop-blur dark:border-white/10 dark:bg-brand-900/40 dark:text-brand-200">
+                      You’ll see real booking links in the results. No spam, no weird redirects.
+                    </div>
+
+                    <div className="h-6" />
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
 
       {/* results modal */}
       <ResultsModal
