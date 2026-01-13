@@ -29,13 +29,13 @@ export default function SideNavigation() {
     <div className="sticky top-0 w-56 sm:w-48 md:w-24 shrink-0 h-screen overflow-y-auto no-scrollbar border-r border-slate-200 dark:border-slate-800 dark:bg-brand-900 bg-indigo-50">
       <div className="h-full flex flex-col justify-between after:flex-1 after:mt-auto">
         {/* Desktop-only avatar: top-left */}
-        <div className="hidden md:block px-3 pt-3">
+        <div className="md:block px-3 pt-3">
           <Link href="/" onClick={() => handleNavClick("Home Avatar", "/")}>
             <Image
               className="rounded-full"
               src={HeroImage}
-              width={50}
-              height={50}
+              width={40}
+              height={40}
               priority
               alt="Me"
             />

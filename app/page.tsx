@@ -12,9 +12,11 @@ import FlightSearch from "./Country/FlightSearch";
 
 import HeroImage from "@/public/images/pumpkin.jpg";
 import SecondImage from "@/public/images/cabin.jpg";
-import ThirdImage from "@/public/images/wedding.jpg";
+import ThirdImage from "@/public/images/winter.jpg";
+import FourthImage from "@/public/images/fiji.jpg";
+import FifthImage from "@/public/images/couch.jpg";
 
-const images = [HeroImage, SecondImage, ThirdImage];
+const images = [HeroImage, SecondImage, ThirdImage, FourthImage, FifthImage];
 
 export default function AboutPage() {
   const [currentImage, setCurrentImage] = useState(0);
@@ -57,7 +59,7 @@ export default function AboutPage() {
                             fill
                             priority={index === 0}
                             sizes=""
-                            className="object-contain"
+                             className="object-cover object-center"
                           />
                         </div>
                       ))}
