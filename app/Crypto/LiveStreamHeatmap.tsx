@@ -346,7 +346,7 @@ export default function LiveStreamHeatmap() {
 
   return (
     <>
-      <div className="p-4 max-w-5xl mx-auto">
+      <div className="p-2 max-w-5xl mx-auto">
         {!wsAvailable && (
           <div className="mb-4 p-2 bg-yellow-100 text-yellow-800 rounded text-center">
             WebSocket unavailable—polling every 5&nbsp;s.

@@ -100,7 +100,7 @@ const CryptoDashboard = () => {
           </div>
 
           {/* content */}
-          <div className="p-3 sm:p-4">
+          <div className="">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={tabs[active]?.name}

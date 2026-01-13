@@ -307,7 +307,7 @@ export default function TopGainersLosers() {
             {["Rank", "Symbol", "Name", "Price", "24h"].map((h) => (
               <th
                 key={h}
-                className="px-3 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60"
+                className="px-1 sm:px-2 py-2 text-left text-[10px] sm:text-xs font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60"
               >
                 {h}
               </th>
@@ -342,11 +342,11 @@ export default function TopGainersLosers() {
                 }}
                 transition={{ duration: 0.35, ease: "easeOut" }}
               >
-                <td className="px-3 sm:px-4 py-2 text-[11px] sm:text-sm font-semibold text-gray-700 dark:text-white/75">
+                <td className="px-1 sm:px-2 py-2 text-[11px] sm:text-sm font-semibold text-gray-700 dark:text-white/75">
                   {c?.rank ?? "—"}
                 </td>
 
-                <td className="px-3 sm:px-4 py-2">
+                <td className="px-1 sm:px-2 py-2">
                   <div className="flex items-center gap-2">
                     {logo ? (
                       <span className="inline-flex items-center justify-center rounded-full bg-white/90 dark:bg-white/10 p-[2px] ring-1 ring-black/10 dark:ring-white/10">
@@ -366,17 +366,17 @@ export default function TopGainersLosers() {
                   </div>
                 </td>
 
-                <td className="px-3 sm:px-4 py-2">
+                <td className="px-1 sm:px-2 py-2">
                   <div className="text-[12px] sm:text-sm font-semibold text-gray-800 dark:text-white/80 line-clamp-1">
                     {c?.name ?? "—"}
                   </div>
                 </td>
 
-                <td className="px-3 sm:px-4 py-2 text-[12px] sm:text-sm font-extrabold text-gray-900 dark:text-white">
+                <td className="px-1 sm:px-2 py-2 text-[12px] sm:text-sm font-extrabold text-gray-900 dark:text-white">
                   {formatUSD(c?.priceUsd)}
                 </td>
 
-                <td className="px-3 sm:px-4 py-2">
+                <td className="px-1 sm:px-2 py-2">
                   <div
                     className={cn(
                       "inline-flex items-center gap-2 text-[12px] sm:text-sm font-extrabold",
@@ -506,7 +506,7 @@ const renderGrid = (rows: any[]) => (
 
   return (
     // ✅ scroll-safe padding + no overflow-hidden anywhere
-    <div className="min-h-screen px-4 py-6 pb-24">
+    <div className="min-h-screen  py-6 pb-24">
       <div className="mx-auto max-w-5xl">
         {/* Header */}
         <div className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-5 shadow-sm">

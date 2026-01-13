@@ -496,7 +496,7 @@ const CryptoChartPrices: React.FC = () => {
   const change24h = cryptoDetails ? parseFloat(cryptoDetails.changePercent24Hr) : null;
 
   return (
-    <div className="mx-auto max-w-4xl p-4">
+    <div className="mx-auto max-w-4xl p-1">
       {/* header */}
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
