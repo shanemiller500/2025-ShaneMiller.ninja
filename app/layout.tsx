@@ -195,10 +195,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         Menu
                       </button>
 
-                      {/* optional: small brand / page label */}
-                      <div className="text-[11px] font-semibold text-brand-600 dark:text-brand-300">
-                        shanemiller.ninja
-                      </div>
+                     
                     </div>
                   </div>
 
