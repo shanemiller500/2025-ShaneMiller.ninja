@@ -151,8 +151,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       leaveTo="-translate-x-full"
                     >
                       <Dialog.Panel className="relative flex w-[86%] max-w-sm flex-col bg-white shadow-xl dark:bg-brand-900">
-                        <div className="flex items-center justify-between px-4 py-4 border-b border-black/5 dark:border-white/10">
-                          <div className="text-sm font-extrabold text-brand-900 dark:text-white">
+                        <div className="flex items-center justify-between px-4 py-4 border-b border-black/5 dark:border-white/10 dark:bg-brand-900 bg-indigo-50">
+                          <div className="text-sm font-extrabold text-brand-900 dark:text-white ">
                             Menu
                           </div>
                           <button
@@ -166,7 +166,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         </div>
 
                         {/* Your existing sidebar component */}
-                        <div className="flex-1 overflow-y-auto overscroll-contain">
+                        <div className="flex-1 overflow-y-auto overscroll-contain ">
                           <SideNavigation />
                         </div>
 
@@ -180,7 +180,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </Transition.Root>
 
               {/* Main content */}
-              <main className="grow overflow-hidden px-4 sm:px-6">
+              <main className="grow overflow-hidden px-4 sm:px-6 dark:bg-brand-900 bg-indigo-50">
                 <div className="w-full h-full max-w-[1072px] mx-auto flex flex-col">
                   {/* Mobile top bar (hamburger) */}
                   <div className="lg:hidden pt-4">
@@ -188,7 +188,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       <button
                         type="button"
                         onClick={() => setMobileNavOpen(true)}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-white/70 px-3 py-2 text-xs font-extrabold text-brand-900 shadow-sm hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-white/70 px-3 py-2 text-xs font-extrabold text-brand-900 shadow-sm hover:bg-white dark:border-white/10 dark:bg-brand-900 dark:text-white"
                         aria-label="Open menu"
                       >
                         <Menu className="h-4 w-4" />

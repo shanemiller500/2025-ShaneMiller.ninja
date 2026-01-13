@@ -28,16 +28,11 @@ const CryptoDashboard = () => {
 
   return (
     <div className="min-h-screen">
-      {/* ambient background */}
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute inset-0 bg-gradient-to-b from-white via-white to-white dark:from-black dark:via-black dark:to-black" />
-        <div className="absolute -top-28 -left-28 h-80 w-80 rounded-full bg-indigo-400/20 blur-3xl" />
-        <div className="absolute -bottom-40 -right-24 h-96 w-96 rounded-full bg-fuchsia-400/20 blur-3xl" />
-      </div>
+
 
       <div className="mx-auto max-w-6xl px-4 py-6 space-y-6 dark:text-gray-100">
         {/* header */}
-        <div className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-5 sm:p-6 shadow-sm">
+        <div className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900 p-5 sm:p-6 shadow-sm">
           <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
             <div className="absolute -top-14 -left-20 h-56 w-56 rounded-full bg-indigo-400/20 blur-3xl" />
             <div className="absolute -bottom-16 -right-16 h-64 w-64 rounded-full bg-fuchsia-400/20 blur-3xl" />
@@ -52,7 +47,7 @@ const CryptoDashboard = () => {
             </div>
 
             <div className="flex items-center gap-2 text-xs font-semibold text-gray-600 dark:text-white/60">
-              <span className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06]">
+              <span className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-brand-900">
                 <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                 Live
               </span>
@@ -64,7 +59,7 @@ const CryptoDashboard = () => {
         <FearGreedIndexes />
 
         {/* tabs */}
-        <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
+        <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900 shadow-sm overflow-hidden">
           {/* tab bar */}
           <div className="flex items-center gap-2 p-2 sm:p-3 border-b border-black/10 dark:border-white/10 overflow-x-auto no-scrollbar">
             {tabs.map((t, i) => {
@@ -82,7 +77,7 @@ const CryptoDashboard = () => {
                     "ring-1 ring-black/10 dark:ring-white/10",
                     isActive
                       ? "text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-sm"
-                      : "text-gray-900 dark:text-white bg-black/[0.03] dark:bg-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.10]",
+                      : "text-gray-900 dark:text-white bg-black/[0.03] dark:bg-brand-900 hover:bg-black/[0.06] dark:hover:bg-white/[0.10]",
                   ].join(" ")}
                   aria-current={isActive ? "page" : undefined}
                 >

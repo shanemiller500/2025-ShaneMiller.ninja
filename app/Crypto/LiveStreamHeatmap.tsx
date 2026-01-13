@@ -484,9 +484,9 @@ export default function LiveStreamHeatmap() {
             })}
           </div>
        ) : (
-  <div className="overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
+  <div className="overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900 shadow-sm">
     <table className="min-w-full divide-y divide-black/5 dark:divide-white/10">
-      <thead className="bg-black/[0.03] dark:bg-white/[0.06]">
+      <thead className="bg-black/[0.03] dark:bg-brand-900">
         <tr>
           {["Rank", "Symbol", "Name", "Price", "24h"].map((h) => (
             <th
@@ -544,7 +544,7 @@ export default function LiveStreamHeatmap() {
               <td className="px-3 sm:px-4 py-2">
                 <div className="flex items-center gap-2">
                   {logo ? (
-                    <span className="inline-flex items-center justify-center rounded-full bg-white/90 dark:bg-white/10 p-[2px] ring-1 ring-black/10 dark:ring-white/10">
+                    <span className="inline-flex items-center justify-center rounded-full bg-white/90 dark:bg-brand-900 p-[2px] ring-1 ring-black/10 dark:ring-white/10">
                       <img
                         src={logo}
                         alt={md.symbol}
@@ -553,7 +553,7 @@ export default function LiveStreamHeatmap() {
                       />
                     </span>
                   ) : (
-                    <span className="h-5 w-5 sm:h-6 sm:w-6 rounded-full bg-black/10 dark:bg-white/10" />
+                    <span className="h-5 w-5 sm:h-6 sm:w-6 rounded-full  dark:bg-brand-900" />
                   )}
 
                   <div className="font-extrabold text-[12px] sm:text-sm text-gray-900 dark:text-white">
@@ -619,7 +619,7 @@ export default function LiveStreamHeatmap() {
 
       {/* websocket-closed popup */}
       {wsClosed && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 dark:bg-brand-900 flex items-center justify-center z-50 p-4">
           <div className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full max-w-sm p-6 text-center">
             <button
               className="absolute top-4 right-4 text-indigo-500 hover:text-indigo-700 text-xl"

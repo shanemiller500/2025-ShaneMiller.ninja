@@ -41,7 +41,7 @@ export default function AboutPage() {
                 {/* Image slider — bigger, no crop */}
                 <div className="relative overflow-hidden rounded-2xl border border-gray-200/70 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900">
                   {/* Taller frame so images feel substantial */}
-                  <div className="relative w-full aspect-[3/2] bg-gray-50 dark:bg-white/5">
+                  <div className="relative w-full aspect-[3/2] bg-gray-50 dark:bg-brand-900">
                     <div
                       className="absolute inset-0 flex transition-transform duration-500 ease-in-out"
                       style={{ transform: `translateX(-${currentImage * 100}%)` }}
@@ -72,8 +72,8 @@ export default function AboutPage() {
                           aria-label={`Go to slide ${i + 1}`}
                           className={`h-2.5 w-2.5 rounded-full transition ring-1 ring-black/30 dark:ring-white/30 ${
                             i === currentImage
-                              ? "bg-gray-900 dark:bg-white"
-                              : "bg-gray-900/30 hover:bg-gray-900/50 dark:bg-white/30 dark:hover:bg-white/50"
+                              ? "bg-gray-900 dark:bg-brand-900"
+                              : "bg-gray-900/30 hover:bg-gray-900/50 dark:bg-brand-900 dark:hover:bg-white/50"
                           }`}
                         />
                       ))}
