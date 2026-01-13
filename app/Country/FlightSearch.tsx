@@ -2,7 +2,14 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, ArrowLeftRight, ChevronDown } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowLeftRight,
+  ChevronDown,
+  Users,
+  Armchair,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import ResultsModal from "./ResultsModal";
 
 /* ------------------------------------------------------------------ */
@@ -58,7 +65,10 @@ const addDaysISO = (iso: string, days: number) =>
   new Date(new Date(iso).getTime() + days * 864e5).toISOString().slice(0, 10);
 const tomorrow = (iso: string) => addDaysISO(iso, 1);
 
-const isIata = (s: string) => /^[A-Z]{3}$/.test((s || "").trim().toUpperCase());
+const isIata = (s: string) =>
+  /^[A-Z]{3}$/.test((s || "").trim().toUpperCase());
+const safeUpper3 = (s: string) =>
+  (s || "").replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase();
 
 const prettyAirport = (a: AirportRec) => {
   const city = a.city || a.name || "";
@@ -66,111 +76,253 @@ const prettyAirport = (a: AirportRec) => {
   return `${a.iata} — ${city}${name}`;
 };
 
-const safeUpper3 = (s: string) => (s || "").replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase();
-
 const LS_KEY = "flightSearch:last";
 
-/* ---------- tiny counter ----------------------------------------- */
-const Counter = ({
+/* ---------- typeahead input -------------------------------------- */
+function AirportTypeahead({
   label,
+  value,
+  setValue,
+  placeholder,
+  airportsReady,
+  allAirports,
+  rightAccessory,
+}: {
+  label: string;
+  value: string;
+  setValue: (s: string) => void;
+  placeholder: string;
+  airportsReady: boolean;
+  allAirports: AirportRec[];
+  rightAccessory?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => setQuery(value), [value]);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as any)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const suggestions = useMemo(() => {
+    if (!airportsReady) return [];
+    const q = (query || "").trim().toLowerCase();
+    if (q.length < 2) return [];
+
+    return allAirports
+      .filter((a) => a.iata)
+      .filter((a) => {
+        const iata = a.iata.toLowerCase();
+        const city = (a.city || "").toLowerCase();
+        const name = (a.name || "").toLowerCase();
+        const iso = (a.iso || "").toLowerCase();
+        return (
+          iata.startsWith(q) ||
+          city.includes(q) ||
+          name.includes(q) ||
+          iso === q
+        );
+      })
+      .slice(0, 14);
+  }, [query, airportsReady, allAirports]);
+
+  const selectedLabel = useMemo(() => {
+    if (!isIata(value)) return "";
+    const a = allAirports.find((x) => x.iata?.toUpperCase() === value);
+    return a ? prettyAirport(a) : "";
+  }, [value, allAirports]);
+
+  return (
+    <div className="flex flex-col" ref={wrapRef}>
+      <span className="mb-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+        {label}
+      </span>
+
+      <div className="relative">
+        <input
+          value={query}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            const next = e.target.value;
+            setQuery(next);
+
+            const maybe = safeUpper3(next);
+            if (maybe.length === 3) setValue(maybe);
+            else setValue("");
+          }}
+          placeholder={placeholder}
+          autoComplete="off"
+          inputMode="text"
+          className="
+            w-full rounded-xl border border-brand-300/80 bg-white/70
+            px-3 py-2.5 pr-12 text-sm text-brand-900 shadow-sm backdrop-blur
+            focus:outline-none focus:ring-2 focus:ring-indigo-500
+            dark:border-brand-700/70 dark:bg-brand-900/60 dark:text-brand-100
+          "
+        />
+
+        {rightAccessory && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+            {rightAccessory}
+          </div>
+        )}
+
+        <AnimatePresence>
+          {open && suggestions.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 360, damping: 26 }}
+              className="
+                absolute z-30 mt-2 w-full overflow-hidden rounded-2xl
+                border border-gray-200 bg-white shadow-xl
+                dark:border-white/10 dark:bg-brand-900
+              "
+            >
+              {/* MOBILE: make it scrollable + touch friendly */}
+              <div
+                className="
+                  max-h-[52vh] overflow-y-auto overscroll-contain
+                  [scrollbar-width:none] [-ms-overflow-style:none]
+                "
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
+                {suggestions.map((a) => (
+                  <button
+                    key={a.iata}
+                    type="button"
+                    onClick={() => {
+                      setValue(a.iata.toUpperCase());
+                      setQuery(a.iata.toUpperCase());
+                      setOpen(false);
+                    }}
+                    className="
+                      flex w-full items-start gap-3 px-3 py-3 text-left
+                      hover:bg-gray-50 active:bg-gray-100
+                      dark:hover:bg-white/5 dark:active:bg-white/10
+                    "
+                  >
+                    <span className="mt-[2px] inline-flex min-w-[44px] justify-center rounded-lg bg-indigo-600 px-2 py-1 text-xs font-extrabold text-white">
+                      {a.iata.toUpperCase()}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-gray-900 dark:text-white">
+                        {a.city || a.name || a.iata}
+                      </span>
+                      <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
+                        {a.name}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {selectedLabel && (
+        <span className="mt-1 text-[11px] text-brand-600 dark:text-brand-300">
+          {selectedLabel}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ---------- premium counter -------------------------------------- */
+function Stepper({
+  label,
+  desc,
   val,
   set,
   min,
 }: {
   label: string;
+  desc: string;
   val: number;
   set: (n: number) => void;
   min: number;
-}) => (
-  <div
-    className="w-full rounded-md border border-brand-300/70 bg-white/40
-              px-2 py-1.5 text-xs backdrop-blur
-              dark:border-brand-700/60 dark:bg-brand-900/40
-              sm:px-3 sm:text-sm"
-  >
-    <div className="flex items-center justify-between">
-      <span className="text-brand-800 dark:text-brand-200">{label}</span>
+}) {
+  return (
+    <div className="rounded-2xl border border-brand-200/70 bg-white/60 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-brand-900/40">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-brand-900 dark:text-white">
+            {label}
+          </div>
+          <div className="text-xs text-brand-600 dark:text-brand-300">{desc}</div>
+        </div>
 
-      <div className="flex items-center gap-1 sm:gap-2">
-        <button
-          aria-label={`Decrease ${label}`}
-          onClick={() => set(Math.max(min, val - 1))}
-          className="flex h-6 w-6 items-center justify-center rounded-full border border-brand-400
-                     text-sm leading-none text-brand-600 hover:bg-brand-100
-                     dark:border-brand-600 dark:text-brand-200 dark:hover:bg-brand-800/50
-                     sm:h-8 sm:w-8 sm:text-base"
-          type="button"
-        >
-          –
-        </button>
+        <div className="flex items-center gap-2">
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            type="button"
+            onClick={() => set(Math.max(min, val - 1))}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-brand-300 bg-white text-brand-800 shadow-sm hover:bg-brand-50 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-100 dark:hover:bg-white/5"
+            aria-label={`Decrease ${label}`}
+          >
+            –
+          </motion.button>
 
-        <span className="min-w-[1.6rem] text-center font-semibold text-brand-900 dark:text-brand-100 sm:min-w-[2rem]">
-          {val}
-        </span>
+          <motion.div
+            key={val}
+            initial={{ y: -6, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            className="min-w-[2.5rem] text-center text-base font-extrabold text-brand-900 dark:text-white"
+          >
+            {val}
+          </motion.div>
 
-        <button
-          aria-label={`Increase ${label}`}
-          onClick={() => set(val + 1)}
-          className="flex h-6 w-6 items-center justify-center rounded-full border border-brand-400
-                     text-sm leading-none text-brand-600 hover:bg-brand-100
-                     dark:border-brand-600 dark:text-brand-200 dark:hover:bg-brand-800/50
-                     sm:h-8 sm:w-8 sm:text-base"
-          type="button"
-        >
-          +
-        </button>
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            type="button"
+            onClick={() => set(val + 1)}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-brand-300 bg-white text-brand-800 shadow-sm hover:bg-brand-50 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-100 dark:hover:bg-white/5"
+            aria-label={`Increase ${label}`}
+          >
+            +
+          </motion.button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+}
 
-/* ---------- detailed types reflecting new /api/flights output ----- */
-interface FlightSegment {
-  departure_airport: { name: string; id: string; time: string };
-  arrival_airport: { name: string; id: string; time: string };
-  duration: number;
-  airplane: string;
-  airline: string;
-  airline_logo: string;
-  travel_class: string;
-  flight_number: string;
-  extensions?: string[];
-  legroom?: string;
-  often_delayed_by_over_30_min?: boolean;
-}
-interface Layover {
-  duration: number;
-  name: string;
-  id: string;
-  overnight?: boolean;
-}
-interface FlightOption {
-  provider: string;
-  price: number | null;
-  total_duration?: number;
-  carbon_emissions?: {
-    this_flight: number;
-    typical_for_this_route: number;
-    difference_percent: number;
-  };
-  airline_logo?: string;
-  type?: string;
-  booking_token?: string;
-  flights?: FlightSegment[];
-  layovers?: Layover[];
-  legs?: string[];
-  deeplink?: string;
-  ai_score?: number;
-  ai_rank?: number;
-}
+const cabinMeta: Record<Cabin, { title: string; sub: string }> = {
+  e: { title: "Economy", sub: "Best value" },
+  pe: { title: "Premium", sub: "More room" },
+  b: { title: "Business", sub: "Lounge life" },
+  f: { title: "First", sub: "Top shelf" },
+};
+
+const cabinPillClass = (active: boolean) =>
+  `group relative w-full rounded-2xl border p-3 text-left transition
+   ${
+     active
+       ? "border-indigo-500 bg-indigo-600 text-white shadow-md"
+       : "border-brand-200/70 bg-white/70 text-brand-900 shadow-sm hover:shadow-md hover:bg-white dark:border-white/10 dark:bg-brand-900/40 dark:text-white"
+   }`;
 
 /* ================================================================== */
 /*  FlightSearch component                                            */
 /* ================================================================== */
-export default function FlightSearch({ full = null }: { full?: FullCountry | null }) {
+export default function FlightSearch({
+  full = null,
+}: {
+  full?: FullCountry | null;
+}) {
   const API_BASE = "https://u-mail.co";
 
-  /* ------------- form state -------------------------------------- */
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [depart, setDepart] = useState("");
@@ -183,13 +335,11 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
   const [seniors, setSeniors] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
 
-  /* ------------- load airports for suggestions ------------------- */
   const [readyList, setReadyList] = useState(false);
   useEffect(() => {
     getAirports().then(() => setReadyList(true));
   }, []);
 
-  /* ------------- restore last search ----------------------------- */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY);
@@ -197,32 +347,39 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
       const s = JSON.parse(raw);
       if (typeof s?.from === "string") setFrom(safeUpper3(s.from));
       if (typeof s?.to === "string") setTo(safeUpper3(s.to));
-      if (typeof s?.trip === "string" && (s.trip === "round" || s.trip === "oneway")) setTrip(s.trip);
-      if (typeof s?.cabin === "string" && ["e", "pe", "b", "f"].includes(s.cabin)) setCabin(s.cabin);
+      if (typeof s?.trip === "string" && (s.trip === "round" || s.trip === "oneway"))
+        setTrip(s.trip);
+      if (typeof s?.cabin === "string" && ["e", "pe", "b", "f"].includes(s.cabin))
+        setCabin(s.cabin);
       if (typeof s?.adults === "number") setAdults(Math.max(1, s.adults));
       if (typeof s?.children === "number") setChildren(Math.max(0, s.children));
       if (typeof s?.infants === "number") setInfants(Math.max(0, s.infants));
       if (typeof s?.seniors === "number") setSeniors(Math.max(0, s.seniors));
       if (typeof s?.depart === "string") setDepart(s.depart);
       if (typeof s?.ret === "string") setRet(s.ret);
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }, []);
 
-  /* ------------- persist search ---------------------------------- */
   useEffect(() => {
     try {
       localStorage.setItem(
         LS_KEY,
-        JSON.stringify({ from, to, depart, ret, trip, cabin, adults, children, infants, seniors }),
+        JSON.stringify({
+          from,
+          to,
+          depart,
+          ret,
+          trip,
+          cabin,
+          adults,
+          children,
+          infants,
+          seniors,
+        }),
       );
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }, [from, to, depart, ret, trip, cabin, adults, children, infants, seniors]);
 
-  /* ------------- auto-fill “to” when country changes ------------- */
   useEffect(() => {
     if (!full) return;
 
@@ -241,9 +398,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
     })();
   }, [full]);
 
-  /* ------------- date helpers ------------------------------------ */
   useEffect(() => {
-    // auto default dates if empty
     if (!depart) {
       const d = addDaysISO(isoToday(), 14);
       setDepart(d);
@@ -251,7 +406,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
       return;
     }
     if (trip === "round" && (!ret || ret <= depart)) setRet(tomorrow(depart));
-  }, [trip]); // only run when trip toggles (keeps it from fighting your typing)
+  }, [trip]);
 
   const onDepart = (d: string) => {
     setDepart(d);
@@ -264,52 +419,13 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
     else if (depart && (!ret || ret <= depart)) setRet(tomorrow(depart));
   };
 
-  /* ------------- airport suggestions ----------------------------- */
-  const suggest = (q: string) => {
-    if (!readyList) return [];
-    const query = (q || "").trim().toLowerCase();
-    if (query.length < 2) return [];
-
-    const out = airports
-      .filter((a) => a.iata)
-      .filter((a) => {
-        const iata = a.iata.toLowerCase();
-        const city = (a.city || "").toLowerCase();
-        const name = (a.name || "").toLowerCase();
-        const iso = (a.iso || "").toLowerCase();
-        return (
-          iata.startsWith(query) ||
-          city.includes(query) ||
-          name.includes(query) ||
-          iso === query
-        );
-      })
-      .slice(0, 20);
-
-    return out;
-  };
-
-  const fromSuggestions = useMemo(() => suggest(from), [from, readyList]);
-  const toSuggestions = useMemo(() => suggest(to), [to, readyList]);
-
-  const fromSelectedLabel = useMemo(() => {
-    if (!isIata(from)) return "";
-    const a = airports.find((x) => x.iata?.toUpperCase() === from);
-    return a ? prettyAirport(a) : "";
-  }, [from, readyList]);
-
-  const toSelectedLabel = useMemo(() => {
-    if (!isIata(to)) return "";
-    const a = airports.find((x) => x.iata?.toUpperCase() === to);
-    return a ? prettyAirport(a) : "";
-  }, [to, readyList]);
-
-  /* ------------- modal / fetch state ----------------------------- */
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [flights, setFlights] = useState<FlightOption[]>([]);
+  const [flights, setFlights] = useState<any[]>([]);
   const [photo, setPhoto] = useState<string | null>(null);
   const [formError, setFormError] = useState<string>("");
+
+  const paxTotal = adults + children + infants + seniors;
 
   const allGood =
     isIata(from) &&
@@ -319,7 +435,6 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
     (trip === "oneway" || ret > depart);
 
   useEffect(() => {
-    // tiny inline errors (but don’t be annoying)
     if (!from && !to) {
       setFormError("");
       return;
@@ -339,7 +454,6 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
     setFormError("");
   }, [from, to, trip, depart, ret]);
 
-  /* ------------- run search -------------------------------------- */
   const runSearch = async () => {
     if (!allGood || loading) return;
 
@@ -367,10 +481,8 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
 
       const res = await fetch(`${API_BASE}/api/flightSearch?${params.toString()}`);
       const json = await res.json();
+      const list: any[] = Array.isArray(json) ? json : [];
 
-      const list: FlightOption[] = Array.isArray(json) ? json : [];
-
-      // order: AI-rank if present → price asc → provider
       list.sort((a, b) => {
         const ar = typeof a.ai_rank === "number" ? a.ai_rank : Number.POSITIVE_INFINITY;
         const br = typeof b.ai_rank === "number" ? b.ai_rank : Number.POSITIVE_INFINITY;
@@ -396,237 +508,258 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
     setTo(from);
   };
 
+  const summary = useMemo(() => {
+    const tripLabel = trip === "round" ? "Round trip" : "One way";
+    const cabinLabel = cabinMeta[cabin].title;
+    return `${paxTotal} traveller${paxTotal !== 1 ? "s" : ""} · ${cabinLabel} · ${tripLabel}`;
+  }, [paxTotal, cabin, trip]);
+
   return (
     <section
-      className="mx-auto mt-8 overflow-hidden rounded-2xl bg-white/70 backdrop-blur
-                 shadow-sm ring-1 ring-black/5 dark:border-brand-800/30 dark:bg-brand-950"
+      className="
+        relative mx-auto mt-8 overflow-hidden rounded-3xl
+        bg-white/70 backdrop-blur
+        shadow-sm ring-1 ring-black/5
+        dark:border-brand-800/30 dark:bg-brand-900
+      "
     >
+      {/* subtle top glow */}
+      <div className="pointer-events-none absolute -top-24 left-1/2 h-48 w-[520px] -translate-x-1/2 rounded-full bg-indigo-500/15 blur-3xl" />
+
       {/* header */}
-      <header className="flex items-center justify-between px-6 py-4">
+      <header className="flex flex-col gap-3 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
-          <h2 className="text-base font-semibold tracking-tight text-brand-900 dark:text-brand-100">
+          <h2 className="text-base font-extrabold tracking-tight text-brand-900 dark:text-white">
             Find a flight
           </h2>
-          <p className="mt-0.5 text-xs text-brand-600 dark:text-brand-300">
-            Enter airport codes or search by city.
-          </p>
+
+          <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-brand-200/70 bg-white/60 px-3 py-1 text-[11px] font-semibold text-brand-700 shadow-sm backdrop-blur dark:border-white/10 dark:bg-brand-900/40 dark:text-brand-200">
+            <Users className="h-3.5 w-3.5" />
+            {summary}
+          </div>
         </div>
 
         {/* round / one-way pills */}
-        <div className="inline-flex overflow-hidden rounded-lg border border-brand-200 dark:border-brand-800">
+        <div className="inline-flex overflow-hidden rounded-2xl border border-brand-200/70 bg-white/50 shadow-sm backdrop-blur dark:border-white/10 dark:bg-brand-900/40">
           {(["round", "oneway"] as Trip[]).map((t) => (
             <button
               key={t}
               onClick={() => onTripToggle(t)}
               type="button"
-              className={`px-3 py-1 text-xs font-medium uppercase tracking-wide
+              className={`px-3 py-2 text-[11px] font-extrabold uppercase tracking-wide transition
                 ${
                   trip === t
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-transparent text-brand-600 dark:text-brand-300 hover:bg-brand-100/40 dark:hover:bg-brand-800/40"
+                    ? "bg-indigo-600 text-white"
+                    : "text-brand-700 hover:bg-brand-50 dark:text-brand-200 dark:hover:bg-white/5"
                 }`}
             >
-              {t === "round" ? "Round trip" : "One way"}
+              {t === "round" ? "Round" : "One-way"}
             </button>
           ))}
         </div>
       </header>
 
       {/* core inputs */}
-      <div className="grid gap-4 px-6 pb-6 sm:grid-cols-2">
-        {/* FROM */}
-        <label className="flex flex-col text-sm font-medium">
-          <span className="mb-1 text-brand-700 dark:text-brand-300">From</span>
-
-          <div className="relative">
-            <input
-              list="from-list"
-              value={from}
-              maxLength={3}
-              onChange={(e) => setFrom(safeUpper3(e.target.value))}
-              placeholder="DEN"
-              inputMode="text"
-              autoComplete="off"
-              className="w-full rounded-md border border-brand-300 bg-transparent px-3 py-2
-                         text-brand-900 placeholder-brand-400 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                         dark:border-brand-700 dark:text-brand-100 dark:placeholder-brand-500"
-            />
-
-            {/* swap button (floats between From/To on mobile too) */}
-            <button
+      <div className="grid gap-4 px-5 pb-6 sm:grid-cols-2 sm:px-6">
+        <AirportTypeahead
+          label="From"
+          value={from}
+          setValue={setFrom}
+          placeholder="DEN or Denver"
+          airportsReady={readyList}
+          allAirports={airports}
+          rightAccessory={
+            <motion.button
+              whileTap={{ scale: 0.94 }}
               type="button"
               onClick={swap}
               title="Swap"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full
-                         border border-brand-300 bg-white/70 p-1.5 text-brand-700 shadow-sm
+              className="rounded-full border border-brand-300 bg-white/70 p-2 text-brand-700 shadow-sm
                          hover:bg-white hover:text-brand-900
-                         dark:border-brand-700 dark:bg-brand-950/60 dark:text-brand-200 dark:hover:bg-brand-900"
+                         dark:border-brand-700 dark:bg-brand-900/60 dark:text-brand-200 dark:hover:bg-brand-900"
             >
               <ArrowLeftRight className="h-4 w-4" />
-            </button>
-          </div>
+            </motion.button>
+          }
+        />
 
-          {fromSelectedLabel && (
-            <span className="mt-1 text-[11px] text-brand-600 dark:text-brand-300">
-              {fromSelectedLabel}
-            </span>
-          )}
-        </label>
+        <AirportTypeahead
+          label="To"
+          value={to}
+          setValue={setTo}
+          placeholder="LAX or Los Angeles"
+          airportsReady={readyList}
+          allAirports={airports}
+        />
 
-        <datalist id="from-list">
-          {fromSuggestions.map((a) => (
-            <option key={a.iata} value={a.iata}>
-              {prettyAirport(a)}
-            </option>
-          ))}
-        </datalist>
-
-        {/* TO */}
-        <label className="flex flex-col text-sm font-medium">
-          <span className="mb-1 text-brand-700 dark:text-brand-300">To</span>
-          <input
-            list="to-list"
-            value={to}
-            maxLength={3}
-            onChange={(e) => setTo(safeUpper3(e.target.value))}
-            placeholder="LAX"
-            inputMode="text"
-            autoComplete="off"
-            className="rounded-md border border-brand-300 bg-transparent px-3 py-2
-                       text-brand-900 placeholder-brand-400 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                       dark:border-brand-700 dark:text-brand-100 dark:placeholder-brand-500"
-          />
-          {toSelectedLabel && (
-            <span className="mt-1 text-[11px] text-brand-600 dark:text-brand-300">
-              {toSelectedLabel}
-            </span>
-          )}
-        </label>
-
-        <datalist id="to-list">
-          {toSuggestions.map((a) => (
-            <option key={a.iata} value={a.iata}>
-              {prettyAirport(a)}
-            </option>
-          ))}
-        </datalist>
-
-        {/* DEPART */}
-        <label className="flex flex-col text-sm font-medium">
-          <span className="mb-1 text-brand-700 dark:text-brand-300">Depart</span>
+        <label className="flex flex-col">
+          <span className="mb-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+            Depart
+          </span>
           <input
             type="date"
             value={depart}
             min={isoToday()}
             onChange={(e) => onDepart(e.target.value)}
             onFocus={(e) => (e.target as HTMLInputElement).showPicker?.()}
-            className="rounded-md border border-brand-300 bg-transparent px-3 py-2
-                       text-brand-900 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                       dark:border-brand-700 dark:text-brand-100"
+            className="rounded-xl border border-brand-300/80 bg-white/70 px-3 py-2.5 text-sm text-brand-900 shadow-sm backdrop-blur
+                       focus:outline-none focus:ring-2 focus:ring-indigo-500
+                       dark:border-brand-700/70 dark:bg-brand-900/60 dark:text-brand-100"
           />
         </label>
 
-        {/* RETURN */}
         {trip === "round" && (
-          <label className="flex flex-col text-sm font-medium">
-            <span className="mb-1 text-brand-700 dark:text-brand-300">Return</span>
+          <label className="flex flex-col">
+            <span className="mb-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+              Return
+            </span>
             <input
               type="date"
               value={ret}
               min={tomorrow(depart || isoToday())}
               onChange={(e) => setRet(e.target.value)}
               onFocus={(e) => (e.target as HTMLInputElement).showPicker?.()}
-              className="rounded-md border border-brand-300 bg-transparent px-3 py-2
-                         text-brand-900 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                         dark:border-brand-700 dark:text-brand-100"
+              className="rounded-xl border border-brand-300/80 bg-white/70 px-3 py-2.5 text-sm text-brand-900 shadow-sm backdrop-blur
+                         focus:outline-none focus:ring-2 focus:ring-indigo-500
+                         dark:border-brand-700/70 dark:bg-brand-900/60 dark:text-brand-100"
             />
           </label>
         )}
       </div>
 
       {/* inline form error */}
-      {formError && (
-        <div className="px-6 pb-2">
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
-            {formError}
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {formError && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="px-5 pb-2 sm:px-6"
+          >
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
+              {formError}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* collapsible passenger / cabin panel */}
+      {/* travellers & cabin */}
       <button
         type="button"
-        onClick={() => setShowDetails(!showDetails)}
-        className="flex w-full items-center justify-between border-t border-brand-200 px-6 py-4
-                   text-sm font-medium text-brand-700 transition hover:bg-brand-50
-                   dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-800/40"
+        onClick={() => setShowDetails((p) => !p)}
+        className="flex w-full items-center justify-between border-t border-brand-200/70 px-5 py-4
+                   text-sm font-extrabold text-brand-800 transition hover:bg-brand-50
+                   dark:border-white/10 dark:text-brand-200 dark:hover:bg-white/5 sm:px-6"
       >
-        Travellers &amp; cabin
-        <ChevronDown className={`h-4 w-4 transition-transform ${showDetails ? "rotate-180" : ""}`} />
+        <span className="inline-flex items-center gap-2">
+          <Armchair className="h-4 w-4" />
+          Travellers &amp; cabin
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 transition-transform ${showDetails ? "rotate-180" : ""}`}
+        />
       </button>
 
-      {showDetails && (
-        <div className="space-y-3 border-t border-brand-100 px-6 py-4 dark:border-brand-800">
-          {/* cabin select */}
-          <select
-            value={cabin}
-            onChange={(e) => setCabin(e.target.value as Cabin)}
-            className="block w-full rounded-md border border-brand-300 bg-transparent px-3 py-2 text-sm
-                       text-brand-900 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                       dark:border-brand-700 dark:text-brand-100"
+      <AnimatePresence initial={false}>
+        {showDetails && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 28 }}
+            className="overflow-hidden border-t border-brand-100 dark:border-white/10"
           >
-            <option value="e">Economy</option>
-            <option value="pe">Premium Economy</option>
-            <option value="b">Business</option>
-            <option value="f">First</option>
-          </select>
+            <div className="space-y-4 px-5 py-5 sm:px-6">
+              <div>
+                <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-brand-600 dark:text-brand-300">
+                  Cabin
+                </div>
+                <div className="grid gap-2 grid-cols-1 sm:grid-cols-4">
+                  {(Object.keys(cabinMeta) as Cabin[]).map((c) => {
+                    const active = cabin === c;
+                    return (
+                      <motion.button
+                        key={c}
+                        whileHover={{ y: -1 }}
+                        whileTap={{ scale: 0.98 }}
+                        type="button"
+                        onClick={() => setCabin(c)}
+                        className={cabinPillClass(active)}
+                      >
+                        <div className="text-sm font-extrabold">{cabinMeta[c].title}</div>
+                        <div
+                          className={`text-xs font-semibold ${
+                            active ? "text-white/85" : "text-brand-600 dark:text-brand-300"
+                          }`}
+                        >
+                          {cabinMeta[c].sub}
+                        </div>
 
-          {/* counters */}
-          <div className="grid gap-1 sm:grid-cols-1">
-            <Counter label="Adults" val={adults} set={setAdults} min={1} />
-            <Counter label="Children" val={children} set={setChildren} min={0} />
-            <Counter label="Infants" val={infants} set={setInfants} min={0} />
-            <Counter label="Seniors" val={seniors} set={setSeniors} min={0} />
-          </div>
-        </div>
-      )}
+                        {!active && (
+                          <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-black/5 dark:ring-white/5" />
+                        )}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 text-xs font-extrabold uppercase tracking-wide text-brand-600 dark:text-brand-300">
+                  Travellers
+                </div>
+                <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+                  <Stepper label="Adults" desc="Age 16+" val={adults} set={setAdults} min={1} />
+                  <Stepper label="Children" desc="Age 2–15" val={children} set={setChildren} min={0} />
+                  <Stepper label="Infants" desc="Under 2" val={infants} set={setInfants} min={0} />
+                  <Stepper label="Seniors" desc="Flexible fares" val={seniors} set={setSeniors} min={0} />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-brand-200/60 bg-white/60 p-3 text-xs font-semibold text-brand-700 shadow-sm backdrop-blur dark:border-white/10 dark:bg-brand-900/40 dark:text-brand-200">
+                You’ll see real booking links in the results. No spam, no weird redirects.
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* search button */}
-      <div className="border-t border-brand-100 px-6 py-5 dark:border-brand-800">
-        <button
+      <div className="border-t border-brand-100 px-5 py-6 dark:border-white/10 sm:px-6">
+        <motion.button
+          whileHover={allGood && !loading ? { scale: 1.01 } : {}}
+          whileTap={allGood && !loading ? { scale: 0.985 } : {}}
           onClick={runSearch}
           disabled={!allGood || loading}
           type="button"
-          className={`flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold
-            shadow transition focus:outline-none focus:ring-2 focus:ring-offset-2
+          className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-extrabold
+            shadow-lg transition focus:outline-none focus:ring-2 focus:ring-offset-2
             ${
               allGood && !loading
-                ? "bg-indigo-600 text-white hover:bg-indigo-500 focus:ring-indigo-500"
+                ? "bg-gradient-to-r from-indigo-600 to-indigo-500 text-white hover:from-indigo-500 hover:to-indigo-500 focus:ring-indigo-500"
                 : "cursor-not-allowed bg-brand-300 text-brand-600 dark:bg-brand-800/60 dark:text-brand-500"
             }`}
         >
           {loading ? (
-            <>
-              <span className="inline-flex items-center gap-2">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                Searching…
-              </span>
-            </>
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              Searching…
+            </span>
           ) : (
             <>
               Search flights
               <ArrowRight className="h-4 w-4" />
             </>
           )}
-        </button>
+        </motion.button>
 
-        <p className="mt-2 text-center text-[11px] text-brand-600 dark:text-brand-300">
-          Tip: try <span className="font-semibold">DEN</span> →{" "}
-          <span className="font-semibold">LHR</span>
+        <p className="mt-3 text-center text-[11px] text-brand-600 dark:text-brand-300">
+          Tip: try <span className="font-extrabold">DEN</span> →{" "}
+          <span className="font-extrabold">LHR</span>
         </p>
       </div>
 
-      {/* results modal (unchanged) */}
+      {/* results modal */}
       <ResultsModal
         open={open}
         setOpen={setOpen}

@@ -1,3 +1,4 @@
+// SportsNews.tsx
 'use client'
 
 export interface Article {

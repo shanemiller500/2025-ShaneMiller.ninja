@@ -22,7 +22,7 @@ interface Article {
 const CACHE_TTL = 30 * 60 * 1_000; // 30 min
 let cached: { ts: number; data: Article[] } | null = null;
 
-const PER_PAGE = 22;
+const PER_PAGE = 6;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -135,9 +135,7 @@ export default function NewsWidget() {
               <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
                 Latest Finance News
               </h2>
-              <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-white/70">
-                Finnhub general headlines — tap a card to open the story.
-              </p>
+
             </div>
 
             <div className="text-xs font-semibold text-gray-600 dark:text-white/60">

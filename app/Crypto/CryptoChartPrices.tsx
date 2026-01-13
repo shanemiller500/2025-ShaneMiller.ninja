@@ -518,7 +518,7 @@ const CryptoChartPrices: React.FC = () => {
                 : "Charts & Metrics"}
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Search any CoinCap asset • zoom + pan supported
+              Search any CoinCap asset
             </p>
           </div>
         </div>
@@ -542,7 +542,7 @@ const CryptoChartPrices: React.FC = () => {
           <input
             className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm
                        placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                       dark:border-white/10 dark:bg-brand-950 dark:text-white dark:placeholder:text-gray-500"
+                       dark:border-white/10 dark:bg-brand-900 dark:text-white dark:placeholder:text-gray-500"
             placeholder="Search (e.g. bitcoin, BTC, ethereum)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -574,7 +574,7 @@ const CryptoChartPrices: React.FC = () => {
               className={`px-3 py-2 text-xs font-semibold transition ${
                 timeFrame === t
                   ? "bg-indigo-600 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-50 dark:bg-brand-950 dark:text-gray-200 dark:hover:bg-brand-900/40"
+                  : "bg-white text-gray-700 hover:bg-gray-50 dark:bg-brand-900 dark:text-gray-200 dark:hover:bg-brand-900/40"
               }`}
             >
               {t.toUpperCase()}
@@ -585,7 +585,7 @@ const CryptoChartPrices: React.FC = () => {
         <div className="flex items-center gap-2">
           <select
             className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm
-                       dark:border-white/10 dark:bg-brand-950 dark:text-gray-200"
+                       dark:border-white/10 dark:bg-brand-900 dark:text-gray-200"
             value={chartType}
             onChange={(e) => {
               const v = e.target.value as keyof ChartTypeRegistry;
@@ -620,28 +620,28 @@ const CryptoChartPrices: React.FC = () => {
 
       {/* quick stats */}
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-950">
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-900">
           <div className="text-[11px] text-gray-500 dark:text-gray-400">Last</div>
           <div className="text-sm font-bold text-gray-900 dark:text-white">
             {derived.last == null ? "—" : usd(derived.last)}
           </div>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-950">
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-900">
           <div className="text-[11px] text-gray-500 dark:text-gray-400">High</div>
           <div className="text-sm font-bold text-gray-900 dark:text-white">
             {derived.hi == null ? "—" : usd(derived.hi)}
           </div>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-950">
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-900">
           <div className="text-[11px] text-gray-500 dark:text-gray-400">Low</div>
           <div className="text-sm font-bold text-gray-900 dark:text-white">
             {derived.lo == null ? "—" : usd(derived.lo)}
           </div>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-950">
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center shadow-sm dark:border-white/10 dark:bg-brand-900">
           <div className="text-[11px] text-gray-500 dark:text-gray-400">Range</div>
           <div className="text-sm font-bold text-gray-900 dark:text-white">
             {derived.rangePct == null ? "—" : pctText(derived.rangePct)}
@@ -650,13 +650,13 @@ const CryptoChartPrices: React.FC = () => {
       </div>
 
       {/* chart */}
-      <div className="relative h-72 w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-950 sm:h-80 md:h-96">
+      <div className="relative h-72 w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900 sm:h-80 md:h-96">
         <canvas ref={canvasRef} className="h-full w-full" />
 
         <AnimatePresence>
           {loadingChart && (
             <motion.div
-              className="absolute inset-0 flex items-center justify-center bg-white/70 dark:bg-brand-950/70 backdrop-blur"
+              className="absolute inset-0 flex items-center justify-center bg-white/70 dark:bg-brand-900/70 backdrop-blur"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -671,7 +671,7 @@ const CryptoChartPrices: React.FC = () => {
 
       {/* details */}
       {cryptoDetails && (
-        <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-brand-950">
+        <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-brand-900">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <div className="text-xs text-gray-500 dark:text-gray-400">Rank</div>

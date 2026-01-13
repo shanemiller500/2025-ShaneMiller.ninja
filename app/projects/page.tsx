@@ -197,7 +197,7 @@ export default function Projects() {
             {/* Company Founded cards */}
             <section>
               <h2 className="font-aspekta text-xl font-[650] mb-6">Company Founded</h2>
-              <div className="grid sm:grid-cols-1 md:grid-cols-1 lg:grid-cols-1 gap-5 bg-white dark:bg-brand-950">
+              <div className="grid sm:grid-cols-1 md:grid-cols-1 lg:grid-cols-1 gap-5 bg-white dark:bg-brand-900">
                 {items01.map(item => (
                   <ProjectCard
                     key={item.id}

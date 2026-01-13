@@ -1,31 +1,25 @@
 // Filename: FinanceTab.tsx
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { fetchFinanceNews } from './financeNews';
-import StockWidget from '@/app/stocks/stock/LiveStreamTickerWidget';
-
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { fetchFinanceNews } from "./financeNews";
+// import StockWidget from '@/app/stocks/stock/LiveStreamTickerWidget';
 
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                   */
 /* ------------------------------------------------------------------ */
 
 interface Article {
-  source: { id: string | null; name: string };
-  title : string;
-  url   : string;
-  urlToImage : string | null;
+  source: { id: string | null; name: string; image?: string | null; imageCandidates?: string[] };
+  title: string;
+  url: string;
+  urlToImage: string | null;
   publishedAt: string;
 }
 
-const LOGO_FALLBACK = '/images/wedding.jpg';
-
-function getDomain(url: string) {
-  try { return new URL(url).hostname; } catch { return ''; }
-}
-
 function smoothScrollToTop(d = 700) {
-  const start = window.scrollY, t0 = performance.now();
+  const start = window.scrollY,
+    t0 = performance.now();
   const step = (now: number) => {
     const p = Math.min(1, (now - t0) / d);
     const ease = p * (2 - p);
@@ -33,6 +27,95 @@ function smoothScrollToTop(d = 700) {
     if (window.scrollY) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
+}
+
+const uniqStrings = (arr: string[]) => {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const s of arr) {
+    const v = String(s || "").trim();
+    if (!v) continue;
+    if (seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
+};
+
+const safeDomain = (u: string) => {
+  try {
+    return new URL(u).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+};
+
+const normalizeUrl = (s: string) => {
+  const t = s.trim();
+  if (t.startsWith("//")) return `https:${t}`;
+  if (t.startsWith("http://")) return t.replace("http://", "https://");
+  return t;
+};
+
+const bad = (s?: string | null) =>
+  !s || ["none", "null", "n/a"].includes(String(s).toLowerCase());
+
+/**
+ * Remote-only logo candidates (no local fallback)
+ */
+function logoCandidatesForArticle(a: Article) {
+  const domain = safeDomain(a.url);
+  const fromApi = (a.source.imageCandidates?.length ? a.source.imageCandidates : [a.source.image])
+    .filter((s): s is string => !bad(s))
+    .map(normalizeUrl);
+
+  const generated = domain
+    ? [
+        `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`,
+        `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`,
+        `https://logo.clearbit.com/${encodeURIComponent(domain)}?size=128`,
+      ]
+    : [];
+
+  return uniqStrings([...fromApi, ...generated]);
+}
+
+/**
+ * SmartImage: tries multiple remote URLs until one works.
+ * No local images. If all fail, we just hide it.
+ */
+function SmartImage({
+  candidates,
+  alt,
+  className,
+  wrapperClassName,
+}: {
+  candidates: string[];
+  alt: string;
+  className?: string;
+  wrapperClassName?: string;
+}) {
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    setIdx(0);
+  }, [candidates.join("|")]);
+
+  const src = candidates[idx];
+  if (!src) return null;
+
+  return (
+    <div className={wrapperClassName}>
+      <img
+        src={src}
+        alt={alt}
+        className={className}
+        loading="lazy"
+        decoding="async"
+        onError={() => setIdx((i) => i + 1)}
+      />
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -53,11 +136,11 @@ const PER_PAGE = 36;
 /* ------------------------------------------------------------------ */
 
 export default function FinanceTab() {
-  const [page,     setPage]     = useState(1);
+  const [page, setPage] = useState(1);
   const [articles, setArticles] = useState<Article[]>([]);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState<string | null>(null);
-  const [fade,     setFade]     = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fade, setFade] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   /* ---------------------- fetch + cache --------------------------- */
@@ -71,6 +154,8 @@ export default function FinanceTab() {
       }
 
       setLoading(true);
+      setError(null);
+
       try {
         const financeNews = await fetchFinanceNews();
         if (!cancel) {
@@ -79,19 +164,21 @@ export default function FinanceTab() {
         }
       } catch (e: any) {
         console.error(e);
-        if (!cancel) setError(e.message ?? 'Unknown error');
+        if (!cancel) setError(e?.message ?? "Unknown error");
       } finally {
         if (!cancel) setLoading(false);
       }
     })();
 
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, []);
 
   /* ----------------------- paging helpers ------------------------- */
   const totalPages = Math.max(1, Math.ceil(articles.length / PER_PAGE));
-  const startIdx   = (page - 1) * PER_PAGE;
-  const slice      = articles.slice(startIdx, startIdx + PER_PAGE);
+  const startIdx = (page - 1) * PER_PAGE;
+  const slice = articles.slice(startIdx, startIdx + PER_PAGE);
 
   const turnPage = (n: number) => {
     if (fade) return;
@@ -105,46 +192,52 @@ export default function FinanceTab() {
 
   /* ----------------------------- UI -------------------------------- */
   return (
-    
     <div ref={contentRef}>
-      {error && (
-        <p className="bg-red-100 text-red-700 p-3 mb-4 rounded font-medium">{error}</p>
-      )}
+      {error && <p className="bg-red-100 text-red-700 p-3 mb-4 rounded font-medium">{error}</p>}
 
       <section className="w-full">
-      {/* <StockWidget /> */}
-        <div className={`transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'} mt-2`}>
+        {/* <StockWidget /> */}
+        <div className={`transition-opacity duration-300 ${fade ? "opacity-0" : "opacity-100"} mt-2`}>
           {/* Masonry columns */}
-         
           <div className="columns-2 sm:columns-2 md:columns-3 gap-2 space-y-2">
-            {slice.map(a => {
+            {slice.map((a) => {
               const hasImage = !!a.urlToImage;
+              const logoCandidates = logoCandidatesForArticle(a);
+
               return (
                 <a
                   key={a.url}
                   href={a.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="break-inside-avoid block rounded-lg shadow hover:shadow-xl transition transform hover:scale-[1.02] bg-white dark:bg-brand-950"
+                  className="break-inside-avoid block rounded-lg shadow hover:shadow-xl transition transform hover:scale-[1.02] bg-white dark:bg-brand-900"
                 >
                   {hasImage && (
                     <img
                       src={a.urlToImage!}
-                      onError={e => (e.currentTarget.style.display = 'none')}
                       alt={a.title}
                       className="w-full h-36 object-cover"
+                      loading="lazy"
+                      decoding="async"
+                      onError={(e) => {
+                        // no fallback: just hide
+                        e.currentTarget.style.display = "none";
+                      }}
                     />
                   )}
 
-                  <div className={`p-4 flex flex-col gap-1 ${hasImage ? 'mt-1' : ''}`}>
+                  <div className={`p-4 flex flex-col gap-1 ${hasImage ? "mt-1" : ""}`}>
                     <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                      <img
-                        src={`https://logo.clearbit.com/${getDomain(a.url)}`}
-                        onError={e => (e.currentTarget.src = LOGO_FALLBACK)}
-                        alt={a.source.name}
-                        className="w-10 h-10 object-contain"
-                      />
-                      <span className='truncate max-w-[140px]' >{a.source.name}</span>
+                      {/* logo: remote-only, try a few sources */}
+                      {logoCandidates.length ? (
+                        <SmartImage
+                          candidates={logoCandidates}
+                          alt={a.source.name}
+                          className="w-10 h-10 object-contain"
+                        />
+                      ) : null}
+
+                      <span className="truncate max-w-[140px]">{a.source.name}</span>
                     </div>
 
                     <span className="text-xs text-gray-400 dark:text-gray-500">

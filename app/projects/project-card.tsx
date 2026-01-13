@@ -26,7 +26,7 @@ export default function ProjectCard({ item, onClick }: ItemProps) {
   target={isExternal ? "_blank" : undefined}
   rel={isExternal ? "noopener noreferrer" : undefined}
   onClick={onClick}
-      className="rounded-lg dark:hover:border-indigo-700 transition-color ease-in-out p-5 group dark:bg-brand-950 bg-white shadow-lg hover:shadow-lg dark:hover:shadow-indigo-800"
+      className="rounded-lg dark:hover:border-indigo-700 transition-color ease-in-out p-5 group dark:bg-brand-900 bg-white shadow-lg hover:shadow-lg dark:hover:shadow-indigo-800"
     >
       <div className="flex flex-col h-full">
         <div className="grow">

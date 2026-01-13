@@ -320,7 +320,7 @@ export default function PrettyPrint() {
 
           <div className="max-h-[70vh] overflow-auto font-mono text-sm bg-neutral-900 text-white">
             <div className="flex">
-              <ol className="flex-none bg-neutral-950/90 text-right tabular-nums py-4 pl-6 pr-4 leading-5 text-neutral-500 select-none">
+              <ol className="flex-none bg-neutral-900/90 text-right tabular-nums py-4 pl-6 pr-4 leading-5 text-neutral-500 select-none">
                 {lines.map((_,i) => <li key={i}>{i+1}</li>)}
               </ol>
               <pre className="p-4 leading-5">

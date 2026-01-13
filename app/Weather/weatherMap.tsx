@@ -762,7 +762,7 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
               onClick={closeSidebar}
             />
 
-            <div className="absolute z-[3500] w-full sm:w-[420px] sm:right-3 sm:top-16 sm:bottom-3 bottom-0 left-0 sm:left-auto rounded-t-3xl sm:rounded-3xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl">
+            <div className="absolute z-[3500] w-full sm:w-[420px] sm:right-3 sm:top-16 sm:bottom-3 bottom-0 left-0 sm:left-auto rounded-t-3xl sm:rounded-3xl border border-white/10 bg-slate-900/95 p-4 shadow-2xl">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-extrabold text-white">{sidebarData.name}</div>

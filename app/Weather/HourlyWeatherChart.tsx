@@ -366,7 +366,6 @@ const uniqueDays = useMemo(() => {
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h3 className="text-sm font-extrabold dark:text-white">Hourly Chart</h3>
-          <p className="mt-1 text-xs font-semibold dark:text-white/60">Pick a day • Change chart type</p>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">

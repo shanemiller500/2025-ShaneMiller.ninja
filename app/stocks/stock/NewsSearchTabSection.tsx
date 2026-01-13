@@ -208,11 +208,7 @@ export default function NewsSearchTabSection() {
                 <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
                   Finance News
                 </h2>
-                <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-white/70">
-                  {sourceLabel === "general"
-                    ? "General market headlines (Finnhub)."
-                    : "Company news (last 7 days)."}
-                </p>
+                
               </div>
 
               <div className="flex items-center gap-2">

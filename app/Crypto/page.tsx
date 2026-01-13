@@ -48,9 +48,7 @@ const CryptoDashboard = () => {
               <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
                 Crypto Dashboard
               </h1>
-              <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-white/70">
-                Live heatmap, movers, and charts — built for quick scanning.
-              </p>
+
             </div>
 
             <div className="flex items-center gap-2 text-xs font-semibold text-gray-600 dark:text-white/60">

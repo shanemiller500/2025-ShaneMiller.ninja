@@ -14,7 +14,10 @@ interface NewsItem {
   source: string;
   publishedAt: string;
   link: string;
-  sourceImage?: string;
+
+  // backend can send:
+  sourceImageCandidates?: string[]; // preferred
+  sourceImage?: string; // legacy
 }
 
 const LOGO_FALLBACK =
@@ -37,8 +40,28 @@ const timeAgo = (iso: string) => {
   return `${days}d ago`;
 };
 
+function safeHost(u: string) {
+  try {
+    return new URL(u).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+// these are *remote* favicon/logo candidates (fast + reliable)
+// (matches what we did on the backend)
+function getSourceImageCandidatesFromLink(link: string) {
+  const d = safeHost(link);
+  if (!d) return [];
+  return [
+    `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=128`,
+    `https://icons.duckduckgo.com/ip3/${encodeURIComponent(d)}.ico`,
+    `https://logo.clearbit.com/${encodeURIComponent(d)}?size=128`,
+  ];
+}
+
 /* ------------------------------------------------------------------ */
-/*  Animations                                                       */
+/*  Animations                                                        */
 /* ------------------------------------------------------------------ */
 
 const fadeIn: Variants = {
@@ -79,7 +102,61 @@ function SkeletonRow() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Component                                                        */
+/*  Logo image component (tries multiple candidates, no broken icons)  */
+/* ------------------------------------------------------------------ */
+
+function LogoImg({
+  link,
+  alt,
+  className,
+  candidatesFromApi,
+}: {
+  link: string;
+  alt: string;
+  className: string;
+  candidatesFromApi?: string[] | null;
+}) {
+  const fallbackCandidates = useMemo(() => getSourceImageCandidatesFromLink(link), [link]);
+  const candidates = useMemo(() => {
+    const api = (candidatesFromApi || []).filter(Boolean);
+    const all = [...api, ...fallbackCandidates];
+    // uniq
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const s of all) {
+      const v = String(s || "").trim();
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      out.push(v);
+    }
+    return out;
+  }, [candidatesFromApi, fallbackCandidates]);
+
+  const [idx, setIdx] = useState(0);
+  const src = candidates[idx] || LOGO_FALLBACK;
+
+  useEffect(() => {
+    // if the story changed, restart attempts
+    setIdx(0);
+  }, [link, candidatesFromApi]);
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => {
+        if (idx < candidates.length - 1) setIdx((n) => n + 1);
+      }}
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                         */
 /* ------------------------------------------------------------------ */
 
 const WidgetNews: React.FC = () => {
@@ -138,33 +215,32 @@ const WidgetNews: React.FC = () => {
   const rest = useMemo(() => news.slice(1, 7), [news]);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white dark:bg-brand-950 shadow-sm">
+    <div className="relative overflow-hidden rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white dark:bg-brand-900 shadow-sm">
       {/* top glow */}
       <div className="pointer-events-none absolute -top-24 left-1/2 h-48 w-[520px] -translate-x-1/2 rounded-full bg-indigo-500/20 blur-3xl" />
 
       {/* header */}
       <div className="relative px-5 pt-5 pb-4">
-  <div className="flex items-start justify-between gap-3">
-    <div className="w-full">
-      <span
-        className="
-          flex w-full items-center justify-center gap-2
-          rounded-2xl bg-yellow-300/90
-          px-4 py-2
-          text-xs font-extrabold text-brand-900
-          shadow-sm ring-1 ring-black/10
-        "
-      >
-        <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-70" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-        </span>
-        Breaking News
-      </span>
-    </div>
-  </div>
-</div>
-
+        <div className="flex items-start justify-between gap-3">
+          <div className="w-full">
+            <span
+              className="
+                flex w-full items-center justify-center gap-2
+                rounded-2xl bg-yellow-300/90
+                px-4 py-2
+                text-xs font-extrabold text-brand-900
+                shadow-sm ring-1 ring-black/10
+              "
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+              </span>
+              Breaking News
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* content */}
       <div className="px-5 pb-4">
@@ -201,11 +277,14 @@ const WidgetNews: React.FC = () => {
               >
                 <div className="flex items-start gap-3">
                   <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/10">
-                    <img
-                      src={topStory.sourceImage || LOGO_FALLBACK}
+                    <LogoImg
+                      link={topStory.link}
                       alt={topStory.source}
+                      candidatesFromApi={
+                        topStory.sourceImageCandidates ??
+                        (topStory.sourceImage ? [topStory.sourceImage] : null)
+                      }
                       className="h-full w-full object-contain p-1.5"
-                      loading="lazy"
                     />
                   </div>
 
@@ -218,9 +297,7 @@ const WidgetNews: React.FC = () => {
                           {timeAgo(topStory.publishedAt)}
                         </span>
                       </div>
-                      <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-300 opacity-0 group-hover:opacity-100 transition">
-                        Top story →
-                      </span>
+                    
                     </div>
 
                     <div className="mt-1 text-sm font-bold text-gray-900 dark:text-white leading-snug">
@@ -253,11 +330,14 @@ const WidgetNews: React.FC = () => {
                     className="flex items-start gap-3 px-3 py-3"
                   >
                     <div className="relative mt-0.5 h-8 w-8 shrink-0 overflow-hidden rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/10">
-                      <img
-                        src={item.sourceImage || LOGO_FALLBACK}
+                      <LogoImg
+                        link={item.link}
                         alt={item.source}
+                        candidatesFromApi={
+                          item.sourceImageCandidates ??
+                          (item.sourceImage ? [item.sourceImage] : null)
+                        }
                         className="h-full w-full object-contain p-1.5"
-                        loading="lazy"
                       />
                     </div>
 
@@ -278,12 +358,15 @@ const WidgetNews: React.FC = () => {
 
             {/* footer */}
             <div className="pt-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                Read more news{" "}
-                <a href="/news" className="text-indigo-600 dark:text-indigo-300 underline">
-                  here
+              <div className="flex items-center justify-center gap-2">
+
+                <a
+                  href="/news"
+                  className="text-xs text-indigo-600 dark:text-indigo-300 underline"
+                >
+                  Open news
                 </a>
-              </p>
+              </div>
             </div>
           </>
         ) : (

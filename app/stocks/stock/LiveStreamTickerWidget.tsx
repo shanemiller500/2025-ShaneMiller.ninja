@@ -461,7 +461,7 @@ useEffect(() => {
     <>
       <ToastContainer position="top-right" autoClose={4000} hideProgressBar pauseOnHover />
 
-      <section className="mt-6 overflow-hidden rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white dark:bg-brand-950 shadow-sm">
+      <section className="mt-6 overflow-hidden rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white dark:bg-brand-900 shadow-sm">
         {/* header */}
         <div className="px-4 pt-4 pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -486,10 +486,6 @@ useEffect(() => {
                   {wsConnected ? "Stream OK" : "Stream reconnecting"}
                 </span>
               </div>
-
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Tap a tile for details • prices update in real time
-              </p>
             </div>
           </div>
 

@@ -385,14 +385,7 @@ export default function StockQuoteSection() {
                 {loading ? "Searching…" : "Search"}
               </button>
 
-              <button
-                type="button"
-                onClick={handleClear}
-                disabled={loading && !showModal}
-                className="w-full rounded-2xl px-4 py-3 text-sm font-extrabold text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.10] transition disabled:opacity-50"
-              >
-                Clear
-              </button>
+             
             </div>
           </div>
 

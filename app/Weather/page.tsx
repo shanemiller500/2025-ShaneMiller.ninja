@@ -432,10 +432,6 @@ return (
                         </div>
                       )}
 
-                      <div className="mt-5 text-xs font-semibold text-gray-600 dark:text-white/60">
-                        Tip: Swipe charts, tap forecast cards, and open the map
-                        for radar layers.
-                      </div>
                     </div>
 
                     {/* mini map */}

@@ -12,12 +12,12 @@ import { trackEvent } from "@/utils/mixpanel";
 
 type TabKey = "quote" | "live" | "ipo" | "earnings" | "news";
 
-const TABS: { key: TabKey; label: string; short?: string; desc: string }[] = [
-  { key: "quote", label: "Stock Quote", short: "Quote", desc: "Quotes + metrics" },
-  { key: "live", label: "Live Stream Heatmap", short: "Live", desc: "Realtime grid moves." },
-  { key: "ipo", label: "IPO Calendar", short: "IPOs", desc: "Upcoming listings." },
-  { key: "earnings", label: "Earnings Info", short: "Earnings", desc: "Upcoming reports." },
-  { key: "news", label: "News Search", short: "News", desc: "Headlines + filters." },
+const TABS: { key: TabKey; label: string; }[] = [
+  { key: "quote", label: "Stock Quote"},
+  { key: "live", label: "Live Stream Heatmap"},
+  { key: "ipo", label: "IPO Calendar"},
+  { key: "earnings", label: "Earnings Info"},
+  { key: "news", label: "News Search"},
 ];
 
 export default function DashboardTabs() {
@@ -52,9 +52,7 @@ export default function DashboardTabs() {
             <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
               Market Dashboard
             </h1>
-            <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-white/70">
-              Pick a tab to jump between quotes, live heatmap, IPOs, earnings, and news.
-            </p>
+            
           </div>
 
           {/* Mobile: dropdown */}
@@ -76,10 +74,6 @@ export default function DashboardTabs() {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className="mt-2 text-xs font-semibold text-gray-600 dark:text-white/60">
-              {activeMeta.desc}
             </div>
           </div>
         </div>
@@ -114,10 +108,6 @@ export default function DashboardTabs() {
                 </button>
               );
             })}
-          </div>
-
-          <div className="mt-2 text-xs font-semibold text-gray-600 dark:text-white/60">
-            {activeMeta.desc}
           </div>
         </div>
       </div>

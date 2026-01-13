@@ -60,7 +60,7 @@ export default function Home() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-white text-brand-900 dark:bg-brand-950 dark:text-gray-100">
+    <div className="relative min-h-screen overflow-hidden bg-white text-brand-900 dark:bg-brand-900 dark:text-gray-100">
       {/* background */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-24 left-1/2 h-72 w-[40rem] -translate-x-1/2 rounded-full bg-indigo-300/30 blur-3xl dark:bg-indigo-500/20" />
@@ -99,7 +99,7 @@ export default function Home() {
         <form onSubmit={handleSearch} className="mt-10 w-full max-w-2xl">
           <div className="rounded-3xl border border-gray-200 bg-white/80 p-2 shadow-xl backdrop-blur dark:border-white/10 dark:bg-white/5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="flex flex-1 items-center gap-3 rounded-2xl bg-white px-4 py-3 dark:bg-brand-950">
+              <div className="flex flex-1 items-center gap-3 rounded-2xl bg-white px-4 py-3 dark:bg-brand-900">
                 {/* icon */}
                 <svg
                   width="18"

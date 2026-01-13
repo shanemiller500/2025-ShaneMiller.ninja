@@ -25,7 +25,7 @@ const ISSTrackerPage = () => {
   }, []);
 
   return (
-    <main className="min-h-screen bg-brand-50 dark:bg-brand-950 pt-6">
+    <main className="min-h-screen bg-brand-50 dark:bg-brand-900 pt-6">
       <ISSTracker />
     </main>
   );

@@ -158,9 +158,9 @@ export default function Results() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-brand-900 dark:bg-brand-950 dark:text-gray-100">
+    <div className="min-h-screen bg-white text-brand-900 dark:bg-brand-900 dark:text-gray-100">
       {/* ───────────────── HEADER ───────────────── */}
-      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-brand-950/70">
+      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-brand-900/70">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
           {/* Logo / Home */}
           <a href="/" className="flex items-center gap-2">
@@ -221,7 +221,7 @@ export default function Results() {
 
       {/* ───────────────── LOADER OVERLAY ───────────────── */}
       {busy && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/70 backdrop-blur dark:bg-brand-950/70">
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/70 backdrop-blur dark:bg-brand-900/70">
           <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
           <p className="mt-4 text-sm opacity-80">Fetching fresh results…</p>
           <p className="mt-1 text-xs opacity-60">This is the part where it looks like magic.</p>

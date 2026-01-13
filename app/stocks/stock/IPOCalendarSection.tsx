@@ -98,7 +98,7 @@ const IPOCalendarSection: React.FC = () => {
             IPO Calendar
           </h2>
           <p className="mt-2 text-sm font-semibold text-gray-700 dark:text-white/70">
-            Search tickers/companies, then tap a card for quick details.
+            Search tickers/companies.
           </p>
         </div>
 
@@ -208,10 +208,6 @@ const IPOCalendarSection: React.FC = () => {
                   </span>
                 </>
               ) : null}
-            </div>
-
-            <div className="text-xs font-semibold text-gray-600 dark:text-white/60">
-              Tip: tap a card • swipe-scroll on mobile
             </div>
           </div>
 

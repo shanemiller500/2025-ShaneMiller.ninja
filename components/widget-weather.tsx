@@ -226,7 +226,7 @@ export default function WidgetWeather() {
 
   if (loading) {
     return (
-      <div className="max-w-md mx-auto rounded-2xl overflow-hidden bg-white shadow-lg dark:bg-brand-950">
+      <div className="max-w-md mx-auto rounded-2xl overflow-hidden bg-white shadow-lg dark:bg-brand-900">
         <div className="p-5 text-white/70">Loading weather…</div>
         {viewMore}
       </div>
@@ -235,7 +235,7 @@ export default function WidgetWeather() {
 
   if (error || !current) {
     return (
-      <div className="max-w-md mx-auto rounded-2xl overflow-hidden bg-white shadow-lg dark:bg-brand-950">
+      <div className="max-w-md mx-auto rounded-2xl overflow-hidden bg-white shadow-lg dark:bg-brand-900">
         <div className="p-5 text-red-300 text-center">{error || "No data"}</div>
         {viewMore}
       </div>
