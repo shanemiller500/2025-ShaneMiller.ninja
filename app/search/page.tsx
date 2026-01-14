@@ -63,16 +63,15 @@ export default function Home() {
     <div className="relative min-h-screen overflow-hidden bg-white text-brand-900 dark:bg-brand-900 dark:text-gray-100">
       {/* background */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 left-1/2 h-72 w-[40rem] -translate-x-1/2 rounded-full bg-indigo-300/30 blur-3xl dark:bg-indigo-500/20" />
-        <div className="absolute -bottom-24 left-10 h-72 w-72 rounded-full bg-purple-300/30 blur-3xl dark:bg-purple-500/20" />
-        <div className="absolute -bottom-28 right-10 h-72 w-72 rounded-full bg-sky-300/30 blur-3xl dark:bg-sky-500/10" />
+        <div className="absolute -top-24 left-1/2 h-72 w-[40rem] -translate-x-1/2 rounded-full " />
+       
       </div>
 
       <main className="relative mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center px-4 py-10">
         {/* top mini nav */}
         <div className="mb-10 flex w-full items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 shadow-sm" />
+            <div className="h-9 w-9 rounded-2xl shadow-sm" />
             <div className="leading-tight">
               <div className="text-sm font-semibold">AI Search</div>
             </div>
@@ -125,7 +124,7 @@ export default function Home() {
                 <input
                   ref={inputRef}
                   type="text"
-                  className="w-full bg-transparent text-sm outline-none placeholder:opacity-60 sm:text-base"
+                  className="w-full bg-transparent dark:bg-white/5 text-sm outline-none placeholder:opacity-60 sm:text-base"
                   placeholder="Search anything…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
