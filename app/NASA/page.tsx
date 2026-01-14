@@ -1,67 +1,97 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from "react";
-import NasaPhotoOfTheDay from "./nasaPhotoOfTheDay"; // Adjust path if needed
-import MarsRoverPhotos from "./marsRover"; // Adjust path if needed
-import NasaCMEPage from "./NasaCMEPage"; // Adjust path if needed
+import React, { useEffect, useMemo, useState } from "react";
+import NasaPhotoOfTheDay from "./nasaPhotoOfTheDay";
+import MarsRoverPhotos from "./marsRover";
+import NasaCMEPage from "./NasaCMEPage"; // keep your file name as-is
 import { trackEvent } from "@/utils/mixpanel";
 
-const NasaMediaPage = () => {
-  // Fire a page view event on mount.
+const pillBase =
+  "whitespace-nowrap rounded-full px-3 py-2 text-sm font-extrabold transition " +
+  "border border-black/10 bg-white text-gray-800 hover:bg-black/[0.03] " +
+  "dark:border-white/10 dark:bg-brand-900 dark:text-white/80 dark:hover:bg-white/[0.06]";
+
+const pillActive =
+  "bg-gray-900 text-white border-black/20 hover:bg-gray-900 " +
+  "dark:bg-white/10 dark:text-white dark:border-white/20 dark:hover:bg-white/10";
+
+export default function NasaMediaPage() {
   useEffect(() => {
     trackEvent("NASA API Page Viewed", { page: "NASA API Page" });
   }, []);
 
-  // Define tabs with a name and component for each view.
-  const tabs = [
-    { name: "Photo of the Day", component: <NasaPhotoOfTheDay /> },
-    { name: "Mars Rover Photos", component: <MarsRoverPhotos /> },
-    { name: "CME & Analysis", component: <NasaCMEPage /> },
-  ];
+  const tabs = useMemo(
+    () => [
+      { name: "Photo of the Day", component: <NasaPhotoOfTheDay /> },
+      { name: "Mars Rover Photos", component: <MarsRoverPhotos /> },
+      { name: "CME & Analysis", component: <NasaCMEPage /> },
+    ],
+    []
+  );
 
-  // State to track the active tab.
   const [activeTab, setActiveTab] = useState(0);
-  // State for the search term.
-  const [searchTerm, setSearchTerm] = useState("");
 
-  // Handler for tab clicks.
-  const handleTabClick = (index: number, tabName: string) => {
+  const handleTabClick = (index: number) => {
     setActiveTab(index);
-    trackEvent("NASA Tab Clicked", { tab: tabName });
+    trackEvent("NASA Tab Clicked", { tab: tabs[index]?.name ?? "Unknown" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Handler for search form submission.
-  const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    trackEvent("NASA Search Performed", { query: searchTerm });
-    // Add search logic here if desired.
-  };
 
   return (
-    <div className="min-h-screen dark:text-gray-100 p-4">
-      <h1 className="text-4xl font-bold text-center mb-8">NASA Media</h1>
-
-      {/* Tab Buttons */}
-      <div className="flex justify-center border-b border-gray-700 mb-4">
-        {tabs.map((tab, index) => (
-          <button
-            key={index}
-            onClick={() => handleTabClick(index, tab.name)}
-            className={`px-6 py-2 text-lg font-medium focus:outline-none transition-all border-b-2 ${
-              activeTab === index
-                ? "border-indigo-500 text-indigo-500"
-                : "border-transparent hover:border-gray-500"
-            }`}
-          >
-            {tab.name}
-          </button>
-        ))}
+    <div className="mx-auto w-full max-w-6xl px-4 py-6">
+      {/* Header */}
+      <div className="mb-5">
+        <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white sm:text-3xl">
+          NASA Media
+        </h1>
+        <p className="mt-1 text-sm font-semibold text-gray-600 dark:text-white/60">
+          APOD, Mars rover photos, and solar event data.
+        </p>
       </div>
 
-      {/* Active Tab Content */}
-      <div className="mt-6">{tabs[activeTab].component}</div>
+      {/* Mobile: select */}
+      <div className="mb-4 sm:hidden">
+        <label htmlFor="nasa-tab" className="sr-only">
+          Choose section
+        </label>
+        <select
+          id="nasa-tab"
+          value={activeTab}
+          onChange={(e) => handleTabClick(parseInt(e.target.value, 10))}
+          className="w-full rounded-2xl border border-black/10 bg-white px-3 py-2 text-sm font-bold text-gray-800 shadow-sm
+                     focus:outline-none focus:ring-2 focus:ring-indigo-500
+                     dark:border-white/10 dark:bg-brand-900 dark:text-white/90"
+        >
+          {tabs.map((t, idx) => (
+            <option key={t.name} value={idx}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Desktop: scroll pills */}
+      <div className="no-scrollbar mb-6 hidden overflow-x-auto sm:flex">
+        <div className="flex gap-2">
+          {tabs.map((tab, index) => (
+            <button
+              key={tab.name}
+              onClick={() => handleTabClick(index)}
+              className={`${pillBase} ${activeTab === index ? pillActive : ""}`}
+              aria-selected={activeTab === index}
+              role="tab"
+            >
+              {tab.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-brand-900 sm:p-6">
+        {tabs[activeTab].component}
+      </div>
     </div>
   );
-};
-
-export default NasaMediaPage;
+}

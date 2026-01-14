@@ -1,244 +1,315 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { trackEvent } from "@/utils/mixpanel";
 
-const API_KEY = process.env.NEXT_PUBLIC_NASA_API_KEY;
+const API_KEY = process.env.NEXT_PUBLIC_NASA_API_KEY || "";
 
-/**
- * Helper function to format a Date object as a UTC date string in YYYY-MM-DD.
- * @param {Date} date 
- * @returns {string}
- */
 function formatDateUTC(date: Date): string {
   const year = date.getUTCFullYear();
-  let month = date.getUTCMonth() + 1;
-  const monthString = month < 10 ? "0" + month : month.toString();
-  let day = date.getUTCDate();
-  const dayString = day < 10 ? "0" + day : day.toString();
-  return `${year}-${monthString}-${dayString}`;
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-const NasaDONKIPage = () => {
-  // Default date range: last 30 days (UTC)
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-brand-900 sm:p-5">
+      {children}
+    </div>
+  );
+}
+
+function safeJson(v: any) {
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+}
+
+export default function NasaDONKIPage() {
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setUTCDate(d.getUTCDate() - 30);
     return formatDateUTC(d);
   });
-  const [endDate, setEndDate] = useState(() => {
-    const now = new Date();
-    return formatDateUTC(now);
-  });
+
+  const [endDate, setEndDate] = useState(() => formatDateUTC(new Date()));
+
   const [cmeData, setCmeData] = useState<any[]>([]);
   const [flrData, setFlrData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Function to fetch data from both CME and FLR endpoints.
   const fetchData = async () => {
     setLoading(true);
     setError(null);
+
+    if (!API_KEY) {
+      setLoading(false);
+      setError("Missing NASA API key (NEXT_PUBLIC_NASA_API_KEY).");
+      return;
+    }
+
     try {
-      // Fetch CME events.
-      const cmeResponse = await fetch(
-        `https://api.nasa.gov/DONKI/CME?startDate=${startDate}&endDate=${endDate}&api_key=${API_KEY}`
-      );
-      const cmeJson = await cmeResponse.json();
+      const [cmeRes, flrRes] = await Promise.all([
+        fetch(
+          `https://api.nasa.gov/DONKI/CME?startDate=${startDate}&endDate=${endDate}&api_key=${API_KEY}`
+        ),
+        fetch(
+          `https://api.nasa.gov/DONKI/FLR?startDate=${startDate}&endDate=${endDate}&api_key=${API_KEY}`
+        ),
+      ]);
 
-      // Fetch Solar Flare (FLR) events.
-      const flrResponse = await fetch(
-        `https://api.nasa.gov/DONKI/FLR?startDate=${startDate}&endDate=${endDate}&api_key=${API_KEY}`
-      );
-      const flrJson = await flrResponse.json();
+      const cmeJson = await cmeRes.json();
+      const flrJson = await flrRes.json();
 
-      setCmeData(cmeJson);
-      setFlrData(flrJson);
+      setCmeData(Array.isArray(cmeJson) ? cmeJson : []);
+      setFlrData(Array.isArray(flrJson) ? flrJson : []);
+
       trackEvent("DONKI Data Fetched", {
-        cmeCount: cmeJson.length,
-        flrCount: flrJson.length,
+        cmeCount: Array.isArray(cmeJson) ? cmeJson.length : 0,
+        flrCount: Array.isArray(flrJson) ? flrJson.length : 0,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error fetching DONKI data:", err);
-      setError("Error fetching data. Please try again.");
-      trackEvent("DONKI Data Fetch Error", {
-        error: err instanceof Error ? err.toString() : String(err),
-      });
+      setError("Error fetching data. Try again.");
+      trackEvent("DONKI Data Fetch Error", { error: String(err) });
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch data on initial mount.
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handler for the search form submission.
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     trackEvent("DONKI Search Performed", { startDate, endDate });
     fetchData();
   };
 
-  // Helper to get the most recent event from a data array.
   const getLatestEvent = (data: any[]) => {
-    if (!data || data.length === 0) return null;
-    // Assume each event has a beginTime or peakTime field.
+    if (!data?.length) return null;
     const sorted = data.slice().sort((a, b) => {
-      const timeA = a.beginTime || a.peakTime;
-      const timeB = b.beginTime || b.peakTime;
+      const timeA = a.beginTime || a.peakTime || a.startTime;
+      const timeB = b.beginTime || b.peakTime || b.startTime;
       return new Date(timeB).getTime() - new Date(timeA).getTime();
     });
     return sorted[0];
   };
 
-  const latestCME = getLatestEvent(cmeData);
-  const latestFLR = getLatestEvent(flrData);
+  const latestCME = useMemo(() => getLatestEvent(cmeData), [cmeData]);
+  const latestFLR = useMemo(() => getLatestEvent(flrData), [flrData]);
 
   return (
-    <div className="p-4 dark:text-gray-100">
-      <h2 className="text-3xl font-bold text-center mb-6">
-        NASA DONKI Data: CME & Solar Flares
-      </h2>
-      <div className="mb-4 text-center">
-        <p>
-          Showing data from <strong>{startDate}</strong> to{" "}
-          <strong>{endDate}</strong> (UTC)
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-extrabold text-gray-900 dark:text-white sm:text-2xl">
+          CME & Solar Flares
+        </h2>
+        <p className="mt-1 text-sm font-semibold text-gray-600 dark:text-white/60">
+          UTC range: <span className="font-extrabold">{startDate}</span> →{" "}
+          <span className="font-extrabold">{endDate}</span>
         </p>
       </div>
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 justify-center mb-6">
-        <input
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          className="border border-gray-300 rounded p-2 dark:bg-brand-900"
-        />
-        <input
-          type="date"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          className="border border-gray-300 rounded p-2 dark:bg-brand-900"
-        />
-        <button
-          type="submit"
-          className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded px-4 py-2 hover:bg-gradient-to-r from-indigo-600 to-purple-600 transition"
+
+      <Card>
+        <form
+          onSubmit={handleSearch}
+          className="flex flex-col gap-2 sm:flex-row sm:items-end"
         >
-          Search
-        </button>
-      </form>
-      {loading && <p className="text-center">Loading data...</p>}
-      {error && <p className="text-center text-red-500">{error}</p>}
-      {!loading && !error && (
-        <>
-          {/* Latest CME Event */}
-          <div className="mb-8">
-            <h3 className="text-2xl font-semibold mb-4 text-center">Latest CME Event</h3>
+          <div className="w-full">
+            <label className="text-xs font-extrabold text-gray-700 dark:text-white/70">
+              Start (UTC)
+            </label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="mt-1 w-full rounded-2xl border border-black/10 bg-white px-3 py-2 text-sm font-bold text-gray-800 shadow-sm
+                         focus:outline-none focus:ring-2 focus:ring-indigo-500
+                         dark:border-white/10 dark:bg-brand-900 dark:text-white/90"
+            />
+          </div>
+
+          <div className="w-full">
+            <label className="text-xs font-extrabold text-gray-700 dark:text-white/70">
+              End (UTC)
+            </label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="mt-1 w-full rounded-2xl border border-black/10 bg-white px-3 py-2 text-sm font-bold text-gray-800 shadow-sm
+                         focus:outline-none focus:ring-2 focus:ring-indigo-500
+                         dark:border-white/10 dark:bg-brand-900 dark:text-white/90"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="rounded-2xl border border-black/10 bg-black/[0.03] px-4 py-2 text-sm font-extrabold text-gray-800 shadow-sm hover:bg-black/[0.06]
+                       dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80 dark:hover:bg-white/[0.10]"
+          >
+            Search
+          </button>
+        </form>
+
+        {loading ? (
+          <div className="mt-3 text-sm font-bold text-gray-700 dark:text-white/70">
+            Loading…
+          </div>
+        ) : null}
+        {error ? (
+          <div className="mt-3 text-sm font-bold text-red-500">{error}</div>
+        ) : null}
+      </Card>
+
+      {!loading && !error ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card>
+            <div className="text-xs font-extrabold text-gray-600 dark:text-white/60">
+              Latest CME
+            </div>
             {latestCME ? (
-              <div className="border border-gray-300 rounded p-4 shadow">
-                <p>
-                  <strong>Date:</strong>{" "}
-                  {latestCME.beginTime || latestCME.peakTime || "Unknown"}
-                </p>
-                <p>
-                  <strong>Note:</strong>{" "}
-                  {latestCME.note || "No additional info"}
-                </p>
-                {/* You can add more CME-specific fields here */}
+              <div className="mt-2 space-y-2">
+                <div className="text-lg font-extrabold text-gray-900 dark:text-white">
+                  {latestCME.beginTime || latestCME.peakTime || "Unknown time"}
+                </div>
+                <div className="text-sm font-semibold text-gray-700 dark:text-white/70">
+                  {latestCME.note || "No note"}
+                </div>
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm font-extrabold text-gray-800 dark:text-white/80">
+                    Details
+                  </summary>
+                  <pre className="mt-2 max-h-[260px] overflow-auto rounded-2xl bg-black/[0.03] p-3 text-xs font-semibold text-gray-800 ring-1 ring-black/10 dark:bg-white/[0.06] dark:text-white/80 dark:ring-white/10">
+                    {safeJson(latestCME)}
+                  </pre>
+                </details>
               </div>
             ) : (
-              <p className="text-center">
-                No CME events found for this period.
-              </p>
+              <div className="mt-2 text-sm font-semibold text-gray-700 dark:text-white/70">
+                No CME events found.
+              </div>
             )}
-          </div>
-          {/* Latest Solar Flare (FLR) Event */}
-          <div className="mb-8">
-            <h3 className="text-2xl font-semibold mb-4 text-center">
-              Latest Solar Flare (FLR) Event
-            </h3>
+          </Card>
+
+          <Card>
+            <div className="text-xs font-extrabold text-gray-600 dark:text-white/60">
+              Latest Solar Flare
+            </div>
             {latestFLR ? (
-              <div className="border border-gray-300 rounded p-4 shadow">
-                <p>
-                  <strong>Date:</strong>{" "}
-                  {latestFLR.beginTime || latestFLR.peakTime || "Unknown"}
-                </p>
-                <p>
-                  <strong>Class Type:</strong>{" "}
-                  {latestFLR.classType || "Unknown"}
-                </p>
-                <p>
-                  <strong>Source Location:</strong>{" "}
-                  {latestFLR.sourceLocation || "Unknown"}
-                </p>
-                {/* You can add more FLR-specific fields here */}
+              <div className="mt-2 space-y-2">
+                <div className="text-lg font-extrabold text-gray-900 dark:text-white">
+                  {latestFLR.beginTime || latestFLR.peakTime || "Unknown time"}
+                </div>
+                <div className="text-sm font-semibold text-gray-700 dark:text-white/70">
+                  <span className="font-extrabold text-gray-900 dark:text-white">
+                    Class:
+                  </span>{" "}
+                  {latestFLR.classType || "—"}{" "}
+                  <span className="mx-2 text-gray-400 dark:text-white/30">•</span>
+                  <span className="font-extrabold text-gray-900 dark:text-white">
+                    Source:
+                  </span>{" "}
+                  {latestFLR.sourceLocation || "—"}
+                </div>
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm font-extrabold text-gray-800 dark:text-white/80">
+                    Details
+                  </summary>
+                  <pre className="mt-2 max-h-[260px] overflow-auto rounded-2xl bg-black/[0.03] p-3 text-xs font-semibold text-gray-800 ring-1 ring-black/10 dark:bg-white/[0.06] dark:text-white/80 dark:ring-white/10">
+                    {safeJson(latestFLR)}
+                  </pre>
+                </details>
               </div>
             ) : (
-              <p className="text-center">
-                No Solar Flare events found for this period.
-              </p>
+              <div className="mt-2 text-sm font-semibold text-gray-700 dark:text-white/70">
+                No flare events found.
+              </div>
             )}
-          </div>
-          {/* All CME Events List */}
-          {/* <div className="mb-8">
-            <h3 className="text-2xl font-semibold mb-4 text-center">All CME Events</h3>
-            {cmeData.length > 0 ? (
-              <div className="space-y-4">
-                {cmeData.map((event, index) => (
-                  <div key={index} className="border border-gray-300 rounded p-4 shadow">
-                    <p>
-                      <strong>Date:</strong>{" "}
-                      {event.beginTime || event.peakTime || "Unknown"}
-                    </p>
-                    <p>
-                      <strong>Note:</strong>{" "}
-                      {event.note || "No additional info"}
-                    </p>
+          </Card>
+        </div>
+      ) : null}
+
+      {!loading && !error ? (
+        <div className="space-y-4">
+          <details className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-brand-900 sm:p-5">
+            <summary className="cursor-pointer text-sm font-extrabold text-gray-900 dark:text-white">
+              All CME Events ({cmeData.length})
+            </summary>
+            <div className="mt-3 grid gap-3">
+              {cmeData.map((event, idx) => (
+                <Card key={idx}>
+                  <div className="text-sm font-extrabold text-gray-900 dark:text-white">
+                    {event.beginTime || event.peakTime || "Unknown time"}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-center">No CME events found for this period.</p>
-            )}
-          </div> */}
-
-
-          {/* All Solar Flare (FLR) Events List */}
-
-          {/* <div className="mb-8">
-            <h3 className="text-2xl font-semibold mb-4 text-center">
-              All Solar Flare (FLR) Events
-            </h3>
-            {flrData.length > 0 ? (
-              <div className="space-y-4">
-                {flrData.map((event, index) => (
-                  <div key={index} className="border border-gray-300 rounded p-4 shadow">
-                    <p>
-                      <strong>Date:</strong>{" "}
-                      {event.beginTime || event.peakTime || "Unknown"}
-                    </p>
-                    <p>
-                      <strong>Class Type:</strong>{" "}
-                      {event.classType || "Unknown"}
-                    </p>
-                    <p>
-                      <strong>Source Location:</strong>{" "}
-                      {event.sourceLocation || "Unknown"}
-                    </p>
+                  <div className="mt-1 text-sm font-semibold text-gray-700 dark:text-white/70">
+                    {event.note || "No note"}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-center">
-                No Solar Flare events found for this period.
-              </p>
-            )}
-          </div> */}
-        </>
-      )}
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-xs font-extrabold text-gray-800 dark:text-white/80">
+                      Raw
+                    </summary>
+                    <pre className="mt-2 max-h-[220px] overflow-auto rounded-2xl bg-black/[0.03] p-3 text-xs font-semibold text-gray-800 ring-1 ring-black/10 dark:bg-white/[0.06] dark:text-white/80 dark:ring-white/10">
+                      {safeJson(event)}
+                    </pre>
+                  </details>
+                </Card>
+              ))}
+              {!cmeData.length ? (
+                <div className="text-sm font-semibold text-gray-700 dark:text-white/70">
+                  No CME events.
+                </div>
+              ) : null}
+            </div>
+          </details>
+
+          <details className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-brand-900 sm:p-5">
+            <summary className="cursor-pointer text-sm font-extrabold text-gray-900 dark:text-white">
+              All Solar Flare Events ({flrData.length})
+            </summary>
+            <div className="mt-3 grid gap-3">
+              {flrData.map((event, idx) => (
+                <Card key={idx}>
+                  <div className="text-sm font-extrabold text-gray-900 dark:text-white">
+                    {event.beginTime || event.peakTime || "Unknown time"}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-gray-700 dark:text-white/70">
+                    <span className="font-extrabold text-gray-900 dark:text-white">
+                      Class:
+                    </span>{" "}
+                    {event.classType || "—"}{" "}
+                    <span className="mx-2 text-gray-400 dark:text-white/30">•</span>
+                    <span className="font-extrabold text-gray-900 dark:text-white">
+                      Source:
+                    </span>{" "}
+                    {event.sourceLocation || "—"}
+                  </div>
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-xs font-extrabold text-gray-800 dark:text-white/80">
+                      Raw
+                    </summary>
+                    <pre className="mt-2 max-h-[220px] overflow-auto rounded-2xl bg-black/[0.03] p-3 text-xs font-semibold text-gray-800 ring-1 ring-black/10 dark:bg-white/[0.06] dark:text-white/80 dark:ring-white/10">
+                      {safeJson(event)}
+                    </pre>
+                  </details>
+                </Card>
+              ))}
+              {!flrData.length ? (
+                <div className="text-sm font-semibold text-gray-700 dark:text-white/70">
+                  No flare events.
+                </div>
+              ) : null}
+            </div>
+          </details>
+        </div>
+      ) : null}
     </div>
   );
-};
-
-export default NasaDONKIPage;
+}

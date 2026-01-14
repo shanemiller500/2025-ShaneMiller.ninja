@@ -1,8 +1,24 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { Rocket } from './types/spacexTypes';
-import LoadMoreButton from './LoadMoreButton';
+import React, { useEffect, useMemo, useState } from "react";
+import { Rocket } from "./types/spacexTypes";
+import LoadMoreButton from "./LoadMoreButton";
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-brand-900">
+      {children}
+    </div>
+  );
+}
+
+function safeJson(v: any) {
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+}
 
 const RocketsTab: React.FC = () => {
   const [rockets, setRockets] = useState<Rocket[]>([]);
@@ -11,9 +27,9 @@ const RocketsTab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('https://api.spacexdata.com/v4/rockets')
+    fetch("https://api.spacexdata.com/v4/rockets")
       .then((res) => {
-        if (!res.ok) throw new Error('Network error');
+        if (!res.ok) throw new Error("Network error");
         return res.json();
       })
       .then((data: Rocket[]) => {
@@ -26,46 +42,62 @@ const RocketsTab: React.FC = () => {
       });
   }, []);
 
-  if (loading)
-    return <div className="text-center text-lg">Loading rockets...</div>;
-  if (error)
-    return <div className="text-center text-red-500">Error: {error}</div>;
-  if (!rockets.length)
-    return <div className="text-center">No rockets available</div>;
+  const visibleRockets = useMemo(
+    () => rockets.slice(0, visibleCount),
+    [rockets, visibleCount]
+  );
 
-  const visibleRockets = rockets.slice(0, visibleCount);
+  if (loading)
+    return <div className="text-center text-sm font-bold text-gray-700 dark:text-white/70">Loading rockets…</div>;
+  if (error)
+    return <div className="text-center text-sm font-bold text-red-500">Error: {error}</div>;
+  if (!rockets.length)
+    return <div className="text-center text-sm font-bold text-gray-700 dark:text-white/70">No rockets available</div>;
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold mb-4">Rockets</h2>
-      <ul className="space-y-6">
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-extrabold text-gray-900 dark:text-white sm:text-2xl">
+          Rockets
+        </h2>
+      </div>
+
+      <div className="grid gap-4">
         {visibleRockets.map((rocket) => (
-          <li key={rocket.id} className="border-b pb-4">
-            <h3 className="text-xl font-semibold">{rocket.name}</h3>
-            <p>{rocket.description}</p>
-            {/* Display additional properties */}
-            <div className="mt-2">
-              <strong>Additional Data:</strong>
-              <ul>
-                {Object.entries(rocket)
-                  .filter(
-                    ([key]) =>
-                      !['id', 'name', 'description'].includes(key)
-                  )
-                  .map(([key, value]) => (
-                    <li key={key}>
-                      <strong>{key}:</strong> {JSON.stringify(value)}
-                    </li>
-                  ))}
-              </ul>
+          <Card key={rocket.id}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-base font-extrabold text-gray-900 dark:text-white sm:text-lg">
+                  {rocket.name}
+                </h3>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-gray-700 dark:text-white/70">
+                  {rocket.description}
+                </p>
+              </div>
             </div>
-          </li>
+
+            <details className="mt-4">
+              <summary className="cursor-pointer text-sm font-extrabold text-gray-800 dark:text-white/80">
+                Details
+              </summary>
+              <pre className="mt-3 max-h-[320px] overflow-auto rounded-2xl bg-black/[0.03] p-3 text-xs font-semibold text-gray-800 ring-1 ring-black/10 dark:bg-white/[0.06] dark:text-white/80 dark:ring-white/10">
+                {safeJson(
+                  Object.fromEntries(
+                    Object.entries(rocket).filter(
+                      ([k]) => !["id", "name", "description"].includes(k)
+                    )
+                  )
+                )}
+              </pre>
+            </details>
+          </Card>
         ))}
-      </ul>
+      </div>
+
       <LoadMoreButton
         visibleCount={visibleCount}
         totalCount={rockets.length}
-        onLoadMore={() => setVisibleCount(visibleCount + 7)}
+        onLoadMore={() => setVisibleCount((c) => c + 7)}
       />
     </div>
   );

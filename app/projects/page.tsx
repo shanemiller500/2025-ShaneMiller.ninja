@@ -85,7 +85,7 @@ export default function Projects() {
       id: 11,
       icon: Icon12,
       slug: "/search",
-      title: "AI Powered Search Engine",
+      title: "AI Search Engine",
       excerpt: "Search that gets to the point.",
     },
     {
@@ -95,7 +95,6 @@ export default function Projects() {
       title: "AI JSON/XML Prettifier",
       excerpt:
         "Paste messy JSON/XML and get formatted output with helpful corrections.",
-      badge: "New",
     },
     {
       id: 7,
@@ -104,14 +103,14 @@ export default function Projects() {
       title: "Art Institute of Chicago",
       excerpt: "A clean UI on top of the AIC open API.",
     },
-    {
-      id: 9,
-      icon: Icon10,
-      slug: "/Spacex",
-      title: "SpaceX API stuff",
-      excerpt:
-        "Fun SpaceX project. Older data + an unmaintained API (still cool).",
-    },
+    // {
+    //   id: 9,
+    //   icon: Icon10,
+    //   slug: "/Spacex",
+    //   title: "SpaceX API stuff",
+    //   excerpt:
+    //     "Fun SpaceX project. Older data + an unmaintained API (still cool).",
+    // },
     {
       id: 12,
       icon: Icon06,
@@ -133,7 +132,16 @@ export default function Projects() {
       title: "Epstein Files Library",
       excerpt:
         "Search DOJ, FBI, and House Oversight docs related to Epstein investigations.",
-      badge: "Big",
+      badge: "Big Data",
+    },
+     {
+      id: 6,
+      icon: Icon08,
+      slug: '/NASA',
+      title: 'NASA API',
+      excerpt:
+        'NASA photo of the day, Mars rover photos, and other space data.',
+      openSource: false,
     },
 
         /*
