@@ -151,7 +151,7 @@ export default function Home() {
             <p className="text-xs font-semibold uppercase tracking-wide opacity-60">
               Try one of these
             </p>
-            <p className="text-xs opacity-60 sm:hidden">Press / to focus</p>
+           
           </div>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
