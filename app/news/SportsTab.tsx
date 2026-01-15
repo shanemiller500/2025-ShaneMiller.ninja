@@ -18,7 +18,7 @@ const CACHE_TTL = 30 * 60 * 1000;
 const PER_PAGE = 36;
 
 const CATEGORIES = [
-  { key: "all", label: "Latest World Sports" },
+  { key: "all", label: "All Sports" },
   { key: "nba", label: "NBA" },
   { key: "nfl", label: "NFL" },
   { key: "mlb", label: "MLB" },
@@ -97,7 +97,11 @@ function SmartImage({
 }
 
 const getImageCandidates = (a: Article) => {
-  const sources = [a.urlToImage, a.images?.[0]].filter((s): s is string => !bad(s)).map(normalize);
+  // ✅ gather ALL possible image fields, not just first image
+  const sources = [a.urlToImage, ...(Array.isArray(a.images) ? a.images : [])]
+    .filter((s): s is string => !bad(s))
+    .map(normalize);
+
   return uniqStrings(sources);
 };
 
@@ -159,7 +163,9 @@ export default function SportsTab() {
           if (!map.has(k)) map.set(k, a);
         }
 
-        const uniq = Array.from(map.values()).sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
+        const uniq = Array.from(map.values()).sort(
+          (a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt)
+        );
 
         if (!cancel) {
           cached[tab] = { ts: Date.now(), data: uniq };
@@ -217,33 +223,29 @@ export default function SportsTab() {
 
   return (
     <div className="pb-10">
-      <select
-        value={tab}
-        onChange={(e) => setTab(e.target.value as TabKey)}
-        className="block w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-800 shadow-sm
-                   focus:outline-none dark:border-white/10 dark:bg-brand-900 dark:text-gray-100 sm:hidden"
-      >
-        {CATEGORIES.map((c) => (
-          <option key={c.key} value={c.key}>
-            {c.label}
-          </option>
-        ))}
-      </select>
-
-      <div className="mt-3 hidden flex-wrap gap-2 sm:flex">
-        {CATEGORIES.map((c) => (
-          <button
-            key={c.key}
-            onClick={() => setTab(c.key)}
-            className={`rounded-full px-4 py-2 text-xs font-semibold transition sm:text-sm ${
-              tab === c.key
-                ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm"
-                : "bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-            }`}
-          >
-            {c.label}
-          </button>
-        ))}
+      <div className="rounded-3xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900 overflow-hidden">
+        <div className="flex items-center gap-2 p-2 sm:p-3 border-b border-gray-200 dark:border-white/10 overflow-x-auto ">
+          {CATEGORIES.map((c) => {
+            const isActive = tab === c.key;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => setTab(c.key)}
+                className={[
+                  "relative shrink-0 rounded-2xl px-4 sm:px-5 py-2 sm:py-2.5 text-sm sm:text-base font-extrabold transition",
+                  "ring-1 ring-black/10 dark:ring-white/10",
+                  isActive
+                    ? "text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-sm"
+                    : "text-gray-900 dark:text-white bg-black/[0.03] dark:bg-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.10]",
+                ].join(" ")}
+                aria-current={isActive ? "page" : undefined}
+              >
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <LiveScores sport={tab} />
@@ -258,9 +260,7 @@ export default function SportsTab() {
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {topStrip.map((a, i) => {
             const domain = getDomain(a.url);
-            const logoCandidates = uniqStrings(
-              [a.source.image ?? "", favicon(domain)].filter(Boolean).map(normalize)
-            );
+            const logoCandidates = uniqStrings([a.source.image ?? "", favicon(domain)].filter(Boolean).map(normalize));
             const imgCandidates = getImageCandidates(a);
 
             return (
@@ -343,6 +343,7 @@ function ArticleCard({ article }: { article: Article }) {
   const logoCandidates = uniqStrings([article.source.image ?? "", favicon(domain)].filter(Boolean).map(normalize));
   const imgCandidates = getImageCandidates(article);
 
+  // ✅ If an article has ANY image candidate, show the image card.
   if (imgCandidates.length) {
     return (
       <a
@@ -385,6 +386,7 @@ function ArticleCard({ article }: { article: Article }) {
     );
   }
 
+  // ✅ If no images, keep the existing text-only style exactly.
   return (
     <a
       href={article.url}

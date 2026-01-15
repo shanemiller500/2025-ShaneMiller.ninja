@@ -24,7 +24,7 @@ export default function AboutPage() {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentImage((prev) => (prev + 1) % images.length);
-    }, 5000);
+    }, 10000);
 
     return () => clearInterval(timer);
   }, []);
@@ -45,7 +45,7 @@ export default function AboutPage() {
                   {/* Taller frame so images feel substantial */}
                   <div className="relative w-full aspect-[3/2] bg-gray-50 dark:bg-brand-900">
                     <div
-                      className="absolute inset-0 flex transition-transform duration-500 ease-in-out"
+                      className="absolute inset-0 flex transition-transform duration-1000 ease-in-out"
                       style={{ transform: `translateX(-${currentImage * 100}%)` }}
                     >
                       {images.map((src, index) => (
@@ -65,21 +65,7 @@ export default function AboutPage() {
                       ))}
                     </div>
 
-                    {/* Dots */}
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                      {images.map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setCurrentImage(i)}
-                          aria-label={`Go to slide ${i + 1}`}
-                          className={`h-2.5 w-2.5 rounded-full transition ring-1 ring-black/30 dark:ring-white/30 ${
-                            i === currentImage
-                              ? "bg-gray-900 dark:bg-brand-900"
-                              : "bg-gray-900/30 hover:bg-gray-900/50 dark:bg-brand-900 dark:hover:bg-white/50"
-                          }`}
-                        />
-                      ))}
-                    </div>
+        
                   </div>
                 </div>
 

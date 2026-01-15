@@ -12,12 +12,12 @@ import { trackEvent } from "@/utils/mixpanel";
 
 type TabKey = "quote" | "live" | "ipo" | "earnings" | "news";
 
-const TABS: { key: TabKey; label: string; }[] = [
-  { key: "quote", label: "Stock Quote"},
-  { key: "live", label: "Live Stream Heatmap"},
-  { key: "ipo", label: "IPO Calendar"},
-  { key: "earnings", label: "Earnings Info"},
-  { key: "news", label: "News Search"},
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "quote", label: "Stock Quote" },
+  { key: "live", label: "Live Stream Heatmap" },
+  { key: "ipo", label: "IPO Calendar" },
+  { key: "earnings", label: "Earnings Info" },
+  { key: "news", label: "News Search" },
 ];
 
 export default function DashboardTabs() {
@@ -52,70 +52,44 @@ export default function DashboardTabs() {
             <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
               Market Dashboard
             </h1>
-            
-          </div>
-
-          {/* Mobile: dropdown */}
-          <div className="sm:hidden">
-            <label htmlFor="dashboard-tab-select" className="sr-only">
-              Select Dashboard Tab
-            </label>
-
-            <div className="flex items-center gap-2">
-              <select
-                id="dashboard-tab-select"
-                value={activeTab}
-                onChange={(e) => handleTabClick(e.target.value as TabKey)}
-                className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] px-4 py-3 text-sm font-extrabold text-gray-900 dark:text-white outline-none focus:border-black/20 dark:focus:border-white/20"
-              >
-                {TABS.map((t) => (
-                  <option key={t.key} value={t.key}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Desktop: pill tabs */}
-        <div className="relative mt-4 hidden sm:block">
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-            {TABS.map((t) => {
-              const isActive = t.key === activeTab;
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => handleTabClick(t.key)}
-                  className={[
-                    "relative shrink-0 rounded-2xl px-4 py-2 text-sm font-extrabold transition",
-                    "ring-1 ring-black/10 dark:ring-white/10",
-                    isActive
-                      ? "text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-sm"
-                      : "text-gray-900 dark:text-white bg-black/[0.03] dark:bg-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.10]",
-                  ].join(" ")}
-                  aria-current={isActive ? "page" : undefined}
-                >
-                  {t.label}
-                  {isActive && (
-                    <motion.span
-                      layoutId="dashTabsPill"
-                      className="absolute inset-0 -z-10 rounded-2xl"
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                    />
-                  )}
-                </button>
-              );
-            })}
           </div>
         </div>
       </div>
 
-      {/* Content card */}
+      {/* Tabs card (use CryptoDashboard-style tabs; no dropdown) */}
+      <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
+        {/* tab bar */}
+        <div className="flex items-center gap-2 p-2 sm:p-3 border-b border-black/10 dark:border-white/10 overflow-x-auto no-scrollbar">
+          {TABS.map((t) => {
+            const isActive = t.key === activeTab;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => handleTabClick(t.key)}
+                className={[
+                  "relative shrink-0 rounded-2xl px-4 sm:px-5 py-2 sm:py-2.5 text-sm sm:text-base font-extrabold transition",
+                  "ring-1 ring-black/10 dark:ring-white/10",
+                  isActive
+                    ? "text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-sm"
+                    : "text-gray-900 dark:text-white bg-black/[0.03] dark:bg-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.10]",
+                ].join(" ")}
+                aria-current={isActive ? "page" : undefined}
+              >
+                {t.label}
+                {isActive && (
+                  <motion.span
+                    layoutId="dashTabsPill"
+                    className="absolute inset-0 -z-10 rounded-2xl"
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-      <div className="relative rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-visible">
-
+        {/* content */}
         <div className="p-3 sm:p-4">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
