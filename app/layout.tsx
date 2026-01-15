@@ -157,7 +157,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       <Dialog.Panel className="">
                         <div className="flex items-center justify-between px-4 py-4 border-b border-black/5 dark:border-white/10 dark:bg-brand-900 bg-indigo-50">
                           {/* ✅ Avatar (shows on any route except "/") */}
-                          {pathname !== "/" && (
+                         
                             <div className="shrink-0">
                               <Link
                                 href="/"
@@ -174,7 +174,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                                 />
                               </Link>
                             </div>
-                          )}
+                   
 
                       
 
