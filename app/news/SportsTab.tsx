@@ -14,6 +14,14 @@ interface Article {
   publishedAt: string;
 }
 
+interface LiveGame {
+  id: string;
+  league: string;
+  leagueDisplay?: string;
+  status?: string;
+  isLive?: boolean;
+}
+
 const CACHE_TTL = 30 * 60 * 1000;
 const PER_PAGE = 36;
 
@@ -24,11 +32,22 @@ const CATEGORIES = [
   { key: "mlb", label: "MLB" },
   { key: "nhl", label: "NHL" },
   { key: "soccer", label: "Soccer" },
-  { key: "mma", label: "MMA" }, // ✅ backend now supports /mma
+  { key: "mma", label: "MMA" },
 ] as const;
 
 type TabKey = (typeof CATEGORIES)[number]["key"];
 const cached: Record<string, { ts: number; data: Article[] }> = {};
+
+const todayET = () => {
+  const fmt = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const [m, d, y] = fmt.split("/");
+  return `${y}${m}${d}`;
+};
 
 const getDomain = (u: string) => {
   try {
@@ -97,11 +116,9 @@ function SmartImage({
 }
 
 const getImageCandidates = (a: Article) => {
-  // ✅ gather ALL possible image fields, not just first image
   const sources = [a.urlToImage, ...(Array.isArray(a.images) ? a.images : [])]
     .filter((s): s is string => !bad(s))
     .map(normalize);
-
   return uniqStrings(sources);
 };
 
@@ -116,6 +133,76 @@ function SkeletonCard() {
       </div>
     </div>
   );
+}
+
+/* --------------------------------------------- */
+/* Live scores router for tabs                   */
+/* - All tab => show ALL live sports             */
+/* - League tab => show ONLY that league live    */
+/* - If none live => show "No live games..."     */
+/* --------------------------------------------- */
+function LiveScoresForTab({ tab }: { tab: TabKey }) {
+  const [live, setLive] = useState<LiveGame[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancel = false;
+
+    const tick = async () => {
+      try {
+        const res = await fetch(`https://u-mail.co/api/sportsGames/live?date=${todayET()}`, {
+          cache: "no-store",
+        });
+        const j = await res.json();
+        const games: LiveGame[] = Array.isArray(j?.games) ? j.games : [];
+
+        // safety: ensure "live" really means live
+        const filtered = games.filter(
+          (g) => g?.isLive === true || /live|in progress/i.test(g?.status || "")
+        );
+
+        if (!cancel) {
+          setLive(filtered);
+          setLoaded(true);
+        }
+      } catch {
+        if (!cancel) {
+          setLive([]);
+          setLoaded(true);
+        }
+      }
+    };
+
+    tick();
+    const iv = setInterval(tick, 60_000);
+    return () => {
+      cancel = true;
+      clearInterval(iv);
+    };
+  }, []);
+
+  const hasLiveForTab = useMemo(() => {
+    if (tab === "all") return live.length > 0;
+    return live.some((g) => String(g.league || "").toLowerCase() === tab);
+  }, [live, tab]);
+
+  // Don’t show anything until we’ve checked once (prevents flicker)
+  if (!loaded) return null;
+
+  // If no live games for the selected tab, show the message (not "No games today.")
+  if (!hasLiveForTab) {
+    return (
+      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-4 text-sm font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-brand-900 dark:text-gray-200">
+        No live games right now.
+      </div>
+    );
+  }
+
+  // All = all live games
+  if (tab === "all") return <LiveScores sport="all" />;
+
+  // League tab = only that league (LiveScores will show only live for that league)
+  return <LiveScores sport={tab} />;
 }
 
 export default function SportsTab() {
@@ -163,9 +250,7 @@ export default function SportsTab() {
           if (!map.has(k)) map.set(k, a);
         }
 
-        const uniq = Array.from(map.values()).sort(
-          (a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt)
-        );
+        const uniq = Array.from(map.values()).sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
 
         if (!cancel) {
           cached[tab] = { ts: Date.now(), data: uniq };
@@ -193,10 +278,7 @@ export default function SportsTab() {
     return Array.from(map.values());
   }, [articles]);
 
-  const topStrip = useMemo(
-    () => uniq.filter((a) => getImageCandidates(a).length > 0).slice(0, 4),
-    [uniq]
-  );
+  const topStrip = useMemo(() => uniq.filter((a) => getImageCandidates(a).length > 0).slice(0, 4), [uniq]);
 
   const rest = useMemo(() => {
     const heroKeys = new Set(topStrip.map(stableKey));
@@ -223,8 +305,9 @@ export default function SportsTab() {
 
   return (
     <div className="pb-10">
+      {/* News tabs */}
       <div className="rounded-3xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900 overflow-hidden">
-        <div className="flex items-center gap-2 p-2 sm:p-3 border-b border-gray-200 dark:border-white/10 overflow-x-auto ">
+        <div className="flex items-center gap-2 p-2 sm:p-3 border-b border-gray-200 dark:border-white/10 overflow-x-auto">
           {CATEGORIES.map((c) => {
             const isActive = tab === c.key;
             return (
@@ -248,7 +331,8 @@ export default function SportsTab() {
         </div>
       </div>
 
-      <LiveScores sport={tab} />
+      {/* ✅ Live scores obey the selected tab */}
+      <LiveScoresForTab tab={tab} />
 
       {error && (
         <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-900/20 dark:text-red-200">
@@ -290,11 +374,7 @@ export default function SportsTab() {
                   <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{a.title}</h3>
                   <div className="mt-2 flex items-center gap-2 text-xs">
                     {logoCandidates.length ? (
-                      <SmartImage
-                        candidates={logoCandidates}
-                        alt={a.source.name}
-                        className="h-4 w-4 rounded bg-white/10 object-contain"
-                      />
+                      <SmartImage candidates={logoCandidates} alt={a.source.name} className="h-4 w-4 rounded bg-white/10 object-contain" />
                     ) : null}
                     <span className="truncate max-w-[140px]">{a.source.name}</span>
                   </div>
@@ -343,7 +423,6 @@ function ArticleCard({ article }: { article: Article }) {
   const logoCandidates = uniqStrings([article.source.image ?? "", favicon(domain)].filter(Boolean).map(normalize));
   const imgCandidates = getImageCandidates(article);
 
-  // ✅ If an article has ANY image candidate, show the image card.
   if (imgCandidates.length) {
     return (
       <a
@@ -365,19 +444,12 @@ function ArticleCard({ article }: { article: Article }) {
             <h3 className="line-clamp-3 text-sm font-semibold leading-snug">{article.title}</h3>
             <div className="flex items-center gap-2 text-xs text-white/90">
               {logoCandidates.length ? (
-                <SmartImage
-                  candidates={logoCandidates}
-                  alt={article.source.name}
-                  className="h-4 w-4 rounded bg-white/10 object-contain"
-                />
+                <SmartImage candidates={logoCandidates} alt={article.source.name} className="h-4 w-4 rounded bg-white/10 object-contain" />
               ) : null}
               <span className="truncate max-w-[160px]">{article.source.name}</span>
               <span className="text-white/60">•</span>
               <time className="whitespace-nowrap text-white/70">
-                {new Date(article.publishedAt).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                })}
+                {new Date(article.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
               </time>
             </div>
           </div>
@@ -386,7 +458,6 @@ function ArticleCard({ article }: { article: Article }) {
     );
   }
 
-  // ✅ If no images, keep the existing text-only style exactly.
   return (
     <a
       href={article.url}
@@ -395,24 +466,15 @@ function ArticleCard({ article }: { article: Article }) {
       className="group block overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md
                  dark:border-white/10 dark:bg-brand-900"
     >
-      <h3 className="line-clamp-3 text-sm font-semibold leading-snug text-gray-900 dark:text-white">
-        {article.title}
-      </h3>
+      <h3 className="line-clamp-3 text-sm font-semibold leading-snug text-gray-900 dark:text-white">{article.title}</h3>
       <div className="mt-3 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
         {logoCandidates.length ? (
-          <SmartImage
-            candidates={logoCandidates}
-            alt={article.source.name}
-            className="h-6 w-6 rounded bg-gray-100 object-contain dark:bg-white/5"
-          />
+          <SmartImage candidates={logoCandidates} alt={article.source.name} className="h-6 w-6 rounded bg-gray-100 object-contain dark:bg-white/5" />
         ) : null}
         <span className="truncate max-w-[200px]">{article.source.name}</span>
         <span>•</span>
         <time className="whitespace-nowrap">
-          {new Date(article.publishedAt).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-          })}
+          {new Date(article.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
         </time>
       </div>
     </a>

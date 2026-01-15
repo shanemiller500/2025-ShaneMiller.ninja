@@ -10,6 +10,7 @@ interface GameTeam {
   points?: string;
   logo?: string;
 }
+
 interface Game {
   id: string;
   league: string;
@@ -20,17 +21,19 @@ interface Game {
   awayTeam: GameTeam;
   homeTeam: GameTeam;
   isFinal: boolean;
+  isLive?: boolean; // ✅ new
   seriesText?: string;
   recapLink?: string;
   highlight?: string;
   espnLink?: string;
 }
 
-const CORE_TABS = ["nba", "nfl", "mlb", "nhl", "soccer", "mma"] as const;
-const CACHE_TTL = 30 * 60 * 1000;
+const CACHE_TTL = 15 * 1000; // ✅ live scoreboard = refreshy
 const cache: Record<string, { ts: number; data: Game[] }> = {};
 
-const isLive = (s: string) => /live|in progress|[1-9](st|nd|rd|th)|q[1-4]/i.test(s);
+// A bit more inclusive than before (covers soccer halves, periods, OT, etc.)
+const isLiveText = (s: string) =>
+  /live|in progress|halftime|half time|end of|quarter|period|overtime|\bot\b|q[1-4]\b|p[1-9]\b/i.test(s);
 
 const todayET = () => {
   const fmt = new Date().toLocaleDateString("en-US", {
@@ -44,8 +47,8 @@ const todayET = () => {
 };
 
 const orderGames = (a: Game, b: Game) => {
-  const liveA = isLive(a.status);
-  const liveB = isLive(b.status);
+  const liveA = !!a.isLive || isLiveText(a.status);
+  const liveB = !!b.isLive || isLiveText(b.status);
   if (liveA !== liveB) return liveA ? -1 : 1;
   if (a.isFinal !== b.isFinal) return a.isFinal ? 1 : -1;
   return +new Date(b.startTime) - +new Date(a.startTime);
@@ -97,24 +100,13 @@ export default function LiveScores({ sport }: { sport: string }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [canScroll, setCanScroll] = useState(false);
 
-  /* ------------------------------ */
-  /* marquee motion (like example)  */
-  /* ------------------------------ */
+  /* marquee motion */
   const innerRef = useRef<HTMLDivElement | null>(null);
   const [contentWidth, setContentWidth] = useState(0);
   const x = useMotionValue(0);
   const [isDragging, setIsDragging] = useState(false);
-  const speed = 40; // px/sec (tune)
+  const speed = 40; // px/sec
 
-  /* is-mounted flag for safe async state updates */
-  const isMounted = useRef(true);
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
-  /* Pause auto-scroll when user interacting or modal open (same concept as crypto) */
   const interactingRef = useRef(false);
   const modalOpenRef = useRef(false);
   useEffect(() => {
@@ -138,16 +130,19 @@ export default function LiveScores({ sport }: { sport: string }) {
           return;
         }
 
+        // ✅ NEW:
+        // - "all" => live across ALL leagues
+        // - specific => that league for today
         const url =
           sport === "all"
-            ? "https://u-mail.co/api/sportsGames/others"
+            ? `https://u-mail.co/api/sportsGames/live?date=${todayET()}`
             : `https://u-mail.co/api/sportsGames/${sport}?date=${todayET()}`;
 
         const res = await fetch(url, { cache: "no-store" });
         if (!res.ok) throw new Error(`Games API ${res.status}`);
 
-        let list: Game[] = (await res.json())?.games ?? [];
-        if (sport === "all") list = list.filter((g) => !CORE_TABS.includes(g.league as any));
+        const json = await res.json();
+        const list: Game[] = Array.isArray(json?.games) ? json.games : [];
 
         list.sort(orderGames);
         cache[key] = { ts: Date.now(), data: list };
@@ -235,9 +230,7 @@ export default function LiveScores({ sport }: { sport: string }) {
   }, []);
 
   /* ------------------------------ */
-  /* marquee auto-scroll (crypto style) */
-  /* - uses motion value x
-  /* - pauses on drag, interaction, or modal open
+  /* marquee auto-scroll            */
   /* ------------------------------ */
   useEffect(() => {
     let raf = 0;
@@ -254,7 +247,6 @@ export default function LiveScores({ sport }: { sport: string }) {
         const current = x.get();
         let next = current - speed * (delta / 1000);
 
-        // wrap like your crypto widget
         if (next <= -contentWidth) next += contentWidth;
         if (next > 0) next -= contentWidth;
 
@@ -268,17 +260,17 @@ export default function LiveScores({ sport }: { sport: string }) {
     return () => cancelAnimationFrame(raf);
   }, [isDragging, contentWidth, games.length, x]);
 
-  const title = sport === "all" ? "Latest World Sports (Live)" : "Today's Games";
+  const title = sport === "all" ? "Live Now (All Sports)" : "Today's Games";
 
   const cards = useMemo(() => {
     return games.map((g) => {
-      const live = isLive(g.status);
+      const live = !!g.isLive || isLiveText(g.status);
       const away = g.awayTeam.score ?? g.awayTeam.points ?? "—";
       const home = g.homeTeam.score ?? g.homeTeam.points ?? "—";
 
       return (
         <motion.div
-          key={g.id}
+          key={`${g.league}-${g.id}`}
           role="button"
           tabIndex={0}
           onClick={() => setSel(g)}
@@ -329,8 +321,6 @@ export default function LiveScores({ sport }: { sport: string }) {
 
   const onDragEnd = useCallback(() => {
     setIsDragging(false);
-
-    // snap back to a clean loop boundary (same idea as crypto widget)
     const mod = (n: number, m: number) => ((n % m) + m) % m;
     if (contentWidth > 0) x.set(-mod(-x.get(), contentWidth));
   }, [contentWidth, x]);
@@ -340,7 +330,6 @@ export default function LiveScores({ sport }: { sport: string }) {
       <div className="mb-3 flex items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h2>
-
         </div>
         <div className="hidden text-xs font-semibold text-gray-500 dark:text-gray-400 sm:block">
           Updates every 60s
@@ -349,17 +338,20 @@ export default function LiveScores({ sport }: { sport: string }) {
 
       {loading && <p className="text-sm text-gray-600 dark:text-gray-300">Loading games…</p>}
       {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
-      {!loading && !error && games.length === 0 && <p className="text-sm text-gray-600 dark:text-gray-300">No games today.</p>}
+
+      {!loading && !error && games.length === 0 && (
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          {sport === "all" ? "No live games right now." : "No games today."}
+        </p>
+      )}
 
       {games.length > 0 && (
         <div className="relative">
-          {/* wrapper keeps fades + allows touch scrolling when user wants */}
           <div
             ref={scrollRef}
             className="no-scrollbar overflow-hidden overscroll-x-contain touch-pan-x pb-2"
             style={{ WebkitOverflowScrolling: "touch" }}
           >
-            {/* marquee row (crypto-style) */}
             <motion.div
               className="flex w-max cursor-grab active:cursor-grabbing"
               style={{ x }}
@@ -369,12 +361,9 @@ export default function LiveScores({ sport }: { sport: string }) {
               onDragStart={() => setIsDragging(true)}
               onDragEnd={onDragEnd}
             >
-              {/* innerRef is used to measure contentWidth */}
               <div className="flex" ref={innerRef}>
                 <div className="flex w-max gap-3 px-0">{cards}</div>
               </div>
-
-              {/* duplicate for seamless loop */}
               <div className="flex w-max gap-3 px-0">{cards}</div>
             </motion.div>
           </div>
@@ -390,10 +379,13 @@ export default function LiveScores({ sport }: { sport: string }) {
 
       {sel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setSel(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-white/10 bg-white p-5 shadow-xl dark:bg-brand-900">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-white p-5 shadow-xl dark:bg-brand-900"
+          >
             <div className="mb-3 flex items-center justify-between">
               <Chip kind="league" text={sel.leagueDisplay || sel.league.toUpperCase()} />
-              {isLive(sel.status) ? <Chip kind="live" text="LIVE" /> : sel.isFinal ? <Chip kind="final" text="FINAL" /> : null}
+              {sel.isLive || isLiveText(sel.status) ? <Chip kind="live" text="LIVE" /> : sel.isFinal ? <Chip kind="final" text="FINAL" /> : null}
             </div>
 
             <h3 className="text-base font-bold text-gray-900 dark:text-white">{sel.competition}</h3>
@@ -406,45 +398,14 @@ export default function LiveScores({ sport }: { sport: string }) {
                     <Img src={t.logo} alt={t.name} className="h-10 w-10" />
                     <div className="text-sm font-semibold text-gray-900 dark:text-white">{t.name}</div>
                   </div>
-                  <div className="text-2xl font-extrabold text-gray-900 dark:text-white">{t.score ?? t.points ?? "—"}</div>
+                  <div className="text-2xl font-extrabold text-gray-900 dark:text-white">
+                    {t.score ?? t.points ?? "—"}
+                  </div>
                 </div>
               ))}
             </div>
 
             {sel.seriesText && <p className="mt-4 text-xs font-semibold text-gray-600 dark:text-gray-300">{sel.seriesText}</p>}
-
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {sel.recapLink && (
-                <a
-                  href={sel.recapLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-xl bg-gray-900 px-3 py-2 text-center text-xs font-bold text-white hover:bg-gray-800 dark:bg-white/10 dark:hover:bg-white/15"
-                >
-                  Recap / Box
-                </a>
-              )}
-              {sel.highlight && (
-                <a
-                  href={sel.highlight}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-xl bg-indigo-600 px-3 py-2 text-center text-xs font-bold text-white hover:bg-indigo-500"
-                >
-                  Highlights
-                </a>
-              )}
-              {sel.espnLink && (
-                <a
-                  href={sel.espnLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-xl bg-purple-600 px-3 py-2 text-center text-xs font-bold text-white hover:bg-purple-500"
-                >
-                  ESPN ↗
-                </a>
-              )}
-            </div>
 
             <button
               onClick={() => setSel(null)}
