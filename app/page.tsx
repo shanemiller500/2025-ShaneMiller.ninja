@@ -91,7 +91,7 @@ export default function AboutPage() {
 
                       <p>
                         I care about clean UX, straightforward architecture, and seeing things through.
-                        I’m not interested in trends — I focus on building things that work and improving them over time.
+                        I’m not interested in trends, I focus on building things that work and improving them over time.
                       </p>
 
                       <p>
