@@ -76,29 +76,29 @@ export default function AboutPage() {
                       Short Bio
                     </h2>
 
-                    <p>
-                      I’m a full-stack developer with over a decade of experience building,
-                      maintaining, and supporting production web applications. I’ve worked
-                      on large-scale platforms at S&amp;P Global, and today I help keep
-                      mission-critical banking software stable and dependable at Data Center Inc.
-                    </p>
+                      <p>
+                        I’m a full-stack developer with over a decade of experience building,
+                        maintaining, and supporting production web applications. I’ve worked
+                        on large-scale platforms at S&amp;P Global, and today I help keep
+                        mission-critical banking software stable and dependable at Data Center Inc.
+                      </p>
 
-                    <p>
-                      Outside of my day job, I build privacy-first products like ApplyPro
-                      and UMail. I enjoy working on tools that solve real problems, respect
-                      users, and don’t do anything sketchy with their data.
-                    </p>
+                      <p>
+                        Outside of my day job, I spend time building and refining personal projects,
+                        including ApplyPro and UMail. This portfolio has been updated over many years
+                        as my work and interests have evolved.
+                      </p>
 
-                    <p>
-                      I care a lot about clean UX, straightforward architecture, and
-                      finishing what I start. I’m not chasing hype, I just like building
-                      things that work and improving them over time.
-                    </p>
+                      <p>
+                        I care about clean UX, straightforward architecture, and seeing things through.
+                        I’m not interested in trends — I focus on building things that work and improving them over time.
+                      </p>
 
-                    <p>
-                      If you’re looking for someone practical, steady, and easy to work
-                      with, I’m always happy to talk.
-                    </p>
+                      <p>
+                        If you’re looking for someone practical, steady, and easy to work with,
+                        I’m always happy to talk.
+                      </p>
+
 
                     <p className="text-xs text-gray-500 text-center pb-10">
                       See resume{" "}
