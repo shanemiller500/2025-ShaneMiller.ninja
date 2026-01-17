@@ -210,14 +210,14 @@ return (
     }}
   >
     {/* overlay (light + dark) */}
-    <div className="absolute inset-0 bg-white/70 dark:bg-black/45" />
+    <div className="absolute inset-0 bg-white/70 dark:bg-brand-900" />
 
     {!mounted ? (
       <div style={{ minHeight: "100vh" }} />
     ) : (
       <div className="relative z-10">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 border-b border-black/10 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-black/30">
+        <header className="sticky top-0 z-30 border-b border-black/10 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-white/10 rounded-3xl">
           <div className="mx-auto max-w-7xl px-4 py-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-start justify-between gap-3">

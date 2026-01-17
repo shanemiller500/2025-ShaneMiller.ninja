@@ -56,7 +56,7 @@ export default function DashboardTabs() {
         </div>
       </div>
 
-      {/* Tabs card (use CryptoDashboard-style tabs; no dropdown) */}
+      {/* Tabs card */}
       <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
         {/* tab bar */}
         <div className="flex items-center gap-2 p-2 sm:p-3 border-b border-black/10 dark:border-white/10 overflow-x-auto no-scrollbar">

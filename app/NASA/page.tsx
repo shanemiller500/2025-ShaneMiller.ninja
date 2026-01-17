@@ -1,19 +1,11 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import NasaPhotoOfTheDay from "./nasaPhotoOfTheDay";
 import MarsRoverPhotos from "./marsRover";
 import NasaCMEPage from "./NasaCMEPage"; // keep your file name as-is
 import { trackEvent } from "@/utils/mixpanel";
-
-const pillBase =
-  "whitespace-nowrap rounded-full px-3 py-2 text-sm font-extrabold transition " +
-  "border border-black/10 bg-white text-gray-800 hover:bg-black/[0.03] " +
-  "dark:border-white/10 dark:bg-brand-900 dark:text-white/80 dark:hover:bg-white/[0.06]";
-
-const pillActive =
-  "bg-gray-900 text-white border-black/20 hover:bg-gray-900 " +
-  "dark:bg-white/10 dark:text-white dark:border-white/20 dark:hover:bg-white/10";
 
 export default function NasaMediaPage() {
   useEffect(() => {
@@ -37,11 +29,10 @@ export default function NasaMediaPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6">
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 space-y-5">
       {/* Header */}
-      <div className="mb-5">
+      <div>
         <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white sm:text-3xl">
           NASA Media
         </h1>
@@ -50,48 +41,65 @@ export default function NasaMediaPage() {
         </p>
       </div>
 
-      {/* Mobile: select */}
-      <div className="mb-4 sm:hidden">
-        <label htmlFor="nasa-tab" className="sr-only">
-          Choose section
-        </label>
-        <select
-          id="nasa-tab"
-          value={activeTab}
-          onChange={(e) => handleTabClick(parseInt(e.target.value, 10))}
-          className="w-full rounded-2xl border border-black/10 bg-white px-3 py-2 text-sm font-bold text-gray-800 shadow-sm
-                     focus:outline-none focus:ring-2 focus:ring-indigo-500
-                     dark:border-white/10 dark:bg-brand-900 dark:text-white/90"
-        >
-          {tabs.map((t, idx) => (
-            <option key={t.name} value={idx}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Tabs card (mobile + desktop same style) */}
+      <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
+        {/* tab bar */}
+        <div className="flex items-center gap-2 p-2 sm:p-3 border-b border-black/10 dark:border-white/10 overflow-x-auto no-scrollbar">
+          {tabs.map((t, idx) => {
+            const isActive = idx === activeTab;
 
-      {/* Desktop: scroll pills */}
-      <div className="no-scrollbar mb-6 hidden overflow-x-auto sm:flex">
-        <div className="flex gap-2">
-          {tabs.map((tab, index) => (
-            <button
-              key={tab.name}
-              onClick={() => handleTabClick(index)}
-              className={`${pillBase} ${activeTab === index ? pillActive : ""}`}
-              aria-selected={activeTab === index}
-              role="tab"
+            // keep your existing NASA tab colors:
+            // - inactive: white / brand-900 (like pillBase)
+            // - active: gray-900 (like pillActive)
+            return (
+              <button
+                key={t.name}
+                type="button"
+                onClick={() => handleTabClick(idx)}
+                className={[
+                  "relative shrink-0 whitespace-nowrap rounded-full px-3 sm:px-4 py-2 text-sm font-extrabold transition",
+                  "ring-1 ring-black/10 dark:ring-white/10",
+                  isActive
+                    ? "bg-gray-900 text-white border-black/20 hover:bg-gray-900 dark:bg-white/10 dark:text-white dark:border-white/20 dark:hover:bg-white/10"
+                    : "border border-black/10 bg-white text-gray-800 hover:bg-black/[0.03] dark:border-white/10 dark:bg-brand-900 dark:text-white/80 dark:hover:bg-white/[0.06]",
+                ].join(" ")}
+                aria-current={isActive ? "page" : undefined}
+                aria-selected={isActive}
+                role="tab"
+              >
+                {t.name}
+
+                {isActive && (
+                  <motion.span
+                    layoutId="nasaTabsPill"
+                    className="absolute inset-0 -z-10 rounded-full"
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* content */}
+        <div className="p-3 sm:p-4">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.99 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
             >
-              {tab.name}
-            </button>
-          ))}
+              <div className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/10 sm:p-6">
+                {tabs[activeTab].component}
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-brand-900 sm:p-6">
-        {tabs[activeTab].component}
-      </div>
+      <div className="h-2" />
     </div>
   );
 }

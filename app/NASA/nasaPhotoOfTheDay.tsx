@@ -23,7 +23,7 @@ function formatDate(date: Date) {
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/10 sm:p-5">
+    <div className="rounded-3xl border border-black/10 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-brand-900 sm:p-5">
       {children}
     </div>
   );
@@ -279,7 +279,7 @@ export default function NasaPhotoOfTheDay() {
               onClick={() => openGalleryModal(index)}
               className="text-left"
             >
-              <div className="group overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm transition hover:shadow-md dark:border-white/10 dark:bg-white/10">
+              <div className="group overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm transition hover:shadow-md dark:border-white/10 dark:bg-brand-900">
                 <div className="relative">
                   <img
                     src={mediaSrc(item)}

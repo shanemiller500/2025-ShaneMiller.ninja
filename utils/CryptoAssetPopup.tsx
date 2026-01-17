@@ -65,6 +65,7 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
   const [timeframe, setTimeframe] = useState<"1" | "7" | "30">("1");
   const [chartLoading, setChartLoading] = useState(false);
   const [timeframeChange, setTimeframeChange] = useState<number | null>(null);
+  const [change24hStatic, setChange24hStatic] = useState<number | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartRef = useRef<Chart | null>(null);
@@ -74,13 +75,13 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
   const destroyChart = () => {
     try {
       chartRef.current?.destroy();
-    } catch {}
+    } catch { }
     chartRef.current = null;
 
     if (canvasRef.current) {
       try {
         Chart.getChart(canvasRef.current)?.destroy();
-      } catch {}
+      } catch { }
     }
   };
 
@@ -99,6 +100,12 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [onClose]);
+
+      useEffect(() => {
+    if (!asset) return;
+    const v = parseFloat(asset.changePercent24Hr);
+    setChange24hStatic(Number.isFinite(v) ? v : null);
+  }, [asset]);
 
   /* load chart ------------------------------------------------------ */
   useEffect(() => {
@@ -130,21 +137,28 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
         const pts =
           raw.length > 0
             ? raw.map((p: any) => ({
-                x: new Date(p.time),
-                y: parseFloat(p.priceUsd),
-              }))
+              x: new Date(p.time),
+              y: parseFloat(p.priceUsd),
+            }))
             : [
-                { x: new Date(start), y: parseFloat(asset.priceUsd) },
-                { x: new Date(end), y: parseFloat(asset.priceUsd) },
-              ];
+              { x: new Date(start), y: parseFloat(asset.priceUsd) },
+              { x: new Date(end), y: parseFloat(asset.priceUsd) },
+            ];
 
         if (signal.aborted || !canvasRef.current) return;
 
-        // compute timeframe % change
+                // compute timeframe % change
         const first = pts[0]?.y as number;
         const last = pts[pts.length - 1]?.y as number;
-        if (!Number.isNaN(first) && first !== 0) setTimeframeChange(((last - first) / first) * 100);
-        else setTimeframeChange(0);
+
+        const computed =
+          !Number.isNaN(first) && first !== 0 ? ((last - first) / first) * 100 : 0;
+
+        setTimeframeChange(computed);
+
+        // ✅ only update the STATIC 24h value when we're on 1D
+        if (timeframe === "1") setChange24hStatic(computed);
+
 
         // dynamic bounds to reduce chart "flatline" feeling
         const ys = pts.map((p: any) => p.y).filter((v: any) => typeof v === "number" && !Number.isNaN(v));
@@ -263,20 +277,6 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
 
   const changeLabel = timeframe === "1" ? "24h Change" : timeframe === "7" ? "7D Change" : "30D Change";
 
-  const changeValue =
-    timeframeChange != null
-      ? pct(timeframeChange)
-      : timeframe === "1"
-        ? pct(asset.changePercent24Hr)
-        : "—";
-
-  const baseChange =
-    timeframeChange != null
-      ? timeframeChange
-      : parseFloat(asset.changePercent24Hr);
-
-  const changeColor =
-    baseChange >= 0 ? "text-emerald-600" : "text-rose-600";
 
   // explorer helper
   const explorerHost = asset.explorer ? host(asset.explorer) : null;
@@ -290,19 +290,36 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
   const rank = Number(asset.rank ?? 0);
   const rankLabel = Number.isFinite(rank) && rank > 0 ? `Rank #${rank}` : "Rank —";
 
+  // --------- unify change values everywhere ----------
+  const asset24h = parseFloat(asset.changePercent24Hr);
+
+  // Canonical change number for the currently selected timeframe
+  // - 1D: prefer computed timeframeChange (from history), fallback to asset.changePercent24Hr
+  // - 7D/30D: use computed timeframeChange (from history) when available
+  const canonicalChange: number | null =
+    timeframe === "1"
+      ? (timeframeChange ?? (Number.isFinite(asset24h) ? asset24h : null))
+      : (timeframeChange ?? null);
+
+  const changeValue = canonicalChange != null ? pct(canonicalChange) : "—";
+  const baseChange = canonicalChange ?? 0;
+
+  const changeColor = baseChange >= 0 ? "text-emerald-600" : "text-rose-600";
+
   const changePillBg =
     baseChange >= 0
       ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-200"
       : "bg-rose-500/10 text-rose-700 ring-rose-500/20 dark:text-rose-200";
 
+
   const tfButtons =
-      [
-        { tf: "1" as const, label: "1D" },
-        { tf: "7" as const, label: "7D" },
-        { tf: "30" as const, label: "30D" },
-      ] as const;
-    
-  
+    [
+      { tf: "1" as const, label: "1D" },
+      { tf: "7" as const, label: "7D" },
+      { tf: "30" as const, label: "30D" },
+    ] as const;
+
+
 
   return (
     <AnimatePresence>
@@ -549,15 +566,17 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
                   value={asset.vwap24Hr ? compact(asset.vwap24Hr) : "—"}
                 />
                 <Metric
-                  icon={<FaChartLine className="text-indigo-600 dark:text-indigo-300" />}
-                  label="24h Change"
-                  value={pct(asset.changePercent24Hr)}
-                  color={
-                    parseFloat(asset.changePercent24Hr) >= 0
-                      ? "text-emerald-600"
-                      : "text-rose-600"
-                  }
-                />
+  icon={<FaChartLine className="text-indigo-600 dark:text-indigo-300" />}
+  label="24h Change"
+  value={change24hStatic != null ? pct(change24hStatic) : pct(asset.changePercent24Hr)}
+  color={
+    (change24hStatic != null ? change24hStatic : parseFloat(asset.changePercent24Hr)) >= 0
+      ? "text-emerald-600"
+      : "text-rose-600"
+  }
+/>
+
+
               </div>
 
               {/* Explorer */}
