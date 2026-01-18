@@ -43,7 +43,7 @@ export default function AboutPage() {
                 {/* Image slider — bigger, no crop */}
                 <div className="relative overflow-hidden rounded-2xl border border-gray-200/70 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900">
                   {/* Taller frame so images feel substantial */}
-                  <div className="relative w-full aspect-[3/2] bg-gray-50 dark:bg-brand-900">
+                  <div className="relative w-full aspect-[1/1] bg-gray-50 dark:bg-brand-900">
                     <div
                       className="absolute inset-0 flex transition-transform duration-1000 ease-in-out"
                       style={{ transform: `translateX(-${currentImage * 100}%)` }}
