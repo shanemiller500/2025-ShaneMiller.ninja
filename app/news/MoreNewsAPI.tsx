@@ -4,7 +4,7 @@ export interface Article {
   source: {
     id: string | null;
     name: string;
-    image?: string | null;
+    imageCandidates?: string[]; // ✅ match NewsTab
   };
   author: string | null;
   title: string;
@@ -40,12 +40,15 @@ export async function fetchUmailArticles(): Promise<Article[]> {
     const url = String(item.link || "");
     const domain = safeDomain(url);
 
+    const candidatesFromApi: string[] = Array.isArray(item.sourceImageCandidates)
+      ? item.sourceImageCandidates
+      : [];
+
     return {
       source: {
         id: null,
         name: item.source || domain || "U-Mail",
-        // ✅ prefer backend favicon, else Google favicon, else null
-        image: item.sourceImage ?? favicon(domain),
+        imageCandidates: candidatesFromApi.length ? candidatesFromApi : (favicon(domain) ? [favicon(domain)!] : []),
       },
       author: item.author ?? null,
       title: item.headline ?? "",

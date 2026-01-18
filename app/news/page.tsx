@@ -144,7 +144,7 @@ export default function Page() {
       </div>
 
       {/* Layout: content + sidebar */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-1 gap-1 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Main */}
         <main className="min-w-0">
           <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
