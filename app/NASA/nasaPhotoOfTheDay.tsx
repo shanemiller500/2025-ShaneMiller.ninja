@@ -213,10 +213,6 @@ export default function NasaPhotoOfTheDay() {
                   {todayData.date}
                 </div>
               </div>
-
-              <div className="rounded-2xl border border-black/10 bg-black/[0.03] px-3 py-1 text-xs font-extrabold text-gray-800 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80">
-                {todayData.media_type === "video" ? "Video" : "Image"}
-              </div>
             </div>
 
             {todayData.media_type === "video" ? (

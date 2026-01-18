@@ -96,7 +96,7 @@ export default function DashboardTabs() {
         </div>
 
         {/* content */}
-        <div className="p-3 sm:p-4">
+        <div className="p-1 sm:p-2">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={activeTab}

@@ -251,7 +251,7 @@ export default function StockQuoteSection() {
 
   /* ────────────────────────────── Render ────────────────────────────── */
   return (
-    <section className="space-y-6">
+    <section className="space-y-3">
       <ToastContainer
         position="top-right"
         autoClose={4000}
@@ -262,7 +262,7 @@ export default function StockQuoteSection() {
       />
 
       {/* Header card */}
-      <div className="relative overflow-visible rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-5 shadow-sm">
+      <div className="relative overflow-visible rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
         {/* soft blobs */}
         <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
           <div className="absolute -top-16 -left-20 h-60 w-60 rounded-full bg-indigo-400/20 blur-3xl" />
@@ -393,7 +393,7 @@ export default function StockQuoteSection() {
 
       {/* Default widgets (only when not showing modal) */}
       {!loading && (!showModal || !stockData) && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-1 md:grid-cols-2">
           <MarketWidgets onSelectTicker={handleSearch} />
           <NewsWidget />
         </div>

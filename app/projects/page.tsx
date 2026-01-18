@@ -123,14 +123,14 @@ export default function Projects() {
   //   badge: "SpaceX-API",
   // },
 
-  {
-    id: 12,
-    icon: Icon11,
-    slug: "/Weather",
-    title: "Local Weather",
-    excerpt: "Hourly charts, 7-day forecasts, and weather details.",
-    badge: "Weather API",
-  },
+  // {
+  //   id: 12,
+  //   icon: Icon11,
+  //   slug: "/Weather",
+  //   title: "Local Weather",
+  //   excerpt: "Hourly charts, 7-day forecasts, and weather details.",
+  //   badge: "Weather API",
+  // },
   // {
   //   id: 3,
   //   icon: Icon06,

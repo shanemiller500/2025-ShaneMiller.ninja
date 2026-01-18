@@ -157,7 +157,7 @@ export default function Page() {
         {/* Sidebar */}
         <aside className="min-w-0 space-y-4">
           {/* On mobile, show "quick widgets" first in a 2-col grid so it's not a tall brick */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-1">
             <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
               <div className="p-3 sm:p-4">
                 <WidgetNews />

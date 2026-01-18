@@ -380,16 +380,16 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {/* top row: status + fear/greed */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-1 md:grid-cols-2">
         <StatBanner />
         <FearGreedWidget index={fearGreedIndex} />
       </div>
 
       {/* overall perf */}
       {topTen.length > 0 ? (
-        <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] px-4 py-3 shadow-sm">
+        <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] px-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-sm font-extrabold text-gray-900 dark:text-white">Today’s Market</div>
