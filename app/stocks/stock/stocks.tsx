@@ -52,12 +52,18 @@ export default function DashboardTabs() {
             <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
               Market Dashboard
             </h1>
+            <p className="mt-2 max-w-2xl text-sm sm:text-base text-gray-600 dark:text-white/70">
+              A market dashboard for tracking stocks, earnings, and market activity in real time.
+              Stock data is pulled from the Finnhub API, with multiple API keys used to separate
+              concerns like quotes, earnings, and news while keeping updates fast and reliable.
+            </p>
           </div>
         </div>
+        
       </div>
 
       {/* Tabs card */}
-      <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
+      <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900 shadow-sm overflow-hidden">
         {/* tab bar */}
         <div className="flex items-center gap-2 p-2 sm:p-3 border-b border-black/10 dark:border-white/10 overflow-x-auto no-scrollbar">
           {TABS.map((t) => {
@@ -68,11 +74,11 @@ export default function DashboardTabs() {
                 type="button"
                 onClick={() => handleTabClick(t.key)}
                 className={[
-                  "relative shrink-0 rounded-2xl px-4 sm:px-5 py-2 sm:py-2.5 text-sm sm:text-base font-extrabold transition",
+                     "relative shrink-0 whitespace-nowrap rounded-full px-3 sm:px-4 py-2 text-sm font-extrabold transition",
                   "ring-1 ring-black/10 dark:ring-white/10",
                   isActive
-                    ? "text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-sm"
-                    : "text-gray-900 dark:text-white bg-black/[0.03] dark:bg-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.10]",
+                    ? "bg-gray-900 text-white border-black/20 hover:bg-gray-900 dark:bg-white/10 dark:text-white dark:border-white/20 dark:hover:bg-white/10"
+                    : "border border-black/10 bg-white text-gray-800 hover:bg-black/[0.03] dark:border-white/10 dark:bg-brand-900 dark:text-white/80 dark:hover:bg-white/[0.06]",
                 ].join(" ")}
                 aria-current={isActive ? "page" : undefined}
               >

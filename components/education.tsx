@@ -12,7 +12,7 @@ export default function Education() {
         {/* Item - IHS Markit / Dev-U */}
         <li className="relative group">
           <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
-            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-indigo-50  rounded-full">
+            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-slate-200 rounded-full">
               <Image src={EducationIcon01} width={50} height={49} alt="IHS Markit / Dev-U" />
             </div>
             <div className="pl-20 space-y-1">
@@ -35,7 +35,7 @@ export default function Education() {
         {/* Item - General Assembly */}
         <li className="relative group">
           <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
-            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-indigo-50  rounded-full">
+            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-slate-200 rounded-full">
               <Image src={EducationIcon02} width={50} height={26} alt="General Assembly" />
             </div>
             <div className="pl-20 space-y-1">

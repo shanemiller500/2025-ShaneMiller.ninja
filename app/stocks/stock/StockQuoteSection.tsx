@@ -274,13 +274,7 @@ export default function StockQuoteSection() {
             <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
               Stock Quote
             </h2>
-            <p className="mt-1 text-sm font-semibold text-gray-700 dark:text-white/70">
-              Search a ticker to open the full quote + news modal.
-            </p>
-          </div>
-
-          <div className="text-xs font-semibold text-gray-600 dark:text-white/60">
-            Data may be delayed.
+         
           </div>
         </div>
 

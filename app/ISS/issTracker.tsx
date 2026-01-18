@@ -377,21 +377,15 @@ const ISSTracker: React.FC = () => {
       {/* Header / hero */}
       <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-brand-900/60 backdrop-blur shadow-sm overflow-hidden">
         <div className="p-4 sm:p-5 flex items-center gap-3">
-          <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-black/[0.03] dark:bg-white/[0.06] flex items-center justify-center overflow-hidden ring-1 ring-black/5 dark:ring-white/10">
-            <img
-              src={ISS_LOGO}
-              onError={(e) => (((e.target as HTMLImageElement).src = NASA_FALLBACK), void 0)}
-              alt="ISS"
-              className="h-full w-full object-contain p-2"
-            />
-          </div>
 
           <div className="min-w-0">
             <h1 className="text-lg sm:text-2xl font-extrabold tracking-tight text-brand-900 dark:text-white">
               International Space Station
             </h1>
             <p className="text-xs sm:text-sm text-brand-900/70 dark:text-white/70">
-              Live position, day/night, trail, and crew.
+              A live view of the International Space Station using real-time position and crew data
+              from public ISS tracking APIs. It shows orbit path, day/night coverage, and current
+              crew status in a simple, readable way.
             </p>
           </div>
         </div>

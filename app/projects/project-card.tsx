@@ -40,7 +40,7 @@ export default function ProjectCard({ item, onClick }: ItemProps) {
         {/* Top row */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ring-black/10 dark:ring-white/10 bg-white dark:bg-brand-900">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ring-black/10 dark:ring-white/10 bg-slate-100">
               <Image
                 src={item.icon}
                 width={28}

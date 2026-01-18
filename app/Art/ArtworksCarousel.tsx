@@ -228,17 +228,7 @@ export default function ArtworksCarousel() {
         {imgState !== "ready" ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="rounded-3xl bg-white/75 dark:bg-neutral-900/60 backdrop-blur px-4 py-3 border border-black/10 dark:border-white/10 shadow">
-              {imgState === "loading" ? (
-                <div className="flex items-center gap-2 text-sm font-extrabold text-neutral-800 dark:text-neutral-100">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading image…
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-sm font-extrabold text-neutral-800 dark:text-neutral-100">
-                  <ImageOff className="h-4 w-4" />
-                  Image failed to load
-                </div>
-              )}
+
             </div>
           </div>
         ) : null}

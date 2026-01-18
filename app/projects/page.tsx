@@ -131,14 +131,14 @@ export default function Projects() {
     excerpt: "Hourly charts, 7-day forecasts, and weather details.",
     badge: "Weather API",
   },
-  {
-    id: 3,
-    icon: Icon06,
-    slug: "/Bored",
-    title: "Bored?",
-    excerpt: "Quick ideas and activities using free APIs.",
-    badge: "Free APIs",
-  },
+  // {
+  //   id: 3,
+  //   icon: Icon06,
+  //   slug: "/Bored",
+  //   title: "Bored?",
+  //   excerpt: "Quick ideas and activities using free APIs.",
+  //   badge: "Free APIs",
+  // },
   {
     id: 14,
     icon: Icon5,

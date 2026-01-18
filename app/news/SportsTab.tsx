@@ -316,11 +316,11 @@ export default function SportsTab() {
                 type="button"
                 onClick={() => setTab(c.key)}
                 className={[
-                  "relative shrink-0 rounded-2xl px-4 sm:px-5 py-2 sm:py-2.5 text-sm sm:text-base font-extrabold transition",
+                     "relative shrink-0 whitespace-nowrap rounded-full px-3 sm:px-4 py-2 text-sm font-extrabold transition",
                   "ring-1 ring-black/10 dark:ring-white/10",
                   isActive
-                    ? "text-white bg-gradient-to-r from-indigo-600 to-purple-600 shadow-sm"
-                    : "text-gray-900 dark:text-white bg-black/[0.03] dark:bg-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.10]",
+                    ? "bg-gray-900 text-white border-black/20 hover:bg-gray-900 dark:bg-white/10 dark:text-white dark:border-white/20 dark:hover:bg-white/10"
+                    : "border border-black/10 bg-white text-gray-800 hover:bg-black/[0.03] dark:border-white/10 dark:bg-brand-900 dark:text-white/80 dark:hover:bg-white/[0.06]",
                 ].join(" ")}
                 aria-current={isActive ? "page" : undefined}
               >
