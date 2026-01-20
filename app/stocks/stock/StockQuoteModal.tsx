@@ -354,7 +354,7 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
                         <img
                           src={profile.logo}
                           alt=""
-                          className="relative h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-white/80 dark:bg-white/5 object-contain p-2 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm"
+                          className="relative h-15 w-40 sm:h-16 sm:w-16 rounded-2xl bg-white/80 dark:bg-white/5 object-contain p-2 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm"
                           onError={(e) => (e.currentTarget.style.display = "none")}
                         />
                       </div>
@@ -424,7 +424,7 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
                   </div>
 
                   <div className="mt-3">
-                    <div className="inline-flex w-full sm:w-auto rounded-2xl gap-2 p-1 bg-black/[0.03] dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10">
+                    <div className="inline-flex sm:w-auto rounded-2xl gap-1  ring-black/10 dark:ring-white/10">
                       <SegButton active={tab === "overview"} label="Overview" icon={<FaChartLine />} onClick={() => setTab("overview")} />
                       <SegButton active={tab === "metrics"} label="Metrics" icon={<FaExchangeAlt />} onClick={() => setTab("metrics")} />
                       <SegButton active={tab === "news"} label="News" icon={<FaNewspaper />} onClick={() => setTab("news")} />
