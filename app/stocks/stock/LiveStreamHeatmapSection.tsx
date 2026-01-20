@@ -94,7 +94,7 @@ const BETWEEN_ITEM_DELAY_MS = 220;
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
 const LOGO_FALLBACK =
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="100%" height="100%" fill="%23EEF2FF"/><text x="50%" y="54%" font-family="Arial" font-size="16" text-anchor="middle" fill="%234C1D95">STK</text></svg>';
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="100%" height="100%" fill="%23EEF2FF"/><text x="50%" y="54%" font-family="Arial" font-size="7" text-anchor="middle" fill="%234C1D95">Logo Loading...</text></svg>';
 
 const usd = (n: number | null | undefined) =>
   typeof n === "number" && Number.isFinite(n) ? `$${n.toFixed(2)}` : "—";

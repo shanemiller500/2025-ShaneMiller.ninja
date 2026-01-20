@@ -26,7 +26,7 @@ interface TradeInfo {
 /* Constants -------------------------------------------------------- */
 const PROXY_BASE = "https://u-mail.co/api/finnhubProxy";
 const WS_RECONNECT_DELAY = 2500;
-const LOGO_FALLBACK = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="100%" height="100%" fill="%23EEF2FF"/><text x="50%" y="54%" font-family="Arial" font-size="16" text-anchor="middle" fill="%234C1D95">STK</text></svg>';
+const LOGO_FALLBACK = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="100%" height="100%" fill="%23EEF2FF"/><text x="50%" y="54%" font-family="Arial" font-size="7" text-anchor="middle" fill="%234C1D95">Logo Loading...</text></svg>';
 
 /* Utilities -------------------------------------------------------- */
 const fmt = {
