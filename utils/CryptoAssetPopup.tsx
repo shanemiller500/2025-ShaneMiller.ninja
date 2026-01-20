@@ -1,6 +1,8 @@
+// CryptoAssetPopup.tsx
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { useEffect, useRef, useState, JSX } from "react";
+import React, { useEffect, useMemo, useRef, useState, JSX } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Chart } from "chart.js/auto";
 import "chartjs-adapter-date-fns";
@@ -13,6 +15,7 @@ import {
   FaWarehouse,
   FaGlobeAmericas,
   FaLink,
+  FaTimes,
 } from "react-icons/fa";
 
 /* helpers ----------------------------------------------------------- */
@@ -107,6 +110,80 @@ type CoinGeckoMarket = {
 
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 
+/* small UI bits (match StockQuoteModal feel) ------------------------ */
+function SegButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "relative flex-1 rounded-xl px-4 py-2 text-xs font-extrabold transition",
+        "ring-1 ring-black/10 dark:ring-white/10",
+        active
+          ? "bg-indigo-600/15 text-indigo-800 dark:text-indigo-200"
+          : "bg-white/60 dark:bg-white/[0.06] text-gray-700 dark:text-white/70 hover:text-gray-900 dark:hover:text-white"
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  sub,
+  icon,
+  accent = "indigo",
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  icon?: React.ReactNode;
+  accent?: "indigo" | "emerald" | "rose";
+}) {
+  const accentCls =
+    accent === "emerald"
+      ? "from-emerald-500/10 to-sky-500/10"
+      : accent === "rose"
+      ? "from-rose-500/10 to-fuchsia-500/10"
+      : "from-indigo-500/10 to-fuchsia-500/10";
+
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md">
+      <div className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100">
+        <div className={cn("absolute -top-10 -left-10 h-28 w-28 rounded-full blur-2xl bg-gradient-to-br", accentCls)} />
+        <div className="absolute -bottom-12 -right-12 h-32 w-32 rounded-full bg-sky-500/10 blur-2xl" />
+      </div>
+
+      <div className="relative">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[11px] font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60">
+            {label}
+          </div>
+          {icon ? (
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-black/[0.03] dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10">
+              {icon}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="mt-1 text-sm sm:text-base font-extrabold text-gray-900 dark:text-white">{value}</div>
+        {sub ? <div className="mt-1 text-[11px] font-semibold text-gray-500 dark:text-white/50">{sub}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: Props) {
   const [timeframe, setTimeframe] = useState<"1" | "7" | "30">("1");
   const [chartLoading, setChartLoading] = useState(false);
@@ -118,6 +195,9 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
   const [cg, setCg] = useState<CoinGeckoMarket | null>(null);
 
   const [changeTab, setChangeTab] = useState<"price" | "mcap">("price");
+
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartRef = useRef<Chart | null>(null);
@@ -137,30 +217,36 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
     }
   };
 
-  /* modal behavior */
+  /* modal behavior -------------------------------------------------- */
   useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  /* stable 24h */
+  useEffect(() => {
+    // lock background scroll (mobile friendly)
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
+
+  const onOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === overlayRef.current) onClose();
+  };
+
+  /* stable 24h (from asset) ---------------------------------------- */
   useEffect(() => {
     if (!asset) return;
     const v = parseFloat(asset.changePercent24Hr);
     setChange24hStatic(Number.isFinite(v) ? v : null);
   }, [asset]);
 
-  /* extra market data */
+  /* extra market data (CoinGecko) ---------------------------------- */
   useEffect(() => {
     if (!asset) return;
 
@@ -201,7 +287,7 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
     return () => ctrl.abort();
   }, [asset]);
 
-  /* chart data */
+  /* chart data (CoinCap) ------------------------------------------- */
   useEffect(() => {
     if (!asset) return;
 
@@ -276,7 +362,7 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
               tooltip: {
                 displayColors: false,
                 padding: 10,
-                callbacks: { label: (ctx) => ` ${usd(ctx.parsed.y)}` },
+                callbacks: { label: (c) => ` ${usd(c.parsed.y)}` },
               },
             },
             scales: {
@@ -309,18 +395,23 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asset, timeframe]);
 
+  // scroll modal body to top on timeframe / asset changes (mobile feel)
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [timeframe, asset?.id]);
+
+  /* derived values --------------------------------------------------- */
   const logo = asset ? logos[asset.symbol?.toLowerCase()] ?? null : null;
 
-const priceNum =
-  tradeInfo?.price != null
-    ? tradeInfo.price
-    : parseFloat(String(asset?.priceUsd ?? "0"));
+  const priceNum =
+    tradeInfo?.price != null ? tradeInfo.price : parseFloat(String(asset?.priceUsd ?? "0"));
   const prevNum = tradeInfo?.prev ?? priceNum;
-  const priceColor = priceNum >= prevNum ? "text-emerald-600" : "text-rose-600";
+
+  const priceIsUp = priceNum >= prevNum;
 
   const changeLabel = timeframe === "1" ? "24h Change" : timeframe === "7" ? "7D Change" : "30D Change";
 
-const asset24h = parseFloat(String(asset?.changePercent24Hr ?? "0"));
+  const asset24h = parseFloat(String(asset?.changePercent24Hr ?? "0"));
   const canonicalChange: number | null =
     timeframe === "1"
       ? timeframeChange ?? (Number.isFinite(asset24h) ? asset24h : null)
@@ -328,12 +419,7 @@ const asset24h = parseFloat(String(asset?.changePercent24Hr ?? "0"));
 
   const changeValue = canonicalChange != null ? pct(canonicalChange) : "—";
   const baseChange = canonicalChange ?? 0;
-  const changeColor = baseChange >= 0 ? "text-emerald-600" : "text-rose-600";
-
-  const changePillBg =
-    baseChange >= 0
-      ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-200"
-      : "bg-rose-500/10 text-rose-700 ring-rose-500/20 dark:text-rose-200";
+  const changeIsUp = baseChange >= 0;
 
   const explorerHost = asset?.explorer ? host(asset.explorer) : null;
   const explorerHref =
@@ -370,122 +456,71 @@ const asset24h = parseFloat(String(asset?.changePercent24Hr ?? "0"));
 
   const lastUpdated = cg?.last_updated ? new Date(cg.last_updated) : null;
 
-  const snapIsUp = (canonicalChange ?? 0) >= 0;
-  const snapArrow = snapIsUp ? "▲" : "▼";
+  const snapArrow = changeIsUp ? "▲" : "▼";
   const snapPrice = usd(priceNum);
   const snapChange = canonicalChange != null ? `${snapArrow} ${pct(canonicalChange)}` : "—";
   const snapHigh = cgHigh != null ? usd(cgHigh) : "—";
   const snapLow = cgLow != null ? usd(cgLow) : "—";
 
-  const Metric = ({
-    icon,
-    label,
-    value,
-    color = "text-gray-900 dark:text-white",
-    sub,
-  }: {
-    icon: JSX.Element;
-    label: string;
-    value: string;
-    color?: string;
-    sub?: string;
-  }) => (
-    <div className="rounded-2xl p-3 border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
-      <div className="flex items-center gap-2">
-        <span className="shrink-0">{icon}</span>
-        <span className="text-[11px] sm:text-xs font-bold text-gray-500 dark:text-white/60">{label}</span>
-      </div>
-      <div className={cn("mt-1 text-sm sm:text-base font-extrabold", color)}>{value}</div>
-      {sub ? <div className="mt-0.5 text-[11px] font-bold text-gray-500 dark:text-white/60">{sub}</div> : null}
-    </div>
-  );
-
-  const changeTabs = [
-    { key: "price" as const, label: "Price 24h" },
-    { key: "mcap" as const, label: "MCap 24h" },
-  ] as const;
-
-  const changeTabActiveStyle = "bg-indigo-600 text-white border-indigo-600";
-  const changeTabInactiveStyle =
-    "bg-black/[0.03] dark:bg-white/[0.06] text-gray-900 dark:text-white border-black/10 dark:border-white/10 hover:bg-black/[0.06] dark:hover:bg-white/[0.10]";
+  const sourceLabel = cgLoading ? "Loading…" : cgError ? "Limited data" : cg ? "CoinGecko" : "CoinCap";
+  const sourceTime = lastUpdated ? ` • ${lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
 
   const ChangePanel = () => {
     const isPrice = changeTab === "price";
-
     const title = isPrice ? "24h Price Change" : "24h Market Cap Change";
-const mainValue = isPrice
-  ? cgPriceChange24 != null
-    ? (
-        <span
-          className={
-            cgPriceChange24 >= 0
-              ? "text-emerald-600 dark:text-emerald-300"
-              : "text-rose-600 dark:text-rose-300"
-          }
-        >
-          {usd(cgPriceChange24)}
-        </span>
-      )
-    : "—"
-  : cgMktCapChange24 != null
-  ? (
-      <span
-        className={
-          cgMktCapChange24 >= 0
-            ? "text-emerald-600 dark:text-emerald-300"
-            : "text-rose-600 dark:text-rose-300"
-        }
-      >
-        {compact(cgMktCapChange24)}
-      </span>
-    )
-  : "—";
 
+    const mainValue = isPrice
+      ? cgPriceChange24 != null
+        ? (
+            <span
+              className={
+                cgPriceChange24 >= 0 ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"
+              }
+            >
+              {usd(cgPriceChange24)}
+            </span>
+          )
+        : "—"
+      : cgMktCapChange24 != null
+      ? (
+          <span
+            className={
+              cgMktCapChange24 >= 0 ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"
+            }
+          >
+            {compact(cgMktCapChange24)}
+          </span>
+        )
+      : "—";
 
     const mainPct = isPrice ? cgPriceChangePct24 : cgMktCapChangePct24;
-    const color = (mainPct ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300";
-    const arrow = (mainPct ?? 0) >= 0 ? "▲" : "▼";
+    const pctUp = (mainPct ?? 0) >= 0;
+    const color = pctUp ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300";
+    const arrow = pctUp ? "▲" : "▼";
 
     return (
-      <div className="mt-4 rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
-        <div className="px-4 pt-3 pb-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60">
-              Change
-            </div>
-            <div className="text-[11px] font-extrabold text-gray-500 dark:text-white/60">
-              {cgLoading ? "Loading…" : cgError ? "Limited data" : cg ? "CoinGecko" : "CoinCap"}
-              {lastUpdated ? ` • ${lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}
-            </div>
+      <div className="mt-5 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[11px] font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60">
+            Change
           </div>
-
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {changeTabs.map((t) => {
-              const active = changeTab === t.key;
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setChangeTab(t.key)}
-                  aria-pressed={active}
-                  className={cn(
-                    "rounded-2xl px-3 py-2 text-xs font-extrabold border transition shadow-sm",
-                    active ? changeTabActiveStyle : changeTabInactiveStyle
-                  )}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
+          <div className="text-[11px] font-extrabold text-gray-500 dark:text-white/60">
+            {sourceLabel}
+            {sourceTime}
           </div>
+        </div>
 
-          <div className="mt-3">
-            <div className="text-[11px] font-bold text-gray-500 dark:text-white/60">{title}</div>
-            <div className="mt-1 flex items-baseline justify-between gap-3">
-              <div className="text-lg sm:text-xl font-extrabold text-gray-900 dark:text-white">{mainValue}</div>
-              <div className={cn("text-sm sm:text-base font-extrabold", color)}>
-                {mainPct != null ? `${arrow} ${pct(mainPct)}` : "—"}
-              </div>
+        <div className="mt-3 inline-flex w-full rounded-2xl gap-2 p-1 bg-black/[0.03] dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10">
+          <SegButton active={changeTab === "price"} label="Price 24h" onClick={() => setChangeTab("price")} />
+          <SegButton active={changeTab === "mcap"} label="MCap 24h" onClick={() => setChangeTab("mcap")} />
+        </div>
+
+        <div className="mt-4">
+          <div className="text-[11px] font-bold text-gray-500 dark:text-white/60">{title}</div>
+          <div className="mt-1 flex items-baseline justify-between gap-3">
+            <div className="text-lg sm:text-xl font-extrabold text-gray-900 dark:text-white">{mainValue}</div>
+            <div className={cn("text-sm sm:text-base font-extrabold", color)}>
+              {mainPct != null ? `${arrow} ${pct(mainPct)}` : "—"}
             </div>
           </div>
         </div>
@@ -493,383 +528,383 @@ const mainValue = isPrice
     );
   };
 
-  const ExtremesHeader = () => (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2 min-w-0">
-        <div className="shrink-0">
-          {logo ? (
-            <span className="inline-flex items-center justify-center rounded-2xl p-2 bg-white/70 dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10 shadow-sm">
-              <img src={logo} alt={asset.symbol} className="h-7 w-7 object-contain" />
-            </span>
-          ) : (
-            <span className="h-10 w-10 rounded-2xl bg-black/5 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/10" />
-          )}
-        </div>
-
-        <div className="min-w-0">
-
-          <div className="truncate text-xs font-extrabold text-gray-900 dark:text-white/80">
-            {asset.name} • {asset.symbol?.toUpperCase?.()}
-          </div>
-        </div>
-      </div>
-
-      {explorerHost && explorerHref ? (
-        <a
-          href={explorerHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={cn(
-            "shrink-0 inline-flex items-center gap-2",
-            "rounded-2xl px-3 py-2",
-            "border border-black/10 dark:border-white/10",
-            "bg-white/70 dark:bg-white/[0.06]",
-            "text-[11px] font-extrabold",
-            "text-gray-900 dark:text-white",
-            "shadow-sm hover:bg-white dark:hover:bg-white/[0.10] transition"
-          )}
-        >
-          <FaLink className="text-indigo-600 dark:text-indigo-300" />
-          Explorer
-          <span className="hidden sm:inline text-gray-500 dark:text-white/60">({explorerHost})</span>
-        </a>
-      ) : null}
-    </div>
-  );
-
   if (!asset) return null;
 
+  /* render ----------------------------------------------------------- */
   return (
     <AnimatePresence>
       <motion.div
-        key="popup-bg"
-        className="fixed inset-0 z-50 overflow-y-auto"
+        key="crypto-overlay"
+        ref={overlayRef as any}
+        onMouseDown={onOverlayClick}
+        className="fixed inset-0 z-50 bg-black/60 dark:bg-black/70 backdrop-blur-sm"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
+        aria-modal="true"
+        role="dialog"
       >
-        <motion.div className="absolute inset-0 bg-black/60" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
-
-        <div
-          className="relative min-h-[100svh] w-full px-3 py-3 sm:px-6 sm:py-8 flex items-center justify-center"
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
+        {/* full-height shell like stock modal */}
+        <div className="h-[100dvh] w-full flex items-end sm:items-center justify-center">
           <motion.div
-            key="popup-card"
-            className={cn(
-              "relative w-full max-w-xl",
-              "rounded-3xl",
-              "bg-white dark:bg-brand-900",
-              "border border-black/10 dark:border-white/10",
-              "shadow-2xl overflow-hidden",
-              "flex flex-col min-h-0",
-              "max-h-[calc(100svh-24px)] sm:max-h-[85svh]"
-            )}
-            initial={{ y: 24, opacity: 0, scale: 0.98 }}
+            key="crypto-card"
+            initial={{ y: 24, opacity: 0, scale: 0.985 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 24, opacity: 0, scale: 0.98 }}
+            exit={{ y: 24, opacity: 0, scale: 0.985 }}
             transition={{ type: "spring", stiffness: 360, damping: 32 }}
-            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            className={cn(
+              "relative w-full sm:max-w-5xl",
+              "h-[100dvh] sm:h-auto sm:max-h-[88vh]",
+              "flex flex-col",
+              "bg-white dark:bg-brand-900",
+              "border border-gray-200/70 dark:border-white/10",
+              "shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] dark:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.75)]",
+              "rounded-t-2xl sm:rounded-2xl overflow-hidden"
+            )}
           >
-            <div className="relative">
-              <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
-                <div className="absolute -top-16 -left-20 h-64 w-64 rounded-full bg-indigo-400/20 blur-3xl" />
-                <div className="absolute -bottom-20 -right-16 h-72 w-72 rounded-full bg-sky-400/10 blur-3xl" />
-              </div>
+            {/* ambient blobs */}
+            <div className="pointer-events-none absolute inset-0 opacity-[0.55] dark:opacity-[0.45]">
+              <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-indigo-400/20 blur-3xl" />
+              <div className="absolute -bottom-28 -right-28 h-72 w-72 rounded-full bg-fuchsia-400/20 blur-3xl" />
+              <div className="absolute top-20 right-10 h-56 w-56 rounded-full bg-sky-400/15 blur-3xl" />
+            </div>
 
-              <div className="relative sticky top-0 z-20 bg-white/85 dark:bg-brand-900/85 backdrop-blur border-b border-black/10 dark:border-white/10">
-                <div className="px-4 py-3 sm:px-6 sm:py-4 flex items-start gap-3">
-                  <div className="shrink-0">
-                    {logo ? (
-                      <span className="inline-flex items-center justify-center rounded-2xl p-2 bg-white/70 dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10 shadow-sm">
-                        <img src={logo} alt={asset.symbol} className="h-9 w-9 sm:h-10 sm:w-10 object-contain" />
-                      </span>
-                    ) : (
-                      <span className="h-11 w-11 rounded-2xl bg-black/5 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/10" />
-                    )}
-                  </div>
-
+            {/* sticky header */}
+            <div className="relative z-20 sticky top-0 border-b border-gray-200/70 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-brand-900/85">
+              <div className="px-4 sm:px-6 py-3 sm:py-4">
+                <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <h3 className="truncate text-lg sm:text-2xl font-extrabold text-gray-900 dark:text-white">
-                        {asset.name}
-                      </h3>
-                      <span className="shrink-0 rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-[11px] font-extrabold text-gray-700 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/10">
-                        {asset.symbol?.toUpperCase?.() ?? ""}
-                      </span>
+                    <div className="flex items-center gap-3">
+                      {logo ? (
+                        <div className="relative shrink-0">
+                          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 blur-md" />
+                          <img
+                            src={logo}
+                            alt={asset.symbol}
+                            className="relative h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-white/80 dark:bg-white/5 object-contain p-2 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm"
+                            onError={(e) => (e.currentTarget.style.display = "none")}
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm" />
+                      )}
+
+                      <div className="min-w-0">
+                        <h3 className="text-base sm:text-lg font-extrabold tracking-tight truncate text-gray-900 dark:text-white">
+                          {asset.name}
+                          <span className="ml-2 text-gray-500 dark:text-white/60 font-bold">
+                            ({asset.symbol?.toUpperCase?.() ?? ""})
+                          </span>
+                        </h3>
+
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-white/60">
+                          <span className="inline-flex items-center gap-2 rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">
+                            {rankLabel}
+                          </span>
+
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2.5 py-1 font-semibold ring-1",
+                              changeIsUp
+                                ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/20"
+                                : "bg-rose-500/10 text-rose-700 ring-rose-500/20 dark:bg-rose-400/10 dark:text-rose-200 dark:ring-rose-300/20"
+                            )}
+                            title={changeLabel}
+                          >
+                            {changeLabel}: {changeValue}
+                          </span>
+
+                          {cgMktCapRank ? (
+                            <span className="rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">
+                              Market Rank #{cgMktCapRank}
+                            </span>
+                          ) : null}
+
+                          {explorerHost && explorerHref ? (
+                            <a
+                              href={explorerHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10 hover:opacity-90 transition"
+                            >
+                              <FaLink className="opacity-75" />
+                              <span className="hidden sm:inline">Explorer</span>
+                              <span className="hidden sm:inline opacity-70">({explorerHost})</span>
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-bold text-gray-600 dark:text-white/60">{rankLabel}</span>
+                    {/* price row + timeframe seg */}
+                    <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+                      <div className="flex items-end gap-3 min-w-0">
+                        <div className="inline-flex items-center gap-2">
+                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-indigo-600/10 ring-1 ring-black/10 dark:bg-indigo-400/10 dark:ring-white/10">
+                            <FaDollarSign className="text-indigo-600 dark:text-indigo-300" />
+                          </span>
+                          <div
+                            className={cn(
+                              "text-3xl sm:text-4xl font-black tracking-tight truncate",
+                              "text-gray-900 dark:text-white"
+                            )}
+                            title={usd(priceNum)}
+                          >
+                            {usd(priceNum)}
+                          </div>
+                        </div>
 
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-extrabold ring-1",
-                          changePillBg
-                        )}
-                        title={changeLabel}
-                      >
-                        {changeLabel}: {changeValue}
-                      </span>
+                        <div
+                          className={cn(
+                            "flex items-center gap-2 text-sm font-extrabold",
+                            priceIsUp ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"
+                          )}
+                        >
+                          <span>{priceIsUp ? "▲" : "▼"}</span>
+                          <span className="text-gray-500 dark:text-white/60 font-bold">{changeValue}</span>
+                        </div>
+                      </div>
 
-                      {cgMktCapRank ? (
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-extrabold bg-black/5 dark:bg-white/10 text-gray-700 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/10">
-                          Market Rank #{cgMktCapRank}
-                        </span>
-                      ) : null}
+                      <div className="inline-flex w-full sm:w-auto rounded-2xl gap-2 p-1 bg-black/[0.03] dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10">
+                        <SegButton active={timeframe === "1"} label="1D" onClick={() => setTimeframe("1")} />
+                        <SegButton active={timeframe === "7"} label="7D" onClick={() => setTimeframe("7")} />
+                        <SegButton active={timeframe === "30"} label="30D" onClick={() => setTimeframe("30")} />
+                      </div>
+                    </div>
+
+                    <div className="mt-2 text-[11px] font-extrabold text-gray-500 dark:text-white/60">
+                      {sourceLabel}
+                      {sourceTime}
                     </div>
                   </div>
 
                   <button
-                    type="button"
-                    className="h-10 w-10 rounded-2xl bg-white/70 dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10 flex items-center justify-center text-gray-800 dark:text-white shadow-sm hover:bg-white dark:hover:bg-white/[0.10] transition"
                     onClick={onClose}
+                    className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-white/80 dark:bg-white/[0.08] hover:bg-white dark:hover:bg-white/[0.12] text-gray-900 dark:text-white transition"
                     aria-label="Close"
+                    title="Close (Esc)"
                   >
-                    <span className="text-2xl leading-none">×</span>
+                    <FaTimes />
                   </button>
                 </div>
-
-                <div className="px-4 pb-3 sm:px-6 sm:pb-4">
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { tf: "1" as const, label: "1D" },
-                      { tf: "7" as const, label: "7D" },
-                      { tf: "30" as const, label: "30D" },
-                    ].map(({ tf, label }) => {
-                      const active = timeframe === tf;
-                      return (
-                        <button
-                          key={tf}
-                          type="button"
-                          onClick={() => setTimeframe(tf)}
-                          aria-pressed={active}
-                          className={cn(
-                            "rounded-2xl px-3 py-2 text-xs font-extrabold border transition shadow-sm",
-                            active
-                              ? "bg-indigo-600 text-white border-indigo-600"
-                              : "bg-black/[0.03] dark:bg-white/[0.06] text-gray-900 dark:text-white border-black/10 dark:border-white/10 hover:bg-black/[0.06] dark:hover:bg-white/[0.10]"
-                          )}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
+
+              {/* gradient divider like stock */}
+              <div className="h-[2px] w-full bg-gradient-to-r from-indigo-500/40 via-fuchsia-500/30 to-sky-500/30" />
             </div>
 
+            {/* scrollable body */}
             <div
-              className="flex-1 min-h-0 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
-              style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}
+              ref={bodyRef as any}
+              className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-5"
+              style={{ WebkitOverflowScrolling: "touch" as any }}
             >
-              <div className="flex items-end justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-[11px] font-bold text-gray-500 dark:text-white/60">Current Price</div>
-                  <div className={cn("truncate text-2xl sm:text-3xl font-extrabold", priceColor)}>{usd(priceNum)}</div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-[11px] font-bold text-gray-500 dark:text-white/60">{changeLabel}</div>
-                  <div className={cn("text-lg sm:text-xl font-extrabold", changeColor)}>{changeValue}</div>
-                </div>
-              </div>
-
-              {/* Snapshot */}
-              <div className="mt-4 rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
-                <div className="px-4 pt-3 pb-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-[11px] font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60">
-                      Snapshot
-                    </div>
-                    <div className="text-[11px] font-extrabold text-gray-500 dark:text-white/60">
-                      {cgLoading ? "Loading…" : cgError ? "Limited data" : cg ? "CoinGecko" : "CoinCap"}
-                      {lastUpdated ? ` • ${lastUpdated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}
-                    </div>
+              {/* Snapshot (stock-feel card) */}
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-[11px] font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60">
+                    Snapshot
                   </div>
-
-                  <div className="mt-2 text-sm sm:text-[15px] leading-snug text-gray-800 dark:text-white/80">
-                    <span className="font-extrabold text-gray-900 dark:text-white">{asset.symbol?.toUpperCase?.()}</span>{" "}
-                    at{" "}
-                    <span
-                      className={cn(
-                        "font-extrabold",
-                        snapIsUp ? "text-emerald-700 dark:text-emerald-200" : "text-rose-700 dark:text-rose-200"
-                      )}
-                    >
-                      {snapPrice}
-                    </span>{" "}
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 font-extrabold",
-                        snapIsUp ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"
-                      )}
-                    >
-                      ({snapChange})
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-extrabold bg-black/5 dark:bg-white/10 text-emerald-700 dark:text-emerald-200 ring-1 ring-black/10 dark:ring-white/10">
-                      High: {snapHigh}
-                    </span>
-                    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-extrabold bg-black/5 dark:bg-white/10 text-rose-700 dark:text-rose-200 ring-1 ring-black/10 dark:ring-white/10">
-                      Low: {snapLow}
-                    </span>
+                  <div className="text-[11px] font-extrabold text-gray-500 dark:text-white/60">
+                    {sourceLabel}
+                    {sourceTime}
                   </div>
                 </div>
-              </div>
 
-              {/* Chart (moved directly under snapshot) */}
-              <div className="mt-4">
-                <div className="relative rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <div className="text-sm font-extrabold text-gray-900 dark:text-white">Price Chart</div>
-                    <div className="text-xs font-bold text-gray-500 dark:text-white/60">
-                      {timeframe === "1" ? "Last 24h" : timeframe === "7" ? "Last 7 days" : "Last 30 days"}
-                    </div>
-                  </div>
-
-                  <div className="relative h-52 sm:h-64 px-3 pb-3">
-                    {chartLoading && (
-                      <div className="absolute inset-0 bg-white/60 dark:bg-black/35 flex items-center justify-center z-10">
-                        <div className="flex items-center gap-3">
-                          <svg
-                            className="w-6 h-6 animate-spin text-indigo-600 dark:text-indigo-300"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                          </svg>
-                          <span className="text-sm font-extrabold text-gray-700 dark:text-white/80">Loading chart…</span>
-                        </div>
-                      </div>
+                <div className="mt-3 text-sm sm:text-[15px] leading-snug text-gray-800 dark:text-white/80">
+                  <span className="font-extrabold text-gray-900 dark:text-white">
+                    {asset.symbol?.toUpperCase?.()}
+                  </span>{" "}
+                  at{" "}
+                  <span
+                    className={cn(
+                      "font-extrabold",
+                      changeIsUp ? "text-emerald-700 dark:text-emerald-200" : "text-rose-700 dark:text-rose-200"
                     )}
+                  >
+                    {snapPrice}
+                  </span>{" "}
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 font-extrabold",
+                      changeIsUp ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"
+                    )}
+                  >
+                    ({snapChange})
+                  </span>
+                </div>
 
-                    <div className="pointer-events-none absolute inset-0">
-                      <div className="absolute inset-0 bg-gradient-to-b from-black/[0.02] via-transparent to-black/[0.02] dark:from-white/[0.02] dark:to-white/[0.02]" />
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-extrabold bg-gray-100/80 dark:bg-white/10 text-emerald-700 dark:text-emerald-200 ring-1 ring-black/10 dark:ring-white/10">
+                    High: {snapHigh}
+                  </span>
+                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-extrabold bg-gray-100/80 dark:bg-white/10 text-rose-700 dark:text-rose-200 ring-1 ring-black/10 dark:ring-white/10">
+                    Low: {snapLow}
+                  </span>
+                </div>
+              </div>
+
+              {/* Chart */}
+              <div className="mt-5 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
+                    <FaChartLine className="text-indigo-600 dark:text-indigo-300" />
+                    Price chart
+                  </h4>
+                  <div className="text-xs font-bold text-gray-500 dark:text-white/60">
+                    {timeframe === "1" ? "Last 24h" : timeframe === "7" ? "Last 7 days" : "Last 30 days"}
+                  </div>
+                </div>
+
+                <div className="mt-3 relative h-56 sm:h-64">
+                  {chartLoading && (
+                    <div className="absolute inset-0 bg-white/60 dark:bg-black/35 flex items-center justify-center z-10 rounded-2xl">
+                      <div className="flex items-center gap-3">
+                        <svg
+                          className="w-6 h-6 animate-spin text-indigo-600 dark:text-indigo-300"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                        <span className="text-sm font-extrabold text-gray-700 dark:text-white/80">Loading chart…</span>
+                      </div>
                     </div>
+                  )}
 
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl">
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/[0.02] via-transparent to-black/[0.02] dark:from-white/[0.02] dark:to-white/[0.02]" />
+                  </div>
+
+                  <div className="h-full w-full rounded-2xl overflow-hidden">
                     <canvas key={canvasKey} ref={canvasRef} className="w-full h-full" />
                   </div>
                 </div>
               </div>
 
+              {/* Change panel */}
               <ChangePanel />
 
               {/* Extremes */}
-              <div className="mt-4 rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
-                <div className="px-4 pt-3 pb-3">
-                  <ExtremesHeader />
+              <div className="mt-5 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-extrabold text-gray-900 dark:text-white">Extremes</h4>
+                  <div className="text-xs font-bold text-gray-500 dark:text-white/60">CoinGecko when available</div>
+                </div>
 
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.04] p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-[11px] font-extrabold text-gray-600 dark:text-white/60">All-Time High</div>
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-extrabold bg-black/5 dark:bg-white/10 text-gray-800 dark:text-white ring-1 ring-black/10 dark:ring-white/10">
-                          {fmtDate(cgAthDate)}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-xl font-extrabold text-emerald-700 dark:text-emerald-200">
-                        {cgAth != null ? usd(cgAth) : "—"}
-                      </div>
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.06] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[11px] font-extrabold text-gray-600 dark:text-white/60">All-Time High</div>
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-extrabold bg-black/5 dark:bg-white/10 text-gray-800 dark:text-white ring-1 ring-black/10 dark:ring-white/10">
+                        {fmtDate(cgAthDate)}
+                      </span>
                     </div>
+                    <div className="mt-1 text-xl font-extrabold text-emerald-700 dark:text-emerald-200">
+                      {cgAth != null ? usd(cgAth) : "—"}
+                    </div>
+                  </div>
 
-                    <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.04] p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-[11px] font-extrabold text-gray-600 dark:text-white/60">All-Time Low</div>
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-extrabold bg-black/5 dark:bg-white/10 text-gray-800 dark:text-white ring-1 ring-black/10 dark:ring-white/10">
-                          {fmtDate(cgAtlDate)}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-xl font-extrabold text-rose-700 dark:text-rose-200">
-                        {cgAtl != null ? usd(cgAtl) : "—"}
-                      </div>
+                  <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.06] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[11px] font-extrabold text-gray-600 dark:text-white/60">All-Time Low</div>
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-extrabold bg-black/5 dark:bg-white/10 text-gray-800 dark:text-white ring-1 ring-black/10 dark:ring-white/10">
+                        {fmtDate(cgAtlDate)}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xl font-extrabold text-rose-700 dark:text-rose-200">
+                      {cgAtl != null ? usd(cgAtl) : "—"}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Metrics */}
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <Metric
-                  icon={<FaChartPie className="text-indigo-600 dark:text-indigo-300" />}
+              {/* Metrics grid (stock-feel cards) */}
+              <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <StatCard
                   label="Market Cap"
                   value={cgMktCap != null ? compact(cgMktCap) : compact(asset.marketCapUsd)}
+                  icon={<FaChartPie className="text-indigo-600 dark:text-indigo-300" />}
                 />
-                <Metric
-                  icon={<FaCoins className="text-indigo-600 dark:text-indigo-300" />}
+                <StatCard
                   label="Volume (24h)"
                   value={cgVol != null ? compact(cgVol) : compact(asset.volumeUsd24Hr)}
+                  icon={<FaCoins className="text-indigo-600 dark:text-indigo-300" />}
                 />
-                <Metric
-                  icon={<FaDatabase className="text-indigo-600 dark:text-indigo-300" />}
+                <StatCard
                   label="Circulating Supply"
                   value={cgCirc != null ? compact(cgCirc) : compact(asset.supply)}
                   sub={asset.symbol ? asset.symbol.toUpperCase() : undefined}
+                  icon={<FaDatabase className="text-indigo-600 dark:text-indigo-300" />}
                 />
-                <Metric
-                  icon={<FaWarehouse className="text-indigo-600 dark:text-indigo-300" />}
+                <StatCard
                   label="Total / Max Supply"
                   value={cgTotal != null ? compact(cgTotal) : asset.maxSupply ? compact(asset.maxSupply) : "—"}
-                  sub={cgMax != null ? `Max: ${compact(cgMax)}` : asset.maxSupply ? `Max: ${compact(asset.maxSupply)}` : undefined}
+                  sub={
+                    cgMax != null
+                      ? `Max: ${compact(cgMax)}`
+                      : asset.maxSupply
+                      ? `Max: ${compact(asset.maxSupply)}`
+                      : undefined
+                  }
+                  icon={<FaWarehouse className="text-indigo-600 dark:text-indigo-300" />}
                 />
-                <Metric
-                  icon={<FaGlobeAmericas className="text-indigo-600 dark:text-indigo-300" />}
+                <StatCard
                   label="VWAP (24h)"
                   value={asset.vwap24Hr ? compact(asset.vwap24Hr) : "—"}
+                  icon={<FaGlobeAmericas className="text-indigo-600 dark:text-indigo-300" />}
                 />
-                <Metric
-                  icon={<FaChartLine className="text-indigo-600 dark:text-indigo-300" />}
+                <StatCard
                   label="24h Change"
                   value={change24hStatic != null ? pct(change24hStatic) : pct(asset.changePercent24Hr)}
-                  color={
-                    (change24hStatic != null ? change24hStatic : parseFloat(asset.changePercent24Hr)) >= 0
-                      ? "text-emerald-600"
-                      : "text-rose-600"
-                  }
+                  icon={<FaChartLine className="text-indigo-600 dark:text-indigo-300" />}
+                  accent={(() => {
+                    const v = change24hStatic != null ? change24hStatic : parseFloat(asset.changePercent24Hr);
+                    return v >= 0 ? "emerald" : "rose";
+                  })()}
                 />
-                <Metric
-                  icon={<FaDollarSign className="text-indigo-600 dark:text-indigo-300" />}
+                <StatCard
                   label="24h High"
                   value={cgHigh != null ? usd(cgHigh) : "—"}
-                  color="text-emerald-600"
-                />
-                <Metric
                   icon={<FaDollarSign className="text-indigo-600 dark:text-indigo-300" />}
+                  accent="emerald"
+                />
+                <StatCard
                   label="24h Low"
                   value={cgLow != null ? usd(cgLow) : "—"}
-                  color="text-rose-600"
+                  icon={<FaDollarSign className="text-indigo-600 dark:text-indigo-300" />}
+                  accent="rose"
                 />
-                <Metric
-                  icon={<FaChartPie className="text-indigo-600 dark:text-indigo-300" />}
+                <StatCard
                   label="FDV"
                   value={cgFDV != null ? compact(cgFDV) : "—"}
                   sub={cgFDV != null && cgMktCap != null ? `FDV/MCap: ${fmtNum(cgFDV / Math.max(cgMktCap, 1), 2)}x` : undefined}
+                  icon={<FaChartPie className="text-indigo-600 dark:text-indigo-300" />}
                 />
-                <Metric
-                  icon={<FaDatabase className="text-indigo-600 dark:text-indigo-300" />}
+                <StatCard
                   label="Market Cap Rank"
                   value={cgMktCapRank != null ? `#${cgMktCapRank}` : "—"}
+                  icon={<FaDatabase className="text-indigo-600 dark:text-indigo-300" />}
                 />
               </div>
 
-              <div className="h-20" />
-            </div>
+              <div className="mt-6 pb-3 flex flex-col sm:flex-row gap-3 sm:justify-end">
+                <button
+                  onClick={onClose}
+                  className="w-full sm:w-auto rounded-2xl px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-indigo-500/10 bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:opacity-95 active:scale-[0.99] transition"
+                >
+                  Close
+                </button>
+              </div>
 
-            <div className="sticky bottom-0 z-20 bg-white/92 dark:bg-brand-900/92 backdrop-blur border-t border-black/10 dark:border-white/10 px-4 py-3 sm:px-6">
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full rounded-2xl bg-indigo-600 text-white py-3 text-sm font-extrabold shadow hover:bg-indigo-700 transition"
-              >
-                Close
-              </button>
+              <p className="text-xs text-gray-600 dark:text-white/60 text-center">
+                DISCLAIMER: Crypto prices may differ slightly between providers and exchanges.
+              </p>
+
+              <div className="h-2" />
             </div>
           </motion.div>
         </div>
