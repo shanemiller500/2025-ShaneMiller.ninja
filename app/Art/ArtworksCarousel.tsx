@@ -224,15 +224,6 @@ export default function ArtworksCarousel() {
           />
         ) : null}
 
-        {/* loading / error overlay */}
-        {imgState !== "ready" ? (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="rounded-3xl bg-white/75 dark:bg-neutral-900/60 backdrop-blur px-4 py-3 border border-black/10 dark:border-white/10 shadow">
-
-            </div>
-          </div>
-        ) : null}
-
         {/* caption */}
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[92%] sm:w-3/4 lg:w-1/2">
           <div className="rounded-3xl bg-white/80 dark:bg-neutral-900/60 backdrop-blur border border-black/10 dark:border-white/10 p-4 sm:p-5 shadow-lg">

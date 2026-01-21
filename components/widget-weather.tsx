@@ -135,14 +135,20 @@ export default function WidgetWeather() {
 
           // nice label (optional)
           try {
-            const geo = await fetch(
-              `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${latitude}&longitude=${longitude}&language=en&format=json`,
-            ).then((r) => r.json());
-            const place = geo?.results?.[0];
-            if (place?.name) {
-              const region = place?.admin1 ? `, ${place.admin1}` : "";
-              setLocationLabel(`${place.name}${region}`);
-            }
+            const geoRes = await fetch(
+                `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+              );
+
+              if (geoRes.ok) {
+                const geo = await geoRes.json();
+                const city = geo?.city || geo?.locality;
+                const region = geo?.principalSubdivision;
+
+                if (city) {
+                  setLocationLabel(region ? `${city}, ${region}` : city);
+                }
+              }
+
           } catch {
             /* ignore */
           }
