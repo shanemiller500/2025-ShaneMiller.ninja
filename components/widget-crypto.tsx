@@ -1,4 +1,3 @@
-// Filename: WidgetCrypto.tsx
 "use client";
 
 import React, { useEffect, useState, useRef, useMemo, useCallback, startTransition } from "react";
@@ -12,31 +11,14 @@ interface TradeState {
   bump?: number;
 }
 
-const wrap = (min: number, max: number, v: number) => {
-  const range = max - min;
-  if (range === 0) return min;
-  return ((((v - min) % range) + range) % range) + min;
-};
-
 /* Constants -------------------------------------------------------- */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
-const COINGECKO_TOP200 =
-  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
-
-// px/sec (smooth, not racing)
-const SCROLL_SPEED = 34;
+const COINGECKO_TOP200 = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
+const SCROLL_SPEED = 35;
 
 /* Utilities -------------------------------------------------------- */
-const currencyFmt = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
-
-const compactFmt = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 2,
-});
+const currencyFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+const compactFmt = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
 
 const fmt = {
   usd: (v: any) => {
@@ -47,19 +29,23 @@ const fmt = {
     const n = typeof v === "string" ? parseFloat(v) : v;
     return n != null && !Number.isNaN(n) ? compactFmt.format(n) : "—";
   },
-  pct: (v: any) =>
-    v != null && !Number.isNaN(parseFloat(String(v))) ? `${parseFloat(String(v)).toFixed(2)}%` : "—",
+  pct: (v: any) => v != null && !Number.isNaN(parseFloat(String(v))) ? `${parseFloat(String(v)).toFixed(2)}%` : "—",
 };
 
-const cn = (...xs: Array<string | false | null | undefined>) => xs.filter(Boolean).join(" ");
+const cn = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ");
 
-function cleanLogo(url?: string) {
+const wrap = (min: number, max: number, v: number) => {
+  const range = max - min;
+  if (range === 0) return min;
+  return ((((v - min) % range) + range) % range) + min;
+};
+
+const cleanLogo = (url?: string) => {
   if (!url) return "";
   const s = String(url).trim();
-  if (!s) return "";
-  if (s.startsWith("data:")) return "";
+  if (!s || s.startsWith("data:")) return "";
   return s;
-}
+};
 
 if (!API_KEY) {
   console.error("🚨 Missing CoinCap API key! Set NEXT_PUBLIC_COINCAP_API_KEY in .env.local");
@@ -71,30 +57,25 @@ export default function WidgetCrypto() {
   const [tradeInfoMap, setTradeInfoMap] = useState<Record<string, TradeState>>({});
   const [logos, setLogos] = useState<Record<string, string>>({});
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-
   const [contentWidth, setContentWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const innerRef = useRef<HTMLDivElement | null>(null);
   const isMounted = useRef(true);
-
   const dragIntentRef = useRef({ downX: 0, moved: false });
   const x = useMotionValue(0);
 
   useEffect(() => {
     return () => {
       isMounted.current = false;
-      try {
-        socketRef.current?.close();
-      } catch {}
+      try { socketRef.current?.close(); } catch {}
     };
   }, []);
 
-  /* Fetch initial CoinCap metadata */
+  /* Fetch CoinCap metadata */
   useEffect(() => {
     if (!API_KEY) return;
-
     (async () => {
       try {
         const res = await fetch(`https://rest.coincap.io/v3/assets?limit=10&apiKey=${API_KEY}`);
@@ -108,10 +89,9 @@ export default function WidgetCrypto() {
     })();
   }, []);
 
-  /* Fetch logos once (CoinGecko) */
+  /* Fetch logos from CoinGecko */
   useEffect(() => {
     let alive = true;
-
     (async () => {
       try {
         const res = await fetch(COINGECKO_TOP200, { headers: { Accept: "application/json" } });
@@ -125,24 +105,19 @@ export default function WidgetCrypto() {
           const img = String(c?.image ?? "");
           if (sym && img) map[sym] = img;
         });
-
         setLogos(map);
       } catch (e) {
         console.warn("CoinGecko logo preload skipped:", e);
       }
     })();
-
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
   const topAssetIds = useMemo(() => Object.keys(metaData), [metaData]);
 
-  /* Seed initial prices from metadata */
+  /* Seed initial prices */
   useEffect(() => {
     if (!topAssetIds.length) return;
-
     setTradeInfoMap((prev) => {
       if (Object.keys(prev).length) return prev;
       const init: Record<string, TradeState> = {};
@@ -154,7 +129,7 @@ export default function WidgetCrypto() {
     });
   }, [topAssetIds, metaData]);
 
-  /* WebSocket for live price updates */
+  /* WebSocket for live updates */
   useEffect(() => {
     if (!API_KEY || !topAssetIds.length) return;
 
@@ -171,48 +146,40 @@ export default function WidgetCrypto() {
 
       startTransition(() => {
         if (!isMounted.current) return;
-
         setTradeInfoMap((prev) => {
           let changed = false;
           const next = { ...prev };
-
           Object.entries(data).forEach(([id, p]) => {
             const price = parseFloat(p);
             if (!Number.isFinite(price)) return;
-
             const old = prev[id]?.price;
             if (old != null && price === old) return;
-
             const bump = (prev[id]?.bump || 0) + 1;
             next[id] = { price, prev: old, bump };
             changed = true;
           });
-
           return changed ? next : prev;
         });
       });
     };
 
     return () => {
-      try {
-        ws.close();
-      } catch {}
+      try { ws.close(); } catch {}
     };
   }, [topAssetIds]);
 
-  /* Measure content width for infinite scroll */
+  /* Measure content width */
   useEffect(() => {
     const measure = () => {
       if (!innerRef.current) return;
       setContentWidth(innerRef.current.scrollWidth);
     };
-
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [topAssetIds]);
 
-  /* Smooth auto-scroll (no jitter) */
+  /* Auto-scroll animation */
   useAnimationFrame((_, delta) => {
     if (isDragging || !contentWidth || selectedAssetId) return;
     const next = x.get() - SCROLL_SPEED * (delta / 1000);
@@ -225,7 +192,6 @@ export default function WidgetCrypto() {
   const renderCard = (id: string) => {
     const md = metaData[id] || {};
     const ti = tradeInfoMap[id] || ({} as TradeState);
-
     const price = ti.price;
     const prev = ti.prev;
     const bump = ti.bump || 0;
@@ -235,17 +201,6 @@ export default function WidgetCrypto() {
     const isPos = Number.isFinite(pct24Num) ? pct24Num >= 0 : false;
 
     const logo = cleanLogo(logos[String(md?.symbol ?? "").toLowerCase()]);
-
-    const accent = isPos
-      ? "from-emerald-500/30 via-emerald-500/10 to-transparent"
-      : isNeg
-      ? "from-rose-500/30 via-rose-500/10 to-transparent"
-      : "from-slate-500/25 via-slate-500/10 to-transparent";
-
-    // BOOSTED flash so it’s visible
-    const flashBg = isPos
-      ? "radial-gradient(circle at center, rgba(34,197,94,0.98) 0%, rgba(34,197,94,0.55) 36%, rgba(34,197,94,0) 70%)"
-      : "radial-gradient(circle at center, rgba(239,68,68,0.98) 0%, rgba(239,68,68,0.55) 36%, rgba(239,68,68,0) 70%)";
 
     const onCardClick = () => {
       if (dragIntentRef.current.moved) return;
@@ -268,153 +223,84 @@ export default function WidgetCrypto() {
         onClick={onCardClick}
         className={cn(
           "group relative overflow-hidden text-left select-none",
-          "mx-0.5",
-          "min-w-[92px] sm:min-w-[92px]",
-          "rounded-lg sm:rounded-xl",
-          "border border-black/10 dark:border-white/10",
-          "bg-white/75 dark:bg-white/[0.06]",
+          "mx-1",
+          "min-w-[100px] sm:min-w-[110px]",
+          "rounded-xl",
+          "border-2",
+            isPos
+          ? "border-emerald-600/60 bg-gradient-to-br from-emerald-200 via-emerald-100 to-green-900/40 dark:from-emerald-900/60 dark:to-green-900/40"
+          : isNeg
+          ? "border-rose-600/60 bg-gradient-to-br from-rose-900/60 via-rose-100 to-red-900/40 dark:from-rose-900/60 dark:to-red-900/40"
+          : "border-gray-300/60 bg-gradient-to-br from-slate-100 via-gray-50 to-white dark:from-gray-900/60 dark:to-slate-900/40",
           "shadow-sm",
-          "ring-1 ring-black/5 dark:ring-white/5",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60 dark:focus-visible:ring-indigo-300/50"
+          "transition-shadow duration-200",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60"
         )}
-        whileHover={{ y: -1, scale: 1.03 }}
-        whileTap={{ scale: 0.985 }}
+        whileHover={{ y: -2, scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
       >
-        {/* big logo background */}
-        <div
-          className="absolute inset-0 transition-transform duration-300 group-hover:scale-[1.08]"
-          style={{
-            backgroundImage: logo ? `url(${logo})` : undefined,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            opacity: logo ? 0.55 : 0,
-            filter: "saturate(1.15) contrast(1.06)",
-          }}
-        />
+        {/* Subtle gradient overlay */}
+<div className="absolute inset-0 pointer-events-none dark:bg-gradient-to-br dark:from-white/5 dark:via-transparent dark:to-black/25" />
 
-        {/* heatmap-y blobs + accent */}
-        <div className="absolute inset-0 opacity-100">
-          <div className="absolute -top-10 -left-12 h-40 w-40 rounded-full bg-indigo-500/10 blur-2xl" />
-          <div className="absolute -bottom-14 -right-14 h-44 w-44 rounded-full bg-fuchsia-500/10 blur-2xl" />
-          <div className={cn("absolute inset-0 bg-gradient-to-r", accent)} />
-        </div>
+        {/* Flash on price update */}
+        {prev != null && bump > 0 && (isPos || isNeg) && (
+          <motion.div
+            key={`flash-${id}-${bump}`}
+            className="absolute inset-0 pointer-events-none rounded-xl"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.7, 0] }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+           style={{
+  background: isPos
+    ? "radial-gradient(circle at center, rgba(34,197,94,0.55) 0%, rgba(34,197,94,0.22) 52%, transparent 82%)"
+    : "radial-gradient(circle at center, rgba(239,68,68,0.55) 0%, rgba(239,68,68,0.22) 52%, transparent 82%)",
+  mixBlendMode: "screen",
+}}
 
-{/* POP FX: flash + ring glow + auto shine sweep */}
-{prev != null && bump > 0 && (isPos || isNeg) && (
-  <>
-    {/* 1) Big color flash */}
-    <motion.div
-      key={`flash-${id}-${bump}`}
-      className="absolute inset-0 pointer-events-none"
-      initial={{ opacity: 0, scale: 1 }}
-      animate={{
-        opacity: [0, 1, 0.9, 0.25, 0],
-        scale: [1, 1.03, 1.015, 1.01, 1],
-      }}
-      transition={{
-        duration: 0.45,
-        times: [0, 0.12, 0.22, 0.55, 1],
-        ease: "easeOut",
-      }}
-      style={{
-        background: flashBg,
-        mixBlendMode: "screen",
-        filter: "saturate(2.1) contrast(1.25)",
-        willChange: "opacity, transform",
-      }}
-    />
+          />
+        )}
 
-    {/* 2) Edge glow ring (makes the whole card pop) */}
-    <motion.div
-      key={`ring-${id}-${bump}`}
-      className="absolute inset-0 pointer-events-none rounded-lg sm:rounded-xl"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: [0, 1, 0.35, 0] }}
-      transition={{ duration: 0.55, ease: "easeOut" }}
-      style={{
-        boxShadow: isPos
-          ? "0 0 0 1px rgba(34,197,94,0.25), 0 0 26px rgba(34,197,94,0.55), 0 0 60px rgba(34,197,94,0.30)"
-          : "0 0 0 1px rgba(239,68,68,0.25), 0 0 26px rgba(239,68,68,0.55), 0 0 60px rgba(239,68,68,0.30)",
-      }}
-    />
-
-    {/* 3) Auto “shine sweep” (triggers on flash) */}
-    <motion.div
-      key={`shine-${id}-${bump}`}
-      className="pointer-events-none absolute inset-0"
-      initial={{ opacity: 0, x: "-55%" }}
-      animate={{ opacity: [0, 0.9, 0], x: ["-55%", "55%"] }}
-      transition={{ duration: 0.55, ease: "easeOut" }}
-      style={{ willChange: "transform, opacity" }}
-    >
-      <div className="absolute -inset-y-10 left-0 w-[55%] rotate-12 bg-gradient-to-r from-transparent via-white/45 to-transparent blur-[1px]" />
-    </motion.div>
-
-    {/* 4) Short “color boost” overlay (helps text + background feel energized) */}
-    <motion.div
-      key={`boost-${id}-${bump}`}
-      className="absolute inset-0 pointer-events-none"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: [0, 0.22, 0] }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      style={{
-        background: isPos
-          ? "radial-gradient(circle at 30% 30%, rgba(34,197,94,0.22), transparent 60%)"
-          : "radial-gradient(circle at 30% 30%, rgba(239,68,68,0.22), transparent 60%)",
-        mixBlendMode: "overlay",
-      }}
-    />
-  </>
-)}
-
-{/* Keep your vignette (it helps legibility) */}
-<div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/10 via-black/0 to-black/15 dark:from-white/10 dark:via-white/0 dark:to-white/10" />
-
-         {/* content */}
-        <div className="relative z-10 px-2 py-2">
-          {/* top row */}
-          <div className="flex items-center justify-between gap-2">
+        {/* Content */}
+        <div className="relative z-10 px-2.5 py-2.5">
+          {/* Header row with logo, symbol, and rank */}
+          <div className="flex items-center justify-between gap-1.5 mb-2">
             <div className="flex items-center gap-1.5 min-w-0">
-                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ring-black/10 dark:ring-white/10 bg-black/5 dark:bg-white/10 backdrop-blur">
-              <span
-                className={cn(
-                  "truncate",
-                  "text-[10px] sm:text-[10px]",
-                  "font-extrabold tracking-wide",
-                  "text-gray-900 dark:text-white",
-                  "drop-shadow-[0_1px_1px_rgba(255,255,255,0.25)] dark:drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]"
-                )}
-              >
+              {logo && (
+                <div className="relative flex-shrink-0">
+                  <div className="w-5 h-5 rounded-full bg-white dark:bg-gray-800 p-0.5 ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
+                    <img src={logo} alt={md.symbol} className="w-full h-full rounded-full" loading="lazy" />
+                  </div>
+                </div>
+              )}
+              <span className="text-[11px] font-black text-gray-900 dark:text-white truncate">
                 {md?.symbol?.toUpperCase?.()}
               </span>
-              </span>
             </div>
-
-            <span className="inline-flex items-center rounded-full px-1 py-0.5 ring-1 ring-black/10 dark:ring-white/10 bg-black/5 dark:bg-white/10 backdrop-blur">
-              <span className="text-[8px] font-extrabold text-gray-900/80 dark:text-white/85">#{md?.rank}</span>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/10 text-[9px] font-bold text-gray-600 dark:text-gray-300">
+              #{md?.rank}
             </span>
           </div>
 
-          {/* price */}
-          <div className="mt-1 text-center">
-            <div className="text-[12px] font-semibold tabular-nums text-gray-900 dark:text-white">
+          {/* Price */}
+          <div className="mb-1.5">
+            <div className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
               {fmt.usd(price)}
             </div>
           </div>
 
-          {/* change pill */}
-          <div className="mt-1 flex items-center justify-center">
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ring-black/10 dark:ring-white/10 bg-black/5 dark:bg-white/10 backdrop-blur">
-              <span
-                className={cn(
-                  "text-[10px] font-extrabold tabular-nums",
-                  isPos ? "text-emerald-700 dark:text-emerald-200" : isNeg ? "text-rose-700 dark:text-rose-200" : "text-gray-800 dark:text-white/80"
-                )}
-              >
-                {fmt.pct(md?.changePercent24Hr)}
-              </span>
-              <span className="text-[10px] font-semibold text-gray-600 dark:text-white/55">24h</span>
+          {/* 24h Change */}
+          <div className="flex items-center justify-between">
+            <span
+              className={cn(
+                "text-[10px] font-bold tabular-nums",
+                isPos ? "text-emerald-700 dark:text-emerald-300" :
+                isNeg ? "text-rose-700 dark:text-rose-300" :
+                "text-gray-700 dark:text-gray-300"
+              )}
+            >
+              {fmt.pct(md?.changePercent24Hr)}
             </span>
+            <span className="text-[9px] font-semibold text-gray-500 dark:text-gray-400">24h</span>
           </div>
         </div>
       </motion.button>
@@ -426,16 +312,21 @@ export default function WidgetCrypto() {
       {/* Header */}
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-center gap-2">
-          <div className="w-1.5 h-1.5 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full animate-pulse" />
-          <p className="text-[11px] sm:text-sm font-bold text-gray-700 dark:text-gray-300">Top 10 Cryptos by Market Cap</p>
-          <div className="w-1.5 h-1.5 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full animate-pulse" />
+         <div className="w-1.5 h-1.5 bg-gradient-to-r from-emerald-500 to-green-500 rounded-full animate-pulse" />
+
+          <p className="text-xs sm:text-sm font-bold text-gray-700 dark:text-gray-300">
+            Top 10 Cryptos by Market Cap
+          </p>
+         <div className="w-1.5 h-1.5 bg-gradient-to-r from-emerald-500 to-green-500 rounded-full animate-pulse" />
+
         </div>
       </div>
 
-      {/* Scrolling Cards Container */}
+      {/* Scrolling Container */}
       <div className="relative overflow-hidden py-2">
-        <div className="absolute left-0 top-0 bottom-0 w-10 bg-gradient-to-r from-white dark:from-brand-900 to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-white dark:from-brand-900 to-transparent z-10 pointer-events-none" />
+        {/* Gradient fades */}
+        <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white dark:from-brand-900 to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white dark:from-brand-900 to-transparent z-10 pointer-events-none" />
 
         <motion.div
           className="flex cursor-grab active:cursor-grabbing will-change-transform"
@@ -454,14 +345,15 @@ export default function WidgetCrypto() {
           <div className="flex items-center" ref={innerRef}>
             {topAssetIds.map(renderCard)}
           </div>
-
-          <div className="flex items-center">{topAssetIds.map(renderCard)}</div>
+          <div className="flex items-center">
+            {topAssetIds.map(renderCard)}
+          </div>
         </motion.div>
       </div>
 
       {/* Footer */}
       <div className="px-4 pt-2 pb-3">
-        <p className="text-[11px] text-center text-gray-600 dark:text-gray-400">
+        <p className="text-xs text-center text-gray-600 dark:text-gray-400">
           View more crypto data{" "}
           <a
             href="/Crypto"
