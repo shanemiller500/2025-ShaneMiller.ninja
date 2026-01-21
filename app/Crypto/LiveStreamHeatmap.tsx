@@ -1,33 +1,43 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useMemo, JSX } from "react";
-import { motion } from "framer-motion";
-import { FaTable, FaThLarge } from "react-icons/fa";
+import React, { useEffect, useState, useRef, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FaTable, FaThLarge, FaFire } from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
 import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
 
-const currencyFmt = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
-const formatUSD = (v: any) => {
-  const n = parseFloat(v);
-  return isNaN(n) ? "—" : currencyFmt.format(n);
-};
-const formatPct = (s: any) =>
-  s != null ? `${parseFloat(String(s)).toFixed(2)}%` : "N/A";
+/* Types ------------------------------------------------------------ */
+interface TradeInfo {
+  price: number;
+  prev?: number;
+  bump?: number;
+}
 
-/* ---------- API constants ---------- */
+interface CoinGeckoInfo {
+  high: number;
+  low: number;
+}
+
+/* Constants -------------------------------------------------------- */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
-const COINGECKO_TOP200 =
-  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
+const COINGECKO_TOP200 = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
+const WS_TIMEOUT = 600_000; // 10 minutes
+const POLL_INTERVAL = 5_000; // 5 seconds
 
+/* Utilities -------------------------------------------------------- */
+const currencyFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+
+const fmt = {
+  usd: (v: any) => {
+    const n = parseFloat(v);
+    return isNaN(n) ? "—" : currencyFmt.format(n);
+  },
+  pct: (s: any) => s != null ? `${parseFloat(String(s)).toFixed(2)}%` : "N/A",
+};
+
+/* Component -------------------------------------------------------- */
 export default function LiveStreamHeatmap() {
-  /* ---------- core state ---------- */
-  const [tradeInfoMap, setTradeInfoMap] = useState<
-    Record<string, { price: number; prev?: number; bump?: number }>
-  >({});
+  const [tradeInfoMap, setTradeInfoMap] = useState<Record<string, TradeInfo>>({});
   const [metaData, setMetaData] = useState<Record<string, any>>({});
   const [topIds, setTopIds] = useState<string[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<any | null>(null);
@@ -36,36 +46,33 @@ export default function LiveStreamHeatmap() {
   const [wsClosed, setWsClosed] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [logos, setLogos] = useState<Record<string, string>>({});
-  const [cgInfo, setCgInfo] = useState<
-    Record<string, { high: number; low: number }>
-  >({});
+  const [cgInfo, setCgInfo] = useState<Record<string, CoinGeckoInfo>>({});
 
-  /* ---------- refs ---------- */
   const socketRef = useRef<WebSocket | null>(null);
 
-  /* -------- preload CoinGecko logos -------- */
+  /* Load CoinGecko logos and 24h high/low data */
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch(COINGECKO_TOP200);
         const json = await res.json();
-        const map: Record<string, string> = {};
-        const inf: Record<string, { high: number; low: number }> = {};
+        const logoMap: Record<string, string> = {};
+        const infoMap: Record<string, CoinGeckoInfo> = {};
+
         json.forEach((c: any) => {
-          const k = c.symbol?.toLowerCase?.();
-          if (!k) return;
-          map[k] = c.image;
-          inf[k] = { high: c.high_24h, low: c.low_24h };
+          const key = c.symbol?.toLowerCase?.();
+          if (!key) return;
+          logoMap[key] = c.image;
+          infoMap[key] = { high: c.high_24h, low: c.low_24h };
         });
-        setLogos(map);
-        setCgInfo(inf);
-      } catch {
-        /* ignore */
-      }
+
+        setLogos(logoMap);
+        setCgInfo(infoMap);
+      } catch {}
     })();
   }, []);
 
-  /* -------- bootstrap CoinCap metadata + initial prices (FAST initial render) -------- */
+  /* Bootstrap CoinCap metadata and initial prices */
   useEffect(() => {
     let canceled = false;
 
@@ -77,10 +84,7 @@ export default function LiveStreamHeatmap() {
       }
 
       try {
-        const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`,
-        );
-
+        const res = await fetch(`https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`);
         if (res.status === 403) {
           setWsAvailable(false);
           setLoading(false);
@@ -90,29 +94,24 @@ export default function LiveStreamHeatmap() {
         const json = await res.json();
         if (canceled) return;
 
-        const m: Record<string, any> = {};
-        const initialPrices: Record<
-          string,
-          { price: number; prev?: number; bump?: number }
-        > = {};
+        const meta: Record<string, any> = {};
+        const initialPrices: Record<string, TradeInfo> = {};
         const ids: string[] = [];
 
         (json.data || []).forEach((a: any) => {
           if (!a?.id) return;
-          m[a.id] = a;
+          meta[a.id] = a;
           ids.push(a.id);
 
           const p = parseFloat(a.priceUsd);
           if (!Number.isNaN(p)) {
-            // prev stays undefined so WS/timer can still compare "old -> new"
-            // but colors will be based on changePercent24Hr until prev exists
             initialPrices[a.id] = { price: p, prev: undefined, bump: 0 };
           }
         });
 
-        ids.sort((a, b) => (+m[a]?.rank || 9999) - (+m[b]?.rank || 9999));
+        ids.sort((a, b) => (+meta[a]?.rank || 9999) - (+meta[b]?.rank || 9999));
 
-        setMetaData(m);
+        setMetaData(meta);
         setTopIds(ids.slice(0, 200));
         setTradeInfoMap((prev) => ({ ...prev, ...initialPrices }));
         setLoading(false);
@@ -121,16 +120,13 @@ export default function LiveStreamHeatmap() {
       }
     })();
 
-    return () => {
-      canceled = true;
-    };
+    return () => { canceled = true; };
   }, []);
 
-    /* ✅ HARD FIX: force-enable scroll on html/body while this page is mounted */
+  /* Force enable scroll while component is mounted */
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
-
     const prev = {
       htmlOverflow: html.style.overflow,
       htmlHeight: html.style.height,
@@ -143,11 +139,9 @@ export default function LiveStreamHeatmap() {
       bodyTouchAction: (body.style as any).touchAction,
     };
 
-    // Nuke common "modal left me locked" settings
     html.style.overflow = "auto";
     html.style.height = "auto";
     html.style.position = "static";
-
     body.style.overflow = "auto";
     body.style.height = "auto";
     body.style.position = "static";
@@ -155,15 +149,12 @@ export default function LiveStreamHeatmap() {
     body.style.width = "auto";
     (body.style as any).touchAction = "pan-y";
 
-    // Also remove any scroll-behavior traps
-    // (If another component set overflow hidden via class on <html>, this still helps.)
     const unlock = () => {
       html.style.overflow = "auto";
       body.style.overflow = "auto";
       (body.style as any).touchAction = "pan-y";
     };
 
-    // Re-apply a couple times in case another component runs after mount
     const t1 = window.setTimeout(unlock, 0);
     const t2 = window.setTimeout(unlock, 50);
     const t3 = window.setTimeout(unlock, 250);
@@ -172,11 +163,9 @@ export default function LiveStreamHeatmap() {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
       window.clearTimeout(t3);
-
       html.style.overflow = prev.htmlOverflow;
       html.style.height = prev.htmlHeight;
       html.style.position = prev.htmlPosition;
-
       body.style.overflow = prev.bodyOverflow;
       body.style.height = prev.bodyHeight;
       body.style.position = prev.bodyPosition;
@@ -186,27 +175,22 @@ export default function LiveStreamHeatmap() {
     };
   }, []);
 
-  /* -------- websocket stream (subscribe ONLY to top 200) -------- */
+  /* WebSocket for live price updates */
   useEffect(() => {
     if (!API_KEY || !topIds.length || !wsAvailable) return;
 
-    // close previous socket if any
     socketRef.current?.close();
     setWsClosed(false);
 
     const assetsParam = topIds.join(",");
-    const ws = new WebSocket(
-      `wss://wss.coincap.io/prices?assets=${encodeURIComponent(
-        assetsParam,
-      )}&apiKey=${API_KEY}`,
-    );
+    const ws = new WebSocket(`wss://wss.coincap.io/prices?assets=${encodeURIComponent(assetsParam)}&apiKey=${API_KEY}`);
     socketRef.current = ws;
 
     const wsTimeout = window.setTimeout(() => {
       if (socketRef.current?.readyState === WebSocket.OPEN) {
         socketRef.current.close();
       }
-    }, 600_000);
+    }, WS_TIMEOUT);
 
     ws.onmessage = (e) => {
       if (typeof e.data === "string" && e.data.startsWith("Unauthorized")) {
@@ -216,26 +200,25 @@ export default function LiveStreamHeatmap() {
         return;
       }
 
-      let up: Record<string, string> | null = null;
+      let update: Record<string, string> | null = null;
       try {
-        up = JSON.parse(e.data);
+        update = JSON.parse(e.data);
       } catch {
         return;
       }
-      if (!up) return;
 
-      // ✅ Immediate updates + bump counter (forces flash per tick)
+      if (!update) return;
+
       setTradeInfoMap((prev) => {
-        const nxt = { ...prev };
-        for (const [id, ps] of Object.entries(up)) {
-          const p = parseFloat(ps as string);
+        const next = { ...prev };
+        for (const [id, priceStr] of Object.entries(update)) {
+          const p = parseFloat(priceStr as string);
           if (!Number.isFinite(p)) continue;
-
           const old = prev[id]?.price;
           const nextBump = (prev[id]?.bump || 0) + 1;
-          nxt[id] = { price: p, prev: old, bump: nextBump };
+          next[id] = { price: p, prev: old, bump: nextBump };
         }
-        return nxt;
+        return next;
       });
 
       setLoading(false);
@@ -252,44 +235,39 @@ export default function LiveStreamHeatmap() {
     };
   }, [topIds, wsAvailable]);
 
-  /* -------- polling fallback (free tier has NO websocket) -------- */
+  /* Polling fallback for free tier without WebSocket */
   useEffect(() => {
-    if (wsAvailable) return;
-    if (!API_KEY) return;
+    if (wsAvailable || !API_KEY) return;
 
     const fetchPrices = async () => {
       try {
-        const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`,
-        );
+        const res = await fetch(`https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`);
         const json = await res.json();
-
         const upd: Record<string, number> = {};
-        const m: Record<string, any> = {};
+        const meta: Record<string, any> = {};
         const ids: string[] = [];
 
         (json.data || []).forEach((a: any) => {
           if (!a?.id) return;
-          m[a.id] = a;
+          meta[a.id] = a;
           ids.push(a.id);
-
           const p = parseFloat(a.priceUsd);
           if (Number.isFinite(p)) upd[a.id] = p;
         });
 
-        ids.sort((a, b) => (+m[a]?.rank || 9999) - (+m[b]?.rank || 9999));
-        setTopIds(ids.slice(0, 200));
-        setMetaData((prev) => ({ ...prev, ...m }));
+        ids.sort((a, b) => (+meta[a]?.rank || 9999) - (+meta[b]?.rank || 9999));
 
-        // ✅ Apply updates + bump counter (forces flash per poll tick)
+        setTopIds(ids.slice(0, 200));
+        setMetaData((prev) => ({ ...prev, ...meta }));
+
         setTradeInfoMap((prev) => {
-          const nxt = { ...prev };
+          const next = { ...prev };
           for (const [id, p] of Object.entries(upd)) {
             const old = prev[id]?.price;
             const nextBump = (prev[id]?.bump || 0) + 1;
-            nxt[id] = { price: p, prev: old, bump: nextBump };
+            next[id] = { price: p, prev: old, bump: nextBump };
           }
-          return nxt;
+          return next;
         });
 
         setLoading(false);
@@ -299,347 +277,439 @@ export default function LiveStreamHeatmap() {
     };
 
     fetchPrices();
-    const iv = window.setInterval(fetchPrices, 5_000);
-    return () => window.clearInterval(iv);
+    const interval = window.setInterval(fetchPrices, POLL_INTERVAL);
+    return () => window.clearInterval(interval);
   }, [wsAvailable]);
 
-  /* -------- sorted IDs -------- */
+  /* Sorted list of crypto IDs */
   const sortedIds = useMemo(() => {
     if (topIds.length) return topIds.slice(0, 200);
-
     const all = Object.keys(tradeInfoMap).sort(
-      (a, b) => (+metaData[a]?.rank || 9999) - (+metaData[b]?.rank || 9999),
+      (a, b) => (+metaData[a]?.rank || 9999) - (+metaData[b]?.rank || 9999)
     );
     return all.slice(0, 200);
   }, [topIds, tradeInfoMap, metaData]);
 
-  /* -------- Metric component (kept though unused) -------- */
-  const Metric = ({
-    icon,
-    label,
-    value,
-    color = "text-gray-900",
-  }: {
-    icon: JSX.Element;
-    label: string;
-    value: string;
-    color?: string;
-  }) => (
-    <div className="flex items-center gap-2 bg-gray-100 p-2 rounded hover:scale-105 transition-transform">
-      {icon}
-      <div className="flex flex-col">
-        <span className="text-[10px] sm:text-xs text-gray-500">{label}</span>
-        <span className={`font-semibold ${color} text-xs sm:text-sm`}>
-          {value}
-        </span>
-      </div>
-    </div>
-  );
-
-  /* -------- loading spinner -------- */
-  if (loading)
+  if (loading) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-        <div className="animate-spin h-16 w-16 border-t-4 border-indigo-500 rounded-full" />
-      </div>
+     <div className="
+  fixed inset-0 z-50 flex items-center justify-center
+  bg-white/80 backdrop-blur-sm
+  dark:bg-brand-900/90
+">
+  <div className="text-center">
+    <div className="relative inline-flex">
+      <div className="w-20 h-20 border-4 border-indigo-200 dark:border-indigo-900 rounded-full" />
+      <div className="absolute inset-0 w-20 h-20 border-4 border-indigo-600 dark:border-indigo-400 border-t-transparent rounded-full animate-spin" />
+    </div>
+    <p className="mt-4 text-sm font-semibold text-gray-700 dark:text-white/80">
+      Loading heatmap...
+    </p>
+  </div>
+</div>
+
     );
+  }
 
   return (
     <>
-      <div className="p-2 max-w-5xl mx-auto">
-        {!wsAvailable && (
-          <div className="mb-4 p-2 bg-yellow-100 text-yellow-800 rounded text-center">
-            WebSocket unavailable—polling every 5&nbsp;s.
-          </div>
-        )}
-
-        {/* header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-            Live Stream Heatmap
-          </h2>
-          <button
-            onClick={() => {
-              const next = viewMode === "grid" ? "table" : "grid";
-              setViewMode(next);
-              trackEvent("CryptoViewToggle", { view: next });
-            }}
-            className="flex items-center gap-2 bg-brand-gradient border border-gray-300 dark:border-gray-600 text-white px-4 py-2 rounded-full shadow-sm hover:shadow-md transition-shadow duration-200"
-          >
-            {viewMode === "grid" ? (
-              <FaTable className="w-5 h-5" />
-            ) : (
-              <FaThLarge className="w-5 h-5" />
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-indigo-50/30 to-purple-50/20 dark:from-brand-900 dark:via-brand-900 dark:to-brand-800 pb-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6">
+          {/* Warning Banner */}
+          <AnimatePresence>
+            {!wsAvailable && (
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gradient-to-r from-amber-500/10 to-orange-500/10 dark:from-amber-500/20 dark:to-orange-500/20 border border-amber-500/20 dark:border-amber-500/30 rounded-2xl backdrop-blur-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0">
+                    <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                  </div>
+                  <p className="text-xs sm:text-sm font-semibold text-amber-900 dark:text-amber-200">
+                    WebSocket unavailable—polling every 5 seconds
+                  </p>
+                </div>
+              </motion.div>
             )}
-            <span className="hidden sm:inline text-sm font-medium">
-              {viewMode === "grid" ? "Table View" : "Grid View"}
-            </span>
-          </button>
-        </div>
+          </AnimatePresence>
 
-        {/* grid / table */}
-        {viewMode === "grid" ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 lg:grid-cols-5 xl:grid-cols-6">
-            {sortedIds.map((id) => {
-              const { price, prev, bump } = tradeInfoMap[id] || {};
-              const md = metaData[id] || {};
-
-              const pct = parseFloat(String(md.changePercent24Hr ?? ""));
-              const pctPos = Number.isFinite(pct) && pct > 0;
-              const pctNeg = Number.isFinite(pct) && pct < 0;
-
-              let bg = "bg-gray-300";
-              let arrow = "";
-
-              // ✅ Always red/green immediately:
-              // If prev exists, use tick direction; else use 24h % sign.
-              if (prev != null && price != null) {
-                if (price > prev) {
-                  bg = "bg-green-500";
-                  arrow = "↑";
-                } else if (price < prev) {
-                  bg = "bg-red-500";
-                  arrow = "↓";
-                } else {
-                  bg = pctPos ? "bg-green-500" : pctNeg ? "bg-red-500" : "bg-gray-300";
-                }
-              } else {
-                bg = pctPos ? "bg-green-500" : pctNeg ? "bg-red-500" : "bg-gray-300";
-              }
-
-              const logo = logos[md.symbol?.toLowerCase()];
-
-              const tickPos = prev != null && price != null && price > prev;
-              const tickNeg = prev != null && price != null && price < prev;
-
-              return (
-                <motion.div
-                  key={id}
-                  className={`${bg} relative overflow-hidden text-white p-2 sm:p-3 rounded-lg shadow cursor-pointer`}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    setSelectedAsset(md);
-                    trackEvent("CryptoAssetClick", { id, ...md });
-                  }}
-                >
-                  {/* ✅ Flash overlay on every tick (or on first render we keep it off) */}
-                  {prev != null && price != null && bump != null && bump > 0 && (
-                    <motion.div
-                      key={`${id}-${bump}`} // forces animation replay per update
-                      className="absolute inset-0 rounded-lg pointer-events-none"
-                      initial={{ opacity: 0 }}
-                      animate={{
-                        opacity: [0, 0.55, 0],
-                        scale: [1, 1.02, 1],
-                      }}
-                      transition={{ duration: 0.35, ease: "easeOut" }}
-                      style={{
-                        background: tickPos
-                          ? "rgba(255,255,255,0.9)"
-                          : tickNeg
-                            ? "rgba(0,0,0,0.35)"
-                            : "transparent",
-                        mixBlendMode: "overlay",
-                      }}
-                    />
-                  )}
-
-                  <div className="flex items-center gap-1">
-                    <span className="text-[9px] sm:text-xs bg-black/40 px-1 rounded">
-                      #{md.rank || "—"}
-                    </span>
-
-                    {logo && (
-                      <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
-                        <img
-                          src={logo}
-                          alt={md.symbol}
-                          className="w-4 h-4 sm:w-5 sm:h-5"
-                          loading="lazy"
-                        />
-                      </span>
-                    )}
-
-                    <span
-                      className="font-bold text-sm sm:text-lg"
-                      title={md.name}
-                    >
-                      {md.symbol || id}
-                    </span>
+          {/* Header */}
+          <div className="mb-6 sm:mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl blur-xl opacity-40" />
+                  <div className="relative bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-2xl shadow-lg">
+                    <FaFire className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
                   </div>
+                </div>
+                <div>
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+                    Live Crypto Heatmap
+                  </h1>
+                  <p className="mt-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">
+                    Real-time price movements • Top 200 by market cap
+                  </p>
+                </div>
+              </div>
 
-                  <div className="mt-0.5 text-[11px] sm:text-sm">
-                    {formatUSD(price)}{" "}
-                    <span className="font-bold">
-                      {arrow || (pctPos ? "↑" : pctNeg ? "↓" : "")}
-                    </span>
-                  </div>
-
-                  <div className="text-[9px] sm:text-xs">
-                    {formatPct(md.changePercent24Hr)}
-                  </div>
-                </motion.div>
-              );
-            })}
+              <motion.button
+                onClick={() => {
+                  const next = viewMode === "grid" ? "table" : "grid";
+                  setViewMode(next);
+                  trackEvent("CryptoViewToggle", { view: next });
+                }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="flex items-center justify-center gap-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-5 py-3 rounded-2xl shadow-lg shadow-indigo-500/25 transition-all duration-200 font-semibold text-sm"
+              >
+                {viewMode === "grid" ? <FaTable className="w-4 h-4" /> : <FaThLarge className="w-4 h-4" />}
+                <span>{viewMode === "grid" ? "Table View" : "Grid View"}</span>
+              </motion.button>
+            </div>
           </div>
-       ) : (
-  <div className="overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900 shadow-sm">
-    <table className="min-w-full divide-y divide-black/5 dark:divide-white/10">
-      <thead className="bg-black/[0.03] dark:bg-brand-900">
-        <tr>
-          {["Rank", "Symbol", "Name", "Price", "24h"].map((h) => (
-            <th
-              key={h}
-              className="px-3 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60"
-            >
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
 
-      <tbody className="divide-y divide-black/5 dark:divide-white/10">
-        {sortedIds.map((id) => {
-          const md = metaData[id] || {};
-          const { price, prev, bump } = tradeInfoMap[id] || {};
+          {/* Grid View */}
+          {viewMode === "grid" ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1 sm:gap-1">
+              {sortedIds.map((id) => {
+                const { price, prev, bump } = tradeInfoMap[id] || {};
+                const md = metaData[id] || {};
+                const pct = parseFloat(String(md.changePercent24Hr ?? ""));
+                const pctPos = Number.isFinite(pct) && pct > 0;
+                const pctNeg = Number.isFinite(pct) && pct < 0;
 
-          const pct = parseFloat(String(md.changePercent24Hr ?? ""));
-          const pctPos = Number.isFinite(pct) && pct > 0;
-          const pctNeg = Number.isFinite(pct) && pct < 0;
+                let isPositive = false;
+                let isNegative = false;
+                let arrow = "";
 
-          const tickPos = price != null && prev != null && price > prev;
-          const tickNeg = price != null && prev != null && price < prev;
+                if (prev != null && price != null) {
+                  isPositive = price > prev;
+                  isNegative = price < prev;
+                  arrow = isPositive ? "↑" : isNegative ? "↓" : "";
+                } else {
+                  isPositive = pctPos;
+                  isNegative = pctNeg;
+                }
 
-          // ✅ Always red/green immediately (tick direction if available, else 24h sign)
-          const pos = prev != null ? tickPos : pctPos;
-          const neg = prev != null ? tickNeg : pctNeg;
+                const logo = logos[md.symbol?.toLowerCase()];
 
-          const logo = logos[String(md.symbol ?? "").toLowerCase()];
+                return (
+  <motion.div
+    key={id}
+    layout
+    className="group relative"
+    whileHover={{ scale: 1.03, zIndex: 10 }}
+    whileTap={{ scale: 0.97 }}
+    onClick={() => {
+      setSelectedAsset(md);
+      trackEvent("CryptoAssetClick", { id, ...md });
+    }}
+  >
+    {/* soft hover glow */}
+    <div className="absolute inset-0 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-indigo-500/10 to-purple-500/10" />
 
-          return (
-            <motion.tr
-              key={`${id}-${bump ?? 0}`} // replay flash on bump changes
-              className="cursor-pointer transition hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
-              onClick={() => {
-                setSelectedAsset(md);
-                trackEvent("CryptoAssetClick", { id });
-              }}
-              initial={false}
-              animate={{
-                backgroundColor: bump
-                  ? pos
-                    ? "rgba(16,185,129,0.18)"
-                    : neg
-                      ? "rgba(244,63,94,0.18)"
-                      : "rgba(0,0,0,0)"
-                  : "rgba(0,0,0,0)",
-              }}
-              transition={{ duration: 0.35, ease: "easeOut" }}
-            >
-              <td className="px-3 sm:px-4 py-2 text-[11px] sm:text-sm font-semibold text-gray-700 dark:text-white/75">
-                {md.rank ?? "—"}
-              </td>
+    {(() => {
+const cardTone = isPositive
+  ? "bg-gradient-to-br from-green-500 to-emerald-600 border-green-400/35 shadow-lg shadow-green-500/20"
+  : isNegative
+  ? "bg-gradient-to-br from-red-500 to-rose-600 border-red-400/35 shadow-lg shadow-red-500/20"
+  : "bg-gradient-to-br from-gray-400 to-gray-500 border-gray-300/30 shadow-lg shadow-gray-500/10";
 
-              <td className="px-3 sm:px-4 py-2">
-                <div className="flex items-center gap-2">
-                  {logo ? (
-                    <span className="inline-flex items-center justify-center rounded-full bg-white/90 dark:bg-brand-900 p-[2px] ring-1 ring-black/10 dark:ring-white/10">
-                      <img
-                        src={logo}
-                        alt={md.symbol}
-                        className="h-5 w-5 sm:h-6 sm:w-6"
-                        loading="lazy"
-                      />
-                    </span>
-                  ) : (
-                    <span className="h-5 w-5 sm:h-6 sm:w-6 rounded-full  dark:bg-brand-900" />
-                  )}
+const flashBg = isPositive
+  ? "radial-gradient(circle at center, rgba(34,197,94,0.88) 0%, rgba(34,197,94,0.38) 36%, rgba(34,197,94,0) 72%)"
+  : "radial-gradient(circle at center, rgba(239,68,68,0.88) 0%, rgba(239,68,68,0.38) 36%, rgba(239,68,68,0) 72%)";
 
-                  <div className="font-extrabold text-[12px] sm:text-sm text-gray-900 dark:text-white">
-                    {md.symbol ?? id}
+      return (
+        <div
+          className={[
+            "relative overflow-hidden rounded-2xl cursor-pointer",
+            "border-2 transition-all duration-300",
+            cardTone,
+          ].join(" ")}
+        >
+          {/* Flash overlay on price update (GREEN/RED flash) */}
+          <AnimatePresence>
+            {prev != null && price != null && bump != null && bump > 0 && (
+              <motion.div
+                key={`${id}-${bump}`}
+                className="absolute inset-0 pointer-events-none"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0, 0.9, 0] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+                style={{ background: flashBg }}
+              />
+            )}
+          </AnimatePresence>
+
+          <div className="relative p-3 sm:p-4">
+            {/* Rank badge */}
+            <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
+              <div className="bg-black/30 backdrop-blur-sm px-2 py-0.5 rounded-full">
+                <span className="text-[9px] sm:text-[10px] font-bold text-white/90">
+                  #{md.rank || "—"}
+                </span>
+              </div>
+            </div>
+
+            {/* Logo and symbol */}
+            <div className="flex items-center gap-2 mb-3">
+              {logo ? (
+                <div className="relative flex-shrink-0">
+                  {/* removed the shiny white blur; keep it clean */}
+                  <div className="relative bg-white/90 rounded-full p-1.5 shadow-md">
+                    <img
+                      src={logo}
+                      alt={md.symbol}
+                      className="w-6 h-6 sm:w-7 sm:h-7"
+                      loading="lazy"
+                    />
                   </div>
                 </div>
-              </td>
+              ) : (
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 backdrop-blur-sm flex-shrink-0" />
+              )}
 
-              <td className="px-3 sm:px-4 py-2">
-                <div className="text-[12px] sm:text-sm font-semibold text-gray-800 dark:text-white/80 line-clamp-1">
-                  {md.name ?? "—"}
-                </div>
-              </td>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-black text-sm sm:text-base text-white truncate drop-shadow-lg">
+                  {md.symbol || id}
+                </h3>
+              </div>
+            </div>
 
-              <td className="px-3 sm:px-4 py-2 text-[12px] sm:text-sm font-extrabold text-gray-900 dark:text-white">
-                {formatUSD(price)}
-              </td>
+            {/* Price */}
+            <div className="mb-2">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-base sm:text-lg font-black text-white drop-shadow-lg">
+                  {fmt.usd(price)}
+                </span>
+                {arrow && (
+                  <span className="text-sm sm:text-base font-black text-white/90 drop-shadow-lg">
+                    {arrow}
+                  </span>
+                )}
+              </div>
+            </div>
 
-              <td className="px-3 sm:px-4 py-2">
+            {/* 24h change */}
+            <div className="flex items-center justify-between">
+              <div className="inline-flex items-center gap-1 bg-black/20 backdrop-blur-sm px-2 py-1 rounded-full">
+                <span className="text-[10px] sm:text-xs font-bold text-white/90">
+                  {fmt.pct(md.changePercent24Hr)}
+                </span>
+              </div>
+
+              {(pctPos || pctNeg) && (
                 <div
                   className={[
-                    "inline-flex items-center gap-2 text-[12px] sm:text-sm font-extrabold",
-                    pos
-                      ? "text-green-600 dark:text-green-300"
-                      : neg
-                        ? "text-red-600 dark:text-red-300"
-                        : "text-gray-700 dark:text-white/70",
+                    "text-xs sm:text-sm font-black drop-shadow-lg",
+                    pctPos ? "text-emerald-200" : "text-rose-200",
                   ].join(" ")}
                 >
-                  <span aria-hidden>
-                    {pos ? "↑" : neg ? "↓" : ""}
-                  </span>
-                  {formatPct(md.changePercent24Hr)}
+                  {pctPos ? "↑" : "↓"}
                 </div>
-              </td>
-            </motion.tr>
-          );
-        })}
-
-        {sortedIds.length === 0 && (
-          <tr>
-            <td
-              colSpan={5}
-              className="px-4 py-4 text-sm text-gray-600 dark:text-white/70"
-            >
-              No rows to show.
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  </div>
-)}
-
-        {/* shared crypto popup */}
-        <CryptoAssetPopup
-          asset={selectedAsset}
-          logos={logos}
-          onClose={() => setSelectedAsset(null)}
-          tradeInfo={selectedAsset ? tradeInfoMap[selectedAsset.id] : undefined}
-        />
-      </div>
-
-      {/* websocket-closed popup */}
-      {wsClosed && (
-        <div className="fixed inset-0 dark:bg-brand-900 flex items-center justify-center z-50 p-4">
-          <div className="relative bg-white dark:bg-brand-900 rounded-xl shadow-xl w-full max-w-sm p-6 text-center">
-            <button
-              className="absolute top-4 right-4 text-indigo-500 hover:text-indigo-700 text-xl"
-              onClick={() => setWsClosed(false)}
-            >
-              ×
-            </button>
-            <h3 className="text-xl font-bold mb-4">WebSocket closed</h3>
-            <p className="mb-6">
-              The live price stream ended automatically after&nbsp;10&nbsp;minutes.
-            </p>
-            <button
-              className="px-4 py-2 bg-brand-gradient hover:bg-indigo-600 text-white rounded"
-              onClick={() => window.location.reload()}
-            >
-              Start Stream Again
-            </button>
+              )}
+            </div>
           </div>
         </div>
-      )}
+      );
+    })()}
+  </motion.div>
+);
+
+              })}
+            </div>
+          ) : (
+            /* Table View */
+            <div className="overflow-hidden rounded-2xl border border-gray-200/50 dark:border-white/10 bg-white/80 dark:bg-brand-900/80 backdrop-blur-xl shadow-2xl">
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-brand-800 dark:to-brand-900/50 border-b border-gray-200/50 dark:border-white/10">
+                      {["Rank", "Asset", "Name", "Price", "24h Change"].map((h) => (
+                        <th
+                          key={h}
+                          className="px-3 sm:px-6 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider text-gray-700 dark:text-white/80"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                    {sortedIds.map((id) => {
+                      const md = metaData[id] || {};
+                      const { price, prev, bump } = tradeInfoMap[id] || {};
+                      const pct = parseFloat(String(md.changePercent24Hr ?? ""));
+                      const pctPos = Number.isFinite(pct) && pct > 0;
+                      const pctNeg = Number.isFinite(pct) && pct < 0;
+                      const tickPos = price != null && prev != null && price > prev;
+                      const tickNeg = price != null && prev != null && price < prev;
+                      const pos = prev != null ? tickPos : pctPos;
+                      const neg = prev != null ? tickNeg : pctNeg;
+                      const logo = logos[String(md.symbol ?? "").toLowerCase()];
+
+                      return (
+                        <motion.tr
+                          key={`${id}-${bump ?? 0}`}
+                          className="cursor-pointer hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors duration-200"
+                          onClick={() => {
+                            setSelectedAsset(md);
+                            trackEvent("CryptoAssetClick", { id });
+                          }}
+                          initial={false}
+                          animate={{
+                            backgroundColor: bump
+                              ? pos
+                                ? "rgba(16,185,129,0.12)"
+                                : neg
+                                ? "rgba(244,63,94,0.12)"
+                                : "rgba(0,0,0,0)"
+                              : "rgba(0,0,0,0)",
+                          }}
+                          transition={{ duration: 0.4, ease: "easeOut" }}
+                        >
+                          <td className="px-3 sm:px-6 py-3 sm:py-4">
+                            <div className="inline-flex items-center justify-center bg-gray-100 dark:bg-white/10 rounded-full px-2.5 py-1">
+                              <span className="text-[11px] sm:text-sm font-bold text-gray-700 dark:text-white/90">
+                                #{md.rank ?? "—"}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4">
+                            <div className="flex items-center gap-3">
+                              {logo ? (
+                                <div className="relative flex-shrink-0">
+                                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-full blur-md" />
+                                  <div className="relative bg-white dark:bg-brand-800 rounded-full p-1.5 ring-2 ring-gray-200/50 dark:ring-white/10 shadow-lg">
+                                    <img
+                                      src={logo}
+                                      alt={md.symbol}
+                                      className="w-6 h-6 sm:w-8 sm:h-8"
+                                      loading="lazy"
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 dark:from-white/10 dark:to-white/5 flex-shrink-0" />
+                              )}
+                              <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
+                                {md.symbol ?? id}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4">
+                            <span className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-white/80 line-clamp-1">
+                              {md.name ?? "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4">
+                            <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
+                              {fmt.usd(price)}
+                            </span>
+                          </td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4">
+                            <div
+                              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full font-bold text-xs sm:text-sm ${
+                                pos
+                                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                                  : neg
+                                  ? "bg-rose-500/15 text-rose-700 dark:text-rose-300"
+                                  : "bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white/70"
+                              }`}
+                            >
+                              <span aria-hidden className="text-base">
+                                {pos ? "↑" : neg ? "↓" : ""}
+                              </span>
+                              {fmt.pct(md.changePercent24Hr)}
+                            </div>
+                          </td>
+                        </motion.tr>
+                      );
+                    })}
+                    {sortedIds.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-white/60">
+                          No data available
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Asset Detail Modal */}
+      <CryptoAssetPopup
+        asset={selectedAsset}
+        logos={logos}
+        onClose={() => setSelectedAsset(null)}
+        tradeInfo={selectedAsset ? tradeInfoMap[selectedAsset.id] : undefined}
+      />
+
+      {/* WebSocket Closed Modal */}
+      <AnimatePresence>
+        {wsClosed && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+              
+              <div className="p-6 sm:p-8">
+                <button
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors"
+                  onClick={() => setWsClosed(false)}
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+
+                <div className="text-center">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl mb-4 shadow-lg">
+                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+
+                  <h3 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-3">
+                    Stream Ended
+                  </h3>
+                  
+                  <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-6">
+                    The live price stream ended automatically after 10 minutes.
+                  </p>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-2xl font-bold shadow-lg shadow-indigo-500/25 transition-all duration-200"
+                    onClick={() => window.location.reload()}
+                  >
+                    Restart Stream
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
