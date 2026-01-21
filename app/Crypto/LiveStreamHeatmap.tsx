@@ -413,11 +413,11 @@ export default function LiveStreamHeatmap() {
     <div className="absolute inset-0 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-indigo-500/10 to-purple-500/10" />
 
     {(() => {
-const cardTone = isPositive
-  ? "bg-gradient-to-br from-green-500 to-emerald-600 border-green-400/35 shadow-lg shadow-green-500/20"
-  : isNegative
-  ? "bg-gradient-to-br from-red-500 to-rose-600 border-red-400/35 shadow-lg shadow-red-500/20"
-  : "bg-gradient-to-br from-gray-400 to-gray-500 border-gray-300/30 shadow-lg shadow-gray-500/10";
+          const cardTone = isPositive
+            ? "bg-gradient-to-br from-green-500 to-emerald-600 border-green-400/35 shadow-lg shadow-green-500/20"
+            : isNegative
+            ? "bg-gradient-to-br from-red-500 to-rose-600 border-red-400/35 shadow-lg shadow-red-500/20"
+            : "bg-gradient-to-br from-gray-400 to-gray-500 border-gray-300/30 shadow-lg shadow-gray-500/10";
 
 const flashBg = isPositive
   ? "radial-gradient(circle at center, rgba(34,197,94,0.88) 0%, rgba(34,197,94,0.38) 36%, rgba(34,197,94,0) 72%)"

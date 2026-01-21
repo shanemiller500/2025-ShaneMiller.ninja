@@ -234,7 +234,7 @@ function NewsCard({ a }: { a: Article }) {
       <div className="p-4">
         <div className="flex items-center gap-2">
           <img
-            src={domain ? `https://logo.clearbit.com/${domain}` : ""}
+            src={domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : ""}
             alt={a.source || domain || "Source"}
             className="h-8 w-8 rounded-full bg-white object-contain ring-1 ring-black/10"
             loading="lazy"

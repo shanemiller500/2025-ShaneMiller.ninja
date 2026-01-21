@@ -73,7 +73,7 @@ function logoCandidatesForArticle(a: Article) {
     ? [
         `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`,
         `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`,
-        `https://logo.clearbit.com/${encodeURIComponent(domain)}?size=128`,
+         `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`,
       ]
     : [];
 

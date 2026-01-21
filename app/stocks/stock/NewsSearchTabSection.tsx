@@ -378,7 +378,8 @@ function ArticleCard({ a }: { a: Article }) {
         {/* publisher */}
         <div className="flex items-center gap-2">
           <img
-            src={domain ? `https://logo.clearbit.com/${domain}` : LOGO_FALLBACK}
+            src={domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : LOGO_FALLBACK}
+
             onError={(e) => (e.currentTarget.src = LOGO_FALLBACK)}
             alt={a.source}
             className="h-8 w-8 rounded-full bg-white object-contain ring-1 ring-black/10"

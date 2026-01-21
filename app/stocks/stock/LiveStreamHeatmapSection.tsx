@@ -710,7 +710,7 @@ useEffect(() => {
   /* ------------------------------------------------------------------ */
   const banner =
     marketState === "closed"
-      ? "Markets Closed — Showing Last Price vs Prev Close"
+      ? "Markets Closed — Showing Last Price as of market close."
       : marketState === "premarket"
       ? "Pre-Market Trading"
       : marketState === "afterhours"

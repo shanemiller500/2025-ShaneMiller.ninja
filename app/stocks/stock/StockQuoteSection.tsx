@@ -1,7 +1,7 @@
 // Filename: StockQuoteSection.tsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import { motion, AnimatePresence } from "framer-motion";
 import "react-toastify/dist/ReactToastify.css";
@@ -49,6 +49,32 @@ const cleanLogo = (url?: string) => {
   }
 };
 
+const isLikelyUsTicker = (sym: string) => {
+  const s = String(sym || "").trim().toUpperCase();
+  if (!s) return false;
+
+  // Fast reject: most non-US symbols contain a dot suffix (2330.TW, 2222.SR, VOD.L, etc.)
+  // still allow a single class-suffix like BRK.B
+  if (s.includes(".")) {
+    return /^[A-Z]{1,5}\.[A-Z]$/.test(s); // BRK.B, BF.B, etc.
+  }
+
+  // Basic US ticker shape
+  return /^[A-Z]{1,6}$/.test(s);
+};
+
+const isAllowedUsExchange = (exchangeRaw: any) => {
+  const ex = String(exchangeRaw || "").toUpperCase();
+  if (!ex) return false;
+
+  return (
+    ex.includes("NASDAQ") ||
+    ex.includes("NMS") || // NASDAQ Global Market (often includes NMS)
+    ex.includes("NYSE") ||
+    ex.includes("NEW YORK STOCK EXCHANGE")
+  );
+};
+
 export default function StockQuoteSection() {
   const [symbolInput, setSymbolInput] = useState("");
   const debounced = useDebouncedValue(symbolInput, 250);
@@ -76,41 +102,167 @@ export default function StockQuoteSection() {
 
   /* ─────────────────────────  Suggestion profiles cache  ───────────────────────── */
   const [suggestionProfiles, setSuggestionProfiles] = useState<Record<string, any>>({});
+  const suggestionProfilesRef = useRef<Record<string, any>>({});
+  useEffect(() => {
+    suggestionProfilesRef.current = suggestionProfiles;
+  }, [suggestionProfiles]);
+
+  // Negative cache: symbols that have no profile/logo available via proxy.
+  const [noProfile, setNoProfile] = useState<Record<string, true>>({});
+  const noProfileSetRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    noProfileSetRef.current = new Set(Object.keys(noProfile));
+  }, [noProfile]);
+
+  const noProfileRef = useRef<Record<string, { t: number; status: number }>>({});
   const inflightProfilesRef = useRef<Set<string>>(new Set());
   const profileCacheRef = useRef<Record<string, { t: number; p: any }>>({});
+
   const PROFILE_TTL = 6 * 60 * 60 * 1000; // 6h in-memory cache
+  const NO_PROFILE_TTL = 6 * 60 * 60 * 1000; // 6h negative cache
 
-  const ensureProfileForSuggestion = async (sym: string) => {
+  // Concurrency + queue for profile fetches
+  const PROFILE_MAX_CONCURRENCY = 3;
+  const profileQueueRef = useRef<string[]>([]);
+  const activeProfileFetchesRef = useRef(0);
+
+  // Optional: track failures to avoid hot-looping the same broken symbol
+  const profileFailRef = useRef<Record<string, { t: number; c: number }>>({});
+  const FAIL_TTL = 30_000; // 30s cooldown after repeated failures
+
+  const prefetchRunRef = useRef(0);
+
+  const ensureProfileForSuggestion = useCallback(async (symRaw: string) => {
+    const sym = String(symRaw || "").trim().toUpperCase();
     if (!sym) return;
-    if (suggestionProfiles[sym]) return;
 
-    const hit = profileCacheRef.current[sym];
+    // already loaded
+    if (suggestionProfilesRef.current[sym]) return;
+
+    // negative-cache hit (we already learned this symbol doesn't have a profile)
+    const neg = noProfileRef.current[sym];
     const now = Date.now();
+    if (neg && now - neg.t < NO_PROFILE_TTL) return;
+
+    // TTL cache hit
+    const hit = profileCacheRef.current[sym];
     if (hit?.p && now - hit.t < PROFILE_TTL) {
-      setSuggestionProfiles((prev) => ({ ...prev, [sym]: hit.p }));
+      setSuggestionProfiles((prev) => (prev[sym] ? prev : { ...prev, [sym]: hit.p }));
       return;
     }
 
+    // short cooldown if it keeps failing for other reasons
+    const fail = profileFailRef.current[sym];
+    if (fail && now - fail.t < FAIL_TTL && fail.c >= 2) return;
+
+    // de-dupe inflight per symbol
     if (inflightProfilesRef.current.has(sym)) return;
     inflightProfilesRef.current.add(sym);
 
+    const enqueue = () => {
+      if (!profileQueueRef.current.includes(sym)) {
+        profileQueueRef.current.push(sym);
+      }
+      inflightProfilesRef.current.delete(sym);
+    };
+
+    if (activeProfileFetchesRef.current >= PROFILE_MAX_CONCURRENCY) {
+      enqueue();
+      return;
+    }
+
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    const pump = async () => {
+      while (
+        activeProfileFetchesRef.current < PROFILE_MAX_CONCURRENCY &&
+        profileQueueRef.current.length > 0
+      ) {
+        const next = profileQueueRef.current.shift()!;
+        ensureProfileForSuggestion(next); // fire & forget
+        await sleep(0);
+      }
+    };
+
+    activeProfileFetchesRef.current += 1;
+
     try {
-      const r = await fetch(`${PROXY_BASE}/profile/${sym}`, { cache: "no-store" });
-      const p = r.ok ? await r.json() : null;
-      if (!p) return;
+      const url = `${PROXY_BASE}/profile/${encodeURIComponent(sym)}`;
+
+      // 1 retry max for overload-ish responses (NOT for "no profile")
+      let attempt = 0;
+      let p: any = null;
+
+      while (attempt < 2 && !p) {
+        attempt += 1;
+
+        const r = await fetch(url, { cache: "no-store" });
+
+        if (!r.ok) {
+          // Treat 500/404 as "no profile" for this proxy.
+          if (r.status === 500 || r.status === 404) {
+            noProfileRef.current[sym] = { t: Date.now(), status: r.status };
+            setNoProfile((prev) => (prev[sym] ? prev : { ...prev, [sym]: true }));
+
+            // Immediately hide from the dropdown to reduce clutter.
+            setSuggestions((prev) => prev.filter((x) => x.symbol !== sym));
+
+            // Human note for you:
+            // Some tickers simply don't have a profile/logo on this endpoint.
+            console.info(`[profiles] No profile/logo for ${sym} (proxy ${r.status}) → hiding from dropdown.`);
+
+            return;
+          }
+
+          // retry only for rate-limit / transient server issues
+          const retryable = r.status === 429 || r.status === 502 || r.status === 503 || r.status === 504;
+          if (retryable && attempt < 2) {
+            await sleep(350 + Math.floor(Math.random() * 250));
+            continue;
+          }
+
+          break;
+        }
+
+        p = await r.json();
+        if (!p) break;
+
+        // If we did get a profile, only keep it if it's NYSE/NASDAQ.
+        // Otherwise hide it from the dropdown to keep things "major US only".
+        if (p && !isAllowedUsExchange(p.exchange)) {
+          noProfileRef.current[sym] = { t: Date.now(), status: 204 }; // "not in our allowed exchange set"
+          setNoProfile((prev) => (prev[sym] ? prev : { ...prev, [sym]: true }));
+          setSuggestions((prev) => prev.filter((x) => x.symbol !== sym));
+
+          // Human note:
+          console.info(`[profiles] ${sym} exchange "${p.exchange || "?"}" is not NYSE/NASDAQ → hiding from dropdown.`);
+          return;
+        }
+      }
+
+      if (!p) {
+        const prev = profileFailRef.current[sym];
+        profileFailRef.current[sym] = { t: Date.now(), c: (prev?.c ?? 0) + 1 };
+        return;
+      }
+
+      if (profileFailRef.current[sym]) delete profileFailRef.current[sym];
 
       profileCacheRef.current = {
         ...profileCacheRef.current,
         [sym]: { t: Date.now(), p },
       };
 
-      setSuggestionProfiles((prev) => ({ ...prev, [sym]: p }));
+      setSuggestionProfiles((prev) => (prev[sym] ? prev : { ...prev, [sym]: p }));
     } catch {
-      // ignore
+      const prev = profileFailRef.current[sym];
+      profileFailRef.current[sym] = { t: Date.now(), c: (prev?.c ?? 0) + 1 };
     } finally {
       inflightProfilesRef.current.delete(sym);
+      activeProfileFetchesRef.current -= 1;
+      void pump();
     }
-  };
+  }, []);
 
   /* ─────────────────────────── Autocomplete ─────────────────────────── */
   useEffect(() => {
@@ -126,9 +278,10 @@ export default function StockQuoteSection() {
       }
 
       try {
-        const data = await fetch(`https://finnhub.io/api/v1/search?q=${encodeURIComponent(q)}&token=${API_TOKEN}`, {
-          cache: "no-store",
-        })
+        const data = await fetch(
+          `https://finnhub.io/api/v1/search?q=${encodeURIComponent(q)}&token=${API_TOKEN}`,
+          { cache: "no-store" }
+        )
           .then((r) => (r.ok ? r.json() : { result: [] }))
           .catch(() => ({ result: [] }));
 
@@ -136,18 +289,22 @@ export default function StockQuoteSection() {
 
         const rows = Array.isArray(data?.result) ? data.result : [];
         const cleaned: Suggestion[] = rows
-          .map((i: any) => ({
-            symbol: String(i.symbol || "").toUpperCase(),
-            description: i.description ? String(i.description) : "",
-            type: i.type ? String(i.type) : "",
-          }))
-          .filter((s: Suggestion) => !!s.symbol)
-          .slice(0, 12);
+        .map((i: any) => ({
+          symbol: String(i.symbol || "").toUpperCase(),
+          description: i.description ? String(i.description) : "",
+          type: i.type ? String(i.type) : "",
+        }))
+        .filter((s: Suggestion) => !!s.symbol && isLikelyUsTicker(s.symbol))
+        .slice(0, 20); // grab a few more before it de-dupe + later hide
+
 
         const seen = new Set<string>();
         const unique = cleaned.filter((s) => (seen.has(s.symbol) ? false : seen.add(s.symbol)));
 
-        setSuggestions(unique);
+        // Filter out anything we already learned has no profile.
+        const filtered = unique.filter((s) => !noProfileSetRef.current.has(s.symbol));
+
+        setSuggestions(filtered);
         setOpenSuggest(true);
         setActiveIdx(-1);
       } catch {
@@ -164,30 +321,34 @@ export default function StockQuoteSection() {
     };
   }, [debounced]);
 
-  /* Prefetch profiles for the visible suggestions (so logos become backgrounds) */
+  /* Prefetch profiles for suggestions (kept small to reduce noisy 500s) */
   useEffect(() => {
     if (!openSuggest || suggestions.length === 0) return;
+
+    const runId = ++prefetchRunRef.current;
     let cancelled = false;
 
+    const PREFETCH_LIMIT = 6;
+    const list = suggestions.slice(0, PREFETCH_LIMIT);
+
     (async () => {
-      // stagger a bit so it feels smooth and doesn’t spike
-      for (let i = 0; i < suggestions.length; i++) {
+      for (let i = 0; i < list.length; i++) {
         if (cancelled) return;
-        const sym = suggestions[i]?.symbol;
-        if (sym) {
-          // eslint-disable-next-line no-await-in-loop
-          await ensureProfileForSuggestion(sym);
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise((r) => setTimeout(r, 90));
-        }
+        if (runId !== prefetchRunRef.current) return;
+
+        const sym = list[i]?.symbol;
+        if (sym) ensureProfileForSuggestion(sym);
+
+        // stagger
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 70));
       }
     })();
 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openSuggest, suggestions]);
+  }, [openSuggest, suggestions, ensureProfileForSuggestion]);
 
   /* ─────────────────────── Close dropdown on outside click ─────────── */
   useEffect(() => {
@@ -208,7 +369,11 @@ export default function StockQuoteSection() {
     if (activeIdx < 0) return;
     const el = listRef.current?.querySelector<HTMLLIElement>(`li[data-idx="${activeIdx}"]`);
     el?.scrollIntoView({ block: "nearest" });
-  }, [activeIdx]);
+
+    // opportunistic: fetch profile for the active item
+    const sym = suggestions[activeIdx]?.symbol;
+    if (sym) ensureProfileForSuggestion(sym);
+  }, [activeIdx, suggestions, ensureProfileForSuggestion]);
 
   /* ─────────────────────────── Search handler ───────────────────────── */
   const handleSearch = async (sym?: string) => {
@@ -221,12 +386,10 @@ export default function StockQuoteSection() {
     setActiveIdx(-1);
 
     try {
-      const [quote, profile, metric, news] = await Promise.all([
-        fetch(`${PROXY_BASE}/quote/${symbol}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-        fetch(`${PROXY_BASE}/profile/${symbol}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-        fetch(`${PROXY_BASE}/metric/${symbol}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-        fetch(`${PROXY_BASE}/news/${symbol}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])),
-      ]);
+      // Quote first (fast-fail)
+      const quote = await fetch(`${PROXY_BASE}/quote/${encodeURIComponent(symbol)}`, { cache: "no-store" }).then((r) =>
+        r.ok ? r.json() : null
+      );
 
       if (!quote || typeof quote.c !== "number" || quote.c <= 0) {
         toast.error(`No data found for “${symbol}.” Try another symbol.`);
@@ -235,6 +398,18 @@ export default function StockQuoteSection() {
         setShowModal(false);
         return;
       }
+
+      const [profile, metric, news] = await Promise.all([
+        fetch(`${PROXY_BASE}/profile/${encodeURIComponent(symbol)}`, { cache: "no-store" }).then((r) =>
+          r.ok ? r.json() : null
+        ),
+        fetch(`${PROXY_BASE}/metric/${encodeURIComponent(symbol)}`, { cache: "no-store" }).then((r) =>
+          r.ok ? r.json() : null
+        ),
+        fetch(`${PROXY_BASE}/news/${encodeURIComponent(symbol)}`, { cache: "no-store" }).then((r) =>
+          r.ok ? r.json() : []
+        ),
+      ]);
 
       let profileData = profile || {};
       if (!profileData.name) {
@@ -378,132 +553,137 @@ export default function StockQuoteSection() {
                       }}
                       role="listbox"
                     >
-                      {suggestions.map((s, idx) => {
-                        const active = idx === activeIdx;
+                      {suggestions
+                        .filter((s) => !noProfileSetRef.current.has(s.symbol)) // extra guard
+                        .map((s, idx) => {
+                          const active = idx === activeIdx;
 
-                        const p = suggestionProfiles[s.symbol] || {};
-                        const logo = cleanLogo(p?.logo) || "";
+                          const p = suggestionProfiles[s.symbol] || {};
+                          const logo = cleanLogo(p?.logo) || "";
 
-                        return (
-                          <motion.li
-                            key={`${s.symbol}-${idx}`}
-                            data-idx={idx}
-                            role="option"
-                            aria-selected={active}
-                            onMouseEnter={() => setActiveIdx(idx)}
-                            onFocus={() => setActiveIdx(idx)}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              handleSearch(s.symbol);
-                            }}
-                            whileHover={{ y: -1.5, scale: 1.01 }}
-                            whileTap={{ scale: 0.99 }}
-                            transition={{ duration: 0.12 }}
-                            className={cn(
-                              "relative cursor-pointer select-none",
-                              "mx-2 my-2 rounded-2xl overflow-hidden",
-                              "ring-1 ring-black/10 dark:ring-white/10",
-                              "shadow-sm",
-                              active
-                                ? "shadow-[0_18px_40px_-22px_rgba(99,102,241,0.55)] ring-indigo-500/30 dark:ring-indigo-400/30"
-                                : "hover:shadow-[0_18px_40px_-26px_rgba(0,0,0,0.35)]"
-                            )}
-                          >
-                            {/* Logo-as-background layer */}
-                            <div
-                              className="absolute inset-0"
-                              style={{
-                                backgroundImage: logo ? `url(${logo})` : undefined,
-                                backgroundSize: "cover",
-                                backgroundPosition: "center",
-                                opacity: logo ? 0.42 : 0,
-                                transform: "scale(1.05)",
-                                filter: "saturate(1.1) contrast(1.05)",
+                          return (
+                            <motion.li
+                              key={`${s.symbol}-${idx}`}
+                              data-idx={idx}
+                              role="option"
+                              aria-selected={active}
+                              onMouseEnter={() => {
+                                setActiveIdx(idx);
+                                ensureProfileForSuggestion(s.symbol);
                               }}
-                            />
-
-                            {/* Heatmap-style overlays (legibility + vibe) */}
-                            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/80 to-white/55 dark:from-black/65 dark:via-black/45 dark:to-black/25" />
-                            <div className="absolute inset-0 opacity-70">
-                              <div className="absolute -top-10 -left-10 h-28 w-28 rounded-full bg-indigo-500/10 blur-2xl" />
-                              <div className="absolute -bottom-12 -right-12 h-32 w-32 rounded-full bg-fuchsia-500/10 blur-2xl" />
-                            </div>
-
-                            {/* Shine sweep */}
-                            <div
+                              onFocus={() => setActiveIdx(idx)}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleSearch(s.symbol);
+                              }}
+                              whileHover={{ y: -1.5, scale: 1.01 }}
+                              whileTap={{ scale: 0.99 }}
+                              transition={{ duration: 0.12 }}
                               className={cn(
-                                "pointer-events-none absolute -inset-10 rotate-12 opacity-0 transition duration-200",
-                                "bg-gradient-to-r from-transparent via-white/35 to-transparent",
-                                active ? "opacity-70" : "group-hover:opacity-60"
+                                "relative cursor-pointer select-none",
+                                "mx-2 my-2 rounded-2xl overflow-hidden",
+                                "ring-1 ring-black/10 dark:ring-white/10",
+                                "shadow-sm",
+                                active
+                                  ? "shadow-[0_18px_40px_-22px_rgba(99,102,241,0.55)] ring-indigo-500/30 dark:ring-indigo-400/30"
+                                  : "hover:shadow-[0_18px_40px_-26px_rgba(0,0,0,0.35)]"
                               )}
-                            />
+                            >
+                              {/* Logo-as-background layer */}
+                              <div
+                                className="absolute inset-0"
+                                style={{
+                                  backgroundImage: logo ? `url(${logo})` : undefined,
+                                  backgroundSize: "cover",
+                                  backgroundPosition: "center",
+                                  opacity: logo ? 0.42 : 0,
+                                  transform: "scale(1.05)",
+                                  filter: "saturate(1.1) contrast(1.05)",
+                                }}
+                              />
 
-                            {/* Content */}
-                            <div className="relative px-4 py-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    {/* Small logo chip (so even if bg is subtle you still SEE it) */}
-                                    <div className="h-8 w-8 rounded-xl bg-white/80 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/10 flex items-center justify-center overflow-hidden">
-                                      {logo ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                          src={logo}
-                                          alt=""
-                                          className="h-6 w-6 object-contain"
-                                          loading="lazy"
-                                          onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
-                                        />
-                                      ) : (
-                                        <span className="text-[10px] font-black text-gray-700 dark:text-white/70">
-                                          {s.symbol.slice(0, 2)}
+                              {/* Heatmap-style overlays */}
+                              <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/80 to-white/55 dark:from-black/65 dark:via-black/45 dark:to-black/25" />
+                              <div className="absolute inset-0 opacity-70">
+                                <div className="absolute -top-10 -left-10 h-28 w-28 rounded-full bg-indigo-500/10 blur-2xl" />
+                                <div className="absolute -bottom-12 -right-12 h-32 w-32 rounded-full bg-fuchsia-500/10 blur-2xl" />
+                              </div>
+
+                              {/* Shine sweep */}
+                              <div
+                                className={cn(
+                                  "pointer-events-none absolute -inset-10 rotate-12 opacity-0 transition duration-200",
+                                  "bg-gradient-to-r from-transparent via-white/35 to-transparent",
+                                  active ? "opacity-70" : "group-hover:opacity-60"
+                                )}
+                              />
+
+                              {/* Content */}
+                              <div className="relative px-4 py-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <div className="h-8 w-8 rounded-xl bg-white/80 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/10 flex items-center justify-center overflow-hidden">
+                                        {logo ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img
+                                            src={logo}
+                                            alt=""
+                                            className="h-6 w-6 object-contain"
+                                            loading="lazy"
+                                            onError={(e) =>
+                                              ((e.currentTarget as HTMLImageElement).style.display = "none")
+                                            }
+                                          />
+                                        ) : (
+                                          <span className="text-[10px] font-black text-gray-700 dark:text-white/70">
+                                            {s.symbol.slice(0, 2)}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="text-sm font-black tracking-tight text-gray-900 dark:text-white">
+                                        {s.symbol}
+                                      </div>
+
+                                      {p?.exchange ? (
+                                        <span className="hidden sm:inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold bg-black/[0.04] dark:bg-white/[0.08] text-gray-700 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/10">
+                                          {String(p.exchange)}
                                         </span>
-                                      )}
+                                      ) : null}
                                     </div>
 
-                                    <div className="text-sm font-black tracking-tight text-gray-900 dark:text-white">
-                                      {s.symbol}
-                                    </div>
-
-                                    {p?.exchange ? (
-                                      <span className="hidden sm:inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold bg-black/[0.04] dark:bg-white/[0.08] text-gray-700 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/10">
-                                        {String(p.exchange)}
-                                      </span>
-                                    ) : null}
-                                  </div>
-
-                                  <div className="mt-1">
-                                    <div className="text-xs font-semibold text-gray-700 dark:text-white/70 truncate">
-                                      {p?.name || s.description || "—"}
+                                    <div className="mt-1">
+                                      <div className="text-xs font-semibold text-gray-700 dark:text-white/70 truncate">
+                                        {p?.name || s.description || "—"}
+                                      </div>
                                     </div>
                                   </div>
+
+                                  {s.type ? (
+                                    <span className="shrink-0 rounded-full px-3 py-1 text-[11px] font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06] text-gray-800 dark:text-white/75">
+                                      {s.type}
+                                    </span>
+                                  ) : null}
                                 </div>
 
-                                {s.type ? (
-                                  <span className="shrink-0 rounded-full px-3 py-1 text-[11px] font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06] text-gray-800 dark:text-white/75">
-                                    {s.type}
+                                <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-gray-600 dark:text-white/55">
+                                  <span className="truncate">{p?.weburl ? "Has website + logo" : "Fetching profile…"}</span>
+                                  <span
+                                    className={cn(
+                                      "rounded-full px-2 py-0.5 font-black ring-1",
+                                      active
+                                        ? "bg-indigo-600/15 text-indigo-800 ring-indigo-500/20 dark:text-indigo-200 dark:ring-indigo-400/20"
+                                        : "bg-black/[0.03] text-gray-700 ring-black/10 dark:bg-white/[0.06] dark:text-white/70 dark:ring-white/10"
+                                    )}
+                                  >
+                                    {active ? "Enter" : "↵"}
                                   </span>
-                                ) : null}
+                                </div>
                               </div>
-
-                              {/* subtle bottom “press enter” / active hint */}
-                              <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-gray-600 dark:text-white/55">
-                                <span className="truncate">{p?.weburl ? "Has website + logo" : "Fetching profile…"}</span>
-                                <span
-                                  className={cn(
-                                    "rounded-full px-2 py-0.5 font-black ring-1",
-                                    active
-                                      ? "bg-indigo-600/15 text-indigo-800 ring-indigo-500/20 dark:text-indigo-200 dark:ring-indigo-400/20"
-                                      : "bg-black/[0.03] text-gray-700 ring-black/10 dark:bg-white/[0.06] dark:text-white/70 dark:ring-white/10"
-                                  )}
-                                >
-                                  {active ? "Enter" : "↵"}
-                                </span>
-                              </div>
-                            </div>
-                          </motion.li>
-                        );
-                      })}
+                            </motion.li>
+                          );
+                        })}
                     </motion.ul>
                   )}
                 </AnimatePresence>

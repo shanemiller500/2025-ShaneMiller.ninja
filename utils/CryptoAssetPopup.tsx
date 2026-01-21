@@ -468,14 +468,10 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
                 <StatCard label="Volume (24h)" value={cg?.total_volume != null ? fmt.compact(cg.total_volume) : fmt.compact(asset.volumeUsd24Hr)}
                   icon={<FaCoins className="text-indigo-600 dark:text-indigo-300" />} />
                 <StatCard label="Circulating Supply" value={cg?.circulating_supply != null ? fmt.compact(cg.circulating_supply) : fmt.compact(asset.supply)}
-                  sub={asset.symbol ? asset.symbol.toUpperCase() : undefined}
                   icon={<FaDatabase className="text-indigo-600 dark:text-indigo-300" />} />
                 <StatCard label="Total / Max Supply" 
                   value={cg?.total_supply != null ? fmt.compact(cg.total_supply) : asset.maxSupply ? fmt.compact(asset.maxSupply) : "—"}
-                  sub={cg?.max_supply != null ? `Max: ${fmt.compact(cg.max_supply)}` : asset.maxSupply ? `Max: ${fmt.compact(asset.maxSupply)}` : undefined}
                   icon={<FaWarehouse className="text-indigo-600 dark:text-indigo-300" />} />
-                <StatCard label="VWAP (24h)" value={asset.vwap24Hr ? fmt.compact(asset.vwap24Hr) : "—"}
-                  icon={<FaGlobeAmericas className="text-indigo-600 dark:text-indigo-300" />} />
                 <StatCard label="24h Change" 
                   value={fmt.percent(asset24hChange)}
                   icon={<FaChartLine className="text-indigo-600 dark:text-indigo-300" />}
@@ -484,11 +480,8 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
                   icon={<FaDollarSign className="text-indigo-600 dark:text-indigo-300" />} accent="emerald" />
                 <StatCard label="24h Low" value={cg?.low_24h != null ? fmt.currency(cg.low_24h) : "—"}
                   icon={<FaDollarSign className="text-indigo-600 dark:text-indigo-300" />} accent="rose" />
-                <StatCard label="FDV" value={cg?.fully_diluted_valuation != null ? fmt.compact(cg.fully_diluted_valuation) : "—"}
-                  sub={cg?.fully_diluted_valuation != null && cg?.market_cap != null ? `FDV/MCap: ${fmt.number(cg.fully_diluted_valuation / Math.max(cg.market_cap, 1), 2)}x` : undefined}
-                  icon={<FaChartPie className="text-indigo-600 dark:text-indigo-300" />} />
                 <StatCard label="Market Cap Rank" value={cg?.market_cap_rank != null ? `#${cg.market_cap_rank}` : "—"}
-                  icon={<FaDatabase className="text-indigo-600 dark:text-indigo-300" />} />
+                  icon={<FaGlobeAmericas className="text-indigo-600 dark:text-indigo-300" />} />
               </div>
 
               <div className="mt-6 pb-3 flex flex-col sm:flex-row gap-3 sm:justify-end">
