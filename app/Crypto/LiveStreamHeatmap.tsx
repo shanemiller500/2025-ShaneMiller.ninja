@@ -409,19 +409,19 @@ export default function LiveStreamHeatmap() {
       trackEvent("CryptoAssetClick", { id, ...md });
     }}
   >
-    {/* soft hover glow */}
-    <div className="absolute inset-0 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-indigo-500/10 to-purple-500/10" />
-
+  
     {(() => {
           const cardTone = isPositive
-            ? "bg-gradient-to-br from-green-500 to-emerald-600 border-green-400/35 shadow-lg shadow-green-500/20"
-            : isNegative
-            ? "bg-gradient-to-br from-red-500 to-rose-600 border-red-400/35 shadow-lg shadow-red-500/20"
-            : "bg-gradient-to-br from-gray-400 to-gray-500 border-gray-300/30 shadow-lg shadow-gray-500/10";
+  ? "bg-emerald-300 border-emerald-600/40 shadow-sm dark:bg-emerald-800/60 dark:border-emerald-700/40"
+  : isNegative
+  ? "bg-rose-300 border-rose-600/40 shadow-sm dark:bg-rose-800/60 dark:border-rose-700/40"
+  : "bg-gray-200 border-gray-400/40 shadow-sm dark:bg-gray-800/60 dark:border-gray-700/40";
+
 
 const flashBg = isPositive
-  ? "radial-gradient(circle at center, rgba(34,197,94,0.88) 0%, rgba(34,197,94,0.38) 36%, rgba(34,197,94,0) 72%)"
-  : "radial-gradient(circle at center, rgba(239,68,68,0.88) 0%, rgba(239,68,68,0.38) 36%, rgba(239,68,68,0) 72%)";
+  ? "rgba(16,185,129,0.45)" // emerald-500
+  : "rgba(244,63,94,0.45)"; // rose-500
+
 
       return (
         <div
@@ -438,7 +438,7 @@ const flashBg = isPositive
                 key={`${id}-${bump}`}
                 className="absolute inset-0 pointer-events-none"
                 initial={{ opacity: 0 }}
-                animate={{ opacity: [0, 0.9, 0] }}
+                animate={{ opacity: [0, 0.55, 0] }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.28, ease: "easeOut" }}
                 style={{ background: flashBg }}
@@ -447,74 +447,76 @@ const flashBg = isPositive
           </AnimatePresence>
 
           <div className="relative p-3 sm:p-4">
-            {/* Rank badge */}
-            <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
-              <div className="bg-black/30 backdrop-blur-sm px-2 py-0.5 rounded-full">
-                <span className="text-[9px] sm:text-[10px] font-bold text-white/90">
-                  #{md.rank || "—"}
-                </span>
-              </div>
-            </div>
+  {/* Rank badge */}
+  <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
+    <div className="bg-black/15 dark:bg-black/30 backdrop-blur-sm px-2 py-0.5 rounded-full">
+      <span className="text-[9px] sm:text-[10px] font-bold text-gray-900 dark:text-white/90">
+        #{md.rank || "—"}
+      </span>
+    </div>
+  </div>
 
-            {/* Logo and symbol */}
-            <div className="flex items-center gap-2 mb-3">
-              {logo ? (
-                <div className="relative flex-shrink-0">
-                  {/* removed the shiny white blur; keep it clean */}
-                  <div className="relative bg-white/90 rounded-full p-1.5 shadow-md">
-                    <img
-                      src={logo}
-                      alt={md.symbol}
-                      className="w-6 h-6 sm:w-7 sm:h-7"
-                      loading="lazy"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 backdrop-blur-sm flex-shrink-0" />
-              )}
+  {/* Logo and symbol */}
+  <div className="flex items-center gap-2 mb-3">
+    {logo ? (
+      <div className="relative flex-shrink-0">
+        <div className="relative bg-white/90 dark:bg-white/90 rounded-full p-1.5 shadow-sm">
+          <img
+            src={logo}
+            alt={md.symbol}
+            className="w-6 h-6 sm:w-7 sm:h-7"
+            loading="lazy"
+          />
+        </div>
+      </div>
+    ) : (
+      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/10 dark:bg-white/20 flex-shrink-0" />
+    )}
 
-              <div className="min-w-0 flex-1">
-                <h3 className="font-black text-sm sm:text-base text-white truncate drop-shadow-lg">
-                  {md.symbol || id}
-                </h3>
-              </div>
-            </div>
+    <div className="min-w-0 flex-1">
+      <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white truncate">
+        {md.symbol || id}
+      </h3>
+    </div>
+  </div>
 
-            {/* Price */}
-            <div className="mb-2">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-base sm:text-lg font-black text-white drop-shadow-lg">
-                  {fmt.usd(price)}
-                </span>
-                {arrow && (
-                  <span className="text-sm sm:text-base font-black text-white/90 drop-shadow-lg">
-                    {arrow}
-                  </span>
-                )}
-              </div>
-            </div>
+  {/* Price */}
+  <div className="mb-2">
+    <div className="flex items-baseline gap-1.5">
+      <span className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
+        {fmt.usd(price)}
+      </span>
+      {arrow && (
+        <span className="text-sm sm:text-base font-black text-gray-700 dark:text-white/90">
+          {arrow}
+        </span>
+      )}
+    </div>
+  </div>
 
-            {/* 24h change */}
-            <div className="flex items-center justify-between">
-              <div className="inline-flex items-center gap-1 bg-black/20 backdrop-blur-sm px-2 py-1 rounded-full">
-                <span className="text-[10px] sm:text-xs font-bold text-white/90">
-                  {fmt.pct(md.changePercent24Hr)}
-                </span>
-              </div>
+  {/* 24h change */}
+  <div className="flex items-center justify-between">
+    <div className="inline-flex items-center gap-1 bg-black/10 dark:bg-black/20 backdrop-blur-sm px-2 py-1 rounded-full">
+      <span className="text-[10px] sm:text-xs font-bold text-gray-900 dark:text-white/90">
+        {fmt.pct(md.changePercent24Hr)}
+      </span>
+    </div>
 
-              {(pctPos || pctNeg) && (
-                <div
-                  className={[
-                    "text-xs sm:text-sm font-black drop-shadow-lg",
-                    pctPos ? "text-emerald-200" : "text-rose-200",
-                  ].join(" ")}
-                >
-                  {pctPos ? "↑" : "↓"}
-                </div>
-              )}
-            </div>
-          </div>
+    {(pctPos || pctNeg) && (
+      <div
+        className={[
+          "text-xs sm:text-sm font-black",
+          pctPos
+            ? "text-emerald-700 dark:text-emerald-200"
+            : "text-rose-700 dark:text-rose-200",
+        ].join(" ")}
+      >
+        {pctPos ? "↑" : "↓"}
+      </div>
+    )}
+  </div>
+</div>
+
         </div>
       );
     })()}

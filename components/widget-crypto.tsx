@@ -221,21 +221,42 @@ export default function WidgetCrypto() {
           }
         }}
         onClick={onCardClick}
-        className={cn(
-          "group relative overflow-hidden text-left select-none",
-          "mx-1",
-          "min-w-[100px] sm:min-w-[110px]",
-          "rounded-xl",
-          "border-2",
-            isPos
-          ? "border-emerald-600/60 bg-gradient-to-br from-emerald-200 via-emerald-100 to-green-900/40 dark:from-emerald-900/60 dark:to-green-900/40"
-          : isNeg
-          ? "border-rose-600/60 bg-gradient-to-br from-rose-900/60 via-rose-100 to-red-900/40 dark:from-rose-900/60 dark:to-red-900/40"
-          : "border-gray-300/60 bg-gradient-to-br from-slate-100 via-gray-50 to-white dark:from-gray-900/60 dark:to-slate-900/40",
-          "shadow-sm",
-          "transition-shadow duration-200",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60"
-        )}
+className={cn(
+  "group relative overflow-hidden text-left select-none",
+  "mx-1",
+  "min-w-[100px] sm:min-w-[110px]",
+  "rounded-xl",
+  "border",
+  "shadow-sm",
+  "transition-colors duration-150",
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60",
+
+  isPos
+    ? [
+        //  MATTE GREEN
+        "bg-emerald-300/80",
+        "border-emerald-600/40",
+        "dark:bg-emerald-800/60",
+        "dark:border-emerald-700/40",
+      ].join(" ")
+    : isNeg
+    ? [
+        //  MATTE RED
+        "bg-rose-300/80",
+        "border-rose-600/40",
+        "dark:bg-rose-800/60",
+        "dark:border-rose-700/40",
+      ].join(" ")
+    : [
+        //  MATTE NEUTRAL
+        "bg-gray-200/80",
+        "border-gray-400/40",
+        "dark:bg-gray-800/60",
+        "dark:border-gray-700/40",
+      ].join(" ")
+)}
+
+
         whileHover={{ y: -2, scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
       >
