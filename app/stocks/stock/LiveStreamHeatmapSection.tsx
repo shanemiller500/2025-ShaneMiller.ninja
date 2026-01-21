@@ -160,11 +160,14 @@ const calcMarketState = (): MarketState => {
 const cleanLogo = (url?: string) => {
   if (!url) return "";
   try {
-    return new URL(url).toString();
+    const u = new URL(url);
+    if (u.protocol === "http:") u.protocol = "https:";
+    return u.toString();
   } catch {
     return "";
   }
 };
+
 
 const extractDomain = (raw?: string) => {
   if (!raw) return "";
@@ -337,6 +340,39 @@ const LiveStreamHeatmapSection: React.FC = () => {
       inflightProfileRef.current.delete(sym);
     }
   };
+
+  useEffect(() => {
+  let cancelled = false;
+
+  const run = async () => {
+    // Load the first screen worth ASAP (mobile first)
+    const FIRST = 12;
+    for (const sym of SYMBOLS.slice(0, FIRST)) {
+      if (cancelled) return;
+      try {
+        await ensureProfile(sym);
+      } catch {}
+      await sleep(120);
+    }
+
+    // Then load the rest slowly
+    for (const sym of SYMBOLS.slice(FIRST)) {
+      if (cancelled) return;
+      try {
+        await ensureProfile(sym);
+      } catch {}
+      await sleep(450);
+    }
+  };
+
+  run();
+  return () => {
+    cancelled = true;
+  };
+  // IMPORTANT: only run once
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
 
   /* ------------------------------------------------------------------ */
   /*  Quote logic: MATCH THE MODAL                                       */
@@ -778,6 +814,7 @@ useEffect(() => {
                 >
                   {/* center logo */}
                   <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-white/35 dark:bg-black/0" />
                     <img
                       src={logo}
                       alt={sym}
@@ -787,6 +824,7 @@ useEffect(() => {
                         (e.currentTarget as HTMLImageElement).src = LOGO_FALLBACK;
                       }}
                     />
+                    
                   </div>
 
                   {/* flash overlay */}

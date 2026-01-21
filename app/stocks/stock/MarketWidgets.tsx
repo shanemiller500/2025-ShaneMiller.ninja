@@ -138,18 +138,8 @@ function TickerTile({
       </div>
 
       {/* legibility overlay */}
-      <div className="absolute inset-0 bg-gradient-to-r from-white/75 via-white/60 to-white/30 dark:from-black/60 dark:via-black/40 dark:to-black/15" />
+      <div className="absolute inset-0 bg-gradient-to-r from-white/65 via-white/50 to-white/30 dark:from-black/60 dark:via-black/40 dark:to-black/20" />
 
-      {/* scanlines */}
-      <div className="pointer-events-none absolute inset-0 opacity-[0.08] dark:opacity-[0.10] mix-blend-overlay">
-        <div
-          className="h-full w-full"
-          style={{
-            backgroundImage: "linear-gradient(to bottom, rgba(0,0,0,0.9) 1px, transparent 1px)",
-            backgroundSize: "100% 8px",
-          }}
-        />
-      </div>
 
       {/* shine sweep */}
       <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
