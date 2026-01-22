@@ -542,7 +542,7 @@ const renderGrid = (rows: any[]) => (
                   setViewMode(next);
                   trackEvent("CryptoViewToggle", { view: next });
                 }}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-extrabold text-white shadow-sm ring-1 ring-black/10 dark:ring-white/10 bg-brand-gradient hover:opacity-95 active:scale-[0.99] transition"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-extrabold shadow-sm ring-1  bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white hover:opacity-95 active:scale-[0.99] transition"
               >
                 {viewMode === "table" ? <FaThLarge className="w-4 h-4" /> : <FaTable className="w-4 h-4" />}
                 <span>{viewMode === "table" ? "Grid view" : "Table view"}</span>

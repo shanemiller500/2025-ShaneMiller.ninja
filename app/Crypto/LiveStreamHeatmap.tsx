@@ -730,7 +730,7 @@ export default function LiveStreamHeatmap() {
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl blur-xl opacity-40" />
-                  <div className="relative bg-indigo-600/50 dark:bg-indigo-900/40 p-3 rounded-2xl shadow-sm">
+                  <div className="relative bg-indigo-500/50 dark:bg-indigo-900/40 p-3 rounded-2xl shadow-sm">
                     <FaFire className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
                   </div>
                 </div>
@@ -749,7 +749,7 @@ export default function LiveStreamHeatmap() {
                 onClick={handleViewToggle}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="flex items-center justify-center gap-2.5 bg-indigo-600/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white px-5 py-3 rounded-2xl transition-all duration-200 font-semibold text-sm"
+                className="flex items-center justify-center gap-2.5 bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white px-5 py-3 rounded-2xl transition-all duration-200 font-semibold text-sm"
               >
                 {viewMode === "grid" ? (
                   <FaTable className="w-4 h-4" />
@@ -969,7 +969,7 @@ export default function LiveStreamHeatmap() {
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full px-6 py-3 bg-indigo-600/50 dark:bg-indigo-900/40 dark:text-white text-gray-900 rounded-2xl font-bold shadow-lg shadow-indigo-500/25 transition-all duration-200"
+                    className="w-full px-6 py-3 bg-indigo-500/50 dark:bg-indigo-900/40 dark:text-white text-gray-900 rounded-2xl font-bold shadow-lg shadow-indigo-500/25 transition-all duration-200"
                     onClick={restart}
                   >
                     Restart Stream

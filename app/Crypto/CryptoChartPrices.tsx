@@ -552,7 +552,7 @@ const CryptoChartPrices: React.FC = () => {
 
         <button
           type="submit"
-          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500
+          className="rounded-xl bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white px-4 py-2 text-sm font-semiboldshadow-sm hover:bg-indigo-500
                      focus:outline-none focus:ring-2 focus:ring-indigo-500"
           onClick={() => trackEvent("CryptoChartSearchBtnClick")}
         >

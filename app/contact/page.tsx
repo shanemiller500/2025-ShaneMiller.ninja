@@ -558,9 +558,9 @@ return (
                   type="submit"
                   disabled={isLoading}
                   className={
-                    "w-full rounded-2xl px-4 py-3.5 text-sm font-semibold text-white shadow-sm " +
-                    "bg-gradient-to-r from-indigo-600 to-purple-600 " +
-                    "hover:from-indigo-700 hover:to-purple-700 " +
+                    "w-full rounded-2xl px-4 py-3.5 text-sm font-semibold shadow-sm " +
+                    "bg-indigo-500/50 dark:bg-indigo-900/40 " +
+                    "text-gray-900 dark:text-white " +
                     "focus:outline-none focus:ring-2 focus:ring-indigo-500/60 " +
                     "transition " +
                     (isLoading ? "opacity-80 cursor-not-allowed" : "")

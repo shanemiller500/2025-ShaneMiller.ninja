@@ -58,7 +58,7 @@ export default function MoodToneAssistant({
 
   const isSelected = (active: boolean) =>
     active
-      ? "border-transparent bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm"
+      ? "border-transparent bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white shadow-sm"
       : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:hover:bg-white/10";
 
   const handleEnhanceClick = () => {
@@ -103,7 +103,7 @@ export default function MoodToneAssistant({
         <div className="p-5">
           {/* Default enhance */}
           <button
-            className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 transition"
+            className="w-full rounded-2xl bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white px-4 py-3 text-sm font-semibold shadow-sm hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 transition"
             type="button"
             onClick={() => {
               trackEvent("Default Enhance Button Clicked");
@@ -177,7 +177,7 @@ export default function MoodToneAssistant({
           {/* CTA */}
           <button
             type="button"
-            className="mt-8 w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 transition"
+            className="mt-8 w-full rounded-2xl bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white px-4 py-3 text-sm font-semibold shadow-sm hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 transition"
             onClick={handleEnhanceClick}
           >
             Enhance with chosen mood &amp; tone
