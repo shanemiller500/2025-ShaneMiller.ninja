@@ -189,14 +189,6 @@ export default function Page() {
             </div>
           </div>
 
-          {/* Heavy widgets: keep full width, and make them sticky only on desktop */}
-          <div className="space-y-4 lg:sticky lg:top-4">
-            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm overflow-hidden">
-              <div className="p-3 sm:p-4">
-                <StockWidget />
-              </div>
-            </div>
-          </div>
         </aside>
       </div>
 

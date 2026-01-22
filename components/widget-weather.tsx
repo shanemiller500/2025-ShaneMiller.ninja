@@ -90,7 +90,7 @@ function MiniStat({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-white backdrop-blur">
+    <div className="flex items-center rounded-xl bg-white/15 px-1 py-1 text-white backdrop-blur">
       <span className="text-2xl">{icon}</span>
       <div className="leading-tight">
         <div className="text-[10px] opacity-80">{label}</div>
@@ -286,7 +286,7 @@ export default function WidgetWeather() {
         </div>
 
         {/* Current */}
-        <div className="mt-3 flex items-center justify-between gap-3">
+        <div className="mt-2 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="text-5xl drop-shadow">
               <Icon />
@@ -308,7 +308,7 @@ export default function WidgetWeather() {
         </div>
 
         {/* Mini stats */}
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-1">
           <MiniStat
             icon={<WiRaindrops />}
             label="Precip"
@@ -335,9 +335,9 @@ export default function WidgetWeather() {
         </div>
 
         {/* Hourly */}
-        <div className="mt-4">
+        <div className="mt-2">
           <div className="text-sm font-semibold mb-2">Next hours</div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex gap-1 overflow-x-auto pb-1">
             {hourly.map((h) => {
               const { Icon: HIcon } = getWeatherInfo(h.weathercode);
               return (
@@ -384,7 +384,7 @@ export default function WidgetWeather() {
                 transition={{ type: "spring", stiffness: 260, damping: 28 }}
                 className="overflow-hidden"
               >
-                <div className="space-y-2 px-3 pb-3">
+                <div className="space-y-1 px-3 pb-3">
                   {forecast.map((d) => {
                     const { Icon: DIcon } = getWeatherInfo(d.weathercode);
                     return (
