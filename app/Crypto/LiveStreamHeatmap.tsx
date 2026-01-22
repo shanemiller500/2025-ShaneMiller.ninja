@@ -1,7 +1,7 @@
 // Filename: LiveStreamHeatmap.tsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTable, FaThLarge, FaFire } from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
@@ -11,8 +11,9 @@ import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
 interface TradeInfo {
   price: number;
   prev?: number;
-  bump?: number;
-  dir?: 1 | -1 | 0;
+  direction: "up" | "down" | "neutral";
+  lastUpdate: number;
+  bump: number; // increments per update for flash keying
 }
 
 interface CoinGeckoInfo {
@@ -20,7 +21,7 @@ interface CoinGeckoInfo {
   low: number;
 }
 
-type StreamStatus = "connecting" | "live" | "reconnecting" | "down";
+type StreamStatus = "connecting" | "live" | "error";
 
 /* Constants -------------------------------------------------------- */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
@@ -29,11 +30,20 @@ const COINGECKO_TOP200 =
 
 const PAGE_SIZE = 78;
 
+// ✅ Stop WebSocket after 5 minutes (popup MUST appear)
+const WS_TIMEOUT = 300_000; // 5 minutes
+
+// ✅ Keep-alive / resilience (no UI spam)
+const SILENCE_MS = 18_000; // if no messages for this long, restart socket
+const CONNECT_GUARD_MS = 1_250; // minimum delay between reconnect attempts
+const MAX_RESTARTS_WITHIN_WINDOW = 8;
+const RESTART_WINDOW_MS = 60_000;
+
 /* Utilities -------------------------------------------------------- */
 const currencyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-  maximumFractionDigits: 8,
+  maximumFractionDigits: 2,
 });
 
 const fmt = {
@@ -44,7 +54,7 @@ const fmt = {
   pct: (s: any) => (s != null ? `${parseFloat(String(s)).toFixed(2)}%` : "N/A"),
 };
 
-/* Small helper: image that reliably loads when revealed later */
+/* Lazy image loader */
 function LazyImg({
   src,
   alt,
@@ -61,14 +71,10 @@ function LazyImg({
     const el = imgRef.current;
     if (!el) return;
 
-    // If already on-screen, reveal immediately
-    const reveal = () => setRevealed(true);
-
     const io = new IntersectionObserver(
       (entries) => {
-        const e = entries[0];
-        if (e?.isIntersecting) {
-          reveal();
+        if (entries[0]?.isIntersecting) {
+          setRevealed(true);
           io.disconnect();
         }
       },
@@ -79,18 +85,6 @@ function LazyImg({
     return () => io.disconnect();
   }, []);
 
-  // If it becomes revealed, force a decode/load (helps with "Load more" images sitting there)
-  useEffect(() => {
-    const el = imgRef.current;
-    if (!el) return;
-    if (!revealed) return;
-    // kick the browser a bit
-    try {
-      // decode is best-effort
-      (el as any).decode?.().catch?.(() => {});
-    } catch {}
-  }, [revealed]);
-
   return (
     <img
       ref={imgRef}
@@ -100,18 +94,6 @@ function LazyImg({
       className={className}
       loading="lazy"
       decoding="async"
-      // if the browser doesn't load from src until revealed, set it on demand
-      onLoad={(e) => {
-        // ensure it stays loaded
-        const t = e.currentTarget;
-        if (!t.src && (t as any).dataset?.src) t.src = (t as any).dataset.src;
-      }}
-      onError={(e) => {
-        // If we hid src until reveal, set it now and try once more
-        const t = e.currentTarget as HTMLImageElement & { dataset?: any };
-        const ds = t.dataset?.src;
-        if (ds && t.src !== ds) t.src = ds;
-      }}
     />
   );
 }
@@ -124,25 +106,74 @@ export default function LiveStreamHeatmap() {
   const [selectedAsset, setSelectedAsset] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // WS-only status
-  const [wsAvailable, setWsAvailable] = useState(true);
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("connecting");
-  const [wsSession, setWsSession] = useState(0); // flash when (re)connected
+  const [messageCount, setMessageCount] = useState(0);
 
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [logos, setLogos] = useState<Record<string, string>>({});
   const [cgInfo, setCgInfo] = useState<Record<string, CoinGeckoInfo>>({});
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  // WS refs
-  const socketRef = useRef<WebSocket | null>(null);
-  const closeIntentionallyRef = useRef(false);
-  const reconnectTimerRef = useRef<number | null>(null);
-  const reconnectAttemptRef = useRef(0);
+  // ✅ WebSocket timeout popup state (ONLY for WS_TIMEOUT close)
+  const [wsClosed, setWsClosed] = useState(false);
 
-  // Keep latest ids without triggering reconnects on every render
-  const latestIdsRef = useRef<string[]>([]);
-  const latestIdsKeyRef = useRef<string>("");
+  const socketRef = useRef<WebSocket | null>(null);
+  const isUnmountedRef = useRef(false);
+
+  // ✅ ONE global “stop stream” timer (like your old working code)
+  // This does NOT depend on ws.onopen and does NOT get reset by reconnects.
+  const streamStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ✅ Silence watchdog (ensures "continuous stream" feel)
+  const lastMsgAtRef = useRef<number>(0);
+  const silenceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ✅ Restart guard to prevent rapid flapping
+  const lastConnectAtRef = useRef<number>(0);
+  const restartTimesRef = useRef<number[]>([]);
+
+  // ✅ Hard stop guard: once timed out, NEVER auto-reconnect until user clicks Restart
+  const hardStoppedRef = useRef(false);
+
+  /* Clear stop timer */
+  const clearStopTimer = useCallback(() => {
+    if (streamStopTimerRef.current) {
+      clearTimeout(streamStopTimerRef.current);
+      streamStopTimerRef.current = null;
+    }
+  }, []);
+
+  /* Clear silence watchdog */
+  const clearSilenceWatchdog = useCallback(() => {
+    if (silenceIntervalRef.current) {
+      clearInterval(silenceIntervalRef.current);
+      silenceIntervalRef.current = null;
+    }
+  }, []);
+
+  // ✅ This is the ONLY timeout that should show the popup.
+  const hardStopNow = useCallback(() => {
+    // enter hard stopped mode (blocks any reconnect)
+    hardStoppedRef.current = true;
+
+    clearSilenceWatchdog();
+    clearStopTimer();
+
+    // close socket
+    try {
+      socketRef.current?.close(1000, "timeout");
+    } catch {
+      try {
+        socketRef.current?.close();
+      } catch {}
+    } finally {
+      socketRef.current = null;
+    }
+
+    // show popup immediately (do NOT rely on ws.onclose firing)
+    setStreamStatus("error");
+    setWsClosed(true);
+  }, [clearSilenceWatchdog, clearStopTimer]);
 
   /* Load CoinGecko logos and 24h high/low data */
   useEffect(() => {
@@ -162,8 +193,8 @@ export default function LiveStreamHeatmap() {
 
         setLogos(logoMap);
         setCgInfo(infoMap);
-      } catch {
-        // ignore
+      } catch (e) {
+        console.warn("Failed to fetch CoinGecko data:", e);
       }
     })();
   }, []);
@@ -174,17 +205,17 @@ export default function LiveStreamHeatmap() {
 
     (async () => {
       if (!API_KEY) {
-        setWsAvailable(false);
-        setStreamStatus("down");
+        setStreamStatus("error");
         setLoading(false);
         return;
       }
 
       try {
-        const res = await fetch(`https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`);
+        const res = await fetch(
+          `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`
+        );
         if (res.status === 403) {
-          setWsAvailable(false);
-          setStreamStatus("down");
+          setStreamStatus("error");
           setLoading(false);
           return;
         }
@@ -203,7 +234,17 @@ export default function LiveStreamHeatmap() {
 
           const p = parseFloat(a.priceUsd);
           if (Number.isFinite(p)) {
-            initialPrices[a.id] = { price: p, prev: undefined, bump: 0, dir: 0 };
+            const pct = parseFloat(String(a.changePercent24Hr ?? ""));
+            const direction: "up" | "down" | "neutral" =
+              Number.isFinite(pct) && pct !== 0 ? (pct > 0 ? "up" : "down") : "neutral";
+
+            initialPrices[a.id] = {
+              price: p,
+              prev: undefined,
+              direction,
+              lastUpdate: Date.now(),
+              bump: 0,
+            };
           }
         });
 
@@ -211,9 +252,10 @@ export default function LiveStreamHeatmap() {
 
         setMetaData(meta);
         setTopIds(ids.slice(0, 200));
-        setTradeInfoMap((prev) => ({ ...prev, ...initialPrices }));
+        setTradeInfoMap(initialPrices);
         setLoading(false);
-      } catch {
+      } catch (e) {
+        console.error("Failed to fetch initial data:", e);
         if (!canceled) setLoading(false);
       }
     })();
@@ -251,21 +293,7 @@ export default function LiveStreamHeatmap() {
     body.style.width = "auto";
     (body.style as any).touchAction = "pan-y";
 
-    const unlock = () => {
-      html.style.overflow = "auto";
-      body.style.overflow = "auto";
-      (body.style as any).touchAction = "pan-y";
-    };
-
-    const t1 = window.setTimeout(unlock, 0);
-    const t2 = window.setTimeout(unlock, 50);
-    const t3 = window.setTimeout(unlock, 250);
-
     return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-      window.clearTimeout(t3);
-
       html.style.overflow = prev.htmlOverflow;
       html.style.height = prev.htmlHeight;
       html.style.position = prev.htmlPosition;
@@ -282,241 +310,241 @@ export default function LiveStreamHeatmap() {
   /* Sorted list of crypto IDs */
   const sortedIds = useMemo(() => {
     if (topIds.length) return topIds.slice(0, 200);
-    const all = Object.keys(metaData).sort((a, b) => (+metaData[a]?.rank || 9999) - (+metaData[b]?.rank || 9999));
+    const all = Object.keys(metaData).sort(
+      (a, b) => (+metaData[a]?.rank || 9999) - (+metaData[b]?.rank || 9999)
+    );
     return all.slice(0, 200);
   }, [topIds, metaData]);
 
-  const visibleIds = useMemo(() => sortedIds.slice(0, visibleCount), [sortedIds, visibleCount]);
-  const wsIds = useMemo(() => sortedIds.slice(0, visibleCount), [sortedIds, visibleCount]);
+  const visibleIds = useMemo(
+    () => sortedIds.slice(0, visibleCount),
+    [sortedIds, visibleCount]
+  );
 
-  // keep latest ids (and a stable key) in refs so WS doesn't rebuild on rerenders
-  useEffect(() => {
-    latestIdsRef.current = wsIds;
-    latestIdsKeyRef.current = wsIds.join(",");
-  }, [wsIds]);
+  /**
+   * ✅ Socket connect/restart
+   * - keeps it streaming (silent restarts)
+   * - BUT once hardStoppedRef is true, it will NEVER reconnect (so popup stays)
+   */
+  const connectSocket = useCallback(() => {
+    if (isUnmountedRef.current) return;
+    if (hardStoppedRef.current) return; // ✅ stop all reconnect loops once timed out
+    if (!API_KEY || sortedIds.length === 0) return;
 
-  /* Apply WS update -> drives card colors + flashes */
-  const applyUpdateRef = useRef<(u: Record<string, string>) => void>(() => {});
-  applyUpdateRef.current = (update: Record<string, string>) => {
-    setTradeInfoMap((prev) => {
-      const next = { ...prev };
+    const now = Date.now();
 
-      for (const [id, priceStr] of Object.entries(update)) {
-        const p = parseFloat(String(priceStr));
-        if (!Number.isFinite(p)) continue;
+    // prevent tight loops
+    if (now - lastConnectAtRef.current < CONNECT_GUARD_MS) return;
 
-        const oldPrice = prev[id]?.price;
-        const oldDir = prev[id]?.dir ?? 0;
-
-        let dir: 1 | -1 | 0 = oldDir;
-        if (oldPrice != null) {
-          if (p > oldPrice) dir = 1;
-          else if (p < oldPrice) dir = -1;
-        } else {
-          dir = 0;
-        }
-
-        const nextBump = (prev[id]?.bump || 0) + 1;
-        next[id] = { price: p, prev: oldPrice, bump: nextBump, dir };
-      }
-
-      return next;
-    });
-
-    setLoading(false);
-  };
-
-  /* WS-only stream manager (no polling) */
-  useEffect(() => {
-    if (!API_KEY) {
-      setWsAvailable(false);
-      setStreamStatus("down");
+    // rolling window limiter
+    restartTimesRef.current = restartTimesRef.current.filter((t) => now - t < RESTART_WINDOW_MS);
+    if (restartTimesRef.current.length >= MAX_RESTARTS_WITHIN_WINDOW) {
+      setStreamStatus("error");
       return;
     }
+    restartTimesRef.current.push(now);
+    lastConnectAtRef.current = now;
 
-    let disposed = false;
+    // close current
+    try {
+      socketRef.current?.close();
+    } catch {}
+    socketRef.current = null;
 
-    const clearReconnect = () => {
-      if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
+    // keep UI stable: don't spam “connecting” after first live
+    setStreamStatus((s) => (s === "connecting" ? "connecting" : "live"));
+
+    const assetsParam = sortedIds.join(",");
+    const ws = new WebSocket(
+      `wss://wss.coincap.io/prices?assets=${encodeURIComponent(assetsParam)}&apiKey=${API_KEY}`
+    );
+    socketRef.current = ws;
+
+    ws.onopen = () => {
+      if (isUnmountedRef.current) return;
+      if (hardStoppedRef.current) return;
+      setStreamStatus("live");
     };
 
-    const closeSocket = () => {
-      try {
-        closeIntentionallyRef.current = true;
-        socketRef.current?.close();
-      } catch {}
-      socketRef.current = null;
-      closeIntentionallyRef.current = false;
-    };
+    ws.onmessage = (e) => {
+      if (isUnmountedRef.current) return;
+      if (hardStoppedRef.current) return;
 
-    const scheduleReconnect = (reason: "close" | "error" | "manual") => {
-      if (disposed) return;
-
-      setStreamStatus("reconnecting");
-
-      const attempt = (reconnectAttemptRef.current = reconnectAttemptRef.current + 1);
-      const delay = Math.min(12_000, 400 * Math.pow(2, attempt)); // 0.4s, 0.8, 1.6, 3.2, ... max 12s
-
-      clearReconnect();
-      reconnectTimerRef.current = window.setTimeout(() => {
-        if (!disposed) connect("reconnect:" + reason);
-      }, delay);
-    };
-
-    const connect = (why: string) => {
-      if (disposed) return;
-
-      const ids = latestIdsRef.current;
-      if (!ids?.length) return;
-
-      if (socketRef.current?.readyState === WebSocket.OPEN) return;
-      if (socketRef.current?.readyState === WebSocket.CONNECTING) return;
-
-      closeSocket();
-      clearReconnect();
-
-      setStreamStatus(reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting");
-
-      const assetsParam = ids.join(",");
-      const url = `wss://wss.coincap.io/prices?assets=${encodeURIComponent(assetsParam)}&apiKey=${API_KEY}`;
-      const ws = new WebSocket(url);
-      socketRef.current = ws;
-
-      ws.onopen = () => {
-        if (disposed) return;
-        reconnectAttemptRef.current = 0;
-
-        setWsAvailable(true);
-        setStreamStatus("live");
-
-        // 🔥 flash UI on websocket connect / reconnect
-        setWsSession((n) => n + 1);
-      };
-
-      ws.onmessage = (e) => {
-        if (disposed) return;
-
-        if (typeof e.data === "string" && e.data.startsWith("Unauthorized")) {
-          setWsAvailable(false);
-          setStreamStatus("down");
-          closeSocket();
-          return;
-        }
-
-        let update: Record<string, string> | null = null;
+      if (typeof e.data === "string" && e.data.startsWith("Unauthorized")) {
+        setStreamStatus("error");
         try {
-          update = JSON.parse(e.data);
-        } catch {
-          return;
-        }
-        if (!update) return;
-
-        applyUpdateRef.current(update);
-      };
-
-      ws.onerror = () => {
-        if (disposed) return;
-        // onclose usually follows
-      };
-
-      ws.onclose = () => {
-        if (disposed) return;
-
-        const intentional = closeIntentionallyRef.current;
-        closeIntentionallyRef.current = false;
-
-        if (intentional) return;
-
-        scheduleReconnect("close");
-      };
-    };
-
-    connect("initial");
-
-    const resubscribe = () => {
-      if (disposed) return;
-
-      const nextKey = latestIdsKeyRef.current;
-      const ws = socketRef.current;
-
-      if (!ws || (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING)) {
-        connect("resubscribe-no-socket");
+          ws.close();
+        } catch {}
         return;
       }
 
-      closeIntentionallyRef.current = true;
+      let update: Record<string, string>;
       try {
-        ws.close();
-      } catch {}
-      socketRef.current = null;
-
-      clearReconnect();
-      reconnectTimerRef.current = window.setTimeout(() => {
-        connect("resubscribe:" + nextKey.slice(0, 32));
-      }, 200);
-    };
-
-    let lastKey = latestIdsKeyRef.current;
-    const keyWatcher = window.setInterval(() => {
-      if (disposed) return;
-      const k = latestIdsKeyRef.current;
-      if (k && k !== lastKey) {
-        lastKey = k;
-        resubscribe();
+        update = JSON.parse(e.data);
+      } catch {
+        return;
       }
-    }, 500);
 
-    const onVisibility = () => {
-      if (disposed) return;
-      if (document.visibilityState === "visible") {
-        if (!socketRef.current || socketRef.current.readyState === WebSocket.CLOSED) {
-          connect("visibility");
+      const ts = Date.now();
+      lastMsgAtRef.current = ts;
+
+      setMessageCount((c) => c + 1);
+
+      setTradeInfoMap((prev) => {
+        let changedAny = false;
+        const next = { ...prev };
+
+        for (const [id, priceStr] of Object.entries(update)) {
+          const newPrice = parseFloat(String(priceStr));
+          if (!Number.isFinite(newPrice)) continue;
+
+          const existing = prev[id];
+          const oldPrice = existing?.price;
+
+          if (oldPrice === undefined) {
+            next[id] = {
+              price: newPrice,
+              prev: undefined,
+              direction: "neutral",
+              lastUpdate: ts,
+              bump: 1,
+            };
+            changedAny = true;
+            continue;
+          }
+
+          if (newPrice === oldPrice) continue;
+
+          const direction: "up" | "down" = newPrice > oldPrice ? "up" : "down";
+
+          next[id] = {
+            price: newPrice,
+            prev: oldPrice,
+            direction,
+            lastUpdate: ts,
+            bump: (existing?.bump || 0) + 1,
+          };
+          changedAny = true;
         }
-      }
+
+        return changedAny ? next : prev;
+      });
+
+      setLoading(false);
+      setStreamStatus("live");
     };
 
-    const onOnline = () => {
-      if (disposed) return;
-      connect("online");
+    ws.onclose = () => {
+      if (isUnmountedRef.current) return;
+
+      // If we timed out, do nothing (popup already shown)
+      if (hardStoppedRef.current) return;
+
+      // Otherwise: silent restart
+      setTimeout(() => connectSocket(), CONNECT_GUARD_MS);
     };
 
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("online", onOnline);
+    ws.onerror = () => {
+      if (isUnmountedRef.current) return;
+      if (hardStoppedRef.current) return;
+      setTimeout(() => connectSocket(), CONNECT_GUARD_MS);
+    };
+  }, [API_KEY, sortedIds]);
+
+  /* Start stream + start the ONE global timeout (like old code) */
+  useEffect(() => {
+    isUnmountedRef.current = false;
+
+    if (sortedIds.length > 0 && API_KEY) {
+      // reset
+      hardStoppedRef.current = false;
+      setWsClosed(false);
+      setStreamStatus("connecting");
+
+      restartTimesRef.current = [];
+      lastConnectAtRef.current = 0;
+
+      // ✅ start ONE timer that always ends the stream + popup (not tied to ws.onopen)
+      clearStopTimer();
+      streamStopTimerRef.current = setTimeout(() => {
+        if (isUnmountedRef.current) return;
+        hardStopNow();
+      }, WS_TIMEOUT);
+
+      lastMsgAtRef.current = Date.now();
+      connectSocket();
+    }
 
     return () => {
-      disposed = true;
-
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("online", onOnline);
-
-      window.clearInterval(keyWatcher);
-      clearReconnect();
-
-      closeIntentionallyRef.current = true;
-      try {
-        socketRef.current?.close();
-      } catch {}
-      socketRef.current = null;
-      closeIntentionallyRef.current = false;
+      isUnmountedRef.current = true;
+      clearStopTimer();
+      clearSilenceWatchdog();
+      if (socketRef.current) {
+        try {
+          socketRef.current.close();
+        } catch {}
+        socketRef.current = null;
+      }
     };
-  }, [API_KEY]);
+  }, [sortedIds.length, API_KEY, connectSocket, hardStopNow, clearStopTimer, clearSilenceWatchdog]);
+
+  /* Silence watchdog: restart only while NOT timed out */
+  useEffect(() => {
+    clearSilenceWatchdog();
+
+    if (!API_KEY || sortedIds.length === 0) return;
+
+    lastMsgAtRef.current = Date.now();
+
+    silenceIntervalRef.current = setInterval(() => {
+      if (isUnmountedRef.current) return;
+      if (hardStoppedRef.current) return;
+
+      const now = Date.now();
+      const since = now - (lastMsgAtRef.current || 0);
+
+      if (since > SILENCE_MS) {
+        connectSocket();
+      }
+    }, 1500);
+
+    return () => clearSilenceWatchdog();
+  }, [API_KEY, sortedIds.length, connectSocket, clearSilenceWatchdog]);
+
+  /* Manual restart (from error pill or from popup button) */
+  const handleReconnect = useCallback(() => {
+    // full reset + start a fresh 5-min timer from this click
+    hardStoppedRef.current = false;
+    setWsClosed(false);
+
+    restartTimesRef.current = [];
+    lastConnectAtRef.current = 0;
+
+    clearSilenceWatchdog();
+    clearStopTimer();
+
+    setStreamStatus("connecting");
+    lastMsgAtRef.current = Date.now();
+
+    streamStopTimerRef.current = setTimeout(() => {
+      if (isUnmountedRef.current) return;
+      hardStopNow();
+    }, WS_TIMEOUT);
+
+    connectSocket();
+  }, [connectSocket, clearSilenceWatchdog, clearStopTimer, hardStopNow]);
 
   if (loading) {
     return (
-      <div
-        className="
-          fixed inset-0 z-50 flex items-center justify-center
-          bg-white/80 backdrop-blur-sm
-          dark:bg-brand-900/90
-        "
-      >
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm dark:bg-brand-900/90">
         <div className="text-center">
           <div className="relative inline-flex">
             <div className="w-20 h-20 border-4 border-indigo-200 dark:border-indigo-900 rounded-full" />
             <div className="absolute inset-0 w-20 h-20 border-4 border-indigo-600 dark:border-indigo-400 border-t-transparent rounded-full animate-spin" />
           </div>
-          <p className="mt-4 text-sm font-semibold text-gray-700 dark:text-white/80">Loading heatmap...</p>
+          <p className="mt-4 text-sm font-semibold text-gray-700 dark:text-white/80">
+            Loading heatmap...
+          </p>
         </div>
       </div>
     );
@@ -524,47 +552,45 @@ export default function LiveStreamHeatmap() {
 
   return (
     <>
-      {/* Flash banner when websocket connects/reconnects */}
-      <AnimatePresence>
-        {streamStatus === "live" && (
-          <motion.div
-            key={`ws-session-${wsSession}`}
-            className="fixed top-3 left-1/2 -translate-x-1/2 z-[60] pointer-events-none"
-            initial={{ opacity: 0, y: -8, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.35, ease: "easeOut" }}
-          >
-            <div className="px-3 py-1.5 rounded-full bg-emerald-500/20 dark:bg-emerald-400/15 border border-emerald-500/30 dark:border-emerald-400/25 backdrop-blur-md">
-              <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">
-                Live stream connected
+      {/* Connection status indicator */}
+      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[60] pointer-events-none">
+        <AnimatePresence mode="wait">
+          {streamStatus === "connecting" && !wsClosed && (
+            <motion.div
+              key="connecting"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/30 backdrop-blur-md"
+            >
+              <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+              <span className="text-xs font-semibold text-amber-900 dark:text-amber-100">
+                Connecting...
               </span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+
+          {/* ✅ Hide red pill when timeout popup is active */}
+          {streamStatus === "error" && !wsClosed && (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/20 border border-rose-500/30 backdrop-blur-md cursor-pointer hover:bg-rose-500/30 transition-colors"
+              onClick={handleReconnect}
+            >
+              <div className="w-2 h-2 bg-rose-500 rounded-full" />
+              <span className="text-xs font-semibold text-rose-900 dark:text-rose-100">
+                Disconnected • Click to reconnect
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       <div className="min-h-screen dark:bg-brand-900 bg-white pb-8">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6">
-          {/* WS Status Banner (WS ONLY, no polling) */}
-          <AnimatePresence>
-            {!wsAvailable && (
-              <motion.div
-                initial={{ opacity: 0, y: -16 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -16 }}
-                className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gradient-to-r from-rose-500/10 to-orange-500/10 dark:from-rose-500/20 dark:to-orange-500/20 border border-rose-500/20 dark:border-rose-500/30 rounded-2xl backdrop-blur-sm"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-rose-500 rounded-full animate-pulse" />
-                  <p className="text-xs sm:text-sm font-semibold text-rose-900 dark:text-rose-200">
-                    WebSocket unavailable (no polling fallback). Check API key / connection.
-                  </p>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Header */}
           <div className="mb-6 sm:mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -580,7 +606,7 @@ export default function LiveStreamHeatmap() {
                     Live Crypto Heatmap
                   </h1>
                   <p className="mt-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">
-                    WebSocket-only live updates • Top 200 by market cap
+                    Real-time WebSocket prices • Top 200 by market cap
                   </p>
                 </div>
               </div>
@@ -604,8 +630,14 @@ export default function LiveStreamHeatmap() {
           <div className="flex items-center justify-between mb-3 sm:mb-4">
             <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">
               Showing{" "}
-              <span className="font-bold text-gray-900 dark:text-white">{Math.min(visibleCount, sortedIds.length)}</span>{" "}
-              of <span className="font-bold text-gray-900 dark:text-white">{sortedIds.length}</span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {Math.min(visibleCount, sortedIds.length)}
+              </span>{" "}
+              of{" "}
+              <span className="font-bold text-gray-900 dark:text-white">
+                {sortedIds.length}
+              </span>
+              <span className="ml-2 opacity-70">• msgs {messageCount}</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -637,39 +669,31 @@ export default function LiveStreamHeatmap() {
           {viewMode === "grid" ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1 sm:gap-1">
               {visibleIds.map((id) => {
-                const { price, prev, bump, dir } = tradeInfoMap[id] || {};
+                const tradeInfo = tradeInfoMap[id];
+                const price = tradeInfo?.price;
+                const direction = tradeInfo?.direction || "neutral";
+                const bump = tradeInfo?.bump || 0;
                 const md = metaData[id] || {};
+
                 const pct = parseFloat(String(md.changePercent24Hr ?? ""));
                 const pctPos = Number.isFinite(pct) && pct > 0;
                 const pctNeg = Number.isFinite(pct) && pct < 0;
 
-                let isPositive = false;
-                let isNegative = false;
-                let arrow = "";
-
-                if (prev != null && price != null) {
-                  const d = dir ?? 0;
-                  isPositive = d === 1;
-                  isNegative = d === -1;
-                  arrow = d === 1 ? "↑" : d === -1 ? "↓" : "";
-                } else {
-                  isPositive = pctPos;
-                  isNegative = pctNeg;
-                }
-
                 const logo = logos[md.symbol?.toLowerCase?.()];
 
-                const cardTone = isPositive
-                  ? "bg-emerald-300 border-emerald-600/40 shadow-sm dark:bg-emerald-800/60 dark:border-emerald-700/40"
-                  : isNegative
-                  ? "bg-rose-300 border-rose-600/40 shadow-sm dark:bg-rose-800/60 dark:border-rose-700/40"
-                  : "bg-gray-200 border-gray-400/40 shadow-sm dark:bg-gray-800/60 dark:border-gray-700/40";
+                const cardTone =
+                  direction === "up"
+                    ? "bg-emerald-400 border-emerald-600/50 dark:bg-emerald-600 dark:border-emerald-500/50"
+                    : direction === "down"
+                    ? "bg-rose-400 border-rose-600/50 dark:bg-rose-600 dark:border-rose-500/50"
+                    : "bg-gray-200 border-gray-400/40 dark:bg-gray-800/60 dark:border-gray-700/40";
 
-                const flashBg = isPositive
-                  ? "radial-gradient(circle at 35% 35%, rgba(34,197,94,0.95) 0%, rgba(34,197,94,0.35) 38%, rgba(34,197,94,0) 72%)"
-                  : isNegative
-                  ? "radial-gradient(circle at 35% 35%, rgba(244,63,94,0.95) 0%, rgba(244,63,94,0.35) 38%, rgba(244,63,94,0) 72%)"
-                  : "radial-gradient(circle at 35% 35%, rgba(99,102,241,0.85) 0%, rgba(99,102,241,0.28) 40%, rgba(99,102,241,0) 72%)";
+                const flashBg =
+                  direction === "up"
+                    ? "radial-gradient(circle at 50% 45%, rgba(16,185,129,0.85) 0%, rgba(16,185,129,0.25) 55%, rgba(16,185,129,0) 75%)"
+                    : direction === "down"
+                    ? "radial-gradient(circle at 50% 45%, rgba(244,63,94,0.85) 0%, rgba(244,63,94,0.25) 55%, rgba(244,63,94,0) 75%)"
+                    : "transparent";
 
                 return (
                   <motion.div
@@ -683,27 +707,27 @@ export default function LiveStreamHeatmap() {
                       trackEvent("CryptoAssetClick", { id, ...md });
                     }}
                   >
-                    <div
+                    <motion.div
                       className={[
                         "relative overflow-hidden rounded-2xl cursor-pointer",
-                        "border-2 transition-all duration-300",
+                        "border-2 transition-colors duration-150",
                         cardTone,
                       ].join(" ")}
                     >
-                      {/* Flash overlay on price update */}
+                      {/* Fast flash on every price change */}
                       <AnimatePresence>
-                        {prev != null && price != null && bump != null && bump > 0 && (
+                        {bump > 0 && (
                           <motion.div
                             key={`${id}-${bump}`}
                             className="absolute inset-0 pointer-events-none"
                             initial={{ opacity: 0, scale: 1 }}
-                            animate={{ opacity: [0, 0.95, 0.35, 0], scale: [1, 1.02, 1.008, 1] }}
+                            animate={{ opacity: [0, 1, 0], scale: [1, 1.02, 1] }}
                             exit={{ opacity: 0 }}
-                            transition={{ duration: 0.42, times: [0, 0.12, 0.35, 1], ease: "easeOut" }}
+                            transition={{ duration: 0.16, ease: "easeOut" }}
                             style={{
                               background: flashBg,
                               mixBlendMode: "screen",
-                              filter: "saturate(1.8) contrast(1.25)",
+                              filter: "saturate(1.6) contrast(1.15)",
                               willChange: "opacity, transform",
                             }}
                           />
@@ -725,7 +749,11 @@ export default function LiveStreamHeatmap() {
                           {logo ? (
                             <div className="relative flex-shrink-0">
                               <div className="relative bg-white/90 dark:bg-white/90 rounded-full p-1.5 shadow-sm">
-                                <LazyImg src={logo} alt={md.symbol} className="w-6 h-6 sm:w-7 sm:h-7" />
+                                <LazyImg
+                                  src={logo}
+                                  alt={md.symbol}
+                                  className="w-6 h-6 sm:w-7 sm:h-7"
+                                />
                               </div>
                             </div>
                           ) : (
@@ -733,31 +761,57 @@ export default function LiveStreamHeatmap() {
                           )}
 
                           <div className="min-w-0 flex-1">
-                            <h3 className="text-sm sm:text-base text-gray-900 dark:text-white truncate">{md.symbol || id}</h3>
+                            <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white truncate">
+                              {md.symbol || id}
+                            </h3>
                           </div>
                         </div>
 
                         {/* Price */}
                         <div className="mb-2">
                           <div className="flex items-baseline gap-1.5">
-                            <span className="text-base sm:text-lg text-gray-900 dark:text-white">{fmt.usd(price)}</span>
-                            {arrow && <span className="text-sm sm:text-base text-gray-700 dark:text-white/90">{arrow}</span>}
+                            <motion.span
+                              key={`${id}-price-${bump}`}
+                              initial={{ y: 2, opacity: 0.9 }}
+                              animate={{ y: 0, opacity: 1 }}
+                              transition={{ duration: 0.12 }}
+                              className="text-base sm:text-lg font-bold text-gray-900 dark:text-white"
+                            >
+                              {fmt.usd(price)}
+                            </motion.span>
+
+                            {direction !== "neutral" && (
+                              <motion.span
+                                className={`text-sm sm:text-base font-bold ${
+                                  direction === "up"
+                                    ? "text-emerald-800 dark:text-white"
+                                    : "text-rose-800 dark:text-white"
+                                }`}
+                                initial={{ opacity: 0, y: direction === "up" ? 5 : -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.12 }}
+                              >
+                                {direction === "up" ? "↑" : "↓"}
+                              </motion.span>
+                            )}
                           </div>
                         </div>
 
                         {/* 24h change */}
                         <div className="flex items-center justify-between">
                           <div className="inline-flex items-center gap-1 bg-black/10 dark:bg-black/20 backdrop-blur-sm px-2 py-1 rounded-full">
-                            <span className="text-[10px] sm:text-xs text-gray-900 dark:text-white/90">
-                              {fmt.pct(md.changePercent24Hr)}
+                            <span className="text-[10px] sm:text-xs font-semibold text-gray-900 dark:text-white/90">
+                              24h: {fmt.pct(md.changePercent24Hr)}
                             </span>
                           </div>
 
-                          {(pctPos || pctNeg) && (
+                          {Number.isFinite(pct) && pct !== 0 && (
                             <div
                               className={[
                                 "text-xs sm:text-sm font-black",
-                                pctPos ? "text-emerald-700 dark:text-emerald-200" : "text-rose-700 dark:text-rose-200",
+                                pctPos
+                                  ? "text-emerald-700 dark:text-emerald-200"
+                                  : "text-rose-700 dark:text-rose-200",
                               ].join(" ")}
                             >
                               {pctPos ? "↑" : "↓"}
@@ -765,7 +819,7 @@ export default function LiveStreamHeatmap() {
                           )}
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   </motion.div>
                 );
               })}
@@ -791,38 +845,28 @@ export default function LiveStreamHeatmap() {
                   <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                     {visibleIds.map((id) => {
                       const md = metaData[id] || {};
-                      const { price, prev, bump, dir } = tradeInfoMap[id] || {};
+                      const tradeInfo = tradeInfoMap[id];
+                      const price = tradeInfo?.price;
+                      const direction = tradeInfo?.direction || "neutral";
 
                       const pct = parseFloat(String(md.changePercent24Hr ?? ""));
                       const pctPos = Number.isFinite(pct) && pct > 0;
                       const pctNeg = Number.isFinite(pct) && pct < 0;
 
-                      // ✅ match GRID logic: prefer WS direction if available
-                      let isPositive = false;
-                      let isNegative = false;
-                      if (prev != null && price != null) {
-                        const d = dir ?? 0;
-                        isPositive = d === 1;
-                        isNegative = d === -1;
-                      } else {
-                        isPositive = pctPos;
-                        isNegative = pctNeg;
-                      }
-
-                      // ✅ match GRID backgrounds in LIGHT + DARK
-                      const rowBg = isPositive
-                        ? "bg-emerald-300/60 dark:bg-emerald-800/30"
-                        : isNegative
-                        ? "bg-rose-300/60 dark:bg-rose-800/30"
-                        : "";
+                      const rowBg =
+                        direction === "up"
+                          ? "bg-emerald-300/70 dark:bg-emerald-700/50"
+                          : direction === "down"
+                          ? "bg-rose-300/70 dark:bg-rose-700/50"
+                          : "";
 
                       const logo = logos[String(md.symbol ?? "").toLowerCase()];
 
                       return (
                         <motion.tr
-                          key={`${id}-${bump ?? 0}`}
+                          key={id}
                           className={[
-                            "cursor-pointer transition-colors duration-200",
+                            "cursor-pointer transition-all duration-150",
                             rowBg,
                             "hover:bg-black/5 dark:hover:bg-white/5",
                           ].join(" ")}
@@ -830,12 +874,6 @@ export default function LiveStreamHeatmap() {
                             setSelectedAsset(md);
                             trackEvent("CryptoAssetClick", { id });
                           }}
-                          initial={false}
-                          animate={{
-                            // keep a subtle pulse on updates without breaking the base bg
-                            opacity: bump ? [1, 0.98, 1] : 1,
-                          }}
-                          transition={{ duration: 0.35, ease: "easeOut" }}
                         >
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
                             <div className="inline-flex items-center justify-center bg-black/10 dark:bg-white/10 rounded-full px-2.5 py-1">
@@ -850,7 +888,11 @@ export default function LiveStreamHeatmap() {
                               {logo ? (
                                 <div className="relative flex-shrink-0">
                                   <div className="relative bg-white/90 dark:bg-white/90 rounded-full p-1.5 shadow-sm">
-                                    <LazyImg src={logo} alt={md.symbol} className="w-6 h-6 sm:w-8 sm:h-8" />
+                                    <LazyImg
+                                      src={logo}
+                                      alt={md.symbol}
+                                      className="w-6 h-6 sm:w-8 sm:h-8"
+                                    />
                                   </div>
                                 </div>
                               ) : (
@@ -870,23 +912,36 @@ export default function LiveStreamHeatmap() {
                           </td>
 
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
-                            <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
-                              {fmt.usd(price)}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
+                                {fmt.usd(price)}
+                              </span>
+                              {direction !== "neutral" && (
+                                <span
+                                  className={`text-lg font-bold ${
+                                    direction === "up" ? "text-emerald-700" : "text-rose-700"
+                                  }`}
+                                >
+                                  {direction === "up" ? "↑" : "↓"}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           <td className="px-3 sm:px-6 py-3 sm:py-4">
                             <div
                               className={[
                                 "inline-flex items-center gap-2 px-3 py-1.5 rounded-full font-bold text-xs sm:text-sm",
-                                isPositive
+                                pctPos
                                   ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
-                                  : isNegative
+                                  : pctNeg
                                   ? "bg-rose-500/15 text-rose-800 dark:text-rose-200"
                                   : "bg-black/10 dark:bg-white/10 text-gray-800 dark:text-white/70",
                               ].join(" ")}
                             >
-                              <span aria-hidden className="text-base">{isPositive ? "↑" : isNegative ? "↓" : ""}</span>
+                              <span aria-hidden className="text-base">
+                                {pctPos ? "↑" : pctNeg ? "↓" : ""}
+                              </span>
                               {fmt.pct(md.changePercent24Hr)}
                             </div>
                           </td>
@@ -916,6 +971,66 @@ export default function LiveStreamHeatmap() {
         onClose={() => setSelectedAsset(null)}
         tradeInfo={selectedAsset ? tradeInfoMap[selectedAsset.id] : undefined}
       />
+
+      {/* ✅ WebSocket Closed Modal (WS_TIMEOUT only) */}
+      <AnimatePresence>
+        {wsClosed && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+
+              <div className="p-6 sm:p-8">
+                <button
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors"
+                  onClick={() => setWsClosed(false)}
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+
+                <div className="text-center">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl mb-4 shadow-lg">
+                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+
+                  <h3 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-3">
+                    Stream Ended
+                  </h3>
+
+                  <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-6">
+                    The live price stream ended automatically after 5 minutes.
+                  </p>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-2xl font-bold shadow-lg shadow-indigo-500/25 transition-all duration-200"
+                    onClick={() => {
+                      setWsClosed(false);
+                      handleReconnect();
+                    }}
+                  >
+                    Restart Stream
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
