@@ -207,125 +207,122 @@ export default function WidgetCrypto() {
       setSelectedAssetId(id);
     };
 
-    return (
-      <motion.button
-        key={id}
-        type="button"
-        onPointerDown={(e) => {
-          dragIntentRef.current.downX = e.clientX;
-          dragIntentRef.current.moved = false;
+   return (
+  <motion.button
+    key={id}
+    type="button"
+    onPointerDown={(e) => {
+      dragIntentRef.current.downX = e.clientX;
+      dragIntentRef.current.moved = false;
+    }}
+    onPointerMove={(e) => {
+      if (Math.abs(e.clientX - dragIntentRef.current.downX) > 6) {
+        dragIntentRef.current.moved = true;
+      }
+    }}
+    onClick={onCardClick}
+    className={cn(
+      "group relative overflow-hidden text-left select-none",
+      "mx-1",
+      "min-w-[100px] sm:min-w-[110px]",
+      "rounded-xl",
+      "border",
+      "shadow-sm",
+      "transition-colors duration-150",
+      "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60",
+
+      isPos
+        ? [
+            //  MATTE GREEN  
+            "bg-emerald-400",
+            "border-emerald-600/50",
+            "dark:bg-emerald-600",
+            "dark:border-emerald-500/50",
+          ].join(" ")
+        : isNeg
+        ? [
+            //  MATTE RED
+            "bg-rose-400",
+            "border-rose-600/50",
+            "dark:bg-rose-600",
+            "dark:border-rose-500/50",
+          ].join(" ")
+        : [
+            //  MATTE NEUTRAL
+            "bg-gray-200",
+            "border-gray-400/40",
+            "dark:bg-gray-800/60",
+            "dark:border-gray-700/40",
+          ].join(" ")
+    )}
+    whileHover={{ y: -2, scale: 1.02 }}
+    whileTap={{ scale: 0.98 }}
+  >
+    {/* Subtle gradient overlay */}
+    <div className="absolute inset-0 pointer-events-none dark:bg-gradient-to-br dark:from-white/5 dark:via-transparent dark:to-black/25" />
+
+    {/* Flash on price update */}
+    {prev != null && bump > 0 && (isPos || isNeg) && (
+      <motion.div
+        key={`flash-${id}-${bump}`}
+        className="absolute inset-0 pointer-events-none rounded-xl"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0, 0.7, 0] }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        style={{
+          background: isPos
+            ? "radial-gradient(circle at center, rgba(34,197,94,0.55) 0%, rgba(34,197,94,0.22) 52%, transparent 82%)"
+            : "radial-gradient(circle at center, rgba(239,68,68,0.55) 0%, rgba(239,68,68,0.22) 52%, transparent 82%)",
+          mixBlendMode: "screen",
         }}
-        onPointerMove={(e) => {
-          if (Math.abs(e.clientX - dragIntentRef.current.downX) > 6) {
-            dragIntentRef.current.moved = true;
-          }
-        }}
-        onClick={onCardClick}
-className={cn(
-  "group relative overflow-hidden text-left select-none",
-  "mx-1",
-  "min-w-[100px] sm:min-w-[110px]",
-  "rounded-xl",
-  "border",
-  "shadow-sm",
-  "transition-colors duration-150",
-  "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60",
+      />
+    )}
 
-  isPos
-    ? [
-        //  MATTE GREEN
-        "bg-emerald-300/80",
-        "border-emerald-600/40",
-        "dark:bg-emerald-800/60",
-        "dark:border-emerald-700/40",
-      ].join(" ")
-    : isNeg
-    ? [
-        //  MATTE RED
-        "bg-rose-300/80",
-        "border-rose-600/40",
-        "dark:bg-rose-800/60",
-        "dark:border-rose-700/40",
-      ].join(" ")
-    : [
-        //  MATTE NEUTRAL
-        "bg-gray-200/80",
-        "border-gray-400/40",
-        "dark:bg-gray-800/60",
-        "dark:border-gray-700/40",
-      ].join(" ")
-)}
-
-
-        whileHover={{ y: -2, scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-      >
-        {/* Subtle gradient overlay */}
-<div className="absolute inset-0 pointer-events-none dark:bg-gradient-to-br dark:from-white/5 dark:via-transparent dark:to-black/25" />
-
-        {/* Flash on price update */}
-        {prev != null && bump > 0 && (isPos || isNeg) && (
-          <motion.div
-            key={`flash-${id}-${bump}`}
-            className="absolute inset-0 pointer-events-none rounded-xl"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 0.7, 0] }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-           style={{
-  background: isPos
-    ? "radial-gradient(circle at center, rgba(34,197,94,0.55) 0%, rgba(34,197,94,0.22) 52%, transparent 82%)"
-    : "radial-gradient(circle at center, rgba(239,68,68,0.55) 0%, rgba(239,68,68,0.22) 52%, transparent 82%)",
-  mixBlendMode: "screen",
-}}
-
-          />
-        )}
-
-        {/* Content */}
-        <div className="relative z-10 px-2.5 py-2.5">
-          {/* Header row with logo, symbol, and rank */}
-          <div className="flex items-center justify-between gap-1.5 mb-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              {logo && (
-                <div className="relative flex-shrink-0">
-                  <div className="w-5 h-5 rounded-full bg-white dark:bg-gray-800 p-0.5 ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
-                    <img src={logo} alt={md.symbol} className="w-full h-full rounded-full" loading="lazy" />
-                  </div>
-                </div>
-              )}
-              <span className="text-[11px] font-black text-gray-900 dark:text-white truncate">
-                {md?.symbol?.toUpperCase?.()}
-              </span>
+    {/* Content */}
+    <div className="relative z-10 px-2.5 py-2.5">
+      {/* Header row with logo, symbol, and rank */}
+      <div className="flex items-center justify-between gap-1.5 mb-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {logo && (
+            <div className="relative flex-shrink-0">
+              <div className="w-5 h-5 rounded-full bg-white dark:bg-gray-800 p-0.5 ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
+                <img src={logo} alt={md.symbol} className="w-full h-full rounded-full" loading="lazy" />
+              </div>
             </div>
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/10 text-[9px] font-bold text-gray-600 dark:text-gray-300">
-              #{md?.rank}
-            </span>
-          </div>
-
-          {/* Price */}
-          <div className="mb-1.5">
-            <div className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
-              {fmt.usd(price)}
-            </div>
-          </div>
-
-          {/* 24h Change */}
-          <div className="flex items-center justify-between">
-            <span
-              className={cn(
-                "text-[10px] font-bold tabular-nums",
-                isPos ? "text-emerald-700 dark:text-emerald-300" :
-                isNeg ? "text-rose-700 dark:text-rose-300" :
-                "text-gray-700 dark:text-gray-300"
-              )}
-            >
-              {fmt.pct(md?.changePercent24Hr)}
-            </span>
-            <span className="text-[9px] font-semibold text-gray-500 dark:text-gray-400">24h</span>
-          </div>
+          )}
+          <span className="text-[11px] font-semibold text-slate-800 dark:text-white truncate">
+            {md?.symbol?.toUpperCase?.()}
+          </span>
         </div>
-      </motion.button>
-    );
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/10 text-[9px] font-bold text-gray-600 dark:text-gray-300">
+          #{md?.rank}
+        </span>
+      </div>
+
+      {/* Price */}
+      <div className="mb-1.5">
+        <div className="text-sm font-semibold text-slate-800 dark:text-white tabular-nums">
+          {fmt.usd(price)}
+        </div>
+      </div>
+
+      {/* 24h Change */}
+      <div className="flex items-center justify-between">
+        <span
+          className={cn(
+            "text-[10px] font-bold tabular-nums",
+            isPos ? "text-emerald-700 dark:text-emerald-300" :
+            isNeg ? "text-rose-700 dark:text-rose-300" :
+            "text-gray-700 dark:text-gray-300"
+          )}
+        >
+          {fmt.pct(md?.changePercent24Hr)}
+        </span>
+        <span className="text-[9px] font-semibold text-gray-500 dark:text-gray-400">24h</span>
+      </div>
+    </div>
+  </motion.button>
+);
   };
 
   return (
