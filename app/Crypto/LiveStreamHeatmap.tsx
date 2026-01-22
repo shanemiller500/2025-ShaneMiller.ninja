@@ -37,7 +37,7 @@ const COINGECKO_TOP200 =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
 
 const PAGE_SIZE = 78;
-const WS_TIMEOUT_MS = 300_000; // 5 minutes
+const SESSION_TIMEOUT_MS = 300_000; // 5 minutes - this is for the entire session
 const RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
@@ -337,18 +337,14 @@ function useWebSocketStream(
   onPriceUpdate: (updates: Record<string, number>) => void
 ) {
   const [status, setStatus] = useState<StreamStatus>("connecting");
-  const [timedOut, setTimedOut] = useState(false);
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttempts = useRef(0);
   const mountedRef = useRef(true);
 
   const cleanup = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
     if (wsRef.current) {
       wsRef.current.onopen = null;
       wsRef.current.onmessage = null;
@@ -361,8 +357,16 @@ function useWebSocketStream(
     }
   }, []);
 
+  const cleanupSession = useCallback(() => {
+    if (sessionTimerRef.current) {
+      clearTimeout(sessionTimerRef.current);
+      sessionTimerRef.current = null;
+    }
+    cleanup();
+  }, [cleanup]);
+
   const connect = useCallback(() => {
-    if (!mountedRef.current || !enabled || !API_KEY || assetIds.length === 0)
+    if (!mountedRef.current || !enabled || !API_KEY || assetIds.length === 0 || sessionEnded)
       return;
 
     cleanup();
@@ -377,14 +381,6 @@ function useWebSocketStream(
       if (!mountedRef.current) return;
       setStatus("live");
       reconnectAttempts.current = 0;
-
-      // Start timeout timer
-      timeoutRef.current = setTimeout(() => {
-        if (!mountedRef.current) return;
-        cleanup();
-        setStatus("error");
-        setTimedOut(true);
-      }, WS_TIMEOUT_MS);
     };
 
     ws.onmessage = (e) => {
@@ -414,7 +410,7 @@ function useWebSocketStream(
     };
 
     ws.onclose = () => {
-      if (!mountedRef.current || timedOut) return;
+      if (!mountedRef.current || sessionEnded) return;
 
       if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts.current++;
@@ -428,27 +424,46 @@ function useWebSocketStream(
       if (!mountedRef.current) return;
       // onclose will handle reconnection
     };
-  }, [assetIds, enabled, cleanup, onPriceUpdate, timedOut]);
+  }, [assetIds, enabled, cleanup, onPriceUpdate, sessionEnded]);
 
   const restart = useCallback(() => {
-    setTimedOut(false);
+    setSessionEnded(false);
     reconnectAttempts.current = 0;
     setStatus("connecting");
+    
+    // Start new session timer
+    sessionTimerRef.current = setTimeout(() => {
+      if (!mountedRef.current) return;
+      cleanupSession();
+      setStatus("error");
+      setSessionEnded(true);
+    }, SESSION_TIMEOUT_MS);
+    
     connect();
-  }, [connect]);
+  }, [connect, cleanupSession]);
 
   useEffect(() => {
     mountedRef.current = true;
-    if (enabled && assetIds.length > 0 && !timedOut) {
+    
+    if (enabled && assetIds.length > 0 && !sessionEnded) {
+      // Start session timer on initial mount
+      sessionTimerRef.current = setTimeout(() => {
+        if (!mountedRef.current) return;
+        cleanupSession();
+        setStatus("error");
+        setSessionEnded(true);
+      }, SESSION_TIMEOUT_MS);
+      
       connect();
     }
+    
     return () => {
       mountedRef.current = false;
-      cleanup();
+      cleanupSession();
     };
-  }, [assetIds, enabled, connect, cleanup, timedOut]);
+  }, [assetIds, enabled, connect, cleanupSession, sessionEnded]);
 
-  return { status, timedOut, restart };
+  return { status, sessionEnded, restart };
 }
 
 /* Main Component --------------------------------------------------- */
@@ -645,7 +660,7 @@ export default function LiveStreamHeatmap() {
   );
 
   /* WebSocket connection */
-  const { status, timedOut, restart } = useWebSocketStream(
+  const { status, sessionEnded, restart } = useWebSocketStream(
     visibleIds,
     !loading && visibleIds.length > 0,
     handlePriceUpdate
@@ -734,7 +749,7 @@ export default function LiveStreamHeatmap() {
                 onClick={handleViewToggle}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="flex items-center justify-center gap-2.5 bg-indigo-600/50 dark:bg-indigo-900/40 text-white px-5 py-3 rounded-2xl transition-all duration-200 font-semibold text-sm"
+                className="flex items-center justify-center gap-2.5 bg-indigo-600/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white px-5 py-3 rounded-2xl transition-all duration-200 font-semibold text-sm"
               >
                 {viewMode === "grid" ? (
                   <FaTable className="w-4 h-4" />
@@ -761,7 +776,7 @@ export default function LiveStreamHeatmap() {
             {/* Connection status */}
             <div className="pointer-events-none">
               <AnimatePresence mode="wait">
-                {status === "connecting" && !timedOut && (
+                {status === "connecting" && !sessionEnded && (
                   <motion.div
                     key="connecting"
                     initial={{ opacity: 0, y: -8 }}
@@ -776,7 +791,7 @@ export default function LiveStreamHeatmap() {
                   </motion.div>
                 )}
 
-                {status === "error" && !timedOut && (
+                {status === "error" && !sessionEnded && (
                   <motion.div
                     key="error"
                     initial={{ opacity: 0, y: -8 }}
@@ -889,9 +904,9 @@ export default function LiveStreamHeatmap() {
         tradeInfo={selectedAsset ? tradeInfoMap[selectedAsset.id] : undefined}
       />
 
-      {/* WebSocket Timeout Modal */}
+      {/* WebSocket Session Ended Modal */}
       <AnimatePresence>
-        {timedOut && (
+        {sessionEnded && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -954,7 +969,7 @@ export default function LiveStreamHeatmap() {
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-2xl font-bold shadow-lg shadow-indigo-500/25 transition-all duration-200"
+                    className="w-full px-6 py-3 bg-indigo-600/50 dark:bg-indigo-900/40 dark:text-white text-gray-900 rounded-2xl font-bold shadow-lg shadow-indigo-500/25 transition-all duration-200"
                     onClick={restart}
                   >
                     Restart Stream
