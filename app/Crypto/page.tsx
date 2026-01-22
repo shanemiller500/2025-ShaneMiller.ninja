@@ -49,13 +49,6 @@ const CryptoDashboard = () => {
                 </p>
 
             </div>
-
-            <div className="flex items-center gap-2 text-xs font-semibold text-gray-600 dark:text-white/60">
-              <span className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-brand-900">
-                <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                Live
-              </span>
-            </div>
           </div>
         </div>
 
