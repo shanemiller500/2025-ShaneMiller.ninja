@@ -260,7 +260,7 @@ export default function PrettyPrint() {
       <div className="flex gap-3">
         <button
           onClick={handleFormat}
-          className="bg-violet-600 hover:bg-violet-700 active:scale-95 transition text-white font-medium px-6 py-2 rounded-lg"
+          className="bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white active:scale-95 transition  font-medium px-6 py-2 rounded-lg"
         >
           Format
         </button>

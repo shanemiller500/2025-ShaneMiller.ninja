@@ -695,7 +695,7 @@ export default function StockQuoteSection() {
                 type="button"
                 onClick={() => handleSearch()}
                 disabled={loading || !normalizedSymbol}
-                className="w-full rounded-2xl px-4 py-3 text-sm font-extrabold text-white shadow-sm ring-1 ring-black/10 dark:ring-white/10 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 active:scale-[0.99] transition disabled:opacity-50"
+                className="w-full rounded-2xl px-4 py-3 text-sm font-extrabold shadow-sm ring-1 ring-black/10 dark:ring-white/10 bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white hover:opacity-95 active:scale-[0.99] transition disabled:opacity-50"
               >
                 {loading ? "Searching…" : "Search"}
               </button>

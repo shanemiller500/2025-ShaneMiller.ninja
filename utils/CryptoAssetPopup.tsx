@@ -313,7 +313,6 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
           >
             <div className="pointer-events-none absolute inset-0 opacity-[0.55] dark:opacity-[0.45]">
               <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-indigo-400/20 blur-3xl" />
-              <div className="absolute -bottom-28 -right-28 h-72 w-72 rounded-full bg-fuchsia-400/20 blur-3xl" />
               <div className="absolute top-20 right-10 h-56 w-56 rounded-full bg-sky-400/15 blur-3xl" />
             </div>
 
@@ -486,7 +485,7 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
 
               <div className="mt-6 pb-3 flex flex-col sm:flex-row gap-3 sm:justify-end">
                 <button onClick={onClose}
-                  className="w-full sm:w-auto rounded-2xl px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-indigo-500/10 bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:opacity-95 active:scale-[0.99] transition"
+                  className="w-full sm:w-auto rounded-2xl px-5 py-3 text-sm font-extrabold bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white hover:opacity-95 active:scale-[0.99] transition"
                 >Close</button>
               </div>
 

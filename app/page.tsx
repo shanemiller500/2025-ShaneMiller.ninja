@@ -108,7 +108,7 @@ export default function AboutPage() {
                     </p>
 
                     <StockWidget />
-                      <FlightSearch full={null} />
+                      {/* <FlightSearch full={null} /> */}
                   </div>
                 </div>
               </section>
@@ -120,7 +120,7 @@ export default function AboutPage() {
             <div className="space-y-6">
               
               <WidgetWeather />
-              <WidgetSearch />
+              {/* <WidgetSearch /> */}
               <CryptoWidget />
             
               <WidgetNews />
