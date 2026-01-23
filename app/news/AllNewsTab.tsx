@@ -591,7 +591,7 @@ export default function NewsTab() {
 
       {/* GRID (mixed groups inline, newest first) */}
       <div
-        className={`mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 transition-opacity duration-200 ${
+        className={`mt-6 grid grid-cols-1  sm:grid-cols-2 lg:grid-cols-3 transition-opacity duration-200 ${
           fade ? "opacity-0" : "opacity-100"
         }`}
       >
