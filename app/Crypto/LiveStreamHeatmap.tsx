@@ -969,7 +969,7 @@ export default function LiveStreamHeatmap() {
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full px-6 py-3 bg-indigo-500/50 dark:bg-indigo-900/40 dark:text-white text-gray-900 rounded-2xl font-bold shadow-lg shadow-indigo-500/25 transition-all duration-200"
+                    className="w-full px-6 py-3 bg-indigo-500/50 dark:bg-indigo-900/40 dark:text-white text-gray-900 rounded-2xl font-bold transition-all duration-200"
                     onClick={restart}
                   >
                     Restart Stream
