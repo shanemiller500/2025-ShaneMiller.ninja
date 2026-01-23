@@ -380,11 +380,18 @@ export default function Results() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] mt-20 py-8">
-        <div className="mx-auto max-w-[1400px] px-6 text-center">
-          <p className="text-xs uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
-            Powered by AI Research Technology
-          </p>
+       <footer className="border-t-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] mt-20 py-8">
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-xs uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
+              Powered by <a className="font-semibold text-neutral-600 dark:text-neutral-300 transition-colors duration-200 hover:text-neutral-900 dark:hover:text-white hover:underline underline-offset-4" target="_blank" rel="noopener noreferrer" href="https://holdmybeer.info/">Hold My Beer CO</a> AI Research Technology
+            </p>
+            <div className="flex items-center gap-6 text-xs text-neutral-500 dark:text-neutral-400">
+              <span>© 2025 The Search</span>
+              <span>•</span>
+              <span>Privacy-First Design</span>
+            </div>
+          </div>
         </div>
       </footer>
 
