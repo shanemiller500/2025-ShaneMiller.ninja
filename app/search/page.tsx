@@ -6,11 +6,11 @@ import { trackEvent } from "@/utils/mixpanel";
 
 const SUGGESTIONS = [
   "Best laptop for React dev 2026",
-  "Explain quantum computing like I’m 12",
+  "Explain quantum computing like I'm 12",
   "Denver to Gold Coast trip checklist",
   "Compare Rivian vs Tesla charging networks",
   "Build a Next.js API with caching",
-  "What’s the healthiest fast food order",
+  "What's the healthiest fast food order",
 ];
 
 export default function Home() {
@@ -19,7 +19,6 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const hints = useMemo(() => {
-    // light rotation feel without being too “random”
     const now = new Date();
     const idx = (now.getDate() + now.getHours()) % SUGGESTIONS.length;
     return [
@@ -30,7 +29,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Quick “/ to focus” like modern search apps
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "/" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
@@ -60,118 +58,189 @@ export default function Home() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-white text-brand-900 dark:bg-brand-900 dark:text-gray-100">
-      {/* background */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 left-1/2 h-72 w-[40rem] -translate-x-1/2 rounded-full " />
-       
-      </div>
-
-      <main className="relative mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center px-4 py-10">
-        {/* top mini nav */}
-        <div className="mb-10 flex w-full items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-2xl shadow-sm" />
-            <div className="leading-tight">
-              <div className="text-sm font-semibold">AI Search</div>
-            </div>
-          </div>
-
-          
-        </div>
-
-        {/* hero */}
-        <div className="w-full">
-          <h1 className="text-center text-4xl font-extrabold tracking-tight sm:text-6xl">
-           Fast answers{" "}
-            <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              real sources
-            </span>
-            
-          </h1>
-          {/* <p className="mx-auto mt-4 max-w-2xl text-center text-base opacity-80 sm:text-lg">
-           Fast answers + real sources
-          </p> */}
-        </div>
-
-        {/* search bar */}
-        <form onSubmit={handleSearch} className="mt-10 w-full max-w-2xl">
-          <div className="rounded-3xl border border-gray-200 bg-white/80 p-2 shadow-xl backdrop-blur dark:border-white/10 dark:bg-white/5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="flex flex-1 items-center gap-3 rounded-2xl bg-white px-4 py-3 dark:bg-brand-900">
-                {/* icon */}
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  className="opacity-70"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M10.5 19a8.5 8.5 0 1 1 0-17 8.5 8.5 0 0 1 0 17Z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                  <path
-                    d="M16.7 16.7 21 21"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-
-                <input
-                  ref={inputRef}
-                  type="text"
-                  className="w-full bg-transparent dark:bg-white/5 text-sm outline-none placeholder:opacity-60 sm:text-base"
-                  placeholder="Search anything…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-
-                
-              </div>
-
-              <button
-                type="submit"
-                className="rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 active:scale-[0.99] sm:text-base"
-              >
-                Search
-              </button>
-            </div>
-
+    <div className="min-h-screen bg-neutral-50 dark:bg-[#1D1D20]">
       
+      {/* ═══════════════ MASTHEAD ═══════════════ */}
+      <header className="border-b-4 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20]">
+        <div className="mx-auto max-w-7xl px-6 py-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Playfair Display", serif' }}>
+                The Search
+              </h1>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-neutral-500 dark:text-neutral-400 font-semibold mt-0.5" style={{ fontFamily: '"Courier New", monospace' }}>
+                AI-Powered Research
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-widest text-neutral-400 dark:text-neutral-500 mb-0.5">Today</p>
+              <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-300">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+            </div>
           </div>
+        </div>
+      </header>
+
+      {/* ═══════════════ HERO SECTION ═══════════════ */}
+      <main className="mx-auto max-w-4xl px-6 py-16 md:py-24">
+        
+        {/* Hero Headline */}
+        <div className="text-center mb-12 md:mb-16">
+
+          <h2 className="text-5xl md:text-7xl lg:text-8xl font-black leading-none mb-6 text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Playfair Display", serif' }}>
+            Fast Answers,
+            <br />
+            <span className="text-red-600 dark:text-red-400">Real Sources</span>
+          </h2>
+
+          <p className="text-lg md:text-xl text-neutral-600 dark:text-neutral-400 max-w-2xl mx-auto leading-relaxed" style={{ fontFamily: '"Merriweather", serif' }}>
+            AI-powered research that cites its sources. No guesswork, just facts backed by credible references.
+          </p>
+        </div>
+
+        {/* Search Form */}
+        <form onSubmit={handleSearch} className="mb-12">
+          <div className="relative mb-4">
+            <input
+              ref={inputRef}
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="What would you like to discover today?"
+              className="w-full border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 px-6 py-5 md:py-6 text-lg md:text-xl outline-none focus:bg-neutral-50 dark:focus:bg-neutral-900 transition-colors placeholder:text-neutral-400 dark:placeholder:text-neutral-600"
+              style={{ fontFamily: '"Merriweather", serif' }}
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-8 py-4 md:py-5 text-base md:text-lg font-bold uppercase tracking-wider hover:bg-red-600 dark:hover:bg-red-400 hover:text-white transition-all shadow-lg"
+          >
+            Begin Research
+          </button>
         </form>
 
-        {/* suggestion chips */}
-        <div className="mt-8 w-full max-w-2xl">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide opacity-60">
-              Try one of these
-            </p>
-           
+        {/* Suggested Searches */}
+        <div>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+            <h3 className="text-xs uppercase tracking-[0.3em] font-bold text-neutral-900 dark:text-neutral-100">
+              Popular Inquiries
+            </h3>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {hints.map((q) => (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {hints.map((q, idx) => (
               <button
                 key={q}
                 onClick={() => go(q)}
-                className="rounded-2xl border border-gray-200 bg-white/70 px-4 py-3 text-left text-sm shadow-sm transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+                className="group text-left p-5 border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-[#1D1D20] hover:border-neutral-900 dark:hover:border-neutral-100 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-all"
               >
-                <div className="line-clamp-2">{q}</div>
+                <div className="flex items-start gap-3 mb-2">
+                  <span className="text-xl font-black text-neutral-300 dark:text-neutral-700 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors" style={{ fontFamily: '"Playfair Display", serif' }}>
+                    {idx + 1}
+                  </span>
+                  <p className="text-sm leading-relaxed text-neutral-900 dark:text-neutral-100 line-clamp-2" style={{ fontFamily: '"Merriweather", serif' }}>
+                    {q}
+                  </p>
+                </div>
               </button>
             ))}
           </div>
         </div>
 
-        {/* footer */}
-        <div className="mt-14 text-center text-xs opacity-60">
-           Privacy-first UI. No weird clutter.
+        {/* Features Grid */}
+        <div className="mt-20 pt-16 border-t-2 border-neutral-200 dark:border-neutral-700">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            
+            {/* Feature 1 */}
+            <div className="text-center md:text-left">
+              <div className="inline-block mb-4">
+                <div className="w-12 h-12 border-2 border-neutral-900 dark:border-neutral-100 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </div>
+              <h4 className="text-lg font-black mb-2 text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Playfair Display", serif' }}>
+                Cited Sources
+              </h4>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed" style={{ fontFamily: '"Merriweather", serif' }}>
+                Every answer includes direct links to original sources for verification and deeper research.
+              </p>
+            </div>
+
+            {/* Feature 2 */}
+            <div className="text-center md:text-left">
+              <div className="inline-block mb-4">
+                <div className="w-12 h-12 border-2 border-neutral-900 dark:border-neutral-100 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M13 10V3L4 14h7v7l9-11h-7z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </div>
+              <h4 className="text-lg font-black mb-2 text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Playfair Display", serif' }}>
+                Lightning Fast
+              </h4>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed" style={{ fontFamily: '"Merriweather", serif' }}>
+                Get comprehensive answers in seconds, complete with images, tables, and related questions.
+              </p>
+            </div>
+
+            {/* Feature 3 */}
+            <div className="text-center md:text-left">
+              <div className="inline-block mb-4">
+                <div className="w-12 h-12 border-2 border-neutral-900 dark:border-neutral-100 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </div>
+              <h4 className="text-lg font-black mb-2 text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Playfair Display", serif' }}>
+                Privacy First
+              </h4>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed" style={{ fontFamily: '"Merriweather", serif' }}>
+                Your searches are private. No tracking, no data selling, no advertising profile building.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom CTA */}
+        <div className="mt-20 text-center border-t-2 border-neutral-200 dark:border-neutral-700 pt-12">
+          <p className="text-xs uppercase tracking-[0.3em] text-neutral-500 dark:text-neutral-400 mb-4">
+            Ready to Start?
+          </p>
+          <button
+            onClick={() => inputRef.current?.focus()}
+            className="inline-flex items-center gap-3 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 px-8 py-4 text-sm font-bold uppercase tracking-wider hover:bg-neutral-900 dark:hover:bg-neutral-100 hover:text-white dark:hover:text-neutral-900 transition-all"
+          >
+            <span>Type Your Question Above</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M5 10l7-7m0 0l7 7m-7-7v18" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="border-t-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] mt-20 py-8">
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-xs uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
+              Powered by <a className="font-semibold text-neutral-600 dark:text-neutral-300 transition-colors duration-200 hover:text-neutral-900 dark:hover:text-white hover:underline underline-offset-4" target="_blank" rel="noopener noreferrer" href="https://holdmybeer.info/">Hold My Beer CO</a> AI Research Technology
+            </p>
+            <div className="flex items-center gap-6 text-xs text-neutral-500 dark:text-neutral-400">
+              <span>© 2025 The Search</span>
+              <span>•</span>
+              <span>Privacy-First Design</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Merriweather:ital,wght@0,400;0,700;1,400&display=swap');
+      `}</style>
     </div>
   );
 }

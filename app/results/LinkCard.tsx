@@ -1,82 +1,70 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React from "react";
 import { trackEvent } from "@/utils/mixpanel";
 
-interface Props {
-  link: { url: string; title: string; thumbnail?: string | null; snippet?: string };
+interface LinkCardProps {
+  link: {
+    url: string;
+    title: string;
+    snippet?: string;
+    thumbnail?: string | null;
+  };
+  index?: number;
 }
 
-function safeHost(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "source";
-  }
-}
-
-export default function LinkCard({ link }: Props) {
-  const domain = useMemo(() => safeHost(link.url), [link.url]);
-
-  // thum.io preview, fallback to favicon
-  const screen = useMemo(
-    () => `https://image.thum.io/get/width/900/noanimate/${encodeURIComponent(link.url)}`,
-    [link.url]
-  );
-  const icon = useMemo(
-    () => `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-    [domain]
-  );
-
-  const [src, setSrc] = useState(link.thumbnail || screen);
-  const [ready, setReady] = useState(false);
+export default function LinkCard({ link, index }: LinkCardProps) {
+  const domain = new URL(link.url).hostname.replace("www.", "");
 
   return (
-    <a
-      href={link.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={() => trackEvent("Link Click", { url: link.url })}
-      className="group block overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-[1px] hover:shadow-lg dark:border-white/10 dark:bg-white/5"
-    >
-      {/* Banner */}
-      <div className="relative h-36 bg-gray-100 dark:bg-brand-900 sm:h-44">
-        {!ready && <div className="absolute inset-0 animate-pulse bg-gray-100 dark:bg-brand-900" />}
-
-        <img
-          src={src}
-          alt=""
-          className="h-full w-full object-cover"
-          style={{ display: ready ? "block" : "none" }}
-          onLoad={() => setReady(true)}
-          onError={() => {
-            if (src !== icon) setSrc(icon);
-            else setReady(true);
-          }}
-        />
-
-        {/* overlay */}
-        <div className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100">
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-          <div className="absolute bottom-2 left-3 right-3 flex items-center gap-2">
-            <img src={icon} alt="" className="h-5 w-5 rounded-md bg-white/90 p-[2px]" />
-            <span className="truncate text-xs font-semibold text-white">{domain}</span>
+    <article className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors group">
+      <a
+        href={link.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => trackEvent("Link Click", { url: link.url })}
+        className="block"
+      >
+        {/* Thumbnail */}
+        {link.thumbnail && (
+          <div className="relative h-32 overflow-hidden bg-neutral-200 dark:bg-neutral-800">
+            <img
+              src={link.thumbnail}
+              alt=""
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
           </div>
-        </div>
-      </div>
-
-      {/* Text */}
-      <div className="p-4">
-        <p className="line-clamp-2 text-sm font-extrabold tracking-tight text-indigo-700 dark:text-indigo-300">
-          {link.title || "Untitled"}
-        </p>
-
-        {link.snippet ? (
-          <p className="mt-2 line-clamp-2 text-xs opacity-75">{link.snippet}</p>
-        ) : (
-          <p className="mt-2 text-xs opacity-60">{domain}</p>
         )}
-      </div>
-    </a>
+
+        {/* Content */}
+        <div className="p-4">
+          {/* Number + Domain */}
+          <div className="flex items-center gap-3 mb-2">
+            {index && (
+              <span className="text-2xl font-black text-red-600 dark:text-red-400" style={{ fontFamily: '"Playfair Display", serif' }}>
+                {index}
+              </span>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-neutral-500 dark:text-neutral-400 truncate">
+                {domain}
+              </p>
+            </div>
+          </div>
+
+          {/* Title */}
+          <h3 className="text-sm font-bold leading-snug mb-2 line-clamp-2 text-neutral-900 dark:text-neutral-100 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">
+            {link.title}
+          </h3>
+
+          {/* Snippet */}
+          {link.snippet && (
+            <p className="text-xs leading-relaxed text-neutral-600 dark:text-neutral-400 line-clamp-3" style={{ fontFamily: '"Merriweather", serif' }}>
+              {link.snippet}
+            </p>
+          )}
+        </div>
+      </a>
+    </article>
   );
 }

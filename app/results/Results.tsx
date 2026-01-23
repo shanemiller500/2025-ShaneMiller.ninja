@@ -54,7 +54,7 @@ export default function Results() {
     return () => clearInterval(id);
   }, []);
 
-  /* ---------- “/ to focus” ---------- */
+  /* ---------- "/ to focus" ---------- */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "/" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
@@ -112,7 +112,6 @@ export default function Results() {
     } finally {
       setB(false);
       setQ("");
-      // keep follow clear in submitFollow handler
     }
   };
 
@@ -158,203 +157,240 @@ export default function Results() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-brand-900 dark:bg-brand-900 dark:text-gray-100">
-      {/* ───────────────── HEADER ───────────────── */}
-      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-brand-900/70">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
-          {/* Logo / Home */}
-          <a href="/" className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 shadow-sm" />
-            <div className="leading-tight">
-              <div className="text-sm font-extrabold tracking-tight text-indigo-700 dark:text-indigo-300">
-                AI Search
-              </div>
-              <div className="text-[11px] opacity-70">Answers + sources</div>
+    <div className="min-h-screen bg-neutral-50 dark:bg-[#1D1D20]">
+      
+      {/* ───────────────── MASTHEAD ───────────────── */}
+      <header className="border-b-4 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20]">
+        <div className="mx-auto max-w-[1400px] px-6 py-8">
+          {/* Top bar - Logo + Date */}
+          <div className="flex items-start justify-between mb-8 pb-6 border-b border-neutral-200 dark:border-neutral-700">
+            <div>
+              <h1 className="text-5xl md:text-6xl font-black tracking-tight mb-1 text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Playfair Display", serif' }}>
+                The Search
+              </h1>
+              <p className="text-xs uppercase tracking-[0.3em] text-neutral-500 dark:text-neutral-400 font-semibold" style={{ fontFamily: '"Courier New", monospace' }}>
+                AI-Powered Research · Est. 2025
+              </p>
             </div>
-          </a>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-widest text-neutral-400 dark:text-neutral-500 mb-1">Today</p>
+              <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-300">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+            </div>
+          </div>
 
-          {/* Search bar */}
-          <form onSubmit={submitMain} className="flex w-full flex-col gap-2 sm:flex-row sm:flex-1 sm:items-center">
-            <div className="flex flex-1 items-center gap-3 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-sm dark:border-white/10 dark:bg-white/5">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="opacity-70" aria-hidden="true">
-                <path
-                  d="M10.5 19a8.5 8.5 0 1 1 0-17 8.5 8.5 0 0 1 0 17Z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <path
-                  d="M16.7 16.7 21 21"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-
+          {/* Search Bar */}
+          <form onSubmit={submitMain}>
+            <div className="relative mb-4">
               <input
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search anything…"
-                aria-label="Search query"
-                className="w-full bg-transparent text-sm outline-none placeholder:opacity-60 sm:text-base"
+                placeholder="What would you like to discover today?"
+                className="w-full border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 px-6 py-5 text-lg outline-none focus:bg-neutral-50 dark:focus:bg-neutral-900 transition-colors placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
+                style={{ fontFamily: '"Merriweather", serif' }}
               />
-
+              
             </div>
 
-            <button
-              disabled={busy}
-              className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60 sm:text-base"
-            >
-              {busy ? "Searching…" : "Search"}
-            </button>
-
-            <button
-              type="button"
-              onClick={clearAll}
-              className="rounded-full border border-gray-200 bg-white px-5 py-2 text-sm font-semibold shadow-sm transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 sm:text-base"
-            >
-              Clear
-            </button>
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                disabled={busy}
+                className="flex-1 md:flex-none bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-8 py-3 text-sm font-bold uppercase tracking-wider hover:bg-neutral-700 dark:hover:bg-neutral-300 disabled:opacity-50 transition-colors"
+              >
+                {busy ? "Researching..." : "Search"}
+              </button>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 px-6 py-3 text-sm font-bold uppercase tracking-wider hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+              >
+                Clear History
+              </button>
+            </div>
           </form>
         </div>
       </header>
 
-      {/* ───────────────── LOADER OVERLAY ───────────────── */}
+      {/* ───────────────── LOADER ───────────────── */}
       {busy && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/70 backdrop-blur dark:bg-brand-900/70">
-          <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
-          <p className="mt-4 text-sm opacity-80">Fetching fresh results…</p>
-          <p className="mt-1 text-xs opacity-60">This is the part where it looks like magic.</p>
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/95 dark:bg-[#1D1D20]/95">
+          <div className="w-16 h-16 border-4 border-neutral-200 dark:border-neutral-700 border-t-neutral-900 dark:border-t-neutral-100 rounded-full animate-spin"></div>
+          <p className="mt-6 text-sm font-bold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Researching</p>
         </div>
       )}
 
-      {/* ───────────────── BODY ───────────────── */}
-      <main className="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 py-6 sm:py-8 lg:grid-cols-12">
-        {/* Left: history rail (desktop) */}
-        <aside className="hidden lg:col-span-4 lg:block">
-          <div className="sticky top-[84px] rounded-3xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="text-sm font-semibold opacity-80">Recent</div>
-              <div className="text-xs opacity-60">{hist.length}/10</div>
-            </div>
-
-            {!hist.length && !busy ? (
-              <div className="rounded-2xl border border-dashed border-gray-200 p-4 text-sm opacity-70 dark:border-white/10">
-                No searches yet. Try something spicy.
+      {/* ───────────────── MAIN CONTENT ───────────────── */}
+      <main className="mx-auto max-w-[1400px] px-6 py-10">
+        
+        {/* Desktop Layout: Magazine Style */}
+        <div className="hidden lg:block">
+          {!active && !busy ? (
+            <div className="text-center py-24">
+              <div className="inline-block border-4 border-neutral-900 dark:border-neutral-100 p-12 bg-white dark:bg-[#1D1D20]">
+                <svg className="w-16 h-16 mx-auto mb-4 text-neutral-300 dark:text-neutral-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeWidth="2"/>
+                </svg>
+                <p className="text-sm uppercase tracking-widest text-neutral-400 dark:text-neutral-500 font-bold">No Active Search</p>
+                <p className="mt-2 text-neutral-600 dark:text-neutral-400 italic" style={{ fontFamily: '"Merriweather", serif' }}>
+                  Submit a query to begin your research
+                </p>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {hist.map((it, i) => (
+            </div>
+          ) : active ? (
+            <div>
+              {/* Hero Query Header */}
+              <div className="mb-12 pb-8 border-b-2 border-neutral-900 dark:border-neutral-100">
+                <div className="flex items-start gap-8">
+                  {/* Large decorative number */}
+                  <div className="hidden xl:block text-[120px] font-black leading-none text-neutral-900 dark:text-neutral-100 opacity-10" style={{ fontFamily: '"Playfair Display", serif' }}>
+                    1
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs uppercase tracking-[0.3em] text-red-600 dark:text-red-400 font-bold mb-3">
+                      {active.isFinanceRelated ? "Financial Analysis" : "Research Report"}
+                    </p>
+                    <h2 className="text-4xl md:text-5xl font-black leading-tight mb-4 text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Playfair Display", serif' }}>
+                      {active.query}
+                    </h2>
+                    <div className="flex items-center gap-4 text-xs text-neutral-500 dark:text-neutral-400">
+                      <span className="flex items-center gap-2">
+                        <div className="w-1 h-1 bg-neutral-400 dark:bg-neutral-600 rounded-full"></div>
+                        {active.links.length} sources cited
+                      </span>
+                      {active.images.length > 0 && (
+                        <span className="flex items-center gap-2">
+                          <div className="w-1 h-1 bg-neutral-400 dark:bg-neutral-600 rounded-full"></div>
+                          {active.images.length} images
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {err && (
+                <div className="mb-8 border-l-4 border-red-600 bg-red-50 p-6">
+                  <p className="font-bold text-red-900 mb-1">Error</p>
+                  <p className="text-sm text-red-700">{err}</p>
+                </div>
+              )}
+
+              {/* Magazine Grid Layout */}
+              <MainResults
+                result={active}
+                followField={follow}
+                setFollowField={setF}
+                followSubmit={submitFollow}
+                followClick={followTap}
+              />
+            </div>
+          ) : null}
+
+          {/* Sidebar: Recent Searches */}
+          {hist.length > 0 && (
+            <aside className="mt-16 pt-12 border-t-2 border-neutral-200 dark:border-neutral-700">
+              <h3 className="text-2xl font-black mb-6 text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Playfair Display", serif' }}>
+                Recent Searches
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                {hist.slice(0, 6).map((it, i) => (
                   <button
                     key={i}
                     onClick={() => toggle(i)}
                     className={[
-                      "w-full rounded-2xl border px-3 py-3 text-left transition",
-                      it.isOpen
-                        ? "border-indigo-400 bg-indigo-50 dark:border-indigo-500/60 dark:bg-indigo-500/10"
-                        : "border-gray-200 bg-white hover:bg-gray-50 dark:border-white/10 dark:bg-transparent dark:hover:bg-white/5",
+                      "text-left p-5 border-2 transition-all group",
+                      it.isOpen 
+                        ? "border-neutral-900 dark:border-neutral-100 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900" 
+                        : "border-neutral-200 dark:border-neutral-700 bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 hover:border-neutral-400 dark:hover:border-neutral-600"
                     ].join(" ")}
                   >
-                    <div className="text-sm font-semibold">
-                      {clampText(it.query, 80)}
-                    </div>
-                    <div className="mt-1 text-xs opacity-70">
-                      {it.isFinanceRelated ? "Finance-aware answer" : "General answer"}
-                    </div>
+                    <p className="text-xs uppercase tracking-wider text-red-600 dark:text-red-400 mb-2 font-bold">
+                      {it.isFinanceRelated ? "Finance" : "General"}
+                    </p>
+                    <h4 className="font-bold text-sm leading-snug line-clamp-2 mb-1">
+                      {it.query}
+                    </h4>
+                    <p className="text-xs opacity-60">
+                      {it.links.length} sources
+                    </p>
                   </button>
                 ))}
               </div>
-            )}
-          </div>
-        </aside>
+            </aside>
+          )}
+        </div>
 
-        {/* Right: active result */}
-        <section className="lg:col-span-8">
-          {/* mobile accordion */}
-          <div className="space-y-3 lg:hidden">
-            {!hist.length && !busy && (
-              <div className="rounded-3xl border border-gray-200 bg-white p-5 text-sm opacity-70 shadow-sm dark:border-white/10 dark:bg-white/5">
-                Enter a query above to start searching.
-              </div>
-            )}
+        {/* Mobile Layout: Accordion */}
+        <div className="lg:hidden space-y-6">
+          {!hist.length && !busy && (
+            <div className="border-2 border-neutral-200 dark:border-neutral-700 p-8 text-center bg-white dark:bg-[#1D1D20]">
+              <svg className="w-12 h-12 mx-auto mb-4 text-neutral-300 dark:text-neutral-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeWidth="2"/>
+              </svg>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400 italic" style={{ fontFamily: '"Merriweather", serif' }}>
+                Begin your search above
+              </p>
+            </div>
+          )}
 
-            {hist.map((it, i) => (
-              <div key={i} className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-                <button
-                  onClick={() => toggle(i)}
-                  className="flex w-full items-center justify-between px-4 py-4 text-left"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold sm:text-base">{it.query}</div>
-                    <div className="mt-1 text-xs opacity-60">
-                      {it.isFinanceRelated ? "Finance-aware answer" : "Answer + sources"}
-                    </div>
+          {hist.map((it, i) => (
+            <article key={i} className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] overflow-hidden">
+              <button
+                onClick={() => toggle(i)}
+                className="w-full p-6 text-left"
+              >
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div className="flex-1">
+                    <p className="text-[10px] uppercase tracking-wider text-red-600 dark:text-red-400 font-bold mb-2">
+                      {it.isFinanceRelated ? "Finance" : "Research"}
+                    </p>
+                    <h3 className="text-xl font-black leading-tight text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Playfair Display", serif' }}>
+                      {it.query}
+                    </h3>
                   </div>
-                  <div className="ml-3 rounded-full border border-gray-200 px-3 py-1 text-sm opacity-70 dark:border-white/10">
+                  <div className="text-2xl font-bold text-neutral-300 dark:text-neutral-700">
                     {it.isOpen ? "−" : "+"}
                   </div>
-                </button>
-
-                {it.isOpen && (
-                  <div className="border-t border-gray-200 px-4 py-5 dark:border-white/10">
-                    {err && (
-                      <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
-                        {err}
-                      </div>
-                    )}
-
-                    <MainResults
-                      result={it}
-                      followField={follow}
-                      setFollowField={setF}
-                      followSubmit={submitFollow}
-                      followClick={followTap}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* desktop: single active result */}
-          <div className="hidden lg:block">
-            {!active && !busy ? (
-              <div className="rounded-3xl border border-gray-200 bg-white p-6 text-sm opacity-70 shadow-sm dark:border-white/10 dark:bg-white/5">
-                Search above to generate your first result.
-              </div>
-            ) : active ? (
-              <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/5">
-                <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide opacity-60">
-                      Result
-                    </div>
-                    <h1 className="mt-1 text-xl font-extrabold tracking-tight sm:text-2xl">
-                      {active.query}
-                    </h1>
-                  </div>
-
-                  
                 </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  {it.links.length} sources • {it.isOpen ? "Hide" : "Show"} details
+                </p>
+              </button>
 
-                {err && (
-                  <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
-                    {err}
-                  </div>
-                )}
-
-                <MainResults
-                  result={active}
-                  followField={follow}
-                  setFollowField={setF}
-                  followSubmit={submitFollow}
-                  followClick={followTap}
-                />
-              </div>
-            ) : null}
-          </div>
-        </section>
+              {it.isOpen && (
+                <div className="border-t-2 border-neutral-900 dark:border-neutral-100 p-6 bg-neutral-50 dark:bg-neutral-900">
+                  {err && (
+                    <div className="mb-6 border-l-4 border-red-600 bg-red-50 dark:bg-red-950/30 p-4">
+                      <p className="text-sm text-red-700 dark:text-red-400">{err}</p>
+                    </div>
+                  )}
+                  <MainResults
+                    result={it}
+                    followField={follow}
+                    setFollowField={setF}
+                    followSubmit={submitFollow}
+                    followClick={followTap}
+                  />
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
       </main>
+
+      {/* Footer */}
+      <footer className="border-t-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] mt-20 py-8">
+        <div className="mx-auto max-w-[1400px] px-6 text-center">
+          <p className="text-xs uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
+            Powered by AI Research Technology
+          </p>
+        </div>
+      </footer>
+
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Merriweather:ital,wght@0,400;0,700;1,400&display=swap');
+      `}</style>
     </div>
   );
 }

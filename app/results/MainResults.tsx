@@ -52,18 +52,24 @@ function WikiHover({ term, children }: { term: string; children: string }) {
 
   return (
     <span
-      className="relative cursor-pointer font-semibold text-indigo-700 hover:underline dark:text-indigo-300"
+      className="relative cursor-pointer font-bold text-red-700 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 border-b-2 border-red-200 dark:border-red-800 hover:border-red-400 dark:hover:border-red-600 transition-colors"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
       {children}
       {open && info && (
-        <div className="absolute left-1/2 top-7 z-50 w-80 -translate-x-1/2 rounded-2xl border border-gray-200 bg-white p-4 shadow-xl dark:border-white/10 dark:bg-brand-900">
+        <div className="absolute left-1/2 top-full mt-2 z-50 w-80 -translate-x-1/2 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-4 shadow-2xl">
           <div className="flex gap-3">
-            {info.thumb && <img src={info.thumb} alt="" className="h-16 w-16 rounded-xl object-cover" />}
-            <div className="min-w-0">
-              <h3 className="mb-1 truncate text-sm font-extrabold">{info.title}</h3>
-              <p className="line-clamp-4 text-xs opacity-80">{info.extract}</p>
+            {info.thumb && (
+              <img 
+                src={info.thumb} 
+                alt="" 
+                className="w-16 h-16 object-cover border border-neutral-300 dark:border-neutral-700" 
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xs font-black mb-1 uppercase tracking-wide text-neutral-900 dark:text-neutral-100">{info.title}</h3>
+              <p className="text-xs leading-relaxed text-neutral-600 dark:text-neutral-400 line-clamp-3">{info.extract}</p>
             </div>
           </div>
         </div>
@@ -117,186 +123,202 @@ export default function MainResults({ result, followField, setFollowField, follo
   const highlighted = useHighlighted(result.summary, result.keywords);
 
   return (
-    <div className="space-y-6">
-      {/* ───────────── QUICK META ───────────── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold opacity-80 dark:border-white/10 dark:bg-white/5">
-          {result.isFinanceRelated ? "Finance-aware" : "General"}
-        </span>
-        {!!result.links?.length && (
-          <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs opacity-70 dark:border-white/10 dark:bg-white/5">
-            {result.links.length} sources
-          </span>
-        )}
-        {!!result.images?.length && (
-          <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs opacity-70 dark:border-white/10 dark:bg-white/5">
-            {result.images.length} images
-          </span>
-        )}
-      </div>
+    <div>
+      {/* ═══════════════ MAGAZINE MASONRY GRID ═══════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* LEFT COLUMN */}
+        <div className="lg:col-span-2 space-y-8">
+          
+          {/* ───────── LEAD STORY: ANSWER ───────── */}
+          <article className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-8">
+            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+              <h3 className="text-xs uppercase tracking-[0.3em] font-bold text-neutral-900 dark:text-neutral-100">Analysis</h3>
+            </div>
+            
+            <div className="prose prose-lg max-w-none">
+              <p className="text-lg leading-relaxed text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Merriweather", serif', textAlign: 'justify' }}>
+                {highlighted}
+              </p>
+            </div>
+          </article>
 
-      {/* ───────────── IMAGES ───────────── */}
-      {result.images.length > 0 && (
-        <section className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-extrabold tracking-tight sm:text-base">Images</h2>
-            <p className="text-xs opacity-60">Click to open</p>
-          </div>
+          {/* ───────── IMAGES GALLERY ───────── */}
+          {result.images.length > 0 && (
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+                <h3 className="text-xs uppercase tracking-[0.3em] font-bold text-neutral-900 dark:text-neutral-100">Visual Evidence</h3>
+              </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 md:grid-cols-4">
-            {result.images.map((img, i) => (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {result.images.map((img, i) => (
+                  <a
+                    key={i}
+                    href={img.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => trackEvent("Image Click", { url: img.url })}
+                    className="group relative aspect-square overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-100 dark:bg-neutral-900 hover:border-red-600 dark:hover:border-red-400 transition-all"
+                  >
+                    <img
+                      src={img.url}
+                      alt={img.description ?? ""}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    {img.description && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+                        <p className="text-[10px] text-white font-semibold uppercase tracking-wider">
+                          {img.description}
+                        </p>
+                      </div>
+                    )}
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ───────── TABLES ───────── */}
+          {result.tables.map((t, idx) => (
+            <section key={idx}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+                <h3 className="text-xs uppercase tracking-[0.3em] font-bold text-neutral-900 dark:text-neutral-100">{t.title}</h3>
+              </div>
+              
+              <div className="border-2 border-neutral-900 dark:border-neutral-100 overflow-hidden bg-white dark:bg-[#1D1D20]">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900">
+                      <tr>
+                        {t.headers.map((h, i) => (
+                          <th key={i} className="px-4 py-3 text-left text-xs uppercase tracking-wider font-bold">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {t.rows.map((row, r) => (
+                        <tr key={r} className="border-b border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-900">
+                          {row.map((cell, c) => (
+                            <td key={c} className="px-4 py-3 text-sm text-neutral-900 dark:text-neutral-100">
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          ))}
+
+          {/* ───────── FOLLOW-UPS ───────── */}
+          {result.followUpQuestions.length > 0 && (
+            <section className="border-t-2 border-neutral-900 dark:border-neutral-100 pt-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+                <h3 className="text-xs uppercase tracking-[0.3em] font-bold text-neutral-900 dark:text-neutral-100">Continue Reading</h3>
+              </div>
+
+              <div className="space-y-3 mb-6">
+                {result.followUpQuestions.map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => followClick(q)}
+                    className="w-full text-left p-4 border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-[#1D1D20] hover:border-neutral-900 dark:hover:border-neutral-100 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-all group"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="text-xl font-black text-neutral-300 dark:text-neutral-700 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors" style={{ fontFamily: '"Playfair Display", serif' }}>
+                        {i + 1}.
+                      </span>
+                      <span className="text-sm leading-relaxed text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Merriweather", serif' }}>
+                        {q}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom follow-up */}
+              <form onSubmit={followSubmit} className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-4">
+                <label className="block text-xs uppercase tracking-wider font-bold mb-3 text-neutral-900 dark:text-neutral-100">
+                  Ask Your Own Question
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={followField}
+                    onChange={(e) => setFollowField(e.target.value)}
+                    placeholder="Type your question..."
+                    className="flex-1 px-4 py-3 border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 outline-none focus:border-neutral-900 dark:focus:border-neutral-100 transition-colors placeholder:text-neutral-400 dark:placeholder:text-neutral-600"
+                    style={{ fontFamily: '"Merriweather", serif' }}
+                  />
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-sm font-bold uppercase tracking-wider hover:bg-red-600 dark:hover:bg-red-400 transition-colors"
+                  >
+                    Submit
+                  </button>
+                </div>
+              </form>
+            </section>
+          )}
+        </div>
+
+        {/* RIGHT COLUMN - SIDEBAR */}
+        <div className="space-y-8">
+          
+          {/* ───────── WIKIPEDIA FEATURE ───────── */}
+          {result.wikipedia && (
+            <aside className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-6">
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-neutral-200 dark:border-neutral-700">
+                <svg className="w-4 h-4 text-neutral-900 dark:text-neutral-100" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.6 0 12 0zm.14 19.995v-3.92h-.53l-1.89 3.92h-1.52l2.2-4.48c-1.3-.28-2.22-1.19-2.22-2.52 0-1.48 1.11-2.68 2.85-2.68h2.64v9.68h-1.53zm0-5.16v-3.17h-.94c-.94 0-1.55.56-1.55 1.48s.55 1.48 1.45 1.48l1.04.21z"/>
+                </svg>
+                <h3 className="text-xs uppercase tracking-wider font-bold text-neutral-900 dark:text-neutral-100">Encyclopedia</h3>
+              </div>
+
+              <h4 className="text-xl font-black leading-tight mb-3 text-neutral-900 dark:text-neutral-100" style={{ fontFamily: '"Playfair Display", serif' }}>
+                {result.wikipedia.title}
+              </h4>
+
+              <p className="text-sm leading-relaxed mb-4 text-neutral-700 dark:text-neutral-300" style={{ fontFamily: '"Merriweather", serif' }}>
+                {result.wikipedia.extract}
+              </p>
+
               <a
-                key={i}
-                href={img.url}
+                href={result.wikipedia.content_urls.desktop.page}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => trackEvent("Image Click", { url: img.url })}
-                className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-brand-900"
+                className="inline-block w-full text-center px-4 py-3 border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-bold uppercase tracking-wider hover:bg-white dark:hover:bg-[#1D1D20] hover:text-neutral-900 dark:hover:text-neutral-100 transition-all"
+                onClick={() => trackEvent("Wikipedia Click", { page: result.wikipedia!.title })}
               >
-                <img
-                  src={img.url}
-                  alt={img.description ?? ""}
-                  className="h-28 w-full object-cover transition duration-300 group-hover:scale-[1.03] sm:h-36"
-                />
-                <div className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                  <div className="absolute bottom-2 left-2 right-2 line-clamp-2 text-xs text-white">
-                    {img.description ?? "Open image"}
-                  </div>
-                </div>
+                Read Full Article →
               </a>
-            ))}
-          </div>
-        </section>
-      )}
+            </aside>
+          )}
 
-      {/* ───────────── ANSWER ───────────── */}
-      <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-extrabold tracking-tight sm:text-base">Answer</h2>
-          <span className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 px-3 py-1 text-xs font-semibold text-white">
-            AI Summary
-          </span>
-        </div>
+          {/* ───────── SOURCES ───────── */}
+          {result.links.length > 0 && (
+            <aside>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+                <h3 className="text-xs uppercase tracking-[0.3em] font-bold text-neutral-900 dark:text-neutral-100">Sources</h3>
+              </div>
 
-        <div className="break-words leading-relaxed text-sm opacity-90 sm:text-base">
-          {highlighted}
-        </div>
-      </section>
-
-      {/* ───────────── TABLES ───────────── */}
-      {result.tables.map((t, idx) => (
-        <section
-          key={idx}
-          className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-6"
-        >
-          <h3 className="mb-3 text-sm font-extrabold tracking-tight sm:text-base">{t.title}</h3>
-          <div className="overflow-x-auto rounded-2xl border border-gray-200 dark:border-white/10">
-            <table className="min-w-full text-xs sm:text-sm">
-              <thead className="bg-gray-50 dark:bg-brand-900">
-                <tr>
-                  {t.headers.map((h, i) => (
-                    <th key={i} className="whitespace-nowrap px-3 py-2 text-left font-semibold">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {t.rows.map((row, r) => (
-                  <tr key={r} className="border-t border-gray-200 dark:border-white/10">
-                    {row.map((cell, c) => (
-                      <td key={c} className="whitespace-nowrap px-3 py-2 opacity-90">
-                        {cell}
-                      </td>
-                    ))}
-                  </tr>
+              <div className="space-y-4">
+                {result.links.map((l, i) => (
+                  <LinkCard key={i} link={l} index={i + 1} />
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ))}
-
-      {/* ───────────── WIKIPEDIA ───────────── */}
-      {result.wikipedia && (
-        <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-6">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 className="min-w-0 truncate text-sm font-extrabold tracking-tight sm:text-base">
-              {result.wikipedia.title}
-            </h2>
-            <span className="shrink-0 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs opacity-70 dark:border-white/10 dark:bg-white/5">
-              Wikipedia
-            </span>
-          </div>
-
-          <p className="mb-3 text-sm opacity-90 sm:text-base">{result.wikipedia.extract}</p>
-
-          <a
-            href={result.wikipedia.content_urls.desktop.page}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
-            onClick={() => trackEvent("Wikipedia Click", { page: result.wikipedia!.title })}
-          >
-            Read more
-            <span aria-hidden="true">→</span>
-          </a>
-        </section>
-      )}
-
-      {/* ───────────── LINKS ───────────── */}
-      {result.links.length > 0 && (
-        <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-extrabold tracking-tight sm:text-base">Supporting Links</h2>
-            <p className="text-xs opacity-60">Open in a new tab</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {result.links.map((l, i) => (
-              <LinkCard key={i} link={l} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ───────────── FOLLOW-UPS ───────────── */}
-      {result.followUpQuestions.length > 0 && (
-        <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5 sm:p-6">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-extrabold tracking-tight sm:text-base">Follow-ups</h2>
-            <span className="text-xs opacity-60">Tap one or ask your own</span>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {result.followUpQuestions.map((q, i) => (
-              <button
-                key={i}
-                onClick={() => followClick(q)}
-                className="rounded-full border border-gray-200 bg-white px-4 py-2 text-left text-sm shadow-sm transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-
-          <form onSubmit={followSubmit} className="mt-4 flex flex-col gap-2 sm:flex-row">
-            <input
-              value={followField}
-              onChange={(e) => setFollowField(e.target.value)}
-              placeholder="Ask your own follow-up…"
-              className="flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none placeholder:opacity-60 dark:border-white/10 dark:bg-white/5"
-            />
-            <button
-              type="submit"
-              className="rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
-            >
-              Ask
-            </button>
-          </form>
-        </section>
-      )}
+              </div>
+            </aside>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
