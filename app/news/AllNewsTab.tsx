@@ -64,6 +64,13 @@ const normalizeUrl = (s: string) => {
   const t = String(s || "").trim();
   if (!t) return "";
   if (t.startsWith("//")) return `https:${t}`;
+
+  // Fix CBS News tiny thumbnails - replace with larger version
+  if (t.includes('cbsnewsstatic.com') && t.includes('/thumbnail/')) {
+    // Replace any /thumbnail/WIDTHxHEIGHT/ with /thumbnail/1200x675/
+    return t.replace(/\/thumbnail\/\d+x\d+\//i, '/thumbnail/1200x675/');
+  }
+
   return t; // proxy handles http + hotlink blocks
 };
 
@@ -80,13 +87,14 @@ const uniqStrings = (arr: string[]) => {
   return out;
 };
 
-const withProxyFallback = (urls: string[]) => {
+const withProxyFallback = (urls: string[], width?: number) => {
   const norm = urls.map(normalizeUrl).filter(Boolean);
-  const proxied = norm.map((u) => `${IMG_PROXY}${encodeURIComponent(u)}`);
+  const sizeParam = width ? `&width=${width}` : '';
+  const proxied = norm.map((u) => `${IMG_PROXY}${encodeURIComponent(u)}${sizeParam}`);
   return uniqStrings([...norm, ...proxied]);
 };
 
-const getImageCandidates = (a: Article) => {
+const getImageCandidates = (a: Article, width?: number) => {
   const sources = [
     a.urlToImage,
     a.image,
@@ -95,7 +103,7 @@ const getImageCandidates = (a: Article) => {
     firstImg(a.content),
   ].filter((s): s is string => !bad(s));
 
-  return withProxyFallback(uniqStrings(sources));
+  return withProxyFallback(uniqStrings(sources), width);
 };
 
 const getLogoCandidates = (a: Article) => {
@@ -280,7 +288,7 @@ function GroupModal({
           <div className="grid grid-cols-1 gap-3">
             {group.items.map((a) => {
               const logos = getLogoCandidates(a);
-              const imgs = getImageCandidates(a);
+              const imgs = getImageCandidates(a, 200);
               const hasImage = imgs.length > 0;
 
               return (
@@ -503,7 +511,7 @@ export default function NewsTab() {
 
   // hero group = newest group that has an image
   const heroGroup = useMemo(() => {
-    return groups.find((g) => getImageCandidates(g.rep).length > 0) ?? null;
+    return groups.find((g) => getImageCandidates(g.rep, 800).length > 0) ?? null;
   }, [groups]);
 
   const restGroups = useMemo(() => {
@@ -627,7 +635,7 @@ export default function NewsTab() {
     onOpenGroup: () => void;
   }) {
     const a = group.rep;
-    const candidates = getImageCandidates(a);
+    const candidates = getImageCandidates(a, 800);
     const hasImg = candidates.length > 0;
     const logoCandidates = getLogoCandidates(a);
     const multi = group.items.length > 1;
@@ -715,7 +723,7 @@ export default function NewsTab() {
 
   function GroupCard({ group, onOpen }: { group: ArticleGroup; onOpen: () => void }) {
     const a = group.rep;
-    const candidates = getImageCandidates(a);
+    const candidates = getImageCandidates(a, 600);
     const hasImg = candidates.length > 0;
     const logoCandidates = getLogoCandidates(a);
     const multi = group.items.length > 1;
