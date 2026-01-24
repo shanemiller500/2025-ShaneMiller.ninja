@@ -84,11 +84,11 @@ const Img = ({
 const Chip = ({ kind, text }: { kind: "league" | "live" | "final"; text: string }) => {
   const cls =
     kind === "live"
-      ? "bg-red-600 text-white animate-pulse"
+      ? "border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900"
       : kind === "final"
-      ? "bg-gray-600 text-white"
-      : "bg-gradient-to-r from-indigo-600 to-purple-600 text-white";
-  return <span className={`rounded px-2 py-[2px] text-[10px] font-bold ${cls}`}>{text}</span>;
+      ? "border-2 border-neutral-500 dark:border-neutral-400 bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
+      : "border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100";
+  return <span className={`px-2.5 py-1 text-[9px] uppercase tracking-[0.08em] font-bold ${cls}`}>{text}</span>;
 };
 
 export default function LiveScores({ sport }: { sport: string }) {
@@ -279,40 +279,45 @@ export default function LiveScores({ sport }: { sport: string }) {
           }}
           whileTap={{ scale: 0.985 }}
           className="
-            snap-start w-[260px] shrink-0 select-none
-            rounded-2xl border border-gray-200 bg-white p-3 text-left shadow-sm hover:shadow-md
-            dark:border-white/10 dark:bg-brand-900
+            snap-start w-[280px] shrink-0 select-none
+            border-2 border-neutral-900 dark:border-neutral-100 bg-white p-4 text-left shadow-lg hover:shadow-xl
+            dark:bg-[#1D1D20] transition-shadow
           "
         >
-          <div className="mb-2 flex items-center justify-between">
-            <Chip kind="league" text={g.leagueDisplay || g.league.toUpperCase()} />
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-red-600 dark:bg-red-400 rounded-full"></div>
+              <Chip kind="league" text={g.leagueDisplay || g.league.toUpperCase()} />
+            </div>
             {live ? <Chip kind="live" text="LIVE" /> : g.isFinal ? <Chip kind="final" text="FINAL" /> : null}
           </div>
 
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Img src={g.awayTeam.logo} alt={g.awayTeam.name} className="h-8 w-8" />
-              <div className="max-w-[150px] truncate text-xs font-semibold text-gray-900 dark:text-white">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <Img src={g.awayTeam.logo} alt={g.awayTeam.name} className="h-9 w-9 shrink-0" />
+              <div className="truncate text-sm font-bold text-neutral-900 dark:text-neutral-100">
                 {g.awayTeam.name}
               </div>
             </div>
-            <div className="text-lg font-extrabold text-gray-900 dark:text-white">{away}</div>
+            <div className="text-2xl font-black text-neutral-900 dark:text-neutral-100 tabular-nums shrink-0">{away}</div>
           </div>
 
-          <div className="my-2 h-px w-full bg-gray-200 dark:bg-white/10" />
+          <div className="my-3 h-[2px] w-full bg-neutral-200 dark:bg-neutral-700" />
 
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Img src={g.homeTeam.logo} alt={g.homeTeam.name} className="h-8 w-8" />
-              <div className="max-w-[150px] truncate text-xs font-semibold text-gray-900 dark:text-white">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <Img src={g.homeTeam.logo} alt={g.homeTeam.name} className="h-9 w-9 shrink-0" />
+              <div className="truncate text-sm font-bold text-neutral-900 dark:text-neutral-100">
                 {g.homeTeam.name}
               </div>
             </div>
-            <div className="text-lg font-extrabold text-gray-900 dark:text-white">{home}</div>
+            <div className="text-2xl font-black text-neutral-900 dark:text-neutral-100 tabular-nums shrink-0">{home}</div>
           </div>
 
-          <div className="mt-2 line-clamp-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-300">
-            {g.status}
+          <div className="mt-3 pt-3 border-t-2 border-neutral-200 dark:border-neutral-700">
+            <div className="line-clamp-1 text-[10px] uppercase tracking-[0.08em] font-bold text-neutral-600 dark:text-neutral-400">
+              {g.status}
+            </div>
           </div>
         </motion.div>
       );
@@ -327,20 +332,21 @@ export default function LiveScores({ sport }: { sport: string }) {
 
   return (
     <section className="mt-6">
-      <div className="mb-3 flex items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h2>
+      <div className="mb-4 flex items-center justify-between gap-3 pb-3 border-b-2 border-neutral-900 dark:border-neutral-100">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+          <h2 className="text-base font-black text-neutral-900 dark:text-neutral-100 uppercase tracking-wide">{title}</h2>
         </div>
-        <div className="hidden text-xs font-semibold text-gray-500 dark:text-gray-400 sm:block">
+        <div className="hidden text-[9px] uppercase tracking-[0.08em] font-bold text-neutral-600 dark:text-neutral-400 sm:block">
           Updates every 60s
         </div>
       </div>
 
-      {loading && <p className="text-sm text-gray-600 dark:text-gray-300">Loading games…</p>}
-      {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
+      {loading && <p className="text-sm font-bold text-neutral-600 dark:text-neutral-400">Loading games…</p>}
+      {error && <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100 border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-100 dark:bg-neutral-900 p-3">{error}</p>}
 
       {!loading && !error && games.length === 0 && (
-        <p className="text-sm text-gray-600 dark:text-gray-300">
+        <p className="text-sm font-bold text-neutral-600 dark:text-neutral-400">
           {sport === "all" ? "No live games right now." : "No games today."}
         </p>
       )}
@@ -370,46 +376,53 @@ export default function LiveScores({ sport }: { sport: string }) {
 
           {canScroll && (
             <>
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-white to-transparent dark:from-brand-900" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white to-transparent dark:from-brand-900" />
+              <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white to-transparent dark:from-[#1D1D20]" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-white to-transparent dark:from-[#1D1D20]" />
             </>
           )}
         </div>
       )}
 
       {sel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setSel(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setSel(null)}>
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl border border-white/10 bg-white p-5 shadow-xl dark:bg-brand-900"
+            className="w-full max-w-lg border-4 border-neutral-900 dark:border-neutral-100 bg-white p-6 shadow-2xl dark:bg-[#1D1D20]"
           >
-            <div className="mb-3 flex items-center justify-between">
-              <Chip kind="league" text={sel.leagueDisplay || sel.league.toUpperCase()} />
+            <div className="mb-4 flex items-center justify-between gap-3 pb-4 border-b-2 border-neutral-900 dark:border-neutral-100">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+                <Chip kind="league" text={sel.leagueDisplay || sel.league.toUpperCase()} />
+              </div>
               {sel.isLive || isLiveText(sel.status) ? <Chip kind="live" text="LIVE" /> : sel.isFinal ? <Chip kind="final" text="FINAL" /> : null}
             </div>
 
-            <h3 className="text-base font-bold text-gray-900 dark:text-white">{sel.competition}</h3>
-            <p className="mt-1 text-xs font-semibold text-indigo-600 dark:text-indigo-300">{sel.status}</p>
+            <h3 className="text-lg font-black text-neutral-900 dark:text-neutral-100 uppercase tracking-wide">{sel.competition}</h3>
+            <p className="mt-2 text-[10px] uppercase tracking-[0.12em] font-bold text-neutral-600 dark:text-neutral-400">{sel.status}</p>
 
-            <div className="mt-5 space-y-3">
+            <div className="mt-6 space-y-4">
               {[sel.awayTeam, sel.homeTeam].map((t, i) => (
-                <div key={i} className="flex items-center justify-between rounded-xl bg-gray-50 p-3 dark:bg-white/5">
-                  <div className="flex items-center gap-3">
-                    <Img src={t.logo} alt={t.name} className="h-10 w-10" />
-                    <div className="text-sm font-semibold text-gray-900 dark:text-white">{t.name}</div>
+                <div key={i} className="flex items-center justify-between border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-50 p-4 dark:bg-neutral-900">
+                  <div className="flex items-center gap-4">
+                    <Img src={t.logo} alt={t.name} className="h-12 w-12" />
+                    <div className="text-base font-black text-neutral-900 dark:text-neutral-100">{t.name}</div>
                   </div>
-                  <div className="text-2xl font-extrabold text-gray-900 dark:text-white">
+                  <div className="text-3xl font-black text-neutral-900 dark:text-neutral-100 tabular-nums">
                     {t.score ?? t.points ?? "—"}
                   </div>
                 </div>
               ))}
             </div>
 
-            {sel.seriesText && <p className="mt-4 text-xs font-semibold text-gray-600 dark:text-gray-300">{sel.seriesText}</p>}
+            {sel.seriesText && (
+              <div className="mt-4 pt-4 border-t-2 border-neutral-200 dark:border-neutral-700">
+                <p className="text-xs font-bold text-neutral-700 dark:text-neutral-300">{sel.seriesText}</p>
+              </div>
+            )}
 
             <button
               onClick={() => setSel(null)}
-              className="mt-5 w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-2.5 text-sm font-bold text-white"
+              className="mt-6 w-full border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-900 dark:bg-neutral-100 py-3 text-sm font-black uppercase tracking-wider text-white dark:text-neutral-900 hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-colors"
             >
               Close
             </button>
