@@ -431,12 +431,15 @@ const CryptoChartPrices: React.FC = () => {
           titleFont: { size: isMobile ? 12 : 12, weight: "700" },
           bodyFont: { size: isMobile ? 12 : 12, weight: "700" },
           callbacks: {
-            label: (ctx: TooltipItem<"line">) =>
-              `${ctx.dataset.label}: ${
+            label: (ctx: TooltipItem<"line">) => {
+              const y = ctx.parsed.y;
+              if (y === null || y === undefined) return `${ctx.dataset.label}: —`;
+              return `${ctx.dataset.label}: ${
                 String(ctx.dataset.label).includes("%")
-                  ? `${ctx.parsed.y.toFixed(2)}%`
-                  : usd(ctx.parsed.y)
-              }`,
+                  ? `${y.toFixed(2)}%`
+                  : usd(y)
+              }`;
+            },
           },
         },
 
