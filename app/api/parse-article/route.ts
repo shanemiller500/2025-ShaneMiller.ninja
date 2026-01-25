@@ -1,7 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseHTML } from 'linkedom';
 import { Readability } from '@mozilla/readability';
-import DOMPurify from 'isomorphic-dompurify';
+
+// Simple HTML sanitizer that works on serverless (no native deps)
+function sanitizeHtml(html: string): string {
+  if (!html) return '';
+
+  return html
+    // Remove script tags and content
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    // Remove style tags and content
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    // Remove iframe tags
+    .replace(/<iframe[^>]*>.*?<\/iframe>/gi, '')
+    .replace(/<iframe[^>]*\/>/gi, '')
+    // Remove object/embed tags
+    .replace(/<object[^>]*>.*?<\/object>/gi, '')
+    .replace(/<embed[^>]*\/?>/gi, '')
+    // Remove on* event handlers
+    .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/\s+on\w+\s*=\s*[^\s>]+/gi, '')
+    // Remove javascript: URLs
+    .replace(/href\s*=\s*["']javascript:[^"']*["']/gi, 'href="#"')
+    // Remove data: URLs in src (potential XSS)
+    .replace(/src\s*=\s*["']data:[^"']*["']/gi, 'src=""');
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,12 +34,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
     }
 
+    // Validate URL
+    try {
+      new URL(url);
+    } catch {
+      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
+    }
+
     // Fetch the article HTML
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
       },
+      signal: AbortSignal.timeout(10000), // 10s timeout
     });
 
     if (!response.ok) {
@@ -38,32 +70,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to parse article content' }, { status: 500 });
     }
 
-    // Sanitize the content HTML to remove scripts, iframes, and other unwanted elements
-    const cleanContent = DOMPurify.sanitize(article.content || '', {
-      ALLOWED_TAGS: [
-        'p', 'br', 'hr', 'strong', 'em', 'b', 'i', 'u', 's', 'mark', 'small',
-        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-        'ul', 'ol', 'li', 'dl', 'dt', 'dd',
-        'a', 'img', 'picture', 'source',
-        'blockquote', 'q', 'cite',
-        'code', 'pre', 'kbd', 'samp', 'var',
-        'sup', 'sub', 'abbr', 'time',
-        'del', 'ins',
-        'figure', 'figcaption',
-        'div', 'span', 'article', 'section', 'aside',
-        'table', 'caption', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th'
-      ],
-      ALLOWED_ATTR: [
-        'href', 'src', 'srcset', 'alt', 'title', 'cite',
-        'class', 'id', 'style',
-        'target', 'rel',
-        'width', 'height',
-        'colspan', 'rowspan',
-        'datetime', 'type'
-      ],
-      ALLOW_DATA_ATTR: false,
-      KEEP_CONTENT: true,
-    });
+    // Sanitize the content
+    const cleanContent = sanitizeHtml(article.content || '');
 
     return NextResponse.json({
       title: article.title,
