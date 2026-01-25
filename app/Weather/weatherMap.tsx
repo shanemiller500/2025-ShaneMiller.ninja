@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { weatherMapColors } from "@/utils/colors";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -582,12 +583,12 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
       />
 
       <div className="relative h-[92vh] w-[94vw] overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl">
-        {/* styles */}
+        {/* styles - colors from @/utils/colors weatherMapColors */}
         <style>{`
           .wm-topbar {
             backdrop-filter: blur(12px);
-            background: linear-gradient(135deg, rgba(15,23,42,.72), rgba(30,41,59,.55));
-            border-bottom: 1px solid rgba(255,255,255,.08);
+            background: ${weatherMapColors.topbar.background};
+            border-bottom: 1px solid ${weatherMapColors.topbar.border};
           }
 
           .wm-icon { background: transparent; border: none; }
@@ -595,9 +596,9 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
             width: 52px;
             height: 52px;
             border-radius: 14px;
-            background: rgba(15, 23, 42, 0.86);
-            border: 1px solid rgba(255,255,255,.14);
-            box-shadow: 0 10px 24px rgba(0,0,0,.35);
+            background: ${weatherMapColors.pin.background};
+            border: 1px solid ${weatherMapColors.pin.border};
+            box-shadow: 0 10px 24px ${weatherMapColors.pin.shadow};
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -608,29 +609,29 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
           .wm-pin-temp {
             font-size: 11px;
             font-weight: 800;
-            color: rgba(255,255,255,.92);
+            color: ${weatherMapColors.pin.text};
             letter-spacing: .2px;
           }
 
           .wm-popup { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI; }
-          .wm-popup-title { font-weight: 900; font-size: 14px; margin-bottom: 6px; color: #0f172a; }
+          .wm-popup-title { font-weight: 900; font-size: 14px; margin-bottom: 6px; color: ${weatherMapColors.popup.title}; }
           .wm-popup-row { display: flex; gap: 6px; flex-wrap: wrap; }
           .wm-pill {
             font-size: 11px;
             font-weight: 700;
             padding: 3px 8px;
             border-radius: 999px;
-            background: rgba(15,23,42,.08);
-            color: rgba(15,23,42,.85);
+            background: ${weatherMapColors.popup.pill.background};
+            color: ${weatherMapColors.popup.pill.text};
           }
-          .wm-popup-sub { margin-top: 6px; font-size: 11px; color: rgba(15,23,42,.65); }
+          .wm-popup-sub { margin-top: 6px; font-size: 11px; color: ${weatherMapColors.popup.sub}; }
 
           .leaflet-popup-content-wrapper { border-radius: 14px; }
           .leaflet-popup-content { margin: 12px 14px; }
 
           .wm-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
-          .wm-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 999px; }
-          .wm-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,.06); border-radius: 999px; }
+          .wm-scroll::-webkit-scrollbar-thumb { background: ${weatherMapColors.scrollbar.thumb}; border-radius: 999px; }
+          .wm-scroll::-webkit-scrollbar-track { background: ${weatherMapColors.scrollbar.track}; border-radius: 999px; }
         `}</style>
 
         {/* Top bar */}

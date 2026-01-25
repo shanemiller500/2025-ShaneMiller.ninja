@@ -14,6 +14,7 @@ import {
   FaTimes,
 } from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
+import { gaugeGradient } from "@/utils/colors";
 
 /* ---------- mood helper ---------- */
 type MoodInfo = {
@@ -116,7 +117,7 @@ const Gauge = ({
 }) => {
   const mood = moodMap(score);
   const pct = score ?? 50;
-  const ring = `conic-gradient(currentColor ${pct * 3.6}deg,#e5e7eb ${pct * 3.6}deg)`;
+  const ring = gaugeGradient(pct);
   const phrase = mood.copy[Math.floor(Math.random() * mood.copy.length)];
 
   const handle = () => {

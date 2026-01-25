@@ -25,6 +25,7 @@ import {
 import zoomPlugin from "chartjs-plugin-zoom";
 import "chartjs-adapter-date-fns";
 import { trackEvent } from "@/utils/mixpanel";
+import { chartColorsRgba, chartColors, gridColors } from "@/utils/colors";
 
 Chart.register(
   TimeScale,
@@ -361,8 +362,8 @@ const CryptoChartPrices: React.FC = () => {
 
     const dataCfg = {
       datasets: [
-        lineDataset("Price", pricePts, "rgb(56,161,219)"),
-        lineDataset("%", pctPts, "rgb(229,62,62)"),
+        lineDataset("Price", pricePts, chartColorsRgba.price.solid),
+        lineDataset("%", pctPts, chartColorsRgba.percent.solid),
       ],
     };
 
@@ -392,7 +393,7 @@ const CryptoChartPrices: React.FC = () => {
   ticks: { display: false },
 
   // ✅ keep vertical gridlines if you want them (optional)
-  grid: { color: "rgba(0,0,0,0.05)" },
+  grid: { color: gridColors.light },
 
   // ✅ no bottom axis line
   border: { display: false },
@@ -400,9 +401,9 @@ const CryptoChartPrices: React.FC = () => {
 
             y1: {
               position: "left",
-              grid: { color: "rgba(0,0,0,0.05)" },
+              grid: { color: gridColors.light },
               ticks: {
-                color: "#38a1db",
+                color: chartColors.price,
                 padding: isMobile ? 4 : 6,
                 font: { size: isMobile ? 10 : 12, weight: "700" },
                 maxTicksLimit: isMobile ? 4 : 6,
@@ -413,7 +414,7 @@ const CryptoChartPrices: React.FC = () => {
               position: "right",
               grid: { drawOnChartArea: false },
               ticks: {
-                color: "#e53e3e",
+                color: chartColors.percent,
                 padding: isMobile ? 4 : 6,
                 font: { size: isMobile ? 10 : 12, weight: "700" },
                 maxTicksLimit: isMobile ? 4 : 6,

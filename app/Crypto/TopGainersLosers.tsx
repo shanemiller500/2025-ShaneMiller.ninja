@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
 import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
+import { statusColors } from "@/utils/colors";
 
 /* ---------- helpers ---------- */
 const currencyFmt = new Intl.NumberFormat("en-US", {
@@ -334,11 +335,11 @@ export default function TopGainersLosers() {
                 animate={{
                   backgroundColor: bump
                     ? pos
-                      ? "rgba(16,185,129,0.18)"
+                      ? statusColors.positive.flash
                       : neg
-                        ? "rgba(244,63,94,0.18)"
-                        : "rgba(0,0,0,0)"
-                    : "rgba(0,0,0,0)",
+                        ? statusColors.negative.flash
+                        : statusColors.neutral
+                    : statusColors.neutral,
                 }}
                 transition={{ duration: 0.35, ease: "easeOut" }}
               >
@@ -436,9 +437,9 @@ const renderGrid = (rows: any[]) => (
               transition={{ duration: 0.35, ease: "easeOut" }}
               style={{
                 background: pos
-                  ? "rgba(255,255,255,0.85)"
+                  ? statusColors.positive.flashOverlay
                   : neg
-                    ? "rgba(0,0,0,0.30)"
+                    ? statusColors.negative.flashOverlay
                     : "transparent",
                 mixBlendMode: "overlay",
               }}

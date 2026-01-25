@@ -9,9 +9,10 @@ import React, {
   memo,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTable, FaThLarge, FaFire } from "react-icons/fa";
+import { FaTable, FaThLarge, FaFire, FaArrowUp, FaArrowDown } from "react-icons/fa";
 import { trackEvent } from "@/utils/mixpanel";
 import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
+import { heatmapColors, statusColors } from "@/utils/colors";
 
 /* Types ------------------------------------------------------------ */
 interface TradeInfo {
@@ -124,9 +125,9 @@ const GridCard = memo(function GridCard({
 
   const flashBg =
     direction === "up"
-      ? "radial-gradient(circle at 50% 45%, rgba(16,185,129,0.85) 0%, rgba(16,185,129,0.25) 55%, rgba(16,185,129,0) 75%)"
+      ? `radial-gradient(circle at 50% 45%, ${heatmapColors.positive.center} 0%, ${heatmapColors.positive.middle} 55%, ${heatmapColors.positive.edge} 75%)`
       : direction === "down"
-        ? "radial-gradient(circle at 50% 45%, rgba(244,63,94,0.85) 0%, rgba(244,63,94,0.25) 55%, rgba(244,63,94,0) 75%)"
+        ? `radial-gradient(circle at 50% 45%, ${heatmapColors.negative.center} 0%, ${heatmapColors.negative.middle} 55%, ${heatmapColors.negative.edge} 75%)`
         : "transparent";
 
   return (
@@ -233,7 +234,7 @@ const GridCard = memo(function GridCard({
   );
 });
 
-/* Table Row Component */
+/* Table Row Component - styled to match TopGainersLosers */
 const TableRow = memo(function TableRow({
   id,
   meta,
@@ -248,85 +249,75 @@ const TableRow = memo(function TableRow({
   onClick: () => void;
 }) {
   const price = tradeInfo?.price;
-  const direction = tradeInfo?.direction || "neutral";
+  const bump = tradeInfo?.bump || 0;
 
   const pct = parseFloat(String(meta.changePercent24Hr ?? ""));
-  const pctPos = Number.isFinite(pct) && pct > 0;
+  const pctPos = Number.isFinite(pct) && pct >= 0;
   const pctNeg = Number.isFinite(pct) && pct < 0;
 
-  const rowBg =
-    direction === "up"
-      ? "bg-emerald-300/70 dark:bg-emerald-700/50"
-      : direction === "down"
-        ? "bg-rose-300/70 dark:bg-rose-700/50"
-        : "";
-
   return (
-    <tr
-      className={`cursor-pointer transition-colors duration-100 ${rowBg} hover:bg-black/5 dark:hover:bg-white/5`}
+    <motion.tr
+      key={`${id}-${bump}`}
+      className="cursor-pointer transition hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
       onClick={onClick}
+      initial={false}
+      animate={{
+        backgroundColor: bump
+          ? pctPos
+            ? statusColors.positive.flash
+            : pctNeg
+              ? statusColors.negative.flash
+              : statusColors.neutral
+          : statusColors.neutral,
+      }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
     >
-      <td className="px-3 sm:px-6 py-3 sm:py-4">
-        <div className="inline-flex items-center justify-center bg-black/10 dark:bg-white/10 rounded-full px-2.5 py-1">
-          <span className="text-[11px] sm:text-sm font-bold text-gray-800 dark:text-white/90">
-            #{meta.rank ?? "—"}
-          </span>
-        </div>
+      <td className="px-1 sm:px-2 py-2 text-[11px] sm:text-sm font-semibold text-gray-700 dark:text-white/75">
+        {meta.rank ?? "—"}
       </td>
-      <td className="px-3 sm:px-6 py-3 sm:py-4">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-shrink-0">
-            <div className="relative bg-white/90 dark:bg-white/90 rounded-full p-1.5 shadow-sm">
+
+      <td className="px-1 sm:px-2 py-2">
+        <div className="flex items-center gap-2">
+          {logo ? (
+            <span className="inline-flex items-center justify-center rounded-full bg-white/90 dark:bg-white/10 p-[2px] ring-1 ring-black/10 dark:ring-white/10">
               <CoinImage
                 src={logo}
                 alt={meta.symbol}
-                className="w-6 h-6 sm:w-8 sm:h-8"
+                className="h-5 w-5 sm:h-6 sm:w-6"
               />
-            </div>
-          </div>
-          <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
-            {meta.symbol ?? id}
-          </span>
-        </div>
-      </td>
-      <td className="px-3 sm:px-6 py-3 sm:py-4">
-        <span className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-white/80 line-clamp-1">
-          {meta.name ?? "—"}
-        </span>
-      </td>
-      <td className="px-3 sm:px-6 py-3 sm:py-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
-            {formatUsd(price)}
-          </span>
-          {direction !== "neutral" && (
-            <span
-              className={`text-lg font-bold ${
-                direction === "up" ? "text-emerald-700" : "text-rose-700"
-              }`}
-            >
-              {direction === "up" ? "↑" : "↓"}
             </span>
+          ) : (
+            <span className="h-5 w-5 sm:h-6 sm:w-6 rounded-full bg-black/10 dark:bg-white/10" />
           )}
+          <div className="font-extrabold text-[12px] sm:text-sm text-gray-900 dark:text-white">
+            {meta.symbol ?? id}
+          </div>
         </div>
       </td>
-      <td className="px-3 sm:px-6 py-3 sm:py-4">
+
+      <td className="px-1 sm:px-2 py-2">
+        <div className="text-[12px] sm:text-sm font-semibold text-gray-800 dark:text-white/80 line-clamp-1">
+          {meta.name ?? "—"}
+        </div>
+      </td>
+
+      <td className="px-1 sm:px-2 py-2 text-[12px] sm:text-sm font-extrabold text-gray-900 dark:text-white">
+        {formatUsd(price)}
+      </td>
+
+      <td className="px-1 sm:px-2 py-2">
         <div
-          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full font-bold text-xs sm:text-sm ${
+          className={`inline-flex items-center gap-2 text-[12px] sm:text-sm font-extrabold ${
             pctPos
-              ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
-              : pctNeg
-                ? "bg-rose-500/15 text-rose-800 dark:text-rose-200"
-                : "bg-black/10 dark:bg-white/10 text-gray-800 dark:text-white/70"
+              ? "text-green-600 dark:text-green-300"
+              : "text-red-600 dark:text-red-300"
           }`}
         >
-          <span aria-hidden className="text-base">
-            {pctPos ? "↑" : pctNeg ? "↓" : ""}
-          </span>
+          {pctPos ? <FaArrowUp /> : <FaArrowDown />}
           {formatPct(meta.changePercent24Hr)}
         </div>
       </td>
-    </tr>
+    </motion.tr>
   );
 });
 
@@ -825,7 +816,7 @@ export default function LiveStreamHeatmap() {
 
           {/* Grid View */}
           {viewMode === "grid" ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1 sm:gap-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 lg:grid-cols-5 xl:grid-cols-6">
               {visibleIds.map((id) => (
                 <GridCard
                   key={id}
@@ -838,48 +829,44 @@ export default function LiveStreamHeatmap() {
               ))}
             </div>
           ) : (
-            /* Table View */
-            <div className="overflow-hidden rounded-2xl border border-gray-200/50 dark:border-white/10 bg-white/80 dark:bg-brand-900/80 backdrop-blur-xl shadow-2xl">
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-brand-800 dark:to-brand-900/50 border-b border-gray-200/50 dark:border-white/10">
-                      {["Rank", "Asset", "Name", "Price", "24h Change"].map(
-                        (h) => (
-                          <th
-                            key={h}
-                            className="px-3 sm:px-6 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider text-gray-700 dark:text-white/80"
-                          >
-                            {h}
-                          </th>
-                        )
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                    {visibleIds.map((id) => (
-                      <TableRow
-                        key={id}
-                        id={id}
-                        meta={metaData[id] || ({ id } as CoinMeta)}
-                        tradeInfo={tradeInfoMap[id]}
-                        logo={getLogoUrl(metaData[id]?.symbol)}
-                        onClick={() => handleAssetClick(metaData[id])}
-                      />
+            /* Table View - styled to match TopGainersLosers */
+            <div className="overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
+              <table className="min-w-full divide-y divide-black/5 dark:divide-white/10">
+                <thead className="bg-black/[0.03] dark:bg-white/[0.06]">
+                  <tr>
+                    {["Rank", "Symbol", "Name", "Price", "24h"].map((h) => (
+                      <th
+                        key={h}
+                        className="px-1 sm:px-2 py-2 text-left text-[10px] sm:text-xs font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60"
+                      >
+                        {h}
+                      </th>
                     ))}
-                    {sortedIds.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className="px-6 py-8 text-center text-sm text-gray-500 dark:text-white/60"
-                        >
-                          No data available
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/5 dark:divide-white/10">
+                  {visibleIds.map((id) => (
+                    <TableRow
+                      key={id}
+                      id={id}
+                      meta={metaData[id] || ({ id } as CoinMeta)}
+                      tradeInfo={tradeInfoMap[id]}
+                      logo={getLogoUrl(metaData[id]?.symbol)}
+                      onClick={() => handleAssetClick(metaData[id])}
+                    />
+                  ))}
+                  {sortedIds.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-4 text-sm text-gray-600 dark:text-white/70"
+                      >
+                        No data available
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

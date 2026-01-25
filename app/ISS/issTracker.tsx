@@ -6,6 +6,7 @@ import L, { Map as LeafletMap, Marker, Polyline } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import leafletTerminator from "leaflet-terminator";
 import { motion, AnimatePresence } from "framer-motion";
+import { issColors } from "@/utils/colors";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                         */
@@ -202,8 +203,8 @@ const ISSTracker: React.FC = () => {
         if (terminatorRef.current) map.removeLayer(terminatorRef.current);
         terminatorRef.current = leafletTerminator(new Date()) as L.GeoJSON;
         terminatorRef.current.setStyle({
-          fillColor: "#000",
-          color: "#000",
+          fillColor: issColors.terminator,
+          color: issColors.terminator,
           fillOpacity: 0.42,
           weight: 0,
         });
@@ -231,7 +232,7 @@ const ISSTracker: React.FC = () => {
 
       if (!lastSeg) {
         const seg = L.polyline([[lat, lon]], {
-          color: "#6366f1",
+          color: issColors.trail,
           weight: 2,
           dashArray: "4 6",
         }).addTo(map);
@@ -245,7 +246,7 @@ const ISSTracker: React.FC = () => {
 
       if (delta > 180) {
         const seg = L.polyline([[lat, lon]], {
-          color: "#6366f1",
+          color: issColors.trail,
           weight: 2,
           dashArray: "4 6",
         }).addTo(map);
@@ -264,7 +265,7 @@ const ISSTracker: React.FC = () => {
     // If we already had a cached start, seed a tiny first segment
     if (startPos) {
       const seg = L.polyline([[startPos.lat, startPos.lon]], {
-        color: "#6366f1",
+        color: issColors.trail,
         weight: 2,
         dashArray: "4 6",
       }).addTo(map);
@@ -339,9 +340,9 @@ const ISSTracker: React.FC = () => {
     // render start as a tiny ring (better looking than default tooltip-only)
     const m = L.circleMarker([startPos.lat, startPos.lon], {
       radius: 6,
-      color: "#111827",
+      color: issColors.startMarker.stroke,
       weight: 2,
-      fillColor: "#ffffff",
+      fillColor: issColors.startMarker.fill,
       fillOpacity: 0.9,
     })
       .bindTooltip("Session start", {

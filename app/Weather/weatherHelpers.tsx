@@ -10,6 +10,7 @@ import {
   WiFog,
   WiThunderstorm,
 } from 'react-icons/wi';
+import { weatherGradients } from '@/utils/colors';
 
 export const getWeatherIcon = (code: number, size: number = 48) => {
   if (code === 0) return <WiDaySunny size={size} />;
@@ -44,21 +45,21 @@ export const getForecastCardStyle = (code: number) => {
     case code === 0:
       // Clear Sky - Sunny animation
       return {
-        background: 'linear-gradient(135deg, #fceabb 0%, #f7b733 100%)',
+        background: weatherGradients.sunny,
         animation: 'sunshine 10s infinite alternate ease-in-out'
       };
     case [1, 2, 3].includes(code):
-      return { background: 'linear-gradient(135deg, #83a4d4 0%, #b6fbff 100%)' }; // Cloudy
+      return { background: weatherGradients.cloudy };
     case [45, 48].includes(code):
-      return { background: 'linear-gradient(135deg, #d7d2cc 0%, #304352 100%)' }; // Foggy
+      return { background: weatherGradients.foggy };
     case [51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82].includes(code):
-      return { background: 'linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)' }; // Rainy
+      return { background: weatherGradients.rainy };
     case [71, 73, 75, 77, 85, 86].includes(code):
-      return { background: 'linear-gradient(135deg, #e6dada 0%, #bdc3c7 100%)' }; // Snowy
+      return { background: weatherGradients.snowy };
     case [95, 96, 99].includes(code):
-      return { background: 'linear-gradient(135deg, #283048 0%, #859398 100%)' }; // Stormy
+      return { background: weatherGradients.stormy };
     default:
-      return { background: 'linear-gradient(135deg, #ece9e6 0%, #ffffff 100%)' }; // Neutral
+      return { background: weatherGradients.neutral };
   }
 };
 

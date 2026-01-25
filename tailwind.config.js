@@ -11,24 +11,22 @@ module.exports = {
       fontFamily: {
         inter: ['var(--font-inter)', 'sans-serif'],
         aspekta: ['var(--font-aspekta)', 'sans-serif'],
-      }, colors: {
-       
+      },
+      colors: {
         slate: {
-          '50': '#f8fafc',
-          '100': '#f1f5f9',
-          '200': '#e2e8f0',
-          '300': '#cbd5e1',
-          '400': '#94a3b8',
-          '500': '#64748b',
-          '600': '#475569',
-          '700': '#334155',
-          '800': '#1e293b',
-          '900': '#0f172a',
-          '950': '#020617',
+          50: '#f8fafc',
+          100: '#f1f5f9',
+          200: '#e2e8f0',
+          300: '#cbd5e1',
+          400: '#94a3b8',
+          500: '#64748b',
+          600: '#475569',
+          700: '#334155',
+          800: '#1e293b',
+          900: '#0f172a',
+          950: '#020617',
         },
-
         brand: {
-          50: 'gradient-to-r from-indigo-600 to-purple-600',
           100: '#F3F4F6',
           200: '#E5E7EB',
           300: '#BFC4CD',
@@ -36,9 +34,45 @@ module.exports = {
           500: '#6B7280',
           600: '#4B5563',
           700: '#374151',
-          800: '#7F64BA', //Purple
-          900: '#1D1D20', //background black
+          800: '#7F64BA', // Purple accent
+          900: '#1D1D20', // Background black
           950: 'rgb(126 126 126 / 7%)',
+        },
+        // Chart colors - for data visualization
+        chart: {
+          blue: '#38a1db',
+          red: '#e53e3e',
+          temperature: '#ff6384',
+          snowfall: '#ffce56',
+          rain: '#ff9f40',
+          showers: '#c9cbcf',
+          price: '#38a1db',
+          percent: '#e53e3e',
+        },
+        // Accent colors
+        accent: {
+          gold: '#ffd700',
+          indigo: '#6366f1',
+          purple: '#7F64BA',
+        },
+        // Surface colors for cards, overlays, etc.
+        surface: {
+          dark: '#111827',
+          darker: '#0f172a',
+          darkest: '#1d1d20',
+          overlay: 'rgba(15, 23, 42, 0.72)',
+          'overlay-light': 'rgba(30, 41, 59, 0.55)',
+          'overlay-heavy': 'rgba(15, 23, 42, 0.86)',
+        },
+        // Grid and border colors
+        grid: {
+          light: 'rgba(0, 0, 0, 0.05)',
+          dark: 'rgba(255, 255, 255, 0.06)',
+        },
+        // Border colors with opacity
+        border: {
+          subtle: 'rgba(255, 255, 255, 0.14)',
+          shadow: 'rgba(0, 0, 0, 0.35)',
         },
       },
       fontSize: {

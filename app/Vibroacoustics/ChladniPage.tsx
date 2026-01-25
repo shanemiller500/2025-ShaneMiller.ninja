@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { trackEvent } from "@/utils/mixpanel";
+import { visualizationColors } from "@/utils/colors";
 
 const ChladniPage: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,8 +36,8 @@ const ChladniPage: React.FC = () => {
       plateShape: "square",
       plateSize: 80,
       plateRadius: 50,
-      boardColor: "#333333",
-      particleColor: "#ffd700",
+      boardColor: visualizationColors.chladni.board,
+      particleColor: visualizationColors.chladni.particle,
     };
 
     let scene: THREE.Scene,

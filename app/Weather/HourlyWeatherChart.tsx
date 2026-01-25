@@ -5,6 +5,7 @@ import { Chart } from 'chart.js/auto'
 import 'chartjs-adapter-date-fns'
 import { motion } from 'framer-motion'
 import { format } from 'date-fns'
+import { chartColorsRgba, gridColors } from '@/utils/colors'
 
 interface HourlyData {
   time: string[]
@@ -101,32 +102,32 @@ const uniqueDays = useMemo(() => {
             {
               label: `Temperature (${tempUnit === 'F' ? '°F' : '°C'})`,
               data: temperatures.map((val) => convertTemp(val, tempUnit)),
-              borderColor: 'rgba(255, 99, 132, 1)',
-              backgroundColor: 'rgba(255, 99, 132, 0.2)',
+              borderColor: chartColorsRgba.temperature.solid,
+              backgroundColor: chartColorsRgba.temperature.light,
               tension: 0.3,
               yAxisID: 'yTemp',
             },
             {
               label: `Snowfall (${tempUnit === 'F' ? 'in' : 'cm'})`,
               data: snowfalls.map((val) => convertSnowfallDisplay(val, tempUnit)),
-              borderColor: 'rgba(255, 206, 86, 1)',
-              backgroundColor: 'rgba(255, 206, 86, 0.2)',
+              borderColor: chartColorsRgba.snowfall.solid,
+              backgroundColor: chartColorsRgba.snowfall.light,
               tension: 0.3,
               yAxisID: 'yFixed',
             },
             {
               label: `Rain (${tempUnit === 'F' ? 'in' : 'mm'})`,
               data: rains.map((val) => convertRainDisplay(val, tempUnit)),
-              borderColor: 'rgba(255, 159, 64, 1)',
-              backgroundColor: 'rgba(255, 159, 64, 0.2)',
+              borderColor: chartColorsRgba.rain.solid,
+              backgroundColor: chartColorsRgba.rain.light,
               tension: 0.3,
               yAxisID: 'yFixed',
             },
             {
               label: `Showers (${tempUnit === 'F' ? 'in' : 'mm'})`,
               data: showers.map((val) => convertShowersDisplay(val, tempUnit)),
-              borderColor: 'rgba(201, 203, 207, 1)',
-              backgroundColor: 'rgba(201, 203, 207, 0.2)',
+              borderColor: chartColorsRgba.showers.solid,
+              backgroundColor: chartColorsRgba.showers.light,
               tension: 0.3,
               yAxisID: 'yFixed',
             },
@@ -146,13 +147,13 @@ const uniqueDays = useMemo(() => {
                 displayFormats: { hour: 'h a' },
               },
               ticks: { autoSkip: true, maxRotation: 0, minRotation: 0 },
-              grid: { color: 'rgba(255,255,255,0.06)' },
+              grid: { color: gridColors.dark },
             },
             yTemp: {
               type: 'linear',
               position: 'left',
               title: { display: true, text: `Temp (${tempUnit === 'F' ? '°F' : '°C'})` },
-              grid: { color: 'rgba(255,255,255,0.06)' },
+              grid: { color: gridColors.dark },
             },
             yFixed: {
               type: 'linear',
@@ -197,22 +198,22 @@ const uniqueDays = useMemo(() => {
             {
               label: `Temperature (${tempUnit === 'F' ? '°F' : '°C'})`,
               data: times.map((t, i) => ({ x: t, y: convertTemp(temperatures[i], tempUnit) })),
-              backgroundColor: 'rgba(255, 99, 132, 0.6)',
+              backgroundColor: chartColorsRgba.temperature.medium,
             },
             {
               label: `Snowfall (${tempUnit === 'F' ? 'in' : 'cm'})`,
               data: times.map((t, i) => ({ x: t, y: convertSnowfallDisplay(snowfalls[i], tempUnit) })),
-              backgroundColor: 'rgba(255, 206, 86, 0.6)',
+              backgroundColor: chartColorsRgba.snowfall.medium,
             },
             {
               label: `Rain (${tempUnit === 'F' ? 'in' : 'mm'})`,
               data: times.map((t, i) => ({ x: t, y: convertRainDisplay(rains[i], tempUnit) })),
-              backgroundColor: 'rgba(255, 159, 64, 0.6)',
+              backgroundColor: chartColorsRgba.rain.medium,
             },
             {
               label: `Showers (${tempUnit === 'F' ? 'in' : 'mm'})`,
               data: times.map((t, i) => ({ x: t, y: convertShowersDisplay(showers[i], tempUnit) })),
-              backgroundColor: 'rgba(201, 203, 207, 0.6)',
+              backgroundColor: chartColorsRgba.showers.medium,
             },
           ],
         }
@@ -220,8 +221,8 @@ const uniqueDays = useMemo(() => {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { type: 'time', grid: { color: 'rgba(255,255,255,0.06)' } },
-            y: { grid: { color: 'rgba(255,255,255,0.06)' } },
+            x: { type: 'time', grid: { color: gridColors.dark } },
+            y: { grid: { color: gridColors.dark } },
           },
           plugins: { legend: { position: 'top' } },
         }
@@ -234,22 +235,22 @@ const uniqueDays = useMemo(() => {
             {
               label: `Temperature (${tempUnit === 'F' ? '°F' : '°C'})`,
               data: times.map((t, i) => ({ x: t, y: convertTemp(temperatures[i], tempUnit), r: 5 })),
-              backgroundColor: 'rgba(255, 99, 132, 0.6)',
+              backgroundColor: chartColorsRgba.temperature.medium,
             },
             {
               label: `Snowfall (${tempUnit === 'F' ? 'in' : 'cm'})`,
               data: times.map((t, i) => ({ x: t, y: convertSnowfallDisplay(snowfalls[i], tempUnit), r: 5 })),
-              backgroundColor: 'rgba(255, 206, 86, 0.6)',
+              backgroundColor: chartColorsRgba.snowfall.medium,
             },
             {
               label: `Rain (${tempUnit === 'F' ? 'in' : 'mm'})`,
               data: times.map((t, i) => ({ x: t, y: convertRainDisplay(rains[i], tempUnit), r: 5 })),
-              backgroundColor: 'rgba(255, 159, 64, 0.6)',
+              backgroundColor: chartColorsRgba.rain.medium,
             },
             {
               label: `Showers (${tempUnit === 'F' ? 'in' : 'mm'})`,
               data: times.map((t, i) => ({ x: t, y: convertShowersDisplay(showers[i], tempUnit), r: 5 })),
-              backgroundColor: 'rgba(201, 203, 207, 0.6)',
+              backgroundColor: chartColorsRgba.showers.medium,
             },
           ],
         }
@@ -257,8 +258,8 @@ const uniqueDays = useMemo(() => {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { type: 'time', grid: { color: 'rgba(255,255,255,0.06)' } },
-            y: { grid: { color: 'rgba(255,255,255,0.06)' } },
+            x: { type: 'time', grid: { color: gridColors.dark } },
+            y: { grid: { color: gridColors.dark } },
           },
           plugins: { legend: { position: 'top' } },
         }
@@ -273,26 +274,26 @@ const uniqueDays = useMemo(() => {
             {
               label: `Temperature (${tempUnit === 'F' ? '°F' : '°C'})`,
               data: temperatures.map((val) => convertTemp(val, tempUnit)),
-              borderColor: 'rgba(255, 99, 132, 1)',
-              backgroundColor: 'rgba(255, 99, 132, 0.2)',
+              borderColor: chartColorsRgba.temperature.solid,
+              backgroundColor: chartColorsRgba.temperature.light,
             },
             {
               label: `Snowfall (${tempUnit === 'F' ? 'in' : 'cm'})`,
               data: snowfalls.map((val) => convertSnowfallDisplay(val, tempUnit)),
-              borderColor: 'rgba(255, 206, 86, 1)',
-              backgroundColor: 'rgba(255, 206, 86, 0.2)',
+              borderColor: chartColorsRgba.snowfall.solid,
+              backgroundColor: chartColorsRgba.snowfall.light,
             },
             {
               label: `Rain (${tempUnit === 'F' ? 'in' : 'mm'})`,
               data: rains.map((val) => convertRainDisplay(val, tempUnit)),
-              borderColor: 'rgba(255, 159, 64, 1)',
-              backgroundColor: 'rgba(255, 159, 64, 0.2)',
+              borderColor: chartColorsRgba.rain.solid,
+              backgroundColor: chartColorsRgba.rain.light,
             },
             {
               label: `Showers (${tempUnit === 'F' ? 'in' : 'mm'})`,
               data: showers.map((val) => convertShowersDisplay(val, tempUnit)),
-              borderColor: 'rgba(201, 203, 207, 1)',
-              backgroundColor: 'rgba(201, 203, 207, 0.2)',
+              borderColor: chartColorsRgba.showers.solid,
+              backgroundColor: chartColorsRgba.showers.light,
             },
           ],
         }
@@ -328,10 +329,10 @@ const uniqueDays = useMemo(() => {
               label: `Aggregated for ${selectedDay}`,
               data: [avgTemp, totalSnowfall, totalRain, totalShowers],
               backgroundColor: [
-                'rgba(255, 99, 132, 0.6)',
-                'rgba(255, 206, 86, 0.6)',
-                'rgba(255, 159, 64, 0.6)',
-                'rgba(201, 203, 207, 0.6)',
+                chartColorsRgba.temperature.medium,
+                chartColorsRgba.snowfall.medium,
+                chartColorsRgba.rain.medium,
+                chartColorsRgba.showers.medium,
               ],
               borderWidth: 1,
             },
