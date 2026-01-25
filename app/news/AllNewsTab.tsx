@@ -297,7 +297,7 @@ function GroupModal({
           <div className="grid grid-cols-1 gap-3">
             {group.items.map((a) => {
               const logos = getLogoCandidates(a);
-              const imgs = getImageCandidates(a, 200);
+              const imgs = getImageCandidates(a);
               const hasImage = imgs.length > 0;
 
               return (
@@ -422,7 +422,7 @@ function ReaderModal({
 
   if (!open || !article) return null;
 
-  const images = getImageCandidates(article, 1200);
+  const images = getImageCandidates(article);
   const logos = getLogoCandidates(article);
 
   return (
@@ -719,7 +719,7 @@ export default function NewsTab() {
 
   // hero group = newest group that has an image
   const heroGroup = useMemo(() => {
-    return groups.find((g) => getImageCandidates(g.rep, 800).length > 0) ?? null;
+    return groups.find((g) => getImageCandidates(g.rep).length > 0) ?? null;
   }, [groups]);
 
   const restGroups = useMemo(() => {
@@ -852,7 +852,7 @@ export default function NewsTab() {
     onOpenGroup: () => void;
   }) {
     const a = group.rep;
-    const candidates = getImageCandidates(a, 800);
+    const candidates = getImageCandidates(a);
     const hasImg = candidates.length > 0;
     const logoCandidates = getLogoCandidates(a);
     const multi = group.items.length > 1;
@@ -870,76 +870,74 @@ export default function NewsTab() {
     };
 
     return (
-      <div className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition-all duration-200 dark:border-white/10 dark:bg-brand-900">
-        <button
-          onClick={onClick}
-          className="block w-full text-left"
-        >
-          <div className="relative h-52 sm:h-64">
-            {hasImg ? (
-              <SmartImage
-                candidates={candidates}
-                alt={a.title}
-                wrapperClassName="absolute inset-0"
-                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-              />
-            ) : (
-              <div className="absolute inset-0 bg-gray-100 dark:bg-white/5" />
-            )}
+      <div
+        onClick={onClick}
+        className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition-all duration-200 dark:border-white/10 dark:bg-brand-900 cursor-pointer"
+      >
+        <div className="relative h-52 sm:h-64">
+          {hasImg ? (
+            <SmartImage
+              candidates={candidates}
+              alt={a.title}
+              wrapperClassName="absolute inset-0"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gray-100 dark:bg-white/5" />
+          )}
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/0" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/0" />
 
-            <div className="absolute inset-x-0 bottom-0 p-4 text-white">
-              <div className="flex items-center gap-2">
-                {logoCandidates.length ? (
-                  <SmartImage
-                    candidates={logoCandidates}
-                    alt={a.source.name}
-                    className="h-4 w-4 flex-shrink-0 rounded bg-white/10 object-contain"
-                  />
-                ) : null}
-                <span className="max-w-[220px] truncate text-xs font-semibold opacity-95">
-                  {a.source.name || getDomain(a.url)}
-                </span>
-                <span className="opacity-70">•</span>
-                <time dateTime={a.publishedAt} className="text-xs opacity-80">
-                  {new Date(a.publishedAt).toLocaleString(undefined, { month: "short", day: "numeric" })}
-                </time>
-
-                {multi ? (
-                  <span className="ml-auto rounded-full bg-white/50 px-2 py-1 text-[10px] font-semibold backdrop-blur">
-                    +{group.items.length - 1} sources
-                  </span>
-                ) : null}
-              </div>
-
-              <h3 className="mt-2 line-clamp-2 text-base font-extrabold leading-snug sm:text-lg">
-                {a.title}
-              </h3>
+          <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+            <div className="flex items-center gap-2">
+              {logoCandidates.length ? (
+                <SmartImage
+                  candidates={logoCandidates}
+                  alt={a.source.name}
+                  className="h-4 w-4 flex-shrink-0 rounded bg-white/10 object-contain"
+                />
+              ) : null}
+              <span className="max-w-[220px] truncate text-xs font-semibold opacity-95">
+                {a.source.name || getDomain(a.url)}
+              </span>
+              <span className="opacity-70">•</span>
+              <time dateTime={a.publishedAt} className="text-xs opacity-80">
+                {new Date(a.publishedAt).toLocaleString(undefined, { month: "short", day: "numeric" })}
+              </time>
 
               {multi ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onOpenGroup();
-                  }}
-                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-xs font-semibold backdrop-blur hover:bg-white/20 transition"
-                >
-                  View all sources
-                  <span className="opacity-80">→</span>
-                </button>
+                <span className="ml-auto rounded-full bg-white/50 px-2 py-1 text-[10px] font-semibold backdrop-blur">
+                  +{group.items.length - 1} sources
+                </span>
               ) : null}
             </div>
+
+            <h3 className="mt-2 line-clamp-2 text-base font-extrabold leading-snug sm:text-lg">
+              {a.title}
+            </h3>
+
+            {multi ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenGroup();
+                }}
+                className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-xs font-semibold backdrop-blur hover:bg-white/20 transition"
+              >
+                View all sources
+                <span className="opacity-80">→</span>
+              </button>
+            ) : null}
           </div>
-        </button>
+        </div>
       </div>
     );
   }
 
   function GroupCard({ group, onOpen }: { group: ArticleGroup; onOpen: () => void }) {
     const a = group.rep;
-    const candidates = getImageCandidates(a, 600);
+    const candidates = getImageCandidates(a);
     const hasImg = candidates.length > 0;
     const logoCandidates = getLogoCandidates(a);
     const multi = group.items.length > 1;
@@ -959,112 +957,111 @@ export default function NewsTab() {
     // One image only. If no image: show text card (no fake "no image" filler)
     if (hasImg) {
       return (
-        <div className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md dark:border-white/10 dark:bg-brand-900">
-          <button onClick={handlePrimaryClick} className="block w-full text-left">
-            <div className="relative h-44">
-              <SmartImage
-                candidates={candidates}
-                alt={a.title}
-                wrapperClassName="absolute inset-0"
-                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-black/0" />
-              <div className="absolute bottom-0 w-full p-3 text-white">
-                <div className="flex items-center gap-2 text-xs">
-                  {logoCandidates.length ? (
-                    <SmartImage
-                      candidates={logoCandidates}
-                      alt={a.source.name}
-                      className="h-4 w-4 rounded bg-white/10 object-contain"
-                    />
-                  ) : null}
+        <div
+          onClick={handlePrimaryClick}
+          className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md dark:border-white/10 dark:bg-brand-900 cursor-pointer"
+        >
+          <div className="relative h-44">
+            <SmartImage
+              candidates={candidates}
+              alt={a.title}
+              wrapperClassName="absolute inset-0"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-black/0" />
+            <div className="absolute bottom-0 w-full p-3 text-white">
+              <div className="flex items-center gap-2 text-xs">
+                {logoCandidates.length ? (
+                  <SmartImage
+                    candidates={logoCandidates}
+                    alt={a.source.name}
+                    className="h-4 w-4 rounded bg-white/10 object-contain"
+                  />
+                ) : null}
 
-                  <span className="max-w-[160px] truncate font-semibold opacity-95">
-                    {a.source.name}
-                  </span>
-                  <span className="opacity-70">•</span>
-                  <time className="opacity-80" dateTime={a.publishedAt}>
-                    {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                  </time>
-
-                  {multi ? (
-                    <span className="ml-auto rounded-full bg-white/50 px-2 py-1 text-[10px] font-semibold backdrop-blur transition-opacity duration-200 group-hover:bg-white/20">
-                      +{group.items.length - 1} sources
-                    </span>
-                  ) : null}
-                </div>
-
-                <h3 className="mt-2 line-clamp-3 text-sm font-semibold leading-snug">
-                  {a.title}
-                </h3>
+                <span className="max-w-[160px] truncate font-semibold opacity-95">
+                  {a.source.name}
+                </span>
+                <span className="opacity-70">•</span>
+                <time className="opacity-80" dateTime={a.publishedAt}>
+                  {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                </time>
 
                 {multi ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      onOpen();
-                    }}
-                    className="mt-2 inline-flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-xs font-semibold backdrop-blur transition hover:bg-white/20"
-                  >
-                    View sources
-                    <span className="opacity-80">→</span>
-                  </button>
+                  <span className="ml-auto rounded-full bg-white/50 px-2 py-1 text-[10px] font-semibold backdrop-blur transition-opacity duration-200 group-hover:bg-white/20">
+                    +{group.items.length - 1} sources
+                  </span>
                 ) : null}
               </div>
+
+              <h3 className="mt-2 line-clamp-3 text-sm font-semibold leading-snug">
+                {a.title}
+              </h3>
+
+              {multi ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen();
+                  }}
+                  className="mt-2 inline-flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-xs font-semibold backdrop-blur transition hover:bg-white/20"
+                >
+                  View sources
+                  <span className="opacity-80">→</span>
+                </button>
+              ) : null}
             </div>
-          </button>
+          </div>
         </div>
       );
     }
 
     // Text-only card (no image shown)
     return (
-      <div className="group rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md dark:border-white/10 dark:bg-brand-900">
-        <button
-          onClick={handlePrimaryClick}
-          className="block w-full text-left"
-        >
-          <h3 className="line-clamp-3 text-sm font-semibold leading-snug text-gray-900 dark:text-white">
-            {a.title}
-          </h3>
+      <div
+        onClick={handlePrimaryClick}
+        className="group rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md dark:border-white/10 dark:bg-brand-900 cursor-pointer"
+      >
+        <h3 className="line-clamp-3 text-sm font-semibold leading-snug text-gray-900 dark:text-white">
+          {a.title}
+        </h3>
 
-          {a.description ? (
-            <p className="mt-2 line-clamp-3 text-sm text-gray-600 dark:text-gray-400">
-              {a.description}
-            </p>
+        {a.description ? (
+          <p className="mt-2 line-clamp-3 text-sm text-gray-600 dark:text-gray-400">
+            {a.description}
+          </p>
+        ) : null}
+
+        <div className="mt-3 flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+          {logoCandidates.length ? (
+            <SmartImage
+              candidates={logoCandidates}
+              alt={a.source.name}
+              className="h-4 w-4 rounded bg-white/10 object-contain"
+            />
           ) : null}
 
-          <div className="mt-3 flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
-            {logoCandidates.length ? (
-              <SmartImage
-                candidates={logoCandidates}
-                alt={a.source.name}
-                className="h-4 w-4 rounded bg-white/10 object-contain"
-              />
-            ) : null}
+          <span className="max-w-[160px] truncate font-medium">{a.source.name}</span>
+          <span className="text-gray-400">•</span>
+          <time className="text-gray-500 dark:text-gray-400" dateTime={a.publishedAt}>
+            {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+          </time>
 
-            <span className="max-w-[160px] truncate font-medium">{a.source.name}</span>
-            <span className="text-gray-400">•</span>
-            <time className="text-gray-500 dark:text-gray-400" dateTime={a.publishedAt}>
-              {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-            </time>
-
-            {group.items.length > 1 ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onOpen();
-                }}
-                className="ml-auto rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-semibold text-gray-700 hover:bg-gray-100 transition
-                           dark:border-white/10 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10"
-              >
-                +{group.items.length - 1} sources
-              </button>
-            ) : null}
-          </div>
-        </button>
+          {group.items.length > 1 ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen();
+              }}
+              className="ml-auto rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-semibold text-gray-700 hover:bg-gray-100 transition
+                         dark:border-white/10 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10"
+            >
+              +{group.items.length - 1} sources
+            </button>
+          ) : null}
+        </div>
       </div>
     );
   }

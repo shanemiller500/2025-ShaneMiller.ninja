@@ -159,11 +159,206 @@ function LogoImg({
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  Reader Modal                                                       */
+/* ------------------------------------------------------------------ */
+function ReaderModal({
+  open,
+  article,
+  onClose,
+}: {
+  open: boolean;
+  article: NewsItem | null;
+  onClose: () => void;
+}) {
+  const [content, setContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !article) {
+      setContent(null);
+      setError(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    fetch(`/api/parse-article?url=${encodeURIComponent(article.link)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) {
+          setError(data.error);
+        } else {
+          setContent(data.content);
+        }
+      })
+      .catch((err) => {
+        setError("Failed to load article");
+        console.error(err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [open, article]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open || !article) return null;
+
+  const domain = safeHost(article.link);
+  const logoCandidates = article.sourceImageCandidates ?? (article.sourceImage ? [article.sourceImage] : null);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* backdrop */}
+      <button
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/80"
+      />
+
+      {/* panel - MAGAZINE STYLE */}
+      <div className="relative z-10 w-full max-w-5xl max-h-[95vh] overflow-hidden border-4 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] shadow-2xl">
+        {/* BREAKING NEWS BANNER */}
+        <div className="bg-red-600 dark:bg-red-500 py-3 px-6 border-b-4 border-neutral-900 dark:border-neutral-100">
+          <div className="flex items-center justify-center gap-3">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-70" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+            </span>
+            <span className="text-sm uppercase tracking-[0.3em] font-black text-white">
+              Breaking News
+            </span>
+          </div>
+        </div>
+
+        {/* Header - NEWSPAPER MASTHEAD */}
+        <div className="sticky top-0 z-20 border-b-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20]">
+          <div className="flex items-center justify-between gap-4 p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+              {logoCandidates && logoCandidates.length > 0 && (
+                <LogoImg
+                  link={article.link}
+                  alt={article.source}
+                  candidatesFromApi={logoCandidates}
+                  className="h-8 w-8 object-contain flex-shrink-0 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-neutral-800 p-1"
+                />
+              )}
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] font-black text-neutral-900 dark:text-neutral-100">
+                  {article.source || domain}
+                </p>
+                <time className="text-[10px] uppercase tracking-wider font-bold text-neutral-500 dark:text-neutral-400" dateTime={article.publishedAt}>
+                  {new Date(article.publishedAt).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </time>
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-neutral-900 px-4 py-2 text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-red-600 hover:text-white hover:border-red-600 dark:hover:bg-red-400 dark:hover:text-neutral-900 dark:hover:border-red-400 transition-all"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto max-h-[calc(95vh-180px)] bg-white dark:bg-[#1D1D20]">
+          {/* Article Body - MAGAZINE LAYOUT */}
+          <div className="p-8 sm:p-12">
+
+            {/* HEADLINE */}
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-neutral-900 dark:text-neutral-100 mb-6 leading-[1.1] uppercase border-b-4 border-red-600 dark:border-red-400 pb-6">
+              {article.headline}
+            </h1>
+
+            {loading && (
+              <div className="flex flex-col items-center justify-center py-20 border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-100 dark:bg-neutral-900">
+                <div className="w-3 h-3 bg-red-600 dark:bg-red-400 rounded-full animate-pulse mb-4"></div>
+                <span className="text-xs uppercase tracking-[0.3em] font-black text-neutral-900 dark:text-neutral-100">Loading Story...</span>
+              </div>
+            )}
+
+            {error && (
+              <div className="border-4 border-red-600 dark:border-red-400 bg-white dark:bg-neutral-900 p-8">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+                  <h3 className="text-xs uppercase tracking-[0.3em] font-black text-neutral-900 dark:text-neutral-100">Error</h3>
+                </div>
+                <p className="text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 mb-2">{error}</p>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">Read the full article on the original site below.</p>
+              </div>
+            )}
+
+            {/* ARTICLE CONTENT */}
+            {content && (
+              <article
+                className="prose prose-lg max-w-none
+                          prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-headings:text-neutral-900 dark:prose-headings:text-neutral-100 prose-headings:border-b-2 prose-headings:border-neutral-900 dark:prose-headings:border-neutral-100 prose-headings:pb-2 prose-headings:mb-4
+                          prose-p:text-neutral-900 dark:prose-p:text-neutral-100 prose-p:leading-relaxed prose-p:text-lg prose-p:mb-6
+                          prose-a:text-red-600 dark:prose-a:text-red-400 prose-a:no-underline prose-a:font-bold hover:prose-a:underline
+                          prose-strong:text-neutral-900 dark:prose-strong:text-neutral-100 prose-strong:font-black
+                          prose-img:border-4 prose-img:border-neutral-900 dark:prose-img:border-neutral-100 prose-img:my-8 prose-img:w-full
+                          prose-blockquote:border-l-4 prose-blockquote:border-red-600 dark:prose-blockquote:border-red-400 prose-blockquote:bg-neutral-100 dark:prose-blockquote:bg-neutral-900 prose-blockquote:py-4 prose-blockquote:px-6 prose-blockquote:not-italic prose-blockquote:font-light
+                          prose-code:bg-neutral-900 dark:prose-code:bg-neutral-100 prose-code:text-white dark:prose-code:text-neutral-900 prose-code:px-2 prose-code:py-1 prose-code:font-mono prose-code:text-sm
+                          prose-ul:list-square prose-ul:pl-6 prose-ol:list-decimal prose-ol:pl-6
+                          prose-li:text-neutral-900 dark:prose-li:text-neutral-100 prose-li:mb-2"
+                style={{ fontFamily: '"Merriweather", serif', textAlign: 'justify' }}
+                dangerouslySetInnerHTML={{ __html: content }}
+              />
+            )}
+
+            {/* READ MORE SECTION */}
+            <div className="mt-12 pt-8 border-t-4 border-neutral-900 dark:border-neutral-100">
+              <div className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-neutral-900 p-6">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+                      <p className="text-xs uppercase tracking-[0.3em] font-black text-neutral-900 dark:text-neutral-100">Continue Reading</p>
+                    </div>
+                    <p className="text-sm font-bold text-neutral-700 dark:text-neutral-300">{article.source || domain}</p>
+                  </div>
+                  <a
+                    href={article.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 border-2 border-neutral-900 dark:border-neutral-100 bg-red-600 dark:bg-red-400 px-6 py-3 text-xs uppercase tracking-widest font-black text-white dark:text-neutral-900 hover:bg-neutral-900 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900 hover:border-neutral-900 dark:hover:border-neutral-100 transition-all"
+                  >
+                    Read Full Article
+                    <span>→</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const WidgetNews: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [errorMsg, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [readerArticle, setReaderArticle] = useState<NewsItem | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -266,11 +461,9 @@ const WidgetNews: React.FC = () => {
           <>
             {/* top story */}
             {topStory && (
-              <motion.a
-                href={topStory.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group block rounded-2xl border border-gray-200/70 dark:border-white/10 bg-gradient-to-br from-gray-50 to-white dark:from-white/5 dark:to-white/0 p-4 hover:shadow-md transition"
+              <motion.button
+                onClick={() => setReaderArticle(topStory)}
+                className="group block w-full text-left rounded-2xl border border-gray-200/70 dark:border-white/10 bg-gradient-to-br from-gray-50 to-white dark:from-white/5 dark:to-white/0 p-4 hover:shadow-md transition"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 whileHover={{ scale: 1.01 }}
@@ -297,7 +490,7 @@ const WidgetNews: React.FC = () => {
                           {timeAgo(topStory.publishedAt)}
                         </span>
                       </div>
-                    
+
                     </div>
 
                     <div className="mt-1 text-sm font-bold text-gray-900 dark:text-white leading-snug">
@@ -309,7 +502,7 @@ const WidgetNews: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              </motion.a>
+              </motion.button>
             )}
 
             {/* list */}
@@ -323,11 +516,9 @@ const WidgetNews: React.FC = () => {
                   animate="visible"
                   className="rounded-xl border border-gray-200/70 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition"
                 >
-                  <a
-                    href={item.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-start gap-3 px-3 py-3"
+                  <button
+                    onClick={() => setReaderArticle(item)}
+                    className="flex items-start gap-3 px-3 py-3 w-full text-left"
                   >
                     <div className="relative mt-0.5 h-8 w-8 shrink-0 overflow-hidden rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/10">
                       <LogoImg
@@ -351,7 +542,7 @@ const WidgetNews: React.FC = () => {
                         {timeAgo(item.publishedAt)}
                       </div>
                     </div>
-                  </a>
+                  </button>
                 </motion.li>
               ))}
             </ul>
@@ -383,6 +574,8 @@ const WidgetNews: React.FC = () => {
           </div>
         )}
       </div>
+
+      <ReaderModal open={!!readerArticle} article={readerArticle} onClose={() => setReaderArticle(null)} />
     </div>
   );
 };
