@@ -719,7 +719,7 @@ export default function NewsTab() {
 
   // hero group = newest group that has an image
   const heroGroup = useMemo(() => {
-    return groups.find((g) => getImageCandidates(g.rep).length > 0) ?? null;
+    return groups.find((g) => getImageCandidates(g.rep, 800).length > 0) ?? null;
   }, [groups]);
 
   const restGroups = useMemo(() => {
@@ -807,12 +807,16 @@ export default function NewsTab() {
 
       {/* GRID (mixed groups inline, newest first) */}
       <div
-        className={`mt-6 grid grid-cols-1  sm:grid-cols-2 lg:grid-cols-3 transition-opacity duration-200 ${
+        className={`mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 transition-opacity duration-200 ${
           fade ? "opacity-0" : "opacity-100"
         }`}
       >
         {loading && groups.length === 0
-          ? Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)
+          ? Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="col-span-1">
+                <SkeletonCard />
+              </div>
+            ))
           : pageGroups.map((g) => (
               <div key={g.key} className="col-span-1">
                 <GroupCard group={g} onOpen={() => setOpenGroup(g)} />
@@ -852,7 +856,7 @@ export default function NewsTab() {
     onOpenGroup: () => void;
   }) {
     const a = group.rep;
-    const candidates = getImageCandidates(a);
+    const candidates = getImageCandidates(a, 800);
     const hasImg = candidates.length > 0;
     const logoCandidates = getLogoCandidates(a);
     const multi = group.items.length > 1;
@@ -937,7 +941,7 @@ export default function NewsTab() {
 
   function GroupCard({ group, onOpen }: { group: ArticleGroup; onOpen: () => void }) {
     const a = group.rep;
-    const candidates = getImageCandidates(a);
+    const candidates = getImageCandidates(a, 600);
     const hasImg = candidates.length > 0;
     const logoCandidates = getLogoCandidates(a);
     const multi = group.items.length > 1;
@@ -1081,7 +1085,7 @@ export default function NewsTab() {
   }) {
     return (
       <div className="mt-10 flex flex-col items-center gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             disabled={page === 1 || loading}
             onClick={onPrev}
@@ -1110,7 +1114,7 @@ export default function NewsTab() {
 
   function SkeletonCard() {
     return (
-      <div className="animate-pulse overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900">
+      <div className="animate-pulse overflow-hidden gap-5 rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900">
         <div className="h-40 bg-gray-100 dark:bg-white/5" />
         <div className="p-4">
           <div className="h-3 w-3/4 rounded bg-gray-100 dark:bg-white/5" />
