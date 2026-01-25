@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { JSDOM } from 'jsdom';
+import { parseHTML } from 'linkedom';
 import { Readability } from '@mozilla/readability';
 import DOMPurify from 'isomorphic-dompurify';
 
@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
     // Fetch the article HTML
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
     });
 
@@ -24,9 +25,13 @@ export async function GET(request: NextRequest) {
 
     const html = await response.text();
 
-    // Parse with Readability
-    const dom = new JSDOM(html, { url });
-    const reader = new Readability(dom.window.document);
+    // Parse with linkedom (serverless-compatible) + Readability
+    const { document } = parseHTML(html);
+
+    // Set the document URL for Readability
+    Object.defineProperty(document, 'documentURI', { value: url, writable: false });
+
+    const reader = new Readability(document as any);
     const article = reader.parse();
 
     if (!article) {
