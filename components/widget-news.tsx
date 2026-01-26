@@ -407,7 +407,7 @@ const WidgetNews: React.FC = () => {
   }, []);
 
   const topStory = news[0] ?? null;
-  const rest = useMemo(() => news.slice(1, 5), [news]);
+  const rest = useMemo(() => news.slice(1, 7), [news]);
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white dark:bg-brand-900 shadow-sm">
