@@ -1,14 +1,16 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, ArrowLeftRight, ChevronDown, Users } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+
+import { ArrowLeftRight, ArrowRight, ChevronDown, Users } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+
 import ResultsModal from "./ResultsModal";
 
 /* ------------------------------------------------------------------ */
-/*  Types                                                             */
+/*  Types                                                              */
 /* ------------------------------------------------------------------ */
 export interface FullCountry {
   cca3: string;
@@ -27,7 +29,9 @@ type AirportRec = {
 type Cabin = "e" | "pe" | "b" | "f";
 type Trip = "round" | "oneway";
 
-/* ---------------- Constants ---------------------------------------- */
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 const QUICK_MAP: Record<string, string> = {
   USA: "DEN",
   GBR: "LHR",
@@ -37,23 +41,29 @@ const QUICK_MAP: Record<string, string> = {
   JPN: "NRT",
 };
 
-const cabinSlug: Record<Cabin, string> = {
+const CABIN_SLUG: Record<Cabin, string> = {
   e: "economy",
   pe: "premiumeconomy",
   b: "business",
   f: "first",
 };
 
-const cabinMeta: Record<Cabin, { title: string; sub: string }> = {
+const CABIN_META: Record<Cabin, { title: string; sub: string }> = {
   e: { title: "Economy", sub: "Best value" },
   pe: { title: "Premium", sub: "More room" },
   b: { title: "Business", sub: "Lie flat" },
   f: { title: "First", sub: "Luxury" },
 };
 
-const LS_KEY = "flightSearch:last";
+const LOCAL_STORAGE_KEY = "flightSearch:last";
+const DEFAULT_DEPART_DAYS_AHEAD = 14;
+const SUGGESTION_LIMIT = 10;
+const IATA_CODE_LENGTH = 3;
+const MS_PER_DAY = 864e5;
 
-/* ---------------- Helpers ------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 let airports: AirportRec[] = [];
 
 async function getAirports(): Promise<AirportRec[]> {
@@ -65,15 +75,27 @@ async function getAirports(): Promise<AirportRec[]> {
   return airports;
 }
 
-const isoToday = () => new Date().toISOString().slice(0, 10);
-const addDaysISO = (iso: string, days: number) =>
-  new Date(new Date(iso).getTime() + days * 864e5).toISOString().slice(0, 10);
-const tomorrow = (iso: string) => addDaysISO(iso, 1);
-const isIata = (s: string) => /^[A-Z]{3}$/.test((s || "").trim().toUpperCase());
-const safeUpper3 = (s: string) =>
-  (s || "").replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase();
+const isoToday = (): string => new Date().toISOString().slice(0, 10);
+const addDaysISO = (iso: string, days: number): string =>
+  new Date(new Date(iso).getTime() + days * MS_PER_DAY).toISOString().slice(0, 10);
+const tomorrow = (iso: string): string => addDaysISO(iso, 1);
+const isIata = (s: string): boolean => /^[A-Z]{3}$/.test((s || "").trim().toUpperCase());
+const safeUpper3 = (s: string): string =>
+  (s || "").replace(/[^a-zA-Z]/g, "").slice(0, IATA_CODE_LENGTH).toUpperCase();
 
-/* ---------- Airport Typeahead -------------------------------------- */
+/* ------------------------------------------------------------------ */
+/*  AirportTypeahead Component                                         */
+/* ------------------------------------------------------------------ */
+interface AirportTypeaheadProps {
+  label: string;
+  value: string;
+  setValue: (s: string) => void;
+  placeholder: string;
+  allAirports: AirportRec[];
+  showSwap?: boolean;
+  onSwap?: () => void;
+}
+
 function AirportTypeahead({
   label,
   value,
@@ -82,15 +104,7 @@ function AirportTypeahead({
   allAirports,
   showSwap,
   onSwap,
-}: {
-  label: string;
-  value: string;
-  setValue: (s: string) => void;
-  placeholder: string;
-  allAirports: AirportRec[];
-  showSwap?: boolean;
-  onSwap?: () => void;
-}) {
+}: AirportTypeaheadProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -123,7 +137,7 @@ function AirportTypeahead({
           iso === q
         );
       })
-      .slice(0, 10);
+      .slice(0, SUGGESTION_LIMIT);
   }, [query, allAirports]);
 
   const selected = useMemo(() => {
@@ -217,20 +231,18 @@ function AirportTypeahead({
   );
 }
 
-/* ---------- Stepper -------------------------------------- */
-function Stepper({
-  label,
-  desc,
-  val,
-  set,
-  min,
-}: {
+/* ------------------------------------------------------------------ */
+/*  Stepper Component                                                  */
+/* ------------------------------------------------------------------ */
+interface StepperProps {
   label: string;
   desc: string;
   val: number;
   set: (n: number) => void;
   min: number;
-}) {
+}
+
+function Stepper({ label, desc, val, set, min }: StepperProps) {
   return (
     <div className="flex items-center justify-between rounded-xl border border-brand-200/70 bg-white/60 px-3 py-2.5 dark:border-white/10 dark:bg-brand-900/40">
       <div className="min-w-0 pr-3">
@@ -282,8 +294,6 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
   const [seniors, setSeniors] = useState(0);
 
   const [travelersOpen, setTravelersOpen] = useState(false);
-  const [readyList, setReadyList] = useState(false);
-
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [flights, setFlights] = useState<any[]>([]);
@@ -291,12 +301,12 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
   const [formError, setFormError] = useState("");
 
   useEffect(() => {
-    getAirports().then(() => setReadyList(true));
+    getAirports();
   }, []);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(LS_KEY);
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (!raw) return;
       const s = JSON.parse(raw);
       if (s?.from) setFrom(safeUpper3(s.from));
@@ -315,7 +325,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
   useEffect(() => {
     try {
       localStorage.setItem(
-        LS_KEY,
+        LOCAL_STORAGE_KEY,
         JSON.stringify({ from, to, depart, ret, trip, cabin, adults, children, infants, seniors }),
       );
     } catch {}
@@ -339,13 +349,14 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
 
   useEffect(() => {
     if (!depart) {
-      const d = addDaysISO(isoToday(), 14);
+      const d = addDaysISO(isoToday(), DEFAULT_DEPART_DAYS_AHEAD);
       setDepart(d);
       if (trip === "round") setRet(addDaysISO(d, 1));
       return;
     }
     if (trip === "round" && (!ret || ret <= depart)) setRet(tomorrow(depart));
-  }, [trip]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip]);
 
   const onDepart = (d: string) => {
     setDepart(d);
@@ -390,7 +401,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
         to,
         depart,
         trip,
-        cabin: cabinSlug[cabin],
+        cabin: CABIN_SLUG[cabin],
         adults: adults.toString(),
         kids: children.toString(),
         inf: infants.toString(),
@@ -437,7 +448,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
     };
   }, [travelersOpen]);
 
-  const summary = `${paxTotal} traveller${paxTotal !== 1 ? "s" : ""} · ${cabinMeta[cabin].title}`;
+  const summary = `${paxTotal} traveller${paxTotal !== 1 ? "s" : ""} · ${CABIN_META[cabin].title}`;
 
   return (
     <>
@@ -635,7 +646,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
                         Cabin
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        {(Object.keys(cabinMeta) as Cabin[]).map((c) => {
+                        {(Object.keys(CABIN_META) as Cabin[]).map((c) => {
                           const active = cabin === c;
                           return (
                             <button
@@ -649,10 +660,10 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
                               }`}
                             >
                               <div className={`text-xs font-extrabold ${active ? "text-white" : "text-brand-900 dark:text-white"}`}>
-                                {cabinMeta[c].title}
+                                {CABIN_META[c].title}
                               </div>
                               <div className={`text-[10px] ${active ? "text-white/85" : "text-brand-600 dark:text-brand-400"}`}>
-                                {cabinMeta[c].sub}
+                                {CABIN_META[c].sub}
                               </div>
                             </button>
                           );

@@ -1,18 +1,30 @@
-// Filename: DashboardTabs.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import StockQuoteSection from "./StockQuoteSection";
-import IPOCalendarSection from "./IPOCalendarSection";
-import EarningsSection from "./EarningsSection";
-import NewsSearchTabSection from "./NewsSearchTabSection";
-import LiveStreamHeatmapSection from "./LiveStreamHeatmapSection";
-import { trackEvent } from "@/utils/mixpanel";
+import { useEffect, useMemo, useState } from "react";
 
+import { AnimatePresence, motion } from "framer-motion";
+
+import { trackEvent } from "@/utils/mixpanel";
+import EarningsSection from "./EarningsSection";
+import IPOCalendarSection from "./IPOCalendarSection";
+import LiveStreamHeatmapSection from "./LiveStreamHeatmapSection";
+import NewsSearchTabSection from "./NewsSearchTabSection";
+import StockQuoteSection from "./StockQuoteSection";
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 type TabKey = "quote" | "live" | "ipo" | "earnings" | "news";
 
-const TABS: { key: TabKey; label: string }[] = [
+interface TabConfig {
+  key: TabKey;
+  label: string;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const TABS: TabConfig[] = [
   { key: "quote", label: "Stock Quote" },
   { key: "live", label: "Live Stream Heatmap" },
   { key: "ipo", label: "IPO Calendar" },
@@ -20,6 +32,9 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "news", label: "News Search" },
 ];
 
+/* ------------------------------------------------------------------ */
+/*  DashboardTabs Component                                            */
+/* ------------------------------------------------------------------ */
 export default function DashboardTabs() {
   const [activeTab, setActiveTab] = useState<TabKey>("quote");
 
@@ -32,7 +47,7 @@ export default function DashboardTabs() {
     [activeTab]
   );
 
-  const handleTabClick = (tab: TabKey) => {
+  const handleTabClick = (tab: TabKey): void => {
     setActiveTab(tab);
     trackEvent("Dashboard Tab Clicked", { tab });
   };

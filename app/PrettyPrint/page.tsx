@@ -1,6 +1,9 @@
-import PrettyPrint from './PrettyPrint';
+import PrettyPrint from "./PrettyPrint";
 
-export default function Page() {
+/* ------------------------------------------------------------------ */
+/*  PrettyPrintPage Component                                          */
+/* ------------------------------------------------------------------ */
+export default function PrettyPrintPage() {
   return (
     <main className="min-h-screen bg-white dark:bg-brand-900 text-black dark:text-white">
       <PrettyPrint />

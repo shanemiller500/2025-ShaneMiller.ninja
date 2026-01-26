@@ -1,34 +1,55 @@
 "use client";
 
-import React, { useEffect } from "react";
+import { useEffect } from "react";
+
 import dynamic from "next/dynamic";
 import "leaflet/dist/leaflet.css";
+
 import { Location } from "./types";
 
-const LeafletMapComponent: React.FC<{ location: Location }> = ({ location }) => {
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface LeafletMapProps {
+  location: Location;
+}
+
+interface RecenterMapProps {
+  lat: number;
+  lng: number;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const DEFAULT_ZOOM = 10;
+const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_ATTRIBUTION = "&copy; OpenStreetMap contributors";
+
+/* ------------------------------------------------------------------ */
+/*  LeafletMapComponent                                                */
+/* ------------------------------------------------------------------ */
+function LeafletMapComponent({ location }: LeafletMapProps) {
   // react-leaflet only on client (dynamic wrapper below)
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { MapContainer, TileLayer, Marker, Popup, useMap } = require("react-leaflet");
 
-  const RecenterMap = ({ lat, lng }: { lat: number; lng: number }) => {
+  function RecenterMap({ lat, lng }: RecenterMapProps) {
     const map = useMap();
     useEffect(() => {
-      map.setView([lat, lng], 10);
+      map.setView([lat, lng], DEFAULT_ZOOM);
     }, [lat, lng, map]);
     return null;
-  };
+  }
 
   return (
     <MapContainer
       center={[location.latitude, location.longitude]}
-      zoom={10}
+      zoom={DEFAULT_ZOOM}
       scrollWheelZoom={false}
       style={{ height: "100%", width: "100%" }}
     >
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution="&copy; OpenStreetMap contributors"
-      />
+      <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} />
 
       <Marker position={[location.latitude, location.longitude]}>
         <Popup>
@@ -40,8 +61,11 @@ const LeafletMapComponent: React.FC<{ location: Location }> = ({ location }) => 
       <RecenterMap lat={location.latitude} lng={location.longitude} />
     </MapContainer>
   );
-};
+}
 
+/* ------------------------------------------------------------------ */
+/*  Dynamic Export (SSR disabled)                                      */
+/* ------------------------------------------------------------------ */
 const LeafletMap = dynamic(() => Promise.resolve(LeafletMapComponent), { ssr: false });
 
 export default LeafletMap;

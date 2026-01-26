@@ -1,11 +1,15 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "framer-motion";
+
+import { AnimatePresence, motion } from "framer-motion";
+
 import { trackEvent } from "@/utils/mixpanel";
 
-/* dynamic imports */
+/* ------------------------------------------------------------------ */
+/*  Dynamic Imports                                                    */
+/* ------------------------------------------------------------------ */
 const LiveStreamHeatmap = dynamic(() => import("./LiveStreamHeatmap"), { ssr: false });
 const TopGainersLosers = dynamic(() => import("./TopGainersLosers"), { ssr: false });
 const CryptoChartPrices = dynamic(() => import("./CryptoChartPrices"), { ssr: false });

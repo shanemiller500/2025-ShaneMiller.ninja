@@ -1,8 +1,10 @@
 "use client";
 
-import React from "react";
 import { trackEvent } from "@/utils/mixpanel";
 
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 interface LinkCardProps {
   link: {
     url: string;
@@ -13,6 +15,9 @@ interface LinkCardProps {
   index?: number;
 }
 
+/* ------------------------------------------------------------------ */
+/*  LinkCard Component                                                 */
+/* ------------------------------------------------------------------ */
 export default function LinkCard({ link, index }: LinkCardProps) {
   const domain = new URL(link.url).hostname.replace("www.", "");
 

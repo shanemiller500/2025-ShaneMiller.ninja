@@ -1,14 +1,12 @@
-import React from 'react';
-import FinnhubDashboard from './stock/stocks'; 
+import FinnhubDashboard from "./stock/stocks";
 
-
-
-const StocksPage = () => {
+/* ------------------------------------------------------------------ */
+/*  StocksPage Component                                               */
+/* ------------------------------------------------------------------ */
+export default function StocksPage() {
   return (
     <div>
       <FinnhubDashboard />
     </div>
   );
-};
-
-export default StocksPage;
+}

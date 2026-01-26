@@ -1,8 +1,31 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
+
 import { searchMarvelCreators } from "./marvelAPI";
 
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const DEBOUNCE_DELAY_MS = 500;
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface MarvelThumbnail {
+  path: string;
+  extension: string;
+}
+
+interface MarvelCreator {
+  id: number;
+  fullName: string;
+  thumbnail: MarvelThumbnail;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Spinner Component                                                  */
+/* ------------------------------------------------------------------ */
 const Spinner = () => (
   <div className="flex justify-center items-center my-4">
     <svg
@@ -25,22 +48,15 @@ const Spinner = () => (
   </div>
 );
 
-const MarvelCreatorsPage: React.FC = () => {
+/* ------------------------------------------------------------------ */
+/*  MarvelCreatorsPage Component                                       */
+/* ------------------------------------------------------------------ */
+const MarvelCreatorsPage = () => {
   const [creatorQuery, setCreatorQuery] = useState("");
-  const [creatorResults, setCreatorResults] = useState<any[]>([]);
+  const [creatorResults, setCreatorResults] = useState<MarvelCreator[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (creatorQuery) {
-        handleSearch();
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [creatorQuery]);
-
-  const handleSearch = async (e?: React.FormEvent) => {
+  const handleSearch = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     setLoading(true);
     const data = await searchMarvelCreators(creatorQuery);
@@ -51,6 +67,16 @@ const MarvelCreatorsPage: React.FC = () => {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (creatorQuery) {
+        handleSearch();
+      }
+    }, DEBOUNCE_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creatorQuery]);
 
   return (
     <div className="p-4">

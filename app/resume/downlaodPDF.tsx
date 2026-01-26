@@ -1,8 +1,10 @@
-import React from 'react';
-import { trackEvent } from '@/utils/mixpanel';
+import { trackEvent } from "@/utils/mixpanel";
 
-const DownloadPDF: React.FC = () => {
-  const handleDownloadClick = () => {
+/* ------------------------------------------------------------------ */
+/*  DownloadPDF Component                                              */
+/* ------------------------------------------------------------------ */
+export default function DownloadPDF() {
+  const handleDownloadClick = (): void => {
     trackEvent("Resume Download", { downloadUrl: "2025-Resume" });
   };
 
@@ -28,6 +30,4 @@ const DownloadPDF: React.FC = () => {
       </a>
     </div>
   );
-};
-
-export default DownloadPDF;
+}

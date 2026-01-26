@@ -1,12 +1,14 @@
-// Filename: SportsNews.tsx
 "use client";
 
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 export interface Article {
   title: string;
   description: string;
   url: string;
   urlToImage: string | null;
-  images?: string[]; // ✅ ADD
+  images?: string[];
   publishedAt: string;
   source: {
     id: string | null;
@@ -17,9 +19,15 @@ export interface Article {
   sourceLogo: string | null;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 const LOGO_FALLBACK = "/images/wedding.jpg";
 
-const safeDomain = (u: string) => {
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+const safeDomain = (u: string): string => {
   try {
     return new URL(u).hostname.replace(/^www\./, "");
   } catch {
@@ -27,14 +35,16 @@ const safeDomain = (u: string) => {
   }
 };
 
-const bad = (s?: string | null) => !s || ["none", "null", "n/a"].includes(String(s).toLowerCase());
-const normalize = (s: string) => {
+const bad = (s?: string | null): boolean =>
+  !s || ["none", "null", "n/a"].includes(String(s).toLowerCase());
+
+const normalize = (s: string): string => {
   const t = s.trim();
   if (t.startsWith("//")) return `https:${t}`;
   if (t.startsWith("http://")) return t.replace("http://", "https://");
   return t;
 };
-const uniqStrings = (arr: string[]) => {
+const uniqStrings = (arr: string[]): string[] => {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const s of arr) {
@@ -47,6 +57,9 @@ const uniqStrings = (arr: string[]) => {
   return out;
 };
 
+/* ------------------------------------------------------------------ */
+/*  API Function                                                       */
+/* ------------------------------------------------------------------ */
 export async function fetchSportsNews(): Promise<Article[]> {
   const res = await fetch("https://u-mail.co/api/sportsNews", { cache: "no-store" });
   if (!res.ok) throw new Error(`Sports News API error: ${res.status}`);

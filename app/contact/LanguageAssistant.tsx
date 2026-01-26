@@ -1,11 +1,8 @@
-// app/contact/LanguageAssistant.tsx
 "use client";
 
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import ReactCountryFlag from "react-country-flag";
 import { trackEvent } from "@/utils/mixpanel";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faSearch } from "@fortawesome/free-solid-svg-icons";
 
 interface Language {
   name: string;
@@ -21,7 +18,7 @@ interface LanguageAssistantProps {
   onClose: () => void;
 }
 
-const languages: Language[] = [
+const LANGUAGES: Language[] = [
   { name: "English", code: "en", flagCode: "GB", key: "en-GB" },
   { name: "Spanish", code: "es", flagCode: "ES", key: "es-ES" },
   { name: "French", code: "fr", flagCode: "FR", key: "fr-FR" },
@@ -38,8 +35,6 @@ const languages: Language[] = [
   { name: "Portuguese", code: "pt", flagCode: "PT", key: "pt-PT" },
   { name: "Arabic", code: "ar", flagCode: "SA", key: "ar-SA" },
   { name: "Hebrew", code: "he", flagCode: "IL", key: "he-IL" },
-
-  // fun variants (kept)
   {
     name: "Australian Slang",
     code: "en",
@@ -85,18 +80,10 @@ const languages: Language[] = [
 ];
 
 export default function LanguageAssistant({ onTranslate, onClose }: LanguageAssistantProps) {
-  const [query, setQuery] = useState("");
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return languages;
-    return languages.filter((l) => l.name.toLowerCase().includes(q));
-  }, [query]);
-
-  const handleLanguageChange = (language: Language) => {
+  function handleLanguageSelect(language: Language) {
     trackEvent("Language Translation Clicked", { language: language.name });
     onTranslate(language);
-  };
+  }
 
   return (
     <div
@@ -105,38 +92,25 @@ export default function LanguageAssistant({ onTranslate, onClose }: LanguageAssi
       aria-modal="true"
       aria-label="Select Language"
       onMouseDown={(e) => {
-        // click outside closes
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div className="w-full max-w-md overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-brand-900">
-        <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-white/10">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Select language</h2>
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-              Translate your message with one tap.
-            </p>
-          </div>
-          <button
-            className="rounded-xl px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:text-gray-200 dark:hover:bg-white/10"
-            onClick={onClose}
-            aria-label="Close"
-            type="button"
-          >
-            ✕
-          </button>
-        </div>
+        <ModalHeader
+          title="Select language"
+          subtitle="Translate your message with one tap."
+          onClose={onClose}
+        />
 
         <div className="p-5">
-          
           <div className="mt-4 max-h-[320px] overflow-y-auto pr-1">
             <ul className="space-y-2">
-              {filtered.map((language) => (
+              {LANGUAGES.map((language) => (
                 <li key={language.key}>
                   <button
                     type="button"
                     className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:hover:bg-white/10"
-                    onClick={() => handleLanguageChange(language)}
+                    onClick={() => handleLanguageSelect(language)}
                   >
                     <ReactCountryFlag
                       countryCode={language.flagCode}
@@ -145,19 +119,41 @@ export default function LanguageAssistant({ onTranslate, onClose }: LanguageAssi
                       aria-label={language.name}
                     />
                     <span className="flex-1">{language.name}</span>
-                    <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{language.code}</span>
+                    <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
+                      {language.code}
+                    </span>
                   </button>
                 </li>
               ))}
-              {filtered.length === 0 && (
-                <li className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
-                  No matches. Try a different search.
-                </li>
-              )}
             </ul>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+interface ModalHeaderProps {
+  title: string;
+  subtitle: string;
+  onClose: () => void;
+}
+
+function ModalHeader({ title, subtitle, onClose }: ModalHeaderProps) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-white/10">
+      <div>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
+      </div>
+      <button
+        className="rounded-xl px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:text-gray-200 dark:hover:bg-white/10"
+        onClick={onClose}
+        aria-label="Close"
+        type="button"
+      >
+        ✕
+      </button>
     </div>
   );
 }

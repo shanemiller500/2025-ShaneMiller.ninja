@@ -1,8 +1,26 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
+
 import { searchMarvelStories } from "./marvelAPI";
 
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const DEBOUNCE_DELAY_MS = 500;
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface MarvelStory {
+  id: number;
+  title: string;
+  description: string;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Spinner Component                                                  */
+/* ------------------------------------------------------------------ */
 const Spinner = () => (
   <div className="flex justify-center items-center my-4">
     <svg
@@ -25,22 +43,15 @@ const Spinner = () => (
   </div>
 );
 
-const MarvelStoriesPage: React.FC = () => {
+/* ------------------------------------------------------------------ */
+/*  MarvelStoriesPage Component                                        */
+/* ------------------------------------------------------------------ */
+const MarvelStoriesPage = () => {
   const [storyQuery, setStoryQuery] = useState("");
-  const [storyResults, setStoryResults] = useState<any[]>([]);
+  const [storyResults, setStoryResults] = useState<MarvelStory[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (storyQuery) {
-        handleSearch();
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storyQuery]);
-
-  const handleSearch = async (e?: React.FormEvent) => {
+  const handleSearch = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     setLoading(true);
     const data = await searchMarvelStories(storyQuery);
@@ -51,6 +62,16 @@ const MarvelStoriesPage: React.FC = () => {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (storyQuery) {
+        handleSearch();
+      }
+    }, DEBOUNCE_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyQuery]);
 
   return (
     <div className="p-4">

@@ -1,17 +1,21 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
 import { trackEvent } from "@/utils/mixpanel";
 
-type RoverPhoto = {
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface RoverPhoto {
   id: number;
   img_src: string;
   earth_date: string;
   camera: { full_name: string; name: string };
   rover?: { name?: string };
-};
+}
 
-type MarsRssImage = {
+interface MarsRssImage {
   imageid?: string;
   id?: string | number;
   sol?: number;

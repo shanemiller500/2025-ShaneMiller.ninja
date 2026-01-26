@@ -1,9 +1,12 @@
 "use client";
 
+import Image, { type StaticImageData } from "next/image";
 import Link from "next/link";
-import Image, { StaticImageData } from "next/image";
 
-interface Item {
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface ProjectItem {
   id: number;
   icon: StaticImageData;
   slug: string;
@@ -13,12 +16,15 @@ interface Item {
   badge?: string;
 }
 
-interface ItemProps {
-  item: Item;
+interface ProjectCardProps {
+  item: ProjectItem;
   onClick?: () => void;
 }
 
-export default function ProjectCard({ item, onClick }: ItemProps) {
+/* ------------------------------------------------------------------ */
+/*  ProjectCard Component                                              */
+/* ------------------------------------------------------------------ */
+export default function ProjectCard({ item, onClick }: ProjectCardProps) {
   const isExternal = /^https?:\/\//i.test(item.slug);
 
   return (

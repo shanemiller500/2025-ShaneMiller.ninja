@@ -1,18 +1,20 @@
-// Consolidated helper file for news fetches.
-// Split them out if you prefer separate modules.
+import { Article } from "./AllNewsTab";
 
-import { Article } from './AllNewsTab';
-
-// ⚠️ Replace with your real API keys or proxy endpoints.
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 const MEDIASTACK_KEY = process.env.NEXT_PUBLIC_MEDIASTACK_KEY;
-const FINNHUB_KEY   = process.env.NEXT_PUBLIC_FINNHUB_KEY;
-const UMAIL_ENDPOINT= 'https://u-mail.co/api/MoreNewsAPI';
+const FINNHUB_KEY = process.env.NEXT_PUBLIC_FINNHUB_KEY;
+const UMAIL_ENDPOINT = "https://u-mail.co/api/MoreNewsAPI";
+const MEDIASTACK_LIMIT = 100;
 
+/* ------------------------------------------------------------------ */
+/*  MediaStack API                                                     */
+/* ------------------------------------------------------------------ */
 export async function fetchMediaStackArticles(page = 1): Promise<Article[]> {
+  const offset = (page - 1) * MEDIASTACK_LIMIT;
   const res = await fetch(
-    `http://api.mediastack.com/v1/news?access_key=${MEDIASTACK_KEY}&countries=us,gb,ca&limit=100&offset=${
-      (page - 1) * 100
-    }`
+    `http://api.mediastack.com/v1/news?access_key=${MEDIASTACK_KEY}&countries=us,gb,ca&limit=${MEDIASTACK_LIMIT}&offset=${offset}`
   );
   if (!res.ok) throw new Error('Mediastack error');
   const json = await res.json();
@@ -29,6 +31,9 @@ export async function fetchMediaStackArticles(page = 1): Promise<Article[]> {
   }));
 }
 
+/* ------------------------------------------------------------------ */
+/*  Finnhub API                                                        */
+/* ------------------------------------------------------------------ */
 export async function fetchFinnhubArticles(): Promise<Article[]> {
   const res = await fetch(
     `https://finnhub.io/api/v1/news?category=general&token=${FINNHUB_KEY}`
@@ -48,6 +53,9 @@ export async function fetchFinnhubArticles(): Promise<Article[]> {
   }));
 }
 
+/* ------------------------------------------------------------------ */
+/*  U-Mail API                                                         */
+/* ------------------------------------------------------------------ */
 export async function fetchUmailArticles(): Promise<Article[]> {
   const res = await fetch(UMAIL_ENDPOINT, { cache: 'no-store' });
   if (!res.ok) throw new Error('U-Mail news proxy error');

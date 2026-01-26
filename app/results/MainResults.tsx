@@ -1,6 +1,7 @@
 "use client";
 
-import React, { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+
 import { trackEvent } from "@/utils/mixpanel";
 import LinkCard from "./LinkCard";
 
@@ -106,20 +107,26 @@ function useHighlighted(text: string, keywords: string[]) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Props                                                             */
+/*  MainResultsProps                                                   */
 /* ------------------------------------------------------------------ */
-interface Props {
+interface MainResultsProps {
   result: SearchHistoryItem;
   followField: string;
-  setFollowField: React.Dispatch<React.SetStateAction<string>>;
+  setFollowField: (value: string) => void;
   followSubmit: (e: React.FormEvent) => void;
   followClick: (q: string) => void;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Component                                                         */
+/*  MainResults Component                                              */
 /* ------------------------------------------------------------------ */
-export default function MainResults({ result, followField, setFollowField, followSubmit, followClick }: Props) {
+export default function MainResults({
+  result,
+  followField,
+  setFollowField,
+  followSubmit,
+  followClick,
+}: MainResultsProps) {
   const highlighted = useHighlighted(result.summary, result.keywords);
 
   return (

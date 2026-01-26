@@ -1,11 +1,20 @@
-'use client';
+"use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
+
 import ChladniPage from "./ChladniPage";
 import Tesseract4DPage from "./Tesseract4DPage";
 
-const Page: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"chladni" | "tesseract">("chladni");
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+type TabKey = "chladni" | "tesseract";
+
+/* ------------------------------------------------------------------ */
+/*  VibroacousticsPage Component                                       */
+/* ------------------------------------------------------------------ */
+export default function VibroacousticsPage() {
+  const [activeTab, setActiveTab] = useState<TabKey>("chladni");
 
   return (
     <div className="min-h-screen  text-white">
@@ -37,6 +46,4 @@ const Page: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default Page;
+}

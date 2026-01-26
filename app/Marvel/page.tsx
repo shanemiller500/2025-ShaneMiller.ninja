@@ -1,8 +1,12 @@
 "use client";
 
-import React, { useState, Suspense, lazy, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+
 import { trackEvent } from "@/utils/mixpanel";
 
+/* ------------------------------------------------------------------ */
+/*  Lazy-loaded Tab Components                                         */
+/* ------------------------------------------------------------------ */
 const MarvelCharactersPage = lazy(() => import("./MarvelCharactersPage"));
 const MarvelComicsPage = lazy(() => import("./MarvelComicsPage"));
 const MarvelEventsPage = lazy(() => import("./MarvelEventsPage"));
@@ -10,6 +14,9 @@ const MarvelSeriesPage = lazy(() => import("./MarvelSeriesPage"));
 const MarvelCreatorsPage = lazy(() => import("./MarvelCreatorsPage"));
 const MarvelStoriesPage = lazy(() => import("./MarvelStoriesPage"));
 
+/* ------------------------------------------------------------------ */
+/*  Spinner Component                                                  */
+/* ------------------------------------------------------------------ */
 const Spinner = () => (
   <div className="flex justify-center items-center my-8">
     <svg
@@ -32,9 +39,11 @@ const Spinner = () => (
   </div>
 );
 
-const App: React.FC = () => {
+/* ------------------------------------------------------------------ */
+/*  MarvelDashboard Component                                          */
+/* ------------------------------------------------------------------ */
+const MarvelDashboard = () => {
   useEffect(() => {
-    // Fire a page view event for Mixpanel on mount.
     trackEvent("Marvel API Page Viewed", { page: "Marvel API Page" });
   }, []);
 
@@ -78,4 +87,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+export default MarvelDashboard;

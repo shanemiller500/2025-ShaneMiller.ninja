@@ -1,22 +1,26 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  FaSmile,
-  FaMeh,
-  FaFrown,
-  FaAngry,
-  FaGrinStars,
-  FaTimesCircle,
-  FaCalendarAlt,
-  FaBars,
-  FaTimes,
-} from "react-icons/fa";
-import { trackEvent } from "@/utils/mixpanel";
-import { gaugeGradient } from "@/utils/colors";
+import { useState, useEffect, useCallback } from "react";
 
-/* ---------- mood helper ---------- */
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  FaAngry,
+  FaBars,
+  FaCalendarAlt,
+  FaFrown,
+  FaGrinStars,
+  FaMeh,
+  FaSmile,
+  FaTimes,
+  FaTimesCircle,
+} from "react-icons/fa";
+
+import { gaugeGradient } from "@/utils/colors";
+import { trackEvent } from "@/utils/mixpanel";
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 type MoodInfo = {
   label: string;
   icon: typeof FaSmile;
@@ -92,7 +96,6 @@ const moodMap = (v: number | null): MoodInfo => {
   };
 };
 
-/* ---------- popup data ---------- */
 interface PopupData {
   title: string;
   score: number | null;
@@ -105,16 +108,16 @@ interface PopupData {
   end: string;
 }
 
-/* ---------- Gauge component ---------- */
-const Gauge = ({
-  title,
-  score,
-  open,
-}: {
+/* ------------------------------------------------------------------ */
+/*  Gauge Component                                                    */
+/* ------------------------------------------------------------------ */
+interface GaugeProps {
   title: string;
   score: number | null;
   open: (d: PopupData) => void;
-}) => {
+}
+
+const Gauge = ({ title, score, open }: GaugeProps) => {
   const mood = moodMap(score);
   const pct = score ?? 50;
   const ring = gaugeGradient(pct);
@@ -157,7 +160,9 @@ const Gauge = ({
   );
 };
 
-/* ---------- Main component ---------- */
+/* ------------------------------------------------------------------ */
+/*  FearGreedIndexes Component                                         */
+/* ------------------------------------------------------------------ */
 export default function FearGreedIndexes() {
   const [today, setToday] = useState<number | null>(null);
   const [week, setWeek] = useState<number | null>(null);

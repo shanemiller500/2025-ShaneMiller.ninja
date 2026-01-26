@@ -1,42 +1,73 @@
-'use client'
+"use client";
 
-import React, { useRef, useEffect, useState, useMemo } from 'react'
-import { Chart } from 'chart.js/auto'
-import 'chartjs-adapter-date-fns'
-import { motion } from 'framer-motion'
-import { format } from 'date-fns'
-import { chartColorsRgba, gridColors } from '@/utils/colors'
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Chart } from "chart.js/auto";
+import "chartjs-adapter-date-fns";
+import { format } from "date-fns";
+import { motion } from "framer-motion";
+
+import { chartColorsRgba, gridColors } from "@/utils/colors";
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 interface HourlyData {
-  time: string[]
-  temperature_2m: number[]
-  snowfall: number[]
-  rain: number[]
-  showers: number[]
+  time: string[];
+  temperature_2m: number[];
+  snowfall: number[];
+  rain: number[];
+  showers: number[];
 }
 
 interface HourlyWeatherChartProps {
-  hourly: HourlyData
-  tempUnit: 'C' | 'F'
+  hourly: HourlyData;
+  tempUnit: "C" | "F";
 }
 
-const formatDate = (date: Date): string => format(date, 'yyyy-MM-dd')
-const toF = (c: number) => (c * 9) / 5 + 32
+type TempUnit = "C" | "F";
 
-const convertTemp = (value: number, tempUnit: 'C' | 'F'): number => (tempUnit === 'F' ? toF(value) : value)
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const CM_TO_INCHES = 2.54;
+const MM_TO_INCHES = 25.4;
 
-// “display” normalization (kept your approach)
-const convertSnowfallDisplay = (value: number, tempUnit: 'C' | 'F'): number =>
-  tempUnit === 'F' ? 2 + (value / 2.54) * 10 : 2 + value * 10
-const convertRainDisplay = (value: number, tempUnit: 'C' | 'F'): number =>
-  tempUnit === 'F' ? 7 + (value / 25.4) * 3 : 7 + value * 3
-const convertShowersDisplay = (value: number, tempUnit: 'C' | 'F'): number =>
-  tempUnit === 'F' ? 8 + (value / 25.4) * 3 : 8 + value * 3
+/* ------------------------------------------------------------------ */
+/*  Helper Functions                                                   */
+/* ------------------------------------------------------------------ */
+function toF(c: number): number {
+  return (c * 9) / 5 + 32;
+}
 
-const convertSnowfallAggregate = (value: number, tempUnit: 'C' | 'F'): number => (tempUnit === 'F' ? value / 2.54 : value)
-const convertPrecipAggregate = (value: number, tempUnit: 'C' | 'F'): number => (tempUnit === 'F' ? value / 25.4 : value)
+function convertTemp(value: number, tempUnit: TempUnit): number {
+  return tempUnit === "F" ? toF(value) : value;
+}
 
-const HourlyWeatherChart: React.FC<HourlyWeatherChartProps> = ({ hourly, tempUnit }) => {
+function convertSnowfallDisplay(value: number, tempUnit: TempUnit): number {
+  return tempUnit === "F" ? 2 + (value / CM_TO_INCHES) * 10 : 2 + value * 10;
+}
+
+function convertRainDisplay(value: number, tempUnit: TempUnit): number {
+  return tempUnit === "F" ? 7 + (value / MM_TO_INCHES) * 3 : 7 + value * 3;
+}
+
+function convertShowersDisplay(value: number, tempUnit: TempUnit): number {
+  return tempUnit === "F" ? 8 + (value / MM_TO_INCHES) * 3 : 8 + value * 3;
+}
+
+function convertSnowfallAggregate(value: number, tempUnit: TempUnit): number {
+  return tempUnit === "F" ? value / CM_TO_INCHES : value;
+}
+
+function convertPrecipAggregate(value: number, tempUnit: TempUnit): number {
+  return tempUnit === "F" ? value / MM_TO_INCHES : value;
+}
+
+/* ------------------------------------------------------------------ */
+/*  HourlyWeatherChart Component                                       */
+/* ------------------------------------------------------------------ */
+export default function HourlyWeatherChart({ hourly, tempUnit }: HourlyWeatherChartProps) {
   const chartRef = useRef<HTMLCanvasElement>(null)
   const chartInstanceRef = useRef<Chart | null>(null)
 
@@ -422,5 +453,3 @@ const uniqueDays = useMemo(() => {
     </motion.div>
   )
 }
-
-export default HourlyWeatherChart

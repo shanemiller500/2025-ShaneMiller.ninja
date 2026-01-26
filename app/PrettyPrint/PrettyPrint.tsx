@@ -1,34 +1,44 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import type { ChangeEvent } from 'react';
+import { useState, type ChangeEvent } from "react";
 
 /* ------------------------------------------------------------------ */
-/*  Optional JSON5 fallback                                           */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+type FormatStatus = "ok" | "api" | "fixed" | "loose" | "ok-xml" | "loose-xml";
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const COPY_RESET_DELAY_MS = 10_000;
+const XML_INDENT = "  ";
+const JSON_INDENT = "  ";
+const API_ENDPOINT = "https://u-mail.co/api/jsonFormatter";
+
+/* ------------------------------------------------------------------ */
+/*  Optional JSON5 Fallback                                            */
 /* ------------------------------------------------------------------ */
 let JSON5: any;
 try {
   // @ts-ignore – optional dependency, only used locally
-  JSON5 = await import('json5');
+  JSON5 = await import("json5");
 } catch {
   JSON5 = null;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Component                                                         */
+/*  PrettyPrint Component                                              */
 /* ------------------------------------------------------------------ */
 export default function PrettyPrint() {
-  /* ------------------------------ state ----------------------------- */
-  const [input,      setInput]      = useState('');   // raw user input
-  const [pretty,     setPretty]     = useState('');   // HTML‑highlighted output
-  const [rawPretty,  setRawPretty]  = useState('');   // plain (no HTML) output
-  const [status,     setStatus]     = useState<'ok'|'api'|'fixed'|'loose'|'ok-xml'|'loose-xml'>('ok');
-  const [fixLog,     setFixLog]     = useState<string[]>([]);
-  const [copyLabel,  setCopyLabel]  = useState('Copy');
-  const [loading,    setLoading]    = useState(false);
+  const [input, setInput] = useState("");
+  const [pretty, setPretty] = useState("");
+  const [rawPretty, setRawPretty] = useState("");
+  const [status, setStatus] = useState<FormatStatus>("ok");
+  const [fixLog, setFixLog] = useState<string[]>([]);
+  const [copyLabel, setCopyLabel] = useState("Copy");
+  const [loading, setLoading] = useState(false);
 
-  /* -------------------------- example data -------------------------- */
-  const validExamples: Record<string,string> = {
+  const validExamples: Record<string, string> = {
     /* JSON */
     'Simple object'   : '{"foo": 1, "bar": 2}',
     'Nested structure': '{"users":[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]}',
@@ -37,7 +47,7 @@ export default function PrettyPrint() {
     'Bookstore XML'   : `<books><book id=\"1\"><title>1984</title><author>George Orwell</author></book><book id=\"2\"><title>Brave New World</title><author>Aldous Huxley</author></book></books>`
   };
 
-  const invalidExamples: Record<string,string> = {
+  const invalidExamples: Record<string, string> = {
     /* JSON */
     'Unquoted keys'   : '{foo: 1, bar: 2}',
     'Trailing comma'  : '{"foo": 1,}',
@@ -47,40 +57,38 @@ export default function PrettyPrint() {
     'Broken XML'      : `<users><user><name>Alice</name><user><name>Bob</name></users>`
   };
 
-  /* ----------------------- helpers & formatters -------------------- */
-  const escapeHtml = (str: string) => str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const escapeHtml = (str: string): string =>
+    str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  /* JSON syntax highlight */
-  const syntaxHighlightJSON = (json: string) =>
-    json.replace(/("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, m => {
-      let cls = 'text-emerald-400';
-      if (/^"/.test(m))             cls = /:$/.test(m) ? 'text-sky-400' : 'text-pink-400';
-      else if (/true|false/.test(m)) cls = 'text-yellow-300';
-      else if (/null/.test(m))       cls = 'text-gray-400';
-      return `<span class="${cls}">${m}</span>`;
-    });
+  const syntaxHighlightJSON = (json: string): string =>
+    json.replace(
+      /("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+      (m) => {
+        let cls = "text-emerald-400";
+        if (/^"/.test(m)) cls = /:$/.test(m) ? "text-sky-400" : "text-pink-400";
+        else if (/true|false/.test(m)) cls = "text-yellow-300";
+        else if (/null/.test(m)) cls = "text-gray-400";
+        return `<span class="${cls}">${m}</span>`;
+      }
+    );
 
-  /* XML syntax highlight (very light) */
-  const syntaxHighlightXML = (xml: string) =>
+  const syntaxHighlightXML = (xml: string): string =>
     xml
-      /* comments */
       .replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="text-neutral-500">$1</span>')
-      /* prolog */
       .replace(/(&lt;\?[^&]*?\?&gt;)/g, '<span class="text-amber-400">$1</span>')
-      /* tags */
       .replace(/(&lt;\/?)([\w:-]+)(\s?)/g, '$1<span class="text-sky-400">$2</span>$3')
-      /* attributes */
-      .replace(/([\w:-]+)=(&quot;[^&]*?&quot;)/g, '<span class="text-emerald-400">$1</span>=<span class="text-pink-400">$2</span>');
+      .replace(
+        /([\w:-]+)=(&quot;[^&]*?&quot;)/g,
+        '<span class="text-emerald-400">$1</span>=<span class="text-pink-400">$2</span>'
+      );
 
-  const syntaxHighlight = (src: string, isXml = false) =>
+  const syntaxHighlight = (src: string, isXml = false): string =>
     isXml ? syntaxHighlightXML(escapeHtml(src)) : syntaxHighlightJSON(src);
 
-  /* quick heuristic for XML */
-  const looksLikeXML = (str: string) => /^\s*<(!|\?|[a-zA-Z])/i.test(str);
+  const looksLikeXML = (str: string): boolean => /^\s*<(!|\?|[a-zA-Z])/i.test(str);
 
-  /* naïve XML formatter (indent with 2 spaces) */
-  const formatXML = (src: string) => {
-    const PADDING = '  ';
+  const formatXML = (src: string): string => {
+    const PADDING = XML_INDENT;
     const reg = /(>)(<)(\/*)/g;
     let xml = src.replace(/\r?\n/g,'').replace(reg,'$1\n$2$3');
     let pad = 0;
@@ -89,26 +97,22 @@ export default function PrettyPrint() {
       const line = PADDING.repeat(Math.max(pad,0)) + node;
       if (node.match(/^<[^!?][^>]*[^\/]>$/)) pad += 1;
       return line;
-    }).join('\n');
+    }).join("\n");
   };
 
-  /* ------------------------- clipboard helper ---------------------- */
-  const handleCopy = () => {
+  const handleCopy = (): void => {
     navigator.clipboard.writeText(rawPretty).then(() => {
-      setCopyLabel('Copied!');
-      setTimeout(() => setCopyLabel('Copy'), 10_000);
+      setCopyLabel("Copied!");
+      setTimeout(() => setCopyLabel("Copy"), COPY_RESET_DELAY_MS);
     });
   };
 
-  /* --------------------------- formatter --------------------------- */
-  const handleFormat = async () => {
+  const handleFormat = async (): Promise<void> => {
     setFixLog([]);
     setLoading(true);
     try {
-      /* -------------------------- XML path ------------------------- */
       if (looksLikeXML(input)) {
         try {
-          /* try strict parsing via DOMParser to validate */
           const parser = new DOMParser();
           const dom    = parser.parseFromString(input, 'text/xml');
           const err    = dom.getElementsByTagName('parsererror')[0];
@@ -117,90 +121,97 @@ export default function PrettyPrint() {
           const formatted = formatXML(input.trim());
           setPretty(syntaxHighlight(formatted, true));
           setRawPretty(formatted);
-          setStatus('ok-xml');
-          return; // ✅ valid XML
+          setStatus("ok-xml");
+          return;
         } catch {
-          /* fallback – best‑effort pretty‑print even if not valid */
           const loose = formatXML(input.trim());
           setPretty(syntaxHighlight(loose, true));
           setRawPretty(loose);
-          setStatus('loose-xml');
+          setStatus("loose-xml");
           return;
         }
       }
 
-      /* -------------------------- JSON path ------------------------ */
-      /* 1 – strict JSON.parse */
       try {
         const f = JSON.stringify(JSON.parse(input), null, 2);
         setPretty(syntaxHighlight(f));
         setRawPretty(f);
-        setStatus('ok');
-        return; // ✅ valid JSON
-      } catch {/* malformed – continue */}
+        setStatus("ok");
+        return;
+      } catch {
+        /* malformed – continue */
+      }
 
-      /* 2 – JSON5 parse */
       if (JSON5) {
         try {
           const f = JSON.stringify(JSON5.parse(input), null, 2);
           setPretty(syntaxHighlight(f));
           setRawPretty(f);
-          setStatus('fixed');
-          setFixLog(['Parsed with JSON5 (single quotes, trailing commas, comments…).']);
-          return; // ✅ fixed locally
-        } catch {/* still malformed */}
+          setStatus("fixed");
+          setFixLog(["Parsed with JSON5 (single quotes, trailing commas, comments…)."]);
+          return;
+        } catch {
+          /* still malformed */
+        }
       }
 
-      /* 3 – external fixer (API) */
       try {
-        const res  = await fetch('https://u-mail.co/api/jsonFormatter', {
-          method : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body   : JSON.stringify({ json: input })
+        const res = await fetch(API_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ json: input })
         });
         const data = await res.json();
         if (res.ok && data.formattedJson) {
           setPretty(syntaxHighlight(data.formattedJson));
           setRawPretty(data.formattedJson);
           setFixLog(data.fixLog ?? []);
-          setStatus('api');
-          return; // ✅ API fixed JSON
+          setStatus("api");
+          return;
         }
-        throw new Error(data.error || 'Bad API response');
-      } catch {/* API failed, fall through */}
+        throw new Error(data.error || "Bad API response");
+      } catch {
+        /* API failed, fall through */
+      }
 
-      /* 4 – loose JSON formatter */
       const loose = looseFormatJSON(input.trim());
       setPretty(syntaxHighlight(loose));
       setRawPretty(loose);
-      setStatus('loose');
+      setStatus("loose");
     } finally {
       setLoading(false);
     }
   };
 
-  /* fallback JSON indenter if everything else fails */
-  const looseFormatJSON = (src: string) => {
-    let out = '', indent = 0, inStr = false;
+  const looseFormatJSON = (src: string): string => {
+    let out = "";
+    let indent = 0;
+    let inStr = false;
+
     for (let i = 0; i < src.length; i++) {
       const ch = src[i];
-      if (ch === '"' && src[i-1] !== '\\') inStr = !inStr;
+      if (ch === '"' && src[i - 1] !== "\\") inStr = !inStr;
       if (!inStr) {
-        if (ch === '{' || ch === '[') { out += ch + '\n' + '  '.repeat(++indent); continue; }
-        if (ch === '}' || ch === ']') { out += '\n' + '  '.repeat(--indent) + ch; continue; }
-        if (ch === ',')               { out += ch + '\n' + '  '.repeat(indent);  continue; }
+        if (ch === "{" || ch === "[") {
+          out += ch + "\n" + JSON_INDENT.repeat(++indent);
+          continue;
+        }
+        if (ch === "}" || ch === "]") {
+          out += "\n" + JSON_INDENT.repeat(--indent) + ch;
+          continue;
+        }
+        if (ch === ",") {
+          out += ch + "\n" + JSON_INDENT.repeat(indent);
+          continue;
+        }
       }
       out += ch;
     }
     return out;
   };
 
-  /* recompute line numbers whenever output changes */
-  const lines = pretty.split('\n');
+  const lines = pretty.split("\n");
 
-  /* ------------------------------------------------------------------ */
-  /*  JSX                                                              */
-  /* ------------------------------------------------------------------ */
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 space-y-8">
       {/* title */}

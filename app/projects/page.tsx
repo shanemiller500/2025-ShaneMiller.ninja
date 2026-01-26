@@ -1,27 +1,28 @@
 "use client";
 
 import { useEffect } from "react";
+import { type StaticImageData } from "next/image";
+
+import { trackEvent } from "@/utils/mixpanel";
 import ProjectCard from "./project-card";
 
 import Icon01 from "@/public/images/hmbco.png";
 import Icon02 from "@/public/images/project-icon-02.svg";
-import Icon12 from "@/public/images/project-icon-03.svg";
 import Icon03 from "@/public/images/the-new-york-stock-exchange-seeklogo.png";
 import Icon04 from "@/public/images/project-icon-04.svg";
-import Icon5 from "@/public/images/project-icon-05.svg";
 import Icon05 from "@/public/images/project-icon-01.svg";
-import Icon06 from "@/public/images/project-icon-06.svg";
+import Icon5 from "@/public/images/project-icon-05.svg";
 import Icon07 from "@/public/images/bitcoin-seeklogo.png";
 import Icon08 from "@/public/images/nasa-seeklogo.png";
 import Icon09 from "@/public/images/aic.png";
-import Icon10 from "@/public/images/spacex-logo.svg";
-import Icon11 from "@/public/images/project-icon-07.svg";
+import Icon12 from "@/public/images/project-icon-03.svg";
 
-import { trackEvent } from "@/utils/mixpanel";
-
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 interface ProjectItem {
   id: number;
-  icon: any;
+  icon: StaticImageData;
   slug: string;
   title: string;
   excerpt: string;
@@ -29,7 +30,10 @@ interface ProjectItem {
   badge?: string;
 }
 
-export default function Projects() {
+/* ------------------------------------------------------------------ */
+/*  ProjectsPage Component                                             */
+/* ------------------------------------------------------------------ */
+export default function ProjectsPage() {
   useEffect(() => {
     trackEvent("Projects Page Viewed", { page: "Projects" });
   }, []);

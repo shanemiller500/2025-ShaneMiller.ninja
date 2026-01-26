@@ -1,31 +1,26 @@
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  FormEvent,
-  useCallback,
-  useMemo,
-} from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef, useCallback, useMemo, type FormEvent } from "react";
+
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  Chart,
-  ChartTypeRegistry,
-  TooltipItem,
-  ChartDataset,
-  TimeScale,
-  LinearScale,
-  PointElement,
-  LineElement,
   BarElement,
-  Filler,
   CategoryScale,
+  Chart,
+  type ChartDataset,
+  type ChartTypeRegistry,
+  Filler,
+  LinearScale,
+  LineElement,
+  PointElement,
+  TimeScale,
+  type TooltipItem,
 } from "chart.js/auto";
 import zoomPlugin from "chartjs-plugin-zoom";
 import "chartjs-adapter-date-fns";
+
 import { trackEvent } from "@/utils/mixpanel";
-import { chartColorsRgba, chartColors, gridColors } from "@/utils/colors";
+import { chartColors, chartColorsRgba, gridColors } from "@/utils/colors";
 
 Chart.register(
   TimeScale,
@@ -328,17 +323,11 @@ const CryptoChartPrices: React.FC = () => {
 
     // axis formatting based on timeframe
     let unit: "minute" | "hour" | "day" = "hour";
-    let maxTicks = isMobile ? 4 : 8;
 
     if (timeFrame === "1h") {
       unit = "minute";
-      maxTicks = isMobile ? 3 : 6;
-    } else if (timeFrame === "7d") {
+    } else if (timeFrame === "7d" || timeFrame === "30d") {
       unit = "day";
-      maxTicks = isMobile ? 4 : 7;
-    } else if (timeFrame === "30d") {
-      unit = "day";
-      maxTicks = isMobile ? 4 : 8;
     }
 
     const pricePts = chartData.map((p) => ({ x: new Date(p.t), y: p.y }));

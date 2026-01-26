@@ -1,13 +1,16 @@
-// app/Weather/weatherMap.tsx
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+
 import { weatherMapColors } from "@/utils/colors";
 
-/* eslint-disable @next/next/no-img-element */
-
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 interface City {
   name: string;
   lat: number;
@@ -39,7 +42,14 @@ interface SidebarData {
   lon: number;
 }
 
-const initialCities: City[] = [
+interface WeatherMapProps {
+  onClose: () => void;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const INITIAL_CITIES: City[] = [
   { name: "New York", lat: 40.7128, lon: -74.006 },
   { name: "Los Angeles", lat: 34.0522, lon: -118.2437 },
   { name: "Chicago", lat: 41.8781, lon: -87.6298 },
@@ -72,7 +82,7 @@ const initialCities: City[] = [
   { name: "Baltimore", lat: 39.2904, lon: -76.6122 },
 ];
 
-const weatherDescriptions: Record<string, string> = {
+const WEATHER_DESCRIPTIONS: Record<string, string> = {
   clear: "Clear Sky",
   partly: "Partly Cloudy",
   overcast: "Overcast",
@@ -83,7 +93,7 @@ const weatherDescriptions: Record<string, string> = {
   thunder: "Thunderstorm",
 };
 
-const cardBgMapping: Record<string, string> = {
+const CARD_BG_MAPPING: Record<string, string> = {
   clear: "from-yellow-200/80 to-orange-200/60",
   partly: "from-sky-200/80 to-indigo-200/50",
   overcast: "from-slate-300/80 to-slate-400/60",
@@ -94,19 +104,19 @@ const cardBgMapping: Record<string, string> = {
   thunder: "from-purple-400/80 to-slate-600/60",
 };
 
-function clamp(n: number, min: number, max: number) {
+const OM_CACHE_TTL_MS = 10 * 60 * 1000;
+const OM_MAX_CONCURRENCY = 2;
+
+/* ------------------------------------------------------------------ */
+/*  Helper Functions                                                   */
+/* ------------------------------------------------------------------ */
+function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
-// ✅ Fix the “previous day” bug for YYYY-MM-DD date strings
-function safeLocalDateFromYMD(ymd: string) {
-  // lock to local midday so UTC conversion won’t shift to the previous day
+function safeLocalDateFromYMD(ymd: string): Date {
   return new Date(`${ymd}T12:00:00`);
 }
-
-// ---- Open-Meteo protection: queue + retry + cache (fixes 429) ----
-const OM_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const OM_MAX_CONCURRENCY = 2;
 
 type OmCacheEntry = { ts: number; data: any };
 
@@ -171,12 +181,10 @@ function createFetchQueue(max: number) {
   };
 }
 
-/** ✅ Props so `<WeatherMap onClose={...} />` works */
-type WeatherMapProps = {
-  onClose: () => void;
-};
-
-const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
+/* ------------------------------------------------------------------ */
+/*  WeatherMap Component                                               */
+/* ------------------------------------------------------------------ */
+export default function WeatherMap({ onClose }: WeatherMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
@@ -246,7 +254,7 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
       <div class="wm-popup">
         <div class="wm-popup-title">${name}</div>
         <div class="wm-popup-row">
-          <span class="wm-pill">${weatherDescriptions[cond] ?? "Weather"}</span>
+          <span class="wm-pill">${WEATHER_DESCRIPTIONS[cond] ?? "Weather"}</span>
           <span class="wm-pill">${t}°${currentUnit}</span>
           <span class="wm-pill">💨 ${weather.windspeed} km/h</span>
         </div>
@@ -542,7 +550,7 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(mapRef.current);
 
-    initialCities.forEach((city) => {
+    INITIAL_CITIES.forEach((city) => {
       loadedCityNamesRef.current.add(city.name.toLowerCase());
       addCityMarker(city.name, city.lat, city.lon);
     });
@@ -769,7 +777,7 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
                   <div className="text-lg font-extrabold text-white">{sidebarData.name}</div>
                   <div className="mt-1 flex flex-wrap gap-2">
                     <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-white">
-                      {weatherDescriptions[mapWeatherCodeToCondition(sidebarData.weather.weathercode)] || "Weather"}
+                      {WEATHER_DESCRIPTIONS[mapWeatherCodeToCondition(sidebarData.weather.weathercode)] || "Weather"}
                     </span>
                     <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-white">
                       {convertTemp(sidebarData.weather.temperature)}°{currentUnit}
@@ -811,7 +819,7 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
                 <div className="wm-scroll flex gap-2 overflow-x-auto pb-2">
                   {sidebarData.daily.time.map((t, i) => {
                     const cond = mapWeatherCodeToCondition(sidebarData.daily.weathercode[i]);
-                    const bg = cardBgMapping[cond] || "from-white/10 to-white/5";
+                    const bg = CARD_BG_MAPPING[cond] || "from-white/10 to-white/5";
                     const min = sidebarData.daily.temperature_2m_min[i];
                     const max = sidebarData.daily.temperature_2m_max[i];
 
@@ -849,7 +857,7 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
                           {convertTemp(min)}° → {convertTemp(max)}°
                         </div>
                         <div className="mt-1 text-[11px] font-semibold text-white/80">
-                          {weatherDescriptions[cond] ?? "Weather"}
+                          {WEATHER_DESCRIPTIONS[cond] ?? "Weather"}
                         </div>
                       </div>
                     );
@@ -868,7 +876,7 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
                     if (diffHours < 0 || diffHours > 24) return null;
 
                     const cond = mapWeatherCodeToCondition(sidebarData.hourly.weathercode[i]);
-                    const bg = cardBgMapping[cond] || "from-white/10 to-white/5";
+                    const bg = CARD_BG_MAPPING[cond] || "from-white/10 to-white/5";
                     const temp = sidebarData.hourly.temperature_2m[i];
                     const hourLabel = hourTime.toLocaleTimeString([], { hour: "numeric" });
 
@@ -897,7 +905,7 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
                         </div>
                         <div className="mt-2 text-xs font-bold">{convertTemp(temp)}°</div>
                         <div className="mt-1 text-[11px] font-semibold text-white/80">
-                          {weatherDescriptions[cond] ?? "Weather"}
+                          {WEATHER_DESCRIPTIONS[cond] ?? "Weather"}
                         </div>
                       </div>
                     );
@@ -917,6 +925,4 @@ const WeatherMap: React.FC<WeatherMapProps> = ({ onClose }) => {
       </div>
     </div>
   );
-};
-
-export default WeatherMap;
+}

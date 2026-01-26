@@ -1,17 +1,19 @@
-// app/Weather/ToggleSwitch.tsx
-
-import React from 'react';
-
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 interface ToggleSwitchProps {
   isOn: boolean;
   onToggle: () => void;
 }
 
-const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ isOn, onToggle }) => {
+/* ------------------------------------------------------------------ */
+/*  ToggleSwitch Component                                             */
+/* ------------------------------------------------------------------ */
+export default function ToggleSwitch({ isOn, onToggle }: ToggleSwitchProps) {
   return (
     <label className="flex items-center cursor-pointer select-none">
       <span className="mr-2 dark:text-white text-brand-900 font-medium">
-        {isOn ? '°F' : '°C'}
+        {isOn ? "°F" : "°C"}
       </span>
       <div className="relative">
         <input
@@ -23,12 +25,10 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ isOn, onToggle }) => {
         <div className="w-10 h-4 bg-indigo-400 rounded-full shadow-inner"></div>
         <div
           className={`dot absolute w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ease-in-out -top-1 -left-1 ${
-            isOn ? 'transform translate-x-full bg-gradient-to-r from-indigo-600 to-purple-600' : ''
+            isOn ? "transform translate-x-full bg-gradient-to-r from-indigo-600 to-purple-600" : ""
           }`}
         ></div>
       </div>
     </label>
   );
-};
-
-export default ToggleSwitch;
+}

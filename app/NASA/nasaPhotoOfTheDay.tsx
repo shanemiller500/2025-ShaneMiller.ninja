@@ -1,11 +1,18 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
 import { trackEvent } from "@/utils/mixpanel";
 
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 const API_KEY = process.env.NEXT_PUBLIC_NASA_API_KEY || "";
 
-type APOD = {
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface APOD {
   date: string;
   title: string;
   explanation: string;

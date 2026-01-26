@@ -1,20 +1,17 @@
 "use client";
 
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useCallback,
-  memo,
-} from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FaTable, FaThLarge, FaFire, FaArrowUp, FaArrowDown } from "react-icons/fa";
-import { trackEvent } from "@/utils/mixpanel";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { AnimatePresence, motion } from "framer-motion";
+import { FaArrowDown, FaArrowUp, FaFire, FaTable, FaThLarge } from "react-icons/fa";
+
 import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
 import { heatmapColors, statusColors } from "@/utils/colors";
+import { trackEvent } from "@/utils/mixpanel";
 
-/* Types ------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 interface TradeInfo {
   price: number;
   direction: "up" | "down" | "neutral";
@@ -32,7 +29,9 @@ interface CoinMeta {
 
 type StreamStatus = "connecting" | "live" | "error";
 
-/* Constants -------------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 const COINGECKO_TOP200 =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
@@ -60,16 +59,16 @@ const formatPct = (v: string | number | null | undefined): string => {
   return Number.isFinite(n) ? `${n.toFixed(2)}%` : "N/A";
 };
 
-/* Memoized Image Component */
-const CoinImage = memo(function CoinImage({
-  src,
-  alt,
-  className,
-}: {
+/* ------------------------------------------------------------------ */
+/*  CoinImage Component                                                */
+/* ------------------------------------------------------------------ */
+interface CoinImageProps {
   src?: string;
   alt?: string;
   className?: string;
-}) {
+}
+
+const CoinImage = memo(function CoinImage({ src, alt, className }: CoinImageProps) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
@@ -95,20 +94,18 @@ const CoinImage = memo(function CoinImage({
   );
 });
 
-/* Grid Card Component */
-const GridCard = memo(function GridCard({
-  id,
-  meta,
-  tradeInfo,
-  logo,
-  onClick,
-}: {
+/* ------------------------------------------------------------------ */
+/*  GridCard Component                                                 */
+/* ------------------------------------------------------------------ */
+interface GridCardProps {
   id: string;
   meta: CoinMeta;
   tradeInfo?: TradeInfo;
   logo?: string;
   onClick: () => void;
-}) {
+}
+
+const GridCard = memo(function GridCard({ id, meta, tradeInfo, logo, onClick }: GridCardProps) {
   const price = tradeInfo?.price;
   const direction = tradeInfo?.direction || "neutral";
   const bump = tradeInfo?.bump || 0;
@@ -234,20 +231,18 @@ const GridCard = memo(function GridCard({
   );
 });
 
-/* Table Row Component - styled to match TopGainersLosers */
-const TableRow = memo(function TableRow({
-  id,
-  meta,
-  tradeInfo,
-  logo,
-  onClick,
-}: {
+/* ------------------------------------------------------------------ */
+/*  TableRow Component                                                 */
+/* ------------------------------------------------------------------ */
+interface TableRowProps {
   id: string;
   meta: CoinMeta;
   tradeInfo?: TradeInfo;
   logo?: string;
   onClick: () => void;
-}) {
+}
+
+const TableRow = memo(function TableRow({ id, meta, tradeInfo, logo, onClick }: TableRowProps) {
   const price = tradeInfo?.price;
   const bump = tradeInfo?.bump || 0;
 
@@ -321,7 +316,9 @@ const TableRow = memo(function TableRow({
   );
 });
 
-/* WebSocket Hook */
+/* ------------------------------------------------------------------ */
+/*  WebSocket Hook                                                     */
+/* ------------------------------------------------------------------ */
 function useWebSocketStream(
   assetIds: string[],
   enabled: boolean,
@@ -457,7 +454,9 @@ function useWebSocketStream(
   return { status, sessionEnded, restart };
 }
 
-/* Main Component --------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/*  LiveStreamHeatmap Component                                        */
+/* ------------------------------------------------------------------ */
 export default function LiveStreamHeatmap() {
   const [tradeInfoMap, setTradeInfoMap] = useState<Record<string, TradeInfo>>(
     {}

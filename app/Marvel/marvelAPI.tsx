@@ -2,15 +2,24 @@
 
 import CryptoJS from "crypto-js";
 
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 const PUBLIC_KEY = process.env.NEXT_PUBLIC_MARVEL_PUBLIC_KEY || "";
 const PRIVATE_KEY = process.env.NEXT_PUBLIC_MARVEL_PRIVATE_KEY || "";
 const BASE_URL = "https://gateway.marvel.com/v1/public";
 
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 const getTimestamp = (): string => Date.now().toString();
 
 const getHash = (ts: string): string =>
   CryptoJS.MD5(ts + PRIVATE_KEY + PUBLIC_KEY).toString();
 
+/* ------------------------------------------------------------------ */
+/*  API Functions                                                      */
+/* ------------------------------------------------------------------ */
 export async function fetchFromMarvel(
   endpoint: string,
   queryParams: Record<string, string> = {}

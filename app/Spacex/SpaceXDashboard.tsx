@@ -1,27 +1,34 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+
+import { trackEvent } from "@/utils/mixpanel";
+import CapsulesTab from "./CapsulesTab";
+import CoresTab from "./CoresTab";
 import LatestLaunchTab from "./LatestLaunchTab";
-import UpcomingLaunchesTab from "./UpcomingLaunchesTab";
+import LaunchpadsTab from "./LaunchpadsTab";
 import PastLaunchesTab from "./PastLaunchesTab";
+import PayloadsTab from "./PayloadsTab";
 import RocketsTab from "./RocketsTab";
 import StarlinkTab from "./StarlinkTab";
-import LaunchpadsTab from "./LaunchpadsTab";
-import CoresTab from "./CoresTab";
-import CapsulesTab from "./CapsulesTab";
-import PayloadsTab from "./PayloadsTab";
-import { trackEvent } from "@/utils/mixpanel";
+import UpcomingLaunchesTab from "./UpcomingLaunchesTab";
 
-const pillBase =
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const PILL_BASE =
   "whitespace-nowrap rounded-full px-3 py-2 text-sm font-extrabold transition " +
   "border border-black/10 bg-white text-gray-800 hover:bg-black/[0.03] " +
   "dark:border-white/10 dark:bg-brand-900 dark:text-white/80 dark:hover:bg-white/[0.06]";
 
-const pillActive =
+const PILL_ACTIVE =
   "bg-gray-900 text-white border-black/20 hover:bg-gray-900 " +
   "dark:bg-white/10 dark:text-white dark:border-white/20 dark:hover:bg-white/10";
 
-const SpaceXDashboard: React.FC = () => {
+/* ------------------------------------------------------------------ */
+/*  SpaceXDashboard Component                                          */
+/* ------------------------------------------------------------------ */
+export default function SpaceXDashboard() {
   const tabs = useMemo(
     () => [
       { name: "Latest Launch", component: <LatestLaunchTab /> },
@@ -39,7 +46,7 @@ const SpaceXDashboard: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState(0);
 
-  const handleTabClick = (index: number) => {
+  const handleTabClick = (index: number): void => {
     const tabName = tabs[index]?.name ?? "Unknown";
     trackEvent("Tab Clicked", { tabName, page: "SpaceX" });
     setActiveTab(index);
@@ -86,7 +93,7 @@ const SpaceXDashboard: React.FC = () => {
             <button
               key={tab.name}
               onClick={() => handleTabClick(index)}
-              className={`${pillBase} ${activeTab === index ? pillActive : ""}`}
+              className={`${PILL_BASE} ${activeTab === index ? PILL_ACTIVE : ""}`}
               aria-selected={activeTab === index}
               role="tab"
             >
@@ -102,6 +109,4 @@ const SpaceXDashboard: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default SpaceXDashboard;
+}

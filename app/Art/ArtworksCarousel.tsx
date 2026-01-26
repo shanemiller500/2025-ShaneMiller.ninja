@@ -1,5 +1,4 @@
 /* eslint-disable @next/next/no-img-element */
-// ArtworksCarousel.tsx
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -11,7 +10,6 @@ import {
   Play,
   Pause,
   Loader2,
-  ImageOff,
   Sparkles,
 } from "lucide-react";
 
@@ -23,166 +21,167 @@ interface Artwork {
   place_of_origin: string | null;
 }
 
-const FIELDS = "id,title,artist_display,image_id,place_of_origin";
-const BASE_W = 1200;
+type ImageLoadState = "loading" | "ready" | "error";
 
-// ✅ Slowed down so images have time to load + the effect “lands”
-const AUTO_MS = 9_000;
+const API_FIELDS = "id,title,artist_display,image_id,place_of_origin";
+const DEFAULT_IMAGE_WIDTH = 1200;
+const AUTOPLAY_INTERVAL_MS = 9000;
 
-// IIIF helper
-const iiif = (id: string | null, w = BASE_W) =>
-  id ? `https://www.artic.edu/iiif/2/${id}/full/${w},/0/default.jpg` : "";
-
-/** pick a best-effort, less-huge URL for mobile */
-function bestSrc(id: string | null) {
-  if (!id) return "";
-  // 1200 is crisp but not insane
-  return iiif(id, 1200);
+function buildIiifUrl(imageId: string | null, width = DEFAULT_IMAGE_WIDTH): string {
+  if (!imageId) return "";
+  return `https://www.artic.edu/iiif/2/${imageId}/full/${width},/0/default.jpg`;
 }
 
-/** tiny image loader state */
-type ImgState = "loading" | "ready" | "error";
-
 export default function ArtworksCarousel() {
-  const [arts, setArts] = useState<Artwork[]>([]);
-  const [idx, setIdx] = useState(0);
-  const [auto, setAuto] = useState(true);
+  const [artworks, setArtworks] = useState<Artwork[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isAutoplayEnabled, setIsAutoplayEnabled] = useState(true);
+  const [imageSrc, setImageSrc] = useState("");
+  const [imageState, setImageState] = useState<ImageLoadState>("loading");
 
-  const [imgSrc, setImgSrc] = useState<string>("");
-  const [imgState, setImgState] = useState<ImgState>("loading");
+  const autoplayTimer = useRef<NodeJS.Timeout | null>(null);
+  const thumbnailsRef = useRef<HTMLDivElement | null>(null);
+  const lastLoadedIndex = useRef(0);
 
-  const timer = useRef<NodeJS.Timeout | null>(null);
-  const thumbs = useRef<HTMLDivElement | null>(null);
-  const lastIdxRef = useRef<number>(0);
+  const currentArtwork = useMemo(() => artworks[currentIndex], [artworks, currentIndex]);
 
-  /* -------- fetch once -------- */
   useEffect(() => {
-    const ctrl = new AbortController();
-    (async () => {
+    const controller = new AbortController();
+
+    async function fetchArtworks() {
       try {
-        const r = await fetch(
-          `https://api.artic.edu/api/v1/artworks?page=1&limit=30&fields=${FIELDS}`,
-          { signal: ctrl.signal }
+        const response = await fetch(
+          `https://api.artic.edu/api/v1/artworks?page=1&limit=30&fields=${API_FIELDS}`,
+          { signal: controller.signal }
         );
-        if (!r.ok) throw new Error(`AIC_${r.status}`);
-        const j = await r.json();
-        const list = (j.data || []) as Artwork[];
-        setArts(list);
-        if (list.length) {
-          setImgState("loading");
-          setImgSrc(bestSrc(list[0].image_id));
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
         }
-      } catch (e: any) {
-        if (e?.name === "AbortError") return;
-        console.error(e);
+
+        const data = await response.json();
+        const artworkList = (data.data || []) as Artwork[];
+        setArtworks(artworkList);
+
+        if (artworkList.length > 0) {
+          setImageState("loading");
+          setImageSrc(buildIiifUrl(artworkList[0].image_id));
+        }
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        console.error(error);
       }
-    })();
-    return () => ctrl.abort();
+    }
+
+    fetchArtworks();
+    return () => controller.abort();
   }, []);
 
-  /* -------- analytics -------- */
-  useEffect(() => trackEvent("Carousel Viewed"), []);
   useEffect(() => {
-    if (!arts.length) return;
-    trackEvent("Artwork Viewed", { id: arts[idx].id, idx });
-  }, [idx, arts]);
+    trackEvent("Carousel Viewed");
+  }, []);
 
-  /* -------- preload next (and only swap when loaded) -------- */
   useEffect(() => {
-    if (!arts.length) return;
+    if (artworks.length === 0) return;
+    trackEvent("Artwork Viewed", { id: artworks[currentIndex].id, idx: currentIndex });
+  }, [currentIndex, artworks]);
 
-    const wanted = bestSrc(arts[idx].image_id);
-    if (!wanted) {
-      setImgState("error");
-      setImgSrc("");
+  useEffect(() => {
+    if (artworks.length === 0) return;
+
+    const targetSrc = buildIiifUrl(artworks[currentIndex].image_id);
+
+    if (!targetSrc) {
+      setImageState("error");
+      setImageSrc("");
       return;
     }
 
-    // only do work if we're actually changing
-    if (idx === lastIdxRef.current && wanted === imgSrc) return;
+    if (currentIndex === lastLoadedIndex.current && targetSrc === imageSrc) {
+      return;
+    }
 
-    setImgState("loading");
+    setImageState("loading");
 
-    const img = new Image();
-    img.decoding = "async";
-    img.referrerPolicy = "no-referrer";
-    img.src = wanted;
+    const preloadImage = new Image();
+    preloadImage.decoding = "async";
+    preloadImage.referrerPolicy = "no-referrer";
+    preloadImage.src = targetSrc;
 
-    img.onload = () => {
-      lastIdxRef.current = idx;
-      setImgSrc(wanted);
-      setImgState("ready");
+    preloadImage.onload = () => {
+      lastLoadedIndex.current = currentIndex;
+      setImageSrc(targetSrc);
+      setImageState("ready");
     };
-    img.onerror = () => {
-      lastIdxRef.current = idx;
-      setImgState("error");
-      setImgSrc(wanted); // keep src so user can try open in new tab if desired
-    };
-  }, [idx, arts]); // intentionally NOT depending on imgSrc to prevent loops
 
-  /* -------- autoplay -------- */
-  const stop = useCallback(() => {
-    if (timer.current) {
-      clearInterval(timer.current);
-      timer.current = null;
+    preloadImage.onerror = () => {
+      lastLoadedIndex.current = currentIndex;
+      setImageState("error");
+      setImageSrc(targetSrc);
+    };
+  }, [currentIndex, artworks]);
+
+  const stopAutoplay = useCallback(() => {
+    if (autoplayTimer.current) {
+      clearInterval(autoplayTimer.current);
+      autoplayTimer.current = null;
     }
   }, []);
 
-  const start = useCallback(() => {
-    if (timer.current || !arts.length) return;
-    timer.current = setInterval(() => {
-      // don’t advance while the next slide is still loading (makes it feel “smooth”)
-      setIdx((i) => (i + 1) % arts.length);
-    }, AUTO_MS);
-  }, [arts.length]);
+  const startAutoplay = useCallback(() => {
+    if (autoplayTimer.current || artworks.length === 0) return;
+
+    autoplayTimer.current = setInterval(() => {
+      setCurrentIndex((index) => (index + 1) % artworks.length);
+    }, AUTOPLAY_INTERVAL_MS);
+  }, [artworks.length]);
 
   useEffect(() => {
-    auto ? start() : stop();
-    return stop;
-  }, [auto, start, stop]);
+    if (isAutoplayEnabled) {
+      startAutoplay();
+    } else {
+      stopAutoplay();
+    }
+    return stopAutoplay;
+  }, [isAutoplayEnabled, startAutoplay, stopAutoplay]);
 
-  /* -------- nav helpers -------- */
-  const next = useCallback(() => {
-    if (!arts.length) return;
-    setIdx((i) => (i + 1) % arts.length);
-  }, [arts.length]);
+  const goToNext = useCallback(() => {
+    if (artworks.length === 0) return;
+    setCurrentIndex((index) => (index + 1) % artworks.length);
+  }, [artworks.length]);
 
-  const prev = useCallback(() => {
-    if (!arts.length) return;
-    setIdx((i) => (i ? i - 1 : arts.length - 1));
-  }, [arts.length]);
+  const goToPrevious = useCallback(() => {
+    if (artworks.length === 0) return;
+    setCurrentIndex((index) => (index > 0 ? index - 1 : artworks.length - 1));
+  }, [artworks.length]);
 
-  /* keyboard */
   useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight") next();
-      if (e.key === "ArrowLeft") prev();
-    };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [next, prev]);
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "ArrowRight") goToNext();
+      if (event.key === "ArrowLeft") goToPrevious();
+    }
 
-  /* thumb autoscroll */
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [goToNext, goToPrevious]);
+
   useEffect(() => {
-    const row = thumbs.current;
-    const thumb = row?.children[idx] as HTMLElement | undefined;
-    if (!row || !thumb) return;
+    const container = thumbnailsRef.current;
+    const thumbnail = container?.children[currentIndex] as HTMLElement | undefined;
 
-    const offset = thumb.offsetLeft - (row.clientWidth / 2 - thumb.clientWidth / 2);
-    row.scrollTo({ left: offset, behavior: "smooth" });
-  }, [idx]);
+    if (!container || !thumbnail) return;
 
-  /* swipe */
-  const swipe = useSwipeable({
-    onSwipedLeft: next,
-    onSwipedRight: prev,
+    const scrollOffset = thumbnail.offsetLeft - (container.clientWidth / 2 - thumbnail.clientWidth / 2);
+    container.scrollTo({ left: scrollOffset, behavior: "smooth" });
+  }, [currentIndex]);
+
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: goToNext,
+    onSwipedRight: goToPrevious,
     trackTouch: true,
   });
 
-  const art = useMemo(() => arts[idx], [arts, idx]);
-
-  /* -------- loader / empty -------- */
-  if (!arts.length)
+  if (artworks.length === 0) {
     return (
       <div className="h-[60vh] flex items-center justify-center">
         <div className="flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-extrabold text-neutral-700 shadow-sm dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-200">
@@ -191,148 +190,210 @@ export default function ArtworksCarousel() {
         </div>
       </div>
     );
+  }
 
-  /* -------- UI -------- */
   return (
     <section
       className="w-full max-w-6xl mx-auto select-none"
-      onMouseEnter={stop}
-      onMouseLeave={() => auto && start()}
-      {...swipe}
+      onMouseEnter={stopAutoplay}
+      onMouseLeave={() => isAutoplayEnabled && startAutoplay()}
+      {...swipeHandlers}
     >
-      {/* main frame */}
       <div className="relative mx-auto h-[62vh] sm:h-[70vh] w-full rounded-3xl overflow-hidden bg-stone-100 dark:bg-neutral-800 border border-black/10 dark:border-white/10 shadow-sm">
-        {/* subtle glow */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl" />
-          <div className="absolute -bottom-28 -left-24 h-80 w-80 rounded-full bg-fuchsia-500/10 blur-3xl" />
-        </div>
+        <BackgroundGlow />
 
-        {/* image */}
-        {imgSrc ? (
+        {imageSrc && (
           <img
-            src={imgSrc}
-            alt={art?.title || "Artwork"}
-            className={[
-              "absolute inset-0 h-full w-full object-contain",
-              "transition-opacity duration-500",
-              imgState === "ready" ? "opacity-100" : "opacity-60",
-            ].join(" ")}
+            src={imageSrc}
+            alt={currentArtwork?.title || "Artwork"}
+            className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-500 ${
+              imageState === "ready" ? "opacity-100" : "opacity-60"
+            }`}
             referrerPolicy="no-referrer"
             decoding="async"
             loading="eager"
           />
-        ) : null}
+        )}
 
-        {/* caption */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[92%] sm:w-3/4 lg:w-1/2">
-          <div className="rounded-3xl bg-white/80 dark:bg-neutral-900/60 backdrop-blur border border-black/10 dark:border-white/10 p-4 sm:p-5 shadow-lg">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="truncate text-base sm:text-lg font-extrabold text-neutral-900 dark:text-neutral-100">
-                  {art?.title}
-                </h2>
-                <p className="mt-1 line-clamp-2 text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-                  {art?.artist_display || "Unknown artist"}
-                </p>
-                {art?.place_of_origin ? (
-                  <p className="mt-1 text-xs font-bold text-neutral-600 dark:text-neutral-400">
-                    {art.place_of_origin}
-                  </p>
-                ) : null}
-              </div>
+        <ArtworkCaption
+          artwork={currentArtwork}
+          currentIndex={currentIndex}
+          totalCount={artworks.length}
+        />
 
-              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-black/[0.04] dark:bg-white/[0.08] border border-black/10 dark:border-white/10 px-3 py-1 text-xs font-extrabold text-neutral-800 dark:text-neutral-200">
-                <Sparkles className="h-4 w-4" />
-                {idx + 1}/{arts.length}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* arrows */}
-        <button
+        <NavigationButton
+          direction="prev"
           onClick={() => {
-            stop();
-            prev();
+            stopAutoplay();
+            goToPrevious();
           }}
-          aria-label="Prev"
-          className="absolute top-1/2 left-3 -translate-y-1/2 bg-white/85 dark:bg-neutral-900/60 hover:bg-white dark:hover:bg-neutral-900 backdrop-blur p-2.5 rounded-full shadow border border-black/10 dark:border-white/10"
-        >
-          <ChevronLeft className="h-5 w-5 text-neutral-800 dark:text-neutral-100" />
-        </button>
-        <button
-          onClick={() => {
-            stop();
-            next();
-          }}
-          aria-label="Next"
-          className="absolute top-1/2 right-3 -translate-y-1/2 bg-white/85 dark:bg-neutral-900/60 hover:bg-white dark:hover:bg-neutral-900 backdrop-blur p-2.5 rounded-full shadow border border-black/10 dark:border-white/10"
-        >
-          <ChevronRight className="h-5 w-5 text-neutral-800 dark:text-neutral-100" />
-        </button>
+        />
 
-        {/* play / pause */}
-        <button
+        <NavigationButton
+          direction="next"
           onClick={() => {
-            setAuto((a) => !a);
-            stop();
+            stopAutoplay();
+            goToNext();
           }}
-          aria-label="Toggle autoplay"
-          className="absolute top-3 right-3 bg-white/85 dark:bg-neutral-900/60 hover:bg-white dark:hover:bg-neutral-900 backdrop-blur p-2.5 rounded-full shadow border border-black/10 dark:border-white/10"
-        >
-          {auto ? (
-            <Pause className="h-5 w-5 text-neutral-800 dark:text-neutral-100" />
-          ) : (
-            <Play className="h-5 w-5 text-neutral-800 dark:text-neutral-100" />
-          )}
-        </button>
+        />
+
+        <AutoplayToggle
+          isPlaying={isAutoplayEnabled}
+          onToggle={() => {
+            setIsAutoplayEnabled((enabled) => !enabled);
+            stopAutoplay();
+          }}
+        />
       </div>
 
-      {/* thumbnails */}
-      <div
-        ref={thumbs}
-        className="mt-5 sm:mt-6 flex gap-3 overflow-x-auto pb-2"
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        {arts.map((a, i) => {
-          const active = i === idx;
-          const thumbSrc = iiif(a.image_id, 260) || "/placeholder.svg";
-          return (
-            <button
-              key={a.id}
-              onClick={() => {
-                stop();
-                setIdx(i);
-              }}
-              className={[
-                "flex-shrink-0 rounded-2xl overflow-hidden border",
-                active
-                  ? "border-neutral-900 dark:border-yellow-400 shadow"
-                  : "border-transparent opacity-60 hover:opacity-100",
-              ].join(" ")}
-              aria-label={`Jump to ${a.title}`}
-            >
-              <img
-                src={thumbSrc}
-                alt={a.title}
-                className="h-20 w-28 sm:w-32 object-cover"
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  // hide broken thumbs without breaking layout
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            </button>
-          );
-        })}
-      </div>
+      <ThumbnailStrip
+        artworks={artworks}
+        currentIndex={currentIndex}
+        onSelect={(index) => {
+          stopAutoplay();
+          setCurrentIndex(index);
+        }}
+        containerRef={thumbnailsRef}
+      />
 
       <div className="mt-3 text-xs font-bold text-neutral-500 dark:text-neutral-400">
         Tip: swipe on mobile • arrows on desktop • autoplay pauses on hover
       </div>
     </section>
+  );
+}
+
+function BackgroundGlow() {
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl" />
+      <div className="absolute -bottom-28 -left-24 h-80 w-80 rounded-full bg-fuchsia-500/10 blur-3xl" />
+    </div>
+  );
+}
+
+interface ArtworkCaptionProps {
+  artwork: Artwork | undefined;
+  currentIndex: number;
+  totalCount: number;
+}
+
+function ArtworkCaption({ artwork, currentIndex, totalCount }: ArtworkCaptionProps) {
+  if (!artwork) return null;
+
+  return (
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[92%] sm:w-3/4 lg:w-1/2">
+      <div className="rounded-3xl bg-white/80 dark:bg-neutral-900/60 backdrop-blur border border-black/10 dark:border-white/10 p-4 sm:p-5 shadow-lg">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-base sm:text-lg font-extrabold text-neutral-900 dark:text-neutral-100">
+              {artwork.title}
+            </h2>
+            <p className="mt-1 line-clamp-2 text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+              {artwork.artist_display || "Unknown artist"}
+            </p>
+            {artwork.place_of_origin && (
+              <p className="mt-1 text-xs font-bold text-neutral-600 dark:text-neutral-400">
+                {artwork.place_of_origin}
+              </p>
+            )}
+          </div>
+
+          <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-black/[0.04] dark:bg-white/[0.08] border border-black/10 dark:border-white/10 px-3 py-1 text-xs font-extrabold text-neutral-800 dark:text-neutral-200">
+            <Sparkles className="h-4 w-4" />
+            {currentIndex + 1}/{totalCount}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface NavigationButtonProps {
+  direction: "prev" | "next";
+  onClick: () => void;
+}
+
+function NavigationButton({ direction, onClick }: NavigationButtonProps) {
+  const isPrev = direction === "prev";
+  const Icon = isPrev ? ChevronLeft : ChevronRight;
+  const positionClass = isPrev ? "left-3" : "right-3";
+
+  return (
+    <button
+      onClick={onClick}
+      aria-label={isPrev ? "Previous" : "Next"}
+      className={`absolute top-1/2 ${positionClass} -translate-y-1/2 bg-white/85 dark:bg-neutral-900/60 hover:bg-white dark:hover:bg-neutral-900 backdrop-blur p-2.5 rounded-full shadow border border-black/10 dark:border-white/10`}
+    >
+      <Icon className="h-5 w-5 text-neutral-800 dark:text-neutral-100" />
+    </button>
+  );
+}
+
+interface AutoplayToggleProps {
+  isPlaying: boolean;
+  onToggle: () => void;
+}
+
+function AutoplayToggle({ isPlaying, onToggle }: AutoplayToggleProps) {
+  return (
+    <button
+      onClick={onToggle}
+      aria-label="Toggle autoplay"
+      className="absolute top-3 right-3 bg-white/85 dark:bg-neutral-900/60 hover:bg-white dark:hover:bg-neutral-900 backdrop-blur p-2.5 rounded-full shadow border border-black/10 dark:border-white/10"
+    >
+      {isPlaying ? (
+        <Pause className="h-5 w-5 text-neutral-800 dark:text-neutral-100" />
+      ) : (
+        <Play className="h-5 w-5 text-neutral-800 dark:text-neutral-100" />
+      )}
+    </button>
+  );
+}
+
+interface ThumbnailStripProps {
+  artworks: Artwork[];
+  currentIndex: number;
+  onSelect: (index: number) => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+function ThumbnailStrip({ artworks, currentIndex, onSelect, containerRef }: ThumbnailStripProps) {
+  return (
+    <div
+      ref={containerRef}
+      className="mt-5 sm:mt-6 flex gap-3 overflow-x-auto pb-2"
+      style={{ WebkitOverflowScrolling: "touch" }}
+    >
+      {artworks.map((artwork, index) => {
+        const isActive = index === currentIndex;
+        const thumbnailSrc = buildIiifUrl(artwork.image_id, 260) || "/placeholder.svg";
+
+        return (
+          <button
+            key={artwork.id}
+            onClick={() => onSelect(index)}
+            className={`flex-shrink-0 rounded-2xl overflow-hidden border ${
+              isActive
+                ? "border-neutral-900 dark:border-yellow-400 shadow"
+                : "border-transparent opacity-60 hover:opacity-100"
+            }`}
+            aria-label={`Jump to ${artwork.title}`}
+          >
+            <img
+              src={thumbnailSrc}
+              alt={artwork.title}
+              className="h-20 w-28 sm:w-32 object-cover"
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+          </button>
+        );
+      })}
+    </div>
   );
 }

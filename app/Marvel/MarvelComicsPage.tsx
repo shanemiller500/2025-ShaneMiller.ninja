@@ -1,46 +1,79 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
+
 import { searchMarvelComics } from "./marvelAPI";
 
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const DEBOUNCE_DELAY_MS = 500;
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface MarvelThumbnail {
+  path: string;
+  extension: string;
+}
+
+interface MarvelDate {
+  type: string;
+  date: string;
+}
+
+interface MarvelPrice {
+  type: string;
+  price: number;
+}
+
+interface MarvelComic {
+  id: number;
+  title: string;
+  description: string;
+  pageCount: number;
+  thumbnail: MarvelThumbnail;
+  dates?: MarvelDate[];
+  prices?: MarvelPrice[];
+}
+
+/* ------------------------------------------------------------------ */
+/*  Spinner Component                                                  */
+/* ------------------------------------------------------------------ */
 const Spinner = () => (
   <div className="flex justify-center items-center my-4">
     <svg
       className="animate-spin h-8 w-8 text-purple-500"
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
-      viewBox="0 0 24 24">
+      viewBox="0 0 24 24"
+    >
       <circle
         className="opacity-25"
         cx="12"
         cy="12"
         r="10"
         stroke="currentColor"
-        strokeWidth="4"></circle>
+        strokeWidth="4"
+      />
       <path
         className="opacity-75"
         fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+      />
     </svg>
   </div>
 );
 
+/* ------------------------------------------------------------------ */
+/*  MarvelComicsPage Component                                         */
+/* ------------------------------------------------------------------ */
 const MarvelComicsPage = () => {
   const [comicQuery, setComicQuery] = useState("");
-  const [comicResults, setComicResults] = useState([]);
+  const [comicResults, setComicResults] = useState<MarvelComic[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (comicQuery) {
-        handleSearch();
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comicQuery]);
-
-  const handleSearch = async (e) => {
+  const handleSearch = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     setLoading(true);
     const data = await searchMarvelComics(comicQuery);
@@ -52,12 +85,23 @@ const MarvelComicsPage = () => {
     setLoading(false);
   };
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (comicQuery) {
+        handleSearch();
+      }
+    }, DEBOUNCE_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comicQuery]);
+
   return (
     <div className="p-4">
       <h2 className="text-3xl font-bold mb-4 text-center">Marvel Comics</h2>
       <form
         onSubmit={handleSearch}
-        className="flex flex-col sm:flex-row items-center justify-center gap-2 mb-4">
+        className="flex flex-col sm:flex-row items-center justify-center gap-2 mb-4"
+      >
         <input
           type="text"
           value={comicQuery}
@@ -67,7 +111,8 @@ const MarvelComicsPage = () => {
         />
         <button
           type="submit"
-          className="px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
+          className="px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition"
+        >
           Search
         </button>
       </form>
@@ -78,7 +123,8 @@ const MarvelComicsPage = () => {
           {comicResults.map((comic) => (
             <div
               key={comic.id}
-              className="border rounded-lg p-4 shadow hover:shadow-lg transition">
+              className="border rounded-lg p-4 shadow hover:shadow-lg transition"
+            >
               {comic.thumbnail && (
                 <img
                   src={`${comic.thumbnail.path}.${comic.thumbnail.extension}`}
@@ -97,8 +143,7 @@ const MarvelComicsPage = () => {
                 <h4 className="font-bold">Dates:</h4>
                 {comic.dates?.slice(0, 2).map((dateObj, idx) => (
                   <p key={idx} className="text-sm">
-                    {dateObj.type}:{" "}
-                    {new Date(dateObj.date).toLocaleDateString()}
+                    {dateObj.type}: {new Date(dateObj.date).toLocaleDateString()}
                   </p>
                 ))}
               </div>

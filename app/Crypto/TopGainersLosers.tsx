@@ -1,23 +1,26 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
 import { motion } from "framer-motion";
 import {
+  FaArrowDown,
+  FaArrowUp,
+  FaSkullCrossbones,
+  FaSyncAlt,
   FaTable,
   FaThLarge,
-  FaArrowUp,
-  FaArrowDown,
-  FaSyncAlt,
-  FaSearch,
   FaTrophy,
-  FaSkullCrossbones,
 } from "react-icons/fa";
-import { trackEvent } from "@/utils/mixpanel";
+
 import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
 import { statusColors } from "@/utils/colors";
+import { trackEvent } from "@/utils/mixpanel";
 
-/* ---------- helpers ---------- */
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 const currencyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -43,14 +46,15 @@ const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 const COINGECKO_TOP200 =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
 
-/* ---------- small UI pieces ---------- */
-function Pill({
-  children,
-  tone = "neutral",
-}: {
+/* ------------------------------------------------------------------ */
+/*  UI Components                                                      */
+/* ------------------------------------------------------------------ */
+interface PillProps {
   children: React.ReactNode;
   tone?: "neutral" | "up" | "down";
-}) {
+}
+
+function Pill({ children, tone = "neutral" }: PillProps) {
   return (
     <span
       className={cn(
@@ -68,17 +72,14 @@ function Pill({
   );
 }
 
-function SegButton({
-  active,
-  label,
-  icon,
-  onClick,
-}: {
+interface SegButtonProps {
   active: boolean;
   label: string;
   icon: React.ReactNode;
   onClick: () => void;
-}) {
+}
+
+function SegButton({ active, label, icon, onClick }: SegButtonProps) {
   return (
     <button
       type="button"

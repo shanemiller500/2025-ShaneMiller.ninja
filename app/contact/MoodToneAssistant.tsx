@@ -1,7 +1,6 @@
-// app/contact/MoodToneAssistant.tsx
 "use client";
 
-import React, { useMemo, useState } from "react";
+import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faPeace,
@@ -13,6 +12,7 @@ import {
   faWandMagicSparkles,
 } from "@fortawesome/free-solid-svg-icons";
 import { trackEvent } from "@/utils/mixpanel";
+import { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 
 interface MoodToneAssistantProps {
   currentText: string;
@@ -21,9 +21,16 @@ interface MoodToneAssistantProps {
   onClose: () => void;
 }
 
-type Option = { label: string; icon?: any };
+interface MoodOption {
+  label: string;
+  icon: IconDefinition;
+}
 
-const moods: Option[] = [
+interface ToneOption {
+  label: string;
+}
+
+const MOODS: MoodOption[] = [
   { label: "Neutral", icon: faPeace },
   { label: "Happy", icon: faSmile },
   { label: "Sad", icon: faFrown },
@@ -32,7 +39,7 @@ const moods: Option[] = [
   { label: "Concerned", icon: faHandshake },
 ];
 
-const tones: Option[] = [
+const TONES: ToneOption[] = [
   { label: "Formal" },
   { label: "Informal" },
   { label: "Friendly" },
@@ -40,6 +47,9 @@ const tones: Option[] = [
   { label: "Humorous" },
   { label: "Respectful" },
 ];
+
+const SELECTION_BUTTON_BASE =
+  "w-full rounded-xl border px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-indigo-500/60";
 
 export default function MoodToneAssistant({
   onEnhance,
@@ -49,25 +59,24 @@ export default function MoodToneAssistant({
   const [selectedMood, setSelectedMood] = useState("Neutral");
   const [selectedTone, setSelectedTone] = useState("Formal");
 
-  const finalMood = useMemo(() => selectedMood, [selectedMood]);
-  const finalTone = useMemo(() => selectedTone, [selectedTone]);
+  function handleEnhanceClick() {
+    trackEvent("MoodTone Enhance Button Clicked", {
+      mood: selectedMood,
+      tone: selectedTone,
+    });
+    onEnhance(selectedMood, selectedTone);
+  }
 
-  const pickBtn =
-    "w-full rounded-xl border px-3 py-2.5 text-sm font-semibold transition " +
-    "focus:outline-none focus:ring-2 focus:ring-indigo-500/60";
+  function handleDefaultEnhanceClick() {
+    trackEvent("Default Enhance Button Clicked");
+    onDefaultEnhance();
+  }
 
-  const isSelected = (active: boolean) =>
-    active
+  function getSelectionStyles(isActive: boolean): string {
+    return isActive
       ? "border-transparent bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white shadow-sm"
       : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:hover:bg-white/10";
-
-  const handleEnhanceClick = () => {
-    trackEvent("MoodTone Enhance Button Clicked", {
-      mood: finalMood,
-      tone: finalTone,
-    });
-    onEnhance(finalMood, finalTone);
-  };
+  }
 
   return (
     <div
@@ -80,35 +89,13 @@ export default function MoodToneAssistant({
       }}
     >
       <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-brand-900">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-white/10">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-              Mood &amp; tone
-            </h2>
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-              Make your message sound exactly right.
-            </p>
-          </div>
-          <button
-            className="rounded-xl px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:text-gray-200 dark:hover:bg-white/10"
-            onClick={onClose}
-            aria-label="Close"
-            type="button"
-          >
-            ✕
-          </button>
-        </div>
+        <ModalHeader onClose={onClose} />
 
         <div className="p-5">
-          {/* Default enhance */}
           <button
             className="w-full rounded-2xl bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white px-4 py-3 text-sm font-semibold shadow-sm hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 transition"
             type="button"
-            onClick={() => {
-              trackEvent("Default Enhance Button Clicked");
-              onDefaultEnhance();
-            }}
+            onClick={handleDefaultEnhanceClick}
           >
             <span className="inline-flex items-center justify-center gap-2">
               <FontAwesomeIcon icon={faWandMagicSparkles} />
@@ -116,65 +103,41 @@ export default function MoodToneAssistant({
             </span>
           </button>
 
-          {/* Divider */}
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
-            <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              Or customize
-            </div>
-            <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
-          </div>
+          <Divider text="Or customize" />
 
-          {/* Mood Section */}
-          <div>
-            <div className="mb-3 flex items-center gap-3">
-              <span className="h-5 w-1.5 rounded-full bg-gradient-to-b from-indigo-600 to-purple-600" />
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-900 dark:text-gray-100">
-                Select a mood
-              </h3>
-            </div>
-
+          <SelectionSection title="Select a mood">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {moods.map((m) => (
+              {MOODS.map((mood) => (
                 <button
-                  key={m.label}
+                  key={mood.label}
                   type="button"
-                  className={pickBtn + " " + isSelected(selectedMood === m.label)}
-                  onClick={() => setSelectedMood(m.label)}
+                  className={`${SELECTION_BUTTON_BASE} ${getSelectionStyles(selectedMood === mood.label)}`}
+                  onClick={() => setSelectedMood(mood.label)}
                 >
                   <span className="inline-flex items-center justify-center gap-2">
-                    {m.icon && <FontAwesomeIcon icon={m.icon} />}
-                    {m.label}
+                    <FontAwesomeIcon icon={mood.icon} />
+                    {mood.label}
                   </span>
                 </button>
               ))}
             </div>
-          </div>
+          </SelectionSection>
 
-          {/* Tone Section */}
-          <div className="mt-8">
-            <div className="mb-3 flex items-center gap-3">
-              <span className="h-5 w-1.5 rounded-full bg-gradient-to-b from-indigo-600 to-purple-600" />
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-900 dark:text-gray-100">
-                Select a tone
-              </h3>
-            </div>
-
+          <SelectionSection title="Select a tone" className="mt-8">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {tones.map((t) => (
+              {TONES.map((tone) => (
                 <button
-                  key={t.label}
+                  key={tone.label}
                   type="button"
-                  className={pickBtn + " " + isSelected(selectedTone === t.label)}
-                  onClick={() => setSelectedTone(t.label)}
+                  className={`${SELECTION_BUTTON_BASE} ${getSelectionStyles(selectedTone === tone.label)}`}
+                  onClick={() => setSelectedTone(tone.label)}
                 >
-                  {t.label}
+                  {tone.label}
                 </button>
               ))}
             </div>
-          </div>
+          </SelectionSection>
 
-          {/* CTA */}
           <button
             type="button"
             className="mt-8 w-full rounded-2xl bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white px-4 py-3 text-sm font-semibold shadow-sm hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 transition"
@@ -184,6 +147,61 @@ export default function MoodToneAssistant({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ModalHeader({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-white/10">
+      <div>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+          Mood &amp; tone
+        </h2>
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+          Make your message sound exactly right.
+        </p>
+      </div>
+      <button
+        className="rounded-xl px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:text-gray-200 dark:hover:bg-white/10"
+        onClick={onClose}
+        aria-label="Close"
+        type="button"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function Divider({ text }: { text: string }) {
+  return (
+    <div className="my-6 flex items-center gap-3">
+      <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
+      <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        {text}
+      </div>
+      <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />
+    </div>
+  );
+}
+
+interface SelectionSectionProps {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}
+
+function SelectionSection({ title, children, className = "" }: SelectionSectionProps) {
+  return (
+    <div className={className}>
+      <div className="mb-3 flex items-center gap-3">
+        <span className="h-5 w-1.5 rounded-full bg-gradient-to-b from-indigo-600 to-purple-600" />
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-900 dark:text-gray-100">
+          {title}
+        </h3>
+      </div>
+      {children}
     </div>
   );
 }

@@ -1,11 +1,13 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
 import L, { Map as LeafletMap, Marker, Polyline } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import leafletTerminator from "leaflet-terminator";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+
 import { issColors } from "@/utils/colors";
 
 /* ------------------------------------------------------------------ */
@@ -72,7 +74,7 @@ interface CachedStart {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Small helpers                                                     */
+/*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
@@ -84,9 +86,9 @@ const niceNum = (n: number, digits = 2) =>
 const placeholderAvatar =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Crect width='100%25' height='100%25' fill='%23eef2ff'/%3E%3Ctext x='50%25' y='54%25' font-family='Arial' font-size='18' text-anchor='middle' fill='%234c1d95'%3ENo%20Image%3C/text%3E%3C/svg%3E";
 
-/* ================================================================== */
-/*  Component                                                         */
-/* ================================================================== */
+/* ------------------------------------------------------------------ */
+/*  ISSTracker Component                                               */
+/* ------------------------------------------------------------------ */
 const ISSTracker: React.FC = () => {
   const mapRef = useRef<LeafletMap | null>(null);
   const issRef = useRef<Marker | null>(null);
@@ -631,14 +633,15 @@ const ISSTracker: React.FC = () => {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Presenters                                                         */
+/*  UI Components                                                      */
 /* ------------------------------------------------------------------ */
 interface StatProps {
   label: string;
   value: string;
   unit?: string;
 }
-const Stat: React.FC<StatProps> = ({ label, value, unit }) => (
+
+const Stat = ({ label, value, unit }: StatProps) => (
   <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-brand-900/40 px-3 py-3 shadow-sm">
     <div className="text-[10px] uppercase tracking-wide text-brand-900/70 dark:text-white/60 font-extrabold">
       {label}
@@ -650,7 +653,12 @@ const Stat: React.FC<StatProps> = ({ label, value, unit }) => (
   </div>
 );
 
-const MiniPill: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+interface MiniPillProps {
+  label: string;
+  value: string;
+}
+
+const MiniPill = ({ label, value }: MiniPillProps) => (
   <div className="rounded-2xl bg-white/85 dark:bg-brand-900/70 backdrop-blur px-3 py-2 ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
     <div className="text-[10px] font-extrabold uppercase tracking-wide text-brand-900/70 dark:text-white/70">
       {label}
@@ -659,7 +667,12 @@ const MiniPill: React.FC<{ label: string; value: string }> = ({ label, value }) 
   </div>
 );
 
-const InfoPill: React.FC<{ label: string; value: any }> = ({ label, value }) => (
+interface InfoPillProps {
+  label: string;
+  value: string | number | null | undefined;
+}
+
+const InfoPill = ({ label, value }: InfoPillProps) => (
   <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-brand-900/40 px-4 py-3">
     <div className="text-[10px] font-extrabold uppercase tracking-wide text-brand-900/70 dark:text-white/60">
       {label}

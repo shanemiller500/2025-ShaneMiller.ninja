@@ -1,14 +1,20 @@
-// app/Weather/api.ts
+import { Location } from "./types";
 
-import { Location } from './types';
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse";
 
-export const fetchLocationName = async (
+/* ------------------------------------------------------------------ */
+/*  fetchLocationName                                                  */
+/* ------------------------------------------------------------------ */
+export async function fetchLocationName(
   latitude: number,
   longitude: number
-): Promise<Location> => {
+): Promise<Location> {
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
+      `${NOMINATIM_REVERSE_URL}?format=jsonv2&lat=${latitude}&lon=${longitude}`
     );
     const data = await res.json();
     const address = data.address || {};
@@ -35,4 +41,4 @@ export const fetchLocationName = async (
       longitude,
     };
   }
-};
+}

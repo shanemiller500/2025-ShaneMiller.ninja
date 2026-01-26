@@ -1,20 +1,31 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+
 import { Dialog, Transition } from "@headlessui/react";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
 import {
   ChevronDown,
   ChevronUp,
-  Filter as FilterIcon,
-  Sparkles,
   Clock3,
   DollarSign,
+  Filter as FilterIcon,
+  Sparkles,
   Zap,
 } from "lucide-react";
 
-/* ---------- helpers ------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const SCROLL_DELAY_MS = 70;
+const SCROLL_TOP_OFFSET = 120;
+const SCROLL_BOTTOM_OFFSET = 24;
+const DEFAULT_MAX_STOPS = 3;
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 const minsToH = (m: number) => `${Math.floor(m / 60)}h ${m % 60}m`;
 
 const fmtTime = (iso: string) =>
@@ -32,7 +43,9 @@ const fmtDate = (iso: string) =>
     year: "numeric",
   });
 
-/* ---------- API-matching types ------------------------------------ */
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 interface FlightSegment {
   departure_airport: { name: string; id: string; time: string };
   arrival_airport: { name: string; id: string; time: string };
@@ -67,7 +80,9 @@ interface FlightOption {
   ai_rank?: number;
 }
 
-/* ---------- props -------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/*  Props                                                              */
+/* ------------------------------------------------------------------ */
 interface Props {
   open: boolean;
   setOpen: (b: boolean) => void;
@@ -81,7 +96,9 @@ interface Props {
   trip: "round" | "oneway";
 }
 
-/* ---------- links -------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/*  Link Builders                                                      */
+/* ------------------------------------------------------------------ */
 const safeIata = (s: string) =>
   (s || "").trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
 
@@ -154,7 +171,9 @@ function buildMomondoLink({
     : `${base}/${f}-${t}/${d}?sort=bestflight_a`;
 }
 
-/* ---------- animations -------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/*  Animation Variants                                                 */
+/* ------------------------------------------------------------------ */
 const listVariants: Variants = {
   hidden: { opacity: 0 },
   show: {
@@ -178,6 +197,9 @@ const shimmer: Variants = {
   show: { opacity: 1, transition: { duration: 0.8, repeat: Infinity, repeatType: "mirror" } },
 };
 
+/* ------------------------------------------------------------------ */
+/*  SkeletonCard Component                                             */
+/* ------------------------------------------------------------------ */
 function SkeletonCard() {
   return (
     <motion.div
@@ -201,7 +223,9 @@ function SkeletonCard() {
   );
 }
 
-/* ================================================================== */
+/* ------------------------------------------------------------------ */
+/*  ResultsModal Component                                             */
+/* ------------------------------------------------------------------ */
 export default function ResultsModal({
   open,
   setOpen,
@@ -216,7 +240,7 @@ export default function ResultsModal({
 }: Props) {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [maxStops, setMaxStops] = useState<number>(3); // 3 = Any
+  const [maxStops, setMaxStops] = useState<number>(DEFAULT_MAX_STOPS);
   const [selectedAirline, setSelectedAirline] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"price" | "duration" | "ai">("price");
 
@@ -250,7 +274,7 @@ export default function ResultsModal({
       const layCnt =
         f.layovers?.length ??
         (f.flights ? f.flights.length - 1 : (f.legs?.length ?? 1) - 1);
-      if (maxStops < 3 && layCnt > maxStops) return false;
+      if (maxStops < DEFAULT_MAX_STOPS && layCnt > maxStops) return false;
 
       if (
         selectedAirline !== "all" &&
@@ -299,10 +323,10 @@ export default function ResultsModal({
 
       const r = el.getBoundingClientRect();
       const s = scroller.getBoundingClientRect();
-      if (r.top < s.top + 120 || r.bottom > s.bottom - 24) {
+      if (r.top < s.top + SCROLL_TOP_OFFSET || r.bottom > s.bottom - SCROLL_BOTTOM_OFFSET) {
         el.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-    }, 70);
+    }, SCROLL_DELAY_MS);
   };
 
   const quickChip = (active: boolean) =>
@@ -463,7 +487,7 @@ export default function ResultsModal({
                               <option value={0}>Non-stop</option>
                               <option value={1}>1 stop</option>
                               <option value={2}>2 stops</option>
-                              <option value={3}>Any</option>
+                              <option value={DEFAULT_MAX_STOPS}>Any</option>
                             </select>
                           </div>
 

@@ -1,8 +1,34 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
+
 import { searchMarvelEvents } from "./marvelAPI";
 
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const DEBOUNCE_DELAY_MS = 500;
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface MarvelThumbnail {
+  path: string;
+  extension: string;
+}
+
+interface MarvelEvent {
+  id: number;
+  title: string;
+  description: string;
+  start: string;
+  end: string;
+  thumbnail: MarvelThumbnail;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Spinner Component                                                  */
+/* ------------------------------------------------------------------ */
 const Spinner = () => (
   <div className="flex justify-center items-center my-4">
     <svg
@@ -25,22 +51,15 @@ const Spinner = () => (
   </div>
 );
 
-const MarvelEventsPage: React.FC = () => {
+/* ------------------------------------------------------------------ */
+/*  MarvelEventsPage Component                                         */
+/* ------------------------------------------------------------------ */
+const MarvelEventsPage = () => {
   const [eventQuery, setEventQuery] = useState("");
-  const [eventResults, setEventResults] = useState<any[]>([]);
+  const [eventResults, setEventResults] = useState<MarvelEvent[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (eventQuery) {
-        handleSearch();
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventQuery]);
-
-  const handleSearch = async (e?: React.FormEvent) => {
+  const handleSearch = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     setLoading(true);
     const data = await searchMarvelEvents(eventQuery);
@@ -51,6 +70,16 @@ const MarvelEventsPage: React.FC = () => {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (eventQuery) {
+        handleSearch();
+      }
+    }, DEBOUNCE_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventQuery]);
 
   return (
     <div className="p-4">

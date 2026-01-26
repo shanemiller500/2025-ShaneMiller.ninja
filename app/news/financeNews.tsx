@@ -1,6 +1,8 @@
-// Filename: financeNews.ts
 "use client";
 
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 export interface Article {
   title: string;
   description: string;
@@ -10,18 +12,17 @@ export interface Article {
   source: {
     id: string | null;
     name: string;
-    image?: string | null; // we will store FIRST candidate here (remote only)
-    imageCandidates?: string[]; // optional, if you want to try multiple
+    image?: string | null;
+    imageCandidates?: string[];
   };
   image: string | null;
-  sourceLogo: string | null; // we’ll keep this, but prefer candidates
+  sourceLogo: string | null;
 }
 
-/* ---------------------------------------------
-   Helpers (remote-only, no local wedding.jpg)
----------------------------------------------- */
-
-const safeDomain = (u: string) => {
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+const safeDomain = (u: string): string => {
   try {
     return new URL(u).hostname.replace(/^www\./, "");
   } catch {
@@ -29,7 +30,7 @@ const safeDomain = (u: string) => {
   }
 };
 
-const uniqStrings = (arr: string[]) => {
+const uniqStrings = (arr: string[]): string[] => {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const s of arr) {
@@ -42,11 +43,7 @@ const uniqStrings = (arr: string[]) => {
   return out;
 };
 
-/**
- * Remote-only logo candidates (no local files)
- * Order matters: usually Google favicon is the most reliable.
- */
-const logoCandidatesFor = (domain: string) => {
+const logoCandidatesFor = (domain: string): string[] => {
   if (!domain) return [];
   return uniqStrings([
     `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`,
@@ -55,20 +52,19 @@ const logoCandidatesFor = (domain: string) => {
   ]);
 };
 
-/**
- * If the backend returns *http* image URLs, upgrade to https when possible.
- * Also normalizes protocol-relative URLs ("//...").
- */
-const normalizeUrl = (s: string) => {
+const normalizeUrl = (s: string): string => {
   const t = s.trim();
   if (t.startsWith("//")) return `https:${t}`;
   if (t.startsWith("http://")) return t.replace("http://", "https://");
   return t;
 };
 
-const bad = (s?: string | null) =>
+const bad = (s?: string | null): boolean =>
   !s || ["none", "null", "n/a"].includes(String(s).toLowerCase());
 
+/* ------------------------------------------------------------------ */
+/*  API Function                                                       */
+/* ------------------------------------------------------------------ */
 export async function fetchFinanceNews(): Promise<Article[]> {
   const res = await fetch("https://u-mail.co/api/financeNews", {
     cache: "no-store",

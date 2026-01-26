@@ -1,7 +1,7 @@
-// CountrySearchPage.tsx
 "use client";
 
-import React, { useEffect } from "react";
+import { useEffect } from "react";
+
 import CountrySearch from "./CountrySearch";
 import { trackEvent } from "@/utils/mixpanel";
 

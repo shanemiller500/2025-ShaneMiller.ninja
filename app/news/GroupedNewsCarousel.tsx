@@ -2,47 +2,83 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import { motion } from "framer-motion";
 
-export type NewsArticle = {
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+export interface NewsArticle {
   title: string;
   description?: string;
   url: string;
   publishedAt: string;
   content?: string | null;
-
   urlToImage?: string | null;
   image?: string | null;
   images?: string[];
   thumbnails?: string[];
-
   source?: {
     name: string;
     imageCandidates?: string[];
   };
-};
+}
 
-export type ArticleGroup = {
+export interface ArticleGroup {
   key: string;
   title: string;
   items: NewsArticle[];
   rep: NewsArticle;
-};
+}
 
+interface SmartImageProps {
+  candidates: string[];
+  alt: string;
+  className?: string;
+  wrapperClassName?: string;
+}
+
+interface GroupRowProps {
+  group: ArticleGroup;
+  onOpen: () => void;
+}
+
+interface SlideCardProps {
+  a: NewsArticle;
+}
+
+interface PopupCardProps {
+  a: NewsArticle;
+}
+
+interface NewsGroupedCarouselProps {
+  articles: NewsArticle[];
+}
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 const API_BASE = "https://u-mail.co/api/NewsAPI";
 const IMG_PROXY = `${API_BASE}/img?url=`;
+const MAX_GROUPS_DISPLAYED = 12;
+const MAX_ITEMS_PER_ROW = 10;
+const SCROLL_AMOUNT_PX = 420;
+const TITLE_KEY_MAX_LENGTH = 140;
 
-const bad = (s?: string | null) =>
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+const bad = (s?: string | null): boolean =>
   !s || ["none", "null", "n/a"].includes(String(s).toLowerCase());
 
-const normalize = (s: string) => {
+const normalize = (s: string): string => {
   const t = String(s || "").trim();
   if (!t) return "";
   if (t.startsWith("//")) return `https:${t}`;
   return t;
 };
 
-const uniqStrings = (arr: string[]) => {
+const uniqStrings = (arr: string[]): string[] => {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const s of arr) {
@@ -55,20 +91,19 @@ const uniqStrings = (arr: string[]) => {
   return out;
 };
 
-const normalizeTitleKey = (t: string) =>
+const normalizeTitleKey = (t: string): string =>
   String(t || "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ")
-    .replace(/[“”‘’"']/g, "")
+    .replace(/[""''"']/g, "")
     .replace(/\s*[-–—:|]\s*/g, " - ")
-    .slice(0, 140);
+    .slice(0, TITLE_KEY_MAX_LENGTH);
 
-const firstImg = (html?: string | null) =>
+const firstImg = (html?: string | null): string | null =>
   html?.match(/<img[^>]+src=['"]([^'"]+)['"]/i)?.[1] ?? null;
 
-/** heuristic: higher score = likely better quality */
-function scoreImageUrl(u: string) {
+function scoreImageUrl(u: string): number {
   const url = normalize(u);
   if (!url) return -9999;
 
@@ -107,13 +142,7 @@ function scoreImageUrl(u: string) {
   return score;
 }
 
-/**
- * candidates:
- * - pull all known fields
- * - sort by score (best first)
- * - append proxy versions AFTER originals (fallback)
- */
-function getImageCandidates(a: NewsArticle) {
+function getImageCandidates(a: NewsArticle): string[] {
   const raw = [
     a.urlToImage,
     a.image,
@@ -163,21 +192,15 @@ export function groupByTitle(articles: NewsArticle[]): ArticleGroup[] {
   return groups;
 }
 
-/* -------------------------------------------------- */
-/* SmartImage                                          */
-/* - renders NOTHING if all candidates fail             */
-/* -------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/*  SmartImage Component                                               */
+/* ------------------------------------------------------------------ */
 function SmartImage({
   candidates,
   alt,
   className,
   wrapperClassName,
-}: {
-  candidates: string[];
-  alt: string;
-  className?: string;
-  wrapperClassName?: string;
-}) {
+}: SmartImageProps) {
   const [idx, setIdx] = useState(0);
 
   useEffect(() => setIdx(0), [candidates.join("|")]);
@@ -200,14 +223,12 @@ function SmartImage({
   );
 }
 
-/* -------------------------------------------------- */
-/* UI                                                  */
-/* -------------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/*  NewsGroupedCarousel Component                                      */
+/* ------------------------------------------------------------------ */
 export default function NewsGroupedCarousel({
   articles,
-}: {
-  articles: NewsArticle[];
-}) {
+}: NewsGroupedCarouselProps) {
   const groups = useMemo(() => groupByTitle(articles), [articles]);
 
   // only show groups that have multiple sources OR at least 2 items
@@ -235,7 +256,7 @@ export default function NewsGroupedCarousel({
         </div>
 
         <div className="space-y-4">
-          {multi.slice(0, 12).map((g) => (
+          {multi.slice(0, MAX_GROUPS_DISPLAYED).map((g) => (
             <GroupRow key={g.key} group={g} onOpen={() => setOpen(g)} />
           ))}
         </div>
@@ -282,16 +303,13 @@ export default function NewsGroupedCarousel({
   );
 }
 
-function GroupRow({
-  group,
-  onOpen,
-}: {
-  group: ArticleGroup;
-  onOpen: () => void;
-}) {
+/* ------------------------------------------------------------------ */
+/*  GroupRow Component                                                 */
+/* ------------------------------------------------------------------ */
+function GroupRow({ group, onOpen }: GroupRowProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
 
-  const scrollBy = (dx: number) => {
+  const scrollBy = (dx: number): void => {
     const el = rowRef.current;
     if (!el) return;
     el.scrollBy({ left: dx, behavior: "smooth" });
@@ -310,13 +328,13 @@ function GroupRow({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => scrollBy(-420)}
+            onClick={() => scrollBy(-SCROLL_AMOUNT_PX)}
             className="rounded-xl bg-black/[0.04] px-3 py-1.5 text-xs font-bold text-gray-900 hover:bg-black/[0.07] dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.10]"
           >
             ◀
           </button>
           <button
-            onClick={() => scrollBy(420)}
+            onClick={() => scrollBy(SCROLL_AMOUNT_PX)}
             className="rounded-xl bg-black/[0.04] px-3 py-1.5 text-xs font-bold text-gray-900 hover:bg-black/[0.07] dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.10]"
           >
             ▶
@@ -330,13 +348,12 @@ function GroupRow({
         </div>
       </div>
 
-      {/* horizontal slider */}
       <div
         ref={rowRef}
         className="no-scrollbar flex gap-3 overflow-x-auto overscroll-x-contain pb-1"
         style={{ WebkitOverflowScrolling: "touch" }}
       >
-        {group.items.slice(0, 10).map((a) => (
+        {group.items.slice(0, MAX_ITEMS_PER_ROW).map((a) => (
           <SlideCard key={a.url || `${a.title}-${a.publishedAt}`} a={a} />
         ))}
       </div>
@@ -344,7 +361,10 @@ function GroupRow({
   );
 }
 
-function SlideCard({ a }: { a: NewsArticle }) {
+/* ------------------------------------------------------------------ */
+/*  SlideCard Component                                                */
+/* ------------------------------------------------------------------ */
+function SlideCard({ a }: SlideCardProps) {
   const candidates = getImageCandidates(a);
   const hasImg = candidates.length > 0;
 
@@ -358,7 +378,6 @@ function SlideCard({ a }: { a: NewsArticle }) {
       rel="noopener noreferrer"
       className="group relative w-[260px] flex-shrink-0 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md dark:border-white/10 dark:bg-brand-900"
     >
-      {/* ✅ if no image candidates, do NOT render a placeholder */}
       {hasImg ? (
         <div className="relative h-32">
           <SmartImage
@@ -391,7 +410,10 @@ function SlideCard({ a }: { a: NewsArticle }) {
   );
 }
 
-function PopupCard({ a }: { a: NewsArticle }) {
+/* ------------------------------------------------------------------ */
+/*  PopupCard Component                                                */
+/* ------------------------------------------------------------------ */
+function PopupCard({ a }: PopupCardProps) {
   const candidates = getImageCandidates(a);
   const hasImg = candidates.length > 0;
 
@@ -402,7 +424,6 @@ function PopupCard({ a }: { a: NewsArticle }) {
       rel="noopener noreferrer"
       className="group overflow-auto rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md dark:border-white/10 dark:bg-brand-900"
     >
-      {/* ✅ no image block if none */}
       {hasImg ? (
         <div className="relative h-40">
           <SmartImage

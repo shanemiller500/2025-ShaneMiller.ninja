@@ -1,8 +1,34 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
+
 import { searchMarvelSeries } from "./marvelAPI";
 
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const DEBOUNCE_DELAY_MS = 500;
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface MarvelThumbnail {
+  path: string;
+  extension: string;
+}
+
+interface MarvelSeries {
+  id: number;
+  title: string;
+  description: string;
+  startYear: number;
+  endYear: number;
+  thumbnail: MarvelThumbnail;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Spinner Component                                                  */
+/* ------------------------------------------------------------------ */
 const Spinner = () => (
   <div className="flex justify-center items-center my-4">
     <svg
@@ -25,22 +51,15 @@ const Spinner = () => (
   </div>
 );
 
-const MarvelSeriesPage: React.FC = () => {
+/* ------------------------------------------------------------------ */
+/*  MarvelSeriesPage Component                                         */
+/* ------------------------------------------------------------------ */
+const MarvelSeriesPage = () => {
   const [seriesQuery, setSeriesQuery] = useState("");
-  const [seriesResults, setSeriesResults] = useState<any[]>([]);
+  const [seriesResults, setSeriesResults] = useState<MarvelSeries[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (seriesQuery) {
-        handleSearch();
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seriesQuery]);
-
-  const handleSearch = async (e?: React.FormEvent) => {
+  const handleSearch = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     setLoading(true);
     const data = await searchMarvelSeries(seriesQuery);
@@ -51,6 +70,16 @@ const MarvelSeriesPage: React.FC = () => {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (seriesQuery) {
+        handleSearch();
+      }
+    }, DEBOUNCE_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seriesQuery]);
 
   return (
     <div className="p-4">

@@ -1,29 +1,29 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
-  FaGoogle,
-  FaWikipediaW,
-  FaTripadvisor,
-  FaYoutube,
   FaChevronLeft,
   FaChevronRight,
-  FaTimes,
-  FaSearch,
-  FaMapMarkerAlt,
-  FaUsers,
-  FaRulerCombined,
-  FaGlobeAmericas,
-  FaLanguage,
   FaClock,
+  FaGlobeAmericas,
+  FaGoogle,
+  FaLanguage,
+  FaMapMarkerAlt,
+  FaRulerCombined,
+  FaSearch,
+  FaTimes,
+  FaTripadvisor,
+  FaUsers,
+  FaWikipediaW,
+  FaYoutube,
 } from "react-icons/fa";
 
 import FlightSearch from "./FlightSearch";
 import { trackEvent } from "@/utils/mixpanel";
 
 /* ------------------------------------------------------------------ */
-/*  Lite & Full country types                                         */
+/*  Types                                                              */
 /* ------------------------------------------------------------------ */
 interface LiteCountry {
   cca3: string;
@@ -53,54 +53,67 @@ interface Extras {
   photos?: string[];
 }
 
-/* ---------------- constants & helpers ---------------- */
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const CACHE_FEATURED_KEY = "travelExplorerFeatured";
+const FEATURED_PICK_COUNT = 12;
+const DEFAULT_CLAMP_LENGTH = 340;
+const WIKI_CLAMP_LENGTH = 460;
+const SWIPE_THRESHOLD_PX = 45;
+const TOP_SIGHTS_LIMIT = 6;
+const SUGGESTIONS_LIMIT = 8;
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 const lc = (s: string) => (s || "").toLowerCase();
 const fmt = (n?: number) => (typeof n === "number" ? n.toLocaleString() : "—");
-
-const CACHE_FEATURED_KEY = "travelExplorerFeatured";
-const featuredPickCount = 12;
 
 function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
-function clampText(s?: string, max = 340) {
+function clampText(s?: string, max = DEFAULT_CLAMP_LENGTH): string {
   const t = (s || "").trim();
   if (t.length <= max) return t;
   return `${t.slice(0, max).trim()}…`;
 }
 
-function getFeatured(mini: LiteCountry[]) {
-  // Persist a stable “featured” set so it doesn't feel random every refresh.
+function getFeatured(mini: LiteCountry[]): LiteCountry[] {
   try {
     const raw = localStorage.getItem(CACHE_FEATURED_KEY);
     if (raw) {
       const ids: string[] = JSON.parse(raw);
       const map = new Map(mini.map((c) => [c.cca3, c]));
       const picked = ids.map((id) => map.get(id)).filter(Boolean) as LiteCountry[];
-      if (picked.length >= Math.min(featuredPickCount, mini.length)) {
-        return picked.slice(0, featuredPickCount);
+      if (picked.length >= Math.min(FEATURED_PICK_COUNT, mini.length)) {
+        return picked.slice(0, FEATURED_PICK_COUNT);
       }
     }
   } catch {
-    /* ignore */
+    /* localStorage unavailable */
   }
 
   const shuffled = [...mini]
     .sort((a, b) => lc(a.name.common).localeCompare(lc(b.name.common)))
     .sort(() => Math.random() - 0.5)
-    .slice(0, featuredPickCount);
+    .slice(0, FEATURED_PICK_COUNT);
 
   try {
     localStorage.setItem(CACHE_FEATURED_KEY, JSON.stringify(shuffled.map((c) => c.cca3)));
   } catch {
-    /* ignore */
+    /* localStorage unavailable */
   }
 
   return shuffled;
 }
 
-const Spinner = ({ label = "Loading…" }: { label?: string }) => (
+interface SpinnerProps {
+  label?: string;
+}
+
+const Spinner = ({ label = "Loading…" }: SpinnerProps) => (
   <div className="flex justify-center items-center py-10">
     <div className="flex items-center gap-3 rounded-full border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] px-5 py-2 shadow-sm">
       <div className="h-5 w-5 animate-spin rounded-full border-t-4 border-b-4 border-indigo-500 dark:border-indigo-300" />
@@ -223,7 +236,7 @@ export default function CountrySearch() {
     touchStartX.current = null;
     if (sx == null || ex == null || !viewerOpen) return;
     const dx = ex - sx;
-    if (Math.abs(dx) < 45) return;
+    if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return;
     if (dx > 0) prevImg();
     else nextImg();
   };
@@ -234,7 +247,7 @@ export default function CountrySearch() {
   const suggestions = useMemo(() => {
     const t = lc(q.trim());
     if (!t) return [];
-    return mini.filter((c) => lc(c.name.common).includes(t)).slice(0, 8);
+    return mini.filter((c) => lc(c.name.common).includes(t)).slice(0, SUGGESTIONS_LIMIT);
   }, [q, mini]);
 
   const featured = useMemo(() => {
@@ -380,7 +393,7 @@ export default function CountrySearch() {
 
   const topSights = useMemo(() => {
     const s = extras?.sights ?? [];
-    return [...s].sort((a, b) => a.dist - b.dist).slice(0, 6);
+    return [...s].sort((a, b) => a.dist - b.dist).slice(0, TOP_SIGHTS_LIMIT);
   }, [extras]);
 
   const currencyLabel = useMemo(() => {
@@ -391,9 +404,14 @@ export default function CountrySearch() {
   }, [full]);
 
   /* ---------------------------------------------------------------- */
-  /*  UI pieces                                                       */
+  /*  UI Components                                                    */
   /* ---------------------------------------------------------------- */
-  const CountryTile = ({ c, onClick }: { c: LiteCountry; onClick: () => void }) => (
+  interface CountryTileProps {
+    c: LiteCountry;
+    onClick: () => void;
+  }
+
+  const CountryTile = ({ c, onClick }: CountryTileProps) => (
     <button
       type="button"
       onClick={onClick}
@@ -420,7 +438,13 @@ export default function CountrySearch() {
     </button>
   );
 
-  const Pill = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
+  interface PillProps {
+    icon: React.ReactNode;
+    label: string;
+    value: string;
+  }
+
+  const Pill = ({ icon, label, value }: PillProps) => (
     <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/85 dark:bg-brand-900/40 px-4 py-3 shadow-sm">
       <div className="flex items-center gap-2">
         <span className="text-indigo-600 dark:text-indigo-300">{icon}</span>
@@ -432,7 +456,13 @@ export default function CountrySearch() {
     </div>
   );
 
-  const ActionLink = ({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) => (
+  interface ActionLinkProps {
+    href: string;
+    icon: React.ReactNode;
+    label: string;
+  }
+
+  const ActionLink = ({ href, icon, label }: ActionLinkProps) => (
     <a
       href={href}
       target="_blank"
@@ -829,7 +859,7 @@ return (
                   Quick read
                 </div>
                 <p className="mt-2 text-sm leading-relaxed text-gray-800 dark:text-white/80">
-                  {clampText(extras.wiki.extract, 460)}
+                  {clampText(extras.wiki.extract, WIKI_CLAMP_LENGTH)}
                 </p>
               </div>
             )}

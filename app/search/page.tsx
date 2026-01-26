@@ -1,9 +1,13 @@
 "use client";
 
-import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+
 import { trackEvent } from "@/utils/mixpanel";
 
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 const SUGGESTIONS = [
   "Best laptop for React dev 2026",
   "Explain quantum computing like I'm 12",
@@ -13,7 +17,12 @@ const SUGGESTIONS = [
   "What's the healthiest fast food order",
 ];
 
-export default function Home() {
+const HINTS_COUNT = 3;
+
+/* ------------------------------------------------------------------ */
+/*  SearchPage Component                                               */
+/* ------------------------------------------------------------------ */
+export default function SearchPage() {
   const [search, setSearch] = useState<string>("");
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -21,11 +30,9 @@ export default function Home() {
   const hints = useMemo(() => {
     const now = new Date();
     const idx = (now.getDate() + now.getHours()) % SUGGESTIONS.length;
-    return [
-      SUGGESTIONS[idx],
-      SUGGESTIONS[(idx + 1) % SUGGESTIONS.length],
-      SUGGESTIONS[(idx + 2) % SUGGESTIONS.length],
-    ];
+    return Array.from({ length: HINTS_COUNT }, (_, i) =>
+      SUGGESTIONS[(idx + i) % SUGGESTIONS.length]
+    );
   }, []);
 
   useEffect(() => {
@@ -42,7 +49,7 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const handleSearch = (e: FormEvent<HTMLFormElement>) => {
+  const handleSearch = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
     const q = search.trim();
     if (!q) return;
@@ -51,7 +58,7 @@ export default function Home() {
     router.push(`/results?query=${encodeURIComponent(q)}`);
   };
 
-  const go = (q: string) => {
+  const go = (q: string): void => {
     setSearch(q);
     trackEvent("Home AI Search Initiated", { query: q });
     router.push(`/results?query=${encodeURIComponent(q)}`);

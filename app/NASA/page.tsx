@@ -1,12 +1,17 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import NasaPhotoOfTheDay from "./nasaPhotoOfTheDay";
+import { useEffect, useMemo, useState } from "react";
+
+import { AnimatePresence, motion } from "framer-motion";
+
 import MarsRoverPhotos from "./marsRover";
-import NasaCMEPage from "./NasaCMEPage"; // keep your file name as-is
+import NasaCMEPage from "./NasaCMEPage";
+import NasaPhotoOfTheDay from "./nasaPhotoOfTheDay";
 import { trackEvent } from "@/utils/mixpanel";
 
+/* ------------------------------------------------------------------ */
+/*  NasaMediaPage Component                                            */
+/* ------------------------------------------------------------------ */
 export default function NasaMediaPage() {
   useEffect(() => {
     trackEvent("NASA API Page Viewed", { page: "NASA API Page" });

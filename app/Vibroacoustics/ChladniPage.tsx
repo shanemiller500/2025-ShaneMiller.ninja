@@ -1,14 +1,25 @@
-'use client';
+"use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+
 import { trackEvent } from "@/utils/mixpanel";
 import { visualizationColors } from "@/utils/colors";
 
-const ChladniPage: React.FC = () => {
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const LOADING_DELAY_MS = 2000;
+const DEFAULT_FREQUENCY = 178;
+
+/* ------------------------------------------------------------------ */
+/*  ChladniPage Component                                              */
+/* ------------------------------------------------------------------ */
+export default function ChladniPage() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [frequency, setFrequency] = useState<number>(178);
+  const [frequency, setFrequency] = useState<number>(DEFAULT_FREQUENCY);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -18,7 +29,7 @@ const ChladniPage: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(false);
-    }, 2000);
+    }, LOADING_DELAY_MS);
     return () => clearTimeout(timer);
   }, []);
 
@@ -425,6 +436,4 @@ const ChladniPage: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default ChladniPage;
+}

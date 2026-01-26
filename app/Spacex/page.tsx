@@ -1,15 +1,17 @@
 "use client";
 
-import React, { useEffect } from "react";
-import SpaceXDashboard from "./SpaceXDashboard";
-import { trackEvent } from "@/utils/mixpanel";
+import { useEffect } from "react";
 
-const Spacex: React.FC = () => {
+import { trackEvent } from "@/utils/mixpanel";
+import SpaceXDashboard from "./SpaceXDashboard";
+
+/* ------------------------------------------------------------------ */
+/*  SpacexPage Component                                               */
+/* ------------------------------------------------------------------ */
+export default function SpacexPage() {
   useEffect(() => {
     trackEvent("SpaceX API Page Viewed", { page: "SpaceX API Page" });
   }, []);
 
   return <SpaceXDashboard />;
-};
-
-export default Spacex;
+}

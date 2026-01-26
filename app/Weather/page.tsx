@@ -1,54 +1,77 @@
 /* eslint-disable @next/next/no-img-element */
-'use client'
+"use client";
 
-import React, { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import dynamic from 'next/dynamic'
-import { getBackgroundImage, getWeatherIcon } from './weatherHelpers'
-import { fetchLocationName } from './api'
-import { Location, WeatherData } from './types'
+import { useEffect, useMemo, useState } from "react";
 
-import LoadingSpinner from './LoadingSpinner'
-import WeatherSlider from './WeatherSlider'
-import ToggleSwitch from './ToggleSwitch'
-import LeafletMap from './LeafletMap'
-import HourlyWeatherChart from './HourlyWeatherChart'
-// If you use this table anywhere, keep the import ready:
-// import HourlyWeatherTable from './HourlyWeatherTable'
+import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
 
-const WeatherMap = dynamic(() => import('./weatherMap'), { ssr: false })
+import { fetchLocationName } from "./api";
+import HourlyWeatherChart from "./HourlyWeatherChart";
+import LeafletMap from "./LeafletMap";
+import LoadingSpinner from "./LoadingSpinner";
+import ToggleSwitch from "./ToggleSwitch";
+import { Location, WeatherData } from "./types";
+import { getBackgroundImage, getWeatherIcon } from "./weatherHelpers";
+import WeatherSlider from "./WeatherSlider";
 
-/* -------------------- Icons -------------------- */
-const SunriseIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v4m0 0l3-3m-3 3l-3-3M5.5 14h13" />
-  </svg>
-)
+const WeatherMap = dynamic(() => import("./weatherMap"), { ssr: false });
 
-const SunsetIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 22v-4m0 0l3 3m-3-3l-3 3M18.5 10H5.5" />
-  </svg>
-)
-
-/* -------------------- Helpers -------------------- */
-function cx(...classes: Array<string | false | undefined | null>) {
-  return classes.filter(Boolean).join(' ')
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface IconProps {
+  className?: string;
 }
 
-function fmtTime(value: string) {
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const CLOCK_INTERVAL_MS = 1000;
+const MIN_SPINNER_DELAY_MS = 700;
+
+/* ------------------------------------------------------------------ */
+/*  Icon Components                                                    */
+/* ------------------------------------------------------------------ */
+function SunriseIcon({ className }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v4m0 0l3-3m-3 3l-3-3M5.5 14h13" />
+    </svg>
+  );
+}
+
+function SunsetIcon({ className }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 22v-4m0 0l3 3m-3-3l-3 3M18.5 10H5.5" />
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Helper Functions                                                   */
+/* ------------------------------------------------------------------ */
+function cx(...classes: Array<string | false | undefined | null>): string {
+  return classes.filter(Boolean).join(" ");
+}
+
+function fmtTime(value: string): string {
   try {
-    return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {
-    return value
+    return value;
   }
 }
 
-function fmtDateTime(d: Date) {
-  return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`
+function fmtDateTime(d: Date): string {
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
 }
 
-const WeatherPage: React.FC = () => {
+/* ------------------------------------------------------------------ */
+/*  WeatherPage Component                                              */
+/* ------------------------------------------------------------------ */
+export default function WeatherPage() {
   const [mounted, setMounted] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
 
@@ -85,9 +108,9 @@ const WeatherPage: React.FC = () => {
 
   // Tick clock
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => clearInterval(timer)
-  }, [])
+    const timer = setInterval(() => setCurrentTime(new Date()), CLOCK_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   // Background image based on current weather
   useEffect(() => {
@@ -154,9 +177,9 @@ const WeatherPage: React.FC = () => {
       const data = await res.json()
 
       // tiny minimum spinner time for polish
-      const elapsed = Date.now() - startTime
-      const wait = Math.max(0, 700 - elapsed)
-      if (wait) await new Promise((r) => setTimeout(r, wait))
+      const elapsed = Date.now() - startTime;
+      const wait = Math.max(0, MIN_SPINNER_DELAY_MS - elapsed);
+      if (wait) await new Promise((r) => setTimeout(r, wait));
 
       setWeatherData(data)
     } catch (err) {
@@ -511,5 +534,3 @@ return (
 );
 
 }
-
-export default WeatherPage

@@ -1,23 +1,32 @@
 "use client";
 
-import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import MainResults, { SearchHistoryItem } from "./MainResults";
+
 import { trackEvent } from "@/utils/mixpanel";
+import MainResults, { SearchHistoryItem } from "./MainResults";
 
 /* ------------------------------------------------------------------ */
-/*  Constants                                                         */
+/*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 const LS_KEY = "searchHistory";
 const LS_TIME = "searchHistoryTs";
-const TTL = 30 * 60 * 1000; // 30 min
+const TTL_MS = 30 * 60 * 1000;
+const MAX_HISTORY_ITEMS = 10;
+const HISTORY_DISPLAY_LIMIT = 6;
 
-function clampText(s: string, n: number) {
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+function clampText(s: string, n: number): string {
   const t = (s || "").trim();
   if (t.length <= n) return t;
   return t.slice(0, n - 1) + "…";
 }
 
+/* ------------------------------------------------------------------ */
+/*  Results Component                                                  */
+/* ------------------------------------------------------------------ */
 export default function Results() {
   const params = useSearchParams();
 
@@ -29,14 +38,12 @@ export default function Results() {
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  /* ---------- load + prune local history ---------- */
   useEffect(() => {
     const raw = localStorage.getItem(LS_KEY);
     const ts = Number(localStorage.getItem(LS_TIME));
-    if (raw && ts && Date.now() - ts < TTL) setH(JSON.parse(raw));
+    if (raw && ts && Date.now() - ts < TTL_MS) setH(JSON.parse(raw));
   }, []);
 
-  /* ---------- persist history ---------- */
   useEffect(() => {
     if (hist.length) {
       localStorage.setItem(LS_KEY, JSON.stringify(hist));
@@ -44,17 +51,15 @@ export default function Results() {
     }
   }, [hist]);
 
-  /* ---------- scheduled auto-clear ---------- */
   useEffect(() => {
     const id = setInterval(() => {
       setH([]);
       localStorage.removeItem(LS_KEY);
       localStorage.removeItem(LS_TIME);
-    }, TTL);
+    }, TTL_MS);
     return () => clearInterval(id);
   }, []);
 
-  /* ---------- "/ to focus" ---------- */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "/" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
@@ -69,8 +74,7 @@ export default function Results() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  /* ---------- search helper ---------- */
-  const run = async (q: string) => {
+  const run = async (q: string): Promise<void> => {
     const cleaned = (q || "").trim();
     if (!cleaned) return;
 
@@ -105,7 +109,7 @@ export default function Results() {
         isOpen: true,
       };
 
-      setH((h) => [item, ...h.map((x) => ({ ...x, isOpen: false }))].slice(0, 10));
+      setH((h) => [item, ...h.map((x) => ({ ...x, isOpen: false }))].slice(0, MAX_HISTORY_ITEMS));
     } catch (e: any) {
       console.error("search error", e);
       setErr(typeof e?.message === "string" ? e.message : "Something went wrong.");
@@ -115,13 +119,12 @@ export default function Results() {
     }
   };
 
-  /* ---------- handlers ---------- */
-  const submitMain = (e: FormEvent) => {
+  const submitMain = (e: FormEvent): void => {
     e.preventDefault();
     run(query);
   };
 
-  const submitFollow = (e: FormEvent) => {
+  const submitFollow = (e: FormEvent): void => {
     e.preventDefault();
     if (follow.trim()) {
       run(follow);
@@ -129,15 +132,15 @@ export default function Results() {
     }
   };
 
-  const followTap = (q: string) => run(q);
+  const followTap = (q: string): Promise<void> => run(q);
 
-  const toggle = (idx: number) => {
+  const toggle = (idx: number): void => {
     setH((h) =>
       h.map((it, i) => (i === idx ? { ...it, isOpen: !it.isOpen } : it))
     );
   };
 
-  const clearAll = () => {
+  const clearAll = (): void => {
     setH([]);
     localStorage.removeItem(LS_KEY);
     localStorage.removeItem(LS_TIME);
@@ -146,7 +149,6 @@ export default function Results() {
 
   const active = useMemo(() => hist.find((x) => x.isOpen) ?? hist[0] ?? null, [hist]);
 
-  /* ---------- read ?query=… once ---------- */
   useEffect(() => {
     const q = params.get("query");
     if (q) {
@@ -294,7 +296,7 @@ export default function Results() {
                 Recent Searches
               </h3>
               <div className="grid grid-cols-2 gap-4">
-                {hist.slice(0, 6).map((it, i) => (
+                {hist.slice(0, HISTORY_DISPLAY_LIMIT).map((it, i) => (
                   <button
                     key={i}
                     onClick={() => toggle(i)}

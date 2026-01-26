@@ -1,43 +1,46 @@
-// Filename: page.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
 import { motion } from "framer-motion";
+import { Newspaper, Trophy, LineChart, type LucideIcon } from "lucide-react";
+
+import CryptoWidget from "@/components/widget-crypto";
+import WidgetNews from "@/components/widget-news";
+import WidgetSearch from "@/components/widget-search";
+import WidgetWeather from "@/components/widget-weather";
+import FlightSearch from "@/app/Country/FlightSearch";
+import FinanceTab from "./FinanceTab";
 import NewsTab from "./AllNewsTab";
 import SportsTab from "./SportsTab";
-import FinanceTab from "./FinanceTab";
 
-/* widgets */
-import WidgetNews from "@/components/widget-news";
-import WidgetWeather from "@/components/widget-weather";
-import CryptoWidget from "@/components/widget-crypto";
-import WidgetSearch from "@/components/widget-search";
-import StockWidget from "@/app/stocks/stock/LiveStreamTickerWidget";
-import FlightSearch from "@/app/Country/FlightSearch";
-
-/* icons */
-import { Newspaper, Trophy, LineChart } from "lucide-react";
-
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 type TabKey = "All" | "Sports" | "Finance";
 
-const TABS: { key: TabKey; label: string; Icon: any }[] = [
+interface TabConfig {
+  key: TabKey;
+  label: string;
+  Icon: LucideIcon;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const TABS: TabConfig[] = [
   { key: "All", label: "All News", Icon: Newspaper },
   { key: "Sports", label: "Sports", Icon: Trophy },
   { key: "Finance", label: "Finance", Icon: LineChart },
 ];
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function cn(...parts: Array<string | false | null | undefined>) {
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
-/**
- * Optional: keep tab in the URL (?tab=finance) so refresh/back works.
- * Safe even if you don't care — it won't break anything.
- */
 function normalizeTab(v: string | null): TabKey | null {
   if (!v) return null;
   const s = v.toLowerCase();
@@ -47,7 +50,10 @@ function normalizeTab(v: string | null): TabKey | null {
   return null;
 }
 
-export default function Page() {
+/* ------------------------------------------------------------------ */
+/*  NewsPage Component                                                 */
+/* ------------------------------------------------------------------ */
+export default function NewsPage() {
   const [tab, setTab] = useState<TabKey>("All");
 
   // hydrate from URL once

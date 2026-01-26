@@ -1,9 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
+
 import { searchMarvelCharacters } from "./marvelAPI";
 
-const preSearchSuggestions = [
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const PRE_SEARCH_SUGGESTIONS = [
   "Spider-Man",
   "Iron Man",
   "Captain America",
@@ -12,45 +16,66 @@ const preSearchSuggestions = [
   "Black Panther",
 ];
 
+const DEBOUNCE_DELAY_MS = 500;
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+interface MarvelThumbnail {
+  path: string;
+  extension: string;
+}
+
+interface MarvelItem {
+  name: string;
+}
+
+interface MarvelCharacter {
+  id: number;
+  name: string;
+  description: string;
+  thumbnail: MarvelThumbnail;
+  comics?: { items: MarvelItem[] };
+  series?: { items: MarvelItem[] };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Spinner Component                                                  */
+/* ------------------------------------------------------------------ */
 const Spinner = () => (
   <div className="flex justify-center items-center my-4">
     <svg
       className="animate-spin h-8 w-8 text-indigo-500"
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
-      viewBox="0 0 24 24">
+      viewBox="0 0 24 24"
+    >
       <circle
         className="opacity-25"
         cx="12"
         cy="12"
         r="10"
         stroke="currentColor"
-        strokeWidth="4"></circle>
+        strokeWidth="4"
+      />
       <path
         className="opacity-75"
         fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+      />
     </svg>
   </div>
 );
 
+/* ------------------------------------------------------------------ */
+/*  MarvelCharactersPage Component                                     */
+/* ------------------------------------------------------------------ */
 const MarvelCharactersPage = () => {
   const [characterQuery, setCharacterQuery] = useState("");
-  const [characterResults, setCharacterResults] = useState([]);
+  const [characterResults, setCharacterResults] = useState<MarvelCharacter[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Debounced search effect
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (characterQuery) {
-        handleSearch();
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [characterQuery]);
-
-  const handleSearch = async (e) => {
+  const handleSearch = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     setLoading(true);
     const data = await searchMarvelCharacters(characterQuery);
@@ -62,7 +87,17 @@ const MarvelCharactersPage = () => {
     setLoading(false);
   };
 
-  const handlePreSearch = (query) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (characterQuery) {
+        handleSearch();
+      }
+    }, DEBOUNCE_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [characterQuery]);
+
+  const handlePreSearch = (query: string) => {
     setCharacterQuery(query);
   };
 
@@ -71,7 +106,8 @@ const MarvelCharactersPage = () => {
       <h2 className="text-3xl font-bold mb-4 text-center">Marvel Characters</h2>
       <form
         onSubmit={handleSearch}
-        className="flex flex-col sm:flex-row items-center justify-center gap-2 mb-4">
+        className="flex flex-col sm:flex-row items-center justify-center gap-2 mb-4"
+      >
         <input
           type="text"
           list="characterSuggestions"
@@ -81,22 +117,25 @@ const MarvelCharactersPage = () => {
           className="p-3 border rounded w-full sm:w-1/2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-brand-900"
         />
         <datalist id="characterSuggestions">
-          {preSearchSuggestions.map((suggestion, idx) => (
+          {PRE_SEARCH_SUGGESTIONS.map((suggestion, idx) => (
             <option key={idx} value={suggestion} />
           ))}
         </datalist>
         <button
           type="submit"
-          className="px-6 py-3 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">
+          className="px-6 py-3 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition"
+        >
           Search
         </button>
       </form>
       <div className="flex flex-wrap justify-center gap-2 mb-4">
-        {preSearchSuggestions.map((suggestion, idx) => (
+        {PRE_SEARCH_SUGGESTIONS.map((suggestion, idx) => (
           <button
             key={idx}
+            type="button"
             className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
-            onClick={() => handlePreSearch(suggestion)}>
+            onClick={() => handlePreSearch(suggestion)}
+          >
             {suggestion}
           </button>
         ))}
@@ -108,7 +147,8 @@ const MarvelCharactersPage = () => {
           {characterResults.map((character) => (
             <div
               key={character.id}
-              className="border rounded-lg p-4 shadow hover:shadow-lg transition">
+              className="border rounded-lg p-4 shadow hover:shadow-lg transition"
+            >
               {character.thumbnail && (
                 <img
                   src={`${character.thumbnail.path}.${character.thumbnail.extension}`}

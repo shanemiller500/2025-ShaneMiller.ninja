@@ -1,58 +1,74 @@
-'use client'
+"use client";
 
-import React from 'react'
-import Slider from 'react-slick'
-import 'slick-carousel/slick/slick.css'
-import 'slick-carousel/slick/slick-theme.css'
-import { motion } from 'framer-motion'
-import { getForecastCardStyle, getWeatherIcon } from './weatherHelpers'
-import { WeatherData } from './types'
+import { motion } from "framer-motion";
+import Slider from "react-slick";
+import "slick-carousel/slick/slick.css";
+import "slick-carousel/slick/slick-theme.css";
 
+import { WeatherData } from "./types";
+import { getForecastCardStyle, getWeatherIcon } from "./weatherHelpers";
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 interface WeatherSliderProps {
-  daily: NonNullable<WeatherData['daily']>
-  tempUnit: 'C' | 'F'
+  daily: NonNullable<WeatherData["daily"]>;
+  tempUnit: "C" | "F";
 }
 
-const toF = (c: number) => (c * 9) / 5 + 32
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const SLIDER_SETTINGS = {
+  dots: true,
+  infinite: false,
+  speed: 450,
+  slidesToShow: 3,
+  slidesToScroll: 1,
+  arrows: false,
+  responsive: [
+    { breakpoint: 1024, settings: { slidesToShow: 3 } },
+    { breakpoint: 768, settings: { slidesToShow: 2 } },
+    { breakpoint: 520, settings: { slidesToShow: 1 } },
+  ],
+};
 
-const WeatherSlider: React.FC<WeatherSliderProps> = ({ daily, tempUnit }) => {
-  const settings = {
-    dots: true,
-    infinite: false,
-    speed: 450,
-    slidesToShow: 3,
-    slidesToScroll: 1,
-    arrows: false,
-    responsive: [
-      { breakpoint: 1024, settings: { slidesToShow: 3 } },
-      { breakpoint: 768, settings: { slidesToShow: 2 } },
-      { breakpoint: 520, settings: { slidesToShow: 1 } },
-    ],
-  }
+const MM_TO_INCHES = 25.4;
 
-  const fmtTemp = (c: number) => (tempUnit === 'F' ? `${toF(c).toFixed(1)}°F` : `${c}°C`)
+/* ------------------------------------------------------------------ */
+/*  Helper Functions                                                   */
+/* ------------------------------------------------------------------ */
+function toF(c: number): number {
+  return (c * 9) / 5 + 32;
+}
+
+/* ------------------------------------------------------------------ */
+/*  WeatherSlider Component                                            */
+/* ------------------------------------------------------------------ */
+export default function WeatherSlider({ daily, tempUnit }: WeatherSliderProps) {
+  const fmtTemp = (c: number): string =>
+    tempUnit === "F" ? `${toF(c).toFixed(1)}°F` : `${c}°C`;
 
   return (
     <div className="relative">
-      <Slider {...settings}>
+      <Slider {...SLIDER_SETTINGS}>
         {daily.time.map((time: string, index: number) => {
           // Force local midday to avoid UTC -> previous-day shift
-          const date = new Date(`${time}T12:00:00`)
-          const day = date.toLocaleDateString([], { weekday: 'short' })
-          const md = date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+          const date = new Date(`${time}T12:00:00`);
+          const day = date.toLocaleDateString([], { weekday: "short" });
+          const md = date.toLocaleDateString([], { month: "short", day: "numeric" });
 
+          const high = fmtTemp(daily.temperature_2m_max[index]);
+          const low = fmtTemp(daily.temperature_2m_min[index]);
 
-          const high = fmtTemp(daily.temperature_2m_max[index])
-          const low = fmtTemp(daily.temperature_2m_min[index])
-
-          const precipMM = daily.precipitation_sum[index]
+          const precipMM = daily.precipitation_sum[index];
           const precip =
-            tempUnit === 'F'
-              ? `${(precipMM / 25.4).toFixed(2)} in`
-              : `${precipMM} mm`
+            tempUnit === "F"
+              ? `${(precipMM / MM_TO_INCHES).toFixed(2)} in`
+              : `${precipMM} mm`;
 
-          const sunrise = daily.sunrise?.[index]
-          const sunset = daily.sunset?.[index]
+          const sunrise = daily.sunrise?.[index];
+          const sunset = daily.sunset?.[index];
 
           return (
             <motion.div
@@ -99,17 +115,25 @@ const WeatherSlider: React.FC<WeatherSliderProps> = ({ daily, tempUnit }) => {
                   <div className="mt-3 grid grid-cols-2 gap-3 text-xs font-semibold text-white/85">
                     <div className="rounded-xl border border-white/10 bg-white/10 p-3">
                       <div className="text-[11px] font-bold text-white/70">Sunrise</div>
-                      <div className="mt-1">{sunrise ? new Date(sunrise).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</div>
+                      <div className="mt-1">
+                        {sunrise
+                          ? new Date(sunrise).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                          : "—"}
+                      </div>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-white/10 p-3">
                       <div className="text-[11px] font-bold text-white/70">Sunset</div>
-                      <div className="mt-1">{sunset ? new Date(sunset).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</div>
+                      <div className="mt-1">
+                        {sunset
+                          ? new Date(sunset).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                          : "—"}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </motion.div>
-          )
+          );
         })}
       </Slider>
 
@@ -122,7 +146,5 @@ const WeatherSlider: React.FC<WeatherSliderProps> = ({ daily, tempUnit }) => {
         }
       `}</style>
     </div>
-  )
+  );
 }
-
-export default WeatherSlider

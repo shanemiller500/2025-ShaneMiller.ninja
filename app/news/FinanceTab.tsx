@@ -1,14 +1,12 @@
-// Filename: FinanceTab.tsx
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+
 import { fetchFinanceNews } from "./financeNews";
-// import StockWidget from '@/app/stocks/stock/LiveStreamTickerWidget';
 
 /* ------------------------------------------------------------------ */
-/*  Types & helpers                                                   */
+/*  Types                                                              */
 /* ------------------------------------------------------------------ */
-
 interface Article {
   source: { id: string | null; name: string; image?: string | null; imageCandidates?: string[] };
   title: string;
@@ -17,7 +15,38 @@ interface Article {
   publishedAt: string;
 }
 
-function smoothScrollToTop(d = 700) {
+interface SmartImageProps {
+  candidates: string[];
+  alt: string;
+  className?: string;
+  wrapperClassName?: string;
+}
+
+interface PaginationProps {
+  page: number;
+  totalPages: number;
+  loading: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+const CACHE_TTL_MS = 30 * 60 * 1000;
+const PER_PAGE = 36;
+const SCROLL_DURATION_MS = 700;
+const FADE_DURATION_MS = 400;
+
+/* ------------------------------------------------------------------ */
+/*  Module Cache                                                       */
+/* ------------------------------------------------------------------ */
+let cachedFinance: { ts: number; data: Article[] } | null = null;
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+function smoothScrollToTop(d = SCROLL_DURATION_MS): void {
   const start = window.scrollY,
     t0 = performance.now();
   const step = (now: number) => {
@@ -29,7 +58,7 @@ function smoothScrollToTop(d = 700) {
   requestAnimationFrame(step);
 }
 
-const uniqStrings = (arr: string[]) => {
+const uniqStrings = (arr: string[]): string[] => {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const s of arr) {
@@ -42,7 +71,7 @@ const uniqStrings = (arr: string[]) => {
   return out;
 };
 
-const safeDomain = (u: string) => {
+const safeDomain = (u: string): string => {
   try {
     return new URL(u).hostname.replace(/^www\./, "");
   } catch {
@@ -50,20 +79,17 @@ const safeDomain = (u: string) => {
   }
 };
 
-const normalizeUrl = (s: string) => {
+const normalizeUrl = (s: string): string => {
   const t = s.trim();
   if (t.startsWith("//")) return `https:${t}`;
   if (t.startsWith("http://")) return t.replace("http://", "https://");
   return t;
 };
 
-const bad = (s?: string | null) =>
+const bad = (s?: string | null): boolean =>
   !s || ["none", "null", "n/a"].includes(String(s).toLowerCase());
 
-/**
- * Remote-only logo candidates (no local fallback)
- */
-function logoCandidatesForArticle(a: Article) {
+function logoCandidatesForArticle(a: Article): string[] {
   const domain = safeDomain(a.url);
   const fromApi = (a.source.imageCandidates?.length ? a.source.imageCandidates : [a.source.image])
     .filter((s): s is string => !bad(s))
@@ -80,21 +106,15 @@ function logoCandidatesForArticle(a: Article) {
   return uniqStrings([...fromApi, ...generated]);
 }
 
-/**
- * SmartImage: tries multiple remote URLs until one works.
- * No local images. If all fail, we just hide it.
- */
+/* ------------------------------------------------------------------ */
+/*  SmartImage Component                                               */
+/* ------------------------------------------------------------------ */
 function SmartImage({
   candidates,
   alt,
   className,
   wrapperClassName,
-}: {
-  candidates: string[];
-  alt: string;
-  className?: string;
-  wrapperClassName?: string;
-}) {
+}: SmartImageProps) {
   const [idx, setIdx] = useState(0);
 
   useEffect(() => {
@@ -119,22 +139,8 @@ function SmartImage({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Cache (module-level)                                              */
+/*  FinanceTab Component                                               */
 /* ------------------------------------------------------------------ */
-
-const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
-let cachedFinance: { ts: number; data: Article[] } | null = null;
-
-/* ------------------------------------------------------------------ */
-/*  Constants                                                         */
-/* ------------------------------------------------------------------ */
-
-const PER_PAGE = 36;
-
-/* ------------------------------------------------------------------ */
-/*  Component                                                         */
-/* ------------------------------------------------------------------ */
-
 export default function FinanceTab() {
   const [page, setPage] = useState(1);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -143,12 +149,11 @@ export default function FinanceTab() {
   const [fade, setFade] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  /* ---------------------- fetch + cache --------------------------- */
   useEffect(() => {
     let cancel = false;
 
     (async () => {
-      if (cachedFinance && Date.now() - cachedFinance.ts < CACHE_TTL) {
+      if (cachedFinance && Date.now() - cachedFinance.ts < CACHE_TTL_MS) {
         setArticles(cachedFinance.data);
         return;
       }
@@ -175,22 +180,20 @@ export default function FinanceTab() {
     };
   }, []);
 
-  /* ----------------------- paging helpers ------------------------- */
   const totalPages = Math.max(1, Math.ceil(articles.length / PER_PAGE));
   const startIdx = (page - 1) * PER_PAGE;
   const slice = articles.slice(startIdx, startIdx + PER_PAGE);
 
-  const turnPage = (n: number) => {
+  const turnPage = (n: number): void => {
     if (fade) return;
     smoothScrollToTop();
     setFade(true);
     setTimeout(() => {
       setPage(n);
       setFade(false);
-    }, 400);
+    }, FADE_DURATION_MS);
   };
 
-  /* ----------------------------- UI -------------------------------- */
   return (
     <div ref={contentRef}>
       {error && <p className="bg-red-100 text-red-700 p-3 mb-4 rounded font-medium">{error}</p>}
@@ -266,20 +269,16 @@ export default function FinanceTab() {
   );
 }
 
-/* Pagination controls */
+/* ------------------------------------------------------------------ */
+/*  Pagination Component                                               */
+/* ------------------------------------------------------------------ */
 function Pagination({
   page,
   totalPages,
   loading,
   onPrev,
   onNext,
-}: {
-  page: number;
-  totalPages: number;
-  loading: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
+}: PaginationProps) {
   return (
     <div className="flex flex-col items-center gap-4 mt-8 pb-8">
       <div className="flex gap-4">
