@@ -28,7 +28,7 @@ export default function Experience() {
                   April 2025 <span className="text-slate-400 dark:text-slate-600">·</span> Present
                 </div>
                 <div className="font-aspekta font-[650] text-slate-800 dark:text-slate-100">
-                  Senior Engineer Leve II
+                  Senior Engineer Level II
                 </div>
                 <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
                   Data Center Inc. (Remote) — Hutchinson, KS
