@@ -59,7 +59,7 @@ export default function Experience() {
               <div className="font-aspekta font-[650] text-slate-800 dark:text-slate-100">Founder</div>
               <div className="text-sm font-medium text-slate-800 dark:text-slate-100">ApplyPro.ai — Boulder, CO</div>
               <div className="text-sm text-slate-500 dark:text-slate-400">
-                Launched a Next.js-based resume builder with SSR, real-time validations, and Tailwind integration. Deployed on Vercel with Mixpanel & Stripe, scaling to 100+ active users.
+                Launched a Next.js-based resume builder with SSR, real-time validations, and Tailwind integration. Deployed on Vercel with Mixpanel & Stripe, scaling to 400+ active users.
               </div>
             </div>
           </div>
