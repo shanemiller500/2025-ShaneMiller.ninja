@@ -28,13 +28,13 @@ export default function Experience() {
                   April 2025 <span className="text-slate-400 dark:text-slate-600">·</span> Present
                 </div>
                 <div className="font-aspekta font-[650] text-slate-800 dark:text-slate-100">
-                  Senior Software Engineer
+                  Senior Engineer Leve II
                 </div>
                 <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
                   Data Center Inc. (Remote) — Hutchinson, KS
                 </div>
                 <div className="text-sm text-slate-500 dark:text-slate-400">
-                A Level 2 Software Engineer on DCI's core product for community financial institutions, working in an Agile methodology with C# to design, implement, and optimize scalable features that power daily banking operations.
+                As Senior II Software Engineer on DCI's core product for community financial institutions, working in an Agile methodology with C# to design, implement, and optimize scalable features that power daily banking operations.
                 </div>
               </div>
             </div>
