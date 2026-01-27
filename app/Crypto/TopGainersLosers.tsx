@@ -14,7 +14,7 @@ import {
   FaTrophy,
 } from "react-icons/fa";
 
-import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
+import CryptoAssetPopup from "@/app/Crypto/CryptoAssetPopup";
 import { statusColors } from "@/utils/colors";
 import { trackEvent } from "@/utils/mixpanel";
 
@@ -44,7 +44,7 @@ function cn(...xs: Array<string | false | null | undefined>) {
 /* ---------- API constants ---------- */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 const COINGECKO_TOP200 =
-  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
+  "/api/CoinGeckoAPI?vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false";
 
 /* ------------------------------------------------------------------ */
 /*  UI Components                                                      */

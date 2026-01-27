@@ -5,7 +5,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FaArrowDown, FaArrowUp, FaFire, FaTable, FaThLarge } from "react-icons/fa";
 
-import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
+import CryptoAssetPopup from "@/app/Crypto/CryptoAssetPopup";
 import { heatmapColors, statusColors } from "@/utils/colors";
 import { trackEvent } from "@/utils/mixpanel";
 
@@ -34,7 +34,7 @@ type StreamStatus = "connecting" | "live" | "error";
 /* ------------------------------------------------------------------ */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 const COINGECKO_TOP200 =
-  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
+  "/api/CoinGeckoAPI?vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false";
 
 const PAGE_SIZE = 78;
 const SESSION_TIMEOUT_MS = 300_000; // 5 minutes - this is for the entire session
@@ -695,16 +695,20 @@ export default function LiveStreamHeatmap() {
 
   /* Loading state */
   if (loading) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm dark:bg-brand-900/90">
-        <div className="text-center">
-          <div className="relative inline-flex">
-            <div className="w-20 h-20 border-4 border-indigo-200 dark:border-indigo-900 rounded-full" />
-            <div className="absolute inset-0 w-20 h-20 border-4 border-indigo-600 dark:border-indigo-400 border-t-transparent rounded-full animate-spin" />
+     return (
+      <div className="min-h-[70vh] flex items-center justify-center px-4">
+        <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
+          <div className="text-sm font-extrabold text-gray-900 dark:text-white">
+            Loading crypto heatmap
           </div>
-          <p className="mt-4 text-sm font-semibold text-gray-700 dark:text-white/80">
-            Loading heatmap...
-          </p>
+          <div className="mt-2 h-2 w-56 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+            <motion.div
+              className="h-full w-1/2 bg-indigo-500/60"
+              initial={{ x: "-100%" }}
+              animate={{ x: "200%" }}
+              transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
+            />
+          </div>
         </div>
       </div>
     );

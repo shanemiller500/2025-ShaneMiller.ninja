@@ -341,7 +341,7 @@ export default function LiveStreamTickerWidget() {
           </div>
 
           {banner && (
-            <div className={`mt-3 text-center text-xs font-semibold ${bannerColor} animate-pulse`}>
+            <div className={`mt-4 text-center text-xs font-semibold ${bannerColor} animate-pulse`}>
               {banner}
             </div>
           )}
@@ -398,7 +398,7 @@ export default function LiveStreamTickerWidget() {
             })}
           </div>
 
-          <p className="mt-4 text-xs text-gray-500 dark:text-gray-400 text-center">
+          <p className="mt-4 mb-4 text-xs text-gray-500 dark:text-gray-400 text-center">
             See more stock market data{" "}
             <a href="/stocks" className="text-indigo-600 dark:text-indigo-300 underline">here</a>.
           </p>

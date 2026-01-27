@@ -316,12 +316,12 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
     <div
       ref={overlayRef}
       onMouseDown={onOverlayClick}
-      className="fixed inset-0 z-50 bg-black/60 dark:bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 bg-black/90 dark:bg-black/95 backdrop-blur-sm overflow-hidden"
       aria-modal="true"
       role="dialog"
     >
       {/* ✅ full-height shell */}
-      <div className="h-[100dvh] w-full flex items-end sm:items-center justify-center">
+      <div className="h-[100dvh] w-full flex items-end sm:items-center justify-center overflow-hidden">
         {/* ✅ card becomes a flex column; header sticky; body scrolls */}
         <div
           className={cn(
@@ -331,7 +331,7 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
             "bg-white dark:bg-brand-900",
             "border border-gray-200/70 dark:border-white/10",
             "shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] dark:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.75)]",
-            "rounded-t-2xl sm:rounded-2xl overflow-hidden"
+            "rounded-t-2xl sm:rounded-2xl overflow-hidden isolate"
           )}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -342,38 +342,38 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
           </div>
 
           {/* ✅ Sticky header (close always visible) */}
-          <div className="relative z-20 sticky top-0 border-b border-gray-200/70 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-brand-900/85">
-            <div className="px-4 sm:px-6 py-3 sm:py-4">
-              <div className="flex items-start justify-between gap-3">
+          <div className="relative z-20 flex-shrink-0 border-b border-gray-200/70 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-brand-900/85">
+            <div className="px-4 sm:px-6 py-2 sm:py-4">
+              <div className="flex items-start justify-between gap-2 sm:gap-3">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     {profile?.logo ? (
                       <div className="relative">
-                        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 blur-md" />
+                        <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 blur-md" />
                         <img
                           src={profile.logo}
                           alt=""
-                          className="relative h-15 w-40 sm:h-16 sm:w-16 rounded-2xl bg-white/80 dark:bg-white/5 object-contain p-2 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm"
+                          className="relative h-10 w-10 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-white/80 dark:bg-white/5 object-contain p-1.5 sm:p-2 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm"
                           onError={(e) => (e.currentTarget.style.display = "none")}
                         />
                       </div>
                     ) : (
-                      <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm" />
+                      <div className="h-10 w-10 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm" />
                     )}
 
                     <div className="min-w-0">
-                      <h3 className="text-base sm:text-lg font-extrabold tracking-tight truncate text-gray-900 dark:text-white">
+                      <h3 className="text-sm sm:text-lg font-extrabold tracking-tight truncate text-gray-900 dark:text-white">
                         {profile?.name ?? "Company"}
                         <span className="ml-2 text-gray-500 dark:text-white/60 font-bold">({ticker})</span>
                       </h3>
 
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-white/60">
-                        <span className="inline-flex items-center gap-2 rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">
+                      <div className="mt-0.5 sm:mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-600 dark:text-white/60">
+                        <span className="hidden sm:inline-flex items-center gap-2 rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">
                           <FaClock className="opacity-70" />
                           {fmtDateTime(lastMs)}
                         </span>
                         {profile?.exchange && (
-                          <span className="rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">
+                          <span className="rounded-full bg-gray-100/80 px-2 py-0.5 sm:px-2.5 sm:py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">
                             {profile.exchange}
                           </span>
                         )}
@@ -382,18 +382,18 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
                     </div>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-                    <div className="flex items-end gap-3">
-                      <div className="inline-flex items-center gap-2">
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-indigo-600/10 ring-1 ring-black/10 dark:bg-indigo-400/10 dark:ring-white/10">
+                  <div className="mt-2 sm:mt-3 flex flex-wrap items-end justify-between gap-2 sm:gap-3">
+                    <div className="flex items-end gap-2 sm:gap-3">
+                      <div className="inline-flex items-center gap-1.5 sm:gap-2">
+                        <span className="hidden sm:inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-indigo-600/10 ring-1 ring-black/10 dark:bg-indigo-400/10 dark:ring-white/10">
                           <FaDollarSign className="text-indigo-600 dark:text-indigo-300" />
                         </span>
-                        <div className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900 dark:text-white">
+                        <div className="text-2xl sm:text-4xl font-black tracking-tight text-gray-900 dark:text-white">
                           ${formatSupplyValue(quote?.c ?? 0)}
                         </div>
                       </div>
 
-                      <div className={cn("flex items-center gap-2 text-sm font-extrabold", arrowColor)}>
+                      <div className={cn("flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-extrabold", arrowColor)}>
                         {isUp ? <FaArrowUp /> : <FaArrowDown />}
                         <span>
                           {isUp ? "+" : ""}
@@ -422,8 +422,8 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
                     </div>
                   </div>
 
-                  <div className="mt-3">
-                    <div className="inline-flex sm:w-auto rounded-2xl gap-1  ring-black/10 dark:ring-white/10">
+                  <div className="mt-2 sm:mt-3">
+                    <div className="inline-flex sm:w-auto rounded-2xl gap-0.5 sm:gap-1 ring-black/10 dark:ring-white/10">
                       <SegButton active={tab === "overview"} label="Overview" icon={<FaChartLine />} onClick={() => setTab("overview")} />
                       <SegButton active={tab === "metrics"} label="Metrics" icon={<FaExchangeAlt />} onClick={() => setTab("metrics")} />
                       <SegButton active={tab === "news"} label="News" icon={<FaNewspaper />} onClick={() => setTab("news")} />
@@ -433,7 +433,7 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
 
                 <button
                   onClick={onClose}
-                  className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-white/80 dark:bg-white/[0.08] hover:bg-white dark:hover:bg-white/[0.12] text-gray-900 dark:text-white transition"
+                  className="shrink-0 inline-flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg sm:rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-white/80 dark:bg-white/[0.08] hover:bg-white dark:hover:bg-white/[0.12] text-gray-900 dark:text-white transition text-sm sm:text-base"
                   aria-label="Close"
                   title="Close (Esc)"
                 >

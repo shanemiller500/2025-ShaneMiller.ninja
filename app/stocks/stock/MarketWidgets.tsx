@@ -41,7 +41,7 @@ const topTickers = [
 // Expanded movers pool
 const potentialMovers = [
   "AMD", "NFLX", "INTC", "CSCO", "QCOM", "ADBE", "CRM", "ORCL",
-  "PYPL", "SQ", "UBER", "LYFT", "SHOP", "SPOT", "SNAP", "x",
+  "PYPL", "UBER", "LYFT", "SHOP", "SPOT", "SNAP", "x",
   "ZM", "DOCU", "CRWD", "NET", "DDOG", "SNOW", "PLTR", "RBLX",
   "COIN", "HOOD", "SOFI", "AFRM", "RIVN", "LCID", "NIO", "XPEV"
 ];
@@ -529,7 +529,7 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
 
           {/* Desktop: scrollable grid */}
           <div className="hidden sm:block h-full overflow-y-auto p-3" style={{ scrollbarWidth: "thin" }}>
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 lg:grid-cols-3  gap-2">
               {topTen.map((item) => (
                 <TickerTile key={item.symbol} item={item} onSelect={onSelectTicker} size="md" />
               ))}

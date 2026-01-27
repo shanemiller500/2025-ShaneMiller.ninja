@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, useMemo, useCallback, startTransition } from "react";
 import { motion, useMotionValue, useAnimationFrame, animate } from "framer-motion";
-import CryptoAssetPopup from "@/utils/CryptoAssetPopup";
+import CryptoAssetPopup from "@/app/Crypto/CryptoAssetPopup";
 
 /* Types ------------------------------------------------------------ */
 interface TradeState {

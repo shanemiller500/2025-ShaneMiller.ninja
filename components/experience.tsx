@@ -13,8 +13,8 @@ export default function Experience() {
 
         {/* Item - Data Center Inc. */}
           <li className="relative group">
-            <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
-              <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-slate-200 rounded-full">
+            <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-white before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
+              <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-white rounded-full">
                 <Image
                   className="object-contain"
                   src={DCI}
@@ -42,8 +42,8 @@ export default function Experience() {
 
         {/* Item - ApplyPro.ai */}
         <li className="relative group">
-          <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
-            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-slate-200 rounded-full">
+          <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-white before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
+            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-white rounded-full">
               <Image 
                 className="object-contain" 
                 src={ApplyPro} 
@@ -67,8 +67,8 @@ export default function Experience() {
 
         {/* Item - U-Mail.ai */}
         <li className="relative group">
-          <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
-            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-slate-200 rounded-full">
+          <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-white before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
+            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-white rounded-full">
             <Image 
                 className="object-contain" 
                 src={UMail} 
@@ -92,8 +92,8 @@ export default function Experience() {
 
         {/* Item - S&P Global (Senior Software Engineer) */}
         <li className="relative group">
-          <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
-            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-slate-200 rounded-full">
+          <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-white before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
+            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-white rounded-full">
             <Image 
                 className="object-contain" 
                 src={spgi} 
@@ -117,8 +117,8 @@ export default function Experience() {
 
         {/* Item - S&P Global (Web Developer, Client-Facing Team) */}
         <li className="relative group">
-          <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
-            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-slate-200 rounded-full">
+          <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-white before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8 before:group-last-of-type:hidden">
+            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-white rounded-full">
             <Image 
                 className="object-contain" 
                 src={spgi} 
@@ -142,8 +142,8 @@ export default function Experience() {
 
         {/* Item - S&P Global (Jr. Web Developer) */}
         <li className="relative group">
-          <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-slate-200 before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8">
-            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-slate-200 rounded-full">
+          <div className="flex items-start before:absolute before:left-0 before:h-full before:w-px before:bg-white before:dark:bg-slate-800 before:self-start before:ml-[28px] before:-translate-x-1/2 before:translate-y-8">
+            <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-white rounded-full">
             <Image 
                 className="object-contain" 
                 src={spgi} 

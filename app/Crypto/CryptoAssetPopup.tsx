@@ -154,31 +154,49 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-  useEffect(() => {
+    useEffect(() => {
     if (!asset) return;
     const ctrl = new AbortController();
-    setCgLoading(true); setCgError(null); setCg(null);
-    
+    setCgLoading(true);
+    setCgError(null);
+    setCg(null);
+
     (async () => {
       try {
-        const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false", 
-          { signal: ctrl.signal, headers: { accept: "application/json" } });
-        if (!res.ok) throw new Error(`CoinGecko error: ${res.status}`);
+        const qs =
+          "vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false";
+
+        const res = await fetch(`/api/CoinGeckoAPI?${qs}`, {
+          signal: ctrl.signal,
+          headers: { accept: "application/json" },
+        });
+
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(`CoinGecko proxy error: ${res.status} ${txt?.slice(0, 120)}`);
+        }
+
         const markets = (await res.json()) as CoinGeckoMarket[];
         if (ctrl.signal.aborted) return;
-        
+
         const aId = String(asset.id || "").toLowerCase();
         const aSym = String(asset.symbol || "").toLowerCase();
         const aName = String(asset.name || "").toLowerCase();
-        setCg(markets.find(m => m.id?.toLowerCase() === aId) || 
-             markets.find(m => m.symbol?.toLowerCase() === aSym) || 
-             markets.find(m => m.name?.toLowerCase() === aName) || null);
+
+        setCg(
+          markets.find((m) => m.id?.toLowerCase() === aId) ||
+            markets.find((m) => m.symbol?.toLowerCase() === aSym) ||
+            markets.find((m) => m.name?.toLowerCase() === aName) ||
+            null
+        );
       } catch (e: any) {
-        if (e?.name !== "AbortError") setCgError(e?.message || "Failed to load CoinGecko data");
+        if (e?.name !== "AbortError")
+          setCgError(e?.message || "Failed to load CoinGecko data");
       } finally {
         if (!ctrl.signal.aborted) setCgLoading(false);
       }
     })();
+
     return () => ctrl.abort();
   }, [asset]);
 
@@ -296,10 +314,10 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
     <AnimatePresence>
       <motion.div
         key="crypto-overlay" ref={overlayRef} onMouseDown={(e) => { if (e.target === overlayRef.current) onClose(); }}
-        className="fixed inset-0 z-50 bg-black/60 dark:bg-black/70 backdrop-blur-sm"
+        className="fixed inset-0 z-50 bg-black/90 dark:bg-black/95 backdrop-blur-sm overflow-hidden"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-modal="true" role="dialog"
       >
-        <div className="h-[100dvh] w-full flex items-end sm:items-center justify-center">
+        <div className="h-[100dvh] w-full flex items-end sm:items-center justify-center overflow-hidden">
           <motion.div
             key="crypto-card" initial={{ y: 24, opacity: 0, scale: 0.985 }} animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 24, opacity: 0, scale: 0.985 }} transition={{ type: "spring", stiffness: 360, damping: 32 }}
@@ -308,7 +326,7 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
               "relative w-full sm:max-w-5xl h-[100dvh] sm:h-auto sm:max-h-[88vh] flex flex-col",
               "bg-white dark:bg-brand-900 border border-gray-200/70 dark:border-white/10",
               "shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] dark:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.75)]",
-              "rounded-t-2xl sm:rounded-2xl overflow-hidden"
+              "rounded-t-2xl sm:rounded-2xl overflow-hidden isolate"
             )}
           >
             <div className="pointer-events-none absolute inset-0 opacity-[0.55] dark:opacity-[0.45]">
@@ -316,7 +334,7 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
               <div className="absolute top-20 right-10 h-56 w-56 rounded-full bg-sky-400/15 blur-3xl" />
             </div>
 
-            <div className="relative z-20 sticky top-0 border-b border-gray-200/70 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-brand-900/85">
+            <div className="relative z-20 flex-shrink-0 border-b border-gray-200/70 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-brand-900/85">
               <div className="px-4 sm:px-6 py-3 sm:py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">

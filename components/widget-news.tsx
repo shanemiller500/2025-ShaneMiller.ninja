@@ -212,24 +212,34 @@ function ReaderModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  // Disable body scroll when modal is open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
   if (!open || !article) return null;
 
   const domain = safeHost(article.link);
   const logoCandidates = article.sourceImageCandidates ?? (article.sourceImage ? [article.sourceImage] : null);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* backdrop */}
-      <button
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden">
+      {/* backdrop - covers entire screen */}
+      <div
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 bg-black/80"
+        className="fixed inset-0 bg-black/90 cursor-pointer"
       />
 
       {/* panel - MAGAZINE STYLE */}
-      <div className="relative z-10 w-full max-w-5xl max-h-[95vh] overflow-hidden border-4 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] shadow-2xl">
+      <div className="relative z-10 w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden border-4 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] shadow-2xl">
         {/* BREAKING NEWS BANNER */}
-        <div className="bg-red-600 dark:bg-red-500 py-3 px-6 border-b-4 border-neutral-900 dark:border-neutral-100">
+        <div className="flex-shrink-0 bg-red-600 dark:bg-red-500 py-3 px-6 border-b-4 border-neutral-900 dark:border-neutral-100">
           <div className="flex items-center justify-center gap-3">
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-70" />
@@ -242,7 +252,7 @@ function ReaderModal({
         </div>
 
         {/* Header - NEWSPAPER MASTHEAD */}
-        <div className="sticky top-0 z-20 border-b-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20]">
+        <div className="flex-shrink-0 border-b-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20]">
           <div className="flex items-center justify-between gap-4 p-6">
             <div className="flex items-center gap-4">
               <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
@@ -277,8 +287,8 @@ function ReaderModal({
           </div>
         </div>
 
-        {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(95vh-180px)] bg-white dark:bg-[#1D1D20]">
+        {/* Content - scrollable area */}
+        <div className="flex-1 overflow-y-auto bg-white dark:bg-[#1D1D20]">
           {/* Article Body - MAGAZINE LAYOUT */}
           <div className="p-8 sm:p-12">
 

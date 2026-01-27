@@ -63,7 +63,7 @@ type TimeFrameOption = "1h" | "24h" | "7d" | "30d";
 /* ------------------------------------------------------------------ */
 const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 const COINGECKO_TOP200 =
-  "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
+  "/api/CoinGeckoAPI?vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false";
 
 const currencyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
