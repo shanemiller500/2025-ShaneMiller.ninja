@@ -6,7 +6,7 @@ import Image from "next/image";
 import Hero from "@/components/hero";
 import WidgetWeather from "@/components/widget-weather";
 import WidgetNews from "@/components/widget-news";
-import CryptoWidget from "@/components/widget-crypto";
+import CryptoWidget from "@/app/Crypto/widget-crypto";
 import WidgetSearch from "@/components/widget-search";
 import StockWidget from "@/app/stocks/stock/LiveStreamTickerWidget";
 

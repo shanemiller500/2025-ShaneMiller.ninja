@@ -66,12 +66,23 @@ export default function WidgetCrypto() {
   const dragIntentRef = useRef({ downX: 0, moved: false });
   const x = useMotionValue(0);
 
+  const [modalLoading, setModalLoading] = useState(false);
+  const openTimerRef = useRef<number | null>(null);
+
+
   useEffect(() => {
-    return () => {
-      isMounted.current = false;
-      try { socketRef.current?.close(); } catch {}
-    };
-  }, []);
+  return () => {
+    isMounted.current = false;
+
+    if (openTimerRef.current) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+
+    try { socketRef.current?.close(); } catch {}
+  };
+}, []);
+
 
   /* Fetch CoinCap metadata */
   useEffect(() => {
@@ -186,7 +197,15 @@ export default function WidgetCrypto() {
     x.set(wrap(-contentWidth, 0, next));
   });
 
-  const closePopup = useCallback(() => setSelectedAssetId(null), []);
+  const closePopup = useCallback(() => {
+  if (openTimerRef.current) {
+    window.clearTimeout(openTimerRef.current);
+    openTimerRef.current = null;
+  }
+  setModalLoading(false);
+  setSelectedAssetId(null);
+}, []);
+
   const selectedAsset = selectedAssetId ? { ...metaData[selectedAssetId], id: selectedAssetId } : null;
 
   const renderCard = (id: string) => {
@@ -203,9 +222,25 @@ export default function WidgetCrypto() {
     const logo = cleanLogo(logos[String(md?.symbol ?? "").toLowerCase()]);
 
     const onCardClick = () => {
-      if (dragIntentRef.current.moved) return;
-      setSelectedAssetId(id);
-    };
+  if (dragIntentRef.current.moved) return;
+  if (modalLoading) return; // prevent double-taps while loading
+
+  // cancel any previous open
+  if (openTimerRef.current) {
+    window.clearTimeout(openTimerRef.current);
+    openTimerRef.current = null;
+  }
+
+  setModalLoading(true);
+
+  openTimerRef.current = window.setTimeout(() => {
+    if (!isMounted.current) return;
+    setSelectedAssetId(id);
+    setModalLoading(false);
+    openTimerRef.current = null;
+  }, 1000); 
+};
+
 
    return (
   <motion.button
@@ -394,6 +429,14 @@ export default function WidgetCrypto() {
           }}
         />
       )}
+
+      {modalLoading && (
+  <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
+    <div className="rounded-xl bg-white/10 px-4 py-3 text-white text-sm backdrop-blur">
+      Loading…
+    </div>
+  </div>
+)}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Newspaper, Trophy, LineChart, type LucideIcon } from "lucide-react";
 
-import CryptoWidget from "@/components/widget-crypto";
+import CryptoWidget from "@/app/Crypto/widget-crypto";
 import WidgetNews from "@/components/widget-news";
 import WidgetSearch from "@/components/widget-search";
 import WidgetWeather from "@/components/widget-weather";
