@@ -120,9 +120,9 @@ function ImageCarousel({
   return (
     <div className="relative overflow-hidden rounded-2xl border border-gray-200/70 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900">
       {/* Tap/click hint */}
-      {/* <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/40 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
+      <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/40 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
         Tap / click to flip
-      </div> */}
+      </div>
 
       <div className="relative w-full aspect-[1/1] bg-gray-50 dark:bg-brand-900">
         <div
@@ -158,7 +158,7 @@ function ImageCarousel({
                       className="relative h-full w-full transition-transform duration-700 ease-out will-change-transform"
                       style={{
                         transformStyle: "preserve-3d",
-                        transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+                        transform: isFlipped ? "rotateY(-180deg)" : "rotateY(0deg)",
                       }}
                     >
                       {/* Front */}
@@ -185,7 +185,7 @@ function ImageCarousel({
                         className="absolute inset-0"
                         style={{
                           backfaceVisibility: "hidden",
-                          transform: "rotateY(180deg)",
+                          transform: "rotateY(-180deg)",
                         }}
                       >
                         <Image
