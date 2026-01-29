@@ -3,24 +3,19 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { fetchFinanceNews } from "./financeNews";
+import {
+  ReaderModal,
+  SmartImage,
+  getLogoCandidates,
+  getImageCandidates,
+  stableKey,
+  type FinanceArticle,
+} from "./FinanceModals";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
-interface Article {
-  source: { id: string | null; name: string; image?: string | null; imageCandidates?: string[] };
-  title: string;
-  url: string;
-  urlToImage: string | null;
-  publishedAt: string;
-}
-
-interface SmartImageProps {
-  candidates: string[];
-  alt: string;
-  className?: string;
-  wrapperClassName?: string;
-}
+type Article = FinanceArticle;
 
 interface PaginationProps {
   page: number;
@@ -58,86 +53,6 @@ function smoothScrollToTop(d = SCROLL_DURATION_MS): void {
   requestAnimationFrame(step);
 }
 
-const uniqStrings = (arr: string[]): string[] => {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const s of arr) {
-    const v = String(s || "").trim();
-    if (!v) continue;
-    if (seen.has(v)) continue;
-    seen.add(v);
-    out.push(v);
-  }
-  return out;
-};
-
-const safeDomain = (u: string): string => {
-  try {
-    return new URL(u).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-};
-
-const normalizeUrl = (s: string): string => {
-  const t = s.trim();
-  if (t.startsWith("//")) return `https:${t}`;
-  if (t.startsWith("http://")) return t.replace("http://", "https://");
-  return t;
-};
-
-const bad = (s?: string | null): boolean =>
-  !s || ["none", "null", "n/a"].includes(String(s).toLowerCase());
-
-function logoCandidatesForArticle(a: Article): string[] {
-  const domain = safeDomain(a.url);
-  const fromApi = (a.source.imageCandidates?.length ? a.source.imageCandidates : [a.source.image])
-    .filter((s): s is string => !bad(s))
-    .map(normalizeUrl);
-
-  const generated = domain
-    ? [
-        `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`,
-        `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`,
-         `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`,
-      ]
-    : [];
-
-  return uniqStrings([...fromApi, ...generated]);
-}
-
-/* ------------------------------------------------------------------ */
-/*  SmartImage Component                                               */
-/* ------------------------------------------------------------------ */
-function SmartImage({
-  candidates,
-  alt,
-  className,
-  wrapperClassName,
-}: SmartImageProps) {
-  const [idx, setIdx] = useState(0);
-
-  useEffect(() => {
-    setIdx(0);
-  }, [candidates.join("|")]);
-
-  const src = candidates[idx];
-  if (!src) return null;
-
-  return (
-    <div className={wrapperClassName}>
-      <img
-        src={src}
-        alt={alt}
-        className={className}
-        loading="lazy"
-        decoding="async"
-        onError={() => setIdx((i) => i + 1)}
-      />
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /*  FinanceTab Component                                               */
 /* ------------------------------------------------------------------ */
@@ -147,6 +62,7 @@ export default function FinanceTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fade, setFade] = useState(false);
+  const [readerArticle, setReaderArticle] = useState<Article | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -194,64 +110,167 @@ export default function FinanceTab() {
     }, FADE_DURATION_MS);
   };
 
+  // Get hero articles (with images) for featured section
+  const heroArticles = useMemo(() => {
+    return articles.filter((a) => getImageCandidates(a).length > 0).slice(0, 4);
+  }, [articles]);
+
+  const heroKeys = useMemo(() => new Set(heroArticles.map(stableKey)), [heroArticles]);
+
+  // Filter out hero articles from regular slice
+  const regularSlice = useMemo(() => {
+    return slice.filter((a) => !heroKeys.has(stableKey(a)));
+  }, [slice, heroKeys]);
+
   return (
-    <div ref={contentRef}>
-      {error && <p className="bg-red-100 text-red-700 p-3 mb-4 rounded font-medium">{error}</p>}
+    <div ref={contentRef} className="pb-10">
+      {error && (
+        <div className="mb-4 sm:mb-6 border-2 border-red-600 dark:border-red-400 bg-white dark:bg-neutral-900 p-3 sm:p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Error</span>
+          </div>
+          <p className="text-xs sm:text-sm text-red-700 dark:text-red-200">{error}</p>
+        </div>
+      )}
 
       <section className="w-full">
-        {/* <StockWidget /> */}
-        <div className={`transition-opacity duration-300 ${fade ? "opacity-0" : "opacity-100"} mt-2`}>
-          {/* Masonry columns */}
-          <div className="columns-2 sm:columns-2 md:columns-3 gap-2 space-y-2">
-            {slice.map((a) => {
-              const hasImage = !!a.urlToImage;
-              const logoCandidates = logoCandidatesForArticle(a);
+        <div className={`transition-opacity duration-300 ${fade ? "opacity-0" : "opacity-100"}`}>
+          {/* Hero Section - Featured Finance Stories */}
+          {heroArticles.length > 0 && page === 1 && (
+            <div className="mb-6 sm:mb-8">
+              <div className="flex items-center gap-2 mb-3 sm:mb-4 border-b-2 border-neutral-900 dark:border-neutral-100 pb-2">
+                <div className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full"></div>
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Featured Finance</span>
+              </div>
+              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {heroArticles.map((a) => {
+                  const logoCandidates = getLogoCandidates(a);
+                  const imgCandidates = getImageCandidates(a);
+
+                  return (
+                    <button
+                      key={stableKey(a)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setReaderArticle(a);
+                      }}
+                      className="group relative block w-full text-left h-48 sm:h-56 overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] transition-all duration-200 hover:shadow-lg"
+                    >
+                      {imgCandidates.length > 0 && (
+                        <SmartImage
+                          candidates={imgCandidates}
+                          alt={a.title}
+                          wrapperClassName="absolute inset-0"
+                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                        />
+                      )}
+
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/0" />
+
+                      {/* Finance badge */}
+                      <div className="absolute top-0 left-0 bg-green-600 dark:bg-green-400 px-2 sm:px-3 py-1 sm:py-1.5">
+                        <span className="text-[8px] sm:text-[9px] uppercase tracking-widest font-black text-white dark:text-neutral-900">
+                          Finance
+                        </span>
+                      </div>
+
+                      <div className="absolute inset-x-0 bottom-0 z-10 p-3 sm:p-4 text-white">
+                        <h3 className="line-clamp-2 text-sm sm:text-base font-black leading-snug uppercase tracking-tight">{a.title}</h3>
+                        <div className="mt-2 flex items-center gap-2 text-[10px] sm:text-xs">
+                          {logoCandidates.length > 0 && (
+                            <SmartImage
+                              candidates={logoCandidates}
+                              alt={a.source.name}
+                              className="h-4 w-4 sm:h-5 sm:w-5 object-contain border border-white/30 bg-white/10 p-0.5"
+                            />
+                          )}
+                          <span className="truncate max-w-[100px] uppercase tracking-wider font-black opacity-90">{a.source.name}</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Section Header */}
+          <div className="flex items-center gap-2 mb-3 sm:mb-4 border-b-2 border-neutral-900 dark:border-neutral-100 pb-2">
+            <div className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full"></div>
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Latest Finance News</span>
+          </div>
+
+          {/* Article Grid - NEWSPAPER STYLE */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            {regularSlice.map((a) => {
+              const hasImage = getImageCandidates(a).length > 0;
+              const logoCandidates = getLogoCandidates(a);
+              const imgCandidates = getImageCandidates(a);
 
               return (
-                <a
-                  key={a.url}
-                  href={a.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="break-inside-avoid block rounded-lg shadow hover:shadow-xl transition transform hover:scale-[1.02] bg-white dark:bg-brand-900"
+                <button
+                  key={stableKey(a)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setReaderArticle(a);
+                  }}
+                  className="group block w-full text-left overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] transition-all duration-200 hover:shadow-lg"
                 >
                   {hasImage && (
-                    <img
-                      src={a.urlToImage!}
-                      alt={a.title}
-                      className="w-full h-36 object-cover"
-                      loading="lazy"
-                      decoding="async"
-                      onError={(e) => {
-                        // no fallback: just hide
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
+                    <div className="relative h-40 sm:h-44">
+                      <SmartImage
+                        candidates={imgCandidates}
+                        alt={a.title}
+                        wrapperClassName="absolute inset-0"
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/0" />
+                      <div className="absolute bottom-0 w-full p-3 sm:p-4 text-white">
+                        <h3 className="line-clamp-2 text-sm sm:text-base font-black leading-snug uppercase tracking-tight">{a.title}</h3>
+                        <div className="mt-2 flex items-center gap-2 text-[10px] sm:text-xs">
+                          {logoCandidates.length > 0 && (
+                            <SmartImage
+                              candidates={logoCandidates}
+                              alt={a.source.name}
+                              className="h-4 w-4 sm:h-5 sm:w-5 object-contain border border-white/30 bg-white/10 p-0.5"
+                            />
+                          )}
+                          <span className="truncate max-w-[100px] uppercase tracking-wider font-black opacity-90">{a.source.name}</span>
+                          <div className="w-1 h-1 bg-white/50 rounded-full"></div>
+                          <time className="uppercase tracking-wider font-bold opacity-80">
+                            {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          </time>
+                        </div>
+                      </div>
+                    </div>
                   )}
 
-                  <div className={`p-4 flex flex-col gap-1 ${hasImage ? "mt-1" : ""}`}>
-                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                      {/* logo: remote-only, try a few sources */}
-                      {logoCandidates.length ? (
-                        <SmartImage
-                          candidates={logoCandidates}
-                          alt={a.source.name}
-                          className="w-10 h-10 object-contain"
-                        />
-                      ) : null}
+                  {!hasImage && (
+                    <div className="p-3 sm:p-4">
+                      <div className="flex items-center gap-2 text-[10px] sm:text-xs mb-2">
+                        {logoCandidates.length > 0 && (
+                          <SmartImage
+                            candidates={logoCandidates}
+                            alt={a.source.name}
+                            className="h-6 w-6 sm:h-8 sm:w-8 object-contain border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-0.5"
+                          />
+                        )}
+                        <span className="truncate max-w-[120px] uppercase tracking-wider font-black text-neutral-700 dark:text-neutral-300">{a.source.name}</span>
+                      </div>
 
-                      <span className="truncate max-w-[140px]">{a.source.name}</span>
+                      <h3 className="font-black text-neutral-900 dark:text-neutral-100 text-sm sm:text-base leading-snug line-clamp-3 uppercase tracking-tight">
+                        {a.title}
+                      </h3>
+
+                      <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700">
+                        <time className="text-[10px] sm:text-xs uppercase tracking-wider font-bold text-neutral-500 dark:text-neutral-400">
+                          {new Date(a.publishedAt).toLocaleDateString(undefined, { weekday: 'short', month: "short", day: "numeric" })}
+                        </time>
+                      </div>
                     </div>
-
-                    <span className="text-xs text-gray-400 dark:text-gray-500">
-                      {new Date(a.publishedAt).toLocaleDateString()}
-                    </span>
-
-                    <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm leading-snug line-clamp-3">
-                      {a.title}
-                    </h3>
-                  </div>
-                </a>
+                  )}
+                </button>
               );
             })}
           </div>
@@ -265,6 +284,8 @@ export default function FinanceTab() {
           />
         </div>
       </section>
+
+      <ReaderModal open={!!readerArticle} article={readerArticle} onClose={() => setReaderArticle(null)} />
     </div>
   );
 }
@@ -280,27 +301,28 @@ function Pagination({
   onNext,
 }: PaginationProps) {
   return (
-    <div className="flex flex-col items-center gap-4 mt-8 pb-8">
-      <div className="flex gap-4">
+    <div className="mt-8 sm:mt-10 flex flex-col items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-3">
         <button
           disabled={page === 1 || loading}
           onClick={onPrev}
-          className="px-4 py-2 rounded text-white bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40"
+          className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-neutral-900 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900 disabled:opacity-40 transition-all"
         >
-          Previous
+          ← Previous
         </button>
         <button
           disabled={(page === totalPages && !loading) || loading}
           onClick={onNext}
-          className="px-4 py-2 rounded text-white bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40"
+          className="border-2 border-neutral-900 dark:border-neutral-100 bg-green-600 dark:bg-green-400 px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-white dark:text-neutral-900 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 dark:hover:bg-neutral-100 dark:hover:text-neutral-900 dark:hover:border-neutral-100 disabled:opacity-40 transition-all"
         >
-          Next
+          Next →
         </button>
       </div>
-      <span className="text-sm text-gray-700 dark:text-gray-300">
-        Page {page} / {totalPages}
-      </span>
-      {loading && <p className="text-gray-500 dark:text-gray-400">Loading…</p>}
+
+      <div className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-neutral-500 dark:text-neutral-400">
+        Page <span className="font-black text-neutral-900 dark:text-neutral-100">{page}</span> / {totalPages}
+        {loading && <span className="ml-2 animate-pulse">Loading...</span>}
+      </div>
     </div>
   );
 }

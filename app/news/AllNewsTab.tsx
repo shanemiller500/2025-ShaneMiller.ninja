@@ -312,27 +312,37 @@ export default function NewsTab() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-4 pb-10">
+    <div className="mx-auto max-w-7xl pb-10">
       {error && (
-        <p className="mb-6 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
-          {error}
-        </p>
+        <div className="mb-4 sm:mb-6 border-2 border-red-600 dark:border-red-400 bg-white dark:bg-neutral-900 p-3 sm:p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Error</span>
+          </div>
+          <p className="text-xs sm:text-sm text-red-700 dark:text-red-200">{error}</p>
+        </div>
       )}
 
-      {/* Filters */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="inline-flex overflow-hidden rounded-full border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900">
-          {(["All", "USA", "World"] as const).map((r) => (
+      {/* Filters - NEWSPAPER SECTION HEADER */}
+      <div className="mb-4 sm:mb-6 flex flex-wrap items-center gap-2 sm:gap-3 border-b-2 border-neutral-900 dark:border-neutral-100 pb-3 sm:pb-4">
+        <div className="flex items-center gap-2 mr-2 sm:mr-4">
+          <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+          <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Region</span>
+        </div>
+        <div className="inline-flex overflow-hidden border-2 border-neutral-900 dark:border-neutral-100">
+          {(["All", "USA", "World"] as const).map((r, idx) => (
             <button
               key={r}
               onClick={() => {
                 setRegion(r);
                 trackEvent("News Region Changed", { region: r });
               }}
-              className={`px-4 py-2 text-xs font-semibold transition sm:text-sm ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-black uppercase tracking-wider transition ${
+                idx !== 0 ? "border-l-2 border-neutral-900 dark:border-neutral-100" : ""
+              } ${
                 region === r
-                  ? "bg-indigo-600 text-white"
-                  : "bg-transparent text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/5"
+                  ? "bg-red-600 dark:bg-red-400 text-white dark:text-neutral-900"
+                  : "bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800"
               }`}
             >
               {r}
@@ -346,8 +356,7 @@ export default function NewsTab() {
             setProvider(e.target.value);
             trackEvent("News Provider Changed", { provider: e.target.value });
           }}
-          className="ml-auto rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm
-                     dark:border-white/10 dark:bg-brand-900 dark:text-gray-200 sm:text-sm"
+          className="ml-auto border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100"
         >
           {providers.map((p) => (
             <option key={p}>{p}</option>
@@ -355,18 +364,20 @@ export default function NewsTab() {
         </select>
       </div>
 
-      {/* HERO */}
+      {/* HERO - NEWSPAPER FRONT PAGE HEADLINE */}
       {heroGroup ? (
         <HeroCard group={heroGroup} onOpenGroup={() => setOpenGroup(heroGroup)} />
       ) : (
-        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-600 shadow-sm dark:border-white/10 dark:bg-brand-900 dark:text-gray-300">
-          {loading ? "Loading top stories…" : "No stories found."}
+        <div className="mb-4 sm:mb-6 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-4 sm:p-6 text-center">
+          <span className="text-xs sm:text-sm uppercase tracking-widest font-black text-neutral-500 dark:text-neutral-400">
+            {loading ? "Loading top stories..." : "No stories found."}
+          </span>
         </div>
       )}
 
-      {/* GRID (mixed groups inline, newest first) */}
+      {/* GRID - NEWSPAPER ARTICLE GRID */}
       <div
-        className={`mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 transition-opacity duration-200 ${
+        className={`mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 transition-opacity duration-200 ${
           fade ? "opacity-0" : "opacity-100"
         }`}
       >
@@ -405,7 +416,7 @@ export default function NewsTab() {
   );
 
   /* ------------------------------------------------------------------ */
-  /*  Cards                                                             */
+  /*  Cards - NEWSPAPER MAGAZINE STYLE                                  */
   /* ------------------------------------------------------------------ */
   function HeroCard({
     group,
@@ -435,47 +446,54 @@ export default function NewsTab() {
     return (
       <div
         onClick={onClick}
-        className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition-all duration-200 dark:border-white/10 dark:bg-brand-900 cursor-pointer"
+        className="group relative overflow-hidden border-2 sm:border-4 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] cursor-pointer transition-all duration-200 hover:shadow-xl"
       >
-        <div className="relative h-52 sm:h-64">
+        <div className="relative h-56 sm:h-72 md:h-80">
           {hasImg ? (
             <SmartImage
               candidates={candidates}
               alt={a.title}
               wrapperClassName="absolute inset-0"
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
             />
           ) : (
-            <div className="absolute inset-0 bg-gray-100 dark:bg-white/5" />
+            <div className="absolute inset-0 bg-neutral-100 dark:bg-neutral-800" />
           )}
 
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/0" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/0" />
 
-          <div className="absolute inset-x-0 bottom-0 p-4 text-white">
-            <div className="flex items-center gap-2">
+          {/* Breaking news banner */}
+          <div className="absolute top-0 left-0 bg-red-600 dark:bg-red-400 px-3 sm:px-4 py-1.5 sm:py-2">
+            <span className="text-[9px] sm:text-[10px] uppercase tracking-widest font-black text-white dark:text-neutral-900">
+              Top Story
+            </span>
+          </div>
+
+          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6 text-white">
+            <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
               {logoCandidates.length ? (
                 <SmartImage
                   candidates={logoCandidates}
                   alt={a.source.name}
-                  className="h-4 w-4 flex-shrink-0 rounded bg-white/10 object-contain"
+                  className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0 object-contain border border-white/30 bg-white/10 p-0.5"
                 />
               ) : null}
-              <span className="max-w-[220px] truncate text-xs font-semibold opacity-95">
+              <span className="text-[10px] sm:text-xs uppercase tracking-wider font-black opacity-95 truncate max-w-[200px]">
                 {a.source.name || getDomain(a.url)}
               </span>
-              <span className="opacity-70">•</span>
-              <time dateTime={a.publishedAt} className="text-xs opacity-80">
+              <div className="w-1 h-1 bg-white/50 rounded-full"></div>
+              <time dateTime={a.publishedAt} className="text-[10px] sm:text-xs uppercase tracking-wider font-bold opacity-80">
                 {new Date(a.publishedAt).toLocaleString(undefined, { month: "short", day: "numeric" })}
               </time>
 
               {multi ? (
-                <span className="ml-auto rounded-full bg-white/50 px-2 py-1 text-[10px] font-semibold backdrop-blur">
+                <span className="ml-auto border border-white/50 bg-white/20 px-2 py-1 text-[9px] sm:text-[10px] uppercase tracking-wider font-black backdrop-blur">
                   +{group.items.length - 1} sources
                 </span>
               ) : null}
             </div>
 
-            <h3 className="mt-2 line-clamp-2 text-base font-extrabold leading-snug sm:text-lg">
+            <h3 className="line-clamp-2 text-lg sm:text-2xl md:text-3xl font-black leading-tight uppercase tracking-tight">
               {a.title}
             </h3>
 
@@ -486,10 +504,10 @@ export default function NewsTab() {
                   e.stopPropagation();
                   onOpenGroup();
                 }}
-                className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-xs font-semibold backdrop-blur hover:bg-white/20 transition"
+                className="mt-3 sm:mt-4 inline-flex items-center gap-2 border-2 border-white bg-transparent px-3 sm:px-4 py-2 text-[10px] sm:text-xs uppercase tracking-widest font-black hover:bg-white hover:text-neutral-900 transition-all"
               >
                 View all sources
-                <span className="opacity-80">→</span>
+                <span>→</span>
               </button>
             ) : null}
           </div>
@@ -517,47 +535,47 @@ export default function NewsTab() {
       setReaderArticle(a);
     };
 
-    // One image only. If no image: show text card (no fake "no image" filler)
+    // Card with image - NEWSPAPER STYLE
     if (hasImg) {
       return (
         <div
           onClick={handlePrimaryClick}
-          className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md dark:border-white/10 dark:bg-brand-900 cursor-pointer"
+          className="group relative overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] cursor-pointer transition-all duration-200 hover:shadow-lg"
         >
-          <div className="relative h-44">
+          <div className="relative h-48 sm:h-52">
             <SmartImage
               candidates={candidates}
               alt={a.title}
               wrapperClassName="absolute inset-0"
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-black/0" />
-            <div className="absolute bottom-0 w-full p-3 text-white">
-              <div className="flex items-center gap-2 text-xs">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/0" />
+            <div className="absolute bottom-0 w-full p-3 sm:p-4 text-white">
+              <div className="flex items-center gap-2 text-[10px] sm:text-xs mb-2">
                 {logoCandidates.length ? (
                   <SmartImage
                     candidates={logoCandidates}
                     alt={a.source.name}
-                    className="h-4 w-4 rounded bg-white/10 object-contain"
+                    className="h-4 w-4 sm:h-5 sm:w-5 object-contain border border-white/30 bg-white/10 p-0.5"
                   />
                 ) : null}
 
-                <span className="max-w-[160px] truncate font-semibold opacity-95">
+                <span className="truncate max-w-[120px] uppercase tracking-wider font-black opacity-95">
                   {a.source.name}
                 </span>
-                <span className="opacity-70">•</span>
-                <time className="opacity-80" dateTime={a.publishedAt}>
+                <div className="w-1 h-1 bg-white/50 rounded-full"></div>
+                <time className="uppercase tracking-wider font-bold opacity-80" dateTime={a.publishedAt}>
                   {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                 </time>
 
                 {multi ? (
-                  <span className="ml-auto rounded-full bg-white/50 px-2 py-1 text-[10px] font-semibold backdrop-blur transition-opacity duration-200 group-hover:bg-white/20">
-                    +{group.items.length - 1} sources
+                  <span className="ml-auto border border-white/50 bg-white/20 px-1.5 py-0.5 text-[9px] uppercase tracking-wider font-black backdrop-blur">
+                    +{group.items.length - 1}
                   </span>
                 ) : null}
               </div>
 
-              <h3 className="mt-2 line-clamp-3 text-sm font-semibold leading-snug">
+              <h3 className="line-clamp-2 text-sm sm:text-base font-black leading-snug uppercase tracking-tight">
                 {a.title}
               </h3>
 
@@ -568,10 +586,10 @@ export default function NewsTab() {
                     e.stopPropagation();
                     onOpen();
                   }}
-                  className="mt-2 inline-flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-xs font-semibold backdrop-blur transition hover:bg-white/20"
+                  className="mt-2 sm:mt-3 inline-flex items-center gap-1.5 border border-white bg-transparent px-2 sm:px-3 py-1 sm:py-1.5 text-[9px] sm:text-[10px] uppercase tracking-widest font-black hover:bg-white hover:text-neutral-900 transition-all"
                 >
                   View sources
-                  <span className="opacity-80">→</span>
+                  <span>→</span>
                 </button>
               ) : null}
             </div>
@@ -580,34 +598,34 @@ export default function NewsTab() {
       );
     }
 
-    // Text-only card (no image shown)
+    // Text-only card - NEWSPAPER STYLE
     return (
       <div
         onClick={handlePrimaryClick}
-        className="group rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md dark:border-white/10 dark:bg-brand-900 cursor-pointer"
+        className="group border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-3 sm:p-4 cursor-pointer transition-all duration-200 hover:shadow-lg hover:bg-neutral-50 dark:hover:bg-neutral-800"
       >
-        <h3 className="line-clamp-3 text-sm font-semibold leading-snug text-gray-900 dark:text-white">
+        <h3 className="line-clamp-3 text-sm sm:text-base font-black leading-snug text-neutral-900 dark:text-neutral-100 uppercase tracking-tight">
           {a.title}
         </h3>
 
         {a.description ? (
-          <p className="mt-2 line-clamp-3 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-2 line-clamp-2 text-xs sm:text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">
             {a.description}
           </p>
         ) : null}
 
-        <div className="mt-3 flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+        <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center gap-2 text-[10px] sm:text-xs">
           {logoCandidates.length ? (
             <SmartImage
               candidates={logoCandidates}
               alt={a.source.name}
-              className="h-4 w-4 rounded bg-white/10 object-contain"
+              className="h-5 w-5 sm:h-6 sm:w-6 object-contain border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-0.5"
             />
           ) : null}
 
-          <span className="max-w-[160px] truncate font-medium">{a.source.name}</span>
-          <span className="text-gray-400">•</span>
-          <time className="text-gray-500 dark:text-gray-400" dateTime={a.publishedAt}>
+          <span className="truncate max-w-[120px] uppercase tracking-wider font-black text-neutral-700 dark:text-neutral-300">{a.source.name}</span>
+          <div className="w-1 h-1 bg-neutral-400 rounded-full"></div>
+          <time className="uppercase tracking-wider font-bold text-neutral-500 dark:text-neutral-400" dateTime={a.publishedAt}>
             {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
           </time>
 
@@ -618,10 +636,9 @@ export default function NewsTab() {
                 e.stopPropagation();
                 onOpen();
               }}
-              className="ml-auto rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-semibold text-gray-700 hover:bg-gray-100 transition
-                         dark:border-white/10 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10"
+              className="ml-auto border border-neutral-900 dark:border-neutral-100 bg-red-600 dark:bg-red-400 px-2 py-1 text-[9px] uppercase tracking-wider font-black text-white dark:text-neutral-900 hover:bg-neutral-900 dark:hover:bg-neutral-100 transition-all"
             >
-              +{group.items.length - 1} sources
+              +{group.items.length - 1}
             </button>
           ) : null}
         </div>
@@ -643,29 +660,28 @@ export default function NewsTab() {
     onNext: () => void;
   }) {
     return (
-      <div className="mt-10 flex flex-col items-center gap-4">
-        <div className="flex items-center gap-2">
+      <div className="mt-8 sm:mt-10 flex flex-col items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             disabled={page === 1 || loading}
             onClick={onPrev}
-            className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 disabled:opacity-40
-                     dark:bg-white/10 dark:hover:bg-white/15"
+            className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-neutral-900 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900 disabled:opacity-40 transition-all"
           >
-            Previous
+            ← Previous
           </button>
 
           <button
             disabled={page === totalPages || loading}
             onClick={onNext}
-            className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-40"
+            className="border-2 border-neutral-900 dark:border-neutral-100 bg-red-600 dark:bg-red-400 px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-white dark:text-neutral-900 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 dark:hover:bg-neutral-100 dark:hover:text-neutral-900 dark:hover:border-neutral-100 disabled:opacity-40 transition-all"
           >
-            Next
+            Next →
           </button>
         </div>
 
-        <div className="text-xs text-gray-600 dark:text-gray-300">
-          Page <span className="font-semibold">{page}</span> / {totalPages}
-          {loading && <span className="ml-2 animate-pulse text-gray-500">Loading…</span>}
+        <div className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-neutral-500 dark:text-neutral-400">
+          Page <span className="font-black text-neutral-900 dark:text-neutral-100">{page}</span> / {totalPages}
+          {loading && <span className="ml-2 animate-pulse">Loading...</span>}
         </div>
       </div>
     );
@@ -673,12 +689,12 @@ export default function NewsTab() {
 
   function SkeletonCard() {
     return (
-      <div className="animate-pulse overflow-hidden gap-5 rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900">
-        <div className="h-40 bg-gray-100 dark:bg-white/5" />
-        <div className="p-4">
-          <div className="h-3 w-3/4 rounded bg-gray-100 dark:bg-white/5" />
-          <div className="mt-2 h-3 w-2/3 rounded bg-gray-100 dark:bg-white/5" />
-          <div className="mt-4 h-3 w-1/3 rounded bg-gray-100 dark:bg-white/5" />
+      <div className="animate-pulse overflow-hidden border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-[#1D1D20]">
+        <div className="h-48 bg-neutral-100 dark:bg-neutral-800" />
+        <div className="p-3 sm:p-4">
+          <div className="h-3 w-3/4 bg-neutral-200 dark:bg-neutral-700" />
+          <div className="mt-2 h-3 w-2/3 bg-neutral-200 dark:bg-neutral-700" />
+          <div className="mt-4 h-3 w-1/3 bg-neutral-200 dark:bg-neutral-700" />
         </div>
       </div>
     );

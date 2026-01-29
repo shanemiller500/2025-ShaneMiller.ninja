@@ -62,12 +62,12 @@ const normalize = (s: string) => {
 
 function SkeletonCard() {
   return (
-    <div className="animate-pulse overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900">
-      <div className="h-40 bg-gray-100 dark:bg-white/5" />
-      <div className="p-4">
-        <div className="h-3 w-11/12 rounded bg-gray-100 dark:bg-white/5" />
-        <div className="mt-2 h-3 w-8/12 rounded bg-gray-100 dark:bg-white/5" />
-        <div className="mt-4 h-3 w-4/12 rounded bg-gray-100 dark:bg-white/5" />
+    <div className="animate-pulse overflow-hidden border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-[#1D1D20]">
+      <div className="h-48 bg-neutral-100 dark:bg-neutral-800" />
+      <div className="p-3 sm:p-4">
+        <div className="h-3 w-11/12 bg-neutral-200 dark:bg-neutral-700" />
+        <div className="mt-2 h-3 w-8/12 bg-neutral-200 dark:bg-neutral-700" />
+        <div className="mt-4 h-3 w-4/12 bg-neutral-200 dark:bg-neutral-700" />
       </div>
     </div>
   );
@@ -130,8 +130,13 @@ function LiveScoresForTab({ tab }: { tab: TabKey }) {
   // If no live games for the selected tab, show the message (not "No games today.")
   if (!hasLiveForTab) {
     return (
-      <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-4 text-sm font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-brand-900 dark:text-gray-200">
-        No live games right now.
+      <div className="mt-4 sm:mt-6 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-3 sm:p-4">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-neutral-400 rounded-full"></div>
+          <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-500 dark:text-neutral-400">
+            No live games right now
+          </span>
+        </div>
       </div>
     );
   }
@@ -244,10 +249,10 @@ export default function SportsTab() {
 
   return (
     <div className="pb-10">
-      {/* News tabs */}
-      <div className="rounded-3xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-brand-900 overflow-hidden">
-        <div className="flex items-center gap-2 p-2 sm:p-3 border-b border-gray-200 dark:border-white/10 overflow-x-auto">
-          {CATEGORIES.map((c) => {
+      {/* Sports Category Tabs - NEWSPAPER STYLE */}
+      <div className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] mb-4 sm:mb-6">
+        <div className="flex items-center overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-300 dark:scrollbar-thumb-neutral-600">
+          {CATEGORIES.map((c, idx) => {
             const isActive = tab === c.key;
             return (
               <button
@@ -255,11 +260,11 @@ export default function SportsTab() {
                 type="button"
                 onClick={() => setTab(c.key)}
                 className={[
-                     "relative shrink-0 whitespace-nowrap rounded-full px-3 sm:px-4 py-2 text-sm font-extrabold transition",
-                  "ring-1 ring-black/10 dark:ring-white/10",
+                  "relative shrink-0 whitespace-nowrap px-3 sm:px-5 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all",
+                  idx !== 0 ? "border-l-2 border-neutral-900 dark:border-neutral-100" : "",
                   isActive
-                    ? "bg-gray-900 text-white border-black/20 hover:bg-gray-900 dark:bg-white/10 dark:text-white dark:border-white/20 dark:hover:bg-white/10"
-                    : "border border-black/10 bg-white text-gray-800 hover:bg-black/[0.03] dark:border-white/10 dark:bg-brand-900 dark:text-white/80 dark:hover:bg-white/[0.06]",
+                    ? "bg-red-600 dark:bg-red-400 text-white dark:text-neutral-900"
+                    : "bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800",
                 ].join(" ")}
                 aria-current={isActive ? "page" : undefined}
               >
@@ -270,64 +275,80 @@ export default function SportsTab() {
         </div>
       </div>
 
-      {/* ✅ Live scores obey the selected tab */}
+      {/* Live scores obey the selected tab */}
       <LiveScoresForTab tab={tab} />
 
       {error && (
-        <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-900/20 dark:text-red-200">
-          {error}
-        </p>
-      )}
-
-      {topStrip.length > 0 && (
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {topStrip.map((a, i) => {
-            const domain = getDomain(a.url);
-            const logoCandidates = uniqStrings([a.source.image ?? "", favicon(domain)].filter(Boolean).map(normalize));
-            const imgCandidates = getImageCandidates(a);
-
-            return (
-              <button
-                key={`${stableKey(a)}-${i}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  setReaderArticle(a);
-                }}
-                className="group relative block w-full text-left h-44 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md
-                           dark:border-white/10 dark:bg-brand-900"
-              >
-                {imgCandidates.length ? (
-                  <SmartImage
-                    candidates={imgCandidates}
-                    alt={a.title}
-                    wrapperClassName="absolute inset-0"
-                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-white/5">
-                    <span className="text-sm text-gray-500">No image</span>
-                  </div>
-                )}
-
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/0" />
-                <div className="absolute inset-x-0 bottom-0 z-10 p-3 text-white">
-                  <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{a.title}</h3>
-                  <div className="mt-2 flex items-center gap-2 text-xs">
-                    {logoCandidates.length ? (
-                      <SmartImage candidates={logoCandidates} alt={a.source.name} className="h-4 w-4 rounded bg-white/10 object-contain" />
-                    ) : null}
-                    <span className="truncate max-w-[140px]">{a.source.name}</span>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+        <div className="mt-4 border-2 border-red-600 dark:border-red-400 bg-white dark:bg-neutral-900 p-3 sm:p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Error</span>
+          </div>
+          <p className="text-xs sm:text-sm text-red-700 dark:text-red-200">{error}</p>
         </div>
       )}
 
-      <section className="mt-8">
+      {/* Top Stories Strip - FEATURED SPORTS HEADLINES */}
+      {topStrip.length > 0 && (
+        <div className="mt-6 sm:mt-8">
+          <div className="flex items-center gap-2 mb-3 sm:mb-4 border-b-2 border-neutral-900 dark:border-neutral-100 pb-2">
+            <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Featured Stories</span>
+          </div>
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {topStrip.map((a, i) => {
+              const domain = getDomain(a.url);
+              const logoCandidates = uniqStrings([a.source.image ?? "", favicon(domain)].filter(Boolean).map(normalize));
+              const imgCandidates = getImageCandidates(a);
+
+              return (
+                <button
+                  key={`${stableKey(a)}-${i}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setReaderArticle(a);
+                  }}
+                  className="group relative block w-full text-left h-48 sm:h-52 overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] transition-all duration-200 hover:shadow-lg"
+                >
+                  {imgCandidates.length ? (
+                    <SmartImage
+                      candidates={imgCandidates}
+                      alt={a.title}
+                      wrapperClassName="absolute inset-0"
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center bg-neutral-100 dark:bg-neutral-800">
+                      <span className="text-[10px] uppercase tracking-widest font-black text-neutral-400">No image</span>
+                    </div>
+                  )}
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/0" />
+                  <div className="absolute inset-x-0 bottom-0 z-10 p-3 sm:p-4 text-white">
+                    <h3 className="line-clamp-2 text-sm sm:text-base font-black leading-snug uppercase tracking-tight">{a.title}</h3>
+                    <div className="mt-2 flex items-center gap-2 text-[10px] sm:text-xs">
+                      {logoCandidates.length ? (
+                        <SmartImage candidates={logoCandidates} alt={a.source.name} className="h-4 w-4 sm:h-5 sm:w-5 object-contain border border-white/30 bg-white/10 p-0.5" />
+                      ) : null}
+                      <span className="truncate max-w-[120px] uppercase tracking-wider font-black opacity-90">{a.source.name}</span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Main Article Grid - SPORTS NEWS SECTION */}
+      <section className="mt-6 sm:mt-8">
+        <div className="flex items-center gap-2 mb-3 sm:mb-4 border-b-2 border-neutral-900 dark:border-neutral-100 pb-2">
+          <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
+          <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Latest Sports News</span>
+        </div>
+
         {loading && articles.length === 0 ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 12 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
@@ -335,7 +356,7 @@ export default function SportsTab() {
         ) : (
           <div
             className={`
-              grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3
+              grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3
               transition-opacity duration-200
               ${loading ? "opacity-70" : "opacity-100"}
             `}
@@ -365,6 +386,7 @@ function ArticleCard({ article, onClick }: { article: Article; onClick?: () => v
   const logoCandidates = uniqStrings([article.source.image ?? "", favicon(domain)].filter(Boolean).map(normalize));
   const imgCandidates = getImageCandidates(article);
 
+  // Card with image - SPORTS MAGAZINE STYLE
   if (imgCandidates.length) {
     return (
       <button
@@ -372,26 +394,25 @@ function ArticleCard({ article, onClick }: { article: Article; onClick?: () => v
           e.preventDefault();
           onClick?.();
         }}
-        className="group block w-full text-left overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md
-                   dark:border-white/10 dark:bg-brand-900"
+        className="group block w-full text-left overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] transition-all duration-200 hover:shadow-lg"
       >
-        <div className="relative h-48">
+        <div className="relative h-48 sm:h-52">
           <SmartImage
             candidates={imgCandidates}
             alt={article.title}
             wrapperClassName="absolute inset-0"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/0" />
-          <div className="absolute bottom-0 z-10 flex w-full flex-col gap-2 p-4 text-white">
-            <h3 className="line-clamp-3 text-sm font-semibold leading-snug">{article.title}</h3>
-            <div className="flex items-center gap-2 text-xs text-white/90">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-black/0" />
+          <div className="absolute bottom-0 z-10 flex w-full flex-col gap-2 p-3 sm:p-4 text-white">
+            <h3 className="line-clamp-2 text-sm sm:text-base font-black leading-snug uppercase tracking-tight">{article.title}</h3>
+            <div className="flex items-center gap-2 text-[10px] sm:text-xs">
               {logoCandidates.length ? (
-                <SmartImage candidates={logoCandidates} alt={article.source.name} className="h-4 w-4 rounded bg-white/10 object-contain" />
+                <SmartImage candidates={logoCandidates} alt={article.source.name} className="h-4 w-4 sm:h-5 sm:w-5 object-contain border border-white/30 bg-white/10 p-0.5" />
               ) : null}
-              <span className="truncate max-w-[160px]">{article.source.name}</span>
-              <span className="text-white/60">•</span>
-              <time className="whitespace-nowrap text-white/70">
+              <span className="truncate max-w-[120px] uppercase tracking-wider font-black opacity-90">{article.source.name}</span>
+              <div className="w-1 h-1 bg-white/50 rounded-full"></div>
+              <time className="whitespace-nowrap uppercase tracking-wider font-bold opacity-80">
                 {new Date(article.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
               </time>
             </div>
@@ -401,23 +422,23 @@ function ArticleCard({ article, onClick }: { article: Article; onClick?: () => v
     );
   }
 
+  // Text-only card - SPORTS MAGAZINE STYLE
   return (
     <button
       onClick={(e) => {
         e.preventDefault();
         onClick?.();
       }}
-      className="group block w-full text-left overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md
-                 dark:border-white/10 dark:bg-brand-900"
+      className="group block w-full text-left overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-3 sm:p-4 transition-all duration-200 hover:shadow-lg hover:bg-neutral-50 dark:hover:bg-neutral-800"
     >
-      <h3 className="line-clamp-3 text-sm font-semibold leading-snug text-gray-900 dark:text-white">{article.title}</h3>
-      <div className="mt-3 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+      <h3 className="line-clamp-3 text-sm sm:text-base font-black leading-snug text-neutral-900 dark:text-neutral-100 uppercase tracking-tight">{article.title}</h3>
+      <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center gap-2 text-[10px] sm:text-xs">
         {logoCandidates.length ? (
-          <SmartImage candidates={logoCandidates} alt={article.source.name} className="h-6 w-6 rounded bg-gray-100 object-contain dark:bg-white/5" />
+          <SmartImage candidates={logoCandidates} alt={article.source.name} className="h-5 w-5 sm:h-6 sm:w-6 object-contain border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-0.5" />
         ) : null}
-        <span className="truncate max-w-[200px]">{article.source.name}</span>
-        <span>•</span>
-        <time className="whitespace-nowrap">
+        <span className="truncate max-w-[140px] uppercase tracking-wider font-black text-neutral-700 dark:text-neutral-300">{article.source.name}</span>
+        <div className="w-1 h-1 bg-neutral-400 rounded-full"></div>
+        <time className="whitespace-nowrap uppercase tracking-wider font-bold text-neutral-500 dark:text-neutral-400">
           {new Date(article.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
         </time>
       </div>
@@ -439,29 +460,28 @@ function Pagination({
   onNext: () => void;
 }) {
   return (
-    <div className="mt-10 flex flex-col items-center gap-4">
-      <div className="flex gap-3">
+    <div className="mt-8 sm:mt-10 flex flex-col items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-3">
         <button
           disabled={page === 1 || loading}
           onClick={onPrev}
-          className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 disabled:opacity-40
-                     dark:bg-white/10 dark:hover:bg-white/15"
+          className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-neutral-900 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900 disabled:opacity-40 transition-all"
         >
-          Previous
+          ← Previous
         </button>
         <button
           disabled={page === totalPages || loading}
           onClick={onNext}
-          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-40"
+          className="border-2 border-neutral-900 dark:border-neutral-100 bg-red-600 dark:bg-red-400 px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-white dark:text-neutral-900 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 dark:hover:bg-neutral-100 dark:hover:text-neutral-900 dark:hover:border-neutral-100 disabled:opacity-40 transition-all"
         >
-          Next
+          Next →
         </button>
       </div>
 
-      <span className="text-xs text-gray-600 dark:text-gray-300">
-        Page <span className="font-semibold">{page}</span> / {totalPages}
-        {loading && <span className="ml-2 animate-pulse text-gray-500">Loading…</span>}
-      </span>
+      <div className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-neutral-500 dark:text-neutral-400">
+        Page <span className="font-black text-neutral-900 dark:text-neutral-100">{page}</span> / {totalPages}
+        {loading && <span className="ml-2 animate-pulse">Loading...</span>}
+      </div>
     </div>
   );
 }

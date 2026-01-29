@@ -91,6 +91,206 @@ const Chip = ({ kind, text }: { kind: "league" | "live" | "final"; text: string 
   return <span className={`px-2.5 py-1 text-[9px] uppercase tracking-[0.08em] font-bold ${cls}`}>{text}</span>;
 };
 
+/* ------------------------------ */
+/* Game Detail Modal (ESPN-style) */
+/* ------------------------------ */
+function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
+  const live = !!game.isLive || isLiveText(game.status);
+  const awayScore = game.awayTeam.score ?? game.awayTeam.points ?? "—";
+  const homeScore = game.homeTeam.score ?? game.homeTeam.points ?? "—";
+
+  // Format game time
+  const gameTime = new Date(game.startTime);
+  const timeString = gameTime.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const dateString = gameTime.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+
+  // ESC key handler
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Disable body scroll when modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+      {/* backdrop */}
+      <div
+        aria-label="Close"
+        onClick={onClose}
+        className="fixed inset-0 bg-black/90 cursor-pointer"
+      />
+
+      {/* panel - ESPN SCOREBOARD STYLE */}
+      <div className="relative z-10 w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden border-2 sm:border-4 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] shadow-2xl">
+        {/* Header */}
+        <div className="flex-shrink-0 border-b-2 border-neutral-900 dark:border-neutral-100 bg-neutral-900 dark:bg-neutral-100">
+          <div className="flex items-center justify-between gap-2 sm:gap-4 p-3 sm:p-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-600 dark:bg-red-500 rounded-full shrink-0"></div>
+              <span className="text-[10px] sm:text-xs uppercase tracking-[0.15em] sm:tracking-[0.2em] font-black text-white dark:text-neutral-900">
+                {game.leagueDisplay || game.league.toUpperCase()}
+              </span>
+              {live && (
+                <span className="px-2 py-0.5 text-[8px] sm:text-[9px] uppercase tracking-wider font-black bg-red-600 text-white animate-pulse">
+                  LIVE
+                </span>
+              )}
+              {game.isFinal && !live && (
+                <span className="px-2 py-0.5 text-[8px] sm:text-[9px] uppercase tracking-wider font-black bg-neutral-600 dark:bg-neutral-400 text-white dark:text-neutral-900">
+                  FINAL
+                </span>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              className="shrink-0 px-2 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs uppercase tracking-wider font-black text-white dark:text-neutral-900 hover:bg-white/20 dark:hover:bg-neutral-900/20 transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Content - scrollable */}
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          {/* Competition & Status Banner */}
+          <div className="bg-neutral-100 dark:bg-neutral-900 border-b-2 border-neutral-900 dark:border-neutral-100 p-3 sm:p-4">
+            <h2 className="text-sm sm:text-lg font-black text-neutral-900 dark:text-neutral-100 uppercase tracking-wide">
+              {game.competition}
+            </h2>
+            <div className="mt-1 flex flex-wrap items-center gap-2 sm:gap-3 text-[9px] sm:text-[10px] uppercase tracking-wider font-bold text-neutral-600 dark:text-neutral-400">
+              <span>{dateString}</span>
+              <span className="w-1 h-1 bg-neutral-400 rounded-full"></span>
+              <span>{timeString}</span>
+              {game.status && (
+                <>
+                  <span className="w-1 h-1 bg-neutral-400 rounded-full"></span>
+                  <span className={live ? "text-red-600 dark:text-red-400" : ""}>{game.status}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Scoreboard - ESPN STYLE */}
+          <div className="p-3 sm:p-6">
+            {/* Team Rows */}
+            <div className="border-2 border-neutral-900 dark:border-neutral-100 overflow-hidden">
+              {/* Away Team */}
+              <div className="flex items-center bg-white dark:bg-[#1D1D20] border-b-2 border-neutral-900 dark:border-neutral-100">
+                <div className="flex-1 flex items-center gap-3 sm:gap-4 p-3 sm:p-4">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 flex items-center justify-center bg-neutral-100 dark:bg-neutral-800 border-2 border-neutral-300 dark:border-neutral-600">
+                    <Img src={game.awayTeam.logo} alt={game.awayTeam.name} className="h-8 w-8 sm:h-12 sm:w-12" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[9px] sm:text-[10px] uppercase tracking-wider font-bold text-neutral-500 dark:text-neutral-400">Away</div>
+                    <div className="text-sm sm:text-lg font-black text-neutral-900 dark:text-neutral-100 truncate">{game.awayTeam.name}</div>
+                  </div>
+                </div>
+                <div className="w-20 sm:w-28 text-center p-3 sm:p-4 bg-neutral-100 dark:bg-neutral-900 border-l-2 border-neutral-900 dark:border-neutral-100">
+                  <div className="text-2xl sm:text-4xl font-black text-neutral-900 dark:text-neutral-100 tabular-nums">{awayScore}</div>
+                </div>
+              </div>
+
+              {/* Home Team */}
+              <div className="flex items-center bg-white dark:bg-[#1D1D20]">
+                <div className="flex-1 flex items-center gap-3 sm:gap-4 p-3 sm:p-4">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 flex items-center justify-center bg-neutral-100 dark:bg-neutral-800 border-2 border-neutral-300 dark:border-neutral-600">
+                    <Img src={game.homeTeam.logo} alt={game.homeTeam.name} className="h-8 w-8 sm:h-12 sm:w-12" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[9px] sm:text-[10px] uppercase tracking-wider font-bold text-neutral-500 dark:text-neutral-400">Home</div>
+                    <div className="text-sm sm:text-lg font-black text-neutral-900 dark:text-neutral-100 truncate">{game.homeTeam.name}</div>
+                  </div>
+                </div>
+                <div className="w-20 sm:w-28 text-center p-3 sm:p-4 bg-neutral-100 dark:bg-neutral-900 border-l-2 border-neutral-900 dark:border-neutral-100">
+                  <div className="text-2xl sm:text-4xl font-black text-neutral-900 dark:text-neutral-100 tabular-nums">{homeScore}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Series Text */}
+            {game.seriesText && (
+              <div className="mt-4 p-3 sm:p-4 border-2 border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-1.5 h-1.5 bg-red-600 dark:bg-red-400 rounded-full"></div>
+                  <span className="text-[9px] sm:text-[10px] uppercase tracking-wider font-black text-neutral-500 dark:text-neutral-400">Series</span>
+                </div>
+                <p className="text-xs sm:text-sm font-bold text-neutral-800 dark:text-neutral-200">{game.seriesText}</p>
+              </div>
+            )}
+
+            {/* Action Links - ESPN STYLE */}
+            <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+              {game.espnLink && (
+                <a
+                  href={game.espnLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 border-2 border-neutral-900 dark:border-neutral-100 bg-red-600 dark:bg-red-500 px-4 py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-white hover:bg-red-700 dark:hover:bg-red-600 transition-colors"
+                >
+                  <span>View on ESPN</span>
+                  <span>→</span>
+                </a>
+              )}
+
+              {game.recapLink && (
+                <a
+                  href={game.recapLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-900 dark:bg-neutral-100 px-4 py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-white dark:text-neutral-900 hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-colors"
+                >
+                  <span>Game Recap</span>
+                  <span>→</span>
+                </a>
+              )}
+
+              {game.highlight && (
+                <a
+                  href={game.highlight}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] px-4 py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                >
+                  <span>▶ Highlights</span>
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 border-t-2 border-neutral-900 dark:border-neutral-100 bg-neutral-100 dark:bg-neutral-900 p-3 sm:p-4">
+          <button
+            onClick={onClose}
+            className="w-full border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] py-2.5 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-neutral-900 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LiveScores({ sport }: { sport: string }) {
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(false);
@@ -383,52 +583,7 @@ export default function LiveScores({ sport }: { sport: string }) {
         </div>
       )}
 
-      {sel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setSel(null)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg border-4 border-neutral-900 dark:border-neutral-100 bg-white p-6 shadow-2xl dark:bg-[#1D1D20]"
-          >
-            <div className="mb-4 flex items-center justify-between gap-3 pb-4 border-b-2 border-neutral-900 dark:border-neutral-100">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
-                <Chip kind="league" text={sel.leagueDisplay || sel.league.toUpperCase()} />
-              </div>
-              {sel.isLive || isLiveText(sel.status) ? <Chip kind="live" text="LIVE" /> : sel.isFinal ? <Chip kind="final" text="FINAL" /> : null}
-            </div>
-
-            <h3 className="text-lg font-black text-neutral-900 dark:text-neutral-100 uppercase tracking-wide">{sel.competition}</h3>
-            <p className="mt-2 text-[10px] uppercase tracking-[0.12em] font-bold text-neutral-600 dark:text-neutral-400">{sel.status}</p>
-
-            <div className="mt-6 space-y-4">
-              {[sel.awayTeam, sel.homeTeam].map((t, i) => (
-                <div key={i} className="flex items-center justify-between border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-50 p-4 dark:bg-neutral-900">
-                  <div className="flex items-center gap-4">
-                    <Img src={t.logo} alt={t.name} className="h-12 w-12" />
-                    <div className="text-base font-black text-neutral-900 dark:text-neutral-100">{t.name}</div>
-                  </div>
-                  <div className="text-3xl font-black text-neutral-900 dark:text-neutral-100 tabular-nums">
-                    {t.score ?? t.points ?? "—"}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {sel.seriesText && (
-              <div className="mt-4 pt-4 border-t-2 border-neutral-200 dark:border-neutral-700">
-                <p className="text-xs font-bold text-neutral-700 dark:text-neutral-300">{sel.seriesText}</p>
-              </div>
-            )}
-
-            <button
-              onClick={() => setSel(null)}
-              className="mt-6 w-full border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-900 dark:bg-neutral-100 py-3 text-sm font-black uppercase tracking-wider text-white dark:text-neutral-900 hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      {sel && <GameModal game={sel} onClose={() => setSel(null)} />}
     </section>
   );
 }
