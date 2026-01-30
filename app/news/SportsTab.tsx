@@ -295,7 +295,7 @@ export default function SportsTab() {
             <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
             <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Featured Stories</span>
           </div>
-          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {topStrip.map((a, i) => {
               const domain = getDomain(a.url);
               const logoCandidates = uniqStrings([a.source.image ?? "", favicon(domain)].filter(Boolean).map(normalize));
@@ -348,7 +348,7 @@ export default function SportsTab() {
         </div>
 
         {loading && articles.length === 0 ? (
-          <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 12 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
@@ -356,7 +356,7 @@ export default function SportsTab() {
         ) : (
           <div
             className={`
-              grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3
+              grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3
               transition-opacity duration-200
               ${loading ? "opacity-70" : "opacity-100"}
             `}

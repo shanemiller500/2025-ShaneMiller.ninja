@@ -377,7 +377,7 @@ export default function NewsTab() {
 
       {/* GRID - NEWSPAPER ARTICLE GRID */}
       <div
-        className={`mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 transition-opacity duration-200 ${
+        className={`mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 transition-opacity duration-200 ${
           fade ? "opacity-0" : "opacity-100"
         }`}
       >

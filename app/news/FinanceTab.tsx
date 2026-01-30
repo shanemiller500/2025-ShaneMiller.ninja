@@ -143,7 +143,7 @@ export default function FinanceTab() {
                 <div className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full"></div>
                 <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Featured Finance</span>
               </div>
-              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {heroArticles.map((a) => {
                   const logoCandidates = getLogoCandidates(a);
                   const imgCandidates = getImageCandidates(a);
@@ -202,7 +202,7 @@ export default function FinanceTab() {
           </div>
 
           {/* Article Grid - NEWSPAPER STYLE */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {regularSlice.map((a) => {
               const hasImage = getImageCandidates(a).length > 0;
               const logoCandidates = getLogoCandidates(a);
@@ -301,7 +301,7 @@ function Pagination({
   onNext,
 }: PaginationProps) {
   return (
-    <div className="mt-8 sm:mt-10 flex flex-col items-center gap-3 sm:gap-4">
+    <div className="mt-8 sm:mt-10 flex flex-col items-center gap-2">
       <div className="flex items-center gap-2 sm:gap-3">
         <button
           disabled={page === 1 || loading}
