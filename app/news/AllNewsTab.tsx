@@ -549,19 +549,39 @@ export default function NewsTab() {
       setReaderArticle(a);
     };
 
-    // CBS News card - clean text-focused style with small thumbnail accent
+    // CBS News card - consistent style matching other cards
     if (isCBS) {
       return (
         <div
           onClick={handlePrimaryClick}
-          className="group relative border-2 border-neutral-900 dark:border-neutral-100 bg-gradient-to-br from-neutral-50 to-white dark:from-neutral-900 dark:to-[#1D1D20] cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-red-600 dark:hover:border-red-400"
+          className="group relative overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] cursor-pointer transition-all duration-200 hover:shadow-lg"
         >
           {/* Red accent bar */}
-          <div className="absolute top-0 left-0 w-1 h-full bg-red-600 dark:bg-red-400" />
+          <div className="absolute top-0 left-0 w-1 h-full bg-red-600 dark:bg-red-400 z-10" />
 
-          <div className="p-4 sm:p-5 pl-5 sm:pl-6">
-            {/* Header: Logo + Source + Date */}
-            <div className="flex items-center gap-2 mb-3">
+          {/* Image */}
+          {hasImg && (
+            <div className="relative h-40 sm:h-48 bg-neutral-100 dark:bg-neutral-900">
+              <SmartImage
+                candidates={candidates}
+                alt={a.title}
+                wrapperClassName="absolute inset-0"
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+              />
+            </div>
+          )}
+
+          <div className="p-3 sm:p-4">
+            {/* Title */}
+            <h3 className="text-sm sm:text-base font-extrabold leading-tight text-neutral-900 dark:text-neutral-100 line-clamp-3 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">
+              {a.title}
+            </h3>
+
+            {/* Grey divider line */}
+            <div className="h-px bg-neutral-300 dark:bg-neutral-700 my-3" />
+
+            {/* Footer: Logo + Source name + Dot + Date */}
+            <div className="flex items-center gap-2">
               {logoCandidates.length ? (
                 <SmartImage
                   candidates={logoCandidates}
@@ -573,27 +593,6 @@ export default function NewsTab() {
                 CBS News
               </span>
               <span className="text-neutral-300 dark:text-neutral-600">•</span>
-               {/* Optional thumbnail - small, bottom right */}
-            {hasImg ? (
-              <div className="mt-3 flex justify-end">
-                <div className="w-16 h-16 rounded overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 opacity-80 group-hover:opacity-100 transition-opacity">
-                  <SmartImage
-                    candidates={candidates}
-                    alt=""
-                    wrapperClassName="w-full h-full"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-            ) : null}
-
-
-            </div>
-
-            {/* Big headline */}
-            <h3 className="text-base sm:text-lg font-extrabold leading-tight text-neutral-900 dark:text-neutral-100 line-clamp-3 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">
-              {a.title}
-            </h3>
               <time className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400" dateTime={a.publishedAt}>
                 {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
               </time>
@@ -609,7 +608,7 @@ export default function NewsTab() {
                   +{group.items.length - 1}
                 </button>
               ) : null}
-
+            </div>
           </div>
         </div>
       );
@@ -627,11 +626,12 @@ export default function NewsTab() {
           
           <div className="relative h-48 sm:h-52">
             <SmartImage
-              candidates={candidates}
-              alt={a.title}
-              wrapperClassName="absolute inset-0"
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-            />
+  candidates={candidates}
+  alt={a.title}
+  wrapperClassName="absolute inset-0"
+  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+/>
+
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/0" />
             <div className="absolute bottom-0 w-full p-3 sm:p-4 text-white">
               <div className="flex items-center gap-2 text-[10px] sm:text-xs mb-2">

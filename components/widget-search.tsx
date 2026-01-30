@@ -17,7 +17,7 @@ export default function WidgetSearch() {
   };
 
   return (
-    <div className="w-full rounded-2xl border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-4 shadow-lg">
+    <div className="w-full rounded-2xl border border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-4 shadow-lg">
       {/* Header */}
       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-neutral-200 dark:border-neutral-700">
         <div className="w-1.5 h-1.5 bg-red-600 dark:bg-red-400 rounded-full"></div>
