@@ -2,7 +2,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchMediaStackArticles } from "./Mediastack-API-Call";
 import { fetchFinnhubArticles } from "./Finnhub-API-Call";
 import { fetchUmailArticles } from "./MoreNewsAPI";
 import { trackEvent } from "@/utils/mixpanel";
@@ -24,18 +23,20 @@ export interface Article {
     id: string | null;
     name: string;
     imageCandidates?: string[];
+    image?: string | null;
   };
   author: string | null;
   title: string;
   description: string;
   url: string;
   urlToImage: string | null;
+  image?: string | null;
   images?: string[];
   thumbnails?: string[];
   publishedAt: string;
   content: string | null;
   categories: (string | null | undefined | any)[];
-  image?: string;
+  category?: string;
 }
 
 
@@ -171,8 +172,7 @@ export default function NewsTab() {
       setError(null);
 
       try {
-        const [ms, fh, um] = await Promise.allSettled([
-          fetchMediaStackArticles(1),
+        const [fh, um] = await Promise.allSettled([
           fetchFinnhubArticles(),
           fetchUmailArticles(),
         ]);
@@ -180,7 +180,7 @@ export default function NewsTab() {
         const ok = (r: PromiseSettledResult<Article[]>) =>
           r.status === "fulfilled" ? r.value : [];
 
-        const merged = sortByDateDesc(uniqByKey([...ok(ms), ...ok(fh), ...ok(um)]));
+        const merged = sortByDateDesc(uniqByKey([...ok(fh), ...ok(um)]));
 
         if (!cancel) {
           CACHE_ALL = { ts: Date.now(), data: merged };
@@ -212,23 +212,29 @@ export default function NewsTab() {
           if (!res.ok) throw new Error(`US feed ${res.status}`);
           const json = await res.json();
 
-          const data: Article[] = (json?.results || []).map((r: any) => ({
-            source: {
-              id: null,
-              name: getDomain(r.link),
-              imageCandidates: r.sourceImageCandidates || [],
-            },
-            author: r.author || null,
-            title: r.headline ?? "",
-            description: r.description ?? "",
-            url: r.link,
-            urlToImage: r.image ?? null,
-            images: r.images,
-            thumbnails: r.thumbnails,
-            publishedAt: r.publishedAt,
-            content: r.content ?? null,
-            categories: r.categories || [],
-          }));
+          const data: Article[] = (json?.results || []).map((r: any) => {
+            const mainImg = r.image || null;
+            const imagesArr = Array.isArray(r.images) ? r.images.filter(Boolean) : [];
+            const thumbsArr = Array.isArray(r.thumbnails) ? r.thumbnails.filter(Boolean) : [];
+            return {
+              source: {
+                id: null,
+                name: r.source || getDomain(r.link),
+                imageCandidates: Array.isArray(r.sourceImageCandidates) ? r.sourceImageCandidates : [],
+              },
+              author: r.author || null,
+              title: r.headline ?? "",
+              description: r.description ?? "",
+              url: r.link,
+              urlToImage: mainImg,
+              image: mainImg,
+              images: imagesArr,
+              thumbnails: thumbsArr,
+              publishedAt: r.publishedAt,
+              content: r.content ?? null,
+              categories: Array.isArray(r.categories) ? r.categories : [],
+            };
+          });
 
           USA_CACHE = { ts: Date.now(), data };
           try {
@@ -243,7 +249,7 @@ export default function NewsTab() {
     }
 
     USA_FETCH.then(() => {
-      if (!cancel) setArticles((a) => a);
+      if (!cancel) setArticles((a) => [...a]); // Force re-render with new array reference
     });
 
     return () => {
@@ -276,9 +282,14 @@ export default function NewsTab() {
   // GROUPS (mixed feed)
   const groups = useMemo(() => groupByTitle(byProvider), [byProvider]);
 
-  // hero group = newest group that has an image
+  // hero group = newest group that has an image (skip CBS - their thumbnails are too small for hero)
   const heroGroup = useMemo(() => {
-    return groups.find((g) => getImageCandidates(g.rep, 800).length > 0) ?? null;
+    return groups.find((g) => {
+      const a = g.rep;
+      const isCBS = a.url?.includes("cbsnews.com") || a.source.name?.toLowerCase().includes("cbs");
+      if (isCBS) return false; // Skip CBS for hero - images too small
+      return getImageCandidates(a, 800).length > 0;
+    }) ?? null;
   }, [groups]);
 
   const restGroups = useMemo(() => {
@@ -523,6 +534,9 @@ export default function NewsTab() {
     const logoCandidates = getLogoCandidates(a);
     const multi = group.items.length > 1;
 
+    // Check if this is a CBS News article (small thumbnails)
+    const isCBS = a.url?.includes("cbsnews.com") || a.source.name?.toLowerCase().includes("cbs");
+
     const handlePrimaryClick = (e: React.MouseEvent) => {
       e.preventDefault();
       trackEvent("Article Clicked", {
@@ -535,13 +549,82 @@ export default function NewsTab() {
       setReaderArticle(a);
     };
 
-    // Card with image - NEWSPAPER STYLE
+    // CBS News card - clean text-focused style with small thumbnail accent
+    if (isCBS) {
+      return (
+        <div
+          onClick={handlePrimaryClick}
+          className="group relative border-2 border-neutral-900 dark:border-neutral-100 bg-gradient-to-br from-neutral-50 to-white dark:from-neutral-900 dark:to-[#1D1D20] cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-red-600 dark:hover:border-red-400"
+        >
+          {/* Red accent bar */}
+          <div className="absolute top-0 left-0 w-1 h-full bg-red-600 dark:bg-red-400" />
+
+          <div className="p-4 sm:p-5 pl-5 sm:pl-6">
+            {/* Header: Logo + Source + Date */}
+            <div className="flex items-center gap-2 mb-3">
+              {logoCandidates.length ? (
+                <SmartImage
+                  candidates={logoCandidates}
+                  alt={a.source.name}
+                  className="h-5 w-5 object-contain rounded bg-white dark:bg-neutral-800 p-0.5 border border-neutral-200 dark:border-neutral-700"
+                />
+              ) : null}
+              <span className="text-[11px] font-black uppercase tracking-widest text-red-600 dark:text-red-400">
+                CBS News
+              </span>
+              <span className="text-neutral-300 dark:text-neutral-600">•</span>
+               {/* Optional thumbnail - small, bottom right */}
+            {hasImg ? (
+              <div className="mt-3 flex justify-end">
+                <div className="w-16 h-16 rounded overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 opacity-80 group-hover:opacity-100 transition-opacity">
+                  <SmartImage
+                    candidates={candidates}
+                    alt=""
+                    wrapperClassName="w-full h-full"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+            ) : null}
+
+
+            </div>
+
+            {/* Big headline */}
+            <h3 className="text-base sm:text-lg font-extrabold leading-tight text-neutral-900 dark:text-neutral-100 line-clamp-3 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">
+              {a.title}
+            </h3>
+              <time className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400" dateTime={a.publishedAt}>
+                {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              </time>
+              {multi ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen();
+                  }}
+                  className="ml-auto bg-red-600 dark:bg-red-400 text-white dark:text-neutral-900 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide hover:bg-red-700 dark:hover:bg-red-300 transition-colors"
+                >
+                  +{group.items.length - 1}
+                </button>
+              ) : null}
+
+          </div>
+        </div>
+      );
+    }
+
+    // Card with image - NEWSPAPER STYLE (for non-CBS sources)
     if (hasImg) {
       return (
         <div
           onClick={handlePrimaryClick}
           className="group relative overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] cursor-pointer transition-all duration-200 hover:shadow-lg"
         >
+          {/* Red accent bar - z-10 to appear above image */}
+          <div className="absolute top-0 left-0 w-1 h-full bg-red-600 dark:bg-red-400 z-10" />
+          
           <div className="relative h-48 sm:h-52">
             <SmartImage
               candidates={candidates}
@@ -602,8 +685,11 @@ export default function NewsTab() {
     return (
       <div
         onClick={handlePrimaryClick}
-        className="group border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-3 sm:p-4 cursor-pointer transition-all duration-200 hover:shadow-lg hover:bg-neutral-50 dark:hover:bg-neutral-800"
+        className="group relative border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-3 sm:p-4 pl-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:bg-neutral-50 dark:hover:bg-neutral-800"
       >
+        {/* Red accent bar */}
+        <div className="absolute top-0 left-0 w-1 h-full bg-red-600 dark:bg-red-400" />
+
         <h3 className="line-clamp-3 text-sm sm:text-base font-black leading-snug text-neutral-900 dark:text-neutral-100 uppercase tracking-tight">
           {a.title}
         </h3>

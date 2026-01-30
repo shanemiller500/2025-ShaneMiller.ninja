@@ -135,7 +135,7 @@ function ArrowBadge({ up }: { up: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-extrabold ring-1",
+        "inline-flex items-center px-1.5 py-1.5 text-xs font-bold",
         up
           ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/20"
           : "bg-rose-500/10 text-rose-700 ring-rose-500/20 dark:bg-rose-400/10 dark:text-rose-200 dark:ring-rose-300/20"
@@ -367,7 +367,7 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
                         <span className="ml-2 text-gray-500 dark:text-white/60 font-bold">({ticker})</span>
                       </h3>
 
-                      <div className="mt-0.5 sm:mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-600 dark:text-white/60">
+                      <div className="mt-0.5 sm:mt-1 flex flex-wrap items-center gap-1 text-[10px] sm:text-xs text-gray-600 dark:text-white/60">
                         <span className="hidden sm:inline-flex items-center gap-2 rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">
                           <FaClock className="opacity-70" />
                           {fmtDateTime(lastMs)}

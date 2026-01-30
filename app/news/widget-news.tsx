@@ -239,13 +239,13 @@ function ReaderModal({
       {/* panel - MAGAZINE STYLE */}
       <div className="relative z-10 w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden border-4 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] shadow-2xl">
         {/* BREAKING NEWS BANNER */}
-        <div className="flex-shrink-0 bg-red-600 dark:bg-red-500 py-3 px-6 border-b-4 border-neutral-900 dark:border-neutral-100">
+        <div className="flex-shrink-0 bg-yellow-300/90 py-3 px-6 border-b-4 border-neutral-900 dark:border-neutral-100">
           <div className="flex items-center justify-center gap-3">
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-70" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-600 dark:bg-red-400" />
             </span>
-            <span className="text-sm uppercase tracking-[0.3em] font-black text-white">
+            <span className="text-sm uppercase tracking-[0.3em] font-black text-black">
               Breaking News
             </span>
           </div>
@@ -315,20 +315,10 @@ function ReaderModal({
               </div>
             )}
 
-            {/* ARTICLE CONTENT */}
+            {/* ARTICLE CONTENT - uses global .article-reader styles from style.css */}
             {content && (
               <article
-                className="prose prose-lg max-w-none
-                          prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-headings:text-neutral-900 dark:prose-headings:text-neutral-100 prose-headings:border-b-2 prose-headings:border-neutral-900 dark:prose-headings:border-neutral-100 prose-headings:pb-2 prose-headings:mb-4
-                          prose-p:text-neutral-900 dark:prose-p:text-neutral-100 prose-p:leading-relaxed prose-p:text-lg prose-p:mb-6
-                          prose-a:text-red-600 dark:prose-a:text-red-400 prose-a:no-underline prose-a:font-bold hover:prose-a:underline
-                          prose-strong:text-neutral-900 dark:prose-strong:text-neutral-100 prose-strong:font-black
-                          prose-img:border-4 prose-img:border-neutral-900 dark:prose-img:border-neutral-100 prose-img:my-8 prose-img:w-full
-                          prose-blockquote:border-l-4 prose-blockquote:border-red-600 dark:prose-blockquote:border-red-400 prose-blockquote:bg-neutral-100 dark:prose-blockquote:bg-neutral-900 prose-blockquote:py-4 prose-blockquote:px-6 prose-blockquote:not-italic prose-blockquote:font-light
-                          prose-code:bg-neutral-900 dark:prose-code:bg-neutral-100 prose-code:text-white dark:prose-code:text-neutral-900 prose-code:px-2 prose-code:py-1 prose-code:font-mono prose-code:text-sm
-                          prose-ul:list-square prose-ul:pl-6 prose-ol:list-decimal prose-ol:pl-6
-                          prose-li:text-neutral-900 dark:prose-li:text-neutral-100 prose-li:mb-2"
-                style={{ fontFamily: '"Merriweather", serif', textAlign: 'justify' }}
+                className="article-reader"
                 dangerouslySetInnerHTML={{ __html: content }}
               />
             )}

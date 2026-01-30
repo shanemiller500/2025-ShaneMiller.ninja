@@ -11,6 +11,7 @@ export interface Article {
   description: string;
   url: string;
   urlToImage: string | null;
+  image?: string | null; // ✅ secondary image field for getImageCandidates
   images: string[];
   thumbnails: string[];
   publishedAt: string;
@@ -44,6 +45,11 @@ export async function fetchUmailArticles(): Promise<Article[]> {
       ? item.sourceImageCandidates
       : [];
 
+    // Gather all possible image sources from the API response
+    const mainImage = item.image || item.og_image || item.thumbnail || item.urlToImage || null;
+    const imagesArr = Array.isArray(item.images) ? item.images.filter(Boolean) : [];
+    const thumbsArr = Array.isArray(item.thumbnails) ? item.thumbnails.filter(Boolean) : [];
+
     return {
       source: {
         id: null,
@@ -54,9 +60,10 @@ export async function fetchUmailArticles(): Promise<Article[]> {
       title: item.headline ?? "",
       description: item.description ?? "",
       url,
-      urlToImage: item.image ?? null,
-      images: Array.isArray(item.images) ? item.images : [],
-      thumbnails: Array.isArray(item.thumbnails) ? item.thumbnails : [],
+      urlToImage: mainImage,
+      image: mainImage, // Also set image field for getImageCandidates fallback
+      images: imagesArr,
+      thumbnails: thumbsArr,
       publishedAt: item.publishedAt,
       content: item.content ?? null,
       categories: Array.isArray(item.categories) && item.categories.length ? item.categories : ["World"],

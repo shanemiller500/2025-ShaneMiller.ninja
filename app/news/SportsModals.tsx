@@ -249,20 +249,10 @@ export function ReaderModal({
               </div>
             )}
 
-            {/* ARTICLE CONTENT */}
+            {/* ARTICLE CONTENT - uses global .article-reader styles from style.css */}
             {content && (
               <article
-                className="prose prose-sm sm:prose-lg max-w-none
-                          prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-headings:text-neutral-900 dark:prose-headings:text-neutral-100 prose-headings:border-b-2 prose-headings:border-neutral-900 dark:prose-headings:border-neutral-100 prose-headings:pb-2 prose-headings:mb-4
-                          prose-p:text-neutral-900 dark:prose-p:text-neutral-100 prose-p:leading-relaxed prose-p:text-sm sm:prose-p:text-lg prose-p:mb-4 sm:prose-p:mb-6
-                          prose-a:text-red-600 dark:prose-a:text-red-400 prose-a:no-underline prose-a:font-bold hover:prose-a:underline
-                          prose-strong:text-neutral-900 dark:prose-strong:text-neutral-100 prose-strong:font-black
-                          prose-img:border-2 sm:prose-img:border-4 prose-img:border-neutral-900 dark:prose-img:border-neutral-100 prose-img:my-4 sm:prose-img:my-8 prose-img:w-full
-                          prose-blockquote:border-l-4 prose-blockquote:border-red-600 dark:prose-blockquote:border-red-400 prose-blockquote:bg-neutral-100 dark:prose-blockquote:bg-neutral-900 prose-blockquote:py-4 prose-blockquote:px-4 sm:prose-blockquote:px-6 prose-blockquote:not-italic prose-blockquote:font-light
-                          prose-code:bg-neutral-900 dark:prose-code:bg-neutral-100 prose-code:text-white dark:prose-code:text-neutral-900 prose-code:px-2 prose-code:py-1 prose-code:font-mono prose-code:text-xs sm:prose-code:text-sm
-                          prose-ul:list-square prose-ul:pl-4 sm:prose-ul:pl-6 prose-ol:list-decimal prose-ol:pl-4 sm:prose-ol:pl-6
-                          prose-li:text-neutral-900 dark:prose-li:text-neutral-100 prose-li:mb-2"
-                style={{ fontFamily: '"Merriweather", serif', textAlign: "justify" }}
+                className="article-reader"
                 dangerouslySetInnerHTML={{ __html: content }}
               />
             )}

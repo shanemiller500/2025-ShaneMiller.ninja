@@ -66,13 +66,18 @@ const bad = (s?: string | null): boolean =>
 /*  API Function                                                       */
 /* ------------------------------------------------------------------ */
 export async function fetchFinanceNews(): Promise<Article[]> {
-  const res = await fetch("https://u-mail.co/api/financeNews", {
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Finance News API error: ${res.status}`);
+  try {
+    const res = await fetch("https://u-mail.co/api/financeNews", {
+      cache: "no-store",
+    });
 
-  const data = await res.json();
-  const results: any[] = Array.isArray(data?.results) ? data.results : [];
+    if (!res.ok) {
+      console.warn(`Finance News API error: ${res.status}`);
+      return [];
+    }
+
+    const data = await res.json();
+    const results: any[] = Array.isArray(data?.results) ? data.results : [];
 
   return results.map((item) => {
     const url = String(item.link || "");
@@ -104,4 +109,8 @@ export async function fetchFinanceNews(): Promise<Article[]> {
       sourceLogo: backendLogo, // kept for compatibility, but UI will use candidates
     };
   });
+  } catch (err) {
+    console.warn("fetchFinanceNews failed:", err);
+    return [];
+  }
 }

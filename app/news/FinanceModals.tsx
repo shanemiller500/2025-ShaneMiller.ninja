@@ -192,7 +192,7 @@ export function ReaderModal({
         <div className="flex-shrink-0 border-b-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20]">
           <div className="flex items-center justify-between gap-2 sm:gap-4 p-3 sm:p-6">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-600 dark:bg-green-400 rounded-full shrink-0"></div>
+              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-600 dark:bg-red-400 rounded-full shrink-0"></div>
               {logos.length > 0 && (
                 <SmartImage
                   candidates={logos}
@@ -216,7 +216,7 @@ export function ReaderModal({
 
             <button
               onClick={onClose}
-              className="shrink-0 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-neutral-900 px-2 py-1 sm:px-4 sm:py-2 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-green-600 hover:text-white hover:border-green-600 dark:hover:bg-green-400 dark:hover:text-neutral-900 dark:hover:border-green-400 transition-all"
+              className="shrink-0 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-neutral-900 px-2 py-1 sm:px-4 sm:py-2 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-red-600 hover:text-white hover:border-red-600 dark:hover:bg-red-400 dark:hover:text-neutral-900 dark:hover:border-red-400 transition-all"
             >
               Close
             </button>
@@ -228,7 +228,7 @@ export function ReaderModal({
           {/* Article Body - MAGAZINE LAYOUT */}
           <div className="p-4 sm:p-8 md:p-12">
             {/* HEADLINE */}
-            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight text-neutral-900 dark:text-neutral-100 mb-4 sm:mb-6 leading-[1.1] uppercase border-b-4 border-green-600 dark:border-green-400 pb-4 sm:pb-6">
+            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight text-neutral-900 dark:text-neutral-100 mb-4 sm:mb-6 leading-[1.1] uppercase border-b-4 border-red-600 dark:border-red-400 pb-4 sm:pb-6">
               {article.title}
             </h1>
 
@@ -246,15 +246,15 @@ export function ReaderModal({
 
             {loading && (
               <div className="flex flex-col items-center justify-center py-12 sm:py-20 border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-100 dark:bg-neutral-900">
-                <div className="w-3 h-3 bg-green-600 dark:bg-green-400 rounded-full animate-pulse mb-4"></div>
+                <div className="w-3 h-3 bg-red-600 dark:bg-red-400 rounded-full animate-pulse mb-4"></div>
                 <span className="text-[10px] sm:text-xs uppercase tracking-[0.3em] font-black text-neutral-900 dark:text-neutral-100">Loading Story...</span>
               </div>
             )}
 
             {error && (
-              <div className="border-2 sm:border-4 border-green-600 dark:border-green-400 bg-white dark:bg-neutral-900 p-4 sm:p-8">
+              <div className="border-2 sm:border-4 border-red-600 dark:border-red-400 bg-white dark:bg-neutral-900 p-4 sm:p-8">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full"></div>
+                  <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
                   <h3 className="text-[10px] sm:text-xs uppercase tracking-[0.3em] font-black text-neutral-900 dark:text-neutral-100">Error</h3>
                 </div>
                 <p className="text-xs sm:text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 mb-2">{error}</p>
@@ -262,20 +262,10 @@ export function ReaderModal({
               </div>
             )}
 
-            {/* ARTICLE CONTENT */}
+            {/* ARTICLE CONTENT - uses global .article-reader styles from style.css */}
             {content && (
               <article
-                className="prose prose-sm sm:prose-lg max-w-none
-                          prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-headings:text-neutral-900 dark:prose-headings:text-neutral-100 prose-headings:border-b-2 prose-headings:border-neutral-900 dark:prose-headings:border-neutral-100 prose-headings:pb-2 prose-headings:mb-4
-                          prose-p:text-neutral-900 dark:prose-p:text-neutral-100 prose-p:leading-relaxed prose-p:text-sm sm:prose-p:text-lg prose-p:mb-4 sm:prose-p:mb-6
-                          prose-a:text-green-600 dark:prose-a:text-green-400 prose-a:no-underline prose-a:font-bold hover:prose-a:underline
-                          prose-strong:text-neutral-900 dark:prose-strong:text-neutral-100 prose-strong:font-black
-                          prose-img:border-2 sm:prose-img:border-4 prose-img:border-neutral-900 dark:prose-img:border-neutral-100 prose-img:my-4 sm:prose-img:my-8 prose-img:w-full
-                          prose-blockquote:border-l-4 prose-blockquote:border-green-600 dark:prose-blockquote:border-green-400 prose-blockquote:bg-neutral-100 dark:prose-blockquote:bg-neutral-900 prose-blockquote:py-4 prose-blockquote:px-4 sm:prose-blockquote:px-6 prose-blockquote:not-italic prose-blockquote:font-light
-                          prose-code:bg-neutral-900 dark:prose-code:bg-neutral-100 prose-code:text-white dark:prose-code:text-neutral-900 prose-code:px-2 prose-code:py-1 prose-code:font-mono prose-code:text-xs sm:prose-code:text-sm
-                          prose-ul:list-square prose-ul:pl-4 sm:prose-ul:pl-6 prose-ol:list-decimal prose-ol:pl-4 sm:prose-ol:pl-6
-                          prose-li:text-neutral-900 dark:prose-li:text-neutral-100 prose-li:mb-2"
-                style={{ fontFamily: '"Merriweather", serif', textAlign: "justify" }}
+                className="article-reader"
                 dangerouslySetInnerHTML={{ __html: content }}
               />
             )}
@@ -286,7 +276,7 @@ export function ReaderModal({
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full"></div>
+                      <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
                       <p className="text-[10px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] font-black text-neutral-900 dark:text-neutral-100">Continue Reading</p>
                     </div>
                     <p className="text-xs sm:text-sm font-bold text-neutral-700 dark:text-neutral-300">{article.source.name || domain}</p>
@@ -295,7 +285,7 @@ export function ReaderModal({
                     href={article.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 border-2 border-neutral-900 dark:border-neutral-100 bg-green-600 dark:bg-green-400 px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest font-black text-white dark:text-neutral-900 hover:bg-neutral-900 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900 hover:border-neutral-900 dark:hover:border-neutral-100 transition-all"
+                    className="inline-flex items-center gap-2 border-2 border-neutral-900 dark:border-neutral-100 bg-red-600 dark:bg-red-400 px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest font-black text-white dark:text-neutral-900 hover:bg-neutral-900 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900 hover:border-neutral-900 dark:hover:border-neutral-100 transition-all"
                   >
                     Read Full Article
                     <span>→</span>

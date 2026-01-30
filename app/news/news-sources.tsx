@@ -3,33 +3,8 @@ import { Article } from "./AllNewsTab";
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
-const MEDIASTACK_KEY = process.env.NEXT_PUBLIC_MEDIASTACK_KEY;
 const FINNHUB_KEY = process.env.NEXT_PUBLIC_FINNHUB_KEY;
-const UMAIL_ENDPOINT = "https://u-mail.co/api/MoreNewsAPI";
-const MEDIASTACK_LIMIT = 100;
-
-/* ------------------------------------------------------------------ */
-/*  MediaStack API                                                     */
-/* ------------------------------------------------------------------ */
-export async function fetchMediaStackArticles(page = 1): Promise<Article[]> {
-  const offset = (page - 1) * MEDIASTACK_LIMIT;
-  const res = await fetch(
-    `http://api.mediastack.com/v1/news?access_key=${MEDIASTACK_KEY}&countries=us,gb,ca&limit=${MEDIASTACK_LIMIT}&offset=${offset}`
-  );
-  if (!res.ok) throw new Error('Mediastack error');
-  const json = await res.json();
-  return json.data.map((d: any) => ({
-    source: { id: null, name: d.source, image: null },
-    author: d.author,
-    title: d.title,
-    description: d.description,
-    url: d.url,
-    urlToImage: d.image,
-    publishedAt: d.published_at,
-    content: d.description,
-    categories: [],
-  }));
-}
+const UMAIL_ENDPOINT = "https://u-mail.co/api/NewsAPI/more-news";
 
 /* ------------------------------------------------------------------ */
 /*  Finnhub API                                                        */

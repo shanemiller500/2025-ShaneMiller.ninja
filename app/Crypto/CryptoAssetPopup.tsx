@@ -335,62 +335,62 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
             </div>
 
             <div className="relative z-20 flex-shrink-0 border-b border-gray-200/70 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-brand-900/85">
-              <div className="px-4 sm:px-6 py-3 sm:py-4">
-                <div className="flex items-start justify-between gap-3">
+              <div className="px-4 sm:px-6 py-2 sm:py-4">
+                <div className="flex items-start justify-between gap-2 sm:gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
                       {logo ? (
                         <div className="relative shrink-0">
-                          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 blur-md" />
+                          <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 blur-md" />
                           <img src={logo} alt={asset.symbol}
-                            className="relative h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-white/80 dark:bg-white/5 object-contain p-2 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm"
+                            className="relative h-10 w-10 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-white/80 dark:bg-white/5 object-contain p-1.5 sm:p-2 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm"
                             onError={(e) => (e.currentTarget.style.display = "none")}
                           />
                         </div>
                       ) : (
-                        <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm" />
+                        <div className="h-10 w-10 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm" />
                       )}
                       <div className="min-w-0">
-                        <h3 className="text-base sm:text-lg font-extrabold tracking-tight truncate text-gray-900 dark:text-white">
+                        <h3 className="text-sm sm:text-lg font-extrabold tracking-tight truncate text-gray-900 dark:text-white">
                           {asset.name}<span className="ml-2 text-gray-500 dark:text-white/60 font-bold">({asset.symbol?.toUpperCase?.() ?? ""})</span>
                         </h3>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-white/60">
-                          <span className="inline-flex items-center gap-2 rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">{rankLabel}</span>
-                          <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 font-semibold ring-1",
+                        <div className="mt-0.5 sm:mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-600 dark:text-white/60">
+                          <span className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full bg-gray-100/80 px-2 py-0.5 sm:px-2.5 sm:py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">{rankLabel}</span>
+                          <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 font-semibold ring-1",
                             changeIsUp ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/20"
                                        : "bg-rose-500/10 text-rose-700 ring-rose-500/20 dark:bg-rose-400/10 dark:text-rose-200 dark:ring-rose-300/20"
-                          )} title={changeLabel}>{changeLabel}: {fmt.percent(canonicalChange)}</span>
-                          {cg?.market_cap_rank && <span className="rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">Market Rank #{cg.market_cap_rank}</span>}
+                          )} title={changeLabel}><span className="hidden sm:inline">{changeLabel}: </span>{fmt.percent(canonicalChange)}</span>
+                          {cg?.market_cap_rank && <span className="hidden sm:inline rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">Market Rank #{cg.market_cap_rank}</span>}
                           {explorerHost && explorerHref && (
                             <a href={explorerHref} target="_blank" rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10 hover:opacity-90 transition"
-                            ><FaLink className="opacity-75" /><span className="hidden sm:inline">Explorer</span><span className="hidden sm:inline opacity-70">({explorerHost})</span></a>
+                              className="hidden sm:inline-flex items-center gap-2 rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10 hover:opacity-90 transition"
+                            ><FaLink className="opacity-75" /><span>Explorer</span><span className="opacity-70">({explorerHost})</span></a>
                           )}
                         </div>
                       </div>
                     </div>
-                    <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-                      <div className="flex items-end gap-3 min-w-0">
-                        <div className="inline-flex items-center gap-2">
-                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-indigo-600/10 ring-1 ring-black/10 dark:bg-indigo-400/10 dark:ring-white/10">
+                    <div className="mt-2 sm:mt-3 flex flex-wrap items-end justify-between gap-2 sm:gap-3">
+                      <div className="flex items-end gap-2 sm:gap-3 min-w-0">
+                        <div className="inline-flex items-center gap-1.5 sm:gap-2">
+                          <span className="hidden sm:inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-indigo-600/10 ring-1 ring-black/10 dark:bg-indigo-400/10 dark:ring-white/10">
                             <FaDollarSign className="text-indigo-600 dark:text-indigo-300" />
                           </span>
-                          <div className="text-3xl sm:text-4xl font-black tracking-tight truncate text-gray-900 dark:text-white" title={fmt.currency(priceNum)}>{fmt.currency(priceNum)}</div>
+                          <div className="text-2xl sm:text-4xl font-black tracking-tight truncate text-gray-900 dark:text-white" title={fmt.currency(priceNum)}>{fmt.currency(priceNum)}</div>
                         </div>
-                        <div className={cn("flex items-center gap-2 text-sm font-extrabold", priceIsUp ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300")}>
+                        <div className={cn("flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-extrabold", priceIsUp ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300")}>
                           <span>{priceIsUp ? "▲" : "▼"}</span><span className="text-gray-500 dark:text-white/60 font-bold">{fmt.percent(canonicalChange)}</span>
                         </div>
                       </div>
-                      <div className="inline-flex w-full sm:w-auto rounded-2xl gap-2 p-1 bg-black/[0.03] dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10">
+                      <div className="inline-flex w-full sm:w-auto rounded-2xl gap-1 sm:gap-2 p-1 bg-black/[0.03] dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10">
                         <SegmentedButton active={timeframe === "1"} label="1D" onClick={() => setTimeframe("1")} />
                         <SegmentedButton active={timeframe === "7"} label="7D" onClick={() => setTimeframe("7")} />
                         <SegmentedButton active={timeframe === "30"} label="30D" onClick={() => setTimeframe("30")} />
                       </div>
                     </div>
-                    <div className="mt-2 text-[11px] font-extrabold text-gray-500 dark:text-white/60">{sourceLabel}{sourceTime}</div>
+                    <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-[11px] font-extrabold text-gray-500 dark:text-white/60">{sourceLabel}{sourceTime}</div>
                   </div>
                   <button onClick={onClose}
-                    className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-white/80 dark:bg-white/[0.08] hover:bg-white dark:hover:bg-white/[0.12] text-gray-900 dark:text-white transition"
+                    className="shrink-0 inline-flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg sm:rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-white/80 dark:bg-white/[0.08] hover:bg-white dark:hover:bg-white/[0.12] text-gray-900 dark:text-white transition text-sm sm:text-base"
                     aria-label="Close" title="Close (Esc)"><FaTimes /></button>
                 </div>
               </div>

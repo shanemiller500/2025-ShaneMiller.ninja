@@ -28,8 +28,19 @@ const getDomain = (u: string) => {
   }
 };
 
-const bad = (s?: string | null) =>
-  !s || ["none", "null", "n/a"].includes(String(s).toLowerCase());
+const bad = (s?: string | null | unknown) => {
+  if (!s) return true;
+  if (typeof s !== "string") return true; // Filter out objects, numbers, etc.
+  const v = s.trim().toLowerCase();
+  if (!v || v.length < 10) return true; // Too short to be a valid URL
+  // Filter out placeholder/invalid image values
+  if (["none", "null", "n/a", "undefined", "no image", "noimage", "placeholder", "[object object]"].includes(v)) return true;
+  if (v.startsWith("data:image/gif")) return true; // 1x1 tracking pixels
+  if (v.includes("spacer.gif") || v.includes("pixel.gif") || v.includes("blank.gif")) return true;
+  // Must look like a URL
+  if (!v.startsWith("http://") && !v.startsWith("https://") && !v.startsWith("//")) return true;
+  return false;
+};
 
 const firstImg = (html?: string | null) =>
   html?.match(/<img[^>]+src=['"]([^'"]+)['"]/i)?.[1] ?? null;
@@ -38,9 +49,6 @@ const normalizeUrl = (s: string) => {
   const t = String(s || "").trim();
   if (!t) return "";
   if (t.startsWith("//")) return `https:${t}`;
-  if (t.includes("cbsnewsstatic.com") && t.includes("/thumbnail/")) {
-    return t.replace(/\/thumbnail\/\d+x\d+\//i, "/thumbnail/1200x675/");
-  }
   return t;
 };
 
@@ -407,17 +415,38 @@ export function ReaderModal({
               </div>
             )}
 
-            {/* HERO IMAGE */}
-            {images.length > 0 && (
-              <div className="mb-6 sm:mb-8 border-2 sm:border-4 border-neutral-900 dark:border-neutral-100 overflow-hidden bg-neutral-100 dark:bg-neutral-900">
-                <SmartImage
-                  candidates={images}
-                  alt={article.title}
-                  wrapperClassName="aspect-[16/9]"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
+            {/* HERO IMAGE - CBS gets small thumbnail, others get full hero */}
+            {images.length > 0 && (() => {
+              const isCBS = article.url?.includes("cbsnews.com") || article.source.name?.toLowerCase().includes("cbs");
+
+              if (isCBS) {
+                // CBS: Small thumbnail floated to the side
+                return (
+                  <div className="mb-6 sm:mb-8 flex justify-end">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border-2 border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 shadow-sm">
+                      <SmartImage
+                        candidates={images}
+                        alt={article.title}
+                        wrapperClassName="w-full h-full"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  </div>
+                );
+              }
+
+              // Other sources: Full hero image
+              return (
+                <div className="mb-6 sm:mb-8 border-2 sm:border-4 border-neutral-900 dark:border-neutral-100 overflow-hidden bg-neutral-100 dark:bg-neutral-900">
+                  <SmartImage
+                    candidates={images}
+                    alt={article.title}
+                    wrapperClassName="aspect-[16/9]"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              );
+            })()}
 
             {loading && (
               <div className="flex flex-col items-center justify-center py-12 sm:py-20 border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-100 dark:bg-neutral-900">
@@ -437,20 +466,10 @@ export function ReaderModal({
               </div>
             )}
 
-            {/* ARTICLE CONTENT */}
+            {/* ARTICLE CONTENT - uses global .article-reader styles from style.css */}
             {content && (
               <article
-                className="prose prose-sm sm:prose-lg max-w-none
-                          prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-headings:text-neutral-900 dark:prose-headings:text-neutral-100 prose-headings:border-b-2 prose-headings:border-neutral-900 dark:prose-headings:border-neutral-100 prose-headings:pb-2 prose-headings:mb-4
-                          prose-p:text-neutral-900 dark:prose-p:text-neutral-100 prose-p:leading-relaxed prose-p:text-sm sm:prose-p:text-lg prose-p:mb-4 sm:prose-p:mb-6
-                          prose-a:text-red-600 dark:prose-a:text-red-400 prose-a:no-underline prose-a:font-bold hover:prose-a:underline
-                          prose-strong:text-neutral-900 dark:prose-strong:text-neutral-100 prose-strong:font-black
-                          prose-img:border-2 sm:prose-img:border-4 prose-img:border-neutral-900 dark:prose-img:border-neutral-100 prose-img:my-4 sm:prose-img:my-8 prose-img:w-full
-                          prose-blockquote:border-l-4 prose-blockquote:border-red-600 dark:prose-blockquote:border-red-400 prose-blockquote:bg-neutral-100 dark:prose-blockquote:bg-neutral-900 prose-blockquote:py-4 prose-blockquote:px-4 sm:prose-blockquote:px-6 prose-blockquote:not-italic prose-blockquote:font-light
-                          prose-code:bg-neutral-900 dark:prose-code:bg-neutral-100 prose-code:text-white dark:prose-code:text-neutral-900 prose-code:px-2 prose-code:py-1 prose-code:font-mono prose-code:text-xs sm:prose-code:text-sm
-                          prose-ul:list-square prose-ul:pl-4 sm:prose-ul:pl-6 prose-ol:list-decimal prose-ol:pl-4 sm:prose-ol:pl-6
-                          prose-li:text-neutral-900 dark:prose-li:text-neutral-100 prose-li:mb-2"
-                style={{ fontFamily: '"Merriweather", serif', textAlign: "justify" }}
+                className="article-reader"
                 dangerouslySetInnerHTML={{ __html: content }}
               />
             )}
