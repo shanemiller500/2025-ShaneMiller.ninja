@@ -5,13 +5,13 @@ import { trackEvent } from "@/utils/mixpanel";
 /* ------------------------------------------------------------------ */
 export default function DownloadPDF() {
   const handleDownloadClick = (): void => {
-    trackEvent("Resume Download", { downloadUrl: "2025-Resume" });
+    trackEvent("Resume Download", { downloadUrl: "2026-Resume" });
   };
 
   return (
     <div className="flex flex-col items-center justify-center py-8">
       <a
-        href="/PDF/Shane_Miller_Resume.pdf"
+        href="/PDF/ShaneMiller-2026.pdf"
         download
         onClick={handleDownloadClick}
         className="inline-flex items-center px-6 py-3 bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white font-semibold rounded-lg shadow-md transform transition duration-300 ease-in-out hover:scale-105 hover:shadow-xl focus:outline-none"
