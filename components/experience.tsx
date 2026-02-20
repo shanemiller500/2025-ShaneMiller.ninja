@@ -39,7 +39,7 @@ export default function Experience() {
                 Data Center Inc. — Remote
               </div>
               <div className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                Full-stack engineer on a .NET core banking platform under strict SLAs. Ships features across ACH processing, batch systems, reconciliation pipelines, and reporting. Resolves live production incidents, drives performance via SCA scans, and delivers hardened releases in a compliance-driven environment.
+                Full-stack engineer on a .NET core banking platform. Ships features across ACH processing, batch systems, reconciliation pipelines, and reporting. Resolves live production incidents, drives performance via SCA scans, and delivers hardened releases in a compliance-driven environment.
               </div>
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {['C#', '.NET Framework', '.NET Core', 'SQL Server', 'ASP.NET MVC', 'ASP.NET WebForms', 'Stored Procedures', 'ACH Processing', 'Batch Systems', 'Reconciliation Pipelines', 'Transaction Flows', 'Reporting Layers', 'REST APIs', 'Telerik', 'Windows Server', 'SCA / Code Analysis', 'Agile'].map(t => <Tag key={t} label={t} />)}
