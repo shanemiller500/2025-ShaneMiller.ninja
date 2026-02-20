@@ -3,6 +3,12 @@ import Image from 'next/image'
 import EducationIcon01 from '@/public/images/ihs-markit-seeklogo.png'
 import EducationIcon02 from '@/public/images/general-assembly-seeklogo.png'
 
+const Tag = ({ label }: { label: string }) => (
+  <span className="inline-block text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+    {label}
+  </span>
+)
+
 export default function Education() {
   return (
     <div className="space-y-8">
@@ -15,18 +21,21 @@ export default function Education() {
             <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-white rounded-full">
               <Image src={EducationIcon01} width={50} height={49} alt="IHS Markit / Dev-U" />
             </div>
-            <div className="pl-20 space-y-1">
-              <div className="text-xs text-slate-500 uppercase">
+            <div className="pl-20 space-y-2">
+              <div className="text-xs text-slate-500 uppercase tracking-wide">
                 October 2014 <span className="text-slate-400 dark:text-slate-600">·</span> November 2014
               </div>
               <div className="font-aspekta font-[650] text-slate-800 dark:text-slate-100">
                 Certificate in Mid-Tier Development
               </div>
-              <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
+              <div className="text-sm font-medium text-indigo-500 dark:text-indigo-400">
                 IHS Markit / Dev-U — Boulder, CO
               </div>
-              <div className="text-sm text-slate-500 dark:text-slate-400">
-                Focused on HTML5, CSS, JavaScript, jQuery, C#, ASP.NET, and MVC frameworks to build robust, scalable mid-tier applications.
+              <div className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                Intensive program focused on building production-ready mid-tier applications — directly preceding a decade-long career at S&amp;P Global. Covered the full Microsoft web stack alongside modern frontend fundamentals.
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {['C#', 'ASP.NET', 'MVC', 'HTML5', 'CSS3', 'JavaScript', 'jQuery', 'Mid-Tier Architecture'].map(t => <Tag key={t} label={t} />)}
               </div>
             </div>
           </div>
@@ -38,18 +47,21 @@ export default function Education() {
             <div className="absolute left-0 h-14 w-14 flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-white rounded-full">
               <Image src={EducationIcon02} width={50} height={26} alt="General Assembly" />
             </div>
-            <div className="pl-20 space-y-1">
-              <div className="text-xs text-slate-500 uppercase">
+            <div className="pl-20 space-y-2">
+              <div className="text-xs text-slate-500 uppercase tracking-wide">
                 December 2013 <span className="text-slate-400 dark:text-slate-600">·</span> July 2014
               </div>
               <div className="font-aspekta font-[650] text-slate-800 dark:text-slate-100">
-                Web Dev Immersive Course
+                Web Development Immersive
               </div>
-              <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
+              <div className="text-sm font-medium text-indigo-500 dark:text-indigo-400">
                 General Assembly — San Francisco, CA
               </div>
-              <div className="text-sm text-slate-500 dark:text-slate-400">
-                Comprehensive training in full-stack Ruby on Rails development, advanced HTML5/CSS3, JavaScript, jQuery, and API integrations.
+              <div className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                Full-time, project-based immersive covering the complete web development lifecycle. Built and shipped real applications from scratch — the launchpad for a career in financial technology and enterprise software.
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {['Ruby on Rails', 'Full-Stack Development', 'HTML5', 'CSS3', 'JavaScript', 'jQuery', 'REST APIs', 'Git', 'Agile'].map(t => <Tag key={t} label={t} />)}
               </div>
             </div>
           </div>
