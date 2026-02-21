@@ -31,7 +31,7 @@ const entries: TimelineEntry[] = [
     org: 'ApplyPro.ai — Boulder, CO',
     description: (
       <>
-        Solo-built an AI-powered resume platform — owning every layer from SSR Next.js frontend to
+        Solo-built an AI-powered resume platform owning every layer from SSR Next.js frontend to
         API routes, payments, and CI/CD. Integrated Stripe subscriptions and Mixpanel analytics.
         Scaled to{' '}
         <span className="font-semibold text-slate-600 dark:text-slate-300">400+ active users</span>{' '}
@@ -85,7 +85,7 @@ const entries: TimelineEntry[] = [
     title: 'Web Developer — Client-Facing Team',
     org: 'S&P Global — Boulder, CO',
     description:
-      'Built and maintained high-traffic financial web apps for multinational institutional clients. Delivered live-streaming market data systems, client-specific enhancements, and production fixes — often collaborating directly with global clients under tight deadlines.',
+      'Built and maintained high-traffic financial web apps for multinational, bilingual institutional clients. Delivered live-streaming market data systems, client-specific enhancements, and production fixes  often collaborating directly with global clients under tight deadlines.',
     tags: [
       'JavaScript', 'HTML/CSS', 'Real-Time Data', 'Live Streaming', 'Financial Web Apps',
       'Enterprise Systems', 'Legacy Codebases', 'Client Integration', 'Global Markets', 'Production Support',
@@ -98,7 +98,7 @@ const entries: TimelineEntry[] = [
     title: 'Jr. Web Developer',
     org: 'S&P Global — Boulder, CO',
     description:
-      'Began a decade at S&P Global building financial web applications across 100+ client platforms. Worked in agile teams shipping performance improvements and enterprise features — the foundation of deep expertise in global financial systems.',
+      'Began a decade at S&P Global building financial web applications across 100+ client platforms. Worked in agile teams shipping performance improvements and enterprise features the foundation of deep expertise in global financial systems.',
     tags: [
       'JavaScript', 'HTML/CSS', 'Financial Web Apps', 'Enterprise Platforms',
       'Legacy Systems', 'Agile', 'Performance Optimization', 'Client Projects', 'Cross-Team Collaboration',

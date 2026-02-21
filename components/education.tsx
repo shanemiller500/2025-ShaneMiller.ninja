@@ -13,7 +13,7 @@ const entries: TimelineEntry[] = [
     title: 'Certificate in Mid-Tier Development',
     org: 'IHS Markit / Dev-U — Boulder, CO',
     description:
-      'Intensive program focused on building production-ready mid-tier applications — directly preceding a decade-long career at S&P Global. Covered the full Microsoft web stack alongside modern frontend fundamentals.',
+      'Intensive program focused on building production-ready mid-tier applications directly preceding a decade-long career at S&P Global. Covered the full Microsoft web stack alongside modern frontend fundamentals.',
     tags: ['C#', 'ASP.NET', 'MVC', 'HTML5', 'CSS3', 'JavaScript', 'jQuery', 'Mid-Tier Architecture'],
   },
   {
@@ -23,7 +23,7 @@ const entries: TimelineEntry[] = [
     title: 'Web Development Immersive',
     org: 'General Assembly — San Francisco, CA',
     description:
-      'Full-time, project-based immersive covering the complete web development lifecycle. Built and shipped real applications from scratch — the launchpad for a career in financial technology and enterprise software.',
+      'Full-time, project-based immersive covering the complete web development lifecycle. Built and shipped real applications from scratch the launchpad for a career in financial technology and enterprise software.',
     tags: ['Ruby on Rails', 'Full-Stack Development', 'HTML5', 'CSS3', 'JavaScript', 'jQuery', 'REST APIs', 'Git', 'Agile'],
   },
 ]
