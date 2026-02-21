@@ -2,16 +2,16 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { fetchSportsNews } from "./sportsNews";
 import LiveScores from "./LiveScores";
+import { SmartImage, SkeletonCard } from "../lib/SmartImage";
+import { getDomain } from "../lib/utils";
+import ReaderModal, { type ReadableArticle } from "../components/ReaderModal";
 import {
-  ReaderModal,
-  SmartImage,
-  getDomain,
-  favicon,
   stableKey,
-  uniqStrings,
   getImageCandidates,
+  getLogoCandidates,
   type SportsArticle,
 } from "./SportsModals";
 
@@ -25,6 +25,9 @@ interface LiveGame {
   isLive?: boolean;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 const CACHE_TTL = 30 * 60 * 1000;
 const PER_PAGE = 36;
 
@@ -41,6 +44,9 @@ const CATEGORIES = [
 type TabKey = (typeof CATEGORIES)[number]["key"];
 const cached: Record<string, { ts: number; data: Article[] }> = {};
 
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 const todayET = () => {
   const fmt = new Date().toLocaleDateString("en-US", {
     timeZone: "America/New_York",
@@ -52,33 +58,24 @@ const todayET = () => {
   return `${y}${m}${d}`;
 };
 
-const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-const normalize = (s: string) => {
-  const t = s.trim();
-  if (t.startsWith("//")) return `https:${t}`;
-  if (t.startsWith("http://")) return t.replace("http://", "https://");
-  return t;
-};
+const clamp = (n: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, n));
 
-function SkeletonCard() {
-  return (
-    <div className="animate-pulse overflow-hidden border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-[#1D1D20]">
-      <div className="h-48 bg-neutral-100 dark:bg-neutral-800" />
-      <div className="p-3 sm:p-4">
-        <div className="h-3 w-11/12 bg-neutral-200 dark:bg-neutral-700" />
-        <div className="mt-2 h-3 w-8/12 bg-neutral-200 dark:bg-neutral-700" />
-        <div className="mt-4 h-3 w-4/12 bg-neutral-200 dark:bg-neutral-700" />
-      </div>
-    </div>
-  );
+function toReadable(a: Article): ReadableArticle {
+  return {
+    title: a.title,
+    url: a.url,
+    publishedAt: a.publishedAt,
+    sourceName: a.source.name || getDomain(a.url),
+    description: undefined,
+    imageCandidates: getImageCandidates(a),
+    logoCandidates: getLogoCandidates(a),
+  };
 }
 
-/* --------------------------------------------- */
-/* Live scores router for tabs                   */
-/* - All tab => show ALL live sports             */
-/* - League tab => show ONLY that league live    */
-/* - If none live => show "No live games..."     */
-/* --------------------------------------------- */
+/* ------------------------------------------------------------------ */
+/*  LiveScoresForTab                                                   */
+/* ------------------------------------------------------------------ */
 function LiveScoresForTab({ tab }: { tab: TabKey }) {
   const [live, setLive] = useState<LiveGame[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -88,17 +85,15 @@ function LiveScoresForTab({ tab }: { tab: TabKey }) {
 
     const tick = async () => {
       try {
-        const res = await fetch(`https://u-mail.co/api/sportsGames/live?date=${todayET()}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `https://u-mail.co/api/sportsGames/live?date=${todayET()}`,
+          { cache: "no-store" }
+        );
         const j = await res.json();
         const games: LiveGame[] = Array.isArray(j?.games) ? j.games : [];
-
-        // safety: ensure "live" really means live
         const filtered = games.filter(
           (g) => g?.isLive === true || /live|in progress/i.test(g?.status || "")
         );
-
         if (!cancel) {
           setLive(filtered);
           setLoaded(true);
@@ -124,16 +119,14 @@ function LiveScoresForTab({ tab }: { tab: TabKey }) {
     return live.some((g) => String(g.league || "").toLowerCase() === tab);
   }, [live, tab]);
 
-  // Don’t show anything until we’ve checked once (prevents flicker)
   if (!loaded) return null;
 
-  // If no live games for the selected tab, show the message (not "No games today.")
   if (!hasLiveForTab) {
     return (
-      <div className="mt-4 sm:mt-6 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-3 sm:p-4">
+      <div className="mb-4 sm:mb-5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-neutral-400 rounded-full"></div>
-          <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-500 dark:text-neutral-400">
+          <div className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600" />
+          <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">
             No live games right now
           </span>
         </div>
@@ -141,20 +134,19 @@ function LiveScoresForTab({ tab }: { tab: TabKey }) {
     );
   }
 
-  // All = all live games
-  if (tab === "all") return <LiveScores sport="all" />;
-
-  // League tab = only that league (LiveScores will show only live for that league)
-  return <LiveScores sport={tab} />;
+  return tab === "all" ? <LiveScores sport="all" /> : <LiveScores sport={tab} />;
 }
 
+/* ------------------------------------------------------------------ */
+/*  SportsTab                                                          */
+/* ------------------------------------------------------------------ */
 export default function SportsTab() {
   const [tab, setTab] = useState<TabKey>("all");
   const [page, setPage] = useState(1);
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [readerArticle, setReaderArticle] = useState<Article | null>(null);
+  const [readerArticle, setReaderArticle] = useState<ReadableArticle | null>(null);
 
   useEffect(() => {
     let cancel = false;
@@ -174,17 +166,23 @@ export default function SportsTab() {
         if (tab === "all") {
           news = await fetchSportsNews();
         } else {
-          const r = await fetch(`https://u-mail.co/api/sportsByCategory/${tab}`, { cache: "no-store" });
+          const r = await fetch(
+            `https://u-mail.co/api/sportsByCategory/${tab}`,
+            { cache: "no-store" }
+          );
           if (!r.ok) throw new Error(`Sports category API ${r.status}`);
           const j = await r.json();
-
-          news = (j.results || []).map((it: any) => ({
-            title: it.title,
-            url: it.link,
-            urlToImage: it.image ?? null,
-            images: Array.isArray(it.images) ? it.images : [],
-            publishedAt: it.publishedAt,
-            source: { id: null, name: it.source, image: it.sourceLogo ?? favicon(getDomain(it.link)) },
+          news = (j.results || []).map((it: Record<string, unknown>) => ({
+            title: it.title as string,
+            url: it.link as string,
+            urlToImage: (it.image as string) ?? null,
+            images: Array.isArray(it.images) ? it.images as string[] : [],
+            publishedAt: it.publishedAt as string,
+            source: {
+              id: null,
+              name: it.source as string,
+              image: (it.sourceLogo as string) ?? null,
+            },
           }));
         }
 
@@ -193,16 +191,17 @@ export default function SportsTab() {
           const k = stableKey(a);
           if (!map.has(k)) map.set(k, a);
         }
-
-        const uniq = Array.from(map.values()).sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
+        const uniq = Array.from(map.values()).sort(
+          (a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt)
+        );
 
         if (!cancel) {
           cached[tab] = { ts: Date.now(), data: uniq };
           setArticles(uniq);
           setPage(1);
         }
-      } catch (e: any) {
-        if (!cancel) setError(e?.message ?? "Unknown error");
+      } catch (e: unknown) {
+        if (!cancel) setError((e as Error)?.message ?? "Unknown error");
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -222,12 +221,16 @@ export default function SportsTab() {
     return Array.from(map.values());
   }, [articles]);
 
-  const topStrip = useMemo(() => uniq.filter((a) => getImageCandidates(a).length > 0).slice(0, 4), [uniq]);
+  /* Featured: up to 4 articles with images */
+  const featured = useMemo(
+    () => uniq.filter((a) => getImageCandidates(a).length > 0).slice(0, 4),
+    [uniq]
+  );
 
   const rest = useMemo(() => {
-    const heroKeys = new Set(topStrip.map(stableKey));
+    const heroKeys = new Set(featured.map(stableKey));
     return uniq.filter((a) => !heroKeys.has(stableKey(a)));
-  }, [uniq, topStrip]);
+  }, [uniq, featured]);
 
   const totalPages = Math.max(1, Math.ceil(rest.length / PER_PAGE));
   const safePage = clamp(page, 1, totalPages);
@@ -247,12 +250,14 @@ export default function SportsTab() {
     [loading, totalPages]
   );
 
+  const openReader = (a: Article) => setReaderArticle(toReadable(a));
+
   return (
     <div className="pb-10">
-      {/* Sports Category Tabs - NEWSPAPER STYLE */}
-      <div className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] mb-4 sm:mb-6">
-        <div className="flex items-center overflow-x-auto scrollbar-thin scrollbar-thumb-neutral-300 dark:scrollbar-thumb-neutral-600">
-          {CATEGORIES.map((c, idx) => {
+      {/* Sport category tabs */}
+      <div className="mb-4 sm:mb-5 overflow-x-auto">
+        <div className="flex gap-1.5 min-w-max rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-1">
+          {CATEGORIES.map((c) => {
             const isActive = tab === c.key;
             return (
               <button
@@ -260,13 +265,11 @@ export default function SportsTab() {
                 type="button"
                 onClick={() => setTab(c.key)}
                 className={[
-                  "relative shrink-0 whitespace-nowrap px-3 sm:px-5 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest transition-all",
-                  idx !== 0 ? "border-l-2 border-neutral-900 dark:border-neutral-100" : "",
+                  "shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
                   isActive
-                    ? "bg-red-600 dark:bg-red-400 text-white dark:text-neutral-900"
-                    : "bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800",
+                    ? "bg-white dark:bg-gray-700 text-orange-600 dark:text-orange-400 shadow-sm"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200",
                 ].join(" ")}
-                aria-current={isActive ? "page" : undefined}
               >
                 {c.label}
               </button>
@@ -275,145 +278,198 @@ export default function SportsTab() {
         </div>
       </div>
 
-      {/* Live scores obey the selected tab */}
+      {/* Live scores */}
       <LiveScoresForTab tab={tab} />
 
+      {/* Error */}
       {error && (
-        <div className="mt-4 border-2 border-red-600 dark:border-red-400 bg-white dark:bg-neutral-900 p-3 sm:p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
-            <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Error</span>
-          </div>
-          <p className="text-xs sm:text-sm text-red-700 dark:text-red-200">{error}</p>
+        <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/40 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-red-700 dark:text-red-400">{error}</p>
         </div>
       )}
 
-      {/* Top Stories Strip - FEATURED SPORTS HEADLINES */}
-      {topStrip.length > 0 && (
-        <div className="mt-6 sm:mt-8">
-          <div className="flex items-center gap-2 mb-3 sm:mb-4 border-b-2 border-neutral-900 dark:border-neutral-100 pb-2">
-            <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
-            <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Featured Stories</span>
+      {/* Featured stories */}
+      {featured.length > 0 && (
+        <section className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1 h-4 rounded-full bg-orange-500" />
+            <h2 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+              Featured Stories
+            </h2>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {topStrip.map((a, i) => {
-              const domain = getDomain(a.url);
-              const logoCandidates = uniqStrings([a.source.image ?? "", favicon(domain)].filter(Boolean).map(normalize));
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+            {featured.map((a, i) => {
               const imgCandidates = getImageCandidates(a);
+              const logoCandidates = getLogoCandidates(a);
 
               return (
                 <button
                   key={`${stableKey(a)}-${i}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setReaderArticle(a);
-                  }}
-                  className="group relative block w-full text-left h-48 sm:h-52 overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] transition-all duration-200 hover:shadow-lg"
+                  onClick={() => openReader(a)}
+                  className="group relative block w-full text-left h-44 sm:h-48 overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 hover:shadow-md transition-all duration-200"
                 >
-                  {imgCandidates.length ? (
+                  {imgCandidates.length > 0 && (
                     <SmartImage
                       candidates={imgCandidates}
                       alt={a.title}
                       wrapperClassName="absolute inset-0"
-                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                     />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center bg-neutral-100 dark:bg-neutral-800">
-                      <span className="text-[10px] uppercase tracking-widest font-black text-neutral-400">No image</span>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+                  {/* Sport badge */}
+                  {i === 0 && (
+                    <div className="absolute top-2.5 left-2.5">
+                      <span className="rounded-md bg-orange-500/90 backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold text-white uppercase tracking-wide">
+                        Featured
+                      </span>
                     </div>
                   )}
 
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/0" />
-                  <div className="absolute inset-x-0 bottom-0 z-10 p-3 sm:p-4 text-white">
-                    <h3 className="line-clamp-2 text-sm sm:text-base font-black leading-snug uppercase tracking-tight">{a.title}</h3>
-                    <div className="mt-2 flex items-center gap-2 text-[10px] sm:text-xs">
-                      {logoCandidates.length ? (
-                        <SmartImage candidates={logoCandidates} alt={a.source.name} className="h-4 w-4 sm:h-5 sm:w-5 object-contain border border-white/30 bg-white/10 p-0.5" />
-                      ) : null}
-                      <span className="truncate max-w-[120px] uppercase tracking-wider font-black opacity-90">{a.source.name}</span>
+                  <div className="absolute inset-x-0 bottom-0 p-3 text-white">
+                    <h3 className="font-semibold text-sm leading-snug line-clamp-2 mb-1.5">
+                      {a.title}
+                    </h3>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      {logoCandidates.length > 0 && (
+                        <div className="h-4 w-4 rounded-full overflow-hidden bg-white/10 border border-white/20">
+                          <SmartImage
+                            candidates={logoCandidates}
+                            alt={a.source.name}
+                            className="h-full w-full object-contain p-0.5"
+                          />
+                        </div>
+                      )}
+                      <span className="opacity-85 truncate max-w-[100px]">
+                        {a.source.name}
+                      </span>
                     </div>
                   </div>
                 </button>
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Main Article Grid - SPORTS NEWS SECTION */}
-      <section className="mt-6 sm:mt-8">
-        <div className="flex items-center gap-2 mb-3 sm:mb-4 border-b-2 border-neutral-900 dark:border-neutral-100 pb-2">
-          <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
-          <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Latest Sports News</span>
+      {/* Latest articles */}
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-1 h-4 rounded-full bg-orange-500" />
+          <h2 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+            Latest Sports News
+          </h2>
         </div>
 
         {loading && articles.length === 0 ? (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 12 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
           </div>
         ) : (
           <div
-            className={`
-              grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3
-              transition-opacity duration-200
-              ${loading ? "opacity-70" : "opacity-100"}
-            `}
+            className={`grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 transition-opacity duration-200 ${
+              loading ? "opacity-60" : "opacity-100"
+            }`}
           >
             {pageNews.map((a) => (
-              <ArticleCard key={stableKey(a)} article={a} onClick={() => setReaderArticle(a)} />
+              <ArticleCard key={stableKey(a)} article={a} onClick={() => openReader(a)} />
             ))}
           </div>
         )}
 
-        <Pagination
-          page={safePage}
-          totalPages={totalPages}
-          loading={loading}
-          onPrev={() => changePage(safePage - 1)}
-          onNext={() => changePage(safePage + 1)}
-        />
+        {/* Pagination */}
+        <div className="mt-8 sm:mt-10 flex flex-col items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              disabled={safePage === 1 || loading}
+              onClick={() => changePage(safePage - 1)}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-all"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </button>
+            <button
+              disabled={safePage === totalPages || loading}
+              onClick={() => changePage(safePage + 1)}
+              className="flex items-center gap-1.5 rounded-lg bg-orange-600 dark:bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 dark:hover:bg-orange-400 disabled:opacity-40 transition-all"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Page {safePage} of {totalPages}
+            {loading && <span className="ml-2 animate-pulse">Loading…</span>}
+          </p>
+        </div>
       </section>
 
-      <ReaderModal open={!!readerArticle} article={readerArticle} onClose={() => setReaderArticle(null)} />
+      <ReaderModal
+        open={!!readerArticle}
+        article={readerArticle}
+        onClose={() => setReaderArticle(null)}
+        accent="orange"
+      />
     </div>
   );
 }
 
-function ArticleCard({ article, onClick }: { article: Article; onClick?: () => void }) {
-  const domain = getDomain(article.url);
-  const logoCandidates = uniqStrings([article.source.image ?? "", favicon(domain)].filter(Boolean).map(normalize));
+/* ------------------------------------------------------------------ */
+/*  ArticleCard                                                        */
+/* ------------------------------------------------------------------ */
+function ArticleCard({
+  article,
+  onClick,
+}: {
+  article: Article;
+  onClick?: () => void;
+}) {
   const imgCandidates = getImageCandidates(article);
+  const logoCandidates = getLogoCandidates(article);
 
-  // Card with image - SPORTS MAGAZINE STYLE
-  if (imgCandidates.length) {
+  if (imgCandidates.length > 0) {
     return (
       <button
         onClick={(e) => {
           e.preventDefault();
           onClick?.();
         }}
-        className="group block w-full text-left overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] transition-all duration-200 hover:shadow-lg"
+        className="group block w-full text-left overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
       >
-        <div className="relative h-48 sm:h-52">
+        <div className="relative h-44 sm:h-48">
           <SmartImage
             candidates={imgCandidates}
             alt={article.title}
             wrapperClassName="absolute inset-0"
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-black/0" />
-          <div className="absolute bottom-0 z-10 flex w-full flex-col gap-2 p-3 sm:p-4 text-white">
-            <h3 className="line-clamp-2 text-sm sm:text-base font-black leading-snug uppercase tracking-tight">{article.title}</h3>
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs">
-              {logoCandidates.length ? (
-                <SmartImage candidates={logoCandidates} alt={article.source.name} className="h-4 w-4 sm:h-5 sm:w-5 object-contain border border-white/30 bg-white/10 p-0.5" />
-              ) : null}
-              <span className="truncate max-w-[120px] uppercase tracking-wider font-black opacity-90">{article.source.name}</span>
-              <div className="w-1 h-1 bg-white/50 rounded-full"></div>
-              <time className="whitespace-nowrap uppercase tracking-wider font-bold opacity-80">
-                {new Date(article.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+          <div className="absolute bottom-0 w-full p-3 text-white">
+            <h3 className="font-semibold text-sm leading-snug line-clamp-2 mb-1.5">
+              {article.title}
+            </h3>
+            <div className="flex items-center gap-1.5 text-[10px]">
+              {logoCandidates.length > 0 && (
+                <div className="h-4 w-4 rounded-full overflow-hidden bg-white/10 border border-white/20">
+                  <SmartImage
+                    candidates={logoCandidates}
+                    alt={article.source.name}
+                    className="h-full w-full object-contain p-0.5"
+                  />
+                </div>
+              )}
+              <span className="opacity-85 truncate max-w-[110px]">
+                {article.source.name}
+              </span>
+              <span className="opacity-40">·</span>
+              <time>
+                {new Date(article.publishedAt).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                })}
               </time>
             </div>
           </div>
@@ -422,66 +478,38 @@ function ArticleCard({ article, onClick }: { article: Article; onClick?: () => v
     );
   }
 
-  // Text-only card - SPORTS MAGAZINE STYLE
   return (
     <button
       onClick={(e) => {
         e.preventDefault();
         onClick?.();
       }}
-      className="group block w-full text-left overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-3 sm:p-4 transition-all duration-200 hover:shadow-lg hover:bg-neutral-50 dark:hover:bg-neutral-800"
+      className="group block w-full text-left rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
     >
-      <h3 className="line-clamp-3 text-sm sm:text-base font-black leading-snug text-neutral-900 dark:text-neutral-100 uppercase tracking-tight">{article.title}</h3>
-      <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center gap-2 text-[10px] sm:text-xs">
-        {logoCandidates.length ? (
-          <SmartImage candidates={logoCandidates} alt={article.source.name} className="h-5 w-5 sm:h-6 sm:w-6 object-contain border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-0.5" />
-        ) : null}
-        <span className="truncate max-w-[140px] uppercase tracking-wider font-black text-neutral-700 dark:text-neutral-300">{article.source.name}</span>
-        <div className="w-1 h-1 bg-neutral-400 rounded-full"></div>
-        <time className="whitespace-nowrap uppercase tracking-wider font-bold text-neutral-500 dark:text-neutral-400">
-          {new Date(article.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+      <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-50 leading-snug line-clamp-3 group-hover:text-orange-700 dark:group-hover:text-orange-300 transition-colors">
+        {article.title}
+      </h3>
+      <div className="mt-3 pt-3 border-t border-gray-50 dark:border-gray-800 flex items-center gap-2">
+        {logoCandidates.length > 0 && (
+          <div className="h-4 w-4 rounded overflow-hidden bg-gray-50 dark:bg-gray-800 flex-shrink-0">
+            <SmartImage
+              candidates={logoCandidates}
+              alt={article.source.name}
+              className="h-full w-full object-contain"
+            />
+          </div>
+        )}
+        <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[130px]">
+          {article.source.name}
+        </span>
+        <span className="text-gray-300 dark:text-gray-700">·</span>
+        <time className="text-[10px] text-gray-400 dark:text-gray-500">
+          {new Date(article.publishedAt).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          })}
         </time>
       </div>
     </button>
-  );
-}
-
-function Pagination({
-  page,
-  totalPages,
-  loading,
-  onPrev,
-  onNext,
-}: {
-  page: number;
-  totalPages: number;
-  loading: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="mt-8 sm:mt-10 flex flex-col items-center gap-3 sm:gap-4">
-      <div className="flex items-center gap-2 sm:gap-3">
-        <button
-          disabled={page === 1 || loading}
-          onClick={onPrev}
-          className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-neutral-900 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900 disabled:opacity-40 transition-all"
-        >
-          ← Previous
-        </button>
-        <button
-          disabled={page === totalPages || loading}
-          onClick={onNext}
-          className="border-2 border-neutral-900 dark:border-neutral-100 bg-red-600 dark:bg-red-400 px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-white dark:text-neutral-900 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 dark:hover:bg-neutral-100 dark:hover:text-neutral-900 dark:hover:border-neutral-100 disabled:opacity-40 transition-all"
-        >
-          Next →
-        </button>
-      </div>
-
-      <div className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-neutral-500 dark:text-neutral-400">
-        Page <span className="font-black text-neutral-900 dark:text-neutral-100">{page}</span> / {totalPages}
-        {loading && <span className="ml-2 animate-pulse">Loading...</span>}
-      </div>
-    </div>
   );
 }

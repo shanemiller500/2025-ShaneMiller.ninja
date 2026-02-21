@@ -2,13 +2,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { fetchFinnhubArticles } from "./Finnhub-API-Call";
 import { fetchUmailArticles } from "./MoreNewsAPI";
 import { trackEvent } from "@/utils/mixpanel";
+import { SmartImage, SkeletonCard } from "../lib/SmartImage";
+import { getDomain } from "../lib/utils";
+import ReaderModal, { type ReadableArticle } from "../components/ReaderModal";
 import {
   GroupModal,
-  ReaderModal,
-  SmartImage,
   getImageCandidates,
   getLogoCandidates,
   stableKey,
@@ -16,7 +18,7 @@ import {
 } from "./NewsModals";
 
 /* ------------------------------------------------------------------ */
-/*  Types                                                             */
+/*  Types                                                              */
 /* ------------------------------------------------------------------ */
 export interface Article {
   source: {
@@ -35,27 +37,21 @@ export interface Article {
   thumbnails?: string[];
   publishedAt: string;
   content: string | null;
-  categories: (string | null | undefined | any)[];
+  categories: (string | null | undefined)[];
   category?: string;
 }
 
-
 /* ------------------------------------------------------------------ */
-/*  Constants / helpers                                               */
+/*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 const PER_PAGE = 36;
-const CACHE_TTL = 30 * 60 * 1000; // 30 min
+const CACHE_TTL = 30 * 60 * 1000;
 const API_BASE = "https://u-mail.co/api/NewsAPI";
 const USA_ENDPOINT = `${API_BASE}/us-news`;
 
-const getDomain = (u: string) => {
-  try {
-    return new URL(u).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-};
-
+/* ------------------------------------------------------------------ */
+/*  Pure helpers                                                       */
+/* ------------------------------------------------------------------ */
 const sortByDateDesc = (arr: Article[]) =>
   [...arr].sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
 
@@ -73,36 +69,36 @@ const isUSA = (a: Article) => {
     .filter((c): c is string => typeof c === "string")
     .map((c) => c.toLowerCase());
   const host = getDomain(a.url).toLowerCase();
-  return cats.includes("us") || cats.includes("united states") || /\.us$/.test(host);
+  return (
+    cats.includes("us") ||
+    cats.includes("united states") ||
+    /\.us$/.test(host)
+  );
 };
 
-// Title grouping key: “normalize hard” to reduce near-duplicates
-const normalizeTitleKey = (t: string) => {
-  const s = String(t || "")
+const normalizeTitleKey = (t: string) =>
+  String(t || "")
     .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim()
-    .toLowerCase();
-
-  // strip common suffix patterns: " - CNN", " | Reuters", etc.
-  return s
-    .replace(/\s+[-|]\s+(cnn|reuters|ap news|associated press|fox news|bbc|cnbc|wsj|the wall street journal|nyt|the new york times)$/i, "")
+    .toLowerCase()
+    .replace(
+      /\s+[-|]\s+(cnn|reuters|ap news|associated press|fox news|bbc|cnbc|wsj|the wall street journal|nyt|the new york times)$/i,
+      ""
+    )
     .trim();
-};
 
 function groupByTitle(articles: Article[]): ArticleGroup[] {
   const map = new Map<string, Article[]>();
-
   for (const a of articles) {
-    const key = normalizeTitleKey(a.title || "") || (a.url ? a.url : stableKey(a));
+    const key =
+      normalizeTitleKey(a.title || "") || (a.url ? a.url : stableKey(a));
     const list = map.get(key);
     if (list) list.push(a);
     else map.set(key, [a]);
   }
 
   const groups: ArticleGroup[] = [];
-
-  // IMPORTANT: avoids TS downlevelIteration issues
   for (const [key, items] of Array.from(map.entries())) {
     const sorted = sortByDateDesc(items);
     const rep = sorted[0];
@@ -114,22 +110,31 @@ function groupByTitle(articles: Article[]): ArticleGroup[] {
       newestAt: rep?.publishedAt || new Date(0).toISOString(),
     });
   }
-
-  // newest group first
   groups.sort((a, b) => +new Date(b.newestAt) - +new Date(a.newestAt));
   return groups;
 }
 
+function articleToReadable(a: Article): ReadableArticle {
+  return {
+    title: a.title,
+    url: a.url,
+    publishedAt: a.publishedAt,
+    sourceName: a.source.name || getDomain(a.url),
+    description: a.description || undefined,
+    imageCandidates: getImageCandidates(a),
+    logoCandidates: getLogoCandidates(a),
+  };
+}
+
 /* ------------------------------------------------------------------ */
-/*  caches                                                            */
+/*  Module-level cache                                                 */
 /* ------------------------------------------------------------------ */
 let CACHE_ALL: { ts: number; data: Article[] } | null = null;
 let USA_CACHE: { ts: number; data: Article[] } | null = null;
 let USA_FETCH: Promise<void> | null = null;
 
-
 /* ------------------------------------------------------------------ */
-/*  Component                                                          */
+/*  NewsTab                                                            */
 /* ------------------------------------------------------------------ */
 export default function NewsTab() {
   const [region, setRegion] = useState<"All" | "USA" | "World">("All");
@@ -142,9 +147,9 @@ export default function NewsTab() {
   const [error, setError] = useState<string | null>(null);
 
   const [openGroup, setOpenGroup] = useState<ArticleGroup | null>(null);
-  const [readerArticle, setReaderArticle] = useState<Article | null>(null);
+  const [readerArticle, setReaderArticle] = useState<ReadableArticle | null>(null);
 
-  // hydrate USA cache
+  /* Hydrate USA cache from localStorage */
   useEffect(() => {
     try {
       const raw = localStorage.getItem("usaNewsCache");
@@ -158,7 +163,7 @@ export default function NewsTab() {
     trackEvent("NewsTab Loaded");
   }, []);
 
-  // load main feeds
+  /* Load main feeds */
   useEffect(() => {
     let cancel = false;
 
@@ -167,27 +172,22 @@ export default function NewsTab() {
         setArticles(CACHE_ALL.data);
         return;
       }
-
       setLoading(true);
       setError(null);
-
       try {
         const [fh, um] = await Promise.allSettled([
           fetchFinnhubArticles(),
           fetchUmailArticles(),
         ]);
-
         const ok = (r: PromiseSettledResult<Article[]>) =>
           r.status === "fulfilled" ? r.value : [];
-
         const merged = sortByDateDesc(uniqByKey([...ok(fh), ...ok(um)]));
-
         if (!cancel) {
           CACHE_ALL = { ts: Date.now(), data: merged };
           setArticles(merged);
         }
-      } catch (e: any) {
-        if (!cancel) setError(e?.message ?? "Unknown error");
+      } catch (e: unknown) {
+        if (!cancel) setError((e as Error)?.message ?? "Unknown error");
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -198,11 +198,10 @@ export default function NewsTab() {
     };
   }, []);
 
-  // load USA-only endpoint when needed
+  /* Load USA endpoint when needed */
   useEffect(() => {
     let cancel = false;
     if (region !== "USA") return;
-
     if (USA_CACHE && Date.now() - USA_CACHE.ts < CACHE_TTL) return;
 
     if (!USA_FETCH) {
@@ -211,31 +210,29 @@ export default function NewsTab() {
           const res = await fetch(USA_ENDPOINT, { cache: "no-store" });
           if (!res.ok) throw new Error(`US feed ${res.status}`);
           const json = await res.json();
-
-          const data: Article[] = (json?.results || []).map((r: any) => {
-            const mainImg = r.image || null;
-            const imagesArr = Array.isArray(r.images) ? r.images.filter(Boolean) : [];
-            const thumbsArr = Array.isArray(r.thumbnails) ? r.thumbnails.filter(Boolean) : [];
+          const data: Article[] = (json?.results || []).map((r: Record<string, unknown>) => {
+            const mainImg = r.image as string | null ?? null;
             return {
               source: {
                 id: null,
-                name: r.source || getDomain(r.link),
-                imageCandidates: Array.isArray(r.sourceImageCandidates) ? r.sourceImageCandidates : [],
+                name: r.source as string || getDomain(r.link as string),
+                imageCandidates: Array.isArray(r.sourceImageCandidates)
+                  ? r.sourceImageCandidates
+                  : [],
               },
-              author: r.author || null,
-              title: r.headline ?? "",
-              description: r.description ?? "",
-              url: r.link,
+              author: r.author as string | null ?? null,
+              title: r.headline as string ?? "",
+              description: r.description as string ?? "",
+              url: r.link as string,
               urlToImage: mainImg,
               image: mainImg,
-              images: imagesArr,
-              thumbnails: thumbsArr,
-              publishedAt: r.publishedAt,
-              content: r.content ?? null,
-              categories: Array.isArray(r.categories) ? r.categories : [],
+              images: Array.isArray(r.images) ? r.images as string[] : [],
+              thumbnails: Array.isArray(r.thumbnails) ? r.thumbnails as string[] : [],
+              publishedAt: r.publishedAt as string,
+              content: r.content as string ?? null,
+              categories: Array.isArray(r.categories) ? r.categories as string[] : [],
             };
           });
-
           USA_CACHE = { ts: Date.now(), data };
           try {
             localStorage.setItem("usaNewsCache", JSON.stringify(USA_CACHE));
@@ -249,7 +246,7 @@ export default function NewsTab() {
     }
 
     USA_FETCH.then(() => {
-      if (!cancel) setArticles((a) => [...a]); // Force re-render with new array reference
+      if (!cancel) setArticles((a) => [...a]);
     });
 
     return () => {
@@ -257,7 +254,7 @@ export default function NewsTab() {
     };
   }, [region]);
 
-  // region filter
+  /* Filters */
   const dataset = useMemo(() => {
     if (region === "USA") {
       const extra = USA_CACHE?.data ?? [];
@@ -273,101 +270,110 @@ export default function NewsTab() {
     [articles]
   );
 
-  // provider filter
   const byProvider = useMemo(
-    () => (provider === "All" ? dataset : dataset.filter((a) => a.source.name === provider)),
+    () =>
+      provider === "All"
+        ? dataset
+        : dataset.filter((a) => a.source.name === provider),
     [provider, dataset]
   );
 
-  // GROUPS (mixed feed)
   const groups = useMemo(() => groupByTitle(byProvider), [byProvider]);
 
-  // hero group = newest group that has an image (skip CBS - their thumbnails are too small for hero)
-  const heroGroup = useMemo(() => {
-    return groups.find((g) => {
-      const a = g.rep;
-      const isCBS = a.url?.includes("cbsnews.com") || a.source.name?.toLowerCase().includes("cbs");
-      if (isCBS) return false; // Skip CBS for hero - images too small
-      return getImageCandidates(a, 800).length > 0;
-    }) ?? null;
-  }, [groups]);
+  /* Hero group: newest group with an image (skip CBS small thumbs) */
+  const heroGroup = useMemo(
+    () =>
+      groups.find((g) => {
+        const a = g.rep;
+        const isCBS =
+          a.url?.includes("cbsnews.com") ||
+          a.source.name?.toLowerCase().includes("cbs");
+        if (isCBS) return false;
+        return getImageCandidates(a, 800).length > 0;
+      }) ?? null,
+    [groups]
+  );
 
-  const restGroups = useMemo(() => {
-    if (!heroGroup) return groups;
-    return groups.filter((g) => g.key !== heroGroup.key);
-  }, [groups, heroGroup]);
+  const restGroups = useMemo(
+    () =>
+      heroGroup ? groups.filter((g) => g.key !== heroGroup.key) : groups,
+    [groups, heroGroup]
+  );
 
   useEffect(() => setPage(1), [region, provider]);
 
   const totalPages = Math.max(1, Math.ceil(restGroups.length / PER_PAGE));
   const safePage = Math.min(page, totalPages);
-
-  const pageGroups = restGroups.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+  const pageGroups = restGroups.slice(
+    (safePage - 1) * PER_PAGE,
+    safePage * PER_PAGE
+  );
 
   const changePage = useCallback(
     (n: number) => {
       if (fade) return;
       const next = Math.max(1, Math.min(n, totalPages));
       if (next === safePage) return;
-
       trackEvent("News Page Changed", { page: next });
       window.scrollTo({ top: 0, behavior: "smooth" });
-
       setFade(true);
       window.setTimeout(() => {
         setPage(next);
         setFade(false);
-      }, 220);
+      }, 200);
     },
     [fade, totalPages, safePage]
   );
 
+  const openReader = (a: Article) => {
+    trackEvent("Article Clicked", {
+      title: a.title,
+      url: a.url,
+      source: a.source.name,
+    });
+    setReaderArticle(articleToReadable(a));
+  };
+
   return (
-    <div className="mx-auto max-w-7xl pb-10">
+    <div className="pb-10">
+      {/* Error banner */}
       {error && (
-        <div className="mb-4 sm:mb-6 border-2 border-red-600 dark:border-red-400 bg-white dark:bg-neutral-900 p-3 sm:p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
-            <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Error</span>
-          </div>
-          <p className="text-xs sm:text-sm text-red-700 dark:text-red-200">{error}</p>
+        <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/40 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-red-700 dark:text-red-400">{error}</p>
         </div>
       )}
 
-      {/* Filters - NEWSPAPER SECTION HEADER */}
-      <div className="mb-4 sm:mb-6 flex flex-wrap items-center gap-2 sm:gap-3 border-b-2 border-neutral-900 dark:border-neutral-100 pb-3 sm:pb-4">
-        <div className="flex items-center gap-2 mr-2 sm:mr-4">
-          <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
-          <span className="text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100">Region</span>
-        </div>
-        <div className="inline-flex overflow-hidden border-2 border-neutral-900 dark:border-neutral-100">
-          {(["All", "USA", "World"] as const).map((r, idx) => (
+      {/* Filters */}
+      <div className="mb-4 sm:mb-5 flex flex-wrap items-center gap-2 pb-4 border-b border-gray-100 dark:border-gray-800">
+        {/* Region pills */}
+        <div className="flex items-center gap-1.5 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-1">
+          {(["All", "USA", "World"] as const).map((r) => (
             <button
               key={r}
               onClick={() => {
                 setRegion(r);
                 trackEvent("News Region Changed", { region: r });
               }}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-black uppercase tracking-wider transition ${
-                idx !== 0 ? "border-l-2 border-neutral-900 dark:border-neutral-100" : ""
-              } ${
+              className={[
+                "px-3 py-1 rounded-md text-xs font-medium transition-all",
                 region === r
-                  ? "bg-red-600 dark:bg-red-400 text-white dark:text-neutral-900"
-                  : "bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-              }`}
+                  ? "bg-white dark:bg-gray-700 text-brand-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200",
+              ].join(" ")}
             >
               {r}
             </button>
           ))}
         </div>
 
+        {/* Provider dropdown */}
         <select
           value={provider}
           onChange={(e) => {
             setProvider(e.target.value);
             trackEvent("News Provider Changed", { provider: e.target.value });
           }}
-          className="ml-auto border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100"
+          className="ml-auto rounded-lg border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
         >
           {providers.map((p) => (
             <option key={p}>{p}</option>
@@ -375,36 +381,38 @@ export default function NewsTab() {
         </select>
       </div>
 
-      {/* HERO - NEWSPAPER FRONT PAGE HEADLINE */}
+      {/* Hero */}
       {heroGroup ? (
-        <HeroCard group={heroGroup} onOpenGroup={() => setOpenGroup(heroGroup)} />
+        <HeroCard group={heroGroup} onRead={() => openReader(heroGroup.rep)} onOpenGroup={() => setOpenGroup(heroGroup)} />
       ) : (
-        <div className="mb-4 sm:mb-6 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-4 sm:p-6 text-center">
-          <span className="text-xs sm:text-sm uppercase tracking-widest font-black text-neutral-500 dark:text-neutral-400">
-            {loading ? "Loading top stories..." : "No stories found."}
+        <div className="mb-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-brand-900 p-4 sm:p-6 text-center">
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {loading ? "Loading top stories…" : "No stories found."}
           </span>
         </div>
       )}
 
-      {/* GRID - NEWSPAPER ARTICLE GRID */}
+      {/* Grid */}
       <div
-        className={`mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 transition-opacity duration-200 ${
+        className={`mt-4 sm:mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 transition-opacity duration-200 ${
           fade ? "opacity-0" : "opacity-100"
         }`}
       >
         {loading && groups.length === 0
           ? Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="col-span-1">
-                <SkeletonCard />
-              </div>
+              <SkeletonCard key={i} />
             ))
           : pageGroups.map((g) => (
-              <div key={g.key} className="col-span-1">
-                <GroupCard group={g} onOpen={() => setOpenGroup(g)} />
-              </div>
+              <GroupCard
+                key={g.key}
+                group={g}
+                onRead={() => openReader(g.rep)}
+                onOpen={() => setOpenGroup(g)}
+              />
             ))}
       </div>
 
+      {/* Pagination */}
       <Pagination
         page={safePage}
         totalPages={totalPages}
@@ -413,27 +421,37 @@ export default function NewsTab() {
         onNext={() => changePage(safePage + 1)}
       />
 
+      {/* Group modal */}
       <GroupModal
         open={!!openGroup}
         group={openGroup}
         onClose={() => setOpenGroup(null)}
-        onArticleClick={(article) => {
+        onArticleClick={(a) => {
           setOpenGroup(null);
-          setReaderArticle(article);
+          openReader(a);
         }}
       />
-      <ReaderModal open={!!readerArticle} article={readerArticle} onClose={() => setReaderArticle(null)} />
+
+      {/* Reader modal */}
+      <ReaderModal
+        open={!!readerArticle}
+        article={readerArticle}
+        onClose={() => setReaderArticle(null)}
+        accent="indigo"
+      />
     </div>
   );
 
   /* ------------------------------------------------------------------ */
-  /*  Cards - NEWSPAPER MAGAZINE STYLE                                  */
+  /*  HeroCard                                                          */
   /* ------------------------------------------------------------------ */
   function HeroCard({
     group,
+    onRead,
     onOpenGroup,
   }: {
     group: ArticleGroup;
+    onRead: () => void;
     onOpenGroup: () => void;
   }) {
     const a = group.rep;
@@ -442,296 +460,239 @@ export default function NewsTab() {
     const logoCandidates = getLogoCandidates(a);
     const multi = group.items.length > 1;
 
-    const onClick = (e: React.MouseEvent) => {
-      e.preventDefault();
-      trackEvent("Article Clicked", {
-        title: a.title,
-        url: a.url,
-        source: a.source.name,
-        strip: true,
-        grouped: multi,
-      });
-      setReaderArticle(a);
-    };
-
     return (
       <div
-        onClick={onClick}
-        className="group relative overflow-hidden border-2 sm:border-4 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] cursor-pointer transition-all duration-200 hover:shadow-xl"
+        onClick={onRead}
+        className="group relative overflow-hidden rounded-xl cursor-pointer border border-gray-100 dark:border-gray-800 hover:shadow-lg transition-all duration-300"
       >
-        <div className="relative h-56 sm:h-72 md:h-80">
+        <div className="relative h-52 sm:h-64 md:h-72">
           {hasImg ? (
             <SmartImage
               candidates={candidates}
               alt={a.title}
               wrapperClassName="absolute inset-0"
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
             />
           ) : (
-            <div className="absolute inset-0 bg-neutral-100 dark:bg-neutral-800" />
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-950/30 dark:to-indigo-900/20" />
           )}
 
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/0" />
+          {/* Gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/0" />
 
-          {/* Breaking news banner */}
-          <div className="absolute top-0 left-0 bg-red-600 dark:bg-red-400 px-3 sm:px-4 py-1.5 sm:py-2">
-            <span className="text-[9px] sm:text-[10px] uppercase tracking-widest font-black text-white dark:text-neutral-900">
+          {/* Top badge */}
+          <div className="absolute top-3 left-3">
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600/90 backdrop-blur-sm px-2.5 py-1 text-[10px] font-semibold text-white uppercase tracking-wide">
               Top Story
             </span>
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6 text-white">
-            <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-              {logoCandidates.length ? (
-                <SmartImage
-                  candidates={logoCandidates}
-                  alt={a.source.name}
-                  className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0 object-contain border border-white/30 bg-white/10 p-0.5"
-                />
-              ) : null}
-              <span className="text-[10px] sm:text-xs uppercase tracking-wider font-black opacity-95 truncate max-w-[200px]">
+          {/* Bottom content */}
+          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 text-white">
+            <div className="flex items-center gap-2 mb-2">
+              {logoCandidates.length > 0 && (
+                <div className="h-5 w-5 rounded-full overflow-hidden bg-white/10 border border-white/20 flex-shrink-0">
+                  <SmartImage
+                    candidates={logoCandidates}
+                    alt={a.source.name}
+                    className="h-full w-full object-contain p-0.5"
+                  />
+                </div>
+              )}
+              <span className="text-xs font-medium opacity-90 truncate max-w-[180px]">
                 {a.source.name || getDomain(a.url)}
               </span>
-              <div className="w-1 h-1 bg-white/50 rounded-full"></div>
-              <time dateTime={a.publishedAt} className="text-[10px] sm:text-xs uppercase tracking-wider font-bold opacity-80">
-                {new Date(a.publishedAt).toLocaleString(undefined, { month: "short", day: "numeric" })}
+              <span className="opacity-40">·</span>
+              <time className="text-xs opacity-75" dateTime={a.publishedAt}>
+                {new Date(a.publishedAt).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                })}
               </time>
-
-              {multi ? (
-                <span className="ml-auto border border-white/50 bg-white/20 px-2 py-1 text-[9px] sm:text-[10px] uppercase tracking-wider font-black backdrop-blur">
+              {multi && (
+                <span className="ml-auto rounded-md border border-white/30 bg-white/15 backdrop-blur-sm px-2 py-0.5 text-[10px] font-medium">
                   +{group.items.length - 1} sources
                 </span>
-              ) : null}
+              )}
             </div>
 
-            <h3 className="line-clamp-2 text-lg sm:text-2xl md:text-3xl font-black leading-tight uppercase tracking-tight">
+            <h3 className="font-serif text-lg sm:text-xl md:text-2xl font-bold leading-snug line-clamp-2">
               {a.title}
             </h3>
 
-            {multi ? (
+            {multi && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onOpenGroup();
                 }}
-                className="mt-3 sm:mt-4 inline-flex items-center gap-2 border-2 border-white bg-transparent px-3 sm:px-4 py-2 text-[10px] sm:text-xs uppercase tracking-widest font-black hover:bg-white hover:text-neutral-900 transition-all"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-white/40 bg-white/10 backdrop-blur-sm px-3 py-1.5 text-xs font-medium hover:bg-white/20 transition-colors"
               >
-                View all sources
-                <span>→</span>
+                View all sources →
               </button>
-            ) : null}
+            )}
           </div>
         </div>
       </div>
     );
   }
 
-  function GroupCard({ group, onOpen }: { group: ArticleGroup; onOpen: () => void }) {
+  /* ------------------------------------------------------------------ */
+  /*  GroupCard                                                         */
+  /* ------------------------------------------------------------------ */
+  function GroupCard({
+    group,
+    onRead,
+    onOpen,
+  }: {
+    group: ArticleGroup;
+    onRead: () => void;
+    onOpen: () => void;
+  }) {
     const a = group.rep;
     const candidates = getImageCandidates(a, 600);
     const hasImg = candidates.length > 0;
     const logoCandidates = getLogoCandidates(a);
     const multi = group.items.length > 1;
 
-    // Check if this is a CBS News article (small thumbnails)
-    const isCBS = a.url?.includes("cbsnews.com") || a.source.name?.toLowerCase().includes("cbs");
+    const isCBS =
+      a.url?.includes("cbsnews.com") ||
+      a.source.name?.toLowerCase().includes("cbs");
 
-    const handlePrimaryClick = (e: React.MouseEvent) => {
-      e.preventDefault();
-      trackEvent("Article Clicked", {
-        title: a.title,
-        url: a.url,
-        source: a.source.name,
-        strip: false,
-        grouped: multi,
-      });
-      setReaderArticle(a);
-    };
-
-    // CBS News card - consistent style matching other cards
-    if (isCBS) {
+    /* Image card */
+    if (hasImg && !isCBS) {
       return (
         <div
-          onClick={handlePrimaryClick}
-          className="group relative overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] cursor-pointer transition-all duration-200 hover:shadow-lg"
+          onClick={onRead}
+          className="group relative overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
         >
-          {/* Red accent bar */}
-          <div className="absolute top-0 left-0 w-1 h-full bg-red-600 dark:bg-red-400 z-10" />
+          <div className="relative h-44 sm:h-48">
+            <SmartImage
+              candidates={candidates}
+              alt={a.title}
+              wrapperClassName="absolute inset-0"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
 
-          {/* Image */}
-          {hasImg && (
-            <div className="relative h-40 sm:h-48 bg-neutral-100 dark:bg-neutral-900">
-              <SmartImage
-                candidates={candidates}
-                alt={a.title}
-                wrapperClassName="absolute inset-0"
-                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-              />
-            </div>
-          )}
-
-          <div className="p-3 sm:p-4">
-            {/* Title */}
-            <h3 className="text-sm sm:text-base font-extrabold leading-tight text-neutral-900 dark:text-neutral-100 line-clamp-3 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">
-              {a.title}
-            </h3>
-
-            {/* Grey divider line */}
-            <div className="h-px bg-neutral-300 dark:bg-neutral-700 my-3" />
-
-            {/* Footer: Logo + Source name + Dot + Date */}
-            <div className="flex items-center gap-2">
-              {logoCandidates.length ? (
-                <SmartImage
-                  candidates={logoCandidates}
-                  alt={a.source.name}
-                  className="h-5 w-5 object-contain rounded bg-white dark:bg-neutral-800 p-0.5 border border-neutral-200 dark:border-neutral-700"
-                />
-              ) : null}
-              <span className="text-[11px] font-black uppercase tracking-widest text-red-600 dark:text-red-400">
-                CBS News
-              </span>
-              <span className="text-neutral-300 dark:text-neutral-600">•</span>
-              <time className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400" dateTime={a.publishedAt}>
-                {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-              </time>
-              {multi ? (
+            {/* Badge for multi-source */}
+            {multi && (
+              <div className="absolute top-2 right-2">
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onOpen();
                   }}
-                  className="ml-auto bg-red-600 dark:bg-red-400 text-white dark:text-neutral-900 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide hover:bg-red-700 dark:hover:bg-red-300 transition-colors"
+                  className="rounded-md bg-indigo-600/90 backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-indigo-700 transition-colors"
                 >
                   +{group.items.length - 1}
                 </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      );
-    }
+              </div>
+            )}
 
-    // Card with image - NEWSPAPER STYLE (for non-CBS sources)
-    if (hasImg) {
-      return (
-        <div
-          onClick={handlePrimaryClick}
-          className="group relative overflow-hidden border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] cursor-pointer transition-all duration-200 hover:shadow-lg"
-        >
-          {/* Red accent bar - z-10 to appear above image */}
-          <div className="absolute top-0 left-0 w-1 h-full bg-red-600 dark:bg-red-400 z-10" />
-          
-          <div className="relative h-48 sm:h-52">
-            <SmartImage
-  candidates={candidates}
-  alt={a.title}
-  wrapperClassName="absolute inset-0"
-  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-/>
-
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/0" />
-            <div className="absolute bottom-0 w-full p-3 sm:p-4 text-white">
-              <div className="flex items-center gap-2 text-[10px] sm:text-xs mb-2">
-                {logoCandidates.length ? (
-                  <SmartImage
-                    candidates={logoCandidates}
-                    alt={a.source.name}
-                    className="h-4 w-4 sm:h-5 sm:w-5 object-contain border border-white/30 bg-white/10 p-0.5"
-                  />
-                ) : null}
-
-                <span className="truncate max-w-[120px] uppercase tracking-wider font-black opacity-95">
+            <div className="absolute inset-x-0 bottom-0 p-3 text-white">
+              <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
+                {logoCandidates.length > 0 && (
+                  <div className="h-4 w-4 rounded-full overflow-hidden bg-white/10 border border-white/20 flex-shrink-0">
+                    <SmartImage
+                      candidates={logoCandidates}
+                      alt={a.source.name}
+                      className="h-full w-full object-contain p-0.5"
+                    />
+                  </div>
+                )}
+                <span className="font-medium opacity-85 truncate max-w-[110px]">
                   {a.source.name}
                 </span>
-                <div className="w-1 h-1 bg-white/50 rounded-full"></div>
-                <time className="uppercase tracking-wider font-bold opacity-80" dateTime={a.publishedAt}>
-                  {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                <span className="opacity-40">·</span>
+                <time opacity-75 dateTime={a.publishedAt}>
+                  {new Date(a.publishedAt).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
                 </time>
-
-                {multi ? (
-                  <span className="ml-auto border border-white/50 bg-white/20 px-1.5 py-0.5 text-[9px] uppercase tracking-wider font-black backdrop-blur">
-                    +{group.items.length - 1}
-                  </span>
-                ) : null}
               </div>
-
-              <h3 className="line-clamp-2 text-sm sm:text-base font-black leading-snug uppercase tracking-tight">
+              <h3 className="font-semibold text-sm leading-snug line-clamp-2">
                 {a.title}
               </h3>
-
-              {multi ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpen();
-                  }}
-                  className="mt-2 sm:mt-3 inline-flex items-center gap-1.5 border border-white bg-transparent px-2 sm:px-3 py-1 sm:py-1.5 text-[9px] sm:text-[10px] uppercase tracking-widest font-black hover:bg-white hover:text-neutral-900 transition-all"
-                >
-                  View sources
-                  <span>→</span>
-                </button>
-              ) : null}
             </div>
           </div>
         </div>
       );
     }
 
-    // Text-only card - NEWSPAPER STYLE
+    /* Text-only card (CBS or no image) */
     return (
       <div
-        onClick={handlePrimaryClick}
-        className="group relative border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] p-3 sm:p-4 pl-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:bg-neutral-50 dark:hover:bg-neutral-800"
+        onClick={onRead}
+        className="group rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 p-4 cursor-pointer hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
       >
-        {/* Red accent bar */}
-        <div className="absolute top-0 left-0 w-1 h-full bg-red-600 dark:bg-red-400" />
+        {/* CBS thumbnail floated right */}
+        {isCBS && hasImg && (
+          <div className="float-right ml-3 mb-2 h-14 w-14 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 border border-gray-100 dark:border-gray-800 flex-shrink-0">
+            <SmartImage
+              candidates={candidates}
+              alt={a.title}
+              className="h-full w-full object-cover"
+            />
+          </div>
+        )}
 
-        <h3 className="line-clamp-3 text-sm sm:text-base font-black leading-snug text-neutral-900 dark:text-neutral-100 uppercase tracking-tight">
+        <h3 className="text-sm font-semibold text-brand-900 dark:text-gray-50 leading-snug line-clamp-3 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">
           {a.title}
         </h3>
 
-        {a.description ? (
-          <p className="mt-2 line-clamp-2 text-xs sm:text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">
+        {a.description && (
+          <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2">
             {a.description}
           </p>
-        ) : null}
+        )}
 
-        <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center gap-2 text-[10px] sm:text-xs">
-          {logoCandidates.length ? (
-            <SmartImage
-              candidates={logoCandidates}
-              alt={a.source.name}
-              className="h-5 w-5 sm:h-6 sm:w-6 object-contain border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-0.5"
-            />
-          ) : null}
-
-          <span className="truncate max-w-[120px] uppercase tracking-wider font-black text-neutral-700 dark:text-neutral-300">{a.source.name}</span>
-          <div className="w-1 h-1 bg-neutral-400 rounded-full"></div>
-          <time className="uppercase tracking-wider font-bold text-neutral-500 dark:text-neutral-400" dateTime={a.publishedAt}>
-            {new Date(a.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+        <div className="mt-3 pt-3 border-t border-gray-50 dark:border-gray-800 flex items-center gap-2 clear-both">
+          {logoCandidates.length > 0 && (
+            <div className="h-4 w-4 rounded overflow-hidden bg-gray-50 dark:bg-gray-800 flex-shrink-0">
+              <SmartImage
+                candidates={logoCandidates}
+                alt={a.source.name}
+                className="h-full w-full object-contain"
+              />
+            </div>
+          )}
+          <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[120px]">
+            {a.source.name}
+          </span>
+          <span className="text-gray-300 dark:text-gray-700">·</span>
+          <time
+            className="text-[10px] text-gray-400 dark:text-gray-500"
+            dateTime={a.publishedAt}
+          >
+            {new Date(a.publishedAt).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            })}
           </time>
-
-          {group.items.length > 1 ? (
+          {multi && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onOpen();
               }}
-              className="ml-auto border border-neutral-900 dark:border-neutral-100 bg-red-600 dark:bg-red-400 px-2 py-1 text-[9px] uppercase tracking-wider font-black text-white dark:text-neutral-900 hover:bg-neutral-900 dark:hover:bg-neutral-100 transition-all"
+              className="ml-auto rounded-md bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 transition-colors"
             >
               +{group.items.length - 1}
             </button>
-          ) : null}
+          )}
         </div>
       </div>
     );
   }
 
+  /* ------------------------------------------------------------------ */
+  /*  Pagination                                                        */
+  /* ------------------------------------------------------------------ */
   function Pagination({
     page,
     totalPages,
@@ -746,42 +707,31 @@ export default function NewsTab() {
     onNext: () => void;
   }) {
     return (
-      <div className="mt-8 sm:mt-10 flex flex-col items-center gap-3 sm:gap-4">
-        <div className="flex items-center gap-2 sm:gap-3">
+      <div className="mt-8 sm:mt-10 flex flex-col items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             disabled={page === 1 || loading}
             onClick={onPrev}
-            className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-neutral-900 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900 disabled:opacity-40 transition-all"
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-brand-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-all"
           >
-            ← Previous
+            <ChevronLeft className="h-4 w-4" />
+            Previous
           </button>
 
           <button
             disabled={page === totalPages || loading}
             onClick={onNext}
-            className="border-2 border-neutral-900 dark:border-neutral-100 bg-red-600 dark:bg-red-400 px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-widest font-black text-white dark:text-neutral-900 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 dark:hover:bg-neutral-100 dark:hover:text-neutral-900 dark:hover:border-neutral-100 disabled:opacity-40 transition-all"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 dark:bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 dark:hover:bg-indigo-400 disabled:opacity-40 transition-all"
           >
-            Next →
+            Next
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-neutral-500 dark:text-neutral-400">
-          Page <span className="font-black text-neutral-900 dark:text-neutral-100">{page}</span> / {totalPages}
-          {loading && <span className="ml-2 animate-pulse">Loading...</span>}
-        </div>
-      </div>
-    );
-  }
-
-  function SkeletonCard() {
-    return (
-      <div className="animate-pulse overflow-hidden border-2 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-[#1D1D20]">
-        <div className="h-48 bg-neutral-100 dark:bg-neutral-800" />
-        <div className="p-3 sm:p-4">
-          <div className="h-3 w-3/4 bg-neutral-200 dark:bg-neutral-700" />
-          <div className="mt-2 h-3 w-2/3 bg-neutral-200 dark:bg-neutral-700" />
-          <div className="mt-4 h-3 w-1/3 bg-neutral-200 dark:bg-neutral-700" />
-        </div>
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          Page {page} of {totalPages}
+          {loading && <span className="ml-2 animate-pulse">Loading…</span>}
+        </p>
       </div>
     );
   }

@@ -1,8 +1,11 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { X } from "lucide-react";
 import { trackEvent } from "@/utils/mixpanel";
+import { SmartImage } from "../lib/SmartImage";
+import { getDomain, uniqStrings, badUrl, withProxyFallback, normalizeUrl } from "../lib/utils";
 
 import type { Article } from "./AllNewsTab";
 
@@ -20,77 +23,25 @@ export type ArticleGroup = {
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
-const getDomain = (u: string) => {
-  try {
-    return new URL(u).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-};
-
-const bad = (s?: string | null | unknown) => {
-  if (!s) return true;
-  if (typeof s !== "string") return true; // Filter out objects, numbers, etc.
-  const v = s.trim().toLowerCase();
-  if (!v || v.length < 10) return true; // Too short to be a valid URL
-  // Filter out placeholder/invalid image values
-  if (["none", "null", "n/a", "undefined", "no image", "noimage", "placeholder", "[object object]"].includes(v)) return true;
-  if (v.startsWith("data:image/gif")) return true; // 1x1 tracking pixels
-  if (v.includes("spacer.gif") || v.includes("pixel.gif") || v.includes("blank.gif")) return true;
-  // Must look like a URL
-  if (!v.startsWith("http://") && !v.startsWith("https://") && !v.startsWith("//")) return true;
-  return false;
-};
-
 const firstImg = (html?: string | null) =>
   html?.match(/<img[^>]+src=['"]([^'"]+)['"]/i)?.[1] ?? null;
 
-const normalizeUrl = (s: string) => {
-  const t = String(s || "").trim();
-  if (!t) return "";
-  if (t.startsWith("//")) return `https:${t}`;
-  return t;
-};
-
-const uniqStrings = (arr: string[]) => {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const s of arr) {
-    const k = String(s || "").trim();
-    if (!k || seen.has(k)) continue;
-    seen.add(k);
-    out.push(k);
-  }
-  return out;
-};
-
-const IMG_PROXY = "https://u-mail.co/api/NewsAPI/img?url=";
-
-const withProxyFallback = (urls: string[], width?: number) => {
-  const norm = urls.map(normalizeUrl).filter(Boolean);
-  const sizeParam = width ? `&width=${width}` : "";
-  const result: string[] = [];
-  for (const u of norm) {
-    result.push(u);
-    result.push(`${IMG_PROXY}${encodeURIComponent(u)}${sizeParam}`);
-  }
-  return uniqStrings(result);
-};
-
-export const getImageCandidates = (a: Article, width?: number) => {
+export const getImageCandidates = (a: Article, width?: number): string[] => {
   const sources = [
     a.urlToImage,
     a.image,
     a.images?.[0],
     a.thumbnails?.[0],
     firstImg(a.content),
-  ].filter((s): s is string => !bad(s));
+  ].filter((s): s is string => !badUrl(s));
   return withProxyFallback(uniqStrings(sources), width);
 };
 
-export const getLogoCandidates = (a: Article) => {
+export const getLogoCandidates = (a: Article): string[] => {
   const domain = getDomain(a.url);
-  const fromApi = Array.isArray(a.source.imageCandidates) ? a.source.imageCandidates : [];
+  const fromApi = Array.isArray(a.source.imageCandidates)
+    ? a.source.imageCandidates
+    : [];
   const fallback = domain
     ? [
         `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`,
@@ -101,43 +52,8 @@ export const getLogoCandidates = (a: Article) => {
   return withProxyFallback(uniqStrings([...fromApi, ...fallback]));
 };
 
-export const stableKey = (a: Article) => a.url?.trim() || `${a.title}-${a.publishedAt}`;
-
-/* ------------------------------------------------------------------ */
-/*  SmartImage                                                         */
-/* ------------------------------------------------------------------ */
-export function SmartImage({
-  candidates,
-  alt,
-  className,
-  wrapperClassName,
-}: {
-  candidates: string[];
-  alt: string;
-  className?: string;
-  wrapperClassName?: string;
-}) {
-  const [idx, setIdx] = useState(0);
-
-  useEffect(() => setIdx(0), [candidates.join("|")]);
-
-  const src = candidates[idx];
-  if (!src) return null;
-
-  return (
-    <div className={wrapperClassName}>
-      <img
-        src={src}
-        alt={alt}
-        className={className}
-        loading="lazy"
-        decoding="async"
-        referrerPolicy="no-referrer"
-        onError={() => setIdx((i) => i + 1)}
-      />
-    </div>
-  );
-}
+export const stableKey = (a: Article): string =>
+  a.url?.trim() || `${a.title}-${a.publishedAt}`;
 
 /* ------------------------------------------------------------------ */
 /*  GroupModal                                                         */
@@ -153,7 +69,7 @@ export function GroupModal({
   onClose: () => void;
   onArticleClick: (article: Article) => void;
 }) {
-  // ESC key handler
+  /* ESC key */
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -163,7 +79,7 @@ export function GroupModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Disable body scroll when modal is open
+  /* Lock scroll */
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -176,328 +92,116 @@ export function GroupModal({
   if (!open || !group) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center overflow-hidden">
-      {/* backdrop */}
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      {/* Backdrop */}
       <div
         aria-label="Close"
         onClick={onClose}
-        className="fixed inset-0 bg-black/90 cursor-pointer"
+        className="fixed inset-0 bg-black/55 backdrop-blur-sm cursor-pointer"
       />
 
-      {/* panel */}
-      <div className="relative z-10 w-full max-w-3xl max-h-[90vh] sm:max-h-[85vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl border border-white/10 bg-white shadow-2xl dark:bg-brand-900 isolate">
-        {/* Header - flex-shrink-0 */}
-        <div className="flex-shrink-0 flex items-start justify-between gap-3 sm:gap-4 p-3 sm:p-6 border-b border-black/10 dark:border-white/10">
+      {/* Panel */}
+      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] sm:max-h-[85vh] flex flex-col bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-start justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 dark:border-gray-800">
           <div className="min-w-0">
-            <h3 className="text-sm sm:text-lg font-extrabold tracking-tight text-gray-900 dark:text-white line-clamp-2">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                {group.items.length} source{group.items.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-50 leading-snug line-clamp-2">
               {group.title}
             </h3>
-            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-sm text-gray-600 dark:text-gray-300">
-              {group.items.length} source{group.items.length === 1 ? "" : "s"} • newest{" "}
-              {new Date(group.newestAt).toLocaleString(undefined, { month: "short", day: "numeric" })}
+            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+              Latest:{" "}
+              {new Date(group.newestAt).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
             </p>
           </div>
 
           <button
             onClick={onClose}
-            className="shrink-0 rounded-lg sm:rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 sm:px-3 sm:py-2 text-[10px] sm:text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 transition
-                       dark:border-white/10 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10"
+            className="shrink-0 rounded-lg p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Close"
           >
-            Close
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
-          <div className="grid grid-cols-1 gap-3">
-            {group.items.map((a) => {
-              const logos = getLogoCandidates(a);
-              const imgs = getImageCandidates(a);
-              const hasImage = imgs.length > 0;
+        {/* Scrollable list */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-2 bg-gray-50 dark:bg-gray-950">
+          {group.items.map((a) => {
+            const logos = getLogoCandidates(a);
+            const imgs = getImageCandidates(a);
+            const hasImage = imgs.length > 0;
 
-              return (
-                <button
-                  key={stableKey(a)}
-                  onClick={() => {
-                    trackEvent("Article Clicked", {
-                      title: a.title,
-                      url: a.url,
-                      source: a.source.name,
-                      grouped: true,
-                      strip: false,
-                    });
-                    onArticleClick(a);
-                  }}
-                  className="group block w-full text-left overflow-hidden rounded-xl sm:rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition-transform duration-200 hover:-translate-y-[1px]
-                             dark:border-white/10 dark:bg-brand-900"
-                >
-                  <div className="flex gap-2 sm:gap-3 p-2 sm:p-3">
-                    {hasImage ? (
-                      <div className="relative h-14 w-20 sm:h-16 sm:w-24 shrink-0 overflow-hidden rounded-lg sm:rounded-xl bg-gray-100 dark:bg-white/5">
-                        <SmartImage
-                          candidates={imgs}
-                          alt={a.title}
-                          wrapperClassName="absolute inset-0"
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
-                        />
-                      </div>
-                    ) : null}
+            return (
+              <button
+                key={stableKey(a)}
+                onClick={() => {
+                  trackEvent("Article Clicked", {
+                    title: a.title,
+                    url: a.url,
+                    source: a.source.name,
+                    grouped: true,
+                  });
+                  onArticleClick(a);
+                }}
+                className="group block w-full text-left overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
+              >
+                <div className="flex gap-3 p-3">
+                  {hasImage && (
+                    <div className="relative h-14 w-20 sm:h-16 sm:w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+                      <SmartImage
+                        candidates={imgs}
+                        alt={a.title}
+                        wrapperClassName="absolute inset-0"
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                      />
+                    </div>
+                  )}
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        {logos.length ? (
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      {logos.length > 0 && (
+                        <div className="h-4 w-4 rounded overflow-hidden bg-gray-50 dark:bg-gray-800 flex-shrink-0">
                           <SmartImage
                             candidates={logos}
                             alt={a.source.name}
-                            className="h-3.5 w-3.5 sm:h-4 sm:w-4 rounded bg-white/10 object-contain"
+                            className="h-full w-full object-contain"
                           />
-                        ) : null}
-                        <span className="truncate text-[10px] sm:text-xs font-semibold text-gray-700 dark:text-gray-200">
-                          {a.source.name || getDomain(a.url)}
-                        </span>
-                        <span className="text-[10px] sm:text-xs text-gray-400">•</span>
-                        <time className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400" dateTime={a.publishedAt}>
-                          {new Date(a.publishedAt).toLocaleString(undefined, { month: "short", day: "numeric" })}
-                        </time>
-                      </div>
-
-                      <div className="mt-1 line-clamp-2 text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">
-                        {a.title}
-                      </div>
-
-                      {a.description ? (
-                        <div className="mt-1 line-clamp-2 text-[10px] sm:text-xs text-gray-600 dark:text-gray-300">
-                          {a.description}
                         </div>
-                      ) : null}
+                      )}
+                      <span className="text-[10px] sm:text-xs font-medium text-gray-500 dark:text-gray-400 truncate">
+                        {a.source.name || getDomain(a.url)}
+                      </span>
+                      <span className="text-[10px] text-gray-300 dark:text-gray-600">·</span>
+                      <time className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500" dateTime={a.publishedAt}>
+                        {new Date(a.publishedAt).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </time>
                     </div>
+
+                    <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-50 leading-snug line-clamp-2 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">
+                      {a.title}
+                    </p>
+
+                    {a.description && (
+                      <p className="mt-1 text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
+                        {a.description}
+                      </p>
+                    )}
                   </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  ReaderModal                                                        */
-/* ------------------------------------------------------------------ */
-export function ReaderModal({
-  open,
-  article,
-  onClose,
-}: {
-  open: boolean;
-  article: Article | null;
-  onClose: () => void;
-}) {
-  const [content, setContent] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || !article) {
-      setContent(null);
-      setError(null);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    fetch(`/api/parse-article?url=${encodeURIComponent(article.url)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) {
-          setError(data.error);
-        } else {
-          setContent(data.content);
-        }
-      })
-      .catch((err) => {
-        setError("Failed to load article");
-        console.error(err);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [open, article]);
-
-  // ESC key handler
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  // Disable body scroll when modal is open
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
-  if (!open || !article) return null;
-
-  const images = getImageCandidates(article);
-  const logos = getLogoCandidates(article);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
-      {/* backdrop */}
-      <div
-        aria-label="Close"
-        onClick={onClose}
-        className="fixed inset-0 bg-black/90 cursor-pointer"
-      />
-
-      {/* panel - MAGAZINE STYLE */}
-      <div className="relative z-10 w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden border-2 sm:border-4 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20] shadow-2xl isolate">
-        {/* Header - NEWSPAPER MASTHEAD - flex-shrink-0 */}
-        <div className="flex-shrink-0 border-b-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-[#1D1D20]">
-          <div className="flex items-center justify-between gap-2 sm:gap-4 p-3 sm:p-6">
-            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-600 dark:bg-red-400 rounded-full shrink-0"></div>
-              {logos.length > 0 && (
-                <SmartImage
-                  candidates={logos}
-                  alt={article.source.name}
-                  className="h-6 w-6 sm:h-8 sm:w-8 object-contain shrink-0 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-neutral-800 p-0.5 sm:p-1"
-                />
-              )}
-              <div className="min-w-0">
-                <p className="text-[10px] sm:text-xs uppercase tracking-[0.15em] sm:tracking-[0.2em] font-black text-neutral-900 dark:text-neutral-100 truncate">
-                  {article.source.name || getDomain(article.url)}
-                </p>
-                <time className="text-[9px] sm:text-[10px] uppercase tracking-wider font-bold text-neutral-500 dark:text-neutral-400" dateTime={article.publishedAt}>
-                  {new Date(article.publishedAt).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </time>
-              </div>
-            </div>
-
-            <button
-              onClick={onClose}
-              className="shrink-0 border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-neutral-900 px-2 py-1 sm:px-4 sm:py-2 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest font-black text-neutral-900 dark:text-neutral-100 hover:bg-red-600 hover:text-white hover:border-red-600 dark:hover:bg-red-400 dark:hover:text-neutral-900 dark:hover:border-red-400 transition-all"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-
-        {/* Content - scrollable area */}
-        <div className="flex-1 overflow-y-auto overscroll-contain bg-white dark:bg-[#1D1D20]">
-          {/* Article Body - MAGAZINE LAYOUT */}
-          <div className="p-4 sm:p-8 md:p-12">
-            {/* HEADLINE */}
-            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight text-neutral-900 dark:text-neutral-100 mb-4 sm:mb-6 leading-[1.1] uppercase border-b-4 border-red-600 dark:border-red-400 pb-4 sm:pb-6">
-              {article.title}
-            </h1>
-
-            {/* LEAD PARAGRAPH / DECK */}
-            {article.description && (
-              <div className="border-l-4 border-red-600 dark:border-red-400 pl-4 sm:pl-6 mb-6 sm:mb-8 bg-neutral-100 dark:bg-neutral-900 p-4 sm:p-6">
-                <p className="text-base sm:text-xl md:text-2xl leading-relaxed font-light text-neutral-800 dark:text-neutral-200" style={{ fontFamily: '"Merriweather", serif' }}>
-                  {article.description}
-                </p>
-              </div>
-            )}
-
-            {/* HERO IMAGE - CBS gets small thumbnail, others get full hero */}
-            {images.length > 0 && (() => {
-              const isCBS = article.url?.includes("cbsnews.com") || article.source.name?.toLowerCase().includes("cbs");
-
-              if (isCBS) {
-                // CBS: Small thumbnail floated to the side
-                return (
-                  <div className="mb-6 sm:mb-8 flex justify-end">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden border-2 border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 shadow-sm">
-                      <SmartImage
-                        candidates={images}
-                        alt={article.title}
-                        wrapperClassName="w-full h-full"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  </div>
-                );
-              }
-
-              // Other sources: Full hero image
-              return (
-                <div className="mb-6 sm:mb-8 border-2 sm:border-4 border-neutral-900 dark:border-neutral-100 overflow-hidden bg-neutral-100 dark:bg-neutral-900">
-                  <SmartImage
-                    candidates={images}
-                    alt={article.title}
-                    wrapperClassName="aspect-[16/9]"
-                    className="w-full h-full object-cover"
-                  />
                 </div>
-              );
-            })()}
-
-            {loading && (
-              <div className="flex flex-col items-center justify-center py-12 sm:py-20 border-2 border-neutral-900 dark:border-neutral-100 bg-neutral-100 dark:bg-neutral-900">
-                <div className="w-3 h-3 bg-red-600 dark:bg-red-400 rounded-full animate-pulse mb-4"></div>
-                <span className="text-[10px] sm:text-xs uppercase tracking-[0.3em] font-black text-neutral-900 dark:text-neutral-100">Loading Story...</span>
-              </div>
-            )}
-
-            {error && (
-              <div className="border-2 sm:border-4 border-red-600 dark:border-red-400 bg-white dark:bg-neutral-900 p-4 sm:p-8">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
-                  <h3 className="text-[10px] sm:text-xs uppercase tracking-[0.3em] font-black text-neutral-900 dark:text-neutral-100">Error</h3>
-                </div>
-                <p className="text-xs sm:text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 mb-2">{error}</p>
-                <p className="text-[10px] sm:text-xs text-neutral-500 dark:text-neutral-400">Read the full article on the original site below.</p>
-              </div>
-            )}
-
-            {/* ARTICLE CONTENT - uses global .article-reader styles from style.css */}
-            {content && (
-              <article
-                className="article-reader"
-                dangerouslySetInnerHTML={{ __html: content }}
-              />
-            )}
-
-            {/* READ MORE SECTION */}
-            <div className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t-4 border-neutral-900 dark:border-neutral-100">
-              <div className="border-2 border-neutral-900 dark:border-neutral-100 bg-white dark:bg-neutral-900 p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full"></div>
-                      <p className="text-[10px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] font-black text-neutral-900 dark:text-neutral-100">Continue Reading</p>
-                    </div>
-                    <p className="text-xs sm:text-sm font-bold text-neutral-700 dark:text-neutral-300">{article.source.name || getDomain(article.url)}</p>
-                  </div>
-                  <a
-                    href={article.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 border-2 border-neutral-900 dark:border-neutral-100 bg-red-600 dark:bg-red-400 px-4 sm:px-6 py-2 sm:py-3 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest font-black text-white dark:text-neutral-900 hover:bg-neutral-900 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900 hover:border-neutral-900 dark:hover:border-neutral-100 transition-all"
-                  >
-                    Read Full Article
-                    <span>→</span>
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
