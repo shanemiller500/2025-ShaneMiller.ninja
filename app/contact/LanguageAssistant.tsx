@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import ReactCountryFlag from "react-country-flag";
 import { trackEvent } from "@/utils/mixpanel";
+import { Button } from "@/components/ui/button";
 
 interface Language {
   name: string;
@@ -146,14 +147,9 @@ function ModalHeader({ title, subtitle, onClose }: ModalHeaderProps) {
         <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
         <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
       </div>
-      <button
-        className="rounded-xl px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:text-gray-200 dark:hover:bg-white/10"
-        onClick={onClose}
-        aria-label="Close"
-        type="button"
-      >
+      <Button variant="ghost" size="sm" type="button" onClick={onClose} aria-label="Close">
         ✕
-      </button>
+      </Button>
     </div>
   );
 }

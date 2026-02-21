@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 import { motion } from "framer-motion";
 import { Newspaper, Trophy, LineChart, type LucideIcon } from "lucide-react";
@@ -118,18 +119,18 @@ export default function NewsPage() {
             const isActive = t.key === tab;
             const Icon = t.Icon;
             return (
-              <button
+              <Button
                 key={t.key}
                 type="button"
                 role="tab"
+                variant="news-tab"
+                active={isActive}
+                size={null}
                 aria-selected={isActive}
                 onClick={() => handleTab(t.key)}
                 className={cn(
-                  "relative shrink-0 whitespace-nowrap px-4 sm:px-6 md:px-8 py-3 sm:py-4 text-[10px] sm:text-xs md:text-sm font-black uppercase tracking-wider sm:tracking-widest transition-all",
+                  "px-4 sm:px-6 md:px-8 py-3 sm:py-4 text-[10px] sm:text-xs md:text-sm",
                   index !== 0 && "border-l-2 border-neutral-900 dark:border-neutral-100",
-                  isActive
-                    ? "bg-red-600 dark:bg-red-400 text-white dark:text-neutral-900"
-                    : "bg-white dark:bg-[#1D1D20] text-neutral-900 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800",
                 )}
                 aria-current={isActive ? "page" : undefined}
               >
@@ -145,7 +146,7 @@ export default function NewsPage() {
                     transition={{ type: "spring", stiffness: 420, damping: 34 }}
                   />
                 )}
-              </button>
+              </Button>
             );
           })}
         </div>

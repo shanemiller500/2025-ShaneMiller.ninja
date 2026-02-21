@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { trackEvent } from "@/utils/mixpanel";
+import { Button } from "@/components/ui/button";
 
 interface ActivityData {
   activity: string;
@@ -100,7 +101,9 @@ export default function RandomActivity() {
         )}
 
         <div className="mt-4 flex justify-end">
-          <ActionButton onClick={handleRefresh}>Another one</ActionButton>
+          <Button variant="secondary" size="lg" className="rounded-2xl" onClick={handleRefresh}>
+            Another one
+          </Button>
         </div>
       </Card>
     </div>
@@ -128,22 +131,6 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ActionButton({
-  children,
-  onClick,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="rounded-2xl border border-black/10 bg-black/[0.03] px-4 py-2 text-sm font-extrabold text-gray-800 shadow-sm hover:bg-black/[0.06] focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80 dark:hover:bg-white/[0.10]"
-    >
-      {children}
-    </button>
-  );
-}
 
 function LoadingSpinner() {
   return (

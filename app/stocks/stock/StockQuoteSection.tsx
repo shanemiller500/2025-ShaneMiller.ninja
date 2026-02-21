@@ -10,6 +10,7 @@ import { API_TOKEN } from "@/utils/config";
 import MarketWidgets from "./MarketWidgets";
 import NewsWidget from "./NewsWidget";
 import StockQuoteModal from "./StockQuoteModal";
+import { Button } from "@/components/ui/button";
 
 const PROXY_BASE = "https://u-mail.co/api/finnhubProxy";
 
@@ -691,22 +692,28 @@ export default function StockQuoteSection() {
             </div>
 
             <div className="sm:col-span-4 flex sm:flex-col gap-2 sm:justify-end">
-              <button
+              <Button
                 type="button"
+                variant="indigo"
+                size="lg"
+                fullWidth
                 onClick={() => handleSearch()}
                 disabled={loading || !normalizedSymbol}
-                className="w-full rounded-2xl px-4 py-3 text-sm font-extrabold shadow-sm ring-1 ring-black/10 dark:ring-white/10 bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white hover:opacity-95 active:scale-[0.99] transition disabled:opacity-50"
+                className="font-extrabold ring-1 ring-black/10 dark:ring-white/10 active:scale-[0.99] disabled:opacity-50"
               >
                 {loading ? "Searching…" : "Search"}
-              </button>
+              </Button>
 
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="lg"
+                fullWidth
                 onClick={handleClear}
-                className="w-full rounded-2xl px-4 py-3 text-sm font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-white/[0.06] text-gray-900 dark:text-white hover:bg-white dark:hover:bg-white/[0.10] transition"
+                className="font-extrabold rounded-2xl ring-1 ring-black/10 dark:ring-white/10 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10]"
               >
                 Reset
-              </button>
+              </Button>
             </div>
           </div>
 

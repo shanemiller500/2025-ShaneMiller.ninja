@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Button } from '@/components/ui/button';
 
 interface LoadMoreButtonProps {
   visibleCount: number;
@@ -12,12 +13,9 @@ const LoadMoreButton: React.FC<LoadMoreButtonProps> = ({ visibleCount, totalCoun
   if (visibleCount >= totalCount) return null;
   return (
     <div className="flex justify-center mt-4">
-      <button
-        onClick={onLoadMore}
-        className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-2 px-4 rounded"
-      >
+      <Button variant="indigo" size="md" onClick={onLoadMore}>
         Load More
-      </button>
+      </Button>
     </div>
   );
 };

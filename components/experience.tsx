@@ -15,7 +15,7 @@ const entries: TimelineEntry[] = [
     title: 'Senior Engineer Level II',
     org: 'Data Center Inc. — Remote',
     description:
-      'Full-stack engineer on a .NET core banking platform. Ships features across ACH processing, batch systems, reconciliation pipelines, and reporting. Resolves live production incidents, drives performance via SCA scans, and delivers hardened releases in a compliance-driven environment.',
+    'Full-stack engineer on a .NET core banking platform, working across the entire GoBanking ecosystem. Investigates and resolves defects, performance issues, and feature gaps spanning ACH processing, batch workflows, reconciliation systems, reporting, and user-facing modules. Regularly steps into unfamiliar areas of the codebase to diagnose production issues, improve reliability, and deliver hardened releases in a regulated, compliance-driven environment.',
     tags: [
       'C#', '.NET Framework', '.NET Core', 'SQL Server', 'ASP.NET MVC', 'ASP.NET WebForms',
       'Stored Procedures', 'ACH Processing', 'Batch Systems', 'Reconciliation Pipelines',
@@ -66,8 +66,6 @@ const entries: TimelineEntry[] = [
     org: (
       <>
         S&P Global — Boulder, CO{' '}
-        <span className="text-slate-400 dark:text-slate-600">·</span>{' '}
-        <span className="italic">10 Years Total</span>
       </>
     ),
     description:

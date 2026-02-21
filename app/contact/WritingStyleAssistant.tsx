@@ -3,6 +3,7 @@
 import { trackEvent } from "@/utils/mixpanel";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPenNib } from "@fortawesome/free-solid-svg-icons";
+import { Button } from "@/components/ui/button";
 
 interface Style {
   name: string;
@@ -107,14 +108,9 @@ function ModalHeader({ onClose }: { onClose: () => void }) {
           Pick a vibe. We'll rewrite the message.
         </p>
       </div>
-      <button
-        type="button"
-        className="rounded-xl px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:text-gray-200 dark:hover:bg-white/10"
-        aria-label="Close"
-        onClick={onClose}
-      >
+      <Button variant="ghost" size="sm" type="button" aria-label="Close" onClick={onClose}>
         ✕
-      </button>
+      </Button>
     </div>
   );
 }

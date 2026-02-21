@@ -17,6 +17,7 @@ import MoodToneAssistant from "./MoodToneAssistant";
 import LanguageAssistant from "./LanguageAssistant";
 import WritingStyleAssistant from "./WritingStyleAssistant";
 import TextRefinementAssistant from "./TextRefinementAssistant";
+import { Button } from "@/components/ui/button";
 
 import UMail from "@/public/images/umailLogo.png";
 
@@ -508,41 +509,44 @@ function AssistantToolbar({
   showPopup,
   textAreaSelectionRef,
 }: AssistantToolbarProps) {
-  const buttonStyles =
-    "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white/70 px-3 py-2 text-xs font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:hover:bg-white/10 sm:w-auto sm:px-3.5 sm:py-2 sm:text-sm";
-
   return (
     <div className="pt-1">
       <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-center sm:gap-3">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 shadow-sm"
           onClick={onMoodToneClick}
-          className={buttonStyles}
           aria-label="Open Mood & Tone assistant"
         >
           <FontAwesomeIcon icon={faSmile} />
           <span className="truncate">Mood &amp; Tone</span>
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 shadow-sm"
           onClick={onWritingStyleClick}
-          className={buttonStyles}
           aria-label="Open Writing Style assistant"
         >
           <FontAwesomeIcon icon={faPenNib} />
           <span className="truncate">Writing Style</span>
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 shadow-sm"
           onClick={onLanguageClick}
-          className={buttonStyles}
           aria-label="Open Language assistant"
         >
           <FontAwesomeIcon icon={faGlobe} />
           <span className="truncate">Language</span>
-        </button>
+        </Button>
 
         <div className="w-full sm:w-auto">
           <TextRefinementAssistant
@@ -673,18 +677,20 @@ function AttachmentDropZone({
           </div>
 
           {attachment && (
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
+              className="inline-flex items-center gap-2 shrink-0"
               onClick={(e) => {
                 e.stopPropagation();
                 onClear();
               }}
-              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 px-3 py-2 text-xs font-medium text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-white/10 transition"
               aria-label="Remove attachment"
             >
               <FontAwesomeIcon icon={faTrash} />
               <span className="hidden sm:inline">Remove</span>
-            </button>
+            </Button>
           )}
         </div>
 
@@ -704,15 +710,16 @@ function AttachmentDropZone({
 function SubmitButton({ isLoading }: { isLoading: boolean }) {
   return (
     <div className="pt-2">
-      <button
+      <Button
         type="submit"
+        variant="indigo"
+        size="lg"
+        fullWidth
         disabled={isLoading}
-        className={`w-full rounded-2xl px-4 py-3.5 text-sm font-semibold shadow-sm bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/60 transition ${
-          isLoading ? "opacity-80 cursor-not-allowed" : ""
-        }`}
+        className={isLoading ? "opacity-80 cursor-not-allowed" : ""}
       >
         {isLoading ? "Sending…" : "Send message"}
-      </button>
+      </Button>
 
       <p className="mt-4 text-center text-xs text-gray-500 dark:text-gray-400">
         Your message data is never shared or used for AI/ML training purposes.
