@@ -49,9 +49,20 @@ const calcMarketState = (): MarketState => {
 
 /* ─── Component ────────────────────────────────────────────────────── */
 export default function LiveStreamTickerWidget() {
-  // All data from the shared store — HIGH priority since this widget is
-  // often displayed prominently (homepage / above the fold)
-  const { tickerMap, wsConnected } = useMarketData(TICKER_SYMBOLS, "high");
+  // Market clock — sync init so wsEnabled is correct on first render
+  const [marketState, setMarketState] = useState<MarketState>(calcMarketState);
+  useEffect(() => {
+    const interval = window.setInterval(
+      () => setMarketState(calcMarketState()),
+      60_000
+    );
+    return () => window.clearInterval(interval);
+  }, []);
+
+  // All data from the shared store — HIGH priority; WS disabled when market is closed
+  const { tickerMap, wsConnected } = useMarketData(TICKER_SYMBOLS, "high", {
+    wsEnabled: marketState !== "closed",
+  });
 
   // Flash-animation state derived from incoming price changes
   const [flashMap, setFlashMap] = useState<Record<string, TradeInfo>>({});
@@ -104,15 +115,6 @@ export default function LiveStreamTickerWidget() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tickerMap]);
-
-  // Market clock
-  const [marketState, setMarketState] = useState<MarketState>("closed");
-  useEffect(() => {
-    const tick = () => setMarketState(calcMarketState());
-    tick();
-    const interval = window.setInterval(tick, 60_000);
-    return () => window.clearInterval(interval);
-  }, []);
 
   // Modal state
   const [selectedSymbol,    setSelectedSymbol]    = useState<string | null>(null);
@@ -174,6 +176,12 @@ export default function LiveStreamTickerWidget() {
       ? "bg-red-500/15 text-red-700 dark:text-red-200 ring-red-500/20"
       : "bg-yellow-500/15 text-yellow-800 dark:text-yellow-200 ring-yellow-500/20";
 
+  const wsLabel =
+    marketState === "premarket"  ? (wsConnected ? "Pre-Market Stream" : "Pre-Market")  :
+    marketState === "afterhours" ? (wsConnected ? "After-Hours Stream" : "After-Hours") :
+    marketState === "open"       ? (wsConnected ? "Stream Live"        : "Reconnecting") :
+    null; // closed — hide the pill entirely
+
   const wsPill = wsConnected
     ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-200 ring-indigo-500/20"
     : "bg-gray-500/10 text-gray-700 dark:text-gray-300 ring-white/10";
@@ -198,12 +206,14 @@ export default function LiveStreamTickerWidget() {
                   <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
                   {sub}
                 </span>
-                <span
-                  className={`hidden sm:inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${wsPill}`}
-                  title="WebSocket status"
-                >
-                  {wsConnected ? "Stream OK" : "Stream reconnecting"}
-                </span>
+                {wsLabel && (
+                  <span
+                    className={`hidden sm:inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${wsPill}`}
+                    title="WebSocket status"
+                  >
+                    {wsLabel}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -220,20 +230,21 @@ export default function LiveStreamTickerWidget() {
             {TICKER_SYMBOLS.map((sym) => {
               const td   = tickerMap[sym];
               const info = flashMap[sym];
-              const dir  = info?.dir ?? "flat";
+              const dp   = td?.quote?.dp ?? 0;
               const logo = td?.logo || LOGO_FALLBACK;
 
               const baseBg =
-                dir === "up"   ? "bg-green-200/80 dark:bg-green-800/40" :
-                dir === "down" ? "bg-red-200/80 dark:bg-red-800/40"     :
-                                 "bg-gray-100 dark:bg-brand-900/60";
+                dp > 0 ? "bg-green-200/80 dark:bg-green-800/40" :
+                dp < 0 ? "bg-red-200/80 dark:bg-red-800/40"     :
+                         "bg-gray-100 dark:bg-brand-900/60";
 
+              const flashDir = info?.dir ?? "flat";
               const flashBg =
-                dir === "up"   ? "bg-green-400/70 dark:bg-green-500/35" :
-                dir === "down" ? "bg-red-400/70 dark:bg-red-500/35"     :
-                                 "bg-white/0";
+                flashDir === "up"   ? "bg-green-400/70 dark:bg-green-500/35" :
+                flashDir === "down" ? "bg-red-400/70 dark:bg-red-500/35"     :
+                                     "bg-white/0";
 
-              const pct          = info?.percentChange ?? td?.quote?.dp ?? 0;
+              const pct          = td?.quote?.dp ?? info?.percentChange ?? 0;
               const pctColor     = pct >= 0
                 ? "text-green-800 dark:text-green-200"
                 : "text-red-800 dark:text-red-200";
@@ -261,6 +272,15 @@ export default function LiveStreamTickerWidget() {
                       }}
                     />
                   </div>
+
+                  {/* Persistent daily-change tint — always visible over the logo */}
+                  {dp !== 0 && (
+                    <div className={`absolute inset-0 ${
+                      dp > 0
+                        ? "bg-green-400/40 dark:bg-green-500/25"
+                        : "bg-red-400/40 dark:bg-red-500/25"
+                    }`} />
+                  )}
 
                   <AnimatePresence initial={false}>
                     {info?.flashKey ? (

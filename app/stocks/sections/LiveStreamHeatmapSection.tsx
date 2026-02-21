@@ -154,7 +154,7 @@ const LiveStreamHeatmapSection: React.FC = () => {
   /* ── Derived UI values ────────────────────────────────────────────── */
   const banner =
     marketState === "closed"
-      ? "Markets Closed — Showing Last Price as of market close."
+      ? "Markets Closed"
       : marketState === "premarket"
       ? "Pre-Market Trading"
       : marketState === "afterhours"
@@ -233,7 +233,7 @@ const LiveStreamHeatmapSection: React.FC = () => {
             {HEATMAP_SYMBOLS.map((sym) => {
               const td   = tickerMap[sym];
               const info = flashMap[sym];
-              const p    = info?.percentChange ?? td?.quote?.dp ?? 0;
+              const p    = td?.quote?.dp ?? info?.percentChange ?? 0;
               const logo = td?.logo || LOGO_FALLBACK;
 
               // Tile background intensity from daily % change
@@ -280,6 +280,16 @@ const LiveStreamHeatmapSection: React.FC = () => {
                       }}
                     />
                   </div>
+
+                  {/* Persistent daily-change tint — always visible over the logo */}
+                  {p !== 0 && (
+                    <div className={`absolute inset-0 ${
+                      p >= 2   ? "bg-emerald-500/45 dark:bg-emerald-500/30" :
+                      p >= 0.2 ? "bg-emerald-400/30 dark:bg-emerald-500/20" :
+                      p <= -2  ? "bg-rose-500/45 dark:bg-rose-500/30" :
+                                 "bg-rose-400/30 dark:bg-rose-500/20"
+                    }`} />
+                  )}
 
                   {/* Flash overlay */}
                   <AnimatePresence initial={false}>

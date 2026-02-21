@@ -22,8 +22,10 @@ import { API_TOKEN } from "@/utils/config";
 
 export function useMarketData(
   symbols: readonly string[],
-  priority: DataPriority = "medium"
+  priority: DataPriority = "medium",
+  options: { wsEnabled?: boolean } = {}
 ) {
+  const { wsEnabled = true } = options;
   const [tickerMap, setTickerMap] = useState<Record<string, TickerData>>({});
   const [wsConnected, setWsConnected] = useState(false);
 
@@ -37,31 +39,34 @@ export function useMarketData(
     if (API_TOKEN) marketStore.wsInit(API_TOKEN as string);
   }, []);
 
-  // Prefetch + subscribe
+  // Prefetch + data subscribe
   useEffect(() => {
     const syms = symsRef.current;
-
-    // 1. Enqueue REST fetches for all symbols at the requested priority
     marketStore.prefetch(Array.from(syms), priority);
-
-    // 2. Subscribe to data updates → update React state reactively
     const unsub = marketStore.subscribe(Array.from(syms), (sym, data) => {
       setTickerMap((prev) => ({ ...prev, [sym]: data }));
     });
-
-    // 3. Register for WS updates (ref-counted inside store)
-    marketStore.wsSubscribe(Array.from(syms));
-
-    // 4. Subscribe to WS connection state
-    const unsubWs = marketStore.onWsState(setWsConnected);
-
-    return () => {
-      unsub();
-      marketStore.wsUnsubscribe(Array.from(syms));
-      unsubWs();
-    };
+    return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symsKey, priority]);
+
+  // WS subscribe — skipped and actively unsubscribed when wsEnabled is false
+  useEffect(() => {
+    const syms = symsRef.current;
+    if (!wsEnabled) {
+      marketStore.wsUnsubscribe(Array.from(syms));
+      return;
+    }
+    marketStore.wsSubscribe(Array.from(syms));
+    return () => marketStore.wsUnsubscribe(Array.from(syms));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symsKey, wsEnabled]);
+
+  // WS connection state listener
+  useEffect(() => {
+    const unsub = marketStore.onWsState(setWsConnected);
+    return () => unsub();
+  }, []);
 
   // loadingSet: symbols we haven't received data for yet
   const loadingSet = useMemo<Set<string>>(() => {
