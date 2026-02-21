@@ -64,9 +64,9 @@ export default function DashboardTabs() {
               Market Dashboard
             </h1>
             <p className="mt-2 max-w-2xl text-sm sm:text-base text-gray-600 dark:text-white/70">
-              A market dashboard for tracking stocks, earnings, and market activity in real time.
-              Stock data is pulled from the Finnhub API, with multiple API keys used to separate
-              concerns like quotes, earnings, and news while keeping updates fast and reliable.
+              Real-time market dashboard — stocks, earnings, IPOs, and news powered by the Finnhub
+              API. Data is cached and shared across components to keep updates fast and avoid
+              rate limits.
             </p>
           </div>
         </div>
