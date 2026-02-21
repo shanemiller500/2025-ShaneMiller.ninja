@@ -1,18 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-
 import Education from "@/components/education";
 import Experience from "@/components/experience";
-import WidgetSkills1 from "@/components/widget-skills-2";
-import WidgetSkills2 from "@/components/widget-skills-1";
-import WidgetSkills3 from "@/components/widget-skills-3";
-import WidgetSkills4 from "@/components/widget-skills-4";
-import WidgetSkills5 from "@/components/widget-skills-5";
-import WidgetSkills6 from "@/components/widget-skills-6";
-import WidgetSkills7 from "@/components/widget-skills-7";
-import WidgetSkills8 from "@/components/widget-skills-8";
-import WidgetSkills9 from "@/components/widget-skills-9";
+import { WidgetSkills, SKILLS_DATA } from "@/components/widget-skills";
 import { trackEvent } from "@/utils/mixpanel";
 import DownloadPDF from "./downlaodPDF";
 
@@ -23,7 +14,7 @@ export default function ResumePage() {
   useEffect(() => {
     trackEvent("Resume Page Viewed", { page: "Resume" });
   }, []);
-  
+
   return (
     <div className="grow md:flex space-y-8 md:space-y-0 md:space-x-8 pt-12 md:pt-16 pb-16 md:pb-20">
       <div className="grow">
@@ -41,21 +32,13 @@ export default function ResumePage() {
 
       <aside className="md:w-[240px] lg:w-[300px] shrink-0">
         <div className="space-y-6">
-
-       
-
-          <WidgetSkills2 />  { /* Programming Skills */}
-          <WidgetSkills1 />  { /* Frontend Skills */}
-          <WidgetSkills7 />   { /* Backend Technologies & API Development */}  
-          <WidgetSkills3 />   { /* CI/CD (Continuous Integration & Continuous Deployment) */}
-          <WidgetSkills9 />   { /* AI & Machine Learning */}
-          <WidgetSkills4 />   { /* Hosting & Cloud Services */}
-          <WidgetSkills5 />   { /* Monitoring & Logging */}
-          <WidgetSkills6 />   { /*Containerization & Analytics */}
-          <WidgetSkills8/>    { /* Databases & Data Management */}
-
-        
-
+          {SKILLS_DATA.map((category) => (
+            <WidgetSkills
+              key={category.title}
+              title={category.title}
+              skills={category.skills}
+            />
+          ))}
         </div>
       </aside>
     </div>

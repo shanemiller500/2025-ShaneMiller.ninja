@@ -1,14 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 
-const Tag = ({ label }: { label: string }) => (
-  <span className="inline-block text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 whitespace-nowrap">
-    {label}
-  </span>
-)
+interface TagListProps {
+  tags: string[]
+  initialCount?: number
+}
 
-export default function TagList({ tags, initialCount = 4 }: { tags: string[]; initialCount?: number }) {
+export default function TagList({ tags, initialCount = 4 }: TagListProps) {
   const [expanded, setExpanded] = useState(false)
   const hidden = tags.length - initialCount
   const visibleTags = expanded ? tags : tags.slice(0, initialCount)
@@ -17,7 +17,10 @@ export default function TagList({ tags, initialCount = 4 }: { tags: string[]; in
     <div className="pt-1">
       {/* Mobile: truncated with expand toggle */}
       <div className="flex md:hidden flex-wrap gap-1.5 items-center">
-        {visibleTags.map(t => <Tag key={t} label={t} />)}
+        {visibleTags.map((t) => (
+          <Badge key={t} label={t} />
+        ))}
+
         {!expanded && hidden > 0 && (
           <button
             onClick={() => setExpanded(true)}
@@ -26,6 +29,7 @@ export default function TagList({ tags, initialCount = 4 }: { tags: string[]; in
             +{hidden} more
           </button>
         )}
+
         {expanded && (
           <button
             onClick={() => setExpanded(false)}
@@ -38,7 +42,9 @@ export default function TagList({ tags, initialCount = 4 }: { tags: string[]; in
 
       {/* Desktop: show all */}
       <div className="hidden md:flex flex-wrap gap-1.5">
-        {tags.map(t => <Tag key={t} label={t} />)}
+        {tags.map((t) => (
+          <Badge key={t} label={t} />
+        ))}
       </div>
     </div>
   )
