@@ -100,7 +100,12 @@ export default function ReaderModal({
       />
 
       {/* Panel */}
-      <div className="relative z-10 w-full max-w-4xl max-h-[96vh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-brand-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+      <div className="relative z-10 w-full max-w-4xl max-h-[82vh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-brand-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+
+        {/* Drag handle — mobile only */}
+        <div className="flex-shrink-0 flex justify-center pt-2.5 pb-1 sm:hidden bg-white dark:bg-brand-900">
+          <div className="w-10 h-1 rounded-full bg-gray-200 dark:bg-gray-700" />
+        </div>
 
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900">
@@ -215,6 +220,17 @@ export default function ReaderModal({
                 Read Full Article
                 <ExternalLink className="h-4 w-4" />
               </a>
+            </div>
+
+            {/* Mobile close button — always reachable at the bottom */}
+            <div className="mt-6 pb-2 sm:hidden">
+              <button
+                onClick={onClose}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X className="h-4 w-4" />
+                Close
+              </button>
             </div>
           </div>
         </div>
