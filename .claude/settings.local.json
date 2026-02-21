@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:fred.stlouisfed.org)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

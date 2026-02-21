@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import { X, Info } from "lucide-react";
 
 interface FearGreedWidgetProps {
-  index: number; // 0..100
-  title?: string; // optional if you reuse in multiple spots
-  updatedAt?: string; // optional display (e.g. "Updated 10:30 AM")
+  index: number;
+  title?: string;
+  updatedAt?: string;
+  overallChange?: number;
+  tickerCount?: number;
 }
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -26,89 +29,200 @@ const getTone = (index: number) => {
   return { chip: "bg-green-600/15 text-green-800 dark:text-green-200 ring-green-500/30" };
 };
 
-const FearGreedWidget: React.FC<FearGreedWidgetProps> = ({ index, title = "Fear & Greed", updatedAt }) => {
-  const safe = useMemo(() => clamp(Number.isFinite(index) ? index : 0, 0, 100), [index]);
-  const label = useMemo(() => getFearGreedLabel(safe), [safe]);
-  const tone = useMemo(() => getTone(safe), [safe]);
+const ZONES = [
+  { min: 0,  max: 19,  label: "Extreme Fear", color: "bg-red-500" },
+  { min: 20, max: 39,  label: "Fear",          color: "bg-amber-500" },
+  { min: 40, max: 59,  label: "Neutral",       color: "bg-slate-400" },
+  { min: 60, max: 79,  label: "Greed",         color: "bg-emerald-500" },
+  { min: 80, max: 100, label: "Extreme Greed", color: "bg-green-600" },
+];
 
-  // Keep marker fully inside the bar even at 0/100.
-  const markerLeft = useMemo(() => `${clamp(safe, 1, 99)}%`, [safe]);
+/* ─── Info modal ──────────────────────────────────────────────────────── */
+function InfoModal({
+  open, onClose, index, label, overallChange, tickerCount,
+}: {
+  open: boolean; onClose: () => void;
+  index: number; label: string;
+  overallChange?: number; tickerCount?: number;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (open) document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+
+  if (!open) return null;
+
+  const n   = tickerCount ?? 24;
+  const avg = overallChange ?? 0;
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
-      {/* subtle background */}
-      <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
-        <div className="absolute -top-10 -left-14 h-40 w-40 rounded-full bg-indigo-400/20 blur-3xl" />
-        <div className="absolute -bottom-12 -right-12 h-44 w-44 rounded-full bg-fuchsia-400/20 blur-3xl" />
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-sm rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-brand-900 shadow-2xl overflow-hidden">
 
-      <div className="relative p-4 sm:p-5">
-        {/* header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-base sm:text-lg font-extrabold tracking-tight text-gray-900 dark:text-white">
-              {title}
-            </h3>
-            
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-black/[0.07] dark:border-white/[0.08]">
+          <div>
+            <h2 className="text-base font-extrabold text-gray-900 dark:text-white">How Fear &amp; Greed Works</h2>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Powered by live Finnhub quotes</p>
           </div>
-
-          <div className="flex flex-col items-end gap-1">
-            <span
-              className={[
-                "inline-flex items-center gap-2 rounded-full px-3 py-1",
-                "text-[11px] sm:text-xs font-extrabold",
-                "ring-1",
-                tone.chip,
-              ].join(" ")}
-            >
-              <span className="tabular-nums">{safe.toFixed(0)}</span>
-              <span className="opacity-80">•</span>
-              <span className="truncate max-w-[120px] sm:max-w-none">{label}</span>
-            </span>
-
-            {updatedAt ? (
-              <span className="text-[10px] sm:text-[11px] font-semibold text-gray-500 dark:text-white/50">
-                {updatedAt}
-              </span>
-            ) : null}
-          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        {/* bar */}
-        <div className="mt-4">
-          <div className="relative h-3.5 sm:h-4 rounded-full overflow-hidden ring-1 ring-black/10 dark:ring-white/10">
-            <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-slate-200 to-green-500" />
+        {/* Body */}
+        <div className="px-5 py-4 space-y-4">
 
-            {/* marker */}
-            <div
-              className="absolute top-1/2 -translate-y-1/2"
-              style={{ left: markerLeft }}
-              aria-hidden="true"
-            >
-              <div className="relative">
-                {/* pin */}
-                <div className="h-5 sm:h-6 w-1.5 rounded-full bg-gray-900 dark:bg-white shadow" />
-                {/* little cap */}
-                <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-2 rounded-full bg-gray-900 dark:bg-white shadow" />
-              </div>
+          {/* Current reading */}
+          <div className="rounded-xl border border-black/[0.07] dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.04] px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400 dark:text-gray-500 mb-1">Right Now</p>
+              <p className="text-2xl font-black tabular-nums leading-none text-gray-900 dark:text-white">
+                {index.toFixed(0)}
+              </p>
             </div>
+            <span className="text-sm font-extrabold text-gray-500 dark:text-gray-400">{label}</span>
           </div>
 
-          {/* labels */}
-          <div className="mt-2 flex justify-between text-[11px] sm:text-xs font-semibold text-gray-600 dark:text-white/60">
-            <span>Fear</span>
-            <span>Neutral</span>
-            <span>Greed</span>
+          {/* Plain English explanation */}
+          <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+            <p>
+              We look at how the top <span className="font-bold">{n} major US stocks</span> are moving today and turn that into a single 0–100 score.
+            </p>
+            <p>
+              Right now they're averaging{" "}
+              <span className="font-bold tabular-nums">{avg >= 0 ? "+" : ""}{avg.toFixed(2)}%</span> on the day.
+              A big drop pushes the score toward <span className="font-bold text-red-600 dark:text-red-400">0 (Extreme Fear)</span>, a big rally pushes it toward <span className="font-bold text-green-700 dark:text-green-400">100 (Extreme Greed)</span>.
+            </p>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              Prices are delayed ~15 min per Finnhub's free tier and update whenever new quote data arrives.
+            </p>
           </div>
 
-          {/* tiny helper text for mobile */}
-          <div className="mt-2 text-[11px] sm:text-xs font-semibold text-gray-600 dark:text-white/60">
-            <span className="tabular-nums font-extrabold text-gray-900 dark:text-white">{safe.toFixed(0)}</span>{" "}
-            sits in <span className="font-extrabold">{label}</span>.
+          {/* Zone table */}
+          <div className="space-y-1.5">
+            {ZONES.map((z) => {
+              const active = index >= z.min && index <= z.max;
+              return (
+                <div
+                  key={z.label}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-1.5 ${active ? "ring-1 ring-indigo-400/40 bg-indigo-50 dark:bg-indigo-950/30" : ""}`}
+                >
+                  <div className={`h-2 w-2 rounded-full shrink-0 ${z.color}`} />
+                  <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 w-14 shrink-0">{z.min}–{z.max}</span>
+                  <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200">{z.label}</span>
+                  {active && <span className="ml-auto text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">← now</span>}
+                </div>
+              );
+            })}
           </div>
+
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">
+            This is a simplified sentiment proxy, not affiliated with CNN's Fear &amp; Greed Index or any official financial product.
+          </p>
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─── FearGreedWidget ─────────────────────────────────────────────────── */
+const FearGreedWidget: React.FC<FearGreedWidgetProps> = ({
+  index, title = "Fear & Greed", updatedAt, overallChange, tickerCount,
+}) => {
+  const [showInfo, setShowInfo] = useState(false);
+
+  const safe       = useMemo(() => clamp(Number.isFinite(index) ? index : 0, 0, 100), [index]);
+  const label      = useMemo(() => getFearGreedLabel(safe), [safe]);
+  const tone       = useMemo(() => getTone(safe), [safe]);
+  const markerLeft = useMemo(() => `${clamp(safe, 1, 99)}%`, [safe]);
+
+  return (
+    <>
+      <div className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
+        <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
+          <div className="absolute -top-10 -left-14 h-40 w-40 rounded-full bg-indigo-400/20 blur-3xl" />
+          <div className="absolute -bottom-12 -right-12 h-44 w-44 rounded-full bg-fuchsia-400/20 blur-3xl" />
+        </div>
+
+        <div className="relative p-4 sm:p-5">
+          {/* header */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h3 className="text-base sm:text-lg font-extrabold tracking-tight text-gray-900 dark:text-white">
+                {title}
+              </h3>
+          
+            </div>
+
+            <div className="flex flex-col items-end gap-1">
+              <span className={["inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] sm:text-xs font-extrabold ring-1", tone.chip].join(" ")}>
+                <span className="tabular-nums">{safe.toFixed(0)}</span>
+                <span className="opacity-80">•</span>
+                <span className="truncate max-w-[120px] sm:max-w-none">{label}</span>
+              </span>
+              {updatedAt && (
+                <span className="text-[10px] sm:text-[11px] font-semibold text-gray-500 dark:text-white/50">{updatedAt}</span>
+              )}
+            </div>
+          </div>
+
+          {/* gauge */}
+          <div className="mt-4">
+            <div className="relative h-3.5 sm:h-4 rounded-full overflow-hidden ring-1 ring-black/10 dark:ring-white/10">
+              <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-slate-200 to-green-500" />
+              <div className="absolute top-1/2 -translate-y-1/2" style={{ left: markerLeft }} aria-hidden="true">
+                <div className="relative">
+                  <div className="h-5 sm:h-6 w-1.5 rounded-full bg-gray-900 dark:bg-white shadow" />
+                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-2 rounded-full bg-gray-900 dark:bg-white shadow" />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-2 flex justify-between text-[11px] sm:text-xs font-semibold text-gray-600 dark:text-white/60">
+              <span>Fear</span>
+              <span>Neutral</span>
+              <span>Greed</span>
+            </div>
+
+            <div className="mt-2 text-[11px] sm:text-xs font-semibold text-gray-600 dark:text-white/60">
+              <span className="tabular-nums font-extrabold text-gray-900 dark:text-white">{safe.toFixed(0)}</span>{" "}
+              sits in <span className="font-extrabold">{label}</span>.
+                  
+                  <button
+                type="button"
+                onClick={() => setShowInfo(true)}
+                className="float-right rounded-full p-0.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
+                aria-label="How is this calculated?"
+              >
+                <Info className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <InfoModal
+        open={showInfo}
+        onClose={() => setShowInfo(false)}
+        index={safe}
+        label={label}
+        overallChange={overallChange}
+        tickerCount={tickerCount}
+      />
+    </>
   );
 };
 

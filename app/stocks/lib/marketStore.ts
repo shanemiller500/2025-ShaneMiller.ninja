@@ -34,13 +34,93 @@ import type {
 /* ─── Config ──────────────────────────────────────────────────────────── */
 const PROXY          = "https://u-mail.co/api/finnhubProxy";
 const WS_URL_BASE    = "wss://ws.finnhub.io";
-const QUOTE_TTL      = 10 * 60 * 1_000;      // 10 minutes
-const PROFILE_TTL    = 24 * 60 * 60 * 1_000; // 24 hours
+const QUOTE_TTL      = 10 * 60 * 1_000;      // 10 min  (active session)
+const PROFILE_TTL    = 24 * 60 * 60 * 1_000; // 24 hours (active session)
 const STATUS_TTL     = 5  * 60 * 1_000;      // 5 minutes
 const LS_KEY         = "market_profiles_v1";  // localStorage key
 const MAX_CONCURRENT    = 2;    // conservative — prevents burst 429s
 const ITEM_DELAY_MS     = 500;  // 2 req/sec max throughput
 const RATE_LIMIT_PAUSE  = 4_000; // pause queue this long after any 429
+
+/* ─── Market-session helpers ──────────────────────────────────────────── */
+
+/**
+ * Return the Eastern-Time UTC offset in milliseconds for a given Date.
+ * (e.g. 18_000_000 = UTC-5 / EST, 14_400_000 = UTC-4 / EDT)
+ */
+function etOffsetMs(d: Date): number {
+  const p = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const g = (t: string) => +(p.find((x) => x.type === t)?.value ?? 0);
+  const etAsUtcMs = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour"), g("minute"), g("second"));
+  return d.getTime() - etAsUtcMs; // positive: e.g. 5 * 3_600_000 for UTC-5
+}
+
+/**
+ * True when US markets are in their extended trading window:
+ * 4 AM – 8 PM ET, Monday–Friday (covers pre-market, regular, and after-hours).
+ * Outside this window quotes are stale and caching longer saves API calls.
+ */
+function isMarketActiveWindow(): boolean {
+  try {
+    const now = new Date();
+    const p = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      weekday: "short",
+      hour: "2-digit",
+      hour12: false,
+    }).formatToParts(now);
+    const wd = p.find((x) => x.type === "weekday")?.value ?? "";
+    const hr = +(p.find((x) => x.type === "hour")?.value ?? 25);
+    if (wd === "Sat" || wd === "Sun") return false;
+    return hr >= 4 && hr < 20;
+  } catch { return true; } // safe fallback: assume active so we don't over-cache
+}
+
+/**
+ * Milliseconds from now until the next 4 AM ET weekday (pre-market open).
+ * This is used as the closed-market cache TTL so we don't waste API quota
+ * on prices that cannot change.
+ */
+function msUntilPremarketOpen(): number {
+  try {
+    const nowMs = Date.now();
+    for (let ahead = 0; ahead <= 4; ahead++) {
+      const probe = new Date(nowMs + ahead * 86_400_000);
+      const p = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        weekday: "short",
+        year: "numeric", month: "2-digit", day: "2-digit",
+      }).formatToParts(probe);
+      const g = (t: string) => p.find((x) => x.type === t)?.value ?? "";
+      if (g("weekday") === "Sat" || g("weekday") === "Sun") continue;
+
+      const yr = +g("year"), mo = +g("month"), dy = +g("day");
+      // Use midday UTC of this ET date to safely compute the DST offset
+      const midday      = new Date(Date.UTC(yr, mo - 1, dy, 12, 0, 0));
+      const offset      = etOffsetMs(midday);               // e.g. 18_000_000 (EST)
+      const midnightEt  = Date.UTC(yr, mo - 1, dy) + offset; // midnight ET → UTC epoch
+      const fourAmEt    = midnightEt + 4 * 3_600_000;       // 4 AM ET → UTC epoch
+
+      if (fourAmEt > nowMs) return fourAmEt - nowMs + 60_000; // +1 min safety buffer
+    }
+  } catch { /* ignore */ }
+  return QUOTE_TTL; // safe fallback
+}
+
+/** Quote TTL: 10 min while markets are active; hold until next pre-market when closed. */
+function effectiveQuoteTtl(): number {
+  return isMarketActiveWindow() ? QUOTE_TTL : msUntilPremarketOpen();
+}
+
+/** Profile/logo TTL: 24 h while active; hold to next pre-market (≥ 24 h) when closed. */
+function effectiveProfileTtl(): number {
+  return isMarketActiveWindow() ? PROFILE_TTL : Math.max(PROFILE_TTL, msUntilPremarketOpen());
+}
 
 /* ─── Internal state (module-scoped, not React state) ─────────────────── */
 
@@ -186,7 +266,7 @@ async function doFetchQuote(symbol: string): Promise<QuoteData | null> {
 
   // Check cache first
   const cached = quoteCache.get(symbol);
-  if (cached && Date.now() - cached.ts < QUOTE_TTL) return cached.data;
+  if (cached && Date.now() - cached.ts < effectiveQuoteTtl()) return cached.data;
 
   // Dedup: reuse in-flight promise
   if (inflight.has(key)) return inflight.get(key);
@@ -217,7 +297,7 @@ async function doFetchProfile(symbol: string): Promise<CachedProfile | null> {
 
   // Check cache first
   const cached = profileCache.get(symbol);
-  if (cached && Date.now() - cached.ts < PROFILE_TTL) return cached;
+  if (cached && Date.now() - cached.ts < effectiveProfileTtl()) return cached;
 
   // Dedup: reuse in-flight promise
   if (inflight.has(key)) return inflight.get(key);
@@ -286,11 +366,11 @@ function enqueue(symbol: string, kind: "quote" | "profile", priority: DataPriori
   // Skip if already cached / in-flight / already queued
   if (kind === "quote") {
     const c = quoteCache.get(symbol);
-    if (c && Date.now() - c.ts < QUOTE_TTL) return;
+    if (c && Date.now() - c.ts < effectiveQuoteTtl()) return;
     if (inflight.has(`quote:${symbol}`)) return;
   } else {
     const c = profileCache.get(symbol);
-    if (c && Date.now() - c.ts < PROFILE_TTL) return;
+    if (c && Date.now() - c.ts < effectiveProfileTtl()) return;
     if (inflight.has(`profile:${symbol}`)) return;
   }
   if (QUEUE.some((q) => q.symbol === symbol && q.kind === kind)) return;
@@ -409,19 +489,19 @@ export const marketStore = {
   getQuote(symbol: string): { data: QuoteData | null; fresh: boolean } {
     const c = quoteCache.get(symbol);
     if (!c) return { data: null, fresh: false };
-    return { data: c.data, fresh: Date.now() - c.ts < QUOTE_TTL };
+    return { data: c.data, fresh: Date.now() - c.ts < effectiveQuoteTtl() };
   },
 
   getProfile(symbol: string): { data: ProfileData | null; logo: string; fresh: boolean } {
     const c = profileCache.get(symbol);
     if (!c) return { data: null, logo: "", fresh: false };
-    return { data: c.data, logo: c.logo, fresh: Date.now() - c.ts < PROFILE_TTL };
+    return { data: c.data, logo: c.logo, fresh: Date.now() - c.ts < effectiveProfileTtl() };
   },
 
   /** Async request — adds to priority queue, resolves when data is ready. */
   async requestQuote(symbol: string, priority: DataPriority): Promise<QuoteData | null> {
     const cached = quoteCache.get(symbol);
-    if (cached && Date.now() - cached.ts < QUOTE_TTL) return cached.data;
+    if (cached && Date.now() - cached.ts < effectiveQuoteTtl()) return cached.data;
     enqueue(symbol, "quote", priority);
     // Poll until the queue processes this symbol (or it appears via in-flight)
     return new Promise((resolve) => {
@@ -436,7 +516,7 @@ export const marketStore = {
 
   async requestProfile(symbol: string, priority: DataPriority): Promise<ProfileData | null> {
     const cached = profileCache.get(symbol);
-    if (cached && Date.now() - cached.ts < PROFILE_TTL) return cached.data;
+    if (cached && Date.now() - cached.ts < effectiveProfileTtl()) return cached.data;
     enqueue(symbol, "profile", priority);
     return new Promise((resolve) => {
       // We don't have a profile-specific event, so just wait for any update

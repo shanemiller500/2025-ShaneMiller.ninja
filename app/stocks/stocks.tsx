@@ -58,19 +58,16 @@ export default function DashboardTabs() {
           <div className="absolute -bottom-20 -right-16 h-64 w-64 rounded-full bg-fuchsia-400/20 blur-3xl" />
         </div>
 
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
               Market Dashboard
             </h1>
-            <p className="mt-2 max-w-2xl text-sm sm:text-base text-gray-600 dark:text-white/70">
-              Real-time market dashboard — stocks, earnings, IPOs, and news powered by the Finnhub
-              API. Data is cached and shared across components to keep updates fast and avoid
-              rate limits.
+            <p className="mt-2 max-w-xl text-sm text-gray-600 dark:text-white/70">
+              Real-time stocks, earnings, IPOs, and news powered by Finnhub.
             </p>
           </div>
         </div>
-        
       </div>
 
       {/* Tabs card */}

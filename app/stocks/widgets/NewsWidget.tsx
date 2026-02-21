@@ -23,7 +23,7 @@ interface Article {
 const CACHE_TTL = 30 * 60 * 1_000; // 30 min
 let cached: { ts: number; data: Article[] } | null = null;
 
-const PER_PAGE = 8;
+const PER_PAGE = 13;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
