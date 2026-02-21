@@ -31,7 +31,7 @@ export default function ResumePage() {
       </div>
 
       <aside className="md:w-[240px] lg:w-[300px] shrink-0">
-        <div className="space-y-6">
+        <div className="space-y-10">
           {SKILLS_DATA.map((category) => (
             <WidgetSkills
               key={category.title}

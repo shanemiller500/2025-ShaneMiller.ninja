@@ -178,7 +178,7 @@ export default function NewsPage() {
       <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
 
         {/* Main */}
-        <main className="min-w-0 bg-white dark:bg-brand-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+        <main className="min-w-0 bg-white dark:border-white/10 dark:bg-white/[0.06] rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="p-3 sm:p-5">
             {tab === "All" ? (
               <NewsTab />

@@ -40,7 +40,8 @@ const entries: TimelineEntry[] = [
     ),
     tags: [
       'Next.js', 'App Router', 'SSR', 'React', 'TypeScript', 'Node.js', 'PostgreSQL',
-      'REST APIs', 'AI Integration', 'Document Processing', 'Stripe', 'Subscription Billing',
+      'REST APIs', 'AI Integration', 'Document Intelligence', 
+'AI Personalization', 'LLM', 'Document Processing', 'Stripe', 'Subscription Billing',
       'Mixpanel', 'Tailwind CSS', 'Component Architecture', 'Vercel', 'CI/CD',
     ],
   },
@@ -54,7 +55,7 @@ const entries: TimelineEntry[] = [
       'Built an AI-enhanced email platform with Node/Express APIs, Gmail integration, Firebase Auth, and secure OAuth 2.0. Shipped voice-to-text, AI text enhancement, and Google Meet/Zoom integrations. Architected a modular, multi-tenant API to power industry-specific B2B deployments.',
     tags: [
       'Node.js', 'Express', 'React', 'Firebase Auth', 'Realtime DB', 'OAuth 2.0',
-      'Gmail API', 'OpenAI API', 'Voice-to-Text', 'AI Text Enhancement', 'Google Meet API',
+      'Gmail API', 'OpenAI API', 'Voice-to-Text', 'AI-Powered SaaS',  'AI Text Enhancement', 'LLM', 'Google Meet API',
       'Zoom API', 'Multi-Tenant Architecture', 'REST APIs', 'GCP', 'Vercel', 'Mixpanel', 'B2B SaaS',
     ],
   },
