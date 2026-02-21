@@ -6,7 +6,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 import { API_TOKEN } from "@/utils/config";
-import StockQuoteModal from "./StockQuoteModal";
+import StockQuoteModal from "../StockQuoteModal";
 
 /* Types ------------------------------------------------------------ */
 const SYMBOLS = ["AAPL", "MSFT", "AMZN", "GOOGL", "TSLA", "META", "NVDA", "JPM", "V", "NFLX", "AMD", "IBM"] as const;

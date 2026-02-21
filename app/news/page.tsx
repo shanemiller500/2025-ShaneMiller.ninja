@@ -11,9 +11,9 @@ import WidgetNews from "@/app/news/widget-news";
 import WidgetSearch from "@/components/widget-search";
 import WidgetWeather from "@/components/widget-weather";
 import FlightSearch from "@/app/Country/FlightSearch";
-import FinanceTab from "./FinanceTab";
-import NewsTab from "./AllNewsTab";
-import SportsTab from "./SportsTab";
+import FinanceTab from "./finance/FinanceTab";
+import NewsTab from "./general/AllNewsTab";
+import SportsTab from "./sports/SportsTab";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */

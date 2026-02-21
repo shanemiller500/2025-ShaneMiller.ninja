@@ -1,4 +1,4 @@
-import FinnhubDashboard from "./stock/stocks";
+import FinnhubDashboard from "./stocks";
 
 /* ------------------------------------------------------------------ */
 /*  StocksPage Component                                               */

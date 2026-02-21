@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AnimatePresence, motion } from "framer-motion";
 
 import { trackEvent } from "@/utils/mixpanel";
-import EarningsSection from "./EarningsSection";
-import IPOCalendarSection from "./IPOCalendarSection";
-import LiveStreamHeatmapSection from "./LiveStreamHeatmapSection";
-import NewsSearchTabSection from "./NewsSearchTabSection";
-import StockQuoteSection from "./StockQuoteSection";
+import { Button } from "@/components/ui/button";
+import EarningsSection from "./sections/EarningsSection";
+import IPOCalendarSection from "./sections/IPOCalendarSection";
+import LiveStreamHeatmapSection from "./sections/LiveStreamHeatmapSection";
+import NewsSearchTabSection from "./sections/NewsSearchTabSection";
+import StockQuoteSection from "./sections/StockQuoteSection";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -41,11 +42,6 @@ export default function DashboardTabs() {
   useEffect(() => {
     trackEvent("Dashboard Tabs Viewed", { activeTab: "quote" });
   }, []);
-
-  const activeMeta = useMemo(
-    () => TABS.find((t) => t.key === activeTab) ?? TABS[0],
-    [activeTab]
-  );
 
   const handleTabClick = (tab: TabKey): void => {
     setActiveTab(tab);
@@ -84,17 +80,13 @@ export default function DashboardTabs() {
           {TABS.map((t) => {
             const isActive = t.key === activeTab;
             return (
-              <button
+              <Button
                 key={t.key}
-                type="button"
+                variant="pill"
+                active={isActive}
+                size={null}
                 onClick={() => handleTabClick(t.key)}
-                className={[
-                     "relative shrink-0 whitespace-nowrap rounded-full px-3 sm:px-4 py-2 text-sm font-extrabold transition",
-                  "ring-1 ring-black/10 dark:ring-white/10",
-                  isActive
-                    ? "bg-gray-900 text-white border-black/20 hover:bg-gray-900 dark:bg-white/10 dark:text-white dark:border-white/20 dark:hover:bg-white/10"
-                    : "border border-black/10 bg-white text-gray-800 hover:bg-black/[0.03] dark:border-white/10 dark:bg-brand-900 dark:text-white/80 dark:hover:bg-white/[0.06]",
-                ].join(" ")}
+                className="relative shrink-0 whitespace-nowrap px-3 sm:px-4 py-2 text-sm"
                 aria-current={isActive ? "page" : undefined}
               >
                 {t.label}
@@ -105,7 +97,7 @@ export default function DashboardTabs() {
                     transition={{ type: "spring", stiffness: 420, damping: 34 }}
                   />
                 )}
-              </button>
+              </Button>
             );
           })}
         </div>

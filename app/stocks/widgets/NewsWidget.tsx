@@ -1,9 +1,10 @@
 // Filename: NewsWidget.tsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatDate } from "@/utils/formatters";
 import { API_TOKEN } from "@/utils/config";
+import { Button } from "@/components/ui/button";
 
 /* ------------------------------------------------------------------ */
 /*  Types & cache                                                     */
@@ -320,28 +321,18 @@ function Pagination({
   return (
     <div className="relative border-t border-black/10 dark:border-white/10 bg-white/80 dark:bg-black/30 backdrop-blur-xl">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <button
-          disabled={page === 1 || loading}
-          onClick={onPrev}
-          className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white hover:opacity-95 disabled:opacity-40 hover:shadow-md active:scale-95 transition-all"
-          type="button"
-        >
+        <Button variant="indigo" size="sm" disabled={page === 1 || loading} onClick={onPrev} className="disabled:opacity-40">
           ← Prev
-        </button>
+        </Button>
 
         <span className="text-[10px] font-semibold text-gray-600 dark:text-white/60">
           Page <span className="font-extrabold">{page}</span> of{" "}
           <span className="font-extrabold">{totalPages}</span>
         </span>
 
-        <button
-          disabled={page === totalPages || loading}
-          onClick={onNext}
-          className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white hover:opacity-95 disabled:opacity-40 hover:shadow-md active:scale-95 transition-all"
-          type="button"
-        >
+        <Button variant="indigo" size="sm" disabled={page === totalPages || loading} onClick={onNext} className="disabled:opacity-40">
           Next →
-        </button>
+        </Button>
       </div>
     </div>
   );

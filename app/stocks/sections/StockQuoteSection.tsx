@@ -7,9 +7,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import "react-toastify/dist/ReactToastify.css";
 
 import { API_TOKEN } from "@/utils/config";
-import MarketWidgets from "./MarketWidgets";
-import NewsWidget from "./NewsWidget";
-import StockQuoteModal from "./StockQuoteModal";
+import MarketWidgets from "../widgets/MarketWidgets";
+import NewsWidget from "../widgets/NewsWidget";
+import StockQuoteModal from "../StockQuoteModal";
 import { Button } from "@/components/ui/button";
 
 const PROXY_BASE = "https://u-mail.co/api/finnhubProxy";

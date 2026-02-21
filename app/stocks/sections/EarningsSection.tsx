@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { formatSupplyValue } from '@/utils/formatters';
+import { Button } from '@/components/ui/button';
 
 interface EarningsItem {
   symbol: string;
@@ -161,7 +162,6 @@ const EarningsSection: React.FC = () => {
               const epsEst = safeNum(ev.epsEstimate);
               const epsAct = safeNum(ev.epsActual);
               const revEst = safeNum(ev.revenueEstimate);
-              const revAct = safeNum(ev.revenueActual);
               const surprise = safeNum(ev.epsSurprise);
 
               const hasSurprise = surprise != null;
@@ -254,25 +254,29 @@ const EarningsSection: React.FC = () => {
           {/* Pagination */}
           {perPage !== -1 && totalPages > 1 && (
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              <button
+              <Button
+                variant="secondary"
+                size="md"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={clampedPage === 1}
-                className="rounded-xl px-4 py-2 text-sm font-extrabold border border-black/10 dark:border-white/10 disabled:opacity-40"
+                className="disabled:opacity-40"
               >
                 Prev
-              </button>
+              </Button>
 
               <span className="text-sm font-semibold">
                 Page {clampedPage} / {totalPages}
               </span>
 
-              <button
+              <Button
+                variant="secondary"
+                size="md"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={clampedPage === totalPages}
-                className="rounded-xl px-4 py-2 text-sm font-extrabold border border-black/10 dark:border-white/10 disabled:opacity-40"
+                className="disabled:opacity-40"
               >
                 Next
-              </button>
+              </Button>
             </div>
           )}
 

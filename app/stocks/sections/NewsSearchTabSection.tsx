@@ -1,9 +1,11 @@
 // Filename: NewsSearchTabSection.tsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDate } from "@/utils/formatters";
 import { API_TOKEN } from "@/utils/config";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                   */
@@ -93,7 +95,6 @@ export default function NewsSearchTabSection() {
   const [page, setPage] = useState(1);
 
   const [loading, setLoading] = useState(false);
-  const [sourceLabel, setSourceLabel] = useState<"general" | "company">("general");
   const [error, setError] = useState<string | null>(null);
 
   const topRef = useRef<HTMLDivElement>(null);
@@ -104,7 +105,6 @@ export default function NewsSearchTabSection() {
       try {
         setLoading(true);
         setError(null);
-        setSourceLabel("general");
         setArticles(await fetchGeneral());
       } catch (e: any) {
         setError(e?.message ?? "Error");
@@ -124,7 +124,6 @@ export default function NewsSearchTabSection() {
     setPage(1);
 
     try {
-      setSourceLabel("company");
       setArticles(await fetchCompany(sym));
       if (topRef.current) topRef.current.scrollIntoView({ behavior: "smooth" });
     } catch (e: any) {
@@ -140,7 +139,6 @@ export default function NewsSearchTabSection() {
     setPage(1);
 
     try {
-      setSourceLabel("general");
       setArticles(await fetchGeneral());
       if (topRef.current) topRef.current.scrollIntoView({ behavior: "smooth" });
     } catch (e: any) {
@@ -212,21 +210,12 @@ export default function NewsSearchTabSection() {
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={runGeneral}
-                  className="rounded-2xl px-4 py-2 text-sm font-extrabold text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.10] transition"
-                >
+                <Button variant="secondary" size="md" onClick={runGeneral}>
                   General
-                </button>
-
-                <button
-                  type="button"
-                  onClick={runCompanySearch}
-                  className="rounded-2xl px-4 py-2 text-sm font-extrabold  shadow-sm ring-1 ring-black/10 dark:ring-white/10 bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white hover:opacity-95 active:scale-[0.99] transition"
-                >
+                </Button>
+                <Button variant="indigo" size="md" onClick={runCompanySearch}>
                   Company
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -266,13 +255,9 @@ export default function NewsSearchTabSection() {
 
               {/* actions */}
               <div className="sm:col-span-2 flex sm:flex-col gap-2 sm:justify-end">
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="w-full rounded-2xl px-4 py-3 text-sm font-extrabold text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.10] transition"
-                >
+                <Button variant="secondary" size="lg" fullWidth onClick={clearFilters}>
                   Clear
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -410,17 +395,8 @@ function ArticleCard({ a }: { a: Article }) {
 
         {/* footer chips */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {a.category ? (
-            <span className="rounded-full px-3 py-1 text-[11px] font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06] text-gray-800 dark:text-white/75">
-              {a.category}
-            </span>
-          ) : null}
-
-          {a.related ? (
-            <span className="rounded-full px-3 py-1 text-[11px] font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06] text-gray-800 dark:text-white/75">
-              {a.related}
-            </span>
-          ) : null}
+          {a.category ? <Badge variant="info" label={a.category} /> : null}
+          {a.related ? <Badge variant="info" label={a.related} /> : null}
         </div>
       </div>
     </a>
@@ -501,14 +477,9 @@ function Pagination({
   return (
     <div className="mt-8 flex flex-col items-center gap-3 pb-4">
       <div className="flex flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={onPrev}
-          className="rounded-2xl px-4 py-2 text-sm font-extrabold text-white shadow-sm ring-1 ring-black/10 dark:ring-white/10 bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40"
-        >
+        <Button variant="indigo" size="md" disabled={page <= 1} onClick={onPrev} className="disabled:opacity-40">
           Prev
-        </button>
+        </Button>
 
         {buttons.map((b, idx) =>
           b === "..." ? (
@@ -532,14 +503,9 @@ function Pagination({
           )
         )}
 
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={onNext}
-          className="rounded-2xl px-4 py-2 text-sm font-extrabold text-white shadow-sm ring-1 ring-black/10 dark:ring-white/10 bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40"
-        >
+        <Button variant="indigo" size="md" disabled={page >= totalPages} onClick={onNext} className="disabled:opacity-40">
           Next
-        </button>
+        </Button>
       </div>
 
       <div className="text-xs font-semibold text-gray-600 dark:text-white/60">

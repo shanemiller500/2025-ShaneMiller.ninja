@@ -8,7 +8,7 @@ import WidgetWeather from "@/components/widget-weather";
 import WidgetNews from "@/app/news/widget-news";
 import CryptoWidget from "@/app/Crypto/widget-crypto";
 import WidgetSearch from "@/components/widget-search";
-import StockWidget from "@/app/stocks/stock/LiveStreamTickerWidget";
+import StockWidget from "@/app/stocks/widgets/LiveStreamTickerWidget";
 
 import HeroImage from "@/public/images/pumpkin.jpg";
 import SecondImage from "@/public/images/cabin.jpg";

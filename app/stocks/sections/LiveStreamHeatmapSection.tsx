@@ -7,7 +7,7 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 import { API_TOKEN } from "@/utils/config";
-import StockQuoteModal from "./StockQuoteModal";
+import StockQuoteModal from "../StockQuoteModal";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                         */

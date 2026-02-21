@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FaExternalLinkAlt } from 'react-icons/fa';
 import { motion } from 'framer-motion';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -215,9 +216,6 @@ const IPOCalendarSection: React.FC = () => {
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4">
             {visible.map((ev, idx) => {
               const priced = String(ev.status || "").toLowerCase() === "priced";
-              const badge = priced
-                ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/20"
-                : "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-300/20";
 
               return (
                 <motion.button
@@ -254,11 +252,10 @@ const IPOCalendarSection: React.FC = () => {
                       </div>
                     </div>
 
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-extrabold ring-1 ${badge}`}
-                    >
-                      {String(ev.status || "tba").toUpperCase()}
-                    </span>
+                    <Badge
+                      variant={priced ? "success" : "warning"}
+                      label={String(ev.status || "tba").toUpperCase()}
+                    />
                   </div>
 
                   <div className="relative mt-3">
@@ -274,10 +271,6 @@ const IPOCalendarSection: React.FC = () => {
                         </span>
                       </div>
 
-                      {/* optional external link slot for the future */}
-                      {/* <span className="inline-flex items-center gap-2 text-xs font-extrabold text-indigo-700 dark:text-indigo-200 opacity-0 group-hover:opacity-100 transition">
-                        Details <FaExternalLinkAlt className="text-[10px]" />
-                      </span> */}
                     </div>
                   </div>
                 </motion.button>
@@ -289,31 +282,25 @@ const IPOCalendarSection: React.FC = () => {
           {perPage !== -1 && totalPages > 1 && (
             <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex items-center justify-between sm:justify-start gap-3">
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="lg"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={clampedPage === 1}
-                  className="w-full sm:w-auto inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-extrabold
-                             border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06]
-                             text-gray-900 dark:text-white
-                             disabled:opacity-40 disabled:cursor-not-allowed
-                             hover:bg-black/[0.03] dark:hover:bg-white/[0.08] transition"
+                  className="w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Prev
-                </button>
+                </Button>
 
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="lg"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={clampedPage === totalPages}
-                  className="w-full sm:w-auto inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-extrabold
-                             border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06]
-                             text-gray-900 dark:text-white
-                             disabled:opacity-40 disabled:cursor-not-allowed
-                             hover:bg-black/[0.03] dark:hover:bg-white/[0.08] transition"
+                  className="w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Next
-                </button>
+                </Button>
               </div>
 
               <div className="text-center sm:text-right text-sm font-semibold text-gray-700 dark:text-white/70">
