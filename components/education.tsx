@@ -1,13 +1,8 @@
 import Image from 'next/image'
+import TagList from '@/components/ui/tag-list'
 
 import EducationIcon01 from '@/public/images/ihs-markit-seeklogo.png'
 import EducationIcon02 from '@/public/images/general-assembly-seeklogo.png'
-
-const Tag = ({ label }: { label: string }) => (
-  <span className="inline-block text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-    {label}
-  </span>
-)
 
 export default function Education() {
   return (
@@ -34,9 +29,7 @@ export default function Education() {
               <div className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                 Intensive program focused on building production-ready mid-tier applications — directly preceding a decade-long career at S&amp;P Global. Covered the full Microsoft web stack alongside modern frontend fundamentals.
               </div>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {['C#', 'ASP.NET', 'MVC', 'HTML5', 'CSS3', 'JavaScript', 'jQuery', 'Mid-Tier Architecture'].map(t => <Tag key={t} label={t} />)}
-              </div>
+              <TagList tags={['C#', 'ASP.NET', 'MVC', 'HTML5', 'CSS3', 'JavaScript', 'jQuery', 'Mid-Tier Architecture']} />
             </div>
           </div>
         </li>
@@ -60,9 +53,7 @@ export default function Education() {
               <div className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                 Full-time, project-based immersive covering the complete web development lifecycle. Built and shipped real applications from scratch — the launchpad for a career in financial technology and enterprise software.
               </div>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {['Ruby on Rails', 'Full-Stack Development', 'HTML5', 'CSS3', 'JavaScript', 'jQuery', 'REST APIs', 'Git', 'Agile'].map(t => <Tag key={t} label={t} />)}
-              </div>
+              <TagList tags={['Ruby on Rails', 'Full-Stack Development', 'HTML5', 'CSS3', 'JavaScript', 'jQuery', 'REST APIs', 'Git', 'Agile']} />
             </div>
           </div>
         </li>
