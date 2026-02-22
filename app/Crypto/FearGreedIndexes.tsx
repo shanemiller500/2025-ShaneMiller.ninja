@@ -6,8 +6,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   FaAngry,
   FaCalendarAlt,
-  FaChevronDown,
-  FaChevronUp,
   FaFrown,
   FaGrinStars,
   FaInfoCircle,
@@ -146,20 +144,20 @@ const Gauge = ({ title, score, open }: GaugeProps) => {
       onClick={handle}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
-      className="cursor-pointer flex flex-col items-center gap-3 p-4 md:p-6 rounded-2xl bg-white dark:bg-white/[0.06] shadow-sm hover:shadow-md transition-all border border-gray-200/70 dark:border-white/10"
+      className="cursor-pointer flex flex-col items-center gap-3 p-5 sm:p-6 rounded-2xl bg-white dark:bg-white/[0.06] shadow-sm hover:shadow-md transition-all border border-gray-200/70 dark:border-white/10"
     >
-      <h4 className="font-bold text-xs md:text-sm tracking-wide text-gray-600 dark:text-white/70 uppercase">{title}</h4>
+      <h4 className="font-bold text-xs sm:text-sm tracking-wide text-gray-600 dark:text-white/70 uppercase">{title}</h4>
       <div className="relative pb-2">
-        <div className="w-28 h-28 md:w-36 md:h-36 rounded-full flex items-center justify-center shadow-md" style={{ backgroundImage: ring }}>
-          <div className="w-20 h-20 md:w-28 md:h-28 bg-white dark:bg-brand-900 rounded-full flex items-center justify-center shadow-inner">
-            <span className="text-3xl md:text-4xl font-black text-gray-800 dark:text-white">{score ?? "--"}</span>
+        <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full flex items-center justify-center shadow-md" style={{ backgroundImage: ring }}>
+          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-white dark:bg-brand-900 rounded-full flex items-center justify-center shadow-inner">
+            <span className="text-3xl sm:text-4xl font-black text-gray-800 dark:text-white">{score ?? "--"}</span>
           </div>
         </div>
         <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 ${mood.bg} rounded-full p-2.5 shadow-lg`}>
-          <mood.icon className="text-white text-lg md:text-xl" />
+          <mood.icon className="text-white text-lg sm:text-xl" />
         </div>
       </div>
-      <p className={`text-xs md:text-sm font-bold ${mood.color}`}>{mood.label}</p>
+      <p className={`text-xs sm:text-sm font-bold ${mood.color}`}>{mood.label}</p>
     </motion.div>
   );
 };
@@ -173,7 +171,6 @@ export default function FearGreedIndexes() {
   const [ytd,   setYtd]   = useState<number | null>(null);
   const [year,  setYear]  = useState<number | null>(null);
   const [popup, setPopup] = useState<PopupData | null>(null);
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [showMethodology, setShowMethodology] = useState(false);
 
   /* fetch data */
@@ -218,10 +215,10 @@ export default function FearGreedIndexes() {
         });
 
         const withDates = (g: string, p: PopupData) => {
-          if (g === "Today")        { p.start = dateToday;  p.end = dateToday; }
+          if (g === "Today")          { p.start = dateToday;  p.end = dateToday; }
           else if (g === "Last 7 Days") { p.start = dateWeekSt; p.end = dateYest; }
           else if (g === "Year-to-Date") { p.start = dateYTDSt; p.end = dateToday; }
-          else                      { p.start = dateYearSt; p.end = dateToday; }
+          else                          { p.start = dateYearSt; p.end = dateToday; }
           return p;
         };
 
@@ -239,155 +236,130 @@ export default function FearGreedIndexes() {
   const isLoading = today === null && week === null && ytd === null && year === null;
 
   const skeletonCard = (key: number) => (
-    <div key={key} className="flex flex-col items-center gap-3 p-4 md:p-6 rounded-2xl bg-white dark:bg-white/[0.06] border border-gray-200/70 dark:border-white/10 animate-pulse">
+    <div key={key} className="flex flex-col items-center gap-3 p-5 sm:p-6 rounded-2xl bg-white dark:bg-white/[0.06] border border-gray-200/70 dark:border-white/10 animate-pulse">
       <div className="h-4 w-20 bg-gray-200 dark:bg-white/10 rounded-full" />
-      <div className="w-28 h-28 md:w-36 md:h-36 rounded-full bg-gray-200 dark:bg-white/10" />
+      <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-gray-200 dark:bg-white/10" />
       <div className="h-3 w-16 bg-gray-200 dark:bg-white/10 rounded-full" />
     </div>
   );
 
+  const gauges = isLoading
+    ? [1, 2, 3, 4].map(skeletonCard)
+    : [
+        { title: "Today",        score: today },
+        { title: "Last 7 Days",  score: week  },
+        { title: "Year-to-Date", score: ytd   },
+        { title: "12 Months",    score: year  },
+      ].map((g) => <Gauge key={g.title} title={g.title} score={g.score} open={popupEnhancer} />);
+
   return (
-    <div className="py-3 px-4 sm:py-6 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="py-4 px-4 sm:py-6 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto space-y-6">
 
-        {/* ── Mobile Toggle ── */}
-        <div className="md:hidden mb-4">
-          <div className="w-full flex items-center justify-between px-5 py-3 rounded-2xl bg-white dark:bg-white/[0.06] border border-gray-200/70 dark:border-white/10 shadow-sm">
-            <div className="flex items-center gap-3">
-              <FaInfoCircle
-                onClick={() => setShowMethodology(true)}
-                className="text-indigo-500 text-lg cursor-pointer"
-              />
-              <span className="font-bold text-gray-900 dark:text-white">Fear & Greed Indexes</span>
-            </div>
-            {mobileOpen ? (
-              <FaChevronUp onClick={() => setMobileOpen(false)} className="text-gray-500 dark:text-white/50 cursor-pointer" />
-            ) : (
-              <FaChevronDown onClick={() => setMobileOpen(true)} className="text-gray-500 dark:text-white/50 cursor-pointer" />
-            )}
+        {/* ── Intro ── */}
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center"
+        >
+          <div className="flex items-center justify-center gap-2.5 mb-2">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+              Fear & Greed Index
+            </h2>
+            <button
+              type="button"
+              onClick={() => setShowMethodology(true)}
+              className="text-indigo-500 hover:scale-110 transition-transform"
+              aria-label="How it's calculated"
+            >
+              <FaInfoCircle className="text-lg sm:text-xl" />
+            </button>
           </div>
-        </div>
+          <p className="text-sm text-gray-500 dark:text-white/50 max-w-lg mx-auto">
+            Real-time sentiment across four time horizons. Tap any card for details.
+          </p>
+        </motion.div>
 
-        {/* ── Methodology Modal ── */}
-        <AnimatePresence>
-          {showMethodology && (
-            <motion.div
-              className="fixed inset-0 flex items-center justify-center z-50 p-4 bg-black/70 backdrop-blur-md"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowMethodology(false)}
-            >
-              <motion.div
-                className="relative w-full max-w-sm md:max-w-md rounded-2xl bg-white dark:bg-brand-900 shadow-2xl border border-gray-200/70 dark:border-white/10 overflow-hidden"
-                initial={{ scale: 0.92, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.92, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 300, damping: 28 }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="h-1 w-full bg-indigo-500" />
-                <button
-                  className="absolute top-4 right-4 p-2 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-white/70 hover:bg-gray-200 dark:hover:bg-white/15 transition"
-                  onClick={() => setShowMethodology(false)}
-                >
-                  <FaTimes className="text-sm" />
-                </button>
-                <div className="p-6">
-                  <h4 className="font-bold text-base mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
-                    <FaInfoCircle className="text-indigo-500" />
-                    How It&apos;s Calculated
-                  </h4>
-                  <div className="space-y-1">
-                    {methodology.map((item, i) => (
-                      <div key={i} className="flex justify-between py-2 border-b border-gray-100 dark:border-white/[0.08] last:border-0">
-                        <span className="text-sm text-gray-600 dark:text-white/60">{item.label}</span>
-                        <span className="text-sm font-bold text-gray-900 dark:text-white">{item.weight}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-4 pt-4 border-t border-gray-100 dark:border-white/10 text-xs text-gray-400 dark:text-white/40 italic text-center">
-                    Data from Alternative.me API
-                  </p>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* ── Gauges ── */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.08 }}
+          className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
+        >
+          {gauges}
+        </motion.div>
 
-        {/* ── Mobile Gauges ── */}
-        <AnimatePresence>
-          {mobileOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="md:hidden overflow-hidden"
-            >
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                {isLoading
-                  ? [1, 2, 3, 4].map(skeletonCard)
-                  : [
-                      { title: "Today",  score: today },
-                      { title: "7 Days", score: week  },
-                      { title: "YTD",    score: ytd   },
-                      { title: "12 Mo",  score: year  },
-                    ].map((g) => <Gauge key={g.title} title={g.title} score={g.score} open={popupEnhancer} />)}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ── Desktop ── */}
-        <div className="hidden md:block">
-          <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <h1 className="text-4xl sm:text-5xl font-black text-gray-900 dark:text-white tracking-tight">
-                Crypto Fear & Greed Index
-              </h1>
-              <FaInfoCircle
-                onClick={() => setShowMethodology(true)}
-                className="text-indigo-500 text-xl cursor-pointer hover:scale-110 transition-transform"
-              />
-            </div>
-            <p className="text-base text-gray-500 dark:text-white/50 max-w-2xl mx-auto">
-              Real-time sentiment analysis of the cryptocurrency market. Track emotional extremes that signal opportunities or risks.
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6"
-          >
-            {isLoading
-              ? [1, 2, 3, 4].map(skeletonCard)
-              : [
-                  { title: "Today",        score: today },
-                  { title: "Last 7 Days",  score: week  },
-                  { title: "Year-to-Date", score: ytd   },
-                  { title: "12 Months",    score: year  },
-                ].map((g) => <Gauge key={g.title} title={g.title} score={g.score} open={popupEnhancer} />)}
-          </motion.div>
-        </div>
-
-        {/* ── Legend — Desktop ── */}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="hidden md:block mt-10 text-center pb-2">
-          <div className="inline-flex flex-wrap gap-x-6 gap-y-2 px-6 py-3.5 rounded-2xl bg-white dark:bg-white/[0.06] border border-gray-200/70 dark:border-white/10 shadow-sm">
+        {/* ── Legend ── */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.16 }}
+          className="flex justify-center"
+        >
+          <div className="inline-flex flex-wrap justify-center gap-x-5 gap-y-2 px-5 py-3 rounded-2xl bg-white dark:bg-white/[0.06] border border-gray-200/70 dark:border-white/10 shadow-sm">
             {[
-              { color: "bg-red-600",   label: "0–25: Extreme Fear" },
-              { color: "bg-red-400",   label: "26–50: Fear" },
-              { color: "bg-green-400", label: "51–74: Greed" },
-              { color: "bg-green-600", label: "75–100: Extreme Greed" },
+              { color: "bg-red-600",   label: "0–25 · Extreme Fear" },
+              { color: "bg-red-400",   label: "26–50 · Fear" },
+              { color: "bg-green-400", label: "51–74 · Greed" },
+              { color: "bg-green-600", label: "75–100 · Extreme Greed" },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
-                <span className="text-xs font-medium text-gray-500 dark:text-white/50">{item.label}</span>
+                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${item.color}`} />
+                <span className="text-xs font-medium text-gray-500 dark:text-white/50 whitespace-nowrap">{item.label}</span>
               </div>
             ))}
           </div>
         </motion.div>
+
       </div>
+
+      {/* ── Methodology Modal ── */}
+      <AnimatePresence>
+        {showMethodology && (
+          <motion.div
+            className="fixed inset-0 flex items-center justify-center z-50 p-4 bg-black/70 backdrop-blur-md"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowMethodology(false)}
+          >
+            <motion.div
+              className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-brand-900 shadow-2xl border border-gray-200/70 dark:border-white/10 overflow-hidden"
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 28 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="h-1 w-full bg-indigo-500" />
+              <button
+                className="absolute top-4 right-4 p-2 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-white/70 hover:bg-gray-200 dark:hover:bg-white/15 transition"
+                onClick={() => setShowMethodology(false)}
+              >
+                <FaTimes className="text-sm" />
+              </button>
+              <div className="p-6">
+                <h4 className="font-bold text-base mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
+                  <FaInfoCircle className="text-indigo-500" />
+                  How It&apos;s Calculated
+                </h4>
+                <div className="space-y-1">
+                  {methodology.map((item, i) => (
+                    <div key={i} className="flex justify-between py-2 border-b border-gray-100 dark:border-white/[0.08] last:border-0">
+                      <span className="text-sm text-gray-600 dark:text-white/60">{item.label}</span>
+                      <span className="text-sm font-bold text-gray-900 dark:text-white">{item.weight}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 pt-4 border-t border-gray-100 dark:border-white/10 text-xs text-gray-400 dark:text-white/40 italic text-center">
+                  Data from Alternative.me API
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Detail Popup ── */}
       <AnimatePresence>
@@ -407,10 +379,7 @@ export default function FearGreedIndexes() {
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Mood-coloured accent bar */}
               <div className={`h-1 w-full ${popup.bg}`} />
-
-              {/* Close */}
               <button
                 className="absolute top-4 right-4 p-2 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-white/70 hover:bg-gray-200 dark:hover:bg-white/15 transition hover:rotate-90 duration-200"
                 aria-label="Close"
@@ -419,18 +388,13 @@ export default function FearGreedIndexes() {
                 <FaTimes className="text-sm" />
               </button>
 
-              <div className="px-8 py-10 text-center">
-                {/* Mood icon */}
+              <div className="px-6 sm:px-8 py-8 sm:py-10 text-center">
                 <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full ${popup.bg} mb-5 shadow-lg`}>
                   <popup.icon className="text-white text-4xl" />
                 </div>
-
-                {/* Period */}
                 <h3 className="text-sm font-bold text-gray-500 dark:text-white/50 mb-1 uppercase tracking-widest">
                   {popup.title}
                 </h3>
-
-                {/* Score */}
                 <div className="mb-5">
                   <div className="inline-flex items-baseline gap-2">
                     <span className={`text-6xl font-black ${popup.color}`}>{popup.score ?? "--"}</span>
@@ -438,8 +402,6 @@ export default function FearGreedIndexes() {
                   </div>
                   <p className={`mt-1.5 text-base font-bold ${popup.color}`}>{popup.label}</p>
                 </div>
-
-                {/* Date range */}
                 <div className="mb-5 px-4 py-3 rounded-2xl bg-gray-50 dark:bg-white/[0.06] border border-gray-100 dark:border-white/10">
                   <div className="flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-white/60">
                     <FaCalendarAlt className="text-indigo-500 shrink-0" />
@@ -450,8 +412,6 @@ export default function FearGreedIndexes() {
                     )}
                   </div>
                 </div>
-
-                {/* Insight */}
                 <div className="px-5 py-4 rounded-2xl bg-indigo-50 dark:bg-white/[0.06] border border-indigo-100 dark:border-white/10">
                   <p className="text-sm leading-relaxed text-gray-700 dark:text-white/80 italic font-medium">
                     &ldquo;{popup.phrase}&rdquo;

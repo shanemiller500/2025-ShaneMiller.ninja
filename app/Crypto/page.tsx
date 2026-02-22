@@ -71,7 +71,7 @@ const CryptoDashboard = () => {
                   variant="pill"
                   active={isActive}
                   size="md"
-                  className="relative text-sm"
+                  className="relative text-sm whitespace-nowrap"
                   onClick={() => {
                     setActive(i);
                     trackEvent("Dashboard Tab Click", { tab: t.name });

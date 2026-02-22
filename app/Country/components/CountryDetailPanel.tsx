@@ -259,7 +259,7 @@ export default function CountryDetailPanel({
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      "flex-1 rounded-xl px-2 py-2 text-xs font-semibold transition",
+                      "flex-1 rounded-xl px-2 py-2 text-xs font-semibold transition whitespace-nowrap",
                       activeTab === tab.id
                         ? "bg-white dark:bg-white/15 shadow-sm text-gray-900 dark:text-white"
                         : "text-gray-500 dark:text-white/50 hover:text-gray-700 dark:hover:text-white/70",

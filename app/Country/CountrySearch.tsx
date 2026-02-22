@@ -208,14 +208,10 @@ export default function CountrySearch() {
               className="shrink-0 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-white/[0.06] shadow-sm h-[38px] px-1 flex items-center gap-0.5 text-xs font-bold overflow-hidden"
               title="Toggle temperature unit"
             >
-              <span className={useCelsius
-                ? "rounded-xl px-2.5 py-1.5 bg-indigo-600 text-white transition-colors"
-                : "px-2.5 py-1.5 text-gray-500 dark:text-white/50 transition-colors"}>
+              <span className={`rounded-xl px-2.5 py-1.5 transition-colors ${useCelsius ? "bg-indigo-600 text-white" : "text-gray-500 dark:text-white/50"}`}>
                 °C
               </span>
-              <span className={!useCelsius
-                ? "rounded-xl px-2.5 py-1.5 bg-indigo-600 text-white transition-colors"
-                : "px-2.5 py-1.5 text-gray-500 dark:text-white/50 transition-colors"}>
+              <span className={`rounded-xl px-2.5 py-1.5 transition-colors ${!useCelsius ? "bg-indigo-600 text-white" : "text-gray-500 dark:text-white/50"}`}>
                 °F
               </span>
             </button>
