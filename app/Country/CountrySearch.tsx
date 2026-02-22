@@ -15,6 +15,7 @@ import { useCountryDetails } from "./hooks/useCountryDetails";
 import FlightSearch from "./FlightSearch";
 import CountryTile from "./components/CountryTile";
 import CountryDetailPanel from "./components/CountryDetailPanel";
+import CountryWeatherWidget from "./components/CountryWeatherWidget";
 import Spinner from "./components/Spinner";
 
 export default function CountrySearch() {
@@ -23,6 +24,21 @@ export default function CountrySearch() {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<LiteCountry[]>([]);
   const [activeRegion] = useState<RegionId>("all");
+
+  const [useCelsius, setUseCelsius] = useState(true);
+
+  // Read persisted preference after mount to avoid SSR/client hydration mismatch
+  useEffect(() => {
+    try { if (localStorage.getItem("tempUnit") === "F") setUseCelsius(false); } catch {}
+  }, []);
+
+  const toggleUnit = useCallback(() => {
+    setUseCelsius((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("tempUnit", next ? "C" : "F"); } catch {}
+      return next;
+    });
+  }, []);
 
   const detailRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
@@ -185,6 +201,25 @@ export default function CountrySearch() {
               </AnimatePresence>
             </div>
 
+            {/* °C / °F toggle */}
+            <button
+              type="button"
+              onClick={toggleUnit}
+              className="shrink-0 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-white/[0.06] shadow-sm h-[38px] px-1 flex items-center gap-0.5 text-xs font-bold overflow-hidden"
+              title="Toggle temperature unit"
+            >
+              <span className={useCelsius
+                ? "rounded-xl px-2.5 py-1.5 bg-indigo-600 text-white transition-colors"
+                : "px-2.5 py-1.5 text-gray-500 dark:text-white/50 transition-colors"}>
+                °C
+              </span>
+              <span className={!useCelsius
+                ? "rounded-xl px-2.5 py-1.5 bg-indigo-600 text-white transition-colors"
+                : "px-2.5 py-1.5 text-gray-500 dark:text-white/50 transition-colors"}>
+                °F
+              </span>
+            </button>
+
             {/* Random country */}
             <motion.button
               type="button"
@@ -241,7 +276,7 @@ export default function CountrySearch() {
 
                 {/* Tiles: capped + scrollable on mobile; full-height on desktop */}
                 <div
-                  className="max-h-[260px] overflow-y-auto sm:max-h-[340px] lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto"
+                  className="max-h-[290px] overflow-y-auto sm:max-h-[340px] lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto"
                   style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
                 >
                   {displayList.length === 0 ? (
@@ -264,8 +299,8 @@ export default function CountrySearch() {
                 </div>
               </div>
 
-              {/* Flight search — desktop only (shown below tiles) */}
-              <div className="hidden lg:block">
+              {/* Flight search + weather widget — desktop only (shown below tiles) */}
+              <div className="hidden lg:block space-y-5">
                 <AnimatePresence>
                   {full && (
                     <motion.div
@@ -273,12 +308,18 @@ export default function CountrySearch() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 6 }}
                       transition={{ duration: 0.25, ease: "easeOut" }}
-                      className="mt-5"
                     >
                       <FlightSearch full={full} />
                     </motion.div>
                   )}
                 </AnimatePresence>
+
+                <CountryWeatherWidget
+                  full={full}
+                  extras={extras}
+                  loadingDetails={loadingDetails}
+                  useCelsius={useCelsius}
+                />
               </div>
             </div>
 
@@ -293,11 +334,12 @@ export default function CountrySearch() {
                 mini={mini}
                 reducedMotion={reducedMotion}
                 onPickCountry={pickCountry}
+                useCelsius={useCelsius}
               />
             </div>
 
-            {/* Flight search — mobile only (shown AFTER detail panel) */}
-            <div className="w-full lg:hidden">
+            {/* Flight search + weather widget — mobile only (shown AFTER detail panel) */}
+            <div className="w-full lg:hidden space-y-4">
               <AnimatePresence>
                 {full && (
                   <motion.div
@@ -310,6 +352,13 @@ export default function CountrySearch() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              <CountryWeatherWidget
+                full={full}
+                extras={extras}
+                loadingDetails={loadingDetails}
+                useCelsius={useCelsius}
+              />
             </div>
 
           </div>

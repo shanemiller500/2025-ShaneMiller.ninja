@@ -3,6 +3,7 @@ import { CACHE_FEATURED_KEY, FEATURED_PICK_COUNT, WIKI_CLAMP_LENGTH } from "./co
 
 export const lc = (s: string) => (s || "").toLowerCase();
 export const fmt = (n?: number) => (typeof n === "number" ? n.toLocaleString() : "—");
+export const cToF = (c: number): number => Math.round(c * 1.8 + 32);
 
 export function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");

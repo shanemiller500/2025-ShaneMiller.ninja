@@ -30,7 +30,7 @@ import { trackEvent } from "@/utils/mixpanel";
 import type { FullCountry, Extras, LiteCountry } from "../lib/types";
 import type { DetailTab } from "../lib/constants";
 import { TOP_SIGHTS_LIMIT, TRAVEL_TIPS } from "../lib/constants";
-import { cn, clampText, fmt, getBestTime, getLocalTime, getPackList } from "../lib/utils";
+import { cn, clampText, cToF, fmt, getBestTime, getLocalTime, getPackList } from "../lib/utils";
 import StatPill from "./StatPill";
 import ActionLink from "./ActionLink";
 import Spinner from "./Spinner";
@@ -44,6 +44,7 @@ interface CountryDetailPanelProps {
   mini: LiteCountry[];
   reducedMotion: boolean;
   onPickCountry: (cca3: string) => void;
+  useCelsius: boolean;
 }
 
 export default function CountryDetailPanel({
@@ -54,9 +55,11 @@ export default function CountryDetailPanel({
   mini,
   reducedMotion,
   onPickCountry,
+  useCelsius,
 }: CountryDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>("overview");
   const [packExpanded, setPackExpanded] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
   const [localTime, setLocalTime] = useState("");
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIdx, setViewerIdx] = useState(0);
@@ -66,7 +69,7 @@ export default function CountryDetailPanel({
 
   // Reset local state when country changes
   useEffect(() => {
-    if (full) { setActiveTab("overview"); setPackExpanded(false); setMapActivated(false); }
+    if (full) { setActiveTab("overview"); setPackExpanded(false); setLangOpen(false); setMapActivated(false); }
   }, [full?.cca3]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Local time ticker
@@ -113,6 +116,11 @@ export default function CountryDetailPanel({
     const suffix = full.idd.suffixes?.[0] ?? "";
     return `${full.idd.root}${suffix}`;
   }, [full]);
+
+  const langList = useMemo(
+    () => (full?.languages ? Object.values(full.languages) : []),
+    [full?.languages],
+  );
 
   return (
     <>
@@ -215,7 +223,10 @@ export default function CountryDetailPanel({
               )}
               {extras?.weather?.temperature != null && (
                 <span className="rounded-full px-3 py-1 text-xs font-semibold bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 inline-flex items-center gap-1.5">
-                  <FaThermometerHalf className="text-[10px]" />{Math.round(extras.weather.temperature)}°C
+                  <FaThermometerHalf className="text-[10px]" />
+                  {useCelsius
+                    ? `${Math.round(extras.weather.temperature)}°C`
+                    : `${cToF(Math.round(extras.weather.temperature))}°F`}
                   {extras.weather.windspeed != null ? ` · ${extras.weather.windspeed} km/h` : ""}
                 </span>
               )}
@@ -302,11 +313,58 @@ export default function CountryDetailPanel({
                       <StatPill icon={<FaUsers />}        label="Population" value={fmt(full.population)} />
                       <StatPill icon={<FaRulerCombined />} label="Area"      value={full.area != null ? `${fmt(full.area)} km²` : "—"} />
                       <StatPill icon={<FaGlobeAmericas />} label="Currency"  value={currencyLabel} />
-                      <StatPill icon={<FaLanguage />}     label="Languages"  value={full.languages ? Object.values(full.languages).slice(0, 2).join(", ") : "—"} />
+                      {langList.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => setLangOpen((o) => !o)}
+                          className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.05] px-4 py-3 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition group"
+                        >
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-indigo-500 dark:text-indigo-400 text-sm"><FaLanguage /></span>
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-white/40 flex-1">Languages</div>
+                            {langOpen
+                              ? <FaChevronUp className="text-indigo-400 dark:text-indigo-500 text-[8px]" />
+                              : <FaChevronDown className="text-gray-300 dark:text-white/25 text-[8px]" />}
+                          </div>
+                          <div className="text-sm font-bold text-gray-900 dark:text-white line-clamp-1">
+                            {langList[0]} <span className="text-indigo-500 dark:text-indigo-400 font-semibold">+{langList.length - 1}</span>
+                          </div>
+                        </button>
+                      ) : (
+                        <StatPill icon={<FaLanguage />} label="Languages" value={langList[0] ?? "—"} />
+                      )}
                       <StatPill icon={<FaClock />}        label="Timezone"   value={full.timezones?.[0] ?? "—"} />
                       {full.tld?.[0] && <StatPill icon={<FaGlobeAmericas />} label="Domain" value={full.tld[0]} />}
                       {full.borders?.length ? <StatPill icon={<FaMap />} label="Borders" value={`${full.borders.length} countries`} /> : null}
                     </div>
+
+                    <AnimatePresence>
+                      {langOpen && langList.length > 1 && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="rounded-2xl border border-indigo-100 dark:border-indigo-800/30 bg-indigo-50/60 dark:bg-indigo-900/15 px-4 py-3">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-2.5">
+                              All Languages · {langList.length}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {langList.map((lang) => (
+                                <span
+                                  key={lang}
+                                  className="rounded-full px-2.5 py-1 text-xs font-semibold bg-white dark:bg-white/10 border border-indigo-200 dark:border-indigo-700/50 text-gray-700 dark:text-white/80"
+                                >
+                                  {lang}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
                     <div className="flex flex-wrap gap-2">
                       <ActionLink href={`https://en.wikivoyage.org/wiki/${encodeURIComponent(full.name.common)}`}                                              icon={<FaWikipediaW />} label="Wikivoyage" />
@@ -347,7 +405,9 @@ export default function CountryDetailPanel({
                           <span className="text-sm font-semibold text-gray-800 dark:text-white/90">What to pack</span>
                           {extras?.weather?.temperature != null && (
                             <span className="text-xs text-gray-400 dark:text-white/40">
-                              based on {Math.round(extras.weather.temperature)}°C
+                              based on {useCelsius
+                                ? `${Math.round(extras.weather.temperature)}°C`
+                                : `${cToF(Math.round(extras.weather.temperature))}°F`}
                             </span>
                           )}
                         </div>
