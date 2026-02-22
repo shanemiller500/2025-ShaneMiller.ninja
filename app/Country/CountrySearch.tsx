@@ -300,7 +300,16 @@ export default function CountrySearch() {
               </div>
 
               {/* Flight search + weather widget — desktop only (shown below tiles) */}
-              <div className="hidden lg:block space-y-5">
+
+              <div className="hidden mt-5 lg:block">
+
+                <CountryWeatherWidget
+                  full={full}
+                  extras={extras}
+                  loadingDetails={loadingDetails}
+                  useCelsius={useCelsius}
+                />
+
                 <AnimatePresence>
                   {full && (
                     <motion.div
@@ -314,12 +323,6 @@ export default function CountrySearch() {
                   )}
                 </AnimatePresence>
 
-                <CountryWeatherWidget
-                  full={full}
-                  extras={extras}
-                  loadingDetails={loadingDetails}
-                  useCelsius={useCelsius}
-                />
               </div>
             </div>
 
