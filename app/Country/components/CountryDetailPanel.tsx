@@ -60,12 +60,13 @@ export default function CountryDetailPanel({
   const [localTime, setLocalTime] = useState("");
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIdx, setViewerIdx] = useState(0);
+  const [mapActivated, setMapActivated] = useState(false);
 
   const photos: string[] = extras?.photos ?? [];
 
   // Reset local state when country changes
   useEffect(() => {
-    if (full) { setActiveTab("overview"); setPackExpanded(false); }
+    if (full) { setActiveTab("overview"); setPackExpanded(false); setMapActivated(false); }
   }, [full?.cca3]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Local time ticker
@@ -274,8 +275,25 @@ export default function CountryDetailPanel({
                     className="space-y-5"
                   >
                     {mapURL && (
-                      <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 shadow-sm">
-                        <iframe src={mapURL} height={230} className="w-full" loading="lazy" title={`${full.name.common} map`} />
+                      <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 shadow-sm relative">
+                        {/* Smaller height on mobile so it doesn't dominate the screen */}
+                        <iframe
+                          src={mapURL}
+                          className="w-full block h-[175px] sm:h-[230px]"
+                          loading="lazy"
+                          title={`${full.name.common} map`}
+                        />
+                        {/* Mobile scroll-guard: tap to activate map so it doesn't hijack page scroll */}
+                        {!mapActivated && (
+                          <div
+                            className="absolute inset-0 lg:hidden flex items-end justify-center pb-3 cursor-pointer"
+                            onClick={() => setMapActivated(true)}
+                          >
+                            <span className="bg-black/55 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full pointer-events-none">
+                              Tap to interact with map
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
 

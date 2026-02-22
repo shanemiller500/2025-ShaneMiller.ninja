@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import Education from "@/components/education";
-import Experience from "@/components/experience";
-import { WidgetSkills, SKILLS_DATA } from "@/components/widget-skills";
+import Education from "@/app/resume/education";
+import Experience from "@/app/resume/experience";
+import { WidgetSkills, SKILLS_DATA } from "./widget-skills";
 import { trackEvent } from "@/utils/mixpanel";
 import DownloadPDF from "./downlaodPDF";
 

@@ -24,7 +24,7 @@ export default function CountryTile({ c, onClick, selected, reducedMotion }: Cou
         selected
           ? "ring-2 ring-indigo-500 shadow-lg shadow-indigo-500/25"
           : "shadow-sm hover:shadow-lg",
-        "h-28 sm:h-32 w-full",
+        "h-[88px] sm:h-28 w-full",
       )}
       style={{
         backgroundImage: c.flags?.png ? `url(${c.flags.png})` : undefined,

@@ -364,16 +364,15 @@ export default function ResultsModal({
             leaveTo="opacity-0 scale-95"
           >
             <Dialog.Panel className="max-h-[92vh] w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-brand-900 sm:max-w-2xl lg:max-w-3xl">
-              {photo && <img src={photo} alt="" className="h-44 w-full object-cover" />}
-
-              {/* scroll area */}
-              <div 
+              {/* scroll area — photo prop is never populated, so deduct only header space */}
+              <div
                 ref={listRef}
-                className="max-h-[calc(92vh-11rem)] overflow-y-auto"
+                className="max-h-[calc(92vh-3.5rem)] overflow-y-auto"
                 style={{ WebkitOverflowScrolling: "touch" }}
               >
+                {photo && <img src={photo} alt="" className="h-44 w-full object-cover" />}
                 {/* sticky header */}
-                <div className="sticky top-0 z-20 border-b border-gray-200 bg-white/92 px-6 py-4 backdrop-blur-[40px] dark:border-white/10 dark:bg-brand-900/92">
+                <div className="sticky top-0 z-20 border-b border-gray-200 bg-white/92 px-4 py-3 sm:px-6 sm:py-4 backdrop-blur-[40px] dark:border-white/10 dark:bg-brand-900/92">
                   <div className="flex items-center justify-between gap-3">
                     <Dialog.Title className="text-lg font-extrabold text-gray-900 dark:text-white">
                       {loading
@@ -391,38 +390,41 @@ export default function ResultsModal({
                     )}
                   </div>
 
-                  {/* quick sort chips (feels like google/momondo) */}
+                  {/* quick sort chips + booking links */}
                   {!loading && flights.length > 0 && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSortBy("ai")}
-                        className={quickChip(sortBy === "ai")}
-                        title="Best picks"
-                      >
-                        <Zap className="h-3.5 w-3.5" />
-                        Best
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSortBy("price")}
-                        className={quickChip(sortBy === "price")}
-                        title="Lowest price"
-                      >
-                        <DollarSign className="h-3.5 w-3.5" />
-                        Cheapest
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSortBy("duration")}
-                        className={quickChip(sortBy === "duration")}
-                        title="Shortest duration"
-                      >
-                        <Clock3 className="h-3.5 w-3.5" />
-                        Fastest
-                      </button>
-
-                      <div className="ml-auto flex flex-wrap gap-2">
+                    <div className="mt-3 space-y-2">
+                      {/* Sort chips */}
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSortBy("ai")}
+                          className={quickChip(sortBy === "ai")}
+                          title="Best picks"
+                        >
+                          <Zap className="h-3.5 w-3.5" />
+                          Best
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSortBy("price")}
+                          className={quickChip(sortBy === "price")}
+                          title="Lowest price"
+                        >
+                          <DollarSign className="h-3.5 w-3.5" />
+                          Cheapest
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSortBy("duration")}
+                          className={quickChip(sortBy === "duration")}
+                          title="Shortest duration"
+                        >
+                          <Clock3 className="h-3.5 w-3.5" />
+                          Fastest
+                        </button>
+                      </div>
+                      {/* Booking links — own row so they never crowd the sort chips */}
+                      <div className="flex flex-wrap gap-2">
                         <a
                           href={googleLink}
                           target="_blank"
@@ -530,7 +532,7 @@ export default function ResultsModal({
                 </div>
 
                 {/* body */}
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   {/* loading skeletons */}
                   {loading && (
                     <div className="space-y-3">
@@ -644,7 +646,7 @@ export default function ResultsModal({
                                   animate={{ opacity: 1, y: 0 }}
                                   exit={{ opacity: 0, y: -6 }}
                                   transition={{ type: "spring", stiffness: 260, damping: 26 }}
-                                  className="space-y-6 bg-white p-6 pb-8 text-sm leading-relaxed dark:bg-brand-900 dark:text-gray-300"
+                                  className="space-y-6 bg-white p-4 pb-6 sm:p-6 sm:pb-8 text-sm leading-relaxed dark:bg-brand-900 dark:text-gray-300"
                                 >
                                   {f.flights ? (
                                     <>

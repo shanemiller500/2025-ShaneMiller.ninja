@@ -211,21 +211,18 @@ export default function CountrySearch() {
       </div>
 
       {/* ── Main content ── */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-5">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-3 sm:py-5">
         {initialLoad ? (
           <Spinner label="Loading countries…" />
         ) : (
-          <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 items-start">
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-5 lg:gap-6 items-start">
 
             {/* ── Left column ── */}
             <div className="w-full lg:w-[340px] xl:w-[380px] flex-shrink-0">
 
-              {/* Sticky tiles panel */}
-              <div
-                className="lg:sticky lg:top-[105px] lg:max-h-[calc(100vh-125px)] lg:overflow-y-auto"
-                style={{ scrollbarWidth: "thin" }}
-              >
-                <div className="flex items-center justify-between mb-3">
+              {/* Tiles panel — scrollable on mobile, sticky sidebar on desktop */}
+              <div className="lg:sticky lg:top-[105px]">
+                <div className="flex items-center justify-between mb-2.5">
                   <div className="text-xs font-semibold text-gray-500 dark:text-white/40">
                     {results.length
                       ? `${displayList.length} result${displayList.length !== 1 ? "s" : ""}`
@@ -242,43 +239,52 @@ export default function CountrySearch() {
                   )}
                 </div>
 
-                {displayList.length === 0 ? (
-                  <div className="text-center py-10 text-gray-400 dark:text-white/30 text-sm">
-                    No countries found — try a different region
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5">
-                    {displayList.map((c) => (
-                      <CountryTile
-                        key={c.cca3}
-                        c={c}
-                        selected={full?.cca3 === c.cca3}
-                        onClick={() => pickCountry(c.cca3)}
-                        reducedMotion={reducedMotion}
-                      />
-                    ))}
-                  </div>
-                )}
+                {/* Tiles: capped + scrollable on mobile; full-height on desktop */}
+                <div
+                  className="max-h-[260px] overflow-y-auto sm:max-h-[340px] lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto"
+                  style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
+                >
+                  {displayList.length === 0 ? (
+                    <div className="text-center py-10 text-gray-400 dark:text-white/30 text-sm">
+                      No countries found — try a different region
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2">
+                      {displayList.map((c) => (
+                        <CountryTile
+                          key={c.cca3}
+                          c={c}
+                          selected={full?.cca3 === c.cca3}
+                          onClick={() => pickCountry(c.cca3)}
+                          reducedMotion={reducedMotion}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Flight search — below tiles, shown once a country is selected */}
-              <AnimatePresence>
-                {full && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 6 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="mt-5"
-                  >
-                    <FlightSearch full={full} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Flight search — desktop only (shown below tiles) */}
+              <div className="hidden lg:block">
+                <AnimatePresence>
+                  {full && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 6 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                      className="mt-5"
+                    >
+                      <FlightSearch full={full} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
             {/* ── Right: Detail panel ── */}
-            <div ref={detailRef} className="flex-1 min-w-0">
+            {/* w-full needed on mobile: flex-col + items-start doesn't auto-stretch */}
+            <div ref={detailRef} className="w-full flex-1 min-w-0 scroll-mt-24 lg:scroll-mt-0">
               <CountryDetailPanel
                 full={full}
                 extras={extras}
@@ -288,6 +294,22 @@ export default function CountrySearch() {
                 reducedMotion={reducedMotion}
                 onPickCountry={pickCountry}
               />
+            </div>
+
+            {/* Flight search — mobile only (shown AFTER detail panel) */}
+            <div className="w-full lg:hidden">
+              <AnimatePresence>
+                {full && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 6 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                  >
+                    <FlightSearch full={full} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
           </div>
