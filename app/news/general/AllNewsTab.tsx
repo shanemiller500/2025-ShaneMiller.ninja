@@ -44,7 +44,7 @@ export interface Article {
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
-const PER_PAGE = 36;
+const PER_PAGE = 45;
 const CACHE_TTL = 30 * 60 * 1000;
 const API_BASE = "https://u-mail.co/api/NewsAPI";
 const USA_ENDPOINT = `${API_BASE}/us-news`;

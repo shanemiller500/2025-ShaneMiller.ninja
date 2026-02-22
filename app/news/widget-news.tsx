@@ -62,7 +62,7 @@ function toReadable(item: NewsItem): ReadableArticle {
 /* ------------------------------------------------------------------ */
 function SkeletonRow() {
   return (
-    <div className="animate-pulse rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-3">
+    <div className="animate-pulse rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-brand-900/50 p-3">
       <div className="flex items-start gap-3">
         <div className="h-8 w-8 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
         <div className="flex-1 space-y-2">
@@ -181,7 +181,7 @@ const WidgetNews: React.FC = () => {
           {topStory && (
             <motion.button
               onClick={() => setReaderArticle(toReadable(topStory))}
-              className="group block w-full text-left rounded-xl border border-gray-100 dark:border-gray-800 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800/60 dark:to-gray-900 p-3.5 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
+              className="group block w-full text-left rounded-xl border border-gray-100 dark:border-gray-800 bg-gradient-to-br from-gray-50 to-white dark:from-gray-900/60 dark:to-brand-900 p-3.5 hover:shadow-md hover:border-gray-200 dark:hover:border-brand-900 transition-all duration-200"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               whileHover={{ scale: 1.005 }}
@@ -262,7 +262,7 @@ const WidgetNews: React.FC = () => {
           </div>
         </>
       ) : (
-        <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-4 text-center">
+        <div className="rounded-xl bg-gray-50 dark:bg-brand-900/50 border border-gray-100 dark:border-gray-800 p-4 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
             No headlines right now.
           </p>

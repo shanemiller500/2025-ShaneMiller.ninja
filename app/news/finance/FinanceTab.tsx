@@ -233,7 +233,7 @@ export default function FinanceTab() {
                     <button
                       key={stableKey(a)}
                       onClick={() => openReader(a)}
-                      className="group block w-full text-left overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
+                      className="group block w-full text-left overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
                     >
                       {hasImage && (
                         <div className="relative h-40 sm:h-44">
@@ -315,7 +315,7 @@ export default function FinanceTab() {
               <button
                 disabled={page === 1 || loading}
                 onClick={() => turnPage(page - 1)}
-                className="flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-all"
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-brand-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-all"
               >
                 <ChevronLeft className="h-4 w-4" />
                 Previous

@@ -17,9 +17,10 @@ const CryptoChartPrices = dynamic(() => import("./CryptoChartPrices"), { ssr: fa
 const FearGreedIndexes = dynamic(() => import("./FearGreedIndexes"), { ssr: false });
 
 const tabs = [
-  { name: "Heatmap", component: <LiveStreamHeatmap /> },
+  { name: "Heatmap",       component: <LiveStreamHeatmap /> },
   { name: "Gainers & Losers", component: <TopGainersLosers /> },
-  { name: "Charts", component: <CryptoChartPrices /> },
+  { name: "Charts",        component: <CryptoChartPrices /> },
+  { name: "Fear & Greed",  component: <FearGreedIndexes /> },
 ];
 
 const CryptoDashboard = () => {
@@ -56,9 +57,6 @@ const CryptoDashboard = () => {
             </div>
           </div>
         </div>
-
-        {/* Fear & Greed indexes */}
-        <FearGreedIndexes />
 
         {/* tabs */}
         <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900 shadow-sm overflow-hidden">

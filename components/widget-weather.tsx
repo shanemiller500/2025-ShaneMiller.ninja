@@ -38,6 +38,41 @@ type HourPoint = {
   pop?: number; // %
 };
 
+/* ------------------------------------------------------------------ */
+/*  Cache (5-hour TTL)                                                  */
+/* ------------------------------------------------------------------ */
+const WEATHER_CACHE_KEY = "widgetWeatherCache_v2";
+const WEATHER_CACHE_TTL = 5 * 60 * 60 * 1000;
+
+interface WeatherCacheEntry {
+  ts: number;
+  locationLabel: string;
+  current: CurrentWeather;
+  forecast: ForecastDay[];
+  hourly: HourPoint[];
+  meta: { humidity?: number; pop?: number };
+}
+
+function readWeatherCache(): WeatherCacheEntry | null {
+  try {
+    const raw = localStorage.getItem(WEATHER_CACHE_KEY);
+    if (!raw) return null;
+    const entry: WeatherCacheEntry = JSON.parse(raw);
+    if (Date.now() - entry.ts > WEATHER_CACHE_TTL) return null;
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+function writeWeatherCache(entry: Omit<WeatherCacheEntry, "ts">) {
+  try {
+    localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ ...entry, ts: Date.now() }));
+  } catch {
+    /* localStorage unavailable */
+  }
+}
+
 const cToF = (c: number) => c * 1.8 + 32;
 const fmtHour = (iso: string) =>
   new Date(iso).toLocaleTimeString(undefined, { hour: "numeric" });
@@ -122,6 +157,18 @@ export default function WidgetWeather() {
   }, []);
 
   useEffect(() => {
+    // Serve from cache when fresh — instant, no network needed
+    const cached = readWeatherCache();
+    if (cached) {
+      setLocationLabel(cached.locationLabel);
+      setCurrent(cached.current);
+      setForecast(cached.forecast);
+      setHourly(cached.hourly);
+      setMeta(cached.meta);
+      setLoading(false);
+      return;
+    }
+
     if (!navigator.geolocation) {
       setError("Geolocation not supported");
       setLoading(false);
@@ -133,22 +180,17 @@ export default function WidgetWeather() {
         try {
           const { latitude, longitude } = coords;
 
-          // nice label (optional)
+          let label = "Your Location";
           try {
             const geoRes = await fetch(
-                `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
-              );
-
-              if (geoRes.ok) {
-                const geo = await geoRes.json();
-                const city = geo?.city || geo?.locality;
-                const region = geo?.principalSubdivision;
-
-                if (city) {
-                  setLocationLabel(region ? `${city}, ${region}` : city);
-                }
-              }
-
+              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+            );
+            if (geoRes.ok) {
+              const geo = await geoRes.json();
+              const city = geo?.city || geo?.locality;
+              const region = geo?.principalSubdivision;
+              if (city) label = region ? `${city}, ${region}` : city;
+            }
           } catch {
             /* ignore */
           }
@@ -162,8 +204,7 @@ export default function WidgetWeather() {
           );
           const data = await res.json();
 
-          const cw: CurrentWeather | null = data?.current_weather ?? null;
-          setCurrent(cw);
+          const cw: CurrentWeather = data?.current_weather ?? null;
 
           const todayStr = new Date().toISOString().split("T")[0];
           const days: ForecastDay[] = (data?.daily?.time || [])
@@ -176,9 +217,7 @@ export default function WidgetWeather() {
               temperature_min: data.daily.temperature_2m_min[d.idx],
               weathercode: data.daily.weathercode[d.idx],
             }));
-          setForecast(days);
 
-          // next 6 hours
           const times: string[] = data?.hourly?.time || [];
           const temps: number[] = data?.hourly?.temperature_2m || [];
           const codes: number[] = data?.hourly?.weathercode || [];
@@ -203,13 +242,17 @@ export default function WidgetWeather() {
               pop: pops?.[i],
             });
           }
+
+          const metaObj = { pop: pops?.[startIdx], humidity: hums?.[startIdx] };
+
+          // Persist to cache (5-hour TTL)
+          writeWeatherCache({ locationLabel: label, current: cw, forecast: days, hourly: hrs, meta: metaObj });
+
+          setLocationLabel(label);
+          setCurrent(cw);
+          setForecast(days);
           setHourly(hrs);
-
-          setMeta({
-            pop: pops?.[startIdx],
-            humidity: hums?.[startIdx],
-          });
-
+          setMeta(metaObj);
           setLoading(false);
         } catch (e) {
           console.error(e);
@@ -241,9 +284,52 @@ export default function WidgetWeather() {
 
   if (loading) {
     return (
-      <div className="max-w-md mx-auto rounded-2xl overflow-hidden bg-white shadow-lg dark:bg-brand-900">
-        <div className="p-5 text-white/70">Loading weather…</div>
-        {/* {viewMore} */}
+      <div className="max-w-md mx-auto rounded-2xl overflow-hidden shadow-lg bg-gradient-to-br from-sky-500 to-amber-300">
+        <div className="p-5">
+          {/* Location + time */}
+          <div className="flex items-start justify-between mb-1">
+            <div className="space-y-1.5">
+              <div className="h-3.5 w-28 rounded-full bg-white/35 animate-pulse" />
+              <div className="h-3 w-14 rounded-full bg-white/25 animate-pulse" />
+            </div>
+            <div className="h-3 w-16 rounded-full bg-white/25 animate-pulse" />
+          </div>
+
+          {/* Temp + icon */}
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-full bg-white/30 animate-pulse" />
+              <div className="space-y-2">
+                <div className="h-10 w-20 rounded-xl bg-white/35 animate-pulse" />
+                <div className="h-2.5 w-16 rounded-full bg-white/25 animate-pulse" />
+              </div>
+            </div>
+            <div className="h-3 w-20 rounded-full bg-white/25 animate-pulse" />
+          </div>
+
+          {/* Mini stats */}
+          <div className="mt-3 grid grid-cols-3 gap-1">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-14 rounded-xl bg-white/20 animate-pulse" />
+            ))}
+          </div>
+
+          {/* Hourly bars */}
+          <div className="mt-3 space-y-2">
+            <div className="h-3.5 w-20 rounded-full bg-white/30 animate-pulse" />
+            <div className="flex gap-1">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex-1 h-[84px] rounded-xl bg-white/20 animate-pulse" />
+              ))}
+            </div>
+          </div>
+
+          {/* Spinner + label */}
+          <div className="mt-4 flex items-center justify-center gap-2 text-white/80">
+            <div className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+            <span className="text-xs font-medium">Detecting location…</span>
+          </div>
+        </div>
       </div>
     );
   }

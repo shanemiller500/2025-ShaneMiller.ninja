@@ -61,7 +61,7 @@ function SidebarWidget({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white dark:bg-brand-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+    <div className="min-w-0 bg-white dark:border-white/10 dark:bg-white/[0.06] rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
         {dot && (
           <span className="relative flex h-2 w-2">

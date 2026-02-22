@@ -37,6 +37,7 @@ module.exports = {
           800: '#7F64BA', // Purple accent
           900: '#1D1D20', // Background black
           950: 'rgb(126 126 126 / 7%)',
+          101: 'rgb(199 210 254 / 65%)',
         },
         // Chart colors - for data visualization
         chart: {

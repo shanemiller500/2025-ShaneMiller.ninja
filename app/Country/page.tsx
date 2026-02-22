@@ -11,7 +11,7 @@ const CountrySearchPage: React.FC = () => {
   }, []);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-fuchsia-50 dark:from-brand-900 dark:via-brand-900 dark:to-brand-900">
+    <main className="min-h-screen">
       <CountrySearch />
     </main>
   );

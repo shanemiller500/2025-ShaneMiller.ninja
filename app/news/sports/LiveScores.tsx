@@ -137,7 +137,7 @@ function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
       />
 
       {/* Panel */}
-      <div className="relative z-10 w-full max-w-2xl max-h-[92vh] sm:max-h-[85vh] flex flex-col bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+      <div className="relative z-10 w-full max-w-2xl max-h-[92vh] sm:max-h-[85vh] flex flex-col bg-white dark:bg-brand-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
 
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 dark:border-gray-800">
@@ -154,7 +154,7 @@ function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
                 </span>
               </span>
             ) : game.isFinal ? (
-              <span className="inline-flex items-center rounded-md bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              <span className="inline-flex items-center rounded-md bg-gray-100 dark:bg-brand-900 px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Final
               </span>
             ) : null}
@@ -179,7 +179,7 @@ function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain bg-gray-50 dark:bg-gray-950">
+        <div className="flex-1 overflow-y-auto overscroll-contain bg-gray-50 dark:bg-brand-900">
           <div className="p-4 sm:p-6">
             {/* Game title */}
             <h2 className="font-serif text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-50 leading-snug mb-1">
@@ -198,11 +198,11 @@ function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
             )}
 
             {/* Scoreboard */}
-            <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden shadow-sm mb-4">
+            <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 overflow-hidden shadow-sm mb-4">
               {/* Away team */}
               <div className="flex items-center border-b border-gray-100 dark:border-gray-800">
                 <div className="flex-1 flex items-center gap-3 p-4">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex-shrink-0">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-brand-900 border border-gray-100 dark:border-gray-700 flex-shrink-0">
                     <SafeImg
                       src={game.awayTeam.logo}
                       alt={game.awayTeam.name}
@@ -218,7 +218,7 @@ function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
                     </p>
                   </div>
                 </div>
-                <div className="w-16 sm:w-20 text-center p-4 bg-gray-50 dark:bg-gray-800/50 border-l border-gray-100 dark:border-gray-800">
+                <div className="w-16 sm:w-20 text-center p-4 bg-gray-50 dark:bg-brand-900/50 border-l border-gray-100 dark:border-gray-800">
                   <span className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">
                     {awayScore}
                   </span>
@@ -228,7 +228,7 @@ function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
               {/* Home team */}
               <div className="flex items-center">
                 <div className="flex-1 flex items-center gap-3 p-4">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex-shrink-0">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-brand-900 border border-gray-100 dark:border-gray-700 flex-shrink-0">
                     <SafeImg
                       src={game.homeTeam.logo}
                       alt={game.homeTeam.name}
@@ -244,7 +244,7 @@ function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
                     </p>
                   </div>
                 </div>
-                <div className="w-16 sm:w-20 text-center p-4 bg-gray-50 dark:bg-gray-800/50 border-l border-gray-100 dark:border-gray-800">
+                <div className="w-16 sm:w-20 text-center p-4 bg-gray-50 dark:bg-brand-900/50 border-l border-gray-100 dark:border-gray-800">
                   <span className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">
                     {homeScore}
                   </span>
@@ -287,7 +287,7 @@ function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
                       href={game.recapLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-brand-900 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     >
                       Game Recap
                       <ExternalLink className="h-3.5 w-3.5" />
@@ -298,7 +298,7 @@ function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
                       href={game.highlight}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-brand-900 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     >
                       ▶ Highlights
                     </a>
@@ -470,7 +470,7 @@ export default function LiveScores({ sport }: { sport: string }) {
             if (e.key === "Enter" || e.key === " ") setSel(g);
           }}
           whileTap={{ scale: 0.97 }}
-          className="snap-start w-[240px] sm:w-[260px] shrink-0 select-none rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 p-3.5 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200 cursor-pointer"
+          className="snap-start w-[240px] sm:w-[260px] shrink-0 select-none rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 p-3.5 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200 cursor-pointer"
         >
           {/* League + Status */}
           <div className="flex items-center justify-between gap-2 mb-3">
@@ -483,7 +483,7 @@ export default function LiveScores({ sport }: { sport: string }) {
                 Live
               </span>
             ) : g.isFinal ? (
-              <span className="rounded-md bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[9px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+              <span className="rounded-md bg-gray-100 dark:bg-brand-900 px-1.5 py-0.5 text-[9px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                 Final
               </span>
             ) : null}
@@ -492,7 +492,7 @@ export default function LiveScores({ sport }: { sport: string }) {
           {/* Away team */}
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex items-center justify-center overflow-hidden">
+              <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-gray-50 dark:bg-brand-900 border border-gray-100 dark:border-gray-700 flex items-center justify-center overflow-hidden">
                 <SafeImg
                   src={g.awayTeam.logo}
                   alt={g.awayTeam.name}
@@ -508,12 +508,12 @@ export default function LiveScores({ sport }: { sport: string }) {
             </span>
           </div>
 
-          <div className="my-2 h-px bg-gray-100 dark:bg-gray-800" />
+          <div className="my-2 h-px bg-gray-100 dark:bg-brand-900" />
 
           {/* Home team */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex items-center justify-center overflow-hidden">
+              <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-gray-50 dark:bg-brand-900 border border-gray-100 dark:border-gray-700 flex items-center justify-center overflow-hidden">
                 <SafeImg
                   src={g.homeTeam.logo}
                   alt={g.homeTeam.name}

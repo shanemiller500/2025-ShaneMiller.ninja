@@ -191,7 +191,7 @@ export default function LiveStreamTickerWidget() {
     <>
       <ToastContainer position="top-right" autoClose={4000} hideProgressBar pauseOnHover />
 
-      <section className="mt-6 overflow-hidden rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white dark:bg-brand-900 shadow-sm">
+      <section className="min-w-0 bg-white dark:border-white/10 dark:bg-white/[0.06] rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-4 pt-4 pb-3">
           <div className="flex items-start justify-between gap-3">
             <div>

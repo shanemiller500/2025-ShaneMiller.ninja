@@ -111,7 +111,7 @@ export default function ReaderModal({
         <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900">
           <div className="flex items-center gap-3 min-w-0">
             {article.logoCandidates.length > 0 && (
-              <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 overflow-hidden p-1">
+              <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-gray-50 dark:bg-brand-900 border border-gray-100 dark:border-gray-700 overflow-hidden p-1">
                 <SmartImage
                   candidates={article.logoCandidates}
                   alt={article.sourceName}
@@ -146,7 +146,7 @@ export default function ReaderModal({
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain bg-gray-50 dark:bg-gray-950">
+        <div className="flex-1 overflow-y-auto overscroll-contain bg-gray-50 dark:bg-brand-900">
           <div className="px-4 sm:px-8 md:px-12 py-6 sm:py-8 max-w-3xl mx-auto">
 
             {/* Headline */}
@@ -163,7 +163,7 @@ export default function ReaderModal({
 
             {/* Hero image */}
             {article.imageCandidates.length > 0 && (
-              <div className="mb-6 sm:mb-8 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shadow-sm">
+              <div className="mb-6 sm:mb-8 rounded-xl overflow-hidden bg-gray-100 dark:bg-brand-900 shadow-sm">
                 <SmartImage
                   candidates={article.imageCandidates}
                   alt={article.title}
@@ -226,7 +226,7 @@ export default function ReaderModal({
             <div className="mt-6 pb-2 sm:hidden">
               <button
                 onClick={onClose}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-brand-900 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <X className="h-4 w-4" />
                 Close

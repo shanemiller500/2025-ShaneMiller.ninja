@@ -24,8 +24,8 @@ export default function TagList({ tags, initialCount = 4 }: TagListProps) {
         {!expanded && hidden > 0 && (
           <button
             onClick={() => setExpanded(true)}
-            className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-400 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors cursor-pointer"
-          >
+            className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-extrabold text-gray-700 ring-1 ring-black/10 dark:text-white/70 dark:ring-white/10"
+          > 
             +{hidden} more
           </button>
         )}
@@ -33,7 +33,7 @@ export default function TagList({ tags, initialCount = 4 }: TagListProps) {
         {expanded && (
           <button
             onClick={() => setExpanded(false)}
-            className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-extrabold text-gray-700 ring-1 ring-black/10 dark:text-white/70 dark:ring-white/10"
           >
             show less
           </button>
