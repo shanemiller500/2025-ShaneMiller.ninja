@@ -220,45 +220,50 @@ function BioSection() {
         </h2>
 
         <p>
-          I&apos;m a full-stack engineer with over a decade of experience working
-          inside complex, real-world systems. From day one, my career has spanned from large global financial
-          data platforms, core banking infrastructure, and the independent products
-          I design and build on my own.
+          I’m a full-stack engineer with over a decade of experience in complex
+          production environments. I’ve worked on global financial data platforms,
+          core banking systems, and I build my own products from scratch.
         </p>
 
         <p>
-          I&apos;ve worked on global market data pipelines, vendor ingestion systems,
-          alerting and distribution layers, financial transaction flows, and compliance-driven
-          banking software where precision matters. These environments shaped how I think:
-          carefully, structurally, and with long-term consequences in mind.
+          I usually end up in the hard parts of a company. Old code.
+          Fragile flows. Systems no one wants to touch.
+          I can step into code I’ve never seen before, trace it carefully,
+          ask the right questions, and come back with a fix that doesn’t
+          destabilize everything else. It’s rarely glamorous, but it’s effective.
         </p>
 
         <p>
-          My day-to-day is a mix of product development and difficult engineering work,
-          performance improvements, production issues, deep debugging, architectural cleanup,
-          and strengthening systems so they remain stable under pressure. I move comfortably
-          between frontend, APIs, and data layers, but I always think in terms of the whole system.
+          I know C# deeply and have spent years inside .NET systems.
+          I love to hate it, but I understand it well.
+          I prefer frontend engineering.
+          Complex UI state, performance issues, and browser architecture
+          problems don’t intimidate me, they’re usually just puzzles.
         </p>
 
         <p>
-          There&apos;s a method to how I approach problems. I map flows before changing them.
-          I look for hidden dependencies before they surface as incidents. What can look intense
-          from the outside is usually just structured thinking underneath. I don&apos;t chase trends;
-          I build things that hold up.
+          I move between frontend, APIs, and data layers comfortably.
+          Once I understand the whole system, I improve it with long-term
+          stability and clarity in mind.
         </p>
 
         <p>
-          Outside of my day job, I build real products like ApplyPro and U-Mail.
-          I handle everything end to end; design, architecture, implementation,
-          deployment, iteration. It keeps my skills sharp and forces me to think
-          beyond tickets and into ownership.
+          There’s a method to how I work.
+          It may look intense, even backwards to some, but it’s structured.
+          I don’t chase trends. I build things that hold up.
         </p>
 
         <p>
-          I value clean UX, straightforward systems, and steady execution. I’m not a designer,
-          as you can probably tell from this site, but I care deeply about usability and clarity.
-          If you need someone who can understand complexity quickly and improve it without
-          unnecessary noise, I’m happy to talk.
+          Outside of work, I build products with active world wide users like ApplyPro and U-Mail end to end.
+          It keeps me sharp and reminds me that ownership matters.
+          Also, no one else is going to fix my bugs.
+        </p>
+
+        <p>
+          I’m not a designer, as you can probably tell from this site,
+          but I care about usability and clarity.
+          If you need someone steady who can improve complex systems
+          without unnecessary noise, I’m happy to talk.
         </p>
 
         <p className="text-xs text-gray-500 text-center pb-10">
