@@ -220,26 +220,45 @@ function BioSection() {
         </h2>
 
         <p>
-          I'm a full-stack developer with over a decade of experience building,
-          maintaining, and supporting production web applications. I've worked
-          on large-scale platforms at S&amp;P Global, and today I help keep
-          mission-critical banking software stable and dependable at Data Center Inc.
+          I&apos;m a full-stack engineer with over a decade of experience working
+          inside complex, real-world systems. From day one, my career has spanned from large global financial
+          data platforms, core banking infrastructure, and the independent products
+          I design and build on my own.
         </p>
 
         <p>
-          Outside of my day job, I spend time building and refining personal projects,
-          including ApplyPro and UMail. This portfolio has been updated over many years
-          as my work and interests have evolved.
+          I&apos;ve worked on global market data pipelines, vendor ingestion systems,
+          alerting and distribution layers, financial transaction flows, and compliance-driven
+          banking software where precision matters. These environments shaped how I think:
+          carefully, structurally, and with long-term consequences in mind.
         </p>
 
         <p>
-          I care about clean UX, straightforward architecture, and seeing things through.
-          I'm not interested in trends, I focus on building things that work and improving them over time.
+          My day-to-day is a mix of product development and difficult engineering work,
+          performance improvements, production issues, deep debugging, architectural cleanup,
+          and strengthening systems so they remain stable under pressure. I move comfortably
+          between frontend, APIs, and data layers, but I always think in terms of the whole system.
         </p>
 
         <p>
-          If you're looking for someone practical, steady, and easy to work with,
-          I'm always happy to talk.
+          There&apos;s a method to how I approach problems. I map flows before changing them.
+          I look for hidden dependencies before they surface as incidents. What can look intense
+          from the outside is usually just structured thinking underneath. I don&apos;t chase trends;
+          I build things that hold up.
+        </p>
+
+        <p>
+          Outside of my day job, I build real products like ApplyPro and U-Mail.
+          I handle everything end to end; design, architecture, implementation,
+          deployment, iteration. It keeps my skills sharp and forces me to think
+          beyond tickets and into ownership.
+        </p>
+
+        <p>
+          I value clean UX, straightforward systems, and steady execution. I’m not a designer,
+          as you can probably tell from this site, but I care deeply about usability and clarity.
+          If you need someone who can understand complexity quickly and improve it without
+          unnecessary noise, I’m happy to talk.
         </p>
 
         <p className="text-xs text-gray-500 text-center pb-10">
@@ -252,3 +271,5 @@ function BioSection() {
     </div>
   );
 }
+
+
