@@ -27,3 +27,16 @@ export interface Extras {
   sights?: { title: string; dist: number }[];
   photos?: string[];
 }
+
+export interface AITravelInsights {
+  country: string;
+  quickSummary: string;
+  bestTimeToVisit: { summary: string; months: string[] };
+  topExperiences: { title: string; why: string; where: string }[];
+  dos: string[];
+  donts: string[];
+  safety: { commonRisks: string[]; scamsToWatch: string[]; gettingHelp: string };
+  money: { currency: string; paymentTips: string[]; tipping: string };
+  gettingAround: { insideCities: string[]; betweenCities: string[]; roadNotes: string };
+  foodAndDrink: { mustTry: string[]; waterAdvice: string };
+}

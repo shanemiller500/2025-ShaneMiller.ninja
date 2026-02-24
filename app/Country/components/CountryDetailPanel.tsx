@@ -31,10 +31,12 @@ import type { FullCountry, Extras, LiteCountry } from "../lib/types";
 import type { DetailTab } from "../lib/constants";
 import { TOP_SIGHTS_LIMIT, TRAVEL_TIPS } from "../lib/constants";
 import { cn, clampText, cToF, fmt, getBestTime, getLocalTime, getPackList } from "../lib/utils";
+import { useAITravelInsights } from "../hooks/useAITravelInsights";
 import StatPill from "./StatPill";
 import ActionLink from "./ActionLink";
 import Spinner from "./Spinner";
 import CountryLightbox from "./CountryLightbox";
+import AITravelGuide from "./AITravelGuide";
 
 interface CountryDetailPanelProps {
   full: FullCountry | null;
@@ -65,11 +67,13 @@ export default function CountryDetailPanel({
   const [viewerIdx, setViewerIdx] = useState(0);
   const [mapActivated, setMapActivated] = useState(false);
 
+  const { insights, loading: aiLoading, error: aiError, loadInsights, reset: resetInsights } = useAITravelInsights();
+
   const photos: string[] = extras?.photos ?? [];
 
   // Reset local state when country changes
   useEffect(() => {
-    if (full) { setActiveTab("overview"); setPackExpanded(false); setLangOpen(false); setMapActivated(false); }
+    if (full) { setActiveTab("overview"); setPackExpanded(false); setLangOpen(false); setMapActivated(false); resetInsights(); }
   }, [full?.cca3]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Local time ticker
@@ -253,11 +257,15 @@ export default function CountryDetailPanel({
                 {([
                   { id: "overview", label: "Overview" },
                   { id: "photos", label: photos.length ? `Photos (${photos.length})` : "Photos" },
+                  { id: "guide", label: "AI Guide" },
                 ] as { id: DetailTab; label: string }[]).map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      if (tab.id === "guide") loadInsights(full.name.common);
+                    }}
                     className={cn(
                       "flex-1 rounded-xl px-2 py-2 text-xs font-semibold transition whitespace-nowrap",
                       activeTab === tab.id
@@ -265,7 +273,12 @@ export default function CountryDetailPanel({
                         : "text-gray-500 dark:text-white/50 hover:text-gray-700 dark:hover:text-white/70",
                     )}
                   >
-                    {tab.label}
+                    {tab.id === "guide" ? (
+                      <span className="flex items-center justify-center gap-1">
+                        <span className="hidden sm:inline text-indigo-500 dark:text-indigo-400">✦</span>
+                        {tab.label}
+                      </span>
+                    ) : tab.label}
                   </button>
                 ))}
               </div>
@@ -495,6 +508,7 @@ export default function CountryDetailPanel({
                         </div>
                       </div>
                     )}
+
                   </motion.div>
                 )}
 
@@ -549,6 +563,25 @@ export default function CountryDetailPanel({
                         </div>
                       </>
                     )}
+                  </motion.div>
+                )}
+
+                {/* ── AI GUIDE TAB ── */}
+                {activeTab === "guide" && (
+                  <motion.div
+                    key="guide"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    <AITravelGuide
+                      insights={insights}
+                      loading={aiLoading}
+                      error={aiError}
+                      countryName={full.name.common}
+                      onLoad={() => loadInsights(full.name.common)}
+                    />
                   </motion.div>
                 )}
 
