@@ -242,89 +242,58 @@ export default function CountrySearch() {
       </div>
 
       {/* ── Main content ── */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-3 sm:py-5">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 py-4 sm:py-6">
         {initialLoad ? (
           <Spinner label="Loading countries…" />
         ) : (
-          <div className="flex flex-col lg:flex-row gap-4 sm:gap-5 lg:gap-6 items-start">
+          <div className="space-y-5">
 
-            {/* ── Left column ── */}
-            <div className="w-full lg:w-[340px] xl:w-[380px] flex-shrink-0">
-
-              {/* Tiles panel — scrollable on mobile, sticky sidebar on desktop */}
-              <div className="lg:sticky lg:top-[105px]">
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className="text-xs font-semibold text-gray-500 dark:text-white/40">
-                    {results.length
-                      ? `${displayList.length} result${displayList.length !== 1 ? "s" : ""}`
-                      : "Featured destinations"}
-                  </div>
-                  {results.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => { setResults([]); setQ(""); }}
-                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-                    >
-                      Clear search
-                    </button>
-                  )}
+            {/* ── Country tiles — full width at top ── */}
+            <div>
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="text-xs font-semibold text-gray-500 dark:text-white/40">
+                  {results.length
+                    ? `${displayList.length} result${displayList.length !== 1 ? "s" : ""}`
+                    : "Featured destinations"}
                 </div>
-
-                {/* Tiles: capped + scrollable on mobile; full-height on desktop */}
+                {results.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setResults([]); setQ(""); }}
+                    className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    Clear search
+                  </button>
+                )}
+              </div>
+              {displayList.length === 0 ? (
+                <div className="text-center py-10 text-gray-400 dark:text-white/30 text-sm">
+                  No countries found — try a different search
+                </div>
+              ) : (
                 <div
-                  className="max-h-[290px] overflow-y-auto sm:max-h-[340px] lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto"
+                  className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-[230px] overflow-y-auto"
                   style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
                 >
-                  {displayList.length === 0 ? (
-                    <div className="text-center py-10 text-gray-400 dark:text-white/30 text-sm">
-                      No countries found — try a different region
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2">
-                      {displayList.map((c) => (
-                        <CountryTile
-                          key={c.cca3}
-                          c={c}
-                          selected={full?.cca3 === c.cca3}
-                          onClick={() => pickCountry(c.cca3)}
-                          reducedMotion={reducedMotion}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  {displayList.map((c) => (
+                    <CountryTile
+                      key={c.cca3}
+                      c={c}
+                      selected={full?.cca3 === c.cca3}
+                      onClick={() => pickCountry(c.cca3)}
+                      reducedMotion={reducedMotion}
+                    />
+                  ))}
                 </div>
-              </div>
-
-              {/* Flight search + weather widget — desktop only (shown below tiles) */}
-
-              <div className="hidden mt-5 lg:block">
-
-                <CountryWeatherWidget
-                  full={full}
-                  extras={extras}
-                  loadingDetails={loadingDetails}
-                  useCelsius={useCelsius}
-                />
-
-                <AnimatePresence>
-                  {full && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 6 }}
-                      transition={{ duration: 0.25, ease: "easeOut" }}
-                    >
-                      <FlightSearch full={full} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-              </div>
+              )}
             </div>
 
-            {/* ── Right: Detail panel ── */}
-            {/* w-full needed on mobile: flex-col + items-start doesn't auto-stretch */}
-            <div ref={detailRef} className="w-full flex-1 min-w-0 scroll-mt-24 lg:scroll-mt-0">
+            {/* ── Results area: weather + detail + flights ── */}
+            <div ref={detailRef} className="scroll-mt-20 space-y-4">
+
+
+
+              {/* Main detail panel */}
               <CountryDetailPanel
                 full={full}
                 extras={extras}
@@ -335,10 +304,16 @@ export default function CountrySearch() {
                 onPickCountry={pickCountry}
                 useCelsius={useCelsius}
               />
-            </div>
 
-            {/* Flight search + weather widget — mobile only (shown AFTER detail panel) */}
-            <div className="w-full lg:hidden space-y-4">
+                            {/* Weather widget — at the top of results */}
+              <CountryWeatherWidget
+                full={full}
+                extras={extras}
+                loadingDetails={loadingDetails}
+                useCelsius={useCelsius}
+              />
+
+              {/* Flight search */}
               <AnimatePresence>
                 {full && (
                   <motion.div
@@ -352,12 +327,6 @@ export default function CountrySearch() {
                 )}
               </AnimatePresence>
 
-              <CountryWeatherWidget
-                full={full}
-                extras={extras}
-                loadingDetails={loadingDetails}
-                useCelsius={useCelsius}
-              />
             </div>
 
           </div>

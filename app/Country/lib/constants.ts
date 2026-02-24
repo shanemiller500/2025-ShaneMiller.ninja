@@ -15,7 +15,7 @@ export const REGIONS = [
 ] as const;
 export type RegionId = (typeof REGIONS)[number]["id"];
 
-export type DetailTab = "overview" | "photos" | "guide";
+export type DetailTab = "overview" | "photos";
 
 export const TRAVEL_TIPS: Record<string, string[]> = {
   Europe: [

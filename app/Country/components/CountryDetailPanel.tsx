@@ -32,11 +32,22 @@ import type { DetailTab } from "../lib/constants";
 import { TOP_SIGHTS_LIMIT, TRAVEL_TIPS } from "../lib/constants";
 import { cn, clampText, cToF, fmt, getBestTime, getLocalTime, getPackList } from "../lib/utils";
 import { useAITravelInsights } from "../hooks/useAITravelInsights";
+import {
+  AILoadingBanner,
+  AIErrorBanner,
+  AIQuickSummary,
+  AIBestTimeAndMoney,
+  AIExperiences,
+  AIDosDonts,
+  AISafety,
+  AIGettingAround,
+  AIFoodAndDrink,
+  AIAttribution,
+} from "./AITravelGuide";
 import StatPill from "./StatPill";
 import ActionLink from "./ActionLink";
 import Spinner from "./Spinner";
 import CountryLightbox from "./CountryLightbox";
-import AITravelGuide from "./AITravelGuide";
 
 interface CountryDetailPanelProps {
   full: FullCountry | null;
@@ -71,9 +82,16 @@ export default function CountryDetailPanel({
 
   const photos: string[] = extras?.photos ?? [];
 
-  // Reset local state when country changes
+  // Reset and immediately trigger AI insights when country changes
   useEffect(() => {
-    if (full) { setActiveTab("overview"); setPackExpanded(false); setLangOpen(false); setMapActivated(false); resetInsights(); }
+    if (full) {
+      setActiveTab("overview");
+      setPackExpanded(false);
+      setLangOpen(false);
+      setMapActivated(false);
+      resetInsights();
+      loadInsights(full.name.common);
+    }
   }, [full?.cca3]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Local time ticker
@@ -256,16 +274,12 @@ export default function CountryDetailPanel({
               <div className="flex gap-1 rounded-2xl bg-black/5 dark:bg-white/[0.05] p-1">
                 {([
                   { id: "overview", label: "Overview" },
-                  { id: "photos", label: photos.length ? `Photos (${photos.length})` : "Photos" },
-                  { id: "guide", label: "AI Guide" },
+                  { id: "photos",   label: photos.length ? `Photos (${photos.length})` : "Photos" },
                 ] as { id: DetailTab; label: string }[]).map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => {
-                      setActiveTab(tab.id);
-                      if (tab.id === "guide") loadInsights(full.name.common);
-                    }}
+                    onClick={() => setActiveTab(tab.id)}
                     className={cn(
                       "flex-1 rounded-xl px-2 py-2 text-xs font-semibold transition whitespace-nowrap",
                       activeTab === tab.id
@@ -273,12 +287,7 @@ export default function CountryDetailPanel({
                         : "text-gray-500 dark:text-white/50 hover:text-gray-700 dark:hover:text-white/70",
                     )}
                   >
-                    {tab.id === "guide" ? (
-                      <span className="flex items-center justify-center gap-1">
-                        <span className="hidden sm:inline text-indigo-500 dark:text-indigo-400">✦</span>
-                        {tab.label}
-                      </span>
-                    ) : tab.label}
+                    {tab.label}
                   </button>
                 ))}
               </div>
@@ -288,7 +297,7 @@ export default function CountryDetailPanel({
             <div className="px-4 sm:px-6 pb-6 pt-2">
               <AnimatePresence mode="wait">
 
-                {/* OVERVIEW */}
+                {/* ══════════════════ OVERVIEW ══════════════════ */}
                 {activeTab === "overview" && (
                   <motion.div
                     key="overview"
@@ -298,16 +307,15 @@ export default function CountryDetailPanel({
                     transition={{ duration: 0.18 }}
                     className="space-y-5"
                   >
+                    {/* Map */}
                     {mapURL && (
                       <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 shadow-sm relative">
-                        {/* Smaller height on mobile so it doesn't dominate the screen */}
                         <iframe
                           src={mapURL}
                           className="w-full block h-[175px] sm:h-[230px]"
                           loading="lazy"
                           title={`${full.name.common} map`}
                         />
-                        {/* Mobile scroll-guard: tap to activate map so it doesn't hijack page scroll */}
                         {!mapActivated && (
                           <div
                             className="absolute inset-0 lg:hidden flex items-end justify-center pb-3 cursor-pointer"
@@ -321,6 +329,7 @@ export default function CountryDetailPanel({
                       </div>
                     )}
 
+                    {/* Stats grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                       <StatPill icon={<FaMapMarkerAlt />} label="Capital"    value={full.capital?.[0] ?? "—"} />
                       <StatPill icon={<FaUsers />}        label="Population" value={fmt(full.population)} />
@@ -351,6 +360,7 @@ export default function CountryDetailPanel({
                       {full.borders?.length ? <StatPill icon={<FaMap />} label="Borders" value={`${full.borders.length} countries`} /> : null}
                     </div>
 
+                    {/* Language expand */}
                     <AnimatePresence>
                       {langOpen && langList.length > 1 && (
                         <motion.div
@@ -379,6 +389,19 @@ export default function CountryDetailPanel({
                       )}
                     </AnimatePresence>
 
+                    {/* ── AI: Loading ticker ── */}
+                    <AILoadingBanner loading={aiLoading} />
+
+                    {/* ── AI: Error banner ── */}
+                    <AIErrorBanner
+                      error={aiError}
+                      onRetryAction={() => loadInsights(full.name.common)}
+                    />
+
+                    {/* ── AI: Quick summary hero ── */}
+                    <AIQuickSummary insights={insights} loading={aiLoading} />
+
+                    {/* Action links */}
                     <div className="flex flex-wrap gap-2">
                       <ActionLink href={`https://en.wikivoyage.org/wiki/${encodeURIComponent(full.name.common)}`}                                              icon={<FaWikipediaW />} label="Wikivoyage" />
                       <ActionLink href={`https://www.tripadvisor.com/Search?q=${encodeURIComponent(full.name.common)}`}                                       icon={<FaTripadvisor />} label="Tripadvisor" />
@@ -387,6 +410,7 @@ export default function CountryDetailPanel({
                       <ActionLink href={`https://www.lonelyplanet.com/${encodeURIComponent(full.name.common.toLowerCase().replace(/ /g, "-"))}`}               icon={<FaBook />} label="Lonely Planet" />
                     </div>
 
+                    {/* Wikipedia About */}
                     {extras?.wiki?.extract && (
                       <div className="rounded-2xl bg-brand-101 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 p-4">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-2">About</div>
@@ -394,6 +418,16 @@ export default function CountryDetailPanel({
                       </div>
                     )}
 
+                    {/* ── AI: Best time + Money ── */}
+                    <AIBestTimeAndMoney insights={insights} loading={aiLoading} />
+
+                    {/* ── AI: Top experiences ── */}
+                    <AIExperiences insights={insights} loading={aiLoading} />
+
+                    {/* ── AI: Dos & Don'ts ── */}
+                    <AIDosDonts insights={insights} loading={aiLoading} />
+
+                    {/* Travel Tips */}
                     <div className="rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/30 p-4">
                       <div className="text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-2.5">Travel Tips</div>
                       <ul className="space-y-2">
@@ -452,10 +486,15 @@ export default function CountryDetailPanel({
                       </AnimatePresence>
                     </div>
 
+                    {/* ── AI: Safety ── */}
+                    <AISafety insights={insights} loading={aiLoading} />
+
                     {/* Neighboring countries */}
                     {neighbors.length > 0 && (
                       <div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-white/40 mb-2.5">Neighboring countries</div>
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-white/40 mb-2.5">
+                          Neighboring countries
+                        </div>
                         <div className="flex gap-2 overflow-x-auto pb-2" style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "thin" }}>
                           {neighbors.map((n) => (
                             <motion.button
@@ -482,10 +521,15 @@ export default function CountryDetailPanel({
                       </div>
                     )}
 
+                    {/* ── AI: Getting around ── */}
+                    <AIGettingAround insights={insights} loading={aiLoading} />
+
                     {/* Nearby sights */}
                     {topSights.length > 0 && (
                       <div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-white/40 mb-2.5">Points of interest</div>
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-white/40 mb-2.5">
+                          Points of interest
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           {topSights.map((s, i) => (
                             <a
@@ -509,10 +553,16 @@ export default function CountryDetailPanel({
                       </div>
                     )}
 
+                    {/* ── AI: Food & drink ── */}
+                    <AIFoodAndDrink insights={insights} loading={aiLoading} />
+
+                    {/* ── AI: Attribution ── */}
+                    <AIAttribution insights={insights} />
+
                   </motion.div>
                 )}
 
-                {/* PHOTOS */}
+                {/* ══════════════════ PHOTOS ══════════════════ */}
                 {activeTab === "photos" && (
                   <motion.div
                     key="photos"
@@ -566,32 +616,13 @@ export default function CountryDetailPanel({
                   </motion.div>
                 )}
 
-                {/* ── AI GUIDE TAB ── */}
-                {activeTab === "guide" && (
-                  <motion.div
-                    key="guide"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    transition={{ duration: 0.18 }}
-                  >
-                    <AITravelGuide
-                      insights={insights}
-                      loading={aiLoading}
-                      error={aiError}
-                      countryName={full.name.common}
-                      onLoad={() => loadInsights(full.name.common)}
-                    />
-                  </motion.div>
-                )}
-
               </AnimatePresence>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Lightbox — rendered here so it owns viewer state */}
+      {/* Lightbox */}
       <CountryLightbox
         open={viewerOpen}
         photos={photos}
