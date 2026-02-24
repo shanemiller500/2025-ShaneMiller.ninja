@@ -36,7 +36,5 @@ export interface AITravelInsights {
   dos: string[];
   donts: string[];
   safety: { commonRisks: string[]; scamsToWatch: string[]; gettingHelp: string };
-  money: { currency: string; paymentTips: string[]; tipping: string };
-  gettingAround: { insideCities: string[]; betweenCities: string[]; roadNotes: string };
   foodAndDrink: { mustTry: string[]; waterAdvice: string };
 }

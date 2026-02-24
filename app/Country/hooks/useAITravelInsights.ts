@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { AITravelInsights } from "../lib/types";
 
-const CACHE_PREFIX = "travel_ai_v1_";
+const CACHE_PREFIX = "travel_ai_v2_";
 
 function cacheKey(country: string) {
   return `${CACHE_PREFIX}${country.toLowerCase().trim()}`;
@@ -61,7 +61,7 @@ export function useAITravelInsights() {
     loadedRef.current = countryName;
 
     try {
-      const res = await fetch("/api/country-insights", {
+      const res = await fetch("/api/countryinsights", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ country: countryName }),

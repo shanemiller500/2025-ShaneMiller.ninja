@@ -36,11 +36,10 @@ import {
   AILoadingBanner,
   AIErrorBanner,
   AIQuickSummary,
-  AIBestTimeAndMoney,
+  AIBestTime,
   AIExperiences,
   AIDosDonts,
   AISafety,
-  AIGettingAround,
   AIFoodAndDrink,
   AIAttribution,
 } from "./AITravelGuide";
@@ -418,8 +417,8 @@ export default function CountryDetailPanel({
                       </div>
                     )}
 
-                    {/* ── AI: Best time + Money ── */}
-                    <AIBestTimeAndMoney insights={insights} loading={aiLoading} />
+                    {/* ── AI: Best time to visit ── */}
+                    <AIBestTime insights={insights} loading={aiLoading} />
 
                     {/* ── AI: Top experiences ── */}
                     <AIExperiences insights={insights} loading={aiLoading} />
@@ -520,9 +519,6 @@ export default function CountryDetailPanel({
                         </div>
                       </div>
                     )}
-
-                    {/* ── AI: Getting around ── */}
-                    <AIGettingAround insights={insights} loading={aiLoading} />
 
                     {/* Nearby sights */}
                     {topSights.length > 0 && (

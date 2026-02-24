@@ -3,13 +3,10 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FaBus,
   FaCalendarAlt,
   FaCheckCircle,
-  FaCreditCard,
   FaExclamationTriangle,
   FaMapPin,
-  FaPlane,
   FaRedo,
   FaRobot,
   FaShieldAlt,
@@ -268,29 +265,20 @@ export function AIQuickSummary({ insights, loading }: AISectionProps) {
 }
 
 /**
- * Best time to visit + Money at a glance — 2-col internal layout.
- * Shows paired shimmer cards while loading.
+ * Best time to visit — full-width emerald card with month chips.
+ * Shows a shimmer skeleton while loading.
  */
-export function AIBestTimeAndMoney({ insights, loading }: AISectionProps) {
+export function AIBestTime({ insights, loading }: AISectionProps) {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-pulse">
-        <div className="rounded-2xl border border-emerald-100 dark:border-emerald-800/20 bg-white/80 dark:bg-white/[0.04] p-4 space-y-2.5">
-          <Skel h="h-2.5" w="w-32" className="bg-emerald-200 dark:bg-emerald-700/40" />
-          <Skel h="h-3" />
-          <Skel h="h-3" w="w-4/5" />
-          <div className="flex gap-1.5 flex-wrap pt-1">
-            {["w-14", "w-16", "w-12", "w-16"].map((w, i) => (
-              <div key={i} className={cn("h-6 rounded-full bg-gray-100 dark:bg-white/[0.06]", w)} />
-            ))}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-violet-100 dark:border-violet-800/20 bg-white/80 dark:bg-white/[0.04] p-4 space-y-3">
-          <Skel h="h-2.5" w="w-28" className="bg-violet-200 dark:bg-violet-700/40" />
-          <div className="h-8 w-28 rounded-xl bg-violet-100/80 dark:bg-violet-900/30" />
-          <Skel h="h-3" />
-          <Skel h="h-3" w="w-4/5" />
-          <Skel h="h-3" w="w-3/5" />
+      <div className="rounded-2xl border border-emerald-100 dark:border-emerald-800/20 bg-white/80 dark:bg-white/[0.04] p-4 space-y-2.5 animate-pulse">
+        <Skel h="h-2.5" w="w-32" className="bg-emerald-200 dark:bg-emerald-700/40" />
+        <Skel h="h-3" />
+        <Skel h="h-3" w="w-4/5" />
+        <div className="flex gap-1.5 flex-wrap pt-1">
+          {["w-14", "w-16", "w-12", "w-16"].map((w, i) => (
+            <div key={i} className={cn("h-6 rounded-full bg-gray-100 dark:bg-white/[0.06]", w)} />
+          ))}
         </div>
       </div>
     );
@@ -301,58 +289,30 @@ export function AIBestTimeAndMoney({ insights, loading }: AISectionProps) {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" as const }}
-      className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+      className="rounded-2xl border border-emerald-100 dark:border-emerald-800/30 bg-white/80 dark:bg-white/[0.04] p-4 flex flex-col gap-3"
     >
-      {/* Best time */}
-      <div className="rounded-2xl border border-emerald-100 dark:border-emerald-800/30 bg-white/80 dark:bg-white/[0.04] p-4 flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <FaCalendarAlt className="text-emerald-500 dark:text-emerald-400 shrink-0" />
-          <Label text="Best time to visit" className="text-emerald-700 dark:text-emerald-400" />
-        </div>
-        <p className="text-sm text-gray-700 dark:text-white/80 leading-relaxed flex-1">
-          {insights.bestTimeToVisit.summary}
-        </p>
-        {insights.bestTimeToVisit.months.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {insights.bestTimeToVisit.months.map((m) => (
-              <span
-                key={m}
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-xs font-semibold",
-                  MONTH_CHIP[m] ?? "bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-white/70",
-                )}
-              >
-                {m}
-              </span>
-            ))}
-          </div>
-        )}
+      <div className="flex items-center gap-2">
+        <FaCalendarAlt className="text-emerald-500 dark:text-emerald-400 shrink-0" />
+        <Label text="Best time to visit" className="text-emerald-700 dark:text-emerald-400" />
       </div>
-
-      {/* Money */}
-      <div className="rounded-2xl border border-violet-100 dark:border-violet-800/30 bg-violet-50/50 dark:bg-violet-950/20 p-4 flex flex-col gap-2.5">
-        <div className="flex items-center gap-2">
-          <FaCreditCard className="text-violet-500 dark:text-violet-400 shrink-0" />
-          <Label text="Money at a glance" className="text-violet-700 dark:text-violet-400" />
+      <p className="text-sm text-gray-700 dark:text-white/80 leading-relaxed">
+        {insights.bestTimeToVisit.summary}
+      </p>
+      {insights.bestTimeToVisit.months.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {insights.bestTimeToVisit.months.map((m) => (
+            <span
+              key={m}
+              className={cn(
+                "rounded-full px-2.5 py-1 text-xs font-semibold",
+                MONTH_CHIP[m] ?? "bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-white/70",
+              )}
+            >
+              {m}
+            </span>
+          ))}
         </div>
-        {insights.money.currency && (
-          <span className="self-start rounded-xl bg-violet-600 text-white text-xs font-bold px-3 py-1.5 shadow-sm">
-            {insights.money.currency}
-          </span>
-        )}
-        {insights.money.tipping && (
-          <p className="text-xs text-gray-700 dark:text-white/75 leading-relaxed">
-            <span className="font-semibold text-violet-700 dark:text-violet-400">Tipping: </span>
-            {insights.money.tipping}
-          </p>
-        )}
-        {insights.money.paymentTips.slice(0, 2).map((tip, i) => (
-          <p key={i} className="flex items-start gap-1.5 text-xs text-gray-600 dark:text-white/65 leading-relaxed">
-            <span className="text-violet-400 mt-0.5 shrink-0 font-bold">›</span>
-            {tip}
-          </p>
-        ))}
-      </div>
+      )}
     </motion.div>
   );
 }
@@ -550,73 +510,7 @@ export function AISafety({ insights, loading }: AISectionProps) {
 }
 
 /**
- * Getting around — city transit + between-cities + road notes.
- * Shows a sky-blue shimmer skeleton while loading.
- */
-export function AIGettingAround({ insights, loading }: AISectionProps) {
-  if (loading) {
-    return (
-      <div>
-        <div className="flex items-center gap-2 mb-3 px-0.5 animate-pulse">
-          <div className="w-3.5 h-3.5 rounded bg-sky-200 dark:bg-sky-700/40 shrink-0" />
-          <Skel h="h-2.5" w="w-32" className="bg-sky-200 dark:bg-sky-700/40" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-pulse">
-          <div className="rounded-2xl border border-sky-100 dark:border-sky-800/20 bg-white/80 dark:bg-white/[0.04] p-4 space-y-2">
-            <Skel h="h-2.5" w="w-20" className="bg-sky-200 dark:bg-sky-700/30" />
-            {[1, 2, 3].map((j) => <Skel key={j} h="h-3" />)}
-          </div>
-          <div className="rounded-2xl border border-sky-100 dark:border-sky-800/20 bg-white/80 dark:bg-white/[0.04] p-4 space-y-2">
-            <Skel h="h-2.5" w="w-24" className="bg-sky-200 dark:bg-sky-700/30" />
-            {[1, 2, 3].map((j) => <Skel key={j} h="h-3" />)}
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (!insights) return null;
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: "easeOut" as const }}
-    >
-      <div className="flex items-center gap-2 mb-3 px-0.5">
-        <FaBus className="text-sky-500 dark:text-sky-400 shrink-0" />
-        <Label text="Getting around" className="text-sky-700 dark:text-sky-400" />
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2.5">
-        {insights.gettingAround.insideCities.length > 0 && (
-          <div className="rounded-2xl border border-sky-100 dark:border-sky-800/30 bg-white/80 dark:bg-white/[0.04] p-4">
-            <div className="flex items-center gap-1.5 mb-3">
-              <FaBus className="text-[10px] text-sky-500 dark:text-sky-400" />
-              <Label text="In the city" className="text-sky-600/80 dark:text-sky-400/70" />
-            </div>
-            <Bullet items={insights.gettingAround.insideCities} className="text-gray-700 dark:text-white/80" />
-          </div>
-        )}
-        {insights.gettingAround.betweenCities.length > 0 && (
-          <div className="rounded-2xl border border-sky-100 dark:border-sky-800/30 bg-white/80 dark:bg-white/[0.04] p-4">
-            <div className="flex items-center gap-1.5 mb-3">
-              <FaPlane className="text-[10px] text-sky-500 dark:text-sky-400" />
-              <Label text="Between cities" className="text-sky-600/80 dark:text-sky-400/70" />
-            </div>
-            <Bullet items={insights.gettingAround.betweenCities} className="text-gray-700 dark:text-white/80" />
-          </div>
-        )}
-      </div>
-      {insights.gettingAround.roadNotes && (
-        <div className="rounded-xl bg-sky-50/70 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-800/20 px-3.5 py-3 text-sm text-gray-700 dark:text-white/80 leading-relaxed">
-          <span className="font-semibold text-sky-700 dark:text-sky-400">Road notes: </span>
-          {insights.gettingAround.roadNotes}
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-/**
- * Food & drink — must-try dishes, water advice, overflow payment tips.
+ * Food & drink — must-try dishes and water advice.
  * Shows a pink shimmer skeleton while loading.
  */
 export function AIFoodAndDrink({ insights, loading }: AISectionProps) {
@@ -658,12 +552,6 @@ export function AIFoodAndDrink({ insights, loading }: AISectionProps) {
               </span>
             ))}
           </div>
-        </div>
-      )}
-      {insights.money.paymentTips.length > 2 && (
-        <div className="mb-4">
-          <Label text="More payment tips" className="text-pink-600/80 dark:text-pink-400/70 block mb-2" />
-          <Bullet items={insights.money.paymentTips.slice(2)} className="text-gray-700 dark:text-white/80" />
         </div>
       )}
       {insights.foodAndDrink.waterAdvice && (
