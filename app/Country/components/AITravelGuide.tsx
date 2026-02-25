@@ -134,15 +134,18 @@ function Skel({ h = "h-3", w = "w-full", className = "" }: { h?: string; w?: str
 // ─── Rotating phrase (used inside loading banner) ─────────────────────────────
 
 function RotatingPhrase() {
-  const [idx, setIdx] = useState(0);
+  const [idx, setIdx] = useState(() => Math.floor(Math.random() * LOADING_PHRASES.length));
 
   useEffect(() => {
     // Give each phrase reading time proportional to word count — min 1 800 ms
     const words = LOADING_PHRASES[idx].split(" ").length;
-    const id = setTimeout(
-      () => setIdx((i) => (i + 1) % LOADING_PHRASES.length),
-      Math.max(1800, words * 280),
-    );
+    const id = setTimeout(() => {
+      setIdx((i) => {
+        let next: number;
+        do { next = Math.floor(Math.random() * LOADING_PHRASES.length); } while (next === i);
+        return next;
+      });
+    }, Math.max(1800, words * 280));
     return () => clearTimeout(id);
   }, [idx]);
 

@@ -70,7 +70,6 @@ export default function CountryDetailPanel({
   useCelsius,
 }: CountryDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>("overview");
-  const [packExpanded, setPackExpanded] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [localTime, setLocalTime] = useState("");
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -85,7 +84,6 @@ export default function CountryDetailPanel({
   useEffect(() => {
     if (full) {
       setActiveTab("overview");
-      setPackExpanded(false);
       setLangOpen(false);
       setMapActivated(false);
       resetInsights();
@@ -439,50 +437,31 @@ export default function CountryDetailPanel({
                       </ul>
                     </div>
 
-                    {/* Pack list (collapsible) */}
-                    <div className="rounded-2xl border border-black/10 dark:border-white/10 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => setPackExpanded((p) => !p)}
-                        className="w-full flex items-center justify-between px-4 py-3 bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] transition text-left"
-                      >
-                        <div className="flex items-center gap-2">
-                          <FaSuitcase className="text-gray-500 dark:text-white/50 text-sm" />
-                          <span className="text-sm font-semibold text-gray-800 dark:text-white/90">What to pack</span>
+                    {/* Pack list */}
+                    <div className="rounded-2xl bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-800/30 p-4">
+                      <div className="flex items-center gap-2.5 mb-3">
+                        <div className="w-7 h-7 rounded-lg bg-teal-500/15 dark:bg-teal-400/15 flex items-center justify-center flex-shrink-0">
+                          <FaSuitcase className="text-teal-600 dark:text-teal-400 text-xs" />
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-teal-700 dark:text-teal-400">What to pack</div>
                           {extras?.weather?.temperature != null && (
-                            <span className="text-xs text-gray-400 dark:text-white/40">
-                              based on {useCelsius
+                            <div className="text-[10px] text-teal-600/70 dark:text-teal-400/60">
+                              Based on {useCelsius
                                 ? `${Math.round(extras.weather.temperature)}°C`
-                                : `${cToF(Math.round(extras.weather.temperature))}°F`}
-                            </span>
+                                : `${cToF(Math.round(extras.weather.temperature))}°F`} current temp
+                            </div>
                           )}
                         </div>
-                        {packExpanded
-                          ? <FaChevronUp className="text-gray-400 dark:text-white/40 text-xs" />
-                          : <FaChevronDown className="text-gray-400 dark:text-white/40 text-xs" />}
-                      </button>
-                      <AnimatePresence>
-                        {packExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="px-4 pb-4 pt-2 border-t border-black/5 dark:border-white/[0.05]">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                {packList.map((item, i) => (
-                                  <div key={i} className="flex items-center gap-2 text-sm text-gray-700 dark:text-white/80">
-                                    <span className="w-4 h-4 rounded border-2 border-gray-300 dark:border-white/20 flex-shrink-0" />
-                                    {item}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        {packList.map((item, i) => (
+                          <div key={i} className="flex items-center gap-2.5 rounded-xl bg-white/60 dark:bg-white/[0.05] border border-teal-100 dark:border-teal-800/20 px-3 py-2">
+                            <span className="w-3.5 h-3.5 rounded border-2 border-teal-400 dark:border-teal-500 flex-shrink-0" />
+                            <span className="text-sm text-gray-700 dark:text-white/80">{item}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
                     {/* ── AI: Safety ── */}
