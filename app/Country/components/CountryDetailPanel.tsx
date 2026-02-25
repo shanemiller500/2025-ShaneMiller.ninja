@@ -31,7 +31,9 @@ import type { FullCountry, Extras, LiteCountry } from "../lib/types";
 import type { DetailTab } from "../lib/constants";
 import { TOP_SIGHTS_LIMIT, TRAVEL_TIPS } from "../lib/constants";
 import { cn, clampText, cToF, fmt, getBestTime, getLocalTime, getPackList } from "../lib/utils";
+import dynamic from "next/dynamic";
 import { useAITravelInsights } from "../hooks/useAITravelInsights";
+import { useCountryPlaces } from "../hooks/useCountryPlaces";
 import {
   AILoadingBanner,
   AIErrorBanner,
@@ -39,6 +41,7 @@ import {
   AIBestTime,
   AIExperiences,
   AIDosDonts,
+  AIPlaces,
   AISafety,
   AIFoodAndDrink,
   AIAttribution,
@@ -48,11 +51,15 @@ import ActionLink from "./ActionLink";
 import Spinner from "./Spinner";
 import CountryLightbox from "./CountryLightbox";
 
+const CountryMapLeaflet = dynamic(() => import("./CountryMapLeaflet"), {
+  ssr: false,
+  loading: () => <div className="h-[175px] sm:h-[230px] rounded-2xl bg-gray-100 dark:bg-white/[0.05] animate-pulse" />,
+});
+
 interface CountryDetailPanelProps {
   full: FullCountry | null;
   extras: Extras | null;
   loadingDetails: boolean;
-  mapURL: string;
   mini: LiteCountry[];
   reducedMotion: boolean;
   onPickCountry: (cca3: string) => void;
@@ -63,7 +70,6 @@ export default function CountryDetailPanel({
   full,
   extras,
   loadingDetails,
-  mapURL,
   mini,
   reducedMotion,
   onPickCountry,
@@ -74,9 +80,9 @@ export default function CountryDetailPanel({
   const [localTime, setLocalTime] = useState("");
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIdx, setViewerIdx] = useState(0);
-  const [mapActivated, setMapActivated] = useState(false);
 
   const { insights, loading: aiLoading, error: aiError, loadInsights, reset: resetInsights } = useAITravelInsights();
+  const { places, loading: placesLoading, error: placesError, loadPlaces, reset: resetPlaces } = useCountryPlaces();
 
   const photos: string[] = extras?.photos ?? [];
 
@@ -85,8 +91,8 @@ export default function CountryDetailPanel({
     if (full) {
       setActiveTab("overview");
       setLangOpen(false);
-      setMapActivated(false);
       resetInsights();
+      resetPlaces();
       loadInsights(full.name.common);
     }
   }, [full?.cca3]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -305,24 +311,14 @@ export default function CountryDetailPanel({
                     className="space-y-5"
                   >
                     {/* Map */}
-                    {mapURL && (
-                      <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 shadow-sm relative">
-                        <iframe
-                          src={mapURL}
-                          className="w-full block h-[175px] sm:h-[230px]"
-                          loading="lazy"
-                          title={`${full.name.common} map`}
+                    {full.latlng?.length === 2 && (
+                      <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 shadow-sm h-[175px] sm:h-[230px]">
+                        <CountryMapLeaflet
+                          lat={full.latlng[0]}
+                          lng={full.latlng[1]}
+                          countryName={full.name.common}
+                          places={places?.places}
                         />
-                        {!mapActivated && (
-                          <div
-                            className="absolute inset-0 lg:hidden flex items-end justify-center pb-3 cursor-pointer"
-                            onClick={() => setMapActivated(true)}
-                          >
-                            <span className="bg-black/55 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full pointer-events-none">
-                              Tap to interact with map
-                            </span>
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -420,6 +416,16 @@ export default function CountryDetailPanel({
 
                     {/* ── AI: Top experiences ── */}
                     <AIExperiences insights={insights} loading={aiLoading} />
+
+                    {/* ── AI: Explore places (lazy, on expand) ── */}
+                    <AIPlaces
+                      countryName={full.name.common}
+                      places={places}
+                      loading={placesLoading}
+                      error={placesError}
+                      onExpand={() => loadPlaces(full.name.common)}
+                      onRetry={() => loadPlaces(full.name.common)}
+                    />
 
                     {/* ── AI: Dos & Don'ts ── */}
                     <AIDosDonts insights={insights} loading={aiLoading} />

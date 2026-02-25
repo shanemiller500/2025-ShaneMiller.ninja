@@ -80,8 +80,8 @@ export default function ProjectsPage() {
     icon: Icon04,
     slug: "/Country",
     title: "Country Search",
-    excerpt: "Search any country and get clean, useful info fast.",
-    badge: "REST Countries API",
+    excerpt: "Country info, live flight search, and real booking links with no hidden fees.",
+    badge: "LLM + REST Countries API",
   },
   {
     id: 5,

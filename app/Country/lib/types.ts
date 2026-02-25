@@ -28,6 +28,21 @@ export interface Extras {
   photos?: string[];
 }
 
+export interface PlaceResult {
+  name: string;
+  type: string;
+  region: string;
+  why: string;
+  bestFor: string[];
+  lat?: number;
+  lng?: number;
+}
+
+export interface CountryPlacesData {
+  country: string;
+  places: PlaceResult[];
+}
+
 export interface AITravelInsights {
   country: string;
   quickSummary: string;

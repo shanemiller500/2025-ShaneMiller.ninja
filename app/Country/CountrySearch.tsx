@@ -42,7 +42,7 @@ export default function CountrySearch() {
 
   const detailRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
-  const { full, extras, loadingDetails, mapURL, loadDetails } = useCountryDetails();
+  const { full, extras, loadingDetails, loadDetails } = useCountryDetails();
 
   // Fetch lite country list on mount
   useEffect(() => {
@@ -298,7 +298,6 @@ export default function CountrySearch() {
                 full={full}
                 extras={extras}
                 loadingDetails={loadingDetails}
-                mapURL={mapURL}
                 mini={mini}
                 reducedMotion={reducedMotion}
                 onPickCountry={pickCountry}

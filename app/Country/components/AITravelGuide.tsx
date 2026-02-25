@@ -5,7 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaCalendarAlt,
   FaCheckCircle,
+  FaChevronDown,
   FaExclamationTriangle,
+  FaMapMarkerAlt,
   FaMapPin,
   FaRedo,
   FaRobot,
@@ -15,9 +17,8 @@ import {
   FaUtensils,
   FaWater,
 } from "react-icons/fa";
-
 import { cn } from "../lib/utils";
-import type { AITravelInsights } from "../lib/types";
+import type { AITravelInsights, CountryPlacesData, PlaceResult } from "../lib/types";
 
 // ─── Shared props ─────────────────────────────────────────────────────────────
 
@@ -564,6 +565,186 @@ export function AIFoodAndDrink({ insights, loading }: AISectionProps) {
         </div>
       )}
     </motion.div>
+  );
+}
+
+/**
+ * Explore Places — state is lifted to CountryDetailPanel so the map can share pins.
+ * Parent owns places/loading/error; AIPlaces owns only open/close visual state.
+ */
+export function AIPlaces({
+  countryName,
+  places,
+  loading,
+  error,
+  onExpand,
+  onRetry,
+}: {
+  countryName: string;
+  places: CountryPlacesData | null;
+  loading: boolean;
+  error: string | null;
+  onExpand: () => void;
+  onRetry: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  // Close panel when the country changes
+  useEffect(() => {
+    setOpen(false);
+  }, [countryName]);
+
+  const handleToggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next) onExpand();
+  };
+
+  const TYPE_COLORS: Record<string, string> = {
+    City:              "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+    Town:              "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+    Village:           "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+    Island:            "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300",
+    Beach:             "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+    Mountain:          "bg-slate-100 text-slate-700 dark:bg-slate-700/50 dark:text-slate-300",
+    Region:            "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+    "National Park":   "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+    "Historical Site": "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+  };
+
+  return (
+    <div className="rounded-2xl border border-violet-100 dark:border-violet-800/30 overflow-hidden">
+      {/* Header / toggle */}
+      <button
+        type="button"
+        onClick={handleToggle}
+        className="w-full flex items-center justify-between px-4 py-3.5 bg-violet-50/70 dark:bg-violet-950/20 hover:bg-violet-100/60 dark:hover:bg-violet-950/30 transition text-left"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center shrink-0">
+            <FaMapMarkerAlt className="text-violet-600 dark:text-violet-400 text-xs" />
+          </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400">
+              Explore Places
+            </div>
+            <div className="text-[10px] text-violet-600/60 dark:text-violet-400/50">
+              Cities, towns &amp; must-see spots · click to load
+            </div>
+          </div>
+        </div>
+        <FaChevronDown
+          className={cn(
+            "text-violet-400 dark:text-violet-500 text-xs transition-transform duration-200",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+
+      {/* Expandable body */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="overflow-hidden"
+          >
+            <div className="p-4 border-t border-violet-100 dark:border-violet-800/20 space-y-2">
+
+              {/* Loading skeletons */}
+              {loading && (
+                <div className="space-y-2 animate-pulse">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl border border-violet-100 dark:border-violet-800/20 bg-white/60 dark:bg-white/[0.03] p-3 space-y-2"
+                    >
+                      <div className="flex gap-2 items-center">
+                        <Skel h="h-4" w="w-28" className="bg-violet-200/60 dark:bg-violet-700/30" />
+                        <Skel h="h-4" w="w-14" className="rounded-full bg-violet-100 dark:bg-violet-800/30" />
+                      </div>
+                      <Skel h="h-3" w="w-full" />
+                      <Skel h="h-3" w="w-3/4" />
+                      <div className="flex gap-1.5">
+                        <Skel h="h-5" w="w-14" className="rounded-full" />
+                        <Skel h="h-5" w="w-16" className="rounded-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Error */}
+              {error && !loading && (
+                <div className="flex items-center gap-2.5 rounded-xl border border-rose-100 dark:border-rose-800/30 bg-rose-50/50 dark:bg-rose-950/20 px-3.5 py-3 text-sm">
+                  <FaTimes className="text-rose-400 shrink-0" />
+                  <span className="text-gray-600 dark:text-white/70 flex-1">{error}</span>
+                  <button
+                    type="button"
+                    onClick={onRetry}
+                    className="shrink-0 flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-2.5 py-1.5 transition"
+                  >
+                    <FaRedo className="text-[9px]" /> Retry
+                  </button>
+                </div>
+              )}
+
+              {/* Place cards */}
+              {places && !loading && (
+                <div className="space-y-2">
+                  {places.places.map((place: PlaceResult, i: number) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, delay: i * 0.045, ease: "easeOut" }}
+                      className="rounded-xl border border-violet-100 dark:border-violet-800/20 bg-white/70 dark:bg-white/[0.04] px-3.5 py-3"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <span className="font-bold text-sm text-gray-900 dark:text-white leading-tight">
+                          {place.name}
+                        </span>
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0",
+                            TYPE_COLORS[place.type] ?? "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-white/60",
+                          )}
+                        >
+                          {place.type}
+                        </span>
+                        {place.region && (
+                          <span className="text-[10px] text-gray-400 dark:text-white/35 truncate">
+                            {place.region}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600 dark:text-white/65 leading-relaxed mb-2">
+                        {place.why}
+                      </p>
+                      {place.bestFor?.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {place.bestFor.map((tag: string, j: number) => (
+                            <span
+                              key={j}
+                              className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-violet-50 dark:bg-violet-900/25 text-violet-600 dark:text-violet-400 border border-violet-100 dark:border-violet-800/20"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
