@@ -727,7 +727,7 @@ export default function StockQuoteSection() {
 
       {/* Default widgets */}
       {!loading && (!showModal || !stockData) && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="space-y-4">
           <MarketWidgets onSelectTicker={handleSearch} />
           <NewsWidget />
         </div>

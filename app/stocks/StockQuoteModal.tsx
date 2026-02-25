@@ -671,7 +671,6 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
                       const headline = n.headline ?? n.title ?? "Untitled article";
                       const url = String(n.url || "");
                       const publishedMs = safePublishedMs(n);
-                      const srcLogo = logoFromUrl(url);
                       const host = safeHost(url);
 
                       return (
@@ -680,48 +679,67 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
                           href={url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="group relative flex gap-3 overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-black/20 p-3 transition hover:-translate-y-[1px] hover:shadow-md"
+                          className="group relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm hover:shadow-md transition"
                         >
-                          <div className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100">
-                            <div className="absolute -top-10 -left-12 h-40 w-40 rounded-full bg-indigo-500/10 blur-2xl" />
-                            <div className="absolute -bottom-14 -right-14 h-44 w-44 rounded-full bg-fuchsia-500/10 blur-2xl" />
+                          {/* image */}
+                          <div className="relative aspect-[16/9] w-full overflow-hidden">
+                            {imgAvail ? (
+                              <>
+                                <img
+                                  src={n.image}
+                                  alt={headline}
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                  }}
+                                />
+                                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+                              </>
+                            ) : (
+                              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/15 via-fuchsia-500/10 to-sky-500/10 flex items-center justify-center">
+                                <span className="text-xs font-black text-gray-400 dark:text-white/30 tracking-widest uppercase">News</span>
+                              </div>
+                            )}
                           </div>
 
-                          {imgAvail ? (
-                            <img
-                              src={n.image}
-                              alt=""
-                              className="relative h-20 w-28 shrink-0 rounded-xl object-cover bg-gray-100 ring-1 ring-black/10 dark:bg-white/5 dark:ring-white/10"
-                              onError={(e) => (e.currentTarget.style.display = "none")}
-                            />
-                          ) : (
-                            <div className="relative h-20 w-28 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500/10 to-fuchsia-500/10 ring-1 ring-black/10 dark:ring-white/10 flex items-center justify-center text-gray-700 text-xs font-black dark:text-white/70">
-                              NEWS
-                            </div>
-                          )}
-
-                          <div className="relative min-w-0 flex-1">
-                            <div className="text-sm font-extrabold leading-snug line-clamp-2 text-gray-900 group-hover:underline dark:text-white">
-                              {headline}
-                            </div>
-
-                            <div className="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-white/60">
-                              {srcLogo ? (
-                                <img
-                                  src={srcLogo}
-                                  alt=""
-                                  className="h-4 w-4 rounded bg-white/70 ring-1 ring-black/10 dark:bg-white/10 dark:ring-white/10"
-                                  onError={(e) => (e.currentTarget.style.display = "none")}
-                                />
-                              ) : null}
-                              <span className="truncate max-w-[10rem] font-semibold">{host}</span>
-                              <span className="text-gray-400 dark:text-white/30">•</span>
-                              <span className="font-semibold">{timeAgo(publishedMs)}</span>
-
-                              <span className="ml-auto inline-flex items-center gap-2 rounded-full bg-gray-100/80 px-2 py-0.5 text-[11px] font-bold text-gray-700 ring-1 ring-black/10 dark:bg-white/10 dark:text-white/70 dark:ring-white/10">
-                                Open <FaExternalLinkAlt className="text-[10px]" />
+                          <div className="p-3">
+                            {/* publisher row */}
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={host ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : ""}
+                                alt={n.source || host}
+                                className="h-7 w-7 rounded-full bg-white object-contain ring-1 ring-black/10 shrink-0"
+                                loading="lazy"
+                                decoding="async"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => (e.currentTarget.style.display = "none")}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-xs font-extrabold text-gray-800 dark:text-white/85">
+                                  {n.source || host}
+                                </div>
+                                <div className="text-[11px] font-semibold text-gray-600 dark:text-white/60">
+                                  {timeAgo(publishedMs)}
+                                </div>
+                              </div>
+                              <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-100/80 px-2 py-0.5 text-[10px] font-bold text-gray-700 ring-1 ring-black/10 dark:bg-white/10 dark:text-white/70 dark:ring-white/10">
+                                Open <FaExternalLinkAlt className="text-[9px]" />
                               </span>
                             </div>
+
+                            {/* headline */}
+                            <h3 className="mt-2 text-sm font-extrabold leading-snug text-gray-900 dark:text-white line-clamp-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                              {headline}
+                            </h3>
+
+                            {/* summary */}
+                            {n.summary ? (
+                              <p className="mt-1.5 text-xs font-semibold text-gray-700 dark:text-white/65 line-clamp-2">
+                                {n.summary}
+                              </p>
+                            ) : null}
                           </div>
                         </a>
                       );

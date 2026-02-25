@@ -304,7 +304,7 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
 
   /* ── Full render ──────────────────────────────────────────────────── */
   return (
-    <div className="h-full flex flex-col space-y-2">
+    <div className="flex flex-col space-y-2">
       {/* Status + Fear/Greed */}
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <StatBanner />
@@ -414,7 +414,7 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
     
 
       {/* Top tickers */}
-      <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm flex-1 flex flex-col">
+      <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
         <div className="pointer-events-none absolute inset-0 opacity-50 dark:opacity-35">
           <div className="absolute -top-12 -left-12 h-40 w-40 rounded-full bg-indigo-400/15 blur-3xl" />
           <div className="absolute -bottom-12 -right-12 h-40 w-40 rounded-full bg-fuchsia-400/15 blur-3xl" />
@@ -426,41 +426,36 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
           </h3>
         </div>
 
-        <div className="relative flex-1 overflow-hidden">
-          {/* Mobile: horizontal scroll */}
-          <div className="sm:hidden h-full overflow-x-auto overflow-y-hidden no-scrollbar">
-            <div className="flex gap-2 p-3 h-full">
-              {topList.map((item) => (
-                <div key={item.symbol} className="shrink-0 w-[160px]">
-                  <TickerTile item={item} onSelect={onSelectTicker} size="sm" />
-                </div>
-              ))}
-              {Array.from(topLoading).map((sym) => (
-                <div key={sym} className="shrink-0 w-[160px]">
-                  <SkeletonTile size="sm" />
-                </div>
-              ))}
-            </div>
+        {/* Mobile: horizontal scroll */}
+        <div className="sm:hidden overflow-x-auto overflow-y-hidden no-scrollbar">
+          <div className="flex gap-2 p-3">
+            {topList.map((item) => (
+              <div key={item.symbol} className="shrink-0 w-[160px]">
+                <TickerTile item={item} onSelect={onSelectTicker} size="sm" />
+              </div>
+            ))}
+            {Array.from(topLoading).map((sym) => (
+              <div key={sym} className="shrink-0 w-[160px]">
+                <SkeletonTile size="sm" />
+              </div>
+            ))}
           </div>
+        </div>
 
-          {/* Desktop: scrollable grid */}
-          <div
-            className="hidden sm:block h-full overflow-y-auto p-3"
-            style={{ scrollbarWidth: "thin" }}
-          >
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-              {topList.map((item) => (
-                <TickerTile
-                  key={item.symbol}
-                  item={item}
-                  onSelect={onSelectTicker}
-                  size="md"
-                />
-              ))}
-              {Array.from(topLoading).map((sym) => (
-                <SkeletonTile key={sym} size="md" />
-              ))}
-            </div>
+        {/* Desktop: full grid */}
+        <div className="hidden sm:block p-3">
+          <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+            {topList.map((item) => (
+              <TickerTile
+                key={item.symbol}
+                item={item}
+                onSelect={onSelectTicker}
+                size="md"
+              />
+            ))}
+            {Array.from(topLoading).map((sym) => (
+              <SkeletonTile key={sym} size="md" />
+            ))}
           </div>
         </div>
 

@@ -27,9 +27,9 @@ export const HEATMAP_SYMBOLS = [
   "PYPL", "ASML", "ADBE", "CMCSA", "CSCO", "PEP", "NFLX", "AVGO",
   "INTU", "AMD", "IBM", "TXN", "QCOM", "COST", "ABBV", "CRM", "ACN",
   "T", "NKE", "NEE", "DHR", "ORCL", "UNH", "FIS", "BMY", "LLY",
-  "CVX", "LIN", "SBUX", "HD", "AMGN", "MDT", "HON", "MO", "NVO",
-  "MMM", "VRTX", "REGN", "TMO", "LMT", "NOW", "ZM", "MA", "CME",
-  "UPS", "TMUS", "CHTR", "SNOW",
+  "CVX", "LIN", "HD", "AMGN", "MDT", "HON", "MO", "NVO",
+  "MMM", "VRTX", "REGN", "LMT", "NOW", "ZM", "MA", "CME",
+  "UPS", "TMUS", "SNOW",
 ] as const;
 
 /* ── Compact 12-symbol set for the homepage Ticker Widget ───────────── */
