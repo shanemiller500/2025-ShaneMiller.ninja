@@ -23,7 +23,7 @@ interface Article {
 const CACHE_TTL = 30 * 60 * 1_000; // 30 min
 let cached: { ts: number; data: Article[] } | null = null;
 
-const PER_PAGE = 9; // 3×3 grid
+const PER_PAGE = 4; // 2×2 grid
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -126,7 +126,7 @@ export default function NewsWidget() {
       </div>
 
       {/* header */}
-      <div className="relative border-b border-black/10 dark:border-white/10 bg-white/80 dark:bg-black/30 backdrop-blur-xl">
+      <div className="relative rounded-3xl border-b border-black/10 dark:border-white/10 bg-white/80 dark:bg-black/30 backdrop-blur-xl">
         <div className="px-4 py-3 flex items-center justify-between gap-2">
           <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-gray-900 dark:text-white">
             Latest Finance News
@@ -156,7 +156,7 @@ export default function NewsWidget() {
           </div>
         ) : (
           <div className={`transition-opacity duration-220 ${fade ? "opacity-0" : "opacity-100"}`}>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3">
               {slice.map((a) => (
                 <NewsCard key={a.url} a={a} />
               ))}
@@ -320,7 +320,7 @@ function Pagination({
   if (totalPages <= 1) return null;
 
   return (
-    <div className="mt-6 flex flex-col items-center gap-3 pb-1">
+    <div className="mt-6 flex flex-col items-center gap-3 pb-4">
       <div className="flex flex-wrap items-center justify-center gap-2">
         <Button
           variant="indigo"

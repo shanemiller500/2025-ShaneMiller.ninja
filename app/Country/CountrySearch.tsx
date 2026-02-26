@@ -272,7 +272,7 @@ export default function CountrySearch() {
                 </div>
               ) : (
                 <div
-                  className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-[230px] overflow-y-auto"
+                  className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-[240px] overflow-y-auto"
                   style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
                 >
                   {displayList.map((c) => (

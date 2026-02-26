@@ -6,6 +6,8 @@ import { ToastContainer, toast } from "react-toastify";
 import { motion, AnimatePresence } from "framer-motion";
 import "react-toastify/dist/ReactToastify.css";
 
+import { Search, X } from "lucide-react";
+
 import { API_TOKEN } from "@/utils/config";
 import MarketWidgets from "../widgets/MarketWidgets";
 import NewsWidget from "../widgets/NewsWidget";
@@ -490,256 +492,280 @@ export default function StockQuoteSection() {
     <section className="space-y-3">
       <ToastContainer position="top-right" autoClose={4000} hideProgressBar newestOnTop closeOnClick pauseOnHover />
 
-      {/* Header card */}
-      <div className="relative overflow-visible rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
-        {/* soft blobs */}
-        <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
-          <div className="absolute -top-16 -left-20 h-60 w-60 rounded-full bg-indigo-400/20 blur-3xl" />
-          <div className="absolute -bottom-20 -right-16 h-64 w-64 rounded-full bg-fuchsia-400/20 blur-3xl" />
+      {/* ── Search bar ───────────────────────────────────────────────── */}
+      <div className="relative overflow-visible rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
+        {/* Ambient blobs */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl opacity-60 dark:opacity-40">
+          <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-indigo-400/20 blur-2xl" />
+          <div className="absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-fuchsia-400/20 blur-2xl" />
         </div>
 
-        <div className="relative flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">Stock Quote</h2>
-            <p className="mt-1 text-xs sm:text-sm font-semibold text-gray-600 dark:text-white/60">
-              Search a ticker. The dropdown is styled like your heatmap tiles now.
-            </p>
-          </div>
-        </div>
+        <div className="relative px-3 sm:px-4 py-3 sm:py-3.5">
+          {/* Single-row search pill */}
+          <div className="flex items-center gap-2 sm:gap-3 rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] px-3 py-2.5 shadow-sm focus-within:border-indigo-400/50 dark:focus-within:border-indigo-400/30 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.10)] transition-shadow">
+            {/* Magnifying glass */}
+            <Search className="h-4 w-4 shrink-0 text-gray-400 dark:text-white/35" aria-hidden />
 
-        {/* Search box */}
-        <div className="relative mt-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
-            <div className="sm:col-span-8">
-              <div ref={wrapRef} className="relative">
-                <input
-                  ref={inputRef}
-                  value={symbolInput}
-                  onChange={(e) => {
-                    setSymbolInput(e.target.value);
-                    setOpenSuggest(true);
-                  }}
-                  onKeyDown={onKeyDown}
-                  onFocus={() => {
-                    if (suggestions.length) setOpenSuggest(true);
-                  }}
-                  placeholder="AAPL, TSLA, NVDA…"
-                  inputMode="text"
-                  autoCapitalize="characters"
-                  className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] px-4 py-3 text-sm font-extrabold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 outline-none focus:border-black/20 dark:focus:border-white/20 shadow-[0_0_0_0_rgba(0,0,0,0)] focus:shadow-[0_0_0_4px_rgba(99,102,241,0.14)] transition"
-                  aria-autocomplete="list"
-                  aria-expanded={openSuggest}
-                  aria-controls="ticker-suggestions"
-                />
+            {/* Input + autocomplete dropdown */}
+            <div ref={wrapRef} className="relative flex-1 min-w-0">
+              <input
+                ref={inputRef}
+                value={symbolInput}
+                onChange={(e) => {
+                  setSymbolInput(e.target.value);
+                  setOpenSuggest(true);
+                }}
+                onKeyDown={onKeyDown}
+                onFocus={() => {
+                  if (suggestions.length) setOpenSuggest(true);
+                }}
+                placeholder="Search ticker — AAPL, TSLA, NVDA…"
+                inputMode="text"
+                autoCapitalize="characters"
+                className="w-full bg-transparent text-sm font-extrabold text-gray-900 dark:text-white placeholder:font-medium placeholder:text-gray-400 dark:placeholder:text-white/35 outline-none"
+                aria-autocomplete="list"
+                aria-expanded={openSuggest}
+                aria-controls="ticker-suggestions"
+              />
 
-                {/* Dropdown */}
-                <AnimatePresence initial={false}>
-                  {openSuggest && suggestions.length > 0 && (
-                    <motion.ul
-                      id="ticker-suggestions"
-                      ref={listRef}
-                      initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.99 }}
-                      transition={{ duration: 0.16, ease: "easeOut" }}
-                      className={cn(
-                        "absolute left-0 right-0 mt-2 max-h-72 overflow-auto",
-                        "rounded-2xl border border-black/10 dark:border-white/10",
-                        "bg-white/90 dark:bg-brand-900/85 backdrop-blur-xl",
-                        "shadow-[0_24px_60px_-18px_rgba(0,0,0,0.45)]"
-                      )}
-                      style={{
-                        zIndex: 9999,
-                        WebkitOverflowScrolling: "touch" as any,
-                      }}
-                      role="listbox"
-                    >
-                      {suggestions
-                        .filter((s) => !noProfileSetRef.current.has(s.symbol)) // extra guard
-                        .map((s, idx) => {
-                          const active = idx === activeIdx;
+              {/* Dropdown */}
+              <AnimatePresence initial={false}>
+                {openSuggest && suggestions.length > 0 && (
+                  <motion.ul
+                    id="ticker-suggestions"
+                    ref={listRef}
+                    initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.99 }}
+                    transition={{ duration: 0.16, ease: "easeOut" }}
+                    className={cn(
+                      "absolute left-0 right-0 mt-2 max-h-72 overflow-auto",
+                      "rounded-2xl border border-black/10 dark:border-white/10",
+                      "bg-white/90 dark:bg-brand-900/85 backdrop-blur-xl",
+                      "shadow-[0_24px_60px_-18px_rgba(0,0,0,0.45)]"
+                    )}
+                    style={{ zIndex: 9999, WebkitOverflowScrolling: "touch" as any }}
+                    role="listbox"
+                  >
+                    {suggestions
+                      .filter((s) => !noProfileSetRef.current.has(s.symbol))
+                      .map((s, idx) => {
+                        const active = idx === activeIdx;
+                        const p = suggestionProfiles[s.symbol] || {};
+                        const logo = cleanLogo(p?.logo) || "";
 
-                          const p = suggestionProfiles[s.symbol] || {};
-                          const logo = cleanLogo(p?.logo) || "";
-
-                          return (
-                            <motion.li
-                              key={`${s.symbol}-${idx}`}
-                              data-idx={idx}
-                              role="option"
-                              aria-selected={active}
-                              onMouseEnter={() => {
-                                setActiveIdx(idx);
-                                ensureProfileForSuggestion(s.symbol);
+                        return (
+                          <motion.li
+                            key={`${s.symbol}-${idx}`}
+                            data-idx={idx}
+                            role="option"
+                            aria-selected={active}
+                            onMouseEnter={() => {
+                              setActiveIdx(idx);
+                              ensureProfileForSuggestion(s.symbol);
+                            }}
+                            onFocus={() => setActiveIdx(idx)}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleSearch(s.symbol);
+                            }}
+                            whileHover={{ y: -1.5, scale: 1.01 }}
+                            whileTap={{ scale: 0.99 }}
+                            transition={{ duration: 0.12 }}
+                            className={cn(
+                              "relative cursor-pointer select-none",
+                              "mx-2 my-2 rounded-2xl overflow-hidden",
+                              "ring-1 ring-black/10 dark:ring-white/10",
+                              "shadow-sm",
+                              active
+                                ? "shadow-[0_18px_40px_-22px_rgba(99,102,241,0.55)] ring-indigo-500/30 dark:ring-indigo-400/30"
+                                : "hover:shadow-[0_18px_40px_-26px_rgba(0,0,0,0.35)]"
+                            )}
+                          >
+                            {/* Logo as background */}
+                            <div
+                              className="absolute inset-0"
+                              style={{
+                                backgroundImage: logo ? `url(${logo})` : undefined,
+                                backgroundSize: "cover",
+                                backgroundPosition: "center",
+                                opacity: logo ? 0.42 : 0,
+                                transform: "scale(1.05)",
+                                filter: "saturate(1.1) contrast(1.05)",
                               }}
-                              onFocus={() => setActiveIdx(idx)}
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                handleSearch(s.symbol);
-                              }}
-                              whileHover={{ y: -1.5, scale: 1.01 }}
-                              whileTap={{ scale: 0.99 }}
-                              transition={{ duration: 0.12 }}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/80 to-white/55 dark:from-black/65 dark:via-black/45 dark:to-black/25" />
+                            <div className="absolute inset-0 opacity-70">
+                              <div className="absolute -top-10 -left-10 h-28 w-28 rounded-full bg-indigo-500/10 blur-2xl" />
+                              <div className="absolute -bottom-12 -right-12 h-32 w-32 rounded-full bg-fuchsia-500/10 blur-2xl" />
+                            </div>
+                            <div
                               className={cn(
-                                "relative cursor-pointer select-none",
-                                "mx-2 my-2 rounded-2xl overflow-hidden",
-                                "ring-1 ring-black/10 dark:ring-white/10",
-                                "shadow-sm",
-                                active
-                                  ? "shadow-[0_18px_40px_-22px_rgba(99,102,241,0.55)] ring-indigo-500/30 dark:ring-indigo-400/30"
-                                  : "hover:shadow-[0_18px_40px_-26px_rgba(0,0,0,0.35)]"
+                                "pointer-events-none absolute -inset-10 rotate-12 opacity-0 transition duration-200",
+                                "bg-gradient-to-r from-transparent via-white/35 to-transparent",
+                                active ? "opacity-70" : "group-hover:opacity-60"
                               )}
-                            >
-                              {/* Logo-as-background layer */}
-                              <div
-                                className="absolute inset-0"
-                                style={{
-                                  backgroundImage: logo ? `url(${logo})` : undefined,
-                                  backgroundSize: "cover",
-                                  backgroundPosition: "center",
-                                  opacity: logo ? 0.42 : 0,
-                                  transform: "scale(1.05)",
-                                  filter: "saturate(1.1) contrast(1.05)",
-                                }}
-                              />
+                            />
 
-                              {/* Heatmap-style overlays */}
-                              <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/80 to-white/55 dark:from-black/65 dark:via-black/45 dark:to-black/25" />
-                              <div className="absolute inset-0 opacity-70">
-                                <div className="absolute -top-10 -left-10 h-28 w-28 rounded-full bg-indigo-500/10 blur-2xl" />
-                                <div className="absolute -bottom-12 -right-12 h-32 w-32 rounded-full bg-fuchsia-500/10 blur-2xl" />
-                              </div>
-
-                              {/* Shine sweep */}
-                              <div
-                                className={cn(
-                                  "pointer-events-none absolute -inset-10 rotate-12 opacity-0 transition duration-200",
-                                  "bg-gradient-to-r from-transparent via-white/35 to-transparent",
-                                  active ? "opacity-70" : "group-hover:opacity-60"
-                                )}
-                              />
-
-                              {/* Content */}
-                              <div className="relative px-4 py-3">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <div className="h-8 w-8 rounded-xl bg-white/80 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/10 flex items-center justify-center overflow-hidden">
-                                        {logo ? (
-                                          // eslint-disable-next-line @next/next/no-img-element
-                                          <img
-                                            src={logo}
-                                            alt=""
-                                            className="h-6 w-6 object-contain"
-                                            loading="lazy"
-                                            onError={(e) =>
-                                              ((e.currentTarget as HTMLImageElement).style.display = "none")
-                                            }
-                                          />
-                                        ) : (
-                                          <span className="text-[10px] font-black text-gray-700 dark:text-white/70">
-                                            {s.symbol.slice(0, 2)}
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      <div className="text-sm font-black tracking-tight text-gray-900 dark:text-white">
-                                        {s.symbol}
-                                      </div>
-
-                                      {p?.exchange ? (
-                                        <span className="hidden sm:inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold bg-black/[0.04] dark:bg-white/[0.08] text-gray-700 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/10">
-                                          {String(p.exchange)}
+                            {/* Content */}
+                            <div className="relative px-4 py-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-8 w-8 rounded-xl bg-white/80 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/10 flex items-center justify-center overflow-hidden">
+                                      {logo ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                          src={logo}
+                                          alt=""
+                                          className="h-6 w-6 object-contain"
+                                          loading="lazy"
+                                          onError={(e) =>
+                                            ((e.currentTarget as HTMLImageElement).style.display = "none")
+                                          }
+                                        />
+                                      ) : (
+                                        <span className="text-[10px] font-black text-gray-700 dark:text-white/70">
+                                          {s.symbol.slice(0, 2)}
                                         </span>
-                                      ) : null}
+                                      )}
                                     </div>
-
-                                    <div className="mt-1">
-                                      <div className="text-xs font-semibold text-gray-700 dark:text-white/70 truncate">
-                                        {p?.name || s.description || "—"}
-                                      </div>
+                                    <div className="text-sm font-black tracking-tight text-gray-900 dark:text-white">
+                                      {s.symbol}
                                     </div>
+                                    {p?.exchange ? (
+                                      <span className="hidden sm:inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold bg-black/[0.04] dark:bg-white/[0.08] text-gray-700 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/10">
+                                        {String(p.exchange)}
+                                      </span>
+                                    ) : null}
                                   </div>
-
-                                  {s.type ? (
-                                    <span className="shrink-0 rounded-full px-3 py-1 text-[11px] font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06] text-gray-800 dark:text-white/75">
-                                      {s.type}
-                                    </span>
-                                  ) : null}
+                                  <div className="mt-1 text-xs font-semibold text-gray-700 dark:text-white/70 truncate">
+                                    {p?.name || s.description || "—"}
+                                  </div>
                                 </div>
-
-                                <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-gray-600 dark:text-white/55">
-                                  <span className="truncate">{p?.weburl ? "Has website + logo" : "Fetching profile…"}</span>
-                                  <span
-                                    className={cn(
-                                      "rounded-full px-2 py-0.5 font-black ring-1",
-                                      active
-                                        ? "bg-indigo-600/15 text-indigo-800 ring-indigo-500/20 dark:text-indigo-200 dark:ring-indigo-400/20"
-                                        : "bg-black/[0.03] text-gray-700 ring-black/10 dark:bg-white/[0.06] dark:text-white/70 dark:ring-white/10"
-                                    )}
-                                  >
-                                    {active ? "Enter" : "↵"}
+                                {s.type ? (
+                                  <span className="shrink-0 rounded-full px-3 py-1 text-[11px] font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06] text-gray-800 dark:text-white/75">
+                                    {s.type}
                                   </span>
-                                </div>
+                                ) : null}
                               </div>
-                            </motion.li>
-                          );
-                        })}
-                    </motion.ul>
-                  )}
-                </AnimatePresence>
-              </div>
+
+                              <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-gray-600 dark:text-white/55">
+                                <span className="truncate">{p?.weburl ? "Has website + logo" : "Fetching profile…"}</span>
+                                <span
+                                  className={cn(
+                                    "rounded-full px-2 py-0.5 font-black ring-1",
+                                    active
+                                      ? "bg-indigo-600/15 text-indigo-800 ring-indigo-500/20 dark:text-indigo-200 dark:ring-indigo-400/20"
+                                      : "bg-black/[0.03] text-gray-700 ring-black/10 dark:bg-white/[0.06] dark:text-white/70 dark:ring-white/10"
+                                  )}
+                                >
+                                  {active ? "Enter" : "↵"}
+                                </span>
+                              </div>
+                            </div>
+                          </motion.li>
+                        );
+                      })}
+                  </motion.ul>
+                )}
+              </AnimatePresence>
             </div>
 
-            <div className="sm:col-span-4 flex sm:flex-col gap-2 sm:justify-end">
-              <Button
+            {/* Clear button */}
+            {symbolInput && !loading && (
+              <button
                 type="button"
-                variant="indigo"
-                size="lg"
-                fullWidth
-                onClick={() => handleSearch()}
-                disabled={loading || !normalizedSymbol}
-                className="font-extrabold ring-1 ring-black/10 dark:ring-white/10 active:scale-[0.99] disabled:opacity-50"
-              >
-                {loading ? "Searching…" : "Search"}
-              </Button>
-
-              <Button
-                type="button"
-                variant="secondary"
-                size="lg"
-                fullWidth
                 onClick={handleClear}
-                className="font-extrabold rounded-2xl ring-1 ring-black/10 dark:ring-white/10 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10]"
+                className="shrink-0 rounded-lg p-1 text-gray-400 hover:text-gray-700 dark:hover:text-white/70 hover:bg-black/[0.05] dark:hover:bg-white/[0.08] transition-colors"
+                aria-label="Clear search"
               >
-                Reset
-              </Button>
-            </div>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+
+            {/* Divider */}
+            <div className="hidden sm:block h-5 w-px shrink-0 bg-black/10 dark:bg-white/10" />
+
+            {/* Search button */}
+            <Button
+              type="button"
+              variant="indigo"
+              size="sm"
+              onClick={() => handleSearch()}
+              disabled={loading || !normalizedSymbol}
+              className="shrink-0 font-extrabold ring-1 ring-black/10 dark:ring-white/10 active:scale-[0.98] disabled:opacity-50"
+            >
+              {loading ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  <span className="hidden sm:inline">Searching</span>
+                </span>
+              ) : "Search"}
+            </Button>
           </div>
 
-          {error ? (
-            <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-700 dark:text-red-200">
+          {/* Error */}
+          {error && (
+            <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs font-semibold text-red-700 dark:text-red-200">
               {error}
             </div>
-          ) : null}
+          )}
         </div>
       </div>
 
-      {/* Default widgets */}
-      {!loading && (!showModal || !stockData) && (
-        <div className="space-y-4">
+      {/* ── Default widgets — stay visible, overlaid during load ─────── */}
+      {(!showModal || !stockData) && (
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-3 items-start">
           <MarketWidgets onSelectTicker={handleSearch} />
           <NewsWidget />
         </div>
       )}
 
-      {/* Modal */}
-      {showModal && stockData && (
-        <StockQuoteModal stockData={stockData} newsData={newsData} onClose={() => setShowModal(false)} />
-      )}
+      {/* ── Loading overlay — backdrop blur + spinner ─────────────────── */}
+      <AnimatePresence>
+        {loading && (
+          <motion.div
+            key="quote-loading-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-40 flex items-center justify-center backdrop-blur-md bg-black/55"
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ duration: 0.2, delay: 0.06 }}
+              className="flex flex-col items-center gap-4"
+            >
+              {/* Dual-ring spinner */}
+              <div className="relative h-14 w-14">
+                <div className="absolute inset-0 rounded-full border-[3px] border-white/10" />
+                <div className="absolute inset-0 rounded-full border-[3px] border-t-indigo-400 border-r-transparent border-b-transparent border-l-transparent animate-spin" />
+                <div className="absolute inset-[5px] rounded-full border-2 border-t-fuchsia-400/70 border-r-transparent border-b-transparent border-l-transparent animate-spin [animation-duration:800ms] [animation-direction:reverse]" />
+              </div>
+              <p className="text-white/80 text-sm font-extrabold tracking-wide">Fetching quote…</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <p className="text-xs text-gray-600 dark:text-white/60 text-center">
-        DISCLAIMER: All displayed stock quote data is delayed by a minimum of 15 minutes.
+      {/* ── Stock detail modal ────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showModal && stockData && (
+          <StockQuoteModal
+            key="stock-modal"
+            stockData={stockData}
+            newsData={newsData}
+            onClose={() => setShowModal(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <p className="text-[11px] text-gray-500 dark:text-white/40 text-center pb-1">
+        Data delayed ~15 min · Provided by Finnhub · Not financial advice
       </p>
     </section>
   );

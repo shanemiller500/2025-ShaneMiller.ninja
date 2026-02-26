@@ -22,11 +22,11 @@ const getFearGreedLabel = (index: number): string => {
 };
 
 const getTone = (index: number) => {
-  if (index < 20) return { chip: "bg-red-500/15 text-red-700 dark:text-red-200 ring-red-500/30" };
-  if (index < 40) return { chip: "bg-amber-500/15 text-amber-800 dark:text-amber-200 ring-amber-500/30" };
-  if (index < 60) return { chip: "bg-slate-500/15 text-slate-800 dark:text-slate-200 ring-slate-500/30" };
-  if (index < 80) return { chip: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 ring-emerald-500/30" };
-  return { chip: "bg-green-600/15 text-green-800 dark:text-green-200 ring-green-500/30" };
+  if (index < 20) return { chip: "bg-red-500/15 text-red-700 dark:text-red-200 ring-red-500/30",    score: "text-red-600 dark:text-red-300" };
+  if (index < 40) return { chip: "bg-amber-500/15 text-amber-800 dark:text-amber-200 ring-amber-500/30", score: "text-amber-600 dark:text-amber-300" };
+  if (index < 60) return { chip: "bg-slate-500/15 text-slate-800 dark:text-slate-200 ring-slate-500/30", score: "text-slate-600 dark:text-slate-300" };
+  if (index < 80) return { chip: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 ring-emerald-500/30", score: "text-emerald-600 dark:text-emerald-300" };
+  return { chip: "bg-green-600/15 text-green-800 dark:text-green-200 ring-green-500/30", score: "text-green-600 dark:text-green-300" };
 };
 
 const ZONES = [
@@ -84,8 +84,6 @@ function InfoModal({
 
         {/* Body */}
         <div className="px-5 py-4 space-y-4">
-
-          {/* Current reading */}
           <div className="rounded-xl border border-black/[0.07] dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.04] px-4 py-3 flex items-center justify-between">
             <div>
               <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400 dark:text-gray-500 mb-1">Right Now</p>
@@ -96,7 +94,6 @@ function InfoModal({
             <span className="text-sm font-extrabold text-gray-500 dark:text-gray-400">{label}</span>
           </div>
 
-          {/* Plain English explanation */}
           <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
             <p>
               We look at how the top <span className="font-bold">{n} major US stocks</span> are moving today and turn that into a single 0–100 score.
@@ -111,7 +108,6 @@ function InfoModal({
             </p>
           </div>
 
-          {/* Zone table */}
           <div className="space-y-1.5">
             {ZONES.map((z) => {
               const active = index >= z.min && index <= z.max;
@@ -151,67 +147,62 @@ const FearGreedWidget: React.FC<FearGreedWidgetProps> = ({
 
   return (
     <>
-      <div className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
+      <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm flex flex-col">
         <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
           <div className="absolute -top-10 -left-14 h-40 w-40 rounded-full bg-indigo-400/20 blur-3xl" />
           <div className="absolute -bottom-12 -right-12 h-44 w-44 rounded-full bg-fuchsia-400/20 blur-3xl" />
         </div>
 
-        <div className="relative p-4 sm:p-5">
-          {/* header */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <h3 className="text-base sm:text-lg font-extrabold tracking-tight text-gray-900 dark:text-white">
-                {title}
-              </h3>
-          
-            </div>
+        {/* Top label row */}
+        <div className="relative px-4 pt-3.5 flex items-center justify-between">
+          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+            {title}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowInfo(true)}
+            className="rounded-full p-1 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
+            aria-label="How is this calculated?"
+          >
+            <Info className="h-3 w-3" />
+          </button>
+        </div>
 
-            <div className="flex flex-col items-end gap-1">
-              <span className={["inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] sm:text-xs font-extrabold ring-1", tone.chip].join(" ")}>
-                <span className="tabular-nums">{safe.toFixed(0)}</span>
-                <span className="opacity-80">•</span>
-                <span className="truncate max-w-[120px] sm:max-w-none">{label}</span>
-              </span>
-              {updatedAt && (
-                <span className="text-[10px] sm:text-[11px] font-semibold text-gray-500 dark:text-white/50">{updatedAt}</span>
-              )}
-            </div>
+        {/* Hero: big score + label chip */}
+        <div className="relative flex flex-col items-center gap-2 px-4 pt-4 pb-3">
+          <div className={`text-5xl sm:text-6xl font-black tabular-nums leading-none tracking-tight ${tone.score}`}>
+            {safe.toFixed(0)}
           </div>
+          <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-extrabold ring-1 ${tone.chip}`}>
+            {label}
+          </span>
+          {updatedAt && (
+            <span className="text-[10px] font-semibold text-gray-400 dark:text-white/40">{updatedAt}</span>
+          )}
+        </div>
 
-          {/* gauge */}
-          <div className="mt-4">
-            <div className="relative h-3.5 sm:h-4 rounded-full overflow-hidden ring-1 ring-black/10 dark:ring-white/10">
-              <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-slate-200 to-green-500" />
-              <div className="absolute top-1/2 -translate-y-1/2" style={{ left: markerLeft }} aria-hidden="true">
-                <div className="relative">
-                  <div className="h-5 sm:h-6 w-1.5 rounded-full bg-gray-900 dark:bg-white shadow" />
-                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-2 rounded-full bg-gray-900 dark:bg-white shadow" />
-                </div>
+        {/* Gauge — fills remaining space */}
+        <div className="relative flex-1 flex flex-col justify-end px-4 pb-4 gap-2">
+          {/* Bar */}
+          <div className="relative h-3.5 sm:h-4 rounded-full overflow-hidden ring-1 ring-black/10 dark:ring-white/10">
+            <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-slate-200 to-green-500" />
+            <div className="absolute top-1/2 -translate-y-1/2" style={{ left: markerLeft }} aria-hidden="true">
+              <div className="relative">
+                <div className="h-5 sm:h-6 w-1.5 rounded-full bg-gray-900 dark:bg-white shadow" />
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-2 rounded-full bg-gray-900 dark:bg-white shadow" />
               </div>
             </div>
+          </div>
 
-            <div className="mt-2 flex justify-between text-[11px] sm:text-xs font-semibold text-gray-600 dark:text-white/60">
-              <span>Fear</span>
-              <span>Neutral</span>
-              <span>Greed</span>
-            </div>
-
-            <div className="mt-2 text-[11px] sm:text-xs font-semibold text-gray-600 dark:text-white/60">
-              <span className="tabular-nums font-extrabold text-gray-900 dark:text-white">{safe.toFixed(0)}</span>{" "}
-              sits in <span className="font-extrabold">{label}</span>.
-                  
-                  <button
-                type="button"
-                onClick={() => setShowInfo(true)}
-                className="float-right rounded-full p-0.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
-                aria-label="How is this calculated?"
-              >
-                <Info className="h-3 w-3" />
-              </button>
-            </div>
+          {/* Axis labels */}
+          <div className="flex justify-between text-[11px] font-semibold text-gray-500 dark:text-white/50">
+            <span>Fear</span>
+            <span>Neutral</span>
+            <span>Greed</span>
           </div>
         </div>
+
+        <div className="h-[1px] w-full bg-gradient-to-r from-indigo-500/30 via-fuchsia-500/20 to-sky-500/20" />
       </div>
 
       <InfoModal

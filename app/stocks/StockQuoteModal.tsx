@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { formatSupplyValue, formatDate, formatDateWeirdValue } from "@/utils/formatters";
 import {
   FaArrowUp,
@@ -313,17 +314,25 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
   /*  Render                                                           */
   /* ------------------------------------------------------------------ */
   return (
-    <div
+    <motion.div
       ref={overlayRef}
       onMouseDown={onOverlayClick}
-      className="fixed inset-0 z-50 bg-black/90 dark:bg-black/95 backdrop-blur-sm overflow-hidden"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.22 }}
+      className="fixed inset-0 z-50 bg-black/85 dark:bg-black/92 backdrop-blur-md overflow-hidden"
       aria-modal="true"
       role="dialog"
     >
-      {/* ✅ full-height shell */}
+      {/* full-height shell */}
       <div className="h-[100dvh] w-full flex items-end sm:items-center justify-center overflow-hidden">
-        {/* ✅ card becomes a flex column; header sticky; body scrolls */}
-        <div
+        {/* card — slides up from bottom (mobile spring) */}
+        <motion.div
+          initial={{ y: 48, opacity: 0, scale: 0.98 }}
+          animate={{ y: 0, opacity: 1, scale: 1 }}
+          exit={{ y: 48, opacity: 0, scale: 0.98 }}
+          transition={{ type: "spring", stiffness: 360, damping: 38, mass: 0.85 }}
           className={cn(
             "relative w-full sm:max-w-5xl",
             "h-[100dvh] sm:h-auto sm:max-h-[88vh]",
@@ -406,14 +415,45 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                     
+                    <div className="flex items-center gap-1.5">
+                      {/* Copy summary */}
+                      <button
+                        type="button"
+                        onClick={copySummary}
+                        title="Copy summary"
+                        className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10] transition"
+                      >
+                        {copied ? (
+                          <FaCheck className="text-emerald-500" />
+                        ) : (
+                          <FaRegCopy className="text-gray-700 dark:text-white/70" />
+                        )}
+                        <span className="hidden sm:inline text-gray-700 dark:text-white/70">
+                          {copied ? 'Copied!' : 'Copy'}
+                        </span>
+                      </button>
+
+                      {/* Star */}
+                      <button
+                        type="button"
+                        onClick={toggleStar}
+                        title={isStarred ? 'Unstar' : 'Star this ticker'}
+                        className="inline-flex items-center justify-center rounded-xl px-2.5 py-2 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10] transition"
+                      >
+                        {isStarred ? (
+                          <FaStar className="text-amber-500" />
+                        ) : (
+                          <FaRegStar className="text-gray-700 dark:text-white/70" />
+                        )}
+                      </button>
+
+                      {/* Website */}
                       {profile?.weburl && (
                         <a
                           href={profile.weburl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center rounded-xl px-3 py-2 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10] transition"
+                          className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10] transition"
                         >
                           <FaExternalLinkAlt className="text-gray-700 dark:text-white/70" />
                           <span className="hidden sm:inline">Site</span>
@@ -750,23 +790,21 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
             )}
 
             {/* Footer */}
-            <div className="mt-6 pb-3 flex flex-col sm:flex-row gap-3 sm:justify-end">
+            <div className="mt-6 pb-2 flex flex-col sm:flex-row gap-3 sm:justify-end">
               <button
                 onClick={onClose}
                 className="w-full sm:w-auto rounded-2xl px-5 py-3 text-sm font-extrabold bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white hover:opacity-95 active:scale-[0.99] transition"
               >
                 Close
               </button>
-
-              
             </div>
-<p className="text-xs text-gray-600 dark:text-white/60 text-center">
-        DISCLAIMER: All displayed stock quote data is delayed by a minimum of 15 minutes.
-      </p>
+            <p className="text-[11px] text-gray-500 dark:text-white/40 text-center pb-1">
+              Data delayed ~15 min · Provided by Finnhub · Not financial advice
+            </p>
             <div className="h-2" />
           </div>
-        </div>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 }

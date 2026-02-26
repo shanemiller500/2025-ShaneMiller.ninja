@@ -42,9 +42,9 @@ function delta(rate: number | null, prev: number | null) {
   return parseFloat((rate - prev).toFixed(3));
 }
 
-/* ─── RateCard — compact, always-horizontal ─────────────────────────── */
+/* ─── RateRow — full-width stacked layout ──────────────────────────── */
 
-function RateCard({ label, term, point }: { label: string; term: "30yr" | "15yr"; point: RatePoint }) {
+function RateRow({ label, term, point }: { label: string; term: "30yr" | "15yr"; point: RatePoint }) {
   const d      = delta(point.rate, point.prev);
   const isUp   = d !== null && d > 0;
   const isDown = d !== null && d < 0;
@@ -69,30 +69,29 @@ function RateCard({ label, term, point }: { label: string; term: "30yr" | "15yr"
     : "text-gray-400";
 
   return (
-    <div className={`relative flex-1 overflow-hidden rounded-xl border ${borderCls} bg-white dark:bg-white/[0.03] p-2.5 sm:p-3`}>
+    <div className={`relative flex-1 overflow-hidden rounded-xl border ${borderCls} bg-white dark:bg-white/[0.03] px-3.5 py-3 flex flex-col justify-between`}>
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${gradCls}`} />
 
-      <div className="relative space-y-1">
+      <div className="relative flex items-start justify-between gap-2">
         {/* Label */}
         <p className={`text-[9px] font-black uppercase tracking-widest ${labelCls}`}>{label}</p>
-
-        {/* Rate + delta on one line */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-lg sm:text-xl font-black tabular-nums tracking-tight text-gray-900 dark:text-white leading-none">
-            {fmtRate(point.rate)}
-          </span>
-          {d !== null && (
-            <span className={`flex items-center gap-0.5 text-[11px] font-bold leading-none ${trendCls}`}>
-              <TrendIcon className="h-3 w-3 shrink-0" />
-              {Math.abs(d).toFixed(2)}
-            </span>
-          )}
-        </div>
-
-        {/* As-of date */}
-        <p className="text-[9px] text-gray-400 dark:text-gray-500 font-medium">
+        {/* Date */}
+        <p className="text-[9px] text-gray-400 dark:text-gray-500 font-medium shrink-0">
           {fmtDate(point.date)}
         </p>
+      </div>
+
+      {/* Big rate */}
+      <div className="relative mt-2 flex items-end justify-between gap-2">
+        <span className="text-2xl sm:text-3xl font-black tabular-nums tracking-tight text-gray-900 dark:text-white leading-none">
+          {fmtRate(point.rate)}
+        </span>
+        {d !== null && (
+          <span className={`flex items-center gap-0.5 text-xs font-bold leading-none mb-0.5 ${trendCls}`}>
+            <TrendIcon className="h-3.5 w-3.5 shrink-0" />
+            {Math.abs(d).toFixed(2)}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -102,12 +101,11 @@ function RateCard({ label, term, point }: { label: string; term: "30yr" | "15yr"
 
 function Skeleton() {
   return (
-    <div className="flex gap-2 animate-pulse">
+    <div className="flex flex-col gap-2 flex-1 animate-pulse">
       {[0, 1].map((i) => (
-        <div key={i} className="flex-1 rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/[0.03] p-2.5 space-y-1.5">
-          <div className="h-2.5 w-16 rounded-full bg-gray-200 dark:bg-gray-700" />
-          <div className="h-5 w-20 rounded bg-gray-200 dark:bg-gray-700" />
-          <div className="h-2 w-14 rounded bg-gray-100 dark:bg-gray-800" />
+        <div key={i} className="flex-1 rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/[0.03] p-3 space-y-2">
+          <div className="h-2.5 w-20 rounded-full bg-gray-200 dark:bg-gray-700" />
+          <div className="h-7 w-24 rounded bg-gray-200 dark:bg-gray-700" />
         </div>
       ))}
     </div>
@@ -137,9 +135,15 @@ export default function MortgageRateWidget() {
   }, []);
 
   return (
-    <div className="space-y-1.5">
-      {/* Header row */}
-      <div className="flex items-center justify-between">
+    <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm flex flex-col">
+      {/* Ambient blobs */}
+      <div className="pointer-events-none absolute inset-0 opacity-50 dark:opacity-35">
+        <div className="absolute -top-12 -left-12 h-40 w-40 rounded-full bg-indigo-400/15 blur-3xl" />
+        <div className="absolute -bottom-12 -right-12 h-40 w-40 rounded-full bg-fuchsia-400/15 blur-3xl" />
+      </div>
+
+      {/* Header */}
+      <div className="relative px-4 pt-3.5 flex items-center justify-between">
         <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
           US Mortgage Rates · Weekly
         </span>
@@ -153,16 +157,23 @@ export default function MortgageRateWidget() {
         </a>
       </div>
 
-      {loading ? (
-        <Skeleton />
-      ) : error || !data ? (
-        <p className="text-[10px] text-rose-500 dark:text-rose-400">Could not load rates.</p>
-      ) : (
-        <div className="flex gap-2">
-          <RateCard label="30-Year Fixed" term="30yr" point={data.rate30} />
-          <RateCard label="15-Year Fixed" term="15yr" point={data.rate15} />
-        </div>
-      )}
+      {/* Rate cards — flex-1 so they fill available height */}
+      <div className="relative flex-1 flex flex-col gap-2 px-4 py-3">
+        {loading ? (
+          <Skeleton />
+        ) : error || !data ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-[10px] text-rose-500 dark:text-rose-400">Could not load rates.</p>
+          </div>
+        ) : (
+          <>
+            <RateRow label="30-Year Fixed" term="30yr" point={data.rate30} />
+            <RateRow label="15-Year Fixed" term="15yr" point={data.rate15} />
+          </>
+        )}
+      </div>
+
+      <div className="h-[1px] w-full bg-gradient-to-r from-indigo-500/30 via-fuchsia-500/20 to-sky-500/20" />
     </div>
   );
 }
