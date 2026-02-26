@@ -284,49 +284,49 @@ export default function WidgetWeather() {
 
   if (loading) {
     return (
-      <div className="max-w-md mx-auto rounded-2xl overflow-hidden shadow-lg bg-gradient-to-br from-sky-500 to-amber-300">
+      <div className="max-w-md mx-auto rounded-2xl overflow-hidden shadow-lg bg-white dark:bg-brand-900 border border-gray-200/70 dark:border-white/10">
         <div className="p-5">
           {/* Location + time */}
           <div className="flex items-start justify-between mb-1">
             <div className="space-y-1.5">
-              <div className="h-3.5 w-28 rounded-full bg-white/35 animate-pulse" />
-              <div className="h-3 w-14 rounded-full bg-white/25 animate-pulse" />
+              <div className="h-3.5 w-28 rounded-full bg-gray-200 dark:bg-white/10 animate-pulse" />
+              <div className="h-3 w-14 rounded-full bg-gray-200 dark:bg-white/10 animate-pulse" />
             </div>
-            <div className="h-3 w-16 rounded-full bg-white/25 animate-pulse" />
+            <div className="h-3 w-16 rounded-full bg-gray-200 dark:bg-white/10 animate-pulse" />
           </div>
 
           {/* Temp + icon */}
           <div className="mt-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-white/30 animate-pulse" />
+              <div className="h-12 w-12 rounded-full bg-gray-200 dark:bg-white/10 animate-pulse" />
               <div className="space-y-2">
-                <div className="h-10 w-20 rounded-xl bg-white/35 animate-pulse" />
-                <div className="h-2.5 w-16 rounded-full bg-white/25 animate-pulse" />
+                <div className="h-10 w-20 rounded-xl bg-gray-200 dark:bg-white/10 animate-pulse" />
+                <div className="h-2.5 w-16 rounded-full bg-gray-200 dark:bg-white/10 animate-pulse" />
               </div>
             </div>
-            <div className="h-3 w-20 rounded-full bg-white/25 animate-pulse" />
+            <div className="h-3 w-20 rounded-full bg-gray-200 dark:bg-white/10 animate-pulse" />
           </div>
 
           {/* Mini stats */}
           <div className="mt-3 grid grid-cols-3 gap-1">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-14 rounded-xl bg-white/20 animate-pulse" />
+              <div key={i} className="h-14 rounded-xl bg-gray-200 dark:bg-white/10 animate-pulse" />
             ))}
           </div>
 
           {/* Hourly bars */}
           <div className="mt-3 space-y-2">
-            <div className="h-3.5 w-20 rounded-full bg-white/30 animate-pulse" />
+            <div className="h-3.5 w-20 rounded-full bg-gray-200 dark:bg-white/10 animate-pulse" />
             <div className="flex gap-1">
               {[0, 1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex-1 h-[84px] rounded-xl bg-white/20 animate-pulse" />
+                <div key={i} className="flex-1 h-[84px] rounded-xl bg-gray-200 dark:bg-white/10 animate-pulse" />
               ))}
             </div>
           </div>
 
           {/* Spinner + label */}
-          <div className="mt-4 flex items-center justify-center gap-2 text-white/80">
-            <div className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+          <div className="mt-4 flex items-center justify-center gap-2 text-gray-400 dark:text-white/50">
+            <div className="h-4 w-4 rounded-full border-2 border-gray-300 dark:border-white/20 border-t-gray-500 dark:border-t-white/60 animate-spin" />
             <span className="text-xs font-medium">Detecting location…</span>
           </div>
         </div>
