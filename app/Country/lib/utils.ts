@@ -1,5 +1,5 @@
 import type { LiteCountry } from "./types";
-import { CACHE_FEATURED_KEY, FEATURED_PICK_COUNT, WIKI_CLAMP_LENGTH } from "./constants";
+import { CACHE_FEATURED_KEY, CACHE_FEATURED_TTL_MS, FEATURED_PICK_COUNT, WIKI_CLAMP_LENGTH } from "./constants";
 
 export const lc = (s: string) => (s || "").toLowerCase();
 export const fmt = (n?: number) => (typeof n === "number" ? n.toLocaleString() : "—");
@@ -19,18 +19,24 @@ export function getFeatured(mini: LiteCountry[]): LiteCountry[] {
   try {
     const raw = localStorage.getItem(CACHE_FEATURED_KEY);
     if (raw) {
-      const ids: string[] = JSON.parse(raw);
-      const map = new Map(mini.map((c) => [c.cca3, c]));
-      const picked = ids.map((id) => map.get(id)).filter(Boolean) as LiteCountry[];
-      if (picked.length >= Math.min(FEATURED_PICK_COUNT, mini.length)) {
-        return picked.slice(0, FEATURED_PICK_COUNT);
+      const { ids, ts }: { ids: string[]; ts: number } = JSON.parse(raw);
+      const expired = !ts || Date.now() - ts > CACHE_FEATURED_TTL_MS;
+      if (!expired && Array.isArray(ids)) {
+        const map = new Map(mini.map((c) => [c.cca3, c]));
+        const picked = ids.map((id) => map.get(id)).filter(Boolean) as LiteCountry[];
+        if (picked.length >= Math.min(FEATURED_PICK_COUNT, mini.length)) {
+          return picked.slice(0, FEATURED_PICK_COUNT);
+        }
       }
     }
   } catch { /* localStorage unavailable */ }
 
   const shuffled = [...mini].sort(() => Math.random() - 0.5).slice(0, FEATURED_PICK_COUNT);
   try {
-    localStorage.setItem(CACHE_FEATURED_KEY, JSON.stringify(shuffled.map((c) => c.cca3)));
+    localStorage.setItem(
+      CACHE_FEATURED_KEY,
+      JSON.stringify({ ids: shuffled.map((c) => c.cca3), ts: Date.now() }),
+    );
   } catch { /* localStorage unavailable */ }
   return shuffled;
 }

@@ -579,6 +579,7 @@ export function AIPlaces({
   error,
   onExpand,
   onRetry,
+  onPlacePinClick,
 }: {
   countryName: string;
   places: CountryPlacesData | null;
@@ -586,6 +587,7 @@ export function AIPlaces({
   error: string | null;
   onExpand: () => void;
   onRetry: () => void;
+  onPlacePinClick: (place: PlaceResult) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -629,7 +631,7 @@ export function AIPlaces({
               Explore Places
             </div>
             <div className="text-[10px] text-violet-600/60 dark:text-violet-400/50">
-              Cities, towns &amp; must-see spots · click to load
+              Cities, towns &amp; must-see spots · pinned on the map above · click to load
             </div>
           </div>
         </div>
@@ -706,6 +708,16 @@ export function AIPlaces({
                         <span className="font-bold text-sm text-gray-900 dark:text-white leading-tight">
                           {place.name}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => onPlacePinClick(place)}
+                          disabled={place.lat == null || place.lng == null}
+                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold bg-violet-100 dark:bg-violet-800/40 text-violet-800 dark:text-violet-200 border border-violet-300 dark:border-violet-600/60 shadow-sm hover:bg-violet-200 dark:hover:bg-violet-700/45 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={place.lat != null && place.lng != null ? "Show this pin on the map" : "Map pin unavailable for this place"}
+                        >
+                          <FaMapPin className="text-[8px]" />
+                          Pinned on map
+                        </button>
                         <span
                           className={cn(
                             "rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0",

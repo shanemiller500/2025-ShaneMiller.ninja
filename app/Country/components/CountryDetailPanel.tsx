@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaBook,
@@ -27,7 +27,7 @@ import {
 } from "react-icons/fa";
 
 import { trackEvent } from "@/utils/mixpanel";
-import type { FullCountry, Extras, LiteCountry } from "../lib/types";
+import type { FullCountry, Extras, LiteCountry, PlaceResult } from "../lib/types";
 import type { DetailTab } from "../lib/constants";
 import { TOP_SIGHTS_LIMIT, TRAVEL_TIPS } from "../lib/constants";
 import { cn, clampText, cToF, fmt, getBestTime, getLocalTime, getPackList } from "../lib/utils";
@@ -53,7 +53,7 @@ import CountryLightbox from "./CountryLightbox";
 
 const CountryMapLeaflet = dynamic(() => import("./CountryMapLeaflet"), {
   ssr: false,
-  loading: () => <div className="h-[175px] sm:h-[230px] rounded-2xl bg-gray-100 dark:bg-white/[0.05] animate-pulse" />,
+  loading: () => <div className="h-[185px] sm:h-[245px] rounded-2xl bg-gray-100 dark:bg-white/[0.05] animate-pulse" />,
 });
 
 interface CountryDetailPanelProps {
@@ -80,6 +80,8 @@ export default function CountryDetailPanel({
   const [localTime, setLocalTime] = useState("");
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIdx, setViewerIdx] = useState(0);
+  const [selectedPlaceKey, setSelectedPlaceKey] = useState<string | null>(null);
+  const mapWrapRef = useRef<HTMLDivElement | null>(null);
 
   const { insights, loading: aiLoading, error: aiError, loadInsights, reset: resetInsights } = useAITravelInsights();
   const { places, loading: placesLoading, error: placesError, loadPlaces, reset: resetPlaces } = useCountryPlaces();
@@ -93,9 +95,18 @@ export default function CountryDetailPanel({
       setLangOpen(false);
       resetInsights();
       resetPlaces();
+      setSelectedPlaceKey(null);
       loadInsights(full.name.common);
     }
   }, [full?.cca3]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const getPlaceKey = (place: PlaceResult) => `${place.name}::${place.lat ?? "na"}::${place.lng ?? "na"}`;
+
+  const handlePlacePinClick = (place: PlaceResult) => {
+    if (place.lat == null || place.lng == null) return;
+    setSelectedPlaceKey(getPlaceKey(place));
+    mapWrapRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
 
   // Local time ticker
   useEffect(() => {
@@ -312,12 +323,13 @@ export default function CountryDetailPanel({
                   >
                     {/* Map */}
                     {full.latlng?.length === 2 && (
-                      <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 shadow-sm h-[175px] sm:h-[230px]">
+                      <div ref={mapWrapRef} className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 shadow-sm sm:h-[350px]">
                         <CountryMapLeaflet
                           lat={full.latlng[0]}
                           lng={full.latlng[1]}
                           countryName={full.name.common}
                           places={places?.places}
+                          selectedPlaceKey={selectedPlaceKey}
                         />
                       </div>
                     )}
@@ -425,6 +437,7 @@ export default function CountryDetailPanel({
                       error={placesError}
                       onExpand={() => loadPlaces(full.name.common)}
                       onRetry={() => loadPlaces(full.name.common)}
+                      onPlacePinClick={handlePlacePinClick}
                     />
 
                     {/* ── AI: Dos & Don'ts ── */}

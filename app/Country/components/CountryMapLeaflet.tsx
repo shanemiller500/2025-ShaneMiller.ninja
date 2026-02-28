@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -52,6 +52,34 @@ function MapFitter({ places }: { places: PlaceResult[] }) {
   return null;
 }
 
+function OpenSelectedPlace({
+  places,
+  selectedPlaceKey,
+  markerRefs,
+}: {
+  places: PlaceResult[];
+  selectedPlaceKey: string | null;
+  markerRefs: MutableRefObject<Record<string, L.Marker>>;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!selectedPlaceKey) return;
+    const selected = places.find((p) => getPlaceKey(p) === selectedPlaceKey);
+    if (selected?.lat == null || selected?.lng == null) return;
+
+    const marker = markerRefs.current[selectedPlaceKey];
+    map.panTo([selected.lat, selected.lng], { animate: true, duration: 0.45 });
+    marker?.openPopup();
+  }, [places, selectedPlaceKey, markerRefs, map]);
+
+  return null;
+}
+
+function getPlaceKey(place: PlaceResult) {
+  return `${place.name}::${place.lat ?? "na"}::${place.lng ?? "na"}`;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface CountryMapLeafletProps {
@@ -59,10 +87,12 @@ interface CountryMapLeafletProps {
   lng: number;
   countryName: string;
   places?: PlaceResult[];
+  selectedPlaceKey?: string | null;
 }
 
-export default function CountryMapLeaflet({ lat, lng, countryName, places }: CountryMapLeafletProps) {
+export default function CountryMapLeaflet({ lat, lng, countryName, places, selectedPlaceKey }: CountryMapLeafletProps) {
   const validPlaces = places?.filter((p) => p.lat != null && p.lng != null) ?? [];
+  const markerRefs = useRef<Record<string, L.Marker>>({});
 
   return (
     <MapContainer
@@ -85,9 +115,15 @@ export default function CountryMapLeaflet({ lat, lng, countryName, places }: Cou
       {validPlaces.length > 0 && (
         <>
           <MapFitter places={validPlaces} />
+          <OpenSelectedPlace places={validPlaces} selectedPlaceKey={selectedPlaceKey ?? null} markerRefs={markerRefs} />
           {validPlaces.map((place, i) => (
             <Marker
-              key={i}
+              key={getPlaceKey(place)}
+              ref={(marker) => {
+                const key = getPlaceKey(place);
+                if (marker) markerRefs.current[key] = marker;
+                else delete markerRefs.current[key];
+              }}
               position={[place.lat!, place.lng!]}
               icon={makePlaceIcon(place.type, i + 1)}
             >

@@ -1,4 +1,5 @@
-export const CACHE_FEATURED_KEY = "travelExplorerFeatured_v2";
+export const CACHE_FEATURED_KEY = "travelExplorerFeatured_v3";
+export const CACHE_FEATURED_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 export const FEATURED_PICK_COUNT = 12;
 export const WIKI_CLAMP_LENGTH = 500;
 export const SWIPE_THRESHOLD_PX = 45;
