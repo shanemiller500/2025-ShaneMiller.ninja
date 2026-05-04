@@ -47,17 +47,20 @@ const entries: TimelineEntry[] = [
   },
   {
     icon: <Image className="object-contain" src={UMail} alt="UMail Logo" width={46} height={46} />,
-    startDate: 'April 2024',
-    endDate: 'Present',
-    title: 'Founder & Lead Engineer',
-    org: 'U-Mail.ai — Boulder, CO',
-    description:
-      'Built an AI-enhanced email platform with Node/Express APIs, Gmail integration, Firebase Auth, and secure OAuth 2.0. Shipped voice-to-text, AI text enhancement, and Google Meet/Zoom integrations. Architected a modular, multi-tenant API to power industry-specific B2B deployments.',
-    tags: [
-      'Node.js', 'Express', 'React', 'Firebase Auth', 'Realtime DB', 'OAuth 2.0',
-      'Gmail API', 'OpenAI API', 'Voice-to-Text', 'AI-Powered SaaS',  'AI Text Enhancement', 'LLM', 'Google Meet API',
-      'Zoom API', 'Multi-Tenant Architecture', 'REST APIs', 'GCP', 'Vercel', 'Mixpanel', 'B2B SaaS',
-    ],
+startDate: 'April 2024',
+endDate: 'Present',
+title: 'Founder & Lead Engineer',
+org: 'U-Mail.ai — Boulder, CO',
+description:
+  'Building an intelligent email platform powered by a custom decision-making algorithm (“U-Mail Brain”) that prioritizes communication, reduces noise, and streamlines messaging workflows. Developed a full-stack system with Node/Express APIs, Gmail integration via OAuth 2.0, and a React/React Native front end. Implemented AI-assisted writing and voice-to-text features while maintaining a privacy-first architecture with no user data used for model training. Designed a scalable API to support real-time inbox performance, integrations, and future automation. Google CASA certification in progress to ensure compliance with enterprise-grade security and data handling standards.',
+tags: [
+  'Node.js', 'Express', 'React', 'React Native', 'OAuth 2.0',
+  'Gmail API', 'OpenAI API', 'Voice-to-Text', 'AI Writing Assistant',
+  'LLM Integration', 'Custom Algorithms', 'Decision Engine', 'REST APIs',
+  'Full-Stack Development', 'Google Meet API', 'Chrome Extension',
+  'GCP', 'Render', 'Mixpanel', 'Product Engineering', 'SaaS',
+  'Google CASA (In Progress)',
+],
   },
   {
     icon: <Image className="object-contain" src={spgi} alt="S&P Global Logo" width={47} height={47} />,
