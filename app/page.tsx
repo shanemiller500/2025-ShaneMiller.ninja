@@ -219,52 +219,21 @@ function BioSection() {
           Short Bio
         </h2>
 
-        <p>
-          I’m a full-stack engineer with over a decade of experience in complex
-          production environments. I’ve worked on global financial data platforms,
-          core banking systems, and I build my own products from scratch.
-        </p>
+              <p>
+                I’m a full-stack software engineer, AI systems engineer, and product builder with over a decade of experience building complex software systems.
+              </p>
 
-        <p>
-          I usually end up in the hard parts of a company. Old code.
-          Fragile flows. Systems no one wants to touch.
-          I can step into code I’ve never seen before, trace it carefully,
-          ask the right questions, and come back with a fix that doesn’t
-          destabilize everything else. It’s rarely glamorous, but it’s effective.
-        </p>
+              <p>
+                My background includes financial platforms, enterprise applications, cloud infrastructure, and products I’ve built from the ground up. I enjoy solving difficult problems, improving legacy systems, and turning ideas into production-ready software.
+              </p>
 
-        <p>
-          I know C# deeply and have spent years inside .NET systems.
-          I love to hate it, but I understand it well.
-          I prefer frontend engineering.
-          Complex UI state, performance issues, and browser architecture
-          problems don’t intimidate me, they’re usually just puzzles.
-        </p>
+              <p>
+                Today, much of my focus is on building AI-powered products, intelligent workflows, and rapid prototypes. I’m the founder and developer behind U-Mail and ApplyPro, products designed to solve real-world communication and career challenges.
+              </p>
 
-        <p>
-          I move between frontend, APIs, and data layers comfortably.
-          Once I understand the whole system, I improve it with long-term
-          stability and clarity in mind.
-        </p>
-
-        <p>
-          There’s a method to how I work.
-          It may look intense, even backwards to some, but it’s structured.
-          I don’t chase trends. I build things that hold up.
-        </p>
-
-        <p>
-          Outside of work, I build products with active world wide users like ApplyPro and U-Mail end to end.
-          It keeps me sharp and reminds me that ownership matters.
-          Also, no one else is going to fix my bugs.
-        </p>
-
-        <p>
-          I’m not a designer, as you can probably tell from this site,
-          but I care about usability and clarity.
-          If you need someone steady who can improve complex systems
-          without unnecessary noise, I’m happy to talk.
-        </p>
+              <p>
+                I care about building software that is useful, scalable, and built to last. If you're looking for someone who can navigate complexity and turn ideas into working products, I’d be happy to connect.
+              </p>
 
         <p className="text-xs text-gray-500 text-center pb-10">
           See resume{" "}
