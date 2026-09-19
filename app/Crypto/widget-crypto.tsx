@@ -1,5 +1,7 @@
 "use client";
 
+import { fetchCoinCap, subscribeCoinCap } from "@/utils/coincap-client";
+
 import React, { useEffect, useState, useRef, useMemo, useCallback, startTransition } from "react";
 import { motion, useMotionValue, useAnimationFrame, animate } from "framer-motion";
 import CryptoAssetPopup from "@/app/Crypto/CryptoAssetPopup";
@@ -12,7 +14,7 @@ interface TradeState {
 }
 
 /* Constants -------------------------------------------------------- */
-const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
+
 const COINGECKO_TOP200 = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1";
 const SCROLL_SPEED = 35;
 
@@ -47,9 +49,6 @@ const cleanLogo = (url?: string) => {
   return s;
 };
 
-if (!API_KEY) {
-  console.error("🚨 Missing CoinCap API key! Set NEXT_PUBLIC_COINCAP_API_KEY in .env.local");
-}
 
 /* Component -------------------------------------------------------- */
 export default function WidgetCrypto() {
@@ -60,7 +59,6 @@ export default function WidgetCrypto() {
   const [contentWidth, setContentWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
-  const socketRef = useRef<WebSocket | null>(null);
   const innerRef = useRef<HTMLDivElement | null>(null);
   const isMounted = useRef(true);
   const dragIntentRef = useRef({ downX: 0, moved: false });
@@ -71,6 +69,7 @@ export default function WidgetCrypto() {
 
 
   useEffect(() => {
+  isMounted.current = true;
   return () => {
     isMounted.current = false;
 
@@ -79,17 +78,16 @@ export default function WidgetCrypto() {
       openTimerRef.current = null;
     }
 
-    try { socketRef.current?.close(); } catch {}
   };
 }, []);
 
 
   /* Fetch CoinCap metadata */
   useEffect(() => {
-    if (!API_KEY) return;
+
     (async () => {
       try {
-        const res = await fetch(`https://rest.coincap.io/v3/assets?limit=10&apiKey=${API_KEY}`);
+        const res = await fetchCoinCap(`assets?limit=10`);
         const json = await res.json();
         const map: Record<string, any> = {};
         (json.data || []).forEach((a: any) => (map[a.id] = a));
@@ -142,19 +140,9 @@ export default function WidgetCrypto() {
 
   /* WebSocket for live updates */
   useEffect(() => {
-    if (!API_KEY || !topAssetIds.length) return;
+    if (!topAssetIds.length) return;
 
-    const ws = new WebSocket(`wss://wss.coincap.io/prices?assets=${topAssetIds.join(",")}&apiKey=${API_KEY}`);
-    socketRef.current = ws;
-
-    ws.onmessage = (evt) => {
-      let data: Record<string, string>;
-      try {
-        data = JSON.parse(evt.data);
-      } catch {
-        return;
-      }
-
+    const stop = subscribeCoinCap(topAssetIds, (data) => {
       startTransition(() => {
         if (!isMounted.current) return;
         setTradeInfoMap((prev) => {
@@ -172,11 +160,9 @@ export default function WidgetCrypto() {
           return changed ? next : prev;
         });
       });
-    };
+    });
 
-    return () => {
-      try { ws.close(); } catch {}
-    };
+    return stop;
   }, [topAssetIds]);
 
   /* Measure content width */

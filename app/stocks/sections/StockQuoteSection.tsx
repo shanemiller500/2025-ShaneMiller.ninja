@@ -6,7 +6,7 @@ import { ToastContainer, toast } from "react-toastify";
 import { motion, AnimatePresence } from "framer-motion";
 import "react-toastify/dist/ReactToastify.css";
 
-import { Search, X } from "lucide-react";
+import { AlertTriangle, Search, X } from "lucide-react";
 
 import { API_TOKEN } from "@/utils/config";
 import MarketWidgets from "../widgets/MarketWidgets";
@@ -707,7 +707,8 @@ export default function StockQuoteSection() {
 
           {/* Error */}
           {error && (
-            <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs font-semibold text-red-700 dark:text-red-200">
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs font-semibold text-red-700 dark:text-red-200">
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
               {error}
             </div>
           )}

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Info, X } from "lucide-react";
+import { Activity, Info, X } from "lucide-react";
+
+import { IconBadge } from "@/components/ui/icon-badge";
 import type { TickerData } from "../lib/types";
 import { cn, pct } from "./TickerTile";
 
@@ -37,7 +39,12 @@ export default function TodayMarketWidget({
 
         {/* Top label row */}
         <div className="relative px-4 pt-3.5 flex items-center justify-between">
-          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+          <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+            <IconBadge
+              icon={Activity}
+              tone={overallChange > 0 ? "emerald" : overallChange < 0 ? "rose" : "neutral"}
+              size="sm"
+            />
             Today's Market
           </span>
           <button

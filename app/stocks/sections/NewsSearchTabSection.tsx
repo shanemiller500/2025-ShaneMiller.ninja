@@ -2,10 +2,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Building2,
+  Clock,
+  Filter,
+  Globe,
+  Hash,
+  Newspaper,
+  SearchX,
+  X,
+} from "lucide-react";
 import { formatDate } from "@/utils/formatters";
 import { API_TOKEN } from "@/utils/config";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { IconBadge } from "@/components/ui/icon-badge";
 
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                   */
@@ -203,17 +215,31 @@ export default function NewsSearchTabSection() {
           <div className="mx-auto max-w-7xl px-4 py-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0">
-                <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-                  Finance News
-                </h2>
-                
+                <div className="flex items-center gap-3">
+                  <IconBadge icon={Newspaper} tone="amber" size="lg" label="Finance news" />
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+                    Finance News
+                  </h2>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <Button variant="secondary" size="md" onClick={runGeneral}>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={runGeneral}
+                  className="inline-flex items-center gap-1.5"
+                >
+                  <Globe className="h-3.5 w-3.5" aria-hidden />
                   General
                 </Button>
-                <Button variant="indigo" size="md" onClick={runCompanySearch}>
+                <Button
+                  variant="indigo"
+                  size="md"
+                  onClick={runCompanySearch}
+                  className="inline-flex items-center gap-1.5"
+                >
+                  <Building2 className="h-3.5 w-3.5" aria-hidden />
                   Company
                 </Button>
               </div>
@@ -223,39 +249,60 @@ export default function NewsSearchTabSection() {
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-12">
               {/* symbol */}
               <div className="sm:col-span-4">
-                <label className="block text-[11px] font-bold text-gray-600 dark:text-white/60 mb-1">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600 dark:text-white/60 mb-1">
+                  <Hash className="h-3 w-3" aria-hidden />
                   Symbol
                 </label>
-                <input
-                  value={symbol}
-                  onChange={(e) => setSymbol(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") runCompanySearch();
-                  }}
-                  placeholder="AAPL, TSLA, NVDA…"
-                  className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 outline-none focus:border-black/20 dark:focus:border-white/20"
-                />
+                <div className="relative">
+                  <Hash
+                    className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/35"
+                    aria-hidden
+                  />
+                  <input
+                    value={symbol}
+                    onChange={(e) => setSymbol(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") runCompanySearch();
+                    }}
+                    placeholder="AAPL, TSLA, NVDA…"
+                    className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] pl-11 pr-4 py-3 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 outline-none focus:border-black/20 dark:focus:border-white/20"
+                  />
+                </div>
               </div>
 
               {/* keyword */}
               <div className="sm:col-span-6">
-                <label className="block text-[11px] font-bold text-gray-600 dark:text-white/60 mb-1">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600 dark:text-white/60 mb-1">
+                  <Filter className="h-3 w-3" aria-hidden />
                   Keyword filter
                 </label>
-                <input
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Filter headlines, summary, source…"
-                  className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 outline-none focus:border-black/20 dark:focus:border-white/20"
-                />
+                <div className="relative">
+                  <Filter
+                    className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/35"
+                    aria-hidden
+                  />
+                  <input
+                    value={query}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Filter headlines, summary, source…"
+                    className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] pl-11 pr-4 py-3 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 outline-none focus:border-black/20 dark:focus:border-white/20"
+                  />
+                </div>
               </div>
 
               {/* actions */}
               <div className="sm:col-span-2 flex sm:flex-col gap-2 sm:justify-end">
-                <Button variant="secondary" size="lg" fullWidth onClick={clearFilters}>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  fullWidth
+                  onClick={clearFilters}
+                  className="inline-flex items-center justify-center gap-1.5"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden />
                   Clear
                 </Button>
               </div>
@@ -283,7 +330,8 @@ export default function NewsSearchTabSection() {
             </div>
 
             {error && (
-              <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-700 dark:text-red-200">
+              <div className="mt-3 flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-700 dark:text-red-200">
+                <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
                 {error}
               </div>
             )}
@@ -295,7 +343,8 @@ export default function NewsSearchTabSection() {
           {loading ? (
             <SkeletonGrid />
           ) : filtered.length === 0 ? (
-            <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-6 text-center">
+            <div className="flex flex-col items-center rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-6 text-center">
+              <IconBadge icon={SearchX} tone="neutral" size="lg" className="mb-3" />
               <div className="text-lg font-extrabold text-gray-900 dark:text-white">
                 No matches
               </div>
@@ -375,7 +424,8 @@ function ArticleCard({ a }: { a: Article }) {
             <div className="truncate text-xs font-extrabold text-gray-800 dark:text-white/85">
               {a.source || domain || "Source"}
             </div>
-            <div className="text-[11px] font-semibold text-gray-600 dark:text-white/60">
+            <div className="flex items-center gap-1 text-[11px] font-semibold text-gray-600 dark:text-white/60">
+              <Clock className="h-3 w-3 text-gray-400 dark:text-white/40" aria-hidden />
               {dt}
             </div>
           </div>

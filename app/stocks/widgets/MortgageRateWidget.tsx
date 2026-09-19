@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingUp, TrendingDown, Minus, ExternalLink } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ExternalLink, Home } from "lucide-react";
+
+import { IconBadge } from "@/components/ui/icon-badge";
 
 /* ─── Types ────────────────────────────────────────────────────────── */
 
@@ -144,7 +146,8 @@ export default function MortgageRateWidget() {
 
       {/* Header */}
       <div className="relative px-4 pt-3.5 flex items-center justify-between">
-        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+        <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+          <IconBadge icon={Home} tone="sky" size="sm" />
           US Mortgage Rates · Weekly
         </span>
         <a

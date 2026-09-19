@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import { fetchCoinCap } from "@/utils/coincap-client";
+
 import { useEffect, useMemo, useState } from "react";
 
 import { motion } from "framer-motion";
@@ -42,7 +44,7 @@ function cn(...xs: Array<string | false | null | undefined>) {
 }
 
 /* ---------- API constants ---------- */
-const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
+
 const COINGECKO_TOP200 =
   "/api/CoinGeckoAPI?vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false";
 
@@ -150,7 +152,7 @@ export default function TopGainersLosers() {
     useEffect(() => {
       const html = document.documentElement;
       const body = document.body;
-  
+
       const prev = {
         htmlOverflow: html.style.overflow,
         htmlHeight: html.style.height,
@@ -162,19 +164,19 @@ export default function TopGainersLosers() {
         bodyWidth: body.style.width,
         bodyTouchAction: (body.style as any).touchAction,
       };
-  
+
       // Nuke common "modal left me locked" settings
       html.style.overflow = "auto";
       html.style.height = "auto";
       html.style.position = "static";
-  
+
       body.style.overflow = "auto";
       body.style.height = "auto";
       body.style.position = "static";
       body.style.top = "";
       body.style.width = "auto";
       (body.style as any).touchAction = "pan-y";
-  
+
       // Also remove any scroll-behavior traps
       // (If another component set overflow hidden via class on <html>, this still helps.)
       const unlock = () => {
@@ -182,21 +184,21 @@ export default function TopGainersLosers() {
         body.style.overflow = "auto";
         (body.style as any).touchAction = "pan-y";
       };
-  
+
       // Re-apply a couple times in case another component runs after mount
       const t1 = window.setTimeout(unlock, 0);
       const t2 = window.setTimeout(unlock, 50);
       const t3 = window.setTimeout(unlock, 250);
-  
+
       return () => {
         window.clearTimeout(t1);
         window.clearTimeout(t2);
         window.clearTimeout(t3);
-  
+
         html.style.overflow = prev.htmlOverflow;
         html.style.height = prev.htmlHeight;
         html.style.position = prev.htmlPosition;
-  
+
         body.style.overflow = prev.bodyOverflow;
         body.style.height = prev.bodyHeight;
         body.style.position = prev.bodyPosition;
@@ -208,18 +210,12 @@ export default function TopGainersLosers() {
 
   /* -------- fetch CoinCap prices every 15s -------- */
   useEffect(() => {
-    if (!API_KEY) {
-      setLoading(false);
-      return;
-    }
 
     let canceled = false;
 
     const load = async () => {
       try {
-        const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`,
-        );
+        const res = await fetchCoinCap("assets?limit=200");
         const json = await res.json();
         const rows = Array.isArray(json.data) ? json.data : [];
         if (canceled) return;

@@ -2,6 +2,8 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import { fetchCoinCap } from "@/utils/coincap-client";
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Chart } from "chart.js/auto";
@@ -132,7 +134,6 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
 
-  const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
 
   const destroyChart = () => {
     try { chartRef.current?.destroy(); } catch {}
@@ -210,8 +211,7 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
       try {
         const end = Date.now();
         const start = end - parseInt(timeframe, 10) * 86_400_000;
-        const res = await fetch(
-          `https://rest.coincap.io/v3/assets/${asset.id}/history?interval=${intervalMap[timeframe]}&start=${start}&end=${end}&apiKey=${API_KEY}`,
+        const res = await fetchCoinCap(`assets/${asset.id}/history?interval=${intervalMap[timeframe]}&start=${start}&end=${end}`,
           { signal: ctrl.signal }
         );
         if (ctrl.signal.aborted) return;
@@ -256,7 +256,7 @@ export default function CryptoAssetPopup({ asset, logos, onClose, tradeInfo }: P
       }
     })();
     return () => { ctrl.abort(); destroyChart(); };
-  }, [asset, timeframe, API_KEY]);
+  }, [asset, timeframe]);
 
   useEffect(() => { bodyRef.current?.scrollTo({ top: 0, behavior: "smooth" }); }, [timeframe, asset?.id]);
 

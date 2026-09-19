@@ -2,8 +2,20 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import {
+  Building2,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Rocket,
+  Search,
+  SearchX,
+  Tag,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { IconBadge } from '@/components/ui/icon-badge';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -95,9 +107,12 @@ const IPOCalendarSection: React.FC = () => {
 
       <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-            IPO Calendar
-          </h2>
+          <div className="flex items-center gap-3">
+            <IconBadge icon={Rocket} tone="sky" size="lg" label="IPO calendar" />
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+              IPO Calendar
+            </h2>
+          </div>
           <p className="mt-2 text-sm font-semibold text-gray-700 dark:text-white/70">
             Search tickers/companies.
           </p>
@@ -105,6 +120,10 @@ const IPOCalendarSection: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-end">
           <div className="relative w-full sm:w-80">
+            <Search
+              className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/35"
+              aria-hidden
+            />
             <input
               type="text"
               placeholder="Search by company or ticker…"
@@ -114,7 +133,7 @@ const IPOCalendarSection: React.FC = () => {
                 setPage(1);
               }}
               className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06]
-                         px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40
+                         pl-11 pr-24 py-3 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40
                          outline-none ring-0 focus:border-indigo-500/50 dark:focus:border-indigo-300/40"
             />
             {search.trim() && (
@@ -124,10 +143,11 @@ const IPOCalendarSection: React.FC = () => {
                   setSearch("");
                   setPage(1);
                 }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl px-3 py-1 text-xs font-extrabold
+                className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-extrabold
                            bg-black/[0.03] dark:bg-white/[0.06] text-gray-700 dark:text-white/70
                            hover:text-gray-900 dark:hover:text-white"
               >
+                <X className="h-3 w-3" aria-hidden />
                 Clear
               </button>
             )}
@@ -175,7 +195,8 @@ const IPOCalendarSection: React.FC = () => {
           </div>
         </div>
       ) : visible.length === 0 ? (
-        <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-6 shadow-sm text-center">
+        <div className="flex flex-col items-center rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-6 shadow-sm text-center">
+          <IconBadge icon={SearchX} tone="neutral" size="lg" className="mb-3" />
           <div className="text-lg font-extrabold text-gray-900 dark:text-white">
             No matching IPOs
           </div>
@@ -247,7 +268,8 @@ const IPOCalendarSection: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="mt-1 text-[11px] sm:text-xs font-semibold text-gray-600 dark:text-white/60">
+                      <div className="mt-1 flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold text-gray-600 dark:text-white/60">
+                        <CalendarDays className="h-3.5 w-3.5 text-gray-400 dark:text-white/40" aria-hidden />
                         {ev.date ? fmtDate(ev.date) : "—"}
                       </div>
                     </div>
@@ -259,12 +281,19 @@ const IPOCalendarSection: React.FC = () => {
                   </div>
 
                   <div className="relative mt-3">
-                    <div className="text-sm font-extrabold text-gray-900 dark:text-white line-clamp-2">
-                      {ev.name || "—"}
+                    <div className="flex items-start gap-2">
+                      <Building2
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/40"
+                        aria-hidden
+                      />
+                      <div className="text-sm font-extrabold text-gray-900 dark:text-white line-clamp-2">
+                        {ev.name || "—"}
+                      </div>
                     </div>
 
                     <div className="mt-3 flex items-center justify-between gap-3">
-                      <div className="text-xs font-semibold text-gray-700 dark:text-white/70">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-white/70">
+                        <Tag className="h-3.5 w-3.5 text-gray-400 dark:text-white/40" aria-hidden />
                         Price{" "}
                         <span className="font-extrabold text-gray-900 dark:text-white">
                           {ev.price || "TBA"}
@@ -287,8 +316,9 @@ const IPOCalendarSection: React.FC = () => {
                   size="lg"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={clampedPage === 1}
-                  className="w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="inline-flex w-full items-center justify-center gap-1.5 sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
                 >
+                  <ChevronLeft className="h-4 w-4" aria-hidden />
                   Prev
                 </Button>
 
@@ -297,9 +327,10 @@ const IPOCalendarSection: React.FC = () => {
                   size="lg"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={clampedPage === totalPages}
-                  className="w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="inline-flex w-full items-center justify-center gap-1.5 sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Next
+                  <ChevronRight className="h-4 w-4" aria-hidden />
                 </Button>
               </div>
 

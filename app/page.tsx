@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 
+import resumeContent from "@/app/resume/content.json";
+
 import Hero from "@/components/hero";
 import WidgetWeather from "@/components/widget-weather";
 import WidgetNews from "@/app/news/widget-news";
@@ -219,21 +221,9 @@ function BioSection() {
           Short Bio
         </h2>
 
-              <p>
-                I’m a full-stack software engineer, AI systems engineer, and product builder with over a decade of experience building complex software systems.
-              </p>
-
-              <p>
-                My background includes financial platforms, enterprise applications, cloud infrastructure, and products I’ve built from the ground up. I enjoy solving difficult problems, improving legacy systems, and turning ideas into production-ready software.
-              </p>
-
-              <p>
-                Today, much of my focus is on building AI-powered products, intelligent workflows, and rapid prototypes. I’m the founder and developer behind U-Mail and ApplyPro, products designed to solve real-world communication and career challenges.
-              </p>
-
-              <p>
-                I care about building software that is useful, scalable, and built to last. If you're looking for someone who can navigate complexity and turn ideas into working products, I’d be happy to connect.
-              </p>
+        {resumeContent.bio.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
 
         <p className="text-xs text-gray-500 text-center pb-10">
           See resume{" "}

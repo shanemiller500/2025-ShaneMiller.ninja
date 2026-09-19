@@ -6,6 +6,7 @@ import Experience from "@/app/resume/experience";
 import { WidgetSkills, SKILLS_DATA } from "./widget-skills";
 import { trackEvent } from "@/utils/mixpanel";
 import DownloadPDF from "./downlaodPDF";
+import resumeContent from "./content.json";
 
 /* ------------------------------------------------------------------ */
 /*  ResumePage Component                                               */
@@ -20,7 +21,13 @@ export default function ResumePage() {
       <div className="grow">
         <div className="max-w-[700px]">
           <section>
-            <h1 className="h1 font-aspekta mb-12">My resume</h1>
+            <h1 className="h1 font-aspekta mb-5">My resume</h1>
+            <p className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">
+              {resumeContent.headline}
+            </p>
+            <p className="text-slate-500 dark:text-slate-400 mb-12 leading-relaxed">
+              {resumeContent.summary}
+            </p>
             <div className="text-slate-500 dark:text-slate-400 space-y-12">
               <Experience />
               <Education />

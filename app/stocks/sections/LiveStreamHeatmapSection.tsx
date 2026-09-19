@@ -15,7 +15,9 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Grid3x3, Radio, WifiOff } from "lucide-react";
 
+import { IconBadge } from "@/components/ui/icon-badge";
 import { useMarketData } from "../hooks/useMarketData";
 import { HEATMAP_SYMBOLS } from "../lib/tickers";
 import type { TradeInfo } from "../lib/types";
@@ -189,6 +191,14 @@ const LiveStreamHeatmapSection: React.FC = () => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
+                <IconBadge
+                  icon={Grid3x3}
+                  tone="emerald"
+                  size="md"
+                  pulse={wsConnected}
+                  label="Exchange heatmap"
+                />
+
                 <h2 className="text-base font-bold text-gray-900 dark:text-white">
                   Exchange Heatmap
                 </h2>
@@ -205,6 +215,11 @@ const LiveStreamHeatmapSection: React.FC = () => {
                   className={`hidden sm:inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${wsPill}`}
                   title="WebSocket status"
                 >
+                  {wsConnected ? (
+                    <Radio className="h-3 w-3" aria-hidden />
+                  ) : (
+                    <WifiOff className="h-3 w-3" aria-hidden />
+                  )}
                   {wsConnected
                     ? "Stream OK"
                     : marketState === "closed"

@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useMemo, useState, useEffect } from "react";
-import { X, Info } from "lucide-react";
+import { Gauge, X, Info } from "lucide-react";
+
+import { IconBadge } from "@/components/ui/icon-badge";
 
 interface FearGreedWidgetProps {
   index: number;
@@ -70,7 +72,10 @@ function InfoModal({
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-black/[0.07] dark:border-white/[0.08]">
           <div>
-            <h2 className="text-base font-extrabold text-gray-900 dark:text-white">How Fear &amp; Greed Works</h2>
+            <h2 className="flex items-center gap-2 text-base font-extrabold text-gray-900 dark:text-white">
+              <IconBadge icon={Gauge} tone="indigo" size="md" />
+              How Fear &amp; Greed Works
+            </h2>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Powered by live Finnhub quotes</p>
           </div>
           <button
@@ -144,6 +149,7 @@ const FearGreedWidget: React.FC<FearGreedWidgetProps> = ({
   const label      = useMemo(() => getFearGreedLabel(safe), [safe]);
   const tone       = useMemo(() => getTone(safe), [safe]);
   const markerLeft = useMemo(() => `${clamp(safe, 1, 99)}%`, [safe]);
+  const badgeTone  = safe >= 55 ? "emerald" : safe <= 45 ? "rose" : "amber";
 
   return (
     <>
@@ -155,7 +161,8 @@ const FearGreedWidget: React.FC<FearGreedWidgetProps> = ({
 
         {/* Top label row */}
         <div className="relative px-4 pt-3.5 flex items-center justify-between">
-          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+          <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+            <IconBadge icon={Gauge} tone={badgeTone} size="sm" />
             {title}
           </span>
           <button

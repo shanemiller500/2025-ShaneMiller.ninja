@@ -1,0 +1,235 @@
+{
+  "headline": "Applied AI Field Engineer & Software Developer",
+  "summary": "Software developer with 12+ years of experience building full-stack applications and enterprise systems. As an Applied AI Field Engineer at Trilon Group, I conduct onsite deep dives with engineering firms and rapidly turn complex workflows into working software: deterministic calculation and document-processing tools, human-in-the-loop AI workflows, and the data architecture underneath them.",
+  "bio": [
+    "I’m Shane Miller, a software engineer based in Boulder, Colorado, with over a decade in complex production environments — global financial data platforms, core banking systems, and products I’ve built and shipped myself.",
+    "Right now I’m an Applied AI Field Engineer at Trilon Group. I work with a cross-functional team doing onsite deep dives with engineering firms — documenting how the work actually gets done, then building software for the parts worth automating. Mostly deterministic calculation and document tools, and human-in-the-loop AI where every result is reviewable and traceable. So far that has covered GIS and environmental workflows, civil engineering calculations, survey processing, and grant application scoring.",
+    "I usually end up in the hard parts of a company. Old code. Fragile flows. Systems no one wants to touch. I can step into a codebase I’ve never seen, trace it carefully, and come back with a fix that doesn’t destabilize everything else. It’s rarely glamorous, but it’s effective.",
+    "I know C# deeply from years inside .NET, most recently a core banking platform at Data Center Inc. — ACH processing, reconciliation, and incidents where real money is on the line. Before that, ten years at S&P Global on real-time financial data for institutional clients. Given the choice I prefer frontend engineering; complex UI state and performance problems are usually just puzzles.",
+    "Outside of work I build my own products end to end. U-Mail.ai for email productivity, ApplyPro.ai for AI-assisted resumes, now past 400 active users. I own the design, the backend, the payments, and the 2am bug reports. Also, no one else is going to fix my bugs.",
+    "There’s a method to how I work. I don’t chase trends, I build things that hold up. If you need someone steady who can navigate complexity and turn ideas into working software, I’m happy to talk."
+  ],
+  "trilon": {
+    "title": "Applied AI Field Engineer",
+    "org": "Trilon Group — Hybrid",
+    "startDate": "June 2026",
+    "endDate": "Present",
+    "tags": [
+      "Next.js",
+      "React",
+      "TypeScript",
+      "Python",
+      "OpenAI APIs",
+      "Azure",
+      "Microsoft Graph",
+      "SharePoint",
+      "ArcGIS",
+      "Jira"
+    ],
+    "description": "Work within a cross-functional team conducting onsite deep dives with engineering firms, documenting workflows, data sources, and calculations, then identifying where automation, AI, or purpose-built software delivers measurable value. Rapidly prototype full-stack applications: deterministic calculation, validation, and document cross-referencing tools, and human-in-the-loop AI workflows with reviewable results, citations, and traceability. Delivered environmental workflow automation over GIS and regulated modeling tools, civil engineering calculations for stormwater and hydrology, survey-data processing and coordinate transformation, and grant application scoring software. Write structured, reusable code and phased implementation plans so successful prototypes have a clear path to production."
+  },
+  "skills": [
+    {
+      "title": "Frontend",
+      "skills": [
+        "Next.js",
+        "React",
+        "TypeScript",
+        "Tailwind CSS"
+      ]
+    },
+    {
+      "title": "Backend & Automation",
+      "skills": [
+        "Python",
+        "APIs",
+        "Server-Side Processing"
+      ]
+    },
+    {
+      "title": "AI & Documents",
+      "skills": [
+        "OpenAI APIs",
+        "Embeddings & Retrieval",
+        "OCR",
+        "PDF.js",
+        "Azure AI Document Intelligence",
+        "Human-in-the-Loop Review"
+      ]
+    },
+    {
+      "title": "Data & Storage",
+      "skills": [
+        "Azure Blob Storage",
+        "SQL",
+        "JSON",
+        "Excel",
+        "CSV",
+        "Metadata Models",
+        "Versioning & Audit Trails"
+      ]
+    },
+    {
+      "title": "Identity & Integrations",
+      "skills": [
+        "Microsoft Entra ID",
+        "Microsoft Graph",
+        "SharePoint",
+        "Egnyte"
+      ]
+    },
+    {
+      "title": "Engineering & Geospatial",
+      "skills": [
+        "ArcGIS",
+        "GIS Data",
+        "CAD / DXF",
+        "Coordinate Systems",
+        "Engineering Calculation Engines"
+      ]
+    },
+    {
+      "title": "Development",
+      "skills": [
+        "Git",
+        "GitHub",
+        "VS Code",
+        "Monorepo Architecture",
+        "CI/CD"
+      ]
+    },
+    {
+      "title": "Delivery & Documentation",
+      "skills": [
+        "Jira",
+        "Kanban",
+        "User Stories & Acceptance Criteria",
+        "Technical Audits",
+        "Phased Implementation",
+        "Markdown",
+        "Architecture & Implementation Guides",
+        "Demonstrations & Technical Handoffs"
+      ]
+    },
+    {
+      "title": "Additional Experience",
+      "skills": [
+        "C# / .NET",
+        "Node.js / Express",
+        "SQL Server",
+        "PostgreSQL",
+        "React Native",
+        "Vue.js",
+        "SAML / SSO / OAuth 2.0",
+        "Firebase",
+        "Google Cloud",
+        "Vercel"
+      ]
+    }
+  ],
+  "previousExperience": [
+    {
+      "icon": "dci",
+      "startDate": "April 2025",
+      "endDate": "June 2026",
+      "title": "Senior Engineer Level II",
+      "org": "Data Center Inc. — Remote",
+      "description": "Delivered full-stack C#/.NET features across ACH processing, batch systems, transaction flows, reconciliation, and reporting on a core banking platform for community financial institutions. Diagnosed production incidents involving live financial data and downstream systems. Improved reliability through performance and static code analysis, partnering with product, QA, business analysts, and support to deliver secure releases in a regulated environment.",
+      "tags": [
+        "C#",
+        ".NET Framework",
+        ".NET Core",
+        "SQL Server",
+        "Stored Procedures",
+        "ASP.NET MVC",
+        "ASP.NET WebForms",
+        "ACH Processing",
+        "Reconciliation",
+        "REST APIs",
+        "Telerik"
+      ]
+    },
+    {
+      "icon": "umail",
+      "startDate": "April 2024",
+      "endDate": "Present",
+      "title": "Founder & Lead Engineer",
+      "org": "U-Mail.ai — Boulder, CO",
+      "description": "Built an email productivity platform across web and mobile with secure account connections, deterministic message prioritization, and AI-assisted composition. Developed Node.js and Express APIs with Gmail, Google Calendar, Firebase, OAuth 2.0, Google Meet, Zoom, and secure token integrations. Designed reusable services and multi-tenant architecture for consumer and B2B deployments, managing releases, observability, privacy controls, and reliability.",
+      "tags": [
+        "Node.js",
+        "Express",
+        "React",
+        "React Native",
+        "Next.js",
+        "TypeScript",
+        "Firebase",
+        "OAuth 2.0",
+        "Gmail API",
+        "OpenAI APIs",
+        "GCP",
+        "Vercel"
+      ]
+    },
+    {
+      "icon": "applypro",
+      "startDate": "September 2024",
+      "endDate": "Present",
+      "title": "Founder & Lead Engineer",
+      "org": "ApplyPro.ai — Boulder, CO",
+      "description": "Built and launched an AI-powered resume platform, owning product design, frontend, backend, payments, analytics, and deployment. Developed a server-rendered Next.js application with App Router, TypeScript, and document workflows. Integrated Stripe subscriptions, Mixpanel, and Vercel CI/CD, scaling to 400+ active users through rapid iteration and customer feedback.",
+      "tags": [
+        "Next.js",
+        "React",
+        "TypeScript",
+        "Node.js",
+        "PostgreSQL",
+        "SSR",
+        "Document Processing",
+        "Stripe",
+        "Mixpanel",
+        "Tailwind CSS",
+        "Vercel",
+        "CI/CD"
+      ]
+    },
+    {
+      "icon": "spgi",
+      "startDate": "February 2018",
+      "endDate": "February 2024",
+      "title": "Senior Software Engineer",
+      "org": "S&P Global — Boulder, CO",
+      "description": "Resolved high-impact production incidents affecting real-time financial data and institutional clients across Vue, React, JavaScript, Node.js, and C#/.NET. Owned SAML, SSO, and OAuth integrations across distributed products. Optimized high-volume ingestion and cross-referencing pipelines for global exchange and vendor feeds, coordinating with data providers, infrastructure, and product teams to protect uptime and meet service-level commitments.",
+      "tags": [
+        "React",
+        "Vue.js",
+        "JavaScript",
+        "Node.js",
+        "C#",
+        ".NET",
+        "ASP.NET",
+        "SQL Server",
+        "SAML",
+        "SSO",
+        "OAuth",
+        "Financial Data Pipelines"
+      ]
+    },
+    {
+      "icon": "spgi",
+      "startDate": "August 2014",
+      "endDate": "2016",
+      "title": "Web Developer — Client-Facing Team",
+      "org": "S&P Global — Boulder, CO",
+      "description": "Built and maintained high-traffic financial web applications and live-streaming interfaces for multinational institutional clients. Delivered client-specific enhancements across mature codebases and worked directly with global customers to troubleshoot production issues under tight deadlines.",
+      "tags": [
+        "JavaScript",
+        "HTML/CSS",
+        "Real-Time Data",
+        "Financial Web Apps",
+        "Client Integration",
+        "Production Support"
+      ]
+    }
+  ]
+}

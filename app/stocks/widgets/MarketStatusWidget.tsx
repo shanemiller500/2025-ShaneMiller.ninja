@@ -1,5 +1,8 @@
 "use client";
 
+import { Building2, CalendarClock } from "lucide-react";
+
+import { IconBadge } from "@/components/ui/icon-badge";
 import { formatDate } from "@/utils/formatters";
 import type { MarketStatus } from "../lib/types";
 import { cn } from "./TickerTile";
@@ -23,7 +26,8 @@ export default function MarketStatusWidget({ marketStatus }: MarketStatusWidgetP
 
       {/* Top label */}
       <div className="relative px-4 pt-3.5 flex items-center justify-between">
-        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+        <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+          <IconBadge icon={Building2} tone={open ? "emerald" : "rose"} size="sm" />
           Market Status
         </span>
         <div
@@ -74,7 +78,8 @@ export default function MarketStatusWidget({ marketStatus }: MarketStatusWidgetP
       {/* Bottom timestamp */}
       {marketStatus.t && (
         <div className="relative px-4 pb-3.5 text-center">
-          <span className="text-[10px] font-semibold text-gray-400 dark:text-white/40">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-white/40">
+            <CalendarClock className="h-3 w-3" aria-hidden />
             {formatDate(marketStatus.t, "short")}
           </span>
         </div>

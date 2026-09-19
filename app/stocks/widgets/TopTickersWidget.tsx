@@ -1,5 +1,8 @@
 "use client";
 
+import { Star, TrendingDown, TrendingUp } from "lucide-react";
+
+import { IconBadge } from "@/components/ui/icon-badge";
 import type { TickerData } from "../lib/types";
 import { TickerTile, SkeletonTile, cn } from "./TickerTile";
 
@@ -30,25 +33,33 @@ export default function TopTickersWidget({
 
       {/* Header */}
       <div className="relative px-4 py-3 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
-            Top Tickers
-          </p>
-          <p className="mt-0.5 text-xs font-extrabold text-gray-900 dark:text-white">
-            {topList.length} large-cap US equities
-          </p>
+        <div className="flex items-center gap-2.5">
+          <IconBadge icon={Star} tone="amber" size="md" />
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+              Top Tickers
+            </p>
+            <p className="mt-0.5 text-xs font-extrabold text-gray-900 dark:text-white">
+              {topList.length} large-cap US equities
+            </p>
+          </div>
         </div>
 
         {topList.length > 0 && (
           <div
             className={cn(
-              "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ring-1 tabular-nums",
+              "shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-extrabold ring-1 tabular-nums",
               up
                 ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 ring-emerald-500/25"
                 : "bg-rose-500/15 text-rose-800 dark:text-rose-200 ring-rose-500/25"
             )}
           >
-            {up ? "▲" : "▼"} avg {Math.abs(avgChange).toFixed(2)}%
+            {up ? (
+              <TrendingUp className="h-3 w-3" aria-hidden />
+            ) : (
+              <TrendingDown className="h-3 w-3" aria-hidden />
+            )}
+            avg {Math.abs(avgChange).toFixed(2)}%
           </div>
         )}
       </div>

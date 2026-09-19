@@ -2,9 +2,11 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
+import { Inbox, Newspaper } from "lucide-react";
 import { formatDate } from "@/utils/formatters";
 import { API_TOKEN } from "@/utils/config";
 import { Button } from "@/components/ui/button";
+import { IconBadge } from "@/components/ui/icon-badge";
 
 /* ------------------------------------------------------------------ */
 /*  Types & cache                                                     */
@@ -128,7 +130,8 @@ export default function NewsWidget() {
       {/* header */}
       <div className="relative rounded-3xl border-b border-black/10 dark:border-white/10 bg-white/80 dark:bg-black/30 backdrop-blur-xl">
         <div className="px-4 py-3 flex items-center justify-between gap-2">
-          <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+          <h2 className="flex items-center gap-2.5 text-lg sm:text-xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+            <IconBadge icon={Newspaper} tone="amber" size="md" label="Latest finance news" />
             Latest Finance News
           </h2>
           {!loading && !error && articles.length > 0 && (
@@ -151,6 +154,7 @@ export default function NewsWidget() {
           <SkeletonGrid />
         ) : !error && articles.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
+            <IconBadge icon={Inbox} tone="neutral" size="lg" className="mb-1" />
             <div className="text-base font-extrabold text-gray-900 dark:text-white">No news found</div>
             <div className="text-xs font-semibold text-gray-600 dark:text-white/60">Try again in a bit.</div>
           </div>

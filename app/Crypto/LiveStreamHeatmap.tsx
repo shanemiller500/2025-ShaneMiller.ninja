@@ -1,6 +1,8 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchCoinCap, subscribeCoinCap } from "@/utils/coincap-client";
+
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 import { AnimatePresence, motion } from "framer-motion";
 import { FaArrowDown, FaArrowUp, FaFire, FaTable, FaThLarge } from "react-icons/fa";
@@ -32,14 +34,12 @@ type StreamStatus = "connecting" | "live" | "error";
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
-const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
+
 const COINGECKO_TOP200 =
   "/api/CoinGeckoAPI?vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false";
 
 const PAGE_SIZE = 78;
 const SESSION_TIMEOUT_MS = 300_000; // 5 minutes - this is for the entire session
-const RECONNECT_DELAY_MS = 1000;
-const MAX_RECONNECT_ATTEMPTS = 5;
 
 /* Currency formatter (created once) */
 const currencyFmt = new Intl.NumberFormat("en-US", {
@@ -319,137 +319,36 @@ const TableRow = memo(function TableRow({ id, meta, tradeInfo, logo, onClick }: 
 /* ------------------------------------------------------------------ */
 /*  WebSocket Hook                                                     */
 /* ------------------------------------------------------------------ */
-function useWebSocketStream(
+function usePriceStream(
   assetIds: string[],
   enabled: boolean,
   onPriceUpdate: (updates: Record<string, number>) => void
 ) {
   const [status, setStatus] = useState<StreamStatus>("connecting");
   const [sessionEnded, setSessionEnded] = useState(false);
-
-  const wsRef = useRef<WebSocket | null>(null);
-  const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectAttempts = useRef(0);
-  const mountedRef = useRef(true);
-
-  const cleanup = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.onopen = null;
-      wsRef.current.onmessage = null;
-      wsRef.current.onclose = null;
-      wsRef.current.onerror = null;
-      try {
-        wsRef.current.close();
-      } catch {}
-      wsRef.current = null;
-    }
-  }, []);
-
-  const cleanupSession = useCallback(() => {
-    if (sessionTimerRef.current) {
-      clearTimeout(sessionTimerRef.current);
-      sessionTimerRef.current = null;
-    }
-    cleanup();
-  }, [cleanup]);
-
-  const connect = useCallback(() => {
-    if (!mountedRef.current || !enabled || !API_KEY || assetIds.length === 0 || sessionEnded)
-      return;
-
-    cleanup();
-
-    const assetsParam = assetIds.join(",");
-    const ws = new WebSocket(
-      `wss://wss.coincap.io/prices?assets=${encodeURIComponent(assetsParam)}&apiKey=${API_KEY}`
-    );
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      if (!mountedRef.current) return;
-      setStatus("live");
-      reconnectAttempts.current = 0;
-    };
-
-    ws.onmessage = (e) => {
-      if (!mountedRef.current) return;
-
-      if (typeof e.data === "string" && e.data.startsWith("Unauthorized")) {
-        setStatus("error");
-        cleanup();
-        return;
-      }
-
-      try {
-        const data = JSON.parse(e.data) as Record<string, string>;
-        const updates: Record<string, number> = {};
-
-        for (const [id, priceStr] of Object.entries(data)) {
-          const price = parseFloat(priceStr);
-          if (Number.isFinite(price)) {
-            updates[id] = price;
-          }
-        }
-
-        if (Object.keys(updates).length > 0) {
-          onPriceUpdate(updates);
-        }
-      } catch {}
-    };
-
-    ws.onclose = () => {
-      if (!mountedRef.current || sessionEnded) return;
-
-      if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttempts.current++;
-        setTimeout(connect, RECONNECT_DELAY_MS * reconnectAttempts.current);
-      } else {
-        setStatus("error");
-      }
-    };
-
-    ws.onerror = () => {
-      if (!mountedRef.current) return;
-      // onclose will handle reconnection
-    };
-  }, [assetIds, enabled, cleanup, onPriceUpdate, sessionEnded]);
-
+  const [session, setSession] = useState(0);
   const restart = useCallback(() => {
     setSessionEnded(false);
-    reconnectAttempts.current = 0;
-    setStatus("connecting");
-    
-    // Start new session timer
-    sessionTimerRef.current = setTimeout(() => {
-      if (!mountedRef.current) return;
-      cleanupSession();
+    setSession((value) => value + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || !assetIds.length || sessionEnded) return;
+    const stop = subscribeCoinCap(assetIds, (data) => {
+      const updates: Record<string, number> = {};
+      for (const [id, value] of Object.entries(data)) {
+        const price = Number(value);
+        if (Number.isFinite(price)) updates[id] = price;
+      }
+      if (Object.keys(updates).length) onPriceUpdate(updates);
+    }, setStatus);
+    const timer = setTimeout(() => {
+      stop();
       setStatus("error");
       setSessionEnded(true);
     }, SESSION_TIMEOUT_MS);
-    
-    connect();
-  }, [connect, cleanupSession]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    
-    if (enabled && assetIds.length > 0 && !sessionEnded) {
-      // Start session timer on initial mount
-      sessionTimerRef.current = setTimeout(() => {
-        if (!mountedRef.current) return;
-        cleanupSession();
-        setStatus("error");
-        setSessionEnded(true);
-      }, SESSION_TIMEOUT_MS);
-      
-      connect();
-    }
-    
-    return () => {
-      mountedRef.current = false;
-      cleanupSession();
-    };
-  }, [assetIds, enabled, connect, cleanupSession, sessionEnded]);
+    return () => { clearTimeout(timer); stop(); };
+  }, [assetIds, enabled, onPriceUpdate, sessionEnded, session]);
 
   return { status, sessionEnded, restart };
 }
@@ -465,6 +364,7 @@ export default function LiveStreamHeatmap() {
   const [topIds, setTopIds] = useState<string[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<CoinMeta | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [logos, setLogos] = useState<Record<string, string>>({});
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -545,19 +445,10 @@ export default function LiveStreamHeatmap() {
     let canceled = false;
 
     (async () => {
-      if (!API_KEY) {
-        setLoading(false);
-        return;
-      }
 
       try {
-        const res = await fetch(
-          `https://rest.coincap.io/v3/assets?limit=200&apiKey=${API_KEY}`
-        );
-        if (!res.ok || canceled) {
-          setLoading(false);
-          return;
-        }
+        const res = await fetchCoinCap("assets?limit=200");
+        if (canceled) return;
 
         const json = await res.json();
         if (canceled) return;
@@ -595,7 +486,10 @@ export default function LiveStreamHeatmap() {
         setLoading(false);
       } catch (e) {
         console.error("Failed to fetch initial data:", e);
-        if (!canceled) setLoading(false);
+        if (!canceled) {
+          setLoadError(e instanceof Error ? e.message : "Crypto data is unavailable.");
+          setLoading(false);
+        }
       }
     })();
 
@@ -650,7 +544,7 @@ export default function LiveStreamHeatmap() {
   );
 
   /* WebSocket connection */
-  const { status, sessionEnded, restart } = useWebSocketStream(
+  const { status, sessionEnded, restart } = usePriceStream(
     visibleIds,
     !loading && visibleIds.length > 0,
     handlePriceUpdate
@@ -694,6 +588,10 @@ export default function LiveStreamHeatmap() {
   }, []);
 
   /* Loading state */
+  if (loadError) {
+    return <div role="alert" className="p-6 text-sm text-red-700 dark:text-red-300">{loadError}</div>;
+  }
+
   if (loading) {
      return (
       <div className="min-h-[70vh] flex items-center justify-center px-4">

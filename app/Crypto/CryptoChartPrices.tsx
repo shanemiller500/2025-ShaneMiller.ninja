@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import { fetchCoinCap } from "@/utils/coincap-client";
+
 import { useState, useEffect, useRef, useCallback, useMemo, type FormEvent } from "react";
 
 import { AnimatePresence, motion } from "framer-motion";
@@ -72,7 +74,7 @@ type ChartMode = "line" | "area" | "bar";
 /* ------------------------------------------------------------------ */
 /*  Constants / helpers                                                */
 /* ------------------------------------------------------------------ */
-const API_KEY = process.env.NEXT_PUBLIC_COINCAP_API_KEY || "";
+
 const COINGECKO_TOP200 =
   "/api/CoinGeckoAPI?vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false";
 
@@ -189,8 +191,8 @@ const CryptoChartPrices: React.FC = () => {
 
   /* ── asset ID resolver ── */
   const resolveAssetId = useCallback(async (q: string): Promise<string | null> => {
-    if (!API_KEY) return null;
-    const res = await fetch(`https://rest.coincap.io/v3/assets?search=${encodeURIComponent(q)}&apiKey=${API_KEY}`);
+
+    const res = await fetchCoinCap(`assets?search=${encodeURIComponent(q)}`);
     if (!res.ok) return null;
     const json = await res.json();
     const list: CryptoAsset[] = json?.data || [];
@@ -204,7 +206,7 @@ const CryptoChartPrices: React.FC = () => {
 
   /* ── history fetcher ── */
   async function fetchSeries(id: string, tf: TimeFrameOption): Promise<HistoryEntry[]> {
-    if (!API_KEY) return [];
+
     let ms: number, interval: string;
     switch (tf) {
       case "1h":  ms = 3600e3;             interval = "m1"; break;
@@ -213,8 +215,7 @@ const CryptoChartPrices: React.FC = () => {
       default:    ms = 30 * 24 * 3600e3;   interval = "d1";
     }
     const end = Date.now(), start = end - ms;
-    const res = await fetch(
-      `https://rest.coincap.io/v3/assets/${id}/history?interval=${interval}&start=${start}&end=${end}&apiKey=${API_KEY}`,
+    const res = await fetchCoinCap(`assets/${id}/history?interval=${interval}&start=${start}&end=${end}`,
     );
     if (!res.ok) return [];
     const json = await res.json();
@@ -225,8 +226,8 @@ const CryptoChartPrices: React.FC = () => {
 
   /* ── details fetcher ── */
   async function fetchDetails(id: string): Promise<CryptoAsset | null> {
-    if (!API_KEY) return null;
-    const res = await fetch(`https://rest.coincap.io/v3/assets/${id}?apiKey=${API_KEY}`);
+
+    const res = await fetchCoinCap(`assets/${id}`);
     if (!res.ok) return null;
     const json = await res.json();
     return (json?.data || null) as CryptoAsset | null;
@@ -388,16 +389,22 @@ const CryptoChartPrices: React.FC = () => {
     const q = query.trim();
     if (!q) return;
     setLoadingChart(true);
-    const id = await resolveAssetId(q);
-    if (id) {
-      setError(null);
-      setCgData(null);
-      setAssetId(id);
-      trackEvent("CryptoChartSearch", { query: q, id });
-    } else {
+    try {
+      const id = await resolveAssetId(q);
+      if (id) {
+        setError(null);
+        setCgData(null);
+        if (id === assetId) await updateChart();
+        else setAssetId(id);
+        trackEvent("CryptoChartSearch", { query: q, id });
+      } else {
+        setLoadingChart(false);
+        setError("Not found — try 'BTC', 'ethereum', 'solana' etc.");
+        trackEvent("CryptoChartSearchFail", { query: q });
+      }
+    } catch (error) {
       setLoadingChart(false);
-      setError("Not found — try 'BTC', 'ethereum', 'solana' etc.");
-      trackEvent("CryptoChartSearchFail", { query: q });
+      setError(error instanceof Error ? error.message : "Crypto search is unavailable.");
     }
   };
 

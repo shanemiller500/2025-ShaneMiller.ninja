@@ -1,9 +1,18 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { BarChart2, Calendar, Newspaper, Radio, TrendingUp } from "lucide-react";
+import {
+  BarChart2,
+  Calendar,
+  CandlestickChart,
+  type LucideIcon,
+  Newspaper,
+  Radio,
+  TrendingUp,
+} from "lucide-react";
 
+import { IconBadge } from "@/components/ui/icon-badge";
 import { trackEvent } from "@/utils/mixpanel";
 import EarningsSection from "./sections/EarningsSection";
 import IPOCalendarSection from "./sections/IPOCalendarSection";
@@ -16,21 +25,24 @@ import StockQuoteSection from "./sections/StockQuoteSection";
 /* ------------------------------------------------------------------ */
 type TabKey = "quote" | "live" | "ipo" | "earnings" | "news";
 
+type IconTone = "indigo" | "emerald" | "sky" | "violet" | "amber";
+
 interface TabConfig {
   key: TabKey;
   label: string;
-  icon: ReactNode;
+  icon: LucideIcon;
+  tone: IconTone;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 const TABS: TabConfig[] = [
-  { key: "quote",    label: "Quote",    icon: <TrendingUp className="h-3.5 w-3.5" /> },
-  { key: "live",     label: "Live",     icon: <Radio className="h-3.5 w-3.5" /> },
-  { key: "ipo",      label: "IPO",      icon: <Calendar className="h-3.5 w-3.5" /> },
-  { key: "earnings", label: "Earnings", icon: <BarChart2 className="h-3.5 w-3.5" /> },
-  { key: "news",     label: "News",     icon: <Newspaper className="h-3.5 w-3.5" /> },
+  { key: "quote",    label: "Quote",    icon: TrendingUp, tone: "indigo"  },
+  { key: "live",     label: "Live",     icon: Radio,      tone: "emerald" },
+  { key: "ipo",      label: "IPO",      icon: Calendar,   tone: "sky"     },
+  { key: "earnings", label: "Earnings", icon: BarChart2,  tone: "violet"  },
+  { key: "news",     label: "News",     icon: Newspaper,  tone: "amber"   },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -59,7 +71,15 @@ export default function DashboardTabs() {
           <div className="absolute -bottom-24 -right-20 h-72 w-72 rounded-full bg-fuchsia-400/20 blur-3xl dark:opacity-60" />
         </div>
 
-        <div className="relative px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between gap-4">
+        <div className="relative px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-4">
+          <IconBadge
+            icon={CandlestickChart}
+            tone="indigo"
+            size="lg"
+            label="Market dashboard"
+            className="hidden sm:inline-flex"
+          />
+
           <div className="min-w-0">
             {/* Live pulse badge */}
             <div className="mb-1.5 flex items-center gap-2">
@@ -109,16 +129,13 @@ export default function DashboardTabs() {
                     transition={{ type: "spring", stiffness: 420, damping: 34 }}
                   />
                 )}
-                <span
-                  className={[
-                    "transition-colors",
-                    isActive
-                      ? "text-indigo-600 dark:text-indigo-400"
-                      : "text-gray-400 dark:text-white/30",
-                  ].join(" ")}
-                >
-                  {t.icon}
-                </span>
+                <IconBadge
+                  icon={t.icon}
+                  tone={isActive ? t.tone : "neutral"}
+                  size="sm"
+                  pulse={isActive && t.key === "live"}
+                  className="transition-colors"
+                />
                 {t.label}
               </button>
             );

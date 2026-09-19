@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ArrowDownRight, ArrowUpRight, TrendingDown, TrendingUp } from "lucide-react";
+
+import { IconBadge } from "@/components/ui/icon-badge";
 import type { TickerData } from "../lib/types";
 import { cn } from "./TickerTile";
 
@@ -71,13 +74,18 @@ function MoverRow({
         </span>
         <span
           className={cn(
-            "text-[11px] font-extrabold tabular-nums w-[58px] text-right",
+            "inline-flex items-center justify-end gap-0.5 text-[11px] font-extrabold tabular-nums w-[64px] text-right",
             up
               ? "text-emerald-600 dark:text-emerald-400"
               : "text-rose-600 dark:text-rose-400"
           )}
         >
-          {up ? "▲" : "▼"} {Math.abs(dp).toFixed(2)}%
+          {up ? (
+            <ArrowUpRight className="h-3 w-3 shrink-0" aria-hidden />
+          ) : (
+            <ArrowDownRight className="h-3 w-3 shrink-0" aria-hidden />
+          )}
+          {Math.abs(dp).toFixed(2)}%
         </span>
       </div>
     </button>
@@ -142,7 +150,14 @@ export default function MoversWidget({
                     : "text-gray-500 dark:text-white/40 border-black/10 dark:border-white/10 hover:text-gray-800 dark:hover:text-white/70"
                 )}
               >
-                {isGain ? `▲ Gainers (${gainers.length})` : `▼ Losers (${losers.length})`}
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  {isGain ? (
+                    <TrendingUp className="h-3.5 w-3.5" aria-hidden />
+                  ) : (
+                    <TrendingDown className="h-3.5 w-3.5" aria-hidden />
+                  )}
+                  {isGain ? `Gainers (${gainers.length})` : `Losers (${losers.length})`}
+                </span>
               </button>
             );
           })}
@@ -181,8 +196,9 @@ export default function MoversWidget({
         {/* Gainers column */}
         <div className="flex flex-col">
           <div className="px-4 py-3 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-2">
-            <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
-              ▲ Gainers
+            <span className="flex items-center gap-2 text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
+              <IconBadge icon={TrendingUp} tone="emerald" size="sm" />
+              Gainers
             </span>
             <div className="flex items-center gap-2">
               {topGainer && (
@@ -214,8 +230,9 @@ export default function MoversWidget({
         {/* Losers column */}
         <div className="flex flex-col">
           <div className="px-4 py-3 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-2">
-            <span className="text-xs font-extrabold text-rose-700 dark:text-rose-400">
-              ▼ Losers
+            <span className="flex items-center gap-2 text-xs font-extrabold text-rose-700 dark:text-rose-400">
+              <IconBadge icon={TrendingDown} tone="rose" size="sm" />
+              Losers
             </span>
             <div className="flex items-center gap-2">
               {topLoser && (

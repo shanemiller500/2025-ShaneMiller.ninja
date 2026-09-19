@@ -12,9 +12,11 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Activity } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
+import { IconBadge } from "@/components/ui/icon-badge";
 import { useMarketData } from "../hooks/useMarketData";
 import { TICKER_SYMBOLS } from "../lib/tickers";
 import type { TradeInfo } from "../lib/types";
@@ -196,6 +198,14 @@ export default function LiveStreamTickerWidget() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
+                <IconBadge
+                  icon={Activity}
+                  tone="emerald"
+                  size="md"
+                  pulse={wsConnected}
+                  label="Live stock ticker"
+                />
+
                 <h2 className="text-base font-bold text-gray-900 dark:text-white">
                   Live Stock Ticker
                 </h2>

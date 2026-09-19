@@ -2,8 +2,26 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import {
+  BarChart3,
+  CalendarDays,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  DollarSign,
+  ListFilter,
+  Loader2,
+  Minus,
+  Search,
+  SearchX,
+  Sparkles,
+  Target,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 import { formatSupplyValue } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
+import { IconBadge } from '@/components/ui/icon-badge';
 
 interface EarningsItem {
   symbol: string;
@@ -104,9 +122,12 @@ const EarningsSection: React.FC = () => {
       <div className="mb-5 rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-              Upcoming Earnings
-            </h2>
+            <div className="flex items-center gap-3">
+              <IconBadge icon={BarChart3} tone="violet" size="lg" label="Earnings" />
+              <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+                Upcoming Earnings
+              </h2>
+            </div>
             <p className="mt-2 text-sm font-semibold text-gray-700 dark:text-white/70">
               Search tickers and scan EPS + revenue at a glance.
               {rangeLabel ? <span className="ml-2 text-xs font-bold opacity-80">({rangeLabel})</span> : null}
@@ -114,42 +135,56 @@ const EarningsSection: React.FC = () => {
           </div>
 
           <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
-            <input
-              type="text"
-              placeholder="Search ticker…"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full sm:w-64 rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] px-4 py-3 text-sm font-semibold outline-none"
-            />
+            <div className="relative w-full sm:w-64">
+              <Search
+                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/35"
+                aria-hidden
+              />
+              <input
+                type="text"
+                placeholder="Search ticker…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] pl-10 pr-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500/50 dark:focus:border-indigo-300/40"
+              />
+            </div>
 
-            <select
-              value={perPage}
-              onChange={(e) => {
-                setPerPage(parseInt(e.target.value, 10));
-                setPage(1);
-              }}
-              className="w-full sm:w-36 rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] px-3 py-3 text-sm font-semibold outline-none"
-            >
-              {PER_PAGE_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt === -1 ? 'All' : opt} / page
-                </option>
-              ))}
-            </select>
+            <div className="relative w-full sm:w-36">
+              <ListFilter
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/35"
+                aria-hidden
+              />
+              <select
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(parseInt(e.target.value, 10));
+                  setPage(1);
+                }}
+                className="w-full appearance-none rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] pl-9 pr-3 py-3 text-sm font-semibold outline-none focus:border-indigo-500/50 dark:focus:border-indigo-300/40"
+              >
+                {PER_PAGE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt === -1 ? 'All' : opt} / page
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Body */}
       {loading ? (
-        <div className="text-center text-sm font-semibold text-gray-600 dark:text-white/70">
+        <div className="flex items-center justify-center gap-2 py-10 text-sm font-semibold text-gray-600 dark:text-white/70">
+          <Loader2 className="h-4 w-4 animate-spin text-indigo-500 dark:text-indigo-400" aria-hidden />
           Loading earnings…
         </div>
       ) : ordered.length === 0 ? (
-        <div className="text-center text-sm font-semibold text-gray-600 dark:text-white/70">
+        <div className="flex flex-col items-center justify-center gap-3 py-10 text-sm font-semibold text-gray-600 dark:text-white/70">
+          <IconBadge icon={SearchX} tone="neutral" size="lg" />
           No matching earnings.
         </div>
       ) : (
@@ -202,7 +237,8 @@ const EarningsSection: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="mt-1 text-xs font-semibold text-gray-600 dark:text-white/60">
+                      <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600 dark:text-white/60">
+                        <CalendarDays className="h-3.5 w-3.5 text-gray-400 dark:text-white/40" aria-hidden />
                         {fmtDate(ev.date)}
                       </div>
                     </div>
@@ -210,7 +246,16 @@ const EarningsSection: React.FC = () => {
                     {/* Surprise */}
                     {hasSurprise && (
                       <div className={`rounded-2xl px-3 py-2 text-right ring-1 ring-black/10 dark:ring-white/10 ${surprisePill}`}>
-                        <div className="text-[10px] font-bold opacity-80">EPS Surprise</div>
+                        <div className="flex items-center justify-end gap-1 text-[10px] font-bold opacity-80">
+                          {pos ? (
+                            <TrendingUp className="h-3 w-3" aria-hidden />
+                          ) : neg ? (
+                            <TrendingDown className="h-3 w-3" aria-hidden />
+                          ) : (
+                            <Minus className="h-3 w-3" aria-hidden />
+                          )}
+                          EPS Surprise
+                        </div>
                         <div className="text-sm font-black">
                           {surprise! > 0 ? '+' : ''}
                           {formatSupplyValue(surprise)}
@@ -221,24 +266,33 @@ const EarningsSection: React.FC = () => {
 
                   {/* Metrics */}
                   <div className="mt-4 grid grid-cols-1 gap-2">
-                    <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-3">
-                      <div className="text-[11px] font-bold text-gray-600 dark:text-white/60">EPS Est.</div>
-                      <div className="mt-1 text-sm font-extrabold text-gray-900 dark:text-white">
-                        {epsEst != null ? formatSupplyValue(epsEst) : '—'}
+                    <div className="flex items-center gap-3 rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-3">
+                      <IconBadge icon={Target} tone="indigo" size="sm" />
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold text-gray-600 dark:text-white/60">EPS Est.</div>
+                        <div className="mt-0.5 text-sm font-extrabold text-gray-900 dark:text-white">
+                          {epsEst != null ? formatSupplyValue(epsEst) : '—'}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-3">
-                      <div className="text-[11px] font-bold text-gray-600 dark:text-white/60">EPS Act.</div>
-                      <div className="mt-1 text-sm font-extrabold text-gray-900 dark:text-white">
-                        {epsAct != null ? formatSupplyValue(epsAct) : '—'}
+                    <div className="flex items-center gap-3 rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-3">
+                      <IconBadge icon={CheckCircle2} tone={epsAct != null ? 'emerald' : 'neutral'} size="sm" />
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold text-gray-600 dark:text-white/60">EPS Act.</div>
+                        <div className="mt-0.5 text-sm font-extrabold text-gray-900 dark:text-white">
+                          {epsAct != null ? formatSupplyValue(epsAct) : '—'}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-3">
-                      <div className="text-[11px] font-bold text-gray-600 dark:text-white/60">Rev. Est.</div>
-                      <div className="mt-1 text-sm font-extrabold text-gray-900 dark:text-white">
-                        {revEst != null ? formatSupplyValue(revEst) : '—'}
+                    <div className="flex items-center gap-3 rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-3">
+                      <IconBadge icon={DollarSign} tone="sky" size="sm" />
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold text-gray-600 dark:text-white/60">Rev. Est.</div>
+                        <div className="mt-0.5 text-sm font-extrabold text-gray-900 dark:text-white">
+                          {revEst != null ? formatSupplyValue(revEst) : '—'}
+                        </div>
                       </div>
                     </div>
 
@@ -259,8 +313,9 @@ const EarningsSection: React.FC = () => {
                 size="md"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={clampedPage === 1}
-                className="disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 disabled:opacity-40"
               >
+                <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
                 Prev
               </Button>
 
@@ -273,14 +328,16 @@ const EarningsSection: React.FC = () => {
                 size="md"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={clampedPage === totalPages}
-                className="disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 disabled:opacity-40"
               >
                 Next
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden />
               </Button>
             </div>
           )}
 
-          <div className="mt-4 text-center text-xs font-semibold text-gray-600 dark:text-white/60">
+          <div className="mt-4 flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-600 dark:text-white/60">
+            <Sparkles className="h-3.5 w-3.5 text-amber-500" aria-hidden />
             Tip: search is instant — try “AAPL”, “NVDA”, “TSLA”.
           </div>
         </>
