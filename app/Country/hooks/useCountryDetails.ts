@@ -23,9 +23,11 @@ export function useCountryDetails() {
 
     try {
       trackEvent("Country Details Load Start", { cca3 });
-      const fullData: FullCountry = (
-        await fetch(`https://restcountries.com/v3.1/alpha/${cca3}`, { signal: ctrl.signal }).then((r) => r.json())
-      )[0];
+      const response = await fetch(`/api/countries?code=${encodeURIComponent(cca3)}`, { signal: ctrl.signal });
+      if (!response.ok) throw new Error("Country details are temporarily unavailable.");
+      const data: unknown = await response.json();
+      if (!Array.isArray(data) || !data[0]) throw new Error("Country details are temporarily unavailable.");
+      const fullData = data[0] as FullCountry;
 
       if (ctrl.signal.aborted || requestSeq.current !== seq) return;
       setFull(fullData);

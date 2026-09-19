@@ -21,6 +21,7 @@ import Spinner from "./components/Spinner";
 export default function CountrySearch() {
   const [mini, setMini] = useState<LiteCountry[]>([]);
   const [initialLoad, setInitialLoad] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<LiteCountry[]>([]);
   const [activeRegion] = useState<RegionId>("all");
@@ -49,14 +50,13 @@ export default function CountrySearch() {
     const ctrl = new AbortController();
     (async () => {
       try {
-        const res = await fetch(
-          "https://restcountries.com/v3.1/all?fields=name,flags,cca3,continents",
-          { signal: ctrl.signal },
-        );
+        const res = await fetch("/api/countries", { signal: ctrl.signal });
+        if (!res.ok) throw new Error("Country data is temporarily unavailable.");
         const js = await res.json();
-        if (Array.isArray(js)) setMini(js);
+        if (!Array.isArray(js)) throw new Error("Country data is temporarily unavailable.");
+        setMini(js);
       } catch (e: any) {
-        if (e?.name !== "AbortError") console.error(e);
+        if (e?.name !== "AbortError") setLoadError("Country data is temporarily unavailable. Please try again shortly.");
       } finally {
         setInitialLoad(false);
       }
@@ -247,6 +247,11 @@ export default function CountrySearch() {
           <Spinner label="Loading countries…" />
         ) : (
           <div className="space-y-5">
+            {loadError && (
+              <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-100">
+                {loadError}
+              </div>
+            )}
 
             {/* ── Country tiles — full width at top ── */}
             <div>
