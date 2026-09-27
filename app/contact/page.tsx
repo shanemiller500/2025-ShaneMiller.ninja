@@ -3,15 +3,19 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { trackEvent } from "@/utils/mixpanel";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faSpinner,
-  faGlobe,
-  faSmile,
-  faPenNib,
-  faPaperclip,
-  faTrash,
-} from "@fortawesome/free-solid-svg-icons";
+  CheckCircle2,
+  Languages,
+  LoaderCircle,
+  Paperclip,
+  PenTool,
+  Send,
+  ShieldCheck,
+  Smile,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import MoodToneAssistant from "./MoodToneAssistant";
 import LanguageAssistant from "./LanguageAssistant";
@@ -22,8 +26,8 @@ import { Button } from "@/components/ui/button";
 import UMail from "@/public/images/umailLogo.png";
 
 interface ContactFormState {
+  name: string;
   email: string;
-  topic: string;
   subject: string;
   description: string;
   attachment: File | null;
@@ -36,21 +40,22 @@ interface Language {
 }
 
 const INPUT_BASE_STYLES =
-  "w-full rounded-xl bg-gray-50 text-gray-900 placeholder:text-gray-400 " +
-  "dark:bg-brand-900/60 dark:text-gray-100 dark:placeholder:text-gray-500 " +
-  "border border-gray-200 dark:border-white/10 " +
-  "px-4 py-3 text-[15px] leading-6 " +
-  "focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60 " +
-  "transition";
+  "w-full rounded-xl border border-slate-200/90 bg-white/70 px-4 py-3 text-[14px] " +
+  "leading-6 text-slate-900 outline-none placeholder:text-slate-400 " +
+  "transition duration-200 hover:border-slate-300 focus:border-indigo-500 " +
+  "focus:ring-2 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/[0.025] " +
+  "dark:text-white dark:placeholder:text-slate-500 dark:hover:border-white/20 " +
+  "dark:focus:border-indigo-400 dark:focus:ring-indigo-400/10";
 
 const MIN_LOADING_DELAY_MS = 2000;
 const STYLE_LOADING_DELAY_MS = 3000;
 const POPUP_DURATION_MS = 3500;
+const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
 
 export default function ContactPage() {
   const [formData, setFormData] = useState<ContactFormState>({
+    name: "",
     email: "",
-    topic: "",
     subject: "",
     description: "",
     attachment: null,
@@ -65,6 +70,7 @@ export default function ContactPage() {
   const [showWritingStyleModal, setShowWritingStyleModal] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -94,11 +100,19 @@ export default function ContactPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      setFormData((prev) => ({ ...prev, attachment: files[0] }));
+  function selectAttachment(file: File) {
+    if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+      showPopup("Please choose a file smaller than 10 MB.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
     }
+
+    setFormData((prev) => ({ ...prev, attachment: file }));
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) selectAttachment(file);
   }
 
   function clearAttachment() {
@@ -111,6 +125,8 @@ export default function ContactPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    if (isSubmitting) return;
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email.trim()) || formData.description.trim() === "") {
       showPopup("Please fill in all required fields: Email and Message.");
@@ -118,13 +134,15 @@ export default function ContactPage() {
       return;
     }
 
+    setIsSubmitting(true);
+
     try {
       const payload = new FormData();
-      payload.append("name", "Anonymous");
+      payload.append("name", formData.name.trim() || "Anonymous");
       payload.append("surname", "Hidden");
-      payload.append("email", formData.email);
-      payload.append("topic", formData.topic.trim() || "N/A");
-      payload.append("subject", formData.subject.trim());
+      payload.append("email", formData.email.trim());
+      payload.append("topic", "Portfolio contact");
+      payload.append("subject", formData.subject.trim() || "Portfolio message");
       payload.append("description", formData.description.trim());
       if (formData.attachment) {
         payload.append("attachment", formData.attachment);
@@ -141,13 +159,15 @@ export default function ContactPage() {
       }
 
       showPopup("Message sent successfully!", true);
-      setFormData({ email: "", topic: "", subject: "", description: "", attachment: null });
+      setFormData({ name: "", email: "", subject: "", description: "", attachment: null });
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     } catch (error) {
       console.error(error);
       showPopup("An error occurred while sending the message.", false);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -318,106 +338,131 @@ export default function ContactPage() {
     setIsDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFormData((prev) => ({ ...prev, attachment: e.dataTransfer.files[0] }));
+      selectAttachment(e.dataTransfer.files[0]);
     }
   }
 
   return (
-    <section className="mt-6 md:mt-12 text-gray-900 dark:text-gray-100">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <PageHeader />
+    <section className="relative isolate w-full min-w-0 flex-1 overflow-hidden py-8 text-slate-900 sm:py-12 dark:text-slate-100">
+      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
+        <div className="absolute left-1/2 top-0 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-indigo-300/15 blur-3xl dark:bg-indigo-500/[0.07]" />
+        <div className="absolute inset-0 opacity-[0.28] [background-image:linear-gradient(to_right,rgba(99,102,241,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(99,102,241,0.08)_1px,transparent_1px)] [background-size:32px_32px] [mask-image:linear-gradient(to_bottom,black,transparent_75%)] dark:opacity-[0.12]" />
+      </div>
 
-        <div className="mx-auto mt-8 max-w-[720px]">
-          <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-sm backdrop-blur">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-indigo-500/10 to-transparent dark:from-indigo-400/10" />
+      <div className="mx-auto w-full min-w-0 max-w-[720px] px-1 sm:px-4">
+        <ContactIntro />
 
-            <form className="relative p-4 sm:p-6 md:p-8" onSubmit={handleSubmit}>
-              <div className="grid grid-cols-1 gap-4 sm:gap-5">
-                <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
-                  <input
-                    id="subject"
-                    name="subject"
-                    type="text"
-                    className={`${INPUT_BASE_STYLES} placeholder:font-medium`}
-                    placeholder="Name (optional)"
-                    value={formData.subject}
+        <div className="relative mt-7 min-w-0 max-w-full sm:mt-8">
+          <div className="overflow-hidden rounded-[1.75rem] border border-white/80 bg-white/60 shadow-[0_24px_80px_-48px_rgba(79,70,229,0.45)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.025] dark:shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)]">
+            <div className="h-px bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent dark:via-indigo-400/35" />
+            <form className="min-w-0 p-4 sm:p-6" onSubmit={handleSubmit}>
+              <div className="grid grid-cols-1 gap-4">
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <label htmlFor="name" className="block">
+                      <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                        Name <span className="normal-case tracking-normal text-slate-400">· optional</span>
+                      </span>
+                      <input
+                        id="name"
+                        name="name"
+                        type="text"
+                        className={INPUT_BASE_STYLES}
+                        placeholder="Your name"
+                        value={formData.name}
+                        onChange={handleChange}
+                        autoComplete="name"
+                      />
+                    </label>
+
+                    <label htmlFor="email" className="block">
+                      <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                        Email <span className="text-indigo-600 dark:text-indigo-400">*</span>
+                      </span>
+                      <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        className={INPUT_BASE_STYLES}
+                        placeholder="you@example.com"
+                        value={formData.email}
+                        onChange={handleChange}
+                        required
+                        autoComplete="email"
+                        inputMode="email"
+                      />
+                    </label>
+                  </div>
+
+                  <label htmlFor="subject" className="block">
+                    <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                      Subject <span className="normal-case tracking-normal text-slate-400">· optional</span>
+                    </span>
+                    <input
+                      id="subject"
+                      name="subject"
+                      type="text"
+                      className={INPUT_BASE_STYLES}
+                      placeholder="Feedback, an idea, or a project"
+                      value={formData.subject}
+                      onChange={handleChange}
+                    />
+                  </label>
+
+                  <div className="rounded-2xl border border-indigo-200/60 bg-indigo-50/35 p-2.5 dark:border-indigo-400/10 dark:bg-indigo-400/[0.025]">
+                    <div className="mb-2 flex items-center gap-1.5 px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-indigo-600 dark:text-indigo-300">
+                      <Sparkles className="h-3 w-3" />
+                      AI tools
+                    </div>
+                    <AssistantToolbar
+                      onMoodToneClick={() => {
+                        trackEvent("MoodTone Modal Opened");
+                        setShowMoodToneModal(true);
+                      }}
+                      onWritingStyleClick={() => {
+                        trackEvent("WritingStyle Modal Opened");
+                        setShowWritingStyleModal(true);
+                      }}
+                      onLanguageClick={() => {
+                        trackEvent("Language Modal Opened");
+                        setShowLanguageModal(true);
+                      }}
+                      isLoading={isLoading}
+                      setIsLoading={setIsLoading}
+                      currentDescription={formData.description}
+                      updateDescription={(newText) =>
+                        setFormData((prev) => ({ ...prev, description: newText }))
+                      }
+                      showPopup={(msg) => showPopup(msg, false)}
+                      textAreaSelectionRef={textAreaSelectionRef}
+                    />
+                  </div>
+
+                  <MessageTextArea
+                    value={formData.description}
                     onChange={handleChange}
-                    autoComplete="name"
+                    textAreaRef={textAreaRef}
+                    onSelect={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      textAreaSelectionRef.current = {
+                        start: target.selectionStart,
+                        end: target.selectionEnd,
+                      };
+                    }}
                   />
 
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    className={`${INPUT_BASE_STYLES} placeholder:font-medium`}
-                    placeholder="Email *"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                    autoComplete="email"
-                    inputMode="email"
+                  <AttachmentDropZone
+                    attachment={formData.attachment}
+                    isDragActive={isDragActive}
+                    fileInputRef={fileInputRef}
+                    onDragOver={handleDragOver}
+                    onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onFileChange={handleFileChange}
+                    onClear={clearAttachment}
                   />
-                </div>
 
-                <input
-                  id="topic"
-                  name="topic"
-                  type="text"
-                  className={`${INPUT_BASE_STYLES} placeholder:font-medium`}
-                  placeholder="Subject — feedback, feature request…"
-                  value={formData.topic}
-                  onChange={handleChange}
-                />
-
-                <AssistantToolbar
-                  onMoodToneClick={() => {
-                    trackEvent("MoodTone Modal Opened");
-                    setShowMoodToneModal(true);
-                  }}
-                  onWritingStyleClick={() => {
-                    trackEvent("WritingStyle Modal Opened");
-                    setShowWritingStyleModal(true);
-                  }}
-                  onLanguageClick={() => {
-                    trackEvent("Language Modal Opened");
-                    setShowLanguageModal(true);
-                  }}
-                  isLoading={isLoading}
-                  setIsLoading={setIsLoading}
-                  currentDescription={formData.description}
-                  updateDescription={(newText) =>
-                    setFormData((prev) => ({ ...prev, description: newText }))
-                  }
-                  showPopup={(msg) => showPopup(msg, false)}
-                  textAreaSelectionRef={textAreaSelectionRef}
-                />
-
-                <MessageTextArea
-                  value={formData.description}
-                  onChange={handleChange}
-                  textAreaRef={textAreaRef}
-                  onSelect={(e) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    textAreaSelectionRef.current = {
-                      start: target.selectionStart,
-                      end: target.selectionEnd,
-                    };
-                  }}
-                />
-
-                <AttachmentDropZone
-                  attachment={formData.attachment}
-                  isDragActive={isDragActive}
-                  fileInputRef={fileInputRef}
-                  onDragOver={handleDragOver}
-                  onDragEnter={handleDragEnter}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onFileChange={handleFileChange}
-                  onClear={clearAttachment}
-                />
-
-                <SubmitButton isLoading={isLoading} />
+                  <SubmitButton isSubmitting={isSubmitting} />
               </div>
             </form>
           </div>
@@ -465,23 +510,18 @@ export default function ContactPage() {
   );
 }
 
-function PageHeader() {
+function ContactIntro() {
   return (
-    <div className="mx-auto max-w-3xl text-center">
-      <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 px-4 py-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-        <span className="opacity-80">Powered by</span>
-        <span className="inline-flex items-center gap-1">
-          <Image src={UMail} alt="UMail Logo" width={18} height={18} />
-          <span className="text-gray-800 dark:text-gray-100">Mail</span>
-        </span>
+    <div className="mx-auto min-w-0 max-w-xl text-center">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200/70 bg-white/50 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/[0.025] dark:text-slate-300">
+        <Image src={UMail} alt="U-Mail" width={15} height={15} />
+        <span>U-Mail</span>
       </div>
 
-      <h1 className="mt-5 font-nacelle text-3xl md:text-5xl font-semibold tracking-tight">
-        Say Hello
+      <h1 className="mt-5 font-aspekta text-4xl font-medium leading-none tracking-tight text-slate-950 sm:text-5xl dark:text-white">
+        Say hello<span className="text-indigo-600 dark:text-indigo-400">.</span>
       </h1>
-      <p className="mt-3 text-sm md:text-base text-gray-600 dark:text-gray-300">
-        Send a message, attach a file, and use the assistants to polish it before you hit send.
-      </p>
+      <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Send a message. I’ll take it from there.</p>
     </div>
   );
 }
@@ -510,45 +550,45 @@ function AssistantToolbar({
   textAreaSelectionRef,
 }: AssistantToolbarProps) {
   return (
-    <div className="pt-1">
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-center sm:gap-3">
+    <div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Button
           type="button"
           variant="secondary"
           size="sm"
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 shadow-sm"
+          className="inline-flex min-w-0 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border-indigo-200/70 bg-white/60 px-1.5 text-[11px] font-medium shadow-none hover:border-indigo-300 hover:bg-white dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.06]"
           onClick={onMoodToneClick}
           aria-label="Open Mood & Tone assistant"
         >
-          <FontAwesomeIcon icon={faSmile} />
-          <span className="truncate">Mood &amp; Tone</span>
+          <Smile className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-300" />
+          <span>Mood &amp; Tone</span>
         </Button>
 
         <Button
           type="button"
           variant="secondary"
           size="sm"
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 shadow-sm"
+          className="inline-flex min-w-0 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border-indigo-200/70 bg-white/60 px-1.5 text-[11px] font-medium shadow-none hover:border-indigo-300 hover:bg-white dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.06]"
           onClick={onWritingStyleClick}
           aria-label="Open Writing Style assistant"
         >
-          <FontAwesomeIcon icon={faPenNib} />
-          <span className="truncate">Writing Style</span>
+          <PenTool className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-300" />
+          <span>Writing Style</span>
         </Button>
 
         <Button
           type="button"
           variant="secondary"
           size="sm"
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 shadow-sm"
+          className="inline-flex min-w-0 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border-indigo-200/70 bg-white/60 px-1.5 text-[11px] font-medium shadow-none hover:border-indigo-300 hover:bg-white dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.06]"
           onClick={onLanguageClick}
           aria-label="Open Language assistant"
         >
-          <FontAwesomeIcon icon={faGlobe} />
-          <span className="truncate">Language</span>
+          <Languages className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-300" />
+          <span>Language</span>
         </Button>
 
-        <div className="w-full sm:w-auto">
+        <div className="w-full">
           <TextRefinementAssistant
             setPopupMessageWithTimeout={showPopup}
             globalLoading={isLoading}
@@ -560,10 +600,6 @@ function AssistantToolbar({
         </div>
       </div>
 
-      <p className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">
-        Tip: highlight part of your message and hit{" "}
-        <span className="font-semibold">Text Refine</span>.
-      </p>
     </div>
   );
 }
@@ -577,13 +613,13 @@ interface MessageTextAreaProps {
 
 function MessageTextArea({ value, onChange, textAreaRef, onSelect }: MessageTextAreaProps) {
   return (
-    <div className="relative">
+    <label htmlFor="description" className="relative block">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          Message <span className="text-red-500">*</span>
+        <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+          Message <span className="text-indigo-600 dark:text-indigo-400">*</span>
         </span>
-        <span className="text-[11px] text-gray-400 dark:text-gray-500">
-          {value.trim().length}/2000
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium tabular-nums text-slate-400 dark:bg-white/[0.05] dark:text-slate-500">
+          {value.length}/2000
         </span>
       </div>
 
@@ -593,14 +629,14 @@ function MessageTextArea({ value, onChange, textAreaRef, onSelect }: MessageText
         rows={6}
         ref={textAreaRef}
         onSelect={onSelect}
-        className={`${INPUT_BASE_STYLES} resize-none min-h-[160px] leading-7 placeholder:font-medium`}
-        placeholder="What can I help with? *"
+        className={`${INPUT_BASE_STYLES} min-h-[150px] resize-none leading-7`}
+        placeholder="What would you like to discuss?"
         value={value}
         onChange={onChange}
         required
         maxLength={2000}
       />
-    </div>
+    </label>
   );
 }
 
@@ -628,101 +664,96 @@ function AttachmentDropZone({
   onClear,
 }: AttachmentDropZoneProps) {
   return (
-    <div>
-      <div
-        className={`group relative rounded-2xl border-2 border-dashed p-4 sm:p-5 transition cursor-pointer ${
+    <div
+      className={`rounded-2xl border border-dashed p-3 transition duration-200 ${
           isDragActive
-            ? "border-indigo-500 bg-indigo-50/60 dark:bg-indigo-500/10"
-            : "border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10"
+            ? "border-indigo-500 bg-indigo-50 ring-4 ring-indigo-500/10 dark:bg-indigo-500/10"
+            : "border-slate-300 bg-slate-50/70 hover:border-indigo-300 hover:bg-indigo-50/40 dark:border-white/10 dark:bg-white/[0.025] dark:hover:border-indigo-400/30 dark:hover:bg-indigo-400/[0.05]"
         }`}
-        onDragOver={onDragOver}
-        onDragEnter={onDragEnter}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        onClick={() => fileInputRef.current?.click()}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            fileInputRef.current?.click();
-          }
-        }}
-        aria-label="Upload attachment"
-      >
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10">
-            <FontAwesomeIcon icon={faPaperclip} className="text-gray-700 dark:text-gray-200" />
-          </div>
-
-          <div className="flex-1">
-            {attachment ? (
-              <>
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  {attachment.name}
-                </p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Click to replace, or remove.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  Attachment (optional)
-                </p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Drag &amp; drop, or click to select.
-                </p>
-              </>
-            )}
-          </div>
-
-          {attachment && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="inline-flex items-center gap-2 shrink-0"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClear();
-              }}
-              aria-label="Remove attachment"
-            >
-              <FontAwesomeIcon icon={faTrash} />
-              <span className="hidden sm:inline">Remove</span>
-            </Button>
-          )}
+      onDragOver={onDragOver}
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      <div className="flex items-center gap-3">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white/60 text-slate-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300">
+          <Paperclip className="h-4 w-4" />
         </div>
 
-        <input
-          type="file"
-          id="attachment"
-          name="attachment"
-          className="hidden"
-          ref={fileInputRef}
-          onChange={onFileChange}
-        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
+            {attachment ? attachment.name : "Attachment · 10 MB max"}
+          </p>
+          {attachment && <p className="mt-0.5 text-[10px] text-slate-400">{formatFileSize(attachment.size)}</p>}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {attachment && (
+            <button
+              type="button"
+              className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 transition hover:bg-red-50 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+              onClick={onClear}
+              aria-label="Remove attachment"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            className="rounded-lg border border-slate-200 bg-white/60 px-3 py-2 text-[11px] font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-indigo-400/30 dark:hover:text-indigo-200"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {attachment ? "Replace" : "Browse"}
+          </button>
+        </div>
       </div>
+
+      <input
+        type="file"
+        id="attachment"
+        name="attachment"
+        className="sr-only"
+        ref={fileInputRef}
+        onChange={onFileChange}
+        tabIndex={-1}
+      />
     </div>
   );
 }
 
-function SubmitButton({ isLoading }: { isLoading: boolean }) {
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function SubmitButton({ isSubmitting }: { isSubmitting: boolean }) {
   return (
-    <div className="pt-2">
+    <div className="pt-1">
       <Button
         type="submit"
         variant="indigo"
         size="lg"
         fullWidth
-        disabled={isLoading}
-        className={isLoading ? "opacity-80 cursor-not-allowed" : ""}
+        disabled={isSubmitting}
+        aria-busy={isSubmitting}
+        className="group inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 text-white shadow-none hover:bg-indigo-600 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-indigo-400"
       >
-        {isLoading ? "Sending…" : "Send message"}
+        {isSubmitting ? (
+          <>
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            Sending…
+          </>
+        ) : (
+          <>
+            Send message
+            <Send className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </>
+        )}
       </Button>
 
-      <p className="mt-4 text-center text-xs text-gray-500 dark:text-gray-400">
-        Your message data is never shared or used for AI/ML training purposes.
+      <p className="mt-2.5 flex items-center justify-center gap-1.5 text-center text-[10px] text-slate-400 dark:text-slate-500">
+        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        Private · Never used for AI training
       </p>
     </div>
   );
@@ -739,21 +770,31 @@ function NotificationPopup({ isVisible, isSuccess, message, onClose }: Notificat
   if (!isVisible) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-50 w-[calc(100vw-2rem)] max-w-sm">
+    <div className="fixed right-4 top-4 z-[60] w-[calc(100vw-2rem)] max-w-sm" role="alert" aria-live="assertive">
       <div
-        className={`flex items-start justify-between gap-3 rounded-2xl px-4 py-3 shadow-lg border text-white backdrop-blur ${
-          isSuccess ? "bg-green-600/95 border-green-400/40" : "bg-red-600/95 border-red-400/40"
+        className={`flex items-center gap-3 rounded-2xl border bg-white/95 p-3 shadow-[0_18px_50px_-20px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:bg-[#28282e]/95 ${
+          isSuccess ? "border-emerald-200 dark:border-emerald-400/20" : "border-red-200 dark:border-red-400/20"
         }`}
       >
-        <span className="text-sm leading-6">{message}</span>
+        <span
+          className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
+            isSuccess
+              ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300"
+              : "bg-red-50 text-red-600 dark:bg-red-400/10 dark:text-red-300"
+          }`}
+        >
+          {isSuccess ? <CheckCircle2 className="h-4.5 w-4.5" /> : <X className="h-4.5 w-4.5" />}
+        </span>
+        <span className="flex-1 text-sm font-medium leading-5 text-slate-800 dark:text-slate-100">
+          {message}
+        </span>
         <button
+          type="button"
           onClick={onClose}
-          className="rounded-lg p-1 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40"
+          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:hover:bg-white/10 dark:hover:text-white"
           aria-label="Close notification"
         >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <X className="h-4 w-4" />
         </button>
       </div>
     </div>
@@ -764,10 +805,12 @@ function LoadingOverlay({ isVisible }: { isVisible: boolean }) {
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 backdrop-blur-sm">
-      <div className="rounded-2xl border border-white/10 bg-white/10 px-6 py-5 text-center text-white shadow-lg">
-        <FontAwesomeIcon icon={faSpinner} spin size="2x" />
-        <div className="mt-3 text-sm font-medium">Working on it…</div>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm" role="status" aria-live="polite">
+      <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-slate-950/80 px-5 py-4 text-white shadow-2xl backdrop-blur-xl">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-500/15 text-indigo-300">
+          <LoaderCircle className="h-4 w-4 animate-spin" />
+        </span>
+        <span className="text-xs font-medium">Working…</span>
       </div>
     </div>
   );

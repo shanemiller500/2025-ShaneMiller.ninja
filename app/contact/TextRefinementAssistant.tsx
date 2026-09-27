@@ -90,17 +90,17 @@ export default function TextRefinementAssistant({
       type="button"
       onClick={handleRefineClick}
       disabled={globalLoading}
-      className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 px-3 py-2 text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
+      className="inline-flex min-w-0 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-indigo-200/70 bg-white/60 px-1.5 py-1.5 text-[11px] font-medium text-gray-800 shadow-none transition hover:border-indigo-300 hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.025] dark:text-gray-100 dark:hover:bg-white/[0.06]"
       aria-label="Refine selected text"
     >
       {globalLoading ? (
         <>
-          <FontAwesomeIcon icon={faSpinner} spin />
+          <FontAwesomeIcon icon={faSpinner} spin className="text-indigo-500 dark:text-indigo-300" />
           Refining…
         </>
       ) : (
         <>
-          <FontAwesomeIcon icon={faMagic} />
+          <FontAwesomeIcon icon={faMagic} className="text-indigo-500 dark:text-indigo-300" />
           <span>Text Refine</span>
         </>
       )}

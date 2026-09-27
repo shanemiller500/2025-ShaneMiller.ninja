@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import ReactCountryFlag from "react-country-flag";
+import { Languages } from "lucide-react";
 import { trackEvent } from "@/utils/mixpanel";
-import { Button } from "@/components/ui/button";
+import AssistantModalShell from "./AssistantModalShell";
 
 interface Language {
   name: string;
@@ -37,46 +37,46 @@ const LANGUAGES: Language[] = [
   { name: "Arabic", code: "ar", flagCode: "SA", key: "ar-SA" },
   { name: "Hebrew", code: "he", flagCode: "IL", key: "he-IL" },
   {
-    name: "Australian Slang",
+    name: "Australian English",
     code: "en",
     flagCode: "AU",
     key: "en-AU",
-    context: "real Aussie lingo, dont hold back with the slang words, make it sound like a drunk Australian slob",
+    context: "natural Australian English with recognizable regional expressions and slang",
   },
   {
-    name: "Cockney British",
+    name: "Cockney English",
     code: "en",
     flagCode: "GB",
     key: "en-GB-2",
-    context: "real Cockney British lingo, dont hold back with the slang words and lack of teeth",
+    context: "natural Cockney English with recognizable phrasing and rhyming slang",
   },
   {
-    name: "American Southern",
+    name: "Southern US English",
     code: "en",
     flagCode: "US",
     key: "en-US",
-    context: "real American southern bell lingo with slang words",
+    context: "warm Southern US English with natural regional expressions",
   },
   {
-    name: "millennial",
+    name: "Millennial",
     code: "en",
     flagCode: "UN",
     key: "en-US-1",
-    context: "real millennial slang words & lingo, dont hold back on making it sound really millennial sounding",
+    context: "conversational millennial phrasing with natural contemporary expressions",
   },
   {
-    name: "Generation Z",
+    name: "Gen Z",
     code: "en",
     flagCode: "UN",
     key: "en-US-2",
-    context: "real Generation Z slang words & lingo, dont hold back on making it sound really Generation Z sounding make it emo",
+    context: "conversational Gen Z phrasing with natural current expressions",
   },
   {
-    name: "boomer",
+    name: "Baby Boomer",
     code: "en",
     flagCode: "UN",
     key: "en-US-3",
-    context: "real boomer talk & slang words & lingo, dont hold back on making it sound really boomer sounding",
+    context: "clear conversational phrasing associated with the baby boomer generation",
   },
 ];
 
@@ -87,69 +87,31 @@ export default function LanguageAssistant({ onTranslate, onClose }: LanguageAssi
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Select Language"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <AssistantModalShell
+      title="Language"
+      icon={<Languages className="h-4 w-4" />}
+      onClose={onClose}
     >
-      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-brand-900">
-        <ModalHeader
-          title="Select language"
-          subtitle="Translate your message with one tap."
-          onClose={onClose}
-        />
-
-        <div className="p-5">
-          <div className="mt-4 max-h-[320px] overflow-y-auto pr-1">
-            <ul className="space-y-2">
-              {LANGUAGES.map((language) => (
-                <li key={language.key}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:hover:bg-white/10"
-                    onClick={() => handleLanguageSelect(language)}
-                  >
-                    <ReactCountryFlag
-                      countryCode={language.flagCode}
-                      svg
-                      style={{ width: "1.6em", height: "1.6em" }}
-                      aria-label={language.name}
-                    />
-                    <span className="flex-1">{language.name}</span>
-                    <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
-                      {language.code}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+      <div className="no-scrollbar max-h-[390px] overflow-y-auto">
+        <ul className="grid grid-cols-2 gap-2">
+          {LANGUAGES.map((language) => (
+            <li key={language.key}>
+              <button
+                type="button"
+                className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-slate-200/80 bg-white/40 px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50/60 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:border-indigo-400/20 dark:hover:bg-indigo-400/[0.06] dark:hover:text-indigo-200"
+                onClick={() => handleLanguageSelect(language)}
+              >
+                <ReactCountryFlag
+                  countryCode={language.flagCode}
+                  style={{ fontSize: "1rem", lineHeight: "1rem" }}
+                  aria-label={language.name}
+                />
+                <span className="min-w-0 truncate">{language.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
-    </div>
-  );
-}
-
-interface ModalHeaderProps {
-  title: string;
-  subtitle: string;
-  onClose: () => void;
-}
-
-function ModalHeader({ title, subtitle, onClose }: ModalHeaderProps) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-white/10">
-      <div>
-        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
-      </div>
-      <Button variant="ghost" size="sm" type="button" onClick={onClose} aria-label="Close">
-        ✕
-      </Button>
-    </div>
+    </AssistantModalShell>
   );
 }

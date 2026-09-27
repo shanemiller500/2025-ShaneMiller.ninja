@@ -1,9 +1,8 @@
 "use client";
 
 import { trackEvent } from "@/utils/mixpanel";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPenNib } from "@fortawesome/free-solid-svg-icons";
-import { Button } from "@/components/ui/button";
+import { PenLine } from "lucide-react";
+import AssistantModalShell from "./AssistantModalShell";
 
 interface Style {
   name: string;
@@ -60,57 +59,27 @@ export default function WritingStyleAssistant({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Select Writing Style"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) setShowWritingStyleModal(false);
-      }}
+    <AssistantModalShell
+      title="Writing style"
+      icon={<PenLine className="h-4 w-4" />}
+      onClose={() => setShowWritingStyleModal(false)}
     >
-      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-white/10 dark:bg-brand-900">
-        <ModalHeader onClose={() => setShowWritingStyleModal(false)} />
-
-        <div className="p-5">
-          <div className="mt-4 max-h-[320px] overflow-y-auto pr-1">
-            <ul className="space-y-2">
-              {WRITING_STYLES.map((style) => (
-                <li key={style.name}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:hover:bg-white/10"
-                    onClick={() => handleStyleSelect(style)}
-                  >
-                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5">
-                      <FontAwesomeIcon icon={faPenNib} className="text-gray-700 dark:text-gray-200" />
-                    </span>
-                    <span className="flex-1">{style.name}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+      <div className="max-h-[390px] overflow-y-auto pr-1">
+        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {WRITING_STYLES.map((style) => (
+            <li key={style.name}>
+              <button
+                type="button"
+                className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-slate-200/80 bg-white/40 px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50/60 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:border-indigo-400/20 dark:hover:bg-indigo-400/[0.06] dark:hover:text-indigo-200"
+                onClick={() => handleStyleSelect(style)}
+              >
+                <PenLine className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+                <span className="truncate">{style.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
-    </div>
-  );
-}
-
-function ModalHeader({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-white/10">
-      <div>
-        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-          Select writing style
-        </h2>
-        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-          Pick a vibe. We'll rewrite the message.
-        </p>
-      </div>
-      <Button variant="ghost" size="sm" type="button" aria-label="Close" onClick={onClose}>
-        ✕
-      </Button>
-    </div>
+    </AssistantModalShell>
   );
 }
