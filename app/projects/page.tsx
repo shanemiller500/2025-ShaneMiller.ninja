@@ -16,6 +16,7 @@ import Icon07 from "@/public/images/bitcoin-seeklogo.png";
 import Icon08 from "@/public/images/nasa-seeklogo.png";
 import Icon09 from "@/public/images/aic.png";
 import Icon12 from "@/public/images/project-icon-03.svg";
+import WorldIcon from "@/public/images/world.png";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -151,6 +152,15 @@ export default function ProjectsPage() {
     excerpt:
       "Search DOJ, FBI, and House Oversight docs related to Epstein investigations.",
     badge: "Big Data",
+  },
+  {
+    id: 15,
+    icon: WorldIcon,
+    slug: "https://historical-explorer.vercel.app/",
+    title: "Historical Explorer",
+    excerpt:
+      "A work-in-progress map for exploring historical locations, events, archives, and cultural sources together in one place.",
+    badge: "Work in Progress",
   },
   {
     id: 6,

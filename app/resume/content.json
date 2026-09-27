@@ -47,14 +47,14 @@
       ]
     },
     {
-      "title": "AI & Documents",
+      "title": "AI & Machine Learning",
       "skills": [
-        "OpenAI APIs",
-        "Embeddings & Retrieval",
-        "OCR",
-        "PDF.js",
-        "Azure AI Document Intelligence",
-        "Human-in-the-Loop Review"
+        "Large Language Models (LLMs)",
+        "Retrieval-Augmented Generation (RAG)",
+        "AI Agents",
+        "Vector Search",
+        "Model Evaluation",
+        "Model Context Protocol (MCP)"
       ]
     },
     {
