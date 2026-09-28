@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { type StaticImageData } from "next/image";
 
 import { trackEvent } from "@/utils/mixpanel";
-import ProjectCard from "./project-card";
+import ProjectCard, { type ProjectItem } from "./project-card";
 
 import Icon01 from "@/public/images/hmbco.png";
 import Icon02 from "@/public/images/project-icon-02.svg";
@@ -17,19 +16,7 @@ import Icon08 from "@/public/images/nasa-seeklogo.png";
 import Icon09 from "@/public/images/aic.png";
 import Icon12 from "@/public/images/project-icon-03.svg";
 import WorldIcon from "@/public/images/world.png";
-
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
-interface ProjectItem {
-  id: number;
-  icon: StaticImageData;
-  slug: string;
-  title: string;
-  excerpt: string;
-  openSource?: boolean;
-  badge?: string;
-}
+import CharlesIcon from "@/public/images/charles-icon.svg";
 
 /* ------------------------------------------------------------------ */
 /*  ProjectsPage Component                                             */
@@ -108,6 +95,15 @@ export default function ProjectsPage() {
     excerpt:
       "Paste messy JSON/XML and get formatted output with helpful corrections.",
     badge: "AI + Parser",
+  },
+  {
+    id: 16,
+    icon: CharlesIcon,
+    slug: "/Charles",
+    title: "Charles the AI Dog",
+    excerpt:
+      "A sassy, genius, talking robot version of my dog. Barks at the wind mid-sentence, steals the kids' food, refuses to fetch.",
+    badge: "OpenAI + Voice",
   },
   {
     id: 7,
@@ -205,63 +201,93 @@ export default function ProjectsPage() {
     });
   };
 
+  const liveCount = items02.filter((i) => !/^https?:\/\//i.test(i.slug)).length;
+
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 pb-16 pt-10 sm:pt-12">
+    <div className="relative isolate w-full pb-20 pt-10 sm:pt-14">
+      {/* Dot-grid backdrop, faded out toward the bottom */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] text-slate-300 dark:text-white/10 [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]"
+        style={{
+          backgroundImage: "radial-gradient(currentColor 1px, transparent 1px)",
+          backgroundSize: "22px 22px",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-10 left-1/3 -z-10 h-64 w-[36rem] -translate-x-1/2 rounded-full bg-gradient-to-r from-indigo-300/30 via-sky-200/30 to-violet-300/30 blur-3xl dark:from-indigo-500/10 dark:via-cyan-400/10 dark:to-violet-500/10"
+      />
+
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
-          Things I’ve built
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm font-semibold text-gray-600 dark:text-white/60">
-          Side projects, experiments, and tools I actually use.
+      <header className="mb-12 max-w-2xl">
+        <p className="font-mono text-xs text-indigo-500 dark:text-indigo-300">
+          ~/projects<span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse bg-current" />
         </p>
-      </div>
+        <h1 className="mt-4 font-aspekta text-4xl font-[650] tracking-tight text-slate-900 dark:text-white md:text-5xl">
+          Things I&rsquo;ve built
+        </h1>
+        <p className="mt-3 text-[15px] leading-relaxed text-slate-500 dark:text-slate-400">
+          Side projects, experiments, and tools I actually use. Most of them run on live APIs,
+          and some have an LLM inside.
+        </p>
 
-      <div className="space-y-10">
-        {/* Company */}
-        <section className="rounded-3xl border border-black/10 bg-white/70 p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
-          <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
-                Company Founded
-              </h2>
-
+        <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-3 font-mono text-xs">
+          {[
+            { k: "projects", v: items01.length + items02.length },
+            { k: "live on this site", v: liveCount },
+            { k: "company", v: items01.length },
+          ].map((stat) => (
+            <div key={stat.k} className="flex items-baseline gap-2">
+              <dt className="order-2 uppercase tracking-wider text-slate-400 dark:text-slate-500">{stat.k}</dt>
+              <dd className="order-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-white">
+                {String(stat.v).padStart(2, "0")}
+              </dd>
             </div>
-          </div>
+          ))}
+        </dl>
+      </header>
 
-          <div className="grid grid-cols-1 gap-4">
-            {items01.map((item) => (
-              <ProjectCard
-                key={item.slug}
-                item={item}
-                onClick={() => handleProjectClick(item, "Company Founded")}
-              />
-            ))}
-          </div>
+      <div className="space-y-14">
+        {/* Company */}
+        <section>
+          <SectionLabel index="01" title="Company founded" />
+          {items01.map((item) => (
+            <ProjectCard
+              key={item.slug}
+              item={item}
+              featured
+              onClick={() => handleProjectClick(item, "Company Founded")}
+            />
+          ))}
         </section>
 
         {/* Portfolio */}
-        <section className="rounded-3xl border border-black/10 bg-white/70 p-5 shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
-          <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
-                Fun Dev Portfolio Stuff
-              </h2>
-
-            </div>
-          </div>
-
+        <section>
+          <SectionLabel index="02" title="Lab" note="Experiments & live-data playgrounds" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {items02.map((item) => (
+            {items02.map((item, i) => (
               <ProjectCard
                 key={item.slug}
                 item={item}
+                index={i}
                 onClick={() => handleProjectClick(item, "Fun Dev Portfolio Stuff")}
               />
             ))}
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function SectionLabel({ index, title, note }: { index: string; title: string; note?: string }) {
+  return (
+    <div className="mb-5 flex items-center gap-3">
+      <span className="font-mono text-[11px] text-indigo-500 dark:text-indigo-300">{index}</span>
+      <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h2>
+      {note && <span className="hidden text-xs text-slate-400 sm:inline dark:text-slate-500">{note}</span>}
+      <span className="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent dark:from-white/10" />
     </div>
   );
 }

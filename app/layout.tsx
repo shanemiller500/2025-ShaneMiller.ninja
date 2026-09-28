@@ -113,7 +113,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
 
       <body
-        className={`${inter.variable} ${aspekta.variable} font-inter antialiased bg-indigo-50 text-brand-700 dark:bg-brand-900 dark:text-slate-200 tracking-tight`}
+        className={`${inter.variable} ${aspekta.variable} font-inter antialiased bg-slate-50 text-brand-700 dark:bg-brand-900 dark:text-slate-200 tracking-tight`}
       >
         <Theme>
           <ConsoleGreeting />
@@ -155,7 +155,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       leaveTo="-translate-x-full"
                     >
                       <Dialog.Panel className="">
-                        <div className="flex items-center justify-between px-4 py-4 border-b border-black/5 dark:border-white/10 dark:bg-brand-900 bg-indigo-50">
+                        <div className="flex items-center justify-between px-4 py-4 border-b border-black/5 dark:border-white/10 dark:bg-brand-900 bg-slate-50">
                           {/* ✅ Avatar (shows on any route except "/") */}
                          
                             <div className="shrink-0">
@@ -202,7 +202,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </Transition.Root>
 
               {/* Main content */}
-              <main className="grow overflow-hidden px-4 sm:px-6 dark:bg-brand-900 bg-indigo-50">
+              <main className="grow overflow-hidden px-4 sm:px-6 dark:bg-brand-900 bg-slate-50">
                 <div className="w-full h-full max-w-[1072px] mx-auto flex flex-col">
                   {/* Mobile top bar (hamburger) */}
                   <div className="lg:hidden pt-4">

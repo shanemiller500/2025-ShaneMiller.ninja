@@ -12,11 +12,11 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity } from "lucide-react";
+
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-import { IconBadge } from "@/components/ui/icon-badge";
+import { WidgetCard } from "@/components/ui/widget-card";
 import { useMarketData } from "../hooks/useMarketData";
 import { TICKER_SYMBOLS } from "../lib/tickers";
 import type { TradeInfo } from "../lib/types";
@@ -160,173 +160,113 @@ export default function LiveStreamTickerWidget() {
   };
 
   /* ── Derived UI ───────────────────────────────────────────────────── */
-  const banner =
-    marketState === "closed"  ? "Markets Closed"       :
-    marketState === "premarket"  ? "Pre-Market Trading"   :
-    marketState === "afterhours" ? "After-Hours Trading"  : null;
-
-  const bannerColor = marketState === "closed" ? "text-red-600" : "text-yellow-500";
   const sub =
-    marketState === "open"       ? "Live"   :
-    marketState === "premarket"  ? "Pre"    :
-    marketState === "afterhours" ? "After"  : "Closed";
+    marketState === "open"       ? (wsConnected ? "Live" : "Reconnecting") :
+    marketState === "premarket"  ? "Pre-market"  :
+    marketState === "afterhours" ? "After hours" : "Market closed";
 
   const statusPill =
     marketState === "open"
-      ? "bg-green-500/15 text-green-700 dark:text-green-200 ring-green-500/20"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200/70 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-400/20"
       : marketState === "closed"
-      ? "bg-red-500/15 text-red-700 dark:text-red-200 ring-red-500/20"
-      : "bg-yellow-500/15 text-yellow-800 dark:text-yellow-200 ring-yellow-500/20";
-
-  const wsLabel =
-    marketState === "premarket"  ? (wsConnected ? "Pre-Market Stream" : "Pre-Market")  :
-    marketState === "afterhours" ? (wsConnected ? "After-Hours Stream" : "After-Hours") :
-    marketState === "open"       ? (wsConnected ? "Stream Live"        : "Reconnecting") :
-    null; // closed — hide the pill entirely
-
-  const wsPill = wsConnected
-    ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-200 ring-indigo-500/20"
-    : "bg-gray-500/10 text-gray-700 dark:text-gray-300 ring-white/10";
+      ? "bg-slate-50 text-slate-500 ring-slate-200/70 dark:bg-white/5 dark:text-slate-400 dark:ring-white/10"
+      : "bg-amber-50 text-amber-700 ring-amber-200/70 dark:bg-amber-400/10 dark:text-amber-300 dark:ring-amber-400/20";
 
   /* ── Render ───────────────────────────────────────────────────────── */
   return (
     <>
       <ToastContainer position="top-right" autoClose={4000} hideProgressBar pauseOnHover />
 
-      <section className="min-w-0 bg-white dark:border-white/10 dark:bg-white/[0.06] rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-4 pt-4 pb-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <IconBadge
-                  icon={Activity}
-                  tone="emerald"
-                  size="md"
-                  pulse={wsConnected}
-                  label="Live stock ticker"
-                />
+      <WidgetCard
+        title="Markets"
+        subtitle="12 large caps · tap a tile for details"
+        href="/stocks"
+        hrefLabel="More market data"
+        action={
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${statusPill}`}
+            title="Market session"
+          >
+            <span className="relative flex h-1.5 w-1.5">
+              {marketState === "open" && wsConnected && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
+              )}
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
+            </span>
+            {sub}
+          </span>
+        }
+      >
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {TICKER_SYMBOLS.map((sym) => {
+            const td   = tickerMap[sym];
+            const info = flashMap[sym];
+            const logo = td?.logo || LOGO_FALLBACK;
 
-                <h2 className="text-base font-bold text-gray-900 dark:text-white">
-                  Live Stock Ticker
-                </h2>
-                <span
-                  className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${statusPill}`}
-                  title="Market session"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
-                  {sub}
-                </span>
-                {wsLabel && (
-                  <span
-                    className={`hidden sm:inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${wsPill}`}
-                    title="WebSocket status"
-                  >
-                    {wsLabel}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
+            const flashDir = info?.dir ?? "flat";
+            const flashBg =
+              flashDir === "up"   ? "bg-emerald-400/10" :
+              flashDir === "down" ? "bg-rose-400/10"    :
+                                   "bg-transparent";
 
-          {banner && (
-            <div className={`mt-4 text-center text-xs font-semibold ${bannerColor} animate-pulse`}>
-              {banner}
-            </div>
-          )}
-        </div>
+            const pct          = td?.quote?.dp ?? info?.percentChange ?? 0;
+            const pctColor     =
+              pct > 0 ? "text-emerald-600 dark:text-emerald-400" :
+              pct < 0 ? "text-rose-500 dark:text-rose-400"       :
+                        "text-slate-400";
+            const displayPrice = fmt.usd(info?.price ?? td?.quote?.c);
+            const displayPct   = pct ? `${pct > 0 ? "+" : ""}${fmt.pct(pct)}` : "0.00%";
 
-        <div className="px-3 pb-3">
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-4 gap-2">
-            {TICKER_SYMBOLS.map((sym) => {
-              const td   = tickerMap[sym];
-              const info = flashMap[sym];
-              const dp   = td?.quote?.dp ?? 0;
-              const logo = td?.logo || LOGO_FALLBACK;
-
-              const baseBg =
-                dp > 0 ? "bg-green-200/80 dark:bg-green-800/40" :
-                dp < 0 ? "bg-red-200/80 dark:bg-red-800/40"     :
-                         "bg-gray-100 dark:bg-brand-900/60";
-
-              const flashDir = info?.dir ?? "flat";
-              const flashBg =
-                flashDir === "up"   ? "bg-green-400/70 dark:bg-green-500/35" :
-                flashDir === "down" ? "bg-red-400/70 dark:bg-red-500/35"     :
-                                     "bg-white/0";
-
-              const pct          = td?.quote?.dp ?? info?.percentChange ?? 0;
-              const pctColor     = pct >= 0
-                ? "text-green-800 dark:text-green-200"
-                : "text-red-800 dark:text-red-200";
-              const displayPrice = fmt.usd(info?.price ?? td?.quote?.c);
-              const displayPct   = fmt.pct(pct);
-
-              return (
-                <motion.button
-                  key={sym}
-                  type="button"
-                  onClick={() => openSymbolModal(sym)}
-                  className={`relative aspect-square w-full overflow-hidden rounded-xl border border-gray-200/60 dark:border-white/10 ${baseBg} shadow-sm`}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  title={`${sym} details`}
-                >
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <img
-                      src={logo}
-                      alt={sym}
-                      className="h-13 w-13 object-contain opacity-80"
-                      loading="lazy"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = LOGO_FALLBACK;
-                      }}
+            return (
+              <motion.button
+                key={sym}
+                type="button"
+                onClick={() => openSymbolModal(sym)}
+                className="group relative overflow-hidden rounded-xl border border-slate-200/70 bg-white p-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/20"
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                title={`${sym} details`}
+              >
+                <AnimatePresence initial={false}>
+                  {info?.flashKey ? (
+                    <motion.div
+                      key={`${sym}-${info.flashKey}`}
+                      className={`pointer-events-none absolute inset-0 ${flashBg}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: [0, 1, 0] }}
+                      transition={{ duration: 0.6 }}
                     />
-                  </div>
+                  ) : null}
+                </AnimatePresence>
 
-                  {/* Persistent daily-change tint — always visible over the logo */}
-                  {dp !== 0 && (
-                    <div className={`absolute inset-0 ${
-                      dp > 0
-                        ? "bg-green-400/40 dark:bg-green-500/25"
-                        : "bg-red-400/40 dark:bg-red-500/25"
-                    }`} />
-                  )}
+                <div className="relative flex items-center gap-2">
+                  <img
+                    src={logo}
+                    alt=""
+                    className="h-6 w-6 shrink-0 rounded-md bg-white object-contain ring-1 ring-slate-200/70 dark:ring-white/10"
+                    loading="lazy"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = LOGO_FALLBACK;
+                    }}
+                  />
+                  <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    {sym}
+                  </span>
+                </div>
 
-                  <AnimatePresence initial={false}>
-                    {info?.flashKey ? (
-                      <motion.div
-                        key={`${sym}-${info.flashKey}`}
-                        className={`absolute inset-0 ${flashBg}`}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.18 }}
-                      />
-                    ) : null}
-                  </AnimatePresence>
-
-                  <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between gap-2 px-2 py-1.5 bg-white/75 dark:bg-black/30">
-                    <span className="text-[11px] font-semibold text-gray-900 dark:text-white">
-                      {displayPrice}
-                    </span>
-                    <span className={`text-[11px] font-semibold ${pctColor}`}>
-                      {displayPct}
-                    </span>
-                  </div>
-                </motion.button>
-              );
-            })}
-          </div>
-
-          <p className="mt-4 mb-4 text-xs text-gray-500 dark:text-gray-400 text-center">
-            See more stock market data{" "}
-            <a href="/stocks" className="text-indigo-600 dark:text-indigo-300 underline">
-              here
-            </a>
-            .
-          </p>
+                <div className="relative mt-3 flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
+                    {displayPrice}
+                  </span>
+                  <span className={`text-[11px] font-medium tabular-nums ${pctColor}`}>
+                    {displayPct}
+                  </span>
+                </div>
+              </motion.button>
+            );
+          })}
         </div>
-      </section>
+      </WidgetCard>
 
       {modalLoading && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">

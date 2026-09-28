@@ -4,7 +4,7 @@ import { trackEvent } from '@/utils/mixpanel';
 
 export default function Footer() {
   return (
-    <footer className="border-t border-slate-200 dark:border-slate-800">
+    <footer className="border-t border-slate-200/70 dark:border-white/[0.06]">
       <div className="py-8">
         <div className="text-center md:flex md:items-center md:justify-between">
           {/* Social links */}

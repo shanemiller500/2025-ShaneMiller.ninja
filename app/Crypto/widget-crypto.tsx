@@ -5,6 +5,7 @@ import { fetchCoinCap, subscribeCoinCap } from "@/utils/coincap-client";
 import React, { useEffect, useState, useRef, useMemo, useCallback, startTransition } from "react";
 import { motion, useMotionValue, useAnimationFrame, animate } from "framer-motion";
 import CryptoAssetPopup from "@/app/Crypto/CryptoAssetPopup";
+import { WidgetCard } from "@/components/ui/widget-card";
 
 /* Types ------------------------------------------------------------ */
 interface TradeState {
@@ -244,85 +245,54 @@ export default function WidgetCrypto() {
     onClick={onCardClick}
     className={cn(
       "group relative overflow-hidden text-left select-none",
-      "mx-1",
-      "min-w-[100px] sm:min-w-[110px]",
-      "rounded-xl",
-      "border",
-      "shadow-sm",
-      "transition-colors duration-150",
-      "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60",
-
-      isPos
-        ? [
-            //  MATTE GREEN  
-            "bg-emerald-400",
-            "border-emerald-600/50",
-            "dark:bg-emerald-600",
-            "dark:border-emerald-500/50",
-          ].join(" ")
-        : isNeg
-        ? [
-            //  MATTE RED
-            "bg-rose-400",
-            "border-rose-600/50",
-            "dark:bg-rose-600",
-            "dark:border-rose-500/50",
-          ].join(" ")
-        : [
-            //  MATTE NEUTRAL
-            "bg-gray-200",
-            "border-gray-400/40",
-            "dark:bg-gray-800/60",
-            "dark:border-gray-700/40",
-          ].join(" ")
+      "mx-1 min-w-[112px] rounded-xl",
+      "border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.03]",
+      "transition-colors duration-150 hover:border-slate-300 dark:hover:border-white/20",
+      "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60"
     )}
-    whileHover={{ y: -2, scale: 1.02 }}
+    whileHover={{ y: -2 }}
     whileTap={{ scale: 0.98 }}
   >
-    {/* Subtle gradient overlay */}
-    <div className="absolute inset-0 pointer-events-none dark:bg-gradient-to-br dark:from-white/5 dark:via-transparent dark:to-black/25" />
-
     {/* Flash on price update */}
     {prev != null && bump > 0 && (isPos || isNeg) && (
       <motion.div
         key={`flash-${id}-${bump}`}
         className="absolute inset-0 pointer-events-none rounded-xl"
         initial={{ opacity: 0 }}
-        animate={{ opacity: [0, 0.7, 0] }}
+        animate={{ opacity: [0, 0.35, 0] }}
         transition={{ duration: 0.4, ease: "easeOut" }}
         style={{
           background: isPos
             ? "radial-gradient(circle at center, rgba(34,197,94,0.55) 0%, rgba(34,197,94,0.22) 52%, transparent 82%)"
             : "radial-gradient(circle at center, rgba(239,68,68,0.55) 0%, rgba(239,68,68,0.22) 52%, transparent 82%)",
-          mixBlendMode: "screen",
         }}
       />
     )}
 
     {/* Content */}
-    <div className="relative z-10 px-2.5 py-2.5">
+    <div className="relative z-10 p-2.5">
       {/* Header row with logo, symbol, and rank */}
       <div className="flex items-center justify-between gap-1.5 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           {logo && (
             <div className="relative flex-shrink-0">
-              <div className="w-5 h-5 rounded-full bg-white dark:bg-gray-800 p-0.5 ring-1 ring-black/5 dark:ring-white/10 shadow-sm">
+              <div className="w-5 h-5 rounded-full">
                 <img src={logo} alt={md.symbol} className="w-full h-full rounded-full" loading="lazy" />
               </div>
             </div>
           )}
-          <span className="text-[11px] font-semibold text-slate-800 dark:text-white truncate">
+          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate">
             {md?.symbol?.toUpperCase?.()}
           </span>
         </div>
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/10 text-[9px] font-bold text-gray-600 dark:text-gray-300">
+        <span className="text-[10px] font-medium text-slate-300 dark:text-slate-600 tabular-nums">
           #{md?.rank}
         </span>
       </div>
 
       {/* Price */}
       <div className="mb-1.5">
-        <div className="text-sm font-semibold text-slate-800 dark:text-white tabular-nums">
+        <div className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">
           {fmt.usd(price)}
         </div>
       </div>
@@ -331,15 +301,15 @@ export default function WidgetCrypto() {
       <div className="flex items-center justify-between">
         <span
           className={cn(
-            "text-[10px] font-bold tabular-nums",
-            isPos ? "text-emerald-700 dark:text-emerald-300" :
-            isNeg ? "text-rose-700 dark:text-rose-300" :
-            "text-gray-700 dark:text-gray-300"
+            "text-[11px] font-medium tabular-nums",
+            isPos ? "text-emerald-600 dark:text-emerald-400" :
+            isNeg ? "text-rose-500 dark:text-rose-400" :
+            "text-slate-500"
           )}
         >
           {fmt.pct(md?.changePercent24Hr)}
         </span>
-        <span className="text-[9px] font-semibold text-gray-500 dark:text-gray-400">24h</span>
+        <span className="text-[10px] text-slate-400 dark:text-slate-500">24h</span>
       </div>
     </div>
   </motion.button>
@@ -347,25 +317,12 @@ export default function WidgetCrypto() {
   };
 
   return (
-    <div className="w-full max-w-[720px] mx-auto">
-      {/* Header */}
-      <div className="px-4 pt-3 pb-2">
-        <div className="flex items-center justify-center gap-2">
-         <div className="w-1.5 h-1.5 bg-gradient-to-r from-emerald-500 to-green-500 rounded-full animate-pulse" />
-
-          <p className="text-xs sm:text-sm font-bold text-gray-700 dark:text-gray-300">
-            Top 10 Cryptos by Market Cap
-          </p>
-         <div className="w-1.5 h-1.5 bg-gradient-to-r from-emerald-500 to-green-500 rounded-full animate-pulse" />
-
-        </div>
-      </div>
-
+    <WidgetCard title="Crypto" subtitle="Top 10 by market cap · live" href="/Crypto" hrefLabel="More crypto data" flush>
       {/* Scrolling Container */}
-      <div className="relative overflow-hidden py-2">
+      <div className="relative overflow-hidden pb-4">
         {/* Gradient fades */}
-        <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white dark:from-brand-900 to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white dark:from-brand-900 to-transparent z-10 pointer-events-none" />
+        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white dark:from-[#232326] to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white dark:from-[#232326] to-transparent z-10 pointer-events-none" />
 
         <motion.div
           className="flex cursor-grab active:cursor-grabbing will-change-transform"
@@ -390,19 +347,6 @@ export default function WidgetCrypto() {
         </motion.div>
       </div>
 
-      {/* Footer */}
-      <div className="px-4 pt-2 pb-3">
-        <p className="text-xs text-center text-gray-600 dark:text-gray-400">
-          View more crypto data{" "}
-          <a
-            href="/Crypto"
-            className="font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 underline underline-offset-2 transition-colors"
-          >
-            here
-          </a>
-        </p>
-      </div>
-
       {/* Asset Detail Popup */}
       {selectedAsset && (
         <CryptoAssetPopup
@@ -423,6 +367,6 @@ export default function WidgetCrypto() {
     </div>
   </div>
 )}
-    </div>
+    </WidgetCard>
   );
 }

@@ -15,7 +15,7 @@ export default function SideNavigation() {
 
   // shared link class (keeps your exact active logic)
   const linkBase =
-    "w-full h-10 flex items-center justify-center md:justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 dark:bg-brand-900 bg-indigo-50";
+    "w-full h-10 flex items-center justify-center md:justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 dark:bg-brand-900 bg-slate-50";
 
   // on mobile, add left padding + spacing so icon + text fits
   const linkMobileLayout =
@@ -23,10 +23,10 @@ export default function SideNavigation() {
 
   // mobile-only label (one word)
   const labelClass =
-    "text-[12px] font-semibold leading-none md:hidden dark:bg-brand-900 bg-indigo-50";
+    "text-[12px] font-semibold leading-none md:hidden dark:bg-brand-900 bg-slate-50";
 
   return (
-    <div className="sticky top-0 w-56 sm:w-48 md:w-24 shrink-0 h-screen overflow-y-auto no-scrollbar border-r border-slate-200 dark:border-slate-800 dark:bg-brand-900 bg-indigo-50">
+    <div className="sticky top-0 w-56 sm:w-48 md:w-24 shrink-0 h-screen overflow-y-auto no-scrollbar border-r border-slate-200/70 dark:border-white/[0.06] dark:bg-brand-900 bg-slate-50">
       <div className="h-full flex flex-col justify-between after:flex-1 after:mt-auto">
         {/* Desktop-only avatar: top-left */}
         <div className="hidden md:block px-3 pt-3">
@@ -72,7 +72,8 @@ export default function SideNavigation() {
                     pathname !== "/results" &&
                     pathname !== "/Weather" &&
                     pathname !== "/NASA" &&
-                    pathname !== "/PrettyPrint"
+                    pathname !== "/PrettyPrint" &&
+                    pathname !== "/Charles"
                       ? "text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500"
                       : "text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400"
                   }`}
@@ -113,7 +114,8 @@ export default function SideNavigation() {
                     pathname === "/results" ||
                     pathname === "/Weather" ||
                     pathname === "/NASA" ||
-                    pathname === "/PrettyPrint"
+                    pathname === "/PrettyPrint" ||
+                    pathname === "/Charles"
                       ? "text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500"
                       : "text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400"
                   }`}
