@@ -2,31 +2,16 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ToastContainer, toast } from "react-toastify";
 import { motion, AnimatePresence } from "framer-motion";
-import "react-toastify/dist/ReactToastify.css";
 
-import { AlertTriangle, Search, X } from "lucide-react";
+import { ArrowRight, CornerDownLeft, Search, X } from "lucide-react";
 
 import { API_TOKEN } from "@/utils/config";
 import MarketWidgets from "../widgets/MarketWidgets";
 import NewsWidget from "../widgets/NewsWidget";
-import StockQuoteModal from "../StockQuoteModal";
-import { Button } from "@/components/ui/button";
+import { useQuoteModal } from "../hooks/useQuoteModal";
 
 const PROXY_BASE = "https://u-mail.co/api/finnhubProxy";
-
-interface QuoteData {
-  c: number;
-  d: number;
-  dp: number;
-  h: number;
-  l: number;
-  o: number;
-  pc: number;
-  v: number;
-  t: number;
-}
 
 type Suggestion = { symbol: string; description?: string; type?: string };
 
@@ -86,16 +71,7 @@ export default function StockQuoteSection() {
   const [openSuggest, setOpenSuggest] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
 
-  const [stockData, setStockData] = useState<{
-    profile: any;
-    quote: QuoteData;
-    metric: any;
-  } | null>(null);
-
-  const [newsData, setNewsData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [showModal, setShowModal] = useState(false);
+  const { openQuote, quoteModal, quoteLoading: loading } = useQuoteModal();
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -379,68 +355,14 @@ export default function StockQuoteSection() {
   }, [activeIdx, suggestions, ensureProfileForSuggestion]);
 
   /* ─────────────────────────── Search handler ───────────────────────── */
-  const handleSearch = async (sym?: string) => {
+  const handleSearch = (sym?: string) => {
     const symbol = (sym ?? symbolInput).trim().toUpperCase();
     if (!symbol) return;
-
-    setLoading(true);
-    setError("");
     setOpenSuggest(false);
     setActiveIdx(-1);
-
-    try {
-      // Quote first (fast-fail)
-      const quote = await fetch(`${PROXY_BASE}/quote/${encodeURIComponent(symbol)}`, { cache: "no-store" }).then((r) =>
-        r.ok ? r.json() : null
-      );
-
-      if (!quote || typeof quote.c !== "number" || quote.c <= 0) {
-        toast.error(`No data found for “${symbol}.” Try another symbol.`);
-        setStockData(null);
-        setNewsData([]);
-        setShowModal(false);
-        return;
-      }
-
-      const [profile, metric, news] = await Promise.all([
-        fetch(`${PROXY_BASE}/profile/${encodeURIComponent(symbol)}`, { cache: "no-store" }).then((r) =>
-          r.ok ? r.json() : null
-        ),
-        fetch(`${PROXY_BASE}/metric/${encodeURIComponent(symbol)}`, { cache: "no-store" }).then((r) =>
-          r.ok ? r.json() : null
-        ),
-        fetch(`${PROXY_BASE}/news/${encodeURIComponent(symbol)}`, { cache: "no-store" }).then((r) =>
-          r.ok ? r.json() : []
-        ),
-      ]);
-
-      let profileData = profile || {};
-      if (!profileData.name) {
-        profileData = {
-          ...profileData,
-          name: symbol,
-          ticker: symbol,
-          exchange: profileData.exchange ?? "",
-          logo: profileData.logo ?? "",
-        };
-      }
-
-      setStockData({ profile: profileData, quote, metric });
-      setNewsData(Array.isArray(news) ? news : []);
-      setShowModal(true);
-
-      setSymbolInput("");
-      setSuggestions([]);
-      setOpenSuggest(false);
-    } catch (err: any) {
-      toast.error(err?.message || "Something went wrong. Please try again.");
-      setError(err?.message || "Error fetching data");
-      setStockData(null);
-      setNewsData([]);
-      setShowModal(false);
-    } finally {
-      setLoading(false);
-    }
+    setSymbolInput("");
+    setSuggestions([]);
+    void openQuote(symbol);
   };
 
   const handleClear = () => {
@@ -448,10 +370,7 @@ export default function StockQuoteSection() {
     setSuggestions([]);
     setOpenSuggest(false);
     setActiveIdx(-1);
-    setStockData(null);
-    setNewsData([]);
-    setError("");
-    setShowModal(false);
+    inputRef.current?.focus();
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -488,285 +407,131 @@ export default function StockQuoteSection() {
   };
 
   /* ────────────────────────────── Render ────────────────────────────── */
+  const visibleSuggestions = suggestions.filter((x) => !noProfileSetRef.current.has(x.symbol));
+
   return (
-    <section className="space-y-3">
-      <ToastContainer position="top-right" autoClose={4000} hideProgressBar newestOnTop closeOnClick pauseOnHover />
-
+    <section className="space-y-3 p-3 sm:p-5">
       {/* ── Search bar ───────────────────────────────────────────────── */}
-      <div className="relative overflow-visible rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
-        {/* Ambient blobs */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl opacity-60 dark:opacity-40">
-          <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-indigo-400/20 blur-2xl" />
-          <div className="absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-fuchsia-400/20 blur-2xl" />
-        </div>
-
-        <div className="relative px-3 sm:px-4 py-3 sm:py-3.5">
-          {/* Single-row search pill */}
-          <div className="flex items-center gap-2 sm:gap-3 rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] px-3 py-2.5 shadow-sm focus-within:border-indigo-400/50 dark:focus-within:border-indigo-400/30 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.10)] transition-shadow">
-            {/* Magnifying glass */}
-            <Search className="h-4 w-4 shrink-0 text-gray-400 dark:text-white/35" aria-hidden />
-
-            {/* Input + autocomplete dropdown */}
-            <div ref={wrapRef} className="relative flex-1 min-w-0">
-              <input
-                ref={inputRef}
-                value={symbolInput}
-                onChange={(e) => {
-                  setSymbolInput(e.target.value);
-                  setOpenSuggest(true);
-                }}
-                onKeyDown={onKeyDown}
-                onFocus={() => {
-                  if (suggestions.length) setOpenSuggest(true);
-                }}
-                placeholder="Search ticker — AAPL, TSLA, NVDA…"
-                inputMode="text"
-                autoCapitalize="characters"
-                className="w-full bg-transparent text-sm font-extrabold text-gray-900 dark:text-white placeholder:font-medium placeholder:text-gray-400 dark:placeholder:text-white/35 outline-none"
-                aria-autocomplete="list"
-                aria-expanded={openSuggest}
-                aria-controls="ticker-suggestions"
-              />
-
-              {/* Dropdown */}
-              <AnimatePresence initial={false}>
-                {openSuggest && suggestions.length > 0 && (
-                  <motion.ul
-                    id="ticker-suggestions"
-                    ref={listRef}
-                    initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.99 }}
-                    transition={{ duration: 0.16, ease: "easeOut" }}
-                    className={cn(
-                      "absolute left-0 right-0 mt-2 max-h-72 overflow-auto",
-                      "rounded-2xl border border-black/10 dark:border-white/10",
-                      "bg-white/90 dark:bg-brand-900/85 backdrop-blur-xl",
-                      "shadow-[0_24px_60px_-18px_rgba(0,0,0,0.45)]"
-                    )}
-                    style={{ zIndex: 9999, WebkitOverflowScrolling: "touch" as any }}
-                    role="listbox"
-                  >
-                    {suggestions
-                      .filter((s) => !noProfileSetRef.current.has(s.symbol))
-                      .map((s, idx) => {
-                        const active = idx === activeIdx;
-                        const p = suggestionProfiles[s.symbol] || {};
-                        const logo = cleanLogo(p?.logo) || "";
-
-                        return (
-                          <motion.li
-                            key={`${s.symbol}-${idx}`}
-                            data-idx={idx}
-                            role="option"
-                            aria-selected={active}
-                            onMouseEnter={() => {
-                              setActiveIdx(idx);
-                              ensureProfileForSuggestion(s.symbol);
-                            }}
-                            onFocus={() => setActiveIdx(idx)}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              handleSearch(s.symbol);
-                            }}
-                            whileHover={{ y: -1.5, scale: 1.01 }}
-                            whileTap={{ scale: 0.99 }}
-                            transition={{ duration: 0.12 }}
-                            className={cn(
-                              "relative cursor-pointer select-none",
-                              "mx-2 my-2 rounded-2xl overflow-hidden",
-                              "ring-1 ring-black/10 dark:ring-white/10",
-                              "shadow-sm",
-                              active
-                                ? "shadow-[0_18px_40px_-22px_rgba(99,102,241,0.55)] ring-indigo-500/30 dark:ring-indigo-400/30"
-                                : "hover:shadow-[0_18px_40px_-26px_rgba(0,0,0,0.35)]"
-                            )}
-                          >
-                            {/* Logo as background */}
-                            <div
-                              className="absolute inset-0"
-                              style={{
-                                backgroundImage: logo ? `url(${logo})` : undefined,
-                                backgroundSize: "cover",
-                                backgroundPosition: "center",
-                                opacity: logo ? 0.42 : 0,
-                                transform: "scale(1.05)",
-                                filter: "saturate(1.1) contrast(1.05)",
-                              }}
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/80 to-white/55 dark:from-black/65 dark:via-black/45 dark:to-black/25" />
-                            <div className="absolute inset-0 opacity-70">
-                              <div className="absolute -top-10 -left-10 h-28 w-28 rounded-full bg-indigo-500/10 blur-2xl" />
-                              <div className="absolute -bottom-12 -right-12 h-32 w-32 rounded-full bg-fuchsia-500/10 blur-2xl" />
-                            </div>
-                            <div
-                              className={cn(
-                                "pointer-events-none absolute -inset-10 rotate-12 opacity-0 transition duration-200",
-                                "bg-gradient-to-r from-transparent via-white/35 to-transparent",
-                                active ? "opacity-70" : "group-hover:opacity-60"
-                              )}
-                            />
-
-                            {/* Content */}
-                            <div className="relative px-4 py-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-8 w-8 rounded-xl bg-white/80 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/10 flex items-center justify-center overflow-hidden">
-                                      {logo ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                          src={logo}
-                                          alt=""
-                                          className="h-6 w-6 object-contain"
-                                          loading="lazy"
-                                          onError={(e) =>
-                                            ((e.currentTarget as HTMLImageElement).style.display = "none")
-                                          }
-                                        />
-                                      ) : (
-                                        <span className="text-[10px] font-black text-gray-700 dark:text-white/70">
-                                          {s.symbol.slice(0, 2)}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="text-sm font-black tracking-tight text-gray-900 dark:text-white">
-                                      {s.symbol}
-                                    </div>
-                                    {p?.exchange ? (
-                                      <span className="hidden sm:inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold bg-black/[0.04] dark:bg-white/[0.08] text-gray-700 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/10">
-                                        {String(p.exchange)}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <div className="mt-1 text-xs font-semibold text-gray-700 dark:text-white/70 truncate">
-                                    {p?.name || s.description || "—"}
-                                  </div>
-                                </div>
-                                {s.type ? (
-                                  <span className="shrink-0 rounded-full px-3 py-1 text-[11px] font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-black/[0.03] dark:bg-white/[0.06] text-gray-800 dark:text-white/75">
-                                    {s.type}
-                                  </span>
-                                ) : null}
-                              </div>
-
-                              <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-gray-600 dark:text-white/55">
-                                <span className="truncate">{p?.weburl ? "Has website + logo" : "Fetching profile…"}</span>
-                                <span
-                                  className={cn(
-                                    "rounded-full px-2 py-0.5 font-black ring-1",
-                                    active
-                                      ? "bg-indigo-600/15 text-indigo-800 ring-indigo-500/20 dark:text-indigo-200 dark:ring-indigo-400/20"
-                                      : "bg-black/[0.03] text-gray-700 ring-black/10 dark:bg-white/[0.06] dark:text-white/70 dark:ring-white/10"
-                                  )}
-                                >
-                                  {active ? "Enter" : "↵"}
-                                </span>
-                              </div>
-                            </div>
-                          </motion.li>
-                        );
-                      })}
-                  </motion.ul>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Clear button */}
-            {symbolInput && !loading && (
-              <button
-                type="button"
-                onClick={handleClear}
-                className="shrink-0 rounded-lg p-1 text-gray-400 hover:text-gray-700 dark:hover:text-white/70 hover:bg-black/[0.05] dark:hover:bg-white/[0.08] transition-colors"
-                aria-label="Clear search"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-
-            {/* Divider */}
-            <div className="hidden sm:block h-5 w-px shrink-0 bg-black/10 dark:bg-white/10" />
-
-            {/* Search button */}
-            <Button
-              type="button"
-              variant="indigo"
-              size="sm"
-              onClick={() => handleSearch()}
-              disabled={loading || !normalizedSymbol}
-              className="shrink-0 font-extrabold ring-1 ring-black/10 dark:ring-white/10 active:scale-[0.98] disabled:opacity-50"
-            >
-              {loading ? (
-                <span className="flex items-center gap-1.5">
-                  <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                  <span className="hidden sm:inline">Searching</span>
-                </span>
-              ) : "Search"}
-            </Button>
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs font-semibold text-red-700 dark:text-red-200">
-              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
-              {error}
-            </div>
+      <div ref={wrapRef} className="relative z-20">
+        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 transition focus-within:border-indigo-300 focus-within:ring-4 focus-within:ring-indigo-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:focus-within:border-indigo-400/40">
+          <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+          <input
+            ref={inputRef}
+            value={symbolInput}
+            onChange={(e) => {
+              setSymbolInput(e.target.value);
+              setOpenSuggest(true);
+            }}
+            onKeyDown={onKeyDown}
+            onFocus={() => {
+              if (suggestions.length) setOpenSuggest(true);
+            }}
+            placeholder="Search a ticker or company — AAPL, Tesla, NVDA…"
+            inputMode="text"
+            autoCapitalize="characters"
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-sm text-slate-900 shadow-none outline-none ring-0 focus:border-0 focus:ring-0 placeholder:font-sans placeholder:text-slate-400 dark:text-white"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={openSuggest && visibleSuggestions.length > 0}
+            aria-controls="ticker-suggestions"
+            aria-activedescendant={activeIdx >= 0 ? `ticker-opt-${activeIdx}` : undefined}
+          />
+          {symbolInput && !loading && (
+            <button type="button" onClick={handleClear} aria-label="Clear search" className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white">
+              <X className="h-3.5 w-3.5" />
+            </button>
           )}
+          <button
+            type="button"
+            onClick={() => handleSearch()}
+            disabled={loading || !normalizedSymbol}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-600 disabled:bg-slate-200 disabled:text-slate-400 dark:bg-white dark:text-slate-900 dark:hover:bg-indigo-300 dark:disabled:bg-white/10 dark:disabled:text-slate-500"
+          >
+            {loading ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <ArrowRight className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">Quote</span>
+          </button>
         </div>
+
+        {/* Suggestions */}
+        <AnimatePresence initial={false}>
+          {openSuggest && visibleSuggestions.length > 0 && (
+            <motion.ul
+              id="ticker-suggestions"
+              ref={listRef}
+              role="listbox"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.14, ease: "easeOut" }}
+              className="absolute inset-x-0 mt-2 max-h-80 overflow-auto rounded-2xl border border-slate-200/70 bg-white/95 p-1.5 shadow-[0_24px_60px_-18px_rgba(15,23,42,0.35)] backdrop-blur-xl dark:border-white/10 dark:bg-[#1f1f23]/95"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
+              {visibleSuggestions.map((sug, idx) => {
+                const active = idx === activeIdx;
+                const prof = suggestionProfiles[sug.symbol] || {};
+                const logo = cleanLogo(prof?.logo) || "";
+                return (
+                  <li
+                    key={`${sug.symbol}-${idx}`}
+                    id={`ticker-opt-${idx}`}
+                    data-idx={idx}
+                    role="option"
+                    aria-selected={active}
+                    onMouseEnter={() => {
+                      setActiveIdx(idx);
+                      ensureProfileForSuggestion(sug.symbol);
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSearch(sug.symbol);
+                    }}
+                    className={cn(
+                      "flex cursor-pointer select-none items-center gap-3 rounded-xl px-2.5 py-2 transition-colors",
+                      active ? "bg-slate-100 dark:bg-white/[0.06]" : "hover:bg-slate-50 dark:hover:bg-white/[0.03]"
+                    )}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-slate-200 dark:ring-white/10">
+                      {logo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={logo} alt="" className="h-6 w-6 object-contain" loading="lazy" onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")} />
+                      ) : (
+                        <span className="font-mono text-[10px] font-semibold text-slate-400">{sug.symbol.slice(0, 2)}</span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-[13px] font-semibold text-slate-900 dark:text-white">{sug.symbol}</span>
+                        {prof?.exchange && (
+                          <span className="hidden truncate font-mono text-[10px] uppercase tracking-wider text-slate-400 sm:inline">
+                            {String(prof.exchange).replace(/,.*$/, "")}
+                          </span>
+                        )}
+                      </span>
+                      <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{prof?.name || sug.description || "—"}</span>
+                    </span>
+                    {active ? (
+                      <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                    ) : sug.type ? (
+                      <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-slate-400">{sug.type}</span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </motion.ul>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* ── Default widgets — stay visible, overlaid during load ─────── */}
-      {(!showModal || !stockData) && (
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-3 items-start">
-          <MarketWidgets onSelectTicker={handleSearch} />
-          <NewsWidget />
-        </div>
-      )}
+      {/* ── Market widgets + news ────────────────────────────────────── */}
+      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[1fr_360px]">
+        <MarketWidgets onSelectTicker={handleSearch} />
+        <NewsWidget />
+      </div>
 
-      {/* ── Loading overlay — backdrop blur + spinner ─────────────────── */}
-      <AnimatePresence>
-        {loading && (
-          <motion.div
-            key="quote-loading-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-40 flex items-center justify-center backdrop-blur-md bg-black/55"
-          >
-            <motion.div
-              initial={{ scale: 0.85, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.85, opacity: 0 }}
-              transition={{ duration: 0.2, delay: 0.06 }}
-              className="flex flex-col items-center gap-4"
-            >
-              {/* Dual-ring spinner */}
-              <div className="relative h-14 w-14">
-                <div className="absolute inset-0 rounded-full border-[3px] border-white/10" />
-                <div className="absolute inset-0 rounded-full border-[3px] border-t-indigo-400 border-r-transparent border-b-transparent border-l-transparent animate-spin" />
-                <div className="absolute inset-[5px] rounded-full border-2 border-t-fuchsia-400/70 border-r-transparent border-b-transparent border-l-transparent animate-spin [animation-duration:800ms] [animation-direction:reverse]" />
-              </div>
-              <p className="text-white/80 text-sm font-extrabold tracking-wide">Fetching quote…</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {quoteModal}
 
-      {/* ── Stock detail modal ────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showModal && stockData && (
-          <StockQuoteModal
-            key="stock-modal"
-            stockData={stockData}
-            newsData={newsData}
-            onClose={() => setShowModal(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      <p className="text-[11px] text-gray-500 dark:text-white/40 text-center pb-1">
-        Data delayed ~15 min · Provided by Finnhub · Not financial advice
+      <p className="pt-1 text-center font-mono text-[10px] uppercase tracking-wider text-slate-400">
+        Data delayed ~15 min · Finnhub · Not financial advice
       </p>
     </section>
   );

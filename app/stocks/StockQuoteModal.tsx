@@ -1,31 +1,29 @@
-// stockquoteModal.tsx
+// StockQuoteModal.tsx
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { formatSupplyValue, formatDate, formatDateWeirdValue } from "@/utils/formatters";
+import React, { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  FaArrowUp,
-  FaArrowDown,
-  FaExternalLinkAlt,
-  FaSearch,
-  FaClock,
-  FaChartLine,
-  FaNewspaper,
-  FaTimes,
-  FaRegCopy,
-  FaCheck,
-  FaRegStar,
-  FaStar,
-  FaDollarSign,
-  FaExchangeAlt,
-} from "react-icons/fa";
+  ArrowDownRight,
+  ArrowUpRight,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  ExternalLink,
+  Globe,
+  Search,
+  Star,
+  X,
+} from "lucide-react";
+
+import { Modal } from "@/components/ui/modal";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
-interface QuoteData {
+export interface QuoteData {
   c: number; // current
   d: number; // change
   dp: number; // percent
@@ -33,63 +31,89 @@ interface QuoteData {
   l: number; // low
   o: number; // open
   pc: number; // prev close
-  v: number; // volume (if provided)
+  v?: number;
   t: number; // unix seconds
 }
-interface StockData {
+
+export interface StockData {
   profile: any;
   quote: QuoteData;
   metric: any;
 }
 
 interface Props {
-  stockData: StockData;
+  open: boolean;
+  /** Symbol being shown — known before data arrives, so the header can render immediately */
+  symbol: string | null;
+  stockData: StockData | null;
   newsData: any[];
+  loading?: boolean;
+  error?: string | null;
   onClose: () => void;
 }
+
+type Tab = "overview" | "metrics" | "news";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
-const fmt = (v: number | undefined | null, d = 2) =>
-  v == null || Number.isNaN(v as any) ? "—" : parseFloat(String(v)).toFixed(d);
+const cn = (...xs: Array<string | false | null | undefined>) => xs.filter(Boolean).join(" ");
+
+const num = (v: unknown): number | null => {
+  const n = typeof v === "string" ? parseFloat(v) : (v as number);
+  return n != null && Number.isFinite(n) ? n : null;
+};
+
+const usdFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const compactFmt = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
+
+const fmt = {
+  usd: (v: unknown) => {
+    const n = num(v);
+    return n == null || n === 0 ? "—" : usdFmt.format(n);
+  },
+  /** Finnhub reports market cap in millions of USD */
+  mcap: (millions: unknown) => {
+    const n = num(millions);
+    return n == null ? "—" : `$${compactFmt.format(n * 1_000_000)}`;
+  },
+  n: (v: unknown, d = 2) => {
+    const n = num(v);
+    return n == null ? "—" : n.toFixed(d);
+  },
+  pct: (v: unknown, signed = true) => {
+    const n = num(v);
+    return n == null ? "—" : `${signed && n > 0 ? "+" : ""}${n.toFixed(2)}%`;
+  },
+  date: (v: unknown) => {
+    if (!v) return "—";
+    const d = new Date(String(v));
+    return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  },
+};
 
 const fmtDateTime = (ms: number) =>
   new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(ms);
 
 const timeAgo = (ms: number) => {
-  if (!ms || Number.isNaN(ms)) return "—";
+  if (!ms || Number.isNaN(ms)) return "";
   const d = Date.now() - ms;
-  if (d < 60_000) return `${Math.floor(d / 1_000)}s ago`;
-  if (d < 3_600_000) return `${Math.floor(d / 60_000)}m ago`;
+  if (d < 3_600_000) return `${Math.max(1, Math.floor(d / 60_000))}m ago`;
   if (d < 86_400_000) return `${Math.floor(d / 3_600_000)}h ago`;
-  return formatDate(ms);
-};
-
-const logoFromUrl = (url?: string) => {
-  try {
-    const h = new URL(url ?? "").hostname.replace(/^www\./, "");
-    return h ? `https://logo.clearbit.com/${h}?size=64` : "";
-  } catch {
-    return "";
-  }
+  return `${Math.floor(d / 86_400_000)}d ago`;
 };
 
 function safeHost(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
   } catch {
-    return "source";
+    return "";
   }
 }
 
-function safePublishedMs(n: any): number {
+function publishedMs(n: any): number {
   if (typeof n?.datetime === "number" && n.datetime > 0) return n.datetime * 1000;
-  if (typeof n?.datetime === "string") {
-    const d = Date.parse(n.datetime);
-    return Number.isNaN(d) ? 0 : d;
-  }
-  for (const k of ["publishedAt", "published_at", "date", "time"]) {
+  for (const k of ["datetime", "publishedAt", "published_at", "date", "time"]) {
     const v = n?.[k];
     if (typeof v === "number" && v > 0) return v > 10_000_000_000 ? v : v * 1000;
     if (typeof v === "string") {
@@ -100,181 +124,154 @@ function safePublishedMs(n: any): number {
   return 0;
 }
 
-function cn(...xs: Array<string | false | null | undefined>) {
-  return xs.filter(Boolean).join(" ");
-}
-
-const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
-
-/* ------------------------------------------------------------------ */
-/*  LocalStorage keys                                                 */
-/* ------------------------------------------------------------------ */
-const STAR_KEY = "stockQuoteStarred"; // array of tickers
-
-function getStarred(): string[] {
+/* Starred tickers (per browser) */
+const STAR_KEY = "stockQuoteStarred";
+const readStars = (): string[] => {
   try {
-    const raw = localStorage.getItem(STAR_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
+    const arr = JSON.parse(localStorage.getItem(STAR_KEY) || "[]");
     return Array.isArray(arr) ? arr : [];
   } catch {
     return [];
   }
-}
-
-function setStarred(tickers: string[]) {
+};
+const writeStars = (list: string[]) => {
   try {
-    localStorage.setItem(STAR_KEY, JSON.stringify(tickers));
+    localStorage.setItem(STAR_KEY, JSON.stringify(list));
   } catch {
     /* ignore */
   }
-}
+};
 
 /* ------------------------------------------------------------------ */
-/*  Tiny UI pieces                                                    */
+/*  Small pieces                                                      */
 /* ------------------------------------------------------------------ */
-function ArrowBadge({ up }: { up: boolean }) {
+function RangeBar({
+  label,
+  low,
+  high,
+  value,
+  marker,
+  lowLabel,
+  highLabel,
+}: {
+  label: string;
+  low: number | null;
+  high: number | null;
+  value: number | null;
+  marker?: { value: number | null; label: string };
+  lowLabel?: string;
+  highLabel?: string;
+}) {
+  const ok = low != null && high != null && value != null && high > low;
+  const pos = (v: number) => Math.min(100, Math.max(0, ((v - low!) / (high! - low!)) * 100));
   return (
-    <span
-      className={cn(
-        "inline-flex items-center px-1.5 py-1.5 text-xs font-bold",
-        up
-          ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/20"
-          : "bg-rose-500/10 text-rose-700 ring-rose-500/20 dark:bg-rose-400/10 dark:text-rose-200 dark:ring-rose-300/20"
-      )}
-    >
-      {up ? <FaArrowUp /> : <FaArrowDown />}
-      {up ? "Up" : "Down"}
-    </span>
-  );
-}
-
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="group relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md">
-      <div className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100">
-        <div className="absolute -top-10 -left-10 h-28 w-28 rounded-full bg-indigo-500/10 blur-2xl" />
-        <div className="absolute -bottom-12 -right-12 h-32 w-32 rounded-full bg-fuchsia-500/10 blur-2xl" />
+    <div className="rounded-2xl border border-slate-200/70 p-4 dark:border-white/[0.08]">
+      <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-slate-400">
+        <span>{label}</span>
+        {ok && <span className="tabular-nums">{Math.round(pos(value!))}% of range</span>}
       </div>
-      <div className="relative">
-        <div className="text-[11px] font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60">
-          {label}
-        </div>
-        <div className="mt-1 text-sm sm:text-base font-extrabold text-gray-900 dark:text-white">{value}</div>
-        {sub && <div className="mt-1 text-[11px] font-semibold text-gray-500 dark:text-white/50">{sub}</div>}
+      <div className="relative mt-3 h-1.5 rounded-full bg-gradient-to-r from-rose-400 via-amber-300 to-emerald-400 opacity-80">
+        {ok && marker?.value != null && (
+          <span
+            title={marker.label}
+            className="absolute top-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-400 dark:bg-slate-500"
+            style={{ left: `${pos(marker.value)}%` }}
+          />
+        )}
+        {ok && (
+          <motion.span
+            className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-900 shadow-[0_0_0_3px_rgba(99,102,241,0.25)] dark:border-[#1a1a1d] dark:bg-white"
+            initial={{ left: "50%" }}
+            animate={{ left: `${pos(value!)}%` }}
+            transition={{ type: "spring", stiffness: 200, damping: 24 }}
+          />
+        )}
+      </div>
+      <div className="mt-2 flex justify-between font-mono text-xs tabular-nums">
+        <span className="text-rose-500 dark:text-rose-400">
+          {fmt.usd(low)}
+          {lowLabel && <span className="ml-1.5 text-[10px] text-slate-400">{lowLabel}</span>}
+        </span>
+        <span className="text-emerald-600 dark:text-emerald-400">
+          {highLabel && <span className="mr-1.5 text-[10px] text-slate-400">{highLabel}</span>}
+          {fmt.usd(high)}
+        </span>
       </div>
     </div>
   );
 }
 
-function SegButton({
-  active,
-  label,
-  icon,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-}) {
+function StatGrid({ items, loading }: { items: { label: string; value: string; sub?: string }[]; loading?: boolean }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "relative flex-1 sm:flex-none rounded-xl px-4 py-2 text-xs font-extrabold transition",
-        "ring-1 ring-black/10 dark:ring-white/10",
-        active
-          ? "bg-indigo-600/15 text-indigo-800 dark:text-indigo-200"
-          : "bg-white/60 dark:bg-white/[0.06] text-gray-700 dark:text-white/70 hover:text-gray-900 dark:hover:text-white"
-      )}
-    >
-      <span className="inline-flex items-center gap-2">
-        <span className="text-indigo-600 dark:text-indigo-300">{icon}</span>
-        {label}
-      </span>
-    </button>
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-slate-200/70 bg-slate-200/70 dark:border-white/[0.08] dark:bg-white/[0.06] sm:grid-cols-4">
+      {items.map((s) => (
+        <div key={s.label} className="bg-white p-3.5 dark:bg-[#1a1a1d]">
+          <div className="font-mono text-[10px] uppercase tracking-wider text-slate-400">{s.label}</div>
+          <div className={cn("mt-1.5 truncate font-mono text-sm font-semibold tabular-nums text-slate-900 dark:text-white", loading && "animate-pulse text-slate-300 dark:text-slate-600")}>
+            {loading ? "····" : s.value}
+          </div>
+          {s.sub && !loading && <div className="mt-0.5 truncate font-mono text-[10px] text-slate-400">{s.sub}</div>}
+        </div>
+      ))}
+    </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
-export default function StockQuoteModal({ stockData, newsData, onClose }: Props) {
-  const [tab, setTab] = useState<"overview" | "metrics" | "news">("overview");
+export default function StockQuoteModal({ open, symbol, stockData, newsData, loading = false, error, onClose }: Props) {
+  const [tab, setTab] = useState<Tab>("overview");
   const [newsPage, setNewsPage] = useState(1);
   const [newsQuery, setNewsQuery] = useState("");
   const [copied, setCopied] = useState(false);
-  const [starred, setStarredState] = useState<string[]>([]);
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
+  const [stars, setStars] = useState<string[]>([]);
 
   const profile = stockData?.profile ?? {};
   const quote = stockData?.quote ?? ({} as QuoteData);
-  const ticker: string = profile?.ticker ?? "—";
+  const ticker: string = profile?.ticker || symbol || "—";
+  const metric = (k: string) => stockData?.metric?.metric?.[k] ?? null;
 
-  const getMetric = (k: string) => stockData?.metric?.metric?.[k] ?? null;
+  const lastMs = typeof quote?.t === "number" && quote.t > 0 ? quote.t * 1000 : Date.now();
+  const up = (quote?.dp ?? 0) >= 0;
 
-  const lastMs = useMemo(() => {
-    const t = quote?.t;
-    if (typeof t === "number" && t > 0) return t * 1000;
-    return Date.now();
-  }, [quote?.t]);
-
-  const isUp = (quote?.dp ?? 0) >= 0;
-  const arrowColor = isUp ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300";
-
-  /* ------------------------- modal behavior -------------------------- */
+  /* Reset per symbol */
   useEffect(() => {
+    setTab("overview");
+    setNewsQuery("");
+    setNewsPage(1);
+  }, [symbol]);
+
+  useEffect(() => setStars(readStars()), []);
+  const isStarred = stars.includes(ticker);
+  const toggleStar = () => {
+    const next = isStarred ? stars.filter((t) => t !== ticker) : [...stars, ticker];
+    setStars(next);
+    writeStars(next);
+  };
+
+  /* Ctrl/Cmd+K jumps to news search */
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setTab("news");
-        setTimeout(() => {
-          const el = document.getElementById("newsSearchInput") as HTMLInputElement | null;
-          el?.focus();
-        }, 0);
+        setTimeout(() => document.getElementById("stockNewsSearch")?.focus(), 0);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [open]);
 
-  useEffect(() => {
-    // ✅ lock background scroll, but DO NOT kill touch scrolling
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, []);
-
-  const onOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === overlayRef.current) onClose();
-  };
-
-  /* --------------------------- starred ------------------------------ */
-  useEffect(() => setStarredState(getStarred()), []);
-  const isStarred = useMemo(() => starred.includes(ticker), [starred, ticker]);
-
-  const toggleStar = () => {
-    const next = isStarred ? starred.filter((t) => t !== ticker) : [...starred, ticker];
-    setStarredState(next);
-    setStarred(next);
-  };
-
-  /* --------------------------- copy ------------------------------ */
   const copySummary = async () => {
-    const line1 = `${profile?.name ?? "Company"} (${ticker})`;
-    const line2 = `Price: $${formatSupplyValue(quote?.c ?? 0)} • ${isUp ? "▲" : "▼"} ${fmt(quote?.dp ?? 0, 2)}% (${fmt(
-      quote?.d ?? 0,
-      2
-    )})`;
-    const line3 = `As of: ${fmtDateTime(lastMs)}`;
+    const text = [
+      `${profile?.name ?? ticker} (${ticker})`,
+      `Price: ${fmt.usd(quote?.c)} · ${up ? "▲" : "▼"} ${fmt.pct(quote?.dp)} (${fmt.n(quote?.d)})`,
+      `As of: ${fmtDateTime(lastMs)}`,
+    ].join("\n");
     try {
-      await navigator.clipboard.writeText(`${line1}\n${line2}\n${line3}`);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     } catch {
@@ -282,529 +279,291 @@ export default function StockQuoteModal({ stockData, newsData, onClose }: Props)
     }
   };
 
-  /* --------------------------- news paging/search ------------------- */
-  const newsPerPage = 8;
-
+  /* News filter + paging */
+  const PER_PAGE = 6;
   const filteredNews = useMemo(() => {
     const q = newsQuery.trim().toLowerCase();
     const list = Array.isArray(newsData) ? newsData : [];
     if (!q) return list;
-
-    return list.filter((n) => {
-      const headline = String(n?.headline ?? n?.title ?? "").toLowerCase();
-      const summary = String(n?.summary ?? n?.description ?? "").toLowerCase();
-      const src = safeHost(String(n?.url ?? ""));
-      return headline.includes(q) || summary.includes(q) || src.includes(q);
-    });
+    return list.filter((n) =>
+      `${n?.headline ?? n?.title ?? ""} ${n?.summary ?? ""} ${n?.source ?? ""}`.toLowerCase().includes(q)
+    );
   }, [newsData, newsQuery]);
+  const totalPages = Math.max(1, Math.ceil(filteredNews.length / PER_PAGE));
+  const page = Math.min(Math.max(1, newsPage), totalPages);
+  const pageNews = filteredNews.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  useEffect(() => setNewsPage(1), [newsQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredNews.length / newsPerPage));
-  const page = clamp(newsPage, 1, totalPages);
+  const busy = loading && !stockData;
 
-  useEffect(() => setNewsPage(1), [newsQuery, ticker]);
+  const keyStats = [
+    { label: "Open", value: fmt.usd(quote?.o) },
+    { label: "Prev close", value: fmt.usd(quote?.pc) },
+    { label: "Market cap", value: fmt.mcap(metric("marketCapitalization")) },
+    { label: "P/E (TTM)", value: fmt.n(metric("peTTM")) },
+    { label: "P/S (TTM)", value: fmt.n(metric("psTTM")) },
+    { label: "Beta", value: fmt.n(metric("beta")) },
+    { label: "Div yield", value: num(metric("currentDividendYieldTTM")) ? fmt.pct(metric("currentDividendYieldTTM"), false) : "—" },
+    { label: "Volume", value: num(quote?.v) ? compactFmt.format(quote.v!) : "—" },
+  ];
 
-  const paginatedNews = filteredNews.slice((page - 1) * newsPerPage, page * newsPerPage);
+  const metricRows: [string, string][] = [
+    ["Market cap", fmt.mcap(metric("marketCapitalization"))],
+    ["P/E (TTM)", fmt.n(metric("peTTM"))],
+    ["P/S (TTM)", fmt.n(metric("psTTM"))],
+    ["P/B", fmt.n(metric("pbQuarterly") ?? metric("pbAnnual"))],
+    ["EPS (TTM)", fmt.usd(metric("epsTTM"))],
+    ["Dividend yield", num(metric("currentDividendYieldTTM")) ? fmt.pct(metric("currentDividendYieldTTM"), false) : "—"],
+    ["Beta", fmt.n(metric("beta"))],
+    ["ROE (TTM)", num(metric("roeTTM")) != null ? fmt.pct(metric("roeTTM"), false) : "—"],
+    ["Net margin (TTM)", num(metric("netProfitMarginTTM")) != null ? fmt.pct(metric("netProfitMarginTTM"), false) : "—"],
+    ["52-week high", `${fmt.usd(metric("52WeekHigh"))}  ·  ${fmt.date(metric("52WeekHighDate"))}`],
+    ["52-week low", `${fmt.usd(metric("52WeekLow"))}  ·  ${fmt.date(metric("52WeekLowDate"))}`],
+    ["52-week return", num(metric("52WeekPriceReturnDaily")) != null ? fmt.pct(metric("52WeekPriceReturnDaily")) : "—"],
+    ["10-day avg volume", num(metric("10DayAverageTradingVolume")) != null ? `${compactFmt.format(metric("10DayAverageTradingVolume") * 1_000_000)}` : "—"],
+  ];
 
-  // ✅ whenever tab changes, scroll the modal body to top (mobile friendly)
-  useEffect(() => {
-    bodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [tab, ticker]);
+  const TABS: { key: Tab; label: string; count?: number }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "metrics", label: "Metrics" },
+    { key: "news", label: "News", count: Array.isArray(newsData) ? newsData.length : 0 },
+  ];
 
-  /* ------------------------------------------------------------------ */
-  /*  Render                                                           */
-  /* ------------------------------------------------------------------ */
   return (
-    <motion.div
-      ref={overlayRef}
-      onMouseDown={onOverlayClick}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.22 }}
-      className="fixed inset-0 z-50 bg-black/85 dark:bg-black/92 backdrop-blur-md overflow-hidden"
-      aria-modal="true"
-      role="dialog"
-    >
-      {/* full-height shell */}
-      <div className="h-[100dvh] w-full flex items-end sm:items-center justify-center overflow-hidden">
-        {/* card — slides up from bottom (mobile spring) */}
-        <motion.div
-          initial={{ y: 48, opacity: 0, scale: 0.98 }}
-          animate={{ y: 0, opacity: 1, scale: 1 }}
-          exit={{ y: 48, opacity: 0, scale: 0.98 }}
-          transition={{ type: "spring", stiffness: 360, damping: 38, mass: 0.85 }}
-          className={cn(
-            "relative w-full sm:max-w-5xl",
-            "h-[100dvh] sm:h-auto sm:max-h-[88vh]",
-            "flex flex-col",
-            "bg-white dark:bg-brand-900",
-            "border border-gray-200/70 dark:border-white/10",
-            "shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] dark:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.75)]",
-            "rounded-t-2xl sm:rounded-2xl overflow-hidden isolate"
-          )}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {/* ambient */}
-          <div className="pointer-events-none absolute inset-0 opacity-[0.55] dark:opacity-[0.45]">
-            <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-indigo-400/20 blur-3xl" />
-            <div className="absolute top-20 right-10 h-56 w-56 rounded-full bg-sky-400/15 blur-3xl" />
+    <Modal open={open} onClose={onClose} labelledBy="stock-modal-title" size="lg" accent={up ? "#10b981" : "#f43f5e"} hideClose>
+      {/* Ambient */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-64 overflow-hidden">
+        <div className={cn("absolute -top-24 left-1/4 h-56 w-[28rem] rounded-full blur-3xl", up ? "bg-emerald-300/25 dark:bg-emerald-500/10" : "bg-rose-300/25 dark:bg-rose-500/10")} />
+        <div className="absolute -top-20 right-0 h-48 w-72 rounded-full bg-indigo-300/20 blur-3xl dark:bg-indigo-500/10" />
+      </div>
+
+      {/* Header */}
+      <div className="shrink-0 px-5 pt-4 sm:px-7 sm:pt-6">
+        <div className="flex items-start gap-3">
+          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200 dark:ring-white/10">
+            {profile?.logo ? (
+              <img src={profile.logo} alt="" className="h-10 w-10 object-contain" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+            ) : (
+              <span className="font-mono text-sm font-semibold text-slate-400">{ticker.slice(0, 2)}</span>
+            )}
           </div>
-
-          {/* ✅ Sticky header (close always visible) */}
-          <div className="relative z-20 flex-shrink-0 border-b border-gray-200/70 bg-white/90 backdrop-blur-xl dark:border-white/10 dark:bg-brand-900/85">
-            <div className="px-4 sm:px-6 py-2 sm:py-4">
-              <div className="flex items-start justify-between gap-2 sm:gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    {profile?.logo ? (
-                      <div className="relative">
-                        <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 blur-md" />
-                        <img
-                          src={profile.logo}
-                          alt=""
-                          className="relative h-10 w-10 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-white/80 dark:bg-white/5 object-contain p-1.5 sm:p-2 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm"
-                          onError={(e) => (e.currentTarget.style.display = "none")}
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-10 w-10 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500/20 to-fuchsia-500/20 ring-1 ring-gray-200/70 dark:ring-white/10 shadow-sm" />
-                    )}
-
-                    <div className="min-w-0">
-                      <h3 className="text-sm sm:text-lg font-extrabold tracking-tight truncate text-gray-900 dark:text-white">
-                        {profile?.name ?? "Company"}
-                        <span className="ml-2 text-gray-500 dark:text-white/60 font-bold">({ticker})</span>
-                      </h3>
-
-                      <div className="mt-0.5 sm:mt-1 flex flex-wrap items-center gap-1 text-[10px] sm:text-xs text-gray-600 dark:text-white/60">
-                        <span className="hidden sm:inline-flex items-center gap-2 rounded-full bg-gray-100/80 px-2.5 py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">
-                          <FaClock className="opacity-70" />
-                          {fmtDateTime(lastMs)}
-                        </span>
-                        {profile?.exchange && (
-                          <span className="rounded-full bg-gray-100/80 px-2 py-0.5 sm:px-2.5 sm:py-1 font-semibold ring-1 ring-gray-200/70 dark:bg-white/10 dark:ring-white/10">
-                            {profile.exchange}
-                          </span>
-                        )}
-                        <ArrowBadge up={isUp} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-2 sm:mt-3 flex flex-wrap items-end justify-between gap-2 sm:gap-3">
-                    <div className="flex items-end gap-2 sm:gap-3">
-                      <div className="inline-flex items-center gap-1.5 sm:gap-2">
-                        <span className="hidden sm:inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-indigo-600/10 ring-1 ring-black/10 dark:bg-indigo-400/10 dark:ring-white/10">
-                          <FaDollarSign className="text-indigo-600 dark:text-indigo-300" />
-                        </span>
-                        <div className="text-2xl sm:text-4xl font-black tracking-tight text-gray-900 dark:text-white">
-                          ${formatSupplyValue(quote?.c ?? 0)}
-                        </div>
-                      </div>
-
-                      <div className={cn("flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-extrabold", arrowColor)}>
-                        {isUp ? <FaArrowUp /> : <FaArrowDown />}
-                        <span>
-                          {isUp ? "+" : ""}
-                          {fmt(quote?.d ?? 0, 2)}
-                        </span>
-                        <span className="text-gray-500 dark:text-white/60 font-bold">
-                          ({isUp ? "+" : ""}
-                          {fmt(quote?.dp ?? 0, 2)}%)
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {/* Copy summary */}
-                      <button
-                        type="button"
-                        onClick={copySummary}
-                        title="Copy summary"
-                        className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10] transition"
-                      >
-                        {copied ? (
-                          <FaCheck className="text-emerald-500" />
-                        ) : (
-                          <FaRegCopy className="text-gray-700 dark:text-white/70" />
-                        )}
-                        <span className="hidden sm:inline text-gray-700 dark:text-white/70">
-                          {copied ? 'Copied!' : 'Copy'}
-                        </span>
-                      </button>
-
-                      {/* Star */}
-                      <button
-                        type="button"
-                        onClick={toggleStar}
-                        title={isStarred ? 'Unstar' : 'Star this ticker'}
-                        className="inline-flex items-center justify-center rounded-xl px-2.5 py-2 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10] transition"
-                      >
-                        {isStarred ? (
-                          <FaStar className="text-amber-500" />
-                        ) : (
-                          <FaRegStar className="text-gray-700 dark:text-white/70" />
-                        )}
-                      </button>
-
-                      {/* Website */}
-                      {profile?.weburl && (
-                        <a
-                          href={profile.weburl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10] transition"
-                        >
-                          <FaExternalLinkAlt className="text-gray-700 dark:text-white/70" />
-                          <span className="hidden sm:inline">Site</span>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-2 sm:mt-3">
-                    <div className="inline-flex sm:w-auto rounded-2xl gap-0.5 sm:gap-1 ring-black/10 dark:ring-white/10">
-                      <SegButton active={tab === "overview"} label="Overview" icon={<FaChartLine />} onClick={() => setTab("overview")} />
-                      <SegButton active={tab === "metrics"} label="Metrics" icon={<FaExchangeAlt />} onClick={() => setTab("metrics")} />
-                      <SegButton active={tab === "news"} label="News" icon={<FaNewspaper />} onClick={() => setTab("news")} />
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={onClose}
-                  className="shrink-0 inline-flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg sm:rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-white/80 dark:bg-white/[0.08] hover:bg-white dark:hover:bg-white/[0.12] text-gray-900 dark:text-white transition text-sm sm:text-base"
-                  aria-label="Close"
-                  title="Close (Esc)"
-                >
-                  <FaTimes />
-                </button>
-              </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <h3 id="stock-modal-title" className="truncate text-lg font-semibold text-slate-900 dark:text-white">
+                {busy ? <span className="inline-block h-5 w-40 animate-pulse rounded bg-slate-100 align-middle dark:bg-white/[0.06]" /> : profile?.name ?? ticker}
+              </h3>
+              <span className="font-mono text-xs uppercase text-slate-400">{ticker}</span>
             </div>
-            <div className="h-[2px] w-full bg-gradient-to-r from-indigo-500/40 via-fuchsia-500/30 to-sky-500/30" />
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider">
+              {profile?.exchange && (
+                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-slate-600 dark:bg-white/[0.06] dark:text-slate-300">
+                  {String(profile.exchange).replace(/,.*$/, "")}
+                </span>
+              )}
+              {profile?.finnhubIndustry && (
+                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-slate-600 dark:bg-white/[0.06] dark:text-slate-300">{profile.finnhubIndustry}</span>
+              )}
+              {profile?.country && (
+                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-slate-600 dark:bg-white/[0.06] dark:text-slate-300">{profile.country}</span>
+              )}
+            </div>
           </div>
 
-          {/* ✅ Scrollable body (the important part) */}
-          <div
-            ref={bodyRef}
-            className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-5"
-            style={{ WebkitOverflowScrolling: "touch" as any }}
-          >
-            {/* OVERVIEW */}
-            {tab === "overview" && (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button type="button" onClick={copySummary} title="Copy summary" aria-label="Copy summary" className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white">
+              {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={toggleStar}
+              title={isStarred ? "Unstar" : "Star this ticker"}
+              aria-label={isStarred ? "Unstar" : "Star this ticker"}
+              aria-pressed={isStarred}
+              className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white"
+            >
+              <Star className={cn("h-4 w-4", isStarred && "fill-amber-400 text-amber-400")} />
+            </button>
+            {profile?.weburl && (
+              <a href={profile.weburl} target="_blank" rel="noopener noreferrer" title="Company website" aria-label="Company website" className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white">
+                <Globe className="h-4 w-4" />
+              </a>
+            )}
+            <button type="button" onClick={onClose} autoFocus title="Close (Esc)" aria-label="Close" className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:bg-white/10 dark:hover:text-white">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Price */}
+        <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-wider text-slate-400">
+              {busy ? "Fetching quote…" : `As of ${fmtDateTime(lastMs)}`}
+            </div>
+            {busy ? (
+              <div className="mt-2 h-9 w-48 animate-pulse rounded-lg bg-slate-100 dark:bg-white/[0.06]" />
+            ) : (
               <>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  <StatCard label="Open" value={`$${formatSupplyValue(quote?.o ?? 0)}`} />
-                  <StatCard label="High" value={`$${formatSupplyValue(quote?.h ?? 0)}`} />
-                  <StatCard label="Low" value={`$${formatSupplyValue(quote?.l ?? 0)}`} />
-                  <StatCard label="Prev Close" value={`$${formatSupplyValue(quote?.pc ?? 0)}`} />
+                <div className="mt-1 font-mono text-3xl font-semibold tabular-nums tracking-tight text-slate-900 dark:text-white sm:text-4xl">
+                  {fmt.usd(quote?.c)}
                 </div>
-
-                <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
-                  <div className="lg:col-span-1 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-extrabold text-gray-900 dark:text-white">About</h4>
-                      {profile?.weburl && (
-                        <a
-                          href={profile.weburl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-xs font-extrabold text-indigo-700 dark:text-indigo-200 hover:underline"
-                        >
-                          Website <FaExternalLinkAlt className="text-[10px]" />
-                        </a>
-                      )}
-                    </div>
-
-                    <div className="mt-3 space-y-2 text-xs text-gray-700 dark:text-white/70">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-gray-500 dark:text-white/50 font-semibold">Industry</span>
-                        <span className="font-extrabold text-gray-900 dark:text-white text-right">{profile?.finnhubIndustry ?? "—"}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-gray-500 dark:text-white/50 font-semibold">Country</span>
-                        <span className="font-extrabold text-gray-900 dark:text-white text-right">{profile?.country ?? "—"}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-gray-500 dark:text-white/50 font-semibold">IPO</span>
-                        <span className="font-extrabold text-gray-900 dark:text-white text-right">{profile?.ipo ?? "—"}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-gray-500 dark:text-white/50 font-semibold">Market Cap</span>
-                        <span className="font-extrabold text-gray-900 dark:text-white text-right">
-                          ${formatSupplyValue(getMetric("marketCapitalization"))}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.06] p-3">
-  <div className="text-[11px] font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60">
-    Snapshot
-  </div>
-
-  <div className="mt-2 text-xs text-gray-700 dark:text-white/70 leading-relaxed">
-    <span className="font-extrabold text-gray-900 dark:text-white">{ticker}</span> is{" "}
-    <span
-      className={cn(
-        "font-extrabold",
-        isUp ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"
-      )}
-    >
-      {isUp ? "green" : "red"}
-    </span>{" "}
-    today at{" "}
-    <span
-      className={cn(
-        "font-extrabold",
-        isUp ? "text-emerald-700 dark:text-emerald-200" : "text-rose-700 dark:text-rose-200"
-      )}
-    >
-      ${formatSupplyValue(quote?.c ?? 0)}
-    </span>{" "}
-    (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 font-extrabold",
-        isUp ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"
-      )}
-    >
-      {isUp ? "▲" : "▼"} {fmt(quote?.dp ?? 0, 2)}%
-    </span>
-    ).
-  </div>
-</div>
-
-                  </div>
-
-                  <div className="lg:col-span-2 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
-                    <div className="flex items-end justify-between gap-3">
-                      <h4 className="text-sm font-extrabold text-gray-900 dark:text-white">Key metrics</h4>
-                      <button
-                        type="button"
-                        onClick={() => setTab("metrics")}
-                        className="text-xs font-extrabold text-indigo-700 dark:text-indigo-200 hover:underline"
-                      >
-                        View all →
-                      </button>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      <StatCard label="P/E (TTM)" value={fmt(getMetric("peTTM"))} />
-                      <StatCard label="P/S (TTM)" value={fmt(getMetric("psTTM"))} />
-                      <StatCard label="Beta" value={fmt(getMetric("beta"))} />
-                      <StatCard
-                        label="52W High"
-                        value={`$${formatSupplyValue(getMetric("52WeekHigh"))}`}
-                        sub={String(formatDateWeirdValue(getMetric("52WeekHighDate")) || "")}
-                      />
-                      <StatCard
-                        label="52W Low"
-                        value={`$${formatSupplyValue(getMetric("52WeekLow"))}`}
-                        sub={String(formatDateWeirdValue(getMetric("52WeekLowDate")) || "")}
-                      />
-                      <StatCard label="Div Yield" value={`${fmt(getMetric("currentDividendYieldTTM"))}%`} />
-                    </div>
-
-                    <div className="mt-3 text-[11px] text-gray-500 dark:text-white/45">
-                      Some tickers/providers don’t return every metric.
-                    </div>
-                  </div>
+                <div className={cn("mt-1 inline-flex items-center gap-1 font-mono text-sm tabular-nums", up ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400")}>
+                  {up ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                  {up ? "+" : ""}
+                  {fmt.n(quote?.d)} ({fmt.pct(quote?.dp)})<span className="text-slate-400">· today</span>
                 </div>
               </>
             )}
+          </div>
 
-            {/* METRICS */}
-            {tab === "metrics" && (
-              <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-extrabold text-gray-900 dark:text-white">Metrics</h4>
-                  <span className="text-xs text-gray-500 font-semibold dark:text-white/50">TTM where available</span>
-                </div>
+          {/* Tabs */}
+          <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-white/[0.04]" role="tablist" aria-label="Quote sections">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.key}
+                onClick={() => setTab(t.key)}
+                className={cn(
+                  "relative rounded-lg px-3.5 py-1.5 text-xs font-medium transition-colors",
+                  tab === t.key ? "text-white dark:text-slate-900" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+              >
+                {tab === t.key && (
+                  <motion.span layoutId="stockModalTab" className="absolute inset-0 rounded-lg bg-slate-900 dark:bg-white" transition={{ type: "spring", stiffness: 420, damping: 34 }} />
+                )}
+                <span className="relative">
+                  {t.label}
+                  {t.count ? <span className="ml-1 font-mono text-[10px] opacity-60">{t.count}</span> : null}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
-                <div className="mt-3 overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-black/20">
-                  <div className="divide-y divide-gray-200/70 dark:divide-white/10">
-                    {[
-                      ["Market Cap", `$${formatSupplyValue(getMetric("marketCapitalization"))}`],
-                      ["P/E (TTM)", fmt(getMetric("peTTM"))],
-                      ["P/S (TTM)", fmt(getMetric("psTTM"))],
-                      ["Dividend Yield", `${fmt(getMetric("currentDividendYieldTTM"))}%`],
-                      ["Beta", fmt(getMetric("beta"))],
-                      ["52-Week High", `$${formatSupplyValue(getMetric("52WeekHigh"))}`],
-                      ["High Date", formatDateWeirdValue(getMetric("52WeekHighDate"))],
-                      ["52-Week Low", `$${formatSupplyValue(getMetric("52WeekLow"))}`],
-                      ["Low Date", formatDateWeirdValue(getMetric("52WeekLowDate"))],
-                    ].map(([k, v]) => (
-                      <div key={k as string} className="flex items-center justify-between gap-4 px-4 py-3">
-                        <span className="text-xs font-semibold text-gray-600 dark:text-white/65">{k}</span>
-                        <span className="text-xs font-extrabold text-gray-900 dark:text-white text-right">{v as any}</span>
-                      </div>
-                    ))}
+      {/* Body */}
+      <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-slate-100 px-5 pb-6 pt-5 dark:border-white/[0.06] sm:px-7" style={{ WebkitOverflowScrolling: "touch" }}>
+        {error ? (
+          <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-300">
+            {error}
+          </div>
+        ) : (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}>
+              {tab === "overview" && (
+                <div className="space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <RangeBar label="Day range" low={num(quote?.l)} high={num(quote?.h)} value={num(quote?.c)} marker={{ value: num(quote?.o), label: "Open" }} />
+                    <RangeBar
+                      label="52-week range"
+                      low={num(metric("52WeekLow"))}
+                      high={num(metric("52WeekHigh"))}
+                      value={num(quote?.c)}
+                      lowLabel={fmt.date(metric("52WeekLowDate")) !== "—" ? fmt.date(metric("52WeekLowDate")) : undefined}
+                      highLabel={fmt.date(metric("52WeekHighDate")) !== "—" ? fmt.date(metric("52WeekHighDate")) : undefined}
+                    />
                   </div>
-                </div>
-
-                <div className="mt-3 text-[11px] text-gray-500 dark:text-white/45">
-                  Tip: Missing values usually mean the provider didn’t report them for this symbol.
-                </div>
-              </div>
-            )}
-
-            {/* NEWS */}
-            {tab === "news" && (
-              <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-extrabold text-gray-900 dark:text-white">Latest news</h4>
-                    <p className="mt-1 text-xs text-gray-600 dark:text-white/60">
-                      Headlines for <span className="font-bold">{ticker}</span>
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      disabled={page === 1}
-                      onClick={() => setNewsPage((p) => Math.max(1, p - 1))}
-                      className="rounded-xl px-3 py-2 text-xs font-extrabold ring-1 ring-gray-200/70 bg-white/70 hover:bg-white disabled:opacity-40 dark:ring-white/10 dark:bg-white/10 dark:hover:bg-white/15"
-                    >
-                      Prev
-                    </button>
-                    <div className="text-xs font-bold text-gray-600 dark:text-white/70">
-                      {page} / {totalPages}
+                  <StatGrid items={keyStats} loading={busy} />
+                  {(profile?.ipo || profile?.shareOutstanding) && (
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 px-1 font-mono text-[11px] text-slate-400">
+                      {profile?.ipo && <span>IPO · {fmt.date(profile.ipo)}</span>}
+                      {num(profile?.shareOutstanding) != null && <span>Shares out · {compactFmt.format(profile.shareOutstanding * 1_000_000)}</span>}
+                      {profile?.currency && <span>Currency · {profile.currency}</span>}
                     </div>
-                    <button
-                      disabled={page === totalPages}
-                      onClick={() => setNewsPage((p) => Math.min(totalPages, p + 1))}
-                      className="rounded-xl px-3 py-2 text-xs font-extrabold ring-1 ring-gray-200/70 bg-white/70 hover:bg-white disabled:opacity-40 dark:ring-white/10 dark:bg-white/10 dark:hover:bg-white/15"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center gap-2 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-black/20 px-3 py-2">
-                  <FaSearch className="text-gray-500 dark:text-white/45" />
-                  <input
-                    id="newsSearchInput"
-                    value={newsQuery}
-                    onChange={(e) => setNewsQuery(e.target.value)}
-                    placeholder="Search headlines…"
-                    className="flex-1 bg-transparent outline-none text-sm placeholder:text-gray-400 dark:placeholder:text-white/35"
-                  />
-                  {newsQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setNewsQuery("")}
-                      className="rounded-xl px-3 py-2 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 bg-white/60 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10]"
-                    >
-                      Clear
-                    </button>
                   )}
                 </div>
+              )}
 
-                {paginatedNews.length === 0 ? (
-                  <div className="mt-4 rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.06] p-4 text-sm text-gray-700 dark:text-white/70">
-                    No news matches your search.
+              {tab === "metrics" && (
+                <div className="overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/[0.08]">
+                  {metricRows.map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between gap-4 border-b border-slate-100 px-4 py-2.5 last:border-0 dark:border-white/[0.05]">
+                      <span className="text-[13px] text-slate-500 dark:text-slate-400">{k}</span>
+                      <span className={cn("text-right font-mono text-[13px] tabular-nums text-slate-900 dark:text-white", busy && "animate-pulse text-slate-300")}>{busy ? "····" : v}</span>
+                    </div>
+                  ))}
+                  <p className="bg-slate-50 px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:bg-white/[0.02]">
+                    TTM where available · not every symbol reports every metric
+                  </p>
+                </div>
+              )}
+
+              {tab === "news" && (
+                <div>
+                  <div className="flex items-center gap-2">
+                    <label className="relative flex-1">
+                      <span className="sr-only">Search headlines</span>
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                      <input
+                        id="stockNewsSearch"
+                        value={newsQuery}
+                        onChange={(e) => setNewsQuery(e.target.value)}
+                        placeholder="Search headlines  (Ctrl K)"
+                        className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-8 pr-3 text-[13px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                      />
+                    </label>
+                    <div className="flex items-center gap-1 font-mono text-[11px] tabular-nums text-slate-400">
+                      <button type="button" aria-label="Previous page" disabled={page === 1} onClick={() => setNewsPage(page - 1)} className="rounded-lg p-1.5 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-30 dark:hover:bg-white/10 dark:hover:text-white">
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      {page}/{totalPages}
+                      <button type="button" aria-label="Next page" disabled={page === totalPages} onClick={() => setNewsPage(page + 1)} className="rounded-lg p-1.5 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-30 dark:hover:bg-white/10 dark:hover:text-white">
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                ) : (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {paginatedNews.map((n, i) => {
-                      const imgAvail = typeof n.image === "string" && n.image.trim();
-                      const headline = n.headline ?? n.title ?? "Untitled article";
-                      const url = String(n.url || "");
-                      const publishedMs = safePublishedMs(n);
-                      const host = safeHost(url);
 
-                      return (
-                        <a
-                          key={`${n.id ?? url}-${i}`}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="group relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm hover:shadow-md transition"
-                        >
-                          {/* image */}
-                          <div className="relative aspect-[16/9] w-full overflow-hidden">
-                            {imgAvail ? (
-                              <>
-                                <img
-                                  src={n.image}
-                                  alt={headline}
-                                  loading="lazy"
-                                  decoding="async"
-                                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = "none";
-                                  }}
-                                />
-                                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
-                              </>
-                            ) : (
-                              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/15 via-fuchsia-500/10 to-sky-500/10 flex items-center justify-center">
-                                <span className="text-xs font-black text-gray-400 dark:text-white/30 tracking-widest uppercase">News</span>
+                  {busy ? (
+                    <div className="mt-3 space-y-2">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100 dark:bg-white/[0.04]" />
+                      ))}
+                    </div>
+                  ) : pageNews.length === 0 ? (
+                    <div className="mt-3 rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                      {newsQuery ? "No headlines match your search." : `No recent news for ${ticker}.`}
+                    </div>
+                  ) : (
+                    <ul className="mt-3 divide-y divide-slate-100 dark:divide-white/[0.05]">
+                      {pageNews.map((n, i) => {
+                        const url = String(n?.url || "");
+                        const host = safeHost(url);
+                        const img = typeof n?.image === "string" && n.image.trim() ? n.image : "";
+                        return (
+                          <li key={`${n?.id ?? url}-${i}`}>
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="group -mx-2 flex gap-3 rounded-xl px-2 py-3 transition hover:bg-slate-50 dark:hover:bg-white/[0.03]">
+                              <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-white/[0.04]">
+                                {img && <img src={img} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(e) => (e.currentTarget.style.display = "none")} />}
                               </div>
-                            )}
-                          </div>
-
-                          <div className="p-3">
-                            {/* publisher row */}
-                            <div className="flex items-center gap-2">
-                              <img
-                                src={host ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : ""}
-                                alt={n.source || host}
-                                className="h-7 w-7 rounded-full bg-white object-contain ring-1 ring-black/10 shrink-0"
-                                loading="lazy"
-                                decoding="async"
-                                referrerPolicy="no-referrer"
-                                onError={(e) => (e.currentTarget.style.display = "none")}
-                              />
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-xs font-extrabold text-gray-800 dark:text-white/85">
-                                  {n.source || host}
+                                <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+                                  {host && <img src={`https://www.google.com/s2/favicons?domain=${host}&sz=32`} alt="" className="h-3 w-3 rounded-sm" referrerPolicy="no-referrer" />}
+                                  <span className="truncate">{n?.source || host}</span>
+                                  <span>· {timeAgo(publishedMs(n))}</span>
                                 </div>
-                                <div className="text-[11px] font-semibold text-gray-600 dark:text-white/60">
-                                  {timeAgo(publishedMs)}
-                                </div>
+                                <h4 className="mt-1 line-clamp-2 text-[13px] font-medium leading-snug text-slate-900 transition-colors group-hover:text-indigo-600 dark:text-white dark:group-hover:text-indigo-300">
+                                  {n?.headline ?? n?.title ?? "Untitled"}
+                                </h4>
                               </div>
-                              <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-100/80 px-2 py-0.5 text-[10px] font-bold text-gray-700 ring-1 ring-black/10 dark:bg-white/10 dark:text-white/70 dark:ring-white/10">
-                                Open <FaExternalLinkAlt className="text-[9px]" />
-                              </span>
-                            </div>
+                              <ExternalLink className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-300 transition group-hover:text-indigo-500" />
+                            </a>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        )}
 
-                            {/* headline */}
-                            <h3 className="mt-2 text-sm font-extrabold leading-snug text-gray-900 dark:text-white line-clamp-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                              {headline}
-                            </h3>
-
-                            {/* summary */}
-                            {n.summary ? (
-                              <p className="mt-1.5 text-xs font-semibold text-gray-700 dark:text-white/65 line-clamp-2">
-                                {n.summary}
-                              </p>
-                            ) : null}
-                          </div>
-                        </a>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Footer */}
-            <div className="mt-6 pb-2 flex flex-col sm:flex-row gap-3 sm:justify-end">
-              <button
-                onClick={onClose}
-                className="w-full sm:w-auto rounded-2xl px-5 py-3 text-sm font-extrabold bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white hover:opacity-95 active:scale-[0.99] transition"
-              >
-                Close
-              </button>
-            </div>
-            <p className="text-[11px] text-gray-500 dark:text-white/40 text-center pb-1">
-              Data delayed ~15 min · Provided by Finnhub · Not financial advice
-            </p>
-            <div className="h-2" />
-          </div>
-        </motion.div>
+        <p className="mt-5 text-center text-[11px] text-slate-400 dark:text-slate-500">
+          Data delayed ~15 min · Provided by Finnhub · Not financial advice
+        </p>
       </div>
-    </motion.div>
+    </Modal>
   );
 }

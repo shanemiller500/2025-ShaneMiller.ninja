@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, Info, X } from "lucide-react";
+import { Activity, Info } from "lucide-react";
 
 import { IconBadge } from "@/components/ui/icon-badge";
+import { Modal } from "@/components/ui/modal";
 import type { TickerData } from "../lib/types";
 import { cn, pct } from "./TickerTile";
 
@@ -30,16 +31,11 @@ export default function TodayMarketWidget({
 
   return (
     <>
-      <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm flex flex-col">
-        {/* Ambient blobs */}
-        <div className="pointer-events-none absolute inset-0 opacity-50 dark:opacity-35">
-          <div className="absolute -top-12 -left-12 h-48 w-48 rounded-full bg-indigo-400/12 blur-3xl" />
-          <div className="absolute -bottom-12 -right-12 h-48 w-48 rounded-full bg-fuchsia-400/12 blur-3xl" />
-        </div>
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02] flex flex-col">
 
         {/* Top label row */}
         <div className="relative px-4 pt-3.5 flex items-center justify-between">
-          <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+          <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
             <IconBadge
               icon={Activity}
               tone={overallChange > 0 ? "emerald" : overallChange < 0 ? "rose" : "neutral"}
@@ -60,14 +56,14 @@ export default function TodayMarketWidget({
         {/* Hero center — fills remaining space */}
         <div className="relative flex-1 flex flex-col items-center justify-center gap-2 px-4 py-5">
           {/* Big percentage */}
-          <div className={cn("text-4xl sm:text-5xl font-black tabular-nums tracking-tight leading-none", heroColor)}>
+          <div className={cn("text-4xl sm:text-5xl font-mono font-semibold tabular-nums tracking-tight leading-none", heroColor)}>
             {pct(overallChange)}
           </div>
 
           {/* Direction label */}
           <div
             className={cn(
-              "rounded-full px-3 py-1 text-[10px] font-extrabold ring-1 tabular-nums",
+              "rounded-full px-3 py-1 text-[10px] font-semibold ring-1 tabular-nums",
               up
                 ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 ring-emerald-500/25"
                 : down
@@ -91,80 +87,35 @@ export default function TodayMarketWidget({
           </span>
         </div>
 
-        <div className="h-[1px] w-full bg-gradient-to-r from-indigo-500/30 via-fuchsia-500/20 to-sky-500/20" />
       </div>
 
       {/* Info modal */}
-      {showInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowInfo(false)}
-          />
-          <div className="relative z-10 w-full max-w-sm rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-brand-900 shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-black/[0.07] dark:border-white/[0.08]">
-              <div>
-                <h2 className="text-base font-extrabold text-gray-900 dark:text-white">
-                  How Today's Market Works
-                </h2>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                  Powered by live Finnhub quotes
-                </p>
-              </div>
-              <button
-                onClick={() => setShowInfo(false)}
-                className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
-                aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+      <Modal open={showInfo} onClose={() => setShowInfo(false)} labelledBy="today-info-title" size="sm">
+        <div className="overflow-y-auto p-6">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Methodology</p>
+          <h2 id="today-info-title" className="mt-1 text-base font-semibold text-slate-900 dark:text-white">How today&apos;s market is calculated</h2>
 
-            <div className="px-5 py-4 space-y-4">
-              <div className="rounded-xl border border-black/[0.07] dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.04] px-4 py-3 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400 dark:text-gray-500 mb-1">
-                    Right Now
-                  </p>
-                  <p
-                    className={cn(
-                      "text-2xl font-black tabular-nums leading-none",
-                      overallChange >= 0
-                        ? "text-emerald-700 dark:text-emerald-300"
-                        : "text-rose-700 dark:text-rose-300"
-                    )}
-                  >
-                    {pct(overallChange)}
-                  </p>
-                </div>
-                <span className="text-sm font-extrabold text-gray-500 dark:text-gray-400">
-                  avg across {topList.length} tickers
-                </span>
-              </div>
-
-              <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                <p>
-                  The <span className="font-bold">Today's Market</span> figure is the{" "}
-                  <span className="font-bold">simple arithmetic mean</span> of the current-day
-                  percentage price change (
-                  <code className="text-[11px] bg-gray-100 dark:bg-white/10 rounded px-1">dp</code>
-                  ) across the top{" "}
-                  <span className="font-bold">{topList.length} US large-cap tickers</span> tracked
-                  by this dashboard.
-                </p>
-                <div className="rounded-lg bg-gray-900 dark:bg-black/40 px-3 py-2.5 font-mono text-[11px] text-emerald-400">
-                  avgChange = Σ(dp) / {topList.length}
-                </div>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                  Tickers include AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA, and other large-cap
-                  US equities. Prices are delayed ~15 min per Finnhub's free tier. The figure
-                  updates whenever new quote data arrives.
-                </p>
-              </div>
+          <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200/70 px-4 py-3 dark:border-white/[0.08]">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Right now</p>
+              <p className={cn("mt-1 font-mono text-2xl font-semibold tabular-nums", overallChange >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400")}>
+                {pct(overallChange)}
+              </p>
             </div>
+            <span className="font-mono text-[11px] text-slate-400">avg of {topList.length} tickers</span>
           </div>
+
+          <p className="mt-4 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
+            A simple average of today&apos;s percent change across the {topList.length} large-cap US stocks this dashboard tracks.
+          </p>
+          <div className="mt-3 rounded-xl bg-slate-900 px-3 py-2.5 font-mono text-[11px] text-emerald-400 dark:bg-black/40">
+            avgChange = Σ(dp) / {topList.length}
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
+            Includes AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA and other large caps. Quotes are delayed ~15 min.
+          </p>
         </div>
-      )}
+      </Modal>
     </>
   );
 }

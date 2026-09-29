@@ -24,22 +24,17 @@ export default function TopTickersWidget({
   const up = avgChange >= 0;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
-      {/* Ambient blobs */}
-      <div className="pointer-events-none absolute inset-0 opacity-50 dark:opacity-35">
-        <div className="absolute -top-16 -left-16 h-56 w-56 rounded-full bg-indigo-400/15 blur-3xl" />
-        <div className="absolute -bottom-16 -right-16 h-56 w-56 rounded-full bg-fuchsia-400/15 blur-3xl" />
-      </div>
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02]">
 
       {/* Header */}
-      <div className="relative px-4 py-3 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-3">
+      <div className="relative px-4 py-3 border-b border-slate-200/70 dark:border-white/[0.08] flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <IconBadge icon={Star} tone="amber" size="md" />
           <div>
-            <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400">
               Top Tickers
             </p>
-            <p className="mt-0.5 text-xs font-extrabold text-gray-900 dark:text-white">
+            <p className="mt-0.5 text-xs font-semibold text-gray-900 dark:text-white">
               {topList.length} large-cap US equities
             </p>
           </div>
@@ -48,7 +43,7 @@ export default function TopTickersWidget({
         {topList.length > 0 && (
           <div
             className={cn(
-              "shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-extrabold ring-1 tabular-nums",
+              "shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold ring-1 tabular-nums",
               up
                 ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 ring-emerald-500/25"
                 : "bg-rose-500/15 text-rose-800 dark:text-rose-200 ring-rose-500/25"
@@ -76,7 +71,6 @@ export default function TopTickersWidget({
         </div>
       </div>
 
-      <div className="h-[1px] w-full bg-gradient-to-r from-indigo-500/30 via-fuchsia-500/20 to-sky-500/20" />
     </div>
   );
 }

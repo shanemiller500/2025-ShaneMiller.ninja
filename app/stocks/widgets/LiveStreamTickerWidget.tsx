@@ -13,17 +13,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 
 import { WidgetCard } from "@/components/ui/widget-card";
 import { useMarketData } from "../hooks/useMarketData";
 import { TICKER_SYMBOLS } from "../lib/tickers";
 import type { TradeInfo } from "../lib/types";
-import StockQuoteModal from "../StockQuoteModal";
+import { useQuoteModal } from "../hooks/useQuoteModal";
 
 /* ─── Constants ────────────────────────────────────────────────────── */
-const PROXY_BASE = "https://u-mail.co/api/finnhubProxy";
 const LOGO_FALLBACK =
   'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="100%" height="100%" fill="%23EEF2FF"/><text x="50%" y="54%" font-family="Arial" font-size="7" text-anchor="middle" fill="%234C1D95">Loading</text></svg>';
 
@@ -118,46 +115,8 @@ export default function LiveStreamTickerWidget() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tickerMap]);
 
-  // Modal state
-  const [selectedSymbol,    setSelectedSymbol]    = useState<string | null>(null);
-  const [selectedStockData, setSelectedStockData] = useState<any | null>(null);
-  const [selectedNewsData,  setSelectedNewsData]  = useState<any[]>([]);
-  const [modalLoading,      setModalLoading]      = useState(false);
-
-  const openSymbolModal = async (sym: string) => {
-    setModalLoading(true);
-    try {
-      const [quote, profile, metric, news] = await Promise.all([
-        fetch(`${PROXY_BASE}/quote/${sym}`).then((r) => (r.ok ? r.json() : null)),
-        fetch(`${PROXY_BASE}/profile/${sym}`).then((r) => (r.ok ? r.json() : null)),
-        fetch(`${PROXY_BASE}/metric/${sym}`).then((r) => (r.ok ? r.json() : null)),
-        fetch(`${PROXY_BASE}/news/${sym}`).then((r) => (r.ok ? r.json() : [])),
-      ]);
-
-      if (!quote || typeof quote.c !== "number" || quote.c <= 0) {
-        toast.error(`No data found for "${sym}".`);
-        return;
-      }
-
-      const profileData = profile?.name
-        ? profile
-        : { ...profile, name: sym, ticker: sym, exchange: profile?.exchange ?? "", logo: profile?.logo ?? "" };
-
-      setSelectedStockData({ profile: profileData, quote, metric });
-      setSelectedNewsData(Array.isArray(news) ? news : []);
-      setSelectedSymbol(sym);
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to fetch symbol data.");
-    } finally {
-      setModalLoading(false);
-    }
-  };
-
-  const closeModal = () => {
-    setSelectedSymbol(null);
-    setSelectedStockData(null);
-    setSelectedNewsData([]);
-  };
+  // Quote modal (shared fetch + popup)
+  const { openQuote, quoteModal } = useQuoteModal();
 
   /* ── Derived UI ───────────────────────────────────────────────────── */
   const sub =
@@ -175,8 +134,6 @@ export default function LiveStreamTickerWidget() {
   /* ── Render ───────────────────────────────────────────────────────── */
   return (
     <>
-      <ToastContainer position="top-right" autoClose={4000} hideProgressBar pauseOnHover />
-
       <WidgetCard
         title="Markets"
         subtitle="12 large caps · tap a tile for details"
@@ -221,7 +178,7 @@ export default function LiveStreamTickerWidget() {
               <motion.button
                 key={sym}
                 type="button"
-                onClick={() => openSymbolModal(sym)}
+                onClick={() => openQuote(sym)}
                 className="group relative overflow-hidden rounded-xl border border-slate-200/70 bg-white p-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/20"
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
@@ -268,21 +225,7 @@ export default function LiveStreamTickerWidget() {
         </div>
       </WidgetCard>
 
-      {modalLoading && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
-          <div className="rounded-xl bg-white/10 px-4 py-3 text-white text-sm backdrop-blur">
-            Loading…
-          </div>
-        </div>
-      )}
-
-      {selectedSymbol && selectedStockData && (
-        <StockQuoteModal
-          stockData={selectedStockData}
-          newsData={selectedNewsData}
-          onClose={closeModal}
-        />
-      )}
+      {quoteModal}
     </>
   );
 }

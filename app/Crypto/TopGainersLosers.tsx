@@ -6,18 +6,10 @@ import { fetchCoinCap } from "@/utils/coincap-client";
 import { useEffect, useMemo, useState } from "react";
 
 import { motion } from "framer-motion";
-import {
-  FaArrowDown,
-  FaArrowUp,
-  FaSkullCrossbones,
-  FaSyncAlt,
-  FaTable,
-  FaThLarge,
-  FaTrophy,
-} from "react-icons/fa";
+import { LayoutGrid, RefreshCw, Search, Table2, TrendingDown, TrendingUp, X } from "lucide-react";
 
 import CryptoAssetPopup from "@/app/Crypto/CryptoAssetPopup";
-import { statusColors } from "@/utils/colors";
+import { heatTone } from "@/utils/heat";
 import { trackEvent } from "@/utils/mixpanel";
 
 /* ------------------------------------------------------------------ */
@@ -29,14 +21,21 @@ const currencyFmt = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
+const smallFmt = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumSignificantDigits: 4,
+});
+
 const formatUSD = (v: any) => {
   const n = parseFloat(v);
-  return Number.isFinite(n) ? currencyFmt.format(n) : "—";
+  if (!Number.isFinite(n)) return "—";
+  return Math.abs(n) < 1 ? smallFmt.format(n) : currencyFmt.format(n);
 };
 
 const formatPct = (v: any) => {
   const n = parseFloat(v);
-  return Number.isFinite(n) ? `${n.toFixed(2)}%` : "—";
+  return Number.isFinite(n) ? `${n > 0 ? "+" : ""}${n.toFixed(2)}%` : "—";
 };
 
 function cn(...xs: Array<string | false | null | undefined>) {
@@ -47,61 +46,6 @@ function cn(...xs: Array<string | false | null | undefined>) {
 
 const COINGECKO_TOP200 =
   "/api/CoinGeckoAPI?vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false";
-
-/* ------------------------------------------------------------------ */
-/*  UI Components                                                      */
-/* ------------------------------------------------------------------ */
-interface PillProps {
-  children: React.ReactNode;
-  tone?: "neutral" | "up" | "down";
-}
-
-function Pill({ children, tone = "neutral" }: PillProps) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-extrabold ring-1",
-        tone === "up" &&
-          "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/20",
-        tone === "down" &&
-          "bg-rose-500/10 text-rose-700 ring-rose-500/20 dark:bg-rose-400/10 dark:text-rose-200 dark:ring-rose-300/20",
-        tone === "neutral" &&
-          "bg-black/[0.03] text-gray-700 ring-black/10 dark:bg-white/[0.06] dark:text-white/75 dark:ring-white/10",
-      )}
-    >
-      {children}
-    </span>
-  );
-}
-
-interface SegButtonProps {
-  active: boolean;
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-}
-
-function SegButton({ active, label, icon, onClick }: SegButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "relative flex-1 sm:flex-none rounded-xl px-4 py-2 text-xs font-extrabold transition",
-        "ring-1 ring-black/10 dark:ring-white/10",
-        active
-          ? "bg-indigo-600/15 text-indigo-800 dark:text-indigo-200"
-          : "bg-white/70 dark:bg-white/[0.06] text-gray-700 dark:text-white/70 hover:text-gray-900 dark:hover:text-white",
-      )}
-    >
-      <span className="inline-flex items-center gap-2">
-        <span className="text-indigo-600 dark:text-indigo-300">{icon}</span>
-        {label}
-      </span>
-    </button>
-  );
-}
 
 export default function TopGainersLosers() {
   const [cryptoData, setCryptoData] = useState<any[]>([]);
@@ -117,18 +61,6 @@ export default function TopGainersLosers() {
 
   // flash support (NO invalid <div> inside <tr>)
   const [tickMap, setTickMap] = useState<Record<string, { price?: number; bump?: number }>>({});
-
-  /* ✅ FIX SCROLL: if any modal/popup previously left body locked, unlock it on this page */
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    const prevTouch = document.body.style.touchAction;
-    document.body.style.overflow = "auto";
-    document.body.style.touchAction = "auto";
-    return () => {
-      document.body.style.overflow = prev;
-      document.body.style.touchAction = prevTouch;
-    };
-  }, []);
 
   /* -------- preload CoinGecko logos -------- */
   useEffect(() => {
@@ -297,94 +229,88 @@ export default function TopGainersLosers() {
     trackEvent("CryptoAssetClick", { id: c?.id, symbol: c?.symbol, tab });
   };
 
+  const setTabAndTrack = (next: "gainers" | "losers") => {
+    setTab(next);
+    setQuery("");
+    trackEvent("CryptoMoversTab", { tab: next });
+  };
+
+  const setViewAndTrack = (next: "table" | "grid") => {
+    setViewMode(next);
+    trackEvent("CryptoViewToggle", { view: next });
+  };
+
+  /** Bar length relative to the biggest move in the list */
+  const maxAbs = Math.max(1, ...activeRows.map((c) => Math.abs(parseFloat(c?.changePercent24Hr ?? "0")) || 0));
+
   const renderTable = (rows: any[]) => (
-    <div className="overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
-      <table className="min-w-full divide-y divide-black/5 dark:divide-white/10">
-        <thead className="bg-black/[0.03] dark:bg-white/[0.06]">
-          <tr>
-            {["Rank", "Symbol", "Name", "Price", "24h"].map((h) => (
-              <th
-                key={h}
-                className="px-1 sm:px-2 py-2 text-left text-[10px] sm:text-xs font-extrabold uppercase tracking-wide text-gray-600 dark:text-white/60"
-              >
-                {h}
-              </th>
-            ))}
+    <div className="overflow-x-auto rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02]">
+      <table className="min-w-full">
+        <thead>
+          <tr className="border-b border-slate-100 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:border-white/[0.06]">
+            <th className="py-2.5 pl-4 pr-2 text-left font-normal">#</th>
+            <th className="px-2 py-2.5 text-left font-normal">Coin</th>
+            <th className="px-2 py-2.5 text-right font-normal">Price</th>
+            <th className="py-2.5 pl-2 pr-4 text-right font-normal">24h</th>
           </tr>
         </thead>
-
-        <tbody className="divide-y divide-black/5 dark:divide-white/10">
-          {rows.map((c) => {
+        <tbody className="divide-y divide-slate-100 dark:divide-white/[0.05]">
+          {rows.map((c, idx) => {
             const change = parseFloat(c?.changePercent24Hr ?? "0");
-            const pos = Number.isFinite(change) && change >= 0;
-            const neg = Number.isFinite(change) && change < 0;
-
             const logo = logos[String(c?.symbol ?? "").toLowerCase()];
             const bump = tickMap[c?.id]?.bump || 0;
+            const width = `${Math.min(100, (Math.abs(change) / maxAbs) * 100)}%`;
 
-            // ✅ motion.tr is still a <tr> — children are ONLY <td>, so no hydration error
             return (
               <motion.tr
-                key={`${c?.id}-${bump}`} // replay flash on bump changes
-                className="cursor-pointer transition hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
+                key={c?.id}
                 onClick={() => openAsset(c)}
-                initial={false}
-                animate={{
-                  backgroundColor: bump
-                    ? pos
-                      ? statusColors.positive.flash
-                      : neg
-                        ? statusColors.negative.flash
-                        : statusColors.neutral
-                    : statusColors.neutral,
-                }}
-                transition={{ duration: 0.35, ease: "easeOut" }}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.02 }}
+                className="group cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.03]"
               >
-                <td className="px-1 sm:px-2 py-2 text-[11px] sm:text-sm font-semibold text-gray-700 dark:text-white/75">
-                  {c?.rank ?? "—"}
-                </td>
-
-                <td className="px-1 sm:px-2 py-2">
-                  <div className="flex items-center gap-2">
+                <td className="py-2.5 pl-4 pr-2 font-mono text-[11px] tabular-nums text-slate-400">{c?.rank ?? "—"}</td>
+                <td className="px-2 py-2.5">
+                  <div className="flex items-center gap-2.5">
                     {logo ? (
-                      <span className="inline-flex items-center justify-center rounded-full bg-white/90 dark:bg-white/10 p-[2px] ring-1 ring-black/10 dark:ring-white/10">
-                        <img
-                          src={logo}
-                          alt={c?.symbol}
-                          className="h-5 w-5 sm:h-6 sm:w-6"
-                          loading="lazy"
-                        />
-                      </span>
+                      <img src={logo} alt="" className="h-6 w-6 rounded-full bg-white p-0.5 ring-1 ring-slate-200 dark:ring-white/10" loading="lazy" />
                     ) : (
-                      <span className="h-5 w-5 sm:h-6 sm:w-6 rounded-full bg-black/10 dark:bg-white/10" />
+                      <span className="h-6 w-6 rounded-full bg-slate-100 dark:bg-white/10" />
                     )}
-                    <div className="font-extrabold text-[12px] sm:text-sm text-gray-900 dark:text-white">
-                      {c?.symbol ?? "—"}
+                    <div className="min-w-0 leading-tight">
+                      <div className="text-[13px] font-semibold text-slate-900 dark:text-white">{c?.symbol ?? "—"}</div>
+                      <div className="truncate text-[11px] text-slate-400 dark:text-slate-500">{c?.name ?? "—"}</div>
                     </div>
                   </div>
                 </td>
-
-                <td className="px-1 sm:px-2 py-2">
-                  <div className="text-[12px] sm:text-sm font-semibold text-gray-800 dark:text-white/80 line-clamp-1">
-                    {c?.name ?? "—"}
-                  </div>
-                </td>
-
-                <td className="px-1 sm:px-2 py-2 text-[12px] sm:text-sm font-extrabold text-gray-900 dark:text-white">
+                <td className="relative px-2 py-2.5 text-right font-mono text-[13px] tabular-nums text-slate-900 dark:text-white">
+                  {bump > 0 && (
+                    <motion.span
+                      key={bump}
+                      aria-hidden
+                      className="pointer-events-none absolute inset-1 rounded-md"
+                      initial={{ opacity: 1 }}
+                      animate={{ opacity: 0 }}
+                      transition={{ duration: 0.9 }}
+                      style={{ boxShadow: change >= 0 ? "inset 0 0 0 1.5px rgba(16,185,129,.9)" : "inset 0 0 0 1.5px rgba(244,63,94,.9)" }}
+                    />
+                  )}
                   {formatUSD(c?.priceUsd)}
                 </td>
-
-                <td className="px-1 sm:px-2 py-2">
-                  <div
-                    className={cn(
-                      "inline-flex items-center gap-2 text-[12px] sm:text-sm font-extrabold",
-                      pos
-                        ? "text-green-600 dark:text-green-300"
-                        : "text-red-600 dark:text-red-300",
-                    )}
-                  >
-                    {pos ? <FaArrowUp /> : <FaArrowDown />}
-                    {formatPct(c?.changePercent24Hr)}
+                <td className="py-2.5 pl-2 pr-4">
+                  <div className="ml-auto flex w-32 flex-col items-end gap-1 sm:w-44">
+                    <span className={cn("font-mono text-[12px] tabular-nums", change >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400")}>
+                      {formatPct(change)}
+                    </span>
+                    <span className="h-1 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.06]">
+                      <motion.span
+                        className={cn("ml-auto block h-full rounded-full", change >= 0 ? "bg-emerald-400" : "bg-rose-400")}
+                        initial={{ width: 0 }}
+                        animate={{ width }}
+                        transition={{ duration: 0.6, delay: idx * 0.02, ease: "easeOut" }}
+                      />
+                    </span>
                   </div>
                 </td>
               </motion.tr>
@@ -393,7 +319,7 @@ export default function TopGainersLosers() {
 
           {rows.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-4 py-4 text-sm text-gray-600 dark:text-white/70">
+              <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                 No matches in the top 15.
               </td>
             </tr>
@@ -403,188 +329,158 @@ export default function TopGainersLosers() {
     </div>
   );
 
-const renderGrid = (rows: any[]) => (
-  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 lg:grid-cols-5 xl:grid-cols-6">
-    {rows.map((c) => {
-      const change = parseFloat(c?.changePercent24Hr ?? "0");
-      const pos = Number.isFinite(change) && change > 0;
-      const neg = Number.isFinite(change) && change < 0;
+  const renderGrid = (rows: any[]) => (
+    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-5">
+      {rows.map((c, idx) => {
+        const change = parseFloat(c?.changePercent24Hr ?? "0");
+        const logo = logos[String(c?.symbol ?? "").toLowerCase()];
+        const bump = tickMap[c?.id]?.bump || 0;
 
-      // ✅ heat map background (do NOT change)
-      const bg = pos ? "bg-green-500" : neg ? "bg-red-500" : "bg-gray-300";
-
-      const logo = logos[String(c?.symbol ?? "").toLowerCase()];
-      const bump = tickMap[c?.id]?.bump || 0;
-
-      return (
-        <motion.div
-          key={`${c?.id}-${bump}`}
-          className={`${bg} relative overflow-hidden text-white p-2 sm:p-3 rounded-lg shadow cursor-pointer`}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => openAsset(c)}
-        >
-          {/* (optional) subtle flash like heatmap — safe in grid */}
-          {bump > 0 && (
-            <motion.div
-              key={`${c?.id}-flash-${bump}`}
-              className="absolute inset-0 rounded-lg pointer-events-none"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: [0, 0.35, 0], scale: [1, 1.02, 1] }}
-              transition={{ duration: 0.35, ease: "easeOut" }}
-              style={{
-                background: pos
-                  ? statusColors.positive.flashOverlay
-                  : neg
-                    ? statusColors.negative.flashOverlay
-                    : "transparent",
-                mixBlendMode: "overlay",
-              }}
-            />
-          )}
-
-          <div className="flex items-center gap-1">
-            <span className="text-[9px] sm:text-xs bg-black/40 px-1 rounded">
-              #{c?.rank ?? "—"}
-            </span>
-
-            {logo && (
-              <span className="inline-flex items-center justify-center bg-white/90 rounded-full p-[2px]">
-                <img
-                  src={logo}
-                  alt={c?.symbol}
-                  className="w-4 h-4 sm:w-5 sm:h-5"
-                  loading="lazy"
-                />
-              </span>
+        return (
+          <motion.button
+            key={c?.id}
+            type="button"
+            onClick={() => openAsset(c)}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: idx * 0.02 }}
+            className={cn(
+              "group relative isolate flex h-24 flex-col justify-between overflow-hidden rounded-xl p-3 text-left ring-1 ring-inset transition-[transform,filter] hover:-translate-y-0.5 hover:brightness-[1.04]",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
+              heatTone(change)
             )}
+          >
+            {bump > 0 && (
+              <motion.span
+                key={bump}
+                aria-hidden
+                className="pointer-events-none absolute inset-0 rounded-xl"
+                initial={{ opacity: 1 }}
+                animate={{ opacity: 0 }}
+                transition={{ duration: 0.9 }}
+                style={{ boxShadow: change >= 0 ? "inset 0 0 0 2px rgba(16,185,129,.95)" : "inset 0 0 0 2px rgba(244,63,94,.95)" }}
+              />
+            )}
+            <div className="flex items-center justify-between gap-1">
+              <span className="flex min-w-0 items-center gap-1.5">
+                {logo && <img src={logo} alt="" className="h-4 w-4 rounded-full bg-white p-px" loading="lazy" />}
+                <span className="truncate text-[13px] font-semibold" title={c?.name}>{c?.symbol ?? "—"}</span>
+              </span>
+              <span className="font-mono text-[9px] opacity-60">#{c?.rank ?? "—"}</span>
+            </div>
+            <div>
+              <div className="font-mono text-[13px] font-semibold tabular-nums">{formatUSD(c?.priceUsd)}</div>
+              <div className="font-mono text-[11px] tabular-nums opacity-80">{formatPct(change)}</div>
+            </div>
+          </motion.button>
+        );
+      })}
 
-            <span className="font-bold text-sm sm:text-lg" title={c?.name}>
-              {c?.symbol ?? "—"}
-            </span>
-          </div>
-
-          <div className="mt-0.5 text-[11px] sm:text-sm">{formatUSD(c?.priceUsd)}</div>
-
-          <div className="text-[9px] sm:text-xs">
-            {formatPct(change)} {pos ? "↑" : neg ? "↓" : ""}
-          </div>
-        </motion.div>
-      );
-    })}
-
-    {rows.length === 0 && (
-      <div className="col-span-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 text-sm text-gray-700 dark:text-white/70">
-        No matches in the top 15.
-      </div>
-    )}
-  </div>
-);
-
+      {rows.length === 0 && (
+        <div className="col-span-full rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+          No matches in the top 15.
+        </div>
+      )}
+    </div>
+  );
 
   if (loading) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center px-4">
-        <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm">
-          <div className="text-sm font-extrabold text-gray-900 dark:text-white">
-            Loading crypto data…
-          </div>
-          <div className="mt-2 h-2 w-56 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
-            <motion.div
-              className="h-full w-1/2 bg-indigo-500/60"
-              initial={{ x: "-100%" }}
-              animate={{ x: "200%" }}
-              transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
-            />
-          </div>
-        </div>
+      <div className="space-y-2 p-4 sm:p-6">
+        <div className="mb-4 h-12 animate-pulse rounded-2xl bg-slate-100 dark:bg-white/[0.04]" />
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="h-12 animate-pulse rounded-xl bg-slate-100 dark:bg-white/[0.04]" style={{ animationDelay: `${i * 60}ms` }} />
+        ))}
       </div>
     );
   }
 
   return (
-    // ✅ scroll-safe padding + no overflow-hidden anywhere
-    <div className="min-h-screen  py-6 pb-24">
-      <div className="mx-auto max-w-5xl">
-        {/* Header */}
-        <div className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-5 shadow-sm">
-          <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
-            <div className="absolute -top-16 -left-20 h-60 w-60 rounded-full bg-indigo-400/20 blur-3xl" />
-            <div className="absolute -bottom-20 -right-16 h-64 w-64 rounded-full bg-fuchsia-400/20 blur-3xl" />
-          </div>
+    <div className="p-3 sm:p-5">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Gainers / Losers */}
+        <div className="flex rounded-xl border border-slate-200 bg-white p-0.5 dark:border-white/10 dark:bg-white/[0.04]" role="group" aria-label="Movers">
+          {([
+            { key: "gainers", label: "Gainers", icon: TrendingUp, on: "bg-emerald-500 text-white shadow-[0_0_16px_-2px_rgba(16,185,129,0.6)]" },
+            { key: "losers", label: "Losers", icon: TrendingDown, on: "bg-rose-500 text-white shadow-[0_0_16px_-2px_rgba(244,63,94,0.6)]" },
+          ] as const).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTabAndTrack(t.key)}
+              aria-pressed={tab === t.key}
+              className={cn(
+                "relative inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-medium transition-colors",
+                tab === t.key ? "text-white" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              )}
+            >
+              {tab === t.key && (
+                <motion.span layoutId="moversPill" className={cn("absolute inset-0 rounded-lg", t.on)} transition={{ type: "spring", stiffness: 420, damping: 34 }} />
+              )}
+              <t.icon className="relative h-3.5 w-3.5" />
+              <span className="relative">{t.label}</span>
+            </button>
+          ))}
+        </div>
 
-          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-                Crypto Market Movers
-              </h1>
+        <span className="inline-flex items-center gap-1.5 px-2 font-mono text-[11px] text-slate-400">
+          <RefreshCw className="h-3 w-3" />
+          15s · {updatedLabel}
+        </span>
 
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Pill tone="neutral">
-                  <FaSyncAlt className="opacity-80" />
-                  Updates every 15s
-                </Pill>
-                <Pill tone="neutral">Last: {updatedLabel}</Pill>
-                <Pill tone={tab === "gainers" ? "up" : "down"}>
-                  {tab === "gainers" ? <FaTrophy /> : <FaSkullCrossbones />}
-                  {tab === "gainers" ? "Top gainers" : "Top losers"}
-                </Pill>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:items-end gap-3">
-              {/* View toggle */}
-              <button
-                onClick={() => {
-                  const next = viewMode === "table" ? "grid" : "table";
-                  setViewMode(next);
-                  trackEvent("CryptoViewToggle", { view: next });
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-extrabold shadow-sm ring-1  bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white hover:opacity-95 active:scale-[0.99] transition"
-              >
-                {viewMode === "table" ? <FaThLarge className="w-4 h-4" /> : <FaTable className="w-4 h-4" />}
-                <span>{viewMode === "table" ? "Grid view" : "Table view"}</span>
+        <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
+          <label className="relative flex-1 sm:w-52 sm:flex-none">
+            <span className="sr-only">Filter movers</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter"
+              className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-8 pr-8 text-[13px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+            />
+            {query && (
+              <button type="button" onClick={() => setQuery("")} aria-label="Clear filter" className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-white">
+                <X className="h-3.5 w-3.5" />
               </button>
+            )}
+          </label>
 
-              {/* Tabs */}
-              <div className="inline-flex w-full sm:w-auto rounded-2xl gap-2 p-1 bg-black/[0.03] dark:bg-white/[0.06] ring-1 ring-black/10 dark:ring-white/10">
-                <SegButton
-                  active={tab === "gainers"}
-                  label="Gainers"
-                  icon={<FaArrowUp />}
-                  onClick={() => {
-                    setTab("gainers");
-                    setQuery("");
-                    trackEvent("CryptoMoversTab", { tab: "gainers" });
-                  }}
-                />
-                <SegButton
-                  active={tab === "losers"}
-                  label="Losers"
-                  icon={<FaArrowDown />}
-                  onClick={() => {
-                    setTab("losers");
-                    setQuery("");
-                    trackEvent("CryptoMoversTab", { tab: "losers" });
-                  }}
-                />
-              </div>
-            </div>
-          </div>          
+          <div className="flex rounded-xl border border-slate-200 bg-white p-0.5 dark:border-white/10 dark:bg-white/[0.04]" role="group" aria-label="View">
+            {([
+              { key: "table", icon: Table2, label: "Table" },
+              { key: "grid", icon: LayoutGrid, label: "Tiles" },
+            ] as const).map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                onClick={() => setViewAndTrack(v.key)}
+                aria-pressed={viewMode === v.key}
+                title={v.label}
+                className={cn(
+                  "relative inline-flex items-center rounded-lg px-2.5 py-1.5 transition-colors",
+                  viewMode === v.key ? "text-white dark:text-slate-900" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+              >
+                {viewMode === v.key && (
+                  <motion.span layoutId="moversView" className="absolute inset-0 rounded-lg bg-slate-900 dark:bg-white" transition={{ type: "spring", stiffness: 420, damping: 34 }} />
+                )}
+                <v.icon className="relative h-3.5 w-3.5" />
+              </button>
+            ))}
+          </div>
         </div>
-
-        {/* Content */}
-        <div className="mt-5">
-          {viewMode === "table" ? renderTable(filteredActive) : renderGrid(filteredActive)}
-        </div>
-
-        {/* Popup */}
-        <CryptoAssetPopup
-          asset={selectedAsset}
-          logos={logos}
-          onClose={() => setSelectedAsset(null)}
-        />
       </div>
+
+      <p className="mb-3 mt-4 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+        Top 15 {tab} of the top 200 by 24h change
+      </p>
+
+      <motion.div key={`${tab}-${viewMode}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+        {viewMode === "table" ? renderTable(filteredActive) : renderGrid(filteredActive)}
+      </motion.div>
+
+      <CryptoAssetPopup asset={selectedAsset} logos={logos} onClose={() => setSelectedAsset(null)} />
     </div>
   );
 }

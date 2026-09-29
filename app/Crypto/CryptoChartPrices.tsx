@@ -32,7 +32,6 @@ import {
 } from "react-icons/fa";
 
 import { trackEvent } from "@/utils/mixpanel";
-import { chartColors, chartColorsRgba, gridColors } from "@/utils/colors";
 
 Chart.register(
   TimeScale,
@@ -310,15 +309,33 @@ const CryptoChartPrices: React.FC = () => {
     const isArea = chartMode === "area";
     const isBar  = chartMode === "bar";
 
+    // Period direction drives the palette: green if up over the window, red if down
+    const up    = (pricePts[pricePts.length - 1]?.y ?? 0) >= (pricePts[0]?.y ?? 0);
+    const dark  = document.documentElement.classList.contains("dark");
+    const line  = up ? "rgb(16,185,129)" : "rgb(244,63,94)";
+    const glow  = up ? "rgba(16,185,129,0.30)" : "rgba(244,63,94,0.30)";
+    const grid  = dark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.05)";
+    const tick  = dark ? "rgba(148,163,184,0.75)" : "rgba(100,116,139,0.85)";
+    const mono  = "ui-monospace, SFMono-Regular, Menlo, monospace";
+
     const dataset: ChartDataset = {
       label: "Price",
       data: pricePts,
-      borderColor: chartColorsRgba.price.solid,
+      borderColor: line,
       fill: isArea,
       backgroundColor: isBar
         ? pricePts.map((p, i) => i === 0 ? "transparent" : (p.y >= (pricePts[i - 1]?.y ?? p.y) ? "rgba(16,185,129,0.55)" : "rgba(244,63,94,0.55)"))
-        : chartColorsRgba.price.fill,
+        : (c: any) => {
+            const { ctx: g, chartArea } = c.chart;
+            if (!chartArea) return glow;
+            const grad = g.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            grad.addColorStop(0, glow);
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+            return grad;
+          },
       pointRadius: 0,
+      pointHoverRadius: 4,
+      pointHoverBackgroundColor: line,
       tension: 0.3,
       borderWidth: isMobile ? 1.5 : 2,
       yAxisID: "y1",
@@ -340,17 +357,17 @@ const CryptoChartPrices: React.FC = () => {
             type: "time",
             time: { unit },
             ticks: { display: false },
-            grid: { color: gridColors.light },
+            grid: { display: false },
             border: { display: false },
           },
           y1: {
             position: "left",
-            grid: { color: gridColors.light },
+            grid: { color: grid },
             border: { display: false },
             ticks: {
-              color: chartColors.price,
+              color: tick,
               padding: isMobile ? 4 : 6,
-              font: { size: isMobile ? 10 : 11, weight: 700 },
+              font: { size: isMobile ? 10 : 11, family: mono },
               maxTicksLimit: isMobile ? 4 : 6,
               callback: (v: any) => axisUsd(Number(v), isMobile),
             },
@@ -360,6 +377,11 @@ const CryptoChartPrices: React.FC = () => {
           legend: { display: false },
           tooltip: {
             padding: isMobile ? 10 : 8,
+            displayColors: false,
+            backgroundColor: "rgba(15,23,42,0.94)",
+            titleFont: { family: mono, size: 10 },
+            bodyFont: { family: mono, size: 13, weight: "bold" },
+            cornerRadius: 10,
             callbacks: {
               label: (c: TooltipItem<"line">) => {
                 const y = c.parsed.y;

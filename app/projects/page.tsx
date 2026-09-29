@@ -40,6 +40,14 @@ export default function ProjectsPage() {
 
  const items02: ProjectItem[] = [
   {
+    id: 17,
+    icon: WorldIcon,
+    slug: "/day-out",
+    title: "Day Out",
+    excerpt: "Find something fun to do today around South East Queensland using live events, weather, surf, road conditions and local information.",
+    badge: "LIVE DATA + AI + MAPS",
+  },
+  {
     id: 4,
     icon: Icon07,
     slug: "/Crypto",

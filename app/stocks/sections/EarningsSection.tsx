@@ -119,12 +119,12 @@ const EarningsSection: React.FC = () => {
   return (
     <section className="mx-auto max-w-6xl px-4 py-6">
       {/* Header card (same vibe as your IPO “first one”) */}
-      <div className="mb-5 rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-5 shadow-sm">
+      <div className="mb-5 rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02] p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
               <IconBadge icon={BarChart3} tone="violet" size="lg" label="Earnings" />
-              <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+              <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
                 Upcoming Earnings
               </h2>
             </div>
@@ -148,7 +148,7 @@ const EarningsSection: React.FC = () => {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] pl-10 pr-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500/50 dark:focus:border-indigo-300/40"
+                className="w-full rounded-xl border border-slate-200/70 dark:border-white/[0.08] bg-white/80 dark:bg-white/[0.06] pl-10 pr-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500/50 dark:focus:border-indigo-300/40"
               />
             </div>
 
@@ -163,7 +163,7 @@ const EarningsSection: React.FC = () => {
                   setPerPage(parseInt(e.target.value, 10));
                   setPage(1);
                 }}
-                className="w-full appearance-none rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] pl-9 pr-3 py-3 text-sm font-semibold outline-none focus:border-indigo-500/50 dark:focus:border-indigo-300/40"
+                className="w-full appearance-none rounded-xl border border-slate-200/70 dark:border-white/[0.08] bg-white/80 dark:bg-white/[0.06] pl-9 pr-3 py-3 text-sm font-semibold outline-none focus:border-indigo-500/50 dark:focus:border-indigo-300/40"
               >
                 {PER_PAGE_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
@@ -216,23 +216,23 @@ const EarningsSection: React.FC = () => {
                   key={`${ev.symbol}-${ev.date}-${ev.quarter}`}
                   whileHover={{ y: -2, scale: 1.01 }}
                   whileTap={{ scale: 0.99 }}
-                  className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4 shadow-sm"
+                  className="rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02] p-4"
                 >
                   {/* Top row */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
+                        <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                           {ev.symbol}
                         </span>
 
                         {hb && (
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${hb.cls}`}>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${hb.cls}`}>
                             {hb.label}
                           </span>
                         )}
 
-                        <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold bg-black/[0.03] dark:bg-white/[0.06] text-gray-800 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/10">
+                        <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-black/[0.03] dark:bg-white/[0.06] text-gray-800 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/10">
                           {ev.quarter}
                         </span>
                       </div>
@@ -256,7 +256,7 @@ const EarningsSection: React.FC = () => {
                           )}
                           EPS Surprise
                         </div>
-                        <div className="text-sm font-black">
+                        <div className="text-sm font-semibold">
                           {surprise! > 0 ? '+' : ''}
                           {formatSupplyValue(surprise)}
                         </div>
@@ -266,32 +266,32 @@ const EarningsSection: React.FC = () => {
 
                   {/* Metrics */}
                   <div className="mt-4 grid grid-cols-1 gap-2">
-                    <div className="flex items-center gap-3 rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-3">
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200/70 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] p-3">
                       <IconBadge icon={Target} tone="indigo" size="sm" />
                       <div className="min-w-0">
                         <div className="text-[11px] font-bold text-gray-600 dark:text-white/60">EPS Est.</div>
-                        <div className="mt-0.5 text-sm font-extrabold text-gray-900 dark:text-white">
+                        <div className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
                           {epsEst != null ? formatSupplyValue(epsEst) : '—'}
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-3">
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200/70 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] p-3">
                       <IconBadge icon={CheckCircle2} tone={epsAct != null ? 'emerald' : 'neutral'} size="sm" />
                       <div className="min-w-0">
                         <div className="text-[11px] font-bold text-gray-600 dark:text-white/60">EPS Act.</div>
-                        <div className="mt-0.5 text-sm font-extrabold text-gray-900 dark:text-white">
+                        <div className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
                           {epsAct != null ? formatSupplyValue(epsAct) : '—'}
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-3">
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200/70 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] p-3">
                       <IconBadge icon={DollarSign} tone="sky" size="sm" />
                       <div className="min-w-0">
                         <div className="text-[11px] font-bold text-gray-600 dark:text-white/60">Rev. Est.</div>
-                        <div className="mt-0.5 text-sm font-extrabold text-gray-900 dark:text-white">
-                          {revEst != null ? formatSupplyValue(revEst) : '—'}
+                        <div className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white">
+                          {revEst != null ? `$${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(revEst)}` : '—'}
                         </div>
                       </div>
                     </div>

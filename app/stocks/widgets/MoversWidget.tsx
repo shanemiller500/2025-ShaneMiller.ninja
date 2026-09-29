@@ -49,7 +49,7 @@ function MoverRow({
         />
       ) : (
         <div className="flex h-7 w-7 shrink-0 rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 items-center justify-center ring-1 ring-black/10 dark:ring-white/10">
-          <span className="text-[8px] font-black text-indigo-600 dark:text-indigo-400">
+          <span className="text-[8px] font-semibold text-indigo-600 dark:text-indigo-400">
             {item.symbol.slice(0, 2)}
           </span>
         </div>
@@ -57,7 +57,7 @@ function MoverRow({
 
       {/* Symbol + company name — centered */}
       <div className="flex-1 min-w-0 text-center">
-        <span className="block text-xs font-extrabold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+        <span className="block text-xs font-semibold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
           {item.symbol}
         </span>
         {name && (
@@ -74,7 +74,7 @@ function MoverRow({
         </span>
         <span
           className={cn(
-            "inline-flex items-center justify-end gap-0.5 text-[11px] font-extrabold tabular-nums w-[64px] text-right",
+            "inline-flex items-center justify-end gap-0.5 text-[11px] font-semibold tabular-nums w-[64px] text-right",
             up
               ? "text-emerald-600 dark:text-emerald-400"
               : "text-rose-600 dark:text-rose-400"
@@ -96,10 +96,10 @@ function MoverRow({
 function MoverSkeleton() {
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-      <div className="h-3.5 w-14 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
+      <div className="h-3.5 w-14 animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
       <div className="flex items-center gap-2.5">
-        <div className="h-3 w-12 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-        <div className="h-3 w-14 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
+        <div className="h-3 w-12 animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
+        <div className="h-3 w-14 animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
       </div>
     </div>
   );
@@ -121,13 +121,7 @@ export default function MoversWidget({
   const isLoading = moverLoading.size > 0 && moverList.length === 0;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm">
-      {/* Ambient blobs — split emerald/rose */}
-      <div className="pointer-events-none absolute inset-0 opacity-40 dark:opacity-25">
-        <div className="absolute -top-16 -left-16 h-48 w-48 rounded-full bg-emerald-400/20 blur-3xl" />
-        <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-rose-400/20 blur-3xl" />
-        <div className="absolute -bottom-16 left-1/3 h-40 w-40 rounded-full bg-indigo-400/15 blur-3xl" />
-      </div>
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02]">
 
       {/* ── Mobile: tabs ──────────────────────────────────────────────── */}
       <div className="sm:hidden">
@@ -142,12 +136,12 @@ export default function MoversWidget({
                 type="button"
                 onClick={() => setActiveTab(tab)}
                 className={cn(
-                  "relative py-3 text-xs font-extrabold transition-colors border-b",
+                  "relative py-3 text-xs font-semibold transition-colors border-b",
                   active
                     ? isGain
                       ? "text-emerald-700 dark:text-emerald-300 border-emerald-500"
                       : "text-rose-700 dark:text-rose-300 border-rose-500"
-                    : "text-gray-500 dark:text-white/40 border-black/10 dark:border-white/10 hover:text-gray-800 dark:hover:text-white/70"
+                    : "text-gray-500 dark:text-white/40 border-slate-200/70 dark:border-white/[0.08] hover:text-gray-800 dark:hover:text-white/70"
                 )}
               >
                 <span className="inline-flex items-center justify-center gap-1.5">
@@ -191,18 +185,18 @@ export default function MoversWidget({
       </div>
 
       {/* ── Desktop: split columns ────────────────────────────────────── */}
-      <div className="hidden sm:grid grid-cols-2 divide-x divide-black/10 dark:divide-white/10">
+      <div className="hidden sm:grid grid-cols-2 divide-x divide-slate-100 dark:divide-white/[0.06]">
 
         {/* Gainers column */}
         <div className="flex flex-col">
-          <div className="px-4 py-3 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2 text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
+          <div className="px-4 py-3 border-b border-slate-200/70 dark:border-white/[0.08] flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
               <IconBadge icon={TrendingUp} tone="emerald" size="sm" />
               Gainers
             </span>
             <div className="flex items-center gap-2">
               {topGainer && (
-                <span className="text-[10px] font-extrabold tabular-nums text-emerald-600 dark:text-emerald-400">
+                <span className="text-[10px] font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
                   Best: +{(topGainer.quote?.dp ?? 0).toFixed(2)}%
                 </span>
               )}
@@ -229,14 +223,14 @@ export default function MoversWidget({
 
         {/* Losers column */}
         <div className="flex flex-col">
-          <div className="px-4 py-3 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2 text-xs font-extrabold text-rose-700 dark:text-rose-400">
+          <div className="px-4 py-3 border-b border-slate-200/70 dark:border-white/[0.08] flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 text-xs font-semibold text-rose-700 dark:text-rose-400">
               <IconBadge icon={TrendingDown} tone="rose" size="sm" />
               Losers
             </span>
             <div className="flex items-center gap-2">
               {topLoser && (
-                <span className="text-[10px] font-extrabold tabular-nums text-rose-600 dark:text-rose-400">
+                <span className="text-[10px] font-semibold tabular-nums text-rose-600 dark:text-rose-400">
                   Worst: {(topLoser.quote?.dp ?? 0).toFixed(2)}%
                 </span>
               )}
@@ -262,8 +256,6 @@ export default function MoversWidget({
         </div>
       </div>
 
-      {/* Semantic gradient: emerald → rose */}
-      <div className="h-[1px] w-full bg-gradient-to-r from-emerald-500/40 via-indigo-500/20 to-rose-500/40" />
     </div>
   );
 }

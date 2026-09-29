@@ -76,7 +76,7 @@ function RateRow({ label, term, point }: { label: string; term: "30yr" | "15yr";
 
       <div className="relative flex items-start justify-between gap-2">
         {/* Label */}
-        <p className={`text-[9px] font-black uppercase tracking-widest ${labelCls}`}>{label}</p>
+        <p className={`font-mono text-[10px] uppercase tracking-wider ${labelCls}`}>{label}</p>
         {/* Date */}
         <p className="text-[9px] text-gray-400 dark:text-gray-500 font-medium shrink-0">
           {fmtDate(point.date)}
@@ -85,7 +85,7 @@ function RateRow({ label, term, point }: { label: string; term: "30yr" | "15yr";
 
       {/* Big rate */}
       <div className="relative mt-2 flex items-end justify-between gap-2">
-        <span className="text-2xl sm:text-3xl font-black tabular-nums tracking-tight text-gray-900 dark:text-white leading-none">
+        <span className="text-2xl sm:text-3xl font-mono font-semibold tabular-nums tracking-tight text-gray-900 dark:text-white leading-none">
           {fmtRate(point.rate)}
         </span>
         {d !== null && (
@@ -137,16 +137,11 @@ export default function MortgageRateWidget() {
   }, []);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm flex flex-col">
-      {/* Ambient blobs */}
-      <div className="pointer-events-none absolute inset-0 opacity-50 dark:opacity-35">
-        <div className="absolute -top-12 -left-12 h-40 w-40 rounded-full bg-indigo-400/15 blur-3xl" />
-        <div className="absolute -bottom-12 -right-12 h-40 w-40 rounded-full bg-fuchsia-400/15 blur-3xl" />
-      </div>
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02] flex flex-col">
 
       {/* Header */}
       <div className="relative px-4 pt-3.5 flex items-center justify-between">
-        <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+        <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
           <IconBadge icon={Home} tone="sky" size="sm" />
           US Mortgage Rates · Weekly
         </span>
@@ -176,7 +171,6 @@ export default function MortgageRateWidget() {
         )}
       </div>
 
-      <div className="h-[1px] w-full bg-gradient-to-r from-indigo-500/30 via-fuchsia-500/20 to-sky-500/20" />
     </div>
   );
 }

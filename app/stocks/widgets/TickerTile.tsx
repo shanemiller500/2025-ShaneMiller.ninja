@@ -1,7 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { formatDate } from "@/utils/formatters";
+/* eslint-disable @next/next/no-img-element */
+import { HEAT_SCALES, heatTone } from "@/utils/heat";
 import type { TickerData } from "../lib/types";
 
 /* ─── Utilities ────────────────────────────────────────────────────── */
@@ -20,120 +20,62 @@ export function cleanLogo(url?: string): string {
   return s;
 }
 
-/* ─── TickerTile ────────────────────────────────────────────────────── */
+/* ─── TickerTile — logo on a heat-tinted tile ──────────────────────── */
 
 export function TickerTile({
   item,
   onSelect,
-  size = "md",
 }: {
   item: TickerData;
   onSelect: (sym: string) => void;
   size?: "sm" | "md";
 }) {
-  const c    = item.quote?.c  ?? 0;
-  const dp   = item.quote?.dp ?? 0;
-  const up   = dp >= 0;
-  const logo = cleanLogo(item.logo);
-
-  const accent = up
-    ? "from-emerald-500/20 via-emerald-500/10 to-transparent"
-    : "from-rose-500/20 via-rose-500/10 to-transparent";
+  const c = item.quote?.c ?? 0;
+  const dp = item.quote?.dp ?? 0;
+  const logo = cleanLogo(item.logo || item.profile?.logo);
 
   return (
-    <motion.button
+    <button
       type="button"
       onClick={() => onSelect(item.symbol)}
-      whileHover={{ y: -2, scale: 1.01 }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.1 }}
+      title={`${item.profile?.name ?? item.symbol} · ${pct(dp)}`}
       className={cn(
-        "group relative w-full overflow-hidden text-left",
-        "rounded-xl border border-black/10 dark:border-white/10",
-        "bg-white/75 dark:bg-white/[0.06]",
-        "shadow-sm hover:shadow-md hover:border-black/15 dark:hover:border-white/15",
-        "ring-1 ring-black/5 dark:ring-white/5",
-        "transition-all duration-200",
-        "p-2"
+        "group relative isolate flex items-center gap-2.5 overflow-hidden rounded-xl p-2.5 text-left ring-1 ring-inset",
+        "transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-[1.04] active:scale-[0.98]",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
+        heatTone(dp, HEAT_SCALES.stocks)
       )}
     >
-      {/* Company logo as background */}
-      <div
-        className="absolute inset-0 transition-transform duration-300 group-hover:scale-105"
-        style={{
-          backgroundImage: logo ? `url(${logo})` : undefined,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          opacity: logo ? 0.45 : 0,
-          filter: "saturate(1.1) contrast(1.05)",
-        }}
-      />
-
-      {/* Gradient overlays */}
-      <div className="absolute inset-0 opacity-90">
-        <div className="absolute -top-8 -left-8 h-32 w-32 rounded-full bg-indigo-500/8 blur-2xl" />
-        <div className="absolute -bottom-8 -right-8 h-32 w-32 rounded-full bg-fuchsia-500/8 blur-2xl" />
-        <div className={cn("absolute inset-0 bg-gradient-to-br", accent)} />
-      </div>
-
-      {/* Readability overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-white/45 to-white/25 dark:from-black/55 dark:via-black/35 dark:to-black/20" />
-
-      {/* Hover shine */}
-      <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-90">
-        <div className="absolute -inset-8 -left-1/2 w-[130%] rotate-12 bg-gradient-to-r from-transparent via-white/30 to-transparent blur-sm" />
-      </div>
-
-      {/* Content */}
-      <div className="relative z-10">
-        <div className="flex items-center justify-between gap-1">
-          <div className="text-xs sm:text-sm font-semibold tracking-tight text-gray-900 dark:text-white">
-            {item.symbol}
-          </div>
-          <div className="text-xs sm:text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
-            ${Number.isFinite(c) ? c.toFixed(2) : "0.00"}
-          </div>
-        </div>
-
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <div
-            className={cn(
-              "text-[10px] sm:text-xs font-semibold tabular-nums",
-              up ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
-            )}
-          >
-            {up ? "▲" : "▼"} {pct(dp)}
-          </div>
-
-          {item.quote?.t && size === "md" && (
-            <div className="hidden sm:block text-[9px] font-semibold text-gray-600 dark:text-white/50 truncate">
-              {formatDate(item.quote.t, "short")}
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.button>
+      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-white/30 via-transparent to-transparent dark:from-white/[0.06]" />
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-black/5 transition-transform group-hover:scale-105">
+        {logo ? (
+          <img src={logo} alt="" loading="lazy" className="h-6 w-6 object-contain" onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")} />
+        ) : (
+          <span className="font-mono text-[9px] font-semibold text-slate-400">{item.symbol.slice(0, 3)}</span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline justify-between gap-1">
+          <span className="font-mono text-[12px] font-semibold">{item.symbol}</span>
+          <span className="font-mono text-[10px] tabular-nums opacity-80">{pct(dp)}</span>
+        </span>
+        <span className="block font-mono text-[12px] tabular-nums opacity-90">
+          {Number.isFinite(c) && c > 0 ? `$${c.toFixed(2)}` : "—"}
+        </span>
+      </span>
+    </button>
   );
 }
 
 /* ─── SkeletonTile ──────────────────────────────────────────────────── */
 
-export function SkeletonTile({ size = "md" }: { size?: "sm" | "md" }) {
+export function SkeletonTile(_: { size?: "sm" | "md" }) {
   return (
-    <div
-      className={cn(
-        "rounded-xl border border-black/10 dark:border-white/10",
-        "bg-white/70 dark:bg-white/[0.06]",
-        size === "sm" ? "p-2.5" : "p-3"
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="h-4 w-16 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-        <div className="h-4 w-14 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-      </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <div className="h-3 w-12 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-        <div className="h-3 w-16 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
+    <div className="flex items-center gap-2.5 rounded-xl bg-slate-100 p-2.5 dark:bg-white/[0.04]">
+      <div className="h-9 w-9 animate-pulse rounded-xl bg-slate-200 dark:bg-white/[0.06]" />
+      <div className="flex-1 space-y-1.5">
+        <div className="h-3 w-12 animate-pulse rounded bg-slate-200 dark:bg-white/[0.06]" />
+        <div className="h-3 w-16 animate-pulse rounded bg-slate-200 dark:bg-white/[0.06]" />
       </div>
     </div>
   );

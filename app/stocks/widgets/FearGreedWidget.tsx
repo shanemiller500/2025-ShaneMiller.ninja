@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
-import { Gauge, X, Info } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Gauge, Info } from "lucide-react";
 
 import { IconBadge } from "@/components/ui/icon-badge";
+import { Modal } from "@/components/ui/modal";
 
 interface FearGreedWidgetProps {
   index: number;
@@ -47,95 +48,54 @@ function InfoModal({
   index: number; label: string;
   overallChange?: number; tickerCount?: number;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [open, onClose]);
-
-  useEffect(() => {
-    if (open) document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
-  }, [open]);
-
-  if (!open) return null;
-
   const n   = tickerCount ?? 24;
   const avg = overallChange ?? 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-sm rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-brand-900 shadow-2xl overflow-hidden">
+    <Modal open={open} onClose={onClose} labelledBy="fg-widget-title" size="sm">
+      <div className="overflow-y-auto p-6">
+        <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Market sentiment</p>
+        <h2 id="fg-widget-title" className="mt-1 text-base font-semibold text-slate-900 dark:text-white">How Fear &amp; Greed works</h2>
 
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-black/[0.07] dark:border-white/[0.08]">
+        <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200/70 px-4 py-3 dark:border-white/[0.08]">
           <div>
-            <h2 className="flex items-center gap-2 text-base font-extrabold text-gray-900 dark:text-white">
-              <IconBadge icon={Gauge} tone="indigo" size="md" />
-              How Fear &amp; Greed Works
-            </h2>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Powered by live Finnhub quotes</p>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Right now</p>
+            <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">{index.toFixed(0)}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</span>
         </div>
 
-        {/* Body */}
-        <div className="px-5 py-4 space-y-4">
-          <div className="rounded-xl border border-black/[0.07] dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.04] px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400 dark:text-gray-500 mb-1">Right Now</p>
-              <p className="text-2xl font-black tabular-nums leading-none text-gray-900 dark:text-white">
-                {index.toFixed(0)}
-              </p>
-            </div>
-            <span className="text-sm font-extrabold text-gray-500 dark:text-gray-400">{label}</span>
-          </div>
-
-          <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-            <p>
-              We look at how the top <span className="font-bold">{n} major US stocks</span> are moving today and turn that into a single 0–100 score.
-            </p>
-            <p>
-              Right now they're averaging{" "}
-              <span className="font-bold tabular-nums">{avg >= 0 ? "+" : ""}{avg.toFixed(2)}%</span> on the day.
-              A big drop pushes the score toward <span className="font-bold text-red-600 dark:text-red-400">0 (Extreme Fear)</span>, a big rally pushes it toward <span className="font-bold text-green-700 dark:text-green-400">100 (Extreme Greed)</span>.
-            </p>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              Prices are delayed ~15 min per Finnhub's free tier and update whenever new quote data arrives.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            {ZONES.map((z) => {
-              const active = index >= z.min && index <= z.max;
-              return (
-                <div
-                  key={z.label}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-1.5 ${active ? "ring-1 ring-indigo-400/40 bg-indigo-50 dark:bg-indigo-950/30" : ""}`}
-                >
-                  <div className={`h-2 w-2 rounded-full shrink-0 ${z.color}`} />
-                  <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 w-14 shrink-0">{z.min}–{z.max}</span>
-                  <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200">{z.label}</span>
-                  {active && <span className="ml-auto text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">← now</span>}
-                </div>
-              );
-            })}
-          </div>
-
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">
-            This is a simplified sentiment proxy, not affiliated with CNN's Fear &amp; Greed Index or any official financial product.
+        <div className="mt-4 space-y-2 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
+          <p>
+            It takes how the top <span className="font-medium text-slate-900 dark:text-white">{n} large US stocks</span> are moving today and maps that to a 0–100 score.
+          </p>
+          <p>
+            They&apos;re averaging{" "}
+            <span className="font-mono font-medium tabular-nums text-slate-900 dark:text-white">{avg >= 0 ? "+" : ""}{avg.toFixed(2)}%</span> today.
+            A broad drop pushes toward <span className="font-medium text-rose-500">0 (extreme fear)</span>, a broad rally toward{" "}
+            <span className="font-medium text-emerald-600 dark:text-emerald-400">100 (extreme greed)</span>.
           </p>
         </div>
+
+        <div className="mt-4 space-y-1">
+          {ZONES.map((z) => {
+            const active = index >= z.min && index <= z.max;
+            return (
+              <div key={z.label} className={`flex items-center gap-3 rounded-lg px-3 py-1.5 ${active ? "bg-indigo-50 ring-1 ring-indigo-200 dark:bg-indigo-400/10 dark:ring-indigo-400/20" : ""}`}>
+                <div className={`h-2 w-2 shrink-0 rounded-full ${z.color}`} />
+                <span className="w-14 shrink-0 font-mono text-[11px] text-slate-400">{z.min}–{z.max}</span>
+                <span className="text-[12px] font-medium text-slate-700 dark:text-slate-200">{z.label}</span>
+                {active && <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-indigo-500">now</span>}
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="mt-4 text-[11px] leading-relaxed text-slate-400">
+          A simplified sentiment proxy from delayed Finnhub quotes. Not affiliated with CNN&apos;s Fear &amp; Greed Index.
+        </p>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -153,15 +113,11 @@ const FearGreedWidget: React.FC<FearGreedWidgetProps> = ({
 
   return (
     <>
-      <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm flex flex-col">
-        <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
-          <div className="absolute -top-10 -left-14 h-40 w-40 rounded-full bg-indigo-400/20 blur-3xl" />
-          <div className="absolute -bottom-12 -right-12 h-44 w-44 rounded-full bg-fuchsia-400/20 blur-3xl" />
-        </div>
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02] flex flex-col">
 
         {/* Top label row */}
         <div className="relative px-4 pt-3.5 flex items-center justify-between">
-          <span className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">
+          <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
             <IconBadge icon={Gauge} tone={badgeTone} size="sm" />
             {title}
           </span>
@@ -177,10 +133,10 @@ const FearGreedWidget: React.FC<FearGreedWidgetProps> = ({
 
         {/* Hero: big score + label chip */}
         <div className="relative flex flex-col items-center gap-2 px-4 pt-4 pb-3">
-          <div className={`text-5xl sm:text-6xl font-black tabular-nums leading-none tracking-tight ${tone.score}`}>
+          <div className={`text-5xl sm:text-6xl font-mono font-semibold tabular-nums leading-none tracking-tight ${tone.score}`}>
             {safe.toFixed(0)}
           </div>
-          <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-extrabold ring-1 ${tone.chip}`}>
+          <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ring-1 ${tone.chip}`}>
             {label}
           </span>
           {updatedAt && (
@@ -209,7 +165,6 @@ const FearGreedWidget: React.FC<FearGreedWidgetProps> = ({
           </div>
         </div>
 
-        <div className="h-[1px] w-full bg-gradient-to-r from-indigo-500/30 via-fuchsia-500/20 to-sky-500/20" />
       </div>
 
       <InfoModal

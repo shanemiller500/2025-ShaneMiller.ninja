@@ -1,12 +1,9 @@
 // Filename: NewsWidget.tsx
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
-import { Inbox, Newspaper } from "lucide-react";
-import { formatDate } from "@/utils/formatters";
+import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { API_TOKEN } from "@/utils/config";
-import { Button } from "@/components/ui/button";
-import { IconBadge } from "@/components/ui/icon-badge";
 
 /* ------------------------------------------------------------------ */
 /*  Types & cache                                                     */
@@ -25,17 +22,26 @@ interface Article {
 const CACHE_TTL = 30 * 60 * 1_000; // 30 min
 let cached: { ts: number; data: Article[] } | null = null;
 
-const PER_PAGE = 4; // 2×2 grid
+const PER_PAGE = 7;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
 const getDomain = (url: string) => {
   try {
-    return new URL(url).hostname;
+    return new URL(url).hostname.replace(/^www\./, "");
   } catch {
     return "";
   }
+};
+
+/** Finnhub `datetime` is unix seconds. */
+const timeAgo = (unixSeconds: number) => {
+  if (!unixSeconds) return "";
+  const d = Date.now() - unixSeconds * 1000;
+  if (d < 3_600_000) return `${Math.max(1, Math.floor(d / 60_000))}m ago`;
+  if (d < 86_400_000) return `${Math.floor(d / 3_600_000)}h ago`;
+  return `${Math.floor(d / 86_400_000)}d ago`;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -119,62 +125,50 @@ export default function NewsWidget() {
   return (
     <section
       ref={topRef}
-      className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm"
+      className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02]"
     >
-      {/* soft blobs */}
-      <div className="pointer-events-none absolute inset-0 opacity-50 dark:opacity-35">
-        <div className="absolute -top-16 -left-20 h-60 w-60 rounded-full bg-indigo-400/20 blur-3xl" />
-        <div className="absolute -bottom-20 -right-16 h-64 w-64 rounded-full bg-fuchsia-400/20 blur-3xl" />
-      </div>
-
-      {/* header */}
-      <div className="relative rounded-3xl border-b border-black/10 dark:border-white/10 bg-white/80 dark:bg-black/30 backdrop-blur-xl">
-        <div className="px-4 py-3 flex items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2.5 text-lg sm:text-xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-            <IconBadge icon={Newspaper} tone="amber" size="md" label="Latest finance news" />
-            Latest Finance News
-          </h2>
-          {!loading && !error && articles.length > 0 && (
-            <span className="text-[10px] font-semibold text-gray-600 dark:text-white/60">
-              Page <span className="font-extrabold">{safePage}</span> of{" "}
-              <span className="font-extrabold">{totalPages}</span>
-            </span>
-          )}
+      <header className="flex items-center justify-between gap-2 px-4 pt-4 pb-2">
+        <div>
+          <h2 className="text-[13px] font-semibold text-slate-900 dark:text-white">Market headlines</h2>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Finnhub · general</p>
         </div>
-        {error && (
-          <div className="mx-4 mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-700 dark:text-red-200">
-            {error}
+        {!loading && !error && totalPages > 1 && (
+          <div className="flex items-center gap-1 font-mono text-[11px] tabular-nums text-slate-400">
+            <button type="button" aria-label="Previous page" disabled={safePage <= 1} onClick={() => turnPage(safePage - 1)} className="rounded-lg p-1.5 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-30 dark:hover:bg-white/10 dark:hover:text-white">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {safePage}/{totalPages}
+            <button type="button" aria-label="Next page" disabled={safePage >= totalPages} onClick={() => turnPage(safePage + 1)} className="rounded-lg p-1.5 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-30 dark:hover:bg-white/10 dark:hover:text-white">
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
         )}
-      </div>
+      </header>
 
-      {/* body */}
-      <div className="relative px-4 py-4">
-        {loading ? (
-          <SkeletonGrid />
-        ) : !error && articles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-2">
-            <IconBadge icon={Inbox} tone="neutral" size="lg" className="mb-1" />
-            <div className="text-base font-extrabold text-gray-900 dark:text-white">No news found</div>
-            <div className="text-xs font-semibold text-gray-600 dark:text-white/60">Try again in a bit.</div>
+      <div className="px-2 pb-2">
+        {error ? (
+          <div role="alert" className="m-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-300">{error}</div>
+        ) : loading ? (
+          <div className="space-y-1 p-2">
+            {Array.from({ length: PER_PAGE }).map((_, i) => (
+              <div key={i} className="flex gap-3 py-2">
+                <div className="h-14 w-20 shrink-0 animate-pulse rounded-lg bg-slate-100 dark:bg-white/[0.06]" />
+                <div className="flex-1 space-y-2 pt-1">
+                  <div className="h-2.5 w-24 animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
+                  <div className="h-3 w-full animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
+                  <div className="h-3 w-3/4 animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
+                </div>
+              </div>
+            ))}
           </div>
+        ) : articles.length === 0 ? (
+          <div className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400">No headlines right now. Try again in a bit.</div>
         ) : (
-          <div className={`transition-opacity duration-220 ${fade ? "opacity-0" : "opacity-100"}`}>
-            <div className="grid grid-cols-1 gap-3">
-              {slice.map((a) => (
-                <NewsCard key={a.url} a={a} />
-              ))}
-            </div>
-
-            <Pagination
-              page={safePage}
-              totalPages={totalPages}
-              loading={loading}
-              onPrev={() => turnPage(safePage - 1)}
-              onNext={() => turnPage(safePage + 1)}
-              onGo={turnPage}
-            />
-          </div>
+          <ul className={`divide-y divide-slate-100 transition-opacity duration-200 dark:divide-white/[0.05] ${fade ? "opacity-0" : "opacity-100"}`}>
+            {slice.map((a) => (
+              <NewsRow key={a.url} a={a} />
+            ))}
+          </ul>
         )}
       </div>
     </section>
@@ -182,192 +176,39 @@ export default function NewsWidget() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Card                                                              */
+/*  Row                                                               */
 /* ------------------------------------------------------------------ */
-function NewsCard({ a }: { a: Article }) {
+function NewsRow({ a }: { a: Article }) {
   const domain = getDomain(a.url);
-  const dt = a.datetime ? formatDate(a.datetime * 1000) : "";
   const [imgOk, setImgOk] = useState<boolean>(!!a.image);
 
   return (
-    <a
-      href={a.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm hover:shadow-md transition"
-    >
-      {/* image */}
-      <div className="relative aspect-[16/9] w-full overflow-hidden">
-        {a.image && imgOk ? (
-          <>
+    <li>
+      <a href={a.url} target="_blank" rel="noopener noreferrer" className="group flex gap-3 rounded-xl px-2 py-2.5 transition hover:bg-slate-50 dark:hover:bg-white/[0.03]">
+        <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-white/[0.04]">
+          {a.image && imgOk && (
             <img
               src={a.image}
-              alt={a.headline}
+              alt=""
               loading="lazy"
               decoding="async"
               referrerPolicy="no-referrer"
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               onError={() => setImgOk(false)}
             />
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
-          </>
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/15 via-fuchsia-500/10 to-sky-500/10 flex items-center justify-center">
-            <span className="text-xs font-black text-gray-400 dark:text-white/30 tracking-widest uppercase">
-              News
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="p-3">
-        {/* publisher */}
-        <div className="flex items-center gap-2">
-          <img
-            src={domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : ""}
-            alt={a.source || domain || ""}
-            className="h-7 w-7 rounded-full bg-white object-contain ring-1 ring-black/10 shrink-0"
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-            }}
-          />
-          <div className="min-w-0">
-            <div className="truncate text-xs font-extrabold text-gray-800 dark:text-white/85">
-              {a.source || domain || "Source"}
-            </div>
-            <div className="text-[11px] font-semibold text-gray-600 dark:text-white/60">{dt}</div>
-          </div>
+          )}
         </div>
-
-        {/* headline */}
-        <h3 className="mt-2 text-sm font-extrabold leading-snug text-gray-900 dark:text-white line-clamp-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-          {a.headline}
-        </h3>
-
-        {/* summary */}
-        {a.summary ? (
-          <p className="mt-1.5 text-xs font-semibold text-gray-700 dark:text-white/65 line-clamp-2">
-            {a.summary}
-          </p>
-        ) : null}
-      </div>
-    </a>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Skeleton                                                          */
-/* ------------------------------------------------------------------ */
-function SkeletonGrid() {
-  const items = Array.from({ length: PER_PAGE });
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((_, i) => (
-        <div
-          key={i}
-          className="overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06]"
-        >
-          <div className="aspect-[16/9] w-full animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" />
-          <div className="p-3">
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-full animate-pulse bg-black/[0.06] dark:bg-white/[0.08] shrink-0" />
-              <div className="flex-1">
-                <div className="h-3 w-28 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-                <div className="mt-1.5 h-2.5 w-16 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-              </div>
-            </div>
-            <div className="mt-2 h-4 w-full animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-            <div className="mt-1.5 h-4 w-4/5 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-            <div className="mt-2 h-3 w-full animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+            {domain && <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`} alt="" className="h-3 w-3 rounded-sm" referrerPolicy="no-referrer" />}
+            <span className="truncate">{a.source || domain}</span>
+            <span className="shrink-0">· {timeAgo(a.datetime)}</span>
           </div>
+          <h3 className="mt-1 line-clamp-2 text-[13px] font-medium leading-snug text-slate-900 transition-colors group-hover:text-indigo-600 dark:text-white dark:group-hover:text-indigo-300">
+            {a.headline}
+          </h3>
         </div>
-      ))}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Pagination                                                        */
-/* ------------------------------------------------------------------ */
-function Pagination({
-  page,
-  totalPages,
-  loading,
-  onPrev,
-  onNext,
-  onGo,
-}: {
-  page: number;
-  totalPages: number;
-  loading: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-  onGo: (n: number) => void;
-}) {
-  const buttons = useMemo(() => {
-    const out: (number | "...")[] = [];
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) out.push(i);
-      return out;
-    }
-    out.push(1);
-    if (page > 3) out.push("...");
-    for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) out.push(i);
-    if (page < totalPages - 2) out.push("...");
-    out.push(totalPages);
-    return out;
-  }, [page, totalPages]);
-
-  if (totalPages <= 1) return null;
-
-  return (
-    <div className="mt-6 flex flex-col items-center gap-3 pb-4">
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button
-          variant="indigo"
-          size="sm"
-          disabled={page <= 1 || loading}
-          onClick={onPrev}
-          className="disabled:opacity-40"
-        >
-          ← Prev
-        </Button>
-
-        {buttons.map((b, idx) =>
-          b === "..." ? (
-            <span key={`dots-${idx}`} className="px-1 text-sm font-extrabold text-gray-500 dark:text-white/50">
-              …
-            </span>
-          ) : (
-            <button
-              key={b}
-              type="button"
-              onClick={() => onGo(b)}
-              className={`rounded-xl px-3 py-1.5 text-xs font-extrabold ring-1 ring-black/10 dark:ring-white/10 transition ${
-                b === page
-                  ? "bg-indigo-600/15 text-indigo-900 dark:text-indigo-100 ring-indigo-500/25"
-                  : "bg-black/[0.03] dark:bg-white/[0.06] text-gray-800 dark:text-white hover:bg-black/[0.06] dark:hover:bg-white/[0.10]"
-              }`}
-              aria-current={b === page ? "page" : undefined}
-            >
-              {b}
-            </button>
-          )
-        )}
-
-        <Button
-          variant="indigo"
-          size="sm"
-          disabled={page >= totalPages || loading}
-          onClick={onNext}
-          className="disabled:opacity-40"
-        >
-          Next →
-        </Button>
-      </div>
-    </div>
+      </a>
+    </li>
   );
 }

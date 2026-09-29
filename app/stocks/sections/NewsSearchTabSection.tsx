@@ -201,23 +201,18 @@ export default function NewsSearchTabSection() {
   return (
     <section
       ref={topRef}
-      className="relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm"
+      className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02]"
     >
-      {/* soft blobs */}
-      <div className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-45">
-        <div className="absolute -top-16 -left-20 h-60 w-60 rounded-full bg-indigo-400/20 blur-3xl" />
-        <div className="absolute -bottom-20 -right-16 h-64 w-64 rounded-full bg-fuchsia-400/20 blur-3xl" />
-      </div>
 
       {/* Header + controls (sticky) */}
       <div className="relative">
-        <div className="sticky top-0 z-20 border-b border-black/10 dark:border-white/10 bg-white/80 dark:bg-black/30 backdrop-blur-xl">
+        <div className="sticky top-0 z-20 border-b border-slate-200/70 dark:border-white/[0.08] bg-white/80 dark:bg-black/30 backdrop-blur-xl">
           <div className="mx-auto max-w-7xl px-4 py-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-3">
                   <IconBadge icon={Newspaper} tone="amber" size="lg" label="Finance news" />
-                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+                  <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
                     Finance News
                   </h2>
                 </div>
@@ -265,7 +260,7 @@ export default function NewsSearchTabSection() {
                       if (e.key === "Enter") runCompanySearch();
                     }}
                     placeholder="AAPL, TSLA, NVDA…"
-                    className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] pl-11 pr-4 py-3 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 outline-none focus:border-black/20 dark:focus:border-white/20"
+                    className="w-full rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02] pl-11 pr-4 py-3 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 outline-none focus:border-black/20 dark:focus:border-white/20"
                   />
                 </div>
               </div>
@@ -288,7 +283,7 @@ export default function NewsSearchTabSection() {
                       setPage(1);
                     }}
                     placeholder="Filter headlines, summary, source…"
-                    className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] pl-11 pr-4 py-3 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 outline-none focus:border-black/20 dark:focus:border-white/20"
+                    className="w-full rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02] pl-11 pr-4 py-3 text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 outline-none focus:border-black/20 dark:focus:border-white/20"
                   />
                 </div>
               </div>
@@ -311,12 +306,12 @@ export default function NewsSearchTabSection() {
             {/* status row */}
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <div className="text-xs font-semibold text-gray-600 dark:text-white/60">
-                Showing <span className="font-extrabold">{filtered.length}</span> results
+                Showing <span className="font-semibold">{filtered.length}</span> results
                 {debouncedQuery.trim() ? (
                   <>
                     {" "}
                     • Filter:{" "}
-                    <span className="font-extrabold text-gray-800 dark:text-white/80">
+                    <span className="font-semibold text-gray-800 dark:text-white/80">
                       “{debouncedQuery.trim()}”
                     </span>
                   </>
@@ -324,8 +319,8 @@ export default function NewsSearchTabSection() {
               </div>
 
               <div className="text-xs font-semibold text-gray-600 dark:text-white/60">
-                Page <span className="font-extrabold">{safePage}</span> /{" "}
-                <span className="font-extrabold">{totalPages}</span>
+                Page <span className="font-semibold">{safePage}</span> /{" "}
+                <span className="font-semibold">{totalPages}</span>
               </div>
             </div>
 
@@ -343,9 +338,9 @@ export default function NewsSearchTabSection() {
           {loading ? (
             <SkeletonGrid />
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-6 text-center">
+            <div className="flex flex-col items-center rounded-3xl border border-slate-200/70 dark:border-white/[0.08] bg-white/70 dark:bg-white/[0.06] p-6 text-center">
               <IconBadge icon={SearchX} tone="neutral" size="lg" className="mb-3" />
-              <div className="text-lg font-extrabold text-gray-900 dark:text-white">
+              <div className="text-lg font-semibold text-gray-900 dark:text-white">
                 No matches
               </div>
               <div className="mt-1 text-sm font-semibold text-gray-700 dark:text-white/70">
@@ -382,14 +377,14 @@ export default function NewsSearchTabSection() {
 /* ------------------------------------------------------------------ */
 function ArticleCard({ a }: { a: Article }) {
   const domain = getDomain(a.url);
-  const dt = a.datetime ? formatDate(a.datetime * 1000) : "";
+  const dt = a.datetime ? formatDate(a.datetime) : ""; // Finnhub datetime is already unix seconds
 
   return (
     <a
       href={a.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group relative overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] shadow-sm hover:shadow-md transition"
+      className="group relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02] hover:shadow-md transition"
     >
       {/* image */}
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-black/[0.03] dark:bg-white/[0.04]">
@@ -421,7 +416,7 @@ function ArticleCard({ a }: { a: Article }) {
             decoding="async"
           />
           <div className="min-w-0">
-            <div className="truncate text-xs font-extrabold text-gray-800 dark:text-white/85">
+            <div className="truncate text-xs font-semibold text-gray-800 dark:text-white/85">
               {a.source || domain || "Source"}
             </div>
             <div className="flex items-center gap-1 text-[11px] font-semibold text-gray-600 dark:text-white/60">
@@ -432,7 +427,7 @@ function ArticleCard({ a }: { a: Article }) {
         </div>
 
         {/* headline */}
-        <h3 className="mt-3 text-sm font-extrabold leading-snug text-gray-900 dark:text-white line-clamp-3">
+        <h3 className="mt-3 text-sm font-semibold leading-snug text-gray-900 dark:text-white line-clamp-3">
           {a.headline}
         </h3>
 
@@ -463,21 +458,21 @@ function SkeletonGrid() {
       {items.map((_, i) => (
         <div
           key={i}
-          className="overflow-hidden rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06]"
+          className="overflow-hidden rounded-3xl border border-slate-200/70 dark:border-white/[0.08] bg-white/70 dark:bg-white/[0.06]"
         >
-          <div className="aspect-[16/9] w-full animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" />
+          <div className="aspect-[16/9] w-full animate-pulse bg-slate-100 dark:bg-white/[0.06]" />
           <div className="p-4">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full animate-pulse bg-black/[0.06] dark:bg-white/[0.08]" />
+              <div className="h-8 w-8 rounded-full animate-pulse bg-slate-100 dark:bg-white/[0.06]" />
               <div className="flex-1">
-                <div className="h-3 w-32 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-                <div className="mt-2 h-3 w-20 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
+                <div className="h-3 w-32 animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
+                <div className="mt-2 h-3 w-20 animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
               </div>
             </div>
 
-            <div className="mt-3 h-4 w-full animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-            <div className="mt-2 h-4 w-5/6 animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
-            <div className="mt-4 h-3 w-full animate-pulse rounded bg-black/[0.06] dark:bg-white/[0.08]" />
+            <div className="mt-3 h-4 w-full animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
+            <div className="mt-2 h-4 w-5/6 animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
+            <div className="mt-4 h-3 w-full animate-pulse rounded bg-slate-100 dark:bg-white/[0.06]" />
           </div>
         </div>
       ))}
@@ -533,7 +528,7 @@ function Pagination({
 
         {buttons.map((b, idx) =>
           b === "..." ? (
-            <span key={`dots-${idx}`} className="px-2 text-sm font-extrabold text-gray-600 dark:text-white/60">
+            <span key={`dots-${idx}`} className="px-2 text-sm font-semibold text-gray-600 dark:text-white/60">
               …
             </span>
           ) : (
@@ -541,7 +536,7 @@ function Pagination({
               key={b}
               type="button"
               onClick={() => onGo(b)}
-              className={`rounded-2xl px-3 py-2 text-sm font-extrabold ring-1 ring-black/10 dark:ring-white/10 transition ${
+              className={`rounded-2xl px-3 py-2 text-sm font-semibold ring-1 ring-black/10 dark:ring-white/10 transition ${
                 b === page
                   ? "bg-black/10 dark:bg-white/15 text-gray-900 dark:text-white"
                   : "bg-black/[0.03] dark:bg-white/[0.06] text-gray-900 dark:text-white hover:bg-black/[0.06] dark:hover:bg-white/[0.10]"
@@ -559,8 +554,8 @@ function Pagination({
       </div>
 
       <div className="text-xs font-semibold text-gray-600 dark:text-white/60">
-        Page <span className="font-extrabold">{page}</span> of{" "}
-        <span className="font-extrabold">{totalPages}</span>
+        Page <span className="font-semibold">{page}</span> of{" "}
+        <span className="font-semibold">{totalPages}</span>
       </div>
     </div>
   );

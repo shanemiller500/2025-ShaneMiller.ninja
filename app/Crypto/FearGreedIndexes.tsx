@@ -11,10 +11,9 @@ import {
   FaInfoCircle,
   FaMeh,
   FaSmile,
-  FaTimes,
 } from "react-icons/fa";
 
-import { gaugeGradient } from "@/utils/colors";
+import { Modal } from "@/components/ui/modal";
 import { trackEvent } from "@/utils/mixpanel";
 
 /* ------------------------------------------------------------------ */
@@ -68,7 +67,7 @@ const moodMap = (v: number | null): MoodInfo => {
         "Mood is upbeat; stick to your trading plan.",
       ],
     };
-  if (v >= 25)
+  if (v >= 26)
     return {
       label: "Fear",
       icon: FaFrown,
@@ -120,45 +119,117 @@ const methodology = [
 ];
 
 /* ------------------------------------------------------------------ */
-/*  Gauge Component                                                    */
+/*  Gauge Component — SVG arc meter                                    */
 /* ------------------------------------------------------------------ */
+const hexFor = (v: number | null) =>
+  v == null ? "#f59e0b" : v >= 75 ? "#16a34a" : v >= 51 ? "#4ade80" : v >= 26 ? "#f87171" : "#dc2626";
+
+/** Point on the 240° arc (from -210° to 30°) for a 0–100 value. */
+const arcPoint = (v: number, r: number, c = 60) => {
+  const a = ((-210 + (v / 100) * 240) * Math.PI) / 180;
+  return [c + r * Math.cos(a), c + r * Math.sin(a)] as const;
+};
+const ARC_R = 46;
+const ARC_LEN = (240 / 360) * 2 * Math.PI * ARC_R;
+const ARC_PATH = (() => {
+  const [x0, y0] = arcPoint(0, ARC_R);
+  const [x1, y1] = arcPoint(100, ARC_R);
+  return `M ${x0} ${y0} A ${ARC_R} ${ARC_R} 0 1 1 ${x1} ${y1}`;
+})();
+
 interface GaugeProps {
   title: string;
   score: number | null;
   open: (d: PopupData) => void;
+  index: number;
 }
 
-const Gauge = ({ title, score, open }: GaugeProps) => {
+const Gauge = ({ title, score, open, index }: GaugeProps) => {
   const mood = moodMap(score);
-  const pct = score ?? 50;
-  const ring = gaugeGradient(pct);
-  const phrase = mood.copy[Math.floor(Math.random() * mood.copy.length)];
+  const hex = hexFor(score);
+  const pct = score ?? 0;
+  const [kx, ky] = arcPoint(pct, ARC_R);
 
   const handle = () => {
+    const phrase = mood.copy[Math.floor(Math.random() * mood.copy.length)];
     open({ title, score, label: mood.label, phrase, color: mood.color, bg: mood.bg, icon: mood.icon, start: "", end: "" });
     trackEvent("FGI_GaugeClick", { title, score, label: mood.label });
   };
 
   return (
-    <motion.div
+    <motion.button
+      type="button"
       onClick={handle}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      className="cursor-pointer flex flex-col items-center gap-3 p-5 sm:p-6 rounded-2xl bg-white dark:bg-white/[0.06] shadow-sm hover:shadow-md transition-all border border-gray-200/70 dark:border-white/10"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.06 }}
+      className="group relative isolate flex flex-col items-center overflow-hidden rounded-2xl border border-slate-200/70 bg-white px-4 pb-5 pt-4 text-center transition hover:-translate-y-0.5 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/20"
     >
-      <h4 className="font-bold text-xs sm:text-sm tracking-wide text-gray-600 dark:text-white/70 uppercase">{title}</h4>
-      <div className="relative pb-2">
-        <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full flex items-center justify-center shadow-md" style={{ backgroundImage: ring }}>
-          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-white dark:bg-brand-900 rounded-full flex items-center justify-center shadow-inner">
-            <span className="text-3xl sm:text-4xl font-black text-gray-800 dark:text-white">{score ?? "--"}</span>
-          </div>
-        </div>
-        <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 ${mood.bg} rounded-full p-2.5 shadow-lg`}>
-          <mood.icon className="text-white text-lg sm:text-xl" />
-        </div>
-      </div>
-      <p className={`text-xs sm:text-sm font-bold ${mood.color}`}>{mood.label}</p>
-    </motion.div>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -top-10 left-1/2 -z-10 h-32 w-32 -translate-x-1/2 rounded-full opacity-20 blur-2xl transition-opacity group-hover:opacity-35"
+        style={{ background: hex }}
+      />
+      <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400">{title}</span>
+
+      <svg viewBox="0 0 120 104" className="mt-1 w-full max-w-[170px]" aria-hidden>
+        <defs>
+          <linearGradient id={`fg-track-${index}`} x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor="#dc2626" />
+            <stop offset="35%" stopColor="#f87171" />
+            <stop offset="50%" stopColor="#f59e0b" />
+            <stop offset="65%" stopColor="#4ade80" />
+            <stop offset="100%" stopColor="#16a34a" />
+          </linearGradient>
+        </defs>
+        {/* track */}
+        <path d={ARC_PATH} fill="none" strokeWidth="8" strokeLinecap="round" className="stroke-slate-100 dark:stroke-white/[0.06]" />
+        {/* value */}
+        <motion.path
+          d={ARC_PATH}
+          fill="none"
+          stroke={`url(#fg-track-${index})`}
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={ARC_LEN}
+          initial={{ strokeDashoffset: ARC_LEN }}
+          animate={{ strokeDashoffset: ARC_LEN * (1 - pct / 100) }}
+          transition={{ duration: 1.1, delay: 0.15 + index * 0.06, ease: "easeOut" }}
+        />
+        {/* ticks */}
+        {[0, 25, 50, 75, 100].map((t) => {
+          const [ax, ay] = arcPoint(t, 36);
+          const [bx, by] = arcPoint(t, 32);
+          return <line key={t} x1={ax} y1={ay} x2={bx} y2={by} strokeWidth="1.2" className="stroke-slate-300 dark:stroke-white/15" />;
+        })}
+        {/* knob */}
+        {score != null && (
+          <motion.circle
+            r="5"
+            cx={kx}
+            cy={ky}
+            fill="white"
+            stroke={hex}
+            strokeWidth="3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, delay: 1.1 + index * 0.06 }}
+            style={{ filter: `drop-shadow(0 0 6px ${hex})` }}
+          />
+        )}
+        <text x="60" y="66" textAnchor="middle" className="fill-slate-900 font-mono dark:fill-white" style={{ fontSize: 26, fontWeight: 600 }}>
+          {score ?? "--"}
+        </text>
+        <text x="60" y="80" textAnchor="middle" className="fill-slate-400 font-mono" style={{ fontSize: 7, letterSpacing: 1 }}>
+          / 100
+        </text>
+      </svg>
+
+      <span className="-mt-2 inline-flex items-center gap-1.5 text-sm font-semibold" style={{ color: hex }}>
+        <mood.icon className="h-3.5 w-3.5" />
+        {mood.label}
+      </span>
+    </motion.button>
   );
 };
 
@@ -236,10 +307,9 @@ export default function FearGreedIndexes() {
   const isLoading = today === null && week === null && ytd === null && year === null;
 
   const skeletonCard = (key: number) => (
-    <div key={key} className="flex flex-col items-center gap-3 p-5 sm:p-6 rounded-2xl bg-white dark:bg-white/[0.06] border border-gray-200/70 dark:border-white/10 animate-pulse">
-      <div className="h-4 w-20 bg-gray-200 dark:bg-white/10 rounded-full" />
-      <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-gray-200 dark:bg-white/10" />
-      <div className="h-3 w-16 bg-gray-200 dark:bg-white/10 rounded-full" />
+    <div key={key} className="flex h-[196px] flex-col items-center gap-3 rounded-2xl border border-slate-200/70 p-4 dark:border-white/[0.08]">
+      <div className="h-3 w-16 animate-pulse rounded-full bg-slate-100 dark:bg-white/[0.06]" />
+      <div className="h-28 w-28 animate-pulse rounded-full bg-slate-100 dark:bg-white/[0.06]" />
     </div>
   );
 
@@ -250,178 +320,112 @@ export default function FearGreedIndexes() {
         { title: "Last 7 Days",  score: week  },
         { title: "Year-to-Date", score: ytd   },
         { title: "12 Months",    score: year  },
-      ].map((g) => <Gauge key={g.title} title={g.title} score={g.score} open={popupEnhancer} />);
+      ].map((g, i) => <Gauge key={g.title} title={g.title} score={g.score} open={popupEnhancer} index={i} />);
+
+  const closeMethodology = useCallback(() => setShowMethodology(false), []);
+  const popupHex = popup ? hexFor(popup.score) : undefined;
 
   return (
-    <div className="py-4 px-4 sm:py-6 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-
-        {/* ── Intro ── */}
-        <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center"
-        >
-          <div className="flex items-center justify-center gap-2.5 mb-2">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-              Fear & Greed Index
-            </h2>
-            <button
-              type="button"
-              onClick={() => setShowMethodology(true)}
-              className="text-indigo-500 hover:scale-110 transition-transform"
-              aria-label="How it's calculated"
-            >
-              <FaInfoCircle className="text-lg sm:text-xl" />
-            </button>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-white/50 max-w-lg mx-auto">
-            Real-time sentiment across four time horizons. Tap any card for details.
+    <div className="p-3 sm:p-5">
+      {/* ── Intro ── */}
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">Fear &amp; Greed Index</h2>
+          <p className="mt-0.5 text-[13px] text-slate-500 dark:text-slate-400">
+            Market sentiment across four time horizons. Tap a gauge for details.
           </p>
-        </motion.div>
-
-        {/* ── Gauges ── */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.08 }}
-          className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowMethodology(true)}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white"
         >
-          {gauges}
-        </motion.div>
+          <FaInfoCircle className="h-3 w-3 text-indigo-500" />
+          How it&apos;s calculated
+        </button>
+      </div>
 
-        {/* ── Legend ── */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.16 }}
-          className="flex justify-center"
-        >
-          <div className="inline-flex flex-wrap justify-center gap-x-5 gap-y-2 px-5 py-3 rounded-2xl bg-white dark:bg-white/[0.06] border border-gray-200/70 dark:border-white/10 shadow-sm">
-            {[
-              { color: "bg-red-600",   label: "0–25 · Extreme Fear" },
-              { color: "bg-red-400",   label: "26–50 · Fear" },
-              { color: "bg-green-400", label: "51–74 · Greed" },
-              { color: "bg-green-600", label: "75–100 · Extreme Greed" },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${item.color}`} />
-                <span className="text-xs font-medium text-gray-500 dark:text-white/50 whitespace-nowrap">{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
+      {/* ── Gauges ── */}
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">{gauges}</div>
 
+      {/* ── Legend ── */}
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+        {[
+          { hex: "#dc2626", label: "0–25 Extreme fear" },
+          { hex: "#f87171", label: "26–50 Fear" },
+          { hex: "#4ade80", label: "51–74 Greed" },
+          { hex: "#16a34a", label: "75–100 Extreme greed" },
+        ].map((item) => (
+          <span key={item.label} className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full" style={{ background: item.hex, boxShadow: `0 0 8px ${item.hex}` }} />
+            {item.label}
+          </span>
+        ))}
       </div>
 
       {/* ── Methodology Modal ── */}
-      <AnimatePresence>
-        {showMethodology && (
-          <motion.div
-            className="fixed inset-0 flex items-center justify-center z-50 p-4 bg-black/70 backdrop-blur-md"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setShowMethodology(false)}
-          >
-            <motion.div
-              className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-brand-900 shadow-2xl border border-gray-200/70 dark:border-white/10 overflow-hidden"
-              initial={{ scale: 0.92, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.92, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 28 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="h-1 w-full bg-indigo-500" />
-              <button
-                className="absolute top-4 right-4 p-2 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-white/70 hover:bg-gray-200 dark:hover:bg-white/15 transition"
-                onClick={() => setShowMethodology(false)}
-              >
-                <FaTimes className="text-sm" />
-              </button>
-              <div className="p-6">
-                <h4 className="font-bold text-base mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
-                  <FaInfoCircle className="text-indigo-500" />
-                  How It&apos;s Calculated
-                </h4>
-                <div className="space-y-1">
-                  {methodology.map((item, i) => (
-                    <div key={i} className="flex justify-between py-2 border-b border-gray-100 dark:border-white/[0.08] last:border-0">
-                      <span className="text-sm text-gray-600 dark:text-white/60">{item.label}</span>
-                      <span className="text-sm font-bold text-gray-900 dark:text-white">{item.weight}</span>
-                    </div>
-                  ))}
+      <Modal open={showMethodology} onClose={closeMethodology} labelledBy="fg-method-title" size="sm">
+        <div className="p-6">
+          <h4 id="fg-method-title" className="text-base font-semibold text-slate-900 dark:text-white">How it&apos;s calculated</h4>
+          <p className="mt-1 text-[13px] text-slate-500 dark:text-slate-400">A weighted blend of six signals.</p>
+          <div className="mt-5 space-y-3">
+            {methodology.map((item) => (
+              <div key={item.label}>
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-slate-600 dark:text-slate-300">{item.label}</span>
+                  <span className="font-mono tabular-nums text-slate-900 dark:text-white">{item.weight}</span>
                 </div>
-                <p className="mt-4 pt-4 border-t border-gray-100 dark:border-white/10 text-xs text-gray-400 dark:text-white/40 italic text-center">
-                  Data from Alternative.me API
-                </p>
+                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.06]">
+                  <motion.div
+                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-400"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${parseInt(item.weight, 10) * 4}%` }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                  />
+                </div>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            ))}
+          </div>
+          <p className="mt-5 font-mono text-[10px] uppercase tracking-wider text-slate-400">Source · alternative.me</p>
+        </div>
+      </Modal>
 
       {/* ── Detail Popup ── */}
-      <AnimatePresence>
+      <Modal open={!!popup} onClose={close} labelledBy="fg-detail-title" accent={popupHex}>
         {popup && (
-          <motion.div
-            className="fixed inset-0 flex items-center justify-center z-50 p-4 bg-black/70 backdrop-blur-md"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={close}
-          >
-            <motion.div
-              className="relative w-full max-w-lg overflow-hidden rounded-3xl bg-white dark:bg-brand-900 shadow-2xl border border-gray-200/70 dark:border-white/10"
-              initial={{ scale: 0.92, opacity: 0, y: 16 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.92, opacity: 0, y: 16 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className={`h-1 w-full ${popup.bg}`} />
-              <button
-                className="absolute top-4 right-4 p-2 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-white/70 hover:bg-gray-200 dark:hover:bg-white/15 transition hover:rotate-90 duration-200"
-                aria-label="Close"
-                onClick={close}
-              >
-                <FaTimes className="text-sm" />
-              </button>
+          <div className="relative isolate px-6 pb-7 pt-8 text-center">
+            <div aria-hidden className="pointer-events-none absolute -top-16 left-1/2 -z-10 h-48 w-72 -translate-x-1/2 rounded-full opacity-25 blur-3xl" style={{ background: popupHex }} />
+            <p id="fg-detail-title" className="font-mono text-[10px] uppercase tracking-wider text-slate-400">{popup.title}</p>
+            <div className="mt-3 inline-flex items-baseline gap-1.5">
+              <span className="font-mono text-6xl font-semibold tabular-nums" style={{ color: popupHex }}>{popup.score ?? "--"}</span>
+              <span className="font-mono text-lg text-slate-400">/100</span>
+            </div>
+            <p className="mt-1 flex items-center justify-center gap-1.5 text-base font-semibold" style={{ color: popupHex }}>
+              <popup.icon className="h-4 w-4" />
+              {popup.label}
+            </p>
 
-              <div className="px-6 sm:px-8 py-8 sm:py-10 text-center">
-                <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full ${popup.bg} mb-5 shadow-lg`}>
-                  <popup.icon className="text-white text-4xl" />
-                </div>
-                <h3 className="text-sm font-bold text-gray-500 dark:text-white/50 mb-1 uppercase tracking-widest">
-                  {popup.title}
-                </h3>
-                <div className="mb-5">
-                  <div className="inline-flex items-baseline gap-2">
-                    <span className={`text-6xl font-black ${popup.color}`}>{popup.score ?? "--"}</span>
-                    <span className="text-2xl font-semibold text-gray-400 dark:text-white/30">/ 100</span>
-                  </div>
-                  <p className={`mt-1.5 text-base font-bold ${popup.color}`}>{popup.label}</p>
-                </div>
-                <div className="mb-5 px-4 py-3 rounded-2xl bg-gray-50 dark:bg-white/[0.06] border border-gray-100 dark:border-white/10">
-                  <div className="flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-white/60">
-                    <FaCalendarAlt className="text-indigo-500 shrink-0" />
-                    {popup.start === popup.end ? (
-                      <span className="font-medium">{popup.start}</span>
-                    ) : (
-                      <span className="font-medium">{popup.start} → {popup.end}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="px-5 py-4 rounded-2xl bg-indigo-50 dark:bg-white/[0.06] border border-indigo-100 dark:border-white/10">
-                  <p className="text-sm leading-relaxed text-gray-700 dark:text-white/80 italic font-medium">
-                    &ldquo;{popup.phrase}&rdquo;
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
+            {/* position on the scale */}
+            <div className="relative mx-auto mt-5 h-1.5 max-w-xs rounded-full bg-gradient-to-r from-red-600 via-amber-400 to-green-600">
+              <motion.span
+                className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-900 dark:border-[#1a1a1d] dark:bg-white"
+                initial={{ left: "50%" }}
+                animate={{ left: `${popup.score ?? 50}%` }}
+                transition={{ type: "spring", stiffness: 200, damping: 22 }}
+              />
+            </div>
+
+            <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 font-mono text-[11px] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">
+              <FaCalendarAlt className="h-3 w-3 text-indigo-500" />
+              {popup.start && popup.start !== popup.end ? `${popup.start} → ${popup.end}` : popup.start || "—"}
+            </div>
+
+            <p className="mx-auto mt-5 max-w-sm text-[15px] leading-relaxed text-slate-600 dark:text-slate-300">
+              &ldquo;{popup.phrase}&rdquo;
+            </p>
+          </div>
         )}
-      </AnimatePresence>
+      </Modal>
     </div>
   );
 }

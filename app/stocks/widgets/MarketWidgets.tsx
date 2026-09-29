@@ -93,7 +93,7 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
           {[0, 1].map((i) => (
             <div
               key={i}
-              className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-6"
+              className="rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02] p-6"
             >
               <div className="flex items-center justify-center">
                 <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500" />
@@ -101,7 +101,7 @@ export default function MarketWidgets({ onSelectTicker }: MarketWidgetsProps) {
             </div>
           ))}
         </div>
-        <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-white/[0.06] p-4">
+        <div className="rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02] p-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {Array.from({ length: 8 }).map((_, i) => (
               <SkeletonTile key={i} />
