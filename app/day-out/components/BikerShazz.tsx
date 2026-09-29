@@ -1,6 +1,7 @@
 import styles from "../day-out.module.css";
+import { CritterArt, type Critter } from "./RoadKill";
 
-export type ShazzPose = "ride" | "drink" | "flip" | "smoke" | "throw" | "moon" | "fallen";
+export type ShazzPose = "ride" | "drink" | "flip" | "smoke" | "throw" | "moon" | "fallen" | "shotgun" | "off";
 
 // Big Shazz on her chopper, side-on facing right. viewBox 260×180; the wheels touch
 // the ground at y=172 (rear x=60, front x=205) and the exhaust tip sits at (16,128).
@@ -12,9 +13,14 @@ const Wheel = ({ cx }: { cx: number }) => <g className={styles.wheel}>
   {[0, 30, 60, 90, 120, 150].map(angle => <line key={angle} x1={cx - 20} y1={140} x2={cx + 20} y2={140} stroke="#aeb4bb" strokeWidth={2} transform={`rotate(${angle} ${cx} 140)`} />)}
   <circle cx={cx} cy={140} r={5} fill="#f28c28" stroke={INK} strokeWidth={2} />
 </g>;
-const Limb = ({ d, color, width = 12 }: { d: string; color: string; width?: number }) => <>
+const TATTOO = "#2c5f7a";
+const Limb = ({ d, color, width = 12, inked = false }: { d: string; color: string; width?: number; inked?: boolean }) => <>
   <path d={d} stroke={INK} strokeWidth={width + 5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
   <path d={d} stroke={color} strokeWidth={width} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  {inked && <>
+    <path d={d} stroke={TATTOO} strokeWidth={width - 3} strokeDasharray="2 5 6 4" fill="none" strokeLinejoin="round" opacity={0.85} />
+    <path d={d} stroke="#b3261e" strokeWidth={3} strokeDasharray="1 13" strokeDashoffset={-5} fill="none" strokeLinecap="round" />
+  </>}
 </>;
 // A stubby: thick brown body, thin neck, yellow label.
 const Stubby = ({ x1, y1, x2, y2 }: { x1: number; y1: number; x2: number; y2: number }) => {
@@ -30,26 +36,38 @@ const Stubby = ({ x1, y1, x2, y2 }: { x1: number; y1: number; x2: number; y2: nu
 
 function NearArm({ pose }: { pose: ShazzPose }) {
   switch (pose) {
-    case "drink": return <><Limb d="M110 52 L132 50 L142 32" color={SKIN} /><Stubby x1={152} y1={22} x2={136} y2={35} /><circle cx={142} cy={31} r={7} fill={SKIN} stroke={INK} strokeWidth={2.5} /></>;
+    case "drink": return <><Limb d="M110 52 L132 50 L142 32" color={SKIN} inked /><Stubby x1={152} y1={22} x2={136} y2={35} /><circle cx={142} cy={31} r={7} fill={SKIN} stroke={INK} strokeWidth={2.5} /></>;
     case "flip": return <>
-      <Limb d="M110 52 L126 36 L136 16" color={SKIN} />
+      <Limb d="M110 52 L126 36 L136 16" color={SKIN} inked />
       <Limb d="M137 10 L137 -6" color={SKIN} width={5} />
       <circle cx={137} cy={13} r={8} fill={SKIN} stroke={INK} strokeWidth={2.5} />
     </>;
     case "smoke": return <>
-      <Limb d="M110 52 L130 52 L134 41" color={SKIN} />
+      <Limb d="M110 52 L130 52 L134 41" color={SKIN} inked />
       <line x1={136} y1={40} x2={150} y2={38} stroke={INK} strokeWidth={5} strokeLinecap="round" />
       <line x1={136} y1={40} x2={150} y2={38} stroke="#fff" strokeWidth={3} strokeLinecap="round" />
       <circle cx={151} cy={38} r={2.5} fill="#ff6a00" />
       <circle cx={135} cy={40} r={6} fill={SKIN} stroke={INK} strokeWidth={2.5} />
     </>;
-    case "throw": return <><Stubby x1={86} y1={14} x2={74} y2={0} /><Limb d="M108 50 L96 30 L86 14" color={SKIN} /><circle cx={86} cy={13} r={7} fill={SKIN} stroke={INK} strokeWidth={2.5} /></>;
+    case "throw": return <><Stubby x1={86} y1={14} x2={74} y2={0} /><Limb d="M108 50 L96 30 L86 14" color={SKIN} inked /><circle cx={86} cy={13} r={7} fill={SKIN} stroke={INK} strokeWidth={2.5} /></>;
+    case "shotgun": return <>
+      <Limb d="M110 52 L136 54 L152 48" color={SKIN} inked />
+      <path d="M150 48 L140 58 L145 61 L156 51 Z" fill="#6b3e12" stroke={INK} strokeWidth={2} strokeLinejoin="round" />
+      <line x1={152} y1={46} x2={190} y2={41} stroke={INK} strokeWidth={9} strokeLinecap="round" />
+      <line x1={152} y1={46} x2={190} y2={41} stroke="#5d6066" strokeWidth={3} strokeLinecap="round" />
+      <line x1={152} y1={50} x2={190} y2={45} stroke="#5d6066" strokeWidth={3} strokeLinecap="round" />
+      <circle cx={153} cy={48} r={7} fill={SKIN} stroke={INK} strokeWidth={2.5} />
+    </>;
     case "moon": return null;
-    default: return <><Limb d="M110 52 L126 72 L140 66" color={SKIN} /><Stubby x1={143} y1={74} x2={143} y2={56} /><circle cx={141} cy={66} r={7} fill={SKIN} stroke={INK} strokeWidth={2.5} /></>;
+    default: return <><Limb d="M110 52 L126 72 L140 66" color={SKIN} inked /><Stubby x1={143} y1={74} x2={143} y2={56} /><circle cx={141} cy={66} r={7} fill={SKIN} stroke={INK} strokeWidth={2.5} /></>;
   }
 }
 
-export default function BikerShazz({ pose = "ride", drunk = 0 }: { pose?: ShazzPose; drunk?: number }) {
+// Where collected roadkill gets strapped on: front fender, forks, then the back.
+const TROPHY_SPOTS = ["translate(170 92) scale(0.52)", "translate(178 58) scale(0.42) rotate(-24)", "translate(14 98) scale(0.46) rotate(8)"];
+
+// The bike is a blacked-out Harley Night Train.
+export default function BikerShazz({ pose = "ride", drunk = 0, trophies = [] }: { pose?: ShazzPose; drunk?: number; trophies?: Critter[] }) {
   return <svg viewBox="0 0 260 180" width="100%" height="100%" aria-hidden overflow="visible" className={pose === "fallen" ? styles.fallen : ""}>
     <g className={styles.bikeParts}>
       <path d="M112 128 C 90 136, 60 134, 18 128" stroke={INK} strokeWidth={10} fill="none" strokeLinecap="round" />
@@ -58,27 +76,36 @@ export default function BikerShazz({ pose = "ride", drunk = 0 }: { pose?: ShazzP
       <Wheel cx={60} />
       <Wheel cx={205} />
       <path d="M26 132 A36 36 0 0 1 94 116" stroke={INK} strokeWidth={11} fill="none" strokeLinecap="round" />
-      <path d="M26 132 A36 36 0 0 1 94 116" stroke="#b3261e" strokeWidth={7} fill="none" strokeLinecap="round" />
+      <path d="M26 132 A36 36 0 0 1 94 116" stroke="#2e2e2e" strokeWidth={7} fill="none" strokeLinecap="round" />
       <path d="M181 118 A36 36 0 0 1 234 128" stroke={INK} strokeWidth={10} fill="none" strokeLinecap="round" />
-      <path d="M181 118 A36 36 0 0 1 234 128" stroke="#b3261e" strokeWidth={6} fill="none" strokeLinecap="round" />
+      <path d="M181 118 A36 36 0 0 1 234 128" stroke="#2e2e2e" strokeWidth={6} fill="none" strokeLinecap="round" />
       <path d="M60 140 L95 108 L150 112 L178 70" stroke={INK} strokeWidth={8} fill="none" strokeLinejoin="round" />
       <line x1={178} y1={70} x2={205} y2={140} stroke={INK} strokeWidth={9} strokeLinecap="round" />
       <line x1={178} y1={70} x2={205} y2={140} stroke={CHROME} strokeWidth={5} strokeLinecap="round" />
       <rect x={106} y={96} width={16} height={26} rx={3} fill="#9aa0a6" stroke={INK} strokeWidth={2.5} transform="rotate(-22 114 109)" />
       <rect x={124} y={96} width={16} height={26} rx={3} fill="#9aa0a6" stroke={INK} strokeWidth={2.5} transform="rotate(22 132 109)" />
       <ellipse cx={122} cy={127} rx={19} ry={11} fill={CHROME} stroke={INK} strokeWidth={2.5} />
-      <path d="M126 92 C 132 74, 170 70, 180 84 C 174 97, 142 100, 126 92 Z" fill="#f28c28" stroke={INK} strokeWidth={3} />
-      <path d="M134 90 q8 -8 14 -3 q5 -8 12 -2 q4 -6 10 -2 q-12 9 -36 7 z" fill="#ffd23f" />
+      <path d="M126 92 C 132 74, 170 70, 180 84 C 174 97, 142 100, 126 92 Z" fill="#1d1d1d" stroke={INK} strokeWidth={3} />
+      <path d="M134 90 q8 -8 14 -3 q5 -8 12 -2 q4 -6 10 -2 q-12 9 -36 7 z" fill="#f28c28" />
+      <path d="M138 90 q6 -5 10 -2 q4 -5 8 -1 q-8 5 -18 3 z" fill="#ffd23f" />
+      <path d="M140 80 q10 -5 24 -2" stroke="#ffffff55" strokeWidth={2} fill="none" strokeLinecap="round" />
       <circle cx={190} cy={80} r={8} fill="#fff3b0" stroke={INK} strokeWidth={2.5} />
       <path d="M178 72 L171 34 L158 37" stroke={INK} strokeWidth={7} fill="none" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M178 72 L171 34 L158 37" stroke={CHROME} strokeWidth={3.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Dinner, strapped on with ockie straps */}
+      {trophies.slice(-TROPHY_SPOTS.length).map((kind, i) => <g key={i} transform={TROPHY_SPOTS[i]}>
+        <CritterArt kind={kind} shadow={false} />
+        <path d="M28 12 V44 M52 12 V44" stroke="#e53935" strokeWidth={4} strokeLinecap="round" />
+        <path d="M28 12 V44 M52 12 V44" stroke={INK} strokeWidth={1} strokeDasharray="2 6" />
+      </g>)}
     </g>
 
-    <g className={styles.rider}>
+    {/* "off": she's hopped off (e.g. cooking at the barbie), so the bike is empty */}
+    {pose !== "off" && <g className={styles.rider}>
       <path className={styles.braid} d="M101 24 C 88 20, 84 34, 74 30 C 66 27, 62 37, 52 33" stroke="#7a3b12" strokeWidth={7} fill="none" strokeLinecap="round" />
       <circle cx={52} cy={33} r={3.5} fill="#b3261e" stroke={INK} strokeWidth={1.5} />
       {/* Far arm stays on the bars (unless she's fallen off) */}
-      {pose !== "fallen" && <Limb d="M104 50 L140 58 L158 40" color={SKIN_BACK} />}
+      {pose !== "fallen" && <Limb d="M104 50 L140 58 L158 40" color={SKIN_BACK} inked />}
       <Limb d="M100 96 L132 100 L140 122" color="#2f4a78" width={16} />
       <rect x={131} y={118} width={22} height={11} rx={4} fill="#1a1a1a" stroke={INK} strokeWidth={2} />
       <ellipse cx={100} cy={70} rx={34} ry={32} fill="#c0392b" stroke={INK} strokeWidth={3} />
@@ -106,6 +133,7 @@ export default function BikerShazz({ pose = "ride", drunk = 0 }: { pose?: ShazzP
         ? <path d="M121 37 q7 7 14 0 z M126 40 q3 6 6 0" fill="#fff" stroke={INK} strokeWidth={2} strokeLinejoin="round" />
         : <path className={styles.mouth} d="M120 38 q8 8 15 0 z" fill="#fff" stroke={INK} strokeWidth={2} strokeLinejoin="round" />}
       <circle cx={109} cy={34} r={2.2} fill="#ffd23f" stroke={INK} strokeWidth={1} />
-    </g>
+      <path d="M129.5 33 q2 3 1 4.6 q-1.4 0.8 -2.2 -0.4 q-0.4 -1.6 1.2 -4.2 z" fill="#1f3b57" />
+    </g>}
   </svg>;
 }

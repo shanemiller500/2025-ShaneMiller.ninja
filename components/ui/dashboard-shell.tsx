@@ -23,6 +23,8 @@ interface DashboardShellProps<K extends string> {
   onTabChange?: (key: K) => void;
   /** Unique id prefix so two shells never collide */
   id: string;
+  /** Optional sidebar shown beside the panels on large screens (below them on small ones) */
+  aside?: ReactNode;
 }
 
 /**
@@ -39,6 +41,7 @@ export function DashboardShell<K extends string>({
   renderPanel,
   onTabChange,
   id,
+  aside,
 }: DashboardShellProps<K>) {
   const first = tabs[0].key;
   const [activeTab, setActiveTab] = useState<K>(first);
@@ -177,6 +180,8 @@ export function DashboardShell<K extends string>({
         </div>
 
         {/* ── Panels ───────────────────────────────────────────────────── */}
+        <div className={aside ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start" : "contents"}>
+        <div className={aside ? "min-w-0" : "contents"}>
         {tabs.map((t) => {
           if (!visited.has(t.key)) return null;
           const isActive = t.key === activeTab;
@@ -196,6 +201,9 @@ export function DashboardShell<K extends string>({
             </motion.section>
           );
         })}
+        </div>
+        {aside && <aside className="min-w-0">{aside}</aside>}
+        </div>
       </div>
     </div>
   );

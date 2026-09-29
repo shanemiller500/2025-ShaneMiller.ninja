@@ -2,11 +2,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Newspaper } from "lucide-react";
+import { Segmented } from "@/components/ui/segmented";
+import { PanelHeader, SectionLabel, Notice, StoryCard, Pagination, cardGrid } from "../components/NewsKit";
 import { fetchFinnhubArticles } from "./Finnhub-API-Call";
 import { fetchUmailArticles } from "./MoreNewsAPI";
 import { trackEvent } from "@/utils/mixpanel";
-import { SmartImage, SkeletonCard } from "../lib/SmartImage";
+import { SkeletonCard } from "../lib/SmartImage";
 import { getDomain } from "../lib/utils";
 import ReaderModal, { type ReadableArticle } from "../components/ReaderModal";
 import {
@@ -334,94 +336,80 @@ export default function NewsTab() {
     setReaderArticle(articleToReadable(a));
   };
 
+  const isCBS = (a: Article) => a.url?.includes("cbsnews.com") || a.source.name?.toLowerCase().includes("cbs");
+  const card = (g: ArticleGroup, size: "hero" | "card" = "card") => {
+    const a = g.rep;
+    // CBS only serves small thumbnails, so its stories render as text cards.
+    const images = isCBS(a) ? [] : getImageCandidates(a, size === "hero" ? 800 : 600);
+    return (
+      <StoryCard
+        key={g.key}
+        size={size}
+        title={a.title}
+        description={a.description}
+        source={a.source.name || getDomain(a.url)}
+        publishedAt={a.publishedAt}
+        images={images}
+        logos={getLogoCandidates(a)}
+        badge={size === "hero" ? "Top story" : undefined}
+        extra={g.items.length - 1}
+        onExtra={() => setOpenGroup(g)}
+        onOpen={() => openReader(a)}
+      />
+    );
+  };
+
   return (
-    <div className="pb-10">
-      {/* Error banner */}
-      {error && (
-        <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/40 p-3 sm:p-4">
-          <p className="text-xs sm:text-sm text-red-700 dark:text-red-400">{error}</p>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="mb-4 sm:mb-5 flex flex-wrap items-center gap-2 pb-4 border-b border-gray-100 dark:border-gray-800">
-        {/* Region pills */}
-        <div className="flex items-center gap-1.5 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 p-1">
-          {(["All", "USA", "World"] as const).map((r) => (
-            <button
-              key={r}
-              onClick={() => {
-                setRegion(r);
-                trackEvent("News Region Changed", { region: r });
-              }}
-              className={[
-                "px-3 py-1 rounded-md text-xs font-medium transition-all",
-                region === r
-                  ? "bg-white dark:bg-gray-700 text-brand-900 dark:text-gray-100 shadow-sm"
-                  : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200",
-              ].join(" ")}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-
-        {/* Provider dropdown */}
+    <div>
+      <PanelHeader icon={Newspaper} tone="indigo" title="Top Stories" caption={loading ? "Loading feeds…" : `${groups.length} stories · ${providers.length - 1} outlets`}>
+        <Segmented
+          id="newsRegion"
+          ariaLabel="Region"
+          value={region}
+          onChange={(r) => {
+            setRegion(r);
+            trackEvent("News Region Changed", { region: r });
+          }}
+          options={(["All", "USA", "World"] as const).map((r) => ({ key: r, label: r }))}
+        />
         <select
           value={provider}
+          aria-label="Filter by outlet"
           onChange={(e) => {
             setProvider(e.target.value);
             trackEvent("News Provider Changed", { provider: e.target.value });
           }}
-          className="ml-auto rounded-lg border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          className="max-w-[12rem] rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-mono text-[11px] text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200"
         >
           {providers.map((p) => (
             <option key={p}>{p}</option>
           ))}
         </select>
-      </div>
+      </PanelHeader>
 
-      {/* Hero */}
-      {heroGroup ? (
-        <HeroCard group={heroGroup} onRead={() => openReader(heroGroup.rep)} onOpenGroup={() => setOpenGroup(heroGroup)} />
-      ) : (
-        <div className="mb-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-brand-900 p-4 sm:p-6 text-center">
-          <span className="text-xs text-gray-400 dark:text-gray-500">
-            {loading ? "Loading top stories…" : "No stories found."}
-          </span>
+      <div className="p-4 sm:p-6">
+        {error && <Notice tone="error">{error}</Notice>}
+
+        {heroGroup ? card(heroGroup, "hero") : <Notice>{loading ? "Loading top stories…" : "No stories found."}</Notice>}
+
+        <div className="mt-6">
+          <SectionLabel right={totalPages > 1 ? `Page ${safePage} / ${totalPages}` : undefined}>Latest headlines</SectionLabel>
+          <div className={`${cardGrid} transition-opacity duration-200 ${fade ? "opacity-0" : "opacity-100"}`}>
+            {loading && groups.length === 0
+              ? Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)
+              : pageGroups.map((g) => card(g))}
+          </div>
         </div>
-      )}
 
-      {/* Grid */}
-      <div
-        className={`mt-4 sm:mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 transition-opacity duration-200 ${
-          fade ? "opacity-0" : "opacity-100"
-        }`}
-      >
-        {loading && groups.length === 0
-          ? Array.from({ length: 12 }).map((_, i) => (
-              <SkeletonCard key={i} />
-            ))
-          : pageGroups.map((g) => (
-              <GroupCard
-                key={g.key}
-                group={g}
-                onRead={() => openReader(g.rep)}
-                onOpen={() => setOpenGroup(g)}
-              />
-            ))}
+        <Pagination
+          page={safePage}
+          totalPages={totalPages}
+          loading={loading}
+          onPrev={() => changePage(safePage - 1)}
+          onNext={() => changePage(safePage + 1)}
+        />
       </div>
 
-      {/* Pagination */}
-      <Pagination
-        page={safePage}
-        totalPages={totalPages}
-        loading={loading}
-        onPrev={() => changePage(safePage - 1)}
-        onNext={() => changePage(safePage + 1)}
-      />
-
-      {/* Group modal */}
       <GroupModal
         open={!!openGroup}
         group={openGroup}
@@ -431,308 +419,7 @@ export default function NewsTab() {
           openReader(a);
         }}
       />
-
-      {/* Reader modal */}
-      <ReaderModal
-        open={!!readerArticle}
-        article={readerArticle}
-        onClose={() => setReaderArticle(null)}
-        accent="indigo"
-      />
+      <ReaderModal open={!!readerArticle} article={readerArticle} onClose={() => setReaderArticle(null)} accent="indigo" />
     </div>
   );
-
-  /* ------------------------------------------------------------------ */
-  /*  HeroCard                                                          */
-  /* ------------------------------------------------------------------ */
-  function HeroCard({
-    group,
-    onRead,
-    onOpenGroup,
-  }: {
-    group: ArticleGroup;
-    onRead: () => void;
-    onOpenGroup: () => void;
-  }) {
-    const a = group.rep;
-    const candidates = getImageCandidates(a, 800);
-    const hasImg = candidates.length > 0;
-    const logoCandidates = getLogoCandidates(a);
-    const multi = group.items.length > 1;
-
-    return (
-      <div
-        onClick={onRead}
-        className="group relative overflow-hidden rounded-xl cursor-pointer border border-gray-100 dark:border-gray-800 hover:shadow-lg transition-all duration-300"
-      >
-        <div className="relative h-52 sm:h-64 md:h-72">
-          {hasImg ? (
-            <SmartImage
-              candidates={candidates}
-              alt={a.title}
-              wrapperClassName="absolute inset-0"
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-            />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-950/30 dark:to-indigo-900/20" />
-          )}
-
-          {/* Gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/0" />
-
-          {/* Top badge */}
-          <div className="absolute top-3 left-3">
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600/90 backdrop-blur-sm px-2.5 py-1 text-[10px] font-semibold text-white uppercase tracking-wide">
-              Top Story
-            </span>
-          </div>
-
-          {/* Bottom content */}
-          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 text-white">
-            <div className="flex items-center gap-2 mb-2">
-              {logoCandidates.length > 0 && (
-                <div className="h-5 w-5 rounded-full overflow-hidden bg-white/10 border border-white/20 flex-shrink-0">
-                  <SmartImage
-                    candidates={logoCandidates}
-                    alt={a.source.name}
-                    className="h-full w-full object-contain p-0.5"
-                  />
-                </div>
-              )}
-              <span className="text-xs font-medium opacity-90 truncate max-w-[180px]">
-                {a.source.name || getDomain(a.url)}
-              </span>
-              <span className="opacity-40">·</span>
-              <time className="text-xs opacity-75" dateTime={a.publishedAt}>
-                {new Date(a.publishedAt).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                })}
-              </time>
-              {multi && (
-                <span className="ml-auto rounded-md border border-white/30 bg-white/15 backdrop-blur-sm px-2 py-0.5 text-[10px] font-medium">
-                  +{group.items.length - 1} sources
-                </span>
-              )}
-            </div>
-
-            <h3 className="font-serif text-lg sm:text-xl md:text-2xl font-bold leading-snug line-clamp-2">
-              {a.title}
-            </h3>
-
-            {multi && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenGroup();
-                }}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-white/40 bg-white/10 backdrop-blur-sm px-3 py-1.5 text-xs font-medium hover:bg-white/20 transition-colors"
-              >
-                View all sources →
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* ------------------------------------------------------------------ */
-  /*  GroupCard                                                         */
-  /* ------------------------------------------------------------------ */
-  function GroupCard({
-    group,
-    onRead,
-    onOpen,
-  }: {
-    group: ArticleGroup;
-    onRead: () => void;
-    onOpen: () => void;
-  }) {
-    const a = group.rep;
-    const candidates = getImageCandidates(a, 600);
-    const hasImg = candidates.length > 0;
-    const logoCandidates = getLogoCandidates(a);
-    const multi = group.items.length > 1;
-
-    const isCBS =
-      a.url?.includes("cbsnews.com") ||
-      a.source.name?.toLowerCase().includes("cbs");
-
-    /* Image card */
-    if (hasImg && !isCBS) {
-      return (
-        <div
-          onClick={onRead}
-          className="group relative overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
-        >
-          <div className="relative h-44 sm:h-48">
-            <SmartImage
-              candidates={candidates}
-              alt={a.title}
-              wrapperClassName="absolute inset-0"
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
-
-            {/* Badge for multi-source */}
-            {multi && (
-              <div className="absolute top-2 right-2">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpen();
-                  }}
-                  className="rounded-md bg-indigo-600/90 backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-indigo-700 transition-colors"
-                >
-                  +{group.items.length - 1}
-                </button>
-              </div>
-            )}
-
-            <div className="absolute inset-x-0 bottom-0 p-3 text-white">
-              <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
-                {logoCandidates.length > 0 && (
-                  <div className="h-4 w-4 rounded-full overflow-hidden bg-white/10 border border-white/20 flex-shrink-0">
-                    <SmartImage
-                      candidates={logoCandidates}
-                      alt={a.source.name}
-                      className="h-full w-full object-contain p-0.5"
-                    />
-                  </div>
-                )}
-                <span className="font-medium opacity-85 truncate max-w-[110px]">
-                  {a.source.name}
-                </span>
-                <span className="opacity-40">·</span>
-                <time opacity-75 dateTime={a.publishedAt}>
-                  {new Date(a.publishedAt).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </time>
-              </div>
-              <h3 className="font-semibold text-sm leading-snug line-clamp-2">
-                {a.title}
-              </h3>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    /* Text-only card (CBS or no image) */
-    return (
-      <div
-        onClick={onRead}
-        className="group rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 p-4 cursor-pointer hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
-      >
-        {/* CBS thumbnail floated right */}
-        {isCBS && hasImg && (
-          <div className="float-right ml-3 mb-2 h-14 w-14 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 border border-gray-100 dark:border-gray-800 flex-shrink-0">
-            <SmartImage
-              candidates={candidates}
-              alt={a.title}
-              className="h-full w-full object-cover"
-            />
-          </div>
-        )}
-
-        <h3 className="text-sm font-semibold text-brand-900 dark:text-gray-50 leading-snug line-clamp-3 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">
-          {a.title}
-        </h3>
-
-        {a.description && (
-          <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2">
-            {a.description}
-          </p>
-        )}
-
-        <div className="mt-3 pt-3 border-t border-gray-50 dark:border-gray-800 flex items-center gap-2 clear-both">
-          {logoCandidates.length > 0 && (
-            <div className="h-4 w-4 rounded overflow-hidden bg-gray-50 dark:bg-gray-800 flex-shrink-0">
-              <SmartImage
-                candidates={logoCandidates}
-                alt={a.source.name}
-                className="h-full w-full object-contain"
-              />
-            </div>
-          )}
-          <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[120px]">
-            {a.source.name}
-          </span>
-          <span className="text-gray-300 dark:text-gray-700">·</span>
-          <time
-            className="text-[10px] text-gray-400 dark:text-gray-500"
-            dateTime={a.publishedAt}
-          >
-            {new Date(a.publishedAt).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            })}
-          </time>
-          {multi && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpen();
-              }}
-              className="ml-auto rounded-md bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 transition-colors"
-            >
-              +{group.items.length - 1}
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  /* ------------------------------------------------------------------ */
-  /*  Pagination                                                        */
-  /* ------------------------------------------------------------------ */
-  function Pagination({
-    page,
-    totalPages,
-    loading,
-    onPrev,
-    onNext,
-  }: {
-    page: number;
-    totalPages: number;
-    loading: boolean;
-    onPrev: () => void;
-    onNext: () => void;
-  }) {
-    return (
-      <div className="mt-8 sm:mt-10 flex flex-col items-center gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            disabled={page === 1 || loading}
-            onClick={onPrev}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-brand-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-all"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Previous
-          </button>
-
-          <button
-            disabled={page === totalPages || loading}
-            onClick={onNext}
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 dark:bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 dark:hover:bg-indigo-400 disabled:opacity-40 transition-all"
-          >
-            Next
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          Page {page} of {totalPages}
-          {loading && <span className="ml-2 animate-pulse">Loading…</span>}
-        </p>
-      </div>
-    );
-  }
 }

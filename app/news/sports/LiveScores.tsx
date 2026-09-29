@@ -3,7 +3,9 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion, useMotionValue } from "framer-motion";
-import { X, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
+import { SectionLabel, Notice } from "../components/NewsKit";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -95,211 +97,98 @@ function SafeImg({
 /* ------------------------------------------------------------------ */
 /*  GameModal                                                          */
 /* ------------------------------------------------------------------ */
-function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
-  const live = !!game.isLive || isLiveText(game.status);
-  const awayScore = game.awayTeam.score ?? game.awayTeam.points ?? "—";
-  const homeScore = game.homeTeam.score ?? game.homeTeam.points ?? "—";
+function StatusPill({ live, final }: { live: boolean; final: boolean }) {
+  if (live)
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-300/60 bg-rose-50 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-rose-600 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-300">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-rose-500" />
+        </span>
+        Live
+      </span>
+    );
+  if (final)
+    return <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">Final</span>;
+  return null;
+}
 
-  const gameTime = new Date(game.startTime);
-  const timeString = gameTime.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-  const dateString = gameTime.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+function TeamRow({ team, label, score }: { team: GameTeam; label: string; score: string }) {
+  return (
+    <div className="flex items-center">
+      <div className="flex flex-1 items-center gap-3 p-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-slate-200 dark:bg-white/[0.04] dark:ring-white/10 sm:h-14 sm:w-14">
+          <SafeImg src={team.logo} alt={team.name} className="h-9 w-9 sm:h-10 sm:w-10" />
+        </div>
+        <div className="min-w-0">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</p>
+          <p className="truncate text-base font-semibold text-slate-900 dark:text-white">{team.name}</p>
+        </div>
+      </div>
+      <div className="w-16 self-stretch border-l border-slate-200/70 bg-slate-50 p-4 text-center dark:border-white/[0.08] dark:bg-white/[0.02] sm:w-20">
+        <span className="font-mono text-3xl font-bold tabular-nums text-slate-900 dark:text-white sm:text-4xl">{score}</span>
+      </div>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, []);
+function GameModal({ game, onClose }: { game: Game | null; onClose: () => void }) {
+  const live = !!game && (!!game.isLive || isLiveText(game.status));
+  const time = game ? new Date(game.startTime) : null;
+  const link = "inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition";
+  const secondary = `${link} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08]`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      {/* Backdrop */}
-      <div
-        aria-label="Close"
-        onClick={onClose}
-        className="fixed inset-0 bg-black/55 backdrop-blur-sm cursor-pointer"
-      />
-
-      {/* Panel */}
-      <div className="relative z-10 w-full max-w-2xl max-h-[92vh] sm:max-h-[85vh] flex flex-col bg-white dark:bg-brand-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
-
-        {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Live / Final badge */}
-            {live ? (
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-orange-50 dark:bg-orange-950/40 border border-orange-100 dark:border-orange-900/40 px-2 py-0.5">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-70" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-orange-500" />
-                </span>
-                <span className="text-[10px] font-semibold text-orange-700 dark:text-orange-400 uppercase tracking-wider">
-                  Live
-                </span>
-              </span>
-            ) : game.isFinal ? (
-              <span className="inline-flex items-center rounded-md bg-gray-100 dark:bg-brand-900 px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Final
-              </span>
-            ) : null}
-
+    <Modal open={!!game} onClose={onClose} labelledBy="game-title" accent={live ? "#f43f5e" : "#6366f1"} size="lg">
+      {game && time && (
+        <>
+          <div className="flex shrink-0 items-center gap-3 border-b border-slate-200/70 px-4 py-3 pr-14 dark:border-white/[0.08] sm:px-6 sm:py-4">
+            <StatusPill live={live} final={game.isFinal} />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-                {game.leagueDisplay || game.league.toUpperCase()}
-              </p>
-              <time className="text-xs text-gray-400 dark:text-gray-500">
-                {dateString} · {timeString}
+              <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{game.leagueDisplay || game.league.toUpperCase()}</p>
+              <time className="font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                {time.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} ·{" "}
+                {time.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true })}
               </time>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="flex-shrink-0 rounded-lg p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain bg-gray-50 dark:bg-brand-900">
-          <div className="p-4 sm:p-6">
-            {/* Game title */}
-            <h2 className="font-serif text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-50 leading-snug mb-1">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+            <h2 id="game-title" className="font-aspekta text-xl font-[650] leading-snug tracking-tight text-slate-900 dark:text-white sm:text-2xl">
               {game.competition}
             </h2>
             {game.status && (
-              <p
-                className={`text-xs font-medium mb-5 ${
-                  live
-                    ? "text-orange-600 dark:text-orange-400"
-                    : "text-gray-400 dark:text-gray-500"
-                }`}
-              >
-                {game.status}
-              </p>
+              <p className={`mb-5 mt-1 font-mono text-[11px] uppercase tracking-wider ${live ? "text-rose-600 dark:text-rose-300" : "text-slate-400 dark:text-slate-500"}`}>{game.status}</p>
             )}
 
-            {/* Scoreboard */}
-            <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 overflow-hidden shadow-sm mb-4">
-              {/* Away team */}
-              <div className="flex items-center border-b border-gray-100 dark:border-gray-800">
-                <div className="flex-1 flex items-center gap-3 p-4">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-brand-900 border border-gray-100 dark:border-gray-700 flex-shrink-0">
-                    <SafeImg
-                      src={game.awayTeam.logo}
-                      alt={game.awayTeam.name}
-                      className="h-9 w-9 sm:h-10 sm:w-10"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">
-                      Away
-                    </p>
-                    <p className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-                      {game.awayTeam.name}
-                    </p>
-                  </div>
-                </div>
-                <div className="w-16 sm:w-20 text-center p-4 bg-gray-50 dark:bg-brand-900/50 border-l border-gray-100 dark:border-gray-800">
-                  <span className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">
-                    {awayScore}
-                  </span>
-                </div>
-              </div>
-
-              {/* Home team */}
-              <div className="flex items-center">
-                <div className="flex-1 flex items-center gap-3 p-4">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-brand-900 border border-gray-100 dark:border-gray-700 flex-shrink-0">
-                    <SafeImg
-                      src={game.homeTeam.logo}
-                      alt={game.homeTeam.name}
-                      className="h-9 w-9 sm:h-10 sm:w-10"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">
-                      Home
-                    </p>
-                    <p className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-                      {game.homeTeam.name}
-                    </p>
-                  </div>
-                </div>
-                <div className="w-16 sm:w-20 text-center p-4 bg-gray-50 dark:bg-brand-900/50 border-l border-gray-100 dark:border-gray-800">
-                  <span className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">
-                    {homeScore}
-                  </span>
-                </div>
-              </div>
+            <div className="mb-4 divide-y divide-slate-200/70 overflow-hidden rounded-2xl border border-slate-200/70 bg-white dark:divide-white/[0.08] dark:border-white/[0.08] dark:bg-white/[0.02]">
+              <TeamRow team={game.awayTeam} label="Away" score={game.awayTeam.score ?? game.awayTeam.points ?? "—"} />
+              <TeamRow team={game.homeTeam} label="Home" score={game.homeTeam.score ?? game.homeTeam.points ?? "—"} />
             </div>
 
-            {/* Series info */}
             {game.seriesText && (
-              <div className="rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/40 p-3 mb-4">
-                <p className="text-[10px] text-orange-500 dark:text-orange-400 font-medium uppercase tracking-wider mb-1">
-                  Series
-                </p>
-                <p className="text-sm font-semibold text-orange-900 dark:text-orange-200">
-                  {game.seriesText}
-                </p>
+              <div className="mb-4 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-3">
+                <p className="font-mono text-[10px] uppercase tracking-wider text-indigo-500 dark:text-indigo-300">Series</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">{game.seriesText}</p>
               </div>
             )}
 
-            {/* Action links */}
             {(game.espnLink || game.recapLink || game.highlight) && (
-              <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider mb-3">
-                  More Coverage
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2.5">
+              <div className="border-t border-slate-200/70 pt-4 dark:border-white/[0.08]">
+                <p className="mb-3 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">More coverage</p>
+                <div className="flex flex-col gap-2.5 sm:flex-row">
                   {game.espnLink && (
-                    <a
-                      href={game.espnLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 hover:bg-orange-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors"
-                    >
-                      View on ESPN
-                      <ExternalLink className="h-3.5 w-3.5" />
+                    <a href={game.espnLink} target="_blank" rel="noopener noreferrer" className={`${link} bg-indigo-500 text-white shadow-[0_0_18px_-4px_rgba(99,102,241,0.6)] hover:bg-indigo-600`}>
+                      View on ESPN <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                     </a>
                   )}
                   {game.recapLink && (
-                    <a
-                      href={game.recapLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-brand-900 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                    >
-                      Game Recap
-                      <ExternalLink className="h-3.5 w-3.5" />
+                    <a href={game.recapLink} target="_blank" rel="noopener noreferrer" className={secondary}>
+                      Game recap <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                     </a>
                   )}
                   {game.highlight && (
-                    <a
-                      href={game.highlight}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-brand-900 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                    >
+                    <a href={game.highlight} target="_blank" rel="noopener noreferrer" className={secondary}>
                       ▶ Highlights
                     </a>
                   )}
@@ -307,9 +196,9 @@ function GameModal({ game, onClose }: { game: Game; onClose: () => void }) {
               </div>
             )}
           </div>
-        </div>
-      </div>
-    </div>
+        </>
+      )}
+    </Modal>
   );
 }
 
@@ -470,69 +359,24 @@ export default function LiveScores({ sport }: { sport: string }) {
             if (e.key === "Enter" || e.key === " ") setSel(g);
           }}
           whileTap={{ scale: 0.97 }}
-          className="snap-start w-[240px] sm:w-[260px] shrink-0 select-none rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 p-3.5 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200 cursor-pointer"
+          className="w-[240px] shrink-0 cursor-pointer select-none rounded-2xl border border-slate-200/70 bg-white p-3.5 outline-none transition hover:border-slate-300 hover:shadow-[0_12px_30px_-16px_rgba(15,23,42,0.35)] focus-visible:ring-2 focus-visible:ring-indigo-500/60 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/15 sm:w-[260px]"
         >
-          {/* League + Status */}
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              {g.leagueDisplay || g.league.toUpperCase()}
-            </span>
-            {live ? (
-              <span className="inline-flex items-center gap-1 rounded-md bg-orange-50 dark:bg-orange-950/40 px-1.5 py-0.5 text-[9px] font-semibold text-orange-600 dark:text-orange-400 uppercase tracking-wide border border-orange-100 dark:border-orange-900/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse" />
-                Live
-              </span>
-            ) : g.isFinal ? (
-              <span className="rounded-md bg-gray-100 dark:bg-brand-900 px-1.5 py-0.5 text-[9px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                Final
-              </span>
-            ) : null}
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">{g.leagueDisplay || g.league.toUpperCase()}</span>
+            <StatusPill live={live} final={g.isFinal} />
           </div>
-
-          {/* Away team */}
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-gray-50 dark:bg-brand-900 border border-gray-100 dark:border-gray-700 flex items-center justify-center overflow-hidden">
-                <SafeImg
-                  src={g.awayTeam.logo}
-                  alt={g.awayTeam.name}
-                  className="h-6 w-6"
-                />
+          {[{ team: g.awayTeam, score: away }, { team: g.homeTeam, score: home }].map(({ team, score }, i) => (
+            <div key={i} className={`flex items-center justify-between gap-2 ${i ? "mt-2 border-t border-slate-100 pt-2 dark:border-white/[0.06]" : ""}`}>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white ring-1 ring-slate-200 dark:bg-white/[0.04] dark:ring-white/10">
+                  <SafeImg src={team.logo} alt={team.name} className="h-6 w-6" />
+                </div>
+                <span className="max-w-[110px] truncate text-sm font-medium text-slate-900 dark:text-white">{team.name}</span>
               </div>
-              <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[110px]">
-                {g.awayTeam.name}
-              </span>
+              <span className="font-mono text-xl font-bold tabular-nums text-slate-900 dark:text-white">{score}</span>
             </div>
-            <span className="text-xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">
-              {away}
-            </span>
-          </div>
-
-          <div className="my-2 h-px bg-gray-100 dark:bg-brand-900" />
-
-          {/* Home team */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="h-8 w-8 flex-shrink-0 rounded-lg bg-gray-50 dark:bg-brand-900 border border-gray-100 dark:border-gray-700 flex items-center justify-center overflow-hidden">
-                <SafeImg
-                  src={g.homeTeam.logo}
-                  alt={g.homeTeam.name}
-                  className="h-6 w-6"
-                />
-              </div>
-              <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[110px]">
-                {g.homeTeam.name}
-              </span>
-            </div>
-            <span className="text-xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">
-              {home}
-            </span>
-          </div>
-
-          {/* Status text */}
-          <p className="mt-2.5 pt-2.5 border-t border-gray-50 dark:border-gray-800 text-[10px] text-gray-400 dark:text-gray-500 truncate">
-            {g.status}
-          </p>
+          ))}
+          <p className="mt-2.5 truncate border-t border-slate-100 pt-2.5 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:border-white/[0.06] dark:text-slate-500">{g.status}</p>
         </motion.div>
       );
     });
@@ -545,41 +389,17 @@ export default function LiveScores({ sport }: { sport: string }) {
   }, [contentWidth, x]);
 
   return (
-    <section className="mb-5 sm:mb-6">
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-1 h-4 rounded-full bg-orange-500" />
-          <h2 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-            {title}
-          </h2>
-        </div>
-        <span className="text-[10px] text-gray-400 dark:text-gray-500">
-          Updates every 60s
-        </span>
-      </div>
-
-      {loading && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 py-2">
-          Loading games…
-        </p>
-      )}
-      {error && (
-        <div className="rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/40 p-3">
-          <p className="text-xs text-red-700 dark:text-red-400">{error}</p>
-        </div>
-      )}
-
-      {!loading && !error && games.length === 0 && (
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          {sport === "all" ? "No live games right now." : "No games today."}
-        </p>
-      )}
+    <section className="mb-6">
+      <SectionLabel right="Updates every 60s">{title}</SectionLabel>
+      {loading && <p className="py-2 font-mono text-[11px] uppercase tracking-wider text-slate-400">Loading games…</p>}
+      {error && <Notice tone="error">{error}</Notice>}
+      {!loading && !error && games.length === 0 && <Notice>{sport === "all" ? "No live games right now." : "No games today."}</Notice>}
 
       {games.length > 0 && (
         <div className="relative">
           <div
             ref={scrollRef}
-            className="no-scrollbar overflow-hidden overscroll-x-contain touch-pan-x pb-1"
+            className={`no-scrollbar overflow-hidden overscroll-x-contain touch-pan-x pb-1 ${canScroll ? "[mask-image:linear-gradient(90deg,transparent,black_24px,black_calc(100%-48px),transparent)]" : ""}`}
           >
             <motion.div
               className="flex w-max cursor-grab active:cursor-grabbing"
@@ -597,16 +417,10 @@ export default function LiveScores({ sport }: { sport: string }) {
             </motion.div>
           </div>
 
-          {canScroll && (
-            <>
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white dark:from-gray-900 to-transparent" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-white dark:from-gray-900 to-transparent" />
-            </>
-          )}
         </div>
       )}
 
-      {sel && <GameModal game={sel} onClose={() => setSel(null)} />}
+      <GameModal game={sel} onClose={() => setSel(null)} />
     </section>
   );
 }

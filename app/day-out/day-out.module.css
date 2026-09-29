@@ -14,7 +14,7 @@
 .weather{display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--muted);font-size:16px}
 .iconButton{display:grid;place-items:center;width:48px;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--card)}
 
-.container{max-width:1200px;margin:auto;padding:0 16px 110px}
+.container{max-width:1200px;margin:auto;padding:0 16px 150px}
 .titleRow{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:28px 0 18px}
 .title{font-size:clamp(32px,5vw,46px);font-weight:900}
 .scrollRow{position:relative;margin-bottom:6px;border-bottom:1px solid var(--line)}
@@ -90,15 +90,16 @@
 
 /* Big Shazz: stage, road, smoke, skid marks */
 .stage{position:fixed;inset:0;z-index:80;pointer-events:none;overflow:hidden}
-.road{position:absolute;left:0;right:0;bottom:0;height:64px;background:linear-gradient(#2c2e32,#26282b);border-top:3px solid #5a5e65;box-shadow:inset 0 -3px 0 #5a5e65;opacity:0;transition:opacity .6s}
-.road:after{content:"";position:absolute;left:0;right:0;top:30px;height:4px;background:repeating-linear-gradient(90deg,#e8c547 0 34px,transparent 34px 68px)}
+.road{position:absolute;left:0;right:0;bottom:0;height:108px;background:linear-gradient(#2c2e32,#26282b);border-top:3px solid #5a5e65;box-shadow:inset 0 -3px 0 #5a5e65;opacity:0;transition:opacity .6s}
+.road:after{content:"";position:absolute;left:0;right:0;top:50px;height:4px;background:repeating-linear-gradient(90deg,#e8c547 0 34px,transparent 34px 68px)}
 .roadOn{opacity:1}
 .roadClickable{pointer-events:auto;cursor:crosshair}
 .roadClickable:hover{background:#34373c}
-.trickBar{position:absolute;left:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;pointer-events:auto;animation:bubbleIn .25s ease-out}
+.trickBar{position:absolute;left:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:flex-start;gap:6px;pointer-events:auto;animation:bubbleIn .25s ease-out}
 .root .trickToggle{width:56px;height:56px;border-radius:50%;border:3px solid #111;background:var(--accent);font-size:26px;box-shadow:4px 4px 0 #111}
-.root .trick{display:flex;align-items:center;gap:0;width:56px;height:56px;padding:0 0 0 13px;border-radius:28px;border:3px solid #111;background:#fffdf5;color:#141517;box-shadow:4px 4px 0 #111;overflow:hidden;white-space:nowrap;transition:width .2s}
-.trick>span{font-size:24px;flex:none}
+.root .trick{display:flex;align-items:center;gap:0;width:46px;height:46px;padding:0 0 0 9px;border-radius:23px;border:3px solid #111;background:#fffdf5;color:#141517;box-shadow:4px 4px 0 #111;overflow:hidden;white-space:nowrap;transition:width .2s}
+.trick>span{font-size:20px;flex:none}
+.trickDivider{width:26px;height:3px;margin:2px 10px;border-radius:2px;background:#111}
 .trick>em{font-style:normal;font-weight:800;font-size:15px;opacity:0;margin-left:10px;transition:opacity .2s}
 .root .trick:hover,.root .trick:focus-visible{width:210px}
 .trick:hover>em,.trick:focus-visible>em{opacity:1}
@@ -122,7 +123,7 @@
 .bottle{display:block;width:9px;height:24px;border-radius:4px 4px 3px 3px;background:linear-gradient(90deg,#4a2a0c,#7b4a1a 40%,#4a2a0c);border:2px solid #111;animation:spin .35s linear infinite}
 .shard{position:absolute;background:#a8dadc;border:1px solid #fff;clip-path:polygon(50% 0,100% 80%,0 100%);animation:shard 7s forwards}
 .stars{position:absolute;font-size:22px;color:#ffd23f;letter-spacing:4px;-webkit-text-stroke:1px #111;animation:stars 4.2s linear forwards;white-space:nowrap}
-.drunkMeter{position:absolute;left:12px;bottom:78px;display:grid;gap:5px;width:220px;padding:10px 12px;border-radius:14px;border:3px solid #111;background:#fffdf5;color:#141517;box-shadow:4px 4px 0 #111;pointer-events:none;animation:bubbleIn .25s ease-out}
+.drunkMeter{position:absolute;left:50%;top:20px;translate:-50% 0;display:grid;gap:5px;width:220px;padding:10px 12px;border-radius:14px;border:3px solid #111;background:#fffdf5;color:#141517;box-shadow:4px 4px 0 #111;pointer-events:none;animation:bubbleIn .25s ease-out}
 .drunkLabel{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .drunkLabel b{color:#c0392b}
 .drunkTrack{height:12px;border-radius:6px;background:#e3e0d6;border:2px solid #111;overflow:hidden}
@@ -130,6 +131,62 @@
 .drunkCans{display:flex;gap:4px;font-size:16px}
 .drunkCans>span{opacity:.25;filter:grayscale(1)}
 .drunkCans>.canFull{opacity:1;filter:none}
+.smokeCloud{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse at 25% 100%,#f2f2f2,#cfcfcf 45%,#a9aaac);transition:opacity .8s ease;pointer-events:none}
+.fog{position:absolute;border-radius:50%;background:radial-gradient(circle,#eeeeeef0,#d6d6d680 45%,#c8c8c800 70%);animation:fogIn 1.4s ease-out forwards,fogDrift 6s ease-in-out infinite alternate}
+.wall{position:absolute;border:3px solid #111;border-bottom:0;border-radius:4px 4px 0 0;background-color:#a4442c;background-image:linear-gradient(#0000 calc(100% - 3px),#e3d3b5 0),linear-gradient(90deg,#0000 calc(100% - 3px),#e3d3b5 0),linear-gradient(90deg,#0000 calc(50% - 1.5px),#e3d3b5 0 calc(50% + 1.5px),#0000 0);background-size:100% 16px,28px 32px,28px 32px;background-position:0 0,0 0,14px 16px;box-shadow:6px 0 0 #111a;transform-origin:bottom;animation:wallUp .5s cubic-bezier(.3,1.6,.5,1) both}
+.rubber{position:absolute;border-radius:40%;background:#141414;border:1px solid #444;animation:rubber 2.2s cubic-bezier(.2,.7,.4,1) forwards}
+.boom{position:absolute;font-family:var(--font-aspekta),sans-serif;font-weight:900;font-size:clamp(56px,10vw,110px);color:#ff5a1f;-webkit-text-stroke:4px #111;paint-order:stroke;animation:boom 1.3s ease-out forwards;white-space:nowrap;z-index:3}
+.flash{position:absolute;inset:0;background:#fff;pointer-events:none;animation:flash 1.5s ease-out forwards;z-index:4}
+.bigFinger{position:absolute;z-index:5;display:flex;flex-direction:column-reverse;align-items:center;gap:6px;width:min(44vw,230px);translate:-50% 0;transform-origin:50% 100%;animation:fingerPop 3.4s cubic-bezier(.3,1.4,.5,1) forwards;filter:drop-shadow(8px 8px 0 #111)}
+.bigFinger svg{height:auto;animation:fingerShake .12s linear infinite alternate}
+.bigFinger p{white-space:nowrap;font-family:var(--font-aspekta),sans-serif;font-weight:900;font-size:clamp(26px,5vw,48px);color:#ffd23f;-webkit-text-stroke:3px #111;paint-order:stroke;transform:rotate(-4deg)}
+@keyframes fogIn{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:scale(1)}}
+@keyframes fogDrift{to{translate:40px -30px}}
+@keyframes wallUp{from{transform:scaleY(0)}}
+@keyframes rubber{0%{transform:none}100%{transform:translate(var(--dx),calc(var(--dy) * -1 + 260px)) rotate(720deg);opacity:0}}
+@keyframes boom{0%{transform:scale(.2) rotate(-10deg);opacity:0}15%{transform:scale(1.3) rotate(-6deg);opacity:1}70%{opacity:1}100%{transform:scale(1.5) rotate(-4deg);opacity:0}}
+@keyframes flash{0%{opacity:0}8%,40%{opacity:1}100%{opacity:0}}
+@keyframes fingerPop{0%{scale:.06;opacity:0}6%{opacity:1}22%{scale:1.1}30%,85%{scale:1;opacity:1}100%{scale:.06;opacity:0}}
+@keyframes fingerShake{to{transform:rotate(3deg)}}
+.car{position:absolute;left:0;display:block;animation:carDrive linear forwards}
+.carFlip{display:block;width:100%;height:100%}
+.carSwerve{display:block;width:100%;height:100%;animation:carSwerve 1.3s ease-in-out backwards}
+@keyframes carSwerve{0%{transform:none}30%,65%{transform:translateY(-46px) rotate(5deg)}100%{transform:none}}
+.carBody{display:block;width:100%;height:100%;animation:carBounce .3s ease-in-out infinite alternate}
+.carShock{position:absolute;left:50%;top:-34px;translate:-50% 0;font-family:var(--font-aspekta),sans-serif;font-weight:900;font-size:30px;color:#ffd23f;-webkit-text-stroke:2px #111;paint-order:stroke;opacity:0;animation:carShock 1.6s ease-out both}
+.root .roadkill{position:absolute;width:72px;height:40px;padding:0;border:0;background:none;pointer-events:auto;cursor:pointer;animation:killIn .4s ease-out}
+.roadkill:hover{filter:drop-shadow(0 0 6px #ffd23f)}
+.flies{animation:flies .6s ease-in-out infinite alternate}
+@keyframes carDrive{from{transform:translateX(var(--from))}to{transform:translateX(var(--to))}}
+@keyframes carBounce{to{transform:translateY(-2px)}}
+@keyframes carShock{0%{opacity:0;scale:.4}15%{opacity:1;scale:1.2}30%,80%{opacity:1;scale:1}100%{opacity:0}}
+@keyframes killIn{from{opacity:0;transform:translateY(-30px) rotate(-20deg)}}
+@keyframes flies{to{transform:translate(4px,-3px)}}
+.stopSign{position:absolute;width:44px;height:88px;transform-origin:50% 100%;animation:signUp .45s cubic-bezier(.3,1.6,.5,1) backwards;transition:transform .6s cubic-bezier(.5,-0.4,.7,1)}
+.stopSignDown{transform:rotate(84deg) translateY(6px)}
+.copCar{position:absolute;left:0;display:block;will-change:transform}
+.copFlip{display:block;width:100%;height:100%}
+.root .carClickable{pointer-events:auto;cursor:crosshair}
+.carClickable:hover .carBody{filter:drop-shadow(0 0 8px #ffd23f)}
+.carHeld{animation-play-state:paused!important}
+.carHeld .carBody{animation:carYank .12s linear infinite alternate}
+.chain{position:absolute;inset:0;pointer-events:none;overflow:visible}
+.chainLinks{animation:chainRattle .2s linear infinite}
+@keyframes carYank{from{transform:translateX(-3px) rotate(-1deg)}to{transform:translateX(3px) rotate(1deg)}}
+@keyframes chainRattle{to{stroke-dashoffset:11}}
+.lightRed{animation:siren .4s steps(1) infinite}
+.lightBlue{animation:siren .4s steps(1) infinite reverse}
+@keyframes signUp{from{transform:scaleY(0)}}
+@keyframes siren{0%{opacity:1}50%{opacity:.2}}
+.bbq{position:absolute;display:block;animation:bubbleIn .35s ease-out}
+.snag{fill:#f4a3a8;animation:snagCook 5.6s ease-in forwards}
+.bbqFlames{transform-box:fill-box;transform-origin:50% 100%;animation:flicker .18s ease-in-out infinite alternate}
+.tongs{transform-box:view-box;transform-origin:54px 66px;animation:tongs .45s ease-in-out infinite alternate}
+.sanga{transform-box:fill-box;transform-origin:50% 100%;animation:sanga .4s cubic-bezier(.3,1.6,.5,1) both}
+@keyframes snagCook{0%{fill:#f4a3a8}35%{fill:#d9906f}65%{fill:#7a3e1d}100%{fill:#161616}}
+@keyframes flicker{to{transform:scaleY(1.35);opacity:.8}}
+@keyframes tongs{from{transform:rotate(-8deg)}to{transform:rotate(7deg)}}
+@keyframes sanga{from{transform:scale(0) translateY(10px)}}
 .shazzActions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
 .shazzActions button{min-height:38px;padding:0 10px;border-radius:999px;border:2px solid #111;background:#ffe9b3;color:#141517!important;font-weight:800;font-size:13px}
 .shazzActions button:hover{background:#ffd23f}
@@ -138,8 +195,8 @@
 .moving .braid{animation:flutter .18s ease-in-out infinite alternate}
 .mouth{transform-box:fill-box;transform-origin:top center}
 .talking .mouth{animation:chatter .16s ease-in-out infinite alternate}
-.bubble{position:absolute;padding:14px 16px 16px;border-radius:20px;background:#fffdf5;color:#141517;border:3px solid #111;box-shadow:6px 6px 0 #111;pointer-events:auto;animation:bubbleIn .3s ease-out}
-.bubble p{font-size:19px;font-weight:700;line-height:1.35}
+.bubble{position:absolute;padding:12px 16px;border-radius:18px;cursor:pointer;background:#fffdf5;color:#141517;border:3px solid #111;box-shadow:6px 6px 0 #111;pointer-events:auto;animation:bubbleIn .3s ease-out}
+.bubble p{font-size:17px;font-weight:700;line-height:1.35}
 .bubbleHead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-weight:900;font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#c0392b}
 .bubbleHead button{display:grid;place-items:center;width:38px;height:38px;border:0;background:transparent;color:#141517!important}
 .jokeSource{display:flex;align-items:center;gap:5px;margin-top:8px;font-size:12px;font-weight:700;color:#6b6f75}
@@ -165,7 +222,7 @@
 @keyframes flutter{to{transform:skewY(-8deg) scaleY(.85)}}
 @keyframes chatter{to{transform:scaleY(.35)}}
 @keyframes bubbleIn{from{transform:translateY(12px) scale(.9);opacity:0}}
-@media (prefers-reduced-motion:reduce){.stage *{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.stage *{animation:none!important}.stage .flash,.stage .fog{display:none}}
 
 /* AI pick */
 .aiPanel{margin:22px 0 4px;padding:20px;border-radius:18px;border:1px solid #f28c2855;background:linear-gradient(135deg,#f28c2814,#1f2124 45%)}
@@ -182,4 +239,4 @@
 .aiTips{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
 .aiTips li{display:flex;gap:8px;align-items:flex-start;font-size:16px}
 .aiTips svg{margin-top:4px;color:var(--khaki)}
-@media (max-width:640px){.aiResult{grid-template-columns:1fr}.drunkMeter{width:170px;padding:8px 10px}.root .trickToggle,.root .trick{width:48px;height:48px}.root .trick{padding-left:10px}.trick>span{font-size:20px}.callShazz{padding-right:12px}}
+@media (max-width:640px){.aiResult{grid-template-columns:1fr}.drunkMeter{width:170px;padding:8px 10px}.root .trickToggle{width:48px;height:48px}.root .trick{width:40px;height:40px;padding-left:7px}.trick>span{font-size:18px}.callShazz{padding-right:12px}}

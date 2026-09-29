@@ -1,11 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
 import BikerShazz, { type ShazzPose } from "./BikerShazz";
+import BigFinger from "./BigFinger";
+import FamilyCar from "./FamilyCar";
+import PoliceCar from "./PoliceCar";
+import StopSign from "./StopSign";
+import BbqScene from "./BbqScene";
+import RoadKill, { CRITTERS, type Critter } from "./RoadKill";
 import styles from "../day-out.module.css";
 
 const JOKES = [
+  "This is a Night Train, ya cunt. Last of the real engines before all that V-tech water-cooled shit came out.",
+  "Night Train. Proper air-cooled Harley, loud as buggery. Your V-tech whatever can get stuffed.",
+  "They don't make 'em like the Night Train anymore. Now it's all computers and water cooling. Soft cunts.",
   "Tell ya what ya cunt, Indian or Harley? The Indian starts. The Harley pisses oil on the driveway to mark its territory.",
   "Harley riders wave at each other. Indian riders wave at the Harleys broken down on the side of the road. Suck on that, ya cunt.",
   "A Harley isn't loud, ya deaf old bastard. It's just telling the whole suburb you're coming, five minutes before you get there.",
@@ -44,18 +52,45 @@ const LINES: Record<"flip" | "moon" | "drink" | "smoke" | "throw" | "fall" | "up
 // For anyone who'd rather not read the full-strength version.
 const bleep = (text: string) => text.replace(/cunt/gi, "c**t").replace(/fuck/gi, "f**k").replace(/shit/gi, "sh*t").replace(/bastard/gi, "b*stard");
 const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
+const FAR_LANE = 58;
+const CAR_COLORS = ["#2e7dd1", "#e0a100", "#c0392b", "#27ae60", "#8e44ad", "#e8e8e8"];
+const CAR_LINES = ["Oi! Eyes on the road, ya cunt!", "What are youse lookin' at?!", "Wind the window up, Karen!", "Take a photo, it'll last longer, ya cunts!", "Bloody tourists.", "Yeah, you heard me, Dad. Keep drivin'!"];
+const KILL_LINES: Record<Critter, string[]> = {
+  roo: ["Beauty! Roo snags tonight!", "Skippy's comin' home with me, ya cunt.", "Fresh roo. Only been there since Tuesday."],
+  koala: ["Drop bear down! Koala curry, anyone?", "Smells like eucalyptus. Pre-seasoned!", "Don't tell the tourists, ya cunt."],
+  croc: ["Croc! That's a handbag AND dinner.", "Who's a tough cunt now, ya big handbag?", "Tastes like chicken. Angry chicken."],
+  wombat: ["Wombat! Square poo, square meal.", "Built like a brick shithouse. Feeds six.", "Wombat stew. Nan's recipe, ya cunt."],
+};
+const CRITTER_NAMES: Record<Critter, string> = { roo: "roo", koala: "koala", croc: "croc", wombat: "wombat" };
+const STOP_LINES = ["Stop sign? More of a suggestion, really.", "Stop? Never heard of it, ya cunt!", "Council can send me the bill."];
+const BLAST_LINES = ["Stop THIS, ya cunt!", "Say hello to me little friend!", "That's for every red light, ya bastard."];
+const COP_LINES = ["Shit, it's the cops! Catch me if ya can, ya cunts!", "Oi oi, the fuzz! Hold onto ya stubbies!", "Coppers! Time to open her up!"];
+const ESCAPE_LINES = ["Lost 'em. Too easy, ya cunt!", "Coppers couldn't catch a cold.", "They'll never take me alive, ya cunts!", "Outran the pigs AND kept me beer. Legend."];
+const ONCOMING_LINES = ["Get on ya own side, ya cunt!", "Swerve, ya drongo! …Oh, that's my side? Whatever.", "Nearly wore ya on the grille, ya muppet!", "Move it or lose it, Dad!"];
+const BBQ_START = ["Right, that's three. Barbie time, ya cunts!", "Esky's full. Fire up the barbie!"];
+const BBQ_COOKING = ["Pink on…", "Roo, koala and croc. Surf and turf, bush style.", "Don't touch me tongs, ya cunt."];
+const BBQ_DONE = ["…black off. Just the way we love 'em!", "Charcoal. Perfect. Anyone who says otherwise can get stuffed."];
+const BBQ_SERVED = ["Snag on bread with a squirt of dead horse. Get around it, ya cunts!", "Snag sanga with dead horse. Bunnings wishes."];
+const CHASE_LINES = ["Catch me if ya can, ya cunts!", "Too slow, Constable Plod!", "Ya'll need a Night Train to catch me!", "Wee-oo wee-oo, ya wankers!", "Is that all ya got, ya cunts?"];
+const COP_SHOUTS = ["PULL OVER!", "STOP THAT BIKE!", "OI! YOU!", "BACKUP! BACKUP!"];
+const LASSO_LINES = ["Gotcha, ya cunt! Hand over ya snags.", "Yee-haw! Where d'ya think you're goin'?", "Caught one! Tie 'em to the Night Train."];
 const DRUNK_LABELS = ["Stone cold sober", "Tipsy", "Pissed", "Maggoted", "Absolutely legless"];
-const FIRST_DELAY = 20_000, GAP = 150_000, GROUND = 22, VIEW_W = 260, VIEW_H = 180, FALL_AT = 4;
+function Trick({ label, onClick }: { label: string; onClick: () => void }) {
+  const [icon, ...words] = label.split(" ");
+  return <button className={styles.trick} onClick={onClick} aria-label={words.join(" ")} title={words.join(" ")}><span aria-hidden>{icon}</span><em>{words.join(" ")}</em></button>;
+}
+const FIRST_DELAY = 20_000, GAP = 150_000, GROUND = 14, VIEW_W = 260, VIEW_H = 180, FALL_AT = 4;
 type Phase = "hidden" | "enter" | "parked" | "leave";
 type Action = "flip" | "moon" | "drink" | "smoke" | "throw";
 type Line = { text: string; ai: boolean };
-type Fx = { id: number; kind: "smoke" | "tyre" | "skid" | "burst" | "bottle" | "shard" | "stars"; x: number; y: number; size: number; text?: string; dx?: number; dy?: number; arc?: number };
+type Fx = { id: number; kind: "smoke" | "tyre" | "skid" | "burst" | "bottle" | "shard" | "stars" | "fog" | "boom" | "rubber"; x: number; y: number; size: number; text?: string; dx?: number; dy?: number; arc?: number };
 let uid = 0;
 
 // `summon` increments each time the "Call Shazz" button is pressed.
 export default function SmartArse({ topic, summon }: { topic: string; summon: number }) {
   const [muted, setMuted] = useState<boolean | null>(null);
-  const [clean, setClean] = useState(false);
+  // Swearing is bleeped unless the viewer switches it to full.
+  const [clean, setClean] = useState(true);
   const [phase, setPhaseState] = useState<Phase>("hidden");
   const [line, setLine] = useState<Line | null>(null);
   const [talking, setTalking] = useState(false);
@@ -67,11 +102,33 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
   const [moving, setMoving] = useState(false);
   const [facingLeft, setFacingLeft] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [meter, setMeter] = useState(false);
+  const [burning, setBurning] = useState(false);
+  const [wall, setWall] = useState<{ left: number; width: number; height: number } | null>(null);
+  const [flash, setFlash] = useState(0);
+  const [finger, setFinger] = useState<{ left: number; bottom: number } | null>(null);
+  const smokeCloud = useRef<HTMLDivElement>(null);
+  const [cars, setCars] = useState<{ id: number; dir: 1 | -1; lane: "far" | "near"; color: string; ms: number; width: number; shockAt: number }[]>([]);
+  const [trophies, setTrophies] = useState<Critter[]>([]);
+  const trophyCount = useRef(0);
+  // Set when the third critter goes on the bike; the barbie runs as soon as she's free.
+  const bbqPending = useRef(false);
+  const [bbq, setBbq] = useState<{ left: number; width: number; served: boolean } | null>(null);
+  const [kills, setKills] = useState<{ id: number; kind: Critter; x: number }[]>([]);
+  const killsRef = useRef(kills);
+  killsRef.current = kills;
+  const esky = useRef(0);
+  const [sign, setSign] = useState<{ x: number; holes: number; down: boolean } | null>(null);
+  const [cop, setCop] = useState(false);
+  const copCar = useRef<HTMLSpanElement>(null);
   const bike = useRef<HTMLButtonElement>(null);
-  const place = useRef({ x: -500, tilt: 0, pivot: 60 });
+  const place = useRef<{ x: number; tilt: number; pivot: number; y?: number }>({ x: -500, tilt: 0, pivot: 60 });
   const phaseRef = useRef<Phase>("hidden");
   const drunkRef = useRef(0);
   const busy = useRef(false);
+  const lineTimer = useRef(0);
+  const meterTimer = useRef(0);
+  const showMeter = () => { setMeter(true); window.clearTimeout(meterTimer.current); meterTimer.current = window.setTimeout(() => setMeter(false), 4000); };
   const frame = useRef(0);
   const deck = useRef<string[]>([]);
   const ai = useRef<Record<string, { at: number; list: string[] }>>({});
@@ -84,12 +141,23 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
   const add = (item: Omit<Fx, "id">) => setFx(list => [...list.slice(-180), { ...item, id: ++uid }]);
   const remove = (id: number) => setFx(list => list.filter(item => item.id !== id));
   const s = () => (bike.current?.offsetWidth || width) / VIEW_W;
+  // The more she's had, the more she weaves across the road and lurches about.
+  const weave = (t: number, x: number, tilt: number, pivot: number) => {
+    const d = drunkRef.current;
+    if (!d) return { x, tilt, pivot };
+    return {
+      x: x + Math.sin(t * Math.PI * (2 + d)) * d * 9 * (1 - t * 0.6),
+      y: Math.abs(Math.sin(t * Math.PI * (1.5 + d * 0.8))) * d * 7,
+      tilt: tilt + Math.sin(t * Math.PI * (4 + d * 2)) * d * 2.5,
+      pivot,
+    };
+  };
   const later = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
   const draw = useCallback(() => {
     const el = bike.current; if (!el) return;
-    const { x, tilt, pivot } = place.current, k = el.offsetWidth / VIEW_W;
+    const { x, tilt, pivot, y = 0 } = place.current, k = el.offsetWidth / VIEW_W;
     el.style.transformOrigin = `${pivot * k}px ${172 * k}px`;
-    el.style.transform = `translateX(${x}px) rotate(${tilt}deg)`;
+    el.style.transform = `translate(${x}px, ${-y}px) rotate(${tilt}deg)`;
   }, []);
   const animate = (duration: number, step: (t: number) => void) => new Promise<void>(resolve => {
     const start = performance.now();
@@ -105,6 +173,8 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     // The more she drinks, the more she hiccups.
     const hic = drunkRef.current >= 2 ? pick([" *hic*", " *hic* ...", " *burp*"]) : "";
     setLine({ text: text + hic, ai: fromAi });
+    window.clearTimeout(lineTimer.current);
+    lineTimer.current = window.setTimeout(() => setLine(null), Math.min(9000, 3000 + text.length * 45));
     setTalking(true); window.setTimeout(() => setTalking(false), 1800);
   }, []);
   // AI jokes are fetched per topic and used first; the built-in list is the fallback.
@@ -143,7 +213,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     const k = s(), x = place.current.x;
     setPose(action);
     if (action === "drink") {
-      drunkRef.current += 1; setDrunk(drunkRef.current);
+      drunkRef.current += 1; setDrunk(drunkRef.current); showMeter();
       if (drunkRef.current >= FALL_AT) { speak("One more for the road… whoa, whoa, WHOA—"); await later(900); await fall(); busy.current = false; return; }
       speak(pick(LINES.drink));
       await later(1400);
@@ -179,9 +249,9 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     const left = target < x0; setFacingLeft(left);
     const rearAt = (x: number) => x + (left ? VIEW_W - 60 : 60) * k, exhaustAt = (x: number) => x + (left ? VIEW_W - 16 : 16) * k;
     let lastPuff = 0, lastRear: number | null = null;
-    await animate(Math.max(600, Math.abs(target - x0) * 2.2), t => {
+    await animate(Math.max(600, Math.abs(target - x0) * (2.2 + drunkRef.current * 0.5)), t => {
       const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2, x = x0 + (target - x0) * e, now = performance.now();
-      place.current = { x, tilt: 0, pivot: 60 };
+      place.current = weave(t, x, 0, 60);
       if (now - lastPuff > 70) { lastPuff = now; add({ kind: "smoke", x: exhaustAt(x), y: GROUND + (VIEW_H - 128) * k, size: 12 + Math.random() * 10 }); }
       // Skid the back tyre while she pulls up.
       if (t > 0.75) {
@@ -191,6 +261,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
         lastRear = rear;
       }
     });
+    place.current = { x: target, tilt: 0, pivot: 60 }; draw();
     setFacingLeft(false); setAtX(target); setMoving(false);
     busy.current = false;
     if (Math.random() < 0.5) speak(pick(["Happy now, ya bossy cunt?", "Righto, parked. Where's me beer?", "Don't tell me where to park, ya cunt. …Fine.", "This spot's got better views of your bald patch."]));
@@ -207,7 +278,13 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
   const restless = useRef<() => void>(() => {});
   restless.current = () => {
     if (phaseRef.current !== "parked" || busy.current) return;
-    if (Math.random() < 0.4) void rideTo(40 + Math.random() * (window.innerWidth - 80));
+    const roll = Math.random();
+    if (bbqPending.current) { void barbie(); return; }
+    if (killsRef.current.length && roll < 0.3) { void collect(pick(killsRef.current).id); return; }
+    if (roll < 0.06) void burnout();
+    else if (roll < 0.1) void runStopSign();
+    else if (roll < 0.12) void copChase();
+    else if (roll < 0.4 + drunkRef.current * 0.12) void rideTo(40 + Math.random() * (window.innerWidth - 80));
     else void act(pick(["drink", "flip", "moon", "smoke", "throw", "flip", "smoke"] as Action[]));
   };
   useEffect(() => {
@@ -217,6 +294,297 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     next();
     return () => clearTimeout(timer);
   }, [phase]);
+  // Stubby from her hand, slammed into the road in front of the bike.
+  const slamBottle = (x: number, k: number) => {
+    const handY = GROUND + (VIEW_H - 60) * k;
+    add({ kind: "bottle", x: x + 143 * k, y: handY, size: 0, dx: 25 + Math.random() * 45, dy: handY - GROUND - 6, arc: -35 });
+  };
+  // Brick wall, front wheel up, full throttle for ten seconds until the rear tyre lets go.
+  async function burnout() {
+    if (phaseRef.current !== "parked" || busy.current || !bike.current) return;
+    setMenu(false);
+    let k = s();
+    // She needs room for the wall in front of her.
+    if (place.current.x + 310 * k > window.innerWidth) await rideTo(window.innerWidth * 0.3 + bike.current.offsetWidth / 2);
+    if (busy.current) return;
+    busy.current = true; setBurning(true); k = s();
+    const x0 = place.current.x, rear = x0 + 60 * k;
+    setWall({ left: x0 + 226 * k, width: 70 * k, height: 130 * k });
+    speak("Hold me stubby. Watch this, ya cunt!");
+    await later(900);
+    const done = new Set<string>();
+    const at = (key: string, when: number, t: number, run: () => void) => { if (t >= when && !done.has(key)) { done.add(key); run(); } };
+    const shout = (text: string) => add({ kind: "burst", x: x0 + (Math.random() * 120 - 20) * k, y: VIEW_H * k + GROUND + 30 + Math.random() * 60, size: 0, text });
+    let lastPuff = 0, lastFog = 0;
+    await animate(10000, t => {
+      const now = performance.now();
+      // Front wheel up against the wall, the whole bike shaking on the rev limiter.
+      place.current = { x: x0 + Math.sin(t * 420) * 1.8, tilt: -Math.min(12, t * 90) + Math.sin(t * 310) * 1.2, pivot: 60 };
+      if (now - lastPuff > 35) { lastPuff = now; add({ kind: "tyre", x: rear - Math.random() * 50, y: GROUND + 4, size: 40 + Math.random() * 50 + t * 80 }); }
+      if (t > 0.08 && now - lastFog > 110) { lastFog = now; add({ kind: "fog", x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight * 0.9, size: 200 + Math.random() * 280 }); }
+      if (smokeCloud.current) smokeCloud.current.style.opacity = String(Math.min(0.88, t * 1.15));
+      if (now % 900 < 20) add({ kind: "skid", x: rear - 30 * k, y: GROUND + 5 * k, size: 60 * k });
+      at("y1", 0.05, t, () => shout("YEOOOOO!"));
+      at("d1", 0.2, t, () => setPose("drink"));
+      at("b1", 0.33, t, () => { setPose("ride"); slamBottle(x0, k); });
+      at("y2", 0.4, t, () => shout("BRAAAAAAP!"));
+      at("d2", 0.5, t, () => setPose("drink"));
+      at("b2", 0.62, t, () => { setPose("ride"); slamBottle(x0, k); });
+      at("y3", 0.7, t, () => shout("YEEEOOOOOO!!"));
+      at("f1", 0.78, t, () => setPose("flip"));
+      at("y4", 0.88, t, () => { setPose("ride"); shout("SEND IT!!"); });
+    });
+    // Tyre lets go: bang, rubber everywhere, white flash.
+    add({ kind: "boom", x: rear - 90, y: GROUND + 40, size: 0, text: "BANG!!" });
+    for (let i = 0; i < 16; i++) add({ kind: "rubber", x: rear, y: GROUND + 20 * k, size: 8 + Math.random() * 12, dx: (Math.random() - 0.5) * 600, dy: Math.random() * 260 - 40 });
+    setFlash(n => n + 1);
+    await later(300);
+    if (smokeCloud.current) smokeCloud.current.style.opacity = "0";
+    setFx(list => list.filter(item => item.kind !== "fog" && item.kind !== "tyre"));
+    setWall(null); setBurning(false);
+    place.current = { x: x0, tilt: 0, pivot: 60 }; draw();
+    drunkRef.current = Math.min(FALL_AT - 1, drunkRef.current + 2); setDrunk(drunkRef.current); showMeter();
+    await later(1000);
+    // Arm up, then the finger grows straight out of her fist.
+    setPose("flip");
+    await later(250);
+    // Keep the giant hand on screen even if she's parked near an edge.
+    setFinger({ left: Math.min(window.innerWidth - 120, Math.max(120, place.current.x + 137 * k)), bottom: GROUND + (VIEW_H - 16) * k });
+    speak("Yeah cunt! What a ripper!");
+    await later(3400);
+    setFinger(null); setPose("ride");
+    busy.current = false;
+  }
+  // Aussies drive on the left: far-lane traffic heads left to right; near-lane traffic comes
+  // right to left, straight at Shazz (who's on the wrong side, naturally), and they swerve.
+  function spawnCar() {
+    const width = window.innerWidth < 640 ? 150 : 200, lane: "far" | "near" = Math.random() < 0.5 ? "far" : "near";
+    const dir: 1 | -1 = lane === "far" ? 1 : -1, ms = 4200 + Math.random() * 2500;
+    const from = dir === 1 ? -width : window.innerWidth, to = dir === 1 ? window.innerWidth : -width;
+    const herMiddle = place.current.x + (bike.current?.offsetWidth || 200) / 2;
+    const passAt = Math.max(0, Math.min(1, (herMiddle - width / 2 - from) / (to - from))) * ms;
+    setCars(list => [...list, { id: ++uid, dir, lane, color: pick(CAR_COLORS), ms, width, shockAt: passAt }]);
+    window.setTimeout(async () => {
+      if (phaseRef.current !== "parked" || busy.current) return;
+      busy.current = true;
+      setPose("flip");
+      add({ kind: "burst", x: herMiddle - 20, y: VIEW_H * s() + GROUND + 24, size: 0, text: "OI!" });
+      if (lane === "far") { speak(pick(CAR_LINES)); await later(1700); }
+      else {
+        // Head-on: she ducks toward the kerb and wobbles while the car dives into the other lane.
+        speak(pick(ONCOMING_LINES));
+        const x0 = place.current.x;
+        await animate(900, t => { place.current = { x: x0, y: -Math.sin(t * Math.PI) * 10, tilt: Math.sin(t * Math.PI * 3) * 7, pivot: 130 }; });
+        place.current = { x: x0, tilt: 0, pivot: 60 }; draw();
+        await later(700);
+      }
+      setPose("ride"); busy.current = false;
+    }, Math.max(0, passAt - (lane === "near" ? 550 : 350)));
+  }
+  // Something's copped it on the road. She'll grab it for dinner.
+  function spawnKill() {
+    if (killsRef.current.length >= 3) return;
+    const herMiddle = place.current.x + (bike.current?.offsetWidth || 200) / 2;
+    let x = 0;
+    for (let i = 0; i < 8; i++) { x = 30 + Math.random() * (window.innerWidth - 120); if (Math.abs(x + 35 - herMiddle) > 140) break; }
+    setKills(list => [...list, { id: ++uid, kind: pick(CRITTERS), x }]);
+  }
+  async function collect(id: number) {
+    const kill = killsRef.current.find(item => item.id === id);
+    if (!kill || phaseRef.current !== "parked" || busy.current) return;
+    await rideTo(kill.x + 35);
+    if (busy.current || !killsRef.current.some(item => item.id === id)) return;
+    busy.current = true;
+    setPose("throw");
+    setKills(list => list.filter(item => item.id !== id));
+    esky.current += 1;
+    setTrophies(list => [...list, kill.kind].slice(-3));
+    trophyCount.current += 1;
+    add({ kind: "burst", x: kill.x - 20, y: GROUND + 90, size: 0, text: "+1 FOR DINNER!" });
+    speak(`${pick(KILL_LINES[kill.kind])} Strapped to the front of the Night Train. That's ${esky.current} for the esky.`);
+    await later(1200);
+    setPose("ride"); busy.current = false;
+    if (trophyCount.current >= 3) bbqPending.current = true;
+  }
+
+  // Three critters on the bike: hop off, cook 'em pink to charcoal, serve on bread with dead horse.
+  async function barbie() {
+    if (phaseRef.current !== "parked" || busy.current || !bike.current) return;
+    const w = () => bike.current?.offsetWidth || 200;
+    const sceneW = Math.round(w() * 0.9);
+    // Needs room beside the bike for the barbie.
+    if (place.current.x + w() + sceneW + 10 > window.innerWidth) await rideTo(window.innerWidth * 0.35);
+    if (busy.current) return;
+    busy.current = true; setMenu(false); bbqPending.current = false;
+    const left = place.current.x + w() - 10;
+    setPose("off");
+    setBbq({ left, width: sceneW, served: false });
+    speak(pick(BBQ_START));
+    const plateX = left + sceneW * (126 / 170), plateY = GROUND + sceneW * (150 / 170) * (60 / 150);
+    let lastPuff = 0, said = 0;
+    await animate(6500, t => {
+      const now = performance.now();
+      if (now - lastPuff > 140) { lastPuff = now; add({ kind: "smoke", x: plateX + (Math.random() - 0.5) * sceneW * 0.4, y: plateY, size: 14 + Math.random() * 14 + t * 10 }); }
+      if (t > 0.2 && said === 0) { said = 1; speak(pick(BBQ_COOKING)); add({ kind: "burst", x: plateX - 50, y: plateY + 40, size: 0, text: "SIZZLE!" }); }
+      if (t > 0.75 && said === 1) { said = 2; speak(pick(BBQ_DONE)); }
+    });
+    setBbq(current => current && { ...current, served: true });
+    speak(pick(BBQ_SERVED));
+    add({ kind: "burst", x: plateX - 60, y: plateY + 50, size: 0, text: "SNAG SANGA!" });
+    await later(3800);
+    // Dinner's eaten, the straps are empty, back on the bike.
+    setBbq(null); setTrophies([]); trophyCount.current = 0;
+    setPose("ride");
+    speak("Right. Back on the Night Train.");
+    busy.current = false;
+  }
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (bbqPending.current && phaseRef.current === "parked" && !busy.current) void barbie();
+    }, 600);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (phase !== "parked") return;
+    let carTimer = 0, killTimer = 0;
+    const nextCar = () => { carTimer = window.setTimeout(() => { spawnCar(); nextCar(); }, 9000 + Math.random() * 16000); };
+    const nextKill = () => { killTimer = window.setTimeout(() => { spawnKill(); nextKill(); }, 12000 + Math.random() * 18000); };
+    nextCar(); nextKill();
+    return () => { clearTimeout(carTimer); clearTimeout(killTimer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+  // Blow straight through a stop sign, then turn round and let it have both barrels.
+  async function runStopSign() {
+    if (phaseRef.current !== "parked" || busy.current || !bike.current) return;
+    setMenu(false);
+    const w = bike.current.offsetWidth, x0 = place.current.x, goRight = x0 < window.innerWidth / 2;
+    const signX = goRight ? Math.min(window.innerWidth - 150, x0 + w + 90) : Math.max(90, x0 - 150);
+    setSign({ x: signX, holes: 0, down: false });
+    speak(pick(STOP_LINES));
+    await later(900);
+    await rideTo(goRight ? signX + w + 60 : signX - 110);
+    if (busy.current) return;
+    busy.current = true;
+    const k = s(), x = place.current.x, faceLeft = signX < x;
+    setFacingLeft(faceLeft); setPose("shotgun");
+    await later(400);
+    const muzzle = faceLeft ? x + (VIEW_W - 192) * k : x + 192 * k, muzzleY = GROUND + (VIEW_H - 42) * k;
+    for (let shot = 1; shot <= 2; shot++) {
+      add({ kind: "burst", x: muzzle - 40, y: muzzleY + 10, size: 0, text: "BLAM!" });
+      for (let i = 0; i < 5; i++) add({ kind: "smoke", x: muzzle + (faceLeft ? -i * 8 : i * 8), y: muzzleY, size: 14 + i * 5 });
+      place.current = { ...place.current, tilt: faceLeft ? 3 : -3 }; draw();
+      setSign(current => current && { ...current, holes: shot, down: shot === 2 });
+      if (shot === 1) speak(pick(BLAST_LINES));
+      await later(160);
+      place.current = { ...place.current, tilt: 0 }; draw();
+      await later(700);
+    }
+    setPose("ride"); setFacingLeft(false);
+    window.setTimeout(() => setSign(null), 2500);
+    busy.current = false;
+    // Shooting up public property tends to attract attention.
+    if (Math.random() < 0.7) { await later(1200); await copChase(); }
+  }
+
+  // A full minute of cops and robbers: she tears back and forth across the road, the cop
+  // car follows her exact path a beat behind, cars keep coming, bottles fly. She always wins.
+  async function copChase() {
+    if (phaseRef.current !== "parked" || busy.current || !bike.current) return;
+    busy.current = true; setMenu(false); setBurning(true); setLine(null);
+    const k = s(), w = bike.current.offsetWidth, copW = window.innerWidth < 640 ? 160 : 210;
+    setCop(true);
+    await later(50);
+    let copX = -copW - 30, lastCopX = copX, copSpin = 0;
+    const moveCop = (x: number) => {
+      const el = copCar.current; if (!el) return;
+      const dir = x < lastCopX - 0.5 ? -1 : x > lastCopX + 0.5 ? 1 : 0;
+      el.style.transform = `translateX(${x}px) rotate(${copSpin}deg)`;
+      if (dir) (el.firstElementChild as HTMLElement | null)?.style.setProperty("transform", dir < 0 ? "scaleX(-1)" : "none");
+      lastCopX = x; copX = x;
+    };
+    moveCop(copX);
+    add({ kind: "burst", x: 20, y: GROUND + 130, size: 0, text: "WEE-OO WEE-OO!" });
+    add({ kind: "burst", x: place.current.x, y: VIEW_H * k + GROUND + 40, size: 0, text: pick(["Shit! Cops!", "The fuzz!", "Coppers!"]) });
+    const trail: { at: number; x: number }[] = [];
+    const LAG = 850, START = performance.now(), LENGTH = 60_000;
+    let x = place.current.x, lastPuff = 0, lastShout = 0;
+    const exhaustAt = (px: number, left: boolean) => px + (left ? VIEW_W - 16 : 16) * k;
+    const rearAt = (px: number, left: boolean) => px + (left ? VIEW_W - 60 : 60) * k;
+    const throwAtCop = () => {
+      const hand = x + 143 * k, handY = GROUND + (VIEW_H - 60) * k;
+      add({ kind: "bottle", x: hand, y: handY, size: 0, dx: copX + copW / 2 - hand, dy: handY - GROUND - 30, arc: -90 });
+    };
+    while (performance.now() - START < LENGTH && phaseRef.current === "parked") {
+      // Pick somewhere well away and floor it; every leg is a U-turn or a dash.
+      let target = x;
+      for (let i = 0; i < 10 && Math.abs(target - x) < window.innerWidth * 0.3; i++) target = 10 + Math.random() * (window.innerWidth - w - 20);
+      const left = target < x, x0 = x;
+      setFacingLeft(left);
+      add({ kind: "skid", x: rearAt(x0, left) - 25 * k, y: GROUND + 5 * k, size: 50 * k });
+      for (let i = 0; i < 4; i++) add({ kind: "tyre", x: rearAt(x0, left) + (Math.random() - 0.5) * 30, y: GROUND + 4, size: 30 + Math.random() * 24 });
+      const roll = Math.random();
+      if (roll < 0.3) add({ kind: "burst", x: Math.max(10, x0 - 40), y: VIEW_H * k + GROUND + 40, size: 0, text: pick(CHASE_LINES) });
+      else if (roll < 0.5) { throwAtCop(); add({ kind: "burst", x: x0, y: VIEW_H * k + GROUND + 30, size: 0, text: "HAVE A BEER!" }); }
+      if (Math.random() < 0.35) spawnCar();
+      await animate(Math.abs(target - x0) * 1.5 + 350, t => {
+        const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2, now = performance.now();
+        x = x0 + (target - x0) * e;
+        place.current = weave(t, x, (left ? 1 : -1) * Math.sin(t * Math.PI) * 6, 60);
+        trail.push({ at: now, x });
+        while (trail.length > 2 && trail[1].at <= now - LAG) trail.shift();
+        // The cop drives her exact line, a beat behind.
+        if (trail[0].at <= now - LAG) moveCop(trail[0].x - (left ? -1 : 1) * 30);
+        else moveCop(copX + (x - copX) * 0.02);
+        if (now - lastPuff > 70) { lastPuff = now; add({ kind: "smoke", x: exhaustAt(x, left), y: GROUND + (VIEW_H - 128) * k, size: 14 + Math.random() * 10 }); }
+        if (now - lastShout > 3500) { lastShout = now; add({ kind: "burst", x: copX + 10, y: GROUND + 150, size: 0, text: pick(COP_SHOUTS) }); }
+      });
+    }
+    // Finale: the cop overcooks a U-turn and spins out. She's gone.
+    setFacingLeft(false);
+    add({ kind: "burst", x: copX, y: GROUND + 150, size: 0, text: "SPUN OUT!" });
+    await animate(1400, t => {
+      copSpin = t * 720; moveCop(copX + Math.sin(t * Math.PI) * 40);
+      if (Math.random() < 0.4) add({ kind: "tyre", x: copX + copW / 2 + (Math.random() - 0.5) * copW, y: GROUND + 6, size: 30 + Math.random() * 30 });
+      place.current = { x, tilt: 0, pivot: 60 };
+    });
+    setAtX(x); speak("See ya later, Constable Plod!");
+    const x0 = x, end = window.innerWidth + 160;
+    let lastRear = rearAt(x0, false);
+    await animate(1800, t => {
+      const px = x0 + (end - x0) * t * t * t, now = performance.now();
+      place.current = weave(t, px, -Math.min(14, t * 50), 60);
+      if (now - lastPuff > 45) { lastPuff = now; add({ kind: "smoke", x: exhaustAt(px, false), y: GROUND + (VIEW_H - 128) * k, size: 16 + Math.random() * 12 }); add({ kind: "smoke", x: copX + copW / 2, y: GROUND + 40, size: 20 + Math.random() * 20 }); }
+      const r = rearAt(px, false);
+      if (t < 0.3 && r > lastRear) { add({ kind: "skid", x: lastRear, y: GROUND + 5 * k, size: r - lastRear + 1 }); lastRear = r; }
+    });
+    setCop(false); setBurning(false);
+    await later(1400);
+    // Back in from the left like nothing happened.
+    setPhase("hidden");
+    busy.current = false;
+    await arrive();
+    speak(pick(ESCAPE_LINES));
+  }
+
+  // Click a passing car and she lassoes it with a chain, holds it, then lets it go.
+  const [lasso, setLasso] = useState<{ carId: number; x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [heldCar, setHeldCar] = useState<number | null>(null);
+  async function lassoCar(carId: number, el: HTMLElement) {
+    if (phaseRef.current !== "parked" || busy.current || !bike.current) return;
+    busy.current = true; setMenu(false);
+    const k = s(), box = el.getBoundingClientRect();
+    const handX = place.current.x + 86 * k, handY = window.innerHeight - (GROUND + (VIEW_H - 12) * k);
+    setPose("throw");
+    setHeldCar(carId);
+    setLasso({ carId, x1: handX, y1: handY, x2: box.left + box.width / 2, y2: box.top + box.height * 0.35 });
+    add({ kind: "burst", x: box.left + box.width / 2 - 40, y: window.innerHeight - box.top + 10, size: 0, text: "YOINK!" });
+    speak(pick(LASSO_LINES));
+    await later(2600);
+    setLasso(null); setHeldCar(null); setPose("ride");
+    speak("Nah, go on, piss off. Drive safe!");
+    busy.current = false;
+  }
   const smash = (item: Fx) => {
     remove(item.id);
     const x = item.x + (item.dx || 0);
@@ -236,7 +604,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
         const x = start + (park - start) * (1 - Math.pow(1 - t, 3));
         const braking = t > 0.5, now = performance.now();
         // Braking dips the nose over the front wheel and shakes a little.
-        place.current = { x, tilt: braking ? 3 * (1 - t) * 2 + Math.sin(t * 90) * 0.6 : 0, pivot: 205 };
+        place.current = weave(t, x, braking ? 3 * (1 - t) * 2 + Math.sin(t * 90) * 0.6 : 0, 205);
         if (now - lastPuff > 60) {
           lastPuff = now;
           add({ kind: "smoke", x: x + 16 * k, y: GROUND + (VIEW_H - 128) * k, size: 14 + Math.random() * 10 });
@@ -249,7 +617,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
           lastRear = rear;
         }
       });
-      await animate(250, t => { place.current = { ...place.current, tilt: 1.2 * (1 - t) }; });
+      await animate(250, t => { place.current = { x: place.current.x, tilt: 1.2 * (1 - t), pivot: 205 }; });
     }
     setAtX(park); setPhase("parked"); say();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,20 +641,21 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
       const end = window.innerWidth + 120; let lastRear = rear;
       await animate(1400, t => {
         const x = x0 + (end - x0) * t * t * t, now = performance.now();
-        place.current = { x, tilt: -Math.min(16, t * 60) * (t < 0.8 ? 1 : (1 - t) * 5), pivot: 60 };
+        place.current = weave(t, x, -Math.min(16, t * 60) * (t < 0.8 ? 1 : (1 - t) * 5), 60);
         if (now - lastPuff > 50) { lastPuff = now; add({ kind: "smoke", x: x + 16 * k, y: GROUND + (VIEW_H - 128) * k, size: 16 + Math.random() * 12 }); }
         const r = x + 60 * k;
         if (t < 0.35 && r > lastRear) { add({ kind: "skid", x: lastRear, y: GROUND + 5 * k, size: r - lastRear + 1 }); lastRear = r; }
       });
     }
     place.current = { x: -500, tilt: 0, pivot: 60 }; draw();
+    setKills([]); setBbq(null);
     setPhase("hidden");
   }
 
   useEffect(() => {
     try {
       setMuted(localStorage.getItem("day-out-smartarse-muted") === "1");
-      setClean(localStorage.getItem("day-out-smartarse-clean") === "1");
+      setClean(localStorage.getItem("day-out-smartarse-clean") !== "0");
     } catch { setMuted(false); }
     const onResize = () => {
       if (phaseRef.current !== "parked" || !bike.current) return;
@@ -316,8 +685,25 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
   const actions: [Action, string][] = [["drink", "🍺 Crack a tinnie"], ["flip", "🖕 Flip us off"], ["moon", "🍑 Show us ya arse"], ["smoke", "🚬 Light a durry"], ["throw", "🍾 Chuck a bottle"]];
   return <div className={styles.stage}>
     <div className={`${styles.road} ${onRoad ? styles.roadOn : ""} ${phase === "parked" ? styles.roadClickable : ""}`} onClick={event => void rideTo(event.clientX)} title={phase === "parked" ? "Click to move Shazz here" : undefined} />
+    {cars.map(car => <span key={car.id} className={`${styles.car} ${phase === "parked" ? styles.carClickable : ""} ${heldCar === car.id ? styles.carHeld : ""}`}
+      onClick={event => void lassoCar(car.id, event.currentTarget)} title={phase === "parked" ? "Lasso it!" : undefined} onAnimationEnd={event => event.target === event.currentTarget && setCars(list => list.filter(item => item.id !== car.id))}
+      style={{ bottom: car.lane === "far" ? FAR_LANE : GROUND + 2, width: car.width, height: car.width * 0.45, animationDuration: `${car.ms}ms`, ["--from" as string]: `${car.dir === 1 ? -car.width : window.innerWidth}px`, ["--to" as string]: `${car.dir === 1 ? window.innerWidth : -car.width}px` }}>
+      <span className={car.lane === "near" ? styles.carSwerve : styles.carFlip} style={car.lane === "near" ? { animationDelay: `${Math.max(0, car.shockAt - 650)}ms` } : undefined}>
+        <span className={styles.carFlip} style={{ transform: car.dir === -1 ? "scaleX(-1)" : undefined }}><span className={styles.carBody}><FamilyCar color={car.color} /></span></span>
+      </span>
+      <span className={styles.carShock} style={{ animationDelay: `${car.shockAt}ms` }}>!!</span>
+    </span>)}
+    {sign && <span className={`${styles.stopSign} ${sign.down ? styles.stopSignDown : ""}`} style={{ left: sign.x, bottom: 44 }}><StopSign holes={sign.holes} /></span>}
+    {bbq && <span className={styles.bbq} style={{ left: bbq.left, bottom: GROUND - 2, width: bbq.width, height: bbq.width * (150 / 170) }}><BbqScene served={bbq.served} /></span>}
+    {cop && <span ref={copCar} className={styles.copCar} style={{ bottom: GROUND + 30, width: window.innerWidth < 640 ? 160 : 210, height: (window.innerWidth < 640 ? 160 : 210) * 0.42, transform: "translateX(-400px)" }}><span className={styles.copFlip}><PoliceCar /></span></span>}
+    {kills.map(kill => <button key={kill.id} className={styles.roadkill} style={{ left: kill.x, bottom: GROUND - 2 }} onClick={() => void collect(kill.id)}
+      aria-label={`Dead ${CRITTER_NAMES[kill.kind]} on the road. Send Shazz to grab it for dinner`} title="Dinner! Click to send Shazz">
+      <RoadKill kind={kill.kind} />
+    </button>)}
     {fx.map(item => {
-      if (item.kind === "burst" || item.kind === "stars") return <span key={item.id} className={styles[item.kind]} style={{ left: item.x, bottom: item.y }} onAnimationEnd={() => remove(item.id)}>{item.text}</span>;
+      if (item.kind === "fog") return null;
+      if (item.kind === "rubber") return <span key={item.id} className={styles.rubber} style={{ left: item.x, bottom: item.y, width: item.size, height: item.size * 0.6, ["--dx" as string]: `${item.dx}px`, ["--dy" as string]: `${item.dy}px` }} onAnimationEnd={() => remove(item.id)} />;
+      if (item.kind === "burst" || item.kind === "stars" || item.kind === "boom") return <span key={item.id} className={styles[item.kind]} style={{ left: item.x, bottom: item.y }} onAnimationEnd={() => remove(item.id)}>{item.text}</span>;
       if (item.kind === "bottle") return <span key={item.id} className={styles.bottleX} style={{ left: item.x, bottom: item.y, ["--dx" as string]: `${item.dx}px` }} onAnimationEnd={event => event.target === event.currentTarget && smash(item)}>
         <span className={styles.bottleY} style={{ ["--dy" as string]: `${item.dy}px`, ["--arc" as string]: `${item.arc ?? -110}px` }}><span className={styles.bottle} /></span>
       </span>;
@@ -325,40 +711,50 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
       return <span key={item.id} className={styles[item.kind]} onAnimationEnd={() => remove(item.id)}
         style={item.kind === "skid" ? { left: item.x, bottom: item.y, width: item.size } : { left: item.x - item.size / 2, bottom: item.y - item.size / 2, width: item.size, height: item.size }} />;
     })}
-    <button ref={bike} className={`${styles.shazz} ${phase === "enter" || phase === "leave" || moving ? styles.moving : ""} ${talking ? styles.talking : ""}`}
+    {wall && <span className={styles.wall} style={{ left: wall.left, bottom: GROUND - 2, width: wall.width, height: wall.height }} />}
+    <button ref={bike} className={`${styles.shazz} ${phase === "enter" || phase === "leave" || moving || burning ? styles.moving : ""} ${talking ? styles.talking : ""}`}
       style={{ width, height, bottom: GROUND, visibility: phase === "hidden" ? "hidden" : "visible", transform: "translateX(-500px)" }}
       onClick={() => phase === "parked" && void act(pick(actions)[0])} tabIndex={phase === "parked" ? 0 : -1} aria-label="Big Shazz. Poke her and see what happens">
-      <span style={{ transform: facingLeft ? "scaleX(-1)" : undefined }}><span className={drunk ? styles.wobble : ""} style={{ ["--wobble" as string]: `${Math.min(drunk, 3) * 2.5}deg` }}><BikerShazz pose={pose} drunk={drunk} /></span></span>
+      <span style={{ transform: facingLeft ? "scaleX(-1)" : undefined }}><span className={drunk ? styles.wobble : ""} style={{ ["--wobble" as string]: `${Math.min(drunk, 3) * 2.5}deg` }}><BikerShazz pose={pose} drunk={drunk} trophies={trophies} /></span></span>
     </button>
+    <div ref={smokeCloud} className={styles.smokeCloud} />
+    {fx.filter(item => item.kind === "fog").map(item => <span key={item.id} className={styles.fog} style={{ left: item.x - item.size / 2, bottom: item.y - item.size / 2, width: item.size, height: item.size }} />)}
+    {lasso && <svg className={styles.chain} width="100%" height="100%" aria-hidden>
+      <line x1={lasso.x1} y1={lasso.y1} x2={lasso.x2} y2={lasso.y2} stroke="#111" strokeWidth={7} strokeLinecap="round" />
+      <line x1={lasso.x1} y1={lasso.y1} x2={lasso.x2} y2={lasso.y2} stroke="#c9ced6" strokeWidth={4} strokeDasharray="7 4" strokeLinecap="round" className={styles.chainLinks} />
+      <ellipse cx={lasso.x2} cy={lasso.y2} rx={34} ry={12} fill="none" stroke="#c9ced6" strokeWidth={4} strokeDasharray="7 4" />
+    </svg>}
+    {flash > 0 && <div key={flash} className={styles.flash} />}
+    {finger && <div className={styles.bigFinger} style={{ left: finger.left, bottom: finger.bottom }} role="img" aria-label="Shazz gives you the finger">
+      <BigFinger />
+      <p>{clean ? bleep("Yeah cunt! What a ripper!") : "Yeah cunt! What a ripper!"}</p>
+    </div>}
     {phase === "parked" && !moving && line && (() => {
-      const bubbleW = Math.min(370, window.innerWidth - 32), head = atX + 118 * scale;
-      const left = Math.max(16, Math.min(window.innerWidth - bubbleW - 16, head - bubbleW + 70));
-      return <aside className={styles.bubble} style={{ left, width: bubbleW, bottom: height + GROUND + 16 }} role="status" aria-live="polite">
-        <div className={styles.bubbleHead}>
-          <span>Big Shazz · Smart Arse MC{drunk ? ` · ${"🍺".repeat(drunk)}` : ""}</span>
-          <button onClick={() => void leave()} aria-label="Send Shazz off"><X size={20} aria-hidden /></button>
-        </div>
+      const bubbleW = Math.min(320, window.innerWidth - 32), head = atX + 118 * scale;
+      const left = Math.max(16, Math.min(window.innerWidth - bubbleW - 16, head - bubbleW + 60));
+      return <aside key={line.text} className={styles.bubble} style={{ left, width: bubbleW, bottom: height + GROUND + 14 }} role="status" aria-live="polite" onClick={() => setLine(null)}>
         <p>{clean ? bleep(line.text) : line.text}</p>
-        <span className={styles.jokeSource}>Click the road to move her · 🤘 on the left for tricks</span>
-        <div className={styles.bubbleActions}>
-          <button onClick={say}>Another one</button>
-          <button onClick={() => void leave()}>Yeah, righto</button>
-          <button onClick={() => void leave(true)}>Piss off, Shazz</button>
-          <button onClick={toggleClean} aria-pressed={clean}>{clean ? "Swearing: bleeped" : "Swearing: full"}</button>
-        </div>
         <span className={styles.bubbleTail} style={{ left: Math.max(16, Math.min(bubbleW - 42, head - left - 13)) }} />
       </aside>;
     })()}
-    {phase !== "hidden" && <div className={styles.drunkMeter} role="meter" aria-label="Shazz's drunk meter" aria-valuemin={0} aria-valuemax={FALL_AT} aria-valuenow={drunk}>
+    {phase !== "hidden" && meter && <div className={styles.drunkMeter} role="meter" aria-label="Shazz's drunk meter" aria-valuemin={0} aria-valuemax={FALL_AT} aria-valuenow={drunk}>
       <span className={styles.drunkLabel}>Drunk-o-meter: <b>{DRUNK_LABELS[Math.min(drunk, FALL_AT)]}</b></span>
       <span className={styles.drunkTrack}><span className={styles.drunkFill} style={{ width: `${(Math.min(drunk, FALL_AT) / FALL_AT) * 100}%` }} /></span>
       <span className={styles.drunkCans} aria-hidden>{Array.from({ length: FALL_AT }, (_, i) => <span key={i} className={i < drunk ? styles.canFull : ""}>🍺</span>)}</span>
     </div>}
-    {phase === "parked" && <div className={`${styles.trickBar} ${menu ? styles.trickBarOpen : ""}`}>
-      <button className={styles.trickToggle} onClick={() => setMenu(open => !open)} aria-expanded={menu} aria-label="Shazz's tricks">{menu ? "✕" : "🤘"}</button>
-      {menu && actions.map(([action, label]) => <button key={action} className={styles.trick} onClick={() => void act(action)}>
-        <span aria-hidden>{label.split(" ")[0]}</span><em>{label.split(" ").slice(1).join(" ")}</em>
-      </button>)}
+    {phase === "parked" && <div className={styles.trickBar}>
+      <button className={styles.trickToggle} onClick={() => setMenu(open => !open)} aria-expanded={menu} aria-label="Shazz's tricks and settings">{menu ? "✕" : "🤘"}</button>
+      {menu && <>
+        <Trick label="🔥 Burnout" onClick={() => void burnout()} />
+        <Trick label="🛑 Run a stop sign" onClick={() => void runStopSign()} />
+        <Trick label="🚓 Cop chase" onClick={() => void copChase()} />
+        {actions.map(([action, label]) => <Trick key={action} label={label} onClick={() => void act(action)} />)}
+        <span className={styles.trickDivider} />
+        <Trick label="💬 Another one" onClick={say} />
+        <Trick label={clean ? "🤬 Full swearing" : "🤐 Bleep swearing"} onClick={toggleClean} />
+        <Trick label="👋 Yeah, righto" onClick={() => void leave()} />
+        <Trick label="🖐️ Piss off, Shazz" onClick={() => void leave(true)} />
+      </>}
     </div>}
   </div>;
 }

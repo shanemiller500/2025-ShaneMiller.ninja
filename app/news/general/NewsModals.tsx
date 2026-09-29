@@ -1,11 +1,12 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect } from "react";
-import { X } from "lucide-react";
+import { Layers } from "lucide-react";
 import { trackEvent } from "@/utils/mixpanel";
+import { Modal } from "@/components/ui/modal";
 import { SmartImage } from "../lib/SmartImage";
-import { getDomain, uniqStrings, badUrl, withProxyFallback, normalizeUrl } from "../lib/utils";
+import { getDomain, uniqStrings, badUrl, withProxyFallback } from "../lib/utils";
+import { shortDate } from "../components/NewsKit";
 
 import type { Article } from "./AllNewsTab";
 
@@ -69,141 +70,61 @@ export function GroupModal({
   onClose: () => void;
   onArticleClick: (article: Article) => void;
 }) {
-  /* ESC key */
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  /* Lock scroll */
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
-  if (!open || !group) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      {/* Backdrop */}
-      <div
-        aria-label="Close"
-        onClick={onClose}
-        className="fixed inset-0 bg-black/55 backdrop-blur-sm cursor-pointer"
-      />
-
-      {/* Panel */}
-      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] sm:max-h-[85vh] flex flex-col bg-white dark:bg-brand-900 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
-
-        {/* Header */}
-        <div className="flex-shrink-0 flex items-start justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 dark:border-gray-800">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                {group.items.length} source{group.items.length === 1 ? "" : "s"}
-              </span>
-            </div>
-            <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-50 leading-snug line-clamp-2">
+    <Modal open={open && !!group} onClose={onClose} labelledBy="group-title" size="lg">
+      {group && (
+        <>
+          <div className="shrink-0 border-b border-slate-200/70 px-4 py-4 pr-14 dark:border-white/[0.08] sm:px-6">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
+              <Layers className="h-3 w-3" aria-hidden />
+              {group.items.length} source{group.items.length === 1 ? "" : "s"}
+            </span>
+            <h3 id="group-title" className="mt-2 text-base font-semibold leading-snug text-slate-900 line-clamp-2 dark:text-white">
               {group.title}
             </h3>
-            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
-              Latest:{" "}
-              {new Date(group.newestAt).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
-            </p>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">Latest · {shortDate(group.newestAt)}</p>
           </div>
 
-          <button
-            onClick={onClose}
-            className="shrink-0 rounded-lg p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Scrollable list */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-2 bg-gray-50 dark:bg-gray-950">
-          {group.items.map((a) => {
-            const logos = getLogoCandidates(a);
-            const imgs = getImageCandidates(a);
-            const hasImage = imgs.length > 0;
-
-            return (
-              <button
-                key={stableKey(a)}
-                onClick={() => {
-                  trackEvent("Article Clicked", {
-                    title: a.title,
-                    url: a.url,
-                    source: a.source.name,
-                    grouped: true,
-                  });
-                  onArticleClick(a);
-                }}
-                className="group block w-full text-left overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
-              >
-                <div className="flex gap-3 p-3">
-                  {hasImage && (
-                    <div className="relative h-14 w-20 sm:h-16 sm:w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
-                      <SmartImage
-                        candidates={imgs}
-                        alt={a.title}
-                        wrapperClassName="absolute inset-0"
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
-                      />
+          <div className="flex-1 space-y-2 overflow-y-auto overscroll-contain p-3 sm:p-4">
+            {group.items.map((a) => {
+              const logos = getLogoCandidates(a);
+              const imgs = getImageCandidates(a);
+              return (
+                <button
+                  key={stableKey(a)}
+                  onClick={() => {
+                    trackEvent("Article Clicked", { title: a.title, url: a.url, source: a.source.name, grouped: true });
+                    onArticleClick(a);
+                  }}
+                  className="group flex w-full gap-3 rounded-2xl border border-slate-200/70 bg-white p-3 text-left transition hover:border-slate-300 hover:shadow-[0_8px_24px_-14px_rgba(15,23,42,0.35)] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/15"
+                >
+                  {imgs.length > 0 && (
+                    <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl bg-slate-100 dark:bg-white/[0.04]">
+                      <SmartImage candidates={imgs} alt={a.title} wrapperClassName="absolute inset-0" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" />
                     </div>
                   )}
-
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 mb-1">
+                    <div className="mb-1 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                       {logos.length > 0 && (
-                        <div className="h-4 w-4 rounded overflow-hidden bg-gray-50 dark:bg-gray-800 flex-shrink-0">
-                          <SmartImage
-                            candidates={logos}
-                            alt={a.source.name}
-                            className="h-full w-full object-contain"
-                          />
-                        </div>
+                        <span className="h-4 w-4 shrink-0 overflow-hidden rounded-full bg-white ring-1 ring-slate-200 dark:ring-white/10">
+                          <SmartImage candidates={logos} alt={a.source.name} className="h-full w-full object-contain p-0.5" />
+                        </span>
                       )}
-                      <span className="text-[10px] sm:text-xs font-medium text-gray-500 dark:text-gray-400 truncate">
-                        {a.source.name || getDomain(a.url)}
-                      </span>
-                      <span className="text-[10px] text-gray-300 dark:text-gray-600">·</span>
-                      <time className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500" dateTime={a.publishedAt}>
-                        {new Date(a.publishedAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </time>
+                      <span className="truncate font-medium">{a.source.name || getDomain(a.url)}</span>
+                      <span className="opacity-40">·</span>
+                      <time className="font-mono text-[10px]" dateTime={a.publishedAt}>{shortDate(a.publishedAt)}</time>
                     </div>
-
-                    <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-50 leading-snug line-clamp-2 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">
+                    <p className="text-sm font-semibold leading-snug text-slate-900 transition-colors line-clamp-2 group-hover:text-indigo-600 dark:text-white dark:group-hover:text-indigo-300">
                       {a.title}
                     </p>
-
-                    {a.description && (
-                      <p className="mt-1 text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
-                        {a.description}
-                      </p>
-                    )}
+                    {a.description && <p className="mt-1 text-xs leading-relaxed text-slate-500 line-clamp-2 dark:text-slate-400">{a.description}</p>}
                   </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </Modal>
   );
 }

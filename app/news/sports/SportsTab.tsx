@@ -2,10 +2,12 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Trophy } from "lucide-react";
+import { Segmented } from "@/components/ui/segmented";
+import { PanelHeader, SectionLabel, Notice, StoryCard, Pagination, cardGrid } from "../components/NewsKit";
 import { fetchSportsNews } from "./sportsNews";
 import LiveScores from "./LiveScores";
-import { SmartImage, SkeletonCard } from "../lib/SmartImage";
+import { SkeletonCard } from "../lib/SmartImage";
 import { getDomain } from "../lib/utils";
 import ReaderModal, { type ReadableArticle } from "../components/ReaderModal";
 import {
@@ -123,13 +125,9 @@ function LiveScoresForTab({ tab }: { tab: TabKey }) {
 
   if (!hasLiveForTab) {
     return (
-      <div className="mb-4 sm:mb-5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600" />
-          <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">
-            No live games right now
-          </span>
-        </div>
+      <div className="mb-6 flex items-center gap-2 rounded-2xl border border-slate-200/70 bg-slate-50 px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.02]">
+        <span className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+        <span className="font-mono text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">No live games right now</span>
       </div>
     );
   }
@@ -252,264 +250,68 @@ export default function SportsTab() {
 
   const openReader = (a: Article) => setReaderArticle(toReadable(a));
 
-  return (
-    <div className="pb-10">
-      {/* Sport category tabs */}
-      <div className="mb-4 sm:mb-5 overflow-x-auto">
-        <div className="flex gap-1.5 min-w-max rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-1">
-          {CATEGORIES.map((c) => {
-            const isActive = tab === c.key;
-            return (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => setTab(c.key)}
-                className={[
-                  "shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                  isActive
-                    ? "bg-white dark:bg-gray-700 text-orange-600 dark:text-orange-400 shadow-sm"
-                    : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200",
-                ].join(" ")}
-              >
-                {c.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Live scores */}
-      <LiveScoresForTab tab={tab} />
-
-      {/* Error */}
-      {error && (
-        <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/40 p-3 sm:p-4">
-          <p className="text-xs sm:text-sm text-red-700 dark:text-red-400">{error}</p>
-        </div>
-      )}
-
-      {/* Featured stories */}
-      {featured.length > 0 && (
-        <section className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-1 h-4 rounded-full bg-orange-500" />
-            <h2 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              Featured Stories
-            </h2>
-          </div>
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-            {featured.map((a, i) => {
-              const imgCandidates = getImageCandidates(a);
-              const logoCandidates = getLogoCandidates(a);
-
-              return (
-                <button
-                  key={`${stableKey(a)}-${i}`}
-                  onClick={() => openReader(a)}
-                  className="group relative block w-full text-left h-44 sm:h-48 overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 hover:shadow-md transition-all duration-200"
-                >
-                  {imgCandidates.length > 0 && (
-                    <SmartImage
-                      candidates={imgCandidates}
-                      alt={a.title}
-                      wrapperClassName="absolute inset-0"
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
-                  {/* Sport badge */}
-                  {i === 0 && (
-                    <div className="absolute top-2.5 left-2.5">
-                      <span className="rounded-md bg-orange-500/90 backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold text-white uppercase tracking-wide">
-                        Featured
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="absolute inset-x-0 bottom-0 p-3 text-white">
-                    <h3 className="font-semibold text-sm leading-snug line-clamp-2 mb-1.5">
-                      {a.title}
-                    </h3>
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      {logoCandidates.length > 0 && (
-                        <div className="h-4 w-4 rounded-full overflow-hidden bg-white/10 border border-white/20">
-                          <SmartImage
-                            candidates={logoCandidates}
-                            alt={a.source.name}
-                            className="h-full w-full object-contain p-0.5"
-                          />
-                        </div>
-                      )}
-                      <span className="opacity-85 truncate max-w-[100px]">
-                        {a.source.name}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Latest articles */}
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-1 h-4 rounded-full bg-orange-500" />
-          <h2 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-            Latest Sports News
-          </h2>
-        </div>
-
-        {loading && articles.length === 0 ? (
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
-        ) : (
-          <div
-            className={`grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 transition-opacity duration-200 ${
-              loading ? "opacity-60" : "opacity-100"
-            }`}
-          >
-            {pageNews.map((a) => (
-              <ArticleCard key={stableKey(a)} article={a} onClick={() => openReader(a)} />
-            ))}
-          </div>
-        )}
-
-        {/* Pagination */}
-        <div className="mt-8 sm:mt-10 flex flex-col items-center gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              disabled={safePage === 1 || loading}
-              onClick={() => changePage(safePage - 1)}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-brand-900 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 transition-all"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Previous
-            </button>
-            <button
-              disabled={safePage === totalPages || loading}
-              onClick={() => changePage(safePage + 1)}
-              className="flex items-center gap-1.5 rounded-lg bg-orange-600 dark:bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 dark:hover:bg-orange-400 disabled:opacity-40 transition-all"
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            Page {safePage} of {totalPages}
-            {loading && <span className="ml-2 animate-pulse">Loading…</span>}
-          </p>
-        </div>
-      </section>
-
-      <ReaderModal
-        open={!!readerArticle}
-        article={readerArticle}
-        onClose={() => setReaderArticle(null)}
-        accent="orange"
-      />
-    </div>
+  const card = (a: Article, size: "feature" | "card" = "card", badge?: string) => (
+    <StoryCard
+      key={stableKey(a)}
+      size={size}
+      title={a.title}
+      source={a.source.name || getDomain(a.url)}
+      publishedAt={a.publishedAt}
+      images={getImageCandidates(a)}
+      logos={getLogoCandidates(a)}
+      badge={badge}
+      onOpen={() => openReader(a)}
+    />
   );
-}
-
-/* ------------------------------------------------------------------ */
-/*  ArticleCard                                                        */
-/* ------------------------------------------------------------------ */
-function ArticleCard({
-  article,
-  onClick,
-}: {
-  article: Article;
-  onClick?: () => void;
-}) {
-  const imgCandidates = getImageCandidates(article);
-  const logoCandidates = getLogoCandidates(article);
-
-  if (imgCandidates.length > 0) {
-    return (
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          onClick?.();
-        }}
-        className="group block w-full text-left overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
-      >
-        <div className="relative h-44 sm:h-48">
-          <SmartImage
-            candidates={imgCandidates}
-            alt={article.title}
-            wrapperClassName="absolute inset-0"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-          <div className="absolute bottom-0 w-full p-3 text-white">
-            <h3 className="font-semibold text-sm leading-snug line-clamp-2 mb-1.5">
-              {article.title}
-            </h3>
-            <div className="flex items-center gap-1.5 text-[10px]">
-              {logoCandidates.length > 0 && (
-                <div className="h-4 w-4 rounded-full overflow-hidden bg-white/10 border border-white/20">
-                  <SmartImage
-                    candidates={logoCandidates}
-                    alt={article.source.name}
-                    className="h-full w-full object-contain p-0.5"
-                  />
-                </div>
-              )}
-              <span className="opacity-85 truncate max-w-[110px]">
-                {article.source.name}
-              </span>
-              <span className="opacity-40">·</span>
-              <time>
-                {new Date(article.publishedAt).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                })}
-              </time>
-            </div>
-          </div>
-        </div>
-      </button>
-    );
-  }
 
   return (
-    <button
-      onClick={(e) => {
-        e.preventDefault();
-        onClick?.();
-      }}
-      className="group block w-full text-left rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-brand-900 p-4 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 transition-all duration-200"
-    >
-      <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-50 leading-snug line-clamp-3 group-hover:text-orange-700 dark:group-hover:text-orange-300 transition-colors">
-        {article.title}
-      </h3>
-      <div className="mt-3 pt-3 border-t border-gray-50 dark:border-gray-800 flex items-center gap-2">
-        {logoCandidates.length > 0 && (
-          <div className="h-4 w-4 rounded overflow-hidden bg-gray-50 dark:bg-gray-800 flex-shrink-0">
-            <SmartImage
-              candidates={logoCandidates}
-              alt={article.source.name}
-              className="h-full w-full object-contain"
-            />
-          </div>
+    <div>
+      <PanelHeader icon={Trophy} tone="amber" title="Sports" caption="Scores & headlines">
+        <div className="max-w-full overflow-x-auto no-scrollbar">
+          <Segmented
+            id="sportsLeague"
+            ariaLabel="League"
+            value={tab}
+            onChange={(key) => setTab(key)}
+            options={CATEGORIES.map((c) => ({ key: c.key, label: c.label }))}
+            className="w-max"
+          />
+        </div>
+      </PanelHeader>
+
+      <div className="p-4 sm:p-6">
+        <LiveScoresForTab tab={tab} />
+        {error && <Notice tone="error">{error}</Notice>}
+
+        {featured.length > 0 && (
+          <section className="mb-6">
+            <SectionLabel>Featured stories</SectionLabel>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {featured.map((a, i) => card(a, "feature", i === 0 ? "Featured" : undefined))}
+            </div>
+          </section>
         )}
-        <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[130px]">
-          {article.source.name}
-        </span>
-        <span className="text-gray-300 dark:text-gray-700">·</span>
-        <time className="text-[10px] text-gray-400 dark:text-gray-500">
-          {new Date(article.publishedAt).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-          })}
-        </time>
+
+        <section>
+          <SectionLabel right={totalPages > 1 ? `Page ${safePage} / ${totalPages}` : undefined}>Latest sports news</SectionLabel>
+          {loading && articles.length === 0 ? (
+            <div className={cardGrid}>{Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+          ) : (
+            <div className={`${cardGrid} transition-opacity duration-200 ${loading ? "opacity-60" : "opacity-100"}`}>
+              {pageNews.map((a) => card(a))}
+            </div>
+          )}
+          <Pagination
+            page={safePage}
+            totalPages={totalPages}
+            loading={loading}
+            onPrev={() => changePage(safePage - 1)}
+            onNext={() => changePage(safePage + 1)}
+          />
+        </section>
       </div>
-    </button>
+
+      <ReaderModal open={!!readerArticle} article={readerArticle} onClose={() => setReaderArticle(null)} accent="orange" />
+    </div>
   );
 }

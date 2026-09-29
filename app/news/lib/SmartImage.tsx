@@ -48,12 +48,12 @@ export function SmartImage({
 
 export function SkeletonCard({ hasImage = true }: { hasImage?: boolean }) {
   return (
-    <div className="animate-pulse rounded-xl border border-gray-100 dark:border-gray-800 gap-5 bg-white dark:bg-brand-900 overflow-hidden">
-      {hasImage && <div className="h-44 bg-gray-100 dark:bg-gray-800" />}
+    <div className="animate-pulse overflow-hidden rounded-2xl border border-slate-200/70 bg-white dark:border-white/[0.08] dark:bg-white/[0.02]">
+      {hasImage && <div className="h-44 bg-slate-100 dark:bg-white/[0.04]" />}
       <div className="p-4">
-        <div className="h-3.5 w-3/4 rounded bg-gray-100 dark:bg-gray-800 mb-2" />
-        <div className="h-3.5 w-2/3 rounded bg-gray-100 dark:bg-gray-800 mb-4" />
-        <div className="h-2.5 w-1/3 rounded bg-gray-100 dark:bg-gray-800" />
+        <div className="mb-2 h-3.5 w-3/4 rounded bg-slate-100 dark:bg-white/[0.06]" />
+        <div className="mb-4 h-3.5 w-2/3 rounded bg-slate-100 dark:bg-white/[0.06]" />
+        <div className="h-2.5 w-1/3 rounded bg-slate-100 dark:bg-white/[0.06]" />
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 
-type IconBadgeTone =
+export type IconBadgeTone =
   | 'indigo'
   | 'emerald'
   | 'rose'
