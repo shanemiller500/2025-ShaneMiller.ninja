@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Bookmark, CloudRain, Flag, Mountain, Music, RefreshCw, Shield, Shuffle, Sofa, Star, Sun, TramFront, Tent, type LucideIcon } from "lucide-react";
 import type { Activity, Category, DayData, Recommendation } from "./lib/types";
 import { fresh, recommend, surpriseCandidates } from "./lib/recommendations";
+import { brisbaneDay } from "./lib/normalize";
 import MotorbikeIcon from "./components/MotorbikeIcon";
 import SmartArse from "./components/SmartArse";
 import AiPick from "./components/AiPick";
@@ -40,6 +41,8 @@ function withHomeIdeas(list: Recommendation[], day: number, wet: boolean): Recom
   result.splice(Math.min(6, result.length), 0, homeIdea(second));
   return result;
 }
+// What's-on results are kept on this device for the day, then thrown away.
+const WHATS_ON_KEY = "day-out-whats-on";
 const fallback = (places: Activity[]): DayData => {
   const source = { name: "Not loaded", url: "https://open-meteo.com/", fetchedAt: "" };
   return { generatedAt: "", activities: places, weather: { status: "unavailable", data: null, source }, surf: { status: "unavailable", data: null, source }, events: { status: "unavailable", data: [], source }, traffic: { status: "unavailable", data: [], source }, news: { status: "unavailable", data: [], source } };
@@ -56,6 +59,26 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
   const [summon, setSummon] = useState(0);
   const [message, setMessage] = useState("");
   const [now, setNow] = useState<Date | null>(null);
+  const [whatsOn, setWhatsOn] = useState<Activity[]>([]);
+  const [whatsOnState, setWhatsOnState] = useState<"loading" | "ready" | "unavailable">("loading");
+
+  // Events for today and tomorrow: use today's saved copy if there is one; otherwise ask the
+  // server once (it caches per day too) and save the result. Yesterday's copy is cleared.
+  useEffect(() => {
+    const today = brisbaneDay(new Date());
+    try {
+      const stored = JSON.parse(localStorage.getItem(WHATS_ON_KEY) || "null") as { day?: string; events?: Activity[] } | null;
+      if (stored?.day === today && Array.isArray(stored.events)) { setWhatsOn(stored.events); setWhatsOnState("ready"); return; }
+      localStorage.removeItem(WHATS_ON_KEY);
+    } catch { /* storage unavailable: just fetch */ }
+    const controller = new AbortController();
+    fetch("/api/day-out/whats-on", { signal: controller.signal, cache: "no-store" }).then(response => response.json()).then((result: { ok?: boolean; day?: string; events?: Activity[] }) => {
+      if (!result.ok || !Array.isArray(result.events)) { setWhatsOnState("unavailable"); return; }
+      setWhatsOn(result.events); setWhatsOnState("ready");
+      try { localStorage.setItem(WHATS_ON_KEY, JSON.stringify({ day: result.day || today, events: result.events })); } catch { /* ignore */ }
+    }).catch(() => { if (!controller.signal.aborted) setWhatsOnState("unavailable"); });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     setNow(new Date());
@@ -85,8 +108,10 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
 
   const dataset = useMemo(() => {
     const base = data || fallback(places);
-    return { ...base, activities: base.activities.filter(a => a.kind !== "event" || EVENT_CATEGORIES.includes(a.category)) };
-  }, [data, places]);
+    const known = new Set(base.activities.map(a => a.id));
+    const activities = [...base.activities, ...whatsOn.filter(a => !known.has(a.id))];
+    return { ...base, activities: activities.filter(a => a.kind !== "event" || EVENT_CATEGORIES.includes(a.category)) };
+  }, [data, places, whatsOn]);
   const ranked = useMemo(() => recommend(dataset, { freeOnly: false, interests: [] }, now || new Date("2026-09-28T00:00:00Z")), [dataset, now]);
   const stale = !!data && !fresh(data.generatedAt, 30, new Date());
   const weather = !stale && data?.weather.status === "available" ? data.weather.data : null;
@@ -112,6 +137,10 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
     if (!pool.length) { setMessage("Nothing strong for that right now. Try another button."); return; }
     setSelected(pool[Math.floor(Math.random() * pool.length)]); setSurprise(true); setMessage("");
   }
+  // Web-found events (today's ones are also ranked into the cards above).
+  const whatsOnCards: Recommendation[] = whatsOn.map(activity => ranked.find(item => item.activity.id === activity.id)
+    || { activity, score: 0, reason: "Listed online. Check the event page before heading off.", notices: [] })
+    .filter(item => !item.activity.endDate || item.activity.endDate > (now || new Date()).toISOString());
   const notices = data && !stale ? [...data.traffic.data, ...data.news.data].slice(0, 3) : [];
 
   return <div className={styles.root}>
@@ -130,9 +159,24 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
         <h1 className={styles.title}>Where to today?</h1>
         <button className={styles.surprise} onClick={chooseSurprise}><Shuffle size={20} aria-hidden />Surprise me</button>
       </div>
+      <p className={styles.intro}>
+        <strong>Built by Shane for Dad.</strong> You&apos;ve clocked off for good, so every day&apos;s a Saturday now. Find a ride, a gig,
+        a bit of war history, somewhere to park the van, or a feed at the pub. Or tell Shazz to rack off and have a nap.
+        Get out there and live it up, old man! 🏍️🍺
+      </p>
       <ScrollRow label="Kind of day out" active={group}>
         {GROUPS.map(({ name, icon: Icon }) => <button key={name} aria-pressed={group === name} onClick={() => { setGroup(name); setMessage(""); }}><Icon size={19} aria-hidden />{name}</button>)}
       </ScrollRow>
+      {group === "Best today" && <section className={styles.whatsOn}>
+        <h2>What's on around Ormeau</h2>
+        <p className={styles.small}>Gigs, bike events, car shows and war history listed online for today and tomorrow. Checked once a day; always confirm on the event page.</p>
+        {whatsOnState === "loading" && <p className={styles.small} role="status">Checking what's on…</p>}
+        {whatsOnState === "unavailable" && <p className={styles.small}>Couldn't check events right now. Try again later.</p>}
+        {whatsOnState === "ready" && !whatsOnCards.length && <p className={styles.small}>Nothing listed for today or tomorrow that fits. Quiet one.</p>}
+        {!!whatsOnCards.length && <div className={styles.grid}>
+          {whatsOnCards.map(item => <ActivityCard key={item.activity.id} item={item} saved={saved.includes(item.activity.id)} onOpen={() => { setSelected(item); setSurprise(false); }} onSave={() => toggleSave(item.activity)} />)}
+        </div>}
+      </section>}
       {group === "Best today" && <AiPick onOpen={item => { setSelected(item); setSurprise(true); }} />}
       <p className={styles.message} role="status" aria-live="polite">{message}</p>
 

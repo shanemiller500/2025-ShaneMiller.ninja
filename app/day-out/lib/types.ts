@@ -1,6 +1,7 @@
 export type Category = "Home" | "Ride" | "War" | "Music" | "Hinterland" | "Camping" | "Motorsport" | "Transit" | "Beach" | "Event";
 export type Point = { latitude: number; longitude: number };
-export type Source = { name: string; url: string; fetchedAt: string; updatedAt?: string; attribution?: string };
+// ttlMinutes: how long a listing counts as fresh (default 120; daily web-search results use a day).
+export type Source = { name: string; url: string; fetchedAt: string; updatedAt?: string; attribution?: string; ttlMinutes?: number };
 export type Provider<T> = { status: "available" | "unavailable" | "unconfigured"; data: T; source: Source; note?: string };
 export type Stop = Point & { name: string };
 export type Activity = {

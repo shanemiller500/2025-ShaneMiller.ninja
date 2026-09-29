@@ -29,7 +29,7 @@ export function recommend(data: DayData, prefs: Preferences = { freeOnly: false,
   return data.activities.flatMap(activity => {
     if (prefs.freeOnly && activity.isFree !== true) return [];
     if (activity.kind === "event") {
-      if (!fresh(activity.source.fetchedAt, 120, now) || !activity.startDate || !activity.endDate || activity.endDate <= now.toISOString() || brisbaneDay(new Date(activity.startDate)) > today) return [];
+      if (!fresh(activity.source.fetchedAt, activity.source.ttlMinutes ?? 120, now) || !activity.startDate || !activity.endDate || activity.endDate <= now.toISOString() || brisbaneDay(new Date(activity.startDate)) > today) return [];
     }
     if (activity.hours) {
       const { days, open, close } = activity.hours;
