@@ -16,7 +16,8 @@ function ShockedFace({ cx, cy, r = 8, hair, extra }: { cx: number; cy: number; r
   </g>;
 }
 
-export default function FamilyCar({ color }: { color: string }) {
+// `dented`: the bonnet's crumpled, windscreen cracked and a headlight's out (hit a roo).
+export default function FamilyCar({ color, dented = false }: { color: string; dented?: boolean }) {
   return <svg viewBox="0 0 200 90" width="100%" height="100%" aria-hidden overflow="visible">
     {/* Surfboard strapped to the roof racks */}
     <ellipse cx={72} cy={8} rx={50} ry={4.5} fill="#ffd23f" stroke={INK} strokeWidth={2.5} />
@@ -36,7 +37,15 @@ export default function FamilyCar({ color }: { color: string }) {
     <line x1={90} y1={38} x2={90} y2={70} stroke={INK} strokeWidth={2} />
     <line x1={48} y1={38} x2={48} y2={70} stroke={INK} strokeWidth={2} />
     <rect x={76} y={45} width={10} height={3} rx={1.5} fill={INK} />
-    <circle cx={190} cy={50} r={4} fill="#fff3b0" stroke={INK} strokeWidth={2} />
+    <circle cx={190} cy={50} r={4} fill={dented ? "#555" : "#fff3b0"} stroke={INK} strokeWidth={2} />
+    {dented && <>
+      {/* Crumpled bonnet and front */}
+      <path d="M156 40 l6 -5 l5 6 l6 -4 l5 5 l6 -3 l6 5" fill="none" stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
+      <path d="M186 44 q6 6 2 14 q-4 4 0 10" fill="none" stroke={INK} strokeWidth={2} />
+      <path d="M170 48 q5 -3 9 1" fill="none" stroke={INK} strokeWidth={1.5} />
+      {/* Cracked windscreen */}
+      <path d="M134 22 l4 6 l-3 4 l6 3 M138 28 l5 -3 M137 32 l-4 3" fill="none" stroke="#fff" strokeWidth={1.3} />
+    </>}
     <rect x={8} y={42} width={5} height={10} rx={2} fill="#e53935" stroke={INK} strokeWidth={1.5} />
     <rect x={184} y={64} width={14} height={6} rx={2} fill="#bfc4ca" stroke={INK} strokeWidth={2} />
     <rect x={4} y={64} width={12} height={6} rx={2} fill="#bfc4ca" stroke={INK} strokeWidth={2} />

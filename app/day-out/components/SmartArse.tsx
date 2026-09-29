@@ -13,78 +13,124 @@ import MiniBiker from "./MiniBiker";
 import Guillotine from "./Guillotine";
 import Brawler from "./Brawler";
 import RoadKill, { CRITTERS, type Critter } from "./RoadKill";
+import BinChicken from "./BinChicken";
+import WheelieBin from "./WheelieBin";
+import Kangaroo from "./Kangaroo";
+import GumTree from "./GumTree";
+import DropBear from "./DropBear";
+import SportBike from "./SportBike";
+import HoopSnake from "./HoopSnake";
+import Bludger from "./Bludger";
 import styles from "../day-out.module.css";
 
 const JOKES = [
-  "This is a Night Train, ya cunt. Last of the real engines before all that V-tech water-cooled shit came out.",
+  "Harley owners are a special breed of dropkick. Indian owners actually get where they're going, ya flog.",
+  "Oi wanker, your Harley's been in the shop more than you've been to the pub. And that's saying something.",
+  "Get a mullet up ya, ya absolute tosser. The Indian's better and you know it.",
+  "You ride like a nervous learner, ya knob. Twist the bloody throttle.",
+  "Listen here, ya dropkick: chrome doesn't make it go faster. It just makes it shinier while it breaks down.",
+  "Fair dinkum, you're a flog. Who reverses a caravan into the letterbox? Twice.",
+  "Indian starts first go. Harley needs a jump start, a prayer and a mechanic named Dazza. Get a mullet up ya.",
+  "Harley riders reckon it's a lifestyle. Yeah, the lifestyle is standing on the side of the Pacific Motorway, ya dickhead.",
+  "Indian: built like a Swiss watch. Harley: built like a dunny door in a cyclone. Fight me, ya prick.",
+  "You know why Harleys vibrate so much? So the owner doesn't notice the bits falling off. Dickhead.",
+  "Bought a Harley, did ya? Tell ya what, ya prick, the only thing it's faster at is emptying your wallet.",
+  "An Indian rider and a Harley rider walk into a pub. Only one of 'em rode there. The other one's still waiting on the NRMA, ya dickhead.",
+  "Harley: all chrome, no brains. Bit like you, ya prick.",
+  "The Indian Chief will still be purring when your Harley's a garden ornament. Get a mullet up ya.",
+  "I ride a Harley, and even I'll admit the Indian's a better bike. Don't tell anyone or I'll deck ya, ya dickhead.",
+  "Harley's idea of innovation is a new shade of black. Indian actually builds bikes, ya prick.",
+  "Oi dickhead, a Harley leaks oil so you always know where you parked it. With your memory, that's a feature.",
+  "Get a mullet up ya, ya flamin' galah. Business at the front, oil leak at the back.",
+  "You're a good cunt, but your taste in bikes is bloody criminal, ya prick.",
+  "Fuck me, you're slow. My nan's mobility scooter would lap ya, ya dickhead.",
+  "This is a Night Train, ya galah. Last of the real engines before all that V-tech water-cooled shit came out.",
   "Night Train. Proper air-cooled Harley, loud as buggery. Your V-tech whatever can get stuffed.",
-  "They don't make 'em like the Night Train anymore. Now it's all computers and water cooling. Soft cunts.",
+  "They don't make 'em like the Night Train anymore. Now it's all computers and water cooling. Soft as butter, the lot of 'em.",
   "Tell ya what ya cunt, Indian or Harley? The Indian starts. The Harley pisses oil on the driveway to mark its territory.",
-  "Harley riders wave at each other. Indian riders wave at the Harleys broken down on the side of the road. Suck on that, ya cunt.",
+  "Harley riders wave at each other. Indian riders wave at the Harleys broken down on the side of the road. Suck on that, ya drongo.",
   "A Harley isn't loud, ya deaf old bastard. It's just telling the whole suburb you're coming, five minutes before you get there.",
-  "Indian vs Harley, settled: whichever one you can still pick up when it tips over in the driveway. So neither, ya weak cunt.",
+  "Indian vs Harley, settled: whichever one you can still pick up when it tips over in the driveway. So neither, ya weak dog.",
   "Every Harley comes with a free oil drip tray. It's called your fuckin' garage floor.",
-  "Barnesy can still hit the big note in Working Class Man. You hit it getting out of the recliner, ya cunt.",
+  "Barnesy can still hit the big note in Working Class Man. You hit it getting out of the recliner, ya mongrel.",
   "Barnesy's been screaming since the '70s and he's still got more puff than you on a flight of stairs.",
-  "Barnesy's got a voice like gravel. You've got knees like gravel, ya creaky old cunt.",
+  "Barnesy's got a voice like gravel. You've got knees like gravel, ya creaky old bastard.",
   "You've retired from mowing the lawn more times than Farnsy's retired from touring. Get off ya arse.",
   "Brocky won Bathurst nine times. You've taken the wrong turn to Canungra at least that many, ya galah.",
   "Steve Irwin wrestled crocs. You wrestle the caravan awning, and the awning wins. Every. Single. Time.",
-  "\"That's not a knife.\" That's attempt number four at reversing the caravan, ya useless cunt. Crikey.",
+  "\"That's not a knife.\" That's attempt number four at reversing the caravan, ya useless galah. Crikey.",
   "AC/DC said it's a long way to the top. They were talking about you backing the trailer up the driveway.",
   "Midnight Oil sang Beds Are Burning. Your camp cooking took it as a fuckin' challenge.",
-  "Did I already tell you this one? Doesn't matter, ya won't remember, ya forgetful old cunt. Easiest crowd I've ever had.",
+  "Did I already tell you this one? Doesn't matter, ya won't remember, ya forgetful old coot. Easiest crowd I've ever had.",
   "Upside of the memory going: every ride up Tamborine is a brand new adventure. Never been, apparently.",
   "Keys in the fridge again? Relax, at least they're next to the beer. Priorities intact, ya legend.",
   "Hang on, what was I saying? Ah, fuck it. Neither of us will remember in a minute anyway.",
-  "Holden or Ford? Doesn't matter. You'll still reckon the one you had in '78 was better, ya stubborn cunt.",
+  "Holden or Ford? Doesn't matter. You'll still reckon the one you had in '78 was better, ya stubborn old mule.",
   "The Chiko Roll was invented in Wagga and perfected by your arteries.",
   "Bunnings snag queue: the only line you've ever stood in without a fuckin' whinge.",
-  "Reckon you can still pull a wheelie? The physio reckons no, and so do I, ya cunt.",
+  "Reckon you can still pull a wheelie? The physio reckons no, and so do I, ya flog.",
   "The tram's the only thing you'll overtake on the Gold Coast this year, and it's on bloody rails.",
   "Your campervan's got more rust than a Kingswood left on the beach at Bribie.",
   "Crocodile Dundee had the knife. You've got a Swiss Army knife with 40 tools and ya still use your teeth.",
 ];
 const LINES: Record<"flip" | "moon" | "drink" | "smoke" | "throw" | "fall" | "up", string[]> = {
-  flip: ["Swivel on that, ya cunt!", "That one's from me and the whole Smart Arse MC, ya old bastard.", "Here's the Harley warranty department's official response, ya cunt.", "Oi! Read it and weep, grandpa."],
-  moon: ["Full moon over the Gold Coast tonight, ya cunt!", "Kiss that, old man. Best view you've had since '82.", "That's the only thing round here shinier than your chrome.", "Park ya eyes on that, ya perve. Ha!"],
-  drink: ["Cheers, ya cunt! XXXX Gold: breakfast of champions.", "One for the road, and one for the other fuckin' road.", "Don't look at me like that. It's five o'clock somewhere, ya wowser.", "Ahhh. Beer's colder than your ex, ya cunt."],
-  smoke: ["Doctor said quit. Doctor rides a Vespa, ya cunt.", "Got a light? Nah, found one. Tight arse.", "Want a drag? Course ya don't, you're soft as butter, ya cunt."],
-  throw: ["Catch, ya cunt!", "Recycling, Aussie style!", "Heads up, ya slow bastard!", "Empty. Like your fuckin' head."],
-  fall: ["Who moved the fuckin' ground?!", "I'm right! I'm right! Nobody saw that, ya cunts.", "That's not a stack, that's a tactical dismount, ya cunt.", "Ow. Fuck. Me stubby's alright though."],
-  up: ["Right. Where was I? Oh yeah: you're a cunt.", "Back on the horse. Don't tell anyone, ya dobber.", "Sweet as. Barely a scratch. On the bike, I mean."],
+  flip: ["Swivel on that, ya dropkick!", "That one's from me and the whole Smart Arse MC, ya old bastard.", "Here's the Harley warranty department's official response, ya dill.", "Oi! Read it and weep, grandpa."],
+  moon: ["Full moon over the Gold Coast tonight, ya ratbag!", "Kiss that, old man. Best view you've had since '82.", "That's the only thing round here shinier than your chrome.", "Park ya eyes on that, ya perve. Ha!"],
+  drink: ["Cheers, ya cunt! XXXX Gold: breakfast of champions.", "One for the road, and one for the other fuckin' road.", "Don't look at me like that. It's five o'clock somewhere, ya wowser.", "Ahhh. Beer's colder than your ex, ya muppet."],
+  smoke: ["Doctor said quit. Doctor rides a Vespa, ya bogan.", "Got a light? Nah, found one. Tight arse.", "Want a drag? Course ya don't, you're soft as butter, ya numpty."],
+  throw: ["Catch, ya goose!", "Recycling, Aussie style!", "Heads up, ya slow bastard!", "Empty. Like your fuckin' head."],
+  fall: ["Who moved the fuckin' ground?!", "I'm right! I'm right! Nobody saw that, ya galahs.", "That's not a stack, that's a tactical dismount, ya knob.", "Ow. Fuck. Me stubby's alright though."],
+  up: ["Right. Where was I? Oh yeah: you're a flog.", "Back on the horse. Don't tell anyone, ya dobber.", "Sweet as. Barely a scratch. On the bike, I mean."],
 };
 // For anyone who'd rather not read the full-strength version.
-const bleep = (text: string) => text.replace(/cunt/gi, "c**t").replace(/fuck/gi, "f**k").replace(/shit/gi, "sh*t").replace(/bastard/gi, "b*stard");
+const bleep = (text: string) => text.replace(/cunt/gi, "c**t").replace(/fuck/gi, "f**k").replace(/shit/gi, "sh*t").replace(/bastard/gi, "b*stard").replace(/prick/gi, "pr*ck").replace(/dickhead/gi, "d*ckhead").replace(/wanker/gi, "w*nker");
 const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
 const FAR_LANE = 58;
 const CAR_COLORS = ["#2e7dd1", "#e0a100", "#c0392b", "#27ae60", "#8e44ad", "#e8e8e8"];
-const CAR_LINES = ["Oi! Eyes on the road, ya cunt!", "What are youse lookin' at?!", "Wind the window up, Karen!", "Take a photo, it'll last longer, ya cunts!", "Bloody tourists.", "Yeah, you heard me, Dad. Keep drivin'!"];
+const CAR_LINES = ["Oi! Eyes on the road, ya dag!", "What are youse lookin' at?!", "Wind the window up, Karen!", "Take a photo, it'll last longer, ya drongos!", "Bloody tourists.", "Yeah, you heard me, Dad. Keep drivin'!"];
 const KILL_LINES: Record<Critter, string[]> = {
-  roo: ["Beauty! Roo snags tonight!", "Skippy's comin' home with me, ya cunt.", "Fresh roo. Only been there since Tuesday."],
-  koala: ["Drop bear down! Koala curry, anyone?", "Smells like eucalyptus. Pre-seasoned!", "Don't tell the tourists, ya cunt."],
-  croc: ["Croc! That's a handbag AND dinner.", "Who's a tough cunt now, ya big handbag?", "Tastes like chicken. Angry chicken."],
-  wombat: ["Wombat! Square poo, square meal.", "Built like a brick shithouse. Feeds six.", "Wombat stew. Nan's recipe, ya cunt."],
+  roo: ["Beauty! Roo snags tonight!", "Skippy's comin' home with me, ya larrikin.", "Fresh roo. Only been there since Tuesday."],
+  koala: ["Drop bear down! Koala curry, anyone?", "Smells like eucalyptus. Pre-seasoned!", "Don't tell the tourists, ya great sook."],
+  croc: ["Croc! That's a handbag AND dinner.", "Who's a tough nut now, ya big handbag?", "Tastes like chicken. Angry chicken."],
+  wombat: ["Wombat! Square poo, square meal.", "Built like a brick shithouse. Feeds six.", "Wombat stew. Nan's recipe, ya galah."],
 };
 const CRITTER_NAMES: Record<Critter, string> = { roo: "roo", koala: "koala", croc: "croc", wombat: "wombat" };
-const STOP_LINES = ["Stop sign? More of a suggestion, really.", "Stop? Never heard of it, ya cunt!", "Council can send me the bill."];
-const BLAST_LINES = ["Stop THIS, ya cunt!", "Say hello to me little friend!", "That's for every red light, ya bastard."];
-const COP_LINES = ["Shit, it's the cops! Catch me if ya can, ya cunts!", "Oi oi, the fuzz! Hold onto ya stubbies!", "Coppers! Time to open her up!"];
-const ESCAPE_LINES = ["Lost 'em. Too easy, ya cunt!", "Coppers couldn't catch a cold.", "They'll never take me alive, ya cunts!", "Outran the pigs AND kept me beer. Legend."];
-const ONCOMING_LINES = ["Get on ya own side, ya cunt!", "Swerve, ya drongo! …Oh, that's my side? Whatever.", "Nearly wore ya on the grille, ya muppet!", "Move it or lose it, Dad!"];
-const BBQ_START = ["Right, that's three. Barbie time, ya cunts!", "Esky's full. Fire up the barbie!"];
-const BBQ_COOKING = ["Pink on…", "Roo, koala and croc. Surf and turf, bush style.", "Don't touch me tongs, ya cunt."];
+const STOP_LINES = ["Stop sign? More of a suggestion, really.", "Stop? Never heard of it, ya drongo!", "Council can send me the bill."];
+const BLAST_LINES = ["Stop THIS, ya mongrel!", "Say hello to me little friend!", "That's for every red light, ya bastard."];
+const COP_LINES = ["Shit, it's the cops! Catch me if ya can, ya mongrels!", "Oi oi, the fuzz! Hold onto ya stubbies!", "Coppers! Time to open her up!"];
+const ESCAPE_LINES = ["Lost 'em. Too easy, ya flog!", "Coppers couldn't catch a cold.", "They'll never take me alive, ya ratbags!", "Outran the pigs AND kept me beer. Legend."];
+const ONCOMING_LINES = ["Get on ya own side, ya dropkick!", "Swerve, ya drongo! …Oh, that's my side? Whatever.", "Nearly wore ya on the grille, ya muppet!", "Move it or lose it, Dad!"];
+const BBQ_START = ["Right, that's three. Barbie time, ya bogans!", "Esky's full. Fire up the barbie!"];
+const BBQ_COOKING = ["Pink on…", "Roo, koala and croc. Surf and turf, bush style.", "Don't touch me tongs, ya dill."];
 const BBQ_DONE = ["…black off. Just the way we love 'em!", "Charcoal. Perfect. Anyone who says otherwise can get stuffed."];
-const BBQ_SERVED = ["Snag on bread with a squirt of dead horse. Get around it, ya cunts!", "Snag sanga with dead horse. Bunnings wishes."];
-const CHASE_LINES = ["Catch me if ya can, ya cunts!", "Too slow, Constable Plod!", "Ya'll need a Night Train to catch me!", "Wee-oo wee-oo, ya wankers!", "Is that all ya got, ya cunts?"];
+const BBQ_SERVED = ["Snag on bread with a squirt of dead horse. Get around it, ya muppets!", "Snag sanga with dead horse. Bunnings wishes."];
+const CHASE_LINES = ["Catch me if ya can, ya flogs!", "Too slow, Constable Plod!", "Ya'll need a Night Train to catch me!", "Wee-oo wee-oo, ya wankers!", "Is that all ya got, ya cunts?"];
 const COP_SHOUTS = ["PULL OVER!", "STOP THAT BIKE!", "OI! YOU!", "BACKUP! BACKUP!"];
-const LASSO_LINES = ["Gotcha, ya cunt! Hand over ya snags.", "Yee-haw! Where d'ya think you're goin'?", "Caught one! Tie 'em to the Night Train."];
+const LASSO_LINES = ["Gotcha, ya ratbag! Hand over ya snags.", "Yee-haw! Where d'ya think you're goin'?", "Caught one! Tie 'em to the Night Train."];
 // Things that come flying out of a proper cartoon bikie brawl.
 const JUNK = ["🍳", "🐔", "🩴", "🪑", "🎸", "🧯", "🏓", "🍺", "🌭", "🥾", "🪣", "🛞", "🧦", "🥫"];
 // Four pairs slugging it out, as px offsets from the middle of the screen, and what they're swinging.
 const PAIRS = [{ at: -190, row: 22 }, { at: -80, row: 42 }, { at: 30, row: 22 }, { at: 140, row: 42 }];
 const RED_WEAPONS = ["🍳", undefined, "🏓", "🐔"], BLUE_WEAPONS = ["🩴", "🌭", undefined, "🎸"];
 const BRAWL_HITS = ["POW!", "BIFF!", "WHACK!", "KAPOW!", "BONK!", "THWACK!", "OOF!", "CRUNCH!"];
+// Left on the road for a minute, roadkill gets nicked by a bin chicken.
+const IBIS_AFTER_MS = 60_000;
+const IBIS_LINES = ["Squawk. Finders keepers.", "Mine now. MINE.", "Five second rule, ya bogans.", "Bin chicken's eating good tonight.", "Honk. Don't mind me.", "I've eaten worse out of a Maccas bin.", "Shh. I was never here."];
+// Bin chicken flock: they land on (and around) the wheelie bin at the back of the road.
+const BIN_BOTTOM = 96, BIN_W = 56, BIN_H = 75, FLOCK_SIZE = 6;
+const BIN_JUNK = ["🍌", "🥡", "🍕", "📰", "🥤", "🍟", "🦴", "🧃"];
+const FLOCK_LINES = ["Oi, the bin chicken union's having a meeting.", "Look at 'em. Feathered bogans, the lot of 'em.", "Get outta that bin, ya filthy animals!", "Six of 'em. SIX. It's an infestation, ya galahs."];
+const ROO_LINES = ["Skippy and the boys, off to the pub.", "Oi! Don't jump in front of the Night Train!", "Look at 'em go. Built like brick dunnies.", "That big buck's eyeing me off. Come at me, Skip!", "Roo mob! Hide the snags."];
+// Gum trees along the back of the road (as fractions of the screen width); koalas in some.
+const TREES = [{ at: 0.34, koala: true }, { at: 0.64, koala: false }, { at: 0.88, koala: true }];
+const TREE_W = 110, TREE_H = 200, TREE_BOTTOM = 100;
+const DROP_LINES = ["DROP BEAR! Vegemite behind the ears, quick!", "Bloody drop bears. Tourists reckon they're a myth, the dills.", "That's why ya never park under a gum tree, ya galah.", "Get back up ya tree, ya feral little mongrel!"];
+const SPORTBIKE_COLORS = ["#16a34a", "#dc2626", "#2563eb", "#f59e0b", "#e5e7eb", "#7c3aed"];
+const SPORTBIKE_LINES = ["Plastic fantastic! Get a real bike, ya muppet!", "Listen to that sewing machine scream.", "Nice pyjamas, ya Power Ranger!", "Hairdryer on wheels, that one.", "Knees on the ground, brain in the bin."];
+const STRIKE_LINES = ["Oof! Skippy's had a bad day. Dinner's sorted, though.", "Should've got a roo bar, ya galah!", "That's why ya don't drive at dusk, ya dill.", "Poor bastard. The roo, not the car."];
+const SNAKE_LINES = ["HOOP SNAKE! Lift ya feet, ya galah!", "Rolled right past me, the cheeky mongrel.", "Seen bigger hoop snakes at the Ekka.", "Never trust a snake that bites its own arse."];
+const DAZZA_ASKS = ["Oi, spare a durry, love?", "Got a couple o' bucks for the bus? I'm a bit short.", "Couldn't bum a smoke off ya, could I? I'll pay ya back Tuesday."];
+const SHAZZ_TO_DAZZA = ["Pay me back Tuesday? Which Tuesday, ya bludger?", "Get a mullet up ya, Dazza. Buy ya own.", "Here, take one and piss off, ya bludger.", "I've seen more of your IOUs than you've had hot dinners, Dazza."];
 const DRUNK_LABELS = ["Stone cold sober", "Tipsy", "Pissed", "Maggoted", "Absolutely legless"];
 function Trick({ label, onClick }: { label: string; onClick: () => void }) {
   const [icon, ...words] = label.split(" ");
@@ -94,7 +140,7 @@ const FIRST_DELAY = 20_000, GAP = 150_000, GROUND = 14, VIEW_W = 260, VIEW_H = 1
 type Phase = "hidden" | "enter" | "parked" | "leave";
 type Action = "flip" | "moon" | "drink" | "smoke" | "throw";
 type Line = { text: string; ai: boolean };
-type Fx = { id: number; kind: "smoke" | "tyre" | "skid" | "burst" | "bottle" | "shard" | "stars" | "fog" | "boom" | "rubber" | "bullet" | "junk"; x: number; y: number; size: number; text?: string; dx?: number; dy?: number; arc?: number; hit?: boolean };
+type Fx = { id: number; kind: "smoke" | "tyre" | "skid" | "burst" | "bottle" | "shard" | "stars" | "fog" | "boom" | "rubber" | "bullet" | "junk" | "splat" | "rooFly"; x: number; y: number; size: number; text?: string; dx?: number; dy?: number; arc?: number; hit?: boolean };
 let uid = 0;
 
 // `summon` increments each time the "Call Shazz" button is pressed.
@@ -124,8 +170,31 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
   const trophyCount = useRef(0);
   // Set when the third critter goes on the bike; the barbie runs as soon as she's free.
   const bbqPending = useRef(false);
-  const [bbq, setBbq] = useState<{ left: number; width: number; served: boolean } | null>(null);
-  const [kills, setKills] = useState<{ id: number; kind: Critter; x: number }[]>([]);
+  const [bbq, setBbq] = useState<{ left: number; width: number; served: boolean; stolen?: number } | null>(null);
+  const [kills, setKills] = useState<{ id: number; kind: Critter; x: number; bornAt: number; claimed?: boolean }[]>([]);
+  const [ibis, setIbis] = useState<{ x: number; ms: number; faceLeft: boolean; stage: "walk" | "grab" | "leave"; carrying: Critter | null; line: string | null } | null>(null);
+  // Bin chickens just cruising overhead, and the one that raids the barbie.
+  const [flyers, setFlyers] = useState<{ id: number; dir: 1 | -1; bottom: number; ms: number; delay: number }[]>([]);
+  type FlockBird = { x: number; bottom: number; ms: number; onBin: boolean };
+  const [flock, setFlock] = useState<{ dir: 1 | -1; stage: "in" | "landed" | "out"; birds: FlockBird[] } | null>(null);
+  const flockBusy = useRef(false);
+  // A mob of roos bouncing across behind her now and then.
+  const [dropBear, setDropBear] = useState<{ x: number; bottom: number; ms: number; ease: string; faceLeft: boolean } | null>(null);
+  const dropBusy = useRef(false);
+  // Narrow screens get two trees instead of three.
+  const treeSpots = () => TREES.filter((_, i) => window.innerWidth >= 640 || i !== 1).map((t) => ({ ...t, x: Math.round(window.innerWidth * t.at - TREE_W / 2) }));
+  // Traffic and wildlife extras
+  const [sportbikes, setSportbikes] = useState<{ id: number; dir: 1 | -1; lane: "far" | "near"; color: string; ms: number }[]>([]);
+  const [strike, setStrike] = useState<{ carX: number; carMs: number; color: string; dented: boolean; rooX: number; rooBottom: number; rooMs: number; rooGone: boolean; shaking: boolean } | null>(null);
+  const strikeBusy = useRef(false);
+  const [danglers, setDanglers] = useState<{ id: number; x: number; top: number; ms: number }[]>([]);
+  const [snakes, setSnakes] = useState<{ id: number; dir: 1 | -1; ms: number; bottom: number }[]>([]);
+  const [dazza, setDazza] = useState<{ x: number; ms: number; faceLeft: boolean; pose: "walk" | "ask" | "run"; bear: boolean; line: string | null; bearTop: number | null } | null>(null);
+  const dazzaBusy = useRef(false);
+  const [roos, setRoos] = useState<{ id: number; dir: 1 | -1; bottom: number; size: number; ms: number; delay: number; hop: number; joey: boolean }[]>([]);
+  const binX = () => Math.max(24, Math.round(window.innerWidth * 0.1));
+  const [raider, setRaider] = useState<{ x: number; bottom: number; ms: number; faceLeft: boolean; carrying: "snag" | null } | null>(null);
+  const ibisBusy = useRef(false);
   const killsRef = useRef(kills);
   killsRef.current = kills;
   const esky = useRef(0);
@@ -155,7 +224,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
   const busy = useRef(false);
   const lineTimer = useRef(0);
   const meterTimer = useRef(0);
-  const showMeter = () => { setMeter(true); window.clearTimeout(meterTimer.current); meterTimer.current = window.setTimeout(() => setMeter(false), 4000); };
+  const showMeter = () => { setMeter(true); window.clearTimeout(meterTimer.current); meterTimer.current = window.setTimeout(() => setMeter(false), 10_000); };
   const frame = useRef(0);
   const deck = useRef<string[]>([]);
   const ai = useRef<Record<string, { at: number; list: string[] }>>({});
@@ -196,14 +265,35 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     frame.current = requestAnimationFrame(tick);
   });
 
-  const speak = useCallback((text: string, fromAi = false) => {
+  // Lines queue up: a new one waits until the current one has been up long enough to read,
+  // then shows for roughly reading time plus a generous buffer (10s minimum, up to 25s).
+  const lineShownAt = useRef(0);
+  const lineQueue = useRef<{ text: string; ai: boolean }[]>([]);
+  const queueTimer = useRef(0);
+  const readTime = (text: string) => Math.min(25_000, 10_000 + text.length * 120);
+  const MIN_READ_MS = 7000;
+  const showLine = useCallback((text: string, fromAi: boolean) => {
     // The more she drinks, the more she hiccups.
     const hic = drunkRef.current >= 2 ? pick([" *hic*", " *hic* ...", " *burp*"]) : "";
     setLine({ text: text + hic, ai: fromAi });
+    lineShownAt.current = Date.now();
     window.clearTimeout(lineTimer.current);
-    lineTimer.current = window.setTimeout(() => setLine(null), Math.min(9000, 3000 + text.length * 45));
+    lineTimer.current = window.setTimeout(() => setLine(null), readTime(text));
     setTalking(true); window.setTimeout(() => setTalking(false), 1800);
   }, []);
+  const drainQueue = useCallback(() => {
+    window.clearTimeout(queueTimer.current);
+    const wait = MIN_READ_MS - (Date.now() - lineShownAt.current);
+    if (wait > 0) { queueTimer.current = window.setTimeout(drainQueue, wait); return; }
+    const nextLine = lineQueue.current.shift();
+    if (nextLine) { showLine(nextLine.text, nextLine.ai); if (lineQueue.current.length) queueTimer.current = window.setTimeout(drainQueue, MIN_READ_MS); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showLine]);
+  const speak = useCallback((text: string, fromAi = false) => {
+    // Keep only the newest couple waiting so she never falls minutes behind.
+    lineQueue.current = [...lineQueue.current, { text, ai: fromAi }].slice(-2);
+    drainQueue();
+  }, [drainQueue]);
   // AI jokes are fetched per topic and used first; the built-in list is the fallback.
   const loadAi = useCallback(async () => {
     const key = topicRef.current, cached = ai.current[key];
@@ -291,7 +381,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     place.current = { x: target, tilt: 0, pivot: 60 }; draw();
     setFacingLeft(false); setAtX(target); setMoving(false);
     busy.current = false;
-    if (Math.random() < 0.5) speak(pick(["Happy now, ya bossy cunt?", "Righto, parked. Where's me beer?", "Don't tell me where to park, ya cunt. …Fine.", "This spot's got better views of your bald patch."]));
+    if (Math.random() < 0.5) speak(pick(["Happy now, ya bossy bugger?", "Righto, parked. Where's me beer?", "Don't tell me where to park, ya cunt. …Fine.", "This spot's got better views of your bald patch."]));
   }
   // She sobers up one beer every 45 seconds.
   useEffect(() => {
@@ -317,7 +407,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
   useEffect(() => {
     if (phase !== "parked") return;
     let timer = 0;
-    const next = () => { timer = window.setTimeout(() => { restless.current(); next(); }, 5000 + Math.random() * 7000); };
+    const next = () => { timer = window.setTimeout(() => { restless.current(); next(); }, 12_000 + Math.random() * 10_000); };
     next();
     return () => clearTimeout(timer);
   }, [phase]);
@@ -337,7 +427,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     busy.current = true; setBurning(true); k = s();
     const x0 = place.current.x, rear = x0 + 60 * k;
     setWall({ left: x0 + 226 * k, width: 70 * k, height: 130 * k });
-    speak("Hold me stubby. Watch this, ya cunt!");
+    speak("Hold me stubby. Watch this, ya muppet!");
     await later(900);
     const done = new Set<string>();
     const at = (key: string, when: number, t: number, run: () => void) => { if (t >= when && !done.has(key)) { done.add(key); run(); } };
@@ -421,11 +511,11 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     const herMiddle = place.current.x + (bike.current?.offsetWidth || 200) / 2;
     let x = 0;
     for (let i = 0; i < 8; i++) { x = 30 + Math.random() * (window.innerWidth - 120); if (Math.abs(x + 35 - herMiddle) > 140) break; }
-    setKills(list => [...list, { id: ++uid, kind: pick(CRITTERS), x }]);
+    setKills(list => [...list, { id: ++uid, kind: pick(CRITTERS), x, bornAt: Date.now() }]);
   }
   async function collect(id: number) {
     const kill = killsRef.current.find(item => item.id === id);
-    if (!kill || phaseRef.current !== "parked" || busy.current) return;
+    if (!kill || kill.claimed || phaseRef.current !== "parked" || busy.current) return;
     await rideTo(kill.x + 35);
     if (busy.current || !killsRef.current.some(item => item.id === id)) return;
     busy.current = true;
@@ -455,6 +545,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     setBbq({ left, width: sceneW, served: false });
     speak(pick(BBQ_START));
     const plateX = left + sceneW * (126 / 170), plateY = GROUND + sceneW * (150 / 170) * (60 / 150);
+    window.setTimeout(() => void snagRaid(plateX, plateY), 1800);
     let lastPuff = 0, said = 0;
     await animate(6500, t => {
       const now = performance.now();
@@ -652,7 +743,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
   async function bikieBrawl() {
     if (phaseRef.current !== "parked" || busy.current) return;
     busy.current = true; setMenu(false);
-    speak("Reds versus Blues. Righto, let's have it, ya blue cunts!");
+    speak("Reds versus Blues. Righto, let's have it, ya blue mongrels!");
     setBrawl("rideIn");
     await later(2400);
     setBrawl("fight"); setLine(null);
@@ -680,7 +771,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     await later(700);
     add({ kind: "burst", x: cx - 220, y: GROUND + 150, size: 0, text: "OI OI OI!" });
     add({ kind: "burst", x: cx + 40, y: GROUND + 130, size: 0, text: "HOORAY!" });
-    speak("Business at the front, NOTHING at the back. Reds win, ya cunts!");
+    speak("Business at the front, NOTHING at the back. Reds win, ya drongos!");
     setPose("flip");
     await later(3800);
     setPose("ride"); setBrawl(null);
@@ -697,7 +788,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     await later(2200);
     setPose("ride");
     setConvoy(n => n + 1);
-    speak("Here they come! That's me boys, ya cunts!");
+    speak("Here they come! That's me boys, ya mongrels!");
     for (let i = 0; i < 10; i++) {
       await later(1000);
       if (i % 2 === 0) add({ kind: "burst", x: Math.random() * (window.innerWidth - 200), y: GROUND + 150 + Math.random() * 40, size: 0, text: pick(["BRAAAP!", "VROOOM!", "POTATO POTATO", "YEOOO!"]) });
@@ -731,7 +822,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     speak("…Worth it.");
     await later(2800);
     setTattoo(null); setPose("ride");
-    speak("And that's a wrap, ya cunts.");
+    speak("And that's a wrap, ya ratbags.");
   }
 
   // Click a passing car and she lassoes it with a chain, holds it, then lets it go.
@@ -751,6 +842,256 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     setLasso(null); setHeldCar(null); setPose("ride");
     speak("Nah, go on, piss off. Drive safe!");
     busy.current = false;
+  }
+  async function binChickenRaid(killId: number) {
+    const kill = killsRef.current.find(item => item.id === killId);
+    if (!kill || ibisBusy.current) return;
+    ibisBusy.current = true;
+    setKills(list => list.map(item => (item.id === killId ? { ...item, claimed: true } : item)));
+    const fromRight = kill.x > window.innerWidth / 2;
+    const start = fromRight ? window.innerWidth + 20 : -100, target = kill.x - 4;
+    const walkMs = Math.max(1500, Math.abs(target - start) * 9);
+    setIbis({ x: start, ms: 0, faceLeft: fromRight, stage: "walk", carrying: null, line: null });
+    await later(60);
+    setIbis(current => current && { ...current, x: target, ms: walkMs });
+    await later(walkMs);
+    setIbis(current => current && { ...current, stage: "grab" });
+    await later(700);
+    setKills(list => list.filter(item => item.id !== killId));
+    setIbis(current => current && { ...current, carrying: kill.kind, line: pick(IBIS_LINES) });
+    if (phaseRef.current === "parked" && !busy.current) speak(pick(["Oi! That's MY dinner, ya bin chicken!", "Get back here with me roo, ya feathered bastard!", "Bloody bin chickens. Nothing's sacred."]));
+    await later(7000);
+    // Turn round and wander off the way it came, dinner in beak (still muttering).
+    setIbis(current => current && { ...current, stage: "leave", faceLeft: !fromRight, x: start, ms: walkMs });
+    await later(walkMs + 100);
+    setIbis(null);
+    ibisBusy.current = false;
+  }
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (ibisBusy.current) return;
+      const stale = killsRef.current.find(item => !item.claimed && Date.now() - item.bornAt > IBIS_AFTER_MS);
+      if (stale) void binChickenRaid(stale.id);
+    }, 4000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (phase !== "parked") return;
+    let timer = 0;
+    const next = () => { timer = window.setTimeout(() => {
+      // A loose group of 2-4 flying together, slightly staggered.
+      const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, base = 170 + Math.random() * Math.max(80, window.innerHeight * 0.4), ms = 6500 + Math.random() * 3000;
+      const group = 2 + Math.floor(Math.random() * 3);
+      setFlyers(list => [...list, ...Array.from({ length: group }, (_, i) => ({ id: ++uid, dir, bottom: base + (i % 2 ? 36 : -14) * Math.ceil(i / 2), ms: ms + i * 220, delay: i * 260 }))]);
+      next();
+    }, 20_000 + Math.random() * 25_000); };
+    next();
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  // A flock drops onto the wheelie bin, rummages for a bit, then takes off together.
+  async function flockVisit() {
+    if (flockBusy.current) return;
+    flockBusy.current = true;
+    const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, bx = binX();
+    const spots = [
+      { x: bx - 8, bottom: BIN_BOTTOM + BIN_H - 12, onBin: true },
+      { x: bx + 18, bottom: BIN_BOTTOM + BIN_H - 12, onBin: true },
+      { x: bx - 72, bottom: BIN_BOTTOM - 6, onBin: false },
+      { x: bx - 40, bottom: BIN_BOTTOM - 10, onBin: false },
+      { x: bx + BIN_W + 6, bottom: BIN_BOTTOM - 8, onBin: false },
+      { x: bx + BIN_W + 40, bottom: BIN_BOTTOM - 4, onBin: false },
+    ].slice(0, FLOCK_SIZE);
+    const offX = (i: number) => (dir === 1 ? -140 - i * 60 : window.innerWidth + 60 + i * 60);
+    setFlock({ dir, stage: "in", birds: spots.map((sp, i) => ({ x: offX(i), bottom: window.innerHeight * (0.55 + (i % 3) * 0.1), ms: 0, onBin: sp.onBin })) });
+    await later(60);
+    setFlock(fl => fl && { ...fl, birds: spots.map((sp, i) => ({ ...sp, ms: 2400 + i * 260 })) });
+    await later(2400 + FLOCK_SIZE * 260);
+    setFlock(fl => fl && { ...fl, stage: "landed" });
+    add({ kind: "burst", x: bx - 40, y: BIN_BOTTOM + BIN_H + 50, size: 0, text: "SQUAWK SQUAWK!" });
+    if (phaseRef.current === "parked" && !busy.current) speak(pick(FLOCK_LINES));
+    // Rubbish flies out of the bin while they dig.
+    for (let i = 0; i < 7; i++) {
+      await later(1100);
+      add({ kind: "junk", x: bx + BIN_W / 2, y: BIN_BOTTOM + BIN_H, size: 0, dx: (Math.random() - 0.5) * 260, dy: BIN_H + 10, arc: -(60 + Math.random() * 80), text: pick(BIN_JUNK) });
+    }
+    // Everyone up at once, off the far side.
+    setFlock(fl => fl && { ...fl, stage: "out", birds: fl.birds.map((b, i) => ({ ...b, x: dir === 1 ? window.innerWidth + 80 + i * 50 : -160 - i * 50, bottom: window.innerHeight * (0.6 + (i % 3) * 0.08), ms: 2600 + i * 180 })) });
+    await later(2600 + FLOCK_SIZE * 180 + 200);
+    setFlock(null);
+    flockBusy.current = false;
+  }
+  useEffect(() => {
+    if (phase !== "parked") return;
+    let timer = 0;
+    const next = () => { timer = window.setTimeout(() => { void flockVisit(); next(); }, 35_000 + Math.random() * 35_000); };
+    timer = window.setTimeout(() => { void flockVisit(); next(); }, 12_000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  // A drop bear falls out of a gum tree, lands with a thud, snarls, and bolts for the bush.
+  async function dropBearAttack() {
+    if (dropBusy.current) return;
+    dropBusy.current = true;
+    const tree = pick(treeSpots());
+    const x = tree.x + TREE_W * 0.55, top = TREE_BOTTOM + TREE_H * 0.62;
+    setDropBear({ x, bottom: top, ms: 0, ease: "ease-in", faceLeft: false });
+    await later(80);
+    setDropBear(d => d && { ...d, bottom: GROUND + 6, ms: 650 });
+    await later(650);
+    add({ kind: "burst", x: x - 30, y: GROUND + 70, size: 0, text: "THUD!" });
+    for (let i = 0; i < 4; i++) add({ kind: "tyre", x: x + (Math.random() - 0.5) * 40, y: GROUND + 6, size: 20 + Math.random() * 16 });
+    await later(500);
+    add({ kind: "burst", x: x - 50, y: GROUND + 100, size: 0, text: "RAAARGH!" });
+    if (phaseRef.current === "parked" && !busy.current) speak(pick(DROP_LINES));
+    await later(1400);
+    const toLeft = x < window.innerWidth / 2;
+    setDropBear(d => d && { ...d, faceLeft: toLeft, x: toLeft ? -80 : window.innerWidth + 40, ms: 1600, ease: "cubic-bezier(.5,0,.8,.6)" });
+    await later(1700);
+    setDropBear(null);
+    dropBusy.current = false;
+  }
+  useEffect(() => {
+    if (phase !== "parked") return;
+    let timer = 0;
+    const next = () => { timer = window.setTimeout(() => { void dropBearAttack(); next(); }, 45_000 + Math.random() * 45_000); };
+    timer = window.setTimeout(() => { void dropBearAttack(); next(); }, 35_000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  // Sportsbikes scream past like the cars, faster.
+  function spawnSportbike() {
+    const lane: "far" | "near" = Math.random() < 0.5 ? "far" : "near", dir: 1 | -1 = lane === "far" ? 1 : -1;
+    setSportbikes(list => [...list, { id: ++uid, dir, lane, color: pick(SPORTBIKE_COLORS), ms: 1900 + Math.random() * 900 }]);
+    add({ kind: "burst", x: dir === 1 ? 20 : window.innerWidth - 220, y: (lane === "far" ? FAR_LANE : GROUND) + 70, size: 0, text: "NEEEEOWWW!" });
+    if (phaseRef.current === "parked" && !busy.current && Math.random() < 0.4) window.setTimeout(() => speak(pick(SPORTBIKE_LINES)), 900);
+  }
+
+  // A roo hops out in front of a family wagon: BONK. Roo becomes roadkill, car limps off dented.
+  async function rooStrike() {
+    if (strikeBusy.current) return;
+    strikeBusy.current = true;
+    const rooX = Math.round(window.innerWidth * (0.4 + Math.random() * 0.2)), carW = window.innerWidth < 640 ? 150 : 200;
+    const impactCarX = rooX - carW * 0.93, runIn = 2400;
+    setStrike({ carX: -carW - 20, carMs: 0, color: pick(CAR_COLORS), dented: false, rooX, rooBottom: 150, rooMs: 0, rooGone: false, shaking: false });
+    await later(60);
+    setStrike(st => st && { ...st, carX: impactCarX, carMs: runIn, rooBottom: FAR_LANE + 8, rooMs: runIn });
+    await later(runIn);
+    add({ kind: "boom", x: rooX - 120, y: FAR_LANE + 110, size: 0, text: "BONK!" });
+    add({ kind: "splat", x: rooX, y: FAR_LANE + 10, size: 46 });
+    add({ kind: "rooFly", x: rooX, y: FAR_LANE + 20, size: 0, dx: 160 + Math.random() * 120, dy: FAR_LANE + 20 - GROUND, arc: -130 });
+    setStrike(st => st && { ...st, dented: true, rooGone: true, shaking: true });
+    if (phaseRef.current === "parked" && !busy.current) speak(pick(STRIKE_LINES));
+    for (let i = 0; i < 6; i++) { add({ kind: "smoke", x: impactCarX + carW * 0.92, y: FAR_LANE + 50, size: 18 + i * 5 }); await later(160); }
+    setStrike(st => st && { ...st, shaking: false, carX: window.innerWidth + 40, carMs: 6000 });
+    await later(6100);
+    setStrike(null);
+    strikeBusy.current = false;
+  }
+  const rooLanded = (item: Fx) => {
+    remove(item.id);
+    const x = Math.max(20, Math.min(window.innerWidth - 90, item.x + (item.dx || 0) - 36));
+    setKills(list => [...list, { id: ++uid, kind: "roo", x, bornAt: Date.now() }]);
+  };
+
+  // Drop bears lower down on a web thread from the gum trees, dangle a bit, and climb back up.
+  function spawnDangler() {
+    const tree = pick(treeSpots());
+    const x = tree.x + TREE_W * (0.3 + Math.random() * 0.4), top = window.innerHeight - (TREE_BOTTOM + TREE_H * 0.78);
+    setDanglers(list => [...list, { id: ++uid, x, top, ms: 7000 + Math.random() * 3000 }]);
+  }
+
+  // Hoop snakes roll across the road.
+  function spawnSnake() {
+    const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+    setSnakes(list => [...list, { id: ++uid, dir, ms: 4200 + Math.random() * 1500, bottom: GROUND + 4 + Math.random() * 30 }]);
+    if (phaseRef.current === "parked" && !busy.current && Math.random() < 0.5) window.setTimeout(() => speak(pick(SNAKE_LINES)), 1000);
+  }
+
+  // Dazza the bludger wanders up for a durry and a few bucks, then cops a drop bear.
+  async function dazzaVisit() {
+    if (dazzaBusy.current) return;
+    dazzaBusy.current = true;
+    const tree = pick(treeSpots());
+    const standX = tree.x + TREE_W * 0.35, fromRight = standX > window.innerWidth / 2;
+    const start = fromRight ? window.innerWidth + 20 : -80;
+    const walkMs = Math.max(2500, Math.abs(standX - start) * 7);
+    setDazza({ x: start, ms: 0, faceLeft: fromRight, pose: "walk", bear: false, line: null, bearTop: null });
+    await later(60);
+    setDazza(d => d && { ...d, x: standX, ms: walkMs });
+    await later(walkMs);
+    setDazza(d => d && { ...d, pose: "ask", line: pick(DAZZA_ASKS) });
+    await later(4500);
+    if (phaseRef.current === "parked" && !busy.current) speak(pick(SHAZZ_TO_DAZZA));
+    await later(3500);
+    // Drop bear straight onto his head from the gum above.
+    setDazza(d => d && { ...d, line: null, bearTop: window.innerHeight - (TREE_BOTTOM + TREE_H * 0.7) });
+    await later(80);
+    setDazza(d => d && { ...d, bearTop: window.innerHeight - (GROUND + 118) });
+    await later(600);
+    add({ kind: "burst", x: standX - 40, y: GROUND + 150, size: 0, text: "THUD!" });
+    setDazza(d => d && { ...d, bear: true, bearTop: null, pose: "run", line: "AAARGH! DROP BEAR! GET IT OFF!" });
+    await later(1400);
+    if (phaseRef.current === "parked" && !busy.current) speak(pick(["Told ya not to stand under the gum tree, Dazza!", "Ha! Karma, ya bludger!", "Vegemite behind the ears next time, Dazza!"]));
+    const exit = fromRight ? window.innerWidth + 40 : -100;
+    setDazza(d => d && { ...d, faceLeft: !fromRight, x: exit, ms: 1800 });
+    await later(1900);
+    setDazza(null);
+    dazzaBusy.current = false;
+  }
+
+  useEffect(() => {
+    if (phase !== "parked") return;
+    const timers: number[] = [];
+    const every = (first: number, min: number, spread: number, run: () => void) => {
+      const next = () => { timers.push(window.setTimeout(() => { run(); next(); }, min + Math.random() * spread)); };
+      timers.push(window.setTimeout(() => { run(); next(); }, first));
+    };
+    every(9_000, 12_000, 13_000, spawnSportbike);
+    every(50_000, 70_000, 50_000, () => void rooStrike());
+    every(15_000, 25_000, 20_000, spawnDangler);
+    every(28_000, 35_000, 35_000, spawnSnake);
+    every(40_000, 50_000, 40_000, () => void dazzaVisit());
+    return () => timers.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  function rooMob() {
+    const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, count = 4 + Math.floor(Math.random() * 3), ms = 5500 + Math.random() * 2000;
+    // Spread them across the back of the road; bigger ones are "closer".
+    setRoos(list => [...list, ...Array.from({ length: count }, (_, i) => {
+      const size = 62 + Math.random() * 30;
+      return { id: ++uid, dir, size, bottom: 104 - (size - 62) * 0.8 + (i % 2) * 10, ms: ms + (Math.random() - 0.5) * 900, delay: i * 380 + Math.random() * 200, hop: 520 + Math.random() * 140, joey: i === 1 };
+    })]);
+    if (phaseRef.current === "parked" && !busy.current && Math.random() < 0.6) window.setTimeout(() => speak(pick(ROO_LINES)), 1200);
+  }
+  useEffect(() => {
+    if (phase !== "parked") return;
+    let timer = 0;
+    const next = () => { timer = window.setTimeout(() => { rooMob(); next(); }, 30_000 + Math.random() * 35_000); };
+    timer = window.setTimeout(() => { rooMob(); next(); }, 22_000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  // During the barbie: one swoops in, nicks a snag off the plate, and flaps off with it.
+  async function snagRaid(plateX: number, plateBottom: number) {
+    const w = 84;
+    setRaider({ x: window.innerWidth + 40, bottom: window.innerHeight * 0.65, ms: 0, faceLeft: true, carrying: null });
+    await later(60);
+    setRaider(r => r && { ...r, x: plateX - w * 0.9, bottom: plateBottom, ms: 1600 });
+    await later(1600);
+    add({ kind: "burst", x: plateX - 60, y: plateBottom + 70, size: 0, text: "SQUAWK!" });
+    setBbq(current => current && { ...current, stolen: Math.min(3, (current.stolen || 0) + 1) });
+    setRaider(r => r && { ...r, carrying: "snag" });
+    speak(pick(["OI! Get off me snags, ya flying rat!", "That's MY snag, ya bin-diving mongrel!", "Bloody bin chicken! That was the good one!"]));
+    await later(650);
+    setRaider(r => r && { ...r, x: -160, bottom: window.innerHeight * 0.75, ms: 1900 });
+    await later(2000);
+    setRaider(null);
   }
   const smash = (item: Fx) => {
     remove(item.id);
@@ -792,7 +1133,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
 
   async function leave(mute = false) {
     if (phaseRef.current !== "parked" || busy.current) return;
-    setLine(null); setMenu(false); setPhase("leave"); setPose("ride");
+    setLine(null); lineQueue.current = []; setMenu(false); setPhase("leave"); setPose("ride");
     if (mute) { setMuted(true); try { localStorage.setItem("day-out-smartarse-muted", "1"); } catch { /* ignore */ } }
     const k = s();
     if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -815,7 +1156,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
       });
     }
     place.current = { x: -500, tilt: 0, pivot: 60 }; draw();
-    setKills([]); setBbq(null); setTattoo(null); setConvoy(0); setBrawl(null);
+    setKills([]); setIbis(null); ibisBusy.current = false; setBbq(null); setFlyers([]); setRaider(null); setFlock(null); flockBusy.current = false; setRoos([]); setDropBear(null); dropBusy.current = false; setSportbikes([]); setStrike(null); strikeBusy.current = false; setDanglers([]); setSnakes([]); setDazza(null); dazzaBusy.current = false; setTattoo(null); setConvoy(0); setBrawl(null);
     setPhase("hidden");
   }
 
@@ -880,7 +1221,61 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
       {Array.from({ length: 50 }, (_, i) => <span key={i} className={styles.convoyBike} style={{ left: Math.floor(i / 2) * 78 + (i % 2) * 34, bottom: i % 2 ? 50 : 66, animationDelay: `${(i % 7) * 0.07}s` }}><MiniBiker seed={i} /></span>)}
     </div>}
     {sign && <span className={`${styles.stopSign} ${sign.down ? styles.stopSignDown : ""}`} style={{ left: sign.x, bottom: 44 }}><StopSign holes={sign.holes} /></span>}
-    {bbq && <span className={styles.bbq} style={{ left: bbq.left, bottom: GROUND - 2, width: bbq.width, height: bbq.width * (150 / 170) }}><BbqScene served={bbq.served} /></span>}
+    {bbq && <span className={styles.bbq} style={{ left: bbq.left, bottom: GROUND - 2, width: bbq.width, height: bbq.width * (150 / 170) }}><BbqScene served={bbq.served} stolen={bbq.stolen} /></span>}
+    {raider && <span className={styles.raider} style={{ left: raider.x, bottom: raider.bottom, transitionDuration: `${raider.ms}ms` }} aria-hidden>
+      <span className={styles.ibisBody} style={{ transform: raider.faceLeft ? "scaleX(-1)" : undefined }}><BinChicken flying carrying={raider.carrying} /></span>
+    </span>}
+    {phase !== "hidden" && treeSpots().map((t, i) => (
+      <span key={i} className={styles.gumTree} style={{ left: t.x, bottom: TREE_BOTTOM, width: TREE_W, height: TREE_H }} aria-hidden><GumTree koala={t.koala} variant={i} /></span>
+    ))}
+    {danglers.map(d => <span key={d.id} className={styles.dangler} style={{ left: d.x, top: d.top, animationDuration: `${d.ms}ms` }} aria-hidden
+      onAnimationEnd={event => event.target === event.currentTarget && setDanglers(list => list.filter(x => x.id !== d.id))}>
+      <svg className={styles.web} viewBox="-12 -12 24 24" aria-hidden><path d="M-10 0 H10 M0 -10 V10 M-7 -7 L7 7 M7 -7 L-7 7" stroke="#fff" strokeWidth="0.6" opacity="0.8" /><circle r="4" fill="none" stroke="#fff" strokeWidth="0.5" opacity="0.8" /><circle r="8" fill="none" stroke="#fff" strokeWidth="0.5" opacity="0.6" /></svg>
+      <span className={styles.danglerThread} style={{ animationDuration: `${d.ms}ms` }}><span className={styles.danglerBear}><DropBear /></span></span>
+    </span>)}
+    {dropBear && <span className={styles.dropBear} aria-hidden
+      style={{ left: dropBear.x - 24, bottom: dropBear.bottom, transitionDuration: `${dropBear.ms}ms`, transitionTimingFunction: dropBear.ease }}>
+      <span className={styles.ibisBody} style={{ transform: dropBear.faceLeft ? "scaleX(-1)" : undefined }}><DropBear /></span>
+    </span>}
+    {strike && <span className={styles.strikeCar} aria-hidden
+      style={{ left: strike.carX, bottom: FAR_LANE, width: window.innerWidth < 640 ? 150 : 200, height: (window.innerWidth < 640 ? 150 : 200) * 0.45, transitionDuration: `${strike.carMs}ms` }}>
+      <span className={`${styles.carBody} ${strike.shaking ? styles.carShake : ""}`}><FamilyCar color={strike.color} dented={strike.dented} /></span>
+      {strike.dented && <span className={styles.carShock} style={{ animationDelay: "0ms" }}>!!</span>}
+    </span>}
+    {strike && !strike.rooGone && <span className={styles.strikeRoo} aria-hidden style={{ left: strike.rooX, bottom: strike.rooBottom, transitionDuration: `${strike.rooMs}ms`, ["--hop" as string]: "480ms" }}>
+      <span className={styles.rooHop}><span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><Kangaroo /></span></span>
+    </span>}
+    {snakes.map(sn => <span key={sn.id} className={styles.hoopSnake} aria-hidden onAnimationEnd={event => event.target === event.currentTarget && setSnakes(list => list.filter(x => x.id !== sn.id))}
+      style={{ bottom: sn.bottom, animationDuration: `${sn.ms}ms`, ["--from" as string]: `${sn.dir === 1 ? -60 : window.innerWidth + 10}px`, ["--to" as string]: `${sn.dir === 1 ? window.innerWidth + 10 : -60}px` }}>
+      <span className={styles.snakeBounce}><span className={sn.dir === 1 ? styles.snakeRollRight : styles.snakeRollLeft}><HoopSnake /></span></span>
+    </span>)}
+    {sportbikes.map(b => <span key={b.id} className={styles.car} aria-hidden onAnimationEnd={event => event.target === event.currentTarget && setSportbikes(list => list.filter(x => x.id !== b.id))}
+      style={{ bottom: b.lane === "far" ? FAR_LANE + 4 : GROUND + 4, width: 110, height: 60, animationDuration: `${b.ms}ms`, ["--from" as string]: `${b.dir === 1 ? -120 : window.innerWidth}px`, ["--to" as string]: `${b.dir === 1 ? window.innerWidth : -120}px` }}>
+      <span className={`${styles.carFlip} ${styles.moving}`} style={{ transform: b.dir === -1 ? "scaleX(-1)" : undefined }}><SportBike color={b.color} /></span>
+    </span>)}
+    {dazza && <span className={styles.dazza} aria-hidden style={{ left: dazza.x, bottom: GROUND + 2, transitionDuration: `${dazza.ms}ms` }}>
+      <span className={styles.ibisBody} style={{ transform: dazza.faceLeft ? "scaleX(-1)" : undefined }}><Bludger pose={dazza.pose} /></span>
+      {dazza.bear && <span className={styles.bearOnHead}><DropBear /></span>}
+      {dazza.line && <span className={styles.ibisBubble}>{dazza.line}</span>}
+    </span>}
+    {dazza && dazza.bearTop !== null && <span className={styles.fallingBear} aria-hidden style={{ left: dazza.x + 8, top: dazza.bearTop }}><DropBear /></span>}
+    {roos.map(r => <span key={r.id} className={styles.roo} aria-hidden onAnimationEnd={event => event.target === event.currentTarget && setRoos(list => list.filter(x => x.id !== r.id))}
+      style={{ bottom: r.bottom, width: r.size, height: r.size * 0.9, animationDuration: `${r.ms}ms`, animationDelay: `${r.delay}ms`, ["--from" as string]: `${r.dir === 1 ? -r.size - 20 : window.innerWidth + 20}px`, ["--to" as string]: `${r.dir === 1 ? window.innerWidth + 20 : -r.size - 20}px`, ["--hop" as string]: `${r.hop}ms` }}>
+      <span className={styles.rooHop}><span className={styles.ibisBody} style={{ transform: r.dir === -1 ? "scaleX(-1)" : undefined }}><Kangaroo joey={r.joey} /></span></span>
+    </span>)}
+    {phase !== "hidden" && <span className={styles.wheelieBin} style={{ left: binX(), bottom: BIN_BOTTOM, width: BIN_W, height: BIN_H }} aria-hidden><WheelieBin rattling={flock?.stage === "landed"} /></span>}
+    {flock && flock.birds.map((b, i) => (
+      <span key={i} className={`${styles.flockBird} ${flock.stage === "landed" ? (b.onBin ? styles.ibisRummage : styles.ibisWalking) : ""}`} aria-hidden
+        style={{ left: b.x, bottom: b.bottom, transitionDuration: `${b.ms}ms` }}>
+        <span className={styles.ibisBody} style={{ transform: (flock.stage === "landed" ? (b.x > binX() + BIN_W / 2) : flock.dir === -1) ? "scaleX(-1)" : undefined }}>
+          <BinChicken flying={flock.stage !== "landed"} />
+        </span>
+      </span>
+    ))}
+    {flyers.map(fl => <span key={fl.id} className={styles.flyer} aria-hidden onAnimationEnd={event => event.target === event.currentTarget && setFlyers(list => list.filter(x => x.id !== fl.id))}
+      style={{ bottom: fl.bottom, animationDuration: `${fl.ms}ms`, animationDelay: `${fl.delay}ms`, ["--from" as string]: `${fl.dir === 1 ? -120 : window.innerWidth + 40}px`, ["--to" as string]: `${fl.dir === 1 ? window.innerWidth + 40 : -120}px` }}>
+      <span className={styles.flyerBob}><span className={styles.ibisBody} style={{ transform: fl.dir === -1 ? "scaleX(-1)" : undefined }}><BinChicken flying /></span></span>
+    </span>)}
     {fireball && <span className={styles.fireball} style={{ left: fireball.x, bottom: fireball.bottom }}><span className={styles.fireCore} /></span>}
     {cop && <span ref={copCar} className={styles.copCar} style={{ bottom: GROUND + 30, width: window.innerWidth < 640 ? 160 : 210, height: (window.innerWidth < 640 ? 160 : 210) * 0.42, transform: "translateX(-400px)" }}><span className={styles.copFlip}><PoliceCar damage={copDamage} wrecked={wreck} /></span></span>}
     {cops && <span className={styles.copsFlee} style={{ left: cops.x - 40, bottom: cops.bottom }}>
@@ -888,13 +1283,22 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
       <span className={styles.copMan} style={{ animationDelay: "0.12s" }}><CopFigure look={cops.look} /></span>
     </span>}
     {tattoo && <span className={styles.bbq} style={{ left: tattoo.left, bottom: GROUND - 2, width: tattoo.width, height: tattoo.width * (150 / 190) }}><TattooScene stage={tattoo.stage} /></span>}
-    {kills.map(kill => <button key={kill.id} className={styles.roadkill} style={{ left: kill.x, bottom: GROUND - 2 }} onClick={() => void collect(kill.id)}
+    {kills.map(kill => <button key={kill.id} className={styles.roadkill} style={{ left: kill.x, bottom: GROUND - 2 }} disabled={kill.claimed} onClick={() => void collect(kill.id)}
       aria-label={`Dead ${CRITTER_NAMES[kill.kind]} on the road. Send Shazz to grab it for dinner`} title="Dinner! Click to send Shazz">
       <RoadKill kind={kill.kind} />
     </button>)}
+    {ibis && <span className={`${styles.ibis} ${ibis.stage === "grab" ? styles.ibisPecking : styles.ibisWalking}`}
+      style={{ left: ibis.x, bottom: GROUND - 2, transitionDuration: `${ibis.ms}ms` }} aria-hidden>
+      <span className={styles.ibisBody} style={{ transform: ibis.faceLeft ? "scaleX(-1)" : undefined }}><BinChicken carrying={ibis.carrying} /></span>
+      {ibis.line && <span className={styles.ibisBubble}>{ibis.line}</span>}
+    </span>}
     {fx.map(item => {
       if (item.kind === "fog") return null;
       if (item.kind === "rubber") return <span key={item.id} className={styles.rubber} style={{ left: item.x, bottom: item.y, width: item.size, height: item.size * 0.6, ["--dx" as string]: `${item.dx}px`, ["--dy" as string]: `${item.dy}px` }} onAnimationEnd={() => remove(item.id)} />;
+      if (item.kind === "splat") return <span key={item.id} className={styles.splat} style={{ left: item.x - item.size / 2, bottom: item.y, width: item.size, height: item.size * 0.45 }} onAnimationEnd={() => remove(item.id)} />;
+      if (item.kind === "rooFly") return <span key={item.id} className={styles.bottleX} style={{ left: item.x, bottom: item.y, ["--dx" as string]: `${item.dx}px` }} onAnimationEnd={event => event.target === event.currentTarget && rooLanded(item)}>
+        <span className={styles.bottleY} style={{ ["--dy" as string]: `${item.dy}px`, ["--arc" as string]: `${item.arc ?? -110}px` }}><span className={styles.rooTumble}><Kangaroo /></span></span>
+      </span>;
       if (item.kind === "junk") return <span key={item.id} className={styles.bottleX} style={{ left: item.x, bottom: item.y, ["--dx" as string]: `${item.dx}px` }} onAnimationEnd={event => event.target === event.currentTarget && remove(item.id)}>
         <span className={styles.bottleY} style={{ ["--dy" as string]: `${item.dy}px`, ["--arc" as string]: `${item.arc ?? -110}px` }}><span className={styles.junk}>{item.text}</span></span>
       </span>;
@@ -943,7 +1347,7 @@ export default function SmartArse({ topic, summon }: { topic: string; summon: nu
     {phase === "parked" && !moving && line && (() => {
       const bubbleW = Math.min(320, window.innerWidth - 32), head = atX + 118 * scale;
       const left = Math.max(16, Math.min(window.innerWidth - bubbleW - 16, head - bubbleW + 60));
-      return <aside key={line.text} className={styles.bubble} style={{ left, width: bubbleW, bottom: height + GROUND + 14 }} role="status" aria-live="polite" onClick={() => setLine(null)}>
+      return <aside key={line.text} className={styles.bubble} style={{ left, width: bubbleW, bottom: height + GROUND + 14 }} role="status" aria-live="polite" onClick={() => { setLine(null); lineShownAt.current = 0; drainQueue(); }}>
         <p>{clean ? bleep(line.text) : line.text}</p>
         <span className={styles.bubbleTail} style={{ left: Math.max(16, Math.min(bubbleW - 42, head - left - 13)) }} />
       </aside>;

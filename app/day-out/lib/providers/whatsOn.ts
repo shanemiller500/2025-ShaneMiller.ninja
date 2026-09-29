@@ -3,14 +3,16 @@ import type { Activity, Category } from "../types";
 import { brisbaneDay, publicUrl, text } from "../normalize";
 import { webSearchJson } from "../openai";
 
-// Web-searched events for today and tomorrow around Ormeau, matched to Dad's interests.
+// Web-searched events for today and tomorrow across South East Queensland, matched to Dad's interests.
 // One search per Queensland day (server cache), and every event must link to a real page;
 // anything without a valid link or date is dropped rather than shown.
 const CATEGORIES: Category[] = ["Music", "War", "Motorsport"];
-const SYSTEM = `You find real, upcoming events for an older bloke living in Ormeau, Queensland (between Brisbane and the Gold Coast).
-Search the web. Only include events that are actually listed online for the given dates, within about 90 minutes' drive of Ormeau (Gold Coast, Brisbane, Logan, Scenic Rim, Tweed).
+// South East Queensland regions the search covers (also used to label each event).
+const AREAS = ["Brisbane", "Gold Coast", "Sunshine Coast", "Ipswich", "Logan", "Redlands", "Moreton Bay", "Scenic Rim", "Toowoomba", "Lockyer Valley", "Noosa", "Somerset"];
+const SYSTEM = `You find real, upcoming events for an older bloke living in Ormeau, Queensland.
+Search the web across ALL of South East Queensland: ${AREAS.join(", ")}. Run several searches (for example each region's what's-on pages, gig guides, motorcycle club calendars, car show listings, RSL and museum events) so the list isn't just one area. Only include events actually listed online for the given dates.
 He likes: live music and pub gigs (rock, blues, country, cover bands), motorbike events, rides, shows and swap meets, car shows and motorsport, war and military history (museums, Anzac/RSL events, air shows).
-For each event give the exact page URL where it is listed. Never invent events, venues, times or URLs; if unsure, leave it out. Return at most 10.`;
+Never include funerals, farewells or memorials for individual people. For each event give the exact page URL where it is listed. Never invent events, venues, times or URLs; if unsure, leave it out. Return up to 15, spread across different regions where possible.`;
 
 const SCHEMA = {
   type: "object", additionalProperties: false, required: ["events"],
@@ -19,13 +21,14 @@ const SCHEMA = {
       type: "array",
       items: {
         type: "object", additionalProperties: false,
-        required: ["title", "date", "time", "venue", "suburb", "category", "url", "description"],
+        required: ["title", "date", "time", "venue", "suburb", "area", "category", "url", "description"],
         properties: {
           title: { type: "string" },
           date: { type: "string", description: "YYYY-MM-DD" },
           time: { type: ["string", "null"], description: "24h HH:MM start time, or null if not listed" },
           venue: { type: "string" },
           suburb: { type: "string" },
+          area: { type: "string", enum: AREAS },
           category: { type: "string", enum: CATEGORIES },
           url: { type: "string" },
           description: { type: "string", description: "One or two sentences, from the listing" },
@@ -62,7 +65,7 @@ export function normalizeWhatsOn(raw: unknown, day: string, fetchedAt: string): 
       id: `web-${date}-${i}-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}`,
       kind: "event" as const, title, category, environment: "mixed" as const,
       description: text(e.description, 400) || "Listed online. Check the event page for details.",
-      venue: text(e.venue, 120), suburb: text(e.suburb, 80), region: "Around Ormeau",
+      venue: text(e.venue, 120), suburb: text(e.suburb, 80), region: AREAS.includes(String(e.area)) ? String(e.area) : "South East Queensland",
       startDate: start.toISOString(), endDate: end.toISOString(),
       openingHours: time ? undefined : "Start time not listed. Check the event page.",
       source: { name: new URL(url).hostname.replace(/^www\./, ""), url, fetchedAt, ttlMinutes: 24 * 60 },
@@ -70,11 +73,35 @@ export function normalizeWhatsOn(raw: unknown, day: string, fetchedAt: string): 
   });
 }
 
-export async function getWhatsOn(now = new Date()) {
+// Three focused searches (run in parallel) cover far more than one broad one, which tends
+// to come back as all gigs. Results are merged and de-duplicated; one failing is fine.
+const THEMES = [
+  "Live music only: pub gigs, rock, blues, country and cover bands, concerts, music festivals.",
+  "Motorbikes, cars and motorsport only: open motorcycle rides and charity runs, bike shows, swap meets, car and hot rod shows, drag racing, speedway, circuit racing. Prefer events open to the public over members-only club rides.",
+  "War and military history only: public events a visitor could go to, such as military museum exhibitions and open days, air shows, historic re-enactments, war history talks and tours, commemorative services open to the public. Exclude veterans' support and welfare sessions (yoga, fitness, morning teas, counselling, member socials).",
+];
+
+// If two visits miss the cache at the same moment, they share one search instead of paying twice.
+const inFlight = new Map<string, Promise<{ day: string; fetchedAt: string; events: Activity[] }>>();
+
+export function getWhatsOn(now = new Date()) {
   const day = brisbaneDay(now);
+  const running = inFlight.get(day);
+  if (running) return running;
+  const request = searchDay(day).finally(() => inFlight.delete(day));
+  inFlight.set(day, request);
+  return request;
+}
+
+function searchDay(day: string) {
   return unstable_cache(async () => {
     const fetchedAt = new Date().toISOString();
-    const raw = await webSearchJson(SYSTEM, `Find events on ${day} (today) and ${addDays(day, 1)} (tomorrow).`, "whats_on", SCHEMA, 3000);
-    return { day, fetchedAt, events: normalizeWhatsOn(raw, day, fetchedAt) };
-  }, ["day-out-whats-on-v2", day], { revalidate: 24 * 3600 })();
+    const ask = `Find events on ${day} (today) and ${addDays(day, 1)} (tomorrow).`;
+    const results = await Promise.allSettled(THEMES.map((theme) => webSearchJson(`${SYSTEM}
+This search: ${theme}`, ask, "whats_on", SCHEMA, 3000)));
+    const ok = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    if (!ok.length) throw new Error("All event searches failed");
+    const merged = { events: ok.flatMap((raw) => (Array.isArray((raw as { events?: unknown }).events) ? (raw as { events: unknown[] }).events : [])) };
+    return { day, fetchedAt, events: normalizeWhatsOn(merged, day, fetchedAt) };
+  }, ["day-out-whats-on-v6-seq", day], { revalidate: 24 * 3600 })();
 }

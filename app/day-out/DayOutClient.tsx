@@ -42,7 +42,27 @@ function withHomeIdeas(list: Recommendation[], day: number, wet: boolean): Recom
   return result;
 }
 // What's-on results are kept on this device for the day, then thrown away.
-const WHATS_ON_KEY = "day-out-whats-on";
+// Bump the key when the search changes so devices drop a copy made the old way.
+const WHATS_ON_KEY = "day-out-whats-on-seq";
+const WHATS_ON_RETRY_MS = 30 * 60_000;
+type WhatsOnStore = { day: string; events?: Activity[]; fetchedAt?: string; failedAt?: number };
+// One request per page load at most, shared by re-mounts (React dev mode mounts twice) and
+// allowed to finish even if you leave the page, so the day's result always gets saved.
+let whatsOnRequest: Promise<WhatsOnStore> | null = null;
+function loadWhatsOn(today: string): Promise<WhatsOnStore> {
+  whatsOnRequest ??= fetch("/api/day-out/whats-on", { cache: "no-store" })
+    .then(response => response.json())
+    .then((result: { ok?: boolean; day?: string; events?: Activity[]; fetchedAt?: string }): WhatsOnStore =>
+      result.ok && Array.isArray(result.events)
+        ? { day: result.day || today, events: result.events, fetchedAt: result.fetchedAt }
+        : { day: today, failedAt: Date.now() })
+    .catch((): WhatsOnStore => ({ day: today, failedAt: Date.now() }))
+    .then(store => {
+      try { localStorage.setItem(WHATS_ON_KEY, JSON.stringify(store)); } catch { /* ignore */ }
+      return store;
+    });
+  return whatsOnRequest;
+}
 const fallback = (places: Activity[]): DayData => {
   const source = { name: "Not loaded", url: "https://open-meteo.com/", fetchedAt: "" };
   return { generatedAt: "", activities: places, weather: { status: "unavailable", data: null, source }, surf: { status: "unavailable", data: null, source }, events: { status: "unavailable", data: [], source }, traffic: { status: "unavailable", data: [], source }, news: { status: "unavailable", data: [], source } };
@@ -61,23 +81,29 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
   const [now, setNow] = useState<Date | null>(null);
   const [whatsOn, setWhatsOn] = useState<Activity[]>([]);
   const [whatsOnState, setWhatsOnState] = useState<"loading" | "ready" | "unavailable">("loading");
+  const [whatsOnAt, setWhatsOnAt] = useState<string | null>(null);
 
   // Events for today and tomorrow: use today's saved copy if there is one; otherwise ask the
   // server once (it caches per day too) and save the result. Yesterday's copy is cleared.
   useEffect(() => {
     const today = brisbaneDay(new Date());
+    let alive = true;
+    const show = (store: WhatsOnStore) => {
+      if (!alive) return;
+      if (store.events) { setWhatsOn(store.events); setWhatsOnAt(store.fetchedAt || null); setWhatsOnState("ready"); }
+      else setWhatsOnState("unavailable");
+    };
     try {
-      const stored = JSON.parse(localStorage.getItem(WHATS_ON_KEY) || "null") as { day?: string; events?: Activity[] } | null;
-      if (stored?.day === today && Array.isArray(stored.events)) { setWhatsOn(stored.events); setWhatsOnState("ready"); return; }
-      localStorage.removeItem(WHATS_ON_KEY);
+      const stored = JSON.parse(localStorage.getItem(WHATS_ON_KEY) || "null") as WhatsOnStore | null;
+      if (stored?.day === today) {
+        // Today's list: use it all day. A failed check waits 30 minutes before trying again.
+        if (stored.events) { show(stored); return () => { alive = false; }; }
+        if (stored.failedAt && Date.now() - stored.failedAt < WHATS_ON_RETRY_MS) { show(stored); return () => { alive = false; }; }
+      }
+      localStorage.removeItem(WHATS_ON_KEY); // yesterday's (or a stale failure)
     } catch { /* storage unavailable: just fetch */ }
-    const controller = new AbortController();
-    fetch("/api/day-out/whats-on", { signal: controller.signal, cache: "no-store" }).then(response => response.json()).then((result: { ok?: boolean; day?: string; events?: Activity[] }) => {
-      if (!result.ok || !Array.isArray(result.events)) { setWhatsOnState("unavailable"); return; }
-      setWhatsOn(result.events); setWhatsOnState("ready");
-      try { localStorage.setItem(WHATS_ON_KEY, JSON.stringify({ day: result.day || today, events: result.events })); } catch { /* ignore */ }
-    }).catch(() => { if (!controller.signal.aborted) setWhatsOnState("unavailable"); });
-    return () => controller.abort();
+    void loadWhatsOn(today).then(show);
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
@@ -168,8 +194,8 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
         {GROUPS.map(({ name, icon: Icon }) => <button key={name} aria-pressed={group === name} onClick={() => { setGroup(name); setMessage(""); }}><Icon size={19} aria-hidden />{name}</button>)}
       </ScrollRow>
       {group === "Best today" && <section className={styles.whatsOn}>
-        <h2>What's on around Ormeau</h2>
-        <p className={styles.small}>Gigs, bike events, car shows and war history listed online for today and tomorrow. Checked once a day; always confirm on the event page.</p>
+        <h2>What's on around South East Queensland</h2>
+        <p className={styles.small}>{whatsOnAt ? `Checked today at ${new Date(whatsOnAt).toLocaleTimeString("en-AU", { timeZone: "Australia/Brisbane", hour: "numeric", minute: "2-digit" })} · refreshes tomorrow. ` : ""}Gigs, bike events, car shows and war history from Noosa to the Tweed and out to Toowoomba, for today and tomorrow. Checked once a day; always confirm on the event page.</p>
         {whatsOnState === "loading" && <p className={styles.small} role="status">Checking what's on…</p>}
         {whatsOnState === "unavailable" && <p className={styles.small}>Couldn't check events right now. Try again later.</p>}
         {whatsOnState === "ready" && !whatsOnCards.length && <p className={styles.small}>Nothing listed for today or tomorrow that fits. Quiet one.</p>}

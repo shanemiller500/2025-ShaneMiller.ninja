@@ -11,7 +11,8 @@ const Arm = ({ d, className }: { d: string; className?: string }) => <g classNam
   <path d={d} stroke={TATTOO} strokeWidth={7} strokeDasharray="2 5 6 4" fill="none" opacity={0.85} />
 </g>;
 
-export default function BbqScene({ served }: { served: boolean }) {
+// `stolen` hides that many snags off the end of the plate (a bin chicken got them).
+export default function BbqScene({ served, stolen = 0 }: { served: boolean; stolen?: number }) {
   return <svg viewBox="0 0 170 150" width="100%" height="100%" aria-hidden overflow="visible">
     {/* The barbie: plate, hood-less body, legs, gas bottle */}
     <line x1={100} y1={116} x2={98} y2={148} stroke={INK} strokeWidth={4} />
@@ -23,7 +24,7 @@ export default function BbqScene({ served }: { served: boolean }) {
     </g>
     <rect x={88} y={94} width={78} height={7} rx={2} fill="#3a3a3a" stroke={INK} strokeWidth={2.5} />
     {/* Snags: pink on, charcoal off */}
-    {[96, 112, 128, 144].map((x, i) => <rect key={x} x={x} y={86} width={14} height={8} rx={4}
+    {[96, 112, 128, 144].slice(0, 4 - stolen).map((x, i) => <rect key={x} x={x} y={86} width={14} height={8} rx={4}
       className={styles.snag} style={{ animationDelay: `${i * 0.25}s` }} stroke={INK} strokeWidth={2} />)}
     {/* Dead horse (tomato sauce) on the side */}
     <rect x={160} y={70} width={9} height={24} rx={3} fill="#d32f2f" stroke={INK} strokeWidth={2} />

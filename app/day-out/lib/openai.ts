@@ -37,7 +37,7 @@ export async function webSearchJson(system: string, user: string, schemaName: st
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...(org ? { "OpenAI-Organization": org } : {}) },
     body: JSON.stringify({
       model: openAiModel(), store: false, max_output_tokens: maxTokens,
-      tools: [{ type: "web_search_preview", search_context_size: "medium", user_location: { type: "approximate", country: "AU", region: "Queensland", city: "Gold Coast", timezone: "Australia/Brisbane" } }],
+      tools: [{ type: "web_search_preview", search_context_size: "high", user_location: { type: "approximate", country: "AU", region: "Queensland", city: "Brisbane", timezone: "Australia/Brisbane" } }],
       input: [{ role: "system", content: system }, { role: "user", content: user }],
       text: { format: { type: "json_schema", name: schemaName, strict: true, schema } },
     }),
