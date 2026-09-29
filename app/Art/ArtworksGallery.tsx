@@ -1,311 +1,110 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { X, ImageOff, Loader2, Maximize2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
+import { Loader2, Search, X } from "lucide-react";
+import { type Artwork, searchArtworks } from "./lib";
 
-interface Artwork {
-  id: number;
-  title: string;
-  image_id: string | null;
-  description: string;
-}
+const SUGGESTED = ["Monet", "Seurat", "Hopper", "Cassatt", "Rembrandt", "Egypt", "Samurai", "Cats"];
 
-const API_FIELDS = "id,title,image_id,description";
-const PAGE_NUMBER = 2;
-const ITEMS_PER_PAGE = 30;
-
-function buildIiifUrl(imageId: string | null, width = 300): string {
-  if (!imageId) return "";
-  return `https://www.artic.edu/iiif/2/${imageId}/full/${width},/0/default.jpg`;
-}
-
-export default function ArtworksGallery() {
-  const [artworks, setArtworks] = useState<Artwork[]>([]);
-  const [selectedArtwork, setSelectedArtwork] = useState<Artwork | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+// The collection: search anything, masonry wall of results, load more at the bottom.
+export default function ArtworksGallery({ onOpen }: { onOpen: (a: Artwork) => void }) {
+  const [input, setInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [items, setItems] = useState<Artwork[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const ctrl = useRef<AbortController | null>(null);
 
+  // Debounce typing into a search
   useEffect(() => {
-    if (!selectedArtwork) return;
+    const t = input.trim();
+    const id = window.setTimeout(() => setQuery(t), 400);
+    return () => window.clearTimeout(id);
+  }, [input]);
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+  useEffect(() => { void load(query, 1); }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [selectedArtwork]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function fetchArtworks() {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const response = await fetch(
-          `https://api.artic.edu/api/v1/artworks?page=${PAGE_NUMBER}&limit=${ITEMS_PER_PAGE}&fields=${API_FIELDS}`,
-          { signal: controller.signal }
-        );
-
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setArtworks((data.data || []) as Artwork[]);
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name === "AbortError") return;
-        console.error(err);
-        setError("Couldn't load older works right now.");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchArtworks();
-    return () => controller.abort();
-  }, []);
-
-  const fullImageSrc = useMemo(() => {
-    if (!selectedArtwork?.image_id) return "";
-    return buildIiifUrl(selectedArtwork.image_id, 1400);
-  }, [selectedArtwork]);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-14">
-        <div className="flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-extrabold text-neutral-700 shadow-sm dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-200">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading older works…
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-3xl border border-red-500/20 bg-red-500/5 p-4 text-sm font-bold text-red-700 dark:text-red-200">
-        {error}
-      </div>
-    );
-  }
-
-  if (artworks.length === 0) {
-    return (
-      <div className="rounded-3xl border border-black/10 bg-white p-6 text-sm font-bold text-neutral-700 shadow-sm dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-200">
-        No items returned.
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
-        {artworks.map((artwork) => (
-          <ArtworkCard
-            key={artwork.id}
-            artwork={artwork}
-            onSelect={() => setSelectedArtwork(artwork)}
-          />
-        ))}
-      </div>
-
-      {selectedArtwork && (
-        <LightboxModal
-          artwork={selectedArtwork}
-          imageSrc={fullImageSrc}
-          onClose={() => setSelectedArtwork(null)}
-        />
-      )}
-    </>
-  );
-}
-
-interface SmartImageProps {
-  src: string;
-  alt: string;
-  className?: string;
-  onClick?: () => void;
-  sizes?: string;
-}
-
-function SmartImage({ src, alt, className, onClick, sizes }: SmartImageProps) {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [hasFailed, setHasFailed] = useState(false);
-
-  if (hasFailed) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-black/5 dark:bg-white/10">
-        <div className="flex items-center gap-2 rounded-full px-3 py-2 text-xs font-extrabold text-neutral-600 dark:text-neutral-300">
-          <ImageOff className="h-4 w-4" />
-          Image unavailable
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative">
-      {!isLoaded && (
-        <div className="absolute inset-0 animate-pulse bg-black/5 dark:bg-white/10" />
-      )}
-      <img
-        src={src}
-        alt={alt}
-        className={`${className || ""} transition-transform duration-300 will-change-transform ${
-          isLoaded ? "opacity-100" : "opacity-0"
-        }`}
-        loading="lazy"
-        decoding="async"
-        sizes={sizes}
-        onClick={onClick}
-        referrerPolicy="no-referrer"
-        onLoad={() => setIsLoaded(true)}
-        onError={() => {
-          setHasFailed(true);
-          setIsLoaded(true);
-        }}
-      />
-    </div>
-  );
-}
-
-interface ArtworkCardProps {
-  artwork: Artwork;
-  onSelect: () => void;
-}
-
-function ArtworkCard({ artwork, onSelect }: ArtworkCardProps) {
-  const thumbnailSrc = buildIiifUrl(artwork.image_id, 600) || "/placeholder.svg";
-
-  return (
-    <button
-      onClick={onSelect}
-      className="group overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-800 hover:shadow-md transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-      aria-label={`Open ${artwork.title}`}
-    >
-      <div className="relative">
-        <SmartImage
-          src={thumbnailSrc}
-          alt={artwork.title}
-          className="w-full h-[190px] sm:h-[220px] object-cover group-hover:scale-[1.03]"
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
-        />
-
-        <div className="absolute inset-x-0 bottom-0 p-3">
-          <div className="rounded-2xl bg-black/55 backdrop-blur px-3 py-2">
-            <div className="line-clamp-1 text-left text-xs font-extrabold text-white">
-              {artwork.title}
-            </div>
-          </div>
-        </div>
-
-        <div className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity">
-          <span className="inline-flex items-center gap-1 rounded-full bg-white/85 px-2 py-1 text-[11px] font-extrabold text-neutral-800">
-            <Maximize2 className="h-3 w-3" />
-            Open
-          </span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-interface LightboxModalProps {
-  artwork: Artwork;
-  imageSrc: string;
-  onClose: () => void;
-}
-
-function LightboxModal({ artwork, imageSrc, onClose }: LightboxModalProps) {
-  function handleCopyUrl() {
+  async function load(q: string, p: number) {
+    ctrl.current?.abort();
+    const c = new AbortController(); ctrl.current = c;
+    setLoading(true); setError(null);
     try {
-      navigator.clipboard.writeText(imageSrc);
-    } catch {
-      // Clipboard API not available
+      // No search yet: show the museum's own highlights.
+      const res = await searchArtworks(q ? { q } : { highlight: true }, p, 24, c.signal);
+      setItems((prev) => (p === 1 ? res.data : [...prev, ...res.data.filter((a) => !prev.some((x) => x.id === a.id))]));
+      setPage(p); setTotalPages(res.totalPages);
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setError("Couldn't reach the collection right now.");
+    } finally {
+      if (!c.signal.aborted) setLoading(false);
     }
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm overflow-y-auto"
-      style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
-      onClick={onClose}
-    >
-      <div className="min-h-[100svh] w-full flex items-center justify-center px-3 py-3 sm:p-6">
-        <div
-          className="relative w-full max-w-5xl rounded-3xl overflow-hidden bg-white dark:bg-neutral-900 border border-black/10 dark:border-white/10 shadow-2xl max-h-[calc(100svh-24px)] sm:max-h-[90svh] flex flex-col"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="sticky top-0 z-20 bg-white/90 dark:bg-neutral-900/90 backdrop-blur border-b border-black/10 dark:border-white/10">
-            <div className="px-4 py-3 sm:px-6 sm:py-4 flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm sm:text-base font-extrabold text-neutral-900 dark:text-neutral-100">
-                  {artwork.title}
-                </div>
-                {artwork.description && (
-                  <div className="mt-1 line-clamp-2 text-xs sm:text-sm font-semibold text-neutral-600 dark:text-neutral-300">
-                    {artwork.description}
-                  </div>
-                )}
-              </div>
-
-              <button
-                aria-label="Close"
-                className="h-10 w-10 rounded-full bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] border border-black/10 dark:border-white/10 flex items-center justify-center"
-                onClick={onClose}
-              >
-                <X className="h-5 w-5 text-neutral-900 dark:text-neutral-100" />
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="flex-1 min-h-0 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
-            style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
-          >
-            <div className="overflow-hidden rounded-3xl ring-1 ring-black/10 dark:ring-white/10 bg-black">
-              {imageSrc ? (
-                <img
-                  src={imageSrc}
-                  alt={artwork.title}
-                  className="w-full max-h-[70vh] object-contain"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="p-10 text-center text-sm font-bold text-white/70">
-                  No image available.
-                </div>
-              )}
-            </div>
-
-            {imageSrc && (
-              <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                <a
-                  href={imageSrc}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full sm:w-auto inline-flex items-center justify-center rounded-2xl bg-indigo-600 px-4 py-3 text-xs font-extrabold text-white shadow hover:bg-indigo-700 transition"
-                >
-                  Open full image
-                </a>
-
-                <button
-                  type="button"
-                  onClick={handleCopyUrl}
-                  className="w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.06] px-4 py-3 text-xs font-extrabold text-neutral-900 dark:text-neutral-100 hover:bg-black/[0.06] dark:hover:bg-white/[0.10]"
-                >
-                  Copy image URL
-                </button>
-              </div>
-            )}
-
-            <div className="h-8" />
-          </div>
+    <div>
+      <div className="border-b border-slate-200/70 px-4 py-4 dark:border-white/[0.08] sm:px-6">
+        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 transition focus-within:border-indigo-400 focus-within:shadow-[0_0_0_4px_rgba(99,102,241,0.12)] dark:border-white/10 dark:bg-white/[0.04]">
+          <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Search 41,000+ works: artist, subject, place…" aria-label="Search the collection"
+            className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-white" />
+          {loading && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-indigo-500" aria-hidden />}
+          {input && <button type="button" onClick={() => setInput("")} aria-label="Clear search" className="rounded-lg p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white"><X className="h-3.5 w-3.5" /></button>}
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">Try</span>
+          {SUGGESTED.map((s) => (
+            <button key={s} type="button" onClick={() => setInput(s)}
+              className={`rounded-full border px-2.5 py-1 font-mono text-[11px] transition ${query.toLowerCase() === s.toLowerCase() ? "border-indigo-500 bg-indigo-500 text-white" : "border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-slate-300"}`}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-6">
+        <h3 className="mb-4 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+          {input.trim() ? `${items.length} works for “${input.trim()}”${page < totalPages ? " so far" : ""}` : "Highlights from the collection"}
+        </h3>
+
+        {error && <div className="mb-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-700 dark:text-rose-200">{error}</div>}
+        {!loading && !error && items.length === 0 && <p className="rounded-2xl border border-dashed border-slate-200 py-12 text-center font-mono text-xs text-slate-400 dark:border-white/10">Nothing in the collection matches that. Try another word.</p>}
+
+        {/* Masonry via CSS columns */}
+        <div className="columns-2 gap-3 sm:columns-3 lg:columns-4">
+          {items.map((a, i) => (
+            <motion.button
+              key={a.id}
+              type="button"
+              onClick={() => onOpen(a)}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(i % 24, 12) * 0.03 }}
+              className="group relative mb-3 block w-full break-inside-avoid overflow-hidden rounded-2xl border border-slate-200/70 bg-slate-100 text-left outline-none transition hover:shadow-[0_16px_40px_-18px_rgba(15,23,42,0.5)] focus-visible:ring-2 focus-visible:ring-indigo-500/60 dark:border-white/[0.08] dark:bg-white/[0.04]"
+              aria-label={`Open ${a.title}`}
+            >
+              <img src={a.image} alt={a.title} loading="lazy"
+                className="block min-h-[120px] w-full transition-transform duration-500 group-hover:scale-[1.04]" />
+              <div className="absolute inset-x-0 bottom-0 translate-y-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-3 pt-10 opacity-0 transition group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
+                <p className="line-clamp-2 font-serif text-sm italic text-white">{a.title}</p>
+                <p className="line-clamp-1 font-mono text-[10px] uppercase tracking-wider text-amber-300/90">{a.artistShort}{a.date ? ` · ${a.date}` : ""}</p>
+              </div>
+            </motion.button>
+          ))}
+        </div>
+
+        {items.length > 0 && page < totalPages && (
+          <div className="mt-6 flex justify-center">
+            <button type="button" disabled={loading} onClick={() => load(query, page + 1)}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_18px_-4px_rgba(99,102,241,0.6)] transition hover:bg-indigo-600 disabled:opacity-50">
+              {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}Load more works
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

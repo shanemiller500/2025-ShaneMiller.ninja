@@ -179,7 +179,7 @@ function AirportTypeahead({
 
         <div className="flex-1 min-w-0">
           {/* Label */}
-          <div className="text-[10px] font-bold uppercase tracking-widest text-brand-400 dark:text-brand-500 mb-0.5 select-none">
+          <div className="font-mono text-[10px] uppercase tracking-widerst text-slate-400 dark:text-slate-500 mb-0.5 select-none">
             {label}
           </div>
 
@@ -195,7 +195,7 @@ function AirportTypeahead({
             placeholder={placeholder}
             autoComplete="off"
             spellCheck={false}
-            className="w-full bg-transparent text-sm font-semibold text-brand-900 dark:text-white placeholder:text-brand-400 dark:placeholder:text-brand-600 focus:outline-none"
+            className="w-full bg-transparent text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none"
           />
 
           {/* City hint */}
@@ -204,7 +204,7 @@ function AirportTypeahead({
               {selected.name}
             </div>
           ) : (
-            <div className="text-[11px] text-brand-400 dark:text-brand-500 mt-0.5">
+            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
               {isIata(value) ? value : "City or airport"}
             </div>
           )}
@@ -218,7 +218,7 @@ function AirportTypeahead({
               e.preventDefault();
               setValue(""); setQuery("");
             }}
-            className="mt-1 shrink-0 rounded-full p-0.5 text-brand-400 hover:text-brand-600 dark:text-brand-500 dark:hover:text-brand-200"
+            className="mt-1 shrink-0 rounded-full p-0.5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -235,7 +235,7 @@ function AirportTypeahead({
               exit={{ opacity: 0, y: -4, scale: 0.98 }}
               transition={{ duration: 0.15 }}
               style={{ position: "fixed", top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
-              className="overflow-hidden rounded-2xl border border-brand-200/70 bg-white shadow-2xl dark:border-white/10 dark:bg-brand-900"
+              className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-2xl dark:border-white/10 dark:bg-[#1a1a1d]"
             >
               <div className="max-h-60 overflow-y-auto py-1">
                 {suggestions.map((a) => (
@@ -248,18 +248,18 @@ function AirportTypeahead({
                       setQuery(a.iata.toUpperCase());
                       setOpen(false);
                     }}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-brand-50 dark:hover:bg-white/5"
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-white/5"
                   >
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/10">
-                      <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-300">
+                      <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-300">
                         {a.iata.toUpperCase()}
                       </span>
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-brand-900 dark:text-white">
+                      <span className="block truncate text-sm font-semibold text-slate-900 dark:text-white">
                         {a.city || a.name}
                       </span>
-                      <span className="block truncate text-[11px] text-brand-500 dark:text-brand-400">
+                      <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">
                         {a.name}
                       </span>
                     </span>
@@ -288,25 +288,25 @@ interface StepperProps {
 
 function Stepper({ label, desc, val, set, min }: StepperProps) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-brand-100/60 dark:border-white/5 last:border-0">
+    <div className="flex items-center justify-between py-3 border-b border-slate-100/60 dark:border-white/[0.08] last:border-0">
       <div>
-        <div className="text-sm font-semibold text-brand-900 dark:text-white">{label}</div>
-        <div className="text-[11px] text-brand-500 dark:text-brand-400">{desc}</div>
+        <div className="text-sm font-semibold text-slate-900 dark:text-white">{label}</div>
+        <div className="text-[11px] text-slate-500 dark:text-slate-400">{desc}</div>
       </div>
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={() => set(Math.max(min, val - 1))}
           disabled={val <= min}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-300/70 bg-white text-brand-700 transition hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-30 dark:border-white/20 dark:bg-white/5 dark:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300/70 bg-white text-slate-700 transition hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-30 dark:border-white/20 dark:bg-white/5 dark:text-white"
         >
           <Minus className="h-3.5 w-3.5" />
         </button>
-        <span className="w-5 text-center text-sm font-bold text-brand-900 dark:text-white">{val}</span>
+        <span className="w-5 text-center text-sm font-bold text-slate-900 dark:text-white">{val}</span>
         <button
           type="button"
           onClick={() => set(val + 1)}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-300/70 bg-white text-brand-700 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-white/20 dark:bg-white/5 dark:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300/70 bg-white text-slate-700 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-white/20 dark:bg-white/5 dark:text-white"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -345,13 +345,13 @@ function DateField({ label, value, onChange, min, disabled, autoOpen }: DateFiel
     >
       <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500 dark:text-indigo-400" />
       <div className="flex-1 min-w-0">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-brand-400 dark:text-brand-500 mb-0.5 select-none">
+        <div className="font-mono text-[10px] uppercase tracking-widerst text-slate-400 dark:text-slate-500 mb-0.5 select-none">
           {label}
         </div>
-        <div className={`text-sm font-semibold ${value ? "text-brand-900 dark:text-white" : "text-brand-400 dark:text-brand-500"}`}>
+        <div className={`text-sm font-semibold ${value ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-500"}`}>
           {value ? fmtDate(value) : "Add date"}
         </div>
-        <div className="text-[11px] text-brand-400 dark:text-brand-500 mt-0.5">
+        <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
           {value ? new Date(value + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", year: "numeric" }) : ""}
         </div>
         <input
@@ -459,7 +459,7 @@ function FlipRouteCard({ from, setFrom, to, setTo, allAirports, onSwap }: FlipRo
                 </span>
                 <ArrowLeftRight className="h-3 w-3 shrink-0 opacity-50" />
               </button>
-              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-brand-400" />
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
             </div>
 
             {/* To typeahead */}
@@ -473,11 +473,11 @@ function FlipRouteCard({ from, setFrom, to, setTo, allAirports, onSwap }: FlipRo
             />
 
             {/* Swap / Edit row */}
-            <div className="flex items-center gap-3 border-t border-brand-100/60 px-3 py-2 dark:border-white/5 sm:px-4">
+            <div className="flex items-center gap-3 border-t border-slate-100/60 px-3 py-2 dark:border-white/[0.08] sm:px-4">
               <button
                 type="button"
                 onClick={doSwap}
-                className="flex items-center gap-1.5 rounded-full border border-brand-200/70 px-2.5 py-1 text-[11px] font-semibold text-brand-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-brand-400 dark:hover:text-indigo-400"
+                className="flex items-center gap-1.5 rounded-full border border-slate-200/70 px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-slate-400 dark:hover:text-indigo-400"
               >
                 <ArrowLeftRight className="h-3 w-3" />
                 Swap
@@ -485,7 +485,7 @@ function FlipRouteCard({ from, setFrom, to, setTo, allAirports, onSwap }: FlipRo
               <button
                 type="button"
                 onClick={goBack}
-                className="text-[11px] text-brand-400 transition hover:text-brand-600 dark:text-brand-500 dark:hover:text-brand-300"
+                className="text-[11px] text-slate-400 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
               >
                 ← Edit departure
               </button>
@@ -552,7 +552,7 @@ function DateStepCard({ depart, onDepart, ret, setRet, trip, goBack }: DateStepC
                 <button
                   type="button"
                   onClick={goBack}
-                  className="flex items-center gap-1 text-[11px] text-brand-400 transition hover:text-brand-600 dark:text-brand-500 dark:hover:text-brand-300"
+                  className="flex items-center gap-1 text-[11px] text-slate-400 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
                 >
                   ← Edit airports
                 </button>
@@ -601,7 +601,7 @@ function DateStepCard({ depart, onDepart, ret, setRet, trip, goBack }: DateStepC
                   {departSub ? ` · ${departSub}` : ""}
                 </span>
               </button>
-              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-brand-400" />
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
             </div>
 
             {/* Return date field */}
@@ -613,11 +613,11 @@ function DateStepCard({ depart, onDepart, ret, setRet, trip, goBack }: DateStepC
             />
 
             {/* Edit row */}
-            <div className="flex items-center gap-4 border-t border-brand-100/60 px-3 py-2 dark:border-white/5 sm:px-4">
+            <div className="flex items-center gap-4 border-t border-slate-100/60 px-3 py-2 dark:border-white/[0.08] sm:px-4">
               <button
                 type="button"
                 onClick={() => setPhase("depart")}
-                className="text-[11px] text-brand-400 transition hover:text-brand-600 dark:text-brand-500 dark:hover:text-brand-300"
+                className="text-[11px] text-slate-400 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
               >
                 ← Edit depart
               </button>
@@ -625,7 +625,7 @@ function DateStepCard({ depart, onDepart, ret, setRet, trip, goBack }: DateStepC
                 <button
                   type="button"
                   onClick={goBack}
-                  className="text-[11px] text-brand-400 transition hover:text-brand-600 dark:text-brand-500 dark:hover:text-brand-300"
+                  className="text-[11px] text-slate-400 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
                 >
                   ← Edit airports
                 </button>
@@ -840,8 +840,8 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
           <div className="flex items-center gap-2">
             <Plane className="h-4 w-4 shrink-0 text-indigo-500" />
             <div>
-              <div className="text-sm font-bold text-brand-700 dark:text-brand-300">Flight search</div>
-              <div className="text-[10px] text-brand-400 dark:text-brand-500">Live fares · real booking links · no hidden fees</div>
+              <div className="text-sm font-bold text-slate-700 dark:text-slate-300">Flight search</div>
+              <div className="text-[10px] text-slate-400 dark:text-slate-500">Live fares · real booking links · no hidden fees</div>
             </div>
           </div>
           <AnimatePresence>
@@ -858,7 +858,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
                   setDepart(d);
                   setRet(addDaysISO(d, 2));
                 }}
-                className="flex items-center gap-1 rounded-full border border-brand-200/70 bg-white px-2.5 py-1 text-[11px] font-semibold text-brand-500 transition hover:border-red-300 hover:text-red-500 dark:border-white/10 dark:bg-transparent dark:text-brand-400 dark:hover:border-red-500/50 dark:hover:text-red-400"
+                className="flex items-center gap-1 rounded-full border border-slate-200/70 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition hover:border-red-300 hover:text-red-500 dark:border-white/10 dark:bg-transparent dark:text-slate-400 dark:hover:border-red-500/50 dark:hover:text-red-400"
               >
                 <X className="h-3 w-3" />
                 Clear
@@ -873,14 +873,14 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="overflow-hidden rounded-3xl border border-brand-200/70 bg-white shadow-lg dark:border-white/10 dark:bg-brand-900"
+          className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-lg dark:border-white/10 dark:bg-[#1a1a1d]"
         >
 
           {/* ── Top control bar ─────────────────────────────────────── */}
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-brand-100/60 px-3 py-2.5 sm:gap-2 sm:px-4 sm:py-3 dark:border-white/5">
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100/60 px-3 py-2.5 sm:gap-2 sm:px-4 sm:py-3 dark:border-white/[0.08]">
 
             {/* Trip type */}
-            <div className="flex overflow-hidden rounded-full border border-brand-200/70 dark:border-white/10">
+            <div className="flex overflow-hidden rounded-full border border-slate-200/70 dark:border-white/10">
               {(["round", "oneway"] as Trip[]).map((t) => (
                 <button
                   key={t}
@@ -889,7 +889,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
                   className={`px-3 py-1.5 text-[11px] font-bold transition ${
                     trip === t
                       ? "bg-indigo-600 text-white"
-                      : "bg-white text-brand-600 hover:bg-brand-50 dark:bg-transparent dark:text-brand-400 dark:hover:bg-white/5"
+                      : "bg-white text-slate-600 hover:bg-slate-50 dark:bg-transparent dark:text-slate-400 dark:hover:bg-white/5"
                   }`}
                 >
                   {t === "round" ? "Round trip" : "One-way"}
@@ -901,7 +901,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
             <button
               type="button"
               onClick={() => setTravelersOpen(true)}
-              className="flex items-center gap-1.5 rounded-full border border-brand-200/70 bg-white px-3 py-1.5 text-[11px] font-bold text-brand-700 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:bg-transparent dark:text-brand-300 dark:hover:border-indigo-500 dark:hover:text-indigo-400"
+              className="flex items-center gap-1.5 rounded-full border border-slate-200/70 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:bg-transparent dark:text-slate-300 dark:hover:border-indigo-500 dark:hover:text-indigo-400"
             >
               <Users className="h-3.5 w-3.5" />
               {paxTotal} {paxTotal === 1 ? "passenger" : "passengers"}
@@ -913,7 +913,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
               <button
                 type="button"
                 onClick={() => setCabinOpen((p) => !p)}
-                className="flex items-center gap-1.5 rounded-full border border-brand-200/70 bg-white px-3 py-1.5 text-[11px] font-bold text-brand-700 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:bg-transparent dark:text-brand-300 dark:hover:border-indigo-500 dark:hover:text-indigo-400"
+                className="flex items-center gap-1.5 rounded-full border border-slate-200/70 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:bg-transparent dark:text-slate-300 dark:hover:border-indigo-500 dark:hover:text-indigo-400"
               >
                 <span>{CABIN_META[cabin].icon}</span>
                 {CABIN_META[cabin].title}
@@ -927,23 +927,23 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.97 }}
                     transition={{ duration: 0.13 }}
-                    className="absolute left-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-brand-200/70 bg-white shadow-2xl dark:border-white/10 dark:bg-brand-900"
+                    className="absolute left-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-2xl dark:border-white/10 dark:bg-[#1a1a1d]"
                   >
                     {(Object.keys(CABIN_META) as Cabin[]).map((c) => (
                       <button
                         key={c}
                         type="button"
                         onClick={() => { setCabin(c); setCabinOpen(false); }}
-                        className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-brand-50 dark:hover:bg-white/5 ${
+                        className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-white/5 ${
                           cabin === c ? "bg-indigo-50 dark:bg-indigo-500/10" : ""
                         }`}
                       >
                         <span className="text-lg">{CABIN_META[c].icon}</span>
                         <span>
-                          <span className={`block text-sm font-semibold ${cabin === c ? "text-indigo-700 dark:text-indigo-300" : "text-brand-900 dark:text-white"}`}>
+                          <span className={`block text-sm font-semibold ${cabin === c ? "text-indigo-700 dark:text-indigo-300" : "text-slate-900 dark:text-white"}`}>
                             {CABIN_META[c].title}
                           </span>
-                          <span className="text-[11px] text-brand-500 dark:text-brand-400">
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
                             {CABIN_META[c].sub}
                           </span>
                         </span>
@@ -1016,7 +1016,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
           </AnimatePresence>
 
           {/* ── Search button bar ────────────────────────────────────── */}
-          <div className="flex flex-col gap-2 border-t border-brand-100/60 px-3 py-3 dark:border-white/5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <div className="flex flex-col gap-2 border-t border-slate-100/60 px-3 py-3 dark:border-white/[0.08] sm:flex-row sm:items-center sm:justify-between sm:px-4">
            
             <motion.button
               whileHover={allGood && !loading ? { scale: 1.03 } : {}}
@@ -1027,7 +1027,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
               className={`flex w-full items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-bold shadow-md transition sm:w-auto ${
                 allGood && !loading
                   ? "bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-500/25"
-                  : "cursor-not-allowed bg-brand-200 text-brand-400 shadow-none dark:bg-white/10 dark:text-brand-500"
+                  : "cursor-not-allowed bg-slate-200 text-slate-400 shadow-none dark:bg-white/10 dark:text-slate-500"
               }`}
             >
               {loading ? (
@@ -1060,9 +1060,9 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
                 <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{to}</span>
               </div>
               {depart && (
-                <div className="flex items-center gap-1.5 rounded-full bg-brand-100 px-3 py-1.5 dark:bg-white/5">
-                  <CalendarDays className="h-3 w-3 text-brand-500" />
-                  <span className="text-xs font-semibold text-brand-600 dark:text-brand-400">
+                <div className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 dark:bg-white/5">
+                  <CalendarDays className="h-3 w-3 text-slate-500" />
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                     {fmtDate(depart)}{trip === "round" && ret ? ` → ${fmtDate(ret)}` : ""}
                   </span>
                 </div>
@@ -1101,22 +1101,22 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", stiffness: 340, damping: 32 }}
-                  className="relative w-full rounded-t-3xl bg-white shadow-2xl dark:bg-brand-900 sm:max-w-md sm:rounded-3xl"
+                  className="relative w-full rounded-t-3xl bg-white shadow-2xl dark:bg-[#1a1a1d] sm:max-w-md sm:rounded-3xl"
                 >
                   {/* Handle */}
                   <div className="flex justify-center pt-3 pb-1">
-                    <div className="h-1 w-10 rounded-full bg-brand-200 dark:bg-brand-700" />
+                    <div className="h-1 w-10 rounded-full bg-slate-200 dark:bg-white/[0.06]" />
                   </div>
 
                   {/* Header */}
-                  <div className="flex items-center justify-between border-b border-brand-100/60 px-5 pb-3 dark:border-white/5">
-                    <h3 className="text-base font-bold text-brand-900 dark:text-white">
+                  <div className="flex items-center justify-between border-b border-slate-100/60 px-5 pb-3 dark:border-white/[0.08]">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
                       Passengers & cabin
                     </h3>
                     <button
                       type="button"
                       onClick={() => setTravelersOpen(false)}
-                      className="rounded-full bg-brand-100 p-1.5 text-brand-600 transition hover:bg-brand-200 dark:bg-white/10 dark:text-brand-300"
+                      className="rounded-full bg-slate-100 p-1.5 text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -1126,7 +1126,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
                   <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
                     {/* Cabin */}
                     <div className="mb-5">
-                      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-brand-400 dark:text-brand-500">
+                      <p className="mb-2 font-mono text-[10px] uppercase tracking-widerst text-slate-400 dark:text-slate-500">
                         Cabin class
                       </p>
                       <div className="grid grid-cols-2 gap-2">
@@ -1140,15 +1140,15 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
                               className={`flex items-center gap-2.5 rounded-2xl border p-3 text-left transition ${
                                 active
                                   ? "border-indigo-500 bg-indigo-600 shadow-lg shadow-indigo-500/20"
-                                  : "border-brand-200/70 bg-brand-50 hover:border-indigo-300 hover:bg-white dark:border-white/10 dark:bg-white/5"
+                                  : "border-slate-200/70 bg-slate-50 hover:border-indigo-300 hover:bg-white dark:border-white/10 dark:bg-white/5"
                               }`}
                             >
                               <span className="text-xl">{CABIN_META[c].icon}</span>
                               <span>
-                                <span className={`block text-xs font-bold ${active ? "text-white" : "text-brand-900 dark:text-white"}`}>
+                                <span className={`block text-xs font-bold ${active ? "text-white" : "text-slate-900 dark:text-white"}`}>
                                   {CABIN_META[c].title}
                                 </span>
-                                <span className={`text-[10px] ${active ? "text-white/75" : "text-brand-500 dark:text-brand-400"}`}>
+                                <span className={`text-[10px] ${active ? "text-white/75" : "text-slate-500 dark:text-slate-400"}`}>
                                   {CABIN_META[c].sub}
                                 </span>
                               </span>
@@ -1160,7 +1160,7 @@ export default function FlightSearch({ full = null }: { full?: FullCountry | nul
 
                     {/* Passengers */}
                     <div>
-                      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-brand-400 dark:text-brand-500">
+                      <p className="mb-2 font-mono text-[10px] uppercase tracking-widerst text-slate-400 dark:text-slate-500">
                         Passengers
                       </p>
                       <Stepper label="Adults"   desc="Age 16+"    val={adults}   set={setAdults}   min={1} />

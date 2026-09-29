@@ -120,6 +120,8 @@ export function DashboardShell<K extends string>({
         </header>
 
         {/* ── Tab bar ──────────────────────────────────────────────────── */}
+        {/* A single-tab page (a standalone tool) skips the tab bar. */}
+        {tabs.length > 1 && (
         <div
           role="tablist"
           aria-label={`${title} sections`}
@@ -178,6 +180,7 @@ export function DashboardShell<K extends string>({
             );
           })}
         </div>
+        )}
 
         {/* ── Panels ───────────────────────────────────────────────────── */}
         <div className={aside ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start" : "contents"}>

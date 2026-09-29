@@ -13,7 +13,7 @@ import Icon05 from "@/public/images/project-icon-01.svg";
 import Icon5 from "@/public/images/project-icon-05.svg";
 import Icon07 from "@/public/images/bitcoin-seeklogo.png";
 import Icon08 from "@/public/images/nasa-seeklogo.png";
-import Icon09 from "@/public/images/aic.png";
+import Icon09 from "@/public/images/art-icon.jpg";
 import Icon12 from "@/public/images/project-icon-03.svg";
 import WorldIcon from "@/public/images/world.png";
 import CharlesIcon from "@/public/images/charles-icon.svg";
@@ -109,9 +109,9 @@ export default function ProjectsPage() {
     id: 7,
     icon: Icon09,
     slug: "/Art",
-    title: "Art Institute of Chicago",
-    excerpt: "A clean UI on top of the AIC open API.",
-    badge: "AIC API",
+    title: "Cleveland Museum of Art",
+    excerpt: "Wander a gallery of public-domain masterpieces and search 41,000+ works.",
+    badge: "CMA Open Access",
   },
 
   // {

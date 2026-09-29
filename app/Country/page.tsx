@@ -11,9 +11,7 @@ const CountrySearchPage: React.FC = () => {
   }, []);
 
   return (
-    <main className="min-h-screen">
-      <CountrySearch />
-    </main>
+    <CountrySearch />
   );
 };
 

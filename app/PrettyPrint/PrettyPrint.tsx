@@ -1,348 +1,342 @@
 "use client";
 
-import { useState, type ChangeEvent } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Braces, Check, ChevronRight, ClipboardPaste, Copy, Download, Eraser, FileUp, ListTree, Loader2, Minimize2, Sparkles, Wand2 } from "lucide-react";
+
+import { DashboardShell, type DashboardTab } from "@/components/ui/dashboard-shell";
+import { Segmented } from "@/components/ui/segmented";
+import { trackEvent } from "@/utils/mixpanel";
 
 /* ------------------------------------------------------------------ */
-/*  Types                                                              */
+/*  Types & constants                                                  */
 /* ------------------------------------------------------------------ */
-type FormatStatus = "ok" | "api" | "fixed" | "loose" | "ok-xml" | "loose-xml";
+type Status = "ok" | "ok-xml" | "fixed" | "api" | "loose" | "loose-xml";
+type Indent = "2" | "4" | "tab";
+type View = "code" | "tree";
 
-/* ------------------------------------------------------------------ */
-/*  Constants                                                          */
-/* ------------------------------------------------------------------ */
-const COPY_RESET_DELAY_MS = 10_000;
-const XML_INDENT = "  ";
-const JSON_INDENT = "  ";
 const API_ENDPOINT = "https://u-mail.co/api/jsonFormatter";
+const STATUS: Record<Status, { label: string; tone: string }> = {
+  ok: { label: "Valid JSON", tone: "emerald" },
+  "ok-xml": { label: "Valid XML", tone: "emerald" },
+  fixed: { label: "Repaired with JSON5 (quotes, commas, comments)", tone: "amber" },
+  api: { label: "Repaired by AI", tone: "indigo" },
+  loose: { label: "Best-effort JSON formatting: still has errors", tone: "rose" },
+  "loose-xml": { label: "Best-effort XML formatting: still has errors", tone: "rose" },
+};
+const TONES: Record<string, string> = {
+  emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  amber: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  indigo: "border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+  rose: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+};
+
+const EXAMPLES: { label: string; broken?: boolean; text: string }[] = [
+  { label: "Simple object", text: '{"foo": 1, "bar": 2}' },
+  { label: "Nested users", text: '{"users":[{"id":1,"name":"Alice","active":true},{"id":2,"name":"Bob","active":false,"manager":null}]}' },
+  { label: "Team JSON", text: '{"employees":[{"id":1,"name":"Alice","department":"Engineering","skills":["JS","React","Node"]},{"id":2,"name":"Bob","department":"Marketing","skills":["SEO","Content"]},{"id":3,"name":"Carol","department":"HR","skills":["Recruiting","Relations"]}]}' },
+  { label: "Bookstore XML", text: '<books><book id="1"><title>1984</title><author>George Orwell</author></book><book id="2"><title>Brave New World</title><author>Aldous Huxley</author></book></books>' },
+  { label: "Unquoted keys", broken: true, text: "{foo: 1, bar: 2}" },
+  { label: "Trailing comma", broken: true, text: '{"foo": 1,}' },
+  { label: "Missing comma", broken: true, text: '{"foo":1 "bar":2}' },
+  { label: "Big mess", broken: true, text: '{ user: { id: 1,, name: "Alice", roles: [\'admin\',\'editor\',], active: true, profile: { bio: "Loves coding", location "Wonderland", stats: { posts: 42, followers: 1000,, following: 150 } }, orders: [ { orderId: 1001, items: ["book","pen"], total: 29.99, }, { orderId: 1002, items: ["notebook"), total: 9.5 } ] }' },
+  { label: "Broken XML", broken: true, text: "<users><user><name>Alice</name><user><name>Bob</name></users>" },
+];
 
 /* ------------------------------------------------------------------ */
-/*  Optional JSON5 Fallback                                            */
+/*  Formatting helpers                                                 */
 /* ------------------------------------------------------------------ */
-let JSON5: any;
-try {
-  // @ts-ignore – optional dependency, only used locally
-  JSON5 = await import("json5");
-} catch {
-  JSON5 = null;
+const indentUnit = (i: Indent) => (i === "tab" ? "\t" : " ".repeat(Number(i)));
+// Escape first so pasted markup can never become live HTML in the output.
+const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const looksLikeXML = (s: string) => /^\s*<(!|\?|[a-zA-Z])/.test(s);
+
+function highlightJSON(json: string) {
+  return escapeHtml(json).replace(
+    /(&quot;(?:\\u[\da-fA-F]{4}|\\[^u]|(?!&quot;)[^\\])*&quot;(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+    (m) => {
+      let cls = "text-emerald-600 dark:text-emerald-400";
+      if (m.startsWith("&quot;")) cls = /:$/.test(m) ? "text-sky-700 dark:text-sky-400" : "text-pink-600 dark:text-pink-400";
+      else if (/true|false/.test(m)) cls = "text-amber-600 dark:text-amber-300";
+      else if (m === "null") cls = "text-slate-400 dark:text-slate-500";
+      return `<span class="${cls}">${m}</span>`;
+    },
+  );
 }
+function highlightXML(xml: string) {
+  return escapeHtml(xml)
+    .replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="text-slate-400 dark:text-slate-500">$1</span>')
+    .replace(/(&lt;\?[\s\S]*?\?&gt;)/g, '<span class="text-amber-600 dark:text-amber-400">$1</span>')
+    .replace(/([\w:-]+)=(&quot;[^&]*?&quot;)/g, '<span class="text-emerald-600 dark:text-emerald-400">$1</span>=<span class="text-pink-600 dark:text-pink-400">$2</span>')
+    .replace(/(&lt;\/?)([\w:-]+)/g, '$1<span class="text-sky-700 dark:text-sky-400">$2</span>');
+}
+function formatXML(src: string, unit: string) {
+  let pad = 0;
+  return src.replace(/\r?\n/g, "").replace(/(>)\s*(<)(\/*)/g, "$1\n$2$3").split("\n").map((node) => {
+    if (/^<\//.test(node)) pad -= 1;
+    const line = unit.repeat(Math.max(pad, 0)) + node;
+    if (/^<[^!?][^>]*[^/]>$/.test(node) && !/<\/[^>]+>$/.test(node)) pad += 1;
+    return line;
+  }).join("\n");
+}
+function looseFormatJSON(src: string, unit: string) {
+  let out = "", depth = 0, inStr = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === '"' && src[i - 1] !== "\\") inStr = !inStr;
+    if (!inStr && (ch === "{" || ch === "[")) { out += ch + "\n" + unit.repeat(++depth); continue; }
+    if (!inStr && (ch === "}" || ch === "]")) { out += "\n" + unit.repeat(Math.max(0, --depth)) + ch; continue; }
+    if (!inStr && ch === ",") { out += ",\n" + unit.repeat(depth); continue; }
+    out += ch;
+  }
+  return out;
+}
+function stats(value: unknown) {
+  let keys = 0, arrays = 0, depth = 0;
+  const walk = (v: unknown, d: number) => {
+    depth = Math.max(depth, d);
+    if (Array.isArray(v)) { arrays++; v.forEach((x) => walk(x, d + 1)); }
+    else if (v && typeof v === "object") Object.entries(v).forEach(([, x]) => { keys++; walk(x, d + 1); });
+  };
+  walk(value, 0);
+  return { keys, arrays, depth };
+}
+const bytes = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
 
 /* ------------------------------------------------------------------ */
-/*  PrettyPrint Component                                              */
+/*  Page                                                               */
 /* ------------------------------------------------------------------ */
+const TABS: DashboardTab<"format">[] = [{ key: "format", label: "Formatter", hint: "JSON · XML", icon: <Braces className="h-4 w-4" /> }];
+
 export default function PrettyPrint() {
   const [input, setInput] = useState("");
-  const [pretty, setPretty] = useState("");
-  const [rawPretty, setRawPretty] = useState("");
-  const [status, setStatus] = useState<FormatStatus>("ok");
+  const [raw, setRaw] = useState("");
+  const [html, setHtml] = useState("");
+  const [parsed, setParsed] = useState<unknown>(undefined);
+  const [status, setStatus] = useState<Status | null>(null);
   const [fixLog, setFixLog] = useState<string[]>([]);
-  const [copyLabel, setCopyLabel] = useState("Copy");
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [indent, setIndent] = useState<Indent>("2");
+  const [view, setView] = useState<View>("code");
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  const validExamples: Record<string, string> = {
-    /* JSON */
-    'Simple object'   : '{"foo": 1, "bar": 2}',
-    'Nested structure': '{"users":[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]}',
-    'Large JSON'      : `{"employees":[{"id":1,"name":"Alice","department":"Engineering","skills":["JS","React","Node"]},{"id":2,"name":"Bob","department":"Marketing","skills":["SEO","Content"]},{"id":3,"name":"Carol","department":"HR","skills":["Recruiting","Relations"]},{"id":4,"name":"Dave","department":"Design","skills":["Photoshop","Figma","Sketch"]}]}`,
-    /* XML */
-    'Bookstore XML'   : `<books><book id=\"1\"><title>1984</title><author>George Orwell</author></book><book id=\"2\"><title>Brave New World</title><author>Aldous Huxley</author></book></books>`
-  };
+  const show = useCallback((text: string, st: Status, value?: unknown, log: string[] = []) => {
+    const xml = st === "ok-xml" || st === "loose-xml";
+    setRaw(text); setHtml(xml ? highlightXML(text) : highlightJSON(text));
+    setParsed(value); setStatus(st); setFixLog(log);
+    if (value === undefined) setView("code");
+    trackEvent("PrettyPrint Formatted", { status: st });
+  }, []);
 
-  const invalidExamples: Record<string, string> = {
-    /* JSON */
-    'Unquoted keys'   : '{foo: 1, bar: 2}',
-    'Trailing comma'  : '{"foo": 1,}',
-    'Missing comma'   : '{"foo":1 "bar":2}',
-    'Large malformed' : `{ user: { id: 1,, name: "Alice", roles: ['admin','editor',], active: true, profile: { bio: "Loves coding", location "Wonderland", stats: { posts: 42, followers: 1000,, following: 150 } }, orders: [ { orderId: 1001, items: ["book","pen"], total: 29.99, }, { orderId: 1002, items: ["notebook"), total: 9.5 } ], createdAt: "2025-06-27T12:00:00Z" }`,
-    /* XML */
-    'Broken XML'      : `<users><user><name>Alice</name><user><name>Bob</name></users>`
-  };
-
-  const escapeHtml = (str: string): string =>
-    str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  const syntaxHighlightJSON = (json: string): string =>
-    json.replace(
-      /("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
-      (m) => {
-        let cls = "text-emerald-400";
-        if (/^"/.test(m)) cls = /:$/.test(m) ? "text-sky-400" : "text-pink-400";
-        else if (/true|false/.test(m)) cls = "text-yellow-300";
-        else if (/null/.test(m)) cls = "text-gray-400";
-        return `<span class="${cls}">${m}</span>`;
-      }
-    );
-
-  const syntaxHighlightXML = (xml: string): string =>
-    xml
-      .replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="text-neutral-500">$1</span>')
-      .replace(/(&lt;\?[^&]*?\?&gt;)/g, '<span class="text-amber-400">$1</span>')
-      .replace(/(&lt;\/?)([\w:-]+)(\s?)/g, '$1<span class="text-sky-400">$2</span>$3')
-      .replace(
-        /([\w:-]+)=(&quot;[^&]*?&quot;)/g,
-        '<span class="text-emerald-400">$1</span>=<span class="text-pink-400">$2</span>'
-      );
-
-  const syntaxHighlight = (src: string, isXml = false): string =>
-    isXml ? syntaxHighlightXML(escapeHtml(src)) : syntaxHighlightJSON(src);
-
-  const looksLikeXML = (str: string): boolean => /^\s*<(!|\?|[a-zA-Z])/i.test(str);
-
-  const formatXML = (src: string): string => {
-    const PADDING = XML_INDENT;
-    const reg = /(>)(<)(\/*)/g;
-    let xml = src.replace(/\r?\n/g,'').replace(reg,'$1\n$2$3');
-    let pad = 0;
-    return xml.split('\n').map((node) => {
-      if (node.match(/^<\//)) pad -= 1;
-      const line = PADDING.repeat(Math.max(pad,0)) + node;
-      if (node.match(/^<[^!?][^>]*[^\/]>$/)) pad += 1;
-      return line;
-    }).join("\n");
-  };
-
-  const handleCopy = (): void => {
-    navigator.clipboard.writeText(rawPretty).then(() => {
-      setCopyLabel("Copied!");
-      setTimeout(() => setCopyLabel("Copy"), COPY_RESET_DELAY_MS);
-    });
-  };
-
-  const handleFormat = async (): Promise<void> => {
-    setFixLog([]);
+  const format = useCallback(async (minify = false) => {
+    const src = input.trim();
+    if (!src) return;
+    const unit = minify ? "" : indentUnit(indent);
+    const dump = (v: unknown) => (minify ? JSON.stringify(v) : JSON.stringify(v, null, unit));
     setLoading(true);
     try {
-      if (looksLikeXML(input)) {
-        try {
-          const parser = new DOMParser();
-          const dom    = parser.parseFromString(input, 'text/xml');
-          const err    = dom.getElementsByTagName('parsererror')[0];
-          if (err) throw new Error('Invalid XML');
-
-          const formatted = formatXML(input.trim());
-          setPretty(syntaxHighlight(formatted, true));
-          setRawPretty(formatted);
-          setStatus("ok-xml");
-          return;
-        } catch {
-          const loose = formatXML(input.trim());
-          setPretty(syntaxHighlight(loose, true));
-          setRawPretty(loose);
-          setStatus("loose-xml");
-          return;
-        }
-      }
-
-      try {
-        const f = JSON.stringify(JSON.parse(input), null, 2);
-        setPretty(syntaxHighlight(f));
-        setRawPretty(f);
-        setStatus("ok");
+      if (looksLikeXML(src)) {
+        const ok = !new DOMParser().parseFromString(src, "text/xml").getElementsByTagName("parsererror")[0];
+        const out = minify ? src.replace(/>\s+</g, "><") : formatXML(src, unit);
+        show(out, ok ? "ok-xml" : "loose-xml");
         return;
-      } catch {
-        /* malformed – continue */
       }
-
-      if (JSON5) {
-        try {
-          const f = JSON.stringify(JSON5.parse(input), null, 2);
-          setPretty(syntaxHighlight(f));
-          setRawPretty(f);
-          setStatus("fixed");
-          setFixLog(["Parsed with JSON5 (single quotes, trailing commas, comments…)."]);
-          return;
-        } catch {
-          /* still malformed */
-        }
-      }
-
+      try { const v = JSON.parse(src); show(dump(v), "ok", v); return; } catch { /* try repairs */ }
       try {
-        const res = await fetch(API_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ json: input })
-        });
+        const JSON5 = (await import("json5")).default;
+        const v = JSON5.parse(src);
+        show(dump(v), "fixed", v, ["Parsed leniently: single quotes, unquoted keys, trailing commas and comments are allowed."]);
+        return;
+      } catch { /* still broken */ }
+      try {
+        const res = await fetch(API_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ json: src }) });
         const data = await res.json();
-        if (res.ok && data.formattedJson) {
-          setPretty(syntaxHighlight(data.formattedJson));
-          setRawPretty(data.formattedJson);
-          setFixLog(data.fixLog ?? []);
-          setStatus("api");
+        if (res.ok && typeof data.formattedJson === "string") {
+          let v: unknown;
+          try { v = JSON.parse(data.formattedJson); } catch { v = undefined; }
+          show(v !== undefined ? dump(v) : data.formattedJson, "api", v, Array.isArray(data.fixLog) ? data.fixLog : []);
           return;
         }
-        throw new Error(data.error || "Bad API response");
-      } catch {
-        /* API failed, fall through */
-      }
-
-      const loose = looseFormatJSON(input.trim());
-      setPretty(syntaxHighlight(loose));
-      setRawPretty(loose);
-      setStatus("loose");
+      } catch { /* AI unavailable */ }
+      show(looseFormatJSON(src, unit || "  "), "loose");
     } finally {
       setLoading(false);
     }
+  }, [input, indent, show]);
+
+  // Ctrl/⌘ + Enter formats from anywhere
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); void format(); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [format]);
+
+  const info = useMemo(() => (parsed !== undefined ? stats(parsed) : null), [parsed]);
+  const lines = raw ? raw.split("\n") : [];
+  const htmlLines = html ? html.split("\n") : [];
+  const isXml = status === "ok-xml" || status === "loose-xml";
+
+  const copy = () => navigator.clipboard?.writeText(raw).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1600); });
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([raw], { type: isXml ? "application/xml" : "application/json" }));
+    const a = document.createElement("a"); a.href = url; a.download = isXml ? "formatted.xml" : "formatted.json"; a.click();
+    URL.revokeObjectURL(url);
   };
+  const paste = async () => { try { setInput(await navigator.clipboard.readText()); } catch { /* clipboard blocked */ } };
+  const upload = (file?: File) => { if (file) file.text().then(setInput); };
 
-  const looseFormatJSON = (src: string): string => {
-    let out = "";
-    let indent = 0;
-    let inStr = false;
-
-    for (let i = 0; i < src.length; i++) {
-      const ch = src[i];
-      if (ch === '"' && src[i - 1] !== "\\") inStr = !inStr;
-      if (!inStr) {
-        if (ch === "{" || ch === "[") {
-          out += ch + "\n" + JSON_INDENT.repeat(++indent);
-          continue;
-        }
-        if (ch === "}" || ch === "]") {
-          out += "\n" + JSON_INDENT.repeat(--indent) + ch;
-          continue;
-        }
-        if (ch === ",") {
-          out += ch + "\n" + JSON_INDENT.repeat(indent);
-          continue;
-        }
-      }
-      out += ch;
-    }
-    return out;
-  };
-
-  const lines = pretty.split("\n");
+  const toolButton = "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-[11px] text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-900 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white";
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 space-y-8">
-      {/* title */}
-      <header className="text-center">
-        <h1 className="text-3xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          AI JSON / XML Formatter
-        </h1>
-        <p className="mt-2 text-neutral-600 dark:text-neutral-400">
-          Drop in raw JSON or XML & we'll fix syntax, standardise style, and pretty print huge data sets in a snap.
-        </p>
-      </header>
-
-      {/* example dropdowns */}
-      <div className="flex flex-wrap gap-4">
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-            Working Examples
-          </label>
-          <select
-            className="w-full p-2 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white/60 dark:bg-neutral-800/60 backdrop-blur-sm font-mono text-sm"
-            defaultValue=""
-            onChange={(e) => setInput(e.target.value)}
-          >
-            <option value="">Select example</option>
-            {Object.entries(validExamples).map(([label,json]) => (
-              <option key={label} value={json}>{label}</option>
+    <DashboardShell
+      id="prettyprint"
+      path="~/prettyprint"
+      liveLabel="ai repair"
+      title="JSON & XML Prettifier"
+      description="Paste messy JSON or XML. Valid data is formatted instantly; broken data is repaired (lenient parsing first, then AI) with a list of exactly what was fixed."
+      tabs={TABS}
+      renderPanel={() => (
+        <div className="p-4 sm:p-6">
+          {/* Examples */}
+          <div className="mb-4 flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">Try</span>
+            {EXAMPLES.map((ex) => (
+              <button key={ex.label} type="button" onClick={() => setInput(ex.text)}
+                className={`rounded-full border px-2.5 py-1 font-mono text-[11px] transition ${ex.broken
+                  ? "border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-400/20 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                  : "border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-400/20 dark:text-emerald-300 dark:hover:bg-emerald-500/10"}`}>
+                {ex.broken ? "✕ " : "✓ "}{ex.label}
+              </button>
             ))}
-          </select>
-        </div>
+          </div>
 
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-            Broken Examples
-          </label>
-          <select
-            className="w-full p-2 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white/60 dark:bg-neutral-800/60 backdrop-blur-sm font-mono text-sm"
-            defaultValue=""
-            onChange={(e) => setInput(e.target.value)}
-          >
-            <option value="">Select example</option>
-            {Object.entries(invalidExamples).map(([label,json]) => (
-              <option key={label} value={json}>{label}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* Input editor */}
+            <Editor
+              title="input"
+              right={<>
+                <button type="button" className={toolButton} onClick={paste}><ClipboardPaste className="h-3.5 w-3.5" />Paste</button>
+                <button type="button" className={toolButton} onClick={() => fileInput.current?.click()}><FileUp className="h-3.5 w-3.5" />Open</button>
+                <button type="button" className={toolButton} onClick={() => { setInput(""); setRaw(""); setHtml(""); setStatus(null); setFixLog([]); setParsed(undefined); }} disabled={!input && !raw}><Eraser className="h-3.5 w-3.5" />Clear</button>
+                <input ref={fileInput} type="file" accept=".json,.xml,.txt,application/json,text/xml" className="hidden" onChange={(e) => upload(e.target.files?.[0])} />
+              </>}
+              footer={input ? `${input.split("\n").length} lines · ${bytes(new Blob([input]).size)}` : "Drop a file or paste"}
+            >
+              <textarea value={input} onChange={(e) => setInput(e.target.value)} spellCheck={false}
+                onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); upload(e.dataTransfer.files?.[0]); }}
+                placeholder={'{"foo": 1, "bar": 2}\n\nor\n\n<note><to>Alice</to></note>'}
+                aria-label="JSON or XML to format"
+                className="h-[420px] w-full resize-none bg-transparent p-4 font-mono text-[13px] leading-5 text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-600" />
+            </Editor>
 
-      {/* input area */}
-      <textarea
-        className="w-full h-60 resize-y rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white/60 dark:bg-neutral-800/60 backdrop-blur-sm p-4 font-mono text-sm shadow-inner focus:outline-none focus:ring-2 focus:ring-violet-500/70"
-        placeholder='{"foo": 1, "bar": 2} OR <note><to>Alice</to></note>'
-        value={input}
-        onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
-      />
+            {/* Output editor */}
+            <Editor
+              title={isXml ? "output.xml" : "output.json"}
+              right={<>
+                {parsed !== undefined && <Segmented id="ppView" ariaLabel="Output view" value={view} onChange={setView}
+                  options={[{ key: "code", label: <><Braces className="h-3 w-3" />Code</> }, { key: "tree", label: <><ListTree className="h-3 w-3" />Tree</> }]} />}
+                <button type="button" className={toolButton} onClick={copy} disabled={!raw}>{copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}{copied ? "Copied" : "Copy"}</button>
+                <button type="button" className={toolButton} onClick={download} disabled={!raw}><Download className="h-3.5 w-3.5" />Save</button>
+              </>}
+              footer={raw ? `${lines.length} lines · ${bytes(new Blob([raw]).size)}${info ? ` · ${info.keys} keys · ${info.arrays} arrays · depth ${info.depth}` : ""}` : "Formatted output appears here"}
+            >
+              <div className="h-[420px] overflow-auto">
+                {loading && <div className="flex h-full items-center justify-center gap-2 font-mono text-[11px] uppercase tracking-wider text-slate-400"><Loader2 className="h-4 w-4 animate-spin" />Repairing…</div>}
+                {!loading && !raw && <div className="flex h-full flex-col items-center justify-center gap-2 text-center"><Sparkles className="h-6 w-6 text-indigo-400/70" /><p className="font-mono text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">Nothing yet. Hit Format</p></div>}
+                {!loading && raw && view === "tree" && parsed !== undefined && <div className="p-4 font-mono text-[13px] leading-6"><TreeNode value={parsed} name="root" depth={0} /></div>}
+                {!loading && raw && (view === "code" || parsed === undefined) && (
+                  <div className="flex min-w-max font-mono text-[13px] leading-5">
+                    <ol className="sticky left-0 select-none bg-slate-50 py-4 pl-4 pr-3 text-right tabular-nums text-slate-400 dark:bg-[#0d0f14] dark:text-slate-600">{lines.map((_, i) => <li key={i}>{i + 1}</li>)}</ol>
+                    <pre className="py-4 pr-6">{htmlLines.map((ln, i) => <code key={i} className="block whitespace-pre text-slate-800 hover:bg-indigo-50/70 dark:text-slate-200 dark:hover:bg-white/[0.04]" dangerouslySetInnerHTML={{ __html: ln || "&#8203;" }} />)}</pre>
+                  </div>
+                )}
+              </div>
+            </Editor>
+          </div>
 
-      {/* action button */}
-      <div className="flex gap-3">
-        <button
-          onClick={handleFormat}
-          className="bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white active:scale-95 transition  font-medium px-6 py-2 rounded-lg"
-        >
-          Format
-        </button>
-      </div>
-
-      {/* spinner */}
-      {loading && (
-        <div className="flex justify-center py-6">
-          <svg className="w-8 h-8 animate-spin text-neutral-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-          </svg>
-        </div>
-      )}
-
-      {/* status banner */}
-      {pretty && !loading && (
-        <div
-          className={`rounded-md px-4 py-3 text-sm font-medium shadow ${
-            status === 'ok'       || status === 'ok-xml'    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' :
-            status === 'api'                               ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' :
-            status === 'fixed'                             ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' :
-            status === 'loose'    || status === 'loose-xml'? 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300' : ''}`}
-        >
-          {status === 'ok'        && 'Valid JSON.'}
-          {status === 'ok-xml'    && 'Valid XML.'}
-          {status === 'api'       && 'Formatted by API.'}
-          {status === 'fixed'     && 'Parsed with JSON5.'}
-          {status === 'loose'     && 'Best‑effort JSON formatting.'}
-          {status === 'loose-xml' && 'Best‑effort XML formatting.'}
-        </div>
-      )}
-
-      {/* fix log */}
-      {fixLog.length > 0 && !loading && (
-        <details className="bg-amber-100/30 dark:bg-amber-800/20 rounded-lg p-4 text-sm open:shadow-inner">
-          <summary className="font-semibold cursor-pointer">Changes made</summary>
-          <ul className="list-disc ml-6 mt-2 space-y-1">
-            {fixLog.map((f,i) => <li key={i}>{f}</li>)}
-          </ul>
-        </details>
-      )}
-
-      {/* output pane */}
-      {pretty && !loading && (
-        <section className="relative rounded-lg border border-neutral-700/60 shadow-xl overflow-hidden">
-          {/* copy btn */}
-          <button
-            onClick={handleCopy}
-            className="absolute top-2 right-2 inline-flex items-center mr-2 px-3 py-1 bg-neutral-700 text-white text-sm rounded hover:bg-neutral-600"
-          >
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m5-10H8l-2 2H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-1l-2-2z" />
-            </svg>
-            {copyLabel}
-          </button>
-
-          <div className="max-h-[70vh] overflow-auto font-mono text-sm bg-neutral-900 text-white">
-            <div className="flex">
-              <ol className="flex-none bg-neutral-900/90 text-right tabular-nums py-4 pl-6 pr-4 leading-5 text-neutral-500 select-none">
-                {lines.map((_,i) => <li key={i}>{i+1}</li>)}
-              </ol>
-              <pre className="p-4 leading-5">
-                {lines.map((ln,i) => (
-                  <code key={i} className="block whitespace-pre hover:bg-neutral-800/60 transition-colors" dangerouslySetInnerHTML={{ __html: ln || '&#8203;' }} />
-                ))}
-              </pre>
+          {/* Actions */}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => format()} disabled={!input.trim() || loading}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_18px_-4px_rgba(99,102,241,0.6)] transition hover:bg-indigo-600 disabled:opacity-40">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}Format &amp; fix
+            </button>
+            <button type="button" onClick={() => format(true)} disabled={!input.trim() || loading}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08]">
+              <Minimize2 className="h-4 w-4" />Minify
+            </button>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Ctrl/⌘ + Enter</span>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Indent</span>
+              <Segmented id="ppIndent" ariaLabel="Indent" value={indent} onChange={setIndent} options={[{ key: "2", label: "2" }, { key: "4", label: "4" }, { key: "tab", label: "Tab" }]} />
             </div>
           </div>
-        </section>
+
+          {/* Result status + what was fixed */}
+          <AnimatePresence>
+            {status && !loading && (
+              <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-4 space-y-3">
+                <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium ${TONES[STATUS[status].tone]}`}>
+                  {status.startsWith("ok") ? <Check className="h-4 w-4" /> : <Wand2 className="h-4 w-4" />}{STATUS[status].label}
+                </div>
+                {fixLog.length > 0 && (
+                  <div className="rounded-2xl border border-slate-200/70 bg-white p-4 dark:border-white/[0.08] dark:bg-white/[0.02]">
+                    <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">What was fixed ({fixLog.length})</p>
+                    <ul className="space-y-1.5">
+                      {fixLog.map((fix, i) => <li key={i} className="flex gap-2 text-sm text-slate-700 dark:text-slate-300"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />{fix}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       )}
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Editor chrome: a dark code window with traffic lights              */
+/* ------------------------------------------------------------------ */
+function Editor({ title, right, footer, children }: { title: string; right?: ReactNode; footer: string; children: ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_12px_32px_-20px_rgba(15,23,42,0.35)] dark:border-white/[0.08] dark:bg-[#0d0f14] dark:shadow-[0_20px_50px_-24px_rgba(0,0,0,0.7)]">
+      <div className="flex items-center gap-3 border-b border-slate-200/70 bg-slate-50 px-3 py-2 dark:border-white/[0.06] dark:bg-[#12151c]">
+        <span className="flex gap-1.5" aria-hidden><i className="h-2.5 w-2.5 rounded-full bg-rose-400/80" /><i className="h-2.5 w-2.5 rounded-full bg-amber-400/80" /><i className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" /></span>
+        <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">{title}</span>
+        <div className="ml-auto flex items-center gap-1">{right}</div>
+      </div>
+      {children}
+      <div className="border-t border-slate-200/70 bg-slate-50 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:border-white/[0.06] dark:bg-[#12151c] dark:text-slate-500">{footer}</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tree view: collapsible JSON                                        */
+/* ------------------------------------------------------------------ */
+function TreeNode({ name, value, depth }: { name: string; value: unknown; depth: number }) {
+  const [open, setOpen] = useState(depth < 2);
+  const isArray = Array.isArray(value);
+  const isObject = value !== null && typeof value === "object";
+  const label = <span className="text-sky-700 dark:text-sky-400">{/^\d+$/.test(name) ? name : `"${name}"`}</span>;
+
+  if (!isObject) {
+    const cls = typeof value === "string" ? "text-pink-600 dark:text-pink-400" : typeof value === "boolean" ? "text-amber-600 dark:text-amber-300" : value === null ? "text-slate-400 dark:text-slate-500" : "text-emerald-600 dark:text-emerald-400";
+    return <div className="pl-5">{label}<span className="text-slate-400 dark:text-slate-500">: </span><span className={cls}>{typeof value === "string" ? `"${value}"` : String(value)}</span></div>;
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  return (
+    <div className={depth ? "pl-3" : ""}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 rounded text-left text-slate-700 hover:bg-indigo-50 dark:text-slate-200 dark:hover:bg-white/[0.05]">
+        <ChevronRight className={`h-3.5 w-3.5 text-slate-500 transition-transform ${open ? "rotate-90" : ""}`} />
+        {label}<span className="text-slate-400 dark:text-slate-500">: {isArray ? "[" : "{"}</span>
+        {!open && <span className="text-slate-400 dark:text-slate-500">…{isArray ? "]" : "}"}</span>}
+        <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-600">{entries.length} {isArray ? "items" : "keys"}</span>
+      </button>
+      {open && <div className="ml-[7px] border-l border-slate-200 dark:border-white/[0.08]">{entries.map(([k, v]) => <TreeNode key={k} name={k} value={v} depth={depth + 1} />)}</div>}
+      {open && <div className="pl-5 text-slate-400 dark:text-slate-500">{isArray ? "]" : "}"}</div>}
     </div>
   );
 }

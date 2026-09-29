@@ -1,15 +1,17 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FaPlane, FaRandom, FaSearch, FaTimes } from "react-icons/fa";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { CloudSun, Compass, Globe2, Plane, Search, Shuffle, X } from "lucide-react";
 
 import { trackEvent } from "@/utils/mixpanel";
+import { DashboardShell, type DashboardTab } from "@/components/ui/dashboard-shell";
+import { Segmented } from "@/components/ui/segmented";
+import { IconBadge } from "@/components/ui/icon-badge";
 import { SUGGESTIONS_LIMIT } from "./lib/constants";
-import type { RegionId } from "./lib/constants";
 import type { LiteCountry } from "./lib/types";
-import { lc, getFeatured, cn } from "./lib/utils";
+import { lc, getFeatured } from "./lib/utils";
 import { usePrefersReducedMotion } from "./hooks/usePrefersReducedMotion";
 import { useCountryDetails } from "./hooks/useCountryDetails";
 import FlightSearch from "./FlightSearch";
@@ -18,45 +20,50 @@ import CountryDetailPanel from "./components/CountryDetailPanel";
 import CountryWeatherWidget from "./components/CountryWeatherWidget";
 import Spinner from "./components/Spinner";
 
+/* ------------------------------------------------------------------ */
+/*  Tabs                                                               */
+/* ------------------------------------------------------------------ */
+type TabKey = "explore" | "weather" | "flights";
+const TABS: DashboardTab<TabKey>[] = [
+  { key: "explore", label: "Explore", hint: "250 countries", icon: <Compass className="h-4 w-4" /> },
+  { key: "weather", label: "Weather", hint: "7-day outlook", icon: <CloudSun className="h-4 w-4" /> },
+  { key: "flights", label: "Flights", hint: "Real prices", icon: <Plane className="h-4 w-4" /> },
+];
+
 export default function CountrySearch() {
   const [mini, setMini] = useState<LiteCountry[]>([]);
   const [initialLoad, setInitialLoad] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<LiteCountry[]>([]);
-  const [activeRegion] = useState<RegionId>("all");
+  const [unit, setUnit] = useState<"C" | "F">("C");
 
-  const [useCelsius, setUseCelsius] = useState(true);
-
-  // Read persisted preference after mount to avoid SSR/client hydration mismatch
+  // Read the saved unit after mount (avoids a hydration mismatch)
   useEffect(() => {
-    try { if (localStorage.getItem("tempUnit") === "F") setUseCelsius(false); } catch {}
+    try { if (localStorage.getItem("tempUnit") === "F") setUnit("F"); } catch { /* ignore */ }
   }, []);
-
-  const toggleUnit = useCallback(() => {
-    setUseCelsius((prev) => {
-      const next = !prev;
-      try { localStorage.setItem("tempUnit", next ? "C" : "F"); } catch {}
-      return next;
-    });
+  const changeUnit = useCallback((next: "C" | "F") => {
+    setUnit(next);
+    try { localStorage.setItem("tempUnit", next); } catch { /* ignore */ }
   }, []);
+  const useCelsius = unit === "C";
 
   const detailRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const { full, extras, loadingDetails, loadDetails } = useCountryDetails();
 
-  // Fetch lite country list on mount
+  // Lite country list on mount
   useEffect(() => {
     const ctrl = new AbortController();
     (async () => {
       try {
         const res = await fetch("/api/countries", { signal: ctrl.signal });
-        if (!res.ok) throw new Error("Country data is temporarily unavailable.");
+        if (!res.ok) throw new Error("unavailable");
         const js = await res.json();
-        if (!Array.isArray(js)) throw new Error("Country data is temporarily unavailable.");
+        if (!Array.isArray(js)) throw new Error("unavailable");
         setMini(js);
-      } catch (e: any) {
-        if (e?.name !== "AbortError") setLoadError("Country data is temporarily unavailable. Please try again shortly.");
+      } catch (e: unknown) {
+        if ((e as Error)?.name !== "AbortError") setLoadError("Country data is temporarily unavailable. Please try again shortly.");
       } finally {
         setInitialLoad(false);
       }
@@ -64,27 +71,13 @@ export default function CountrySearch() {
     return () => ctrl.abort();
   }, []);
 
-  // Derived
   const suggestions = useMemo(() => {
     const t = lc(q.trim());
-    if (!t) return [];
-    return mini.filter((c) => lc(c.name.common).includes(t)).slice(0, SUGGESTIONS_LIMIT);
+    return t ? mini.filter((c) => lc(c.name.common).includes(t)).slice(0, SUGGESTIONS_LIMIT) : [];
   }, [q, mini]);
+  const featured = useMemo(() => (mini.length ? getFeatured(mini) : []), [mini]);
+  const displayList = results.length ? results : featured;
 
-  const featured = useMemo(() => {
-    if (!mini.length) return [];
-    return getFeatured(mini);
-  }, [mini]);
-
-  const displayList = useMemo(() => {
-    const base = results.length ? results : featured;
-    if (activeRegion === "all") return base;
-    return base.filter((c) =>
-      c.continents?.some((cont) => cont.toLowerCase().includes(activeRegion.toLowerCase()))
-    );
-  }, [results, featured, activeRegion]);
-
-  // Handlers
   const runSearch = useCallback(() => {
     const t = q.trim();
     if (!t) { setResults([]); return; }
@@ -94,18 +87,13 @@ export default function CountrySearch() {
     if (hits[0]) loadDetails(hits[0].cca3);
   }, [q, mini, loadDetails]);
 
-  const pickCountry = useCallback(
-    (cca3: string) => {
-      loadDetails(cca3);
-      setResults([]);
-      setQ("");
-      trackEvent("Country Picked", { cca3 });
-      setTimeout(() => {
-        detailRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
-      }, 80);
-    },
-    [loadDetails, reducedMotion],
-  );
+  const pickCountry = useCallback((cca3: string) => {
+    loadDetails(cca3);
+    setResults([]);
+    setQ("");
+    trackEvent("Country Picked", { cca3 });
+    setTimeout(() => detailRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" }), 80);
+  }, [loadDetails, reducedMotion]);
 
   const pickRandom = useCallback(() => {
     if (!mini.length) return;
@@ -114,85 +102,61 @@ export default function CountrySearch() {
     trackEvent("Country Random Pick", { cca3: pick.cca3 });
   }, [mini, pickCountry]);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-sky-50/40 to-amber-50/30 dark:from-brand-900 dark:via-brand-900 dark:to-brand-900 text-gray-900 dark:text-gray-100">
+  // Shown on the Weather and Flights tabs so it's clear which country they're for.
+  const currentBanner = full ? (
+    <div className="mb-5 flex items-center gap-3 rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.06] px-4 py-3">
+      {full.flags?.png && <img src={full.flags.png} alt="" referrerPolicy="no-referrer" className="h-7 w-10 rounded-md object-cover ring-1 ring-black/10" />}
+      <div className="min-w-0">
+        <p className="font-mono text-[10px] uppercase tracking-wider text-indigo-500 dark:text-indigo-300">Showing</p>
+        <p className="truncate font-semibold text-slate-900 dark:text-white">{full.name.common}</p>
+      </div>
+      <span className="ml-auto hidden font-mono text-[10px] uppercase tracking-wider text-slate-400 sm:block">Change it on the Explore tab</span>
+    </div>
+  ) : null;
 
-      {/* ── Sticky header ── */}
-      <div className="sticky top-0 z-40 border-b border-black/5 dark:border-white/[0.06] bg-white/80 dark:bg-brand-900/90 backdrop-blur-xl">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-3">
-          <div className="flex items-center gap-3">
+  const pickFirst = (
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-200 px-6 py-12 text-center dark:border-white/10">
+      <IconBadge icon={Globe2} tone="indigo" size="lg" />
+      <p className="font-semibold text-slate-900 dark:text-white">Pick a country first</p>
+      <p className="max-w-sm text-sm text-slate-500 dark:text-slate-400">Choose one on the Explore tab, or roll the dice.</p>
+      <button type="button" onClick={pickRandom} disabled={!mini.length}
+        className="mt-1 inline-flex items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_18px_-4px_rgba(99,102,241,0.6)] transition hover:bg-indigo-600 disabled:opacity-40">
+        <Shuffle className="h-4 w-4" aria-hidden />Surprise me
+      </button>
+    </div>
+  );
 
-            {/* Brand */}
-            <div className="hidden sm:flex items-center gap-2 shrink-0">
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shadow-sm text-white">
-                <FaPlane className="text-sm" />
-              </div>
-              <div className="leading-none">
-                <div className="text-sm font-extrabold text-gray-900 dark:text-white">Travel</div>
-                <div className="text-[10px] text-gray-400 dark:text-white/40">Explorer</div>
-              </div>
-            </div>
-
-            {/* Search */}
-            <div className="flex-1 relative">
-              <form
-                onSubmit={(e) => { e.preventDefault(); runSearch(); }}
-                className="flex items-center gap-2 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-white/[0.06] shadow-sm px-3 py-2"
-              >
-                <FaSearch className="shrink-0 text-gray-400 dark:text-white/40 text-sm" />
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && runSearch()}
-                  placeholder="Search any country…"
-                  type="search"
-                  inputMode="search"
-                  autoComplete="off"
-                  className="w-full bg-transparent outline-none text-sm placeholder:text-gray-400 dark:placeholder:text-white/40"
-                />
+  const panels: Record<TabKey, () => ReactNode> = {
+    explore: () => (
+      <div>
+        {/* Toolbar: search, units, surprise */}
+        <div className="border-b border-slate-200/70 px-4 py-4 dark:border-white/[0.08] sm:px-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[14rem] flex-1">
+              <form onSubmit={(e) => { e.preventDefault(); runSearch(); }}
+                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 transition focus-within:border-indigo-400 focus-within:shadow-[0_0_0_4px_rgba(99,102,241,0.12)] dark:border-white/10 dark:bg-white/[0.04]">
+                <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search any country…" type="search" inputMode="search" autoComplete="off"
+                  aria-label="Search countries" className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-white" />
                 {q.trim() && (
-                  <button
-                    type="button"
-                    onClick={() => { setQ(""); setResults([]); }}
-                    className="shrink-0 rounded-full p-1 text-gray-400 hover:text-gray-700 dark:hover:text-white transition"
-                    aria-label="Clear"
-                  >
-                    <FaTimes className="text-xs" />
+                  <button type="button" onClick={() => { setQ(""); setResults([]); }} aria-label="Clear search" className="rounded-lg p-1 text-slate-400 transition hover:text-slate-700 dark:hover:text-white">
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 )}
-                <button
-                  type="submit"
-                  className="shrink-0 rounded-xl h-8 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-sm"
-                >
-                  Go
-                </button>
+                <button type="submit" className="h-8 shrink-0 rounded-xl bg-indigo-500 px-4 text-xs font-semibold text-white transition hover:bg-indigo-600">Go</button>
               </form>
 
-              {/* Suggestions dropdown */}
               <AnimatePresence>
                 {suggestions.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute left-0 right-0 mt-1.5 rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-brand-900 shadow-xl overflow-hidden z-50"
-                  >
-                    <div className="max-h-60 overflow-y-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+                  <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={{ duration: 0.15 }}
+                    className="absolute inset-x-0 z-50 mt-1.5 overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_20px_50px_-20px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-[#1a1a1d]">
+                    <div className="max-h-64 overflow-y-auto py-1">
                       {suggestions.map((s) => (
-                        <button
-                          key={s.cca3}
-                          type="button"
-                          onClick={() => { setQ(""); pickCountry(s.cca3); }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 dark:hover:bg-white/[0.05] transition flex items-center gap-3"
-                        >
-                          {s.flags?.png && (
-                            <img src={s.flags.png} alt="" className="w-7 h-5 object-cover rounded shadow-sm" referrerPolicy="no-referrer" />
-                          )}
-                          <span className="flex-1 text-sm font-semibold text-gray-900 dark:text-white">{s.name.common}</span>
-                          {s.continents?.[0] && (
-                            <span className="text-xs text-gray-400 dark:text-white/40">{s.continents[0]}</span>
-                          )}
+                        <button key={s.cca3} type="button" onClick={() => pickCountry(s.cca3)}
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-indigo-50 dark:hover:bg-white/[0.05]">
+                          {s.flags?.png && <img src={s.flags.png} alt="" className="h-5 w-7 rounded object-cover ring-1 ring-black/10" referrerPolicy="no-referrer" />}
+                          <span className="flex-1 text-sm font-semibold text-slate-900 dark:text-white">{s.name.common}</span>
+                          {s.continents?.[0] && <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400">{s.continents[0]}</span>}
                         </button>
                       ))}
                     </div>
@@ -201,141 +165,67 @@ export default function CountrySearch() {
               </AnimatePresence>
             </div>
 
-            {/* °C / °F toggle */}
-            <button
-              type="button"
-              onClick={toggleUnit}
-              className="shrink-0 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-white/[0.06] shadow-sm h-[38px] px-1 flex items-center gap-0.5 text-xs font-bold overflow-hidden"
-              title="Toggle temperature unit"
-            >
-              <span className={`rounded-xl px-2.5 py-1.5 transition-colors ${useCelsius ? "bg-indigo-600 text-white" : "text-gray-500 dark:text-white/50"}`}>
-                °C
-              </span>
-              <span className={`rounded-xl px-2.5 py-1.5 transition-colors ${!useCelsius ? "bg-indigo-600 text-white" : "text-gray-500 dark:text-white/50"}`}>
-                °F
-              </span>
+            <Segmented id="countryUnit" ariaLabel="Temperature unit" value={unit} onChange={changeUnit}
+              options={[{ key: "C", label: "°C" }, { key: "F", label: "°F" }]} />
+            <button type="button" onClick={pickRandom} disabled={!mini.length}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200">
+              <Shuffle className="h-3.5 w-3.5 text-indigo-500" aria-hidden />Surprise me
             </button>
-
-            {/* Random country */}
-            <motion.button
-              type="button"
-              onClick={pickRandom}
-              disabled={!mini.length}
-              whileHover={reducedMotion ? {} : { scale: 1.05 }}
-              whileTap={reducedMotion ? {} : { scale: 0.95 }}
-              className={cn(
-                "shrink-0 rounded-2xl border border-black/10 dark:border-white/10",
-                "bg-white/90 dark:bg-white/[0.06] shadow-sm",
-                "h-[38px] px-3 flex items-center gap-1.5",
-                "text-xs font-semibold text-gray-700 dark:text-white/80",
-                "hover:bg-white dark:hover:bg-white/[0.10] transition",
-                "disabled:opacity-40 disabled:cursor-not-allowed",
-              )}
-              title="Explore a random country"
-            >
-              <FaRandom className="text-indigo-500 dark:text-indigo-400" />
-              <span className="hidden sm:inline">Surprise me</span>
-            </motion.button>
-
           </div>
         </div>
-      </div>
 
-      {/* ── Main content ── */}
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 py-4 sm:py-6">
-        {initialLoad ? (
-          <Spinner label="Loading countries…" />
-        ) : (
-          <div className="space-y-5">
-            {loadError && (
-              <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-100">
-                {loadError}
-              </div>
-            )}
+        <div className="p-4 sm:p-6">
+          {initialLoad ? <Spinner label="Loading countries…" /> : <>
+            {loadError && <div role="alert" className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">{loadError}</div>}
 
-            {/* ── Country tiles — full width at top ── */}
-            <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <div className="text-xs font-semibold text-gray-500 dark:text-white/40">
-                  {results.length
-                    ? `${displayList.length} result${displayList.length !== 1 ? "s" : ""}`
-                    : "Featured destinations"}
-                </div>
-                {results.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { setResults([]); setQ(""); }}
-                    className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-                  >
-                    Clear search
-                  </button>
-                )}
-              </div>
-              {displayList.length === 0 ? (
-                <div className="text-center py-10 text-gray-400 dark:text-white/30 text-sm">
-                  No countries found — try a different search
-                </div>
-              ) : (
-                <div
-                  className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-[240px] overflow-y-auto"
-                  style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
-                >
-                  {displayList.map((c) => (
-                    <CountryTile
-                      key={c.cca3}
-                      c={c}
-                      selected={full?.cca3 === c.cca3}
-                      onClick={() => pickCountry(c.cca3)}
-                      reducedMotion={reducedMotion}
-                    />
-                  ))}
-                </div>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                {results.length ? `${displayList.length} result${displayList.length === 1 ? "" : "s"}` : "Featured destinations"}
+              </h3>
+              {results.length > 0 && (
+                <button type="button" onClick={() => { setResults([]); setQ(""); }} className="font-mono text-[10px] uppercase tracking-wider text-indigo-500 hover:underline">Clear search</button>
               )}
             </div>
+            {displayList.length === 0
+              ? <p className="rounded-2xl border border-dashed border-slate-200 py-10 text-center font-mono text-xs text-slate-400 dark:border-white/10">No countries found. Try a different search.</p>
+              : <div className="grid max-h-[272px] grid-cols-2 gap-2.5 overflow-y-auto pr-1 [scrollbar-width:thin] sm:grid-cols-4 md:grid-cols-6">
+                  {displayList.map((c) => <CountryTile key={c.cca3} c={c} selected={full?.cca3 === c.cca3} onClick={() => pickCountry(c.cca3)} reducedMotion={reducedMotion} />)}
+                </div>}
 
-            {/* ── Results area: weather + detail + flights ── */}
-            <div ref={detailRef} className="scroll-mt-20 space-y-4">
-
-
-
-              {/* Main detail panel */}
-              <CountryDetailPanel
-                full={full}
-                extras={extras}
-                loadingDetails={loadingDetails}
-                mini={mini}
-                reducedMotion={reducedMotion}
-                onPickCountry={pickCountry}
-                useCelsius={useCelsius}
-              />
-
-                            {/* Weather widget — at the top of results */}
-              <CountryWeatherWidget
-                full={full}
-                extras={extras}
-                loadingDetails={loadingDetails}
-                useCelsius={useCelsius}
-              />
-
-              {/* Flight search */}
-              <AnimatePresence>
-                {full && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 6 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                  >
-                    <FlightSearch full={full} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
+            <div ref={detailRef} className="mt-6 scroll-mt-24">
+              <CountryDetailPanel full={full} extras={extras} loadingDetails={loadingDetails} mini={mini} reducedMotion={reducedMotion} onPickCountry={pickCountry} useCelsius={useCelsius} />
             </div>
-
-          </div>
-        )}
+          </>}
+        </div>
       </div>
-    </div>
+    ),
+    weather: () => (
+      <div className="p-4 sm:p-6">
+        <div className="mb-4 flex items-center justify-end">
+          <Segmented id="countryUnitWx" ariaLabel="Temperature unit" value={unit} onChange={changeUnit} options={[{ key: "C", label: "°C" }, { key: "F", label: "°F" }]} />
+        </div>
+        {full ? <>{currentBanner}<CountryWeatherWidget full={full} extras={extras} loadingDetails={loadingDetails} useCelsius={useCelsius} /></> : pickFirst}
+      </div>
+    ),
+    flights: () => (
+      <div className="p-4 sm:p-6">
+        {currentBanner}
+        <FlightSearch full={full} />
+      </div>
+    ),
+  };
+
+  return (
+    <DashboardShell
+      id="country"
+      path="~/country"
+      liveLabel="live data"
+      title="Country Explorer"
+      description="Search any country for the essentials, local time, photos, sights and a 7-day forecast, then find real flights and booking links with no hidden fees."
+      tabs={TABS}
+      renderPanel={(key) => panels[key]()}
+      onTabChange={(key) => trackEvent("Country Tab Click", { tab: key })}
+    />
   );
 }

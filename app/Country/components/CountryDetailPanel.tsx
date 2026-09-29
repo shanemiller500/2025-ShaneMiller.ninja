@@ -53,7 +53,7 @@ import CountryLightbox from "./CountryLightbox";
 
 const CountryMapLeaflet = dynamic(() => import("./CountryMapLeaflet"), {
   ssr: false,
-  loading: () => <div className="h-[185px] sm:h-[245px] rounded-2xl bg-gray-100 dark:bg-white/[0.05] animate-pulse" />,
+  loading: () => <div className="h-[185px] sm:h-[245px] rounded-2xl bg-slate-100 dark:bg-white/[0.05] animate-pulse" />,
 });
 
 interface CountryDetailPanelProps {
@@ -173,8 +173,8 @@ export default function CountryDetailPanel({
             <div className="w-20 h-20 rounded-3xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center mb-5 shadow-sm text-indigo-500 dark:text-indigo-400">
               <FaGlobeAmericas className="text-4xl" />
             </div>
-            <h2 className="text-xl font-bold text-gray-800 dark:text-white/80">Pick a Destination</h2>
-            <p className="mt-2 text-sm text-gray-400 dark:text-white/40 max-w-xs">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-300">Pick a Destination</h2>
+            <p className="mt-2 text-sm text-slate-400 dark:text-slate-500 max-w-xs">
               Select any country to explore weather, currency, photos, places to visit, and book flights.
             </p>
           </motion.div>
@@ -195,7 +195,7 @@ export default function CountryDetailPanel({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.28, ease: "easeOut" }}
-            className="rounded-3xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/60 backdrop-blur-sm shadow-sm overflow-hidden"
+            className="rounded-3xl border border-slate-200/70 dark:border-white/[0.08] bg-white/90 dark:bg-white/[0.03] backdrop-blur-sm shadow-sm overflow-hidden"
           >
             {/* ── Hero header ── */}
             <div className="relative">
@@ -219,7 +219,7 @@ export default function CountryDetailPanel({
                       />
                     )}
                     <div className="min-w-0">
-                      <h2 className="text-2xl sm:text-3xl font-extrabold text-white drop-shadow-md line-clamp-1">
+                      <h2 className="text-2xl sm:text-3xl font-semibold text-white drop-shadow-md line-clamp-1">
                         {full.name.common}
                       </h2>
                       <p className="text-xs text-white/70 mt-0.5">
@@ -233,13 +233,13 @@ export default function CountryDetailPanel({
 
               {/* Fallback header (no image) */}
               {!extras?.wiki?.thumbnail?.source && !full.flags?.png && (
-                <div className="p-5 sm:p-6 border-b border-black/10 dark:border-white/10 flex items-center gap-4">
+                <div className="p-5 sm:p-6 border-b border-slate-200/70 dark:border-white/[0.08] flex items-center gap-4">
                   <div className="w-16 h-16 rounded-2xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-500 dark:text-indigo-400 flex-shrink-0">
                     <FaGlobeAmericas className="text-3xl" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-extrabold">{full.name.common}</h2>
-                    <p className="text-sm text-gray-500 dark:text-white/50 mt-1">
+                    <h2 className="text-2xl font-semibold">{full.name.common}</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                       {full.continents?.join(", ")}{full.subregion ? ` · ${full.subregion}` : ""}
                     </p>
                   </div>
@@ -248,7 +248,7 @@ export default function CountryDetailPanel({
             </div>
 
             {/* ── Status chips ── */}
-            <div className="px-4 sm:px-6 py-3 border-b border-black/5 dark:border-white/[0.06] flex flex-wrap gap-2">
+            <div className="px-4 sm:px-6 py-3 border-b border-slate-200/70 dark:border-white/[0.08] flex flex-wrap gap-2">
               <span className={cn("rounded-full px-3 py-1 text-xs font-semibold inline-flex items-center gap-1.5", bestTime.classes)}>
                 <FaCalendarAlt className="text-[10px]" />{bestTime.label}
               </span>
@@ -272,12 +272,12 @@ export default function CountryDetailPanel({
                 </span>
               )}
               {callingCode && (
-                <span className="rounded-full px-3 py-1 text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-white/60 inline-flex items-center gap-1.5">
+                <span className="rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-400 inline-flex items-center gap-1.5">
                   <FaPhone className="text-[10px]" />{callingCode}
                 </span>
               )}
               {loadingDetails && (
-                <span className="rounded-full px-3 py-1 text-xs font-semibold bg-gray-100 text-gray-400 dark:bg-white/[0.05] dark:text-white/40 animate-pulse">
+                <span className="rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-400 dark:bg-white/[0.05] dark:text-slate-500 animate-pulse">
                   Updating…
                 </span>
               )}
@@ -297,8 +297,8 @@ export default function CountryDetailPanel({
                     className={cn(
                       "flex-1 rounded-xl px-2 py-2 text-xs font-semibold transition whitespace-nowrap",
                       activeTab === tab.id
-                        ? "bg-white dark:bg-white/15 shadow-sm text-gray-900 dark:text-white"
-                        : "text-gray-500 dark:text-white/50 hover:text-gray-700 dark:hover:text-white/70",
+                        ? "bg-white dark:bg-white/15 shadow-sm text-slate-900 dark:text-white"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white/70",
                     )}
                   >
                     {tab.label}
@@ -323,7 +323,7 @@ export default function CountryDetailPanel({
                   >
                     {/* Map */}
                     {full.latlng?.length === 2 && (
-                      <div ref={mapWrapRef} className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 shadow-sm sm:h-[350px]">
+                      <div ref={mapWrapRef} className="rounded-2xl overflow-hidden border border-slate-200/70 dark:border-white/[0.08] shadow-sm sm:h-[350px]">
                         <CountryMapLeaflet
                           lat={full.latlng[0]}
                           lng={full.latlng[1]}
@@ -344,16 +344,16 @@ export default function CountryDetailPanel({
                         <button
                           type="button"
                           onClick={() => setLangOpen((o) => !o)}
-                          className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/[0.05] px-4 py-3 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition group"
+                          className="rounded-2xl border border-slate-200/70 dark:border-white/[0.08] bg-white dark:bg-white/[0.02] px-4 py-3 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition group"
                         >
                           <div className="flex items-center gap-1.5 mb-1">
                             <span className="text-indigo-500 dark:text-indigo-400 text-sm"><FaLanguage /></span>
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-white/40 flex-1">Languages</div>
+                            <div className="font-mono text-[10px] uppercase tracking-widerr text-slate-400 dark:text-slate-500 flex-1">Languages</div>
                             {langOpen
                               ? <FaChevronUp className="text-indigo-400 dark:text-indigo-500 text-[8px]" />
-                              : <FaChevronDown className="text-gray-300 dark:text-white/25 text-[8px]" />}
+                              : <FaChevronDown className="text-slate-300 dark:text-white/25 text-[8px]" />}
                           </div>
-                          <div className="text-sm font-bold text-gray-900 dark:text-white line-clamp-1">
+                          <div className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
                             {langList[0]} <span className="text-indigo-500 dark:text-indigo-400 font-semibold">+{langList.length - 1}</span>
                           </div>
                         </button>
@@ -376,14 +376,14 @@ export default function CountryDetailPanel({
                           className="overflow-hidden"
                         >
                           <div className="rounded-2xl border border-indigo-100 dark:border-indigo-800/30 bg-indigo-50/60 dark:bg-indigo-900/15 px-4 py-3">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-2.5">
+                            <div className="font-mono text-[10px] uppercase tracking-widerst text-indigo-600 dark:text-indigo-400 mb-2.5">
                               All Languages · {langList.length}
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {langList.map((lang) => (
                                 <span
                                   key={lang}
-                                  className="rounded-full px-2.5 py-1 text-xs font-semibold bg-white dark:bg-white/10 border border-indigo-200 dark:border-indigo-700/50 text-gray-700 dark:text-white/80"
+                                  className="rounded-full px-2.5 py-1 text-xs font-semibold bg-white dark:bg-white/10 border border-indigo-200 dark:border-indigo-700/50 text-slate-700 dark:text-slate-300"
                                 >
                                   {lang}
                                 </span>
@@ -417,9 +417,9 @@ export default function CountryDetailPanel({
 
                     {/* Wikipedia About */}
                     {extras?.wiki?.extract && (
-                      <div className="rounded-2xl bg-brand-101 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 p-4">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-2">About</div>
-                        <p className="text-sm leading-relaxed text-gray-700 dark:text-white/80">{clampText(extras.wiki.extract)}</p>
+                      <div className="rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 p-4">
+                        <div className="font-mono text-[10px] uppercase tracking-widerst text-indigo-600 dark:text-indigo-400 mb-2">About</div>
+                        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{clampText(extras.wiki.extract)}</p>
                       </div>
                     )}
 
@@ -445,10 +445,10 @@ export default function CountryDetailPanel({
 
                     {/* Travel Tips */}
                     <div className="rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/30 p-4">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-2.5">Travel Tips</div>
+                      <div className="font-mono text-[10px] uppercase tracking-widerst text-amber-700 dark:text-amber-400 mb-2.5">Travel Tips</div>
                       <ul className="space-y-2">
                         {travelTips.map((tip, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-white/80">
+                          <li key={i} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
                             <span className="text-amber-500 mt-px shrink-0 font-bold">›</span>
                             {tip}
                           </li>
@@ -463,7 +463,7 @@ export default function CountryDetailPanel({
                           <FaSuitcase className="text-teal-600 dark:text-teal-400 text-xs" />
                         </div>
                         <div>
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-teal-700 dark:text-teal-400">What to pack</div>
+                          <div className="font-mono text-[10px] uppercase tracking-widerst text-teal-700 dark:text-teal-400">What to pack</div>
                           {extras?.weather?.temperature != null && (
                             <div className="text-[10px] text-teal-600/70 dark:text-teal-400/60">
                               Based on {useCelsius
@@ -477,7 +477,7 @@ export default function CountryDetailPanel({
                         {packList.map((item, i) => (
                           <div key={i} className="flex items-center gap-2.5 rounded-xl bg-white/60 dark:bg-white/[0.05] border border-teal-100 dark:border-teal-800/20 px-3 py-2">
                             <span className="w-3.5 h-3.5 rounded border-2 border-teal-400 dark:border-teal-500 flex-shrink-0" />
-                            <span className="text-sm text-gray-700 dark:text-white/80">{item}</span>
+                            <span className="text-sm text-slate-700 dark:text-slate-300">{item}</span>
                           </div>
                         ))}
                       </div>
@@ -489,7 +489,7 @@ export default function CountryDetailPanel({
                     {/* Neighboring countries */}
                     {neighbors.length > 0 && (
                       <div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-white/40 mb-2.5">
+                        <div className="font-mono text-[10px] uppercase tracking-widerst text-slate-400 dark:text-slate-500 mb-2.5">
                           Neighboring countries
                         </div>
                         <div className="flex gap-2 overflow-x-auto pb-2" style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "thin" }}>
@@ -521,7 +521,7 @@ export default function CountryDetailPanel({
                     {/* Nearby sights */}
                     {topSights.length > 0 && (
                       <div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-white/40 mb-2.5">
+                        <div className="font-mono text-[10px] uppercase tracking-widerst text-slate-400 dark:text-slate-500 mb-2.5">
                           Points of interest
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -533,14 +533,14 @@ export default function CountryDetailPanel({
                               rel="noopener noreferrer"
                               className={cn(
                                 "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
-                                "border border-black/10 dark:border-white/10",
-                                "bg-white/80 dark:bg-white/[0.06] hover:bg-white dark:hover:bg-white/[0.10]",
+                                "border border-slate-200/70 dark:border-white/[0.08]",
+                                "bg-white dark:bg-white/[0.02] hover:bg-white dark:hover:bg-white/[0.10]",
                                 "shadow-sm transition",
                               )}
                             >
                               <FaMapMarkerAlt className="text-indigo-500 dark:text-indigo-400 shrink-0" />
                               <span className="max-w-[180px] truncate">{s.title}</span>
-                              <span className="text-gray-400 dark:text-white/30">{(s.dist / 1000).toFixed(0)} km</span>
+                              <span className="text-slate-400 dark:text-slate-500">{(s.dist / 1000).toFixed(0)} km</span>
                             </a>
                           ))}
                         </div>
@@ -567,12 +567,12 @@ export default function CountryDetailPanel({
                   >
                     {photos.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-16 text-center">
-                        <FaCamera className="text-4xl mb-3 text-gray-300 dark:text-white/20" />
-                        <div className="text-sm font-medium text-gray-400 dark:text-white/40">No photos available for this destination</div>
+                        <FaCamera className="text-4xl mb-3 text-slate-300 dark:text-white/20" />
+                        <div className="text-sm font-medium text-slate-400 dark:text-slate-500">No photos available for this destination</div>
                       </div>
                     ) : (
                       <>
-                        <p className="text-xs text-gray-400 dark:text-white/40 mb-3">Tap any photo to open full view · Swipe inside</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">Tap any photo to open full view · Swipe inside</p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {photos.map((p, i) => (
                             <motion.button

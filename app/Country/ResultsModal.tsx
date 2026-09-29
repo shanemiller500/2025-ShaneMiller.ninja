@@ -173,19 +173,19 @@ function SkeletonCard() {
       variants={shimmer}
       initial="hidden"
       animate="show"
-      className="rounded-2xl border border-brand-200/70 bg-white p-4 dark:border-white/10 dark:bg-brand-900/60"
+      className="rounded-2xl border border-slate-200/70 bg-white p-4 dark:border-white/10 dark:bg-white/[0.03]"
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-brand-100 dark:bg-white/10" />
+          <div className="h-9 w-9 rounded-full bg-slate-100 dark:bg-white/10" />
           <div>
-            <div className="h-3 w-28 rounded-full bg-brand-100 dark:bg-white/10" />
-            <div className="mt-2 h-2 w-36 rounded-full bg-brand-100 dark:bg-white/10" />
+            <div className="h-3 w-28 rounded-full bg-slate-100 dark:bg-white/10" />
+            <div className="mt-2 h-2 w-36 rounded-full bg-slate-100 dark:bg-white/10" />
           </div>
         </div>
-        <div className="h-5 w-14 rounded-full bg-brand-100 dark:bg-white/10" />
+        <div className="h-5 w-14 rounded-full bg-slate-100 dark:bg-white/10" />
       </div>
-      <div className="mt-3 h-2 w-48 rounded-full bg-brand-100 dark:bg-white/10" />
+      <div className="mt-3 h-2 w-48 rounded-full bg-slate-100 dark:bg-white/10" />
     </motion.div>
   );
 }
@@ -266,7 +266,7 @@ export default function ResultsModal({
     `inline-flex items-center gap-1.5 shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold transition
      ${active
        ? "border-indigo-500 bg-indigo-600 text-white shadow-sm shadow-indigo-500/25"
-       : "border-brand-200/70 bg-white text-brand-700 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:bg-transparent dark:text-brand-300 dark:hover:text-indigo-400"}`;
+       : "border-slate-200/70 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:bg-transparent dark:text-slate-300 dark:hover:text-indigo-400"}`;
 
   /* ── Render ── */
   return (
@@ -295,28 +295,28 @@ export default function ResultsModal({
             leaveFrom="opacity-100 translate-y-0 sm:scale-100"
             leaveTo="opacity-0 translate-y-8 sm:scale-95"
           >
-            <DialogPanel className="w-full overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-brand-900 sm:max-w-2xl sm:rounded-3xl">
+            <DialogPanel className="w-full overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-[#1a1a1d] sm:max-w-2xl sm:rounded-3xl">
 
               {/* ── SLIM STICKY HEADER ──────────────────────────────── */}
-              <div className="sticky top-0 z-20 border-b border-brand-100/60 bg-white/95 backdrop-blur-xl dark:border-white/5 dark:bg-brand-900/95">
+              <div className="sticky top-0 z-20 border-b border-slate-100/60 bg-white/95 backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#1a1a1d]/95">
 
                 {/* Drag handle (mobile only) */}
                 <div className="flex justify-center pt-2 sm:hidden">
-                  <div className="h-1 w-10 rounded-full bg-brand-200 dark:bg-brand-700" />
+                  <div className="h-1 w-10 rounded-full bg-slate-200 dark:bg-white/[0.06]" />
                 </div>
 
                 {/* Route + close row */}
                 <div className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
                   <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="text-[13px] font-extrabold text-brand-900 dark:text-white">
+                    <span className="text-[13px] font-semibold text-slate-900 dark:text-white">
                       {from || "—"}
                     </span>
                     <ArrowRight className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
-                    <span className="text-[13px] font-extrabold text-brand-900 dark:text-white">
+                    <span className="text-[13px] font-semibold text-slate-900 dark:text-white">
                       {to || "—"}
                     </span>
                     {depart && (
-                      <span className="ml-1 hidden text-xs text-brand-400 dark:text-brand-500 sm:inline">
+                      <span className="ml-1 hidden text-xs text-slate-400 dark:text-slate-500 sm:inline">
                         · {fmtShort(depart)}
                         {trip === "round" && ret ? ` – ${fmtShort(ret)}` : ""}
                       </span>
@@ -330,7 +330,7 @@ export default function ResultsModal({
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    className="hidden shrink-0 items-center gap-1.5 rounded-full border border-brand-200/70 px-3 py-1.5 text-xs font-semibold text-brand-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-brand-400 dark:hover:text-indigo-400 sm:inline-flex"
+                    className="hidden shrink-0 items-center gap-1.5 rounded-full border border-slate-200/70 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-slate-400 dark:hover:text-indigo-400 sm:inline-flex"
                   >
                     <ArrowLeft className="h-3 w-3" />
                     Edit search
@@ -340,7 +340,7 @@ export default function ResultsModal({
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600 transition hover:bg-brand-200 dark:bg-white/10 dark:text-brand-300 dark:hover:bg-white/20"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/20"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -356,18 +356,18 @@ export default function ResultsModal({
                 {photo && <img src={photo} alt="" className="h-40 w-full object-cover" />}
 
                 {/* Controls bar */}
-                <div className="border-b border-brand-100/60 px-4 py-3 dark:border-white/5 sm:px-5">
+                <div className="border-b border-slate-100/60 px-4 py-3 dark:border-white/[0.08] sm:px-5">
 
                   {/* Status row */}
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       {loading ? (
-                        <p className="text-xs font-semibold text-brand-500 dark:text-brand-400">
+                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                           Searching for the best fares…
                         </p>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-brand-900 dark:text-white">
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">
                             {filteredFlights.length} flight{filteredFlights.length !== 1 ? "s" : ""} found
                           </p>
                           {!loading && flights.length > 0 && (
@@ -384,7 +384,7 @@ export default function ResultsModal({
                     <button
                       type="button"
                       onClick={() => setOpen(false)}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-200/70 px-3 py-1.5 text-xs font-semibold text-brand-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-brand-400 dark:hover:text-indigo-400 sm:hidden"
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200/70 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-slate-400 dark:hover:text-indigo-400 sm:hidden"
                     >
                       <ArrowLeft className="h-3 w-3" />
                       Edit search
@@ -393,7 +393,7 @@ export default function ResultsModal({
 
                   {/* Dates strip — mobile */}
                   {depart && (
-                    <p className="mb-3 text-xs text-brand-400 dark:text-brand-500 sm:hidden">
+                    <p className="mb-3 text-xs text-slate-400 dark:text-slate-500 sm:hidden">
                       {fmtShort(depart)}
                       {trip === "round" && ret ? ` – ${fmtShort(ret)}` : ""}
                     </p>
@@ -413,7 +413,7 @@ export default function ResultsModal({
                       </button>
 
                       {/* Divider */}
-                      <div className="mx-1 h-5 w-px shrink-0 bg-brand-200/70 dark:bg-white/10" />
+                      <div className="mx-1 h-5 w-px shrink-0 bg-slate-200/70 dark:bg-white/10" />
 
                       {/* Booking site links */}
                       <a href={googleLink}  target="_blank" rel="noopener noreferrer"
@@ -425,7 +425,7 @@ export default function ResultsModal({
                         <ExternalLink className="h-3 w-3" /> Skyscanner
                       </a>
                       <a href={momondoLink} target="_blank" rel="noopener noreferrer"
-                         className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand-900 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-brand-700 dark:bg-white/10 dark:hover:bg-white/20">
+                         className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-slate-700 dark:bg-white/10 dark:hover:bg-white/20">
                         <ExternalLink className="h-3 w-3" /> Momondo
                       </a>
                     </div>
@@ -436,7 +436,7 @@ export default function ResultsModal({
                     <button
                       type="button"
                       onClick={() => setFiltersOpen((p) => !p)}
-                      className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-brand-200/70 px-3 py-1.5 text-xs font-semibold text-brand-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-brand-400 dark:hover:text-indigo-400"
+                      className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-slate-200/70 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-slate-400 dark:hover:text-indigo-400"
                     >
                       <FilterIcon className="h-3 w-3" />
                       Filters
@@ -457,13 +457,13 @@ export default function ResultsModal({
                         <div className="mt-3 grid grid-cols-3 gap-2">
                           {/* Max stops */}
                           <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-brand-400 dark:text-brand-500">
+                            <label className="mb-1 block font-mono text-[10px] uppercase tracking-widerst text-slate-400 dark:text-slate-500">
                               Stops
                             </label>
                             <select
                               value={maxStops}
                               onChange={(e) => setMaxStops(+e.target.value)}
-                              className="w-full rounded-xl border border-brand-200/70 bg-white px-2 py-1.5 text-xs font-semibold text-brand-900 dark:border-white/10 dark:bg-brand-900 dark:text-white"
+                              className="w-full rounded-xl border border-slate-200/70 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 dark:border-white/10 dark:bg-[#1a1a1d] dark:text-white"
                             >
                               <option value={0}>Non-stop</option>
                               <option value={1}>1 stop</option>
@@ -474,13 +474,13 @@ export default function ResultsModal({
 
                           {/* Airline */}
                           <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-brand-400 dark:text-brand-500">
+                            <label className="mb-1 block font-mono text-[10px] uppercase tracking-widerst text-slate-400 dark:text-slate-500">
                               Airline
                             </label>
                             <select
                               value={selectedAirline}
                               onChange={(e) => setSelectedAirline(e.target.value)}
-                              className="w-full rounded-xl border border-brand-200/70 bg-white px-2 py-1.5 text-xs font-semibold text-brand-900 dark:border-white/10 dark:bg-brand-900 dark:text-white"
+                              className="w-full rounded-xl border border-slate-200/70 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 dark:border-white/10 dark:bg-[#1a1a1d] dark:text-white"
                             >
                               <option value="all">All</option>
                               {airlines.map((a) => (
@@ -491,13 +491,13 @@ export default function ResultsModal({
 
                           {/* Sort (mirrors the chips) */}
                           <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-brand-400 dark:text-brand-500">
+                            <label className="mb-1 block font-mono text-[10px] uppercase tracking-widerst text-slate-400 dark:text-slate-500">
                               Sort
                             </label>
                             <select
                               value={sortBy}
                               onChange={(e) => setSortBy(e.target.value as "price" | "duration" | "ai")}
-                              className="w-full rounded-xl border border-brand-200/70 bg-white px-2 py-1.5 text-xs font-semibold text-brand-900 dark:border-white/10 dark:bg-brand-900 dark:text-white"
+                              className="w-full rounded-xl border border-slate-200/70 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 dark:border-white/10 dark:bg-[#1a1a1d] dark:text-white"
                             >
                               <option value="price">Cheapest</option>
                               <option value="duration">Fastest</option>
@@ -524,8 +524,8 @@ export default function ResultsModal({
 
                   {/* Empty state */}
                   {!loading && filteredFlights.length === 0 && (
-                    <div className="rounded-2xl border border-brand-200/70 bg-white px-6 py-10 text-center dark:border-white/10 dark:bg-brand-900/40">
-                      <p className="text-sm font-semibold text-brand-500 dark:text-brand-400">
+                    <div className="rounded-2xl border border-slate-200/70 bg-white px-6 py-10 text-center dark:border-white/10 dark:bg-white/[0.03]">
+                      <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
                         No flights match your filters.
                       </p>
                       <button
@@ -564,35 +564,35 @@ export default function ResultsModal({
                             className={`overflow-hidden rounded-2xl border transition
                               ${isOpen
                                 ? "border-indigo-300 shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-400/20 dark:border-indigo-500/50"
-                                : "border-brand-200/70 hover:border-brand-300 hover:shadow-md dark:border-white/10 dark:hover:border-white/20"
-                              } bg-white dark:bg-brand-900`}
+                                : "border-slate-200/70 hover:border-slate-300 hover:shadow-md dark:border-white/10 dark:hover:border-white/20"
+                              } bg-white dark:bg-[#1a1a1d]`}
                           >
                             {/* Summary row — tap to expand */}
                             <button
                               type="button"
                               onClick={() => toggleCard(i)}
-                              className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-brand-50/50 dark:hover:bg-white/3"
+                              className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-slate-50/50 dark:hover:bg-white/3"
                             >
                               <div className="flex min-w-0 items-center gap-3">
                                 {/* Airline logo */}
                                 {f.airline_logo ? (
-                                  <div className="h-9 w-9 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-brand-200/70 dark:bg-white/10 dark:ring-white/10">
+                                  <div className="h-9 w-9 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 dark:bg-white/10 dark:ring-white/10">
                                     <img src={f.airline_logo} alt="" className="h-full w-full object-contain p-1.5" />
                                   </div>
                                 ) : (
                                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/10">
-                                    <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-300">
+                                    <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-300">
                                       {(f.provider || "?").slice(0, 2).toUpperCase()}
                                     </span>
                                   </div>
                                 )}
 
                                 <div className="min-w-0">
-                                  <p className="truncate text-sm font-bold text-brand-900 dark:text-white">
+                                  <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
                                     {f.provider}
                                   </p>
                                   {seg0 && (
-                                    <p className="truncate text-[11px] text-brand-500 dark:text-brand-400">
+                                    <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
                                       {seg0.airline}
                                       {seg0.flight_number ? ` · ${seg0.flight_number}` : ""}
                                       {seg0.travel_class  ? ` · ${seg0.travel_class}` : ""}
@@ -604,7 +604,7 @@ export default function ResultsModal({
                               <div className="ml-2 flex shrink-0 items-center gap-3">
                                 {/* Duration — hidden on very small */}
                                 {f.total_duration != null && (
-                                  <span className="hidden text-xs font-semibold text-brand-500 dark:text-brand-400 xs:inline">
+                                  <span className="hidden text-xs font-semibold text-slate-500 dark:text-slate-400 xs:inline">
                                     {minsToH(f.total_duration)}
                                   </span>
                                 )}
@@ -613,21 +613,21 @@ export default function ResultsModal({
                                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold
                                   ${layCnt === 0
                                     ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-                                    : "bg-brand-100 text-brand-600 dark:bg-white/10 dark:text-brand-300"
+                                    : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300"
                                   }`}>
                                   {layCnt === 0 ? "Direct" : `${layCnt} stop${layCnt !== 1 ? "s" : ""}`}
                                 </span>
 
                                 {/* Price */}
                                 {typeof f.price === "number" && (
-                                  <span className="text-base font-extrabold text-brand-900 dark:text-white">
+                                  <span className="text-base font-semibold text-slate-900 dark:text-white">
                                     ${f.price}
                                   </span>
                                 )}
 
                                 {isOpen
-                                  ? <ChevronUp   className="h-4 w-4 text-brand-400" />
-                                  : <ChevronDown className="h-4 w-4 text-brand-400" />
+                                  ? <ChevronUp   className="h-4 w-4 text-slate-400" />
+                                  : <ChevronDown className="h-4 w-4 text-slate-400" />
                                 }
                               </div>
                             </button>
@@ -640,7 +640,7 @@ export default function ResultsModal({
                                   animate={{ opacity: 1, y: 0 }}
                                   exit={{ opacity: 0, y: -4 }}
                                   transition={{ type: "spring", stiffness: 300, damping: 28 }}
-                                  className="border-t border-brand-100/60 bg-brand-50/30 px-4 pb-5 pt-4 text-sm dark:border-white/5 dark:bg-white/2"
+                                  className="border-t border-slate-100/60 bg-slate-50/30 px-4 pb-5 pt-4 text-sm dark:border-white/[0.08] dark:bg-white/2"
                                 >
                                   {f.flights ? (
                                     <>
@@ -654,7 +654,7 @@ export default function ResultsModal({
                                         {f.flights.map((seg, j) => (
                                           <li key={j} className="relative mb-7 last:mb-0">
                                             {/* Timeline dot */}
-                                            <div className="absolute -left-[1.5625rem] top-1 flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-2 ring-indigo-400 dark:bg-brand-900 dark:ring-indigo-500">
+                                            <div className="absolute -left-[1.5625rem] top-1 flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-2 ring-indigo-400 dark:bg-[#1a1a1d] dark:ring-indigo-500">
                                               {seg.airline_logo ? (
                                                 <img src={seg.airline_logo} alt={seg.airline} className="h-full w-full object-contain" />
                                               ) : (
@@ -665,25 +665,25 @@ export default function ResultsModal({
                                             {/* Segment info */}
                                             <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between">
                                               <div>
-                                                <p className="text-sm font-bold text-brand-900 dark:text-white">
+                                                <p className="text-sm font-bold text-slate-900 dark:text-white">
                                                   {seg.departure_airport.id} → {seg.arrival_airport.id}
                                                 </p>
-                                                <p className="text-[11px] text-brand-500 dark:text-brand-400">
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                                                   {seg.airline} {seg.flight_number}
                                                   {seg.travel_class ? ` · ${seg.travel_class}` : ""}
                                                 </p>
                                               </div>
                                               <div className="text-right">
-                                                <p className="text-xs font-bold text-brand-900 dark:text-white">
+                                                <p className="text-xs font-bold text-slate-900 dark:text-white">
                                                   {fmtTime(seg.departure_airport.time)} → {fmtTime(seg.arrival_airport.time)}
                                                 </p>
-                                                <p className="text-[11px] text-brand-500 dark:text-brand-400">
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                                                   {minsToH(seg.duration)}
                                                 </p>
                                               </div>
                                             </div>
 
-                                            <p className="mt-0.5 text-[11px] text-brand-400 dark:text-brand-500">
+                                            <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">
                                               {seg.departure_airport.name} › {seg.arrival_airport.name}
                                             </p>
 
@@ -699,20 +699,20 @@ export default function ResultsModal({
                                       </ol>
 
                                       {/* Stats row */}
-                                      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-brand-500 dark:text-brand-400">
+                                      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                                         {f.total_duration != null && (
-                                          <span><strong className="text-brand-700 dark:text-brand-300">Total</strong> {minsToH(f.total_duration)}</span>
+                                          <span><strong className="text-slate-700 dark:text-slate-300">Total</strong> {minsToH(f.total_duration)}</span>
                                         )}
                                         {f.carbon_emissions && (
-                                          <span><strong className="text-brand-700 dark:text-brand-300">CO₂</strong> {(f.carbon_emissions.this_flight / 1000).toFixed(1)} kg</span>
+                                          <span><strong className="text-slate-700 dark:text-slate-300">CO₂</strong> {(f.carbon_emissions.this_flight / 1000).toFixed(1)} kg</span>
                                         )}
                                         {typeof f.ai_score === "number" && (
-                                          <span><strong className="text-brand-700 dark:text-brand-300">AI score</strong> {f.ai_score.toFixed(1)}{typeof f.ai_rank === "number" ? ` · rank #${f.ai_rank}` : ""}</span>
+                                          <span><strong className="text-slate-700 dark:text-slate-300">AI score</strong> {f.ai_score.toFixed(1)}{typeof f.ai_rank === "number" ? ` · rank #${f.ai_rank}` : ""}</span>
                                         )}
                                       </div>
                                     </>
                                   ) : (
-                                    <ul className="list-inside list-disc space-y-1 text-brand-600 dark:text-brand-300">
+                                    <ul className="list-inside list-disc space-y-1 text-slate-600 dark:text-slate-300">
                                       {(f.legs || []).map((l, k) => <li key={k}>{l}</li>)}
                                     </ul>
                                   )}
@@ -724,7 +724,7 @@ export default function ResultsModal({
                                     href={f.deeplink || googleLink}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-3 text-sm font-extrabold text-white shadow-lg shadow-indigo-500/20 transition hover:opacity-95"
+                                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:opacity-95"
                                   >
                                     Book now
                                     <ExternalLink className="h-3.5 w-3.5" />
@@ -743,7 +743,7 @@ export default function ResultsModal({
                     <button
                       type="button"
                       onClick={() => setOpen(false)}
-                      className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-brand-200/70 py-3 text-sm font-semibold text-brand-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-brand-400 dark:hover:text-indigo-400"
+                      className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200/70 py-3 text-sm font-semibold text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-slate-400 dark:hover:text-indigo-400"
                     >
                       <ArrowLeft className="h-4 w-4" />
                       Edit search

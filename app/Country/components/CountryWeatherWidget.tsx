@@ -70,18 +70,18 @@ const SCHEMES: Record<
     temp:  "text-amber-600 dark:text-amber-300",
   },
   cloudy: {
-    bar:   "bg-gradient-to-r from-slate-400 to-gray-400",
+    bar:   "bg-gradient-to-r from-slate-400 to-slate-400",
     tint:  "from-slate-50/70 dark:from-slate-800/25",
     badge: "bg-slate-100 text-slate-700 dark:bg-slate-800/50 dark:text-slate-300",
     icon:  "text-slate-500 dark:text-slate-400",
     temp:  "text-slate-700 dark:text-slate-200",
   },
   fog: {
-    bar:   "bg-gradient-to-r from-gray-400 to-slate-400",
-    tint:  "from-gray-50/70 dark:from-gray-800/25",
-    badge: "bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-300",
-    icon:  "text-gray-500 dark:text-gray-400",
-    temp:  "text-gray-700 dark:text-gray-200",
+    bar:   "bg-gradient-to-r from-slate-400 to-slate-400",
+    tint:  "from-slate-50/70 dark:from-slate-800/25",
+    badge: "bg-slate-100 text-slate-700 dark:bg-slate-800/50 dark:text-slate-300",
+    icon:  "text-slate-500 dark:text-slate-400",
+    temp:  "text-slate-700 dark:text-slate-200",
   },
   drizzle: {
     bar:   "bg-gradient-to-r from-sky-400 to-cyan-400",
@@ -139,7 +139,7 @@ function StatPill({
 }
 
 function SkeletonPulse({ className }: { className: string }) {
-  return <div className={cn("rounded-lg bg-gray-200 dark:bg-white/10 animate-pulse", className)} />;
+  return <div className={cn("rounded-lg bg-slate-200 dark:bg-white/10 animate-pulse", className)} />;
 }
 
 /* ── Props ───────────────────────────────────────────────────────────── */
@@ -226,9 +226,9 @@ export default function CountryWeatherWidget({
   /* ── Empty state ── */
   if (!full && !loadingDetails) {
     return (
-      <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-6 flex flex-col items-center justify-center gap-2.5 text-center">
-        <WiDaySunny className="text-5xl text-gray-200 dark:text-white/15" />
-        <p className="text-xs text-gray-400 dark:text-white/35 font-medium">
+      <div className="rounded-2xl border border-slate-200/70 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] p-6 flex flex-col items-center justify-center gap-2.5 text-center">
+        <WiDaySunny className="text-5xl text-slate-200 dark:text-white/15" />
+        <p className="text-xs text-slate-400 dark:text-white/35 font-medium">
           Select a country to see its weather
         </p>
       </div>
@@ -238,8 +238,8 @@ export default function CountryWeatherWidget({
   /* ── Loading skeleton ── */
   if (loadingDetails && !full) {
     return (
-      <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] overflow-hidden">
-        <div className="h-1 w-full bg-gray-200 dark:bg-white/10 animate-pulse" />
+      <div className="rounded-2xl border border-slate-200/70 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] overflow-hidden">
+        <div className="h-1 w-full bg-slate-200 dark:bg-white/10 animate-pulse" />
         <div className="p-4 sm:p-5 space-y-4">
           <div className="flex items-center justify-between">
             <SkeletonPulse className="h-4 w-32" />
@@ -269,9 +269,9 @@ export default function CountryWeatherWidget({
   /* Weather data isn't ready yet */
   if (!weather) {
     return (
-      <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] p-4 flex items-center gap-3">
+      <div className="rounded-2xl border border-slate-200/70 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.04] p-4 flex items-center gap-3">
         <div className="h-4 w-4 rounded-full border-2 border-indigo-400/40 border-t-indigo-500 animate-spin flex-shrink-0" />
-        <span className="text-xs text-gray-400 dark:text-white/40">Loading weather…</span>
+        <span className="text-xs text-slate-400 dark:text-slate-500">Loading weather…</span>
       </div>
     );
   }
@@ -294,8 +294,8 @@ export default function CountryWeatherWidget({
         transition={{ duration: 0.28, ease: "easeOut" }}
         className={cn(
           "rounded-2xl overflow-hidden",
-          "border border-black/10 dark:border-white/10",
-          "bg-gradient-to-b to-white dark:to-brand-900/80 shadow-sm",
+          "border border-slate-200/70 dark:border-white/[0.08]",
+          "bg-gradient-to-b to-white dark:to-slate-900/80 shadow-sm",
           s.tint,
         )}
       >
@@ -315,11 +315,11 @@ export default function CountryWeatherWidget({
                 />
               )}
               <div className="min-w-0">
-                <div className="text-sm font-extrabold text-gray-900 dark:text-white truncate leading-tight">
+                <div className="text-sm font-semibold text-slate-900 dark:text-white truncate leading-tight">
                   {full.name.common}
                 </div>
                 {full.capital?.[0] && (
-                  <div className="text-[10px] text-gray-400 dark:text-white/40 truncate leading-tight">
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate leading-tight">
                     {full.capital[0]}
                   </div>
                 )}
@@ -347,10 +347,10 @@ export default function CountryWeatherWidget({
                 <span className="text-5xl sm:text-6xl font-black tracking-tight">{temp}</span>
                 <span className="text-xl font-bold mt-1 ml-0.5 opacity-70">{unit}</span>
               </div>
-              <div className="text-sm font-semibold text-gray-700 dark:text-white/80 mt-1">
+              <div className="text-sm font-semibold text-slate-700 dark:text-slate-300 mt-1">
                 {label}
               </div>
-              <div className="text-xs text-gray-400 dark:text-white/40 mt-0.5">
+              <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                 {feelsLike != null
                   ? `Feels like ${feelsLike}${unit}`
                   : fetchingExt
@@ -388,7 +388,7 @@ export default function CountryWeatherWidget({
           {extended?.forecast && extended.forecast.length > 0 ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-white/40">
+                <div className="font-mono text-[10px] uppercase tracking-widerst text-slate-400 dark:text-slate-500">
                   5-Day Forecast
                 </div>
                 <div className="flex-1 h-px bg-black/5 dark:bg-white/[0.07]" />
@@ -402,16 +402,16 @@ export default function CountryWeatherWidget({
                       key={d.date}
                       className="flex flex-col items-center gap-0.5 rounded-xl bg-white/60 dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.06] py-2 px-1"
                     >
-                      <span className="text-[10px] font-semibold text-gray-500 dark:text-white/50">
+                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                         {fmtDay(d.date)}
                       </span>
                       <span className={cn("text-2xl leading-tight", ds.icon)}>
                         <DIcon />
                       </span>
-                      <span className="text-[11px] font-bold text-gray-800 dark:text-white/90">
+                      <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
                         {useCelsius ? Math.round(d.max) : cToF(Math.round(d.max))}°
                       </span>
-                      <span className="text-[9px] text-gray-400 dark:text-white/40">
+                      <span className="text-[9px] text-slate-400 dark:text-slate-500">
                         {useCelsius ? Math.round(d.min) : cToF(Math.round(d.min))}°
                       </span>
                     </div>

@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { trackEvent } from '@/utils/mixpanel';
+import './iss.css';
 
 /* ------------------------------------------------------------------ */
 /*  Dynamic import — avoid SSR for Leaflet                            */
@@ -10,8 +11,8 @@ import { trackEvent } from '@/utils/mixpanel';
 const ISSTracker = dynamic(() => import('./issTracker'), {
   ssr: false,
   loading: () => (
-    <p className="text-center py-20 text-brand-600 dark:text-brand-300">
-      Loading ISS Tracker…
+    <p className="py-24 text-center font-mono text-xs uppercase tracking-wider text-slate-400">
+      Acquiring signal from the ISS…
     </p>
   ),
 });
@@ -19,16 +20,10 @@ const ISSTracker = dynamic(() => import('./issTracker'), {
 /* ------------------------------------------------------------------ */
 /*  Page component                                                    */
 /* ------------------------------------------------------------------ */
-const ISSTrackerPage = () => {
+export default function ISSTrackerPage() {
   useEffect(() => {
     trackEvent('ISS Tracker Page Viewed', { page: 'ISS Tracker' });
   }, []);
 
-  return (
-    <main className="min-h-screen bg-brand-50 dark:bg-brand-900 pt-6">
-      <ISSTracker />
-    </main>
-  );
-};
-
-export default ISSTrackerPage;
+  return <ISSTracker />;
+}
