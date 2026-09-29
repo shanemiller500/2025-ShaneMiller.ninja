@@ -1,7 +1,7 @@
 import styles from "../day-out.module.css";
 import { CritterArt, type Critter } from "./RoadKill";
 
-export type ShazzPose = "ride" | "drink" | "flip" | "smoke" | "throw" | "moon" | "fallen" | "shotgun" | "off";
+export type ShazzPose = "ride" | "drink" | "flip" | "smoke" | "throw" | "moon" | "fallen" | "shotgun" | "off" | "phone";
 
 // Big Shazz on her chopper, side-on facing right. viewBox 260×180; the wheels touch
 // the ground at y=172 (rear x=60, front x=205) and the exhaust tip sits at (16,128).
@@ -58,6 +58,12 @@ function NearArm({ pose }: { pose: ShazzPose }) {
       <line x1={152} y1={50} x2={190} y2={45} stroke="#5d6066" strokeWidth={3} strokeLinecap="round" />
       <circle cx={153} cy={48} r={7} fill={SKIN} stroke={INK} strokeWidth={2.5} />
     </>;
+    case "phone": return <>
+      <Limb d="M110 52 L102 42 L106 30" color={SKIN} inked />
+      <rect x={101} y={20} width={8} height={14} rx={2} fill="#1d1d1d" stroke={INK} strokeWidth={1.5} />
+      <rect x={102.5} y={22} width={5} height={8} rx={1} fill="#7fd3ff" />
+      <circle cx={106} cy={31} r={6} fill={SKIN} stroke={INK} strokeWidth={2.5} />
+    </>;
     case "moon": return null;
     default: return <><Limb d="M110 52 L126 72 L140 66" color={SKIN} inked /><Stubby x1={143} y1={74} x2={143} y2={56} /><circle cx={141} cy={66} r={7} fill={SKIN} stroke={INK} strokeWidth={2.5} /></>;
   }
@@ -67,7 +73,7 @@ function NearArm({ pose }: { pose: ShazzPose }) {
 const TROPHY_SPOTS = ["translate(170 92) scale(0.52)", "translate(178 58) scale(0.42) rotate(-24)", "translate(14 98) scale(0.46) rotate(8)"];
 
 // The bike is a blacked-out Harley Night Train.
-export default function BikerShazz({ pose = "ride", drunk = 0, trophies = [] }: { pose?: ShazzPose; drunk?: number; trophies?: Critter[] }) {
+export default function BikerShazz({ pose = "ride", drunk = 0, trophies = [], teardrops = 1 }: { pose?: ShazzPose; drunk?: number; trophies?: Critter[]; teardrops?: number }) {
   return <svg viewBox="0 0 260 180" width="100%" height="100%" aria-hidden overflow="visible" className={pose === "fallen" ? styles.fallen : ""}>
     <g className={styles.bikeParts}>
       <path d="M112 128 C 90 136, 60 134, 18 128" stroke={INK} strokeWidth={10} fill="none" strokeLinecap="round" />
@@ -134,6 +140,7 @@ export default function BikerShazz({ pose = "ride", drunk = 0, trophies = [] }: 
         : <path className={styles.mouth} d="M120 38 q8 8 15 0 z" fill="#fff" stroke={INK} strokeWidth={2} strokeLinejoin="round" />}
       <circle cx={109} cy={34} r={2.2} fill="#ffd23f" stroke={INK} strokeWidth={1} />
       <path d="M129.5 33 q2 3 1 4.6 q-1.4 0.8 -2.2 -0.4 q-0.4 -1.6 1.2 -4.2 z" fill="#1f3b57" />
+      {teardrops > 1 && <path d="M131 39 q2 3 1 4.6 q-1.4 0.8 -2.2 -0.4 q-0.4 -1.6 1.2 -4.2 z" fill="#1f3b57" />}
     </g>}
   </svg>;
 }

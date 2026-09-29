@@ -1,6 +1,9 @@
 import type { Activity, Category, Point, Source } from "./types";
 
 export const GOLD_COAST: Point = { latitude: -28.0027, longitude: 153.431 };
+// Home base: distances, ranking and Directions all start from Ormeau.
+export const HOME_BASE: Point = { latitude: -27.7966, longitude: 153.26 };
+export const HOME_NAME = "Ormeau";
 export const record = (v: unknown): Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
 export const text = (v: unknown, max = 600): string => typeof v === "string" ? v.replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, " ").trim().slice(0, max) : "";
 export const finite = (v: unknown): number | undefined => typeof v === "number" && Number.isFinite(v) ? v : undefined;

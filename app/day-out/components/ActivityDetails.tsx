@@ -33,7 +33,7 @@ export default function ActivityDetails({ item, onClose, saved, onSave, data, su
           </div>
 
           {activity.startDate && <p><strong>When:</strong> {stamp(activity.startDate)}{activity.endDate ? ` – ${stamp(activity.endDate)}` : ""}</p>}
-          {item.distanceKm !== undefined && <p><strong>How far:</strong> about {Math.round(item.distanceKm)} km in a straight line from central Gold Coast. The road trip is longer; {activity.travel === "transit" ? "the tram & train button" : "Directions"} gives the real travel time.</p>}
+          {item.distanceKm !== undefined && <p><strong>How far:</strong> about {Math.round(item.distanceKm)} km in a straight line from Ormeau. The road trip is longer; {activity.travel === "transit" ? "the tram & train button" : "Directions"} gives the real travel time.</p>}
           {activity.kind === "ride" && activity.stops && <>
             <h3>Stop overview</h3>
             <ol className={styles.stops}>{activity.stops.map(stop => <li key={stop.name}>{stop.name}</li>)}</ol>

@@ -1,5 +1,5 @@
 import type { Activity, DayData, Notice, Point, Preferences, Recommendation } from "./types";
-import { brisbaneDay, GOLD_COAST } from "./normalize";
+import { brisbaneDay, HOME_BASE, HOME_NAME } from "./normalize";
 
 export function distanceKm(a: Point, b: Point): number {
   const rad = Math.PI / 180;
@@ -38,7 +38,7 @@ export function recommend(data: DayData, prefs: Preferences = { freeOnly: false,
       if (toMinutes(open) - minutes > 120) return [];
     }
     let score = 50;
-    const distance = activity.latitude !== undefined && activity.longitude !== undefined ? distanceKm(GOLD_COAST, { latitude: activity.latitude, longitude: activity.longitude }) : undefined;
+    const distance = activity.latitude !== undefined && activity.longitude !== undefined ? distanceKm(HOME_BASE, { latitude: activity.latitude, longitude: activity.longitude }) : undefined;
     if (distance !== undefined) score -= Math.min(30, distance / 4);
     if (prefs.interests.includes(activity.category)) score += 18;
     if (activity.isFree) score += 6;
@@ -72,6 +72,7 @@ export function surpriseCandidates(recommendations: Recommendation[]): Recommend
 export function directionsUrl(activity: Activity): string {
   const url = new URL("https://www.google.com/maps/dir/");
   url.searchParams.set("api", "1");
+  url.searchParams.set("origin", `${HOME_NAME} QLD`);
   url.searchParams.set("travelmode", activity.travel === "transit" ? "transit" : "driving");
   if (activity.stops?.length) {
     const stops = activity.stops;

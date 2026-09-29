@@ -18,7 +18,7 @@ export async function chooseIdea(candidates: Recommendation[], preference: strin
   const weather = weatherSummary(data);
   const options = candidates.slice(0, 5).map(item => ({
     id: item.activity.id, title: item.activity.title, category: item.activity.category, region: item.activity.region,
-    straightLineKmFromGoldCoast: item.distanceKm !== undefined ? Math.round(item.distanceKm) : null,
+    straightLineKmFromOrmeau: item.distanceKm !== undefined ? Math.round(item.distanceKm) : null,
     byTramOrTrain: item.activity.travel === "transit", indoors: item.activity.environment === "indoor",
     stops: item.activity.stops?.map(stop => stop.name), description: item.activity.description, rankingNote: item.reason,
   }));

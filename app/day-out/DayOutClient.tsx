@@ -140,7 +140,7 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
         {visible.map(item => <ActivityCard key={item.activity.id} item={item} saved={saved.includes(item.activity.id)} onOpen={() => { setSelected(item); setSurprise(false); }} onSave={() => toggleSave(item.activity)} />)}
       </div>
       {!visible.length && <p className={styles.empty}>{group === "Saved" ? "Nothing saved yet. Tap Save on anything you like." : "Nothing here right now."}</p>}
-      <p className={styles.small}>* Distances are straight-line estimates from central Gold Coast. Directions gives the real road distance and travel time.</p>
+      <p className={styles.small}>* Distances are straight-line estimates from Ormeau. Directions gives the real road distance and travel time.</p>
 
       {notices.length > 0 && <section className={styles.headsUp}>
         <h2>Heads up</h2>

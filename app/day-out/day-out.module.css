@@ -166,6 +166,22 @@
 .stopSignDown{transform:rotate(84deg) translateY(6px)}
 .copCar{position:absolute;left:0;display:block;will-change:transform}
 .copFlip{display:block;width:100%;height:100%}
+.fireball{position:absolute;width:300px;height:300px;translate:-50% 50%;border-radius:50%;background:radial-gradient(circle,#fff7c2 0%,#ffd23f 25%,#ff7a1a 50%,#c0300f 68%,#3a1a0a00 72%);animation:fireball 4.2s ease-out forwards;pointer-events:none}
+.fireCore{position:absolute;inset:25%;border-radius:50%;background:radial-gradient(circle,#fff,#fff0 70%);animation:fireCore .5s ease-in-out infinite alternate}
+.copsFlee{position:absolute;display:flex;gap:6px;animation:copsFlee 4.6s cubic-bezier(.4,0,.6,1) forwards;pointer-events:none}
+.copMan{display:block;width:34px;height:60px;animation:copRun .18s linear infinite alternate}
+.headSnap{transform-box:view-box;transform-origin:44px 58px;animation:headSnap .5s cubic-bezier(.3,1.6,.5,1) forwards}
+.handprint{animation:bubbleIn .2s ease-out}
+.newDrop{transform-box:fill-box;transform-origin:center;animation:sanga .5s cubic-bezier(.3,1.8,.5,1) both}
+.tattooGun{animation:gunBuzz .05s linear infinite alternate}
+.slapArm{transform-box:view-box;transform-origin:146px 66px;animation:slap .25s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes fireball{0%{scale:.1;opacity:1}30%{scale:1.15;opacity:1}70%{scale:1.3;opacity:.85}100%{scale:1.6;opacity:0}}
+@keyframes fireCore{to{opacity:.4}}
+@keyframes copsFlee{0%{transform:translate(0,0) rotate(0)}22%{transform:translate(-20px,-120px) rotate(-200deg)}38%{transform:translate(-40px,0) rotate(-360deg)}100%{transform:translate(-110vw,0) rotate(-360deg)}}
+@keyframes copRun{to{transform:translateY(-4px) rotate(-6deg)}}
+@keyframes headSnap{to{transform:rotate(-24deg)}}
+@keyframes gunBuzz{to{transform:translate(0.6px,-0.6px)}}
+@keyframes slap{from{transform:rotate(-40deg)}}
 .root .carClickable{pointer-events:auto;cursor:crosshair}
 .carClickable:hover .carBody{filter:drop-shadow(0 0 8px #ffd23f)}
 .carHeld{animation-play-state:paused!important}
@@ -187,6 +203,55 @@
 @keyframes flicker{to{transform:scaleY(1.35);opacity:.8}}
 @keyframes tongs{from{transform:rotate(-8deg)}to{transform:rotate(7deg)}}
 @keyframes sanga{from{transform:scale(0) translateY(10px)}}
+.bullet{position:absolute;width:0;height:0;animation:bullet .2s linear forwards}
+.bullet:after{content:"";position:absolute;left:-9px;top:-2px;width:18px;height:4px;border-radius:2px;background:linear-gradient(90deg,#ff8a0000,#ffd23f 60%,#fff);box-shadow:0 0 6px #ffd23f;rotate:var(--angle)}
+.root .shootZone{position:absolute;inset:0;pointer-events:auto;cursor:crosshair;touch-action:manipulation}
+.gameHud{position:absolute;left:50%;top:16px;translate:-50% 0;display:grid;justify-items:center;gap:4px;padding:10px 18px;border-radius:14px;border:3px solid #111;background:#fffdf5;color:#141517;box-shadow:4px 4px 0 #111;pointer-events:none;font-weight:900;text-transform:uppercase;letter-spacing:.5px}
+.gameHud small{font-size:11px;font-weight:700;color:#6b6f75}
+.hits{display:flex;gap:6px}
+.hits i{width:16px;height:16px;border-radius:50%;border:2px solid #111;background:#e3e0d6}
+.hits i.hitOn{background:#e53935;box-shadow:0 0 8px #e53935}
+.gamePrompt{position:absolute;inset:0;display:grid;place-items:center;padding:16px;background:#000a;pointer-events:auto;z-index:6;animation:bubbleIn .25s ease-out}
+.gamePrompt>div{max-width:420px;padding:22px;border-radius:20px;border:3px solid #111;background:#fffdf5;color:#141517;box-shadow:8px 8px 0 #111;display:grid;gap:10px;text-align:center}
+.gamePrompt h2{font-size:26px;font-weight:900}
+.gamePrompt p{font-size:16px;line-height:1.45}
+.gamePromptBadge{font-family:ui-monospace,monospace;font-weight:800;color:#c0392b;letter-spacing:1px}
+.root .gamePrompt button{min-height:52px;border-radius:14px;border:3px solid #111;background:var(--accent);color:#141517;font-weight:900;font-size:18px;box-shadow:4px 4px 0 #111}
+.convoy{position:absolute;left:0;bottom:0;width:1980px;height:140px;animation:convoy 10s linear forwards;pointer-events:none}
+.convoyBike{position:absolute;display:block;width:96px;height:67px;animation:carBounce .25s ease-in-out infinite alternate}
+.convoyBike .wheel{animation:spin .22s linear infinite}
+.rumble{animation:rumble .09s linear infinite alternate}
+@keyframes bullet{to{transform:translate(var(--dx),var(--dy))}}
+@keyframes convoy{from{transform:translateX(-2000px)}to{transform:translateX(100vw)}}
+@keyframes rumble{to{transform:translate(1px,-1px)}}
+.brawl{position:absolute;inset:0;pointer-events:none}
+.gangBike{position:absolute;display:block;width:88px;height:62px;animation-fill-mode:both}
+.gangInLeft{animation:gangInLeft 2s cubic-bezier(.2,.8,.3,1) both}
+.gangInRight{animation:gangInRight 2s cubic-bezier(.2,.8,.3,1) both}
+.gangInLeft .wheel,.gangInRight .wheel{animation:spin .22s linear infinite}
+.facingLeft{display:block;width:100%;height:100%;transform:scaleX(-1)}
+.cheer{animation:cheer .35s ease-in-out infinite alternate}
+.brawler{position:absolute;display:block;width:46px;height:74px;animation:brawlBob .32s ease-in-out infinite alternate}
+.punchArm{animation:punch .55s cubic-bezier(.3,1.6,.5,1) infinite}
+.weaponSwing{transform-box:fill-box;transform-origin:0 100%;animation:weaponSwing .55s ease-in-out infinite}
+.knockedRed{animation:knockedRed .7s ease-out}
+.knockedBlue{animation:knockedBlue .7s ease-out}
+.car.carTurn{animation-name:carTurn;animation-timing-function:ease-in-out}
+@keyframes brawlBob{to{transform:translateY(-3px)}}
+@keyframes punch{0%,55%,100%{transform:translateX(0)}25%{transform:translateX(9px)}}
+@keyframes weaponSwing{0%,100%{transform:rotate(-50deg)}40%{transform:rotate(35deg)}}
+@keyframes knockedRed{40%{transform:translate(-44px,-46px) rotate(-120deg)}80%{transform:translate(-20px,0) rotate(-340deg)}100%{transform:none}}
+@keyframes knockedBlue{40%{transform:translate(44px,-46px) rotate(120deg)}80%{transform:translate(20px,0) rotate(340deg)}100%{transform:none}}
+@keyframes carTurn{0%{transform:translateX(var(--from))}42%{transform:translateX(var(--stop))}52%{transform:translateX(var(--stop)) scaleX(-1)}100%{transform:translateX(var(--from)) scaleX(-1)}}
+.junk{display:inline-block;font-size:30px;animation:spin .4s linear infinite}
+.guillotine{position:absolute;left:50%;bottom:12px;width:130px;height:184px;translate:-50% 0;animation:signUp .5s cubic-bezier(.3,1.6,.5,1) backwards;transform-origin:50% 100%}
+.bladeDrop{animation:bladeDrop .22s cubic-bezier(.6,0,1,.6) forwards}
+.mulletFall{transform-box:fill-box;transform-origin:center;animation:mulletFall 1.4s cubic-bezier(.4,0,.8,.6) .18s forwards}
+@keyframes gangInLeft{from{transform:translateX(-70vw)}}
+@keyframes gangInRight{from{transform:translateX(70vw)}}
+@keyframes cheer{to{transform:translateY(-10px) rotate(-4deg)}}
+@keyframes bladeDrop{to{transform:translateY(64px)}}
+@keyframes mulletFall{to{transform:translate(26px,70px) rotate(160deg);opacity:0}}
 .shazzActions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
 .shazzActions button{min-height:38px;padding:0 10px;border-radius:999px;border:2px solid #111;background:#ffe9b3;color:#141517!important;font-weight:800;font-size:13px}
 .shazzActions button:hover{background:#ffd23f}
