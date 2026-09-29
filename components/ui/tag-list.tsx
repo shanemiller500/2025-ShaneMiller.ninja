@@ -18,13 +18,13 @@ export default function TagList({ tags, initialCount = 4 }: TagListProps) {
       {/* Mobile: truncated with expand toggle */}
       <div className="flex md:hidden flex-wrap gap-1.5 items-center">
         {visibleTags.map((t) => (
-          <Badge key={t} label={t} />
+          <Chip key={t} label={t} />
         ))}
 
         {!expanded && hidden > 0 && (
           <button
             onClick={() => setExpanded(true)}
-            className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-extrabold text-gray-700 ring-1 ring-black/10 dark:text-white/70 dark:ring-white/10"
+            className="rounded-md px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-indigo-500 ring-1 ring-indigo-500/30 transition hover:bg-indigo-500/10 dark:text-indigo-300"
           > 
             +{hidden} more
           </button>
@@ -33,7 +33,7 @@ export default function TagList({ tags, initialCount = 4 }: TagListProps) {
         {expanded && (
           <button
             onClick={() => setExpanded(false)}
-            className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] font-extrabold text-gray-700 ring-1 ring-black/10 dark:text-white/70 dark:ring-white/10"
+            className="rounded-md px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-indigo-500 ring-1 ring-indigo-500/30 transition hover:bg-indigo-500/10 dark:text-indigo-300"
           >
             show less
           </button>
@@ -43,9 +43,18 @@ export default function TagList({ tags, initialCount = 4 }: TagListProps) {
       {/* Desktop: show all */}
       <div className="hidden md:flex flex-wrap gap-1.5">
         {tags.map((t) => (
-          <Badge key={t} label={t} />
+          <Chip key={t} label={t} />
         ))}
       </div>
     </div>
+  )
+}
+
+// Mono tech chip, matching the dashboard captions.
+function Chip({ label }: { label: string }) {
+  return (
+    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-slate-600 ring-1 ring-slate-200/80 dark:bg-white/[0.04] dark:text-slate-300 dark:ring-white/10">
+      {label}
+    </span>
   )
 }

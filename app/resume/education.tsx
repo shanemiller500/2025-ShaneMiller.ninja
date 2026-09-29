@@ -31,7 +31,7 @@ const entries: TimelineEntry[] = [
 export default function Education() {
   return (
     <div className="space-y-8">
-      <SectionHeader title="Education" />
+      <SectionHeader title="Education" eyebrow={`${entries.length} programs`} />
       <Timeline entries={entries} />
     </div>
   )

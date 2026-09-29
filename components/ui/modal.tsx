@@ -12,7 +12,7 @@ interface ModalProps {
   labelledBy?: string;
   /** Color of the hairline across the top edge */
   accent?: string;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "wide" | "lg" | "xl";
   /** Hide the built-in close button (render your own) */
   hideClose?: boolean;
   className?: string;
@@ -22,6 +22,7 @@ interface ModalProps {
 const SIZES = {
   sm: "sm:max-w-sm",
   md: "sm:max-w-md",
+  wide: "sm:max-w-lg",
   lg: "sm:max-w-3xl",
   xl: "sm:max-w-5xl",
 };

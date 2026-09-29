@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Search, X } from "lucide-react";
 
 import { trackEvent } from "@/utils/mixpanel";
 import ProjectCard, { type ProjectItem } from "./project-card";
@@ -210,28 +211,42 @@ export default function ProjectsPage() {
   };
 
   const liveCount = items02.filter((i) => !/^https?:\/\//i.test(i.slug)).length;
+  const [filter, setFilter] = useState("");
+  const shown = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return q ? items02.filter((i) => `${i.title} ${i.excerpt} ${i.badge ?? ""} ${i.slug}`.toLowerCase().includes(q)) : items02;
+  }, [filter, items02]);
 
   return (
     <div className="relative isolate w-full pb-20 pt-10 sm:pt-14">
-      {/* Dot-grid backdrop, faded out toward the bottom */}
+      {/* Backdrop: fine grid squares + aurora, same as the dashboards */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] text-slate-300 dark:text-white/10 [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[520px] text-slate-300/70 dark:text-white/[0.07] [mask-image:radial-gradient(ellipse_at_top,black_25%,transparent_72%)]"
         style={{
-          backgroundImage: "radial-gradient(currentColor 1px, transparent 1px)",
-          backgroundSize: "22px 22px",
+          backgroundImage: "linear-gradient(currentColor 1px, transparent 1px), linear-gradient(90deg, currentColor 1px, transparent 1px)",
+          backgroundSize: "36px 36px",
         }}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-10 left-1/3 -z-10 h-64 w-[36rem] -translate-x-1/2 rounded-full bg-gradient-to-r from-indigo-300/30 via-sky-200/30 to-violet-300/30 blur-3xl dark:from-indigo-500/10 dark:via-cyan-400/10 dark:to-violet-500/10"
+        className="pointer-events-none absolute -top-16 left-1/2 -z-10 h-72 w-[46rem] max-w-full -translate-x-1/2 rounded-full bg-gradient-to-r from-emerald-300/25 via-indigo-300/25 to-rose-300/25 blur-3xl dark:from-emerald-500/10 dark:via-indigo-500/15 dark:to-rose-500/10"
       />
 
       {/* Header */}
       <header className="mb-12 max-w-2xl">
-        <p className="font-mono text-xs text-indigo-500 dark:text-indigo-300">
-          ~/projects<span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse bg-current" />
-        </p>
+        <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
+          <span className="text-indigo-500 dark:text-indigo-300">
+            ~/projects<span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse bg-current" />
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/60 bg-emerald-50/80 px-2 py-0.5 text-[10px] uppercase tracking-wider text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            </span>
+            {liveCount} live
+          </span>
+        </div>
         <h1 className="mt-4 font-aspekta text-4xl font-[650] tracking-tight text-slate-900 dark:text-white md:text-5xl">
           Things I&rsquo;ve built
         </h1>
@@ -272,9 +287,19 @@ export default function ProjectsPage() {
 
         {/* Portfolio */}
         <section>
-          <SectionLabel index="02" title="Lab" note="Experiments & live-data playgrounds" />
+          <SectionLabel index="02" title="Lab" note="Experiments & live-data playgrounds">
+            <label className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white/80 px-3 py-1.5 backdrop-blur transition focus-within:border-indigo-400 focus-within:shadow-[0_0_0_4px_rgba(99,102,241,0.12)] dark:border-white/10 dark:bg-white/[0.04] sm:w-56">
+              <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+              <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter…" aria-label="Filter projects"
+                className="w-full bg-transparent font-mono text-[12px] text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200" />
+              {filter && <button type="button" onClick={() => setFilter("")} aria-label="Clear filter" className="text-slate-400 hover:text-slate-700 dark:hover:text-white"><X className="h-3.5 w-3.5" /></button>}
+            </label>
+          </SectionLabel>
+          {shown.length === 0 && (
+            <p className="rounded-2xl border border-dashed border-slate-200 py-10 text-center font-mono text-xs text-slate-400 dark:border-white/10">Nothing matches “{filter}”.</p>
+          )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {items02.map((item, i) => (
+            {shown.map((item, i) => (
               <ProjectCard
                 key={item.slug}
                 item={item}
@@ -289,13 +314,14 @@ export default function ProjectsPage() {
   );
 }
 
-function SectionLabel({ index, title, note }: { index: string; title: string; note?: string }) {
+function SectionLabel({ index, title, note, children }: { index: string; title: string; note?: string; children?: React.ReactNode }) {
   return (
-    <div className="mb-5 flex items-center gap-3">
+    <div className="mb-5 flex flex-wrap items-center gap-3">
       <span className="font-mono text-[11px] text-indigo-500 dark:text-indigo-300">{index}</span>
       <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h2>
       {note && <span className="hidden text-xs text-slate-400 sm:inline dark:text-slate-500">{note}</span>}
-      <span className="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent dark:from-white/10" />
+      <span className="hidden h-px min-w-8 flex-1 bg-gradient-to-r from-slate-200 to-transparent dark:from-white/10 sm:block" />
+      {children}
     </div>
   );
 }

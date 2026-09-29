@@ -129,6 +129,10 @@ export default function ProjectCard({ item, index, featured = false, onClick }: 
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
+          {/* Where it lives: ~/path for pages on this site, the domain for external ones */}
+          <p className="mb-0.5 truncate font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {isExternal ? new URL(item.slug).hostname.replace(/^www\./, "") : `~${item.slug.toLowerCase()}`}
+          </p>
           <h3
             className={`font-aspekta font-[650] tracking-tight text-slate-900 dark:text-white ${
               featured ? "pr-10 text-2xl" : "text-[15px]"

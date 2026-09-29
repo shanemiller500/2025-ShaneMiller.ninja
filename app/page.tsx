@@ -235,7 +235,8 @@ function BioSection() {
 
   return (
     <section>
-      <p className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-indigo-500 dark:text-indigo-300">
+      <p className="mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-indigo-500 dark:text-indigo-300">
+        <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
         About
       </p>
       <h2 className="font-aspekta text-2xl font-[650] text-slate-900 dark:text-white">

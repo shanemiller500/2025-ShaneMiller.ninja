@@ -3,194 +3,102 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
+import { motion } from "framer-motion";
+import { FileText, House, LayoutGrid, Send, type LucideIcon } from "lucide-react";
 import HeroImage from "@/public/images/wedding.jpg";
 import { trackEvent } from "@/utils/mixpanel";
 
+type Section = "home" | "projects" | "resume" | "contact";
+
+const ITEMS: { key: Section; label: string; hint: string; href: string; icon: LucideIcon }[] = [
+  { key: "home", label: "Home", hint: "~/", href: "/", icon: House },
+  { key: "projects", label: "Projects", hint: "~/projects", href: "/projects", icon: LayoutGrid },
+  { key: "resume", label: "Resume", hint: "~/resume", href: "/resume", icon: FileText },
+  { key: "contact", label: "Contact", hint: "~/contact", href: "/contact", icon: Send },
+];
+
+// Home, resume, contact and about have their own routes; every other page is a project,
+// so new projects light up "Projects" without being listed here.
+function sectionFor(pathname: string): Section | null {
+  if (pathname === "/") return "home";
+  if (pathname.startsWith("/resume")) return "resume";
+  if (pathname.startsWith("/contact")) return "contact";
+  if (pathname.startsWith("/about")) return null;
+  return "projects";
+}
+
 export default function SideNavigation() {
   const pathname = usePathname();
-
-  const handleNavClick = (label: string, route: string) => {
-    trackEvent("Navigation Clicked", { label, route });
-  };
-
-  // shared link class (keeps your exact active logic)
-  const linkBase =
-    "w-full h-10 flex items-center justify-center md:justify-center relative after:absolute after:w-0.5 after:right-0 after:top-0 after:bottom-0 dark:bg-brand-900 bg-slate-50";
-
-  // on mobile, add left padding + spacing so icon + text fits
-  const linkMobileLayout =
-    "justify-start gap-3 px-4 md:px-0 md:gap-0 md:justify-center";
-
-  // mobile-only label (one word)
-  const labelClass =
-    "text-[12px] font-semibold leading-none md:hidden dark:bg-brand-900 bg-slate-50";
+  const active = sectionFor(pathname || "/");
 
   return (
-    <div className="sticky top-0 w-56 sm:w-48 md:w-24 shrink-0 h-screen overflow-y-auto no-scrollbar border-r border-slate-200/70 dark:border-white/[0.06] dark:bg-brand-900 bg-slate-50">
-      <div className="h-full flex flex-col justify-between after:flex-1 after:mt-auto">
-        {/* Desktop-only avatar: top-left */}
-        <div className="hidden md:block px-3 pt-3">
-          <Link href="/" onClick={() => handleNavClick("Home Avatar", "/")}>
-            <Image
-              className="rounded-full"
-              src={HeroImage}
-              width={40}
-              height={40}
-              priority
-              alt="Me"
-            />
+    <div className="sticky top-0 h-screen w-56 shrink-0 overflow-y-auto border-r border-slate-200/70 bg-slate-50/80 backdrop-blur-xl no-scrollbar dark:border-white/[0.06] dark:bg-brand-900/80 sm:w-48 md:w-24 md:overflow-visible">
+      <div className="flex h-full flex-col">
+        {/* Avatar with an "online" dot */}
+        <div className="hidden justify-center pt-5 md:flex">
+          <Link href="/" onClick={() => trackEvent("Navigation Clicked", { label: "Home Avatar", route: "/" })} aria-label="Home" className="group relative">
+            <span aria-hidden className="absolute -inset-1 rounded-full bg-gradient-to-br from-indigo-500 via-violet-500 to-rose-400 opacity-60 blur-[6px] transition group-hover:opacity-90" />
+            <Image className="relative rounded-full ring-2 ring-white dark:ring-brand-900" src={HeroImage} width={44} height={44} priority alt="Shane Miller" />
+            <span className="absolute bottom-0 right-0 flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-brand-900" />
+            </span>
           </Link>
         </div>
 
-        <div className="flex-1">
+        <nav className="flex flex-1 items-center" aria-label="Main">
+          <ul className="w-full space-y-1.5 px-3 md:space-y-3">
+            {ITEMS.map(({ key, label, hint, href, icon: Icon }) => {
+              const isActive = active === key;
+              return (
+                <li key={key} className="relative">
+                  <Link
+                    href={href}
+                    onClick={() => trackEvent("Navigation Clicked", { label, route: href })}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`group relative flex h-12 items-center gap-3 rounded-2xl px-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/60 md:justify-center md:px-0 ${
+                      isActive ? "text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                    }`}
+                  >
+                    {/* Sliding highlight behind the active item */}
+                    {isActive && (
+                      <motion.span layoutId="sideNavActive" className="absolute inset-0 rounded-2xl bg-slate-900/[0.04] ring-1 ring-slate-900/10 dark:bg-white/[0.06] dark:ring-white/10"
+                        transition={{ type: "spring", stiffness: 420, damping: 34 }} />
+                    )}
+                    <span
+                      className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${
+                        isActive
+                          ? "bg-indigo-500 text-white shadow-[0_0_18px_-2px_rgba(99,102,241,0.6)]"
+                          : "bg-white text-slate-400 ring-1 ring-slate-200/80 group-hover:text-indigo-500 group-hover:ring-indigo-300 dark:bg-white/[0.04] dark:text-slate-500 dark:ring-white/10 dark:group-hover:text-indigo-300"
+                      }`}
+                    >
+                      <Icon className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                    </span>
+
+                    {/* Label: inline in the mobile drawer, a tooltip on the desktop rail */}
+                    <span className="relative min-w-0 leading-tight md:hidden">
+                      <span className="block text-sm font-semibold">{label}</span>
+                      <span className="block font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">{hint}</span>
+                    </span>
+                    <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] text-white opacity-0 shadow-lg transition group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 dark:bg-white dark:text-slate-900 md:block">
+                      {label}
+                    </span>
+
+                    {/* Edge indicator on the rail */}
+                    {isActive && (
+                      <motion.span layoutId="sideNavEdge" aria-hidden className="absolute -right-3 top-2 bottom-2 hidden w-0.5 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] md:block"
+                        transition={{ type: "spring", stiffness: 420, damping: 34 }} />
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <div className="hidden pb-5 text-center font-mono text-[9px] uppercase tracking-widest text-slate-300 dark:text-slate-600 md:block">
+          SM · 26
         </div>
-
-        <div className="flex-1 grow flex items-center">
-          <nav className="w-full">
-            <ul className="space-y-2 md:space-y-4">
-              {/* HOME */}
-              <li className="py-1 md:py-2">
-                <Link
-                  href="/"
-                  onClick={() => handleNavClick("Home", "/")}
-                  className={`${linkBase} ${linkMobileLayout} ${
-                    pathname !== "/about" &&
-                    pathname !== "/contact" &&
-                    pathname !== "/projects" &&
-                    pathname !== "/resume" &&
-                    pathname !== "/Bored" &&
-                    pathname !== "/Marvel" &&
-                    pathname !== "/stocks" &&
-                    pathname !== "/Country" &&
-                    pathname !== "/Crypto" &&
-                    pathname !== "/ISS" &&
-                    pathname !== "/Art" &&
-                    pathname !== "/Vibroacoustics" &&
-                    pathname !== "/Spacex" &&
-                    pathname !== "/news" &&
-                    pathname !== "/search" &&
-                    pathname !== "/results" &&
-                    pathname !== "/Weather" &&
-                    pathname !== "/NASA" &&
-                    pathname !== "/PrettyPrint" &&
-                    pathname !== "/Charles"
-                      ? "text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500"
-                      : "text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400"
-                  }`}
-                >
-                  <span className="sr-only">Home</span>
-                  <svg
-                    className="fill-current shrink-0"
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="21"
-                    height="19"
-                  >
-                    <path fillOpacity=".16" d="M4 7v11h13V7l-6.5-5z" />
-                    <path d="m10.433 3.242-8.837 6.56L.404 8.198l10.02-7.44L20.59 8.194l-1.18 1.614-8.977-6.565ZM16 17V9h2v10H3V9h2v8h11Z" />
-                  </svg>
-
-                  <span className={labelClass}>Home</span>
-                </Link>
-              </li>
-
-              {/* PROJECTS */}
-              <li className="py-1 md:py-2">
-                <Link
-                  href="/projects"
-                  onClick={() => handleNavClick("Projects", "/projects")}
-                  className={`${linkBase} ${linkMobileLayout} ${
-                    pathname === "/projects" ||
-                    pathname === "/Marvel" ||
-                    pathname === "/stocks" ||
-                    pathname === "/Country" ||
-                    pathname === "/Crypto" ||
-                    pathname === "/Bored" ||
-                    pathname === "/ISS" ||
-                    pathname === "/Art" ||
-                    pathname === "/Vibroacoustics" ||
-                    pathname === "/Spacex" ||
-                    pathname === "/news" ||
-                    pathname === "/search" ||
-                    pathname === "/results" ||
-                    pathname === "/Weather" ||
-                    pathname === "/NASA" ||
-                    pathname === "/PrettyPrint" ||
-                    pathname === "/Charles"
-                      ? "text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500"
-                      : "text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400"
-                  }`}
-                >
-                  <span className="sr-only">Projects</span>
-                  <svg
-                    className="fill-current shrink-0"
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                  >
-                    <path fillOpacity=".16" d="M1 4h18v10H1z" />
-                    <path d="M8 3h4V2H8v1ZM6 3V0h8v3h6v12H0V3h6ZM2 5v8h16V5H2Zm14 13v-2h2v4H2v-4h2v2h12Z" />
-                  </svg>
-
-                  <span className={labelClass}>Projects</span>
-                </Link>
-              </li>
-
-              {/* RESUME */}
-              <li className="py-1 md:py-2">
-                <Link
-                  href="/resume"
-                  onClick={() => handleNavClick("Resume", "/resume")}
-                  className={`${linkBase} ${linkMobileLayout} ${
-                    pathname === "/resume"
-                      ? "text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500"
-                      : "text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400"
-                  }`}
-                >
-                  <span className="sr-only">Resume</span>
-                  <svg
-                    className="fill-current shrink-0"
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="18"
-                    height="20"
-                  >
-                    <path fillOpacity=".16" fillRule="nonzero" d="M1 5h16v14H1z" />
-                    <path fillRule="nonzero" d="M2 6v12h14V6H2Zm16-2v16H0V4h18ZM2 2V0h14v2H2Z" />
-                  </svg>
-
-                  <span className={labelClass}>Resume</span>
-                </Link>
-              </li>
-
-              {/* CONTACT */}
-              <li className="py-1 md:py-2">
-                <Link
-                  href="/contact"
-                  onClick={() => handleNavClick("Contact", "/contact")}
-                  className={`${linkBase} ${linkMobileLayout} ${
-                    pathname === "/contact"
-                      ? "text-indigo-500 after:bg-gradient-to-r from-indigo-500 to-purple-500"
-                      : "text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400"
-                  }`}
-                >
-                  <span className="sr-only">Contact</span>
-                  <svg
-                    className="fill-current shrink-0"
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="21"
-                    height="21"
-                  >
-                    <path fillOpacity=".16" d="m13.4 18-3-7.4-7.4-3L19 2z" />
-                    <path d="M13.331 15.169 17.37 3.63 5.831 7.669l5.337 2.163 2.163 5.337Zm-3.699-3.801L.17 7.53 20.63.37l-7.161 20.461-3.837-9.463Z" />
-                  </svg>
-
-                  <span className={labelClass}>Contact</span>
-                </Link>
-              </li>
-            </ul>
-          </nav>
-        </div>
-
-        <div className="h-6" />
       </div>
     </div>
   );

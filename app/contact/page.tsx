@@ -345,8 +345,11 @@ export default function ContactPage() {
   return (
     <section className="relative isolate w-full min-w-0 flex-1 overflow-hidden py-8 text-slate-900 sm:py-12 dark:text-slate-100">
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
-        <div className="absolute left-1/2 top-0 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-indigo-300/15 blur-3xl dark:bg-indigo-500/[0.07]" />
-        <div className="absolute inset-0 opacity-[0.28] [background-image:linear-gradient(to_right,rgba(99,102,241,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(99,102,241,0.08)_1px,transparent_1px)] [background-size:32px_32px] [mask-image:linear-gradient(to_bottom,black,transparent_75%)] dark:opacity-[0.12]" />
+        <div
+          className="absolute inset-x-0 top-0 h-[520px] text-slate-300/70 dark:text-white/[0.07] [mask-image:radial-gradient(ellipse_at_top,black_25%,transparent_72%)]"
+          style={{ backgroundImage: "linear-gradient(currentColor 1px, transparent 1px), linear-gradient(90deg, currentColor 1px, transparent 1px)", backgroundSize: "36px 36px" }}
+        />
+        <div className="absolute -top-16 left-1/2 h-72 w-[46rem] max-w-full -translate-x-1/2 rounded-full bg-gradient-to-r from-emerald-300/25 via-indigo-300/25 to-rose-300/25 blur-3xl dark:from-emerald-500/10 dark:via-indigo-500/15 dark:to-rose-500/10" />
       </div>
 
       <div className="mx-auto w-full min-w-0 max-w-[720px] px-1 sm:px-4">
@@ -359,7 +362,7 @@ export default function ContactPage() {
               <div className="grid grid-cols-1 gap-4">
                   <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <label htmlFor="name" className="block">
-                      <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                      <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Name <span className="normal-case tracking-normal text-slate-400">· optional</span>
                       </span>
                       <input
@@ -375,7 +378,7 @@ export default function ContactPage() {
                     </label>
 
                     <label htmlFor="email" className="block">
-                      <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                      <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Email <span className="text-indigo-600 dark:text-indigo-400">*</span>
                       </span>
                       <input
@@ -394,7 +397,7 @@ export default function ContactPage() {
                   </div>
 
                   <label htmlFor="subject" className="block">
-                    <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                    <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Subject <span className="normal-case tracking-normal text-slate-400">· optional</span>
                     </span>
                     <input
@@ -409,7 +412,7 @@ export default function ContactPage() {
                   </label>
 
                   <div className="rounded-2xl border border-indigo-200/60 bg-indigo-50/35 p-2.5 dark:border-indigo-400/10 dark:bg-indigo-400/[0.025]">
-                    <div className="mb-2 flex items-center gap-1.5 px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-indigo-600 dark:text-indigo-300">
+                    <div className="mb-2 flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
                       <Sparkles className="h-3 w-3" />
                       AI tools
                     </div>
@@ -513,13 +516,23 @@ export default function ContactPage() {
 function ContactIntro() {
   return (
     <div className="mx-auto min-w-0 max-w-xl text-center">
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200/70 bg-white/50 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/[0.025] dark:text-slate-300">
-        <Image src={UMail} alt="U-Mail" width={15} height={15} />
-        <span>U-Mail</span>
+      <div className="flex flex-wrap items-center justify-center gap-3 font-mono text-xs">
+        <span className="text-indigo-500 dark:text-indigo-300">~/contact</span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/60 bg-emerald-50/80 px-2 py-0.5 text-[10px] uppercase tracking-wider text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          </span>
+          Inbox open
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <Image src={UMail} alt="" width={13} height={13} />
+          Sent via U-Mail
+        </span>
       </div>
 
-      <h1 className="mt-5 font-aspekta text-4xl font-medium leading-none tracking-tight text-slate-950 sm:text-5xl dark:text-white">
-        Say hello<span className="text-indigo-600 dark:text-indigo-400">.</span>
+      <h1 className="mt-5 font-aspekta text-4xl font-[650] leading-none tracking-tight text-slate-950 sm:text-5xl dark:text-white">
+        Say <span className="bg-gradient-to-r from-indigo-500 via-violet-500 to-rose-400 bg-clip-text text-transparent">hello.</span>
       </h1>
       <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Send a message. I’ll take it from there.</p>
     </div>
@@ -615,10 +628,10 @@ function MessageTextArea({ value, onChange, textAreaRef, onSelect }: MessageText
   return (
     <label htmlFor="description" className="relative block">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Message <span className="text-indigo-600 dark:text-indigo-400">*</span>
         </span>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium tabular-nums text-slate-400 dark:bg-white/[0.05] dark:text-slate-500">
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] tabular-nums text-slate-400 dark:bg-white/[0.05] dark:text-slate-500">
           {value.length}/2000
         </span>
       </div>
@@ -736,7 +749,7 @@ function SubmitButton({ isSubmitting }: { isSubmitting: boolean }) {
         fullWidth
         disabled={isSubmitting}
         aria-busy={isSubmitting}
-        className="group inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 text-white shadow-none hover:bg-indigo-600 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-950 dark:hover:bg-indigo-400"
+        className="group inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-500 text-white shadow-[0_0_20px_-4px_rgba(99,102,241,0.7)] hover:bg-indigo-600 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:text-white dark:hover:bg-indigo-400"
       >
         {isSubmitting ? (
           <>
@@ -751,7 +764,7 @@ function SubmitButton({ isSubmitting }: { isSubmitting: boolean }) {
         )}
       </Button>
 
-      <p className="mt-2.5 flex items-center justify-center gap-1.5 text-center text-[10px] text-slate-400 dark:text-slate-500">
+      <p className="mt-2.5 flex items-center justify-center gap-1.5 text-center font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
         <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
         Private · Never used for AI training
       </p>
@@ -770,9 +783,9 @@ function NotificationPopup({ isVisible, isSuccess, message, onClose }: Notificat
   if (!isVisible) return null;
 
   return (
-    <div className="fixed right-4 top-4 z-[60] w-[calc(100vw-2rem)] max-w-sm" role="alert" aria-live="assertive">
+    <div className="fixed right-4 top-4 z-[80] w-[calc(100vw-2rem)] max-w-sm" role="alert" aria-live="assertive">
       <div
-        className={`flex items-center gap-3 rounded-2xl border bg-white/95 p-3 shadow-[0_18px_50px_-20px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:bg-[#28282e]/95 ${
+        className={`flex items-center gap-3 rounded-2xl border bg-white/95 p-3 shadow-[0_18px_50px_-20px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:bg-[#1a1a1d]/95 ${
           isSuccess ? "border-emerald-200 dark:border-emerald-400/20" : "border-red-200 dark:border-red-400/20"
         }`}
       >
@@ -805,12 +818,12 @@ function LoadingOverlay({ isVisible }: { isVisible: boolean }) {
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm" role="status" aria-live="polite">
+    <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm" role="status" aria-live="polite">
       <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-slate-950/80 px-5 py-4 text-white shadow-2xl backdrop-blur-xl">
         <span className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-500/15 text-indigo-300">
           <LoaderCircle className="h-4 w-4 animate-spin" />
         </span>
-        <span className="text-xs font-medium">Working…</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider">AI is working…</span>
       </div>
     </div>
   );

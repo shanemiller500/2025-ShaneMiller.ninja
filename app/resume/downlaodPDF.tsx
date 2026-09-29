@@ -1,33 +1,22 @@
+import { Download } from "lucide-react";
 import { trackEvent } from "@/utils/mixpanel";
+
+export const RESUME_PDF = "/PDF/ShaneMiller-2026.pdf?v=2026-09-19-aec-hybrid";
 
 /* ------------------------------------------------------------------ */
 /*  DownloadPDF Component                                              */
 /* ------------------------------------------------------------------ */
-export default function DownloadPDF() {
-  const handleDownloadClick = (): void => {
-    trackEvent("Resume Download", { downloadUrl: "2026-Resume-AEC" });
-  };
-
+export default function DownloadPDF({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center py-8">
-      <a
-        href="/PDF/ShaneMiller-2026.pdf?v=2026-09-19-aec-hybrid"
-        download
-        onClick={handleDownloadClick}
-        className="inline-flex items-center px-6 py-3 bg-indigo-500/50 dark:bg-indigo-900/40 text-gray-900 dark:text-white font-semibold rounded-lg shadow-md transform transition duration-300 ease-in-out hover:scale-105 hover:shadow-xl focus:outline-none"
-      >
-        {/* Download Icon */}
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="h-5 w-5 mr-2"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
-        </svg>
-        Download My Resume
-      </a>
-    </div>
+    <a
+      href={RESUME_PDF}
+      download
+      onClick={() => trackEvent("Resume Download", { downloadUrl: "2026-Resume-AEC", placement: compact ? "header" : "footer" })}
+      className={`group inline-flex items-center gap-2 rounded-xl bg-indigo-500 font-semibold text-white shadow-[0_0_18px_-4px_rgba(99,102,241,0.6)] transition hover:bg-indigo-600 hover:shadow-[0_0_28px_-4px_rgba(99,102,241,0.8)] ${compact ? "px-4 py-2 text-sm" : "px-6 py-3"}`}
+    >
+      <Download className="h-4 w-4 transition-transform group-hover:translate-y-0.5" aria-hidden />
+      Download my resume
+      <span className="font-mono text-[10px] uppercase tracking-wider text-white/70">PDF</span>
+    </a>
   );
 }
