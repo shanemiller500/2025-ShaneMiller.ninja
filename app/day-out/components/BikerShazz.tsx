@@ -73,7 +73,8 @@ function NearArm({ pose }: { pose: ShazzPose }) {
 const TROPHY_SPOTS = ["translate(170 92) scale(0.52)", "translate(178 58) scale(0.42) rotate(-24)", "translate(14 98) scale(0.46) rotate(8)"];
 
 // The bike is a blacked-out Harley Night Train.
-export default function BikerShazz({ pose = "ride", drunk = 0, trophies = [], teardrops = 1 }: { pose?: ShazzPose; drunk?: number; trophies?: Critter[]; teardrops?: number }) {
+// `flaming`: her head goes up like a Ghost Rider skull (used while she has a car lassoed).
+export default function BikerShazz({ pose = "ride", drunk = 0, trophies = [], teardrops = 1, flaming = false }: { pose?: ShazzPose; drunk?: number; trophies?: Critter[]; teardrops?: number; flaming?: boolean }) {
   return <svg viewBox="0 0 260 180" width="100%" height="100%" aria-hidden overflow="visible" className={pose === "fallen" ? styles.fallen : ""}>
     <g className={styles.bikeParts}>
       <path d="M112 128 C 90 136, 60 134, 18 128" stroke={INK} strokeWidth={10} fill="none" strokeLinecap="round" />
@@ -141,6 +142,22 @@ export default function BikerShazz({ pose = "ride", drunk = 0, trophies = [], te
       <circle cx={109} cy={34} r={2.2} fill="#ffd23f" stroke={INK} strokeWidth={1} />
       <path d="M129.5 33 q2 3 1 4.6 q-1.4 0.8 -2.2 -0.4 q-0.4 -1.6 1.2 -4.2 z" fill="#1f3b57" />
       {teardrops > 1 && <path d="M131 39 q2 3 1 4.6 q-1.4 0.8 -2.2 -0.4 q-0.4 -1.6 1.2 -4.2 z" fill="#1f3b57" />}
+      {flaming && <g className={styles.flameHead}>
+        {/* Fire roaring up off the skull, flickering */}
+        <g className={styles.flames}>
+          <path d="M94 34 C 86 14, 98 -2, 94 -22 C 106 -8, 108 -26, 116 -44 C 120 -22, 132 -18, 136 -34 C 140 -14, 150 -6, 142 16 C 150 20, 146 34, 140 38 Z" fill="#ff5a1f" stroke={INK} strokeWidth={2.5} strokeLinejoin="round" />
+          <path d="M100 30 C 96 16, 106 6, 104 -8 C 112 2, 114 -12, 118 -24 C 122 -8, 130 -6, 132 -16 C 136 -2, 140 8, 134 30 Z" fill="#ffb020" />
+          <path d="M106 28 C 106 18, 112 12, 112 4 C 118 12, 122 6, 124 0 C 128 10, 130 18, 128 28 Z" fill="#fff3a0" />
+        </g>
+        {/* Bone-white skull where her face was */}
+        <path d="M100 28 C 100 12, 134 12, 134 28 C 134 36, 130 40, 128 44 L 108 44 C 104 40, 100 36, 100 28 Z" fill="#f5f0e6" stroke={INK} strokeWidth={3} strokeLinejoin="round" />
+        <ellipse cx={111} cy={28} rx={5} ry={5.5} fill={INK} />
+        <ellipse cx={125} cy={28} rx={5} ry={5.5} fill={INK} />
+        <circle cx={111} cy={28} r={1.8} fill="#ff5a1f" className={styles.skullEye} />
+        <circle cx={125} cy={28} r={1.8} fill="#ff5a1f" className={styles.skullEye} />
+        <path d="M118 33 l-2 4 h4 z" fill={INK} />
+        <path d="M109 40 h18 M112 38 v5 M116 38 v5 M120 38 v5 M124 38 v5" stroke={INK} strokeWidth={1.6} />
+      </g>}
     </g>}
   </svg>;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Bookmark, CloudRain, Flag, Mountain, Music, RefreshCw, Shield, Shuffle, Sofa, Star, Sun, TramFront, Tent, type LucideIcon } from "lucide-react";
 import type { Activity, Category, DayData, Recommendation } from "./lib/types";
@@ -77,6 +77,11 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
   const [selected, setSelected] = useState<Recommendation | null>(null);
   const [surprise, setSurprise] = useState(false);
   const [summon, setSummon] = useState(0);
+  const [dismiss, setDismiss] = useState(0);
+  // Whether Shazz is on screen, and whether she has been told to go home but is still finishing up.
+  const [shazzOut, setShazzOut] = useState(false);
+  const [sendingHome, setSendingHome] = useState(false);
+  const onShazzPresence = useCallback((out: boolean) => { setShazzOut(out); if (!out) setSendingHome(false); }, []);
   const [message, setMessage] = useState("");
   const [now, setNow] = useState<Date | null>(null);
   const [whatsOn, setWhatsOn] = useState<Activity[]>([]);
@@ -176,7 +181,10 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
       <span className={styles.weather}>
         {weather ? <>{weather.rainNextHours >= 60 ? <CloudRain size={20} aria-hidden /> : <Sun size={20} aria-hidden />}{Math.round(weather.temperature)}° Gold Coast · {weather.rainNextHours}% rain</> : loading ? "Checking weather…" : "Weather unavailable"}
       </span>
-      <button className={styles.callShazz} onClick={() => setSummon(value => value + 1)}><span aria-hidden><BikerShazz /></span>Call Shazz</button>
+      <button className={styles.callShazz} aria-pressed={shazzOut} disabled={sendingHome}
+        onClick={() => { if (shazzOut) { setSendingHome(true); setDismiss(value => value + 1); } else setSummon(value => value + 1); }}>
+        <span aria-hidden><BikerShazz /></span>{sendingHome ? "Leaving…" : shazzOut ? "Send Shazz home" : "Call Shazz"}
+      </button>
       <button className={styles.iconButton} onClick={() => setRefresh(value => value + 1)} disabled={loading} aria-label="Refresh"><RefreshCw size={20} aria-hidden /></button>
     </header>
 
@@ -224,7 +232,7 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
       <footer className={styles.footer}><Link href="/projects">Back to the portfolio</Link></footer>
     </main>
 
-    <SmartArse topic={selected?.activity.title || group} summon={summon} />
+    <SmartArse topic={selected?.activity.title || group} summon={summon} dismiss={dismiss} onPresence={onShazzPresence} />
     <ActivityDetails item={selected} onClose={() => setSelected(null)} saved={!!selected && saved.includes(selected.activity.id)} onSave={() => selected && toggleSave(selected.activity)} data={stale ? null : data} surprise={surprise} onAnother={chooseSurprise} />
   </div>;
 }

@@ -8,12 +8,17 @@ const TANKS = ["#1d1d1d", "#7a1f1f", "#1f3b8f", "#555", "#b35900"];
 const BEARDS = ["#6d4c2f", "#999", "#3a2a1f", "#d9c7a8"];
 
 // `gang` forces club colours (red or blue bandana and tank) for the brawl.
-// `riderless` leaves the bike parked on its own (the rider's off having a go).
-export default function MiniBiker({ seed, gang, riderless = false }: { seed: number; gang?: "red" | "blue"; riderless?: boolean }) {
+// `riderless` leaves the bike parked on its own (the rider's off having a go). `bricks`: the rear
+// wheel has been nicked and the back of the bike is propped up on a couple of bricks.
+export default function MiniBiker({ seed, gang, riderless = false, bricks = false }: { seed: number; gang?: "red" | "blue"; riderless?: boolean; bricks?: boolean }) {
   const club = gang === "red" ? "#c0392b" : gang === "blue" ? "#1f5fbf" : null;
   const bandana = club || BANDANAS[seed % BANDANAS.length], tank = club || TANKS[(seed * 3) % TANKS.length], beard = BEARDS[(seed * 7) % BEARDS.length];
   return <svg viewBox="0 0 100 70" width="100%" height="100%" aria-hidden overflow="visible">
-    {[20, 80].map(cx => <g key={cx} className={styles.wheel}>
+    {bricks && <g stroke={INK} strokeWidth={1.5}>
+      <rect x={11} y={58} width={18} height={9} fill="#b45309" /><rect x={13} y={49} width={16} height={9} fill="#c2410c" />
+      <path d="M11 62 h18 M19 58 v4 M21 49 v9" stroke="#7c2d12" strokeWidth={1} />
+    </g>}
+    {(bricks ? [80] : [20, 80]).map(cx => <g key={cx} className={styles.wheel}>
       <circle cx={cx} cy={56} r={12} fill="#222" stroke={INK} strokeWidth={2.5} />
       <line x1={cx - 8} y1={56} x2={cx + 8} y2={56} stroke="#aeb4bb" strokeWidth={1.5} />
       <line x1={cx} y1={48} x2={cx} y2={64} stroke="#aeb4bb" strokeWidth={1.5} />

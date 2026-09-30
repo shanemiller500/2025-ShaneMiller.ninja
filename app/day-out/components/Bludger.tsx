@@ -1,12 +1,13 @@
 import styles from "../day-out.module.css";
 
 // Dazza the bludger: mullet, stubble, a durry tucked behind his ear, Bonds singlet, stubbies
-// and thongs. Faces right. "ask" has his hand out; "run" is arms up, legging it.
+// and thongs. Faces right. "ask" has his hand out; "run" is arms up, legging it; "aim" is
+// his old slug gun pointed up and to the right (muzzle at about 62,16) for bin chickens.
 // viewBox 60×100, feet at y=98.
 const INK = "#111", SKIN = "#e8b98a";
 
-export default function Bludger({ pose = "ask" }: { pose?: "ask" | "walk" | "run" }) {
-  const running = pose === "run";
+export default function Bludger({ pose = "ask" }: { pose?: "ask" | "walk" | "run" | "aim" }) {
+  const running = pose === "run", aiming = pose === "aim";
   return <svg viewBox="0 0 60 100" width="100%" height="100%" aria-hidden overflow="visible">
     {/* Legs, stubbies, thongs */}
     <g className={pose === "ask" ? undefined : styles.bludgerLegs}>
@@ -18,14 +19,22 @@ export default function Bludger({ pose = "ask" }: { pose?: "ask" | "walk" | "run
     {/* Bonds singlet, a bit grubby */}
     <path d="M20 32 q10 -6 20 0 l2 26 h-24 z" fill="#f4f1e8" stroke={INK} strokeWidth={2} strokeLinejoin="round" />
     <circle cx={27} cy={47} r={2.5} fill="#c9b99a" opacity={0.7} />
-    {/* Arms */}
-    {running
+    {/* Arms (or the slug gun, shouldered) */}
+    {aiming && <g>
+      <path d="M30 40 L62 16" stroke={INK} strokeWidth={5} strokeLinecap="round" />
+      <path d="M30 40 L62 16" stroke="#6b7280" strokeWidth={2.5} strokeLinecap="round" />
+      <path d="M26 44 L38 35" stroke={INK} strokeWidth={8} strokeLinecap="round" />
+      <path d="M26 44 L38 35" stroke="#8a5a2b" strokeWidth={5} strokeLinecap="round" />
+      <path d="M22 36 L34 40 M38 36 L48 30" stroke={INK} strokeWidth={7} fill="none" strokeLinecap="round" />
+      <path d="M22 36 L34 40 M38 36 L48 30" stroke={SKIN} strokeWidth={4.5} fill="none" strokeLinecap="round" />
+    </g>}
+    {aiming ? null : running
       ? <path d="M22 36 L12 20 M38 36 L48 20" stroke={INK} strokeWidth={7} strokeLinecap="round" />
       : <path d="M22 36 L16 54 M38 36 L50 44 L56 42" stroke={INK} strokeWidth={7} fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-    {running
+    {aiming ? null : running
       ? <path d="M22 36 L12 20 M38 36 L48 20" stroke={SKIN} strokeWidth={4.5} strokeLinecap="round" />
       : <path d="M22 36 L16 54 M38 36 L50 44 L56 42" stroke={SKIN} strokeWidth={4.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-    {!running && <path d="M53 40 q4 -1 5 2" stroke={INK} strokeWidth={1.5} fill="none" />}
+    {pose === "ask" || pose === "walk" ? <path d="M53 40 q4 -1 5 2" stroke={INK} strokeWidth={1.5} fill="none" /> : null}
     {/* Head: mullet (business at the front, party at the back), stubble, durry behind the ear */}
     <path d="M22 14 q-6 10 -2 20 q4 -2 5 -8 z" fill="#8a5a2b" stroke={INK} strokeWidth={1.5} />
     <circle cx={31} cy={18} r={10} fill={SKIN} stroke={INK} strokeWidth={2} />

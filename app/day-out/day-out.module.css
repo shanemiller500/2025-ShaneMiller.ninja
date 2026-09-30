@@ -99,7 +99,7 @@
 
 /* Big Shazz: stage, road, smoke, skid marks */
 .stage{position:fixed;inset:0;z-index:80;pointer-events:none;overflow:hidden}
-.road{position:absolute;left:0;right:0;bottom:0;height:108px;background:linear-gradient(#2c2e32,#26282b);border-top:3px solid #5a5e65;box-shadow:inset 0 -3px 0 #5a5e65;opacity:0;transition:opacity .6s}
+.road{position:absolute;left:0;right:0;bottom:0;height:150px;background:linear-gradient(#2c2e32,#26282b);border-top:3px solid #5a5e65;box-shadow:inset 0 -3px 0 #5a5e65;opacity:0;transition:opacity .6s}
 .road:after{content:"";position:absolute;left:0;right:0;top:50px;height:4px;background:repeating-linear-gradient(90deg,#e8c547 0 34px,transparent 34px 68px)}
 .roadOn{opacity:1}
 .roadClickable{pointer-events:auto;cursor:crosshair}
@@ -226,21 +226,21 @@
 .gamePrompt p{font-size:16px;line-height:1.45}
 .gamePromptBadge{font-family:ui-monospace,monospace;font-weight:800;color:#c0392b;letter-spacing:1px}
 .root .gamePrompt button{min-height:52px;border-radius:14px;border:3px solid #111;background:var(--accent);color:#141517;font-weight:900;font-size:18px;box-shadow:4px 4px 0 #111}
-.convoy{position:absolute;left:0;bottom:0;width:1980px;height:140px;animation:convoy 10s linear forwards;pointer-events:none}
-.convoyBike{position:absolute;display:block;width:96px;height:67px;animation:carBounce .25s ease-in-out infinite alternate}
+.convoy{position:absolute;left:0;bottom:0;width:2960px;height:190px;animation:convoy 11s linear forwards;pointer-events:none}
+.convoyBike{position:absolute;display:block;width:140px;height:98px;animation:carBounce .25s ease-in-out infinite alternate}
 .convoyBike .wheel{animation:spin .22s linear infinite}
 .rumble{animation:rumble .09s linear infinite alternate}
 @keyframes bullet{to{transform:translate(var(--dx),var(--dy))}}
-@keyframes convoy{from{transform:translateX(-2000px)}to{transform:translateX(100vw)}}
+@keyframes convoy{from{transform:translateX(-2980px)}to{transform:translateX(100vw)}}
 @keyframes rumble{to{transform:translate(1px,-1px)}}
 .brawl{position:absolute;inset:0;pointer-events:none}
-.gangBike{position:absolute;display:block;width:88px;height:62px;animation-fill-mode:both}
+.gangBike{position:absolute;display:block;width:128px;height:90px;animation-fill-mode:both}
 .gangInLeft{animation:gangInLeft 2s cubic-bezier(.2,.8,.3,1) both}
 .gangInRight{animation:gangInRight 2s cubic-bezier(.2,.8,.3,1) both}
 .gangInLeft .wheel,.gangInRight .wheel{animation:spin .22s linear infinite}
 .facingLeft{display:block;width:100%;height:100%;transform:scaleX(-1)}
 .cheer{animation:cheer .35s ease-in-out infinite alternate}
-.brawler{position:absolute;display:block;width:46px;height:74px;animation:brawlBob .32s ease-in-out infinite alternate}
+.brawler{position:absolute;display:block;width:66px;height:106px;animation:brawlBob .32s ease-in-out infinite alternate}
 .punchArm{animation:punch .55s cubic-bezier(.3,1.6,.5,1) infinite}
 .weaponSwing{transform-box:fill-box;transform-origin:0 100%;animation:weaponSwing .55s ease-in-out infinite}
 .knockedRed{animation:knockedRed .7s ease-out}
@@ -253,7 +253,7 @@
 @keyframes knockedBlue{40%{transform:translate(44px,-46px) rotate(120deg)}80%{transform:translate(20px,0) rotate(340deg)}100%{transform:none}}
 @keyframes carTurn{0%{transform:translateX(var(--from))}42%{transform:translateX(var(--stop))}52%{transform:translateX(var(--stop)) scaleX(-1)}100%{transform:translateX(var(--from)) scaleX(-1)}}
 .junk{display:inline-block;font-size:30px;animation:spin .4s linear infinite}
-.guillotine{position:absolute;left:50%;bottom:12px;width:130px;height:184px;translate:-50% 0;animation:signUp .5s cubic-bezier(.3,1.6,.5,1) backwards;transform-origin:50% 100%}
+.guillotine{position:absolute;left:50%;bottom:12px;width:160px;height:226px;translate:-50% 0;animation:signUp .5s cubic-bezier(.3,1.6,.5,1) backwards;transform-origin:50% 100%}
 .bladeDrop{animation:bladeDrop .22s cubic-bezier(.6,0,1,.6) forwards}
 .mulletFall{transform-box:fill-box;transform-origin:center;animation:mulletFall 1.4s cubic-bezier(.4,0,.8,.6) .18s forwards}
 @keyframes gangInLeft{from{transform:translateX(-70vw)}}
@@ -315,10 +315,10 @@
 .snakeBounce{display:block;width:100%;height:100%;animation:snakeBounce .7s ease-in-out infinite}
 .snakeRollRight{display:block;width:100%;height:100%;animation:spin .6s linear infinite}
 .snakeRollLeft{display:block;width:100%;height:100%;animation:spin .6s linear infinite reverse}
-.dazza{position:absolute;width:60px;height:100px;pointer-events:none;transition-property:left;transition-timing-function:linear}
-.dazza .ibisBubble{bottom:108px}
-.bearOnHead{position:absolute;left:4px;top:-30px;width:50px;height:50px;animation:dropBearShake .1s linear infinite alternate}
-.fallingBear{position:absolute;width:48px;height:48px;pointer-events:none;transition:top .6s cubic-bezier(.6,0,1,.6)}
+.dazza{position:absolute;width:108px;height:180px;pointer-events:none;transition-property:left;transition-timing-function:linear}
+.dazza .ibisBubble{bottom:190px}
+.bearOnHead{position:absolute;left:14px;top:-50px;width:80px;height:80px;animation:dropBearShake .1s linear infinite alternate}
+.fallingBear{position:absolute;width:78px;height:78px;pointer-events:none;transition:top .6s cubic-bezier(.6,0,1,.6)}
 .bludgerLegs{transform-box:fill-box;transform-origin:50% 0;animation:ibisStep .3s ease-in-out infinite alternate}
 @keyframes danglerLife{0%,100%{opacity:1}}
 @keyframes dangle{0%{height:0}25%{height:110px}40%{height:92px}55%{height:118px}70%{height:100px}100%{height:0}}
@@ -343,6 +343,9 @@
 .root .callShazz{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 14px 0 6px;border-radius:999px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-weight:800;font-size:15px}
 .callShazz>span{display:block;width:46px;height:32px}
 .root .callShazz:hover{background:#f28c281a}
+.root .callShazz[aria-pressed="true"]{background:var(--accent);color:#141517}
+.root .callShazz[aria-pressed="true"]:hover{filter:brightness(1.08)}
+.root .callShazz:disabled{opacity:.6;cursor:wait}
 @keyframes skidFade{0%,70%{opacity:.9}100%{opacity:0}}
 @keyframes puff{from{transform:scale(.4);opacity:.8}to{transform:translate(-45px,-40px) scale(2.4);opacity:0}}
 @keyframes tyrePuff{from{transform:scale(.5);opacity:.9}to{transform:translate(-25px,-70px) scale(3.2);opacity:0}}
@@ -376,3 +379,171 @@
 .aiTips li{display:flex;gap:8px;align-items:flex-start;font-size:16px}
 .aiTips svg{margin-top:4px;color:var(--khaki)}
 @media (max-width:640px){.aiResult{grid-template-columns:1fr}.drunkMeter{width:170px;padding:8px 10px}.root .trickToggle{width:48px;height:48px}.root .trick{width:40px;height:40px;padding-left:7px}.trick>span{font-size:18px}.callShazz{padding-right:12px}}
+/* Live critters wandering onto the road, and getting flattened */
+.crossing{position:absolute;pointer-events:none;transition-property:bottom;transition-timing-function:linear}
+.critterWaddle{display:block;width:100%;height:100%;animation:critterWaddle .35s ease-in-out infinite alternate}
+.critterLegs{transform-box:fill-box;transform-origin:50% 0;animation:ibisStep .3s ease-in-out infinite alternate}
+.flatten{display:block;width:100%;height:100%;transform-origin:50% 100%;animation:flatten .25s ease-in forwards}
+@keyframes critterWaddle{from{transform:rotate(-3deg)}to{transform:rotate(3deg) translateY(-2px)}}
+@keyframes flatten{0%{transform:none}40%{transform:scale(1.25,.5)}100%{transform:scale(1.4,.14)}}
+/* Bin chickens you can shoot, and the puff of feathers they leave behind */
+.shootable{pointer-events:auto;cursor:crosshair}
+.featherPuff{position:absolute;width:0;height:0;pointer-events:none;animation:featherLife 2.6s linear forwards}
+.featherPuff:before{content:"";position:absolute;left:-36px;top:-36px;width:72px;height:72px;border-radius:50%;background:radial-gradient(circle,#fffffff2 0 40%,#f1f5f9aa 55%,transparent 70%);animation:featherCloud .7s ease-out forwards}
+.feather{position:absolute;left:-8px;top:-3px;width:16px;height:6px;border-radius:50%/60% 60% 40% 40%;background:linear-gradient(90deg,#fff,#e5e7eb);border:1px solid #1118;animation:featherFly 2.4s cubic-bezier(.2,.7,.4,1) both}
+@keyframes featherLife{0%,100%{opacity:1}}
+@keyframes featherCloud{from{transform:scale(.3);opacity:1}to{transform:scale(1.8);opacity:0}}
+@keyframes featherFly{0%{transform:translate(0,0) rotate(0);opacity:1}35%{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:1}100%{transform:translate(calc(var(--dx) * 1.3),calc(var(--dy) + 90px)) rotate(calc(var(--r) * -1));opacity:0}}
+/* Hoop snakes slithering before they hoop up */
+.snake{position:absolute;transition-property:left;transition-timing-function:linear}
+.slitherSeg{animation:slither .7s ease-in-out infinite alternate}
+.snakeTongue{animation:tongueFlick .5s steps(2) infinite}
+@keyframes slither{from{transform:translateY(-4px)}to{transform:translateY(4px)}}
+@keyframes tongueFlick{0%{opacity:1}100%{opacity:0}}
+/* Postie, kid on the BMX and the magpies swooping him */
+.postie,.kid{position:absolute;pointer-events:none;transition-property:left;transition-timing-function:linear}
+.kidLegs{transform-box:fill-box;transform-origin:50% 0;animation:ibisStep .25s ease-in-out infinite alternate}
+.magpie{position:absolute;width:54px;height:36px;animation:magpieIn .8s ease-out both}
+.magpieSwoop{display:block;width:100%;height:100%;animation:magpieSwoop .6s ease-in-out infinite alternate}
+.magpieWing{transform-box:view-box;transform-origin:30px 20px;animation:flap .18s ease-in-out infinite alternate}
+@keyframes magpieIn{from{transform:translate(var(--sx),var(--sy)) scale(.6)}to{transform:none}}
+@keyframes magpieSwoop{0%{transform:translate(-12px,-6px)}60%{transform:translate(10px,24px) rotate(16deg)}100%{transform:translate(-4px,-10px) rotate(-6deg)}}
+.koalaTarget{position:absolute;border-radius:50%}
+/* The bin flock: glow on hover, skittish hop away from the cursor, click to shoo */
+.flockHome{pointer-events:auto;cursor:pointer}
+.flockHome:hover .ibisBody{filter:drop-shadow(0 0 5px #ffd23f) drop-shadow(0 0 1px #fff)}
+.flockNudge{display:block;width:100%;height:100%;transition:transform .3s cubic-bezier(.3,1.6,.5,1)}
+/* Ghost Rider head while she has a car lassoed */
+.flameHead{animation:bubbleIn .25s ease-out}
+.flames{transform-box:fill-box;transform-origin:50% 100%;animation:flicker .16s ease-in-out infinite alternate}
+.skullEye{animation:tongueFlick .3s steps(2) infinite}
+@keyframes flicker{from{transform:scale(1,1) skewX(-3deg)}to{transform:scale(1.06,1.14) skewX(4deg)}}
+/* Crows picking over whatever Shazz shot */
+.crow{position:absolute;width:48px;height:35px;pointer-events:none;transition-property:left,bottom;transition-timing-function:ease-out}
+.crowWing{transform-box:view-box;transform-origin:30px 22px;animation:flap .2s ease-in-out infinite alternate}
+.crowEating .crowHead{transform-box:view-box;transform-origin:38px 22px;animation:crowPeck .9s ease-in-out var(--peck,0ms) infinite}
+@keyframes crowPeck{0%,55%{transform:none}75%{transform:rotate(40deg) translateY(2px)}100%{transform:none}}
+/* Drops flicked off the crows' beaks: short arc, then a little stain that fades */
+.dropX{position:absolute;pointer-events:none;animation:bottleX .45s linear forwards}
+.dropY{display:block;animation:bottleY .45s cubic-bezier(.3,0,.7,1) forwards}
+.bloodDrop{display:block;border-radius:50%;background:#b3121f;animation:dropFade 2.5s .45s forwards}
+@keyframes dropFade{0%{transform:scale(1,1)}10%{transform:scale(1.8,.6)}100%{transform:scale(1.8,.6);opacity:0}}
+/* Bird droppings: falling, splatted on the road, stuck on vehicles, and caked round the bin */
+.poopFall{position:absolute;width:7px;height:9px;border-radius:50% 50% 45% 45%;background:#f7f4ea;border:1px solid #8f8a7c;pointer-events:none;animation:poopFall linear forwards;animation-timing-function:cubic-bezier(.45,0,1,1)}
+@keyframes poopFall{to{transform:translateY(var(--dy))}}
+.poopSplat{position:absolute;border-radius:50%;background:radial-gradient(ellipse at 45% 45%,#fff 0 35%,#e9e4d6 55%,#c9c2ae 68%,transparent 72%);pointer-events:none;animation:poopFade 30s forwards}
+@keyframes poopFade{0%,80%{opacity:1}100%{opacity:0}}
+.poopMark{position:absolute;width:12px;height:8px;margin-left:-6px;border-radius:50% 50% 40% 40%;background:radial-gradient(ellipse at 45% 40%,#fff 0 40%,#e2dccb 65%,transparent 72%);pointer-events:none;animation:bubbleIn .2s ease-out}
+.poopMark:after{content:"";position:absolute;left:5px;top:6px;width:3px;height:7px;border-radius:0 0 3px 3px;background:#efe9da}
+.carSwerve,.carFlip{position:relative}
+.binPoop{position:absolute;border-radius:50%;background:radial-gradient(ellipse at 45% 45%,#fff 0 35%,#e9e4d6 55%,#b9b19b 68%,transparent 72%);pointer-events:none}
+.binDrip{position:absolute;width:4px;border-radius:2px 2px 3px 3px;background:linear-gradient(#fffdf6,#e6dfcc);box-shadow:0 0 0 1px #0002;pointer-events:none}
+.binDrip:after{content:"";position:absolute;left:-1.5px;bottom:-3px;width:7px;height:7px;border-radius:50%;background:#efe9da}
+/* Rainbow lorikeets */
+.lorikeet{position:absolute;width:32px;height:22px;transition-property:left,bottom;transition-timing-function:ease-in-out}
+.lorikeetWing{transform-box:view-box;transform-origin:18px 14px;animation:flap .12s ease-in-out infinite alternate}
+/* Tricks menu. Desktop: the slim pill column (labels slide out on hover). Phones: a bottom sheet. */
+.trickPanel{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.trickGroup{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.trickHeading,.trickBackdrop{display:none}
+@media (max-width:640px){
+  .trickBar{top:auto;bottom:168px;transform:none}
+  .trickBackdrop{display:block;position:fixed;inset:0;z-index:1;background:#0008;pointer-events:auto;animation:bubbleIn .2s ease-out}
+  .root .trickToggle{position:relative;z-index:3}
+  .trickPanel{position:fixed;left:0;right:0;bottom:0;z-index:2;display:block;max-height:72vh;overflow-y:auto;padding:14px 14px calc(18px + env(safe-area-inset-bottom));border-top:3px solid #111;border-radius:22px 22px 0 0;background:#fffdf5;box-shadow:0 -6px 0 #111;pointer-events:auto;animation:sheetUp .25s ease-out}
+  .trickHeading{display:block;margin:6px 2px 8px;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#6b6b6b}
+  .trickGroup{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .root .trick,.root .trick:hover,.root .trick:focus-visible{width:auto;height:auto;min-height:74px;flex-direction:column;justify-content:center;padding:10px 4px;border-radius:16px;box-shadow:3px 3px 0 #111;white-space:normal;text-align:center}
+  .trick>span{font-size:26px}
+  .trick>em{opacity:1;margin:4px 0 0;font-size:12.5px;line-height:1.2}
+}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+/* Twitchy Trev */
+.trev{position:absolute;width:66px;height:121px;pointer-events:none;transition-property:left,bottom;transition-timing-function:ease-in-out;animation:bubbleIn .3s ease-out}
+.trev .ibisBubble{z-index:1}
+.trevTwitch{display:block;width:100%;height:100%;animation:twitch .35s steps(3) infinite}
+.trevEyes{transform-box:fill-box;transform-origin:center;animation:trevEyes 1.3s ease-in-out infinite}
+@keyframes twitch{0%{transform:translate(0,0) rotate(0)}25%{transform:translate(-2px,1px) rotate(-2deg)}50%{transform:translate(2px,-1px) rotate(1.5deg)}75%{transform:translate(-1px,0) rotate(-1deg)}100%{transform:translate(1px,1px)}}
+@keyframes trevEyes{0%,70%,100%{transform:scale(1)}80%{transform:scale(1.15)}90%{transform:translateX(1px) scale(1.1)}}
+/* Bullet holes where Shazz missed (or went a bit wide) */
+.bulletHole{position:absolute;border-radius:50%;pointer-events:none;background:radial-gradient(circle,#000 0 32%,#2b2b2b 42%,#8a8a8a 52%,#d4d4d4 56%,transparent 62%);animation:poopFade 45s forwards}
+.bulletHole:after{content:"";position:absolute;inset:-5px;background:linear-gradient(35deg,transparent 47%,#d4d4d499 48% 52%,transparent 53%),linear-gradient(-60deg,transparent 47%,#d4d4d477 48% 52%,transparent 53%)}
+/* Trev and Kylie's paint-tin fire, and the can getting booted when the coppers turn up */
+.fireCan{position:absolute;width:40px;height:50px;pointer-events:none;animation:bubbleIn .3s ease-out}
+.canKick{animation:canKick 1.1s cubic-bezier(.2,.7,.4,1) forwards}
+@keyframes canKick{0%{transform:none}35%{transform:translate(var(--kx),-46px) rotate(200deg)}100%{transform:translate(calc(var(--kx) * 2.4),20px) rotate(470deg);opacity:0}}
+/* Bin flock: one big hover target; nearby birds stand alert (head up, a shuffle away, a '!') */
+.flockZone{position:absolute;pointer-events:auto;cursor:pointer;border-radius:48px}
+.flockLit .ibisBody{filter:drop-shadow(0 0 4px #ffd23f)}
+.ibisAlert .ibisHead{transform-box:view-box;transform-origin:56px 44px;transform:rotate(-22deg) translateY(-3px);transition:transform .15s}
+.flockNudge{transform-origin:50% 100%}
+.alertMark{position:absolute;left:50%;top:-16px;translate:-50% 0;font:900 18px/1 var(--font-aspekta),sans-serif;color:#ffd23f;-webkit-text-stroke:1.5px #111;paint-order:stroke;animation:bubbleIn .15s ease-out}
+/* Tricks menu, redesigned: a labelled toggle and a card of labelled rows (desktop), bottom sheet (phones) */
+.root .trickToggle{display:flex;align-items:center;gap:8px;width:auto;height:48px;padding:0 18px 0 14px;border-radius:999px;font-size:16px;font-weight:900;color:#141517}
+.trickToggle>span{font-size:22px}
+.trickPanel{display:block;width:250px;max-height:calc(100vh - 170px);overflow-y:auto;padding:10px 10px 4px;border:3px solid #111;border-radius:18px;background:#fffdf5;box-shadow:5px 5px 0 #111;pointer-events:auto;animation:bubbleIn .2s ease-out}
+.trickHeading{display:block;margin:4px 6px 6px;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#6b6b6b}
+.trickGroup{display:grid;grid-template-columns:1fr;gap:3px;margin-bottom:8px}
+.root .trickPanel .trick,.root .trickPanel .trick:hover,.root .trickPanel .trick:focus-visible{display:flex;align-items:center;gap:10px;width:100%;height:auto;min-height:40px;padding:6px 10px;border:0;border-radius:10px;box-shadow:none;background:transparent;text-align:left;white-space:normal;flex-direction:row;justify-content:flex-start}
+.root .trickPanel .trick:hover,.root .trickPanel .trick:focus-visible{background:#ffe8cc;outline:none}
+.trickPanel .trick>span{font-size:20px;width:26px;text-align:center}
+.trickPanel .trick>em{opacity:1;margin:0;font-size:14.5px;line-height:1.2}
+@media (max-width:640px){
+  .trickPanel{position:fixed;left:0;right:0;bottom:0;z-index:2;width:auto;max-height:72vh;padding:14px 14px calc(18px + env(safe-area-inset-bottom));border-width:3px 0 0;border-radius:22px 22px 0 0;box-shadow:0 -6px 0 #111;animation:sheetUp .25s ease-out}
+  .trickGroup{grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .root .trickPanel .trick,.root .trickPanel .trick:hover,.root .trickPanel .trick:focus-visible{flex-direction:column;justify-content:center;gap:4px;min-height:74px;padding:10px 4px;border:3px solid #111;border-radius:16px;box-shadow:3px 3px 0 #111;background:#fffdf5;text-align:center}
+  .trickPanel .trick>span{font-size:26px;width:auto}
+  .trickPanel .trick>em{font-size:12.5px}
+  .root .trickToggle{height:44px;font-size:15px}
+}
+/* Brawl finale: dynamite on the blue bikes */
+.dynamite{position:absolute;width:54px;height:54px;animation:signUp .4s cubic-bezier(.3,1.6,.5,1) backwards}
+.fuseSpark{transform-box:fill-box;transform-origin:center;animation:fuseSpark .12s linear infinite alternate}
+@keyframes fuseSpark{from{transform:scale(.8) rotate(0);opacity:.8}to{transform:scale(1.25) rotate(25deg);opacity:1}}
+.bikeBoom{position:absolute;bottom:20px;width:40px;height:40px;margin-left:-20px;border-radius:50%;background:radial-gradient(circle,#fff 0 18%,#fff3a0 30%,#ffb020 48%,#ff5a1f 64%,#b3121f00 72%);animation:bikeBoom 1.3s ease-out forwards;pointer-events:none}
+@keyframes bikeBoom{0%{transform:scale(.3);opacity:1}35%{transform:scale(11);opacity:1}100%{transform:scale(14);opacity:0}}
+.scorch{position:absolute;bottom:22px;width:210px;height:34px;border-radius:50%;background:radial-gradient(ellipse,#000c 0 40%,#1118 60%,transparent 72%);animation:poopFade 12s forwards;pointer-events:none}
+/* Lighter tricks menu on desktop */
+@media (min-width:641px){
+  .root .trickToggle{height:40px;padding:0 14px 0 11px;border-width:2px;box-shadow:3px 3px 0 #111;font-size:14px}
+  .trickToggle>span{font-size:18px}
+  .trickPanel{width:196px;padding:6px 6px 2px;border-width:2px;border-radius:14px;box-shadow:3px 3px 0 #1119;background:#fffdf5f0;backdrop-filter:blur(6px)}
+  .trickHeading{margin:6px 8px 3px;font-size:10px;color:#8a8a8a}
+  .trickGroup{gap:1px;margin-bottom:4px}
+  .root .trickPanel .trick,.root .trickPanel .trick:hover,.root .trickPanel .trick:focus-visible{min-height:32px;padding:4px 8px;gap:8px;border-radius:8px}
+  .trickPanel .trick>span{font-size:16px;width:20px}
+  .trickPanel .trick>em{font-size:13px;font-weight:700}
+}
+/* Bush doof */
+.rave{position:absolute;inset:0;pointer-events:none}
+.raveLights{position:absolute;inset:0;background:radial-gradient(circle at 18% 100%,#ff00c855 0,transparent 42%),radial-gradient(circle at 82% 100%,#00e5ff55 0,transparent 42%),radial-gradient(circle at 50% 100%,#fde04744 0,transparent 48%);animation:raveFlash .5s steps(2) infinite}
+@keyframes raveFlash{0%{opacity:.9;filter:hue-rotate(0)}50%{opacity:.45;filter:hue-rotate(120deg)}100%{opacity:.9;filter:hue-rotate(240deg)}}
+.raveDance{display:block;width:100%;height:100%;transform-origin:50% 100%;animation:raveDance .42s ease-in-out infinite alternate}
+@keyframes raveDance{from{transform:translateY(0) rotate(-6deg)}to{transform:translateY(-10px) rotate(6deg)}}
+.raveProp{position:absolute;pointer-events:none;animation:signUp .4s cubic-bezier(.3,1.6,.5,1) backwards}
+.hoistSpin{transform-box:view-box;transform-origin:60px 26px;animation:hoistSpin 2.2s linear infinite}
+@keyframes hoistSpin{0%{transform:scaleX(1)}50%{transform:scaleX(-1)}100%{transform:scaleX(1)}}
+.speakerThump{transform-box:fill-box;transform-origin:center;animation:thump .35s ease-in-out infinite alternate}
+@keyframes thump{to{transform:scale(1.15)}}
+.boardHeld{position:absolute;left:-12px;top:-8px;width:90px;height:40px}
+.wobbleFlex{transform-box:fill-box;transform-origin:center;animation:wobbleFlex .18s ease-in-out infinite alternate}
+@keyframes wobbleFlex{from{transform:scaleY(1) skewX(-8deg)}to{transform:scaleY(.45) skewX(8deg)}}
+.tossed{transition-timing-function:cubic-bezier(.3,-.6,.6,1)!important}
+.tossed>span{animation:spin .5s linear infinite}
+.raveCop{position:absolute;width:55px;height:110px;pointer-events:none;transition-property:left,bottom;transition-timing-function:ease-in-out;animation:bubbleIn .3s ease-out}
+.zapBolt{animation:zapFlicker .08s steps(2) infinite}
+@keyframes zapFlicker{0%{opacity:1}100%{opacity:.2}}
+.sirenRed{animation:siren .5s steps(2) infinite}
+.sirenBlue{animation:siren .5s steps(2) -.25s infinite}
+@keyframes siren{0%{opacity:1}100%{opacity:.25}}
+/* Brawl thieves */
+.thief{position:absolute;pointer-events:none;transition-property:left;transition-timing-function:linear}
+.thiefBike{position:absolute;left:0;bottom:0;width:128px;height:90px}
+.thiefBody{position:absolute;left:0;bottom:0;width:66px;height:121px}
+.stolenWheel{position:absolute;left:-26px;bottom:0;width:34px;height:34px;border-radius:50%;border:5px solid #222;background:radial-gradient(circle,#aeb4bb 0 22%,transparent 24%),linear-gradient(90deg,transparent 46%,#aeb4bb 47% 53%,transparent 54%);animation:spin .5s linear infinite reverse}
+/* Cartoon scuffle cloud: copper and bogan disappear into it, a cuffed bogan comes out */
+.scuffle{position:absolute;left:-40px;bottom:6px;width:150px;height:110px;border-radius:50%;background:radial-gradient(circle at 30% 45%,#e5e7eb 0 22%,transparent 23%),radial-gradient(circle at 62% 38%,#d1d5db 0 26%,transparent 27%),radial-gradient(circle at 48% 70%,#e5e7eb 0 30%,transparent 31%),radial-gradient(circle at 78% 66%,#d1d5db 0 20%,transparent 21%),radial-gradient(circle at 20% 72%,#d1d5db 0 18%,transparent 19%);animation:scuffle .12s linear infinite alternate;z-index:1}
+.scuffle>em{position:absolute;font-style:normal;font-size:22px;animation:scufflePop .3s steps(2) infinite}
+.scuffle>em:nth-child(1){left:18%;top:10%}.scuffle>em:nth-child(2){left:62%;top:22%;animation-delay:-.1s}.scuffle>em:nth-child(3){left:40%;top:52%;animation-delay:-.2s}.scuffle>em:nth-child(4){left:74%;top:60%;animation-delay:-.15s}
+@keyframes scuffle{from{transform:translate(-3px,1px) rotate(-2deg)}to{transform:translate(3px,-2px) rotate(2deg)}}
+@keyframes scufflePop{0%{opacity:1;transform:scale(1)}100%{opacity:.2;transform:scale(1.4)}}
