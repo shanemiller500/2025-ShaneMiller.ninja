@@ -447,7 +447,7 @@
 .trickGroup{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
 .trickHeading,.trickBackdrop{display:none}
 @media (max-width:640px){
-  .trickBar{top:auto;bottom:168px;transform:none}
+  .trickBar{top:96px;bottom:auto;left:10px;transform:none}
   .trickBackdrop{display:block;position:fixed;inset:0;z-index:1;background:#0008;pointer-events:auto;animation:bubbleIn .2s ease-out}
   .root .trickToggle{position:relative;z-index:3}
   .trickPanel{position:fixed;left:0;right:0;bottom:0;z-index:2;display:block;max-height:72vh;overflow-y:auto;padding:14px 14px calc(18px + env(safe-area-inset-bottom));border-top:3px solid #111;border-radius:22px 22px 0 0;background:#fffdf5;box-shadow:0 -6px 0 #111;pointer-events:auto;animation:sheetUp .25s ease-out}
@@ -547,3 +547,16 @@
 .scuffle>em:nth-child(1){left:18%;top:10%}.scuffle>em:nth-child(2){left:62%;top:22%;animation-delay:-.1s}.scuffle>em:nth-child(3){left:40%;top:52%;animation-delay:-.2s}.scuffle>em:nth-child(4){left:74%;top:60%;animation-delay:-.15s}
 @keyframes scuffle{from{transform:translate(-3px,1px) rotate(-2deg)}to{transform:translate(3px,-2px) rotate(2deg)}}
 @keyframes scufflePop{0%{opacity:1;transform:scale(1)}100%{opacity:.2;transform:scale(1.4)}}
+/* Old Nev on the verge */
+.nev{position:absolute;width:62px;height:124px;pointer-events:auto;cursor:pointer;transition-property:left;transition-timing-function:linear}
+.nev:hover .ibisBody{filter:drop-shadow(0 0 4px #fde68a)}
+.caneShake{transform-box:view-box;transform-origin:36px 40px;animation:caneShake .22s ease-in-out infinite alternate}
+@keyframes caneShake{from{transform:rotate(-14deg)}to{transform:rotate(12deg)}}
+/* Phones: less crammed. Smaller speech bubbles and birds so the road stays visible. */
+@media (max-width:640px){
+  .bubble{padding:8px 11px;border-width:2px;box-shadow:3px 3px 0 #111}
+  .root .bubble p,.bubble p{font-size:13.5px;line-height:1.3}
+  .ibisBubble{max-width:150px;padding:5px 8px;font-size:11.5px}
+  .flockBird{width:52px;height:52px}
+  .nev{width:50px;height:100px}
+}
