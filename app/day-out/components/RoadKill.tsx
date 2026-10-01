@@ -2,7 +2,7 @@ import styles from "../day-out.module.css";
 
 // Cartoon Aussie roadkill: legs in the air, X eyes, a couple of flies. viewBox 80×44.
 // "snake" is only ever a hoop snake that got run over (or shot), so it is not in CRITTERS.
-export type Critter = "roo" | "koala" | "croc" | "wombat" | "snake";
+export type Critter = "roo" | "koala" | "croc" | "wombat" | "snake" | "emu";
 export const CRITTERS: Critter[] = ["roo", "koala", "croc", "wombat"];
 const INK = "#111";
 
@@ -54,6 +54,16 @@ function Body({ kind }: { kind: Critter }) {
       <ellipse cx={64} cy={36} rx={8} ry={5} fill="#7a5c2e" stroke={INK} strokeWidth={2} />
       <XEye x={65} y={35} />
       <path d="M72 37 h5 l2 -2 m-2 2 l2 2" stroke="#d62828" strokeWidth={1.3} fill="none" strokeLinecap="round" />
+    </>;
+    // Emus only end up here after being shot twice, so: one leg left, pointing at the sky.
+    case "emu": return <>
+      <Leg d="M30 26 L26 8 L22 4 M26 8 l3 -5" color="#9a7b5b" />
+      <ellipse cx={32} cy={32} rx={22} ry={9} fill="#5b4636" stroke={INK} strokeWidth={2.2} />
+      <path d="M16 32 q3 6 -1 9 M24 34 q2 6 -1 8 M34 34 q2 5 0 8" stroke="#3b2f26" strokeWidth={1.8} fill="none" />
+      <path d="M52 32 Q64 30 70 36" stroke={INK} strokeWidth={7} fill="none" strokeLinecap="round" />
+      <path d="M52 32 Q64 30 70 36" stroke="#8ea3b8" strokeWidth={4.5} fill="none" strokeLinecap="round" />
+      <ellipse cx={72} cy={37} rx={5} ry={4} fill="#4b3a2c" stroke={INK} strokeWidth={1.4} />
+      <XEye x={72} y={36} />
     </>;
     case "wombat": return <>
       {[26, 34, 46, 54].map(x => <Leg key={x} d={`M${x} 22 L${x} 13`} color="#7a5c43" />)}

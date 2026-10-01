@@ -5,8 +5,9 @@ import styles from "../day-out.module.css";
 // Faces right; viewBox 50×100, feet at y=98.
 const INK = "#111", SKIN = "#eab990";
 
-export default function RaveCop({ zap = false, walking = false }: { zap?: boolean; walking?: boolean }) {
-  const arm = zap ? "M32 36 L46 38 L54 36" : "M32 36 L36 54";
+// `baton` has him swinging his baton overhead (cartoon bonks, nothing more).
+export default function RaveCop({ zap = false, walking = false, baton = false }: { zap?: boolean; walking?: boolean; baton?: boolean }) {
+  const arm = zap ? "M32 36 L46 38 L54 36" : baton ? "M32 36 L42 22" : "M32 36 L36 54";
   return <svg viewBox="0 0 50 100" width="100%" height="100%" aria-hidden overflow="visible">
     <g className={walking ? styles.bludgerLegs : undefined}>
       <path d="M20 62 L17 94 M30 62 L33 94" stroke={INK} strokeWidth={8} strokeLinecap="round" />
@@ -21,6 +22,7 @@ export default function RaveCop({ zap = false, walking = false }: { zap?: boolea
     <path d="M18 36 L12 54" stroke="#9cc3e6" strokeWidth={4} strokeLinecap="round" />
     <path d={arm} stroke={INK} strokeWidth={6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
     <path d={arm} stroke="#9cc3e6" strokeWidth={4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    {baton && <g className={styles.batonSwing}><path d="M42 22 L60 6" stroke="#111" strokeWidth={4.5} strokeLinecap="round" /><path d="M44 20 l3 3" stroke="#6b7280" strokeWidth={2} /></g>}
     {zap && <>
       <rect x={50} y={32} width={10} height={6} rx={1.5} fill="#facc15" stroke={INK} strokeWidth={1.3} />
       <path className={styles.zapBolt} d="M60 34 l8 -4 l-3 5 l9 -3 l-4 6 l10 -2" stroke="#fde047" strokeWidth={2.2} fill="none" strokeLinejoin="round" />

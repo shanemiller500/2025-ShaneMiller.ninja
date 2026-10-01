@@ -1,6 +1,7 @@
 import styles from "../day-out.module.css";
 import Kangaroo from "./Kangaroo";
 import SlitherSnake from "./SlitherSnake";
+import Emu from "./Emu";
 import type { Critter } from "./RoadKill";
 
 // The critters while they're still alive, wandering onto the road. Side-on facing right,
@@ -16,7 +17,7 @@ const Eye = ({ x, y }: { x: number; y: number }) => <>
   <circle cx={x + 0.8} cy={y} r={1.2} fill={INK} />
 </>;
 
-function Body({ kind }: { kind: Exclude<Critter, "roo" | "snake"> }) {
+function Body({ kind }: { kind: Exclude<Critter, "roo" | "snake" | "emu"> }) {
   switch (kind) {
     case "koala": return <>
       <g className={styles.critterLegs}><Leg d="M28 40 L26 53" color="#9aa0a6" /><Leg d="M48 40 L50 53" color="#9aa0a6" /></g>
@@ -55,6 +56,7 @@ function Body({ kind }: { kind: Exclude<Critter, "roo" | "snake"> }) {
 export default function LiveCritter({ kind }: { kind: Critter }) {
   if (kind === "roo") return <Kangaroo />;
   if (kind === "snake") return <SlitherSnake />;
+  if (kind === "emu") return <Emu />;
   return <svg viewBox="0 0 80 56" width="100%" height="100%" aria-hidden overflow="visible">
     <Body kind={kind} />
   </svg>;

@@ -22,6 +22,8 @@ import SportBike from "./SportBike";
 import HoopSnake from "./HoopSnake";
 import Bludger from "./Bludger";
 import OldNev from "./OldNev";
+import TrueBlue, { Pelican, type TrueBluePose } from "./TrueBlue";
+import Emu, { EmuLeg } from "./Emu";
 import LiveCritter from "./LiveCritter";
 import SlitherSnake from "./SlitherSnake";
 import PostieBike from "./PostieBike";
@@ -105,13 +107,14 @@ const ROAD_H = 150, FAR_LANE = 86;
 const CAR_COLORS = ["#2e7dd1", "#e0a100", "#c0392b", "#27ae60", "#8e44ad", "#e8e8e8"];
 const CAR_LINES = ["Oi! Eyes on the road, ya dag!", "What are youse lookin' at?!", "Wind the window up, Karen!", "Take a photo, it'll last longer, ya drongos!", "Bloody tourists.", "Yeah, you heard me, Dad. Keep drivin'!"];
 const KILL_LINES: Record<Critter, string[]> = {
+  emu: ["Emu drumsticks tonight! Well. Drumstick.", "They won the war in '32. Not this one.", "Big bird, bigger barbie."],
   snake: ["Hoop snake! Tastes like chicken. Rolls like a wheel.", "Flat as a tack. Easy to pack, too.", "Snake on the barbie. Put that on a postcard."],
   roo: ["Beauty! Roo snags tonight!", "Skippy's comin' home with me, ya larrikin.", "Fresh roo. Only been there since Tuesday."],
   koala: ["Drop bear down! Koala curry, anyone?", "Smells like eucalyptus. Pre-seasoned!", "Don't tell the tourists, ya great sook."],
   croc: ["Croc! That's a handbag AND dinner.", "Who's a tough nut now, ya big handbag?", "Tastes like chicken. Angry chicken."],
   wombat: ["Wombat! Square poo, square meal.", "Built like a brick shithouse. Feeds six.", "Wombat stew. Nan's recipe, ya galah."],
 };
-const CRITTER_NAMES: Record<Critter, string> = { roo: "roo", koala: "koala", croc: "croc", wombat: "wombat", snake: "hoop snake" };
+const CRITTER_NAMES: Record<Critter, string> = { roo: "roo", koala: "koala", croc: "croc", wombat: "wombat", snake: "hoop snake", emu: "emu" };
 const STOP_LINES = ["Stop sign? More of a suggestion, really.", "Stop? Never heard of it, ya drongo!", "Council can send me the bill."];
 const BLAST_LINES = ["Stop THIS, ya mongrel!", "Say hello to me little friend!", "That's for every red light, ya bastard."];
 const COP_LINES = ["Shit, it's the cops! Catch me if ya can, ya mongrels!", "Oi oi, the fuzz! Hold onto ya stubbies!", "Coppers! Time to open her up!"];
@@ -203,6 +206,13 @@ const NEV_LINES = [
   "Best ten cents I ever… worst. WORST ten cents I ever spent.",
   "He'd be in his forties now. Probably building things for his old man.",
 ];
+const PET_LINES: Record<"roo" | "koala" | "wombat" | "dropbear" | "croc", string> = {
+  roo: "G'day, Skip! Who's a good roo?",
+  koala: "Look at ya, ya little gumnut.",
+  wombat: "Hello, ya square-bummed beauty!",
+  dropbear: "Easy, mate… easy… there's a good drop bear.",
+  croc: "Even you, ya big handbag. Pat pat.",
+};
 const NEV_SHAZZ = ["Shane? Nah, Shane's dad's the one reading this, Nev.", "Keep lookin', Nev. He'll turn up. They always do when they want money.", "Ten cents? Ya got ripped off, Nev. That bloke got a bargain."];
 const SHAZZ_TO_DAZZA = ["Pay me back Tuesday? Which Tuesday, ya bludger?", "Get a mullet up ya, Dazza. Buy ya own.", "Here, take one and piss off, ya bludger.", "I've seen more of your IOUs than you've had hot dinners, Dazza."];
 const DRUNK_LABELS = ["Stone cold sober", "Tipsy", "Pissed", "Maggoted", "Absolutely legless"];
@@ -214,17 +224,17 @@ const FIRST_DELAY = 20_000, GAP = 150_000, GROUND = 14, VIEW_W = 260, VIEW_H = 1
 type Phase = "hidden" | "enter" | "parked" | "leave";
 type Action = "flip" | "moon" | "drink" | "smoke" | "throw";
 type Line = { text: string; ai: boolean };
-type Fx = { stage?: number; palette?: string[]; id: number; kind: "hole" | "poop" | "poopSplat" | "drop" | "feathers" | "smoke" | "tyre" | "skid" | "burst" | "bottle" | "shard" | "stars" | "fog" | "boom" | "rubber" | "bullet" | "junk" | "splat" | "rooFly"; x: number; y: number; size: number; text?: string; dx?: number; dy?: number; arc?: number; hit?: boolean };
+type Fx = { stage?: number; palette?: string[]; id: number; kind: "leg" | "hole" | "poop" | "poopSplat" | "drop" | "feathers" | "smoke" | "tyre" | "skid" | "burst" | "bottle" | "shard" | "stars" | "fog" | "boom" | "rubber" | "bullet" | "junk" | "splat" | "rooFly"; x: number; y: number; size: number; text?: string; dx?: number; dy?: number; arc?: number; hit?: boolean };
 let uid = 0;
 // Sportsbikes are drawn 110×60; this keeps them road-sized next to the cars and Shazz.
 const sportbikeW = () => (window.innerWidth < 640 ? 150 : 205);
 // Everything Shazz can take a shot at. Birds and pests go up in a puff; the rest drop as dinner.
 type Target = { kind: "flyer"; id: number } | { kind: "flock"; index: number } | { kind: "raider" } | { kind: "ibis" } | { kind: "magpie"; id: number }
   | { kind: "roo"; id: number } | { kind: "crossing"; id: number } | { kind: "snake"; id: number } | { kind: "strikeRoo" }
-  | { kind: "dropBear" } | { kind: "dangler"; id: number } | { kind: "koala"; tree: number } | { kind: "lorikeet"; id: number };
+  | { kind: "dropBear" } | { kind: "dangler"; id: number } | { kind: "koala"; tree: number } | { kind: "lorikeet"; id: number } | { kind: "emu"; id: number };
 const FUR: Partial<Record<Target["kind"], string[]>> = {
   roo: ["#b5733a", "#e6c49a"], strikeRoo: ["#b5733a", "#e6c49a"], koala: ["#9aa0a6", "#e8e8e8"], dropBear: ["#8a7f72", "#5b5148"], dangler: ["#8a7f72", "#5b5148"],
-  snake: ["#7a5c2e", "#c9a86a"], magpie: ["#111", "#fff", "#111"], lorikeet: ["#16a34a", "#1d4ed8", "#f97316", "#dc2626", "#facc15"],
+  snake: ["#7a5c2e", "#c9a86a"], magpie: ["#111", "#fff", "#111"], emu: ["#5b4636", "#3b2f26", "#7a6048"], lorikeet: ["#16a34a", "#1d4ed8", "#f97316", "#dc2626", "#facc15"],
 };
 const POSTIE_W = 170, KID_W = 115;
 type Crossing = { id: number; kind: Critter; x: number; bottom: number; ms: number; faceLeft: boolean; flat: boolean; done: boolean; lane: "far" | "near" };
@@ -294,8 +304,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   type Tweaker = { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "peek" | "run" | "cook"; carrying: Critter | null; stick: "none" | "cook" | "up" };
   const [cookout, setCookout] = useState<{ trev: Tweaker; kylie: Tweaker; fireX: number; fireBottom: number; can: "none" | "lit" | "kicked"; kick: 1 | -1; line: { who: "trev" | "kylie"; text: string } | null; cop: { x: number; ms: number; flip: boolean } | null } | null>(null);
   // The bush doof, and the coppers who shut it down.
-  type Raver = { id: number; who: "trev" | "kylie"; tint: string; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "dance" | "zapped" | "run" | "cuffed"; line: string | null; board: boolean; tossed: boolean; gone: boolean; scuffle?: boolean };
-  type RaveCopState = { id: number; x: number; bottom: number; ms: number; faceLeft: boolean; zap: boolean; walking: boolean; line: string | null; gone: boolean };
+  type Raver = { id: number; who: "trev" | "kylie"; tint: string; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "dance" | "zapped" | "run" | "cuffed"; line: string | null; board: boolean; tossed: boolean; gone: boolean; scuffle?: boolean; hiding?: boolean };
+  type RaveCopState = { id: number; x: number; bottom: number; ms: number; faceLeft: boolean; zap: boolean; walking: boolean; line: string | null; gone: boolean; baton?: boolean };
   type RaveVehicle = { id: number; kind: "car" | "wagon"; w: number; x: number; bottom: number; ms: number; flip: boolean };
   const [rave, setRave] = useState<{ ravers: Raver[]; cops: RaveCopState[]; vehicles: RaveVehicle[]; gear: boolean; lights: boolean } | null>(null);
   // Brawl thieves: Trev nicks a red bike; Kylie nicks a blue bike's back wheel and leaves it on bricks.
@@ -328,6 +338,22 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // Old Nev shuffles up and down the verge looking for his boy.
   const [nev, setNev] = useState<{ x: number; ms: number; faceLeft: boolean; walking: boolean; shaking?: boolean; line: string | null } | null>(null);
   const nevLine = useRef(0);
+  // True Blue and his entourage; Gumtree Gary up the right-hand gum.
+  const [blue, setBlue] = useState<{ x: number; ms: number; faceLeft: boolean; pose: TrueBluePose; line: string | null; fish: boolean } | null>(null);
+  const blueBusy = useRef(false);
+  const [blueAnimal, setBlueAnimal] = useState<{ kind: "roo" | "koala" | "wombat" | "dropbear" | "croc"; x: number; ms: number; faceLeft: boolean } | null>(null);
+  type PerchBird = { x: number; bottom: number; ms: number; landed: boolean } | null;
+  const [blueBirds, setBlueBirds] = useState<{ lori: PerchBird; ibis: PerchBird } | null>(null);
+  const [pelican, setPelican] = useState<{ x: number; bottom: number; ms: number; fish: boolean } | null>(null);
+  const [roadFish, setRoadFish] = useState<{ x: number } | null>(null);
+  const [gary, setGary] = useState<{ mode: "hiding" | "out"; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "run" | "dance" | "crawl" | "pee"; carrying: Critter | "fish" | null; fish: boolean; line: string | null } | null>(null);
+  const garyBusy = useRef(false);
+  // A tree tweaker down on the road having a go at the crows over a carcass.
+  const [fighter, setFighter] = useState<{ who: "trev" | "kylie" | "gary"; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "run" | "dance"; carrying: Critter | null; scuffle: boolean; line: string | null } | null>(null);
+  // A tweaker clicked out of their tree for a five-second boogie.
+  const [boogie, setBoogie] = useState<{ who: "trev" | "kylie" | "gary"; x: number; line: string } | null>(null);
+  // Emus: each takes two shots. `hits` 1 = one leg gone, hopping slower.
+  const [emus, setEmus] = useState<{ id: number; dir: 1 | -1; x: number; bottom: number; size: number; ms: number; hits: number }[]>([]);
   const [roos, setRoos] = useState<{ id: number; dir: 1 | -1; bottom: number; size: number; ms: number; delay: number; hop: number; joey: boolean }[]>([]);
   const binX = () => Math.max(24, Math.round(window.innerWidth * 0.1));
   const [raider, setRaider] = useState<{ x: number; bottom: number; ms: number; faceLeft: boolean; carrying: "snag" | null } | null>(null);
@@ -429,8 +455,14 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // She talks less: nothing while she's in the middle of something (brawls, chases, tricks), and
   // otherwise only now and then, at random, with a decent gap. `force` is for when she's asked.
   const lastSpoke = useRef(0);
+  const lastHover = useRef(0);
   const speak = useCallback((text: string, fromAi = false, force = false) => {
-    if (!force && (busy.current || Date.now() - lastSpoke.current < 20_000 || Math.random() < 0.5)) return;
+    // Comments are off: she only talks when hovered, clicked, or asked from the menu.
+    if (!force) return;
+    // One bubble at a time: a new line replaces whatever she was saying, nothing queues up.
+    lineQueue.current = []; window.clearTimeout(queueTimer.current);
+    showLine(text, fromAi);
+    return;
     lastSpoke.current = Date.now();
     // Keep only the newest couple waiting so she never falls minutes behind.
     lineQueue.current = [...lineQueue.current, { text, ai: fromAi }].slice(-2);
@@ -1164,10 +1196,72 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
         break;
       }
       case "lorikeet": setLorikeets(list => list.filter(b => b.id !== target.id)); break;
+      case "emu": {
+        const emu = emus.find(e => e.id === target.id);
+        if (!emu) break;
+        if (emu.hits === 0) {
+          // First shot: feathers and a leg go flying; it hops on, slower but still going.
+          add({ kind: "leg", x: x - 8, y: Math.max(GROUND, y - 30), size: 0, dx: (Math.random() - 0.5) * 120, dy: Math.max(10, y - 30 - GROUND), arc: -(70 + Math.random() * 60) });
+          const end = emu.dir === 1 ? window.innerWidth + 100 : -emu.size - 40, here = r.left;
+          setEmus(list => list.map(e => (e.id === emu.id ? { ...e, hits: 1, x: here, ms: 0 } : e)));
+          window.setTimeout(() => setEmus(list => list.map(e => (e.id === emu.id ? { ...e, x: end, ms: Math.abs(end - here) * 9 } : e))), 40);
+        } else {
+          // Second shot finishes the job: one-legged roadkill.
+          setEmus(list => list.filter(e => e.id !== emu.id));
+          dinner("emu");
+        }
+        break;
+      }
     }
   }
   // A shot animal draws a murder of crows: five drop in, pick at it for 10-15s and leave. Half the
   // time there's only a skeleton left, which sits on the road until a car or bike crunches it.
+  // One of the tree tweakers comes down and has a go at the crows. Win and they carry the carcass up
+  // their tree; lose and they slink back while the crows carry on. Returns "won", "lost" or null.
+  async function crowFight(killId: number, kind: Critter, mid: number, kb: number, crowIds: number[], spots: { id: number; x: number; bottom: number }[]): Promise<"won" | "lost" | null> {
+    const trees = treeSpots(), lurkersHome = !trev && !cookout && !rave && !thieves.trev && !thieves.kylie;
+    const choices = (["gary", "trev", "kylie"] as const).filter(w => boogie?.who !== w && (w === "gary" ? !garyBusy.current : lurkersHome && trees.length > (w === "trev" ? 1 : 2)));
+    if (!choices.length || fighter) return null;
+    const who = pick([...choices]);
+    if (who === "gary") garyBusy.current = true;
+    const tree = who === "gary" ? trees[trees.length - 1] : trees[who === "trev" ? 0 : 1], trunkX = tree.x + TREE_W * 0.45 - 33;
+    const flock = (change: (c: (typeof crows)[number]) => (typeof crows)[number]) => setCrows(list => list.map(c => (crowIds.includes(c.id) ? change(c) : c)));
+    // Down out of the tree (Gary climbs down from the canopy; the others pop out from behind the trunk).
+    setFighter({ who, x: trunkX, bottom: who === "gary" ? TREE_BOTTOM + TREE_H * 0.48 : TREE_BOTTOM - 6, ms: 0, faceLeft: false, pose: who === "gary" ? "dance" : "run", carrying: null, scuffle: false, line: pick(["OI! THAT'S MY DINNER!", "GET OFF IT, YA FEATHERED MONGRELS!", "MINE! MINE MINE MINE!"]) });
+    await later(400);
+    if (who === "gary") { setFighter(f => f && { ...f, bottom: TREE_BOTTOM - 6, ms: 900 }); await later(950); }
+    const runMs = Math.max(700, Math.abs(mid - 33 - trunkX) * 3);
+    setFighter(f => f && { ...f, pose: "run", x: mid - 33, bottom: kb, ms: runMs, faceLeft: mid - 33 < trunkX, line: null });
+    await later(runMs + 50);
+    // The brawl: crows up and flapping, a cloud of dust and feathers.
+    setFighter(f => f && { ...f, scuffle: true });
+    for (let i = 0; i < 6; i++) {
+      flock(c => ({ ...c, eating: false, x: mid - 60 + Math.random() * 100, bottom: kb + 20 + Math.random() * 70, ms: 350 }));
+      add({ kind: "burst", x: mid - 50 + (Math.random() - 0.5) * 80, y: kb + 120 + Math.random() * 30, size: 0, text: pick(["CAW!", "GERROFF!", "PECK PECK!", "OW! ME EAR!", "SQUAWK!", "BIFF!"]) });
+      if (i % 2 === 0) add({ kind: "feathers", x: mid, y: kb + 50, size: 0, palette: ["#111", "#1b1b1f", "#3b3b3b"] });
+      await later(420);
+    }
+    const won = Math.random() < 0.55, home = who === "gary" ? TREE_BOTTOM + TREE_H * 0.48 : TREE_BOTTOM - 6;
+    if (won) {
+      setKills(list => list.filter(k => k.id !== killId));
+      setFighter(f => f && { ...f, scuffle: false, carrying: kind, line: "HA! DINNER'S MINE!" });
+      flock(c => ({ ...c, eating: false, faceLeft: Math.random() < 0.5, x: mid + (Math.random() < 0.5 ? -1 : 1) * (window.innerWidth * 0.7), bottom: window.innerHeight * (0.65 + Math.random() * 0.2), ms: 2200 }));
+      add({ kind: "burst", x: mid - 50, y: kb + 140, size: 0, text: "CAAAW!!" });
+      window.setTimeout(() => setCrows(list => list.filter(c => !crowIds.includes(c.id))), 2400);
+    } else {
+      setFighter(f => f && { ...f, scuffle: false, line: "ALRIGHT! ALRIGHT! YA CAN HAVE IT!" });
+      setCrows(list => list.map(c => { const sp = spots.find(x => x.id === c.id); return sp ? { ...c, x: sp.x, bottom: sp.bottom, ms: 600, eating: true, faceLeft: sp.x + 22 > mid } : c; }));
+    }
+    await later(900);
+    // Back home.
+    setFighter(f => f && { ...f, x: trunkX, bottom: TREE_BOTTOM - 6, ms: runMs, faceLeft: trunkX < mid - 33, line: null });
+    await later(runMs + 50);
+    if (who === "gary") { setFighter(f => f && { ...f, pose: "dance", bottom: home, ms: 900 }); await later(950); }
+    if (won) add({ kind: "burst", x: trunkX, y: (who === "gary" ? home : TREE_BOTTOM) + 140, size: 0, text: "NOM NOM NOM" });
+    setFighter(null);
+    if (who === "gary") garyBusy.current = false;
+    return won ? "won" : "lost";
+  }
   async function crowFeast(killId: number) {
     await later(1500 + Math.random() * 2000);
     const kill = killsRef.current.find(k => k.id === killId);
@@ -1199,10 +1293,14 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     })();
     add({ kind: "burst", x: mid - 50, y: kb + 80, size: 0, text: "CAW! CAW!" });
     if (phaseRef.current === "parked" && !busy.current && Math.random() < 0.6) speak(pick(CROW_LINES));
-    const eatMs = 10_000 + Math.random() * 5000;
+    const eatMs = 10_000 + Math.random() * 5000, fightRoll = Math.random() < 0.45;
     for (let t = 0; t < eatMs; t += 3500) {
       await later(Math.min(3500, eatMs - t));
       if (!killsRef.current.some(k => k.id === killId)) break;
+      if (t === 0 && fightRoll) {
+        const result = await crowFight(killId, kill.kind, mid, kb, ids, spots);
+        if (result === "won") { flicking = false; return; }
+      }
       if (Math.random() < 0.6) add({ kind: "burst", x: mid - 40 + (Math.random() - 0.5) * 60, y: kb + 70, size: 0, text: pick(["CAW!", "CAAAW!", "peck peck"]) });
     }
     flicking = false;
@@ -1444,8 +1542,37 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     speak("COPPAS! Scatter, ya ferals!");
     await later(60);
     updRave(rv => ({ ...rv, vehicles: rv.vehicles.map((v, i) => ({ ...v, x: stops[i], ms: 1900 })) }));
-    setRaver(ravers[1].id, r => ({ ...r, line: "Is that part of the show?" }));
-    await later(2100);
+    // Panic on the dance floor.
+    const shuffled = [...ravers].sort(() => Math.random() - 0.5);
+    const climbers = shuffled.slice(0, 2), runners = shuffled.slice(2, 5), stayers = shuffled.slice(5);
+    const PANIC = ["COPPAS!!", "SCATTER!", "LEG IT!", "COPPAS! RUN!", "EVERY MAN FOR HIMSELF!"];
+    shuffled.slice(0, 5).forEach((r, i) => setRaver(r.id, rr => ({ ...rr, line: PANIC[i] })));
+    if (stayers[0]) setRaver(stayers[0].id, r => ({ ...r, line: "Is that part of the show?" }));
+    await later(900);
+    // Three of 'em get away...
+    runners.forEach(r => {
+      const toLeft = r.x < W / 2;
+      setRaver(r.id, rr => ({ ...rr, pose: "run", board: false, faceLeft: toLeft, x: toLeft ? -140 : W + 80, ms: 1300 + Math.random() * 500 }));
+    });
+    // ...and two shin up gum trees (different ones if there are enough) and hide in the leaves.
+    const trees = treeSpots(), taken: number[] = [];
+    climbers.forEach((climber, ci) => {
+      const order = trees.map((t, ti) => ({ ti, d: Math.abs(t.x + TREE_W / 2 - climber.x) })).sort((a, b) => a.d - b.d);
+      const pickTree = order.find(o => !taken.includes(o.ti)) ?? order[0];
+      taken.push(pickTree.ti);
+      const trunkX = trees[pickTree.ti].x + TREE_W * 0.45 - 33 + (taken.filter(t => t === pickTree.ti).length > 1 ? 24 : 0);
+      setRaver(climber.id, r => ({ ...r, pose: "run", board: false, x: trunkX, bottom: TREE_BOTTOM - 6, ms: 900, faceLeft: trunkX < r.x, line: ci ? "ME TOO! ME TOO!" : "UP THE TREE!" }));
+      void (async () => {
+        await later(950 + ci * 200);
+        setRaver(climber.id, r => ({ ...r, pose: "dance", bottom: TREE_BOTTOM + TREE_H * (ci ? 0.52 : 0.45), ms: 1300, line: null }));
+        await later(1350);
+        setRaver(climber.id, r => ({ ...r, hiding: true }));
+      })();
+    });
+    await later(1300);
+    runners.forEach(r => setRaver(r.id, rr => ({ ...rr, gone: true, line: null })));
+    add({ kind: "burst", x: 20, y: GROUND + 200, size: 0, text: "THREE GOT AWAY!" });
+    await later(800);
     // Four coppers pile out.
     const doors = [stops[0] + copW * 0.6, stops[1] + copW * 0.3, wagonX + wagonW * 0.2, wagonX + wagonW * 0.55];
     const cops: RaveCopState[] = doors.map((x, i) => ({ id: ++uid, x, bottom: i < 2 ? FAR_LANE + 10 : GROUND + 8, ms: 0, faceLeft: x > W / 2, zap: false, walking: false, line: null, gone: false }));
@@ -1454,7 +1581,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     await later(1200);
     // Round by round: each copper walks up to one, zaps them, chucks them in the van.
     const van = { x: wagonX + wagonW * 0.72, bottom: GROUND + 40 };
-    const queue = [...ravers].sort(() => Math.random() - 0.5);
+    const queue = [...stayers];
     let caught = 0;
     const copAt = cops.map(c => c.x);
     while (queue.length && phaseRef.current === "parked") {
@@ -1472,6 +1599,17 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
         add({ kind: "stars", x: r.x, y: r.bottom + 100, size: 0, text: "★ ✦ ★" });
       });
       await later(1000);
+      // Batons out: a few cartoon bonks, stars all round.
+      round.forEach((r, j) => {
+        setCop(cops[j].id, c => ({ ...c, zap: false, baton: true }));
+        setRaver(r.id, rr => ({ ...rr, line: Math.random() < 0.4 ? pick(["OW! ME HEAD!", "NOT THE FACE!", "I'LL BE GOOD!", "OI! THAT'S ME GOOD SIDE!"]) : null }));
+      });
+      for (let b = 0; b < 3; b++) {
+        round.forEach(r => add({ kind: "burst", x: r.x - 10 + (Math.random() - 0.5) * 30, y: r.bottom + 110 + b * 12, size: 0, text: pick(["BONK!", "WHACK!", "THWACK!", "DONK!"]) }));
+        round.forEach(r => add({ kind: "stars", x: r.x + 6, y: r.bottom + 104, size: 0, text: "★ ✦ ★" }));
+        await later(450);
+      }
+      round.forEach((r, j) => setCop(cops[j].id, c => ({ ...c, baton: false })));
       // Into the scuffle cloud...
       round.forEach((r, j) => {
         setCop(cops[j].id, c => ({ ...c, zap: false, gone: true }));
@@ -1500,6 +1638,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     }
     updRave(rv => ({ ...rv, gear: false }));
     setCop(cops[2].id, c => ({ ...c, line: "Right. Who's for a pie?" }));
+    setCop(cops[1].id, c => ({ ...c, line: "Could've sworn there were more of 'em." }));
     speak(`Ha! ${caught} in the paddy wagon. Personal best, lads.`);
     await later(1600);
     // Everyone back in and off.
@@ -1507,6 +1646,16 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     add({ kind: "burst", x: wagonX - 40, y: GROUND + 150, size: 0, text: "LET US OUT! TASMANIA ISN'T REAL!" });
     updRave(rv => ({ ...rv, vehicles: rv.vehicles.map(v => (v.kind === "wagon" ? { ...v, x: -v.w - 40, ms: 4200 } : v.flip ? { ...v, x: W + 40, flip: false, ms: 3000 } : { ...v, x: -v.w - 40, flip: true, ms: 3000 })) }));
     await later(4300);
+    // Coast is clear.
+    climbers.forEach((c, ci) => setRaver(c.id, r => ({ ...r, hiding: false, line: ci ? "…Is it safe?" : "Are they gone? …THEY'RE GONE!" })));
+    await later(1400);
+    climbers.forEach(c => setRaver(c.id, r => ({ ...r, bottom: TREE_BOTTOM - 6, ms: 1100, line: null })));
+    await later(1150);
+    climbers.forEach((c, ci) => {
+      const away = c.x < W / 2;
+      setRaver(c.id, r => ({ ...r, pose: "run", faceLeft: away, x: away ? -140 : W + 80, ms: 1800 + ci * 300, line: ci ? "WAIT FOR MEEE!" : "YA'LL NEVER TAKE ME ALIVE, COPPAS!" }));
+    });
+    await later(2200);
     setRave(null);
     busy.current = false;
   }
@@ -1549,7 +1698,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     }
     hitTarget(target, el);
     if (Math.random() < 0.4) bulletHoles(el, 1);
-    const bird = ["flyer", "flock", "raider", "ibis", "lorikeet"].includes(target.kind), pest = ["magpie", "dropBear", "dangler"].includes(target.kind);
+    const bird = ["flyer", "flock", "raider", "ibis", "lorikeet"].includes(target.kind), pest = ["magpie", "dropBear", "dangler", "emu"].includes(target.kind);
     if (Math.random() < 0.55) speak(pick(bird ? BIRD_SHOT_LINES : pest ? PEST_SHOT_LINES : ANIMAL_SHOT_LINES));
     await later(160);
     place.current = { ...place.current, tilt: 0 }; draw();
@@ -1873,7 +2022,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       [3, () => void rooStrike()],
       [2, () => void magpieSwoop()],
       [5, () => void lorikeetVisit()],
-      [2, () => void tweakerAct()],
+      [3, () => void trueBlueVisit()],
+      [3, () => emuFlock()],
+      [5, () => void tweakerAct()],
     ];
     const total = acts.reduce((sum, [weight]) => sum + weight, 0);
     let timer = 0;
@@ -1892,6 +2043,24 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
+  // A mob of emus legs it across the road, all neck and knees.
+  function emuFlock() {
+    if (!claimScene(8000)) return;
+    const W = window.innerWidth, dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, count = 5 + Math.floor(Math.random() * 3);
+    const flock = Array.from({ length: count }, (_, i) => {
+      const size = 62 + Math.random() * 18;
+      return { id: ++uid, dir, size, x: dir === 1 ? -size - 40 - i * 70 - Math.random() * 40 : W + 40 + i * 70 + Math.random() * 40, bottom: [GROUND + 2, FAR_LANE + 6, ROAD_H - 8][i % 3] + Math.random() * 8, ms: 0, hits: 0 };
+    });
+    setEmus(list => [...list, ...flock]);
+    window.setTimeout(() => setEmus(list => list.map(e => {
+      const f = flock.find(x => x.id === e.id);
+      if (!f) return e;
+      const end = dir === 1 ? W + 100 : -f.size - 40;
+      return { ...e, x: end, ms: Math.abs(end - f.x) * 3 };
+    })), 60);
+    add({ kind: "burst", x: dir === 1 ? 20 : W - 240, y: GROUND + 150, size: 0, text: "THUD THUD THUD THUD!" });
+    if (phaseRef.current === "parked" && !busy.current && Math.random() < 0.5) window.setTimeout(() => speak(pick(["EMUS! Lock up the barbie!", "They won the Great Emu War, ya know. Cocky buggers.", "Look at the knees on 'em!"])), 1000);
+  }
   function rooMob() {
     if (!claimScene(8000)) return;
     const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, count = 4 + Math.floor(Math.random() * 3), ms = 5500 + Math.random() * 2000;
@@ -1953,7 +2122,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       });
       await animate(250, t => { place.current = { x: place.current.x, tilt: 1.2 * (1 - t), pivot: 205 }; });
     }
-    setAtX(park); setPhase("parked"); say();
+    setAtX(park); setPhase("parked");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draw, loadAi, say]);
 
@@ -1982,7 +2151,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       });
     }
     place.current = { x: -500, tilt: 0, pivot: 60 }; draw();
-    setKills([]); setIbis(null); ibisBusy.current = false; setBbq(null); setFlyers([]); setRaider(null); setFlock(null); flockBusy.current = false; setRoos([]); setDropBear(null); dropBusy.current = false; setSportbikes([]); setStrike(null); strikeBusy.current = false; setDanglers([]); setSnakes([]); setDazza(null); dazzaBusy.current = false; setNev(null); setCrossings([]); crossingCount.current = 0; setCrows([]); setLorikeets([]); setPoops({}); setTrev(null); setCookout(null); setRave(null); setThieves({ trev: null, kylie: null, stolenRed: false, bricked: false }); setHitters([]); setPostie(null); setKid(null); setShotKoalas([]); shotIds.current.clear(); sceneUntil.current = 0; setTattoo(null); setConvoy(0); setBrawl(null);
+    setKills([]); setIbis(null); ibisBusy.current = false; setBbq(null); setFlyers([]); setRaider(null); setFlock(null); flockBusy.current = false; setRoos([]); setEmus([]); setDropBear(null); dropBusy.current = false; setSportbikes([]); setStrike(null); strikeBusy.current = false; setDanglers([]); setSnakes([]); setDazza(null); dazzaBusy.current = false; setNev(null); nevRun.current++; setBlue(null); blueBusy.current = false; setBlueAnimal(null); setBlueBirds(null); setPelican(null); setRoadFish(null); setGary(null); garyBusy.current = false; setCrossings([]); crossingCount.current = 0; setCrows([]); setLorikeets([]); setPoops({}); setTrev(null); setCookout(null); setRave(null); setThieves({ trev: null, kylie: null, stolenRed: false, bricked: false }); setHitters([]); setPostie(null); setKid(null); setShotKoalas([]); shotIds.current.clear(); sceneUntil.current = 0; setTattoo(null); setConvoy(0); setBrawl(null);
     setPhase("hidden");
   }
 
@@ -2011,31 +2180,230 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     void arrive();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summon]);
-  useEffect(() => { onPresence?.(phase !== "hidden"); }, [phase, onPresence]);
-  // Nev: wanders in, then shuffles to a new spot every so often, pausing in between. Slow, like
-  // an old bloke should be (14ms a pixel). Sometimes he mutters his story when he stops.
+  // ---- Gumtree Gary: lives up the right-hand roadside gum, eats whatever lands on the road ----
+  const garyHome = () => {
+    const trees = treeSpots(), t = trees[trees.length - 1];
+    return { x: t.x + TREE_W * 0.45 - 33, bottom: TREE_BOTTOM + TREE_H * 0.48, base: TREE_BOTTOM - 6 };
+  };
   useEffect(() => {
     if (phase !== "parked") return;
-    let timer = 0, alive = true;
-    let at = -60;
+    const h = garyHome();
+    setGary({ mode: "hiding", x: h.x, bottom: h.bottom, ms: 0, faceLeft: false, pose: "dance", carrying: null, fish: false, line: null });
+    // Every so often, if there's roadkill on the road, down he comes for it.
+    const timer = window.setInterval(() => {
+      if (garyBusy.current || busy.current) return;
+      const kill = killsRef.current.find(k => !k.claimed && Date.now() - k.bornAt > 12_000);
+      if (!kill || Math.random() < 0.4) return;
+      setKills(list => list.map(k => (k.id === kill.id ? { ...k, claimed: true } : k)));
+      void garyFetch(kill.x + 30, kill.bottom ?? GROUND - 2, () => setKills(list => list.filter(k => k.id !== kill.id)), kill.kind);
+    }, 9000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+  // Down the trunk, over to it, grab it, back up the tree. Fish go straight in the gob on the spot;
+  // roadkill gets carried up and eaten up the tree.
+  async function garyFetch(targetX: number, targetBottom: number, grab: () => void, critter: Critter | "fish") {
+    while (garyBusy.current) await later(500);
+    garyBusy.current = true;
+    const h = garyHome(), isFish = critter === "fish";
+    setGary(g => g && { ...g, mode: "out", x: h.x, bottom: h.bottom, ms: 0, pose: "dance", line: isFish ? pick(["Ooh! FISH!", "Is someone gonna eat that?"]) : pick(["Dinner's served!", "Nobody's usin' that, eh?"]) });
+    await later(400);
+    setGary(g => g && { ...g, bottom: h.base, ms: 1000, line: null });
+    await later(1050);
+    const runMs = Math.max(700, Math.abs(targetX - 33 - h.x) * 3);
+    setGary(g => g && { ...g, pose: "run", x: targetX - 33, bottom: Math.max(GROUND - 2, targetBottom), ms: runMs, faceLeft: targetX - 33 < h.x });
+    await later(runMs + 50);
+    grab();
+    if (isFish) {
+      setGary(g => g && { ...g, fish: true, line: "Into the gob!" });
+      await later(800);
+      setGary(g => g && { ...g, fish: false, line: "GULP!" });
+      add({ kind: "burst", x: targetX - 30, y: GROUND + 130, size: 0, text: "NOM!" });
+      await later(600);
+    } else {
+      setGary(g => g && { ...g, carrying: critter, line: "Mine now!" });
+      await later(600);
+    }
+    setGary(g => g && { ...g, x: h.x, bottom: h.base, ms: runMs, faceLeft: h.x < targetX - 33, line: null });
+    await later(runMs + 50);
+    setGary(g => g && { ...g, pose: "dance", bottom: h.bottom, ms: 1000 });
+    await later(1050);
+    setGary(g => g && { ...g, mode: "hiding", carrying: null });
+    if (!isFish) add({ kind: "burst", x: h.x, y: h.bottom + 140, size: 0, text: "NOM NOM NOM" });
+    garyBusy.current = false;
+  }
+
+  // Click a tweaker: out they come and go absolutely mental on the dance floor for five seconds.
+  async function boogieOut(who: "trev" | "kylie" | "gary") {
+    if (boogie || (who === "gary" && garyBusy.current)) return;
+    if (who === "gary") garyBusy.current = true;
+    const trees = treeSpots(), tree = who === "gary" ? trees[trees.length - 1] : trees[who === "trev" ? 0 : 1];
+    if (!tree) { if (who === "gary") garyBusy.current = false; return; }
+    const trunk = tree.x + TREE_W * 0.45, x = who === "trev" ? trunk - 96 : trunk + 26;
+    const lines = ["WOOOOOO!", "THIS IS MY JAM!", "UNTZ UNTZ UNTZ!", "CAN'T STOP, WON'T STOP!", "DOOF DOOF DOOF!", "WATCH THIS! …WATCH THIS!"];
+    setBoogie({ who, x, line: pick(lines) });
+    for (let i = 0; i < 6; i++) {
+      add({ kind: "junk", x: x + 33, y: TREE_BOTTOM + 90, size: 0, dx: (Math.random() - 0.5) * 140, dy: 20, arc: -(60 + Math.random() * 60), text: pick(["🎵", "🎶", "✨"]) });
+      if (i === 3) setBoogie(b => b && { ...b, line: pick(lines) });
+      await later(830);
+    }
+    setBoogie(null);
+    if (who === "gary") garyBusy.current = false;
+  }
+
+  // Gary on all fours for a pat from True Blue: down the tree, scamper over (returns once he's there).
+  async function garyComeForPat(petX: number) {
+    while (garyBusy.current) await later(400);
+    garyBusy.current = true;
+    const h = garyHome();
+    setGary(g => g && { ...g, mode: "out", x: h.x, bottom: h.bottom, ms: 0, pose: "dance", carrying: null, fish: false, line: "Woof?" });
+    await later(500);
+    setGary(g => g && { ...g, bottom: h.base, ms: 1000, line: null });
+    await later(1050);
+    const ms = Math.max(900, Math.abs(petX - h.x) * 4);
+    setGary(g => g && { ...g, pose: "crawl", x: petX, bottom: ROAD_H - 12, ms, faceLeft: petX < h.x });
+    await later(ms + 50);
+    setGary(g => g && { ...g, faceLeft: true, line: "*pant pant*" });
+  }
+  // ...then back to his tree, leg up against the trunk for a wee, and up he goes.
+  async function garyGoHome() {
+    const h = garyHome(), byTrunk = h.x + 34;
+    setGary(g => g && { ...g, line: null, x: byTrunk, bottom: TREE_BOTTOM - 8, ms: 1600, faceLeft: false });
+    await later(1650);
+    setGary(g => g && { ...g, pose: "pee", line: null });
+    add({ kind: "burst", x: byTrunk - 40, y: TREE_BOTTOM + 70, size: 0, text: "psssssst" });
+    await later(2200);
+    setGary(g => g && { ...g, pose: "dance", x: h.x, bottom: h.base, ms: 300 });
+    await later(350);
+    setGary(g => g && { ...g, bottom: h.bottom, ms: 1000 });
+    await later(1050);
+    setGary(g => g && { ...g, mode: "hiding" });
+    garyBusy.current = false;
+  }
+
+  // ---- True Blue: staggers down the road with his VB, sings, pats every animal, kisses fish ----
+  // `now`: called from the tricks menu, so he comes straight away instead of waiting his turn.
+  async function trueBlueVisit(now = false) {
+    if (blueBusy.current) return;
+    if (now) sceneUntil.current = Date.now() + 64_000;
+    else if (!claimScene(60_000, 4000)) return;
+    blueBusy.current = true;
+    const W = window.innerWidth, stand = Math.round(W * 0.36), say = (line: string | null) => setBlue(b => b && { ...b, line });
+    const pose = (p: TrueBluePose) => setBlue(b => b && { ...b, pose: p });
+    setBlue({ x: -80, ms: 0, faceLeft: false, pose: "walk", line: "🎵 Hey True Blue! Is it me and you? 🎵", fish: false });
+    await later(60);
+    const walkMs = Math.max(4000, (stand + 80) * 11);
+    setBlue(b => b && { ...b, x: stand, ms: walkMs });
+    await later(walkMs);
+    pose("drink"); say("Ahh. Nothin' beats a hard-earned thirst.");
+    await later(2600);
+    pose("stand"); say("A hard-earned thirst needs a big cold beer!");
+    await later(2600);
+    // The animals queue up for a pat, one at a time.
+    const pets = (["roo", "koala", "wombat", "dropbear", "croc"] as const).slice().sort(() => Math.random() - 0.5).slice(0, 4);
+    for (const kind of pets) {
+      setBlueAnimal({ kind, x: W + 40, ms: 0, faceLeft: true });
+      await later(60);
+      setBlueAnimal(a => a && { ...a, x: stand + 62, ms: 1800 });
+      await later(1850);
+      pose("pet"); say(PET_LINES[kind]);
+      for (let i = 0; i < 3; i++) { add({ kind: "burst", x: stand + 70, y: ROAD_H + 40 + i * 14, size: 0, text: i === 1 ? "pat pat" : "♥" }); await later(450); }
+      pose("stand");
+      setBlueAnimal(a => a && { ...a, x: W + 40, ms: 1600, faceLeft: false });
+      await later(700);
+    }
+    setBlueAnimal(null); say(null);
+    // Gumtree Gary wants one too.
+    await garyComeForPat(stand + 60);
+    pose("pet"); say("Who's a good boy, Gary? Who's a GOOD boy?");
+    for (let i = 0; i < 3; i++) { add({ kind: "burst", x: stand + 70, y: ROAD_H + 40 + i * 14, size: 0, text: i === 1 ? "pat pat" : "♥" }); await later(450); }
+    pose("stand");
+    void garyGoHome();
+    await later(1700);
+    say("Oh, ya filthy animal. Not on the gum tree!");
+    await later(2400);
+    say(null);
+    // Birds: a lorikeet onto his shoulder, a bin chicken beside him.
+    setBlueBirds({ lori: { x: -40, bottom: window.innerHeight * 0.7, ms: 0, landed: false }, ibis: { x: W + 40, bottom: window.innerHeight * 0.6, ms: 0, landed: false } });
+    await later(60);
+    setBlueBirds({ lori: { x: stand + 22, bottom: ROAD_H - 10 + 84, ms: 1800, landed: false }, ibis: { x: stand - 70, bottom: ROAD_H - 14, ms: 2200, landed: false } });
+    await later(2300);
+    setBlueBirds(bb => bb && { lori: bb.lori && { ...bb.lori, landed: true }, ibis: bb.ibis && { ...bb.ibis, landed: true } });
+    say("G'day, birds! Plenty of room on the shoulder.");
+    await later(2600);
+    // Fish from the sky (twice): the pelican drops one into his hand, he kisses it and lobs it on the road.
+    const gary = garyHome();
+    for (let round = 0; round < 2; round++) {
+      setPelican({ x: -120, bottom: window.innerHeight * 0.78, ms: 0, fish: true });
+      await later(60);
+      setPelican({ x: stand - 10, bottom: ROAD_H + 190, ms: 2200, fish: true });
+      pose("catch"); say(round ? "Another one! Ya spoil me!" : "Here she comes!");
+      await later(2250);
+      setPelican(p => p && { ...p, fish: false });
+      add({ kind: "junk", x: stand + 50, y: ROAD_H + 200, size: 0, dx: 0, dy: 120, arc: -10, text: "🐟" });
+      await later(900);
+      setPelican(p => p && { ...p, x: W + 160, bottom: window.innerHeight * 0.85, ms: 2600 });
+      setBlue(b => b && { ...b, pose: "kiss", fish: true, line: "MWAH! Ya beautiful thing." });
+      add({ kind: "burst", x: stand + 10, y: ROAD_H + 150, size: 0, text: "♥ MWAH ♥" });
+      await later(1800);
+      setBlue(b => b && { ...b, pose: "toss", fish: false, line: "Off ya go, mate!" });
+      const landX = gary.x + 20 + (Math.random() - 0.5) * 60, handX = stand + 60, handY = ROAD_H - 10 + 108;
+      add({ kind: "junk", x: handX, y: handY, size: 0, dx: landX - handX, dy: handY - (GROUND + 8), arc: -110, text: "🐟" });
+      await later(950);
+      setRoadFish({ x: landX });
+      pose("stand");
+      if (round === 0) await later(400);
+      void garyFetch(landX + 12, GROUND - 2, () => setRoadFish(null), "fish");
+      await later(round === 0 ? 3500 : 1500);
+    }
+    setPelican(null);
+    // Off he staggers, singing.
+    setBlueBirds(bb => bb && { lori: bb.lori && { ...bb.lori, landed: false, x: W + 60, bottom: window.innerHeight * 0.8, ms: 2400 }, ibis: bb.ibis && { ...bb.ibis, landed: false, x: -80, ms: 3000 } });
+    setBlue(b => b && { ...b, pose: "walk", line: "🎵 Hey True Blue… 🎵 Hooroo, cobbers!", x: W + 80, ms: Math.max(4000, (W - stand) * 11) });
+    if (!busy.current) speak(pick(["Hey True Blue! Legend.", "That bloke's patted more roos than I've had hot dinners.", "Kissin' fish on a Tuesday. Living the dream."]));
+    await later(Math.max(4000, (W - stand) * 11));
+    setBlue(null); setBlueBirds(null);
+    blueBusy.current = false;
+  }
+
+  useEffect(() => { onPresence?.(phase !== "hidden"); }, [phase, onPresence]);
+  // Nev only turns up when the "Dad?" button is pressed. He shuffles in, wanders about looking
+  // for his boy (slow, like an old bloke should be: 14ms a pixel), shakes his cane now and then,
+  // and after a minute he gives up for the day and walks off screen.
+  const nevRun = useRef(0);
+  function nevVisit() {
+    if (nev || phaseRef.current !== "parked") return;
+    const run = ++nevRun.current, alive = () => nevRun.current === run && phaseRef.current === "parked";
+    let at = -60, timer = 0;
     const shuffle = () => {
+      if (!alive()) return;
       const from = at, to = 20 + Math.random() * (window.innerWidth - 80), ms = Math.max(2500, Math.abs(to - from) * 14);
       at = to;
       setNev(n => n && { ...n, x: to, ms, faceLeft: to < from, walking: true });
       timer = window.setTimeout(() => {
-        if (!alive) return;
+        if (!alive()) return;
         setNev(cur => cur && { ...cur, walking: false });
         if (Math.random() < 0.35) {
           setNev(cur => cur && { ...cur, shaking: true });
-          window.setTimeout(() => alive && setNev(cur => cur && { ...cur, shaking: false }), 2200);
+          window.setTimeout(() => alive() && setNev(cur => cur && { ...cur, shaking: false }), 2200);
         }
         timer = window.setTimeout(shuffle, 4000 + Math.random() * 6000);
       }, ms);
     };
-    setNev({ x: at, ms: 0, faceLeft: false, walking: false, line: null });
+    setNev({ x: at, ms: 0, faceLeft: false, walking: false, line: "Has anyone seen me boy?" });
+    window.setTimeout(() => alive() && setNev(n => n && { ...n, line: null }), 4000);
     timer = window.setTimeout(shuffle, 1500);
-    return () => { alive = false; clearTimeout(timer); };
-  }, [phase]);
+    // A minute later, off he goes.
+    window.setTimeout(() => {
+      if (!alive()) return;
+      nevRun.current++;
+      clearTimeout(timer);
+      const off = window.innerWidth + 80, ms = Math.max(2500, Math.abs(off - at) * 14);
+      setNev(n => n && { ...n, x: off, ms, faceLeft: false, walking: true, shaking: false, line: "Ah well. I'll keep lookin'." });
+      window.setTimeout(() => setNev(n => n && { ...n, line: null }), 4000);
+      window.setTimeout(() => setNev(null), ms + 100);
+    }, 60_000);
+  }
   function nevSays() {
     setNev(n => n && { ...n, line: NEV_LINES[nevLine.current++ % NEV_LINES.length] });
     window.setTimeout(() => setNev(n => n && { ...n, line: null }), 4500);
@@ -2114,6 +2482,22 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     {raider && <span className={`${styles.raider} ${styles.shootable}`} style={{ left: raider.x, bottom: raider.bottom, transitionDuration: `${raider.ms}ms` }} {...shootProps({ kind: "raider" }, "Shoot the bin chicken!")}>
       <span className={styles.ibisBody} style={{ transform: raider.faceLeft ? "scaleX(-1)" : undefined }}><BinChicken flying carrying={raider.carrying} /></span>
     </span>}
+    {phase !== "hidden" && (() => {
+      const others = treeSpots().slice(0, -1), home = !trev && !cookout && !rave && !thieves.trev && !thieves.kylie;
+      if (!home) return null;
+      return others.slice(0, 2).map((t, i) => {
+        const left = i === 0, trunk = t.x + TREE_W * 0.45, who = i === 0 ? "trev" : "kylie";
+        if (boogie?.who === who || fighter?.who === who) return null;
+        return <span key={`lurk${i}`} className={styles.lurker} style={{ left: trunk - (left ? 46 : 20), bottom: TREE_BOTTOM - 6 }}>
+          <span className={styles.lurkHit} role="button" aria-label={`Get ${i === 0 ? "Trev" : "Kylie"} out for a dance`} title="Oi! Come out!" onClick={() => void boogieOut(who)} />
+          <span className={left ? styles.lurkLeft : styles.lurkRight} style={{ animationDelay: `${-i * 2.6}s` }}>
+            <span className={styles.trevTwitch}>
+              <span className={styles.ibisBody} style={{ transform: left ? "scaleX(-1)" : undefined }}>{i === 0 ? <Trev pose="peek" /> : <Kylie pose="peek" />}</span>
+            </span>
+          </span>
+        </span>;
+      });
+    })()}
     {trev && <span data-poopable="person" className={styles.trev} aria-hidden style={{ left: trev.x, bottom: trev.bottom, transitionDuration: `${trev.ms}ms` }}>
       <span className={trev.pose === "peek" ? styles.trevTwitch : styles.ibisBody}>
         <span className={styles.ibisBody} style={{ transform: trev.faceLeft ? "scaleX(-1)" : undefined }}><Trev pose={trev.pose} carrying={trev.carrying} /></span>
@@ -2156,7 +2540,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       {rave.vehicles.map(v => <span key={v.id} className={`${styles.strikeCar} ${styles.moving}`} style={{ left: v.x, bottom: v.bottom, width: v.w, height: v.kind === "wagon" ? v.w * 0.5 : v.w * 0.42, transitionDuration: `${v.ms}ms` }}>
         <span className={styles.carFlip} style={{ transform: v.flip ? "scaleX(-1)" : undefined }}>{v.kind === "wagon" ? <PaddyWagon /> : <PoliceCar damage={0} wrecked={false} />}</span>
       </span>)}
-      {rave.ravers.map(r => !r.gone && <span key={r.id} className={`${styles.trev} ${r.tossed ? styles.tossed : ""}`} style={{ left: r.x, bottom: r.bottom, transitionDuration: `${r.ms}ms` }}>
+      {rave.ravers.map(r => r.gone ? null : r.hiding ? <span key={r.id} className={styles.peekFace} style={{ left: r.x + 18, bottom: r.bottom + 88 }}>
+        <span className={styles.peekInner}>{r.who === "trev" ? <Trev pose="peek" shorts={r.tint} /> : <Kylie pose="peek" top={r.tint} />}</span>
+      </span> : <span key={r.id} className={`${styles.trev} ${r.tossed ? styles.tossed : ""}`} style={{ left: r.x, bottom: r.bottom, transitionDuration: `${r.ms}ms` }}>
         {r.scuffle && <span className={styles.scuffle}><em>💥</em><em>👊</em><em>⭐</em><em>🦶</em></span>}
         <span className={r.pose === "dance" ? styles.raveDance : r.pose === "zapped" ? styles.trevTwitch : styles.ibisBody} style={{ animationDelay: `${-(r.id % 5) * 90}ms`, visibility: r.scuffle ? "hidden" : undefined }}>
           <span className={styles.ibisBody} style={{ transform: r.faceLeft ? "scaleX(-1)" : undefined }}>
@@ -2167,7 +2553,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
         {r.line && <span className={styles.ibisBubble} style={{ bottom: 132 }}>{r.line}</span>}
       </span>)}
       {rave.cops.map(c => !c.gone && <span key={c.id} className={styles.raveCop} style={{ left: c.x, bottom: c.bottom, transitionDuration: `${c.ms}ms` }}>
-        <span className={styles.ibisBody} style={{ transform: c.faceLeft ? "scaleX(-1)" : undefined }}><RaveCop zap={c.zap} walking={c.walking} /></span>
+        <span className={styles.ibisBody} style={{ transform: c.faceLeft ? "scaleX(-1)" : undefined }}><RaveCop zap={c.zap} walking={c.walking} baton={c.baton} /></span>
         {c.line && <span className={styles.ibisBubble} style={{ bottom: 118 }}>{c.line}</span>}
       </span>)}
     </div>}
@@ -2231,6 +2617,53 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       <span className={`${styles.carFlip} ${styles.moving}`} style={{ transform: b.dir === -1 ? "scaleX(-1)" : undefined }}><SportBike color={b.color} /></span>
       {poopMarks(`bike-${b.id}`, "6%")}
     </span>)}
+    {/* Gumtree Gary: just his face in the leaves, or out and about after a feed */}
+    {gary && gary.mode === "hiding" && boogie?.who !== "gary" && fighter?.who !== "gary" && <span className={styles.lurkHit} role="button" aria-label="Get Gary down for a dance" title="Oi, Gary!"
+      style={{ inset: "auto", left: gary.x, bottom: gary.bottom + 40, width: 66, height: 90 }} onClick={() => void boogieOut("gary")} />}
+    {gary && (gary.mode === "hiding"
+      ? boogie?.who === "gary" || fighter?.who === "gary" ? null : <span className={styles.peekFace} style={{ left: gary.x + 18, bottom: gary.bottom + 88 }}><span className={styles.peekInner}><Trev pose="peek" shorts="#4d7c0f" /></span></span>
+      : <span data-poopable="person" className={styles.trev} style={{ left: gary.x, bottom: gary.bottom, transitionDuration: `${gary.ms}ms` }}>
+        <span className={styles.ibisBody} style={{ transform: gary.faceLeft ? "scaleX(-1)" : undefined }}>
+          <Trev pose={gary.pose} shorts="#4d7c0f" carrying={gary.carrying && gary.carrying !== "fish" ? gary.carrying : null} />
+        </span>
+        {gary.fish && <span className={styles.heldFish} style={{ left: gary.faceLeft ? 4 : 34, bottom: 92 }}>🐟</span>}
+        {gary.line && <span className={styles.ibisBubble} style={{ bottom: 128 }}>{gary.line}</span>}
+      </span>)}
+    {roadFish && <span className={styles.roadFish} style={{ left: roadFish.x, bottom: GROUND + 4 }}>🐟</span>}
+    {/* True Blue and his visitors */}
+    {blueAnimal && <span className={styles.blueAnimal} style={{ left: blueAnimal.x, bottom: ROAD_H - 12, width: blueAnimal.kind === "roo" ? 74 : blueAnimal.kind === "dropbear" ? 52 : 66, height: blueAnimal.kind === "roo" ? 66 : blueAnimal.kind === "dropbear" ? 52 : 46, transitionDuration: `${blueAnimal.ms}ms` }}>
+      <span className={blueAnimal.kind === "roo" ? styles.rooHop : styles.critterWaddle}>
+        <span className={styles.ibisBody} style={{ transform: blueAnimal.faceLeft ? "scaleX(-1)" : undefined }}>
+          {blueAnimal.kind === "roo" ? <Kangaroo /> : blueAnimal.kind === "dropbear" ? <DropBear /> : <LiveCritter kind={blueAnimal.kind} />}
+        </span>
+      </span>
+    </span>}
+    {blue && <span data-poopable="person" className={styles.trueBlue} role="button" aria-label="True Blue" title="True Blue" style={{ left: blue.x, bottom: ROAD_H - 10, transitionDuration: `${blue.ms}ms` }}
+      onClick={() => setBlue(b => b && { ...b, line: pick(["🎵 Hey True Blue! Is it me and you? 🎵", "For a hard-earned thirst, mate.", "Beer o'clock somewhere, cobber.", "Every animal's a mate if ya pat it right."]) })}>
+      <span className={blue.pose === "walk" ? styles.stagger : styles.ibisBody}>
+        <span className={styles.ibisBody} style={{ transform: blue.faceLeft ? "scaleX(-1)" : undefined }}><TrueBlue pose={blue.pose} /></span>
+      </span>
+      {blue.fish && <span className={styles.heldFish} style={{ left: 36, bottom: 96 }}>🐟</span>}
+      {blue.line && <span className={styles.ibisBubble} style={{ bottom: 130 }}>{blue.line}</span>}
+    </span>}
+    {blueBirds?.lori && <span className={styles.blueBird} style={{ left: blueBirds.lori.x, bottom: blueBirds.lori.bottom, width: 30, height: 21, transitionDuration: `${blueBirds.lori.ms}ms` }}><Lorikeet flying={!blueBirds.lori.landed} /></span>}
+    {blueBirds?.ibis && <span className={styles.blueBird} style={{ left: blueBirds.ibis.x, bottom: blueBirds.ibis.bottom, width: 70, height: 70, transitionDuration: `${blueBirds.ibis.ms}ms` }}><BinChicken flying={!blueBirds.ibis.landed} /></span>}
+    {pelican && <span className={styles.pelican} style={{ left: pelican.x, bottom: pelican.bottom, transitionDuration: `${pelican.ms}ms` }}><Pelican fish={pelican.fish} /></span>}
+    {fighter && <span data-poopable="person" className={styles.trev} aria-hidden style={{ left: fighter.x, bottom: fighter.bottom, transitionDuration: `${fighter.ms}ms` }}>
+      {fighter.scuffle && <span className={styles.scuffle}><em>💥</em><em>🪶</em><em>👊</em><em>⭐</em></span>}
+      <span className={styles.ibisBody} style={{ visibility: fighter.scuffle ? "hidden" : undefined }}>
+        <span className={styles.ibisBody} style={{ transform: fighter.faceLeft ? "scaleX(-1)" : undefined }}>
+          {fighter.who === "kylie" ? <Kylie pose={fighter.pose} carrying={fighter.carrying} /> : <Trev pose={fighter.pose} carrying={fighter.carrying} shorts={fighter.who === "gary" ? "#4d7c0f" : undefined} />}
+        </span>
+      </span>
+      {fighter.line && <span key={fighter.line} className={styles.ibisBubble} style={{ bottom: 132 }}>{fighter.line}</span>}
+    </span>}
+    {boogie && <span data-poopable="person" className={styles.trev} aria-hidden style={{ left: boogie.x, bottom: TREE_BOTTOM - 6 }}>
+      <span className={styles.wildDance}>
+        <span className={styles.ibisBody}>{boogie.who === "kylie" ? <Kylie pose="dance" /> : <Trev pose="dance" shorts={boogie.who === "gary" ? "#4d7c0f" : undefined} />}</span>
+      </span>
+      <span key={boogie.line} className={styles.ibisBubble} style={{ bottom: 132 }}>{boogie.line}</span>
+    </span>}
     {nev && <span data-poopable="person" className={styles.nev} role="button" aria-label="Talk to Old Nev" title="Old Nev" style={{ left: nev.x, bottom: ROAD_H - 10, transitionDuration: `${nev.ms}ms` }} onClick={nevSays}>
       <span className={styles.ibisBody} style={{ transform: nev.faceLeft ? "scaleX(-1)" : undefined }}><OldNev walking={nev.walking} shaking={nev.shaking} /></span>
       {nev.line && <span className={styles.ibisBubble} style={{ bottom: 128 }}>{nev.line}</span>}
@@ -2241,6 +2674,11 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       {dazza.line && <span className={styles.ibisBubble}>{dazza.line}</span>}
     </span>}
     {dazza && dazza.bearTop !== null && <span className={styles.fallingBear} aria-hidden style={{ left: dazza.x + 14, top: dazza.bearTop }}><DropBear /></span>}
+    {emus.map(e => <span data-poopable="animal" key={e.id} className={`${styles.emu} ${styles.shootable}`} {...shootProps({ kind: "emu", id: e.id }, e.hits ? "Finish it off!" : "Shoot the emu!")}
+      onTransitionEnd={event => { if (event.target === event.currentTarget && (e.x > window.innerWidth || e.x < -e.size)) setEmus(list => list.filter(x => x.id !== e.id)); }}
+      style={{ left: e.x, bottom: e.bottom, width: e.size, height: e.size * 90 / 70, transitionDuration: `${e.ms}ms` }}>
+      <span className={e.hits ? styles.emuHop : styles.emuRun}><span className={styles.ibisBody} style={{ transform: e.dir === -1 ? "scaleX(-1)" : undefined }}><Emu oneLeg={e.hits > 0} /></span></span>
+    </span>)}
     {roos.map(r => <span data-poopable="animal" key={r.id} className={`${styles.roo} ${styles.shootable}`} {...shootProps({ kind: "roo", id: r.id }, "Shoot the roo!")} onAnimationEnd={event => event.target === event.currentTarget && setRoos(list => list.filter(x => x.id !== r.id))}
       style={{ bottom: r.bottom, width: r.size, height: r.size * 0.9, animationDuration: `${r.ms}ms`, animationDelay: `${r.delay}ms`, ["--from" as string]: `${r.dir === 1 ? -r.size - 20 : window.innerWidth + 20}px`, ["--to" as string]: `${r.dir === 1 ? window.innerWidth + 20 : -r.size - 20}px`, ["--hop" as string]: `${r.hop}ms` }}>
       <span className={styles.rooHop}><span className={styles.ibisBody} style={{ transform: r.dir === -1 ? "scaleX(-1)" : undefined }}><Kangaroo joey={r.joey} /></span></span>
@@ -2314,6 +2752,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       if (item.kind === "rooFly") return <span key={item.id} className={styles.bottleX} style={{ left: item.x, bottom: item.y, ["--dx" as string]: `${item.dx}px` }} onAnimationEnd={event => event.target === event.currentTarget && rooLanded(item)}>
         <span className={styles.bottleY} style={{ ["--dy" as string]: `${item.dy}px`, ["--arc" as string]: `${item.arc ?? -110}px` }}><span className={styles.rooTumble}><Kangaroo /></span></span>
       </span>;
+      if (item.kind === "leg") return <span key={item.id} className={styles.bottleX} style={{ left: item.x, bottom: item.y, ["--dx" as string]: `${item.dx}px` }} onAnimationEnd={event => event.target === event.currentTarget && remove(item.id)}>
+        <span className={styles.bottleY} style={{ ["--dy" as string]: `${item.dy}px`, ["--arc" as string]: `${item.arc ?? -110}px` }}><span className={styles.flyingLeg}><EmuLeg /></span></span>
+      </span>;
       if (item.kind === "junk") return <span key={item.id} className={styles.bottleX} style={{ left: item.x, bottom: item.y, ["--dx" as string]: `${item.dx}px` }} onAnimationEnd={event => event.target === event.currentTarget && remove(item.id)}>
         <span className={styles.bottleY} style={{ ["--dy" as string]: `${item.dy}px`, ["--arc" as string]: `${item.arc ?? -110}px` }}><span className={styles.junk}>{item.text}</span></span>
       </span>;
@@ -2329,7 +2770,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     {wall && <span className={styles.wall} style={{ left: wall.left, bottom: GROUND - 2, width: wall.width, height: wall.height }} />}
     <button data-poopable="shazz" ref={bike} className={`${styles.shazz} ${phase === "enter" || phase === "leave" || moving || burning ? styles.moving : ""} ${talking ? styles.talking : ""}`}
       style={{ width, height, bottom: GROUND, visibility: phase === "hidden" ? "hidden" : "visible", transform: "translateX(-500px)" }}
-      onClick={() => phase === "parked" && void act(pick(actions)[0])} tabIndex={phase === "parked" ? 0 : -1} aria-label="Big Shazz. Poke her and see what happens">
+      onClick={() => { if (phase === "parked") { if (Date.now() - lineShownAt.current > 3000) say(); void act(pick(actions)[0]); } }}
+      // Only a real hover counts (the mouse actually moving over her), not her riding under a still cursor.
+      onPointerMove={event => { if (phase !== "parked" || event.pointerType !== "mouse" || (!event.movementX && !event.movementY) || Date.now() - lastHover.current < 8000) return; lastHover.current = Date.now(); say(); }} tabIndex={phase === "parked" ? 0 : -1} aria-label="Big Shazz. Poke her and see what happens">
       <span style={{ transform: facingLeft ? "scaleX(-1)" : undefined }}><span className={drunk ? styles.wobble : ""} style={{ ["--wobble" as string]: `${Math.min(drunk, 3) * 2.5}deg` }}><BikerShazz pose={pose} drunk={drunk} trophies={trophies} teardrops={teardrops} flaming={flaming} /></span></span>
     </button>
     <div ref={smokeCloud} className={styles.smokeCloud} />
@@ -2385,6 +2828,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
             <Trick label="🚓 Cop chase" onClick={pickTrick(() => void copChase())} />
             <Trick label="📱 Call backup" onClick={pickTrick(() => void callBackup())} />
             <Trick label="🥊 Bikie brawl" onClick={pickTrick(() => void bikieBrawl())} />
+            <Trick label="🍺 True Blue" onClick={pickTrick(() => void trueBlueVisit(true))} />
+            <Trick label="👴 Dad?" onClick={pickTrick(nevVisit)} />
             <Trick label="🪩 Bush doof" onClick={pickTrick(() => void bushRave())} />
           </div>
           <p className={styles.trickHeading}>Her antics</p>

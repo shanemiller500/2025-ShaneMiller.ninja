@@ -560,3 +560,49 @@
   .flockBird{width:52px;height:52px}
   .nev{width:50px;height:100px}
 }
+/* The raver hiding up the gum tree: just his face, popping out of the leaves now and then */
+.peekFace{position:absolute;width:30px;height:30px;overflow:hidden;border-radius:50%;pointer-events:none;animation:peek 3.2s ease-in-out infinite}
+.peekFace:after{content:"";position:absolute;left:-6px;right:-6px;bottom:-6px;height:12px;border-radius:50%;background:#5e8a6e}
+.peekInner{position:absolute;left:-19px;top:-7px;width:66px;height:121px}
+@keyframes peek{0%,50%,100%{transform:translateY(16px) scale(.5);opacity:0}62%,86%{transform:none;opacity:1}}
+.batonSwing{transform-box:view-box;transform-origin:42px 22px;animation:batonSwing .22s ease-in-out infinite alternate}
+@keyframes batonSwing{from{transform:rotate(-35deg)}to{transform:rotate(40deg)}}
+/* ---- True Blue, his visitors, the pelican, Gumtree Gary ---- */
+.trueBlue{position:absolute;width:66px;height:121px;cursor:pointer;pointer-events:auto;transition-property:left;transition-timing-function:linear}
+.trueBlue:hover .ibisBody{filter:drop-shadow(0 0 4px #fde68a)}
+.stagger{display:block;width:100%;height:100%;transform-origin:50% 100%;animation:blueStagger .9s ease-in-out infinite alternate}
+@keyframes blueStagger{from{transform:rotate(-5deg) translateX(-2px)}to{transform:rotate(5deg) translateX(2px)}}
+.blueAnimal{position:absolute;pointer-events:none;transition-property:left;transition-timing-function:ease-out}
+.blueBird{position:absolute;pointer-events:none;transition-property:left,bottom;transition-timing-function:ease-out}
+.pelican{position:absolute;width:90px;height:50px;pointer-events:none;transition-property:left,bottom;transition-timing-function:ease-in-out}
+.pelicanWing{transform-box:view-box;transform-origin:32px 24px;animation:pelicanFlap .45s ease-in-out infinite alternate}
+@keyframes pelicanFlap{from{transform:scaleY(1)}to{transform:scaleY(-.4)}}
+.heldFish{position:absolute;font-size:16px;line-height:1;pointer-events:none;animation:bubbleIn .2s ease-out}
+.roadFish{position:absolute;font-size:18px;line-height:1;pointer-events:none;transform-origin:50% 100%;animation:fishFlop .3s ease-in-out infinite alternate}
+@keyframes fishFlop{from{transform:rotate(-20deg) translateY(0)}to{transform:rotate(20deg) translateY(-6px)}}
+/* Emus: full sprint, or hopping on one leg after the first shot */
+.emu{position:absolute;transition-property:left;transition-timing-function:linear}
+.emuRun{display:block;width:100%;height:100%;animation:emuBob .2s ease-in-out infinite alternate}
+.emuHop{display:block;width:100%;height:100%;transform-origin:50% 100%;animation:emuHop .4s ease-out infinite}
+.emuLegNear{transform-box:view-box;transform-origin:36px 52px;animation:emuStride .2s ease-in-out infinite alternate}
+.emuLegFar{transform-box:view-box;transform-origin:30px 52px;animation:emuStride .2s ease-in-out -.2s infinite alternate}
+@keyframes emuBob{from{transform:translateY(0)}to{transform:translateY(-3px)}}
+@keyframes emuStride{from{transform:rotate(-24deg)}to{transform:rotate(24deg)}}
+@keyframes emuHop{0%,100%{transform:translateY(0) rotate(-4deg)}45%{transform:translateY(-14px) rotate(6deg)}}
+.flyingLeg{display:block;width:16px;height:32px;animation:spin .45s linear infinite}
+/* Trev and Kylie lurking behind the gums: mostly hidden, then head and shoulders lean out for a look */
+.lurker{position:absolute;width:66px;height:121px;pointer-events:none}
+.lurkLeft,.lurkRight{display:block;width:100%;height:100%}
+.lurkLeft{animation:lurkLeft 6s ease-in-out infinite}
+.lurkRight{animation:lurkRight 6s ease-in-out infinite}
+@keyframes lurkLeft{0%,40%,100%{clip-path:inset(0 0 45% 100%);transform:translateX(18px)}52%,84%{clip-path:inset(0 0 40% 0);transform:translateX(0)}}
+@keyframes lurkRight{0%,40%,100%{clip-path:inset(0 100% 45% 0);transform:translateX(-18px)}52%,84%{clip-path:inset(0 0 40% 0);transform:translateX(0)}}
+/* Gumtree Gary on all fours: panting tongue, and the wee against the tree */
+.pant{transform-box:fill-box;transform-origin:50% 0;animation:pant .25s ease-in-out infinite alternate}
+@keyframes pant{from{transform:scaleY(.7)}to{transform:scaleY(1.15)}}
+.peeStream{stroke-dasharray:5 4;animation:peeStream .3s linear infinite}
+@keyframes peeStream{to{stroke-dashoffset:-18}}
+/* Click a tweaker: they come out and dance like nobody's watching (everybody is) */
+.lurkHit{position:absolute;left:0;right:0;top:0;bottom:40%;pointer-events:auto;cursor:pointer}
+.wildDance{display:block;width:100%;height:100%;transform-origin:50% 100%;animation:wildDance 1.1s ease-in-out infinite}
+@keyframes wildDance{0%{transform:translateY(0) rotate(0) scaleX(1)}15%{transform:translateY(-22px) rotate(-14deg) scaleX(1)}30%{transform:translateY(0) rotate(10deg) scaleX(-1)}45%{transform:translateY(-14px) rotate(-8deg) scaleX(-1)}60%{transform:translateY(0) rotate(360deg) scaleX(1)}75%{transform:translateY(-26px) rotate(355deg) scaleX(1)}90%{transform:translateY(0) rotate(370deg) scaleX(-1)}100%{transform:translateY(0) rotate(360deg) scaleX(1)}}

@@ -18,7 +18,31 @@ export function StickFood({ x1, y1, x2, y2 }: { x1: number; y1: number; x2: numb
 
 // "dance" is arms in the air; "zapped" is stiff-armed with sparks coming off him. `shorts` recolours
 // the footy shorts so a crowd of Trevs doesn't look like clones.
-export default function Trev({ pose = "peek", carrying = null, stick = "none", shorts = "#b91c1c" }: { pose?: "peek" | "run" | "cook" | "dance" | "zapped" | "cuffed"; carrying?: Critter | null; stick?: "none" | "cook" | "up"; shorts?: string }) {
+export default function Trev({ pose = "peek", carrying = null, stick = "none", shorts = "#b91c1c" }: { pose?: "peek" | "run" | "cook" | "dance" | "zapped" | "cuffed" | "crawl" | "pee"; carrying?: Critter | null; stick?: "none" | "cook" | "up"; shorts?: string }) {
+  // On all fours like a dog (Gumtree Gary getting a pat), or with a back leg up against a tree.
+  if (pose === "crawl" || pose === "pee") {
+    const pee = pose === "pee";
+    const limb = (d: string) => <><path d={d} stroke={INK} strokeWidth={6} fill="none" strokeLinecap="round" strokeLinejoin="round" /><path d={d} stroke={SKIN} strokeWidth={3.8} fill="none" strokeLinecap="round" strokeLinejoin="round" /></>;
+    return <svg viewBox="0 0 60 110" width="100%" height="100%" aria-hidden overflow="visible">
+      {pee && <path className={styles.peeStream} d="M8 82 Q-8 80 -16 106" stroke="#facc15" strokeWidth={2.4} fill="none" strokeLinecap="round" />}
+      <g className={pee ? undefined : styles.bludgerLegs}>{limb(pee ? "M14 82 L2 70 L-4 72" : "M14 84 L10 106")}</g>
+      {limb("M22 86 L24 106")}
+      <g className={pee ? undefined : styles.bludgerLegs} style={{ animationDelay: "-.15s" }}>{limb("M42 84 L44 106 M48 82 L52 106")}</g>
+      <path d="M8 76 q4 -9 15 -7 l2 17 h-17 z" fill={shorts} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
+      <path d="M20 70 q16 -9 32 -1 l0 15 q-16 5 -32 0 z" fill={SKIN} stroke={INK} strokeWidth={1.8} strokeLinejoin="round" />
+      <path d="M28 72 v12 M33 71 v13 M38 71 v13" stroke="#c98f6a" strokeWidth={1} />
+      <circle cx={30} cy={80} r={1.6} fill={DIRT} opacity={0.6} />
+      {/* Head up, tongue out, panting */}
+      <path d="M50 62 q-8 -2 -10 8" stroke="#6b4a2b" strokeWidth={3} fill="none" strokeLinecap="round" />
+      <ellipse cx={54} cy={66} rx={8} ry={9} fill={SKIN} stroke={INK} strokeWidth={1.8} />
+      <path d="M46 62 q4 -8 12 -6 q4 2 4 6 q-6 -3 -16 0 z" fill="#6b4a2b" stroke={INK} strokeWidth={1.2} />
+      <g className={styles.trevEyes}>
+        <circle cx={54} cy={64} r={3.6} fill="#fff" stroke={INK} strokeWidth={1.1} /><circle cx={60} cy={64} r={3.6} fill="#fff" stroke={INK} strokeWidth={1.1} />
+        <circle cx={55} cy={64} r={1.1} fill={INK} /><circle cx={61} cy={64} r={1.1} fill={INK} />
+      </g>
+      <path className={pee ? undefined : styles.pant} d="M56 72 q3 1 4 0 q1 5 -2 6 q-3 -1 -2 -6 z" fill="#f472b6" stroke={INK} strokeWidth={0.8} />
+    </svg>;
+  }
   const running = pose === "run", walking = running || pose === "cuffed";
   const arms = pose === "cuffed" ? "M23 38 L22 56 M37 38 L30 58" : pose === "dance" ? "M23 38 L14 18 M37 38 L46 16" : pose === "zapped" ? "M23 38 L6 30 M37 38 L54 30"
     : pose === "cook" ? "M23 38 L28 52 M37 38 L50 42"
