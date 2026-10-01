@@ -237,8 +237,15 @@ type Fx = { stage?: number; palette?: string[]; id: number; kind: "leg" | "hole"
 let uid = Date.now();
 // Phones get a wider street than the screen (you swipe along it); desktop uses the screen width.
 const PHONE_WORLD = 900;
-const isPhone = () => typeof window !== "undefined" && window.innerWidth < 640;
-const VW = () => (typeof window === "undefined" ? 1200 : isPhone() ? Math.max(PHONE_WORLD, window.innerWidth) : window.innerWidth);
+// Full-screen mode (/day-out/shazz): set by the component when it mounts with `immersive`.
+let IMMERSIVE = false;
+const isPhone = () => typeof window !== "undefined" && (window.innerWidth < 640 || (IMMERSIVE && window.innerHeight < 500));
+const VW = () => {
+  if (typeof window === "undefined") return 1200;
+  // Full screen: the 1500×420 street drawing scaled to fill the height above the road.
+  if (IMMERSIVE) return Math.max(window.innerWidth, Math.round((window.innerHeight - 147) * 1500 / 420));
+  return isPhone() ? Math.max(PHONE_WORLD, window.innerWidth) : window.innerWidth;
+};
 // Sportsbikes are drawn 110×60; this keeps them road-sized next to the cars and Shazz.
 const sportbikeW = () => (isPhone() ? 150 : 205);
 // Everything Shazz can take a shot at. Birds and pests go up in a puff; the rest drop as dinner.
@@ -257,7 +264,9 @@ type Kid = { x: number; ms: number; dir: 1 | -1; panic: boolean; line: string | 
 
 // `summon` increments each time the "Call Shazz" button is pressed; `dismiss` each time
 // "Send Shazz home" is. `onPresence` reports whether she is on screen, so the header button can flip.
-export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { topic: string; summon: number; dismiss?: number; onPresence?: (out: boolean) => void }) {
+// `immersive`: the full-screen Bogan Street page. The street fills the screen and scrolls sideways.
+export default function SmartArse({ topic, summon, dismiss = 0, onPresence, immersive = false }: { topic: string; summon: number; dismiss?: number; onPresence?: (out: boolean) => void; immersive?: boolean }) {
+  IMMERSIVE = immersive;
   const [muted, setMuted] = useState<boolean | null>(null);
   // Swearing is bleeped unless the viewer switches it to full.
   const [clean, setClean] = useState(true);
@@ -479,7 +488,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // Swipe the phone view so x (scene px) is in the middle of the screen.
   const panTo = (x: number) => {
     const sc = scroller.current;
-    if (!sc || !isPhone()) return;
+    if (!sc || sc.scrollWidth <= sc.clientWidth + 4) return;
     sc.scrollTo({ left: Math.max(0, x - window.innerWidth / 2), behavior: "smooth" });
   };
   const lastHover = useRef(0);
@@ -2214,9 +2223,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       const x = Math.max(8, Math.min(place.current.x, VW() - w - 8));
       if (x !== place.current.x) { place.current.x = x; draw(); setAtX(x); }
     };
-    setPhoneView(isPhone());
+    setPhoneView(VW() > window.innerWidth + 1);
     const onResize = () => {
-      setPhoneView(isPhone());
+      setPhoneView(VW() > window.innerWidth + 1);
       if (phaseRef.current === "hidden" || !bike.current) return;
       const w = isPhone() ? 150 : 210;
       setWidth(w);
@@ -2501,15 +2510,46 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     setClean(value => { try { localStorage.setItem("day-out-smartarse-clean", value ? "0" : "1"); } catch { /* ignore */ } return !value; });
   }
 
-  const onRoad = phase !== "hidden" || fx.some(item => item.kind === "skid" || item.kind === "shard");
+  // Full screen on a phone held upright: ask them to turn it sideways.
+  const [portrait, setPortrait] = useState(false);
+  const [rotateOk, setRotateOk] = useState(false);
+  useEffect(() => {
+    if (!immersive) return;
+    const check = () => {
+      const upright = window.innerHeight > window.innerWidth && Math.min(window.innerWidth, window.innerHeight) < 600;
+      setPortrait(upright);
+      if (!upright) setRotateOk(false);
+    };
+    check();
+    window.addEventListener("resize", check);
+    window.addEventListener("orientationchange", check);
+    setCanFull(!!document.fullscreenEnabled);
+    const fsChange = () => setIsFull(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", fsChange);
+    return () => { window.removeEventListener("resize", check); window.removeEventListener("orientationchange", check); document.removeEventListener("fullscreenchange", fsChange); };
+  }, [immersive]);
+  const [isFull, setIsFull] = useState(false);
+  const [canFull, setCanFull] = useState(false);
+  async function goLandscape() {
+    try {
+      await document.documentElement.requestFullscreen?.();
+      const orientation = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+      await orientation.lock?.("landscape");
+    } catch { /* not every phone allows it; turning it by hand works too */ }
+    setRotateOk(true);
+  }
+  const scrollStreet = (dir: 1 | -1) => scroller.current?.scrollBy({ left: dir * window.innerWidth * 0.6, behavior: "smooth" });
+  const onRoad = immersive || phase !== "hidden" || fx.some(item => item.kind === "skid" || item.kind === "shard");
   const actions: [Action, string][] = [["drink", "🍺 Crack a tinnie"], ["flip", "🖕 Flip us off"], ["moon", "🍑 Show us ya arse"], ["smoke", "🚬 Light a durry"], ["throw", "🍾 Chuck a bottle"]];
   // Choosing anything from the menu closes it (so on a phone the sheet gets out of the way).
   const pickTrick = (run: () => void) => () => { setMenu(false); run(); };
   // Wildlife and locals from the menu jump the queue (clear the "something's on" lock first).
   const callIn = (run: () => void) => pickTrick(() => { sceneUntil.current = 0; run(); });
-  return <><div ref={scroller} className={styles.stageScroller}><div className={`${styles.stage} ${convoy || brawl === "boom" ? styles.rumble : ""}`} style={phoneView ? { width: VW() } : undefined}>
+  return <><div ref={scroller} className={styles.stageScroller}
+    onWheel={immersive ? event => { if (scroller.current && Math.abs(event.deltaY) > Math.abs(event.deltaX)) scroller.current.scrollLeft += event.deltaY; } : undefined}>
+    <div className={`${styles.stage} ${immersive ? styles.immersive : ""} ${convoy || brawl === "boom" ? styles.rumble : ""}`} style={phoneView ? { width: VW() } : undefined}>
     {/* The shops behind the road. Not clickable itself, but it stops clicks reaching the page behind. */}
-    {phase !== "hidden" && <div className={styles.shopStrip} aria-hidden onClick={event => event.stopPropagation()}><Shopfronts /></div>}
+    {(immersive || phase !== "hidden") && <div className={styles.shopStrip} aria-hidden onClick={event => event.stopPropagation()}><Shopfronts /></div>}
     <div className={`${styles.road} ${onRoad ? styles.roadOn : ""} ${phase === "parked" ? styles.roadClickable : ""}`} onClick={event => void rideTo(event.clientX + panX())} title={phase === "parked" ? "Click to move Shazz here" : undefined} />
     {cars.map(car => <span key={car.id} data-vehicle={`car-${car.id}`} data-lane={car.lane} className={`${styles.car} ${car.turnAt !== undefined ? styles.carTurn : ""} ${phase === "parked" ? styles.carClickable : ""} ${heldCar === car.id ? styles.carHeld : ""}`}
       onClick={event => void lassoCar(car.id, event.currentTarget)} title={phase === "parked" ? "Lasso it!" : undefined} onAnimationEnd={event => event.target === event.currentTarget && setCars(list => list.filter(item => item.id !== car.id))}
@@ -2894,7 +2934,26 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       <span className={styles.drunkCans} aria-hidden>{Array.from({ length: FALL_AT }, (_, i) => <span key={i} className={i < drunk ? styles.canFull : ""}>🍺</span>)}</span>
     </div>}
     </div></div>
-    {phase === "parked" && <div className={styles.trickBar}>
+    {immersive && <>
+      <a href="/day-out" className={styles.immersiveBack} onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); }}>← Day Out</a>
+      {canFull && !isFull && <button className={styles.fullButton} onClick={() => void goLandscape()}>⛶ Full screen</button>}
+      {phoneView && <>
+        <button className={`${styles.streetArrow} ${styles.streetArrowLeft}`} onClick={() => scrollStreet(-1)} aria-label="Look left along the street">◀</button>
+        <button className={`${styles.streetArrow} ${styles.streetArrowRight}`} onClick={() => scrollStreet(1)} aria-label="Look right along the street">▶</button>
+      </>}
+      {phase === "hidden" && <div className={styles.callBack}>
+        <p>Shazz has buggered off.</p>
+        <button onClick={() => void arrive()}>Call her back</button>
+      </div>}
+      {portrait && !rotateOk && <div className={styles.rotatePrompt}>
+        <span className={styles.rotatePhone} aria-hidden>📱</span>
+        <h2>Turn your phone sideways</h2>
+        <p>Bogan Street is a wide street. Turn your phone on its side to see the lot, then swipe along it.</p>
+        <button onClick={() => void goLandscape()}>Go full screen</button>
+        <button className={styles.rotateSkip} onClick={() => setRotateOk(true)}>Play like this anyway</button>
+      </div>}
+    </>}
+    {phase === "parked" && <div className={`${styles.trickBar} ${immersive ? styles.trickBarImmersive : ""}`}>
       <button className={styles.trickToggle} onClick={() => setMenu(open => !open)} aria-expanded={menu} aria-label="Shazz's tricks and settings"><span aria-hidden>{menu ? "✕" : "🤘"}</span>{menu ? "Close" : "Tricks"}</button>
       {menu && <>
         {/* Phones: the menu is a bottom sheet; tapping outside it closes it */}
@@ -2934,6 +2993,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
           </div>
           <p className={styles.trickHeading}>Settings</p>
           <div className={styles.trickGroup}>
+            {!immersive && <Trick label="🎮 Full screen" onClick={() => { window.location.href = "/day-out/shazz"; }} />}
             <Trick label={clean ? "🤬 Full swearing" : "🤐 Bleep swearing"} onClick={toggleClean} />
             <Trick label="👋 Yeah, righto" onClick={pickTrick(() => void leave())} />
             <Trick label="🖐️ Piss off, Shazz" onClick={pickTrick(() => void leave(true))} />

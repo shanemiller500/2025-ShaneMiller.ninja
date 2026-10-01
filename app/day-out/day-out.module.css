@@ -630,3 +630,22 @@
   .root .trickToggle[aria-expanded="true"]{display:none}
   .root .sheetClose{position:sticky;top:-14px;z-index:1;display:flex;align-items:center;justify-content:center;gap:8px;width:calc(100% + 28px);margin:-14px -14px 10px;min-height:48px;border:0;border-bottom:3px solid #111;border-radius:22px 22px 0 0;background:var(--accent);color:#141517;font-size:16px;font-weight:900}
 }
+/* ---- Bogan Street, full screen ---- */
+.immersivePage{position:fixed;inset:0;z-index:100;overflow:hidden;background:linear-gradient(#2f80d1,#8cc4f0)}
+.immersive .shopStrip{height:calc(100dvh - 147px)}
+.root .trickBarImmersive{top:64px;bottom:auto;left:12px;transform:none}
+.root .immersiveBack{position:fixed;top:12px;left:12px;z-index:82;display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:999px;border:2px solid #111;background:#fffdf5;color:#141517;font-weight:900;font-size:14px;box-shadow:3px 3px 0 #111;text-decoration:none}
+.root .streetArrow{position:fixed;top:45%;z-index:82;width:44px;height:44px;border-radius:50%;border:2px solid #111;background:#fffdf5e6;color:#141517;font-size:18px;box-shadow:3px 3px 0 #111;cursor:pointer}
+.root .streetArrowLeft{left:10px}
+.root .streetArrowRight{right:10px}
+.callBack{position:fixed;left:50%;top:40%;z-index:82;translate:-50% -50%;padding:18px 22px;border:3px solid #111;border-radius:18px;background:#fffdf5;color:#141517;text-align:center;box-shadow:6px 6px 0 #111}
+.callBack p{margin:0 0 10px;font-weight:900}
+.root .callBack button{min-height:44px;padding:0 18px;border-radius:999px;border:2px solid #111;background:var(--accent);color:#141517;font-weight:900}
+.rotatePrompt{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;background:#141517f2;color:#f2f0eb;text-align:center}
+.rotatePrompt h2{margin:0;font-size:24px;font-weight:900}
+.rotatePrompt p{margin:0;max-width:300px;font-size:16px;color:#a8aba3}
+.rotatePhone{font-size:64px;animation:rotatePhone 2.4s ease-in-out infinite}
+@keyframes rotatePhone{0%,25%{transform:rotate(0)}50%,85%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
+.root .rotatePrompt button{min-height:48px;padding:0 22px;border-radius:999px;border:2px solid #111;background:var(--accent);color:#141517;font-weight:900;font-size:16px}
+.root .rotatePrompt .rotateSkip{min-height:40px;background:transparent;border-color:#555;color:#a8aba3;font-weight:700;font-size:14px}
+.root .fullButton{position:fixed;top:12px;right:12px;z-index:82;min-height:40px;padding:0 14px;border-radius:999px;border:2px solid #111;background:var(--accent);color:#141517;font-weight:900;font-size:14px;box-shadow:3px 3px 0 #111;cursor:pointer}

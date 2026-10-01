@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Bookmark, CloudRain, Flag, Mountain, Music, RefreshCw, Shield, Shuffle, Sofa, Star, Sun, TramFront, Tent, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Maximize2, Bookmark, CloudRain, Flag, Mountain, Music, RefreshCw, Shield, Shuffle, Sofa, Star, Sun, TramFront, Tent, type LucideIcon } from "lucide-react";
 import type { Activity, Category, DayData, Recommendation } from "./lib/types";
 import { fresh, recommend, surpriseCandidates } from "./lib/recommendations";
 import { brisbaneDay } from "./lib/normalize";
@@ -182,9 +182,15 @@ export default function DayOutClient({ places }: { places: Activity[] }) {
         {weather ? <>{weather.rainNextHours >= 60 ? <CloudRain size={20} aria-hidden /> : <Sun size={20} aria-hidden />}{Math.round(weather.temperature)}° Gold Coast · {weather.rainNextHours}% rain</> : loading ? "Checking weather…" : "Weather unavailable"}
       </span>
       <button className={styles.callShazz} aria-pressed={shazzOut} disabled={sendingHome}
-        onClick={() => { if (shazzOut) { setSendingHome(true); setDismiss(value => value + 1); } else setSummon(value => value + 1); }}>
+        onClick={() => {
+          if (shazzOut) { setSendingHome(true); setDismiss(value => value + 1); return; }
+          // On a phone she gets the whole screen: off to Bogan Street (which asks to turn the phone sideways).
+          if (window.innerWidth < 640) { window.location.href = "/day-out/shazz"; return; }
+          setSummon(value => value + 1);
+        }}>
         <span aria-hidden><BikerShazz /></span>{sendingHome ? "Leaving…" : shazzOut ? "Send Shazz home" : "Call Shazz"}
       </button>
+      <Link href="/day-out/shazz" className={styles.iconButton} aria-label="Bogan Street, full screen" title="Bogan Street, full screen"><Maximize2 size={20} aria-hidden /></Link>
       <button className={styles.iconButton} onClick={() => setRefresh(value => value + 1)} disabled={loading} aria-label="Refresh"><RefreshCw size={20} aria-hidden /></button>
     </header>
 
