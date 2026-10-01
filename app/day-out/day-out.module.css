@@ -98,13 +98,15 @@
 @media (max-width:640px){.header{gap:8px}.backLink{font-size:0;gap:0;padding:0 10px}.root .callShazz{font-size:0;gap:0;padding:0 8px}.brand{font-size:19px}.scrollArrow{display:none!important}.panelBody{padding:18px 16px}.panelTitle{font-size:26px}.actions :is(a,button){flex:1 1 auto;justify-content:center}.bubble p{font-size:17px}.weather{display:none}.iconButton{margin-left:auto}.titleRow{margin-top:20px}.root .surprise{width:100%;justify-content:center}}
 
 /* Big Shazz: stage, road, smoke, skid marks */
-.stage{position:fixed;inset:0;z-index:80;pointer-events:none;overflow:hidden}
+.stageScroller{position:fixed;inset:0;z-index:80;pointer-events:none;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain}
+.stageScroller::-webkit-scrollbar{display:none}
+.stage{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden}
 .road{position:absolute;left:0;right:0;bottom:0;height:150px;background:linear-gradient(#2c2e32,#26282b);border-top:3px solid #5a5e65;box-shadow:inset 0 -3px 0 #5a5e65;opacity:0;transition:opacity .6s}
 .road:after{content:"";position:absolute;left:0;right:0;top:50px;height:4px;background:repeating-linear-gradient(90deg,#e8c547 0 34px,transparent 34px 68px)}
 .roadOn{opacity:1}
 .roadClickable{pointer-events:auto;cursor:crosshair}
 .roadClickable:hover{background:#34373c}
-.trickBar{position:absolute;left:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:flex-start;gap:6px;pointer-events:auto;animation:bubbleIn .25s ease-out}
+.trickBar{position:fixed;z-index:81;left:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:flex-start;gap:6px;pointer-events:auto;animation:bubbleIn .25s ease-out}
 .root .trickToggle{width:56px;height:56px;border-radius:50%;border:3px solid #111;background:var(--accent);font-size:26px;box-shadow:4px 4px 0 #111}
 .root .trick{display:flex;align-items:center;gap:0;width:46px;height:46px;padding:0 0 0 9px;border-radius:23px;border:3px solid #111;background:#fffdf5;color:#141517;box-shadow:4px 4px 0 #111;overflow:hidden;white-space:nowrap;transition:width .2s}
 .trick>span{font-size:20px;flex:none}
@@ -292,7 +294,7 @@
 @keyframes rooHop{0%,100%{transform:translateY(0) rotate(0);animation-timing-function:cubic-bezier(.2,.8,.4,1)}45%{transform:translateY(-46px) rotate(-8deg);animation-timing-function:cubic-bezier(.6,0,.8,.3)}90%{transform:translateY(0) rotate(2deg)}}
 @keyframes rooLegs{0%,90%,100%{transform:rotate(0)}45%{transform:rotate(-24deg)}}
 @keyframes rooTail{0%,90%,100%{transform:rotate(0)}45%{transform:rotate(14deg)}}
-.gumTree{position:absolute;display:block;pointer-events:none;opacity:.95;animation:bubbleIn .6s ease-out}
+.gumTree{position:absolute;display:block;pointer-events:none;animation:bubbleIn .6s ease-out;filter:drop-shadow(0 0 1.5px #000) drop-shadow(3px 4px 0 #0005)}
 .koala{animation:koalaSway 4s ease-in-out infinite alternate}
 .koalaEyes{transform-box:fill-box;transform-origin:center;animation:koalaBlink 5s infinite}
 .koalaChew{transform-box:fill-box;transform-origin:0 50%;animation:koalaChew .5s ease-in-out infinite alternate}
@@ -447,7 +449,8 @@
 .trickGroup{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
 .trickHeading,.trickBackdrop{display:none}
 @media (max-width:640px){
-  .trickBar{top:96px;bottom:auto;left:10px;transform:none}
+  /* Sits just above the shop backdrop, top-left, so it's always right with the scene */
+  .trickBar{top:auto;bottom:calc(147px + min(252px, 50vh) + 8px);left:10px;transform:none}
   .trickBackdrop{display:block;position:fixed;inset:0;z-index:1;background:#0008;pointer-events:auto;animation:bubbleIn .2s ease-out}
   .root .trickToggle{position:relative;z-index:3}
   .trickPanel{position:fixed;left:0;right:0;bottom:0;z-index:2;display:block;max-height:72vh;overflow-y:auto;padding:14px 14px calc(18px + env(safe-area-inset-bottom));border-top:3px solid #111;border-radius:22px 22px 0 0;background:#fffdf5;box-shadow:0 -6px 0 #111;pointer-events:auto;animation:sheetUp .25s ease-out}
@@ -606,3 +609,19 @@
 .lurkHit{position:absolute;left:0;right:0;top:0;bottom:40%;pointer-events:auto;cursor:pointer}
 .wildDance{display:block;width:100%;height:100%;transform-origin:50% 100%;animation:wildDance 1.1s ease-in-out infinite}
 @keyframes wildDance{0%{transform:translateY(0) rotate(0) scaleX(1)}15%{transform:translateY(-22px) rotate(-14deg) scaleX(1)}30%{transform:translateY(0) rotate(10deg) scaleX(-1)}45%{transform:translateY(-14px) rotate(-8deg) scaleX(-1)}60%{transform:translateY(0) rotate(360deg) scaleX(1)}75%{transform:translateY(-26px) rotate(355deg) scaleX(1)}90%{transform:translateY(0) rotate(370deg) scaleX(-1)}100%{transform:translateY(0) rotate(360deg) scaleX(1)}}
+/* ---- The shop strip behind the road ---- */
+.shopStrip{position:absolute;left:0;right:0;bottom:147px;height:clamp(240px,28vw,64vh);pointer-events:auto;cursor:default;animation:bubbleIn .5s ease-out}
+.shopStrip>svg{display:block}
+.stripCloud{animation:stripCloud 60s linear infinite}
+@keyframes stripCloud{from{transform:translateX(-300px)}to{transform:translateX(1700px)}}
+.officeLight{animation:officeLight 4s steps(1) infinite}
+@keyframes officeLight{0%,92%,96%,100%{opacity:1}94%{opacity:.3}}
+.openSign{animation:officeLight 2.5s steps(1) infinite}
+.stripTree{transform-box:fill-box;transform-origin:50% 100%;animation:stripTree 5s ease-in-out infinite alternate}
+@keyframes stripTree{from{transform:rotate(-1.5deg)}to{transform:rotate(1.5deg)}}
+.wireBird{transform-box:fill-box;transform-origin:50% 100%;animation:wireBird 2.2s ease-in-out infinite alternate}
+@keyframes wireBird{from{transform:translateY(0)}to{transform:translateY(-2px) rotate(-4deg)}}
+/* Phones: the street is 900px wide, so the whole drawing (rooftops, wires) is 252px tall */
+@media (max-width:640px){.shopStrip{height:min(252px,50vh)}}
+/* Characters around the trees get a dark edge too, so they read against the shops */
+.lurker,.peekFace,.trev{filter:drop-shadow(0 0 1.5px #000c)}

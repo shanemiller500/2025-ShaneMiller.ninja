@@ -24,6 +24,7 @@ import Bludger from "./Bludger";
 import OldNev from "./OldNev";
 import TrueBlue, { Pelican, type TrueBluePose } from "./TrueBlue";
 import Emu, { EmuLeg } from "./Emu";
+import Shopfronts from "./Shopfronts";
 import LiveCritter from "./LiveCritter";
 import SlitherSnake from "./SlitherSnake";
 import PostieBike from "./PostieBike";
@@ -145,8 +146,14 @@ const BIN_JUNK = ["🍌", "🥡", "🍕", "📰", "🥤", "🍟", "🦴", "🧃"
 const FLOCK_LINES = ["Check out those white pointers!!", "Oi, the bin chicken union's having a meeting.", "Look at 'em. Feathered bogans, the lot of 'em.", "Get outta that bin, ya filthy animals!", "Six of 'em. SIX. It's an infestation, ya galahs."];
 const ROO_LINES = ["Skippy and the boys, off to the pub.", "Oi! Don't jump in front of the Night Train!", "Look at 'em go. Built like brick dunnies.", "That big buck's eyeing me off. Come at me, Skip!", "Roo mob! Hide the snags."];
 // Gum trees along the back of the road (as fractions of the screen width); koalas in some.
-const TREES = [{ at: 0.34, koala: true }, { at: 0.64, koala: false }, { at: 0.88, koala: true }];
-const TREE_W = 110, TREE_H = 200, TREE_BOTTOM = 142;
+// Roadside gums: clear of the bus shelter in the shop strip (roughly 28-43% across).
+const TREES = [{ at: 0.19, koala: true }, { at: 0.62, koala: false }, { at: 0.88, koala: true }];
+const TREE_BOTTOM = 142;
+// Gum tree size: big on desktop, cut down on phones so it doesn't swallow the screen.
+const TREE = {
+  get W() { return typeof window !== "undefined" && isPhone() ? 130 : 170; },
+  get H() { return typeof window !== "undefined" && isPhone() ? 236 : 310; },
+};
 const DROP_LINES = ["DROP BEAR! Vegemite behind the ears, quick!", "Bloody drop bears. Tourists reckon they're a myth, the dills.", "That's why ya never park under a gum tree, ya galah.", "Get back up ya tree, ya feral little mongrel!"];
 const RED_BIKE = "#dc2626";
 const RED_BIKE_LINES = ["Jesus! Was that a bike or a bloody comet?!", "Red ones go faster. Everyone knows that, ya drongo.", "Slow down, Rossi! Ya'll be a hood ornament!", "Blink and ya missed him. Organ donor on wheels.", "That red one's got more speeding fines than brains."];
@@ -225,9 +232,15 @@ type Phase = "hidden" | "enter" | "parked" | "leave";
 type Action = "flip" | "moon" | "drink" | "smoke" | "throw";
 type Line = { text: string; ai: boolean };
 type Fx = { stage?: number; palette?: string[]; id: number; kind: "leg" | "hole" | "poop" | "poopSplat" | "drop" | "feathers" | "smoke" | "tyre" | "skid" | "burst" | "bottle" | "shard" | "stars" | "fog" | "boom" | "rubber" | "bullet" | "junk" | "splat" | "rooFly"; x: number; y: number; size: number; text?: string; dx?: number; dy?: number; arc?: number; hit?: boolean };
-let uid = 0;
+// Ids for everything on screen. Seeded from the clock so a hot reload (which re-runs this file
+// while the old items are still on screen) can never hand out an id that is already in use.
+let uid = Date.now();
+// Phones get a wider street than the screen (you swipe along it); desktop uses the screen width.
+const PHONE_WORLD = 900;
+const isPhone = () => typeof window !== "undefined" && window.innerWidth < 640;
+const VW = () => (typeof window === "undefined" ? 1200 : isPhone() ? Math.max(PHONE_WORLD, window.innerWidth) : window.innerWidth);
 // Sportsbikes are drawn 110×60; this keeps them road-sized next to the cars and Shazz.
-const sportbikeW = () => (window.innerWidth < 640 ? 150 : 205);
+const sportbikeW = () => (isPhone() ? 150 : 205);
 // Everything Shazz can take a shot at. Birds and pests go up in a puff; the rest drop as dinner.
 type Target = { kind: "flyer"; id: number } | { kind: "flock"; index: number } | { kind: "raider" } | { kind: "ibis" } | { kind: "magpie"; id: number }
   | { kind: "roo"; id: number } | { kind: "crossing"; id: number } | { kind: "snake"; id: number } | { kind: "strikeRoo" }
@@ -285,7 +298,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   const [kid, setKid] = useState<Kid | null>(null);
   // Only one big ambient set piece at a time, with a breather after each.
   const sceneUntil = useRef(0);
-  const claimScene = (ms: number, rest = 6000) => {
+  const claimScene = (ms: number, rest = 10_000) => {
     if (Date.now() < sceneUntil.current) return false;
     sceneUntil.current = Date.now() + ms + rest;
     return true;
@@ -326,7 +339,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   const dropBusy = useRef(false);
   // Narrow screens get two trees instead of three.
   // Phones only get the one roadside gum (the right-hand one); there isn't room for three.
-  const treeSpots = () => TREES.filter((_, i) => window.innerWidth >= 640 || i === 2).map((t) => ({ ...t, x: Math.round(window.innerWidth * t.at - TREE_W / 2) }));
+  const treeSpots = () => TREES.filter(() => true).map((t) => ({ ...t, x: Math.round(VW() * t.at - TREE.W / 2) }));
   // Traffic and wildlife extras
   const [sportbikes, setSportbikes] = useState<{ id: number; dir: 1 | -1; lane: "far" | "near"; color: string; ms: number }[]>([]);
   const [strike, setStrike] = useState<{ carX: number; carMs: number; color: string; dented: boolean; rooX: number; rooBottom: number; rooMs: number; rooGone: boolean; shaking: boolean } | null>(null);
@@ -355,7 +368,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // Emus: each takes two shots. `hits` 1 = one leg gone, hopping slower.
   const [emus, setEmus] = useState<{ id: number; dir: 1 | -1; x: number; bottom: number; size: number; ms: number; hits: number }[]>([]);
   const [roos, setRoos] = useState<{ id: number; dir: 1 | -1; bottom: number; size: number; ms: number; delay: number; hop: number; joey: boolean }[]>([]);
-  const binX = () => Math.max(24, Math.round(window.innerWidth * 0.1));
+  const binX = () => Math.max(24, Math.round(VW() * 0.1));
   const [raider, setRaider] = useState<{ x: number; bottom: number; ms: number; faceLeft: boolean; carrying: "snag" | null } | null>(null);
   const ibisBusy = useRef(false);
   const killsRef = useRef(kills);
@@ -455,6 +468,20 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // She talks less: nothing while she's in the middle of something (brawls, chases, tricks), and
   // otherwise only now and then, at random, with a decent gap. `force` is for when she's asked.
   const lastSpoke = useRef(0);
+  // On phones the scene scrolls sideways inside this; panX() is how far it's been swiped.
+  const scroller = useRef<HTMLDivElement>(null);
+  const [phoneView, setPhoneView] = useState(false);
+  const panX = () => scroller.current?.scrollLeft ?? 0;
+  const sRect = (el: Element) => {
+    const r = el.getBoundingClientRect(), dx = panX();
+    return { left: r.left + dx, right: r.right + dx, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+  };
+  // Swipe the phone view so x (scene px) is in the middle of the screen.
+  const panTo = (x: number) => {
+    const sc = scroller.current;
+    if (!sc || !isPhone()) return;
+    sc.scrollTo({ left: Math.max(0, x - window.innerWidth / 2), behavior: "smooth" });
+  };
   const lastHover = useRef(0);
   const speak = useCallback((text: string, fromAi = false, force = false) => {
     // Comments are off: she only talks when hovered, clicked, or asked from the menu.
@@ -535,7 +562,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   async function rideTo(clientX: number, lazy = false) {
     if (phaseRef.current !== "parked" || busy.current || !bike.current) return;
     const k = s(), w = bike.current.offsetWidth, x0 = place.current.x;
-    const target = Math.max(8, Math.min(window.innerWidth - w - 8, clientX - w / 2));
+    const target = Math.max(8, Math.min(VW() - w - 8, clientX - w / 2));
     if (Math.abs(target - x0) < 12) return;
     busy.current = true; setMoving(true);
     const left = target < x0; setFacingLeft(left);
@@ -574,7 +601,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (sceneActive() && !bbqPending.current) return;
     const roll = Math.random();
     if (bbqPending.current) { void barbie(); return; }
-    if (!claimScene(6000, 3000)) return;
+    if (!claimScene(6000, 6000)) return;
     if (killsRef.current.length && roll < 0.3) { void collect(pick(killsRef.current).id); return; }
     if (roll < 0.06) void burnout();
     else if (roll < 0.1) void runStopSign();
@@ -582,7 +609,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     else if (roll < 0.22 + drunkRef.current * 0.08) {
       // A short cruise, not a lap of the screen.
       const here = place.current.x + (bike.current?.offsetWidth || 200) / 2, hop = (120 + Math.random() * 200) * (Math.random() < 0.5 ? -1 : 1);
-      void rideTo(Math.max(40, Math.min(window.innerWidth - 40, here + hop)), true);
+      void rideTo(Math.max(40, Math.min(VW() - 40, here + hop)), true);
     }
     else void act(pick(["drink", "flip", "moon", "smoke", "throw", "flip", "smoke"] as Action[]));
   };
@@ -604,7 +631,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     setMenu(false);
     let k = s();
     // She needs room for the wall in front of her.
-    if (place.current.x + 310 * k > window.innerWidth) await rideTo(window.innerWidth * 0.3 + bike.current.offsetWidth / 2);
+    if (place.current.x + 310 * k > VW()) await rideTo(VW() * 0.3 + bike.current.offsetWidth / 2);
     if (busy.current) return;
     busy.current = true; setBurning(true); k = s();
     const x0 = place.current.x, rear = x0 + 60 * k;
@@ -620,7 +647,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       // Front wheel up against the wall, the whole bike shaking on the rev limiter.
       place.current = { x: x0 + Math.sin(t * 420) * 1.8, tilt: -Math.min(12, t * 90) + Math.sin(t * 310) * 1.2, pivot: 60 };
       if (now - lastPuff > 35) { lastPuff = now; add({ kind: "tyre", x: rear - Math.random() * 50, y: GROUND + 4, size: 40 + Math.random() * 50 + t * 80 }); }
-      if (t > 0.08 && now - lastFog > 110) { lastFog = now; add({ kind: "fog", x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight * 0.9, size: 200 + Math.random() * 280 }); }
+      if (t > 0.08 && now - lastFog > 110) { lastFog = now; add({ kind: "fog", x: Math.random() * VW(), y: Math.random() * window.innerHeight * 0.9, size: 200 + Math.random() * 280 }); }
       if (smokeCloud.current) smokeCloud.current.style.opacity = String(Math.min(0.88, t * 1.15));
       if (now % 900 < 20) add({ kind: "skid", x: rear - 30 * k, y: GROUND + 5 * k, size: 60 * k });
       at("y1", 0.05, t, () => shout("YEOOOOO!"));
@@ -648,7 +675,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     setPose("flip");
     await later(250);
     // Keep the giant hand on screen even if she's parked near an edge.
-    setFinger({ left: Math.min(window.innerWidth - 120, Math.max(120, place.current.x + 137 * k)), bottom: GROUND + (VIEW_H - 16) * k });
+    setFinger({ left: Math.min(VW() - 120, Math.max(120, place.current.x + 137 * k)), bottom: GROUND + (VIEW_H - 16) * k });
     speak("Yeah cunt! What a ripper!");
     await later(3400);
     setFinger(null); setPose("ride");
@@ -657,15 +684,15 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // Aussies drive on the left: far-lane traffic heads left to right; near-lane traffic comes
   // right to left, straight at Shazz (who's on the wrong side, naturally), and they swerve.
   function spawnCar() {
-    const width = window.innerWidth < 640 ? 150 : 200, lane: "far" | "near" = Math.random() < 0.5 ? "far" : "near";
+    const width = isPhone() ? 150 : 200, lane: "far" | "near" = Math.random() < 0.5 ? "far" : "near";
     const dir: 1 | -1 = lane === "far" ? 1 : -1, ms = 4200 + Math.random() * 2500;
-    const from = dir === 1 ? -width : window.innerWidth, to = dir === 1 ? window.innerWidth : -width;
+    const from = dir === 1 ? -width : VW(), to = dir === 1 ? VW() : -width;
     const herMiddle = place.current.x + (bike.current?.offsetWidth || 200) / 2;
     const passAt = Math.max(0, Math.min(1, (herMiddle - width / 2 - from) / (to - from))) * ms;
     if (brawlRef.current) {
       // Nobody drives through a bikie brawl: pull up short, gawk, chuck a U-ey.
-      const cx = window.innerWidth / 2;
-      const turnAt = dir === 1 ? Math.max(-width * 0.3, cx - 560 - width) : Math.min(window.innerWidth - width * 0.7, cx + 560);
+      const cx = VW() / 2;
+      const turnAt = dir === 1 ? Math.max(-width * 0.3, cx - 560 - width) : Math.min(VW() - width * 0.7, cx + 560);
       setCars(list => [...list, { id: ++uid, dir, lane, color: pick(CAR_COLORS), ms: ms * 1.2, width, shockAt: ms * 1.2 * 0.42, turnAt }]);
       return;
     }
@@ -692,16 +719,16 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // at the moment of impact; the vehicle carries on off-screen at the same speed.
   async function runOver(x: number, lane: "far" | "near", targetW: number) {
     const id = ++uid, dir: 1 | -1 = lane === "far" ? 1 : -1, vehicle: "car" | "bike" = Math.random() < 0.4 ? "bike" : "car";
-    const vw = vehicle === "bike" ? sportbikeW() : window.innerWidth < 640 ? 150 : 200;
-    const startX = dir === 1 ? -vw - 20 : window.innerWidth + 20, impactX = dir === 1 ? x - vw * 0.9 : x + targetW * 0.6 - vw * 0.1;
+    const vw = vehicle === "bike" ? sportbikeW() : isPhone() ? 150 : 200;
+    const startX = dir === 1 ? -vw - 20 : VW() + 20, impactX = dir === 1 ? x - vw * 0.9 : x + targetW * 0.6 - vw * 0.1;
     const runIn = vehicle === "bike" ? 1600 : 2400, speed = Math.abs(impactX - startX) / runIn;
     const update = (change: (h: Hitter) => Hitter) => setHitters(list => list.map(h => (h.id === id ? change(h) : h)));
     setHitters(list => [...list, { id, lane, dir, vehicle, color: pick(vehicle === "bike" ? SPORTBIKE_COLORS : CAR_COLORS), vx: startX, vms: 0, vw }]);
     await later(60);
-    if (vehicle === "bike") add({ kind: "burst", x: dir === 1 ? 20 : window.innerWidth - 220, y: (lane === "far" ? FAR_LANE : GROUND) + 70, size: 0, text: "NEEEEOWWW!" });
+    if (vehicle === "bike") add({ kind: "burst", x: dir === 1 ? 20 : VW() - 220, y: (lane === "far" ? FAR_LANE : GROUND) + 70, size: 0, text: "NEEEEOWWW!" });
     update(h => ({ ...h, vx: impactX, vms: runIn }));
     await later(runIn);
-    const exitX = dir === 1 ? window.innerWidth + 40 : -vw - 40, exitMs = Math.abs(exitX - impactX) / speed;
+    const exitX = dir === 1 ? VW() + 40 : -vw - 40, exitMs = Math.abs(exitX - impactX) / speed;
     update(h => ({ ...h, vx: exitX, vms: exitMs }));
     window.setTimeout(() => setHitters(list => list.filter(h => h.id !== id)), exitMs + 150);
   }
@@ -712,7 +739,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (killsRef.current.length + crossingCount.current >= 3 || !claimScene(7000)) return;
     const herMiddle = place.current.x + (bike.current?.offsetWidth || 200) / 2;
     let x = 0;
-    for (let i = 0; i < 8; i++) { x = 30 + Math.random() * (window.innerWidth - 120); if (Math.abs(x + 35 - herMiddle) > 140) break; }
+    for (let i = 0; i < 8; i++) { x = 30 + Math.random() * (VW() - 120); if (Math.abs(x + 35 - herMiddle) > 140) break; }
     crossingCount.current++;
     const id = ++uid, kind = pick(CRITTERS), lane: "far" | "near" = Math.random() < 0.5 ? "far" : "near", critterW = kind === "roo" ? 74 : 66;
     const laneBottom = lane === "far" ? FAR_LANE + 4 : GROUND + 2;
@@ -760,7 +787,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     const w = () => bike.current?.offsetWidth || 200;
     const sceneW = Math.round(w() * 0.9);
     // Needs room beside the bike for the barbie.
-    if (place.current.x + w() + sceneW + 10 > window.innerWidth) await rideTo(window.innerWidth * 0.35);
+    if (place.current.x + w() + sceneW + 10 > VW()) await rideTo(VW() * 0.35);
     if (busy.current) return;
     busy.current = true; setMenu(false); bbqPending.current = false;
     const left = place.current.x + w() - 10;
@@ -797,8 +824,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   async function runStopSign(fromUser = false) {
     if (phaseRef.current !== "parked" || busy.current || !bike.current) return;
     setMenu(false);
-    const w = bike.current.offsetWidth, x0 = place.current.x, goRight = x0 < window.innerWidth / 2;
-    const signX = goRight ? Math.min(window.innerWidth - 150, x0 + w + 90) : Math.max(90, x0 - 150);
+    const w = bike.current.offsetWidth, x0 = place.current.x, goRight = x0 < VW() / 2;
+    const signX = goRight ? Math.min(VW() - 150, x0 + w + 90) : Math.max(90, x0 - 150);
     setSign({ x: signX, holes: 0, down: false });
     speak(pick(STOP_LINES));
     await later(900);
@@ -831,7 +858,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   async function copChase() {
     if (phaseRef.current !== "parked" || busy.current || !bike.current) return;
     busy.current = true; setMenu(false); setBurning(true); setLine(null);
-    const k = s(), w = bike.current.offsetWidth, copW = window.innerWidth < 640 ? 160 : 210, copH = copW * 0.42;
+    const k = s(), w = bike.current.offsetWidth, copW = isPhone() ? 160 : 210, copH = copW * 0.42;
     setCop(true); setWreck(false);
     damageRef.current = 0; setCopDamage(0);
     await later(50);
@@ -847,7 +874,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     add({ kind: "burst", x: 20, y: GROUND + 130, size: 0, text: "WEE-OO WEE-OO!" });
     add({ kind: "burst", x: place.current.x, y: VIEW_H * k + GROUND + 40, size: 0, text: pick(["Shit! Cops!", "The fuzz!", "Coppers!"]) });
     // Cop pulls up behind her, lights going, while the rules pop up.
-    const parkCop = Math.max(10, Math.min(x - copW - 40, window.innerWidth * 0.3));
+    const parkCop = Math.max(10, Math.min(x - copW - 40, VW() * 0.3));
     await animate(1300, t => moveCop(-copW - 30 + (parkCop + copW + 30) * (1 - Math.pow(1 - t, 2))));
     await new Promise<void>(resolve => { gameStart.current = resolve; setGamePrompt(true); });
 
@@ -875,7 +902,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     const rearAt = (px: number, left: boolean) => px + (left ? VIEW_W - 60 : 60) * k;
     while (performance.now() - START < LENGTH && phaseRef.current === "parked" && damageRef.current < 6) {
       let target = x;
-      for (let i = 0; i < 10 && Math.abs(target - x) < window.innerWidth * 0.3; i++) target = 10 + Math.random() * (window.innerWidth - w - 20);
+      for (let i = 0; i < 10 && Math.abs(target - x) < VW() * 0.3; i++) target = 10 + Math.random() * (VW() - w - 20);
       const left = target < x, x0 = x;
       curLeft = left; setFacingLeft(left);
       add({ kind: "skid", x: rearAt(x0, left) - 25 * k, y: GROUND + 5 * k, size: 50 * k });
@@ -906,7 +933,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       if (Math.random() < 0.4) add({ kind: "tyre", x: copX + copW / 2 + (Math.random() - 0.5) * copW, y: GROUND + 6, size: 30 + Math.random() * 30 });
     });
     setAtX(x); speak("See ya later, Constable Plod!");
-    const x0 = x, end = window.innerWidth + 160;
+    const x0 = x, end = VW() + 160;
     await animate(1800, t => {
       const px = x0 + (end - x0) * t * t * t, now = performance.now();
       place.current = weave(t, px, -Math.min(14, t * 50), 60);
@@ -961,12 +988,12 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     setBrawl("rideIn");
     await later(2400);
     setBrawl("fight"); setLine(null);
-    const cx = window.innerWidth / 2, cloudY = GROUND + 60;
+    const cx = VW() / 2, cloudY = GROUND + 60;
     const started = performance.now();
     let i = 0;
     while (performance.now() - started < 15_000 && phaseRef.current === "parked") {
       // Junk flies out of the cloud in every direction.
-      const dx = (Math.random() < 0.5 ? -1 : 1) * (120 + Math.random() * Math.min(520, window.innerWidth * 0.45));
+      const dx = (Math.random() < 0.5 ? -1 : 1) * (120 + Math.random() * Math.min(520, VW() * 0.45));
       add({ kind: "junk", x: cx + (Math.random() - 0.5) * 80, y: cloudY + 40 + Math.random() * 60, size: 0, dx, dy: cloudY + 60 - GROUND, arc: -(100 + Math.random() * 160), text: pick(JUNK) });
       if (i % 3 === 0) add({ kind: "burst", x: cx - 160 + Math.random() * 260, y: cloudY + 90 + Math.random() * 110, size: 0, text: pick(BRAWL_HITS) });
       if (i % 2 === 0) { const p = pick(PAIRS); add({ kind: "tyre", x: cx + p.at + Math.random() * 40, y: GROUND + p.row, size: 26 + Math.random() * 20 }); }
@@ -979,13 +1006,13 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
         setThieves(t => ({ ...t, stolenRed: true, trev: t.trev && { ...t.trev, riding: true, x: -260, ms: 2600, line: "SWEET AS! SWEET AS! SWEET AS!" } }));
         add({ kind: "burst", x: redBikeX - 20, y: GROUND + 150, size: 0, text: "OI! ME BIKE!" });
       }
-      if (i === 28) setThieves(t => ({ ...t, kylie: { x: window.innerWidth + 40, ms: 0, wheel: false, line: null } }));
+      if (i === 28) setThieves(t => ({ ...t, kylie: { x: VW() + 40, ms: 0, wheel: false, line: null } }));
       if (i === 29) setThieves(t => ({ ...t, kylie: t.kylie && { ...t.kylie, x: blueBikeX + 96, ms: 2000, line: "Ooh. Spare wheel." } }));
       if (i === 40) {
         setThieves(t => ({ ...t, bricked: true, kylie: t.kylie && { ...t.kylie, wheel: true, line: "Bricks under it, babe. It's only fair." } }));
         add({ kind: "burst", x: blueBikeX + 40, y: GROUND + 150, size: 0, text: "CLUNK CLUNK!" });
       }
-      if (i === 48) setThieves(t => ({ ...t, kylie: t.kylie && { ...t.kylie, x: window.innerWidth + 80, ms: 2400, line: "BYE!", leaving: true } }));
+      if (i === 48) setThieves(t => ({ ...t, kylie: t.kylie && { ...t.kylie, x: VW() + 80, ms: 2400, line: "BYE!", leaving: true } }));
       if (i === 60) setThieves(t => ({ ...t, trev: null, kylie: null }));
       if (i % 12 === 0) { setPose(pick<ShazzPose>(["flip", "drink", "ride", "flip"])); }
       i++;
@@ -1044,7 +1071,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     speak("Here they come! That's me boys, ya mongrels!");
     for (let i = 0; i < 10; i++) {
       await later(1000);
-      if (i % 2 === 0) add({ kind: "burst", x: Math.random() * (window.innerWidth - 200), y: GROUND + 150 + Math.random() * 40, size: 0, text: pick(["BRAAAP!", "VROOOM!", "POTATO POTATO", "YEOOO!"]) });
+      if (i % 2 === 0) add({ kind: "burst", x: Math.random() * (VW() - 200), y: GROUND + 150 + Math.random() * 40, size: 0, text: pick(["BRAAAP!", "VROOOM!", "POTATO POTATO", "YEOOO!"]) });
       if (i === 5) setPose("flip");
       if (i === 7) setPose("ride");
     }
@@ -1057,7 +1084,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // Off the bike, onto the stool: second teardrop. Then a cheeky pat and a big slap.
   async function tattooTime() {
     const w = bike.current?.offsetWidth || 200, sceneW = Math.round(w * 1.05);
-    if (place.current.x + w + sceneW + 10 > window.innerWidth) { busy.current = false; await rideTo(window.innerWidth * 0.3); busy.current = true; }
+    if (place.current.x + w + sceneW + 10 > VW()) { busy.current = false; await rideTo(VW() * 0.3); busy.current = true; }
     const left = place.current.x + w - 10, k = s();
     setAtX(place.current.x); setPose("off");
     setTattoo({ left, width: sceneW, stage: "inking" });
@@ -1084,7 +1111,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   async function lassoCar(carId: number, el: HTMLElement) {
     if (phaseRef.current !== "parked" || busy.current || !bike.current) return;
     busy.current = true; setMenu(false);
-    const k = s(), box = el.getBoundingClientRect();
+    const k = s(), box = sRect(el);
     const handX = place.current.x + 86 * k, handY = window.innerHeight - (GROUND + (VIEW_H - 12) * k);
     setPose("throw"); setFlaming(true);
     add({ kind: "boom", x: place.current.x + 40 * k, y: GROUND + (VIEW_H + 30) * k, size: 0, text: "WHOOSH!" });
@@ -1104,8 +1131,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (!kill || ibisBusy.current) return;
     ibisBusy.current = true;
     setKills(list => list.map(item => (item.id === killId ? { ...item, claimed: true } : item)));
-    const tree = treeSpots().reduce((best, t) => (Math.abs(t.x + TREE_W / 2 - kill.x) < Math.abs(best.x + TREE_W / 2 - kill.x) ? t : best));
-    const hideX = tree.x + TREE_W * 0.42 - 33, hideBottom = TREE_BOTTOM - 6, faceLeft = kill.x < hideX;
+    const tree = treeSpots().reduce((best, t) => (Math.abs(t.x + TREE.W / 2 - kill.x) < Math.abs(best.x + TREE.W / 2 - kill.x) ? t : best));
+    const hideX = tree.x + TREE.W * 0.42 - 33, hideBottom = TREE_BOTTOM - 6, faceLeft = kill.x < hideX;
     setTrev({ x: hideX, bottom: hideBottom, ms: 0, faceLeft, pose: "peek", carrying: null, line: pick(TREV_PEEK) });
     await later(4000);
     // Go!
@@ -1149,7 +1176,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // feathers or fur; roos, koalas, snakes and the rest drop onto the road as dinner.
   function hitTarget(target: Target, el: Element, text?: string) {
     if (!el.isConnected) return;
-    const r = el.getBoundingClientRect();
+    const r = sRect(el);
     const x = r.left + r.width / 2, y = window.innerHeight - (r.top + r.height / 2);
     const onRoad = Math.max(GROUND - 2, Math.min(FAR_LANE + 4, window.innerHeight - r.bottom));
     const dinner = (kind: Critter) => {
@@ -1202,7 +1229,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
         if (emu.hits === 0) {
           // First shot: feathers and a leg go flying; it hops on, slower but still going.
           add({ kind: "leg", x: x - 8, y: Math.max(GROUND, y - 30), size: 0, dx: (Math.random() - 0.5) * 120, dy: Math.max(10, y - 30 - GROUND), arc: -(70 + Math.random() * 60) });
-          const end = emu.dir === 1 ? window.innerWidth + 100 : -emu.size - 40, here = r.left;
+          const end = emu.dir === 1 ? VW() + 100 : -emu.size - 40, here = r.left;
           setEmus(list => list.map(e => (e.id === emu.id ? { ...e, hits: 1, x: here, ms: 0 } : e)));
           window.setTimeout(() => setEmus(list => list.map(e => (e.id === emu.id ? { ...e, x: end, ms: Math.abs(end - here) * 9 } : e))), 40);
         } else {
@@ -1224,10 +1251,10 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (!choices.length || fighter) return null;
     const who = pick([...choices]);
     if (who === "gary") garyBusy.current = true;
-    const tree = who === "gary" ? trees[trees.length - 1] : trees[who === "trev" ? 0 : 1], trunkX = tree.x + TREE_W * 0.45 - 33;
+    const tree = who === "gary" ? trees[trees.length - 1] : trees[who === "trev" ? 0 : 1], trunkX = tree.x + TREE.W * 0.45 - 33;
     const flock = (change: (c: (typeof crows)[number]) => (typeof crows)[number]) => setCrows(list => list.map(c => (crowIds.includes(c.id) ? change(c) : c)));
     // Down out of the tree (Gary climbs down from the canopy; the others pop out from behind the trunk).
-    setFighter({ who, x: trunkX, bottom: who === "gary" ? TREE_BOTTOM + TREE_H * 0.48 : TREE_BOTTOM - 6, ms: 0, faceLeft: false, pose: who === "gary" ? "dance" : "run", carrying: null, scuffle: false, line: pick(["OI! THAT'S MY DINNER!", "GET OFF IT, YA FEATHERED MONGRELS!", "MINE! MINE MINE MINE!"]) });
+    setFighter({ who, x: trunkX, bottom: who === "gary" ? TREE_BOTTOM + TREE.H * 0.48 : TREE_BOTTOM - 6, ms: 0, faceLeft: false, pose: who === "gary" ? "dance" : "run", carrying: null, scuffle: false, line: pick(["OI! THAT'S MY DINNER!", "GET OFF IT, YA FEATHERED MONGRELS!", "MINE! MINE MINE MINE!"]) });
     await later(400);
     if (who === "gary") { setFighter(f => f && { ...f, bottom: TREE_BOTTOM - 6, ms: 900 }); await later(950); }
     const runMs = Math.max(700, Math.abs(mid - 33 - trunkX) * 3);
@@ -1241,11 +1268,11 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       if (i % 2 === 0) add({ kind: "feathers", x: mid, y: kb + 50, size: 0, palette: ["#111", "#1b1b1f", "#3b3b3b"] });
       await later(420);
     }
-    const won = Math.random() < 0.55, home = who === "gary" ? TREE_BOTTOM + TREE_H * 0.48 : TREE_BOTTOM - 6;
+    const won = Math.random() < 0.55, home = who === "gary" ? TREE_BOTTOM + TREE.H * 0.48 : TREE_BOTTOM - 6;
     if (won) {
       setKills(list => list.filter(k => k.id !== killId));
       setFighter(f => f && { ...f, scuffle: false, carrying: kind, line: "HA! DINNER'S MINE!" });
-      flock(c => ({ ...c, eating: false, faceLeft: Math.random() < 0.5, x: mid + (Math.random() < 0.5 ? -1 : 1) * (window.innerWidth * 0.7), bottom: window.innerHeight * (0.65 + Math.random() * 0.2), ms: 2200 }));
+      flock(c => ({ ...c, eating: false, faceLeft: Math.random() < 0.5, x: mid + (Math.random() < 0.5 ? -1 : 1) * (VW() * 0.7), bottom: window.innerHeight * (0.65 + Math.random() * 0.2), ms: 2200 }));
       add({ kind: "burst", x: mid - 50, y: kb + 140, size: 0, text: "CAAAW!!" });
       window.setTimeout(() => setCrows(list => list.filter(c => !crowIds.includes(c.id))), 2400);
     } else {
@@ -1308,7 +1335,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     const bones = Math.random() < 0.5;
     setKills(list => list.map(k => (k.id === killId ? (bones ? { ...k, bones: true } : { ...k, claimed: false, bornAt: Date.now() }) : k)));
     const away = Math.random() < 0.5 ? 1 : -1;
-    mine(c => ({ ...c, eating: false, faceLeft: away === -1, x: mid + away * (window.innerWidth * 0.7 + Math.random() * 200), bottom: window.innerHeight * (0.65 + Math.random() * 0.2), ms: 2200 }));
+    mine(c => ({ ...c, eating: false, faceLeft: away === -1, x: mid + away * (VW() * 0.7 + Math.random() * 200), bottom: window.innerHeight * (0.65 + Math.random() * 0.2), ms: 2200 }));
     await later(2400);
     setCrows(list => list.filter(c => !ids.includes(c.id)));
     if (!bones) return;
@@ -1330,8 +1357,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (phase !== "parked") return;
     const timer = window.setInterval(() => {
       if (Math.random() > 0.4) return;
-      const birds = Array.from(document.querySelectorAll<HTMLElement>("[data-pooper]")).map(el => el.getBoundingClientRect())
-        .filter(r => r.right > 0 && r.left < window.innerWidth && r.bottom > 0 && window.innerHeight - r.bottom > FAR_LANE + 110);
+      const birds = Array.from(document.querySelectorAll<HTMLElement>("[data-pooper]")).map(el => sRect(el))
+        .filter(r => r.right > 0 && r.left < VW() && r.bottom > 0 && window.innerHeight - r.bottom > FAR_LANE + 110);
       if (!birds.length) return;
       const r = pick(birds), x = r.left + r.width / 2, y = window.innerHeight - r.bottom + 10;
       dropPoop(x, y, 0);
@@ -1344,7 +1371,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   function headUnder(x: number, fromY: number) {
     const H = window.innerHeight;
     return Array.from(document.querySelectorAll<HTMLElement>("[data-poopable]"))
-      .map(el => ({ el, r: el.getBoundingClientRect() }))
+      .map(el => ({ el, r: sRect(el) }))
       .filter(({ r }) => x > r.left + r.width * 0.15 && x < r.right - r.width * 0.15 && H - r.top < fromY - 4 && H - r.top > 0)
       .map(({ el, r }) => ({ el, top: H - r.top }))
       .sort((a, b) => b.top - a.top)[0];
@@ -1381,14 +1408,14 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (stage < 2) {
       const lane = stage === 0 ? "far" : "near";
       const hit = Array.from(document.querySelectorAll<HTMLElement>(`[data-vehicle][data-lane="${lane}"]`)).find(el => {
-        const r = el.getBoundingClientRect();
+        const r = sRect(el);
         return x > r.left + r.width * 0.08 && x < r.right - r.width * 0.08;
       });
-      const shazz = lane === "near" && bike.current && phaseRef.current === "parked" && (() => { const r = bike.current!.getBoundingClientRect(); return x > r.left + r.width * 0.2 && x < r.right - r.width * 0.2; })();
+      const shazz = lane === "near" && bike.current && phaseRef.current === "parked" && (() => { const r = sRect(bike.current!); return x > r.left + r.width * 0.2 && x < r.right - r.width * 0.2; })();
       if (hit || shazz) {
         add({ kind: "burst", x: x - 30, y: y + 30, size: 0, text: "SPLAT!" });
         if (hit) {
-          const key = hit.dataset.vehicle!, r = hit.getBoundingClientRect(), f = (x - r.left) / r.width;
+          const key = hit.dataset.vehicle!, r = sRect(hit), f = (x - r.left) / r.width;
           setPoops(all => ({ ...all, [key]: [...(all[key] || []), f] }));
         }
         if (Date.now() - lastPoopLine.current > 9000 && phaseRef.current === "parked" && (shazz || Math.random() < 0.5)) {
@@ -1407,9 +1434,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // A mob of about twenty rainbow lorikeets: a noisy swirl across the sky, into the gum trees,
   // a bit of flitting about, then off again one by one in every direction.
   async function lorikeetVisit() {
-    if (!claimScene(24_000, 3000)) return;
-    const trees = treeSpots(), fromRight = Math.random() < 0.5, W = window.innerWidth, H = window.innerHeight;
-    const perch = () => { const t = pick(trees); return { x: t.x + TREE_W * (0.12 + Math.random() * 0.7) - 15, bottom: TREE_BOTTOM + TREE_H * (0.62 + Math.random() * 0.28) }; };
+    if (!claimScene(24_000, 8000)) return;
+    const trees = treeSpots(), fromRight = Math.random() < 0.5, W = VW(), H = window.innerHeight;
+    const perch = () => { const t = pick(trees); return { x: t.x + TREE.W * (0.12 + Math.random() * 0.7) - 15, bottom: TREE_BOTTOM + TREE.H * (0.62 + Math.random() * 0.28) }; };
     const birds = Array.from({ length: 20 }, (_, i) => ({ id: ++uid, x: fromRight ? W + 30 + Math.random() * 220 : -60 - Math.random() * 220, bottom: H * (0.55 + Math.random() * 0.3), ms: 0, delay: i * 60, faceLeft: fromRight, perched: false }));
     const ids = birds.map(b => b.id);
     const mine = (change: (b: (typeof birds)[number]) => (typeof birds)[number]) => setLorikeets(list => list.map(b => (ids.includes(b.id) ? change(b) : b)));
@@ -1429,7 +1456,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       const flitters = [pick(ids), pick(ids)];
       mine(b => { if (!flitters.includes(b.id)) return b; const p = perch(); return { ...b, x: p.x, bottom: p.bottom, ms: 900, perched: false, faceLeft: p.x < b.x }; });
       window.setTimeout(() => mine(b => (flitters.includes(b.id) ? { ...b, perched: true } : b)), 950);
-      if (Math.random() < 0.35) add({ kind: "burst", x: pick(trees).x, y: TREE_BOTTOM + TREE_H + 10, size: 0, text: pick(["SCREECH!", "chatter chatter", "SQUAWK!"]) });
+      if (Math.random() < 0.35) add({ kind: "burst", x: pick(trees).x, y: TREE_BOTTOM + TREE.H + 10, size: 0, text: pick(["SCREECH!", "chatter chatter", "SQUAWK!"]) });
     }
     // Off they go, each in its own time and direction.
     mine(b => { const toLeft = Math.random() < 0.5; return { ...b, perched: false, delay: Math.random() * 2500, x: toLeft ? -80 : W + 40, bottom: H * (0.45 + Math.random() * 0.45), ms: 1500 + Math.random() * 1000, faceLeft: toLeft }; });
@@ -1440,9 +1467,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // Trev and Kylie, a dinner each, cook up on sticks over a paint tin fire and talk conspiracy
   // rubbish until the coppers turn up. Then they kick the can over and leg it, dinner held high.
   async function tweakerCookout(tree: { x: number }, trevFrom: { x: number; bottom: number; pose: "peek" | "run" }, trevFood: Critter) {
-    const W = window.innerWidth, mid = tree.x + TREE_W / 2, side = mid < W / 2 ? 1 : -1;
+    const W = VW(), mid = tree.x + TREE.W / 2, side = mid < W / 2 ? 1 : -1;
     const fireX = Math.max(110, Math.min(W - 150, mid + side * 120)), fireBottom = TREE_BOTTOM - 16;
-    const hideX = tree.x + TREE_W * 0.42 - 33, hideBottom = TREE_BOTTOM - 6;
+    const hideX = tree.x + TREE.W * 0.42 - 33, hideBottom = TREE_BOTTOM - 6;
     const upd = (change: (c: NonNullable<typeof cookout>) => NonNullable<typeof cookout>) => setCookout(c => c && change(c));
     const gone = () => phaseRef.current !== "parked";
     const person = (x: number, bottom: number, pose: Tweaker["pose"], carrying: Critter): Tweaker => ({ x, bottom, ms: 0, faceLeft: fireX < x, pose, carrying, stick: "none" });
@@ -1492,7 +1519,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   async function tweakerAct() {
     if (ibisBusy.current || !claimScene(38_000, 4000)) return;
     ibisBusy.current = true;
-    const tree = pick(treeSpots()), hideX = tree.x + TREE_W * 0.42 - 33;
+    const tree = pick(treeSpots()), hideX = tree.x + TREE.W * 0.42 - 33;
     await tweakerCookout(tree, { x: hideX, bottom: TREE_BOTTOM - 6, pose: "peek" }, pick(CRITTERS));
     ibisBusy.current = false;
   }
@@ -1504,7 +1531,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (phaseRef.current !== "parked" || busy.current) return;
     busy.current = true; setMenu(false);
     sceneUntil.current = Date.now() + 70_000;
-    const W = window.innerWidth, n = 8 + Math.floor(Math.random() * 5), rows = [TREE_BOTTOM - 14, FAR_LANE + 14, GROUND + 10];
+    const W = VW(), n = 8 + Math.floor(Math.random() * 5), rows = [TREE_BOTTOM - 14, FAR_LANE + 14, GROUND + 10];
     const tints = ["#b91c1c", "#16a34a", "#2563eb", "#f59e0b", "#7c3aed", "#0f766e", "#f9a8d4", "#fde047", "#22d3ee", "#fb923c", "#a3e635", "#e11d48"];
     const spots = Array.from({ length: n }, (_, i) => ({ x: W * (0.08 + (i / (n - 1)) * 0.8) + (Math.random() - 0.5) * 24, bottom: rows[i % 3] }));
     const updRave = (change: (rv: NonNullable<typeof rave>) => NonNullable<typeof rave>) => setRave(rv => rv && change(rv));
@@ -1557,14 +1584,14 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     // ...and two shin up gum trees (different ones if there are enough) and hide in the leaves.
     const trees = treeSpots(), taken: number[] = [];
     climbers.forEach((climber, ci) => {
-      const order = trees.map((t, ti) => ({ ti, d: Math.abs(t.x + TREE_W / 2 - climber.x) })).sort((a, b) => a.d - b.d);
+      const order = trees.map((t, ti) => ({ ti, d: Math.abs(t.x + TREE.W / 2 - climber.x) })).sort((a, b) => a.d - b.d);
       const pickTree = order.find(o => !taken.includes(o.ti)) ?? order[0];
       taken.push(pickTree.ti);
-      const trunkX = trees[pickTree.ti].x + TREE_W * 0.45 - 33 + (taken.filter(t => t === pickTree.ti).length > 1 ? 24 : 0);
+      const trunkX = trees[pickTree.ti].x + TREE.W * 0.45 - 33 + (taken.filter(t => t === pickTree.ti).length > 1 ? 24 : 0);
       setRaver(climber.id, r => ({ ...r, pose: "run", board: false, x: trunkX, bottom: TREE_BOTTOM - 6, ms: 900, faceLeft: trunkX < r.x, line: ci ? "ME TOO! ME TOO!" : "UP THE TREE!" }));
       void (async () => {
         await later(950 + ci * 200);
-        setRaver(climber.id, r => ({ ...r, pose: "dance", bottom: TREE_BOTTOM + TREE_H * (ci ? 0.52 : 0.45), ms: 1300, line: null }));
+        setRaver(climber.id, r => ({ ...r, pose: "dance", bottom: TREE_BOTTOM + TREE.H * (ci ? 0.52 : 0.45), ms: 1300, line: null }));
         await later(1350);
         setRaver(climber.id, r => ({ ...r, hiding: true }));
       })();
@@ -1662,14 +1689,14 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
 
   // A few holes left where the shot went, a bit wide of whatever she was aiming at.
   function bulletHoles(el: Element, count: number) {
-    const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = window.innerHeight - (r.top + r.height / 2);
+    const r = sRect(el), cx = r.left + r.width / 2, cy = window.innerHeight - (r.top + r.height / 2);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2, dist = 30 + Math.random() * 50;
       add({ kind: "hole", x: cx + Math.cos(angle) * dist, y: Math.max(GROUND + 4, cy + Math.sin(angle) * dist), size: 8 + Math.random() * 5 });
     }
   }
   function missed(el: Element) {
-    const r = el.getBoundingClientRect();
+    const r = sRect(el);
     bulletHoles(el, 2 + Math.floor(Math.random() * 2));
     add({ kind: "burst", x: r.left - 10, y: window.innerHeight - r.top + 20, size: 0, text: "MISSED!" });
     if (Math.random() < 0.7) speak(pick(MISS_LINES));
@@ -1680,7 +1707,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (phaseRef.current === "hidden") return;
     if (phaseRef.current !== "parked" || busy.current || !bike.current) { hitTarget(target, el, "BLAM!"); return; }
     busy.current = true; setMenu(false);
-    const box = el.getBoundingClientRect(), faceLeft = box.left + box.width / 2 < place.current.x + bike.current.offsetWidth / 2;
+    const box = sRect(el), faceLeft = box.left + box.width / 2 < place.current.x + bike.current.offsetWidth / 2;
     setFacingLeft(faceLeft); setPose("shotgun");
     await later(260);
     const k = s(), x = place.current.x, muzzle = faceLeft ? x + (VIEW_W - 192) * k : x + 192 * k, muzzleY = GROUND + (VIEW_H - 42) * k;
@@ -1708,18 +1735,38 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   }
   const shootProps = (target: Target, title = "Shoot it!") => ({
     title,
+    // Lets the "Shoot something" button find targets on screen.
+    "data-shoot": JSON.stringify(target),
     onClick: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); void blast(target, event.currentTarget); },
   });
+  // "Shoot something" from the menu: she picks something on screen, going for dinner first (roos,
+  // emus, critters, snakes, koalas) so the crows and the tweakers get fed. Nothing about? A roo mob
+  // or a mob of emus gets called in and she has a go at that.
+  const DINNER_KINDS = ["roo", "emu", "crossing", "snake", "koala", "strikeRoo"];
+  function shootSomething(retry = true) {
+    const W = VW(), H = window.innerHeight;
+    const onScreen = Array.from(document.querySelectorAll<HTMLElement>("[data-shoot]")).filter(el => {
+      const r = sRect(el);
+      return r.right > 10 && r.left < W - 10 && r.bottom > 0 && r.top < H;
+    });
+    const dinner = onScreen.filter(el => DINNER_KINDS.includes((JSON.parse(el.dataset.shoot!) as Target).kind));
+    const el = pick(dinner.length ? dinner : onScreen.length ? onScreen : [null]);
+    if (el) { const r = sRect(el); panTo(r.left + r.width / 2); void blast(JSON.parse(el.dataset.shoot!) as Target, el); return; }
+    if (!retry) return;
+    sceneUntil.current = 0;
+    if (Math.random() < 0.5) rooMob(); else emuFlock();
+    window.setTimeout(() => shootSomething(false), 2200);
+  }
 
   // The postie putters past on the little red Honda, flinging letters.
   async function postieRun() {
     if (!claimScene(10_000)) return;
-    const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, w = window.innerWidth < 640 ? 130 : POSTIE_W;
-    const start = dir === 1 ? -w - 10 : window.innerWidth + 10, end = dir === 1 ? window.innerWidth + 10 : -w - 10, ms = 9000;
+    const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, w = isPhone() ? 130 : POSTIE_W;
+    const start = dir === 1 ? -w - 10 : VW() + 10, end = dir === 1 ? VW() + 10 : -w - 10, ms = 9000;
     setPostie({ x: start, ms: 0, dir });
     await later(60);
     setPostie(pt => pt && { ...pt, x: end, ms });
-    add({ kind: "burst", x: dir === 1 ? 20 : window.innerWidth - 200, y: GROUND + 120, size: 0, text: "BEEP BEEP!" });
+    add({ kind: "burst", x: dir === 1 ? 20 : VW() - 200, y: GROUND + 120, size: 0, text: "BEEP BEEP!" });
     if (phaseRef.current === "parked" && !busy.current && Math.random() < 0.6) window.setTimeout(() => speak(pick(POSTIE_LINES)), 1500);
     const t0 = performance.now();
     for (let i = 0; i < 6; i++) {
@@ -1734,17 +1781,17 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // A kid on a BMX rides under a gum tree in swooping season. Bad idea.
   async function magpieSwoop() {
     if (!claimScene(14_000)) return;
-    const tree = pick(treeSpots()), treeMid = tree.x + TREE_W / 2, dir: 1 | -1 = treeMid < window.innerWidth / 2 ? -1 : 1;
-    const start = dir === 1 ? -KID_W - 10 : window.innerWidth + 10, end = dir === 1 ? window.innerWidth + 10 : -KID_W - 10;
+    const tree = pick(treeSpots()), treeMid = tree.x + TREE.W / 2, dir: 1 | -1 = treeMid < VW() / 2 ? -1 : 1;
+    const start = dir === 1 ? -KID_W - 10 : VW() + 10, end = dir === 1 ? VW() + 10 : -KID_W - 10;
     const meet = treeMid - KID_W / 2, rideMs = Math.max(2500, Math.abs(meet - start) * 6);
     setKid({ x: start, ms: 0, dir, panic: false, line: null, magpies: [] });
     await later(60);
     setKid(k => k && { ...k, x: meet, ms: rideMs, line: "Ding ding! Lovely day for a ride!" });
     await later(rideMs);
     // Out of the canopy they come.
-    const canopyBottom = TREE_BOTTOM + TREE_H * 0.75, magpies = Array.from({ length: 5 }, (_, i) => {
+    const canopyBottom = TREE_BOTTOM + TREE.H * 0.75, magpies = Array.from({ length: 5 }, (_, i) => {
       const ox = -10 + i * 28, oy = 84 + (i % 2) * 30;
-      return { id: ++uid, ox, oy, sx: tree.x + TREE_W * (0.2 + Math.random() * 0.6) - (meet + ox), sy: -(canopyBottom - (GROUND + 2 + oy)), delay: i * 160 };
+      return { id: ++uid, ox, oy, sx: tree.x + TREE.W * (0.2 + Math.random() * 0.6) - (meet + ox), sy: -(canopyBottom - (GROUND + 2 + oy)), delay: i * 160 };
     });
     setKid(k => k && { ...k, panic: true, magpies, line: pick(KID_SCREAMS) });
     add({ kind: "burst", x: treeMid - 60, y: canopyBottom + 20, size: 0, text: "SWOOOOP!" });
@@ -1754,7 +1801,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     setKid(k => k && { ...k, x: end, ms: fleeMs });
     for (let t = 0; t < fleeMs; t += 1400) {
       await later(1400);
-      setKid(k => { if (k && k.magpies.length) add({ kind: "burst", x: Math.max(20, Math.min(window.innerWidth - 200, meet + (end - meet) * Math.min(1, (t + 1400) / fleeMs))), y: GROUND + 190, size: 0, text: pick(["CLACK CLACK!", "SWOOP!", "CAROL-CAROL!"]) }); return k; });
+      setKid(k => { if (k && k.magpies.length) add({ kind: "burst", x: Math.max(20, Math.min(VW() - 200, meet + (end - meet) * Math.min(1, (t + 1400) / fleeMs))), y: GROUND + 190, size: 0, text: pick(["CLACK CLACK!", "SWOOP!", "CAROL-CAROL!"]) }); return k; });
     }
     await later(300);
     setKid(null);
@@ -1771,7 +1818,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       { x: bx - 40, bottom: BIN_BOTTOM - 10, onBin: false },
       { x: bx + BIN_W + 6, bottom: BIN_BOTTOM - 8, onBin: false },
       { x: bx + BIN_W + 40, bottom: BIN_BOTTOM - 4, onBin: false },
-    ].filter((_, i) => window.innerWidth >= 640 || [0, 1, 4].includes(i)).slice(0, FLOCK_SIZE);
+    ].filter((_, i) => !isPhone() || [0, 1, 4].includes(i)).slice(0, FLOCK_SIZE);
   };
   useEffect(() => {
     if (phase !== "enter" && phase !== "parked") return;
@@ -1818,7 +1865,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     await later(14_000);
     if (gone()) { flockBusy.current = false; return; }
     // One lap over the top, left to right.
-    setFlock(fl => fl && { ...fl, dir: 1, stage: "pass", birds: fl.birds.map((b, i) => ({ ...b, x: window.innerWidth + 80 + i * 60, bottom: window.innerHeight * (0.62 + (i % 3) * 0.07), ms: 7000 + i * 200 })) });
+    setFlock(fl => fl && { ...fl, dir: 1, stage: "pass", birds: fl.birds.map((b, i) => ({ ...b, x: VW() + 80 + i * 60, bottom: window.innerHeight * (0.62 + (i % 3) * 0.07), ms: 7000 + i * 200 })) });
     if (phaseRef.current === "parked" && !busy.current && Math.random() < 0.5) window.setTimeout(() => speak("Check out those white pointers!!"), 1500);
     await later(13_000);
     if (gone()) { flockBusy.current = false; return; }
@@ -1835,7 +1882,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (dropBusy.current || !claimScene(5000)) return;
     dropBusy.current = true;
     const tree = pick(treeSpots());
-    const x = tree.x + TREE_W * 0.55, top = TREE_BOTTOM + TREE_H * 0.62;
+    const x = tree.x + TREE.W * 0.55, top = TREE_BOTTOM + TREE.H * 0.62;
     setDropBear({ x, bottom: top, ms: 0, ease: "ease-in", faceLeft: false });
     await later(80);
     setDropBear(d => d && { ...d, bottom: GROUND + 6, ms: 650 });
@@ -1846,8 +1893,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     add({ kind: "burst", x: x - 50, y: GROUND + 100, size: 0, text: "RAAARGH!" });
     if (phaseRef.current === "parked" && !busy.current) speak(pick(DROP_LINES));
     await later(1400);
-    const toLeft = x < window.innerWidth / 2;
-    setDropBear(d => d && { ...d, faceLeft: toLeft, x: toLeft ? -80 : window.innerWidth + 40, ms: 1600, ease: "cubic-bezier(.5,0,.8,.6)" });
+    const toLeft = x < VW() / 2;
+    setDropBear(d => d && { ...d, faceLeft: toLeft, x: toLeft ? -80 : VW() + 40, ms: 1600, ease: "cubic-bezier(.5,0,.8,.6)" });
     await later(1700);
     setDropBear(null);
     dropBusy.current = false;
@@ -1862,11 +1909,11 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     setSportbikes(list => [...list, { id: ++uid, dir, lane, color, ms }]);
     if (red) {
       // So fast it leaves a trail of smoke hanging over the road behind it.
-      const bw = sportbikeW(), from = dir === 1 ? -bw - 10 : window.innerWidth, to = dir === 1 ? window.innerWidth : -bw - 10, laneY = (lane === "far" ? FAR_LANE : GROUND) + 16;
+      const bw = sportbikeW(), from = dir === 1 ? -bw - 10 : VW(), to = dir === 1 ? VW() : -bw - 10, laneY = (lane === "far" ? FAR_LANE : GROUND) + 16;
       for (let i = 0; i <= 14; i++) window.setTimeout(() => add({ kind: "smoke", x: from + (to - from) * (i / 14) + (dir === 1 ? 14 : bw - 14), y: laneY + Math.random() * 10, size: 26 + Math.random() * 18 }), (i / 14) * ms);
     }
-    add({ kind: "burst", x: dir === 1 ? 20 : window.innerWidth - 260, y: (lane === "far" ? FAR_LANE : GROUND) + 70, size: 0, text: red ? "NYEEEEEEOOOWWWWW!!!" : "NEEEEOWWW!" });
-    if (red) for (let i = 0; i < 4; i++) add({ kind: "smoke", x: dir === 1 ? 10 + i * 30 : window.innerWidth - 10 - i * 30, y: (lane === "far" ? FAR_LANE : GROUND) + 20, size: 18 + i * 6 });
+    add({ kind: "burst", x: dir === 1 ? 20 : VW() - 260, y: (lane === "far" ? FAR_LANE : GROUND) + 70, size: 0, text: red ? "NYEEEEEEOOOWWWWW!!!" : "NEEEEOWWW!" });
+    if (red) for (let i = 0; i < 4; i++) add({ kind: "smoke", x: dir === 1 ? 10 + i * 30 : VW() - 10 - i * 30, y: (lane === "far" ? FAR_LANE : GROUND) + 20, size: 18 + i * 6 });
     if (phaseRef.current === "parked") window.setTimeout(() => speak(pick(red ? RED_BIKE_LINES : SPORTBIKE_LINES)), red ? 500 : 900);
   }
 
@@ -1876,7 +1923,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     strikeBusy.current = true;
     if (!claimScene(12_000)) { strikeBusy.current = false; return; }
     strikeRooShot.current = false;
-    const rooX = Math.round(window.innerWidth * (0.4 + Math.random() * 0.2)), carW = window.innerWidth < 640 ? 150 : 200;
+    const rooX = Math.round(VW() * (0.4 + Math.random() * 0.2)), carW = isPhone() ? 150 : 200;
     const impactCarX = rooX - carW * 0.93, runIn = 2400;
     setStrike({ carX: -carW - 20, carMs: 0, color: pick(CAR_COLORS), dented: false, rooX, rooBottom: ROAD_H + 40, rooMs: 0, rooGone: false, shaking: false });
     await later(60);
@@ -1884,7 +1931,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     await later(runIn);
     if (strikeRooShot.current) {
       // Shazz got Skippy first; the wagon just drives on through.
-      setStrike(st => st && { ...st, carX: window.innerWidth + 40, carMs: 3500 });
+      setStrike(st => st && { ...st, carX: VW() + 40, carMs: 3500 });
       await later(3600);
       setStrike(null); strikeBusy.current = false;
       return;
@@ -1895,21 +1942,21 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     setStrike(st => st && { ...st, dented: true, rooGone: true, shaking: true });
     if (phaseRef.current === "parked" && !busy.current) speak(pick(STRIKE_LINES));
     for (let i = 0; i < 6; i++) { add({ kind: "smoke", x: impactCarX + carW * 0.92, y: FAR_LANE + 50, size: 18 + i * 5 }); await later(160); }
-    setStrike(st => st && { ...st, shaking: false, carX: window.innerWidth + 40, carMs: 6000 });
+    setStrike(st => st && { ...st, shaking: false, carX: VW() + 40, carMs: 6000 });
     await later(6100);
     setStrike(null);
     strikeBusy.current = false;
   }
   const rooLanded = (item: Fx) => {
     remove(item.id);
-    const x = Math.max(20, Math.min(window.innerWidth - 90, item.x + (item.dx || 0) - 36));
+    const x = Math.max(20, Math.min(VW() - 90, item.x + (item.dx || 0) - 36));
     setKills(list => [...list, { id: ++uid, kind: "roo", x, bornAt: Date.now() }]);
   };
 
   // Drop bears lower down on a web thread from the gum trees, dangle a bit, and climb back up.
   function spawnDangler() {
     const tree = pick(treeSpots());
-    const x = tree.x + TREE_W * (0.3 + Math.random() * 0.4), top = window.innerHeight - (TREE_BOTTOM + TREE_H * 0.78);
+    const x = tree.x + TREE.W * (0.3 + Math.random() * 0.4), top = window.innerHeight - (TREE_BOTTOM + TREE.H * 0.78);
     setDanglers(list => [...list, { id: ++uid, x, top, ms: 7000 + Math.random() * 3000 }]);
   }
 
@@ -1918,8 +1965,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   async function snakeRun() {
     if (!claimScene(11_000)) return;
     const id = ++uid, dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, lane: "far" | "near" = Math.random() < 0.5 ? "far" : "near";
-    const bottom = lane === "far" ? FAR_LANE + 8 : GROUND + 6, start = dir === 1 ? -130 : window.innerWidth + 10;
-    const stop = window.innerWidth * (0.3 + Math.random() * 0.4), slitherMs = Math.min(7000, Math.abs(stop - start) * 9);
+    const bottom = lane === "far" ? FAR_LANE + 8 : GROUND + 6, start = dir === 1 ? -130 : VW() + 10;
+    const stop = VW() * (0.3 + Math.random() * 0.4), slitherMs = Math.min(7000, Math.abs(stop - start) * 9);
     const update = (change: (sn: Snake) => Snake) => setSnakes(list => list.map(sn => (sn.id === id ? change(sn) : sn)));
     const shot = () => shotIds.current.has(id);
     setSnakes(list => [...list, { id, x: start, bottom, ms: 0, dir, mode: "slither", done: false }]);
@@ -1942,7 +1989,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       add({ kind: "burst", x: stop, y: bottom + 70, size: 0, text: "HOOP!" });
       if (phaseRef.current === "parked" && !busy.current && Math.random() < 0.5) window.setTimeout(() => speak(pick(SNAKE_LINES)), 700);
       await later(450);
-      const end = dir === 1 ? window.innerWidth + 20 : -80, ms = Math.abs(end - stop) * 2.2;
+      const end = dir === 1 ? VW() + 20 : -80, ms = Math.abs(end - stop) * 2.2;
       update(sn => ({ ...sn, x: end, ms }));
       await later(ms);
     }
@@ -1955,8 +2002,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (dazzaBusy.current || !claimScene(28_000)) return;
     dazzaBusy.current = true;
     const tree = pick(treeSpots());
-    const standX = tree.x + TREE_W * 0.35, fromRight = standX > window.innerWidth / 2;
-    const start = fromRight ? window.innerWidth + 20 : -140;
+    const standX = tree.x + TREE.W * 0.35, fromRight = standX > VW() / 2;
+    const start = fromRight ? VW() + 20 : -140;
     const walkMs = Math.max(2500, Math.abs(standX - start) * 7);
     setDazza({ x: start, ms: 0, faceLeft: fromRight, pose: "walk", bear: false, line: null, bearTop: null });
     await later(60);
@@ -1987,7 +2034,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       await later(3000);
     }
     // Drop bear straight onto his head from the gum above.
-    setDazza(d => d && { ...d, line: null, bearTop: window.innerHeight - (TREE_BOTTOM + TREE_H * 0.7) });
+    setDazza(d => d && { ...d, line: null, bearTop: window.innerHeight - (TREE_BOTTOM + TREE.H * 0.7) });
     await later(80);
     setDazza(d => d && { ...d, bearTop: window.innerHeight - (GROUND + 234) });
     await later(600);
@@ -1995,7 +2042,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     setDazza(d => d && { ...d, bear: true, bearTop: null, pose: "run", line: "AAARGH! DROP BEAR! GET IT OFF!" });
     await later(1400);
     if (phaseRef.current === "parked" && !busy.current) speak(pick(["Told ya not to stand under the gum tree, Dazza!", "Ha! Karma, ya bludger!", "Vegemite behind the ears next time, Dazza!"]));
-    const exit = fromRight ? window.innerWidth + 40 : -160;
+    const exit = fromRight ? VW() + 40 : -160;
     setDazza(d => d && { ...d, faceLeft: !fromRight, x: exit, ms: 1800 });
     await later(1900);
     setDazza(null);
@@ -2008,14 +2055,14 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (phase !== "parked") return;
     const acts: [number, () => void][] = [
       // Traffic and people
-      [4, () => { if (claimScene(6000, 2000)) spawnCar(); }],
-      [5, () => { if (claimScene(2500, 2000)) spawnSportbike(); }],
+      [4, () => { if (claimScene(6000, 5000)) spawnCar(); }],
+      [5, () => { if (claimScene(2500, 5000)) spawnSportbike(); }],
       [1, () => void postieRun()],
       [1, () => void dazzaVisit()],
       // Animals: most of the show
-      [2, () => { if (claimScene(9000, 3000)) spawnFlyers(); }],
+      [2, () => { if (claimScene(9000, 6000)) spawnFlyers(); }],
       [5, () => void spawnKill()],
-      [3, () => { if (claimScene(10_000, 3000)) spawnDangler(); }],
+      [3, () => { if (claimScene(10_000, 6000)) spawnDangler(); }],
       [4, () => void snakeRun()],
       [4, () => rooMob()],
       [3, () => void dropBearAttack()],
@@ -2026,18 +2073,21 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       [3, () => emuFlock()],
       [5, () => void tweakerAct()],
     ];
-    const total = acts.reduce((sum, [weight]) => sum + weight, 0);
+    // On a phone there isn't room for all of it: only cars, bikes and roadkill come by themselves,
+    // and the wildlife and locals are buttons in the tricks menu instead.
+    const phoneActs = [acts[0], acts[1], acts[5]];
     let timer = 0;
     const tick = () => {
       if (!sceneActive() && !busy.current) {
+        const pool = isPhone() ? phoneActs : acts, total = pool.reduce((sum, [weight]) => sum + weight, 0);
         let roll = Math.random() * total;
-        const act = acts.find(([weight]) => (roll -= weight) < 0) ?? acts[0];
+        const act = pool.find(([weight]) => (roll -= weight) < 0) ?? pool[0];
         act[1]();
       }
-      timer = window.setTimeout(tick, 2500 + Math.random() * 2500);
+      timer = window.setTimeout(tick, 5000 + Math.random() * 4000);
     };
     // Lorikeets open the show shortly after she parks.
-    const opener = window.setTimeout(() => void lorikeetVisit(), 3000);
+    const opener = window.setTimeout(() => { if (!isPhone()) void lorikeetVisit(); }, 3000);
     timer = window.setTimeout(tick, 4000);
     return () => { clearTimeout(opener); clearTimeout(timer); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2046,7 +2096,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // A mob of emus legs it across the road, all neck and knees.
   function emuFlock() {
     if (!claimScene(8000)) return;
-    const W = window.innerWidth, dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, count = 5 + Math.floor(Math.random() * 3);
+    const W = VW(), dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, count = 5 + Math.floor(Math.random() * 3);
     const flock = Array.from({ length: count }, (_, i) => {
       const size = 62 + Math.random() * 18;
       return { id: ++uid, dir, size, x: dir === 1 ? -size - 40 - i * 70 - Math.random() * 40 : W + 40 + i * 70 + Math.random() * 40, bottom: [GROUND + 2, FAR_LANE + 6, ROAD_H - 8][i % 3] + Math.random() * 8, ms: 0, hits: 0 };
@@ -2075,7 +2125,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // During the barbie: one swoops in, nicks a snag off the plate, and flaps off with it.
   async function snagRaid(plateX: number, plateBottom: number) {
     const w = 84;
-    setRaider({ x: window.innerWidth + 40, bottom: window.innerHeight * 0.65, ms: 0, faceLeft: true, carrying: null });
+    setRaider({ x: VW() + 40, bottom: window.innerHeight * 0.65, ms: 0, faceLeft: true, carrying: null });
     await later(60);
     setRaider(r => r && { ...r, x: plateX - w * 0.9, bottom: plateBottom, ms: 1600 });
     await later(1600);
@@ -2097,9 +2147,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
 
   const arrive = useCallback(async () => {
     if (phaseRef.current !== "hidden") { if (phaseRef.current === "parked") say(); return; }
-    const w = window.innerWidth < 640 ? 150 : 210, k = w / VIEW_W;
+    const w = isPhone() ? 150 : 210, k = w / VIEW_W;
     setWidth(w); setPhase("enter"); setPose("ride"); void loadAi();
-    const park = window.innerWidth - w - 16;
+    const park = VW() - w - 16;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { place.current = { x: park, tilt: 0, pivot: 60 }; draw(); }
     else {
       const start = -w - 80; let lastPuff = 0, lastRear: number | null = null, screeched = false;
@@ -2122,7 +2172,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       });
       await animate(250, t => { place.current = { x: place.current.x, tilt: 1.2 * (1 - t), pivot: 205 }; });
     }
-    setAtX(park); setPhase("parked");
+    setAtX(park); setPhase("parked"); panTo(park + w / 2);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draw, loadAi, say]);
 
@@ -2141,7 +2191,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
         const now = performance.now();
         if (now - lastPuff > 40) { lastPuff = now; add({ kind: "tyre", x: rear - 10 + Math.random() * 20, y: GROUND + 2, size: 28 + Math.random() * 22 }); }
       });
-      const end = window.innerWidth + 120; let lastRear = rear;
+      const end = VW() + 120; let lastRear = rear;
       await animate(1400, t => {
         const x = x0 + (end - x0) * t * t * t, now = performance.now();
         place.current = weave(t, x, -Math.min(16, t * 60) * (t < 0.8 ? 1 : (1 - t) * 5), 60);
@@ -2160,12 +2210,23 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       setMuted(localStorage.getItem("day-out-smartarse-muted") === "1");
       setClean(localStorage.getItem("day-out-smartarse-clean") !== "0");
     } catch { setMuted(false); }
-    const onResize = () => {
-      if (phaseRef.current !== "parked" || !bike.current) return;
-      place.current.x = Math.min(place.current.x, window.innerWidth - bike.current.offsetWidth - 8); draw(); setAtX(place.current.x);
+    const keepInView = (w: number) => {
+      const x = Math.max(8, Math.min(place.current.x, VW() - w - 8));
+      if (x !== place.current.x) { place.current.x = x; draw(); setAtX(x); }
     };
+    setPhoneView(isPhone());
+    const onResize = () => {
+      setPhoneView(isPhone());
+      if (phaseRef.current === "hidden" || !bike.current) return;
+      const w = isPhone() ? 150 : 210;
+      setWidth(w);
+      if (phaseRef.current === "parked") keepInView(w);
+    };
+    const watchdog = window.setInterval(() => {
+      if (phaseRef.current === "parked" && !busy.current && bike.current) keepInView(bike.current.offsetWidth);
+    }, 2000);
     window.addEventListener("resize", onResize);
-    return () => { window.removeEventListener("resize", onResize); cancelAnimationFrame(frame.current); };
+    return () => { window.removeEventListener("resize", onResize); clearInterval(watchdog); cancelAnimationFrame(frame.current); };
   }, [draw]);
   useEffect(() => {
     if (muted !== false) return;
@@ -2183,7 +2244,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   // ---- Gumtree Gary: lives up the right-hand roadside gum, eats whatever lands on the road ----
   const garyHome = () => {
     const trees = treeSpots(), t = trees[trees.length - 1];
-    return { x: t.x + TREE_W * 0.45 - 33, bottom: TREE_BOTTOM + TREE_H * 0.48, base: TREE_BOTTOM - 6 };
+    return { x: t.x + TREE.W * 0.45 - 33, bottom: TREE_BOTTOM + TREE.H * 0.48, base: TREE_BOTTOM - 6 };
   };
   useEffect(() => {
     if (phase !== "parked") return;
@@ -2239,9 +2300,10 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (who === "gary") garyBusy.current = true;
     const trees = treeSpots(), tree = who === "gary" ? trees[trees.length - 1] : trees[who === "trev" ? 0 : 1];
     if (!tree) { if (who === "gary") garyBusy.current = false; return; }
-    const trunk = tree.x + TREE_W * 0.45, x = who === "trev" ? trunk - 96 : trunk + 26;
+    const trunk = tree.x + TREE.W * 0.45, x = who === "trev" ? trunk - 96 : trunk + 26;
     const lines = ["WOOOOOO!", "THIS IS MY JAM!", "UNTZ UNTZ UNTZ!", "CAN'T STOP, WON'T STOP!", "DOOF DOOF DOOF!", "WATCH THIS! …WATCH THIS!"];
     setBoogie({ who, x, line: pick(lines) });
+    panTo(x + 33);
     for (let i = 0; i < 6; i++) {
       add({ kind: "junk", x: x + 33, y: TREE_BOTTOM + 90, size: 0, dx: (Math.random() - 0.5) * 140, dy: 20, arc: -(60 + Math.random() * 60), text: pick(["🎵", "🎶", "✨"]) });
       if (i === 3) setBoogie(b => b && { ...b, line: pick(lines) });
@@ -2288,9 +2350,10 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     if (now) sceneUntil.current = Date.now() + 64_000;
     else if (!claimScene(60_000, 4000)) return;
     blueBusy.current = true;
-    const W = window.innerWidth, stand = Math.round(W * 0.36), say = (line: string | null) => setBlue(b => b && { ...b, line });
+    const W = VW(), stand = Math.round(W * 0.36), say = (line: string | null) => setBlue(b => b && { ...b, line });
     const pose = (p: TrueBluePose) => setBlue(b => b && { ...b, pose: p });
     setBlue({ x: -80, ms: 0, faceLeft: false, pose: "walk", line: "🎵 Hey True Blue! Is it me and you? 🎵", fish: false });
+    panTo(stand);
     await later(60);
     const walkMs = Math.max(4000, (stand + 80) * 11);
     setBlue(b => b && { ...b, x: stand, ms: walkMs });
@@ -2367,6 +2430,17 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   }
 
   useEffect(() => { onPresence?.(phase !== "hidden"); }, [phase, onPresence]);
+  useEffect(() => {
+    if (phase === "hidden") return;
+    const make = () => {
+      const strip = document.querySelector<HTMLElement>(`.${styles.shopStrip}`);
+      document.body.style.paddingBottom = `${(strip?.offsetHeight ?? 0) + ROAD_H + 16}px`;
+    };
+    make();
+    const late = window.setTimeout(make, 600);
+    window.addEventListener("resize", make);
+    return () => { clearTimeout(late); window.removeEventListener("resize", make); document.body.style.paddingBottom = ""; };
+  }, [phase]);
   // Nev only turns up when the "Dad?" button is pressed. He shuffles in, wanders about looking
   // for his boy (slow, like an old bloke should be: 14ms a pixel), shakes his cane now and then,
   // and after a minute he gives up for the day and walks off screen.
@@ -2377,7 +2451,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     let at = -60, timer = 0;
     const shuffle = () => {
       if (!alive()) return;
-      const from = at, to = 20 + Math.random() * (window.innerWidth - 80), ms = Math.max(2500, Math.abs(to - from) * 14);
+      const from = at, to = 20 + Math.random() * (VW() - 80), ms = Math.max(2500, Math.abs(to - from) * 14);
       at = to;
       setNev(n => n && { ...n, x: to, ms, faceLeft: to < from, walking: true });
       timer = window.setTimeout(() => {
@@ -2398,7 +2472,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       if (!alive()) return;
       nevRun.current++;
       clearTimeout(timer);
-      const off = window.innerWidth + 80, ms = Math.max(2500, Math.abs(off - at) * 14);
+      const off = VW() + 80, ms = Math.max(2500, Math.abs(off - at) * 14);
       setNev(n => n && { ...n, x: off, ms, faceLeft: false, walking: true, shaking: false, line: "Ah well. I'll keep lookin'." });
       window.setTimeout(() => setNev(n => n && { ...n, line: null }), 4000);
       window.setTimeout(() => setNev(null), ms + 100);
@@ -2431,11 +2505,15 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
   const actions: [Action, string][] = [["drink", "🍺 Crack a tinnie"], ["flip", "🖕 Flip us off"], ["moon", "🍑 Show us ya arse"], ["smoke", "🚬 Light a durry"], ["throw", "🍾 Chuck a bottle"]];
   // Choosing anything from the menu closes it (so on a phone the sheet gets out of the way).
   const pickTrick = (run: () => void) => () => { setMenu(false); run(); };
-  return <div className={`${styles.stage} ${convoy || brawl === "boom" ? styles.rumble : ""}`}>
-    <div className={`${styles.road} ${onRoad ? styles.roadOn : ""} ${phase === "parked" ? styles.roadClickable : ""}`} onClick={event => void rideTo(event.clientX)} title={phase === "parked" ? "Click to move Shazz here" : undefined} />
+  // Wildlife and locals from the menu jump the queue (clear the "something's on" lock first).
+  const callIn = (run: () => void) => pickTrick(() => { sceneUntil.current = 0; run(); });
+  return <><div ref={scroller} className={styles.stageScroller}><div className={`${styles.stage} ${convoy || brawl === "boom" ? styles.rumble : ""}`} style={phoneView ? { width: VW() } : undefined}>
+    {/* The shops behind the road. Not clickable itself, but it stops clicks reaching the page behind. */}
+    {phase !== "hidden" && <div className={styles.shopStrip} aria-hidden onClick={event => event.stopPropagation()}><Shopfronts /></div>}
+    <div className={`${styles.road} ${onRoad ? styles.roadOn : ""} ${phase === "parked" ? styles.roadClickable : ""}`} onClick={event => void rideTo(event.clientX + panX())} title={phase === "parked" ? "Click to move Shazz here" : undefined} />
     {cars.map(car => <span key={car.id} data-vehicle={`car-${car.id}`} data-lane={car.lane} className={`${styles.car} ${car.turnAt !== undefined ? styles.carTurn : ""} ${phase === "parked" ? styles.carClickable : ""} ${heldCar === car.id ? styles.carHeld : ""}`}
       onClick={event => void lassoCar(car.id, event.currentTarget)} title={phase === "parked" ? "Lasso it!" : undefined} onAnimationEnd={event => event.target === event.currentTarget && setCars(list => list.filter(item => item.id !== car.id))}
-      style={{ bottom: car.lane === "far" ? FAR_LANE : GROUND + 2, width: car.width, height: car.width * 0.45, animationDuration: `${car.ms}ms`, ["--from" as string]: `${car.dir === 1 ? -car.width : window.innerWidth}px`, ["--to" as string]: `${car.dir === 1 ? window.innerWidth : -car.width}px`, ["--stop" as string]: `${car.turnAt ?? 0}px` }}>
+      style={{ bottom: car.lane === "far" ? FAR_LANE : GROUND + 2, width: car.width, height: car.width * 0.45, animationDuration: `${car.ms}ms`, ["--from" as string]: `${car.dir === 1 ? -car.width : VW()}px`, ["--to" as string]: `${car.dir === 1 ? VW() : -car.width}px`, ["--stop" as string]: `${car.turnAt ?? 0}px` }}>
       <span className={car.lane === "near" && car.turnAt === undefined ? styles.carSwerve : styles.carFlip} style={car.lane === "near" && car.turnAt === undefined ? { animationDelay: `${Math.max(0, car.shockAt - 650)}ms` } : undefined}>
         <span className={styles.carFlip} style={{ transform: car.dir === -1 ? "scaleX(-1)" : undefined }}><span className={styles.carBody}><FamilyCar color={car.color} /></span></span>
         {poopMarks(`car-${car.id}`, "10%")}
@@ -2486,7 +2564,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       const others = treeSpots().slice(0, -1), home = !trev && !cookout && !rave && !thieves.trev && !thieves.kylie;
       if (!home) return null;
       return others.slice(0, 2).map((t, i) => {
-        const left = i === 0, trunk = t.x + TREE_W * 0.45, who = i === 0 ? "trev" : "kylie";
+        const left = i === 0, trunk = t.x + TREE.W * 0.45, who = i === 0 ? "trev" : "kylie";
         if (boogie?.who === who || fighter?.who === who) return null;
         return <span key={`lurk${i}`} className={styles.lurker} style={{ left: trunk - (left ? 46 : 20), bottom: TREE_BOTTOM - 6 }}>
           <span className={styles.lurkHit} role="button" aria-label={`Get ${i === 0 ? "Trev" : "Kylie"} out for a dance`} title="Oi! Come out!" onClick={() => void boogieOut(who)} />
@@ -2505,10 +2583,10 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       {trev.line && <span className={styles.ibisBubble} style={{ bottom: 132 }}>{trev.line}</span>}
     </span>}
     {phase !== "hidden" && treeSpots().map((t, i) => (
-      <span key={i} className={styles.gumTree} style={{ left: t.x, bottom: TREE_BOTTOM, width: TREE_W, height: TREE_H }}>
+      <span key={i} className={styles.gumTree} style={{ left: t.x, bottom: TREE_BOTTOM, width: TREE.W, height: TREE.H }}>
         <GumTree koala={t.koala && !shotKoalas.includes(i)} variant={i} />
         {t.koala && !shotKoalas.includes(i) && phase === "parked" && <span className={`${styles.koalaTarget} ${styles.shootable}`} {...shootProps({ kind: "koala", tree: i }, "Shoot the koala!")}
-          style={{ left: TREE_W * (80 / 120) - 16, top: TREE_H * (98 / 220) - 22, width: 32, height: 40 }} />}
+          style={{ left: TREE.W * (80 / 120) - 16, top: TREE.H * (98 / 220) - 22, width: 32, height: 40 }} />}
       </span>
     ))}
     {cookout && <>
@@ -2525,17 +2603,17 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
           {cookout.line?.who === who && <span key={cookout.line.text} className={styles.ibisBubble} style={{ bottom: 132 }}>{cookout.line.text}</span>}
         </span>;
       })}
-      {cookout.cop && <span className={styles.strikeCar} aria-hidden style={{ left: cookout.cop.x, bottom: FAR_LANE, width: window.innerWidth < 640 ? 150 : 190, height: (window.innerWidth < 640 ? 150 : 190) * 0.42, transitionDuration: `${cookout.cop.ms}ms` }}>
+      {cookout.cop && <span className={styles.strikeCar} aria-hidden style={{ left: cookout.cop.x, bottom: FAR_LANE, width: isPhone() ? 150 : 190, height: (isPhone() ? 150 : 190) * 0.42, transitionDuration: `${cookout.cop.ms}ms` }}>
         <span className={styles.carFlip} style={{ transform: cookout.cop.flip ? "scaleX(-1)" : undefined }}><PoliceCar damage={0} wrecked={false} /></span>
       </span>}
     </>}
     {rave && <div className={styles.rave} aria-hidden>
       {rave.lights && <span className={styles.raveLights} />}
       {rave.gear && <>
-        <span className={styles.raveProp} style={{ left: window.innerWidth * 0.48 - 60, bottom: TREE_BOTTOM - 20, width: 120, height: 150 }}><HillsHoist /></span>
-        <span className={styles.raveProp} style={{ left: window.innerWidth * 0.3, bottom: GROUND + 4, width: 60, height: 44 }}><Esky /></span>
-        <span className={styles.raveProp} style={{ left: window.innerWidth * 0.62, bottom: GROUND + 4, width: 70, height: 44 }}><Boombox /></span>
-        {[0.18, 0.8].map(f => <span key={f} className={styles.raveProp} style={{ left: window.innerWidth * f, bottom: FAR_LANE + 6, width: 40, height: 50 }}><FireCan /></span>)}
+        <span className={styles.raveProp} style={{ left: VW() * 0.48 - 60, bottom: TREE_BOTTOM - 20, width: 120, height: 150 }}><HillsHoist /></span>
+        <span className={styles.raveProp} style={{ left: VW() * 0.3, bottom: GROUND + 4, width: 60, height: 44 }}><Esky /></span>
+        <span className={styles.raveProp} style={{ left: VW() * 0.62, bottom: GROUND + 4, width: 70, height: 44 }}><Boombox /></span>
+        {[0.18, 0.8].map(f => <span key={f} className={styles.raveProp} style={{ left: VW() * f, bottom: FAR_LANE + 6, width: 40, height: 50 }}><FireCan /></span>)}
       </>}
       {rave.vehicles.map(v => <span key={v.id} className={`${styles.strikeCar} ${styles.moving}`} style={{ left: v.x, bottom: v.bottom, width: v.w, height: v.kind === "wagon" ? v.w * 0.5 : v.w * 0.42, transitionDuration: `${v.ms}ms` }}>
         <span className={styles.carFlip} style={{ transform: v.flip ? "scaleX(-1)" : undefined }}>{v.kind === "wagon" ? <PaddyWagon /> : <PoliceCar damage={0} wrecked={false} />}</span>
@@ -2590,7 +2668,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       {poopMarks(`hit-${h.id}`, h.vehicle === "bike" ? "6%" : "10%")}
     </span>)}
     {postie && <span data-vehicle="postie" data-lane="near" className={`${styles.postie} ${styles.moving}`} aria-hidden
-      style={{ left: postie.x, bottom: GROUND + 2, width: window.innerWidth < 640 ? 130 : POSTIE_W, height: (window.innerWidth < 640 ? 130 : POSTIE_W) * 100 / 130, transitionDuration: `${postie.ms}ms` }}>
+      style={{ left: postie.x, bottom: GROUND + 2, width: isPhone() ? 130 : POSTIE_W, height: (isPhone() ? 130 : POSTIE_W) * 100 / 130, transitionDuration: `${postie.ms}ms` }}>
       <span className={styles.carFlip} style={{ transform: postie.dir === -1 ? "scaleX(-1)" : undefined }}><span className={styles.carBody}><PostieBike /></span></span>
       {poopMarks("postie", "2%")}
     </span>}
@@ -2605,7 +2683,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       </span>)}
     </span>}
     {strike && <span className={styles.strikeCar} aria-hidden
-      style={{ left: strike.carX, bottom: FAR_LANE, width: window.innerWidth < 640 ? 150 : 200, height: (window.innerWidth < 640 ? 150 : 200) * 0.45, transitionDuration: `${strike.carMs}ms` }}>
+      style={{ left: strike.carX, bottom: FAR_LANE, width: isPhone() ? 150 : 200, height: (isPhone() ? 150 : 200) * 0.45, transitionDuration: `${strike.carMs}ms` }}>
       <span className={`${styles.carBody} ${strike.shaking ? styles.carShake : ""}`}><FamilyCar color={strike.color} dented={strike.dented} /></span>
       {strike.dented && <span className={styles.carShock} style={{ animationDelay: "0ms" }}>!!</span>}
     </span>}
@@ -2613,15 +2691,15 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       <span className={styles.rooHop}><span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><Kangaroo /></span></span>
     </span>}
     {sportbikes.map(b => <span key={b.id} data-vehicle={`bike-${b.id}`} data-lane={b.lane} className={styles.car} aria-hidden onAnimationEnd={event => event.target === event.currentTarget && setSportbikes(list => list.filter(x => x.id !== b.id))}
-      style={{ bottom: b.lane === "far" ? FAR_LANE + 4 : GROUND + 4, width: sportbikeW(), height: sportbikeW() * 60 / 110, animationDuration: `${b.ms}ms`, ["--from" as string]: `${b.dir === 1 ? -sportbikeW() - 10 : window.innerWidth}px`, ["--to" as string]: `${b.dir === 1 ? window.innerWidth : -sportbikeW() - 10}px` }}>
+      style={{ bottom: b.lane === "far" ? FAR_LANE + 4 : GROUND + 4, width: sportbikeW(), height: sportbikeW() * 60 / 110, animationDuration: `${b.ms}ms`, ["--from" as string]: `${b.dir === 1 ? -sportbikeW() - 10 : VW()}px`, ["--to" as string]: `${b.dir === 1 ? VW() : -sportbikeW() - 10}px` }}>
       <span className={`${styles.carFlip} ${styles.moving}`} style={{ transform: b.dir === -1 ? "scaleX(-1)" : undefined }}><SportBike color={b.color} /></span>
       {poopMarks(`bike-${b.id}`, "6%")}
     </span>)}
     {/* Gumtree Gary: just his face in the leaves, or out and about after a feed */}
     {gary && gary.mode === "hiding" && boogie?.who !== "gary" && fighter?.who !== "gary" && <span className={styles.lurkHit} role="button" aria-label="Get Gary down for a dance" title="Oi, Gary!"
-      style={{ inset: "auto", left: gary.x, bottom: gary.bottom + 40, width: 66, height: 90 }} onClick={() => void boogieOut("gary")} />}
+      style={{ inset: "auto", left: garyHome().x, bottom: garyHome().bottom + 40, width: 66, height: 90 }} onClick={() => void boogieOut("gary")} />}
     {gary && (gary.mode === "hiding"
-      ? boogie?.who === "gary" || fighter?.who === "gary" ? null : <span className={styles.peekFace} style={{ left: gary.x + 18, bottom: gary.bottom + 88 }}><span className={styles.peekInner}><Trev pose="peek" shorts="#4d7c0f" /></span></span>
+      ? boogie?.who === "gary" || fighter?.who === "gary" ? null : <span className={styles.peekFace} style={{ left: garyHome().x + 18, bottom: garyHome().bottom + 88 }}><span className={styles.peekInner}><Trev pose="peek" shorts="#4d7c0f" /></span></span>
       : <span data-poopable="person" className={styles.trev} style={{ left: gary.x, bottom: gary.bottom, transitionDuration: `${gary.ms}ms` }}>
         <span className={styles.ibisBody} style={{ transform: gary.faceLeft ? "scaleX(-1)" : undefined }}>
           <Trev pose={gary.pose} shorts="#4d7c0f" carrying={gary.carrying && gary.carrying !== "fish" ? gary.carrying : null} />
@@ -2675,12 +2753,12 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     </span>}
     {dazza && dazza.bearTop !== null && <span className={styles.fallingBear} aria-hidden style={{ left: dazza.x + 14, top: dazza.bearTop }}><DropBear /></span>}
     {emus.map(e => <span data-poopable="animal" key={e.id} className={`${styles.emu} ${styles.shootable}`} {...shootProps({ kind: "emu", id: e.id }, e.hits ? "Finish it off!" : "Shoot the emu!")}
-      onTransitionEnd={event => { if (event.target === event.currentTarget && (e.x > window.innerWidth || e.x < -e.size)) setEmus(list => list.filter(x => x.id !== e.id)); }}
+      onTransitionEnd={event => { if (event.target === event.currentTarget && (e.x > VW() || e.x < -e.size)) setEmus(list => list.filter(x => x.id !== e.id)); }}
       style={{ left: e.x, bottom: e.bottom, width: e.size, height: e.size * 90 / 70, transitionDuration: `${e.ms}ms` }}>
       <span className={e.hits ? styles.emuHop : styles.emuRun}><span className={styles.ibisBody} style={{ transform: e.dir === -1 ? "scaleX(-1)" : undefined }}><Emu oneLeg={e.hits > 0} /></span></span>
     </span>)}
     {roos.map(r => <span data-poopable="animal" key={r.id} className={`${styles.roo} ${styles.shootable}`} {...shootProps({ kind: "roo", id: r.id }, "Shoot the roo!")} onAnimationEnd={event => event.target === event.currentTarget && setRoos(list => list.filter(x => x.id !== r.id))}
-      style={{ bottom: r.bottom, width: r.size, height: r.size * 0.9, animationDuration: `${r.ms}ms`, animationDelay: `${r.delay}ms`, ["--from" as string]: `${r.dir === 1 ? -r.size - 20 : window.innerWidth + 20}px`, ["--to" as string]: `${r.dir === 1 ? window.innerWidth + 20 : -r.size - 20}px`, ["--hop" as string]: `${r.hop}ms` }}>
+      style={{ bottom: r.bottom, width: r.size, height: r.size * 0.9, animationDuration: `${r.ms}ms`, animationDelay: `${r.delay}ms`, ["--from" as string]: `${r.dir === 1 ? -r.size - 20 : VW() + 20}px`, ["--to" as string]: `${r.dir === 1 ? VW() + 20 : -r.size - 20}px`, ["--hop" as string]: `${r.hop}ms` }}>
       <span className={styles.rooHop}><span className={styles.ibisBody} style={{ transform: r.dir === -1 ? "scaleX(-1)" : undefined }}><Kangaroo joey={r.joey} /></span></span>
     </span>)}
     {phase !== "hidden" && <span className={styles.wheelieBin} style={{ left: binX(), bottom: BIN_BOTTOM, width: BIN_W, height: BIN_H }} aria-hidden><WheelieBin rattling={binRattle} /></span>}
@@ -2703,15 +2781,15 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
     })}
     {flock?.stage === "landed" && <span className={styles.flockZone} title="Shoo the bin chickens!" role="button" aria-label="Shoo the bin chickens"
       style={{ left: binX() - 110, bottom: BIN_BOTTOM - 24, width: BIN_W + 230, height: BIN_H + 90 }}
-      onMouseEnter={() => setFlockHover(true)} onMouseMove={event => alertNear(event.clientX, event.clientY)}
+      onMouseEnter={() => setFlockHover(true)} onMouseMove={event => alertNear(event.clientX + panX(), event.clientY)}
       onMouseLeave={() => { setFlockHover(false); setSpooked({}); }}
       onClick={event => { event.stopPropagation(); void scatterFlock(); }} />}
     {flyers.map(fl => <span key={fl.id} className={`${styles.flyer} ${styles.shootable}`} data-bird={`f${fl.id}`} data-pooper="" {...shootProps({ kind: "flyer", id: fl.id }, "Shoot the bin chicken!")} onAnimationEnd={event => event.target === event.currentTarget && setFlyers(list => list.filter(x => x.id !== fl.id))}
-      style={{ bottom: fl.bottom, animationDuration: `${fl.ms}ms`, animationDelay: `${fl.delay}ms`, ["--from" as string]: `${fl.dir === 1 ? -120 : window.innerWidth + 40}px`, ["--to" as string]: `${fl.dir === 1 ? window.innerWidth + 40 : -120}px` }}>
+      style={{ bottom: fl.bottom, animationDuration: `${fl.ms}ms`, animationDelay: `${fl.delay}ms`, ["--from" as string]: `${fl.dir === 1 ? -120 : VW() + 40}px`, ["--to" as string]: `${fl.dir === 1 ? VW() + 40 : -120}px` }}>
       <span className={styles.flyerBob}><span className={styles.ibisBody} style={{ transform: fl.dir === -1 ? "scaleX(-1)" : undefined }}><BinChicken flying /></span></span>
     </span>)}
     {fireball && <span className={styles.fireball} style={{ left: fireball.x, bottom: fireball.bottom }}><span className={styles.fireCore} /></span>}
-    {cop && <span ref={copCar} className={styles.copCar} style={{ bottom: GROUND + 30, width: window.innerWidth < 640 ? 160 : 210, height: (window.innerWidth < 640 ? 160 : 210) * 0.42, transform: "translateX(-400px)" }}><span className={styles.copFlip}><PoliceCar damage={copDamage} wrecked={wreck} /></span></span>}
+    {cop && <span ref={copCar} className={styles.copCar} style={{ bottom: GROUND + 30, width: isPhone() ? 160 : 210, height: (isPhone() ? 160 : 210) * 0.42, transform: "translateX(-400px)" }}><span className={styles.copFlip}><PoliceCar damage={copDamage} wrecked={wreck} /></span></span>}
     {cops && <span className={styles.copsFlee} style={{ left: cops.x - 40, bottom: cops.bottom }}>
       <span className={styles.copMan}><CopFigure look={cops.look} /></span>
       <span className={styles.copMan} style={{ animationDelay: "0.12s" }}><CopFigure look={cops.look} /></span>
@@ -2803,8 +2881,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       <p>{clean ? bleep("Yeah cunt! What a ripper!") : "Yeah cunt! What a ripper!"}</p>
     </div>}
     {phase === "parked" && !moving && line && (() => {
-      const bubbleW = Math.min(window.innerWidth < 640 ? 250 : 320, window.innerWidth - 32), head = atX + 118 * scale;
-      const left = Math.max(16, Math.min(window.innerWidth - bubbleW - 16, head - bubbleW + 60));
+      const bubbleW = Math.min(isPhone() ? 250 : 320, VW() - 32), head = atX + 118 * scale;
+      const left = Math.max(16, Math.min(VW() - bubbleW - 16, head - bubbleW + 60));
       return <aside key={line.text} className={styles.bubble} style={{ left, width: bubbleW, bottom: height + GROUND + 14 }} role="status" aria-live="polite" onClick={() => { setLine(null); lineShownAt.current = 0; drainQueue(); }}>
         <p>{clean ? bleep(line.text) : line.text}</p>
         <span className={styles.bubbleTail} style={{ left: Math.max(16, Math.min(bubbleW - 42, head - left - 13)) }} />
@@ -2815,6 +2893,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
       <span className={styles.drunkTrack}><span className={styles.drunkFill} style={{ width: `${(Math.min(drunk, FALL_AT) / FALL_AT) * 100}%` }} /></span>
       <span className={styles.drunkCans} aria-hidden>{Array.from({ length: FALL_AT }, (_, i) => <span key={i} className={i < drunk ? styles.canFull : ""}>🍺</span>)}</span>
     </div>}
+    </div></div>
     {phase === "parked" && <div className={styles.trickBar}>
       <button className={styles.trickToggle} onClick={() => setMenu(open => !open)} aria-expanded={menu} aria-label="Shazz's tricks and settings"><span aria-hidden>{menu ? "✕" : "🤘"}</span>{menu ? "Close" : "Tricks"}</button>
       {menu && <>
@@ -2832,6 +2911,20 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
             <Trick label="👴 Dad?" onClick={pickTrick(nevVisit)} />
             <Trick label="🪩 Bush doof" onClick={pickTrick(() => void bushRave())} />
           </div>
+          <p className={styles.trickHeading}>Wildlife & locals</p>
+          <div className={styles.trickGroup}>
+            <Trick label="🔫 Shoot something" onClick={pickTrick(() => shootSomething())} />
+            <Trick label="🚲 Magpie swoop" onClick={callIn(() => void magpieSwoop())} />
+            <Trick label="🦜 Lorikeets" onClick={callIn(() => void lorikeetVisit())} />
+            <Trick label="🦘 Roo mob" onClick={callIn(() => rooMob())} />
+            <Trick label="🪶 Emus" onClick={callIn(() => emuFlock())} />
+            <Trick label="🐍 Hoop snake" onClick={callIn(() => void snakeRun())} />
+            <Trick label="🐨 Drop bear" onClick={callIn(() => void dropBearAttack())} />
+            <Trick label="🐦 Bin chickens" onClick={callIn(() => spawnFlyers())} />
+            <Trick label="📬 Postie" onClick={callIn(() => void postieRun())} />
+            <Trick label="🙋 Dazza" onClick={callIn(() => void dazzaVisit())} />
+            <Trick label="🔥 Cookout" onClick={callIn(() => void tweakerAct())} />
+          </div>
           <p className={styles.trickHeading}>Her antics</p>
           <div className={styles.trickGroup}>
             {actions.map(([action, label]) => <Trick key={action} label={label} onClick={pickTrick(() => void act(action))} />)}
@@ -2846,5 +2939,5 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
         </div>
       </>}
     </div>}
-  </div>;
+  </>;
 }
