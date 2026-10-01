@@ -2900,6 +2900,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence }: { 
         {/* Phones: the menu is a bottom sheet; tapping outside it closes it */}
         <div className={styles.trickBackdrop} onClick={() => setMenu(false)} aria-hidden />
         <div className={styles.trickPanel}>
+          {/* Phones: close sits at the top of the sheet (the floating toggle hides while it's open) */}
+          <button className={styles.sheetClose} onClick={() => setMenu(false)}><span aria-hidden>✕</span> Close</button>
           <p className={styles.trickHeading}>Big stuff</p>
           <div className={styles.trickGroup}>
             <Trick label="🔥 Burnout" onClick={pickTrick(() => void burnout())} />

@@ -625,3 +625,8 @@
 @media (max-width:640px){.shopStrip{height:min(252px,50vh)}}
 /* Characters around the trees get a dark edge too, so they read against the shops */
 .lurker,.peekFace,.trev{filter:drop-shadow(0 0 1.5px #000c)}
+.root .sheetClose{display:none}
+@media (max-width:640px){
+  .root .trickToggle[aria-expanded="true"]{display:none}
+  .root .sheetClose{position:sticky;top:-14px;z-index:1;display:flex;align-items:center;justify-content:center;gap:8px;width:calc(100% + 28px);margin:-14px -14px 10px;min-height:48px;border:0;border-bottom:3px solid #111;border-radius:22px 22px 0 0;background:var(--accent);color:#141517;font-size:16px;font-weight:900}
+}
