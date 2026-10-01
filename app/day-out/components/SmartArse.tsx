@@ -25,6 +25,9 @@ import OldNev from "./OldNev";
 import TrueBlue, { Pelican, type TrueBluePose } from "./TrueBlue";
 import Emu, { EmuLeg } from "./Emu";
 import Shopfronts from "./Shopfronts";
+import Dingo from "./Dingo";
+import Bev from "./Bev";
+import Jet from "./Jet";
 import LiveCritter from "./LiveCritter";
 import SlitherSnake from "./SlitherSnake";
 import PostieBike from "./PostieBike";
@@ -202,6 +205,21 @@ const RAVE_LINES = ["This is the best night of me LIFE!", "Who brought the goon?
 const ZAPPED_LINES = ["BZZZT—AAAAAA!", "NOT THE ZAPPER!", "I'M A SOVEREIGN CITIZEN!", "THE BIRDS TOLD ME TO!", "I KNOW ME RIGHTS! OW!"];
 const CUFFED_LINES = ["I want me lawyer! Me mum's a lawyer!", "This is a sovereign doof!", "Mind the mullet, officer!", "Can I at least finish me goon?", "I was just holdin' it for a mate!"];
 const RAVE_COP_LINES = ["Party's over, champions.", "Music off. Hands where I can see 'em.", "You have the right to remain silent. I'd use it.", "Tell it to the magistrate, sunshine.", "Nice thongs. In the van.", "Birds aren't real? Neither's ya bail, mate.", "Sovereign citizen? Sovereign of the back seat, more like.", "Next."];
+const DOLE_QUEUE_LINES = [
+  "Dole day! Best day of the fortnight!",
+  "Applied for three jobs. Made sure I didn't get any.",
+  "Me job diary says 'went fishin'' fourteen times.",
+  "Best job I ever had, this one.",
+  "Mutual obligation? I'm mutually obliged to the couch.",
+  "If they ask, I'm a 'freelance consultant'.",
+  "Gonna do a course. A course of beers.",
+  "Twelve years and they still spell me name wrong.",
+  "Is this the line for the free money?",
+  "Dressed up for it an' everything. Clean thongs.",
+];
+const DOLE_EXIT_LINES = ["CHA-CHING!", "PAYDAY, BABY!", "Too easy!", "See ya in a fortnight, Centrelink!", "Straight to the bottlo!"];
+const DOLE_BOTTLO_LINES = ["*hic* …Bargain.", "Whole fortnight's sorted! …For tonight.", "Who moved the footpath?", "Slab of VB and a scratchie. Investin'."];
+const BEV_LINES = ["A DINGO ATE MY BABY!", "THE DINGO'S GOT ME BABY!", "MY BABY'S GONE!", "SOMEONE CALL THE COPS!"];
 const MISS_LINES = ["Bugger! Missed!", "Sun was in me eyes, alright?!", "That was a warning shot, ya mongrel.", "Too many tinnies. Hold STILL!", "Bloody sights on this thing are bent."];
 const BIRD_SHOT_LINES = ["Get stuffed, ya bin chicken!", "Pillow stuffing, anyone?", "Feathers everywhere. Worth it.", "That's for me roo, ya thieving galah!", "Bin chicken nil, sawn-off one."];
 // Old Nev's story, one line per click (and now and then when he stops for a breather).
@@ -257,6 +275,7 @@ const FUR: Partial<Record<Target["kind"], string[]>> = {
   snake: ["#7a5c2e", "#c9a86a"], magpie: ["#111", "#fff", "#111"], emu: ["#5b4636", "#3b2f26", "#7a6048"], lorikeet: ["#16a34a", "#1d4ed8", "#f97316", "#dc2626", "#facc15"],
 };
 const POSTIE_W = 170, KID_W = 115;
+type DolePerson = { id: number; who: "trev" | "kylie"; tint: string; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "run" | "peek" | "dance" | "scratch"; line: string | null; inside: boolean; cash: boolean; beer: boolean; stagger: boolean; gone: boolean; enter?: "climb" | "pop"; weird?: boolean };
 type Crossing = { id: number; kind: Critter; x: number; bottom: number; ms: number; faceLeft: boolean; flat: boolean; done: boolean; lane: "far" | "near" };
 type Hitter = { id: number; lane: "far" | "near"; dir: 1 | -1; vehicle: "car" | "bike"; color: string; vx: number; vms: number; vw: number };
 type Snake = { id: number; x: number; bottom: number; ms: number; dir: 1 | -1; mode: "slither" | "hoop" | "flat"; done: boolean };
@@ -361,7 +380,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   const [nev, setNev] = useState<{ x: number; ms: number; faceLeft: boolean; walking: boolean; shaking?: boolean; line: string | null } | null>(null);
   const nevLine = useRef(0);
   // True Blue and his entourage; Gumtree Gary up the right-hand gum.
-  const [blue, setBlue] = useState<{ x: number; ms: number; faceLeft: boolean; pose: TrueBluePose; line: string | null; fish: boolean } | null>(null);
+  const [blue, setBlue] = useState<{ x: number; bottom?: number; ms: number; faceLeft: boolean; pose: TrueBluePose; line: string | null; fish: boolean } | null>(null);
   const blueBusy = useRef(false);
   const [blueAnimal, setBlueAnimal] = useState<{ kind: "roo" | "koala" | "wombat" | "dropbear" | "croc"; x: number; ms: number; faceLeft: boolean } | null>(null);
   type PerchBird = { x: number; bottom: number; ms: number; landed: boolean } | null;
@@ -370,6 +389,19 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   const [roadFish, setRoadFish] = useState<{ x: number } | null>(null);
   const [gary, setGary] = useState<{ mode: "hiding" | "out"; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "run" | "dance" | "crawl" | "pee"; carrying: Critter | "fish" | null; fish: boolean; line: string | null } | null>(null);
   const garyBusy = useRef(false);
+  // Bev from the caravan park and the dingo pack that pinched her snags.
+  const [bev, setBev] = useState<{ x: number; ms: number; faceLeft: boolean; pose: "shout" | "run"; line: string | null } | null>(null);
+  const [dingoes, setDingoes] = useState<{ id: number; x: number; ms: number; faceLeft: boolean; running: boolean; snags: boolean; puzzled: boolean }[]>([]);
+  const dingoBusy = useRef(false);
+  // Jets high over the street, leaving contrails ("chemtrails", if you ask Trev).
+  const [jets, setJets] = useState<{ id: number; x0: number; y0: number; x1: number; y1: number; ms: number }[]>([]);
+  // Dole day at Centrelink.
+  const [dole, setDole] = useState<{ open: boolean; people: DolePerson[] } | null>(null);
+  const doleBusy = useRef(false);
+  const dolePeopleLeft = useRef(0);
+  const doleNow = useRef<typeof dole>(null);
+  const doleRobbed = useRef(new Set<number>());
+  useEffect(() => { doleNow.current = dole; dolePeopleLeft.current = dole ? dole.people.filter(d => !d.gone).length : 0; }, [dole]);
   // A tree tweaker down on the road having a go at the crows over a carcass.
   const [fighter, setFighter] = useState<{ who: "trev" | "kylie" | "gary"; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "run" | "dance"; carrying: Critter | null; scuffle: boolean; line: string | null } | null>(null);
   // A tweaker clicked out of their tree for a five-second boogie.
@@ -1406,7 +1438,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       const head = headUnder(x, y + 30);
       if (head && Math.abs(head.top - y) < 40) {
         const who = head.el.dataset.poopable;
-        add({ kind: "burst", x: x - 30, y: y + 26, size: 0, text: "SPLAT!" });
+        add({ kind: "burst", x: x - 30, y: y + 26, size: 0, text: "SPLAT!" });
+
         if (who !== "shazz") add({ kind: "burst", x: x - 20, y: y + 58, size: 0, text: who === "animal" ? pick(["!!", "SQUAWK?!", "OI!"]) : pick(["OI!", "EWWW!", "ME HAT!", "IN ME HAIR!", "LUCKY, APPARENTLY"]) });
         else if (Date.now() - lastPoopLine.current > 9000) { lastPoopLine.current = Date.now(); speak(pick(POOP_SHAZZ_LINES)); }
         return;
@@ -1445,8 +1478,13 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   async function lorikeetVisit() {
     if (!claimScene(24_000, 8000)) return;
     const trees = treeSpots(), fromRight = Math.random() < 0.5, W = VW(), H = window.innerHeight;
-    const perch = () => { const t = pick(trees); return { x: t.x + TREE.W * (0.12 + Math.random() * 0.7) - 15, bottom: TREE_BOTTOM + TREE.H * (0.62 + Math.random() * 0.28) }; };
-    const birds = Array.from({ length: 20 }, (_, i) => ({ id: ++uid, x: fromRight ? W + 30 + Math.random() * 220 : -60 - Math.random() * 220, bottom: H * (0.55 + Math.random() * 0.3), ms: 0, delay: i * 60, faceLeft: fromRight, perched: false }));
+    // Half land along the shop rooftops (parapet tops in the street drawing), half in the gums.
+    const sm = stripMap(), ROOFTOPS: [number, number, number][] = [[10, 240, 82], [255, 495, 64], [505, 570, 70], [680, 745, 70], [755, 995, 88], [1005, 1060, 84], [1190, 1245, 84], [1255, 1490, 62]];
+    const perch = () => {
+      if (Math.random() < 0.5) { const [a, b, y] = pick(ROOFTOPS); return { x: sm.x(a + Math.random() * (b - a)) - 16, bottom: sm.b(y) - 3 }; }
+      const t = pick(trees); return { x: t.x + TREE.W * (0.12 + Math.random() * 0.7) - 15, bottom: TREE_BOTTOM + TREE.H * (0.62 + Math.random() * 0.28) };
+    };
+    const birds = Array.from({ length: 32 }, (_, i) => ({ id: ++uid, x: fromRight ? W + 30 + Math.random() * 220 : -60 - Math.random() * 220, bottom: H * (0.55 + Math.random() * 0.3), ms: 0, delay: i * 60, faceLeft: fromRight, perched: false }));
     const ids = birds.map(b => b.id);
     const mine = (change: (b: (typeof birds)[number]) => (typeof birds)[number]) => setLorikeets(list => list.map(b => (ids.includes(b.id) ? change(b) : b)));
     setLorikeets(list => [...list, ...birds]);
@@ -1536,6 +1574,263 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // Bush doof: a mob of Trev's mates turn up with the Hills Hoist, an esky, a boombox and a wobble
   // board and go off for fifteen seconds. Then the coppers roll in, zap the lot (slapstick), and
   // chuck them in the paddy wagon, deadpan as you like.
+  // ---- Dole day at Centrelink -------------------------------------------------------------
+  // Where things in the shop-strip drawing (1500×420, scaled to cover the strip) land on screen.
+  const stripMap = () => {
+    const strip = document.querySelector<HTMLElement>(`.${styles.shopStrip}`), W = VW(), h = strip?.offsetHeight || 300;
+    const k = Math.max(W / 1500, h / 420), off = (W - 1500 * k) / 2;
+    return { x: (svgX: number) => off + svgX * k, b: (svgY: number) => 147 + (420 - svgY) * k, k };
+  };
+  // The bludgers queue before it opens, have a yarn, file in one door and out the other with cash.
+  // About half go straight into the bottlo and stagger back out.
+  async function doleDay() {
+    if (doleBusy.current || phaseRef.current !== "parked") return;
+    doleBusy.current = true;
+    doleRobbed.current.clear();
+    sceneUntil.current = Date.now() + 120_000;
+    const W = VW(), m = stripMap(), entry = m.x(790), exit = m.x(935), bottlo = m.x(1135), foot = m.b(395), door = m.b(381);
+    const tints = ["#b91c1c", "#16a34a", "#2563eb", "#f59e0b", "#7c3aed", "#0f766e", "#f9a8d4", "#fb923c", "#22d3ee", "#a3e635", "#e11d48", "#fde047"];
+    const gap = Math.min(46, Math.max(26, (entry - 60) / tints.length));
+    const spot = (i: number) => entry - 70 - i * gap;
+    // Where they come from: walking in from either side, climbing down off the rooftops, or out of the bins.
+    const ROOFS: [number, number][] = [[125, 82], [375, 64], [625, 40], [875, 88], [1125, 50], [1375, 62]];
+    const binAt = binX() + BIN_W / 2 - 33, binTop = BIN_BOTTOM + BIN_H - 56;
+    const people: DolePerson[] = tints.map((tint, i) => {
+      const from = i % 4, roof = ROOFS[(i * 7) % ROOFS.length];
+      const base = { id: ++uid, who: (i % 2 ? "kylie" : "trev") as "trev" | "kylie", tint, ms: 0, line: null, inside: false, cash: false, beer: false, stagger: false, gone: false };
+      if (from === 2) return { ...base, x: m.x(roof[0]) - 33 + (i % 3) * 22, bottom: m.b(roof[1]) - 24, faceLeft: false, pose: "dance" as const, enter: "climb" as const };
+      if (from === 3) return { ...base, x: binAt, bottom: binTop, faceLeft: false, pose: "dance" as const, enter: "pop" as const };
+      return { ...base, x: from === 1 ? W + 40 + i * 30 : -90 - i * 40, bottom: foot, faceLeft: from === 1, pose: "run" as const };
+    });
+    const setPerson = (id: number, change: (p: DolePerson) => DolePerson) => setDole(d => d && { ...d, people: d.people.map(p => (p.id === id ? change(p) : p)) });
+    setDole({ open: false, people });
+    panTo(entry);
+    await later(60);
+    // Down off the rooftops hand over hand, and up out of the bins with a clang.
+    people.forEach((p, i) => {
+      if (p.enter === "climb") setPerson(p.id, q => ({ ...q, bottom: foot, ms: 2600 + i * 120 }));
+      if (p.enter === "pop") window.setTimeout(() => {
+        setBinRattle(true);
+        window.setTimeout(() => setBinRattle(false), 700);
+        add({ kind: "burst", x: binAt - 10, y: BIN_BOTTOM + BIN_H + 40, size: 0, text: pick(["CLANG!", "RATTLE RATTLE", "BOO!"]) });
+        setPerson(p.id, q => ({ ...q, bottom: foot, x: q.x + 54, ms: 600 }));
+      }, 300 + i * 260);
+    });
+    await later(2900 + people.length * 140);
+    // Then everyone into the queue (before it's even open).
+    let longest = 0;
+    people.forEach((p, i) => {
+      const from = p.enter === "pop" ? p.x + 54 : p.x, ms = Math.max(1500, Math.abs(spot(i) - from) * 5);
+      longest = Math.max(longest, ms);
+      setPerson(p.id, q => ({ ...q, pose: "run", enter: undefined, x: spot(i), ms, faceLeft: spot(i) < q.x }));
+    });
+    await later(longest + 100);
+    // Waiting: half of 'em can't stop scratching.
+    const IDLE: DolePerson["pose"][] = ["peek", "scratch", "peek", "scratch", "dance"];
+    people.forEach(p => setPerson(p.id, q => ({ ...q, pose: pick(IDLE), faceLeft: Math.random() < 0.2, ms: 0 })));
+    // A yarn while they wait: one at a time.
+    const talk = [...DOLE_QUEUE_LINES].sort(() => Math.random() - 0.5).slice(0, 4);
+    for (const line of talk) {
+      const who = pick(people).id;
+      people.forEach(pp => { if (Math.random() < 0.35) setPerson(pp.id, q => ({ ...q, pose: pick(IDLE), faceLeft: Math.random() < 0.2 })); });
+      const itchy = Math.floor(Math.random() * people.length);
+      add({ kind: "burst", x: spot(itchy) - 20, y: foot + 130, size: 0, text: pick(["*scratch scratch*", "*scritch*", "itchy itchy"]) });
+      setPerson(who, q => ({ ...q, line }));
+      await later(3200);
+      setPerson(who, q => ({ ...q, line: null }));
+      await later(300);
+    }
+    // Doors open.
+    setDole(d => d && { ...d, open: true });
+    add({ kind: "burst", x: entry - 80, y: door + 120, size: 0, text: "NOW SERVING: 001" });
+    setPerson(people[0].id, q => ({ ...q, line: "IT'S OPEN! IT'S OPEN!" }));
+    await later(1200);
+    for (let i = 0; i < people.length; i++) {
+      const p = people[i];
+      // Front of the line goes in; everyone behind shuffles up.
+      setPerson(p.id, q => ({ ...q, line: null, pose: "run", x: entry - 33, bottom: door, ms: 700 }));
+      for (let j = i + 1; j < people.length; j++) { const at = spot(j - i - 1); setPerson(people[j].id, q => ({ ...q, x: at, ms: 700 })); }
+      await later(750);
+      setPerson(p.id, q => ({ ...q, inside: true }));
+      // Processed, out the other door with cash.
+      void (async () => {
+        await later(1800);
+        setPerson(p.id, q => ({ ...q, inside: false, cash: true, x: exit - 33, bottom: door, ms: 0, faceLeft: false, line: pick(DOLE_EXIT_LINES) }));
+        await later(500);
+        const roll = Math.random(), offRight = W + 90, offLeft = -110;
+        const off = async (x: number, ms: number) => { setPerson(p.id, q => ({ ...q, x, ms, faceLeft: x < exit })); await later(ms + 100); };
+        // A victim: someone else outside holding cash who isn't already being robbed.
+        const victim = doleNow.current?.people.find(v => v.id !== p.id && v.cash && !v.inside && !v.gone && !doleRobbed.current.has(v.id));
+        if (roll < 0.28) {
+          // Straight to the bottlo...
+          setPerson(p.id, q => ({ ...q, x: bottlo - 33, bottom: foot, ms: Math.max(1200, Math.abs(bottlo - exit) * 4) }));
+          await later(Math.max(1200, Math.abs(bottlo - exit) * 4) + 50);
+          setPerson(p.id, q => ({ ...q, bottom: door, ms: 400, line: null }));
+          await later(450);
+          setPerson(p.id, q => ({ ...q, inside: true, cash: false }));
+          await later(2600 + Math.random() * 1500);
+          // ...and staggers back out with a tinnie.
+          setPerson(p.id, q => ({ ...q, inside: false, beer: true, stagger: true, bottom: foot, ms: 500, line: pick(DOLE_BOTTLO_LINES) }));
+          await later(1800);
+          setPerson(p.id, q => ({ ...q, line: null }));
+          await off(offRight, 7000);
+        } else if (roll < 0.42 && victim) {
+          // Snatch and run: grabs someone else's cash, and they give chase.
+          doleRobbed.current.add(victim.id);
+          setPerson(p.id, q => ({ ...q, bottom: foot, x: victim.x - 20, ms: 600, line: "Ooh, what's that?" }));
+          await later(650);
+          add({ kind: "burst", x: victim.x - 20, y: foot + 120, size: 0, text: "YOINK!" });
+          const away = victim.x < W / 2 ? offLeft : offRight;
+          setPerson(p.id, q => ({ ...q, line: "FINDERS KEEPERS!", x: away, ms: Math.abs(away - victim.x) * 1.6, faceLeft: away < victim.x }));
+          setPerson(victim.id, q => ({ ...q, cash: false, stagger: false, line: "OI! ME DOLE!", x: away, ms: Math.abs(away - victim.x) * 1.8 + 400, faceLeft: away < victim.x, pose: "run" }));
+          window.setTimeout(() => setPerson(victim.id, q => ({ ...q, gone: true })), Math.abs(away - victim.x) * 1.8 + 600);
+          await later(Math.abs(away - victim.x) * 1.6 + 150);
+        } else if (roll < 0.58) {
+          // Sprints off like the cops are after him.
+          setPerson(p.id, q => ({ ...q, bottom: foot, ms: 300, line: pick(["GOTTA GO FAST!", "BEFORE THEY CHANGE THEIR MINDS!", "RUN, MONEY, RUN!"]) }));
+          await later(350);
+          const to = Math.random() < 0.5 ? offLeft : offRight;
+          await off(to, Math.abs(to - exit) * 1.3);
+        } else if (roll < 0.8) {
+          // Scatters like a weirdo: darting about, spinning, hopping, before buggering off.
+          setPerson(p.id, q => ({ ...q, bottom: foot, ms: 300, weird: true, line: pick(["WOOO! RICH!", "I CAN HEAR COLOURS!", "WHICH WAY'S HOME?!"]) }));
+          await later(350);
+          let x = exit;
+          for (let k = 0; k < 4; k++) {
+            x = Math.max(20, Math.min(W - 80, x + (Math.random() - 0.5) * 320));
+            const nx = x;
+            setPerson(p.id, q => ({ ...q, x: nx, bottom: foot + Math.random() * 18, ms: 450, faceLeft: Math.random() < 0.5, line: k === 1 ? null : q.line }));
+            await later(500);
+          }
+          await off(Math.random() < 0.5 ? offLeft : offRight, 2200);
+        } else {
+          // Wanders off the other way, counting it.
+          setPerson(p.id, q => ({ ...q, bottom: foot, ms: 400, line: pick(["One, two… three hundred an'… lost count.", "Rent? Nah. Priorities."]) }));
+          await later(450);
+          await off(offLeft, Math.max(3000, Math.abs(offLeft - exit) * 6));
+        }
+        setPerson(p.id, q => ({ ...q, gone: true }));
+      })();
+      await later(1000);
+    }
+    // Wait for the last of them to wander off, then shut up shop.
+    for (let t = 0; t < 30 && dolePeopleLeft.current > 0; t++) await later(1000);
+    setDole(null);
+    doleBusy.current = false;
+  }
+
+  // Bev storms out screaming that a dingo took her snags. Every time she yells, the pack looks at
+  // each other with a big "?"; then they chase her off the screen, one still with the sausages.
+  async function dingoSnags(now = false) {
+    if (dingoBusy.current) return;
+    if (now) sceneUntil.current = Date.now() + 30_000;
+    else if (!claimScene(24_000, 8000)) return;
+    dingoBusy.current = true;
+    const W = VW(), stand = Math.round(W * 0.42);
+    setBev({ x: -80, ms: 0, faceLeft: false, pose: "run", line: null });
+    panTo(stand);
+    await later(60);
+    setBev(b => b && { ...b, x: stand, ms: 2200 });
+    await later(2250);
+    setBev(b => b && { ...b, pose: "shout", line: BEV_LINES[0] });
+    // The pack trots in from the other side and sits there looking at her.
+    const pack = Array.from({ length: 5 }, (_, i) => ({ id: ++uid, x: W + 40 + i * 60, ms: 0, faceLeft: true, running: true, snags: i === 0, puzzled: false }));
+    setDingoes(pack);
+    await later(60);
+    setDingoes(list => list.map((d, i) => ({ ...d, x: stand + 120 + i * 58, ms: 2000 + i * 150 })));
+    await later(2300);
+    setDingoes(list => list.map(d => ({ ...d, running: false })));
+    // Every scream: the whole pack goes "?".
+    for (let i = 1; i < BEV_LINES.length; i++) {
+      setBev(b => b && { ...b, line: BEV_LINES[i] });
+      setDingoes(list => list.map(d => ({ ...d, puzzled: true, faceLeft: Math.random() < 0.7 })));
+      await later(1600);
+      setDingoes(list => list.map(d => ({ ...d, puzzled: false })));
+      await later(700);
+    }
+    // Then they go for her.
+    setBev(b => b && { ...b, pose: "run", faceLeft: true, line: "AAAAAAAAH!", x: -120, ms: 3600 });
+    setDingoes(list => list.map((d, i) => ({ ...d, running: true, faceLeft: true, puzzled: false, x: -120 - i * 30, ms: 3400 + i * 220 })));
+    add({ kind: "burst", x: stand - 20, y: ROAD_H + 150, size: 0, text: "YIP YIP YIP!" });
+    await later(4500);
+    setBev(null); setDingoes([]);
+    dingoBusy.current = false;
+  }
+
+  useEffect(() => {
+    if (!immersive && phase === "hidden") return;
+    let timer = 0;
+    // One jet along a straight line through (cx, cy) at slope s (bottom-up px per px; + climbs to
+    // the right). The low end never dips below the rooftops; the high end can fly out the top of the
+    // sky (the sky is clipped there), which is what lets the trails cross at decent angles.
+    const sky = () => { const sm = stripMap(); return { W: VW(), lo: sm.b(78), hi: sm.b(0) }; };
+    const launch = (cx: number, cy: number, s: number, leftToRight: boolean, delay = 0) => {
+      const { W } = sky(), id = ++uid, ms = 9000 + Math.random() * 7000;
+      const xa = -140, xb = W + 140, ya = cy + s * (xa - cx), yb = cy + s * (xb - cx);
+      const [x0, y0, x1, y1] = leftToRight ? [xa, ya, xb, yb] : [xb, yb, xa, ya];
+      window.setTimeout(() => {
+        setJets(list => [...list, { id, x0, y0, x1, y1, ms }]);
+        // The trail hangs about after the jet's gone, spreading out, then fades; tidy up once it has.
+        window.setTimeout(() => setJets(list => list.filter(j => j.id !== id)), ms + 22_000);
+      }, delay);
+      return ms + delay;
+    };
+    // The steepest slope (with that sign) that keeps the low end of a line through (cx, cy) above the
+    // rooftops: a climb only needs room on its left end, a descent on its right.
+    const maxSlope = (cx: number, cy: number, sign: 1 | -1) => {
+      const { W, lo } = sky(), room = sign > 0 ? cx + 140 : W + 140 - cx;
+      return sign * Math.max(0.03, (cy - lo) / room);
+    };
+    const sgn = (): 1 | -1 => (coin() ? 1 : -1);
+    const coin = () => Math.random() < 0.5;
+    // Different patterns, never the same one twice running.
+    const PATTERNS = ["solo", "x", "lattice", "hash", "formation"] as const;
+    let last = "";
+    const fly = () => {
+      const { W, lo, hi } = sky(), band = hi - lo;
+      const pattern = pick(PATTERNS.filter(p => p !== last));
+      last = pattern;
+      let longest = 0;
+      const at = (fx: number, fy: number) => ({ cx: W * fx, cy: lo + band * fy });
+      if (pattern === "solo") {
+        const { cx, cy } = at(0.2 + Math.random() * 0.6, 0.35 + Math.random() * 0.5), s = maxSlope(cx, cy, sgn()) * (0.4 + Math.random() * 0.6);
+        longest = launch(cx, cy, s, coin());
+      } else if (pattern === "x") {
+        // Two through the same point on opposite slopes.
+        const { cx, cy } = at(0.2 + Math.random() * 0.6, 0.45 + Math.random() * 0.45), up = maxSlope(cx, cy, 1) * (0.6 + Math.random() * 0.4), down = maxSlope(cx, cy, -1) * (0.6 + Math.random() * 0.4);
+        longest = Math.max(launch(cx, cy, up, coin()), launch(cx, cy, down, coin(), 1200 + Math.random() * 3000));
+      } else if (pattern === "lattice") {
+        // A run of trails alternating slopes across the sky: a criss-cross diamond lattice.
+        const n = 4 + Math.floor(Math.random() * 3), cy = lo + band * (0.55 + Math.random() * 0.35);
+        for (let i = 0; i < n; i++) {
+          const cx = W * (0.12 + (i / (n - 1)) * 0.76), s = maxSlope(cx, cy, i % 2 ? -1 : 1) * 0.85;
+          longest = Math.max(longest, launch(cx, cy, s, coin(), i * (900 + Math.random() * 900)));
+        }
+      } else if (pattern === "hash") {
+        // Two parallel one way, two parallel the other: a #.
+        const cy = lo + band * (0.6 + Math.random() * 0.3), gap = W * (0.12 + Math.random() * 0.1);
+        // Same steepness for both pairs so the # stays square-ish.
+        const s = Math.min(maxSlope(W * 0.5 - gap, cy, 1), -maxSlope(W * 0.5 + gap, cy, -1)) * 0.9;
+        ([[W * 0.5 - gap, 1], [W * 0.5 + gap, 1], [W * 0.5 - gap, -1], [W * 0.5 + gap, -1]] as [number, 1 | -1][]).forEach(([cx, sign], i) => {
+          longest = Math.max(longest, launch(cx, cy, s * sign, coin(), i * (700 + Math.random() * 1200)));
+        });
+      } else {
+        // Formation: two or three side by side on the same heading.
+        const { cx, cy } = at(0.3 + Math.random() * 0.4, 0.6 + Math.random() * 0.3), s = maxSlope(cx, cy, sgn()) * (0.3 + Math.random() * 0.6), dir = coin();
+        const n = 2 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < n; i++) longest = Math.max(longest, launch(cx + i * 30, cy + i * 14, s, dir, i * (300 + Math.random() * 400)));
+      }
+      if (Math.random() < 0.35) window.setTimeout(() => {
+        const trees = treeSpots(), t = pick(trees);
+        add({ kind: "burst", x: t.x + TREE.W * 0.3, y: TREE_BOTTOM + TREE.H * 0.7, size: 0, text: pick(["CHEMTRAILS!!", "SEE?! SEE?! CHEMTRAILS!", "THEY'RE SPRAYIN' US AGAIN!", "VEGEMITE VAPOUR, I TOLD YA!", "THAT'S A GRID! THEY'RE MAPPIN' US!"]) });
+      }, Math.min(longest, 8000) * 0.5);
+      timer = window.setTimeout(fly, Math.max(14_000, longest * 0.6) + Math.random() * 18_000);
+    };
+    timer = window.setTimeout(fly, 5000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, immersive]);
+
   async function bushRave() {
     if (phaseRef.current !== "parked" || busy.current) return;
     busy.current = true; setMenu(false);
@@ -2077,7 +2372,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       [3, () => void dropBearAttack()],
       [3, () => void rooStrike()],
       [2, () => void magpieSwoop()],
-      [5, () => void lorikeetVisit()],
+      [8, () => void lorikeetVisit()],
+      [2, () => void dingoSnags()],
       [3, () => void trueBlueVisit()],
       [3, () => emuFlock()],
       [5, () => void tweakerAct()],
@@ -2210,7 +2506,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       });
     }
     place.current = { x: -500, tilt: 0, pivot: 60 }; draw();
-    setKills([]); setIbis(null); ibisBusy.current = false; setBbq(null); setFlyers([]); setRaider(null); setFlock(null); flockBusy.current = false; setRoos([]); setEmus([]); setDropBear(null); dropBusy.current = false; setSportbikes([]); setStrike(null); strikeBusy.current = false; setDanglers([]); setSnakes([]); setDazza(null); dazzaBusy.current = false; setNev(null); nevRun.current++; setBlue(null); blueBusy.current = false; setBlueAnimal(null); setBlueBirds(null); setPelican(null); setRoadFish(null); setGary(null); garyBusy.current = false; setCrossings([]); crossingCount.current = 0; setCrows([]); setLorikeets([]); setPoops({}); setTrev(null); setCookout(null); setRave(null); setThieves({ trev: null, kylie: null, stolenRed: false, bricked: false }); setHitters([]); setPostie(null); setKid(null); setShotKoalas([]); shotIds.current.clear(); sceneUntil.current = 0; setTattoo(null); setConvoy(0); setBrawl(null);
+    setKills([]); setIbis(null); ibisBusy.current = false; setBbq(null); setFlyers([]); setRaider(null); setFlock(null); flockBusy.current = false; setRoos([]); setEmus([]); setDropBear(null); dropBusy.current = false; setSportbikes([]); setStrike(null); strikeBusy.current = false; setDanglers([]); setSnakes([]); setDazza(null); dazzaBusy.current = false; setNev(null); nevRun.current++; setBlue(null); blueBusy.current = false; setBlueAnimal(null); setBlueBirds(null); setPelican(null); setRoadFish(null); setGary(null); garyBusy.current = false; setCrossings([]); crossingCount.current = 0; setCrows([]); setLorikeets([]); setPoops({}); setTrev(null); setCookout(null); setDole(null); doleBusy.current = false; setBev(null); setDingoes([]); dingoBusy.current = false; setRave(null); setThieves({ trev: null, kylie: null, stolenRed: false, bricked: false }); setHitters([]); setPostie(null); setKid(null); setShotKoalas([]); shotIds.current.clear(); sceneUntil.current = 0; setTattoo(null); setConvoy(0); setBrawl(null);
     setPhase("hidden");
   }
 
@@ -2356,49 +2652,69 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // `now`: called from the tricks menu, so he comes straight away instead of waiting his turn.
   async function trueBlueVisit(now = false) {
     if (blueBusy.current) return;
-    if (now) sceneUntil.current = Date.now() + 64_000;
-    else if (!claimScene(60_000, 4000)) return;
+    if (now) sceneUntil.current = Date.now() + 90_000;
+    else if (!claimScene(80_000, 4000)) return;
     blueBusy.current = true;
-    const W = VW(), stand = Math.round(W * 0.36), say = (line: string | null) => setBlue(b => b && { ...b, line });
+    const W = VW(), verge = ROAD_H - 10, say = (line: string | null) => setBlue(b => b && { ...b, line });
     const pose = (p: TrueBluePose) => setBlue(b => b && { ...b, pose: p });
-    setBlue({ x: -80, ms: 0, faceLeft: false, pose: "walk", line: "🎵 Hey True Blue! Is it me and you? 🎵", fish: false });
-    panTo(stand);
-    await later(60);
-    const walkMs = Math.max(4000, (stand + 80) * 11);
-    setBlue(b => b && { ...b, x: stand, ms: walkMs });
-    await later(walkMs);
+    // He comes out of the bottlo, of course.
+    const sm = stripMap(), bottloX = Math.round(sm.x(1135) - 33), bottloDoor = sm.b(381);
+    let at = bottloX;
+    setBlue({ x: bottloX, bottom: bottloDoor, ms: 0, faceLeft: false, pose: "walk", line: "🎵 Hey True Blue! Is it me and you? 🎵", fish: false });
+    panTo(bottloX);
+    add({ kind: "burst", x: bottloX - 10, y: bottloDoor + 120, size: 0, text: "*clink clink*" });
+    await later(500);
+    setBlue(b => b && { ...b, bottom: verge, ms: 700 });
+    await later(750);
+    // Wanders about the street; somewhere a decent way from where he is now.
+    const spot = () => { let x = at; for (let i = 0; i < 12 && Math.abs(x - at) < 180; i++) x = Math.round(60 + Math.random() * (W - 220)); return x; };
+    const walkTo = async (x: number) => {
+      const ms = Math.max(1400, Math.abs(x - at) * 10);
+      panTo(x);
+      setBlue(b => b && { ...b, pose: "walk", x, ms, faceLeft: x < at });
+      at = x;
+      await later(ms + 50);
+      pose("stand");
+    };
     pose("drink"); say("Ahh. Nothin' beats a hard-earned thirst.");
     await later(2600);
-    pose("stand"); say("A hard-earned thirst needs a big cold beer!");
-    await later(2600);
-    // The animals queue up for a pat, one at a time.
+    say("A hard-earned thirst needs a big cold beer!");
+    await walkTo(spot());
+    say(null);
+    // The animals find him one at a time, wherever he's wandered to.
     const pets = (["roo", "koala", "wombat", "dropbear", "croc"] as const).slice().sort(() => Math.random() - 0.5).slice(0, 4);
     for (const kind of pets) {
-      setBlueAnimal({ kind, x: W + 40, ms: 0, faceLeft: true });
+      const fromLeft = at > W / 2 ? Math.random() < 0.3 : Math.random() < 0.7, edge = fromLeft ? -90 : W + 40;
+      const besideX = fromLeft ? at - 72 : at + 62;
+      setBlueAnimal({ kind, x: edge, ms: 0, faceLeft: !fromLeft });
       await later(60);
-      setBlueAnimal(a => a && { ...a, x: stand + 62, ms: 1800 });
-      await later(1850);
+      setBlueAnimal(a => a && { ...a, x: besideX, ms: Math.max(1400, Math.abs(besideX - edge) * 3) });
+      setBlue(b => b && { ...b, faceLeft: fromLeft });
+      await later(Math.max(1400, Math.abs(besideX - edge) * 3) + 50);
       pose("pet"); say(PET_LINES[kind]);
-      for (let i = 0; i < 3; i++) { add({ kind: "burst", x: stand + 70, y: ROAD_H + 40 + i * 14, size: 0, text: i === 1 ? "pat pat" : "♥" }); await later(450); }
-      pose("stand");
-      setBlueAnimal(a => a && { ...a, x: W + 40, ms: 1600, faceLeft: false });
-      await later(700);
+      for (let i = 0; i < 3; i++) { add({ kind: "burst", x: besideX + 10, y: ROAD_H + 40 + i * 14, size: 0, text: i === 1 ? "pat pat" : "♥" }); await later(450); }
+      pose("stand"); say(null);
+      setBlueAnimal(a => a && { ...a, x: edge, ms: 1600, faceLeft: !a.faceLeft });
+      await later(900);
+      setBlueAnimal(null);
+      await walkTo(spot());
     }
-    setBlueAnimal(null); say(null);
     // Gumtree Gary wants one too.
-    await garyComeForPat(stand + 60);
+    await garyComeForPat(at + 60);
+    setBlue(b => b && { ...b, faceLeft: false });
     pose("pet"); say("Who's a good boy, Gary? Who's a GOOD boy?");
-    for (let i = 0; i < 3; i++) { add({ kind: "burst", x: stand + 70, y: ROAD_H + 40 + i * 14, size: 0, text: i === 1 ? "pat pat" : "♥" }); await later(450); }
+    for (let i = 0; i < 3; i++) { add({ kind: "burst", x: at + 70, y: ROAD_H + 40 + i * 14, size: 0, text: i === 1 ? "pat pat" : "♥" }); await later(450); }
     pose("stand");
     void garyGoHome();
     await later(1700);
     say("Oh, ya filthy animal. Not on the gum tree!");
     await later(2400);
     say(null);
-    // Birds: a lorikeet onto his shoulder, a bin chicken beside him.
+    // Somewhere new for the birds: a lorikeet onto his shoulder, a bin chicken beside him.
+    await walkTo(spot());
     setBlueBirds({ lori: { x: -40, bottom: window.innerHeight * 0.7, ms: 0, landed: false }, ibis: { x: W + 40, bottom: window.innerHeight * 0.6, ms: 0, landed: false } });
     await later(60);
-    setBlueBirds({ lori: { x: stand + 22, bottom: ROAD_H - 10 + 84, ms: 1800, landed: false }, ibis: { x: stand - 70, bottom: ROAD_H - 14, ms: 2200, landed: false } });
+    setBlueBirds({ lori: { x: at + 22, bottom: verge + 84, ms: 1800, landed: false }, ibis: { x: at - 70, bottom: ROAD_H - 14, ms: 2200, landed: false } });
     await later(2300);
     setBlueBirds(bb => bb && { lori: bb.lori && { ...bb.lori, landed: true }, ibis: bb.ibis && { ...bb.ibis, landed: true } });
     say("G'day, birds! Plenty of room on the shoulder.");
@@ -2408,18 +2724,18 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     for (let round = 0; round < 2; round++) {
       setPelican({ x: -120, bottom: window.innerHeight * 0.78, ms: 0, fish: true });
       await later(60);
-      setPelican({ x: stand - 10, bottom: ROAD_H + 190, ms: 2200, fish: true });
+      setPelican({ x: at - 10, bottom: ROAD_H + 190, ms: 2200, fish: true });
       pose("catch"); say(round ? "Another one! Ya spoil me!" : "Here she comes!");
       await later(2250);
       setPelican(p => p && { ...p, fish: false });
-      add({ kind: "junk", x: stand + 50, y: ROAD_H + 200, size: 0, dx: 0, dy: 120, arc: -10, text: "🐟" });
+      add({ kind: "junk", x: at + 50, y: ROAD_H + 200, size: 0, dx: 0, dy: 120, arc: -10, text: "🐟" });
       await later(900);
       setPelican(p => p && { ...p, x: W + 160, bottom: window.innerHeight * 0.85, ms: 2600 });
       setBlue(b => b && { ...b, pose: "kiss", fish: true, line: "MWAH! Ya beautiful thing." });
-      add({ kind: "burst", x: stand + 10, y: ROAD_H + 150, size: 0, text: "♥ MWAH ♥" });
+      add({ kind: "burst", x: at + 10, y: ROAD_H + 150, size: 0, text: "♥ MWAH ♥" });
       await later(1800);
       setBlue(b => b && { ...b, pose: "toss", fish: false, line: "Off ya go, mate!" });
-      const landX = gary.x + 20 + (Math.random() - 0.5) * 60, handX = stand + 60, handY = ROAD_H - 10 + 108;
+      const landX = gary.x + 20 + (Math.random() - 0.5) * 60, handX = at + 60, handY = verge + 108;
       add({ kind: "junk", x: handX, y: handY, size: 0, dx: landX - handX, dy: handY - (GROUND + 8), arc: -110, text: "🐟" });
       await later(950);
       setRoadFish({ x: landX });
@@ -2429,14 +2745,16 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       await later(round === 0 ? 3500 : 1500);
     }
     setPelican(null);
-    // Off he staggers, singing.
+    // Off he staggers, singing (back to the bottlo for another, probably).
     setBlueBirds(bb => bb && { lori: bb.lori && { ...bb.lori, landed: false, x: W + 60, bottom: window.innerHeight * 0.8, ms: 2400 }, ibis: bb.ibis && { ...bb.ibis, landed: false, x: -80, ms: 3000 } });
-    setBlue(b => b && { ...b, pose: "walk", line: "🎵 Hey True Blue… 🎵 Hooroo, cobbers!", x: W + 80, ms: Math.max(4000, (W - stand) * 11) });
+    const offMs = Math.max(4000, (W + 80 - at) * 11);
+    setBlue(b => b && { ...b, pose: "walk", faceLeft: false, line: "🎵 Hey True Blue… 🎵 Hooroo, cobbers!", x: W + 80, ms: offMs });
     if (!busy.current) speak(pick(["Hey True Blue! Legend.", "That bloke's patted more roos than I've had hot dinners.", "Kissin' fish on a Tuesday. Living the dream."]));
-    await later(Math.max(4000, (W - stand) * 11));
+    await later(offMs);
     setBlue(null); setBlueBirds(null);
     blueBusy.current = false;
   }
+
 
   useEffect(() => { onPresence?.(phase !== "hidden"); }, [phase, onPresence]);
   useEffect(() => {
@@ -2550,6 +2868,16 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     <div className={`${styles.stage} ${immersive ? styles.immersive : ""} ${convoy || brawl === "boom" ? styles.rumble : ""}`} style={phoneView ? { width: VW() } : undefined}>
     {/* The shops behind the road. Not clickable itself, but it stops clicks reaching the page behind. */}
     {(immersive || phase !== "hidden") && <div className={styles.shopStrip} aria-hidden onClick={event => event.stopPropagation()}><Shopfronts /></div>}
+    {jets.length > 0 && <span className={styles.skyClip} aria-hidden style={{ width: VW(), height: stripMap().b(0) }}>{jets.map(j => {
+      // bottom-up coords, so a climb is a negative (anticlockwise) rotation on screen
+      const dx = j.x1 - j.x0, dy = j.y1 - j.y0, len = Math.hypot(dx, dy), angle = (-Math.atan2(dy, dx) * 180) / Math.PI, upsideDown = Math.abs(angle) > 90;
+      return <span key={j.id} className={styles.flightPath} aria-hidden style={{ left: j.x0, bottom: j.y0, width: len, transform: `rotate(${angle}deg)`, ["--ms" as string]: `${j.ms}ms` }}>
+        <span className={styles.contrailWrap}><span className={styles.contrail} /></span>
+        <span className={styles.jet} style={{ animationDuration: `${j.ms}ms`, ["--from" as string]: "-60px", ["--to" as string]: `${len - 10}px` }}>
+          <span className={styles.ibisBody} style={{ transform: upsideDown ? "scaleY(-1)" : undefined }}><Jet /></span>
+        </span>
+      </span>;
+    })}</span>}
     <div className={`${styles.road} ${onRoad ? styles.roadOn : ""} ${phase === "parked" ? styles.roadClickable : ""}`} onClick={event => void rideTo(event.clientX + panX())} title={phase === "parked" ? "Click to move Shazz here" : undefined} />
     {cars.map(car => <span key={car.id} data-vehicle={`car-${car.id}`} data-lane={car.lane} className={`${styles.car} ${car.turnAt !== undefined ? styles.carTurn : ""} ${phase === "parked" ? styles.carClickable : ""} ${heldCar === car.id ? styles.carHeld : ""}`}
       onClick={event => void lassoCar(car.id, event.currentTarget)} title={phase === "parked" ? "Lasso it!" : undefined} onAnimationEnd={event => event.target === event.currentTarget && setCars(list => list.filter(item => item.id !== car.id))}
@@ -2647,6 +2975,29 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         <span className={styles.carFlip} style={{ transform: cookout.cop.flip ? "scaleX(-1)" : undefined }}><PoliceCar damage={0} wrecked={false} /></span>
       </span>}
     </>}
+    {dingoes.map(d => <span key={d.id} data-poopable="animal" className={styles.dingo} style={{ left: d.x, bottom: ROAD_H - 12, transitionDuration: `${d.ms}ms` }}>
+      <span className={d.running ? styles.dingoRun : styles.ibisBody}><span className={styles.ibisBody} style={{ transform: d.faceLeft ? "scaleX(-1)" : undefined }}><Dingo running={d.running} snags={d.snags} /></span></span>
+      {d.puzzled && <span className={styles.puzzled}>?</span>}
+    </span>)}
+    {bev && <span data-poopable="person" className={styles.bev} style={{ left: bev.x, bottom: ROAD_H - 10, transitionDuration: `${bev.ms}ms` }}>
+      <span className={bev.pose === "shout" ? styles.trevTwitch : styles.ibisBody}><span className={styles.ibisBody} style={{ transform: bev.faceLeft ? "scaleX(-1)" : undefined }}><Bev pose={bev.pose} /></span></span>
+      {bev.line && <span key={bev.line} className={styles.ibisBubble} style={{ bottom: 124 }}>{bev.line}</span>}
+    </span>}
+    {dole && (() => {
+      const m = stripMap();
+      return <>
+        <span className={`${styles.doleSign} ${dole.open ? styles.doleOpen : ""}`} style={{ left: m.x(790) - 34, bottom: m.b(318) }}>{dole.open ? "OPEN" : "CLOSED"}</span>
+        {dole.people.map(d => d.gone || d.inside ? null : <span key={d.id} data-poopable="person" className={styles.trev} style={{ left: d.x, bottom: d.bottom, transitionDuration: `${d.ms}ms`, ["--d" as string]: `${-((d.id % 9) * 0.137)}s`, ["--sd" as string]: `${0.09 + (d.id % 5) * 0.03}s` }}>
+          <span className={d.enter === "climb" ? styles.climbDown : d.enter === "pop" ? styles.binPop : d.weird ? styles.weirdo : d.stagger ? styles.stagger : d.pose === "peek" || d.pose === "scratch" ? styles.trevTwitch : styles.ibisBody}>
+            <span className={styles.ibisBody} style={{ transform: d.faceLeft ? "scaleX(-1)" : undefined }}>
+              {d.who === "trev" ? <Trev pose={d.pose} shorts={d.tint} /> : <Kylie pose={d.pose} top={d.tint} />}
+            </span>
+          </span>
+          {(d.cash || d.beer) && <span className={styles.heldFish} style={{ left: d.faceLeft ? 0 : 44, bottom: 64, fontSize: 18 }}>{d.beer ? "🍺" : "💵"}</span>}
+          {d.line && <span key={d.line} className={styles.ibisBubble} style={{ bottom: 132 }}>{d.line}</span>}
+        </span>)}
+      </>;
+    })()}
     {rave && <div className={styles.rave} aria-hidden>
       {rave.lights && <span className={styles.raveLights} />}
       {rave.gear && <>
@@ -2756,7 +3107,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         </span>
       </span>
     </span>}
-    {blue && <span data-poopable="person" className={styles.trueBlue} role="button" aria-label="True Blue" title="True Blue" style={{ left: blue.x, bottom: ROAD_H - 10, transitionDuration: `${blue.ms}ms` }}
+    {blue && <span data-poopable="person" className={styles.trueBlue} role="button" aria-label="True Blue" title="True Blue" style={{ left: blue.x, bottom: blue.bottom ?? ROAD_H - 10, transitionDuration: `${blue.ms}ms` }}
       onClick={() => setBlue(b => b && { ...b, line: pick(["🎵 Hey True Blue! Is it me and you? 🎵", "For a hard-earned thirst, mate.", "Beer o'clock somewhere, cobber.", "Every animal's a mate if ya pat it right."]) })}>
       <span className={blue.pose === "walk" ? styles.stagger : styles.ibisBody}>
         <span className={styles.ibisBody} style={{ transform: blue.faceLeft ? "scaleX(-1)" : undefined }}><TrueBlue pose={blue.pose} /></span>
@@ -2971,6 +3322,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             <Trick label="🍺 True Blue" onClick={pickTrick(() => void trueBlueVisit(true))} />
             <Trick label="👴 Dad?" onClick={pickTrick(nevVisit)} />
             <Trick label="🪩 Bush doof" onClick={pickTrick(() => void bushRave())} />
+            <Trick label="💸 Dole day" onClick={pickTrick(() => void doleDay())} />
           </div>
           <p className={styles.trickHeading}>Wildlife & locals</p>
           <div className={styles.trickGroup}>
@@ -2979,6 +3331,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             <Trick label="🦜 Lorikeets" onClick={callIn(() => void lorikeetVisit())} />
             <Trick label="🦘 Roo mob" onClick={callIn(() => rooMob())} />
             <Trick label="🪶 Emus" onClick={callIn(() => emuFlock())} />
+            <Trick label="🐕 Dingo!" onClick={pickTrick(() => void dingoSnags(true))} />
             <Trick label="🐍 Hoop snake" onClick={callIn(() => void snakeRun())} />
             <Trick label="🐨 Drop bear" onClick={callIn(() => void dropBearAttack())} />
             <Trick label="🐦 Bin chickens" onClick={callIn(() => spawnFlyers())} />

@@ -8,9 +8,9 @@ import { StickFood } from "./Trev";
 const INK = "#111", SKIN = "#f0c09a", DIRT = "#8a6a4a", INKTAT = "#35507a";
 
 // Same extra poses as Trev; `top` recolours the singlet.
-export default function Kylie({ pose = "peek", carrying = null, stick = "none", top = "#f9a8d4" }: { pose?: "peek" | "run" | "cook" | "dance" | "zapped" | "cuffed"; carrying?: Critter | null; stick?: "none" | "cook" | "up"; top?: string }) {
+export default function Kylie({ pose = "peek", carrying = null, stick = "none", top = "#f9a8d4" }: { pose?: "peek" | "run" | "cook" | "dance" | "zapped" | "cuffed" | "scratch"; carrying?: Critter | null; stick?: "none" | "cook" | "up"; top?: string }) {
   const running = pose === "run", walking = running || pose === "cuffed";
-  const arms = pose === "cuffed" ? "M23 40 L22 58 M37 40 L30 60" : pose === "dance" ? "M23 40 L14 20 M37 40 L46 18" : pose === "zapped" ? "M23 40 L6 32 M37 40 L54 32"
+  const arms = pose === "scratch" ? "M23 40 L30 52 L34 51 M37 40 L46 26 L38 14" : pose === "cuffed" ? "M23 40 L22 58 M37 40 L30 60" : pose === "dance" ? "M23 40 L14 20 M37 40 L46 18" : pose === "zapped" ? "M23 40 L6 32 M37 40 L54 32"
     : pose === "cook" ? "M23 40 L28 54 M37 40 L50 44"
     : running ? (stick === "up" ? "M23 40 L14 54 M37 40 L42 16" : "M23 40 L14 54 M37 40 L46 32")
     : "M37 40 L50 38 L54 32 M23 40 L18 56";
@@ -29,8 +29,10 @@ export default function Kylie({ pose = "peek", carrying = null, stick = "none", 
     <circle cx={34} cy={52} r={2} fill={DIRT} opacity={0.45} /><circle cx={26} cy={58} r={1.4} fill={DIRT} opacity={0.45} />
     {stick === "cook" && <StickFood x1={50} y1={44} x2={86} y2={38} />}
     {stick === "up" && <StickFood x1={42} y1={16} x2={46} y2={-14} />}
-    <path d={arms} stroke={INK} strokeWidth={5.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-    <path d={arms} stroke={SKIN} strokeWidth={3.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    <g className={pose === "scratch" ? styles.scratchArm : undefined}>
+      <path d={arms} stroke={INK} strokeWidth={5.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={arms} stroke={SKIN} strokeWidth={3.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </g>
     {/* Rose tatt on the upper arm */}
     <circle cx={running ? 18 : 21} cy={running ? 48 : 49} r={1.8} fill="#e11d48" stroke={INKTAT} strokeWidth={0.8} />
     {pose === "cuffed" && <>

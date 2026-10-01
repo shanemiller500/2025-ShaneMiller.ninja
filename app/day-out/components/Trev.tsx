@@ -18,7 +18,7 @@ export function StickFood({ x1, y1, x2, y2 }: { x1: number; y1: number; x2: numb
 
 // "dance" is arms in the air; "zapped" is stiff-armed with sparks coming off him. `shorts` recolours
 // the footy shorts so a crowd of Trevs doesn't look like clones.
-export default function Trev({ pose = "peek", carrying = null, stick = "none", shorts = "#b91c1c" }: { pose?: "peek" | "run" | "cook" | "dance" | "zapped" | "cuffed" | "crawl" | "pee"; carrying?: Critter | null; stick?: "none" | "cook" | "up"; shorts?: string }) {
+export default function Trev({ pose = "peek", carrying = null, stick = "none", shorts = "#b91c1c" }: { pose?: "peek" | "run" | "cook" | "dance" | "zapped" | "cuffed" | "crawl" | "pee" | "scratch"; carrying?: Critter | null; stick?: "none" | "cook" | "up"; shorts?: string }) {
   // On all fours like a dog (Gumtree Gary getting a pat), or with a back leg up against a tree.
   if (pose === "crawl" || pose === "pee") {
     const pee = pose === "pee";
@@ -44,7 +44,8 @@ export default function Trev({ pose = "peek", carrying = null, stick = "none", s
     </svg>;
   }
   const running = pose === "run", walking = running || pose === "cuffed";
-  const arms = pose === "cuffed" ? "M23 38 L22 56 M37 38 L30 58" : pose === "dance" ? "M23 38 L14 18 M37 38 L46 16" : pose === "zapped" ? "M23 38 L6 30 M37 38 L54 30"
+  // "scratch": one hand going at his head, the other at his belly (arms jiggle in CSS).
+  const arms = pose === "scratch" ? "M23 38 L30 50 L34 49 M37 38 L46 24 L38 12" : pose === "cuffed" ? "M23 38 L22 56 M37 38 L30 58" : pose === "dance" ? "M23 38 L14 18 M37 38 L46 16" : pose === "zapped" ? "M23 38 L6 30 M37 38 L54 30"
     : pose === "cook" ? "M23 38 L28 52 M37 38 L50 42"
     : running ? (stick === "up" ? "M23 38 L14 52 M37 38 L42 14" : "M23 38 L14 52 M37 38 L46 30")
     : "M37 38 L50 36 L54 30 M23 38 L18 54";
@@ -68,8 +69,10 @@ export default function Trev({ pose = "peek", carrying = null, stick = "none", s
     {/* Arms, tatts up the forearms, and whatever's in his hands */}
     {stick === "cook" && <StickFood x1={50} y1={42} x2={86} y2={36} />}
     {stick === "up" && <StickFood x1={42} y1={14} x2={46} y2={-16} />}
-    <path d={arms} stroke={INK} strokeWidth={6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-    <path d={arms} stroke={SKIN} strokeWidth={3.8} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    <g className={pose === "scratch" ? styles.scratchArm : undefined}>
+      <path d={arms} stroke={INK} strokeWidth={6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={arms} stroke={SKIN} strokeWidth={3.8} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </g>
     <path d={running ? "M17 47 l2 2" : "M20 47 l1 2"} stroke={INKTAT} strokeWidth={1.2} fill="none" />
     {pose === "cuffed" && <>
       <circle cx={24} cy={57} r={2.6} fill="none" stroke="#9ca3af" strokeWidth={1.6} /><circle cx={29} cy={57} r={2.6} fill="none" stroke="#9ca3af" strokeWidth={1.6} />
