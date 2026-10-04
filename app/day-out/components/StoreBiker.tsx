@@ -4,10 +4,10 @@ import styles from "../day-out.module.css";
 // orange bar-and-shield patch and a bandana; Indian blokes in a red vest with a cream "Indian"
 // script patch and an open-face lid. `look` (0-2) varies the beard and gut. Faces right; viewBox
 // 50×100, feet at y=98. `walking` swings the legs; `flipping` throws the bird at the rival shop;
-// `laughing` has him cracking up, shaking, gob wide open.
+// `laughing` has him cracking up, shaking, gob wide open; `cheering` throws both fists in the air.
 const INK = "#111", SKIN = "#e0a982";
 
-export default function StoreBiker({ brand, look = 0, walking = false, flipping = false, laughing = false }: { brand: "harley" | "indian"; look?: number; walking?: boolean; flipping?: boolean; laughing?: boolean }) {
+export default function StoreBiker({ brand, look = 0, walking = false, flipping = false, laughing = false, cheering = false }: { brand: "harley" | "indian"; look?: number; walking?: boolean; flipping?: boolean; laughing?: boolean; cheering?: boolean }) {
   const harley = brand === "harley";
   const vest = harley ? "#18181b" : "#b91c1c", trim = harley ? "#f97316" : "#f3e6c8";
   const beard = ["#57534e", "#d6d3d1", "#7c2d12"][look % 3], gut = look % 3 === 1 ? 6 : look % 3 === 2 ? 3 : 0;
@@ -27,7 +27,16 @@ export default function StoreBiker({ brand, look = 0, walking = false, flipping 
     <path d="M14 66 h22" stroke="#78350f" strokeWidth={3} />
     <rect x={23} y={64} width={5} height={4} fill="#d4d4d8" />
     {/* Arm: down by his side, or up and forward with the middle finger out */}
-    {flipping
+    {cheering && <g className={styles.birdThrust}>
+      <path d="M14 38 L8 18" stroke={harley ? "#f8fafc" : "#111"} strokeWidth={6} strokeLinecap="round" />
+      <circle cx={7} cy={15} r={3.6} fill={SKIN} stroke={INK} strokeWidth={1} />
+    </g>}
+    {cheering
+      ? <g className={styles.birdThrust}>
+        <path d="M32 38 L40 18" stroke={harley ? "#f8fafc" : "#111"} strokeWidth={6} strokeLinecap="round" />
+        <circle cx={41} cy={15} r={3.6} fill={SKIN} stroke={INK} strokeWidth={1} />
+      </g>
+      : flipping
       ? <g className={styles.birdThrust}>
         <path d="M32 38 L44 26" stroke={harley ? "#f8fafc" : "#111"} strokeWidth={6} strokeLinecap="round" />
         <path d="M38 32 L45 24" stroke={SKIN} strokeWidth={5} strokeLinecap="round" />
@@ -43,7 +52,7 @@ export default function StoreBiker({ brand, look = 0, walking = false, flipping 
     <circle cx={26} cy={20} r={9.5} fill={SKIN} stroke={INK} strokeWidth={1.8} />
     <path d={`M18 22 q2 ${12 + look % 3 * 2} 10 ${13 + look % 3 * 2} q8 -2 8 -14 q-4 3 -9 2 q-5 1 -9 -1 z`} fill={beard} stroke={INK} strokeWidth={1.1} />
     {flipping && <path d="M29 26 q3 -2 6 0 q-3 3 -6 0 z" fill={INK} />}
-    {laughing && <path d="M27 24 q5 -1 9 0 q-2 8 -5 8 q-3 0 -4 -8 z" fill="#7f1d1d" stroke={INK} strokeWidth={1} />}
+    {(laughing || cheering) && <path d="M27 24 q5 -1 9 0 q-2 8 -5 8 q-3 0 -4 -8 z" fill="#7f1d1d" stroke={INK} strokeWidth={1} />}
     <rect x={26} y={16} width={11} height={4} rx={2} fill={INK} />
     {harley
       ? <><path d="M16 15 q10 -12 21 -1 l-1 3 h-20 z" fill="#f97316" stroke={INK} strokeWidth={1.2} /><path d="M17 15 l-5 5 M17 15 l-6 1" stroke="#f97316" strokeWidth={2.2} strokeLinecap="round" /><circle cx={24} cy={11} r={1} fill="#111" /><circle cx={30} cy={10} r={1} fill="#111" /></>

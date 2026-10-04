@@ -251,9 +251,80 @@ function Poster({ x, y, w, h, bg, fg, lines }: { x: number; y: number; w: number
   </g>;
 }
 
+// A shop window after the other mob's been through it: showroom gutted, what's left of the glass
+// hanging in the corners, cracks everywhere, boards nailed across with CLOSED sprayed on.
+function BoardedUp({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+  const cx = x + w * 0.58, cy = y + h * 0.42;
+  return <g>
+    <rect x={x} y={y} width={w} height={h} fill="#111827" stroke={INK} strokeWidth={2.5} />
+    <path d={`M${x} ${y} h${w * 0.2} l${-w * 0.08} ${h * 0.2} l${w * 0.05} ${h * 0.14} L${x} ${y + h * 0.5} Z`} fill="#cbe4f5" opacity={0.75} stroke={INK} strokeWidth={0.8} />
+    <path d={`M${x + w} ${y + h} h${-w * 0.22} l${w * 0.06} ${-h * 0.25} l${-w * 0.04} ${-h * 0.18} L${x + w} ${y + h * 0.42} Z`} fill="#cbe4f5" opacity={0.75} stroke={INK} strokeWidth={0.8} />
+    <path d={`M${x + w} ${y} h${-w * 0.14} l${w * 0.05} ${h * 0.12} Z`} fill="#cbe4f5" opacity={0.75} stroke={INK} strokeWidth={0.8} />
+    {[[-0.3, -0.35], [0.35, -0.3], [0.4, 0.3], [-0.35, 0.4], [0.05, -0.45], [-0.45, 0.02]].map(([dx, dy], i) => <path key={i} d={`M${cx} ${cy} l${dx * w * 0.5} ${dy * h} l${dx * 8} ${dy * 10}`} stroke="#e2e8f0" strokeWidth={1.2} fill="none" opacity={0.8} />)}
+    {[0.2, 0.52, 0.82].map((f, i) => {
+      const py = y + h * f, ang = i % 2 ? -6 : 7;
+      return <g key={f} transform={`rotate(${ang} ${x + w / 2} ${py})`}>
+        <rect x={x - 8} y={py - 10} width={w + 16} height={20} fill={["#c08a52", "#b07a44", "#c9955e"][i]} stroke={INK} strokeWidth={1.3} />
+        <path d={`M${x} ${py - 3} h${w * 0.4} M${x + w * 0.5} ${py + 4} h${w * 0.45}`} stroke="#8a5a2b" strokeWidth={1} />
+        <circle cx={x - 2} cy={py} r={1.8} fill="#52525b" /><circle cx={x + w + 2} cy={py} r={1.8} fill="#52525b" />
+      </g>;
+    })}
+    <text x={x + w / 2} y={y + h * 0.54 + 6} textAnchor="middle" fontSize={Math.min(26, w / 6)} fontWeight={900} fill="#dc2626" fontFamily="Impact, 'Arial Black', sans-serif" transform={`rotate(-6 ${x + w / 2} ${y + h * 0.54})`}>CLOSED</text>
+    <text x={x + w / 2} y={y + h * 0.84 + 4} textAnchor="middle" fontSize={Math.min(12, w / 12)} fontWeight={900} fill="#111" fontFamily="sans-serif" transform={`rotate(7 ${x + w / 2} ${y + h * 0.82})`}>BACK SOON (MAYBE)</text>
+  </g>;
+}
+// Broken glass glittering on the footpath out the front of a wrecked shop.
+function GlassOnPath({ x, w }: { x: number; w: number }) {
+  return <g>{Array.from({ length: 14 }, (_, i) => {
+    const gx = x + ((i * 37) % w), gy = 388 + ((i * 13) % 22);
+    return <path key={i} d={`M${gx} ${gy} l${4 + (i % 3) * 2} -3 l-2 ${5 + (i % 2) * 2} z`} fill="#cbe4f5" stroke="#64748b" strokeWidth={0.6} />;
+  })}</g>;
+}
+
+// The power lines as quadratic curves [x0, y0, cx, cy, x1, y1] (matching the wire paths below), and
+// a point a fraction t of the way along one, so things can hang off them.
+const WIRES = {
+  leftLow: [-650, 100, -300, 160, 0, 140], leftHigh: [-650, 76, -300, 124, 0, 110],
+  midLow: [0, 140, 360, 165, 694, 70], midHigh: [0, 110, 360, 132, 702, 92],
+  rightHigh: [758, 70, 1500, 150, 2250, 70], rightLow: [750, 92, 1500, 175, 2250, 104],
+};
+const onWire = (w: number[], t: number) => {
+  const [x0, y0, cx, cy, x1, y1] = w, u = 1 - t;
+  return { x: rd(u * u * x0 + 2 * u * t * cx + t * t * x1), y: rd(u * u * y0 + 2 * u * t * cy + t * t * y1) };
+};
+// A flying fox hanging upside down off a wire by its feet: wings wrapped round like a little brown
+// umbrella, golden mantle, ears pointing at the ground. `open` has one half-unfurled, stretching.
+function FruitBat({ x, y, open = false, delay = 0 }: { x: number; y: number; open?: boolean; delay?: number }) {
+  return <g transform={`translate(${x} ${y})`}><g className={styles.batSway} style={{ animationDelay: `${delay}s` }}>
+    <path d="M-2 0 v5 M2 0 v5" stroke="#1c1917" strokeWidth={1.5} strokeLinecap="round" />
+    {open && <path d="M0 6 Q-20 3 -24 19 Q-18 16 -14 21 Q-10 17 -7 23 L0 24 L7 23 Q10 17 14 21 Q18 16 24 19 Q20 3 0 6 Z" fill="#2b1d16" stroke={INK} strokeWidth={0.9} />}
+    <ellipse cx={0} cy={14} rx={6.5} ry={11} fill="#3b2a20" stroke={INK} strokeWidth={1} />
+    <path d="M-6 7 Q-9 15 -4 24 M6 7 Q9 15 4 24" stroke="#22160f" strokeWidth={1.3} fill="none" />
+    <circle cx={0} cy={27} r={5.6} fill="#b07a3c" stroke={INK} strokeWidth={1} />
+    <path d="M-4 31 l-2.6 5 l4.6 -2.6 z M4 31 l2.6 5 l-4.6 -2.6 z" fill="#3b2a20" stroke={INK} strokeWidth={0.6} />
+    <ellipse cx={0} cy={23.6} rx={1.6} ry={1.2} fill="#22160f" />
+    <circle cx={-2.2} cy={27.6} r={1.1} fill={INK} /><circle cx={2.2} cy={27.6} r={1.1} fill={INK} />
+    <circle cx={-1.9} cy={27.3} r={0.35} fill="#fff" /><circle cx={2.5} cy={27.3} r={0.35} fill="#fff" />
+  </g></g>;
+}
+// A pair of sneakers slung over the wire by their tied-together laces (some kid's lost them forever).
+function HangingShoes({ x, y, colour, trim, delay = 0 }: { x: number; y: number; colour: string; trim: string; delay?: number }) {
+  const shoe = (tx: number, ty: number, rot: number) => <g transform={`translate(${tx} ${ty}) rotate(${rot})`}>
+    <path d="M-3 0 L-3 8 Q-3 12 2 12 L12 12 Q14 12 14 9.5 Q14 7 9 6 L5 4 L4 0 Z" fill={colour} stroke={INK} strokeWidth={0.9} />
+    <path d="M-3 10.5 Q-3 13.5 2 13.5 L12 13.5 Q14.5 13.5 14.5 11" stroke="#f8fafc" strokeWidth={2.2} fill="none" />
+    <path d="M1 4 l3 6 M4 5 l-1 5" stroke={trim} strokeWidth={1.4} />
+    <path d="M5 5 l2 2 M7 6 l2 2" stroke="#f8fafc" strokeWidth={0.8} />
+  </g>;
+  return <g transform={`translate(${x} ${y})`}><g className={styles.batSway} style={{ animationDelay: `${delay}s`, animationDuration: "2.2s" }}>
+    <path d="M0 0 L-6 18 M0 0 L7 23" stroke="#e5e7eb" strokeWidth={1} />
+    {shoe(-6, 18, 80)}{shoe(7, 23, 100)}
+  </g></g>;
+}
+
 // `sky={false}` leaves the sky transparent so a separate sky layer (with the jets in it) shows
 // through behind the buildings.
-export default function Shopfronts({ sky = true }: { sky?: boolean }) {
+// `closed`: a shop that lost the last brawl is boarded up, its showbike and parked bikes gone.
+export default function Shopfronts({ sky = true, closed = {} }: { sky?: boolean; closed?: { harley?: boolean; indian?: boolean } }) {
   return <svg viewBox="-650 0 2900 420" width="100%" height="100%" preserveAspectRatio="xMidYMax slice" aria-hidden>
     <defs>
       <linearGradient id="sfSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2f80d1" /><stop offset="1" stopColor="#8cc4f0" /></linearGradient>
@@ -280,13 +351,15 @@ export default function Shopfronts({ sky = true }: { sky?: boolean }) {
     <text x={-615} y={142} textAnchor="middle" fontSize={10} fontWeight={900} fill="#fde68a" fontFamily="sans-serif" letterSpacing={3}>BIKES · GEAR · SERVICE</text>
     {/* Black-glass showroom with the bikes lined up inside */}
     <rect x={-770} y={200} width={310} height={176} fill="#0f172a" stroke={INK} strokeWidth={2.5} />
-    <path d="M-690 204 L-735 362 H-640 Z M-540 204 L-590 362 H-495 Z" fill="#fde68a" opacity={0.13} />
-    <rect x={-720} y={360} width={210} height={14} rx={3} fill="#111" stroke={INK} strokeWidth={1.5} />
-    <rect x={-720} y={360} width={210} height={3} fill="#f97316" />
-    <ellipse cx={-615} cy={360} rx={92} ry={5} fill="#f8fafc" opacity={0.12} />
-    <RoadGlide x={-701} y={360} s={1.15} flip />
-    {[-700, -620, -540].map(x => <line key={x} x1={x} y1={200} x2={x} y2={376} stroke="#334155" strokeWidth={3} opacity={0.7} />)}
-    <path d="M-760 210 l60 -6 M-600 214 l70 -8" stroke="#ffffff22" strokeWidth={8} />
+    {closed.harley ? <BoardedUp x={-770} y={200} w={310} h={176} /> : <>
+      <path d="M-690 204 L-735 362 H-640 Z M-540 204 L-590 362 H-495 Z" fill="#fde68a" opacity={0.13} />
+      <rect x={-720} y={360} width={210} height={14} rx={3} fill="#111" stroke={INK} strokeWidth={1.5} />
+      <rect x={-720} y={360} width={210} height={3} fill="#f97316" />
+      <ellipse cx={-615} cy={360} rx={92} ry={5} fill="#f8fafc" opacity={0.12} />
+      <RoadGlide x={-701} y={360} s={1.15} flip />
+      {[-700, -620, -540].map(x => <line key={x} x1={x} y1={200} x2={x} y2={376} stroke="#334155" strokeWidth={3} opacity={0.7} />)}
+      <path d="M-760 210 l60 -6 M-600 214 l70 -8" stroke="#ffffff22" strokeWidth={8} />
+    </>}
     <rect x={-770} y={196} width={310} height={6} fill="#f97316" />
 
     </g>
@@ -303,11 +376,13 @@ export default function Shopfronts({ sky = true }: { sky?: boolean }) {
     <rect x={-440} y={170} width={360} height={206} fill="#1e293b" stroke={INK} strokeWidth={2.5} />
     {[-420, -360, -300, -240, -180, -120].map(x => <rect key={x} x={x} y={176} width={20} height={4} rx={2} fill="#fef9c3" className={styles.officeLight} />)}
     <path d="M-440 340 h360" stroke="#475569" strokeWidth={2} />
-    <ellipse cx={-265} cy={366} rx={90} ry={10} fill="#f8fafc" opacity={0.18} />
-    <rect x={-350} y={352} width={170} height={14} rx={4} fill="#c1121f" stroke={INK} strokeWidth={1.5} />
-    <ScoutBobber x={-333} y={352} s={1.05} />
-    <FeatherWing x={-420} y={196} />
-    <path d="M-430 186 l80 -4 M-200 300 l90 -10" stroke="#ffffff1a" strokeWidth={10} />
+    {closed.indian ? <BoardedUp x={-440} y={170} w={360} h={206} /> : <>
+      <ellipse cx={-265} cy={366} rx={90} ry={10} fill="#f8fafc" opacity={0.18} />
+      <rect x={-350} y={352} width={170} height={14} rx={4} fill="#c1121f" stroke={INK} strokeWidth={1.5} />
+      <ScoutBobber x={-333} y={352} s={1.05} />
+      <FeatherWing x={-420} y={196} />
+      <path d="M-430 186 l80 -4 M-200 300 l90 -10" stroke="#ffffff1a" strokeWidth={10} />
+    </>}
     {/* Roof flags */}
     <path d="M-440 56 V4 M-60 56 V4" stroke="#9ca3af" strokeWidth={3} /><circle cx={-440} cy={4} r={3} fill="#facc15" /><circle cx={-60} cy={4} r={3} fill="#facc15" />
     <ShopFlag x={-438} y={6} brand="indian" slot={0} />
@@ -316,6 +391,7 @@ export default function Shopfronts({ sky = true }: { sky?: boolean }) {
     <rect x={-70} y={210} width={56} height={166} fill="#334155" stroke={INK} strokeWidth={2} />
     <path d="M-42 210 v166" stroke={INK} strokeWidth={1.5} />
     <rect x={-66} y={290} width={8} height={30} rx={2} fill="#c1121f" />
+    {closed.indian && <BoardedUp x={-70} y={210} w={56} h={166} />}
 
     {/* ---- Back lanes at each end ---- */}
     <Alley x={-650} wallTop={56} wallColor="#1c1c1e" />
@@ -479,10 +555,10 @@ export default function Shopfronts({ sky = true }: { sky?: boolean }) {
     {/* Harley row: angled into the kerb, front wheels turned out to the street, pointing back down
         the street at the Indian shop. Some baggers with batwing fairings. Drawn left to right so each
         bike's tucked-in back end sits behind its neighbour. */}
-    {Array.from({ length: 11 }, (_, i) => 1030 + i * 39).map((x, i) => <AngledBike key={x} x={x} y={412} s={1.1} flip fairing={i % 3 === 1}
+    {closed.harley ? <GlassOnPath x={1040} w={380} /> : Array.from({ length: 11 }, (_, i) => 1030 + i * 39).map((x, i) => <AngledBike key={x} x={x} y={412} s={1.1} flip fairing={i % 3 === 1}
       color={["#111", "#4338ca", "#7f1d1d", "#111", "#52525b", "#ea580c", "#1e1b4b", "#111", "#4338ca", "#3f3f46", "#9a3412"][i]} />)}
     {/* Indian row: same, angled the other way, pointing at the Harley shop. Drawn right to left. */}
-    {Array.from({ length: 9 }, (_, i) => -110 - i * 40).map((x, i) => <AngledBike key={x} x={x} y={412} s={1.1} fairing={i % 4 === 2}
+    {closed.indian ? <GlassOnPath x={-430} w={360} /> : Array.from({ length: 9 }, (_, i) => -110 - i * 40).map((x, i) => <AngledBike key={x} x={x} y={412} s={1.1} fairing={i % 4 === 2}
       color={["#b91c1c", "#111", "#7f1d1d", "#f3e6c8", "#c1121f", "#1c1917", "#991b1b", "#111", "#b91c1c"][i]} />)}
     {/* Bus shelter, bench, bin, stop sign */}
     <rect x={420} y={318} width={170} height={8} fill="#166534" stroke={INK} strokeWidth={1.5} />
@@ -503,6 +579,16 @@ export default function Shopfronts({ sky = true }: { sky?: boolean }) {
     </g>
     <path d="M-650 100 Q-300 160 0 140 M-650 76 Q-300 124 0 110" stroke="#1f2937" strokeWidth={2} fill="none" />
     <path d="M0 140 Q360 165 694 70 M0 110 Q360 132 702 92 M758 70 Q1500 150 2250 70 M750 92 Q1500 175 2250 104" stroke="#1f2937" strokeWidth={2} fill="none" />
+    {/* A camp of flying foxes hanging off the wires: a little mob over the chippy end and the
+        servo end, a few more out past the bike shops. And the obligatory shoes on a wire. */}
+    {([["rightHigh", 0.52, false], ["rightHigh", 0.545, true], ["rightHigh", 0.57, false], ["rightHigh", 0.595, false], ["leftLow", 0.3, false], ["leftLow", 0.33, true], ["midHigh", 0.66, false], ["midHigh", 0.685, false]] as [keyof typeof WIRES, number, boolean][]).map(([wire, t, open], i) => {
+      const at = onWire(WIRES[wire], t);
+      return <FruitBat key={`bat${i}`} x={at.x} y={at.y} open={open} delay={-i * 0.7} />;
+    })}
+    {([["midLow", 0.46, "#ef4444", "#111"], ["rightLow", 0.82, "#f8fafc", "#2563eb"], ["leftHigh", 0.62, "#111", "#facc15"]] as [keyof typeof WIRES, number, string, string][]).map(([wire, t, colour, trim], i) => {
+      const at = onWire(WIRES[wire], t);
+      return <HangingShoes key={`shoes${i}`} x={at.x} y={at.y} colour={colour} trim={trim} delay={-i * 0.5} />;
+    })}
     {[[388, 131], [1353, 108], [1427, 110]].map(([x, y], i) => <g key={i} className={styles.wireBird} style={{ animationDelay: `${-i * 0.7}s` }}><ellipse cx={x} cy={y - 5} rx={5} ry={4} fill="#1f2937" /><circle cx={x + 4} cy={y - 9} r={2.6} fill="#1f2937" /></g>)}
   </svg>;
 }

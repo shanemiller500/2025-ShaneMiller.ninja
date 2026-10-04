@@ -506,17 +506,33 @@
 .bikeBoom{position:absolute;bottom:20px;width:40px;height:40px;margin-left:-20px;border-radius:50%;background:radial-gradient(circle,#fff 0 18%,#fff3a0 30%,#ffb020 48%,#ff5a1f 64%,#b3121f00 72%);animation:bikeBoom 1.3s ease-out forwards;pointer-events:none}
 @keyframes bikeBoom{0%{transform:scale(.3);opacity:1}35%{transform:scale(11);opacity:1}100%{transform:scale(14);opacity:0}}
 .scorch{position:absolute;bottom:22px;width:210px;height:34px;border-radius:50%;background:radial-gradient(ellipse,#000c 0 40%,#1118 60%,transparent 72%);animation:poopFade 12s forwards;pointer-events:none}
-/* Lighter tricks menu on desktop */
+/* Tricks menu on desktop: the toggle sits mid-left; the menu opens as a centred panel over a dimmed
+   street, with chunky readable buttons in a grid, grouped under black pill headings. */
 @media (min-width:641px){
-  .root .trickToggle{height:40px;padding:0 14px 0 11px;border-width:2px;box-shadow:3px 3px 0 #111;font-size:14px}
-  .trickToggle>span{font-size:18px}
-  .trickPanel{width:196px;padding:6px 6px 2px;border-width:2px;border-radius:14px;box-shadow:3px 3px 0 #1119;background:#fffdf5f0;backdrop-filter:blur(6px)}
-  .trickHeading{margin:6px 8px 3px;font-size:10px;color:#8a8a8a}
-  .trickGroup{gap:1px;margin-bottom:4px}
-  .root .trickPanel .trick,.root .trickPanel .trick:hover,.root .trickPanel .trick:focus-visible{min-height:32px;padding:4px 8px;gap:8px;border-radius:8px}
-  .trickPanel .trick>span{font-size:16px;width:20px}
-  .trickPanel .trick>em{font-size:13px;font-weight:700}
+  .trickBar{top:calc(50% - 22px);transform:none}
+  .root .trickToggle{position:relative;z-index:3;height:44px;padding:0 16px 0 12px;border-width:2px;box-shadow:3px 3px 0 #111;font-size:15px}
+  .trickToggle>span{font-size:19px}
+  .trickBackdrop{display:block;position:fixed;inset:0;z-index:1;background:#0b0c0e80;backdrop-filter:blur(2px);pointer-events:auto;animation:bubbleIn .2s ease-out}
+  .trickPanel{position:fixed;left:50%;top:50%;translate:-50% -50%;z-index:2;width:min(640px,calc(100vw - 48px));max-height:calc(100dvh - 120px);padding:16px 16px 6px;border-width:3px;border-radius:22px;box-shadow:7px 7px 0 #111;background:#fffdf5}
+  .trickHeading{display:inline-flex;margin:2px 0 8px;padding:4px 11px;border-radius:999px;background:#111;color:#fffdf5;font-size:11.5px;letter-spacing:.1em}
+  .trickGroup{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:14px}
+  .root .trickPanel .trick,.root .trickPanel .trick:hover,.root .trickPanel .trick:focus-visible{min-height:46px;padding:6px 12px;gap:10px;border:2px solid #111;border-radius:12px;background:#fff;box-shadow:2px 2px 0 #111;transition:translate .1s,box-shadow .1s,background .1s}
+  .root .trickPanel .trick:hover,.root .trickPanel .trick:focus-visible{background:#ffe8cc;translate:-1px -1px;box-shadow:3px 3px 0 #111}
+  .root .trickPanel .trick:active{translate:1px 1px;box-shadow:1px 1px 0 #111}
+  .trickPanel .trick>span{font-size:21px;width:26px}
+  .trickPanel .trick>em{font-size:15px;font-weight:800;color:#141517}
 }
+.trickTitle{display:none}
+@media (min-width:641px){
+  .trickTitle{display:flex;flex-direction:column;gap:2px;margin:0 2px 12px;padding-bottom:10px;border-bottom:2px dashed #11111133}
+  .trickTitle strong{font-size:20px;font-weight:900;color:#141517}
+  .trickTitle span{font-size:13px;font-weight:600;color:#52525b}
+}
+/* Full-screen pill under the Tricks button (desktop, normal page) */
+.root .webFull{display:flex;align-items:center;gap:7px;height:38px;padding:0 14px 0 11px;border:2px solid #111;border-radius:999px;background:#fffdf5;color:#141517;font-size:14px;font-weight:900;box-shadow:3px 3px 0 #111;cursor:pointer;transition:translate .1s,box-shadow .1s}
+.root .webFull:hover{translate:-1px -1px;box-shadow:4px 4px 0 #111}
+.root .webFull>span{font-size:17px}
+@media (max-width:640px){.root .webFull{display:none}}
 /* Bush doof */
 .rave{position:absolute;inset:0;pointer-events:none}
 .raveLights{position:absolute;inset:0;background:radial-gradient(circle at 18% 100%,#ff00c855 0,transparent 42%),radial-gradient(circle at 82% 100%,#00e5ff55 0,transparent 42%),radial-gradient(circle at 50% 100%,#fde04744 0,transparent 48%);animation:raveFlash .5s steps(2) infinite}
@@ -752,3 +768,19 @@
 .sledgeNah{background:#e5e7eb;color:#111}
 .sledgeLogo{width:42px;height:30px;flex:none;filter:drop-shadow(2px 2px 0 #111)}
 @media (max-width:400px){.sledgeLogo{width:34px;height:24px}}
+/* Bike shop brawl, club ride-bys */
+.shopBrawl{position:absolute;width:260px;height:170px;pointer-events:none;z-index:2}
+.shopBrawlDust{position:absolute;inset:0;background:radial-gradient(circle at 30% 42%,#e7e5e4 0 22%,transparent 23%),radial-gradient(circle at 64% 34%,#d6d3d1 0 25%,transparent 26%),radial-gradient(circle at 50% 66%,#e7e5e4 0 30%,transparent 31%),radial-gradient(circle at 20% 70%,#d6d3d1 0 18%,transparent 19%),radial-gradient(circle at 80% 68%,#e7e5e4 0 20%,transparent 21%);filter:drop-shadow(2px 2px 0 #111) drop-shadow(-1px -1px 0 #111);animation:brawlDust .3s ease-in-out infinite alternate}
+@keyframes brawlDust{from{transform:scale(1) rotate(-3deg)}to{transform:scale(1.07) rotate(4deg)}}
+.shopBrawlBit{position:absolute;left:46%;top:42%;font-size:24px;animation:brawlBit .9s linear infinite}
+@keyframes brawlBit{from{transform:rotate(var(--a)) translateX(78px) rotate(calc(-1 * var(--a)))}to{transform:rotate(calc(var(--a) + 360deg)) translateX(78px) rotate(calc(-1 * var(--a) - 360deg))}}
+.passingRide{position:absolute;pointer-events:none;transition-property:left;transition-timing-function:linear}
+.rideWheel{animation:spin .25s linear infinite}
+.bandanaTail{transform-box:fill-box;transform-origin:100% 50%;animation:flagWave .25s ease-in-out infinite alternate}
+.sledgeBrawl{flex-basis:100% !important;background:#facc15;color:#111}
+/* Flying foxes and shoes swinging off the power lines */
+.batSway{transform-box:fill-box;transform-origin:50% 0;animation:batSway 3.2s ease-in-out infinite alternate}
+@keyframes batSway{from{transform:rotate(-6deg)}to{transform:rotate(6deg)}}
+/* Bike shop street fight: losers flat on the road, winners jumping about */
+.rumbleDown{display:block;width:100%;height:100%;transform:rotate(-84deg) translate(-22px,8px);transform-origin:50% 95%;transition:transform .35s cubic-bezier(.3,1.4,.5,1)}
+.rumbleCheer{display:block;width:100%;height:100%;animation:cheer .35s ease-in-out infinite alternate}

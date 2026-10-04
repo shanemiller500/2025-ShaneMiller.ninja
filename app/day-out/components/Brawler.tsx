@@ -5,8 +5,9 @@ import styles from "../day-out.module.css";
 const INK = "#111", SKIN = "#f1c27d";
 const BEARDS = ["#6d4c2f", "#999", "#3a2a1f", "#d9c7a8"];
 
-export default function Brawler({ gang, seed, weapon }: { gang: "red" | "blue"; seed: number; weapon?: string }) {
-  const club = gang === "red" ? "#c0392b" : "#1f5fbf", beard = BEARDS[seed % BEARDS.length];
+// `colour` overrides the club colour (the bike shops' crews: Harley orange, Indian red).
+export default function Brawler({ gang, seed, weapon, colour }: { gang: "red" | "blue"; seed: number; weapon?: string; colour?: string }) {
+  const club = colour ?? (gang === "red" ? "#c0392b" : "#1f5fbf"), beard = BEARDS[seed % BEARDS.length];
   return <svg viewBox="0 0 50 80" width="100%" height="100%" aria-hidden overflow="visible">
     {/* Legs in a fighting stance, boots */}
     <path d="M20 54 L14 76 M28 54 L34 76" stroke={INK} strokeWidth={8} strokeLinecap="round" />

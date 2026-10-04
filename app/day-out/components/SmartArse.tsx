@@ -24,6 +24,7 @@ import HoopSnake from "./HoopSnake";
 import Bludger from "./Bludger";
 import OldNev from "./OldNev";
 import StoreBiker from "./StoreBiker";
+import PassingBiker from "./PassingBiker";
 import { HarleyBadge, IndianBadge } from "./BikeLogos";
 import Commuter from "./Commuter";
 import AquaDuck from "./AquaDuck";
@@ -263,7 +264,7 @@ function Trick({ label, onClick }: { label: string; onClick: () => void }) {
 }
 const FIRST_DELAY = 20_000, GAP = 150_000, GROUND = 14, VIEW_W = 260, VIEW_H = 180, FALL_AT = 4;
 // The Harley and Indian blokes out the front of their shops, and what they yell at each other.
-type ShopBiker = { id: number; brand: "harley" | "indian"; look: number; x: number; bottom: number; ms: number; faceLeft: boolean; walking: boolean; until: number; flipping: boolean; line: string | null; crew?: boolean; laughing?: boolean; lift?: number };
+type ShopBiker = { id: number; brand: "harley" | "indian"; look: number; x: number; bottom: number; ms: number; faceLeft: boolean; walking: boolean; until: number; flipping: boolean; line: string | null; crew?: boolean; laughing?: boolean; lift?: number; brawling?: boolean; cheering?: boolean };
 const HARLEY_JABS = ["Nice scooter, mate!", "Oi! Feathers! Go polish ya hairdryer!", "Real bikes leak oil, sunshine!", "That's not a bike, that's a pram!", "Indian? More like Indi-CAN'T!", "Come back when ya grow a beard!"];
 const INDIAN_JABS = ["Nice tractor, champ!", "Ours actually start, mate!", "Harley? More like HARDLY!", "Shake, rattle and roll on home!", "Get a real bike, ya galah!", "Is it leaking or just crying?"];
 type Roach = { id: number; x: number; bottom: number; ms: number; angle: number; squashed: boolean; busy: boolean };
@@ -290,6 +291,19 @@ const sledgeBlurb = (victim: string, round: number) => pick([
   `${victim} have gone dead quiet. That's never a good sign...`,
   ...(round >= 4 ? ["This is better than the footy. Keep it going?", "Centrelink's emptied out to watch. Another round?", "Even the bin chickens have stopped to listen."] : []),
 ]);
+// The bike shop brawl, and club riders cruising past.
+type Ride = { id: number; brand: "harley" | "indian"; look: number; x: number; ms: number; dir: 1 | -1; lane: number };
+const BRAWL_CRIES: Record<"harley" | "indian", string[]> = { harley: ["HARLEY! HARLEY! HARLEY!", "Let's 'ave 'em, boys!", "FOR MILWAUKEE!"], indian: ["INDIAN! INDIAN! INDIAN!", "Get 'em, lads!", "FOR SPRINGFIELD!"] };
+const SHOP_BRAWL_HITS = ["BIFF!", "POW!", "WHACK!", "CRUNCH!", "KAPOW!", "OOF!", "THWACK!", "BONK!", "SMACK!", "NOT THE BEARD!"];
+const BRAWL_WINS: Record<"harley" | "indian", string[]> = { harley: ["HARLEY RULES!", "Back to ya snowmobiles!", "Milwaukee iron, baby!"], indian: ["INDIAN FOREVER!", "Go leak somewhere else!", "1901, ya mugs! Respect ya elders!"] };
+const BRAWL_LOSSES = ["Ow... me ribs...", "I meant to do that...", "Me mum's gonna kill me...", "That's it, I'm taking up golf.", "Is me tooth still in?"];
+const RIDE_CHEERS = ["YEAHHH, BROTHER!", "Loud pipes save lives!", "Ride free, legend!", "WOOOO!", "THAT'S a motorbike!"];
+const RIDE_NOISE: Record<"harley" | "indian", string[]> = { harley: ["POTATO POTATO POTATO!", "BRAAAP!", "BLAT BLAT BLAT!"], indian: ["VROOOOM!", "BRAAAP!", "RUMBLE RUMBLE!"] };
+// The street fight in the bike shop brawl: each club's bikes, and who's paired up with who.
+type RumbleBike = { id: number; brand: "harley" | "indian"; look: number; x: number; bottom: number; ms: number; faceLeft: boolean; ridden: boolean; moving: boolean };
+type Rumble = { mid: number; bikes: RumbleBike[]; stage: "ride" | "fight" | "result" | "leave"; knocked: string | null; winner: "harley" | "indian" | null };
+const SHOP_PAIRS = [{ at: -210, row: 18 }, { at: -75, row: 50 }, { at: 60, row: 18 }, { at: 195, row: 50 }];
+const INDIAN_WEAPONS = ["🔧", undefined, "🌭", "🪃"], HARLEY_WEAPONS = ["🍺", "🔧", undefined, "🩴"];
 type Phase = "hidden" | "enter" | "parked" | "leave";
 type Action = "flip" | "moon" | "drink" | "smoke" | "throw";
 type Line = { text: string; ai: boolean };
@@ -2642,6 +2656,166 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   }
   // Enough of that: the score resets for next time.
   function moveAlong() { setSledge(null); }
+  // ---- Bike shop brawl: both crews charge at each other outside Centrelink, vanish into a cartoon
+  // dust cloud of fists and boots, and one mob comes out on top. They take turns winning. The losers
+  // limp home to find their shop trashed: windows smashed, boarded up, bikes gone, for five minutes.
+  // No brawl till they're back in business.
+  const [closedShops, setClosedShops] = useState({ harley: 0, indian: 0 });
+  const closedRef = useRef(closedShops);
+  useEffect(() => { closedRef.current = closedShops; }, [closedShops]);
+  const [shopBrawl, setShopBrawl] = useState<{ x: number; bottom: number } | null>(null);
+  const [rumble, setRumble] = useState<Rumble | null>(null);
+  const brawlWinner = useRef<"harley" | "indian">(Math.random() < 0.5 ? "harley" : "indian"), brawlOn = useRef(false);
+  async function shopBrawlStart() {
+    const now = Date.now(), L = panX();
+    const shut = (["harley", "indian"] as const).find(b => closedRef.current[b] > now);
+    if (shut) {
+      const left = Math.ceil((closedRef.current[shut] - now) / 1000);
+      add({ kind: "burst", x: L + window.innerWidth / 2 - 150, y: stripMap().b(250), size: 0, text: `${CREW_NAME[shut]}'s still boarded up! Back in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` });
+      return;
+    }
+    const all = shopBikersRef.current;
+    if (brawlOn.current || crewBusy.current.harley || crewBusy.current.indian || !all.some(b => b.brand === "harley") || !all.some(b => b.brand === "indian")) return;
+    brawlOn.current = true;
+    crewBusy.current = { harley: true, indian: true };
+    setSledge(null);
+    const sm = stripMap(), mid = sm.x(500), foot = sm.b(392);
+    panTo(mid);
+    // Charge!
+    const count = { harley: 0, indian: 0 };
+    const plan = new Map(all.map(bk => {
+      const i = count[bk.brand]++, x = bk.brand === "harley" ? mid + 10 + i * 34 : mid - 66 - i * 34;
+      return [bk.id, { x, ms: Math.max(600, Math.abs(x - bk.x) * 5), first: i === 0 }];
+    }));
+    const runMs = Math.max(...Array.from(plan.values(), v => v.ms)), started = Date.now();
+    setShopBikers(list => list.map(bk => {
+      const go = plan.get(bk.id);
+      return go ? { ...bk, crew: true, flipping: false, laughing: false, cheering: false, x: go.x, bottom: foot, ms: go.ms, walking: true, until: started + go.ms, faceLeft: bk.brand === "harley", line: go.first ? pick(BRAWL_CRIES[bk.brand]) : null, lift: 0 } : bk;
+    }));
+    // And the rest of each club turns up on their bikes: Indian roaring in from the left, Harley
+    // from the right, pulling up on the road either side of the fight.
+    const viewL = mid - window.innerWidth / 2, viewW = window.innerWidth, bw = rideW(), bikes: RumbleBike[] = [], park = new Map<number, number>();
+    for (let i = 0; i < 6; i++) {
+      const row = i % 2 ? 26 : 70, back = (i >> 1) * 95 + (i % 2) * 40, indian = ++uid, harley = ++uid;
+      bikes.push({ id: indian, brand: "indian", look: i, x: viewL - bw - 60 - i * 110, bottom: row, ms: 0, faceLeft: false, ridden: true, moving: true });
+      bikes.push({ id: harley, brand: "harley", look: i, x: viewL + viewW + 60 + i * 110, bottom: row, ms: 0, faceLeft: true, ridden: true, moving: true });
+      park.set(indian, mid - 330 - bw - back).set(harley, mid + 330 + back);
+    }
+    setRumble({ mid, bikes, stage: "ride", knocked: null, winner: null });
+    await later(60);
+    setRumble(r => r && { ...r, bikes: r.bikes.map(b => ({ ...b, x: park.get(b.id) ?? b.x, ms: 2200 + Math.random() * 700 })) });
+    add({ kind: "burst", x: mid - 110, y: GROUND + 220, size: 0, text: "BRAAAP BRAAAP BRAAAP!" });
+    await later(Math.max(runMs, 3000) + 150);
+    // Off the bikes and into it, right there in the middle of the road. The shop crews pile into a
+    // dust cloud on the footpath.
+    setRumble(r => r && { ...r, stage: "fight", bikes: r.bikes.map(b => ({ ...b, ridden: false, moving: false })) });
+    setShopBikers(list => list.map(bk => (plan.has(bk.id) ? { ...bk, brawling: true, walking: false, line: null } : bk)));
+    setShopBrawl({ x: mid - 20, bottom: foot - 10 });
+    for (let i = 0; i < 28; i++) {
+      const dx = (Math.random() < 0.5 ? -1 : 1) * (120 + Math.random() * 400);
+      add({ kind: "junk", x: mid + (Math.random() - 0.5) * 80, y: GROUND + 100 + Math.random() * 60, size: 0, dx, dy: 120, arc: -(100 + Math.random() * 160), text: pick(JUNK) });
+      if (i % 2 === 0) add({ kind: "burst", x: mid - 160 + Math.random() * 260, y: GROUND + 150 + Math.random() * 110, size: 0, text: pick(SHOP_BRAWL_HITS) });
+      if (i % 3 === 0) {
+        const n = Math.floor(Math.random() * SHOP_PAIRS.length);
+        setRumble(r => r && { ...r, knocked: `${Math.random() < 0.5 ? "i" : "h"}${n}` });
+        add({ kind: "stars", x: mid + SHOP_PAIRS[n].at - 10, y: GROUND + SHOP_PAIRS[n].row + 70, size: 0, text: "★ ✦ ★" });
+      }
+      await later(260);
+    }
+    setShopBrawl(null);
+    // They take turns: whoever won last time cops it this time.
+    const winner = brawlWinner.current, loser = winner === "harley" ? "indian" : "harley";
+    brawlWinner.current = loser;
+    const firstOf = (brand: string) => all.find(bk => bk.brand === brand)?.id;
+    setShopBikers(list => list.map(bk => {
+      if (!plan.has(bk.id)) return bk;
+      const won = bk.brand === winner;
+      return { ...bk, brawling: false, cheering: won, faceLeft: bk.brand === "indian", line: bk.id === firstOf(bk.brand) ? pick(won ? BRAWL_WINS[winner] : BRAWL_LOSSES) : null };
+    }));
+    add({ kind: "burst", x: mid - 90, y: foot + 190, size: 0, text: `${CREW_NAME[winner].toUpperCase()} WIN!` });
+    setRumble(r => r && { ...r, stage: "result", knocked: null, winner });
+    await later(2800);
+    // Everyone back on the bikes: the losers bolt for home, the winners hot on their tails.
+    const fleeLeft = loser === "indian", gone = fleeLeft ? mid - viewW - 500 : mid + viewW + 500;
+    setRumble(r => r && { ...r, stage: "leave", bikes: r.bikes.map((b, i) => ({ ...b, ridden: true, moving: true, faceLeft: fleeLeft, x: gone + (fleeLeft ? -1 : 1) * (i % 6) * 60, ms: b.brand === loser ? 1700 : 2500 })) });
+    window.setTimeout(() => setRumble(null), 2700);
+    // Losers limp home...
+    const home = loser === "harley" ? sm.x(1225) : sm.x(-265), limpStart = Date.now();
+    const losers = all.filter(bk => bk.brand === loser), limpMs = Math.max(...losers.map(bk => Math.max(1500, Math.abs(home - (plan.get(bk.id)?.x ?? bk.x)) * 7)));
+    setShopBikers(list => list.map(bk => {
+      if (!plan.has(bk.id)) return bk;
+      if (bk.brand === winner) return { ...bk, line: null };
+      const ms = Math.max(1500, Math.abs(home - bk.x) * 7);
+      return { ...bk, x: home + (Math.random() - 0.5) * 40, ms, walking: true, until: limpStart + ms, faceLeft: home < bk.x, line: null };
+    }));
+    window.setTimeout(() => setShopBikers(list => list.map(bk => (plan.has(bk.id) && bk.brand === winner ? { ...bk, crew: false, cheering: false } : bk))), 2500);
+    crewBusy.current[winner] = false;
+    // ...to find the winners have trashed the joint.
+    await later(1500);
+    panTo(home);
+    await later(1200);
+    ["SMASH!", "CRASH!", "TINKLE TINKLE..."].forEach((text, i) => window.setTimeout(() => add({ kind: "burst", x: home - 120 + i * 60, y: sm.b(260) - i * 30, size: 0, text }), i * 350));
+    setClosedShops(c => ({ ...c, [loser]: Date.now() + 5 * 60_000 }));
+    await later(Math.max(0, limpMs - 2700));
+    setShopBikers(list => list.filter(bk => bk.brand !== loser));
+    add({ kind: "burst", x: home - 110, y: sm.b(150), size: 0, text: "CLOSED FOR REPAIRS" });
+    crewBusy.current[loser] = false;
+    brawlOn.current = false;
+  }
+  // Five minutes later: the boards come down and the crew's back.
+  function reopenShop(brand: "harley" | "indian") {
+    setClosedShops(c => ({ ...c, [brand]: 0 }));
+    if (!immersive && phaseRef.current === "hidden") return;
+    const sm = stripMap(), door = brand === "harley" ? sm.x(1225) : sm.x(-42);
+    const fresh: ShopBiker[] = [0, 1, 2].map(i => ({ id: ++uid, brand, look: (brand === "harley" ? 0 : 3) + i, x: door + i * 18, bottom: sm.b(390 + i * 8), ms: 0, faceLeft: brand === "indian", walking: false, until: 0, flipping: false, line: i === 0 ? pick(["BACK IN BUSINESS, BABY!", "Good as new!", "Right. Who's next?"]) : null }));
+    setShopBikers(list => [...list.filter(bk => bk.brand !== brand), ...fresh]);
+    window.setTimeout(() => setShopBikers(list => list.map(bk => (fresh.some(f => f.id === bk.id) ? { ...bk, line: null } : bk))), 4000);
+    add({ kind: "burst", x: door - 100, y: sm.b(150), size: 0, text: "BACK IN BUSINESS!" });
+  }
+  useEffect(() => {
+    const now = Date.now();
+    const timers = (["harley", "indian"] as const).filter(b => closedShops[b] > 0).map(b => window.setTimeout(() => reopenShop(b), Math.max(0, closedShops[b] - now)));
+    return () => timers.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closedShops]);
+  // ---- Club riders cruising down the street now and then: their own crew cheers them on, the
+  // other crew flips them off as they go past.
+  const [rides, setRides] = useState<Ride[]>([]);
+  const rideW = () => (isPhone() ? 130 : 175);
+  function reactToRide(crew: "harley" | "indian", rider: "harley" | "indian") {
+    const mates = shopBikersRef.current.filter(bk => bk.brand === crew && !bk.crew && !bk.flipping && !bk.walking);
+    if (!mates.length) return;
+    const ids = new Set(mates.map(bk => bk.id)), same = crew === rider, lines = same ? RIDE_CHEERS : crew === "harley" ? HARLEY_JABS : INDIAN_JABS;
+    setShopBikers(list => list.map(bk => (ids.has(bk.id) ? { ...bk, cheering: same, flipping: !same, line: bk.id === mates[0].id ? pick(lines) : null, lift: 0 } : bk)));
+    window.setTimeout(() => setShopBikers(list => list.map(bk => (ids.has(bk.id) ? { ...bk, cheering: false, flipping: false, line: null } : bk))), 2800);
+  }
+  function rideBy(brand?: "harley" | "indian") {
+    if (!immersive && phaseRef.current === "hidden") return;
+    const b = brand ?? (Math.random() < 0.5 ? "harley" : "indian"), dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, W = VW(), w = rideW();
+    const start = dir === 1 ? -w - 40 : W + 40, end = dir === 1 ? W + 40 : -w - 40, ms = Math.round(Math.abs(end - start) * 2.4), id = ++uid;
+    const lane = dir === 1 ? GROUND + 4 : FAR_LANE - 4;
+    setRides(list => [...list, { id, brand: b, look: Math.floor(Math.random() * 3), x: start, ms: 0, dir, lane }]);
+    window.setTimeout(() => setRides(list => list.map(r => (r.id === id ? { ...r, x: end, ms } : r))), 60);
+    window.setTimeout(() => setRides(list => list.filter(r => r.id !== id)), ms + 300);
+    // Each crew reacts as it goes past their shop.
+    (["harley", "indian"] as const).forEach(crew => {
+      const mates = shopBikersRef.current.filter(bk => bk.brand === crew);
+      if (!mates.length) return;
+      const at = mates.reduce((sum, bk) => sum + bk.x, 0) / mates.length, t = (at - start) / (end - start);
+      if (t > 0 && t < 1) window.setTimeout(() => reactToRide(crew, b), Math.max(0, 60 + t * ms - 500));
+    });
+    // The pipes, as it goes past whatever you're looking at.
+    const view = panX() + window.innerWidth / 2, tv = (view - start) / (end - start);
+    if (tv > 0 && tv < 1) window.setTimeout(() => add({ kind: "burst", x: view - 70, y: lane + 120, size: 0, text: pick(RIDE_NOISE[b]) }), 60 + tv * ms);
+  }
+  useEffect(() => {
+    if (!immersive && phase === "hidden") { setRides([]); return; }
+    let timer = 0;
+    const next = () => { timer = window.setTimeout(() => { rideBy(); next(); }, 18000 + Math.random() * 22000); };
+    next();
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, immersive]);
   useEffect(() => {
     if (!sledge?.open) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setSledge(null); };
@@ -2713,7 +2887,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     crewBusy.current[brand] = false;
     // Over to the other mob: do they fire back?
     const victim = brand === "harley" ? "indian" : "harley";
-    setSledge(prev => {
+    if (shopBikersRef.current.some(bk => bk.brand === victim)) setSledge(prev => {
       const score = { ...(prev?.score ?? { harley: 0, indian: 0 }) };
       score[brand]++;
       const round = (prev?.round ?? 0) + 1;
@@ -2729,7 +2903,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     setShopBikers(list => {
       if (list.length) return list;
       const sm = stripMap();
-      return (["harley", "harley", "harley", "indian", "indian", "indian"] as const).map((brand, i) => {
+      return (["harley", "harley", "harley", "indian", "indian", "indian"] as const).filter(brand => !(closedRef.current[brand] > Date.now())).map((brand, i) => {
         const [a, b] = bikerZone(brand);
         return { id: ++uid, brand, look: i, x: a + Math.random() * (b - a), bottom: sm.b(388 + Math.random() * 22), ms: 0, faceLeft: Math.random() < 0.5, walking: false, until: 0, flipping: false, line: null };
       });
@@ -2738,7 +2912,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     const amble = window.setInterval(() => {
       const now = Date.now(), sm = stripMap();
       setShopBikers(list => list.map(bk => {
-        if (bk.flipping || bk.crew) return bk;
+        if (bk.flipping || bk.crew || bk.cheering) return bk;
         if (bk.walking) return now > bk.until ? { ...bk, walking: false } : bk;
         const [a, b] = bikerZone(bk.brand), stray = bk.x < a - 20 || bk.x > b + 20;
         if (!stray && Math.random() > 0.18) return bk;
@@ -2777,7 +2951,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   };
   const quackAt = (x: number) => add({ kind: "burst", x, y: FAR_LANE + duckW() * 0.5, size: 0, text: pick(["QUACK QUACK!", "QUAAACK!", "QUACK QUACK QUACK!"]) });
   useEffect(() => {
-    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); return; }
+    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
     let alive = true, target = 4 + (Math.random() < 0.5 ? 1 : 0), look = Math.floor(Math.random() * 6);
     const busComes = async () => {
       const bw = duckW(), sm = stripMap(), stopAt = sm.x(505) - bw * 0.6, startX = -bw - 40, driveMs = Math.max(2500, (stopAt - startX) * 3);
@@ -3443,6 +3617,18 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     } catch { /* not every phone allows it; turning it by hand works too */ }
     setRotateOk(true);
   }
+  function fullScreen() {
+    if (!immersive) { window.location.href = "/day-out/shazz"; return; }
+    if (document.fullscreenElement) void document.exitFullscreen?.();
+    else void goLandscape();
+  }
+  // Esc closes the tricks menu.
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMenu(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menu]);
   const scrollStreet = (dir: 1 | -1) => scroller.current?.scrollBy({ left: dir * window.innerWidth * 0.6, behavior: "smooth" });
   const onRoad = immersive || phase !== "hidden" || fx.some(item => item.kind === "skid" || item.kind === "shard");
   const actions: [Action, string][] = [["drink", "🍺 Crack a tinnie"], ["flip", "🖕 Flip us off"], ["moon", "🍑 Show us ya arse"], ["smoke", "🚬 Light a durry"], ["throw", "🍾 Chuck a bottle"]];
@@ -3472,7 +3658,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         </span>
       </span>;
     })}</span>}
-    {(immersive || phase !== "hidden") && <div className={styles.shopStrip} aria-hidden onClick={event => event.stopPropagation()}><Shopfronts sky={false} /></div>}
+    {(immersive || phase !== "hidden") && <div className={styles.shopStrip} aria-hidden onClick={event => event.stopPropagation()}><Shopfronts sky={false} closed={{ harley: closedShops.harley > 0, indian: closedShops.indian > 0 }} /></div>}
     <div className={`${styles.road} ${onRoad ? styles.roadOn : ""} ${phase === "parked" ? styles.roadClickable : ""}`} onClick={event => void rideTo(event.clientX + panX())} title={phase === "parked" ? "Click to move Shazz here" : undefined} />
     {cars.map(car => <span key={car.id} data-vehicle={`car-${car.id}`} data-lane={car.lane} className={`${styles.car} ${car.turnAt !== undefined ? styles.carTurn : ""} ${phase === "parked" ? styles.carClickable : ""} ${heldCar === car.id ? styles.carHeld : ""}`}
       onClick={event => void lassoCar(car.id, event.currentTarget)} title={phase === "parked" ? "Lasso it!" : undefined} onAnimationEnd={event => event.target === event.currentTarget && setCars(list => list.filter(item => item.id !== car.id))}
@@ -3732,9 +3918,33 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       <span key={boogie.line} className={styles.ibisBubble} style={{ bottom: 132 }}>{boogie.line}</span>
     </span>}
     {shopBikers.map(bk => <span key={bk.id} data-poopable="person" className={styles.storeBiker} role="button" aria-label={`${bk.brand === "harley" ? "Harley" : "Indian"} biker`} title={bk.brand === "harley" ? "Harley bloke" : "Indian bloke"}
-      style={{ left: bk.x, bottom: bk.bottom, transitionDuration: `${bk.ms}ms` }} onClick={event => { event.stopPropagation(); void crewJoke(bk.id); }}>
-      <span className={styles.ibisBody} style={{ transform: bk.faceLeft ? "scaleX(-1)" : undefined }}><StoreBiker brand={bk.brand} look={bk.look} walking={bk.walking} flipping={bk.flipping} laughing={bk.laughing} /></span>
+      style={{ left: bk.x, bottom: bk.bottom, transitionDuration: `${bk.ms}ms`, visibility: bk.brawling ? "hidden" : undefined }} onClick={event => { event.stopPropagation(); void crewJoke(bk.id); }}>
+      <span className={styles.ibisBody} style={{ transform: bk.faceLeft ? "scaleX(-1)" : undefined }}><StoreBiker brand={bk.brand} look={bk.look} walking={bk.walking} flipping={bk.flipping} laughing={bk.laughing} cheering={bk.cheering} /></span>
       {bk.line && <span className={styles.ibisBubble} style={{ bottom: `calc(105% + ${bk.lift ?? 0}px)`, zIndex: 2 }}>{bk.line}</span>}
+    </span>)}
+    {rumble && <div className={styles.brawl} aria-hidden>
+      {rumble.bikes.map(b => <span key={b.id} className={styles.passingRide} style={{ left: b.x, bottom: b.bottom, width: rideW(), height: (rideW() * 100) / 160, transitionDuration: `${b.ms}ms`, transitionTimingFunction: rumble.stage === "ride" ? "ease-out" : "ease-in" }}>
+        <span className={styles.ibisBody} style={{ transform: b.faceLeft ? "scaleX(-1)" : undefined }}><span className={b.moving ? styles.carBody : styles.ibisBody}><PassingBiker brand={b.brand} look={b.look} riderless={!b.ridden} /></span></span>
+      </span>)}
+      {(rumble.stage === "fight" || rumble.stage === "result") && SHOP_PAIRS.map((pair, i) => {
+        const indianDown = rumble.stage === "result" && rumble.winner === "harley", harleyDown = rumble.stage === "result" && rumble.winner === "indian";
+        const pose = (down: boolean) => (down ? styles.rumbleDown : rumble.stage === "result" ? styles.rumbleCheer : styles.ibisBody);
+        return <span key={`sp${i}`}>
+          <span className={`${styles.brawler} ${rumble.knocked === `i${i}` ? styles.knockedRed : ""}`} style={{ left: rumble.mid + pair.at - 54, bottom: pair.row }}>
+            <span className={pose(indianDown)}><Brawler gang="red" seed={i} colour="#b91c1c" weapon={rumble.stage === "fight" ? INDIAN_WEAPONS[i] : undefined} /></span>
+          </span>
+          <span className={`${styles.brawler} ${rumble.knocked === `h${i}` ? styles.knockedBlue : ""}`} style={{ left: rumble.mid + pair.at + 6, bottom: pair.row }}>
+            <span className={pose(harleyDown)}><span className={styles.facingLeft}><Brawler gang="blue" seed={i + 3} colour="#f97316" weapon={rumble.stage === "fight" ? HARLEY_WEAPONS[i] : undefined} /></span></span>
+          </span>
+        </span>;
+      })}
+    </div>}
+    {shopBrawl && <span className={styles.shopBrawl} style={{ left: shopBrawl.x - 130, bottom: shopBrawl.bottom }} aria-hidden>
+      <span className={styles.shopBrawlDust} />
+      {["👊", "🦶", "⭐", "💥", "🦵", "👊", "💫"].map((bit, i) => <span key={i} className={styles.shopBrawlBit} style={{ ["--a" as string]: `${i * 51}deg`, animationDelay: `${-i * 0.13}s` }}>{bit}</span>)}
+    </span>}
+    {rides.map(r => <span key={r.id} className={styles.passingRide} aria-hidden style={{ left: r.x, bottom: r.lane, width: rideW(), height: (rideW() * 100) / 160, transitionDuration: `${r.ms}ms` }}>
+      <span className={styles.ibisBody} style={{ transform: r.dir === -1 ? "scaleX(-1)" : undefined }}><span className={styles.carBody}><PassingBiker brand={r.brand} look={r.look} /></span></span>
     </span>)}
     {commuters.map(c => <span key={c.id} data-poopable="person" className={styles.commuter} role="button" aria-label="Someone waiting for the bus" title="Waiting for the duck"
       style={{ left: c.x, bottom: c.bottom, transitionDuration: `${c.ms}ms` }} onClick={event => { event.stopPropagation(); commuterLine(c.id, pick(BUS_STOP_LINES)); }}>
@@ -3916,7 +4126,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     </div></div>
     {immersive && <>
       <a href="/day-out" className={styles.immersiveBack} onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); }}>← Day Out</a>
-      {canFull && !isFull && <button className={styles.fullButton} onClick={() => void goLandscape()}>⛶ Full screen</button>}
+      {canFull && <button className={styles.fullButton} onClick={fullScreen}>{isFull ? "⤢ Exit full screen" : "⛶ Full screen"}</button>}
       {phoneView && <>
         <button className={`${styles.streetArrow} ${styles.streetArrowLeft}`} onClick={() => scrollStreet(-1)} aria-label="Look left along the street">◀</button>
         <button className={`${styles.streetArrow} ${styles.streetArrowRight}`} onClick={() => scrollStreet(1)} aria-label="Look right along the street">▶</button>
@@ -3946,16 +4156,19 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       <div className={styles.sledgeButtons}>
         <button autoFocus className={sledge.next === "harley" ? styles.sledgeGoHarley : styles.sledgeGoIndian} onClick={fireBack}>🔥 Fire back, {CREW_NAME[sledge.next]}!</button>
         <button className={styles.sledgeNah} onClick={moveAlong}>🚶 Nah, move along</button>
+        <button className={styles.sledgeBrawl} onClick={() => void shopBrawlStart()}>🥊 Settle it outside!</button>
       </div>
     </div>}
     {phase === "parked" && <div className={`${styles.trickBar} ${immersive ? styles.trickBarImmersive : ""}`}>
       <button className={styles.trickToggle} onClick={() => setMenu(open => !open)} aria-expanded={menu} aria-label="Shazz's tricks and settings"><span aria-hidden>{menu ? "✕" : "🤘"}</span>{menu ? "Close" : "Tricks"}</button>
+      {!immersive && !menu && <button className={styles.webFull} onClick={fullScreen} title="Open the full-screen street"><span aria-hidden>⛶</span>Full screen</button>}
       {menu && <>
         {/* Phones: the menu is a bottom sheet; tapping outside it closes it */}
         <div className={styles.trickBackdrop} onClick={() => setMenu(false)} aria-hidden />
         <div className={styles.trickPanel}>
           {/* Phones: close sits at the top of the sheet (the floating toggle hides while it's open) */}
           <button className={styles.sheetClose} onClick={() => setMenu(false)}><span aria-hidden>✕</span> Close</button>
+          <div className={styles.trickTitle}><strong>🤘 Shazz&apos;s tricks</strong><span>Pick one and stand back. Esc or click outside to close.</span></div>
           <p className={styles.trickHeading}>Big stuff</p>
           <div className={styles.trickGroup}>
             <Trick label="🔥 Burnout" onClick={pickTrick(() => void burnout())} />
@@ -3975,6 +4188,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             <Trick label="🐦‍⬛ Magpie flock" onClick={pickTrick(() => magpieFlock())} />
             <Trick label="😱 Swoop everyone!" onClick={pickTrick(() => swoopEveryone())} />
             <Trick label="💩 Magpie poop raid" onClick={pickTrick(() => poopRaid())} />
+            <Trick label="🥊 Bike shop brawl" onClick={pickTrick(() => void shopBrawlStart())} />
+            <Trick label="🏍️ Club ride-by" onClick={pickTrick(() => rideBy())} />
             <Trick label="🦜 Lorikeets" onClick={callIn(() => void lorikeetVisit())} />
             <Trick label="🦘 Roo mob" onClick={callIn(() => rooMob())} />
             <Trick label="🪶 Emus" onClick={callIn(() => emuFlock())} />
@@ -3993,8 +4208,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
           </div>
           <p className={styles.trickHeading}>Settings</p>
           <div className={styles.trickGroup}>
-            {!immersive && <Trick label="🎮 Full screen" onClick={() => { window.location.href = "/day-out/shazz"; }} />}
-            <Trick label={clean ? "🤬 Full swearing" : "🤐 Bleep swearing"} onClick={toggleClean} />
+            <Trick label={isFull ? "⤢ Exit full screen" : "⛶ Full screen"} onClick={pickTrick(fullScreen)} />
+            <Trick label={clean ? "🤬 Full swearing" : "🤐 Bleep swearing"} onClick={pickTrick(toggleClean)} />
             <Trick label="👋 Yeah, righto" onClick={pickTrick(() => void leave())} />
             <Trick label="🖐️ Piss off, Shazz" onClick={pickTrick(() => void leave(true))} />
           </div>
