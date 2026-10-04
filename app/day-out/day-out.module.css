@@ -233,7 +233,7 @@
 .convoyBike .wheel{animation:spin .22s linear infinite}
 .rumble{animation:rumble .09s linear infinite alternate}
 @keyframes bullet{to{transform:translate(var(--dx),var(--dy))}}
-@keyframes convoy{from{transform:translateX(-2980px)}to{transform:translateX(100vw)}}
+@keyframes convoy{from{transform:translateX(-2980px)}to{transform:translateX(var(--world,100vw))}}
 @keyframes rumble{to{transform:translate(1px,-1px)}}
 .brawl{position:absolute;inset:0;pointer-events:none}
 .gangBike{position:absolute;display:block;width:128px;height:90px;animation-fill-mode:both}
@@ -700,3 +700,55 @@
 @keyframes roachLegs{from{transform:skewX(-18deg)}to{transform:skewX(18deg)}}
 .roachFeelers{transform-box:fill-box;transform-origin:0 100%;animation:roachFeelers .35s ease-in-out infinite alternate}
 @keyframes roachFeelers{from{transform:rotate(-12deg)}to{transform:rotate(10deg)}}
+/* Bike-shop rivalry: Harley vs Indian blokes out the front, flags on the Harley roof */
+.storeBiker{position:absolute;width:56px;height:112px;pointer-events:auto;cursor:pointer;transition-property:left,bottom;transition-timing-function:linear}
+.storeBiker:hover .ibisBody{filter:drop-shadow(0 0 4px #fde68a)}
+@media (max-width:640px){.storeBiker{width:40px;height:80px}}
+.birdThrust{transform-box:fill-box;transform-origin:0 100%;animation:birdThrust .35s ease-in-out infinite alternate}
+@keyframes birdThrust{from{transform:rotate(-6deg)}to{transform:rotate(8deg) translate(1px,-1px)}}
+.flagWave{transform-box:fill-box;transform-origin:0 50%;animation:flagWave 1.1s ease-in-out infinite alternate}
+@keyframes flagWave{from{transform:skewY(-6deg) scaleX(.94)}to{transform:skewY(6deg) scaleX(1.04)}}
+/* Tall palms (roach nests) */
+.palmTree{position:absolute;pointer-events:none}
+.palmCrown{animation:palmSway 4.5s ease-in-out infinite alternate}
+@keyframes palmSway{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
+/* Biker crews cracking up at their own jokes */
+.bikerLaugh{transform-box:fill-box;transform-origin:50% 100%;animation:bikerLaugh .16s ease-in-out infinite alternate}
+@keyframes bikerLaugh{from{transform:translateY(0) rotate(-3deg)}to{transform:translateY(-3px) rotate(4deg)}}
+/* Bus stop commuters and the Aquaduck */
+.commuter{position:absolute;width:44px;height:110px;pointer-events:auto;cursor:pointer;transition-property:left,bottom;transition-timing-function:linear}
+.commuter:hover .ibisBody{filter:drop-shadow(0 0 4px #fde68a)}
+@media (max-width:640px){.commuter{width:32px;height:80px}}
+.aquaDuck{position:absolute;pointer-events:auto;cursor:pointer;transition-property:left}
+.duckParked{display:block;width:100%;height:100%}
+.duckQuack{transform-box:fill-box;transform-origin:0 100%;animation:duckQuack .14s ease-in-out infinite alternate}
+@keyframes duckQuack{from{transform:rotate(0)}to{transform:rotate(-9deg)}}
+/* Magpie flock, and swooped people flailing */
+.swooper{position:absolute;width:54px;height:36px;pointer-events:auto;z-index:3;transition-property:left,bottom;transition-timing-function:ease-in-out}
+.swooperFlap{display:block;width:100%;height:100%;animation:swooperFlap .32s ease-in-out infinite alternate}
+@keyframes swooperFlap{from{transform:translateY(-3px) rotate(-5deg)}to{transform:translateY(3px) rotate(5deg)}}
+.swooperDive{display:block;width:100%;height:100%;transform:rotate(22deg) scale(1.1)}
+.flail{position:absolute;pointer-events:none;z-index:4;animation:flailLife 2.3s linear forwards}
+@keyframes flailLife{0%,88%{opacity:1}100%{opacity:0}}
+.flailArm{transform-box:view-box;animation:flailArm .11s ease-in-out infinite alternate}
+.flailArmOther{animation-direction:alternate-reverse}
+@keyframes flailArm{from{transform:rotate(-30deg)}to{transform:rotate(24deg)}}
+/* Bike-shop sledging match: the fire-back prompt */
+.sledgeCard{position:fixed;top:50%;left:50%;translate:-50% -50%;z-index:120;width:min(360px,calc(100vw - 32px));padding:14px 16px 16px;border:3px solid #111;border-radius:18px;background:#fffdf5;color:#141517;box-shadow:6px 6px 0 #111;animation:bubbleIn .3s ease-out;pointer-events:auto}
+.sledgeCard h3{margin:8px 0 4px;font-size:19px;font-weight:900;line-height:1.15}
+.sledgeCard p{margin:0 0 12px;font-size:13.5px;font-weight:600;line-height:1.4;color:#3f3f46}
+.sledgeScore{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:900;letter-spacing:.06em}
+.sledgeHarley,.sledgeIndian{padding:3px 9px;border:2px solid #111;border-radius:999px}
+.sledgeHarley{background:#111;color:#f97316}
+.sledgeIndian{background:#b91c1c;color:#f3e6c8}
+.sledgeVs{font-style:italic;color:#71717a}
+.sledgeButtons{display:flex;flex-wrap:wrap;gap:8px}
+.sledgeButtons button{flex:1 1 140px;padding:10px 12px;border:2px solid #111;border-radius:12px;font-size:14px;font-weight:900;box-shadow:3px 3px 0 #111;cursor:pointer;transition:translate .1s,box-shadow .1s}
+.sledgeButtons button:hover{translate:-1px -1px;box-shadow:4px 4px 0 #111}
+.sledgeButtons button:active{translate:2px 2px;box-shadow:1px 1px 0 #111}
+.sledgeButtons button:focus-visible{outline:3px solid #6366f1;outline-offset:2px}
+.sledgeGoHarley{background:#f97316;color:#111}
+.sledgeGoIndian{background:#b91c1c;color:#fff}
+.sledgeNah{background:#e5e7eb;color:#111}
+.sledgeLogo{width:42px;height:30px;flex:none;filter:drop-shadow(2px 2px 0 #111)}
+@media (max-width:400px){.sledgeLogo{width:34px;height:24px}}

@@ -17,18 +17,24 @@ import BinChicken from "./BinChicken";
 import WheelieBin from "./WheelieBin";
 import Kangaroo from "./Kangaroo";
 import GumTree from "./GumTree";
+import PalmTree from "./PalmTree";
 import DropBear from "./DropBear";
 import SportBike from "./SportBike";
 import HoopSnake from "./HoopSnake";
 import Bludger from "./Bludger";
 import OldNev from "./OldNev";
+import StoreBiker from "./StoreBiker";
+import { HarleyBadge, IndianBadge } from "./BikeLogos";
+import Commuter from "./Commuter";
+import AquaDuck from "./AquaDuck";
+import { HARLEY_ON_INDIAN, INDIAN_ON_HARLEY, CREW_LAUGHS, HARLEY_SENDOFFS, INDIAN_SENDOFFS } from "./bikerJokes";
 import TrueBlue, { Pelican, type TrueBluePose } from "./TrueBlue";
 import Emu, { EmuLeg } from "./Emu";
 import Shopfronts from "./Shopfronts";
 import Dingo from "./Dingo";
 import Bev from "./Bev";
 import Jet from "./Jet";
-import Roach from "./Roach";
+import RoachArt from "./Roach";
 import LiveCritter from "./LiveCritter";
 import SlitherSnake from "./SlitherSnake";
 import PostieBike from "./PostieBike";
@@ -151,7 +157,16 @@ const FLOCK_LINES = ["Check out those white pointers!!", "Oi, the bin chicken un
 const ROO_LINES = ["Skippy and the boys, off to the pub.", "Oi! Don't jump in front of the Night Train!", "Look at 'em go. Built like brick dunnies.", "That big buck's eyeing me off. Come at me, Skip!", "Roo mob! Hide the snags."];
 // Gum trees along the back of the road (as fractions of the screen width); koalas in some.
 // Roadside gums: clear of the bus shelter in the shop strip (roughly 28-43% across).
-const TREES = [{ at: 0.19, koala: true }, { at: 0.62, koala: false }, { at: 0.88, koala: true }];
+// Gum trees, pinned to spots along the street drawing (Shopfronts x units): one between the Indian
+// shop and the fish and chip shop, one between Centrelink and the Harley shop, one out the front of
+// the chemist (clear of its doors). Kept clear of the bus stop, Centrelink's doors and the bottlo door.
+const TREES = [{ sx: 50, koala: true }, { sx: 1040, koala: false }, { sx: 2005, koala: true }];
+// Tall palms, taller than the shops; their shaggy skirts are where the cockroaches live.
+// Spread along the street: the Indian shop, between the empty shop and the milk bar, out the front
+// of Centrelink (next to the power pole), and between the Harley shop and the bottlo.
+const PALMS: { sx: number; lean: 1 | -1 }[] = [{ sx: -400, lean: 1 }, { sx: 250, lean: -1 }, { sx: 640, lean: 1 }, { sx: 1455, lean: -1 }];
+// Where the bottlo's door is on the street drawing (dole day stragglers and True Blue use it).
+const BOTTLO_DOOR = 1585;
 const TREE_BOTTOM = 142;
 // Gum tree size: big on desktop, cut down on phones so it doesn't swallow the screen.
 const TREE = {
@@ -247,34 +262,67 @@ function Trick({ label, onClick }: { label: string; onClick: () => void }) {
   return <button className={styles.trick} onClick={onClick} aria-label={words.join(" ")} title={words.join(" ")}><span aria-hidden>{icon}</span><em>{words.join(" ")}</em></button>;
 }
 const FIRST_DELAY = 20_000, GAP = 150_000, GROUND = 14, VIEW_W = 260, VIEW_H = 180, FALL_AT = 4;
+// The Harley and Indian blokes out the front of their shops, and what they yell at each other.
+type ShopBiker = { id: number; brand: "harley" | "indian"; look: number; x: number; bottom: number; ms: number; faceLeft: boolean; walking: boolean; until: number; flipping: boolean; line: string | null; crew?: boolean; laughing?: boolean; lift?: number };
+const HARLEY_JABS = ["Nice scooter, mate!", "Oi! Feathers! Go polish ya hairdryer!", "Real bikes leak oil, sunshine!", "That's not a bike, that's a pram!", "Indian? More like Indi-CAN'T!", "Come back when ya grow a beard!"];
+const INDIAN_JABS = ["Nice tractor, champ!", "Ours actually start, mate!", "Harley? More like HARDLY!", "Shake, rattle and roll on home!", "Get a real bike, ya galah!", "Is it leaking or just crying?"];
+type Roach = { id: number; x: number; bottom: number; ms: number; angle: number; squashed: boolean; busy: boolean };
+// Folk waiting at the bus stop, and the Aquaduck that comes to get them.
+type CommuterState = { id: number; look: number; x: number; bottom: number; ms: number; faceLeft: boolean; walking: boolean; waving: boolean; line: string | null };
+type DuckBus = { x: number; ms: number; riders: number; quack: boolean; moving: boolean; leaving: boolean };
+const BUS_STOP_LINES = ["Lovely day for it!", "Duck's running late again.", "Ooh, I love the duck bus!", "Hope I get a seat up the front.", "Morning!", "Is this the stop for the duck?", "Nice day for a swim, eh?", "Don't mind me, just waiting for the duck."];
+// The magpie flock: birds wheeling about over the street, diving on whoever's walking underneath.
+type Swooper = { id: number; x: number; bottom: number; ms: number; faceLeft: boolean; diving: boolean; until: number; leaving: boolean };
+const SWOOPED_YELLS = ["ARGH! MAGPIE!", "GET OFF ME!", "ME EYES!", "NOT AGAIN!", "SWOOPED!", "ME HEAD!", "BLOODY MAGPIES!", "AAARGH!", "WHY MEEE?!", "IN ME HAIR!"];
+const SHAZZ_SWOOPED = ["Oi! Pick on someone ya own size!", "Get outta me mullet, ya feathered mongrel!", "Every flamin' spring!", "I'll set Trev on ya, ya pied prick!", "Not the hair! NOT THE HAIR!"];
+// The sledging match between the bike shops: after each crew's joke, a prompt asks whether the
+// other crew fires back. Keeps score in laughs.
+type Sledge = { next: "harley" | "indian"; score: { harley: number; indian: number }; round: number; title: string; blurb: string; open: boolean };
+const CREW_NAME = { harley: "Harley", indian: "Indian" } as const;
+const sledgeTitle = (victim: string, scorer: string, round: number) => pick([
+  `Ooh, ${victim} just got roasted!`, `Round ${round} to ${scorer}!`, "That one left a mark!", `The ${victim} mob are fuming!`, `${scorer} with the cheap shot!`, "OHHHHH!",
+]);
+const sledgeBlurb = (victim: string, round: number) => pick([
+  `The ${victim} blokes are muttering into their beards. Reckon they've got one back?`,
+  `${victim} look like they've just been swooped by a magpie. Fire back?`,
+  `The whole street heard that. Do the ${victim} boys hit back?`,
+  `Somebody fetch the ${victim} crew an ice pack for that burn. Or a comeback.`,
+  `${victim} have gone dead quiet. That's never a good sign...`,
+  ...(round >= 4 ? ["This is better than the footy. Keep it going?", "Centrelink's emptied out to watch. Another round?", "Even the bin chickens have stopped to listen."] : []),
+]);
 type Phase = "hidden" | "enter" | "parked" | "leave";
 type Action = "flip" | "moon" | "drink" | "smoke" | "throw";
 type Line = { text: string; ai: boolean };
-type Fx = { stage?: number; palette?: string[]; id: number; kind: "leg" | "hole" | "poop" | "poopSplat" | "drop" | "feathers" | "smoke" | "tyre" | "skid" | "burst" | "bottle" | "shard" | "stars" | "fog" | "boom" | "rubber" | "bullet" | "junk" | "splat" | "rooFly"; x: number; y: number; size: number; text?: string; dx?: number; dy?: number; arc?: number; hit?: boolean };
+type Fx = { stage?: number; palette?: string[]; id: number; kind: "leg" | "hole" | "poop" | "poopSplat" | "drop" | "feathers" | "smoke" | "tyre" | "skid" | "burst" | "bottle" | "shard" | "stars" | "fog" | "boom" | "rubber" | "bullet" | "junk" | "splat" | "rooFly" | "flail"; x: number; y: number; size: number; text?: string; dx?: number; dy?: number; arc?: number; hit?: boolean };
 // Ids for everything on screen. Seeded from the clock so a hot reload (which re-runs this file
 // while the old items are still on screen) can never hand out an id that is already in use.
 let uid = Date.now();
-// Phones get a wider street than the screen (you swipe along it); desktop uses the screen width.
-const PHONE_WORLD = 900;
 // Full-screen mode (/day-out/shazz): set by the component when it mounts with `immersive`.
 let IMMERSIVE = false;
 const isPhone = () => typeof window !== "undefined" && (window.innerWidth < 640 || (IMMERSIVE && window.innerHeight < 500));
+// The street drawing (Shopfronts, 2900×420) is shown whole at the strip's height, so the world is
+// usually wider than the screen and you drag / swipe / edge-pan along it. The strip heights here
+// match .shopStrip in day-out.module.css (full screen: shops in the bottom half, sky above).
+const STREET_X = -650, STREET_W = 2900, STREET_H = 420;
+const stripHeight = () => {
+  const W = window.innerWidth, H = window.innerHeight;
+  if (IMMERSIVE) return Math.min(H - 147, Math.max(H * 0.46, 220));
+  if (W <= 640) return Math.min(252, H * 0.5);
+  return Math.max(240, Math.min(W * 0.28, H * 0.64));
+};
 const VW = () => {
   if (typeof window === "undefined") return 1200;
-  // Full screen: the 1500×420 street drawing scaled to fill the height above the road.
-  // Full screen: the shops take roughly the bottom half (matches .immersive .shopStrip), sky above.
-  if (IMMERSIVE) return Math.max(window.innerWidth, Math.round(Math.min(window.innerHeight - 147, Math.max(window.innerHeight * 0.46, 220)) * 1500 / 420));
-  return isPhone() ? Math.max(PHONE_WORLD, window.innerWidth) : window.innerWidth;
+  return Math.max(window.innerWidth, Math.round(stripHeight() * STREET_W / STREET_H));
 };
 // Sportsbikes are drawn 110×60; this keeps them road-sized next to the cars and Shazz.
 const sportbikeW = () => (isPhone() ? 150 : 205);
 // Everything Shazz can take a shot at. Birds and pests go up in a puff; the rest drop as dinner.
-type Target = { kind: "flyer"; id: number } | { kind: "flock"; index: number } | { kind: "raider" } | { kind: "ibis" } | { kind: "magpie"; id: number }
+type Target = { kind: "flyer"; id: number } | { kind: "flock"; index: number } | { kind: "raider" } | { kind: "ibis" } | { kind: "magpie"; id: number } | { kind: "swooper"; id: number }
   | { kind: "roo"; id: number } | { kind: "crossing"; id: number } | { kind: "snake"; id: number } | { kind: "strikeRoo" }
   | { kind: "dropBear" } | { kind: "dangler"; id: number } | { kind: "koala"; tree: number } | { kind: "lorikeet"; id: number } | { kind: "emu"; id: number };
 const FUR: Partial<Record<Target["kind"], string[]>> = {
   roo: ["#b5733a", "#e6c49a"], strikeRoo: ["#b5733a", "#e6c49a"], koala: ["#9aa0a6", "#e8e8e8"], dropBear: ["#8a7f72", "#5b5148"], dangler: ["#8a7f72", "#5b5148"],
-  snake: ["#7a5c2e", "#c9a86a"], magpie: ["#111", "#fff", "#111"], emu: ["#5b4636", "#3b2f26", "#7a6048"], lorikeet: ["#16a34a", "#1d4ed8", "#f97316", "#dc2626", "#facc15"],
+  snake: ["#7a5c2e", "#c9a86a"], magpie: ["#111", "#fff", "#111"], swooper: ["#111", "#fff", "#111"], emu: ["#5b4636", "#3b2f26", "#7a6048"], lorikeet: ["#16a34a", "#1d4ed8", "#f97316", "#dc2626", "#facc15"],
 };
 const POSTIE_W = 170, KID_W = 115;
 type DolePerson = { id: number; who: "trev" | "kylie"; tint: string; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "run" | "peek" | "dance" | "scratch"; line: string | null; inside: boolean; cash: boolean; beer: boolean; stagger: boolean; gone: boolean; enter?: "climb" | "pop"; weird?: boolean };
@@ -369,7 +417,15 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   const dropBusy = useRef(false);
   // Narrow screens get two trees instead of three.
   // Phones only get the one roadside gum (the right-hand one); there isn't room for three.
-  const treeSpots = () => TREES.filter(() => true).map((t) => ({ ...t, x: Math.round(VW() * t.at - TREE.W / 2) }));
+  const treeSpots = () => TREES.map(t => ({ ...t, x: Math.round(stripMap().x(t.sx) - TREE.W / 2) }));
+  // Palms: drawn 470 drawing-units tall (well over the rooftops), standing on the footpath.
+  const palmSpots = () => {
+    const sm = stripMap(), h = 470 * sm.k, w = h * 0.4;
+    return PALMS.map((pt, i) => {
+      const trunk = sm.x(pt.sx), base = sm.b(395);
+      return { ...pt, i, left: trunk - w / 2, w, h, base, trunk, skirtX: trunk + (pt.lean * w) / 12, skirtBottom: base + h * 0.7 };
+    });
+  };
   // Traffic and wildlife extras
   const [sportbikes, setSportbikes] = useState<{ id: number; dir: 1 | -1; lane: "far" | "near"; color: string; ms: number }[]>([]);
   const [strike, setStrike] = useState<{ carX: number; carMs: number; color: string; dented: boolean; rooX: number; rooBottom: number; rooMs: number; rooGone: boolean; shaking: boolean } | null>(null);
@@ -396,7 +452,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   const [dingoes, setDingoes] = useState<{ id: number; x: number; ms: number; faceLeft: boolean; running: boolean; snags: boolean; puzzled: boolean }[]>([]);
   const dingoBusy = useRef(false);
   // Cockroaches scuttling about the footpath and the edge of the road.
-  const [roaches, setRoaches] = useState<{ id: number; x: number; bottom: number; ms: number; angle: number; squashed: boolean }[]>([]);
+  const [roaches, setRoaches] = useState<Roach[]>([]);
   // Jets high over the street, leaving contrails ("chemtrails", if you ask Trev).
   const [jets, setJets] = useState<{ id: number; x0: number; y0: number; x1: number; y1: number; ms: number }[]>([]);
   // Dole day at Centrelink.
@@ -413,7 +469,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // Emus: each takes two shots. `hits` 1 = one leg gone, hopping slower.
   const [emus, setEmus] = useState<{ id: number; dir: 1 | -1; x: number; bottom: number; size: number; ms: number; hits: number }[]>([]);
   const [roos, setRoos] = useState<{ id: number; dir: 1 | -1; bottom: number; size: number; ms: number; delay: number; hop: number; joey: boolean }[]>([]);
-  const binX = () => Math.max(24, Math.round(VW() * 0.1));
+  // The bin chicken's wheelie bin, out the front of Centrelink where the scrappy street tree used to be.
+  const binX = () => Math.round(stripMap().x(760) - BIN_W / 2);
   const [raider, setRaider] = useState<{ x: number; bottom: number; ms: number; faceLeft: boolean; carrying: "snag" | null } | null>(null);
   const ibisBusy = useRef(false);
   const killsRef = useRef(kills);
@@ -1313,6 +1370,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         setIbis(null);
         break;
       case "magpie": setKid(k => k && { ...k, magpies: k.magpies.filter(m => m.id !== target.id) }); break;
+      case "swooper": setSwoopers(list => list.filter(b => b.id !== target.id)); break;
       case "roo": setRoos(list => list.filter(item => item.id !== target.id)); dinner("roo"); break;
       case "crossing": {
         const critter = crossings.find(c => c.id === target.id);
@@ -1553,7 +1611,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     if (!claimScene(24_000, 8000)) return;
     const trees = treeSpots(), fromRight = Math.random() < 0.5, W = VW(), H = window.innerHeight;
     // Half land along the shop rooftops (parapet tops in the street drawing), half in the gums.
-    const sm = stripMap(), ROOFTOPS: [number, number, number][] = [[10, 240, 82], [255, 495, 64], [505, 570, 70], [680, 745, 70], [755, 995, 88], [1005, 1060, 84], [1190, 1245, 84], [1255, 1490, 62]];
+    const sm = stripMap(), ROOFTOPS: [number, number, number][] = [[10, 240, 82], [255, 495, 64], [505, 570, 70], [680, 745, 70], [755, 995, 88], [1455, 1510, 84], [1640, 1695, 84], [1705, 1805, 110], [1945, 2045, 110], [1005, 1115, 20], [1120, 1445, 78], [-445, -5, 58]];
     const perch = () => {
       if (Math.random() < 0.5) { const [a, b, y] = pick(ROOFTOPS); return { x: sm.x(a + Math.random() * (b - a)) - 16, bottom: sm.b(y) - 3 }; }
       const t = pick(trees); return { x: t.x + TREE.W * (0.12 + Math.random() * 0.7) - 15, bottom: TREE_BOTTOM + TREE.H * (0.62 + Math.random() * 0.28) };
@@ -1649,11 +1707,13 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // board and go off for fifteen seconds. Then the coppers roll in, zap the lot (slapstick), and
   // chuck them in the paddy wagon, deadpan as you like.
   // ---- Dole day at Centrelink -------------------------------------------------------------
-  // Where things in the shop-strip drawing (1500×420, scaled to cover the strip) land on screen.
+  // Where things in the shop-strip drawing (Shopfronts' viewBox is -650 0 2900 420, scaled to cover
+  // the strip) land on screen. Building coordinates are in drawing units; the Indian shop is at x < 0.
   const stripMap = () => {
-    const strip = document.querySelector<HTMLElement>(`.${styles.shopStrip}`), W = VW(), h = strip?.offsetHeight || 300;
-    const k = Math.max(W / 1500, h / 420), off = (W - 1500 * k) / 2;
-    return { x: (svgX: number) => off + svgX * k, b: (svgY: number) => 147 + (420 - svgY) * k, k };
+    const strip = typeof document === "undefined" ? null : document.querySelector<HTMLElement>(`.${styles.shopStrip}`);
+    const W = VW(), h = strip?.offsetHeight || (typeof window === "undefined" ? 300 : stripHeight());
+    const k = Math.max(W / STREET_W, h / STREET_H), off = (W - STREET_W * k) / 2;
+    return { x: (svgX: number) => off + (svgX - STREET_X) * k, b: (svgY: number) => 147 + (420 - svgY) * k, k };
   };
   // The bludgers queue before it opens, have a yarn, file in one door and out the other with cash.
   // About half go straight into the bottlo and stagger back out.
@@ -1662,12 +1722,12 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     doleBusy.current = true;
     doleRobbed.current.clear();
     sceneUntil.current = Date.now() + 120_000;
-    const W = VW(), m = stripMap(), entry = m.x(790), exit = m.x(935), bottlo = m.x(1135), foot = m.b(395), door = m.b(381);
+    const W = VW(), m = stripMap(), entry = m.x(790), exit = m.x(935), bottlo = m.x(BOTTLO_DOOR), foot = m.b(395), door = m.b(381);
     const tints = ["#b91c1c", "#16a34a", "#2563eb", "#f59e0b", "#7c3aed", "#0f766e", "#f9a8d4", "#fb923c", "#22d3ee", "#a3e635", "#e11d48", "#fde047"];
     const gap = Math.min(46, Math.max(26, (entry - 60) / tints.length));
     const spot = (i: number) => entry - 70 - i * gap;
     // Where they come from: walking in from either side, climbing down off the rooftops, or out of the bins.
-    const ROOFS: [number, number][] = [[125, 82], [375, 64], [625, 40], [875, 88], [1125, 50], [1375, 62]];
+    const ROOFS: [number, number][] = [[125, 82], [375, 64], [625, 40], [875, 88], [1280, 78], [1575, 50], [1760, 110], [1990, 110]];
     const binAt = binX() + BIN_W / 2 - 33, binTop = BIN_BOTTOM + BIN_H - 56;
     const people: DolePerson[] = tints.map((tint, i) => {
       const from = i % 4, roof = ROOFS[(i * 7) % ROOFS.length];
@@ -2107,7 +2167,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     }
     hitTarget(target, el);
     if (Math.random() < 0.4) bulletHoles(el, 1);
-    const bird = ["flyer", "flock", "raider", "ibis", "lorikeet"].includes(target.kind), pest = ["magpie", "dropBear", "dangler", "emu"].includes(target.kind);
+    const bird = ["flyer", "flock", "raider", "ibis", "lorikeet"].includes(target.kind), pest = ["magpie", "swooper", "dropBear", "dangler", "emu"].includes(target.kind);
     if (Math.random() < 0.55) speak(pick(bird ? BIRD_SHOT_LINES : pest ? PEST_SHOT_LINES : ANIMAL_SHOT_LINES));
     await later(160);
     place.current = { ...place.current, tilt: 0 }; draw();
@@ -2476,30 +2536,439 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  // Roaches: dart somewhere random, freeze, dart again. Click one to stomp it; another turns up later.
-  const newRoach = () => ({ id: ++uid, x: 20 + Math.random() * (VW() - 60), bottom: GROUND + Math.random() * (ROAD_H + 22 - GROUND), ms: 0, angle: Math.random() * 360, squashed: false });
+  // Roaches: only a few about. They live in the palm skirts: every so often one scuttles to the
+  // nearest palm, runs up the trunk and vanishes into the dead fronds, and another one comes down a
+  // trunk somewhere else a bit later. On the ground they dart, freeze, dart again. Click to stomp.
+  const roachCount = () => (isPhone() ? 2 : 3);
+  const roachesRef = useRef<Roach[]>([]);
+  useEffect(() => { roachesRef.current = roaches; }, [roaches]);
+  const roachMove = (r: Roach, x: number, bottom: number, msPerPx: number): Roach =>
+    ({ ...r, x, bottom, ms: Math.max(220, Math.hypot(x - r.x, bottom - r.bottom) * msPerPx), angle: (Math.atan2(-(bottom - r.bottom), x - r.x) * 180) / Math.PI });
+  const setRoach = (id: number, change: (r: Roach) => Roach) => setRoaches(list => list.map(r => (r.id === id && !r.squashed ? change(r) : r)));
+  // Out of a palm skirt and down the trunk to the footpath.
+  function roachEmerge() {
+    if (roachesRef.current.filter(r => !r.squashed).length >= roachCount()) return;
+    const palm = pick(palmSpots()), id = ++uid, climb = Math.max(220, (palm.skirtBottom - palm.base) * 7);
+    setRoaches(list => [...list, { id, x: palm.skirtX - 14, bottom: palm.skirtBottom, ms: 0, angle: 90, squashed: false, busy: true }]);
+    window.setTimeout(() => setRoach(id, r => roachMove(r, palm.trunk - 14, palm.base - 6, 7)), 120);
+    window.setTimeout(() => setRoach(id, r => ({ ...r, busy: false })), 120 + climb + 200);
+  }
+  // Back to the nearest palm, up the trunk and gone; another one comes out somewhere later on.
+  function roachHome(id: number) {
+    const r0 = roachesRef.current.find(r => r.id === id);
+    if (!r0) return;
+    const palm = palmSpots().reduce((best, pt) => (Math.abs(pt.trunk - r0.x) < Math.abs(best.trunk - r0.x) ? pt : best));
+    const dash = Math.max(220, Math.hypot(palm.trunk - 14 - r0.x, palm.base - 6 - r0.bottom) * 2.2), climb = Math.max(220, (palm.skirtBottom - palm.base) * 7);
+    setRoach(id, r => ({ ...roachMove(r, palm.trunk - 14, palm.base - 6, 2.2), busy: true }));
+    window.setTimeout(() => setRoach(id, r => roachMove(r, palm.skirtX - 14, palm.skirtBottom, 7)), dash + 150);
+    window.setTimeout(() => setRoaches(list => list.filter(r => r.id !== id || r.squashed)), dash + 150 + climb + 100);
+    window.setTimeout(roachEmerge, dash + climb + 6000 + Math.random() * 9000);
+  }
+  const roachHomeRef = useRef(roachHome);
+  roachHomeRef.current = roachHome;
+  const roachEmergeRef = useRef(roachEmerge);
+  roachEmergeRef.current = roachEmerge;
   useEffect(() => {
     if (!immersive && phase === "hidden") { setRoaches([]); return; }
-    setRoaches(list => list.length ? list : Array.from({ length: isPhone() ? 4 : 7 }, newRoach));
+    // Start with one already out on the street and the rest coming down out of the palms.
+    const starters: number[] = [];
+    if (!roachesRef.current.length) {
+      const W = VW();
+      setRoaches([{ id: ++uid, x: 20 + Math.random() * (W - 60), bottom: GROUND + Math.random() * (ROAD_H + 22 - GROUND), ms: 0, angle: Math.random() * 360, squashed: false, busy: false }]);
+      for (let i = 1; i < roachCount(); i++) starters.push(window.setTimeout(() => roachEmergeRef.current(), 1500 + i * 2500));
+    }
     const timer = window.setInterval(() => {
       const W = VW();
       setRoaches(list => list.map(r => {
-        if (r.squashed || Math.random() > 0.3) return r;
+        if (r.squashed || r.busy || Math.random() > 0.3) return r;
         // A quick dash in a random direction (roaches don't do straight lines for long).
         const heading = r.angle + (Math.random() - 0.5) * 160, rad = (heading * Math.PI) / 180, dist = 40 + Math.random() * 170;
         const x = Math.max(10, Math.min(W - 40, r.x + Math.cos(rad) * dist)), bottom = Math.max(GROUND - 4, Math.min(ROAD_H + 24, r.bottom - Math.sin(rad) * dist * 0.35));
-        return { ...r, x, bottom, ms: Math.max(220, Math.hypot(x - r.x, bottom - r.bottom) * 2.2), angle: (Math.atan2(-(bottom - r.bottom), x - r.x) * 180) / Math.PI };
+        return roachMove(r, x, bottom, 2.2);
       }));
     }, 450);
-    return () => clearInterval(timer);
+    // Now and then one heads home to its palm.
+    const nest = window.setInterval(() => {
+      if (Math.random() > 0.3) return;
+      const out = roachesRef.current.filter(r => !r.squashed && !r.busy);
+      if (out.length) roachHomeRef.current(pick(out).id);
+    }, 5000);
+    return () => { clearInterval(timer); clearInterval(nest); starters.forEach(clearTimeout); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, immersive]);
   function stompRoach(id: number, x: number, y: number) {
     setRoaches(list => list.map(r => (r.id === id ? { ...r, squashed: true, ms: 0 } : r)));
     add({ kind: "burst", x: x - 30, y: y + 30, size: 0, text: pick(["SQUISH!", "CRUNCH!", "GOTCHA!", "EWW!"]) });
     window.setTimeout(() => setRoaches(list => list.filter(r => r.id !== id)), 2600);
-    window.setTimeout(() => setRoaches(list => (list.length < (isPhone() ? 4 : 7) ? [...list, newRoach()] : list)), 6000 + Math.random() * 5000);
+    // A replacement comes down out of a palm a while later.
+    window.setTimeout(() => roachEmergeRef.current(), 8000 + Math.random() * 8000);
   }
+
+  // Bike-shop rivalry: three Harley blokes and three Indian blokes mill about out the front of their own
+  // shops, and every so often one turns and flips the other shop off with a sledge. Sometimes the
+  // other mob gives it straight back. Click one and his whole crew tells a joke (crewJoke below).
+  const [shopBikers, setShopBikers] = useState<ShopBiker[]>([]);
+  const shopBikersRef = useRef<ShopBiker[]>([]);
+  useEffect(() => { shopBikersRef.current = shopBikers; }, [shopBikers]);
+  const bikerZone = (brand: ShopBiker["brand"]): [number, number] => {
+    const sm = stripMap();
+    return brand === "harley" ? [sm.x(1125), sm.x(1425)] : [sm.x(-420), sm.x(-100)];
+  };
+  function bikerFlip(id: number, comeback = true) {
+    const target = shopBikersRef.current.find(bk => bk.id === id);
+    if (!target || target.flipping || target.crew) return;
+    setShopBikers(list => list.map(bk => {
+      if (bk.id !== id) return bk;
+      // The rival shop is always to the other side: the Indian shop is at the left end of the street.
+      return { ...bk, walking: false, ms: 0, until: 0, flipping: true, faceLeft: bk.brand === "harley", line: pick(bk.brand === "harley" ? HARLEY_JABS : INDIAN_JABS) };
+    }));
+    window.setTimeout(() => setShopBikers(list => list.map(bk => (bk.id === id ? { ...bk, flipping: false, line: null } : bk))), 4200);
+    if (comeback && Math.random() < 0.55) window.setTimeout(() => {
+      const rivals = shopBikersRef.current.filter(bk => bk.brand !== target.brand && !bk.flipping && !bk.crew);
+      if (rivals.length) bikerFlip(pick(rivals).id, false);
+    }, 1400);
+  }
+  // Click a biker: his whole crew huddles round him, he tells a joke about the other mob, they all
+  // crack up, all flip the other shop off together, then wander off about their day. Jokes come
+  // round in order (one list per crew), so you hear the lot before any repeats.
+  const crewBusy = useRef({ harley: false, indian: false });
+  const [sledge, setSledge] = useState<Sledge | null>(null);
+  // The other crew's turn: one of them steps up and the camera swings across.
+  function fireBack() {
+    if (!sledge) return;
+    const crew = shopBikersRef.current.filter(bk => bk.brand === sledge.next);
+    setSledge(s => s && { ...s, open: false });
+    if (crew.length) void crewJoke(pick(crew).id);
+  }
+  // Enough of that: the score resets for next time.
+  function moveAlong() { setSledge(null); }
+  useEffect(() => {
+    if (!sledge?.open) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setSledge(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sledge?.open]);
+  // Each crew's jokes come off a shuffled deck: no repeats till the deck's done, then a fresh
+  // shuffle (never starting on the one just told). Where each deck is up to is saved per browser, so
+  // a reload doesn't start the same jokes over.
+  const jokeDecks = useRef<{ harley: number[] | null; indian: number[] | null }>({ harley: null, indian: null });
+  const lastJoke = useRef({ harley: -1, indian: -1 });
+  function nextJoke(brand: "harley" | "indian") {
+    const jokes = brand === "harley" ? HARLEY_ON_INDIAN : INDIAN_ON_HARLEY, key = `day-out-jokes-${brand}`;
+    if (jokeDecks.current[brand] === null) {
+      try {
+        const saved: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
+        jokeDecks.current[brand] = Array.isArray(saved) ? saved.filter((n): n is number => Number.isInteger(n) && n >= 0 && n < jokes.length) : [];
+      } catch { jokeDecks.current[brand] = []; }
+    }
+    let deck = jokeDecks.current[brand]!;
+    if (!deck.length) {
+      deck = jokes.map((_, i) => i);
+      for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+      if (deck[0] === lastJoke.current[brand]) deck.push(deck.shift()!);
+    }
+    const index = deck.shift()!;
+    jokeDecks.current[brand] = deck;
+    lastJoke.current[brand] = index;
+    try { localStorage.setItem(key, JSON.stringify(deck)); } catch { /* private window: fine, just not remembered */ }
+    return jokes[index];
+  }
+  async function crewJoke(tellerId: number) {
+    const teller = shopBikersRef.current.find(bk => bk.id === tellerId);
+    if (!teller || crewBusy.current[teller.brand]) return;
+    const brand = teller.brand, crew = shopBikersRef.current.filter(bk => bk.brand === brand), ids = new Set(crew.map(bk => bk.id));
+    crewBusy.current[brand] = true;
+    const joke = nextJoke(brand);
+    const crewSet = (change: (bk: ShopBiker, i: number) => ShopBiker) => setShopBikers(list => list.map(bk => (ids.has(bk.id) ? change(bk, crew.findIndex(c => c.id === bk.id)) : bk)));
+    // Huddle: the teller stays put (kept inside his patch), his mates close in either side, facing him.
+    const [a, b] = bikerZone(brand), mid = Math.min(b - 50, Math.max(a + 50, teller.x));
+    // Swing the camera over to whoever's telling it.
+    panTo(mid + 28);
+    const mates = crew.filter(bk => bk.id !== tellerId), spot = new Map<number, number>([[tellerId, mid]]);
+    mates.forEach((bk, i) => spot.set(bk.id, mid + (i % 2 ? 48 : -48) * (1 + Math.floor(i / 2))));
+    const now = Date.now(), msFor = (bk: ShopBiker) => Math.max(350, Math.abs(spot.get(bk.id)! - bk.x) * 12);
+    const gather = Math.max(...crew.map(msFor));
+    crewSet(bk => {
+      const x = spot.get(bk.id)!, ms = msFor(bk);
+      return { ...bk, crew: true, flipping: false, laughing: false, line: null, x, ms, walking: Math.abs(x - bk.x) > 4, until: now + ms, faceLeft: bk.id === tellerId ? bk.faceLeft : x > mid };
+    });
+    await later(gather + 150);
+    crewSet(bk => ({ ...bk, walking: false, ms: 0 }));
+    // The setup... (bubbles stay up long enough to read: a beat plus time per character)
+    const readMs = (text: string) => Math.max(5000, 1800 + text.length * 75);
+    setShopBikers(list => list.map(bk => (bk.id === tellerId ? { ...bk, line: joke.setup, lift: 0 } : bk)));
+    await later(readMs(joke.setup));
+    // ...and the punchline.
+    setShopBikers(list => list.map(bk => (bk.id === tellerId ? { ...bk, line: joke.punch } : bk)));
+    await later(readMs(joke.punch) + 800);
+    // Everyone loses it.
+    const laughs = [...CREW_LAUGHS].sort(() => Math.random() - 0.5);
+    crewSet((bk, i) => ({ ...bk, laughing: true, line: laughs[i % laughs.length], lift: i * 26 }));
+    await later(4000);
+    // All together now: the bird, straight down the street at the other shop.
+    const sendoffs = brand === "harley" ? HARLEY_SENDOFFS : INDIAN_SENDOFFS;
+    crewSet((bk, i) => ({ ...bk, laughing: false, flipping: true, faceLeft: brand === "harley", line: i === 0 ? pick(sendoffs) : null, lift: 0 }));
+    await later(4000);
+    crewSet(bk => ({ ...bk, flipping: false, line: null, crew: false }));
+    crewBusy.current[brand] = false;
+    // Over to the other mob: do they fire back?
+    const victim = brand === "harley" ? "indian" : "harley";
+    setSledge(prev => {
+      const score = { ...(prev?.score ?? { harley: 0, indian: 0 }) };
+      score[brand]++;
+      const round = (prev?.round ?? 0) + 1;
+      return { next: victim, score, round, open: true, title: sledgeTitle(CREW_NAME[victim], CREW_NAME[brand], round), blurb: sledgeBlurb(CREW_NAME[victim], round) };
+    });
+    // Sometimes the other mob gives it straight back.
+    shopBikersRef.current.filter(bk => bk.brand !== brand && !bk.crew && !bk.flipping).forEach((bk, i) => {
+      if (Math.random() < 0.5) window.setTimeout(() => bikerFlip(bk.id, false), 300 + i * 350);
+    });
+  }
+  useEffect(() => {
+    if (!immersive && phase === "hidden") { setShopBikers([]); return; }
+    setShopBikers(list => {
+      if (list.length) return list;
+      const sm = stripMap();
+      return (["harley", "harley", "harley", "indian", "indian", "indian"] as const).map((brand, i) => {
+        const [a, b] = bikerZone(brand);
+        return { id: ++uid, brand, look: i, x: a + Math.random() * (b - a), bottom: sm.b(388 + Math.random() * 22), ms: 0, faceLeft: Math.random() < 0.5, walking: false, until: 0, flipping: false, line: null };
+      });
+    });
+    // Wander: a slow amble to another spot in front of his own shop, then a stand about.
+    const amble = window.setInterval(() => {
+      const now = Date.now(), sm = stripMap();
+      setShopBikers(list => list.map(bk => {
+        if (bk.flipping || bk.crew) return bk;
+        if (bk.walking) return now > bk.until ? { ...bk, walking: false } : bk;
+        const [a, b] = bikerZone(bk.brand), stray = bk.x < a - 20 || bk.x > b + 20;
+        if (!stray && Math.random() > 0.18) return bk;
+        const x = a + Math.random() * (b - a), ms = Math.max(900, Math.abs(x - bk.x) * 22);
+        return { ...bk, x, bottom: sm.b(388 + Math.random() * 22), ms, faceLeft: x < bk.x, walking: true, until: now + ms };
+      }));
+    }, 700);
+    // Every so often somebody can't help himself.
+    let flipTimer = 0;
+    const nextFlip = () => {
+      flipTimer = window.setTimeout(() => {
+        const ready = shopBikersRef.current.filter(bk => !bk.flipping && !bk.crew);
+        if (ready.length) bikerFlip(pick(ready).id);
+        nextFlip();
+      }, 9000 + Math.random() * 9000);
+    };
+    nextFlip();
+    return () => { clearInterval(amble); clearTimeout(flipTimer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, immersive]);
+
+  // ---- Bus stop: nice normal people wander up to the bus shelter one at a time. Once four or five
+  // are waiting, the Aquaduck rolls up (QUACK QUACK!), they wave it down, hop on one by one, and off
+  // it goes down the street with a full canopy. Then the stop slowly fills up again.
+  const [commuters, setCommuters] = useState<CommuterState[]>([]);
+  const [duck, setDuck] = useState<DuckBus | null>(null);
+  const commutersRef = useRef<CommuterState[]>([]);
+  useEffect(() => { commutersRef.current = commuters; }, [commuters]);
+  const duckW = () => (isPhone() ? 240 : 330);
+  // Waiting spots along the shelter (Shopfronts x 452..582), staggered a little front to back.
+  const stopSpot = (i: number) => { const sm = stripMap(); return { x: sm.x(452 + i * 26) - 22, bottom: sm.b(388 + (i % 2) * 12) }; };
+  const updCommuter = (id: number, change: (c: CommuterState) => CommuterState) => setCommuters(list => list.map(c => (c.id === id ? change(c) : c)));
+  const commuterLine = (id: number, line: string, ms = 4500) => {
+    updCommuter(id, c => ({ ...c, line }));
+    window.setTimeout(() => updCommuter(id, c => (c.line === line ? { ...c, line: null } : c)), ms);
+  };
+  const quackAt = (x: number) => add({ kind: "burst", x, y: FAR_LANE + duckW() * 0.5, size: 0, text: pick(["QUACK QUACK!", "QUAAACK!", "QUACK QUACK QUACK!"]) });
+  useEffect(() => {
+    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); return; }
+    let alive = true, target = 4 + (Math.random() < 0.5 ? 1 : 0), look = Math.floor(Math.random() * 6);
+    const busComes = async () => {
+      const bw = duckW(), sm = stripMap(), stopAt = sm.x(505) - bw * 0.6, startX = -bw - 40, driveMs = Math.max(2500, (stopAt - startX) * 3);
+      setDuck({ x: startX, ms: 0, riders: 2 + Math.floor(Math.random() * 3), quack: false, moving: true, leaving: false });
+      await later(80);
+      setDuck(d => d && { ...d, x: stopAt, ms: driveMs });
+      // Everyone spots it coming and waves it down.
+      await later(Math.max(0, driveMs - 1800));
+      if (!alive) return;
+      setCommuters(list => list.map(c => ({ ...c, waving: true, faceLeft: true })));
+      const spotter = commutersRef.current[0];
+      if (spotter) commuterLine(spotter.id, pick(["Here's our duck!", "Ooh, here it comes!", "DUCK! Over here!"]), 3000);
+      await later(1800);
+      if (!alive) return;
+      setDuck(d => d && { ...d, moving: false, quack: true });
+      quackAt(stopAt + bw * 0.75);
+      await later(1300);
+      setDuck(d => d && { ...d, quack: false });
+      // On they get, nearest the door first.
+      const door = stopAt + bw * 0.6 - 20;
+      const queue = [...commutersRef.current].sort((a, b) => Math.abs(a.x - door) - Math.abs(b.x - door));
+      for (const c of queue) {
+        if (!alive) return;
+        const ms = Math.max(500, Math.abs(door - c.x) * 14);
+        updCommuter(c.id, x => ({ ...x, waving: false, walking: true, x: door, bottom: FAR_LANE + 30, ms, faceLeft: door < x.x }));
+        await later(ms);
+        setCommuters(list => list.filter(x => x.id !== c.id));
+        setDuck(d => d && { ...d, riders: d.riders + 1 });
+        await later(450);
+      }
+      await later(1000);
+      if (!alive) return;
+      // And away: QUACK QUACK!
+      const endX = VW() + 60, offMs = Math.max(2500, (endX - stopAt) * 3);
+      setDuck(d => d && { ...d, quack: true, moving: true, leaving: true, x: endX, ms: offMs });
+      quackAt(stopAt + bw * 0.75);
+      await later(900);
+      setDuck(d => d && { ...d, quack: false });
+      await later(offMs);
+      setDuck(null);
+    };
+    const run = async () => {
+      await later(5000 + Math.random() * 5000);
+      while (alive) {
+        const waiting = commutersRef.current.length;
+        if (waiting < target) {
+          // Someone new strolls up from one way or the other.
+          const spot = stopSpot(waiting), fromLeft = Math.random() < 0.5, from = spot.x + (fromLeft ? -1 : 1) * (500 + Math.random() * 400);
+          const id = ++uid, ms = Math.abs(spot.x - from) * 14;
+          setCommuters(list => [...list, { id, look: look++ % 6, x: from, bottom: spot.bottom, ms: 0, faceLeft: !fromLeft, walking: true, waving: false, line: null }]);
+          await later(80);
+          updCommuter(id, c => ({ ...c, x: spot.x, ms }));
+          await later(ms);
+          if (!alive) return;
+          updCommuter(id, c => ({ ...c, walking: false, faceLeft: Math.random() < 0.5 }));
+          if (Math.random() < 0.4) commuterLine(id, pick(BUS_STOP_LINES));
+          await later(4000 + Math.random() * 6000);
+          continue;
+        }
+        await busComes();
+        target = 4 + (Math.random() < 0.5 ? 1 : 0);
+        await later(12000 + Math.random() * 12000);
+      }
+    };
+    void run();
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, immersive]);
+
+  // ---- Magpie flock: four to six maggies wheel about over the street, dive-bomb anybody walking
+  // underneath (Shazz, the bikers, the bus queue, the dole mob, Nev, everyone), and crap on the lot.
+  // Swooped people freak out, flailing their arms round their heads. On its own it's one or two lone
+  // maggies at a time; the menu brings the whole flock, a mass swoop and a poop raid.
+  const [swoopers, setSwoopers] = useState<Swooper[]>([]);
+  const swoopersRef = useRef<Swooper[]>([]);
+  useEffect(() => { swoopersRef.current = swoopers; }, [swoopers]);
+  const diving = useRef(new Set<number>()), lastSwoopLine = useRef(0);
+  // Where the flock flies: above head height, up to the rooftops (way up into the sky full screen).
+  const flockSky = () => { const sm = stripMap(), H = window.innerHeight; return { lo: sm.b(300), hi: Math.max(sm.b(300) + 60, Math.min(H - 70, sm.b(0) + 40)) }; };
+  // Everyone who can be swooped, preferring whoever's on screen.
+  const swoopables = () => {
+    const all = Array.from(document.querySelectorAll<HTMLElement>('[data-poopable="person"], [data-poopable="shazz"]'))
+      .map(el => ({ el, r: sRect(el) })).filter(({ r }) => r.width > 0 && r.right > 0 && r.left < VW());
+    const L = panX(), R = L + window.innerWidth, seen = all.filter(({ r }) => r.right > L - 100 && r.left < R + 100);
+    return seen.length ? seen : all;
+  };
+  // A swooped person: a frantic little jig, arms flailing round the head, and a yell.
+  function freakOut(el: HTMLElement) {
+    // Shazz stays on the bike: only she (head and arms, pivoting at the hips) flinches about, and
+    // the flailing arms go round her head rather than the middle of the bike.
+    const flincher = el.dataset.poopable === "shazz" ? el.querySelector<SVGGElement>(`.${styles.rider}`) : el;
+    const r = sRect(flincher ?? el), H = window.innerHeight, cx = r.left + r.width / 2, top = H - r.top;
+    if (el.dataset.poopable === "shazz") flincher?.animate?.([{ translate: "-1.5px 0", rotate: "-5deg" }, { translate: "1.5px -2px", rotate: "4deg" }], { duration: 150, iterations: 14, direction: "alternate" });
+    else flincher?.animate?.([{ translate: "-3px 0", rotate: "-6deg" }, { translate: "3px -6px", rotate: "6deg" }], { duration: 150, iterations: 14, direction: "alternate" });
+    add({ kind: "flail", x: cx, y: top - Math.min(26, r.height * 0.16), size: Math.max(34, Math.min(66, r.width * 0.9)) });
+    if (el.dataset.poopable === "shazz") {
+      if (Date.now() - lastSwoopLine.current > 8000) { lastSwoopLine.current = Date.now(); speak(pick(SHAZZ_SWOOPED), false, true); }
+    } else add({ kind: "burst", x: cx - 40, y: top + 34, size: 0, text: pick(SWOOPED_YELLS) });
+  }
+  // One bird dives on one person's head, then pulls up and away.
+  async function swoopOn(id: number, target?: { el: HTMLElement; r: DOMRect | { left: number; right: number; top: number; bottom: number; width: number; height: number } }) {
+    const bird = swoopersRef.current.find(b => b.id === id), t = target ?? pick(swoopables());
+    if (!bird || !t || diving.current.has(id)) return;
+    diving.current.add(id);
+    const H = window.innerHeight, hx = t.r.left + t.r.width / 2, head = H - t.r.top, faceLeft = hx < bird.x + 27;
+    setSwoopers(list => list.map(b => (b.id === id ? { ...b, x: hx - 27, bottom: head - 6, ms: 520, faceLeft, diving: true } : b)));
+    await later(520);
+    if (!swoopersRef.current.some(b => b.id === id)) { diving.current.delete(id); return; }
+    if (t.el.isConnected) freakOut(t.el);
+    const { lo, hi } = flockSky();
+    setSwoopers(list => list.map(b => (b.id === id ? { ...b, x: hx - 27 + (faceLeft ? -1 : 1) * (150 + Math.random() * 140), bottom: lo + Math.random() * (hi - lo), ms: 800, diving: false } : b)));
+    await later(800);
+    diving.current.delete(id);
+  }
+  // A bird (or a few) flies in from just off one side of the view, with its own time to stay.
+  function bringMagpies(n: number, stayMs: number) {
+    if (!immersive && phaseRef.current === "hidden") return;
+    const { lo, hi } = flockSky(), L = panX(), W = window.innerWidth, fromLeft = Math.random() < 0.5, now = Date.now();
+    const birds: Swooper[] = Array.from({ length: n }, () => ({ id: ++uid, x: fromLeft ? L - 90 - Math.random() * 220 : L + W + 30 + Math.random() * 220, bottom: lo + Math.random() * (hi - lo), ms: 0, faceLeft: !fromLeft, diving: false, until: now + stayMs * (0.8 + Math.random() * 0.4), leaving: false }));
+    const ids = new Set(birds.map(b => b.id));
+    setSwoopers(list => [...list, ...birds]);
+    window.setTimeout(() => setSwoopers(list => list.map(b => (ids.has(b.id) ? { ...b, x: L + 40 + Math.random() * (W - 120), ms: 1800 + Math.random() * 800 } : b))), 60);
+  }
+  // From the menu: a whole flock at once.
+  function magpieFlock() {
+    bringMagpies(4 + Math.floor(Math.random() * 3), 32000);
+    const L = panX(), { hi } = flockSky();
+    add({ kind: "burst", x: L + window.innerWidth / 2 - 100, y: hi - 20, size: 0, text: "SWOOPING SEASON!" });
+  }
+  // Keep whoever's out hanging about a bit longer (for the menu's mass swoop and poop raid).
+  const keepMagpies = (ms: number) => setSwoopers(list => list.map(b => (b.leaving ? b : { ...b, until: Math.max(b.until, Date.now() + ms) })));
+  // Every maggie picks somebody different and goes for them, all at once.
+  function swoopEveryone() {
+    if (!swoopersRef.current.length) { magpieFlock(); window.setTimeout(swoopEveryone, 2000); return; }
+    keepMagpies(15000);
+    const people = [...swoopables()].sort(() => Math.random() - 0.5);
+    swoopersRef.current.filter(b => !b.leaving).forEach((b, i) => { if (people.length) window.setTimeout(() => void swoopOn(b.id, people[i % people.length]), i * 220); });
+  }
+  // Bombs away: every bird lets go, three times over.
+  function poopRaid() {
+    if (!swoopersRef.current.length) { magpieFlock(); window.setTimeout(poopRaid, 2000); return; }
+    keepMagpies(15000);
+    for (let k = 0; k < 3; k++) window.setTimeout(() => swoopersRef.current.forEach((b, i) => window.setTimeout(() => {
+      const cur = swoopersRef.current.find(x => x.id === b.id);
+      if (cur) dropPoop(cur.x + 27, cur.bottom, 0);
+    }, i * 120)), k * 900);
+  }
+  // Swooping season: on their own, it's just a lone maggie (two at most) turning up now and then,
+  // each one arriving separately, causing a bit of havoc for twenty-odd seconds, then buggering off.
+  useEffect(() => {
+    if (!immersive && phase === "hidden") { setSwoopers([]); return; }
+    let timer = 0;
+    const next = () => {
+      timer = window.setTimeout(() => {
+        if (swoopersRef.current.filter(b => !b.leaving).length < 2) bringMagpies(1, 24000);
+        next();
+      }, 25000 + Math.random() * 30000);
+    };
+    timer = window.setTimeout(() => { bringMagpies(1, 24000); next(); }, 15000 + Math.random() * 15000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, immersive]);
+  // While they're about: wheel around, dive on people (one bird at a time, never together), drop the
+  // odd bomb; each one clears off when its time's up.
+  const flockOut = swoopers.length > 0;
+  useEffect(() => {
+    if (!flockOut) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now(), birds = swoopersRef.current, L = panX(), W = window.innerWidth;
+      const done = birds.filter(b => !b.leaving && b.until < now && !diving.current.has(b.id));
+      if (done.length) {
+        const ids = new Set(done.map(b => b.id)), away = Math.random() < 0.5;
+        setSwoopers(list => list.map(b => (ids.has(b.id) ? { ...b, leaving: true, x: away ? L - 300 : L + W + 300, ms: 2200, faceLeft: away, diving: false } : b)));
+        window.setTimeout(() => setSwoopers(list => list.filter(b => !ids.has(b.id))), 2300);
+      }
+      const { lo, hi } = flockSky();
+      let swooping = diving.current.size > 0;
+      birds.forEach(b => {
+        if (b.leaving || b.until < now || diving.current.has(b.id)) return;
+        const roll = Math.random();
+        if (roll < 0.14 && !swooping) { swooping = true; void swoopOn(b.id); }
+        else if (roll < 0.24) dropPoop(b.x + 27, b.bottom, 0);
+        else if (roll < 0.6) {
+          const x = Math.max(L - 60, Math.min(L + W - 20, b.x + (Math.random() - 0.5) * 520));
+          setSwoopers(list => list.map(o => (o.id === b.id ? { ...o, x, bottom: lo + Math.random() * (hi - lo), ms: 1300 + Math.random() * 900, faceLeft: x < o.x } : o)));
+        }
+      });
+    }, 900);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flockOut]);
 
   // Dust and smoke kicked up from the emus' feet as they run.
   const emusOut = emus.length > 0;
@@ -2624,7 +3093,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       });
     }
     place.current = { x: -500, tilt: 0, pivot: 60 }; draw();
-    setKills([]); setIbis(null); ibisBusy.current = false; setBbq(null); setFlyers([]); setRaider(null); setFlock(null); flockBusy.current = false; setRoos([]); setEmus([]); setDropBear(null); dropBusy.current = false; setSportbikes([]); setStrike(null); strikeBusy.current = false; setDanglers([]); setSnakes([]); setDazza(null); dazzaBusy.current = false; setNev(null); nevRun.current++; setBlue(null); blueBusy.current = false; setBlueAnimal(null); setBlueBirds(null); setPelican(null); setRoadFish(null); setGary(null); garyBusy.current = false; setCrossings([]); crossingCount.current = 0; setCrows([]); setLorikeets([]); setPoops({}); setTrev(null); setCookout(null); setDole(null); doleBusy.current = false; setBev(null); setDingoes([]); dingoBusy.current = false; setRoaches([]); setRave(null); setThieves({ trev: null, kylie: null, stolenRed: false, bricked: false }); setHitters([]); setPostie(null); setKid(null); setShotKoalas([]); shotIds.current.clear(); sceneUntil.current = 0; setTattoo(null); setConvoy(0); setBrawl(null);
+    setKills([]); setIbis(null); ibisBusy.current = false; setBbq(null); setFlyers([]); setRaider(null); setFlock(null); flockBusy.current = false; setRoos([]); setEmus([]); setDropBear(null); dropBusy.current = false; setSportbikes([]); setStrike(null); strikeBusy.current = false; setDanglers([]); setSnakes([]); setDazza(null); dazzaBusy.current = false; setNev(null); nevRun.current++; setBlue(null); blueBusy.current = false; setBlueAnimal(null); setBlueBirds(null); setPelican(null); setRoadFish(null); setGary(null); garyBusy.current = false; setCrossings([]); crossingCount.current = 0; setCrows([]); setLorikeets([]); setPoops({}); setTrev(null); setCookout(null); setDole(null); doleBusy.current = false; setBev(null); setDingoes([]); dingoBusy.current = false; setRoaches([]); setShopBikers([]); setCommuters([]); setDuck(null); setRave(null); setThieves({ trev: null, kylie: null, stolenRed: false, bricked: false }); setHitters([]); setPostie(null); setKid(null); setShotKoalas([]); shotIds.current.clear(); sceneUntil.current = 0; setTattoo(null); setConvoy(0); setBrawl(null);
     setPhase("hidden");
   }
 
@@ -2776,7 +3245,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     const W = VW(), verge = ROAD_H - 10, say = (line: string | null) => setBlue(b => b && { ...b, line });
     const pose = (p: TrueBluePose) => setBlue(b => b && { ...b, pose: p });
     // He comes out of the bottlo, of course.
-    const sm = stripMap(), bottloX = Math.round(sm.x(1135) - 33), bottloDoor = sm.b(381);
+    const sm = stripMap(), bottloX = Math.round(sm.x(BOTTLO_DOOR) - 33), bottloDoor = sm.b(381);
     let at = bottloX;
     setBlue({ x: bottloX, bottom: bottloDoor, ms: 0, faceLeft: false, pose: "walk", line: "🎵 Hey True Blue! Is it me and you? 🎵", fish: false });
     panTo(bottloX);
@@ -3046,7 +3515,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         style={{ left: `calc(50% - ${190 + i * 60}px)`, bottom: i % 2 ? 40 : 22, animationDelay: `${i * 0.1}s` }}><Brawler gang="red" seed={i} /></span>)}
       {(brawl === "guillotine" || brawl === "chop") && <span className={styles.guillotine}><Guillotine chopped={brawl === "chop"} /></span>}
     </div>}
-    {convoy > 0 && <div key={convoy} className={styles.convoy} aria-hidden>
+    {convoy > 0 && <div key={convoy} className={styles.convoy} aria-hidden style={{ ["--world" as string]: `${VW()}px` }}>
       {Array.from({ length: 50 }, (_, i) => <span key={i} className={styles.convoyBike} style={{ left: Math.floor(i / 2) * 112 + (i % 2) * 50, bottom: i % 2 ? 36 : 72, animationDelay: `${(i % 7) * 0.07}s` }}><MiniBiker seed={i} /></span>)}
     </div>}
     {sign && <span className={`${styles.stopSign} ${sign.down ? styles.stopSignDown : ""}`} style={{ left: sign.x, bottom: 44 }}><StopSign holes={sign.holes} /></span>}
@@ -3076,6 +3545,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       </span>
       {trev.line && <span className={styles.ibisBubble} style={{ bottom: 132 }}>{trev.line}</span>}
     </span>}
+    {phase !== "hidden" && palmSpots().map(pt => <span key={`palm${pt.i}`} className={styles.palmTree} aria-hidden style={{ left: pt.left, bottom: pt.base, width: pt.w, height: pt.h }}>
+      <PalmTree lean={pt.lean} variant={pt.i} />
+    </span>)}
     {phase !== "hidden" && treeSpots().map((t, i) => (
       <span key={i} className={styles.gumTree} style={{ left: t.x, bottom: TREE_BOTTOM, width: TREE.W, height: TREE.H }}>
         <GumTree koala={t.koala && !shotKoalas.includes(i)} variant={i} />
@@ -3259,6 +3731,25 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       </span>
       <span key={boogie.line} className={styles.ibisBubble} style={{ bottom: 132 }}>{boogie.line}</span>
     </span>}
+    {shopBikers.map(bk => <span key={bk.id} data-poopable="person" className={styles.storeBiker} role="button" aria-label={`${bk.brand === "harley" ? "Harley" : "Indian"} biker`} title={bk.brand === "harley" ? "Harley bloke" : "Indian bloke"}
+      style={{ left: bk.x, bottom: bk.bottom, transitionDuration: `${bk.ms}ms` }} onClick={event => { event.stopPropagation(); void crewJoke(bk.id); }}>
+      <span className={styles.ibisBody} style={{ transform: bk.faceLeft ? "scaleX(-1)" : undefined }}><StoreBiker brand={bk.brand} look={bk.look} walking={bk.walking} flipping={bk.flipping} laughing={bk.laughing} /></span>
+      {bk.line && <span className={styles.ibisBubble} style={{ bottom: `calc(105% + ${bk.lift ?? 0}px)`, zIndex: 2 }}>{bk.line}</span>}
+    </span>)}
+    {commuters.map(c => <span key={c.id} data-poopable="person" className={styles.commuter} role="button" aria-label="Someone waiting for the bus" title="Waiting for the duck"
+      style={{ left: c.x, bottom: c.bottom, transitionDuration: `${c.ms}ms` }} onClick={event => { event.stopPropagation(); commuterLine(c.id, pick(BUS_STOP_LINES)); }}>
+      <span className={styles.ibisBody} style={{ transform: c.faceLeft ? "scaleX(-1)" : undefined }}><Commuter look={c.look} walking={c.walking} waving={c.waving} /></span>
+      {c.line && <span className={styles.ibisBubble} style={{ bottom: "105%" }}>{c.line}</span>}
+    </span>)}
+    {duck && <span className={styles.aquaDuck} role="button" aria-label="The Aquaduck" title="Quack quack!"
+      style={{ left: duck.x, bottom: FAR_LANE - 12, width: duckW(), height: (duckW() * 140) / 300, transitionDuration: `${duck.ms}ms`, transitionTimingFunction: duck.leaving ? "ease-in" : "ease-out" }}
+      onClick={event => { event.stopPropagation(); setDuck(d => d && { ...d, quack: true }); quackAt(duck.x + duckW() * 0.75); window.setTimeout(() => setDuck(d => d && { ...d, quack: false }), 700); }}>
+      <span className={duck.moving ? styles.carBody : styles.duckParked}><AquaDuck riders={duck.riders} quack={duck.quack} /></span>
+    </span>}
+    {swoopers.map(b => <span key={b.id} className={`${styles.swooper} ${styles.shootable}`} {...shootProps({ kind: "swooper", id: b.id }, "Shoot the magpie!")}
+      style={{ left: b.x, bottom: b.bottom, transitionDuration: `${b.ms}ms` }}>
+      <span className={b.diving ? styles.swooperDive : styles.swooperFlap}><span className={styles.ibisBody} style={{ transform: b.faceLeft ? "scaleX(-1)" : undefined }}><Magpie /></span></span>
+    </span>)}
     {nev && <span data-poopable="person" className={styles.nev} role="button" aria-label="Talk to Old Nev" title="Old Nev" style={{ left: nev.x, bottom: ROAD_H - 10, transitionDuration: `${nev.ms}ms` }} onClick={nevSays}>
       <span className={styles.ibisBody} style={{ transform: nev.faceLeft ? "scaleX(-1)" : undefined }}><OldNev walking={nev.walking} shaking={nev.shaking} /></span>
       {nev.line && <span className={styles.ibisBubble} style={{ bottom: 128 }}>{nev.line}</span>}
@@ -3272,7 +3763,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     {roaches.map(r => <span key={r.id} className={styles.roach} role="button" aria-label="Stomp the cockroach" title="Stomp it!"
       style={{ left: r.x, bottom: r.bottom, transitionDuration: `${r.ms}ms` }}
       onClick={event => { event.stopPropagation(); if (!r.squashed) stompRoach(r.id, r.x + 14, r.bottom); }}>
-      <span className={styles.roachTurn} style={{ transform: r.squashed ? undefined : `rotate(${r.angle}deg)`, transitionDuration: `${Math.min(200, r.ms)}ms` }}><Roach squashed={r.squashed} /></span>
+      <span className={styles.roachTurn} style={{ transform: r.squashed ? undefined : `rotate(${r.angle}deg)`, transitionDuration: `${Math.min(200, r.ms)}ms` }}><RoachArt squashed={r.squashed} /></span>
     </span>)}
     {emus.map(e => <span data-poopable="animal" data-emu={e.dir} key={e.id} className={`${styles.emu} ${styles.shootable}`} {...shootProps({ kind: "emu", id: e.id }, e.hits ? "Finish it off!" : "Shoot the emu!")}
       onTransitionEnd={event => { if (event.target === event.currentTarget && (e.x > VW() || e.x < -e.size)) setEmus(list => list.filter(x => x.id !== e.id)); }}
@@ -3333,6 +3824,13 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     {fx.map(item => {
       if (item.kind === "fog") return null;
       if (item.kind === "hole") return <span key={item.id} className={styles.bulletHole} style={{ left: item.x - item.size / 2, bottom: item.y - item.size / 2, width: item.size, height: item.size }} onAnimationEnd={() => remove(item.id)} />;
+      if (item.kind === "flail") return <span key={item.id} className={styles.flail} aria-hidden style={{ left: item.x - item.size / 2, bottom: item.y - item.size * 0.35, width: item.size, height: item.size }} onAnimationEnd={event => { if (event.target === event.currentTarget) remove(item.id); }}>
+        <svg viewBox="0 0 60 60" width="100%" height="100%" overflow="visible">
+          <g className={styles.flailArm} style={{ transformOrigin: "22px 52px" }}><path d="M22 52 L9 22" stroke="#111" strokeWidth={7} strokeLinecap="round" /><path d="M22 52 L9 22" stroke="#e0a982" strokeWidth={4.6} strokeLinecap="round" /><circle cx={8} cy={19} r={4.6} fill="#e0a982" stroke="#111" strokeWidth={1.2} /></g>
+          <g className={`${styles.flailArm} ${styles.flailArmOther}`} style={{ transformOrigin: "38px 52px" }}><path d="M38 52 L51 22" stroke="#111" strokeWidth={7} strokeLinecap="round" /><path d="M38 52 L51 22" stroke="#e0a982" strokeWidth={4.6} strokeLinecap="round" /><circle cx={52} cy={19} r={4.6} fill="#e0a982" stroke="#111" strokeWidth={1.2} /></g>
+          <path d="M0 14 q4 -5 8 0 M52 10 q4 -5 8 0 M24 4 q5 -6 10 0" stroke="#111" strokeWidth={1.6} fill="none" strokeLinecap="round" />
+        </svg>
+      </span>;
       if (item.kind === "poop") return <span key={item.id} className={styles.poopFall} style={{ left: item.x - 3, bottom: item.y, animationDuration: `${item.dx}ms`, ["--dy" as string]: `${item.dy}px` }} onAnimationEnd={() => poopLanded(item)} />;
       if (item.kind === "poopSplat") return <span key={item.id} className={styles.poopSplat} style={{ left: item.x - item.size / 2, bottom: item.y, width: item.size, height: item.size * 0.5 }} onAnimationEnd={() => remove(item.id)} />;
       if (item.kind === "drop") return <span key={item.id} className={styles.dropX} style={{ left: item.x, bottom: item.y, ["--dx" as string]: `${item.dx}px` }} onAnimationEnd={event => event.target === event.currentTarget && remove(item.id)}>
@@ -3435,6 +3933,21 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         <button className={styles.rotateSkip} onClick={() => setRotateOk(true)}>Play like this anyway</button>
       </div>}
     </>}
+    {sledge?.open && <div className={styles.sledgeCard} role="dialog" aria-labelledby="sledge-title">
+      <div className={styles.sledgeScore} aria-label={`Harley ${sledge.score.harley}, Indian ${sledge.score.indian}`}>
+        <HarleyBadge className={styles.sledgeLogo} />
+        <span className={styles.sledgeHarley}>HARLEY {sledge.score.harley}</span>
+        <span className={styles.sledgeVs}>vs</span>
+        <span className={styles.sledgeIndian}>{sledge.score.indian} INDIAN</span>
+        <IndianBadge className={styles.sledgeLogo} />
+      </div>
+      <h3 id="sledge-title">{sledge.title}</h3>
+      <p>{sledge.blurb}</p>
+      <div className={styles.sledgeButtons}>
+        <button autoFocus className={sledge.next === "harley" ? styles.sledgeGoHarley : styles.sledgeGoIndian} onClick={fireBack}>🔥 Fire back, {CREW_NAME[sledge.next]}!</button>
+        <button className={styles.sledgeNah} onClick={moveAlong}>🚶 Nah, move along</button>
+      </div>
+    </div>}
     {phase === "parked" && <div className={`${styles.trickBar} ${immersive ? styles.trickBarImmersive : ""}`}>
       <button className={styles.trickToggle} onClick={() => setMenu(open => !open)} aria-expanded={menu} aria-label="Shazz's tricks and settings"><span aria-hidden>{menu ? "✕" : "🤘"}</span>{menu ? "Close" : "Tricks"}</button>
       {menu && <>
@@ -3459,6 +3972,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
           <div className={styles.trickGroup}>
             <Trick label="🔫 Shoot something" onClick={pickTrick(() => shootSomething())} />
             <Trick label="🚲 Magpie swoop" onClick={callIn(() => void magpieSwoop())} />
+            <Trick label="🐦‍⬛ Magpie flock" onClick={pickTrick(() => magpieFlock())} />
+            <Trick label="😱 Swoop everyone!" onClick={pickTrick(() => swoopEveryone())} />
+            <Trick label="💩 Magpie poop raid" onClick={pickTrick(() => poopRaid())} />
             <Trick label="🦜 Lorikeets" onClick={callIn(() => void lorikeetVisit())} />
             <Trick label="🦘 Roo mob" onClick={callIn(() => rooMob())} />
             <Trick label="🪶 Emus" onClick={callIn(() => emuFlock())} />
