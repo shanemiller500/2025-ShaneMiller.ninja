@@ -28,6 +28,7 @@ import Shopfronts from "./Shopfronts";
 import Dingo from "./Dingo";
 import Bev from "./Bev";
 import Jet from "./Jet";
+import Roach from "./Roach";
 import LiveCritter from "./LiveCritter";
 import SlitherSnake from "./SlitherSnake";
 import PostieBike from "./PostieBike";
@@ -261,7 +262,8 @@ const isPhone = () => typeof window !== "undefined" && (window.innerWidth < 640 
 const VW = () => {
   if (typeof window === "undefined") return 1200;
   // Full screen: the 1500×420 street drawing scaled to fill the height above the road.
-  if (IMMERSIVE) return Math.max(window.innerWidth, Math.round((window.innerHeight - 147) * 1500 / 420));
+  // Full screen: the shops take roughly the bottom half (matches .immersive .shopStrip), sky above.
+  if (IMMERSIVE) return Math.max(window.innerWidth, Math.round(Math.min(window.innerHeight - 147, Math.max(window.innerHeight * 0.46, 220)) * 1500 / 420));
   return isPhone() ? Math.max(PHONE_WORLD, window.innerWidth) : window.innerWidth;
 };
 // Sportsbikes are drawn 110×60; this keeps them road-sized next to the cars and Shazz.
@@ -393,6 +395,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   const [bev, setBev] = useState<{ x: number; ms: number; faceLeft: boolean; pose: "shout" | "run"; line: string | null } | null>(null);
   const [dingoes, setDingoes] = useState<{ id: number; x: number; ms: number; faceLeft: boolean; running: boolean; snags: boolean; puzzled: boolean }[]>([]);
   const dingoBusy = useRef(false);
+  // Cockroaches scuttling about the footpath and the edge of the road.
+  const [roaches, setRoaches] = useState<{ id: number; x: number; bottom: number; ms: number; angle: number; squashed: boolean }[]>([]);
   // Jets high over the street, leaving contrails ("chemtrails", if you ask Trev).
   const [jets, setJets] = useState<{ id: number; x0: number; y0: number; x1: number; y1: number; ms: number }[]>([]);
   // Dole day at Centrelink.
@@ -511,6 +515,76 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   const lastSpoke = useRef(0);
   // On phones the scene scrolls sideways inside this; panX() is how far it's been swiped.
   const scroller = useRef<HTMLDivElement>(null);
+  // Mouse drag to move along the street (when it is wider than the screen). A drag never counts as
+  // a click, so letting go doesn't shoot, lasso or send Shazz anywhere.
+  const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const justDragged = useRef(false);
+  const menuOpen = useRef(false);
+  menuOpen.current = menu;
+  const edgePointer = useRef<{ x: number; y: number; type: string; down: boolean } | null>(null);
+  useEffect(() => {
+    let raf = 0, lit = "";
+    const light = (side: string) => {
+      if (side === lit) return;
+      document.body.classList.remove(styles.edgePanLeft, styles.edgePanRight);
+      if (side) document.body.classList.add(side === "left" ? styles.edgePanLeft : styles.edgePanRight);
+      lit = side;
+    };
+    const onMove = (event: PointerEvent) => {
+      // Not while over the buttons that live near the edges.
+      const target = event.target as Element | null;
+      if (target?.closest?.(`.${styles.trickBar}, .${styles.immersiveBack}, .${styles.fullButton}, .${styles.rotatePrompt}`)) { edgePointer.current = null; return; }
+      edgePointer.current = { x: event.clientX, y: event.clientY, type: event.pointerType, down: event.buttons > 0 };
+    };
+    const onEnd = (event: PointerEvent) => { if (event.pointerType !== "mouse") edgePointer.current = null; };
+    const onLeave = () => { edgePointer.current = null; };
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const sc = scroller.current, pt = edgePointer.current;
+      if (!sc || !pt || menuOpen.current || drag.current?.moved || sc.scrollWidth <= sc.clientWidth + 4 || (pt.type !== "mouse" && !pt.down)) { light(""); return; }
+      const W = window.innerWidth, H = window.innerHeight;
+      // On the normal page only the scene at the bottom counts, not the planner above it.
+      if (!IMMERSIVE) { const strip = document.querySelector<HTMLElement>(`.${styles.shopStrip}`); if (pt.y < H - 147 - (strip?.offsetHeight ?? 0) - 30) { light(""); return; } }
+      const zone = Math.min(220, Math.max(70, W * 0.18));
+      const v = pt.x < zone ? -Math.pow(1 - pt.x / zone, 2) : pt.x > W - zone ? Math.pow(1 - (W - pt.x) / zone, 2) : 0;
+      const before = sc.scrollLeft;
+      if (v) sc.scrollLeft += v * 16;
+      light(v && sc.scrollLeft !== before ? (v < 0 ? "left" : "right") : "");
+    };
+    raf = requestAnimationFrame(tick);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerdown", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
+    document.documentElement.addEventListener("pointerleave", onLeave);
+    window.addEventListener("blur", onLeave);
+    return () => {
+      cancelAnimationFrame(raf); light("");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerdown", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+      document.documentElement.removeEventListener("pointerleave", onLeave);
+      window.removeEventListener("blur", onLeave);
+    };
+  }, []);
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const d = drag.current, sc = scroller.current;
+      if (!d || !sc) return;
+      const dx = event.clientX - d.x;
+      if (!d.moved && Math.abs(dx) > 6) { d.moved = true; document.body.classList.add(styles.dragging); }
+      if (d.moved) sc.scrollLeft = d.left - dx;
+    };
+    const up = () => {
+      if (drag.current?.moved) { justDragged.current = true; window.setTimeout(() => { justDragged.current = false; }, 80); }
+      drag.current = null;
+      document.body.classList.remove(styles.dragging);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+  }, []);
   const [phoneView, setPhoneView] = useState(false);
   const panX = () => scroller.current?.scrollLeft ?? 0;
   const sRect = (el: Element) => {
@@ -1763,7 +1837,11 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     // One jet along a straight line through (cx, cy) at slope s (bottom-up px per px; + climbs to
     // the right). The low end never dips below the rooftops; the high end can fly out the top of the
     // sky (the sky is clipped there), which is what lets the trails cross at decent angles.
-    const sky = () => { const sm = stripMap(); return { W: VW(), lo: sm.b(78), hi: sm.b(0) }; };
+    // The sky band the jets fly in. Full screen: way up in the open sky above the rooftops.
+    const sky = () => {
+      const sm = stripMap(), H = window.innerHeight;
+      return IMMERSIVE ? { W: VW(), lo: Math.max(sm.b(0) + 24, H * 0.55), hi: H - 8 } : { W: VW(), lo: sm.b(78), hi: sm.b(0) };
+    };
     const launch = (cx: number, cy: number, s: number, leftToRight: boolean, delay = 0) => {
       const { W } = sky(), id = ++uid, ms = 9000 + Math.random() * 7000;
       const xa = -140, xb = W + 140, ya = cy + s * (xa - cx), yb = cy + s * (xb - cx);
@@ -2398,6 +2476,46 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
+  // Roaches: dart somewhere random, freeze, dart again. Click one to stomp it; another turns up later.
+  const newRoach = () => ({ id: ++uid, x: 20 + Math.random() * (VW() - 60), bottom: GROUND + Math.random() * (ROAD_H + 22 - GROUND), ms: 0, angle: Math.random() * 360, squashed: false });
+  useEffect(() => {
+    if (!immersive && phase === "hidden") { setRoaches([]); return; }
+    setRoaches(list => list.length ? list : Array.from({ length: isPhone() ? 4 : 7 }, newRoach));
+    const timer = window.setInterval(() => {
+      const W = VW();
+      setRoaches(list => list.map(r => {
+        if (r.squashed || Math.random() > 0.3) return r;
+        // A quick dash in a random direction (roaches don't do straight lines for long).
+        const heading = r.angle + (Math.random() - 0.5) * 160, rad = (heading * Math.PI) / 180, dist = 40 + Math.random() * 170;
+        const x = Math.max(10, Math.min(W - 40, r.x + Math.cos(rad) * dist)), bottom = Math.max(GROUND - 4, Math.min(ROAD_H + 24, r.bottom - Math.sin(rad) * dist * 0.35));
+        return { ...r, x, bottom, ms: Math.max(220, Math.hypot(x - r.x, bottom - r.bottom) * 2.2), angle: (Math.atan2(-(bottom - r.bottom), x - r.x) * 180) / Math.PI };
+      }));
+    }, 450);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, immersive]);
+  function stompRoach(id: number, x: number, y: number) {
+    setRoaches(list => list.map(r => (r.id === id ? { ...r, squashed: true, ms: 0 } : r)));
+    add({ kind: "burst", x: x - 30, y: y + 30, size: 0, text: pick(["SQUISH!", "CRUNCH!", "GOTCHA!", "EWW!"]) });
+    window.setTimeout(() => setRoaches(list => list.filter(r => r.id !== id)), 2600);
+    window.setTimeout(() => setRoaches(list => (list.length < (isPhone() ? 4 : 7) ? [...list, newRoach()] : list)), 6000 + Math.random() * 5000);
+  }
+
+  // Dust and smoke kicked up from the emus' feet as they run.
+  const emusOut = emus.length > 0;
+  useEffect(() => {
+    if (!emusOut) return;
+    const timer = window.setInterval(() => {
+      document.querySelectorAll<HTMLElement>("[data-emu]").forEach(el => {
+        if (Math.random() < 0.4) return;
+        const r = sRect(el), dir = Number(el.dataset.emu), feet = dir === 1 ? r.left + r.width * 0.38 : r.right - r.width * 0.38;
+        if (r.right < 0 || r.left > VW()) return;
+        add({ kind: "smoke", x: feet + (Math.random() - 0.5) * 12, y: window.innerHeight - r.bottom + 2, size: 8 + Math.random() * 12 });
+      });
+    }, 140);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emusOut]);
   // A mob of emus legs it across the road, all neck and knees.
   function emuFlock() {
     if (!claimScene(8000)) return;
@@ -2506,7 +2624,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       });
     }
     place.current = { x: -500, tilt: 0, pivot: 60 }; draw();
-    setKills([]); setIbis(null); ibisBusy.current = false; setBbq(null); setFlyers([]); setRaider(null); setFlock(null); flockBusy.current = false; setRoos([]); setEmus([]); setDropBear(null); dropBusy.current = false; setSportbikes([]); setStrike(null); strikeBusy.current = false; setDanglers([]); setSnakes([]); setDazza(null); dazzaBusy.current = false; setNev(null); nevRun.current++; setBlue(null); blueBusy.current = false; setBlueAnimal(null); setBlueBirds(null); setPelican(null); setRoadFish(null); setGary(null); garyBusy.current = false; setCrossings([]); crossingCount.current = 0; setCrows([]); setLorikeets([]); setPoops({}); setTrev(null); setCookout(null); setDole(null); doleBusy.current = false; setBev(null); setDingoes([]); dingoBusy.current = false; setRave(null); setThieves({ trev: null, kylie: null, stolenRed: false, bricked: false }); setHitters([]); setPostie(null); setKid(null); setShotKoalas([]); shotIds.current.clear(); sceneUntil.current = 0; setTattoo(null); setConvoy(0); setBrawl(null);
+    setKills([]); setIbis(null); ibisBusy.current = false; setBbq(null); setFlyers([]); setRaider(null); setFlock(null); flockBusy.current = false; setRoos([]); setEmus([]); setDropBear(null); dropBusy.current = false; setSportbikes([]); setStrike(null); strikeBusy.current = false; setDanglers([]); setSnakes([]); setDazza(null); dazzaBusy.current = false; setNev(null); nevRun.current++; setBlue(null); blueBusy.current = false; setBlueAnimal(null); setBlueBirds(null); setPelican(null); setRoadFish(null); setGary(null); garyBusy.current = false; setCrossings([]); crossingCount.current = 0; setCrows([]); setLorikeets([]); setPoops({}); setTrev(null); setCookout(null); setDole(null); doleBusy.current = false; setBev(null); setDingoes([]); dingoBusy.current = false; setRoaches([]); setRave(null); setThieves({ trev: null, kylie: null, stolenRed: false, bricked: false }); setHitters([]); setPostie(null); setKid(null); setShotKoalas([]); shotIds.current.clear(); sceneUntil.current = 0; setTattoo(null); setConvoy(0); setBrawl(null);
     setPhase("hidden");
   }
 
@@ -2863,12 +2981,19 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   const pickTrick = (run: () => void) => () => { setMenu(false); run(); };
   // Wildlife and locals from the menu jump the queue (clear the "something's on" lock first).
   const callIn = (run: () => void) => pickTrick(() => { sceneUntil.current = 0; run(); });
-  return <><div ref={scroller} className={styles.stageScroller}
+  return <><div ref={scroller} className={`${styles.stageScroller} ${phoneView ? styles.draggable : ""}`}
+    onPointerDown={event => {
+      const sc = scroller.current;
+      if (event.pointerType !== "mouse" || event.button !== 0 || !sc || sc.scrollWidth <= sc.clientWidth + 4) return;
+      drag.current = { x: event.clientX, left: sc.scrollLeft, moved: false };
+    }}
+    onClickCapture={event => { if (justDragged.current) { event.stopPropagation(); event.preventDefault(); justDragged.current = false; } }}
     onWheel={immersive ? event => { if (scroller.current && Math.abs(event.deltaY) > Math.abs(event.deltaX)) scroller.current.scrollLeft += event.deltaY; } : undefined}>
     <div className={`${styles.stage} ${immersive ? styles.immersive : ""} ${convoy || brawl === "boom" ? styles.rumble : ""}`} style={phoneView ? { width: VW() } : undefined}>
     {/* The shops behind the road. Not clickable itself, but it stops clicks reaching the page behind. */}
-    {(immersive || phase !== "hidden") && <div className={styles.shopStrip} aria-hidden onClick={event => event.stopPropagation()}><Shopfronts /></div>}
-    {jets.length > 0 && <span className={styles.skyClip} aria-hidden style={{ width: VW(), height: stripMap().b(0) }}>{jets.map(j => {
+    {/* Sky first, then the jets, then the shops (sky-less) on top: the trails go behind the buildings. */}
+    {(immersive || phase !== "hidden") && <div className={styles.skyLayer} aria-hidden onClick={event => event.stopPropagation()} />}
+    {jets.length > 0 && <span className={styles.skyClip} aria-hidden style={{ width: VW(), height: immersive ? window.innerHeight : stripMap().b(0) }}>{jets.map(j => {
       // bottom-up coords, so a climb is a negative (anticlockwise) rotation on screen
       const dx = j.x1 - j.x0, dy = j.y1 - j.y0, len = Math.hypot(dx, dy), angle = (-Math.atan2(dy, dx) * 180) / Math.PI, upsideDown = Math.abs(angle) > 90;
       return <span key={j.id} className={styles.flightPath} aria-hidden style={{ left: j.x0, bottom: j.y0, width: len, transform: `rotate(${angle}deg)`, ["--ms" as string]: `${j.ms}ms` }}>
@@ -2878,6 +3003,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         </span>
       </span>;
     })}</span>}
+    {(immersive || phase !== "hidden") && <div className={styles.shopStrip} aria-hidden onClick={event => event.stopPropagation()}><Shopfronts sky={false} /></div>}
     <div className={`${styles.road} ${onRoad ? styles.roadOn : ""} ${phase === "parked" ? styles.roadClickable : ""}`} onClick={event => void rideTo(event.clientX + panX())} title={phase === "parked" ? "Click to move Shazz here" : undefined} />
     {cars.map(car => <span key={car.id} data-vehicle={`car-${car.id}`} data-lane={car.lane} className={`${styles.car} ${car.turnAt !== undefined ? styles.carTurn : ""} ${phase === "parked" ? styles.carClickable : ""} ${heldCar === car.id ? styles.carHeld : ""}`}
       onClick={event => void lassoCar(car.id, event.currentTarget)} title={phase === "parked" ? "Lasso it!" : undefined} onAnimationEnd={event => event.target === event.currentTarget && setCars(list => list.filter(item => item.id !== car.id))}
@@ -3143,7 +3269,12 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       {dazza.line && <span className={styles.ibisBubble}>{dazza.line}</span>}
     </span>}
     {dazza && dazza.bearTop !== null && <span className={styles.fallingBear} aria-hidden style={{ left: dazza.x + 14, top: dazza.bearTop }}><DropBear /></span>}
-    {emus.map(e => <span data-poopable="animal" key={e.id} className={`${styles.emu} ${styles.shootable}`} {...shootProps({ kind: "emu", id: e.id }, e.hits ? "Finish it off!" : "Shoot the emu!")}
+    {roaches.map(r => <span key={r.id} className={styles.roach} role="button" aria-label="Stomp the cockroach" title="Stomp it!"
+      style={{ left: r.x, bottom: r.bottom, transitionDuration: `${r.ms}ms` }}
+      onClick={event => { event.stopPropagation(); if (!r.squashed) stompRoach(r.id, r.x + 14, r.bottom); }}>
+      <span className={styles.roachTurn} style={{ transform: r.squashed ? undefined : `rotate(${r.angle}deg)`, transitionDuration: `${Math.min(200, r.ms)}ms` }}><Roach squashed={r.squashed} /></span>
+    </span>)}
+    {emus.map(e => <span data-poopable="animal" data-emu={e.dir} key={e.id} className={`${styles.emu} ${styles.shootable}`} {...shootProps({ kind: "emu", id: e.id }, e.hits ? "Finish it off!" : "Shoot the emu!")}
       onTransitionEnd={event => { if (event.target === event.currentTarget && (e.x > VW() || e.x < -e.size)) setEmus(list => list.filter(x => x.id !== e.id)); }}
       style={{ left: e.x, bottom: e.bottom, width: e.size, height: e.size * 90 / 70, transitionDuration: `${e.ms}ms` }}>
       <span className={e.hits ? styles.emuHop : styles.emuRun}><span className={styles.ibisBody} style={{ transform: e.dir === -1 ? "scaleX(-1)" : undefined }}><Emu oneLeg={e.hits > 0} /></span></span>

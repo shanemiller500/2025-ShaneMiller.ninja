@@ -27,14 +27,16 @@ function Tag({ x, y, color, s = 1 }: { x: number; y: number; color: string; s?: 
   return <path d={`M${x} ${y} q${8 * s} ${-16 * s} ${14 * s} 0 t${14 * s} 0 q${4 * s} ${-14 * s} ${12 * s} ${-4 * s} l${-6 * s} ${14 * s} q${10 * s} ${-12 * s} ${18 * s} ${-2 * s}`} stroke={color} strokeWidth={3 * s} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
 }
 
-export default function Shopfronts() {
+// `sky={false}` leaves the sky transparent so a separate sky layer (with the jets in it) shows
+// through behind the buildings.
+export default function Shopfronts({ sky = true }: { sky?: boolean }) {
   return <svg viewBox="0 0 1500 420" width="100%" height="100%" preserveAspectRatio="xMidYMax slice" aria-hidden>
     <defs>
       <linearGradient id="sfSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2f80d1" /><stop offset="1" stopColor="#8cc4f0" /></linearGradient>
       <pattern id="sfBrickRed" width="24" height="12" patternUnits="userSpaceOnUse"><rect width="24" height="12" fill="#b4532a" /><path d="M0 12 H24 M12 0 V6 M0 6 H24 M0 6 V12 M24 6 V12" stroke="#8a3b1c" strokeWidth={1} /></pattern>
       <pattern id="sfBrickDark" width="24" height="12" patternUnits="userSpaceOnUse"><rect width="24" height="12" fill="#2b2f36" /><path d="M0 12 H24 M12 0 V6 M0 6 H24 M0 6 V12 M24 6 V12" stroke="#1b1e23" strokeWidth={1} /></pattern>
     </defs>
-    <rect width="1500" height="420" fill="url(#sfSky)" />
+    {sky && <rect width="1500" height="420" fill="url(#sfSky)" />}
     <g className={styles.stripCloud}><ellipse cx={150} cy={70} rx={60} ry={22} fill="#fff" /><ellipse cx={190} cy={62} rx={40} ry={20} fill="#fff" /></g>
     <g className={styles.stripCloud} style={{ animationDelay: "-30s" }}><ellipse cx={900} cy={40} rx={50} ry={16} fill="#fff" opacity={0.9} /></g>
 

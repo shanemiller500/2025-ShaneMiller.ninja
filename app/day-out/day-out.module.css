@@ -7,7 +7,7 @@
 .root h1,.root h2,.root h3{margin:0;font-family:var(--font-aspekta),sans-serif;line-height:1.15}
 .root p{margin:0}
 
-.header{display:flex;align-items:center;gap:14px;max-width:1200px;margin:auto;padding:16px;border-bottom:1px solid var(--line)}
+.header{display:flex;align-items:center;gap:14px;max-width:1200px;margin:auto;padding:16px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:60;background:#141517eb;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 0 0 100vmax #141517eb;clip-path:inset(0 -100vmax)}
 .backLink{display:flex;align-items:center;gap:6px;min-height:40px;padding:0 14px 0 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)!important;text-decoration:none;font-size:15px;font-weight:600}
 .backLink:hover{color:var(--text)!important;border-color:var(--muted)}
 .brand{font-weight:900;font-size:22px;letter-spacing:2px;text-decoration:none;color:var(--accent)!important}
@@ -632,7 +632,7 @@
 }
 /* ---- Bogan Street, full screen ---- */
 .immersivePage{position:fixed;inset:0;z-index:100;overflow:hidden;background:linear-gradient(#2f80d1,#8cc4f0)}
-.immersive .shopStrip{height:calc(100dvh - 147px)}
+.immersive .shopStrip{height:min(calc(100dvh - 147px),max(46vh,220px))}
 .root .trickBarImmersive{top:64px;bottom:auto;left:12px;transform:none}
 .root .immersiveBack{position:fixed;top:12px;left:12px;z-index:82;display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:999px;border:2px solid #111;background:#fffdf5;color:#141517;font-weight:900;font-size:14px;box-shadow:3px 3px 0 #111;text-decoration:none}
 .root .streetArrow{position:fixed;top:45%;z-index:82;width:44px;height:44px;border-radius:50%;border:2px solid #111;background:#fffdf5e6;color:#141517;font-size:18px;box-shadow:3px 3px 0 #111;cursor:pointer}
@@ -674,10 +674,29 @@
 /* Jets and their contrails, high over the street (drawn in front of the shop strip's sky) */
 /* Jets on a slant; the trail grows behind them, then spreads into a wide haze and fades (real-sky style) */
 .flightPath{position:absolute;height:0;transform-origin:0 50%;pointer-events:none}
-.jet{position:absolute;left:0;top:-10px;width:64px;height:20px;animation:flyAcross linear forwards}
-.contrailWrap{position:absolute;left:0;top:0;width:100%;height:6px;transform:translateY(-50%);filter:blur(.8px);animation:contrailSpread calc(var(--ms) + 20s) cubic-bezier(.2,.6,.4,1) forwards}
+.jet{position:absolute;left:0;top:-9px;width:56px;height:17px;animation:flyAcross linear forwards}
+.contrailWrap{position:absolute;left:0;top:0;width:100%;height:5px;transform:translateY(-50%);filter:blur(.8px);animation:contrailSpread calc(var(--ms) + 20s) cubic-bezier(.2,.6,.4,1) forwards}
 .contrail{display:block;width:100%;height:100%;transform-origin:0 50%;transform:scaleX(0);border-radius:999px;background:linear-gradient(#ffffff00 0 12%,#ffffffe0 12% 42%,#ffffff40 42% 58%,#ffffffe0 58% 88%,#ffffff00 88%);animation:contrailGrow var(--ms) linear forwards}
 @keyframes contrailGrow{to{transform:scaleX(1)}}
-@keyframes contrailSpread{0%{height:6px;filter:blur(.8px);opacity:1}35%{height:16px;filter:blur(2.5px);opacity:.95}75%{height:34px;filter:blur(6px);opacity:.6}100%{height:52px;filter:blur(10px);opacity:0}}
+@keyframes contrailSpread{0%{height:5px;filter:blur(.6px);opacity:1}35%{height:13px;filter:blur(2px);opacity:.95}75%{height:28px;filter:blur(5px);opacity:.6}100%{height:42px;filter:blur(8px);opacity:0}}
 /* The sky: flights are clipped to it, so trails can climb out the top of the frame */
 .skyClip{position:absolute;left:0;bottom:0;overflow:hidden;pointer-events:none}
+/* Drag-to-scroll the street with the mouse */
+.draggable .shopStrip{cursor:grab}
+.dragging,.dragging *{cursor:grabbing!important;user-select:none!important}
+/* The sky on its own layer, behind the jets and the (sky-less) shopfronts */
+.skyLayer{position:absolute;left:0;right:0;bottom:147px;height:clamp(240px,28vw,64vh);pointer-events:auto;background:linear-gradient(#2f80d1,#8cc4f0)}
+@media (max-width:640px){.skyLayer{height:min(252px,50vh)}}
+/* Full screen: a big open sky over the (lower) shops, deeper blue up high */
+.immersive .skyLayer{height:calc(100dvh - 147px);background:linear-gradient(#155ea8 0%,#3f8fd8 45%,#8cc4f0 100%)}
+.immersive .jet{width:52px;height:16px}
+/* Edge scrolling: the arrow on the side it's moving towards lights up */
+.root .streetArrow{transition:transform .15s ease,background .15s ease}
+.edgePanLeft .streetArrowLeft,.edgePanRight .streetArrowRight{transform:scale(1.18);background:var(--accent)}
+/* Cockroaches */
+.roach{position:absolute;width:28px;height:14px;pointer-events:auto;cursor:crosshair;transition-property:left,bottom;transition-timing-function:linear}
+.roachTurn{display:block;width:100%;height:100%;transition-property:transform}
+.roachLegs{transform-box:fill-box;transform-origin:50% 0;animation:roachLegs .09s linear infinite alternate}
+@keyframes roachLegs{from{transform:skewX(-18deg)}to{transform:skewX(18deg)}}
+.roachFeelers{transform-box:fill-box;transform-origin:0 100%;animation:roachFeelers .35s ease-in-out infinite alternate}
+@keyframes roachFeelers{from{transform:rotate(-12deg)}to{transform:rotate(10deg)}}

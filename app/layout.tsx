@@ -203,7 +203,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </Transition.Root>
 
               {/* Main content */}
-              <main className="grow overflow-hidden px-4 sm:px-6 dark:bg-brand-900 bg-slate-50">
+              <main className="grow overflow-clip px-4 sm:px-6 dark:bg-brand-900 bg-slate-50">
                 <div className="w-full h-full max-w-[1072px] mx-auto flex flex-col">
                   {/* Mobile top bar (hamburger) */}
                   <div className="lg:hidden pt-4">
