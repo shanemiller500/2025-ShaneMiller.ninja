@@ -176,7 +176,10 @@ export function VMRBoat({ tow = false, hook = false }: { tow?: boolean; hook?: b
     {[176, 192].map(cx => <g key={cx}>
       <path d={`M${cx - 6} 40 q6 -8 12 0 z`} fill="#f97316" stroke={INK} strokeWidth={1} />
       <circle cx={cx} cy={27} r={4.5} fill="#e0a982" stroke={INK} strokeWidth={1} />
-      <path d={`M${cx - 4.5} 25 q4.5 -6 9 0 z`} fill="#1d4ed8" />
+      {cx === 192
+        // The deckie on the hook: blonde mullet, business up front, party flowing out the back.
+        ? <><path d={`M${cx - 4.8} 25 q4.8 -7.5 9.6 0 q-2 -2 -4.8 -2 q-3 0 -4.8 2 z`} fill="#fde047" stroke={INK} strokeWidth={0.6} /><path d={`M${cx + 3} 24 q6 1 6 14 q-3 -4 -7 -7 q2 -3 1 -7 z`} fill="#fde047" stroke={INK} strokeWidth={0.6} /></>
+        : <path d={`M${cx - 4.5} 25 q4.5 -6 9 0 z`} fill="#1d4ed8" />}
     </g>)}
     {hook && <><path d="M196 34 L216 48" stroke="#e0a982" strokeWidth={3} strokeLinecap="round" /><path d="M210 40 L236 74 q2 4 -2 5" stroke="#9ca3af" strokeWidth={2} fill="none" /></>}
   </svg>;

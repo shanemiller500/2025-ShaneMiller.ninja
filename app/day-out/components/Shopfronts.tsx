@@ -9,7 +9,7 @@ import BeachGoer, { Sunbaker } from "./BeachGoer";
 // Harley-Davidson shop (glaring back down the street at the Indian mob), the bottlo, and a big
 // yellow Chemist Warehouse; a bus shelter, a power pole with sagging wires,
 // and a back lane at each end (room for the flags and palms, and somewhere to extend the street to
-// later), and past Snag Alley the esplanade park running down to a surf beach. viewBox -1120 0 4730 420. The Harley block is drawn at x -900..-450 and shifted +1900 (to
+// later), and past Snag Alley the esplanade park running down to a surf beach. viewBox -1120 0 5330 420. The Harley block is drawn at x -900..-450 and shifted +1900 (to
 // 1000..1450); the bottlo is drawn at 1000..1250 and shifted +450 (to 1450..1700); the chemist
 // sits at 1700..2050. The footpath runs along the bottom (y 380-420).
 const INK = "#111";
@@ -419,11 +419,27 @@ function Playground() {
     <path d="M2446 338 H2676 M2450 340 L2466 314 M2672 340 L2656 314" stroke="#f8fafc" strokeWidth={2.2} />
   </g>;
 }
+// An Australian pelican standing about on the sand (or sitting on the water, `floating`): white
+// body, black wing coverts, big pale-pink bill and pouch. Feet at (x, base); faces right.
+function SandPelican({ x, base, flip = false, s = 1, floating = false }: { x: number; base: number; flip?: boolean; s?: number; floating?: boolean }) {
+  return <g transform={`translate(${x} ${base}) scale(${flip ? -s : s} ${s})`}><g className={floating ? styles.swimBob : undefined}>
+    {!floating && <path d="M-4 0 V-10 M4 0 V-10" stroke="#9ca3af" strokeWidth={2.2} />}
+    <ellipse cx={0} cy={floating ? -6 : -16} rx={14} ry={9} fill="#f8fafc" stroke={INK} strokeWidth={1.2} />
+    <path d={floating ? "M-12 -10 Q0 -16 10 -8 Q0 -6 -12 -10 Z" : "M-12 -20 Q0 -26 10 -18 Q0 -16 -12 -20 Z"} fill="#111" />
+    <path d={floating ? "M8 -10 Q14 -24 10 -30" : "M8 -20 Q14 -34 10 -40"} stroke="#f8fafc" strokeWidth={5} fill="none" strokeLinecap="round" />
+    <path d={floating ? "M8 -10 Q14 -24 10 -30" : "M8 -20 Q14 -34 10 -40"} stroke={INK} strokeWidth={0.8} fill="none" />
+    <circle cx={10} cy={floating ? -31 : -41} r={4} fill="#f8fafc" stroke={INK} strokeWidth={1} />
+    <circle cx={11.4} cy={floating ? -32 : -42} r={0.9} fill={INK} />
+    <path d={floating ? "M13 -31 L32 -27 L14 -28 Z" : "M13 -41 L32 -37 L14 -38 Z"} fill="#fbcfe8" stroke={INK} strokeWidth={0.8} />
+    <path d={floating ? "M14 -28 Q24 -21 31 -27" : "M14 -38 Q24 -31 31 -37"} fill="#fda4af" stroke={INK} strokeWidth={0.7} />
+    {floating && <path d="M-16 0 q6 -3 12 0 t12 0 t12 0" stroke="#e0f2fe" strokeWidth={1.4} fill="none" />}
+  </g></g>;
+}
 // Past Snag Alley the street opens up onto the foreshore: a mowed esplanade park with Norfolk
 // pines dotted about, a council BBQ and picnic table, the adventure playground set back on the
 // lawn, a frisbee game and park bins; grassy dune terraces down to the sand; the lifeguard hut,
 // sunbakers, swimmers coming and going, shark fins and container ships out the back, and sets
-// peeling along the sandbank. Drawn at 2250..3450 and shifted +160 to sit past the club.
+// peeling along the sandbank. Drawn at 2250..4060 and shifted +160 to sit past the club.
 function Beachfront() {
   return <g>
     <defs>
@@ -431,14 +447,15 @@ function Beachfront() {
       <linearGradient id="sfSand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#e9c88a" /><stop offset="1" stopColor="#f6dca6" /></linearGradient>
     </defs>
     {/* The sea, all the way back to the horizon (the park covers its left end) */}
-    <rect x={2250} y={238} width={1210} height={92} fill="url(#sfSea)" />
-    <path d="M2250 238 H3460" stroke="#a5d8f3" strokeWidth={3} />
+    <rect x={2250} y={238} width={1810} height={92} fill="url(#sfSea)" />
+    <path d="M2250 238 H4060" stroke="#a5d8f3" strokeWidth={3} />
+    {[[3520, 252, 60], [3700, 262, 50], [3860, 248, 70], [3980, 270, 40]].map(([x, y, w], i) => <path key={i} d={`M${x} ${y} h${w}`} stroke="#bfe3ff" strokeWidth={2} strokeLinecap="round" opacity={0.8} />)}
     {/* Container ships crawling along the horizon */}
-    <CargoShip x={3300} y={240} s={0.5} delay={0} />
-    <CargoShip x={3300} y={240} s={0.42} hull="#1e3a8a" delay={-90} />
+    <CargoShip x={3900} y={240} s={0.5} delay={0} />
+    <CargoShip x={3900} y={240} s={0.42} hull="#1e3a8a" delay={-90} />
     {[[2560, 248, 40], [2760, 256, 70], [2990, 250, 50], [3200, 260, 80], [3380, 252, 40], [2880, 270, 60], [3110, 276, 70]].map(([x, y, w], i) => <path key={i} d={`M${x} ${y} h${w}`} stroke="#bfe3ff" strokeWidth={2} strokeLinecap="round" opacity={0.8} />)}
     {/* Shark fins cruising out the back */}
-    {[[2940, 268, 0], [3150, 282, -7]].map(([x, y, d], i) => <g key={i} transform={`translate(${x} ${y})`}><g className={styles.finCruise} style={{ animationDelay: `${d}s` }}>
+    {[[2940, 268, 0], [3150, 282, -7], [3700, 274, -3]].map(([x, y, d], i) => <g key={i} transform={`translate(${x} ${y})`}><g className={styles.finCruise} style={{ animationDelay: `${d}s` }}>
       <path d="M-10 0 Q-2 -4 0 -18 Q6 -8 12 0 Z" fill="#64748b" stroke={INK} strokeWidth={1.3} />
       <path d="M-16 1 q8 -3 16 0 t16 0" stroke="#e0f2fe" strokeWidth={1.6} fill="none" />
     </g></g>)}
@@ -450,19 +467,19 @@ function Beachfront() {
       <path d="M-9 0 q4.5 -3 9 0 t9 0" stroke="#e0f2fe" strokeWidth={1.4} fill="none" />
     </g></g>)}
     {/* Sets rolling in towards the beach, front on, one with a surfer carving across the face */}
-    <FrontWave x={2790} y={318} w={670} sy={1.55} delay={0} surfer />
-    <FrontWave x={2790} y={318} w={670} sy={1.55} delay={-2.6} />
-    <FrontWave x={2790} y={318} w={670} sy={1.55} delay={-5.2} />
+    <FrontWave x={2790} y={318} w={1270} sy={1.55} delay={0} surfer />
+    <FrontWave x={2790} y={318} w={1270} sy={1.55} delay={-2.6} />
+    <FrontWave x={2790} y={318} w={1270} sy={1.55} delay={-5.2} />
     {/* Whitewash lines rolling in towards the beach */}
-    {[0, 1, 2].map(i => <path key={i} className={styles.foamRoll} style={{ animationDelay: `${-i * 1.1}s` }} d="M2860 300 q30 -6 60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0" stroke="#f8fafc" strokeWidth={3} fill="none" strokeLinecap="round" />)}
+    {[0, 1, 2].map(i => <path key={i} className={styles.foamRoll} style={{ animationDelay: `${-i * 1.1}s` }} d={`M2860 300 q30 -6 60 0 ${Array.from({ length: 19 }, () => "t60 0").join(" ")}`} stroke="#f8fafc" strokeWidth={3} fill="none" strokeLinecap="round" />)}
     {/* The beach: flat sand in front of the water, a wet band and foam washing up the shoreline */}
-    <path d="M2780 380 Q2800 336 2840 326 H3460 V380 Z" fill="url(#sfSand)" stroke={INK} strokeWidth={2} />
-    <path d="M2842 327 H3460" stroke="#d6b06c" strokeWidth={7} />
+    <path d="M2780 380 Q2800 336 2840 326 H4060 V380 Z" fill="url(#sfSand)" stroke={INK} strokeWidth={2} />
+    <path d="M2842 327 H4060" stroke="#d6b06c" strokeWidth={7} />
     {[0, -2.6, -5.2].map(d => <g key={d} className={styles.swash} style={{ animationDelay: `${d}s` }}>
-      <path d={`M2842 326 H3460 V334 ${Array.from({ length: 21 }, () => "q-15 7 -30 0").join(" ")} Z`} fill="#f0f9ff" opacity={0.85} />
-      <path d={`M3460 334 ${Array.from({ length: 21 }, () => "q-15 7 -30 0").join(" ")}`} stroke="#ffffff" strokeWidth={2.4} fill="none" />
+      <path d={`M2842 326 H4060 V334 ${Array.from({ length: 41 }, () => "q-15 7 -30 0").join(" ")} Z`} fill="#f0f9ff" opacity={0.85} />
+      <path d={`M4060 334 ${Array.from({ length: 41 }, () => "q-15 7 -30 0").join(" ")}`} stroke="#ffffff" strokeWidth={2.4} fill="none" />
     </g>)}
-    <path className={styles.shoreFoam} d="M2846 324 q14 -5 28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0" stroke="#f8fafc" strokeWidth={4} fill="none" strokeLinecap="round" />
+    <path className={styles.shoreFoam} d={`M2846 324 q14 -5 28 0 ${Array.from({ length: 43 }, () => "t28 0").join(" ")}`} stroke="#f8fafc" strokeWidth={4} fill="none" strokeLinecap="round" />
     {[[2900, 360], [3040, 348], [3180, 366], [3330, 352], [2980, 372], [3260, 340]].map(([x, y], i) => <path key={i} d={`M${x} ${y} q3 -2 6 0`} stroke="#c9a368" strokeWidth={1.5} fill="none" />)}
     {/* People wandering down for a dip and back up again */}
     {[[3050, 0, -0], [3130, 1, -4.5], [3210, 5, -2.2]].map(([x, look, d], i) => <g key={i} className={styles.dipWalk} style={{ animationDelay: `${d}s` }}>
@@ -482,6 +499,18 @@ function Beachfront() {
       <path d={`M${fx} 372 V318`} stroke="#9ca3af" strokeWidth={2.5} />
       <g className={styles.flagWave}><path d={`M${fx} 318 h22 v15 h-22 z`} fill="#facc15" stroke={INK} strokeWidth={1} /><path d={`M${fx} 318 h22 l-22 15 z`} fill="#dc2626" /></g>
     </g>)}
+    {/* Further along: another brolly and sunbaker, an esky, and the pelican mob loafing about */}
+    <path d="M3572 374 L3580 330" stroke="#78350f" strokeWidth={2.5} />
+    <path d="M3544 338 Q3580 306 3616 330 Q3580 324 3544 338 Z" fill="#2563eb" stroke={INK} strokeWidth={1.4} />
+    <path d="M3556 330 Q3572 316 3580 316 L3580 326 Z M3590 318 Q3604 322 3608 327 L3588 326 Z" fill="#f8fafc" />
+    <svg x={3590} y={356} width={60} height={18} overflow="visible"><Sunbaker look={3} towel="#f472b6" /></svg>
+    <rect x={3672} y={358} width={24} height={16} rx={2} fill="#f8fafc" stroke={INK} strokeWidth={1.2} /><rect x={3672} y={358} width={24} height={5} rx={2} fill="#2563eb" stroke={INK} strokeWidth={1} />
+    <SandPelican x={3610} base={302} floating />
+    <SandPelican x={3660} base={308} floating flip s={0.9} />
+    {[[3760, 372, false, 1], [3800, 366, true, 0.9], [3836, 376, false, 1.05], [3876, 368, true, 0.95], [3912, 374, false, 1], [3950, 364, true, 0.85]].map(([x, base, flip, sc], i) => <SandPelican key={i} x={x as number} base={base as number} flip={flip as boolean} s={sc as number} />)}
+    {/* Rocks at the far end of the beach */}
+    <path d="M3990 380 L3996 340 Q4010 318 4030 326 Q4044 306 4060 312 V380 Z" fill="#78716c" stroke={INK} strokeWidth={1.6} />
+    <path d="M4000 352 q10 -8 20 -2 M4030 338 q10 -6 20 0" stroke="#57534e" strokeWidth={2} fill="none" />
     {/* The lifeguard hut, up on stilts on the sand */}
     <path d="M3298 376 V350 M3352 376 V350" stroke="#a16207" strokeWidth={4} />
     <path d="M3304 376 L3346 350 M3346 376 L3304 350" stroke="#a16207" strokeWidth={1.6} />
@@ -639,14 +668,14 @@ function WooliesFootpath() {
 // through behind the buildings.
 // `closed`: a shop that lost the last brawl is boarded up, its showbike and parked bikes gone.
 export default function Shopfronts({ sky = true, closed = {} }: { sky?: boolean; closed?: { harley?: boolean; indian?: boolean } }) {
-  return <svg viewBox="-1120 0 4730 420" width="100%" height="100%" preserveAspectRatio="xMidYMax slice" aria-hidden>
+  return <svg viewBox="-1120 0 5330 420" width="100%" height="100%" preserveAspectRatio="xMidYMax slice" aria-hidden>
     <defs>
       <linearGradient id="sfSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2f80d1" /><stop offset="1" stopColor="#8cc4f0" /></linearGradient>
       <pattern id="sfBrickRed" width="24" height="12" patternUnits="userSpaceOnUse"><rect width="24" height="12" fill="#b4532a" /><path d="M0 12 H24 M12 0 V6 M0 6 H24 M0 6 V12 M24 6 V12" stroke="#8a3b1c" strokeWidth={1} /></pattern>
       <pattern id="sfBrickOrange" width="24" height="12" patternUnits="userSpaceOnUse"><rect width="24" height="12" fill="#c2410c" /><path d="M0 12 H24 M12 0 V6 M0 6 H24 M0 6 V12 M24 6 V12" stroke="#9a3412" strokeWidth={1} /></pattern>
       <pattern id="sfBrickDark" width="24" height="12" patternUnits="userSpaceOnUse"><rect width="24" height="12" fill="#2b2f36" /><path d="M0 12 H24 M12 0 V6 M0 6 H24 M0 6 V12 M24 6 V12" stroke="#1b1e23" strokeWidth={1} /></pattern>
     </defs>
-    {sky && <rect x={-1120} width="4730" height="420" fill="url(#sfSky)" />}
+    {sky && <rect x={-1120} width="5330" height="420" fill="url(#sfSky)" />}
     <g className={styles.stripCloud}><ellipse cx={150} cy={70} rx={60} ry={22} fill="#fff" /><ellipse cx={190} cy={62} rx={40} ry={20} fill="#fff" /></g>
     <g className={styles.stripCloud} style={{ animationDelay: "-30s" }}><ellipse cx={900} cy={40} rx={50} ry={16} fill="#fff" opacity={0.9} /></g>
 
@@ -860,9 +889,9 @@ export default function Shopfronts({ sky = true, closed = {} }: { sky?: boolean;
     {/* ---- Past Snag Alley: the esplanade park and the surf beach ---- */}
     <g transform="translate(160 0)"><Beachfront /></g>
     {/* ---- Street furniture ---- */}
-    <rect x={-1120} y={380} width={4730} height={40} fill="#b9b4aa" />
-    {Array.from({ length: 158 }, (_, i) => <line key={i} x1={-1120 + i * 30} y1={380} x2={-1120 + i * 30} y2={420} stroke="#a39e93" strokeWidth={1.5} />)}
-    <rect x={-1120} y={380} width={4730} height={4} fill="#8f8a80" />
+    <rect x={-1120} y={380} width={5330} height={40} fill="#b9b4aa" />
+    {Array.from({ length: 178 }, (_, i) => <line key={i} x1={-1120 + i * 30} y1={380} x2={-1120 + i * 30} y2={420} stroke="#a39e93" strokeWidth={1.5} />)}
+    <rect x={-1120} y={380} width={5330} height={4} fill="#8f8a80" />
     <WooliesFootpath />
     <LaneCrossing x={-650} />
     <LaneCrossing x={2050} flip />

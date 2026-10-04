@@ -883,3 +883,10 @@
 /* Whitewash surging up the sand after each wave breaks (synced to the breakers) */
 .swash{transform-box:fill-box;transform-origin:50% 0;animation:swash 7.8s ease-out infinite}
 @keyframes swash{0%,60%{transform:scaleY(.15);opacity:0}70%{opacity:.95}82%{transform:scaleY(2.4);opacity:.85}100%{transform:scaleY(.5);opacity:0}}
+/* Seagulls */
+.gull{position:absolute;pointer-events:none;transition-property:left,bottom;transition-timing-function:ease-in-out}
+.gullFlap{animation:gullFlap .22s ease-in-out infinite alternate}
+@keyframes gullFlap{from{transform:scaleY(1)}to{transform:scaleY(-.6)}}
+/* A pelican plunge-diving for a fish */
+.pelicanDive{animation-name:pelicanDive;animation-timing-function:ease-in;animation-fill-mode:forwards}
+@keyframes pelicanDive{0%{transform:translateY(0) rotate(0)}30%{transform:translateY(-14px) rotate(-20deg)}100%{transform:translateY(var(--dy)) rotate(75deg)}}

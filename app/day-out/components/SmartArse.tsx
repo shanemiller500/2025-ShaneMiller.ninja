@@ -28,6 +28,7 @@ import SmokoGirl from "./SmokoGirl";
 import FruitBat from "./FruitBat";
 import { WIRES, onWire, type WireName } from "./streetWires";
 import DogWalker from "./DogWalker";
+import { Seagull, ChipEater } from "./BeachGulls";
 import { Lifeguard, Swimmer, PaddleSurfer, SharkFin, SharkLunge } from "./BeachRescue";
 import { SkiBoat, StackedSkier, JetSki, Parasail, FallingRider, DolphinPod, WhaleBreach, WhaleTail, Bazza, VMRBoat, BrokenBoat, Floater } from "./SeaLife";
 import PassingBiker from "./PassingBiker";
@@ -326,7 +327,7 @@ const SHARK_SCREAMS = ["SHAAAARK!", "GET OUTTA THE WATER!", "Not again...", "He 
 // Out on the water: ski boats, jet skis, parasailers, dolphins, whales (and what happens to people
 // who fall in). Each bit is a positioned span; `cls` moves it, `inner` animates what's inside.
 // `tms` makes a bit slide (CSS transition on left) to its x instead, with `ease`; `hide` fades it out.
-type SeaBit = { id: number; kind: "ski" | "skier" | "jet" | "para" | "rider" | "pod" | "whale" | "tail" | "fin" | "chomp" | "blood" | "vmr" | "broke" | "floater"; x: number; bottom: number; w: number; h: number; cls?: string; inner?: string; clip?: boolean; dx?: number; dy?: number; ms?: number; delay?: number; on?: boolean; colour?: string; tms?: number; ease?: string; hide?: boolean; hook?: boolean };
+type SeaBit = { id: number; kind: "ski" | "skier" | "jet" | "para" | "rider" | "pod" | "whale" | "tail" | "fin" | "chomp" | "blood" | "vmr" | "broke" | "floater" | "pelicans" | "pelicanDiver"; x: number; bottom: number; w: number; h: number; cls?: string; inner?: string; clip?: boolean; dx?: number; dy?: number; ms?: number; delay?: number; on?: boolean; colour?: string; tms?: number; ease?: string; hide?: boolean; hook?: boolean };
 type BazzaState = { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "walk" | "hold" | "zapped" | "hop"; line: string | null };
 // Flying foxes hanging off the power lines: hover over one and it touches two wires (ZZZT), shoot one
 // and it drops; another one hangs up there again later.
@@ -357,6 +358,10 @@ const DANCER_CHAT: [string, string][] = [
   ["True Blue come in again. Paid in shrimp off the barbie.", "Better than the bloke who paid in exposure."],
   ["I'm savin' up for a house.", "On the Gold Coast? Better learn a few more moves, love."],
 ];
+// The seagull chip heist: someone brings fish and chips down to the beach, the gulls gather, and
+// one of them makes off with the lot.
+type Gull = { id: number; x: number; bottom: number; ms: number; faceLeft: boolean; flying: boolean; carrying: boolean };
+type ChipRaid = { eater: { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "walk" | "eat" | "shoo" | "robbed"; line: string | null }; gulls: Gull[] };
 type Phase = "hidden" | "enter" | "parked" | "leave";
 type Action = "flip" | "moon" | "drink" | "smoke" | "throw";
 type Line = { text: string; ai: boolean };
@@ -367,10 +372,10 @@ let uid = Date.now();
 // Full-screen mode (/day-out/shazz): set by the component when it mounts with `immersive`.
 let IMMERSIVE = false;
 const isPhone = () => typeof window !== "undefined" && (window.innerWidth < 640 || (IMMERSIVE && window.innerHeight < 500));
-// The street drawing (Shopfronts, 4730×420) is shown whole at the strip's height, so the world is
+// The street drawing (Shopfronts, 5330×420) is shown whole at the strip's height, so the world is
 // usually wider than the screen and you drag / swipe / edge-pan along it. The strip heights here
 // match .shopStrip in day-out.module.css (full screen: shops in the bottom half, sky above).
-const STREET_X = -1120, STREET_W = 4730, STREET_H = 420;
+const STREET_X = -1120, STREET_W = 5330, STREET_H = 420;
 const stripHeight = () => {
   const W = window.innerWidth, H = window.innerHeight;
   if (IMMERSIVE) return Math.min(H - 147, Math.max(H * 0.46, 220));
@@ -1785,7 +1790,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // board and go off for fifteen seconds. Then the coppers roll in, zap the lot (slapstick), and
   // chuck them in the paddy wagon, deadpan as you like.
   // ---- Dole day at Centrelink -------------------------------------------------------------
-  // Where things in the shop-strip drawing (Shopfronts' viewBox is -1120 0 4730 420, scaled to cover
+  // Where things in the shop-strip drawing (Shopfronts' viewBox is -1120 0 5330 420, scaled to cover
   // the strip) land on screen. Building coordinates are in drawing units; the Indian shop is at x < 0.
   const stripMap = () => {
     const strip = typeof document === "undefined" ? null : document.querySelector<HTMLElement>(`.${styles.shopStrip}`);
@@ -3015,7 +3020,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   };
   const quackAt = (x: number) => add({ kind: "burst", x, y: FAR_LANE + duckW() * 0.5, size: 0, text: pick(["QUACK QUACK!", "QUAAACK!", "QUACK QUACK QUACK!"]) });
   useEffect(() => {
-    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setDogWalk(null); setDogPoops([]); setBinDiver(null); setRescue(null); setShark(null); setSeaBits([]); setBazza(null); setBats([]); setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
+    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setDogWalk(null); setDogPoops([]); setBinDiver(null); setRescue(null); setShark(null); setSeaBits([]); setBazza(null); setBats([]); setChips(null); chipsOn.current = false; setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
     let alive = true, target = 4 + (Math.random() < 0.5 ? 1 : 0), look = Math.floor(Math.random() * 6);
     const busComes = async () => {
       const bw = duckW(), sm = stripMap(), stopAt = sm.x(505) - bw * 0.6, startX = -bw - 40, driveMs = Math.max(2500, (stopAt - startX) * 3);
@@ -3397,7 +3402,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   };
   const updSea = (id: number, change: Partial<SeaBit>) => setSeaBits(list => list.map(item => (item.id === id ? { ...item, ...change } : item)));
   // Boats come in off the open sea at the right-hand end and run along to the point at the dunes.
-  const seaLane = () => { const sm = stripMap(); return { sm, k: sm.k, start: sm.x(3630), end: sm.x(3020) }; };
+  const seaLane = () => { const sm = stripMap(); return { sm, k: sm.k, start: sm.x(4230), end: sm.x(3020) }; };
   const seaPan = () => panTo(stripMap().x(3310));
   // Somebody in the water gets the dun-dun treatment: fin closes in, CHOMP, red water.
   async function sharkGets(x: number, bottom: number, victim: number) {
@@ -3555,11 +3560,24 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     setSeaBits(list => list.filter(item => item.id !== boat));
     vmrOn.current = false;
   }
+  // A flock of pelicans cruising along the beach in a big V. One peels off, plunges into the water and
+  // comes up with a fish.
+  async function pelicanFlock(pan = false) {
+    const { sm, k, start, end } = seaLane(), w = 420 * k * 0.55, h = w * 0.4, high = sm.b(170), ms = 14_000, dx = end - start;
+    if (pan) seaPan();
+    addSea({ kind: "pelicans", x: start, bottom: high, w, h, cls: "seaCross", dx, ms }, ms + 300);
+    await later(ms * 0.45);
+    const px = start + dx * 0.45 + w * 0.5, pw = 90 * k * 0.5, water = sm.b(300);
+    addSea({ kind: "pelicanDiver", x: px, bottom: high, w: pw, h: pw * 0.55, cls: "pelicanDive", dy: high - water, ms: 1100 }, 1150);
+    await later(1100);
+    add({ kind: "burst", x: px - 40, y: water + 40, size: 0, text: "SPLOOSH!" });
+    addSea({ kind: "pelicanDiver", x: px, bottom: water - pw * 0.2, w: pw, h: pw * 0.55, cls: "floatBob", on: true }, 7000);
+  }
   // Something's always going on out there, one thing at a time-ish.
   useEffect(() => {
     if (!immersive && phase === "hidden") { setSeaBits([]); setBazza(null); bazzaOn.current = false; return; }
     let timer = 0;
-    const shows = [() => void skiRun(), () => jetRun(), () => void paraRun(), () => dolphinRun(), () => void whaleRun(), () => void skiRun(), () => jetRun(), () => void bazzaShow(), () => void vmrTow()];
+    const shows = [() => void skiRun(), () => jetRun(), () => void paraRun(), () => dolphinRun(), () => void whaleRun(), () => void skiRun(), () => jetRun(), () => void bazzaShow(), () => void vmrTow(), () => void pelicanFlock()];
     const next = () => { timer = window.setTimeout(() => { if (seaBitsRef.current.length < 3) pick(shows)(); next(); }, 14_000 + Math.random() * 12_000); };
     next();
     return () => clearTimeout(timer);
@@ -3567,8 +3585,76 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   }, [phase, immersive]);
   const seaArt = (b: SeaBit) => b.kind === "ski" ? <SkiBoat skier={b.on} /> : b.kind === "skier" ? <StackedSkier /> : b.kind === "jet" ? <JetSki colour={b.colour} />
     : b.kind === "para" ? <Parasail rider={b.on} /> : b.kind === "rider" ? <FallingRider /> : b.kind === "pod" ? <span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><DolphinPod /></span> : b.kind === "whale" ? <WhaleBreach />
+      : b.kind === "pelicans" ? <span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><svg viewBox="0 0 420 170" width="100%" height="100%" overflow="visible">
+        {[[0, 0], [60, 30], [120, 60], [180, 90], [60, 110], [0, 140], [-60, 160]].map(([px, py], i) => <svg key={i} x={300 - px} y={py * 0.5} width={90} height={50} overflow="visible"><Pelican /></svg>)}
+      </svg></span>
+      : b.kind === "pelicanDiver" ? <span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><Pelican fish={b.on} /></span>
       : b.kind === "vmr" ? <VMRBoat tow={b.on} hook={b.hook} /> : b.kind === "broke" ? <BrokenBoat /> : b.kind === "floater" ? <Floater />
       : b.kind === "tail" ? <WhaleTail /> : b.kind === "fin" ? <span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><SharkFin /></span> : b.kind === "chomp" ? <SharkLunge /> : null;
+
+  // ---- The seagull chip heist ----
+  const [chips, setChips] = useState<ChipRaid | null>(null);
+  const chipsOn = useRef(false);
+  const updEater = (change: Partial<ChipRaid["eater"]>) => setChips(c => c && { ...c, eater: { ...c.eater, ...change } });
+  const updGulls = (change: (g: Gull, i: number) => Gull) => setChips(c => c && { ...c, gulls: c.gulls.map(change) });
+  async function chipRaid(pan = false) {
+    if (chipsOn.current || (!immersive && phaseRef.current === "hidden")) return;
+    chipsOn.current = true;
+    const sm = stripMap(), sand = sm.b(370), from = sm.x(2990), spot = sm.x(3080 + Math.random() * 280), ew = isPhone() ? 32 : 44, H = window.innerHeight;
+    const sky = () => sand + 90 + Math.random() * Math.min(220, H * 0.3);
+    if (pan) panTo(spot);
+    // Down to the beach with the parcel.
+    setChips({ eater: { x: from - ew / 2, bottom: sand, ms: 0, faceLeft: false, pose: "walk", line: null }, gulls: [] });
+    await later(80);
+    const walkMs = Math.max(1600, Math.abs(spot - from) * 12);
+    updEater({ x: spot - ew / 2, ms: walkMs });
+    await later(walkMs);
+    updEater({ pose: "eat", ms: 0, line: pick(["Ahh. Beachside chippy. Heaven.", "Nothin' beats chips on the beach.", "Flake and chips, extra salt. Lovely."]) });
+    await later(2400);
+    updEater({ line: null });
+    // The gulls start turning up. First a couple, then the lot.
+    const gw = isPhone() ? 28 : 36, L = panX(), W = window.innerWidth;
+    for (let i = 0; i < 9; i++) {
+      const fromLeft = Math.random() < 0.5, id = ++uid;
+      setChips(c => c && { ...c, gulls: [...c.gulls, { id, x: fromLeft ? L - 60 : L + W + 20, bottom: sky(), ms: 0, faceLeft: !fromLeft, flying: true, carrying: false }] });
+      await later(60);
+      const tx = spot + (Math.random() - 0.5) * 260;
+      setChips(c => c && { ...c, gulls: c.gulls.map(g => (g.id === id ? { ...g, x: tx, bottom: sky(), ms: 1800 + Math.random() * 900, faceLeft: tx < g.x } : g)) });
+      if (i % 2 === 0) add({ kind: "burst", x: spot - 120 + Math.random() * 200, y: sand + 150 + Math.random() * 60, size: 0, text: pick(["MINE!", "MINE! MINE!", "SQUAWK!", "MINE?"]) });
+      // Some come down and stand about, edging closer.
+      if (i >= 3) window.setTimeout(() => updGulls(g => (g.id === id ? { ...g, flying: false, bottom: sand + Math.random() * 6, x: spot + (Math.random() < 0.5 ? -1 : 1) * (50 + Math.random() * 90), ms: 900 } : g)), 2000);
+      await later(650);
+    }
+    await later(1600);
+    updGulls(g => (g.flying ? g : { ...g, x: g.x + (spot - g.x) * 0.4, ms: 1200 }));
+    updEater({ pose: "shoo", line: pick(["Piss off!", "Get away, ya flying rats!", "Not today, Kevin!", "SHOO! SHOO!"]) });
+    // They scatter... and come straight back.
+    updGulls(g => ({ ...g, flying: true, bottom: sky(), x: g.x + (Math.random() - 0.5) * 160, ms: 700 }));
+    await later(1600);
+    updEater({ pose: "eat", line: null });
+    updGulls(g => ({ ...g, flying: Math.random() < 0.4, bottom: Math.random() < 0.4 ? sky() : sand + Math.random() * 6, x: spot + (Math.random() < 0.5 ? -1 : 1) * (36 + Math.random() * 70), ms: 1100 }));
+    add({ kind: "burst", x: spot - 60, y: sand + 170, size: 0, text: "MINE! MINE! MINE!" });
+    await later(2400);
+    // The snatch.
+    let thief = 0;
+    setChips(c => { if (c && c.gulls.length) thief = c.gulls[0].id; return c; });
+    await later(30);
+    updGulls(g => (g.id === thief ? { ...g, flying: true, x: spot - gw / 2 + ew * 0.4, bottom: sand + 40, ms: 450, faceLeft: false } : g));
+    await later(480);
+    add({ kind: "burst", x: spot - 40, y: sand + 120, size: 0, text: "SNATCH!" });
+    updEater({ pose: "robbed", line: pick(["ME CHIPS!!", "OI! THAT WAS FOUR BUCKS!", "Oh, come ON!"]) });
+    const away = Math.random() < 0.5, offX = away ? panX() - 300 : panX() + window.innerWidth + 300;
+    updGulls(g => (g.id === thief ? { ...g, carrying: true, x: offX, bottom: H * 0.8, ms: 2600, faceLeft: away } : { ...g, flying: true, x: offX + (Math.random() - 0.5) * 300, bottom: H * (0.6 + Math.random() * 0.25), ms: 2800 + Math.random() * 1200, faceLeft: away }));
+    for (let i = 0; i < 6; i++) window.setTimeout(() => add({ kind: "junk", x: spot + (away ? -1 : 1) * i * 50, y: sand + 140 + i * 12, size: 0, dx: (Math.random() - 0.5) * 60, dy: 140 + i * 12, arc: -20, text: "🍟" }), 200 + i * 220);
+    await later(3000);
+    updEater({ line: pick(["...shoulda got the potato scallops.", "Every. Bloody. Time.", "I'm gettin' a dog."]) });
+    await later(2600);
+    // Off home, empty-handed.
+    updEater({ pose: "walk", line: null, x: from - 200, ms: walkMs, faceLeft: true });
+    await later(walkMs);
+    setChips(null);
+    chipsOn.current = false;
+  }
 
   // They all happen by themselves every so often.
   useEffect(() => {
@@ -3581,6 +3667,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     every(() => void binDive(), 40_000, 35_000);
     every(() => void lifeguardRescue(), 70_000, 60_000);
     every(() => void sharkAttack(), 100_000, 70_000);
+    every(() => void chipRaid(), 60_000, 50_000);
     return () => timers.forEach(clearTimeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, immersive]);
@@ -4406,6 +4493,13 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       <span className={styles.ibisBody} style={{ transform: rescue.guard.faceLeft ? "scaleX(-1)" : undefined }}><Lifeguard pose={rescue.guard.pose} /></span>
       {rescue.guard.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{rescue.guard.line}</span>}
     </span>}
+    {chips && <span data-poopable="person" className={styles.beachActor} style={{ left: chips.eater.x, bottom: chips.eater.bottom, width: isPhone() ? 32 : 44, height: isPhone() ? 80 : 110, transitionDuration: `${chips.eater.ms}ms` }}>
+      <span className={styles.ibisBody} style={{ transform: chips.eater.faceLeft ? "scaleX(-1)" : undefined }}><ChipEater pose={chips.eater.pose} /></span>
+      {chips.eater.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{chips.eater.line}</span>}
+    </span>}
+    {chips?.gulls.map(g => <span key={g.id} data-poopable="animal" className={styles.gull} style={{ left: g.x, bottom: g.bottom, width: isPhone() ? 28 : 36, height: isPhone() ? 21 : 27, transitionDuration: `${g.ms}ms` }}>
+      <span className={styles.ibisBody} style={{ transform: g.faceLeft ? "scaleX(-1)" : undefined }}><Seagull flying={g.flying} carrying={g.carrying} /></span>
+    </span>)}
     {seaBits.map(b => <span key={b.id} className={`${styles.seaThing} ${b.cls ? styles[b.cls] : ""} ${b.clip ? styles.seaClip : ""}`} aria-hidden
       style={{ left: b.x, bottom: b.bottom, width: b.w, height: b.h, opacity: b.hide ? 0 : undefined, ...(b.tms !== undefined ? { transitionProperty: "left, opacity", transitionDuration: `${b.tms}ms, 900ms`, transitionTimingFunction: b.ease ?? "linear" } : {}), animationDuration: b.ms ? `${b.ms}ms` : undefined, animationDelay: b.delay ? `${b.delay}ms` : undefined, ["--dx" as string]: `${b.dx ?? 0}px`, ["--dy" as string]: `${b.dy ?? 0}px` }}>
       {b.inner ? <span className={styles[b.inner]} style={{ display: "block", width: "100%", height: "100%" }}>{seaArt(b)}</span> : seaArt(b)}
@@ -4688,6 +4782,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             <Trick label="🐋 Whale" onClick={pickTrick(() => void whaleRun(true))} />
             <Trick label="🪼 Steve's Wild Oz" onClick={pickTrick(() => void bazzaShow(true))} />
             <Trick label="⚓ VMR tow" onClick={pickTrick(() => void vmrTow(true))} />
+            <Trick label="🍟 Seagull chip heist" onClick={pickTrick(() => void chipRaid(true))} />
+            <Trick label="🐦 Pelican flock" onClick={pickTrick(() => void pelicanFlock(true))} />
             <Trick label="🪝 VMR recovery" onClick={pickTrick(() => void vmrRecover(undefined, true))} />
             <Trick label="🦜 Lorikeets" onClick={callIn(() => void lorikeetVisit())} />
             <Trick label="🦘 Roo mob" onClick={callIn(() => rooMob())} />
