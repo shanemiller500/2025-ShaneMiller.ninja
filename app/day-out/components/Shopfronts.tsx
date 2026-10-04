@@ -1,13 +1,15 @@
 import type React from "react";
 import styles from "../day-out.module.css";
 import { BarAndShield } from "./BikeLogos";
+import { WIRES, onWire } from "./streetWires";
+import BeachGoer, { Sunbaker } from "./BeachGoer";
 
 // The backdrop behind the road: a strip of tired old two-storey terrace shops, cartoon style.
-// From the left: the Indian Motorcycle shop, the fish and chip shop, the milk bar, Centrelink, the
+// From the left: Woolies, Dole Lane, the Indian Motorcycle shop, the fish and chip shop, the milk bar, Centrelink, the
 // Harley-Davidson shop (glaring back down the street at the Indian mob), the bottlo, and a big
 // yellow Chemist Warehouse; a bus shelter, a power pole with sagging wires,
 // and a back lane at each end (room for the flags and palms, and somewhere to extend the street to
-// later). viewBox -650 0 2900 420. The Harley block is drawn at x -900..-450 and shifted +1900 (to
+// later), and past Snag Alley the esplanade park running down to a surf beach. viewBox -1120 0 4730 420. The Harley block is drawn at x -900..-450 and shifted +1900 (to
 // 1000..1450); the bottlo is drawn at 1000..1250 and shifted +450 (to 1450..1700); the chemist
 // sits at 1700..2050. The footpath runs along the bottom (y 380-420).
 const INK = "#111";
@@ -183,11 +185,13 @@ function ShopFlag({ x, y, brand, slot, design: pinned }: { x: number; y: number;
 // walls (in perspective, to a vanishing point) to a paling fence and far-off rooftops. The shop's
 // own wall is at x=200, its roof at `wallTop`, side wall in `wallColor`. `flip` mirrors it for the
 // right-hand end. No text in here (it would read backwards when flipped).
-function Alley({ x, flip = false, wallTop, wallColor }: { x: number; flip?: boolean; wallTop: number; wallColor: string }) {
+// `cornerW` is how wide the corner building across the lane is; `corner={false}` leaves it out so
+// something else (the strip club) can be drawn there unflipped.
+function Alley({ x, flip = false, wallTop, wallColor, cornerW = 46, corner = true, cornerWall = "#8a3b1c" }: { x: number; flip?: boolean; wallTop: number; wallColor: string; cornerW?: number; corner?: boolean; cornerWall?: string }) {
   const vx = 123, vy = 262, backL = 92, backR = 154;
   // Where a line from (x0, y0) towards the vanishing point crosses x = xt.
   const toward = (x0: number, y0: number, xt: number) => y0 + (vy - y0) * ((xt - x0) / (vx - x0));
-  const lTop = toward(46, 110, backL), lBot = toward(46, 380, backL), rTop = toward(200, wallTop, backR), rBot = toward(200, 380, backR);
+  const lTop = toward(cornerW, 110, backL), lBot = toward(cornerW, 380, backL), rTop = toward(200, wallTop, backR), rBot = toward(200, 380, backR);
   return <g transform={flip ? `translate(${x + 200} 0) scale(-1 1)` : `translate(${x} 0)`}>
     {/* Far end of the lane: rooftops and a gum poking up behind a paling fence */}
     <path d={`M${backL} 262 h18 l8 -8 h14 l6 8 h${backR - backL - 46} V${lBot} H${backL} Z`} fill="#94a3b8" stroke={INK} strokeWidth={1} />
@@ -195,13 +199,15 @@ function Alley({ x, flip = false, wallTop, wallColor }: { x: number; flip?: bool
     <rect x={backL} y={284} width={backR - backL} height={lBot - 284} fill="#a07a52" stroke={INK} strokeWidth={1} />
     {Array.from({ length: 9 }, (_, i) => <line key={i} x1={backL + 3 + i * 7} y1={284} x2={backL + 3 + i * 7} y2={lBot} stroke="#7c5a3a" strokeWidth={1} />)}
     {/* The lane itself, with a faded centre line */}
-    <path d={`M46 380 H200 L${backR} ${rBot} H${backL} Z`} fill="#4b4f57" />
+    <path d={`M${cornerW} 380 H200 L${backR} ${rBot} H${backL} Z`} fill="#4b4f57" />
     <path d={`M123 380 L123 ${lBot}`} stroke="#e5e7eb" strokeWidth={1.5} strokeDasharray="8 8" opacity={0.45} />
     {/* Side wall of the building across the lane: brick, in shade */}
-    <path d={`M46 110 L${backL} ${lTop} V${lBot} L46 380 Z`} fill="#8a3b1c" stroke={INK} strokeWidth={1.5} />
-    {[140, 170, 200, 230, 260, 290, 320, 350].map(y => <line key={y} x1={46} y1={y} x2={backL} y2={toward(46, y, backL)} stroke="#6f2f16" strokeWidth={1} />)}
-    <path d={`M58 ${toward(46, 180, 58)} L74 ${toward(46, 180, 74)} V${toward(46, 230, 74)} L58 ${toward(46, 230, 58)} Z`} fill="#1e293b" stroke={INK} strokeWidth={1} />
-    <path d="M56 236 q8 -10 14 2 t12 -4" stroke="#a855f7" strokeWidth={2.5} fill="none" />
+    <path d={`M${cornerW} 110 L${backL} ${lTop} V${lBot} L${cornerW} 380 Z`} fill={cornerWall} stroke={INK} strokeWidth={1.5} />
+    {[140, 170, 200, 230, 260, 290, 320, 350].map(y => <line key={y} x1={cornerW} y1={y} x2={backL} y2={toward(cornerW, y, backL)} stroke="#6f2f16" strokeWidth={1} />)}
+    {backL - cornerW > 30 && <>
+      <path d={`M58 ${toward(46, 180, 58)} L74 ${toward(46, 180, 74)} V${toward(46, 230, 74)} L58 ${toward(46, 230, 58)} Z`} fill="#1e293b" stroke={INK} strokeWidth={1} />
+      <path d="M56 236 q8 -10 14 2 t12 -4" stroke="#a855f7" strokeWidth={2.5} fill="none" />
+    </>}
     {/* Side wall of the shop: same colour as its front, in shade, with a downpipe and a lamp */}
     <path d={`M200 ${wallTop} L${backR} ${rTop} V${rBot} L200 380 Z`} fill={wallColor} stroke={INK} strokeWidth={1.5} />
     <path d={`M200 ${wallTop} L${backR} ${rTop} V${rBot} L200 380 Z`} fill="#000" opacity={0.28} />
@@ -212,14 +218,16 @@ function Alley({ x, flip = false, wallTop, wallColor }: { x: number; flip?: bool
     {/* A skip bin against the shop wall, a milk crate on the other side */}
     <path d="M148 352 h32 l-3 26 h-26 z" fill="#15803d" stroke={INK} strokeWidth={1.4} />
     <path d="M146 352 h36 l-4 -6 h-28 z" fill="#166534" stroke={INK} strokeWidth={1.2} />
-    <rect x={64} y={358} width={16} height={14} fill="#dc2626" stroke={INK} strokeWidth={1} />
+    <rect x={cornerW + 18} y={358} width={16} height={14} fill="#dc2626" stroke={INK} strokeWidth={1} />
     {/* The next building along: just its front corner, cut off by the edge of the world */}
+    {corner && <>
     <rect x={-10} y={110} width={56} height={270} fill="url(#sfBrickRed)" stroke={INK} strokeWidth={2.5} />
     <rect x={-14} y={102} width={64} height={12} fill="#c96b3d" stroke={INK} strokeWidth={2} />
     <rect x={4} y={150} width={28} height={40} fill="#cbe4f5" stroke={INK} strokeWidth={1.5} />
     <path d="M18 150 v40 M4 170 h28" stroke={INK} strokeWidth={1} />
     <rect x={-10} y={290} width={56} height={90} fill="#57534e" stroke={INK} strokeWidth={1.5} />
     <rect x={2} y={300} width={32} height={74} fill="#78716c" stroke={INK} strokeWidth={1} />
+    </>}
   </g>;
 }
 // Footpath crossover where the lane meets the road, and the kerb on the far side of it.
@@ -281,32 +289,6 @@ function GlassOnPath({ x, w }: { x: number; w: number }) {
   })}</g>;
 }
 
-// The power lines as quadratic curves [x0, y0, cx, cy, x1, y1] (matching the wire paths below), and
-// a point a fraction t of the way along one, so things can hang off them.
-const WIRES = {
-  leftLow: [-650, 100, -300, 160, 0, 140], leftHigh: [-650, 76, -300, 124, 0, 110],
-  midLow: [0, 140, 360, 165, 694, 70], midHigh: [0, 110, 360, 132, 702, 92],
-  rightHigh: [758, 70, 1500, 150, 2250, 70], rightLow: [750, 92, 1500, 175, 2250, 104],
-};
-const onWire = (w: number[], t: number) => {
-  const [x0, y0, cx, cy, x1, y1] = w, u = 1 - t;
-  return { x: rd(u * u * x0 + 2 * u * t * cx + t * t * x1), y: rd(u * u * y0 + 2 * u * t * cy + t * t * y1) };
-};
-// A flying fox hanging upside down off a wire by its feet: wings wrapped round like a little brown
-// umbrella, golden mantle, ears pointing at the ground. `open` has one half-unfurled, stretching.
-function FruitBat({ x, y, open = false, delay = 0 }: { x: number; y: number; open?: boolean; delay?: number }) {
-  return <g transform={`translate(${x} ${y})`}><g className={styles.batSway} style={{ animationDelay: `${delay}s` }}>
-    <path d="M-2 0 v5 M2 0 v5" stroke="#1c1917" strokeWidth={1.5} strokeLinecap="round" />
-    {open && <path d="M0 6 Q-20 3 -24 19 Q-18 16 -14 21 Q-10 17 -7 23 L0 24 L7 23 Q10 17 14 21 Q18 16 24 19 Q20 3 0 6 Z" fill="#2b1d16" stroke={INK} strokeWidth={0.9} />}
-    <ellipse cx={0} cy={14} rx={6.5} ry={11} fill="#3b2a20" stroke={INK} strokeWidth={1} />
-    <path d="M-6 7 Q-9 15 -4 24 M6 7 Q9 15 4 24" stroke="#22160f" strokeWidth={1.3} fill="none" />
-    <circle cx={0} cy={27} r={5.6} fill="#b07a3c" stroke={INK} strokeWidth={1} />
-    <path d="M-4 31 l-2.6 5 l4.6 -2.6 z M4 31 l2.6 5 l-4.6 -2.6 z" fill="#3b2a20" stroke={INK} strokeWidth={0.6} />
-    <ellipse cx={0} cy={23.6} rx={1.6} ry={1.2} fill="#22160f" />
-    <circle cx={-2.2} cy={27.6} r={1.1} fill={INK} /><circle cx={2.2} cy={27.6} r={1.1} fill={INK} />
-    <circle cx={-1.9} cy={27.3} r={0.35} fill="#fff" /><circle cx={2.5} cy={27.3} r={0.35} fill="#fff" />
-  </g></g>;
-}
 // A pair of sneakers slung over the wire by their tied-together laces (some kid's lost them forever).
 function HangingShoes({ x, y, colour, trim, delay = 0 }: { x: number; y: number; colour: string; trim: string; delay?: number }) {
   const shoe = (tx: number, ty: number, rot: number) => <g transform={`translate(${tx} ${ty}) rotate(${rot})`}>
@@ -321,18 +303,350 @@ function HangingShoes({ x, y, colour, trim, delay = 0 }: { x: number; y: number;
   </g></g>;
 }
 
+// A tall Norfolk Island pine, the Gold Coast foreshore classic: straight trunk, tiers of drooping
+// dark branches with bright tips, shorter towards the top. Base at (x, base), h tall; it casts a
+// little shadow on the grass so it stands off the lawn.
+function NorfolkPine({ x, h, base = 380 }: { x: number; h: number; base?: number }) {
+  const tiers = Math.round(h / 34);
+  return <g>
+    <ellipse cx={x} cy={base} rx={h * 0.13} ry={4} fill="#00000030" />
+    <path d={`M${x} ${base} V${base - h}`} stroke="#4a3426" strokeWidth={6} />
+    {Array.from({ length: tiers }, (_, i) => {
+      const y = base - h * 0.28 - (i * h * 0.7) / tiers, w = (h / 300) * (46 * (1 - i / (tiers + 1)) + 8);
+      return <g key={i}>
+        <path d={`M${x - w} ${y + 10} Q${x - w * 0.5} ${y - 6} ${x} ${y - 4} Q${x + w * 0.5} ${y - 6} ${x + w} ${y + 10} Q${x + w * 0.5} ${y + 4} ${x} ${y + 6} Q${x - w * 0.5} ${y + 4} ${x - w} ${y + 10} Z`} fill={i % 2 ? "#15402a" : "#123622"} stroke={INK} strokeWidth={1.4} />
+        <path d={`M${x - w * 0.85} ${y + 6} Q${x - w * 0.35} ${y - 5} ${x} ${y - 3} Q${x + w * 0.35} ${y - 5} ${x + w * 0.85} ${y + 6}`} stroke="#4fae63" strokeWidth={2.2} fill="none" />
+      </g>;
+    })}
+    <path d={`M${x - 4} ${base - h + 6} L${x} ${base - h - 12} L${x + 4} ${base - h + 6} Z`} fill="#15402a" stroke={INK} strokeWidth={1.2} />
+  </g>;
+}
+// A breaking wave seen from the beach: a long line of swell rolling in towards you, the face
+// darkening into a hollow under the lip, the white lip pitching forward with spray coming off the
+// top. It stands up, throws, and collapses into whitewash. (x, y) is the left end of its base; w
+// long. `surfer` puts someone carving across the face.
+function FrontWave({ x, y, w, delay, surfer = false, sy = 1 }: { x: number; y: number; w: number; delay: number; surfer?: boolean; sy?: number }) {
+  const n = Math.round(w / 50), seg = w / n;
+  const crest = Array.from({ length: n }, (_, i) => `Q${rd(seg * i + seg / 2)} ${i % 2 ? -30 : -24} ${rd(seg * (i + 1))} ${i % 3 === 1 ? -22 : -27}`).join(" ");
+  return <g transform={`translate(${x} ${y}) scale(1 ${sy})`}><g className={styles.waveFront} style={{ animationDelay: `${delay}s` }}>
+    <path d={`M0 0 L0 -24 ${crest} V0 Z`} fill="#0e86a8" stroke={INK} strokeWidth={1.6} />
+    <path d={`M0 -6 H${w}`} stroke="#3fb4d6" strokeWidth={7} opacity={0.7} />
+    <path d={`M0 -20 ${crest.replace(/-(\d+)/g, (_, v) => `-${Number(v) - 6}`)}`} stroke="#0b4a63" strokeWidth={7} fill="none" opacity={0.85} />
+    {Array.from({ length: n }, (_, i) => <path key={i} d={`M${rd(seg * i + 8)} -10 q${rd(seg * 0.3)} -4 ${rd(seg * 0.6)} 0`} stroke="#7dd3e8" strokeWidth={1.6} fill="none" opacity={0.7} />)}
+    <path d={`M0 -24 ${crest}`} stroke="#f8fafc" strokeWidth={6} fill="none" strokeLinecap="round" />
+    {Array.from({ length: n }, (_, i) => <path key={`c${i}`} d={`M${rd(seg * i + seg * 0.3)} -27 q6 -7 12 -2 q-4 0 -5 4`} stroke="#f8fafc" strokeWidth={2.4} fill="none" strokeLinecap="round" />)}
+    {Array.from({ length: n * 2 }, (_, i) => <circle key={`s${i}`} cx={rd((w / (n * 2)) * i + 10)} cy={-32 - (i % 3) * 3} r={1.6 - (i % 2) * 0.5} fill="#f8fafc" />)}
+    {surfer && <g className={styles.waveSurfer} transform={`translate(${rd(w * 0.7)} -12)`}>
+      <path d="M-12 4 Q0 0 14 3 Q0 8 -12 4 Z" fill="#facc15" stroke={INK} strokeWidth={1.1} />
+      <path d="M-3 3 L-5 -8 M4 3 L5 -8" stroke="#1e3a8a" strokeWidth={3} strokeLinecap="round" />
+      <path d="M-5 -8 h10 v-9 h-10 z" fill="#dc2626" stroke={INK} strokeWidth={1} />
+      <path d="M-5 -15 L-13 -10 M5 -15 L13 -20" stroke="#e0a982" strokeWidth={2.4} strokeLinecap="round" />
+      <circle cx={0} cy={-21} r={4} fill="#e0a982" stroke={INK} strokeWidth={1} /><path d="M-4 -23 q4 -5 8 0" fill="#fde047" />
+    </g>}
+  </g></g>;
+}
+// A park bin on a post (the tweakers' takeaway).
+function ParkBin({ x }: { x: number }) {
+  return <g>
+    <path d={`M${x} 378 V362`} stroke="#4b5563" strokeWidth={3} />
+    <path d={`M${x - 9} 344 h18 l-2 20 h-14 z`} fill="#166534" stroke={INK} strokeWidth={1.3} />
+    <rect x={x - 10} y={341} width={20} height={4} rx={1} fill="#14532d" stroke={INK} strokeWidth={1} />
+  </g>;
+}
+// A beachgoer (same style as the street's commuters) dropped into the street drawing: feet at
+// (x, base), h drawing-units tall. `flip` faces them left.
+function Goer({ x, base, h = 50, look, pose, kid, flip = false }: { x: number; base: number; h?: number; look: number; pose?: "stand" | "walk" | "throw" | "wave"; kid?: boolean; flip?: boolean }) {
+  const w = h * 0.4, body = <svg x={x - w / 2} y={base - h} width={w} height={h} overflow="visible"><BeachGoer look={look} pose={pose} kid={kid} /></svg>;
+  return flip ? <g transform={`translate(${2 * x} 0) scale(-1 1)`}>{body}</g> : body;
+}
+// A container ship crawling along the horizon. Hull bottom at (x, y), about 120 long at s=1.
+function CargoShip({ x, y, s = 1, hull = "#7f1d1d", delay = 0 }: { x: number; y: number; s?: number; hull?: string; delay?: number }) {
+  return <g transform={`translate(${x} ${y}) scale(${s})`}><g className={styles.shipSail} style={{ animationDelay: `${delay}s` }}>
+    <path d="M0 -8 H120 L112 0 H6 Z" fill={hull} stroke={INK} strokeWidth={1.2} />
+    {Array.from({ length: 9 }, (_, i) => <rect key={i} x={10 + i * 10} y={-16 - (i % 3 === 1 ? 6 : 0)} width={9} height={8 + (i % 3 === 1 ? 6 : 0)} fill={["#2563eb", "#f97316", "#16a34a", "#facc15", "#dc2626"][i % 5]} stroke={INK} strokeWidth={0.6} />)}
+    <rect x={102} y={-24} width={12} height={16} fill="#f8fafc" stroke={INK} strokeWidth={0.8} />
+    <rect x={106} y={-30} width={4} height={6} fill="#111" />
+  </g></g>;
+}
+// The adventure playground, set back on the lawn: rubber soft-fall, a timber tower with a cubby on
+// top, a twisty silver tube slide down one side and a rope net up the other, a big nest swing, and
+// a flying fox running the length of it. Kids everywhere. Spans x 2450..2672, base y≈336.
+function Playground() {
+  return <g>
+    {/* Soft-fall: yellow rubber with a blue puddle and an orange path */}
+    <path d="M2450 340 L2466 314 H2656 L2672 340 Z" fill="#facc15" stroke={INK} strokeWidth={1.5} />
+    <path d="M2480 326 q20 -10 44 -2 q10 8 -10 12 q-24 4 -34 -10 z" fill="#2563eb" />
+    <path d="M2600 338 q8 -12 30 -20 l12 2 q-20 8 -26 18 z" fill="#ea580c" />
+    {/* Flying fox: cable from the tall start pole to the low end post, a kid zooming along it */}
+    <path d="M2456 336 V222 M2672 336 V292" stroke="#8b5a2b" strokeWidth={5} />
+    <path d="M2456 226 L2672 298" stroke="#4b5563" strokeWidth={1.6} />
+    <g className={styles.flyingFox}>
+      <rect x={2452} y={222} width={10} height={6} rx={2} fill="#9ca3af" stroke={INK} strokeWidth={0.8} />
+      <path d="M2457 228 V244" stroke="#111" strokeWidth={1.2} />
+      <Goer x={2457} base={266} h={28} look={2} kid pose="wave" />
+    </g>
+    {/* Big nest swing on ropes */}
+    <path d="M2468 336 L2486 268 L2504 336 M2486 268 H2532 M2514 336 L2532 268 L2550 336" stroke="#8b5a2b" strokeWidth={4} fill="none" strokeLinejoin="round" />
+    <g className={styles.swingSway} style={{ transformOrigin: "2509px 270px" }}>
+      <path d="M2496 270 L2498 314 M2522 270 L2520 314" stroke="#d6c7a1" strokeWidth={1.6} />
+      <ellipse cx={2509} cy={316} rx={16} ry={5} fill="#ea580c" stroke={INK} strokeWidth={1.2} />
+      <path d="M2495 316 h28 M2499 313 l4 6 M2507 313 l4 6 M2515 313 l4 6" stroke="#fdba74" strokeWidth={1} />
+      <Goer x={2504} base={314} h={26} look={1} kid />
+      <Goer x={2516} base={314} h={26} look={3} kid />
+    </g>
+    {/* The tower: timber posts, a cubby with grey panels and teal trim, mesh window */}
+    <path d="M2566 336 V226 M2614 336 V226" stroke="#a0703f" strokeWidth={6} />
+    <path d="M2566 300 L2614 280 M2566 280 L2614 300" stroke="#a0703f" strokeWidth={2.5} />
+    <rect x={2558} y={226} width={64} height={40} fill="#94a3b8" stroke={INK} strokeWidth={1.6} />
+    <path d="M2558 246 H2622 M2590 226 V266" stroke="#2dd4bf" strokeWidth={2.5} />
+    <rect x={2566} y={230} width={20} height={13} fill="#e2e8f0" stroke={INK} strokeWidth={0.8} />
+    <path d="M2570 230 v13 M2575 230 v13 M2580 230 v13 M2566 236 h20" stroke="#64748b" strokeWidth={0.6} />
+    <rect x={2552} y={218} width={76} height={9} fill="#2dd4bf" stroke={INK} strokeWidth={1.4} />
+    <Goer x={2604} base={246} h={26} look={5} kid pose="wave" />
+    {/* Rope net up the left side */}
+    <path d="M2558 236 L2528 336 M2558 236 L2546 336" stroke="#d6c7a1" strokeWidth={1.4} />
+    {Array.from({ length: 6 }, (_, i) => <path key={i} d={`M${2554 - i * 4.6} ${252 + i * 14} L${2556 - i * 1.8} ${252 + i * 14}`} stroke="#d6c7a1" strokeWidth={1.4} />)}
+    {Array.from({ length: 5 }, (_, i) => <path key={i} d={`M${2531 + i * 4} 336 L${2558} ${236 + i * 2}`} stroke="#d6c7a1" strokeWidth={0.8} opacity={0.8} />)}
+    <Goer x={2546} base={306} h={26} look={0} kid />
+    {/* Twisty silver tube slide down the right side to a kid popping out the bottom */}
+    <path d="M2622 246 C2662 244 2668 272 2640 282 C2612 292 2618 314 2652 318 C2670 321 2674 328 2678 334" stroke={INK} strokeWidth={15} fill="none" strokeLinecap="round" />
+    <path d="M2622 246 C2662 244 2668 272 2640 282 C2612 292 2618 314 2652 318 C2670 321 2674 328 2678 334" stroke="#cbd5e1" strokeWidth={12} fill="none" strokeLinecap="round" />
+    <path d="M2622 246 C2662 244 2668 272 2640 282 C2612 292 2618 314 2652 318 C2670 321 2674 328 2678 334" stroke="#94a3b8" strokeWidth={12} fill="none" strokeDasharray="2 5" />
+    <Goer x={2690} base={338} h={26} look={4} kid pose="wave" />
+    {/* Picket fence round the lot */}
+    <path d="M2466 314 H2656" stroke="#f8fafc" strokeWidth={2} />
+    {Array.from({ length: 25 }, (_, i) => <path key={i} d={`M${2448 + i * 9.4} 346 v-12 l2 -3 l2 3 v12`} fill="#f8fafc" stroke={INK} strokeWidth={0.7} />)}
+    <path d="M2446 338 H2676 M2450 340 L2466 314 M2672 340 L2656 314" stroke="#f8fafc" strokeWidth={2.2} />
+  </g>;
+}
+// Past Snag Alley the street opens up onto the foreshore: a mowed esplanade park with Norfolk
+// pines dotted about, a council BBQ and picnic table, the adventure playground set back on the
+// lawn, a frisbee game and park bins; grassy dune terraces down to the sand; the lifeguard hut,
+// sunbakers, swimmers coming and going, shark fins and container ships out the back, and sets
+// peeling along the sandbank. Drawn at 2250..3450 and shifted +160 to sit past the club.
+function Beachfront() {
+  return <g>
+    <defs>
+      <linearGradient id="sfSea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#1769a8" /><stop offset="0.55" stopColor="#1e88c7" /><stop offset="1" stopColor="#3fb4d6" /></linearGradient>
+      <linearGradient id="sfSand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#e9c88a" /><stop offset="1" stopColor="#f6dca6" /></linearGradient>
+    </defs>
+    {/* The sea, all the way back to the horizon (the park covers its left end) */}
+    <rect x={2250} y={238} width={1210} height={92} fill="url(#sfSea)" />
+    <path d="M2250 238 H3460" stroke="#a5d8f3" strokeWidth={3} />
+    {/* Container ships crawling along the horizon */}
+    <CargoShip x={3300} y={240} s={0.5} delay={0} />
+    <CargoShip x={3300} y={240} s={0.42} hull="#1e3a8a" delay={-90} />
+    {[[2560, 248, 40], [2760, 256, 70], [2990, 250, 50], [3200, 260, 80], [3380, 252, 40], [2880, 270, 60], [3110, 276, 70]].map(([x, y, w], i) => <path key={i} d={`M${x} ${y} h${w}`} stroke="#bfe3ff" strokeWidth={2} strokeLinecap="round" opacity={0.8} />)}
+    {/* Shark fins cruising out the back */}
+    {[[2940, 268, 0], [3150, 282, -7]].map(([x, y, d], i) => <g key={i} transform={`translate(${x} ${y})`}><g className={styles.finCruise} style={{ animationDelay: `${d}s` }}>
+      <path d="M-10 0 Q-2 -4 0 -18 Q6 -8 12 0 Z" fill="#64748b" stroke={INK} strokeWidth={1.3} />
+      <path d="M-16 1 q8 -3 16 0 t16 0" stroke="#e0f2fe" strokeWidth={1.6} fill="none" />
+    </g></g>)}
+    {/* Swimmers bobbing between the flags */}
+    {[[3020, 304, "#e0ac69", "#7c2d12"], [3090, 312, "#f1c7a3", "#fde047"], [3170, 300, "#8d5524", "#111"]].map(([x, y, skin, hair], i) => <g key={i} transform={`translate(${x} ${y})`}><g className={styles.swimBob} style={{ animationDelay: `${-i * 0.6}s` }}>
+      <circle cx={0} cy={-4} r={4.4} fill={skin as string} stroke={INK} strokeWidth={1} />
+      <path d="M-4.4 -5 q4.4 -6 8.8 0" fill={hair as string} />
+      {i === 1 && <path d="M4 -4 L10 -12" stroke={skin as string} strokeWidth={2.4} strokeLinecap="round" />}
+      <path d="M-9 0 q4.5 -3 9 0 t9 0" stroke="#e0f2fe" strokeWidth={1.4} fill="none" />
+    </g></g>)}
+    {/* Sets rolling in towards the beach, front on, one with a surfer carving across the face */}
+    <FrontWave x={2790} y={318} w={670} sy={1.55} delay={0} surfer />
+    <FrontWave x={2790} y={318} w={670} sy={1.55} delay={-2.6} />
+    <FrontWave x={2790} y={318} w={670} sy={1.55} delay={-5.2} />
+    {/* Whitewash lines rolling in towards the beach */}
+    {[0, 1, 2].map(i => <path key={i} className={styles.foamRoll} style={{ animationDelay: `${-i * 1.1}s` }} d="M2860 300 q30 -6 60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0 t60 0" stroke="#f8fafc" strokeWidth={3} fill="none" strokeLinecap="round" />)}
+    {/* The beach: flat sand in front of the water, a wet band and foam washing up the shoreline */}
+    <path d="M2780 380 Q2800 336 2840 326 H3460 V380 Z" fill="url(#sfSand)" stroke={INK} strokeWidth={2} />
+    <path d="M2842 327 H3460" stroke="#d6b06c" strokeWidth={7} />
+    {[0, -2.6, -5.2].map(d => <g key={d} className={styles.swash} style={{ animationDelay: `${d}s` }}>
+      <path d={`M2842 326 H3460 V334 ${Array.from({ length: 21 }, () => "q-15 7 -30 0").join(" ")} Z`} fill="#f0f9ff" opacity={0.85} />
+      <path d={`M3460 334 ${Array.from({ length: 21 }, () => "q-15 7 -30 0").join(" ")}`} stroke="#ffffff" strokeWidth={2.4} fill="none" />
+    </g>)}
+    <path className={styles.shoreFoam} d="M2846 324 q14 -5 28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0 t28 0" stroke="#f8fafc" strokeWidth={4} fill="none" strokeLinecap="round" />
+    {[[2900, 360], [3040, 348], [3180, 366], [3330, 352], [2980, 372], [3260, 340]].map(([x, y], i) => <path key={i} d={`M${x} ${y} q3 -2 6 0`} stroke="#c9a368" strokeWidth={1.5} fill="none" />)}
+    {/* People wandering down for a dip and back up again */}
+    {[[3050, 0, -0], [3130, 1, -4.5], [3210, 5, -2.2]].map(([x, look, d], i) => <g key={i} className={styles.dipWalk} style={{ animationDelay: `${d}s` }}>
+      <Goer x={x} base={374} look={look} pose="walk" flip={i === 1} />
+    </g>)}
+    {/* Sunbakers, a brolly, a board stuck in the sand, a sandcastle */}
+    <svg x={2924} y={354} width={60} height={18} overflow="visible"><Sunbaker look={5} towel="#38bdf8" /></svg>
+    <svg x={3244} y={356} width={60} height={18} overflow="visible"><Sunbaker look={2} towel="#fde047" /></svg>
+    <path d="M2912 374 L2920 330" stroke="#78350f" strokeWidth={2.5} />
+    <path d="M2884 338 Q2920 306 2956 330 Q2920 324 2884 338 Z" fill="#ef4444" stroke={INK} strokeWidth={1.4} />
+    <path d="M2896 330 Q2912 316 2920 316 L2920 326 Z M2930 318 Q2944 322 2948 327 L2928 326 Z" fill="#fde047" />
+    <path d="M3106 374 Q3100 344 3110 322 Q3120 344 3114 374 Z" fill="#f97316" stroke={INK} strokeWidth={1.3} />
+    <path d="M3110 328 V370" stroke="#fff" strokeWidth={1.5} />
+    <path d="M3006 374 q8 -12 16 0 z" fill="#facc15" stroke={INK} strokeWidth={1} /><path d="M3010 368 l-6 -4 M3018 368 l6 -4" stroke="#78350f" strokeWidth={1.2} />
+    {/* Patrol flags: swim between 'em */}
+    {[2990, 3230].map(fx => <g key={fx}>
+      <path d={`M${fx} 372 V318`} stroke="#9ca3af" strokeWidth={2.5} />
+      <g className={styles.flagWave}><path d={`M${fx} 318 h22 v15 h-22 z`} fill="#facc15" stroke={INK} strokeWidth={1} /><path d={`M${fx} 318 h22 l-22 15 z`} fill="#dc2626" /></g>
+    </g>)}
+    {/* The lifeguard hut, up on stilts on the sand */}
+    <path d="M3298 376 V350 M3352 376 V350" stroke="#a16207" strokeWidth={4} />
+    <path d="M3304 376 L3346 350 M3346 376 L3304 350" stroke="#a16207" strokeWidth={1.6} />
+    <rect x={3292} y={326} width={66} height={26} fill="#facc15" stroke={INK} strokeWidth={1.6} />
+    <path d="M3284 328 L3325 300 L3366 328 Z" fill="#dc2626" stroke={INK} strokeWidth={1.6} />
+    <rect x={3302} y={332} width={46} height={12} fill="#1e293b" />
+    <text x={3325} y={341.5} textAnchor="middle" fontSize={7} fontWeight={900} fill="#facc15" fontFamily="sans-serif">LIFEGUARD</text>
+    {/* The esplanade park: bright mowed grass rolling down in terraces to the sand */}
+    <path d="M2250 380 V300 Q2420 290 2580 296 Q2720 302 2790 318 Q2830 330 2846 356 L2856 380 Z" fill="#8cc63f" stroke={INK} strokeWidth={2} />
+    {[2290, 2370, 2450, 2530, 2610, 2690].map(sx => <path key={sx} d={`M${sx} 300 L${sx + 26} 380`} stroke="#a3d55a" strokeWidth={24} opacity={0.55} />)}
+    {[[2720, 320, 2822], [2740, 340, 2840], [2770, 360, 2850]].map(([x0, y0, x1], i) => <g key={i}>
+      <path d={`M${x0} ${y0} Q${(x0 + x1) / 2} ${y0 - 5} ${x1} ${y0 + 8}`} stroke="#4d8a2e" strokeWidth={4} fill="none" />
+      {Array.from({ length: 4 }, (_, j) => <path key={j} d={`M${x0 + 12 + j * ((x1 - x0) / 4)} ${y0 - 1 + j * 2} v-7`} stroke="#14532d" strokeWidth={2} />)}
+    </g>)}
+    {/* Pines in the back of the park first */}
+    <NorfolkPine x={2290} h={210} base={322} />
+    <NorfolkPine x={2780} h={220} base={326} />
+    <NorfolkPine x={2440} h={260} base={348} />
+    {/* The playground, set back on the lawn */}
+    <Playground />
+    {/* Council BBQ and a picnic table */}
+    <path d="M2318 318 L2346 304 L2374 318 Z" fill="#166534" stroke={INK} strokeWidth={1.4} />
+    <path d="M2322 318 V340 M2370 318 V340" stroke="#4b5563" strokeWidth={3} />
+    <rect x={2320} y={340} width={52} height={8} fill="#6b7280" stroke={INK} strokeWidth={1.2} />
+    <rect x={2324} y={346} width={44} height={30} fill="#9ca3af" stroke={INK} strokeWidth={1.5} />
+    <text x={2346} y={364} textAnchor="middle" fontSize={7} fontWeight={900} fill="#111" fontFamily="sans-serif">FREE BBQ</text>
+    <rect x={2380} y={350} width={54} height={6} fill="#a16207" stroke={INK} strokeWidth={1.2} />
+    <path d="M2388 356 L2382 376 M2426 356 L2432 376" stroke="#78350f" strokeWidth={4} />
+    <rect x={2376} y={364} width={62} height={4} fill="#a16207" stroke={INK} strokeWidth={1} />
+    <ParkBin x={2700} />
+    {/* Frisbee down the far end of the lawn */}
+    <Goer x={2760} base={368} look={4} pose="throw" />
+    <Goer x={2836} base={352} look={1} pose="throw" flip />
+    <g transform="translate(2768 322)"><g className={styles.frisbeeX}><g className={styles.frisbeeY}><ellipse cx={0} cy={0} rx={6} ry={2.2} fill="#f97316" stroke={INK} strokeWidth={0.9} /></g></g></g>
+    {/* Park sign */}
+    <path d="M2722 378 V356" stroke="#78350f" strokeWidth={3} />
+    <rect x={2692} y={338} width={60} height={20} rx={3} fill="#166534" stroke="#f8fafc" strokeWidth={1.5} />
+    <text x={2722} y={347} textAnchor="middle" fontSize={6.2} fontWeight={900} fill="#f8fafc" fontFamily="sans-serif">ESPLANADE PARK</text>
+    <text x={2722} y={354.5} textAnchor="middle" fontSize={4.8} fontWeight={800} fill="#bbf7d0" fontFamily="sans-serif">NO DOGS ON BEACH</text>
+    {/* Pines up front, dotted about rather than in a row */}
+    <NorfolkPine x={2302} h={300} base={378} />
+    <NorfolkPine x={2862} h={220} base={378} />
+    {/* The last power pole, where the wires run out (clear of the lane's corner building) */}
+    <rect x={2262} y={52} width={10} height={348} fill="#8a7a5f" stroke={INK} strokeWidth={1.5} />
+    <path d="M2250 72 h34 M2252 104 h30" stroke="#5b4636" strokeWidth={5} />
+  </g>;
+}
+
+// "Sandy Bottoms", the gentlemen's club on the corner of Snag Alley: a proper shop-width purple
+// building, a big pink neon sign in a frame of chasing marquee bulbs, neon palm and cocktail, two
+// blacked-out windows, a velvet rope at the door, and a pink glow on the footpath. x 2174..2420.
+function StripClub() {
+  const bulbs: [number, number][] = [];
+  for (let x = 2204; x <= 2390; x += 8) { bulbs.push([x, 124]); bulbs.push([x, 216]); }
+  for (let y = 132; y <= 208; y += 8) { bulbs.push([2200, y]); bulbs.push([2394, y]); }
+  return <g>
+    <ellipse cx={2297} cy={392} rx={130} ry={11} fill="#f472b6" className={styles.neonGlow} />
+    <rect x={2174} y={110} width={246} height={270} fill="#2e1065" stroke={INK} strokeWidth={2.5} />
+    <rect x={2170} y={102} width={254} height={12} fill="#111" stroke={INK} strokeWidth={2} />
+    {Array.from({ length: 8 }, (_, i) => <line key={i} x1={2176} y1={132 + i * 32} x2={2418} y2={132 + i * 32} stroke="#3b1580" strokeWidth={1.2} />)}
+    {/* The sign, in its frame of chasing bulbs */}
+    <rect x={2204} y={128} width={186} height={84} rx={10} fill="#111" stroke="#f472b6" strokeWidth={2.2} />
+    {bulbs.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={2} fill="#fde68a" className={styles.marqueeBulb} style={{ animationDelay: `${(i % 2) * -0.4}s` }} />)}
+    <text x={2297} y={170} textAnchor="middle" fontSize={34} fontStyle="italic" fontWeight={900} fill="#f9a8d4" className={styles.neonFlicker} fontFamily="'Brush Script MT', 'Segoe Script', cursive">Sandy Bottoms</text>
+    <text x={2297} y={189} textAnchor="middle" fontSize={9} fontWeight={900} fill="#67e8f9" fontFamily="sans-serif" letterSpacing={3}>GENTLEMEN&apos;S CLUB</text>
+    <text x={2297} y={204} textAnchor="middle" fontSize={8} fontWeight={900} fill="#fde047" fontFamily="sans-serif" letterSpacing={2}>THONGS OPTIONAL</text>
+    {/* Neon palm, cocktail glass, opening hours */}
+    <g className={styles.neonFlicker} style={{ animationDelay: "-0.6s" }} fill="none" strokeLinecap="round">
+      <path d="M2214 254 V230 M2214 230 q-10 -5 -15 2 M2214 230 q10 -5 15 2 M2214 230 q-5 -10 -12 -7 M2214 230 q5 -10 12 -7" stroke="#4ade80" strokeWidth={2.2} />
+      <path d="M2370 226 h20 l-10 12 z M2380 238 v14 M2374 252 h12" stroke="#22d3ee" strokeWidth={2.2} strokeLinejoin="round" />
+      <circle cx={2386} cy={229} r={1.8} stroke="#f472b6" strokeWidth={1.5} />
+    </g>
+    <text x={2297} y={246} textAnchor="middle" fontSize={10} fontWeight={900} fill="#f472b6" className={styles.neonFlicker} style={{ animationDelay: "-2.6s" }} fontFamily="sans-serif" letterSpacing={2}>OPEN TIL 4AM</text>
+    {/* Blacked-out windows */}
+    <rect x={2184} y={264} width={86} height={34} fill="#0f0a1e" stroke="#f472b6" strokeWidth={1.4} />
+    <text x={2227} y={285} textAnchor="middle" fontSize={9} fontWeight={900} fill="#f472b6" className={styles.neonFlicker} style={{ animationDelay: "-2s" }} fontFamily="sans-serif" letterSpacing={1}>LIVE SHOWS</text>
+    <rect x={2324} y={264} width={86} height={34} fill="#0f0a1e" stroke="#22d3ee" strokeWidth={1.4} />
+    <text x={2367} y={285} textAnchor="middle" fontSize={9} fontWeight={900} fill="#22d3ee" className={styles.neonFlicker} style={{ animationDelay: "-3.1s" }} fontFamily="sans-serif" letterSpacing={1}>COLD BEERS</text>
+    {/* Door, VIP sign, velvet rope */}
+    <rect x={2282} y={302} width={30} height={78} fill="#111" stroke={INK} strokeWidth={1.5} />
+    <rect x={2289} y={308} width={16} height={8} rx={2} fill="#facc15" /><text x={2297} y={314.4} textAnchor="middle" fontSize={5} fontWeight={900} fill="#111" fontFamily="sans-serif">VIP</text>
+    <path d="M2268 380 V360 M2326 380 V360" stroke="#d4af37" strokeWidth={2.4} />
+    <circle cx={2268} cy={359} r={2.2} fill="#d4af37" /><circle cx={2326} cy={359} r={2.2} fill="#d4af37" />
+    <path d="M2268 362 Q2297 376 2326 362" stroke="#b91c1c" strokeWidth={2.6} fill="none" />
+  </g>;
+}
+
+// Woolies, at the Dole Lane end: a big box with the green fascia, the white "Woolworths" and the
+// glowing green apple, and a long lit glass front: shelves of stock under rows of lights, yellow
+// half-price tickets, checkouts, "We're here to help". x -1100..-604.
+function Woolies() {
+  const produce = ["#dc2626", "#f97316", "#facc15", "#16a34a", "#2563eb", "#a855f7", "#f8fafc", "#78350f"];
+  return <g>
+    <rect x={-1100} y={110} width={496} height={270} fill="#d1d5db" stroke={INK} strokeWidth={2.5} />
+    <rect x={-1100} y={110} width={496} height={130} fill="#125c33" stroke={INK} strokeWidth={2.5} />
+    <path d="M-1100 120 H-604" stroke="#1a7a45" strokeWidth={4} />
+    <path d="M-1100 238 H-604" stroke="#0b3d22" strokeWidth={6} />
+    <text x={-872} y={198} textAnchor="middle" fontSize={66} fontWeight={500} fill="#ffffff" className={styles.wooliesGlow} fontFamily="'Segoe UI', Helvetica, Arial, sans-serif" letterSpacing={-1.5}>Woolworths</text>
+    <g transform="translate(-668 176)" className={styles.wooliesGlow}>
+      <path d="M-28 -12 Q-32 20 -8 28 L0 22 L8 28 Q32 20 28 -12 Q15 -24 0 -10 Q-15 -24 -28 -12 Z" fill="none" stroke="#7ddc4f" strokeWidth={9} strokeLinejoin="round" />
+      <path d="M0 -10 V16" stroke="#7ddc4f" strokeWidth={8} strokeLinecap="round" />
+      <path d="M3 -15 q9 -15 20 -12 q-6 13 -20 12 z" fill="#7ddc4f" />
+    </g>
+    {/* The shopfront: lit glass with the store inside */}
+    <rect x={-1090} y={250} width={476} height={130} fill="#fefce8" stroke={INK} strokeWidth={2} />
+    {Array.from({ length: 11 }, (_, i) => <rect key={i} x={-1082 + i * 43} y={256} width={30} height={3} rx={1.5} fill="#fff" stroke="#e5e7eb" strokeWidth={0.6} />)}
+    {[0, 1, 2].map(r => <g key={r}>
+      <rect x={-1080} y={280 + r * 16} width={456} height={3} fill="#9ca3af" />
+      {Array.from({ length: 52 }, (_, i) => <rect key={i} x={-1078 + i * 8.7} y={271 + r * 16} width={6.5} height={9} fill={produce[(i * 3 + r * 5) % produce.length]} opacity={0.85} />)}
+    </g>)}
+    {[-1060, -985, -900, -800, -700].map((x, i) => <g key={x}>
+      <rect x={x} y={262} width={20} height={14} rx={2} fill="#facc15" stroke={INK} strokeWidth={0.8} />
+      <text x={x + 10} y={273} textAnchor="middle" fontSize={10} fontWeight={900} fill="#111" fontFamily="sans-serif">{i % 2 ? "½" : "$"}</text>
+    </g>)}
+    <rect x={-930} y={258} width={84} height={14} rx={2} fill="#111" />
+    <text x={-888} y={268} textAnchor="middle" fontSize={7.5} fontWeight={800} fill="#f8fafc" fontFamily="sans-serif">We&apos;re here to help</text>
+    {/* Checkouts and the staff */}
+    {[-1050, -990, -930].map(x => <g key={x}>
+      <circle cx={x + 18} cy={322} r={6} fill="#e0ac69" stroke={INK} strokeWidth={1} />
+      <path d={`M${x + 10} 334 q8 -6 16 0 v6 h-16 z`} fill="#16a34a" stroke={INK} strokeWidth={0.8} />
+      <rect x={x} y={338} width={44} height={22} fill="#b45309" stroke={INK} strokeWidth={1.2} />
+      <rect x={x + 32} y={326} width={8} height={12} fill="#111" />
+      <rect x={x + 4} y={360} width={8} height={20} fill="#16a34a" stroke={INK} strokeWidth={0.8} />
+    </g>)}
+    {/* Self-serve and a shopper having a moment with the bagging area */}
+    <rect x={-880} y={330} width={30} height={30} fill="#374151" stroke={INK} strokeWidth={1} /><rect x={-876} y={334} width={22} height={12} fill="#7dd3fc" />
+    <circle cx={-838} cy={322} r={6} fill="#f1c7a3" stroke={INK} strokeWidth={1} /><path d="M-846 334 q8 -6 16 0 v14 h-16 z" fill="#2563eb" stroke={INK} strokeWidth={0.8} />
+    <text x={-865} y={325} textAnchor="middle" fontSize={5} fontWeight={900} fill="#dc2626" fontFamily="sans-serif">UNEXPECTED ITEM</text>
+    {/* Silver columns, glass glare, exit sign */}
+    {[-940, -760].map(x => <rect key={x} x={x - 5} y={250} width={10} height={130} fill="#cbd5e1" stroke={INK} strokeWidth={1.2} />)}
+    <path d="M-1070 300 l40 -40 M-1040 310 l30 -30 M-720 310 l40 -40 M-690 320 l40 -40" stroke="#ffffff" strokeWidth={4} opacity={0.5} />
+    <rect x={-648} y={256} width={22} height={10} rx={1.5} fill="#16a34a" stroke={INK} strokeWidth={0.8} />
+    <text x={-637} y={263.5} textAnchor="middle" fontSize={5.5} fontWeight={900} fill="#fff" fontFamily="sans-serif">EXIT</text>
+  </g>;
+}
+// Out the front of Woolies, on the footpath: a line of trolleys and the Quiet Hour board.
+function WooliesFootpath() {
+  const trolley = (x: number) => <g key={x}>
+    <path d={`M${x} 368 h30 l-4 16 h-22 z`} fill="none" stroke="#9ca3af" strokeWidth={1.8} />
+    {[6, 12, 18, 24].map(dx => <path key={dx} d={`M${x + dx} 368 v16`} stroke="#9ca3af" strokeWidth={1} />)}
+    <path d={`M${x} 368 l-6 -8 h-4`} stroke="#dc2626" strokeWidth={2.4} strokeLinecap="round" fill="none" />
+    <circle cx={x + 6} cy={390} r={2.6} fill="#111" /><circle cx={x + 24} cy={390} r={2.6} fill="#111" />
+  </g>;
+  return <g>
+    {[-800, -788, -776, -764].map(trolley)}
+    <path d="M-1050 396 L-1040 352 H-1012 L-1002 396" fill="#16a34a" stroke={INK} strokeWidth={1.4} />
+    <rect x={-1038} y={358} width={24} height={30} fill="#f8fafc" />
+    <text x={-1026} y={368} textAnchor="middle" fontSize={5.5} fontWeight={900} fill="#16a34a" fontFamily="sans-serif">QUIET</text>
+    <text x={-1026} y={375} textAnchor="middle" fontSize={5.5} fontWeight={900} fill="#16a34a" fontFamily="sans-serif">HOUR</text>
+    <text x={-1026} y={383} textAnchor="middle" fontSize={4} fontWeight={700} fill="#111" fontFamily="sans-serif">MON-FRI 10:30</text>
+  </g>;
+}
+
 // `sky={false}` leaves the sky transparent so a separate sky layer (with the jets in it) shows
 // through behind the buildings.
 // `closed`: a shop that lost the last brawl is boarded up, its showbike and parked bikes gone.
 export default function Shopfronts({ sky = true, closed = {} }: { sky?: boolean; closed?: { harley?: boolean; indian?: boolean } }) {
-  return <svg viewBox="-650 0 2900 420" width="100%" height="100%" preserveAspectRatio="xMidYMax slice" aria-hidden>
+  return <svg viewBox="-1120 0 4730 420" width="100%" height="100%" preserveAspectRatio="xMidYMax slice" aria-hidden>
     <defs>
       <linearGradient id="sfSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2f80d1" /><stop offset="1" stopColor="#8cc4f0" /></linearGradient>
       <pattern id="sfBrickRed" width="24" height="12" patternUnits="userSpaceOnUse"><rect width="24" height="12" fill="#b4532a" /><path d="M0 12 H24 M12 0 V6 M0 6 H24 M0 6 V12 M24 6 V12" stroke="#8a3b1c" strokeWidth={1} /></pattern>
       <pattern id="sfBrickOrange" width="24" height="12" patternUnits="userSpaceOnUse"><rect width="24" height="12" fill="#c2410c" /><path d="M0 12 H24 M12 0 V6 M0 6 H24 M0 6 V12 M24 6 V12" stroke="#9a3412" strokeWidth={1} /></pattern>
       <pattern id="sfBrickDark" width="24" height="12" patternUnits="userSpaceOnUse"><rect width="24" height="12" fill="#2b2f36" /><path d="M0 12 H24 M12 0 V6 M0 6 H24 M0 6 V12 M24 6 V12" stroke="#1b1e23" strokeWidth={1} /></pattern>
     </defs>
-    {sky && <rect x={-650} width="2900" height="420" fill="url(#sfSky)" />}
+    {sky && <rect x={-1120} width="4730" height="420" fill="url(#sfSky)" />}
     <g className={styles.stripCloud}><ellipse cx={150} cy={70} rx={60} ry={22} fill="#fff" /><ellipse cx={190} cy={62} rx={40} ry={20} fill="#fff" /></g>
     <g className={styles.stripCloud} style={{ animationDelay: "-30s" }}><ellipse cx={900} cy={40} rx={50} ry={16} fill="#fff" opacity={0.9} /></g>
 
@@ -394,8 +708,10 @@ export default function Shopfronts({ sky = true, closed = {} }: { sky?: boolean;
     {closed.indian && <BoardedUp x={-70} y={210} w={56} h={166} />}
 
     {/* ---- Back lanes at each end ---- */}
-    <Alley x={-650} wallTop={56} wallColor="#1c1c1e" />
-    <Alley x={2050} flip wallTop={110} wallColor="#fcd116" />
+    <Alley x={-650} wallTop={56} wallColor="#1c1c1e" corner={false} cornerWall="#9ca3af" />
+    <Woolies />
+    <Alley x={2050} flip wallTop={110} wallColor="#fcd116" cornerW={76} corner={false} />
+    <StripClub />
     {/* ---- The six terraces ---- */}
     {/* 0: painted brick, the fish and chip shop */}
     <rect x={0} y={90} width={250} height={290} fill="#f1f5f9" stroke={INK} strokeWidth={2.5} />
@@ -541,16 +857,19 @@ export default function Shopfronts({ sky = true, closed = {} }: { sky?: boolean;
     <path d="M1854 300 l14 -10 M1882 320 l14 -10" stroke="#fff" strokeWidth={3} opacity={0.7} />
     <rect x={1700} y={370} width={146} height={10} fill="#1d3f9a" /><rect x={1904} y={370} width={146} height={10} fill="#1d3f9a" />
 
+    {/* ---- Past Snag Alley: the esplanade park and the surf beach ---- */}
+    <g transform="translate(160 0)"><Beachfront /></g>
     {/* ---- Street furniture ---- */}
-    <rect x={-650} y={380} width={2900} height={40} fill="#b9b4aa" />
-    {Array.from({ length: 97 }, (_, i) => <line key={i} x1={-650 + i * 30} y1={380} x2={-650 + i * 30} y2={420} stroke="#a39e93" strokeWidth={1.5} />)}
-    <rect x={-650} y={380} width={2900} height={4} fill="#8f8a80" />
+    <rect x={-1120} y={380} width={4730} height={40} fill="#b9b4aa" />
+    {Array.from({ length: 158 }, (_, i) => <line key={i} x1={-1120 + i * 30} y1={380} x2={-1120 + i * 30} y2={420} stroke="#a39e93" strokeWidth={1.5} />)}
+    <rect x={-1120} y={380} width={4730} height={4} fill="#8f8a80" />
+    <WooliesFootpath />
     <LaneCrossing x={-650} />
     <LaneCrossing x={2050} flip />
     {/* The chemist's yellow bollards (not across the doors) */}
     {[1712, 1752, 1792, 1832, 1918, 1958, 1998, 2038].map(x => <rect key={x} x={x - 3} y={384} width={6} height={20} rx={2} fill="#fcd116" stroke={INK} strokeWidth={1.1} />)}
-    <LaneSign x={-610} name="DOLE LANE" />
-    <LaneSign x={2210} name="SNAG ALLEY" />
+    <LaneSign x={-520} name="DOLE LANE" />
+    <LaneSign x={2108} name="SNAG ALLEY" />
     {/* The bike shops' rides parked out front, on the footpath */}
     {/* Harley row: angled into the kerb, front wheels turned out to the street, pointing back down
         the street at the Indian shop. Some baggers with batwing fairings. Drawn left to right so each
@@ -577,14 +896,11 @@ export default function Shopfronts({ sky = true, closed = {} }: { sky?: boolean;
     <path d="M1152 60 q40 -40 110 -36" stroke="#9ca3af" strokeWidth={4} fill="none" />
     <ellipse cx={1268} cy={26} rx={16} ry={6} fill="#cbd5e1" stroke={INK} strokeWidth={1.2} />
     </g>
-    <path d="M-650 100 Q-300 160 0 140 M-650 76 Q-300 124 0 110" stroke="#1f2937" strokeWidth={2} fill="none" />
-    <path d="M0 140 Q360 165 694 70 M0 110 Q360 132 702 92 M758 70 Q1500 150 2250 70 M750 92 Q1500 175 2250 104" stroke="#1f2937" strokeWidth={2} fill="none" />
-    {/* A camp of flying foxes hanging off the wires: a little mob over the chippy end and the
-        servo end, a few more out past the bike shops. And the obligatory shoes on a wire. */}
-    {([["rightHigh", 0.52, false], ["rightHigh", 0.545, true], ["rightHigh", 0.57, false], ["rightHigh", 0.595, false], ["leftLow", 0.3, false], ["leftLow", 0.33, true], ["midHigh", 0.66, false], ["midHigh", 0.685, false]] as [keyof typeof WIRES, number, boolean][]).map(([wire, t, open], i) => {
-      const at = onWire(WIRES[wire], t);
-      return <FruitBat key={`bat${i}`} x={at.x} y={at.y} open={open} delay={-i * 0.7} />;
-    })}
+    <rect x={-597} y={52} width={10} height={348} fill="#8a7a5f" stroke={INK} strokeWidth={1.5} />
+    <path d="M-609 72 h34 M-607 104 h30" stroke="#5b4636" strokeWidth={5} />
+    <path d="M-592 100 Q-300 160 0 140 M-592 76 Q-300 124 0 110" stroke="#1f2937" strokeWidth={2} fill="none" />
+    <path d="M0 140 Q360 165 694 70 M0 110 Q360 132 702 92 M758 70 Q1580 150 2410 70 M750 92 Q1580 175 2410 104" stroke="#1f2937" strokeWidth={2} fill="none" />
+    {/* The obligatory shoes on a wire (the fruit bats hanging off the wires are live, in the game) */}
     {([["midLow", 0.46, "#ef4444", "#111"], ["rightLow", 0.82, "#f8fafc", "#2563eb"], ["leftHigh", 0.62, "#111", "#facc15"]] as [keyof typeof WIRES, number, string, string][]).map(([wire, t, colour, trim], i) => {
       const at = onWire(WIRES[wire], t);
       return <HangingShoes key={`shoes${i}`} x={at.x} y={at.y} colour={colour} trim={trim} delay={-i * 0.5} />;

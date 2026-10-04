@@ -24,6 +24,12 @@ import HoopSnake from "./HoopSnake";
 import Bludger from "./Bludger";
 import OldNev from "./OldNev";
 import StoreBiker from "./StoreBiker";
+import SmokoGirl from "./SmokoGirl";
+import FruitBat from "./FruitBat";
+import { WIRES, onWire, type WireName } from "./streetWires";
+import DogWalker from "./DogWalker";
+import { Lifeguard, Swimmer, PaddleSurfer, SharkFin, SharkLunge } from "./BeachRescue";
+import { SkiBoat, StackedSkier, JetSki, Parasail, FallingRider, DolphinPod, WhaleBreach, WhaleTail, Bazza, VMRBoat, BrokenBoat, Floater } from "./SeaLife";
 import PassingBiker from "./PassingBiker";
 import { HarleyBadge, IndianBadge } from "./BikeLogos";
 import Commuter from "./Commuter";
@@ -304,6 +310,53 @@ type RumbleBike = { id: number; brand: "harley" | "indian"; look: number; x: num
 type Rumble = { mid: number; bikes: RumbleBike[]; stage: "ride" | "fight" | "result" | "leave"; knocked: string | null; winner: "harley" | "indian" | null };
 const SHOP_PAIRS = [{ at: -210, row: 18 }, { at: -75, row: 50 }, { at: 60, row: 18 }, { at: 195, row: 50 }];
 const INDIAN_WEAPONS = ["🔧", undefined, "🌭", "🪃"], HARLEY_WEAPONS = ["🍺", "🔧", undefined, "🩴"];
+// Life down the beach end: a bloke walking his dog round the park, tweakers going through the bins,
+// lifeguard rescues and the odd shark.
+type DogWalkState = { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "walk" | "pee" | "poop" | "stand"; line: string | null };
+type BinDiver = { who: "trev" | "kylie"; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "run" | "cook" | "dance"; line: string | null };
+type GuardState = { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "run" | "swim" | "carry" | "flex" | "stand"; line: string | null };
+type SwimmerState = { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "drown" | "sit" | "walk"; line: string | null };
+type SharkState = { surfer: { x: number; bottom: number } | null; fin: { x: number; bottom: number; ms: number } | null; chomp: { x: number; bottom: number } | null; blood: { x: number; bottom: number } | null; board: { x: number; bottom: number } | null };
+const DOG_PEE_LINES = ["Every. Single. Tree.", "Hurry up, Bluey, it's cold.", "Not the BBQ, Bluey!", "Leave somethin' for the other dogs."];
+const DOG_POOP_LINES = ["Nobody saw that.", "Good boy! ...ah. No bags.", "Council can pick that up.", "That's a ripper, Bluey."];
+const BIN_FINDS = ["Half a dim sim! JACKPOT!", "Who chucks out a perfectly good pie?!", "Chips! Bit of sand on 'em. Still good.", "Ooh, a bottle cap. Score.", "Cold snag! Breakfast sorted!", "Half a can of Bundy! It's me birthday!"];
+const RESCUE_THANKS = ["My hero!", "*cough* ...thanks, legend!", "I only went in for a wee!", "Can I get your number? For... safety."];
+const RESCUE_BRAG = ["All in a day's work.", "Swim between the flags, love!", "That's what the flags are for!", "Rip current. Happens to the best of us."];
+const SHARK_SCREAMS = ["SHAAAARK!", "GET OUTTA THE WATER!", "Not again...", "He was such a good paddler..."];
+// Out on the water: ski boats, jet skis, parasailers, dolphins, whales (and what happens to people
+// who fall in). Each bit is a positioned span; `cls` moves it, `inner` animates what's inside.
+// `tms` makes a bit slide (CSS transition on left) to its x instead, with `ease`; `hide` fades it out.
+type SeaBit = { id: number; kind: "ski" | "skier" | "jet" | "para" | "rider" | "pod" | "whale" | "tail" | "fin" | "chomp" | "blood" | "vmr" | "broke" | "floater"; x: number; bottom: number; w: number; h: number; cls?: string; inner?: string; clip?: boolean; dx?: number; dy?: number; ms?: number; delay?: number; on?: boolean; colour?: string; tms?: number; ease?: string; hide?: boolean; hook?: boolean };
+type BazzaState = { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "walk" | "hold" | "zapped" | "hop"; line: string | null };
+// Flying foxes hanging off the power lines: hover over one and it touches two wires (ZZZT), shoot one
+// and it drops; another one hangs up there again later.
+type Bat = { id: number; wire: WireName; t: number; open: boolean; zapped: boolean; shot: boolean };
+const BAT_SPOTS: [WireName, number, boolean][] = [["rightHigh", 0.52, false], ["rightHigh", 0.545, true], ["rightHigh", 0.57, false], ["rightHigh", 0.595, false], ["leftLow", 0.3, false], ["leftLow", 0.33, true], ["midHigh", 0.66, false], ["midHigh", 0.685, false]];
+const BAT_ZAPS = ["ZZZZT!", "BZZZT!", "*crackle*", "SKREEEE!", "*smells like BBQ*"];
+// Two dancers from Sandy Bottoms on a smoko in Snag Alley. Click either and they have a yarn about
+// the job: one sets it up, the other knocks it down. Dealt like a shuffled deck.
+const DANCER_CHAT: [string, string][] = [
+  ["Some bloke tried to tip me in Woolies vouchers.", "Ya take 'em? Eggs are dear, love."],
+  ["Pole dancing's the only cardio I do.", "Same. That and running from me ex."],
+  ["Me mum still thinks I work in hospitality.", "Technically true. Ya serve drinks... and dreams."],
+  ["Another buck's party tonight.", "Great. Twelve Daryls and one tenner between 'em."],
+  ["Bloke asked if I'm a uni student.", "Tell him ya majoring in his wallet."],
+  ["These heels cost more than me rego.", "And they've got better suspension than your Commodore."],
+  ["A tradie tipped me in Bunnings snags last night.", "Onion on top? Then he's a keeper."],
+  ["Some fella reckons he 'doesn't normally come to these places'.", "Yeah, him and every other regular."],
+  ["Me back's killin' me.", "Pole's tax deductible, love. Ask me accountant."],
+  ["Bloke in there asked for me number.", "Gave him Centrelink's. He'll be on hold till Christmas."],
+  ["Got glitter in places glitter's got no business bein'.", "Ya'll be findin' it at ya funeral, mate."],
+  ["Hens night in there. They're feral.", "Worse than the bikies. At least the bikies tip."],
+  ["The Harley boys were in last night.", "Tipped in beard hair and oil stains again?"],
+  ["Then the Indian mob came in.", "Spent the whole night arguin' about the Harley mob, didn't they."],
+  ["Some bloke tipped me entirely in coins.", "What is he, a parking meter?"],
+  ["Smoko's the best part of the shift.", "Only time nobody's askin' for a 'special discount'."],
+  ["Bloke asked me what a girl like me's doin' in a place like this.", "Rent, mate. It's called rent."],
+  ["Me stage name's Sandy. 'Cos of the club.", "Mine's Chardonnay. 'Cos of the chardonnay."],
+  ["True Blue come in again. Paid in shrimp off the barbie.", "Better than the bloke who paid in exposure."],
+  ["I'm savin' up for a house.", "On the Gold Coast? Better learn a few more moves, love."],
+];
 type Phase = "hidden" | "enter" | "parked" | "leave";
 type Action = "flip" | "moon" | "drink" | "smoke" | "throw";
 type Line = { text: string; ai: boolean };
@@ -314,10 +367,10 @@ let uid = Date.now();
 // Full-screen mode (/day-out/shazz): set by the component when it mounts with `immersive`.
 let IMMERSIVE = false;
 const isPhone = () => typeof window !== "undefined" && (window.innerWidth < 640 || (IMMERSIVE && window.innerHeight < 500));
-// The street drawing (Shopfronts, 2900×420) is shown whole at the strip's height, so the world is
+// The street drawing (Shopfronts, 4730×420) is shown whole at the strip's height, so the world is
 // usually wider than the screen and you drag / swipe / edge-pan along it. The strip heights here
 // match .shopStrip in day-out.module.css (full screen: shops in the bottom half, sky above).
-const STREET_X = -650, STREET_W = 2900, STREET_H = 420;
+const STREET_X = -1120, STREET_W = 4730, STREET_H = 420;
 const stripHeight = () => {
   const W = window.innerWidth, H = window.innerHeight;
   if (IMMERSIVE) return Math.min(H - 147, Math.max(H * 0.46, 220));
@@ -328,15 +381,18 @@ const VW = () => {
   if (typeof window === "undefined") return 1200;
   return Math.max(window.innerWidth, Math.round(stripHeight() * STREET_W / STREET_H));
 };
+// Crossing timings were tuned for a ~1600px street; this stretches one to the full street (out to
+// the beach) so things keep their speed instead of rocketing across.
+const span = (ms: number) => ms * Math.max(1, VW() / 1600);
 // Sportsbikes are drawn 110×60; this keeps them road-sized next to the cars and Shazz.
 const sportbikeW = () => (isPhone() ? 150 : 205);
 // Everything Shazz can take a shot at. Birds and pests go up in a puff; the rest drop as dinner.
-type Target = { kind: "flyer"; id: number } | { kind: "flock"; index: number } | { kind: "raider" } | { kind: "ibis" } | { kind: "magpie"; id: number } | { kind: "swooper"; id: number }
+type Target = { kind: "flyer"; id: number } | { kind: "flock"; index: number } | { kind: "raider" } | { kind: "ibis" } | { kind: "magpie"; id: number } | { kind: "swooper"; id: number } | { kind: "bat"; id: number }
   | { kind: "roo"; id: number } | { kind: "crossing"; id: number } | { kind: "snake"; id: number } | { kind: "strikeRoo" }
   | { kind: "dropBear" } | { kind: "dangler"; id: number } | { kind: "koala"; tree: number } | { kind: "lorikeet"; id: number } | { kind: "emu"; id: number };
 const FUR: Partial<Record<Target["kind"], string[]>> = {
   roo: ["#b5733a", "#e6c49a"], strikeRoo: ["#b5733a", "#e6c49a"], koala: ["#9aa0a6", "#e8e8e8"], dropBear: ["#8a7f72", "#5b5148"], dangler: ["#8a7f72", "#5b5148"],
-  snake: ["#7a5c2e", "#c9a86a"], magpie: ["#111", "#fff", "#111"], swooper: ["#111", "#fff", "#111"], emu: ["#5b4636", "#3b2f26", "#7a6048"], lorikeet: ["#16a34a", "#1d4ed8", "#f97316", "#dc2626", "#facc15"],
+  snake: ["#7a5c2e", "#c9a86a"], magpie: ["#111", "#fff", "#111"], swooper: ["#111", "#fff", "#111"], bat: ["#3b2a20", "#b07a3c", "#22160f"], emu: ["#5b4636", "#3b2f26", "#7a6048"], lorikeet: ["#16a34a", "#1d4ed8", "#f97316", "#dc2626", "#facc15"],
 };
 const POSTIE_W = 170, KID_W = 115;
 type DolePerson = { id: number; who: "trev" | "kylie"; tint: string; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "run" | "peek" | "dance" | "scratch"; line: string | null; inside: boolean; cash: boolean; beer: boolean; stagger: boolean; gone: boolean; enter?: "climb" | "pop"; weird?: boolean };
@@ -871,7 +927,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // right to left, straight at Shazz (who's on the wrong side, naturally), and they swerve.
   function spawnCar() {
     const width = isPhone() ? 150 : 200, lane: "far" | "near" = Math.random() < 0.5 ? "far" : "near";
-    const dir: 1 | -1 = lane === "far" ? 1 : -1, ms = 4200 + Math.random() * 2500;
+    const dir: 1 | -1 = lane === "far" ? 1 : -1, ms = span(4200 + Math.random() * 2500);
     const from = dir === 1 ? -width : VW(), to = dir === 1 ? VW() : -width;
     const herMiddle = place.current.x + (bike.current?.offsetWidth || 200) / 2;
     const passAt = Math.max(0, Math.min(1, (herMiddle - width / 2 - from) / (to - from))) * ms;
@@ -1352,7 +1408,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   }, []);
   // A loose group of 2-4 bin chickens flying over together, slightly staggered.
   function spawnFlyers() {
-    const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, base = 200 + Math.random() * Math.max(80, window.innerHeight * 0.4), ms = 6500 + Math.random() * 3000;
+    const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, base = 200 + Math.random() * Math.max(80, window.innerHeight * 0.4), ms = span(6500 + Math.random() * 3000);
     const group = 2 + Math.floor(Math.random() * 3);
     setFlyers(list => [...list, ...Array.from({ length: group }, (_, i) => ({ id: ++uid, dir, bottom: base + (i % 2 ? 36 : -14) * Math.ceil(i / 2), ms: ms + i * 220, delay: i * 260 }))]);
     if (phaseRef.current === "parked" && !busy.current && Math.random() < 0.35) window.setTimeout(() => speak("Check out those white pointers!!"), 1500);
@@ -1385,6 +1441,14 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         break;
       case "magpie": setKid(k => k && { ...k, magpies: k.magpies.filter(m => m.id !== target.id) }); break;
       case "swooper": setSwoopers(list => list.filter(b => b.id !== target.id)); break;
+      case "bat": {
+        const fell = bats.find(b => b.id === target.id);
+        setBats(list => list.map(b => (b.id === target.id ? { ...b, shot: true, zapped: false } : b)));
+        window.setTimeout(() => setBats(list => list.filter(b => b.id !== target.id)), 1300);
+        // Another one hangs up in the same spot a while later.
+        if (fell) window.setTimeout(() => setBats(list => (list.length ? [...list, { ...fell, id: ++uid, shot: false, zapped: false }] : list)), 45_000 + Math.random() * 30_000);
+        break;
+      }
       case "roo": setRoos(list => list.filter(item => item.id !== target.id)); dinner("roo"); break;
       case "crossing": {
         const critter = crossings.find(c => c.id === target.id);
@@ -1625,7 +1689,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     if (!claimScene(24_000, 8000)) return;
     const trees = treeSpots(), fromRight = Math.random() < 0.5, W = VW(), H = window.innerHeight;
     // Half land along the shop rooftops (parapet tops in the street drawing), half in the gums.
-    const sm = stripMap(), ROOFTOPS: [number, number, number][] = [[10, 240, 82], [255, 495, 64], [505, 570, 70], [680, 745, 70], [755, 995, 88], [1455, 1510, 84], [1640, 1695, 84], [1705, 1805, 110], [1945, 2045, 110], [1005, 1115, 20], [1120, 1445, 78], [-445, -5, 58]];
+    const sm = stripMap(), ROOFTOPS: [number, number, number][] = [[10, 240, 82], [255, 495, 64], [505, 570, 70], [680, 745, 70], [755, 995, 88], [1455, 1510, 84], [1640, 1695, 84], [1705, 1805, 110], [1945, 2045, 110], [1005, 1115, 20], [1120, 1445, 78], [-445, -5, 58], [2445, 2475, 150], [2615, 2645, 110], [2795, 2825, 160]];
     const perch = () => {
       if (Math.random() < 0.5) { const [a, b, y] = pick(ROOFTOPS); return { x: sm.x(a + Math.random() * (b - a)) - 16, bottom: sm.b(y) - 3 }; }
       const t = pick(trees); return { x: t.x + TREE.W * (0.12 + Math.random() * 0.7) - 15, bottom: TREE_BOTTOM + TREE.H * (0.62 + Math.random() * 0.28) };
@@ -1721,7 +1785,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // board and go off for fifteen seconds. Then the coppers roll in, zap the lot (slapstick), and
   // chuck them in the paddy wagon, deadpan as you like.
   // ---- Dole day at Centrelink -------------------------------------------------------------
-  // Where things in the shop-strip drawing (Shopfronts' viewBox is -650 0 2900 420, scaled to cover
+  // Where things in the shop-strip drawing (Shopfronts' viewBox is -1120 0 4730 420, scaled to cover
   // the strip) land on screen. Building coordinates are in drawing units; the Indian shop is at x < 0.
   const stripMap = () => {
     const strip = typeof document === "undefined" ? null : document.querySelector<HTMLElement>(`.${styles.shopStrip}`);
@@ -2181,7 +2245,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     }
     hitTarget(target, el);
     if (Math.random() < 0.4) bulletHoles(el, 1);
-    const bird = ["flyer", "flock", "raider", "ibis", "lorikeet"].includes(target.kind), pest = ["magpie", "swooper", "dropBear", "dangler", "emu"].includes(target.kind);
+    const bird = ["flyer", "flock", "raider", "ibis", "lorikeet", "bat"].includes(target.kind), pest = ["magpie", "swooper", "dropBear", "dangler", "emu"].includes(target.kind);
     if (Math.random() < 0.55) speak(pick(bird ? BIRD_SHOT_LINES : pest ? PEST_SHOT_LINES : ANIMAL_SHOT_LINES));
     await later(160);
     place.current = { ...place.current, tilt: 0 }; draw();
@@ -2218,7 +2282,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   async function postieRun() {
     if (!claimScene(10_000)) return;
     const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, w = isPhone() ? 130 : POSTIE_W;
-    const start = dir === 1 ? -w - 10 : VW() + 10, end = dir === 1 ? VW() + 10 : -w - 10, ms = 9000;
+    const start = dir === 1 ? -w - 10 : VW() + 10, end = dir === 1 ? VW() + 10 : -w - 10, ms = span(9000);
     setPostie({ x: start, ms: 0, dir });
     await later(60);
     setPostie(pt => pt && { ...pt, x: end, ms });
@@ -2321,7 +2385,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     await later(14_000);
     if (gone()) { flockBusy.current = false; return; }
     // One lap over the top, left to right.
-    setFlock(fl => fl && { ...fl, dir: 1, stage: "pass", birds: fl.birds.map((b, i) => ({ ...b, x: VW() + 80 + i * 60, bottom: window.innerHeight * (0.62 + (i % 3) * 0.07), ms: 7000 + i * 200 })) });
+    setFlock(fl => fl && { ...fl, dir: 1, stage: "pass", birds: fl.birds.map((b, i) => ({ ...b, x: VW() + 80 + i * 60, bottom: window.innerHeight * (0.62 + (i % 3) * 0.07), ms: span(7000) + i * 200 })) });
     if (phaseRef.current === "parked" && !busy.current && Math.random() < 0.5) window.setTimeout(() => speak("Check out those white pointers!!"), 1500);
     await later(13_000);
     if (gone()) { flockBusy.current = false; return; }
@@ -2361,7 +2425,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   function spawnSportbike() {
     const lane: "far" | "near" = Math.random() < 0.5 ? "far" : "near", dir: 1 | -1 = lane === "far" ? 1 : -1;
     const color = pick(SPORTBIKE_COLORS), red = color === RED_BIKE;
-    const ms = red ? 380 + Math.random() * 80 : 1900 + Math.random() * 900;
+    const ms = span(red ? 380 + Math.random() * 80 : 1900 + Math.random() * 900);
     setSportbikes(list => [...list, { id: ++uid, dir, lane, color, ms }]);
     if (red) {
       // So fast it leaves a trail of smoke hanging over the road behind it.
@@ -2472,7 +2536,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     if (Math.random() < 0.6) {
       // Bin chickens overhead: out comes the slug gun.
       const dir: 1 | -1 = fromRight ? 1 : -1, base = GROUND + 250 + Math.random() * 90, ids = [++uid, ++uid, ++uid];
-      setFlyers(list => [...list, ...ids.map((id, i) => ({ id, dir, bottom: base + (i % 2 ? 40 : -10) * Math.ceil(i / 2), ms: 8000 + i * 220, delay: i * 300 }))]);
+      setFlyers(list => [...list, ...ids.map((id, i) => ({ id, dir, bottom: base + (i % 2 ? 40 : -10) * Math.ceil(i / 2), ms: span(8000) + i * 220, delay: i * 300 }))]);
       setDazza(d => d && { ...d, line: "Hang on... BIN CHICKENS! Where's me slug gun?" });
       await later(1600);
       setDazza(d => d && { ...d, pose: "aim", line: null });
@@ -2951,7 +3015,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   };
   const quackAt = (x: number) => add({ kind: "burst", x, y: FAR_LANE + duckW() * 0.5, size: 0, text: pick(["QUACK QUACK!", "QUAAACK!", "QUACK QUACK QUACK!"]) });
   useEffect(() => {
-    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
+    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setDogWalk(null); setDogPoops([]); setBinDiver(null); setRescue(null); setShark(null); setSeaBits([]); setBazza(null); setBats([]); setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
     let alive = true, target = 4 + (Math.random() < 0.5 ? 1 : 0), look = Math.floor(Math.random() * 6);
     const busComes = async () => {
       const bw = duckW(), sm = stripMap(), stopAt = sm.x(505) - bw * 0.6, startX = -bw - 40, driveMs = Math.max(2500, (stopAt - startX) * 3);
@@ -3144,6 +3208,383 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flockOut]);
 
+  // ---- The dancers on their smoko in Snag Alley ----
+  const [dancerLines, setDancerLines] = useState<[string | null, string | null]>([null, null]);
+  const [dancersOut, setDancersOut] = useState(false);
+  useEffect(() => { setDancersOut(immersive || phase !== "hidden"); if (!immersive && phase === "hidden") setDancerLines([null, null]); }, [phase, immersive]);
+  const dancerBusy = useRef(false), dancerDeck = useRef<number[]>([]);
+  async function dancerChat(first: 0 | 1) {
+    if (dancerBusy.current) return;
+    dancerBusy.current = true;
+    if (!dancerDeck.current.length) dancerDeck.current = DANCER_CHAT.map((_, i) => i).sort(() => Math.random() - 0.5);
+    const [setup, punch] = DANCER_CHAT[dancerDeck.current.shift()!], read = (text: string) => Math.max(4200, 1600 + text.length * 72);
+    setDancerLines(first === 0 ? [setup, null] : [null, setup]);
+    await later(read(setup));
+    setDancerLines(first === 0 ? [null, punch] : [punch, null]);
+    await later(read(punch));
+    setDancerLines([null, null]);
+    dancerBusy.current = false;
+  }
+
+  // ---- Fruit bats on the power lines ----
+  const [bats, setBats] = useState<Bat[]>([]);
+  useEffect(() => {
+    if (!immersive && phase === "hidden") { setBats([]); return; }
+    setBats(list => (list.length ? list : BAT_SPOTS.map(([wire, t, open]) => ({ id: ++uid, wire, t, open, zapped: false, shot: false }))));
+  }, [phase, immersive]);
+  // Where a bat sits on screen: hanging by its feet from its spot on the wire.
+  const batBox = (b: Bat) => {
+    const sm = stripMap(), at = onWire(WIRES[b.wire], b.t), w = 52 * sm.k, h = 44 * sm.k;
+    return { left: sm.x(at.x) - w / 2, bottom: sm.b(at.y) + 2 * sm.k - h, w, h };
+  };
+  // Hover over one: it brushes the other wire. ZZZT.
+  function zapBat(id: number) {
+    const bat = bats.find(b => b.id === id);
+    if (!bat || bat.zapped || bat.shot) return;
+    setBats(list => list.map(b => (b.id === id ? { ...b, zapped: true } : b)));
+    const box = batBox(bat);
+    add({ kind: "burst", x: box.left - 10, y: box.bottom + box.h + 6, size: 0, text: pick(BAT_ZAPS) });
+    window.setTimeout(() => setBats(list => list.map(b => (b.id === id ? { ...b, zapped: false } : b))), 1300);
+  }
+
+  // ---- Down the beach end ----
+  const beachSize = { dog: () => (isPhone() ? 84 : 116), guard: () => (isPhone() ? 34 : 46), swimmer: () => (isPhone() ? 26 : 34), surfer: () => (isPhone() ? 52 : 70), shark: () => (isPhone() ? 90 : 120) };
+  // A bloke walks his blue heeler round the park, all day: wanders about, the dog cocks its leg on
+  // everything, does the odd poo (which may or may not get picked up). Click them for a woof.
+  const [dogWalk, setDogWalk] = useState<DogWalkState | null>(null);
+  const dogRef = useRef<DogWalkState | null>(null);
+  useEffect(() => { dogRef.current = dogWalk; }, [dogWalk]);
+  const [dogPoops, setDogPoops] = useState<{ id: number; x: number; bottom: number }[]>([]);
+  useEffect(() => {
+    if (!immersive && phase === "hidden") { setDogWalk(null); setDogPoops([]); return; }
+    let alive = true;
+    const run = async () => {
+      setDogWalk({ x: stripMap().x(2430), bottom: stripMap().b(377), ms: 0, faceLeft: false, pose: "walk", line: null });
+      await later(500);
+      while (alive) {
+        const sm = stripMap(), w = beachSize.dog(), cur = dogRef.current;
+        if (!cur) { await later(500); continue; }
+        const x = sm.x(2440 + Math.random() * 540) - w / 2, ms = Math.max(1200, Math.abs(x - cur.x) * 16);
+        setDogWalk(d => d && { ...d, x, bottom: sm.b(373 + Math.random() * 5), ms, faceLeft: x < d.x, pose: "walk", line: null });
+        await later(ms);
+        if (!alive) return;
+        const roll = Math.random();
+        if (roll < 0.3) {
+          setDogWalk(d => d && { ...d, ms: 0, pose: "pee", line: Math.random() < 0.5 ? pick(DOG_PEE_LINES) : null });
+          await later(2800);
+        } else if (roll < 0.55) {
+          setDogWalk(d => d && { ...d, ms: 0, pose: "poop", line: null });
+          await later(2400);
+          if (!alive) return;
+          const d0 = dogRef.current;
+          if (d0) {
+            const id = ++uid, rear = d0.faceLeft ? d0.x + w * (50 / 130) : d0.x + w * (80 / 130);
+            setDogPoops(list => [...list.slice(-5), { id, x: rear - 6, bottom: d0.bottom }]);
+            window.setTimeout(() => setDogPoops(list => list.filter(item => item.id !== id)), 120_000);
+          }
+          setDogWalk(d => d && { ...d, pose: "stand", line: pick(DOG_POOP_LINES) });
+          await later(2800);
+        } else {
+          setDogWalk(d => d && { ...d, ms: 0, pose: "stand" });
+          await later(1200 + Math.random() * 2200);
+        }
+      }
+    };
+    void run();
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, immersive]);
+  // Tweakers doing the rounds of the bins (the two in the park and the bin chicken's one) for a
+  // feed: rummage, rubbish everywhere, a little dance when they find something.
+  const [binDiver, setBinDiver] = useState<BinDiver | null>(null);
+  const binDiveOn = useRef(false);
+  async function binDive(pan = false) {
+    if (binDiveOn.current || (!immersive && phaseRef.current === "hidden")) return;
+    binDiveOn.current = true;
+    const sm = stripMap(), bins = [{ x: sm.x(2860), b: sm.b(378) }, { x: binX() + BIN_W / 2, b: BIN_BOTTOM - 4 }], bin = pick(bins);
+    if (pan) panTo(bin.x);
+    const who = Math.random() < 0.55 ? "trev" : "kylie", fromLeft = Math.random() < 0.5;
+    const from = bin.x + (fromLeft ? -1 : 1) * (420 + Math.random() * 220), stand = fromLeft ? bin.x - 64 : bin.x + 2, walkMs = Math.max(1200, Math.abs(stand - from) * 7);
+    setBinDiver({ who, x: from, bottom: bin.b, ms: 0, faceLeft: !fromLeft, pose: "run", line: null });
+    await later(60);
+    setBinDiver(d => d && { ...d, x: stand, ms: walkMs });
+    await later(walkMs + 100);
+    setBinDiver(d => d && { ...d, pose: "cook", ms: 0, line: pick(["Right, what've we got...", "Come to daddy...", "Dinner time."]) });
+    for (let i = 0; i < 7; i++) {
+      add({ kind: "junk", x: bin.x, y: bin.b + 50, size: 0, dx: (Math.random() - 0.5) * 240, dy: 50, arc: -(60 + Math.random() * 70), text: pick(BIN_JUNK) });
+      if (i === 2) setBinDiver(d => d && { ...d, line: null });
+      await later(480);
+    }
+    setBinDiver(d => d && { ...d, pose: "dance", line: pick(BIN_FINDS) });
+    await later(2800);
+    setBinDiver(d => d && { ...d, pose: "run", line: null, x: from, ms: walkMs, faceLeft: fromLeft });
+    await later(walkMs + 100);
+    setBinDiver(null);
+    binDiveOn.current = false;
+  }
+  // Somebody gets caught in the rip; the lifeguard sprints down from the hut, swims out, carries
+  // her back up the sand, and they both have a moment.
+  const [rescue, setRescue] = useState<{ guard: GuardState | null; swimmer: SwimmerState | null } | null>(null);
+  const rescueOn = useRef(false);
+  const updGuard = (change: (g: GuardState) => GuardState) => setRescue(r => (r && r.guard ? { ...r, guard: change(r.guard) } : r));
+  async function lifeguardRescue(pan = false) {
+    if (rescueOn.current || (!immersive && phaseRef.current === "hidden")) return;
+    rescueOn.current = true;
+    const sm = stripMap(), gw = beachSize.guard(), gh = gw * 2, sw = beachSize.swimmer(), sh = sw * 2.5;
+    const spot = sm.x(3210 + Math.random() * 170), sea = sm.b(312), sand = sm.b(374), shore = sm.b(334), hut = sm.x(3485);
+    if (pan) panTo(spot);
+    setRescue({ guard: null, swimmer: { x: spot - sw / 2, bottom: sea - sh * 0.2, ms: 0, faceLeft: false, pose: "drown", line: "HELP! HELP!" } });
+    await later(1800);
+    add({ kind: "burst", x: hut - 50, y: sand + gh + 20, size: 0, text: "TWEEEEET!" });
+    setRescue(r => r && { ...r, guard: { x: hut - gw / 2, bottom: sand, ms: 0, faceLeft: spot < hut, pose: "run", line: pick(["HANG ON, LOVE!", "I'M COMIN'!", "OUTTA THE WAY!"]) } });
+    await later(80);
+    const runMs = Math.max(900, Math.abs(spot - hut) * 5);
+    updGuard(g => ({ ...g, x: spot - gw / 2 + (spot < hut ? 26 : -26), bottom: shore, ms: runMs }));
+    await later(runMs);
+    updGuard(g => ({ ...g, pose: "swim", line: null, x: spot - gw / 2, bottom: sea - gh * 0.18, ms: 1400 }));
+    await later(1500);
+    // Got her.
+    setRescue(r => r && { ...r, swimmer: null });
+    updGuard(g => ({ ...g, pose: "carry", x: spot - gw / 2, bottom: sand - 4, ms: 2200, faceLeft: true }));
+    await later(2300);
+    setRescue(r => r && { guard: r.guard && { ...r.guard, pose: "flex", ms: 0, line: null }, swimmer: { x: spot - gw / 2 - sw - 4, bottom: sand - 4, ms: 0, faceLeft: false, pose: "sit", line: pick(RESCUE_THANKS) } });
+    await later(2400);
+    updGuard(g => ({ ...g, line: pick(RESCUE_BRAG) }));
+    await later(2600);
+    // Back to work, and off she goes.
+    updGuard(g => ({ ...g, pose: "run", line: null, x: hut - gw / 2, bottom: sand, ms: runMs, faceLeft: hut < g.x }));
+    setRescue(r => r && r.swimmer ? { ...r, swimmer: { ...r.swimmer, pose: "walk", line: null, x: r.swimmer.x - 320, ms: 4200, faceLeft: true } } : r);
+    await later(4300);
+    setRescue(null);
+    rescueOn.current = false;
+  }
+  // A surfer paddling out, a fin closing in, dun-dun... dun-dun... CHOMP. Board's all that's left.
+  const [shark, setShark] = useState<SharkState | null>(null);
+  const sharkOn = useRef(false);
+  async function sharkAttack(pan = false) {
+    if (sharkOn.current || (!immersive && phaseRef.current === "hidden")) return;
+    sharkOn.current = true;
+    const sm = stripMap(), uw = beachSize.surfer(), sea = sm.b(300), sx = sm.x(3270 + Math.random() * 200), surfBottom = sea - uw * (30 / 70) * 0.27;
+    if (pan) panTo(sx);
+    setShark({ surfer: { x: sx - uw / 2, bottom: surfBottom }, fin: { x: sx + 420, bottom: sea - 6, ms: 0 }, chomp: null, blood: null, board: null });
+    await later(80);
+    setShark(st => st && { ...st, fin: st.fin && { ...st.fin, x: sx + 10, ms: 3400 } });
+    add({ kind: "burst", x: sx + 200, y: sea + 50, size: 0, text: "dun dun..." });
+    await later(1700);
+    add({ kind: "burst", x: sx + 90, y: sea + 60, size: 0, text: "DUN DUN... DUN DUN..." });
+    await later(1800);
+    // CHOMP.
+    const sw = beachSize.shark();
+    setShark(st => st && { ...st, surfer: null, fin: null, chomp: { x: sx - sw / 2, bottom: sea - sw * 0.3 }, blood: { x: sx, bottom: sea - 14 } });
+    add({ kind: "burst", x: sx - 50, y: sea + 70, size: 0, text: "CHOMP!!" });
+    window.setTimeout(() => { if (Math.random() < 0.6) void vmrRecover(sx); }, 7000);
+    window.setTimeout(() => add({ kind: "burst", x: sx - 140, y: sea + 30, size: 0, text: pick(SHARK_SCREAMS) }), 700);
+    await later(1100);
+    setShark(st => st && { ...st, chomp: null, board: { x: sx - 12, bottom: sea - 10 } });
+    await later(9000);
+    setShark(null);
+    sharkOn.current = false;
+  }
+  // ---- Out on the water ----
+  const [seaBits, setSeaBits] = useState<SeaBit[]>([]);
+  const seaBitsRef = useRef<SeaBit[]>([]);
+  useEffect(() => { seaBitsRef.current = seaBits; }, [seaBits]);
+  const addSea = (bit: Omit<SeaBit, "id">, life: number) => {
+    const id = ++uid;
+    setSeaBits(list => [...list, { ...bit, id }]);
+    window.setTimeout(() => setSeaBits(list => list.filter(item => item.id !== id)), life);
+    return id;
+  };
+  const updSea = (id: number, change: Partial<SeaBit>) => setSeaBits(list => list.map(item => (item.id === id ? { ...item, ...change } : item)));
+  // Boats come in off the open sea at the right-hand end and run along to the point at the dunes.
+  const seaLane = () => { const sm = stripMap(); return { sm, k: sm.k, start: sm.x(3630), end: sm.x(3020) }; };
+  const seaPan = () => panTo(stripMap().x(3310));
+  // Somebody in the water gets the dun-dun treatment: fin closes in, CHOMP, red water.
+  async function sharkGets(x: number, bottom: number, victim: number) {
+    const { k } = seaLane();
+    addSea({ kind: "fin", x: x + 6, bottom: bottom - 2, w: 30, h: 24, cls: "finApproach", dx: 260, ms: 2200 }, 2250);
+    add({ kind: "burst", x: x + 120, y: bottom + 40, size: 0, text: "dun dun... DUN DUN..." });
+    await later(2200);
+    setSeaBits(list => list.filter(item => item.id !== victim));
+    const sw = 120 * k * 0.8;
+    addSea({ kind: "chomp", x: x - sw / 2, bottom: bottom - sw * 0.3, w: sw, h: (sw * 80) / 120, cls: "sharkLeap" }, 1200);
+    addSea({ kind: "blood", x, bottom: bottom - 6, w: 150, h: 28, cls: "bloodPool" }, 9000);
+    add({ kind: "burst", x: x - 50, y: bottom + 70, size: 0, text: "CHOMP!!" });
+    window.setTimeout(() => add({ kind: "burst", x: x - 150, y: bottom + 30, size: 0, text: pick(SHARK_SCREAMS) }), 700);
+    window.setTimeout(() => { if (Math.random() < 0.6) void vmrRecover(x); }, 7000);
+  }
+  // A ski boat goes past; halfway along the skier stacks it. Sometimes something finds them.
+  async function skiRun(pan = false) {
+    const { sm, k, start, end } = seaLane(), w = 200 * k * 0.55, h = w / 4, water = sm.b(294), ms = 9000, dx = end - start;
+    if (pan) seaPan();
+    const boat = addSea({ kind: "ski", x: start, bottom: water - h * 0.2, w, h, cls: "seaCross", dx, ms, on: true }, ms + 300);
+    await later(ms * 0.5);
+    updSea(boat, { on: false });
+    const fx = start + dx * 0.5 + w * 0.8, fb = water - 8;
+    add({ kind: "burst", x: fx - 40, y: fb + 50, size: 0, text: pick(["SPLASH!", "KERPLUNK!", "FACEPLANT!"]) });
+    const skier = addSea({ kind: "skier", x: fx - 14, bottom: fb, w: 40 * k * 0.7, h: 30 * k * 0.7, cls: "floatBob" }, 7000);
+    window.setTimeout(() => add({ kind: "burst", x: fx - 60, y: fb + 30, size: 0, text: pick(["ME BOARDIES!", "I'M OKAAAY!", "...where's me teeth?"]) }), 700);
+    if (Math.random() < 0.4) { await later(1500); await sharkGets(fx, fb, skier); }
+  }
+  // A couple of jet skis tear through, one launching off a wave.
+  function jetRun(pan = false) {
+    const { sm, k, start, end } = seaLane(), w = 80 * k * 0.7, h = w / 2;
+    if (pan) seaPan();
+    [0, 1].forEach(i => addSea({ kind: "jet", x: start + i * 70, bottom: sm.b(i ? 302 : 286) - h * 0.15, w, h, cls: "jetCross", dx: end - start - i * 70, ms: 5200 + i * 600, delay: i * 500, colour: i ? "#22d3ee" : "#facc15" }, 7000));
+    window.setTimeout(() => add({ kind: "burst", x: panX() + window.innerWidth / 2 - 80, y: sm.b(260), size: 0, text: "BRRRAAAAP!" }), 1200);
+  }
+  // A parasail goes over; halfway along the punter comes unclipped and drops into the drink.
+  async function paraRun(pan = false) {
+    const { sm, k, start, end } = seaLane(), w = 220 * k * 0.6, h = (w * 200) / 220, water = sm.b(288), ms = 11000, dx = end - start;
+    if (pan) seaPan();
+    const rig = addSea({ kind: "para", x: start, bottom: water - h * 0.04, w, h, cls: "seaCross", dx, ms, on: true }, ms + 300);
+    await later(ms * 0.45);
+    updSea(rig, { on: false });
+    const rx = start + dx * 0.45 + w * (190 / 220) - 10, ry = water - h * 0.04 + h * (1 - 60 / 200), rw = 30 * k * 0.7;
+    addSea({ kind: "rider", x: rx, bottom: ry, w: rw, h: rw * (40 / 30), cls: "riderFall", dy: ry - water, ms: 1300 }, 1350);
+    add({ kind: "burst", x: rx - 50, y: ry + 30, size: 0, text: "AAAAAAAH!" });
+    await later(1300);
+    add({ kind: "burst", x: rx - 40, y: water + 40, size: 0, text: "SPLOOSH!" });
+    const splashed = addSea({ kind: "skier", x: rx - 6, bottom: water - 8, w: 40 * k * 0.7, h: 30 * k * 0.7, cls: "floatBob" }, 6000);
+    if (Math.random() < 0.3) { await later(1200); await sharkGets(rx, water - 8, splashed); }
+  }
+  const dolphinRun = (pan = false) => {
+    const { sm, k, start, end } = seaLane(), w = 200 * k * 0.55, h = w * 0.3;
+    if (pan) seaPan();
+    addSea({ kind: "pod", x: start, bottom: sm.b(298) - h * 0.13, w, h, cls: "seaCross", dx: end - start, ms: 10000 }, 10300);
+  };
+  // A humpback breaches out the back, then later waves its tail.
+  async function whaleRun(pan = false) {
+    const { sm, k } = seaLane(), x = sm.x(3120 + Math.random() * 380), water = sm.b(272), w = 160 * k * 0.55, h = w * 0.75;
+    if (pan) seaPan();
+    addSea({ kind: "whale", x: x - w / 2, bottom: water - h * 0.07, w, h, clip: true, inner: "whaleBreach" }, 3100);
+    await later(1700);
+    add({ kind: "burst", x: x - 80, y: water + 60, size: 0, text: "KER-SPLOOOSH!" });
+    await later(2600);
+    addSea({ kind: "tail", x: x - w * 0.2, bottom: water - 4, w: 80 * k * 0.5, h: 60 * k * 0.5, clip: true, inner: "tailRise" }, 3900);
+    add({ kind: "burst", x: x - 30, y: water + 50, size: 0, text: "*pfffffff*" });
+  }
+  // Steve from "Steve's Wild Oz" (the host; internally still bazza*) wades in to show us a bluebottle. Goes about as well as you'd think.
+  const [bazza, setBazza] = useState<BazzaState | null>(null);
+  const bazzaOn = useRef(false);
+  async function bazzaShow(pan = false) {
+    if (bazzaOn.current || (!immersive && phaseRef.current === "hidden")) return;
+    bazzaOn.current = true;
+    const sm = stripMap(), w = isPhone() ? 36 : 50, from = sm.x(3040), wade = sm.x(3160 + Math.random() * 120), sand = sm.b(372), shallows = sm.b(334);
+    if (pan) panTo(wade);
+    setBazza({ x: from - w / 2, bottom: sand, ms: 0, faceLeft: false, pose: "walk", line: "G'day! Welcome to Steve's Wild Oz!" });
+    await later(80);
+    const walkMs = Math.max(1500, Math.abs(wade - from) * 9);
+    setBazza(b => b && { ...b, x: wade - w / 2, bottom: shallows, ms: walkMs });
+    await later(walkMs);
+    setBazza(b => b && { ...b, ms: 0, pose: "hold", line: "Crikey! Look at this little beauty! A bluebottle!" });
+    await later(3200);
+    setBazza(b => b && { ...b, line: "Totally harmless, long as ya don't—" });
+    await later(1600);
+    setBazza(b => b && { ...b, pose: "zapped", line: null });
+    add({ kind: "burst", x: wade - 40, y: shallows + w * 2 + 10, size: 0, text: "ZZZZAP!" });
+    window.setTimeout(() => add({ kind: "burst", x: wade - 70, y: shallows + w * 2 - 20, size: 0, text: "STREWTH!!" }), 600);
+    await later(1900);
+    setBazza(b => b && { ...b, pose: "hop", line: pick(["VINEGAR! Somebody get me VINEGAR!", "RIGHT ON ME KNEE!", "...and that's why ya don't touch 'em, kids!"]) });
+    for (let i = 0; i < 4; i++) { setBazza(b => b && { ...b, x: b.x + (i % 2 ? 26 : -26), ms: 380, faceLeft: i % 2 === 0 }); await later(420); }
+    setBazza(b => b && { ...b, x: from - w / 2 - 260, bottom: sand, ms: walkMs * 1.4, faceLeft: true });
+    await later(walkMs * 1.4);
+    setBazza(null);
+    bazzaOn.current = false;
+  }
+  // The VMR (Volunteer Marine Rescue). A runabout's motor carks it out the back; the skipper waves
+  // his arms; the VMR cat comes in, throws him a line and tows him in round the point.
+  const vmrOn = useRef(false);
+  const vmrSize = () => { const { k } = seaLane(), w = 220 * k * 0.6; return { w, h: (w * 80) / 220 }; };
+  async function vmrTow(pan = false) {
+    if (vmrOn.current) return;
+    vmrOn.current = true;
+    const { sm, k, start, end } = seaLane(), water = sm.b(292), bw = 100 * k * 0.6, bh = bw * 0.44, v = vmrSize();
+    const spot = sm.x(3080 + Math.random() * 220);
+    if (pan) seaPan();
+    const broke = addSea({ kind: "broke", x: start, bottom: water - bh * 0.14, w: bw, h: bh, cls: "floatBob", tms: 0 }, 60_000);
+    await later(80);
+    updSea(broke, { x: spot, tms: 4200, ease: "ease-out" });
+    await later(4300);
+    add({ kind: "burst", x: spot - 60, y: water + bh + 30, size: 0, text: pick(["MAYDAY! Me motor's carked it!", "OI! VMR! Little help?!", "She won't start, mate!"]) });
+    await later(1600);
+    const stop = spot - v.w - 6;
+    const boat = addSea({ kind: "vmr", x: start + 60, bottom: water - v.h * 0.12, w: v.w, h: v.h, tms: 0 }, 60_000);
+    await later(80);
+    updSea(boat, { x: stop, tms: 4200, ease: "ease-out" });
+    await later(4300);
+    add({ kind: "burst", x: stop + v.w * 0.6, y: water + v.h + 10, size: 0, text: pick(["VMR here, mate. Chuck us ya rope!", "Righto, hook her up!", "Third one this week, Kev."]) });
+    updSea(boat, { on: true });
+    await later(1800);
+    // Towed in round the point, the pair of them.
+    const gone = end - v.w - 40, dx = gone - stop, towMs = 6500;
+    updSea(boat, { x: gone, tms: towMs, ease: "ease-in" });
+    updSea(broke, { x: spot + dx, tms: towMs, ease: "ease-in" });
+    await later(towMs - 900);
+    updSea(boat, { hide: true }); updSea(broke, { hide: true });
+    await later(1000);
+    setSeaBits(list => list.filter(item => item.id !== boat && item.id !== broke));
+    vmrOn.current = false;
+  }
+  // After the shark's been (or someone's just gone missing), the VMR comes out to fish the floater out.
+  async function vmrRecover(at?: number, pan = false) {
+    if (vmrOn.current) return;
+    vmrOn.current = true;
+    const { sm, k, start, end } = seaLane(), water = sm.b(296), fx = at ?? sm.x(3100 + Math.random() * 250), fw = 50 * k * 0.6, fh = fw * 0.4, v = vmrSize();
+    if (pan) panTo(fx);
+    const floater = addSea({ kind: "floater", x: fx - fw / 2, bottom: water - fh * 0.5, w: fw, h: fh, cls: "floatBob" }, 60_000);
+    if (at === undefined) add({ kind: "burst", x: fx - 50, y: water + 40, size: 0, text: "Uh oh... floater." });
+    await later(1600);
+    const stop = fx - v.w * 1.02;
+    const boat = addSea({ kind: "vmr", x: start + 60, bottom: water - v.h * 0.12, w: v.w, h: v.h, tms: 0 }, 60_000);
+    await later(80);
+    updSea(boat, { x: stop, tms: 4400, ease: "ease-out" });
+    await later(4500);
+    updSea(boat, { hook: true });
+    add({ kind: "burst", x: fx - 90, y: water + v.h + 10, size: 0, text: pick(["Gently... gently... got 'im.", "Righto, he's comin' aboard.", "Another one for the paperwork."]) });
+    await later(2000);
+    setSeaBits(list => list.filter(item => item.id !== floater));
+    updSea(boat, { hook: false });
+    add({ kind: "burst", x: fx - 70, y: water + v.h - 10, size: 0, text: pick(["That's three this arvo.", "Swim between the flags, they said...", "Shark's eatin' better than me."]) });
+    await later(1500);
+    const gone = end - v.w - 40;
+    updSea(boat, { x: gone, tms: 5200, ease: "ease-in" });
+    await later(4300);
+    updSea(boat, { hide: true });
+    await later(1000);
+    setSeaBits(list => list.filter(item => item.id !== boat));
+    vmrOn.current = false;
+  }
+  // Something's always going on out there, one thing at a time-ish.
+  useEffect(() => {
+    if (!immersive && phase === "hidden") { setSeaBits([]); setBazza(null); bazzaOn.current = false; return; }
+    let timer = 0;
+    const shows = [() => void skiRun(), () => jetRun(), () => void paraRun(), () => dolphinRun(), () => void whaleRun(), () => void skiRun(), () => jetRun(), () => void bazzaShow(), () => void vmrTow()];
+    const next = () => { timer = window.setTimeout(() => { if (seaBitsRef.current.length < 3) pick(shows)(); next(); }, 14_000 + Math.random() * 12_000); };
+    next();
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, immersive]);
+  const seaArt = (b: SeaBit) => b.kind === "ski" ? <SkiBoat skier={b.on} /> : b.kind === "skier" ? <StackedSkier /> : b.kind === "jet" ? <JetSki colour={b.colour} />
+    : b.kind === "para" ? <Parasail rider={b.on} /> : b.kind === "rider" ? <FallingRider /> : b.kind === "pod" ? <span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><DolphinPod /></span> : b.kind === "whale" ? <WhaleBreach />
+      : b.kind === "vmr" ? <VMRBoat tow={b.on} hook={b.hook} /> : b.kind === "broke" ? <BrokenBoat /> : b.kind === "floater" ? <Floater />
+      : b.kind === "tail" ? <WhaleTail /> : b.kind === "fin" ? <span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><SharkFin /></span> : b.kind === "chomp" ? <SharkLunge /> : null;
+
+  // They all happen by themselves every so often.
+  useEffect(() => {
+    if (!immersive && phase === "hidden") { setBinDiver(null); setRescue(null); setShark(null); binDiveOn.current = false; rescueOn.current = false; sharkOn.current = false; return; }
+    const timers: number[] = [];
+    const every = (run: () => void, min: number, spread: number) => {
+      const next = () => { timers.push(window.setTimeout(() => { run(); next(); }, min + Math.random() * spread)); };
+      next();
+    };
+    every(() => void binDive(), 40_000, 35_000);
+    every(() => void lifeguardRescue(), 70_000, 60_000);
+    every(() => void sharkAttack(), 100_000, 70_000);
+    return () => timers.forEach(clearTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, immersive]);
+
   // Dust and smoke kicked up from the emus' feet as they run.
   const emusOut = emus.length > 0;
   useEffect(() => {
@@ -3162,7 +3603,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // A mob of emus legs it across the road, all neck and knees.
   function emuFlock() {
     if (!claimScene(8000)) return;
-    const W = VW(), dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, count = 5 + Math.floor(Math.random() * 3);
+    const W = VW(), dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, count = 10 + Math.floor(Math.random() * 4);
     const flock = Array.from({ length: count }, (_, i) => {
       const size = 62 + Math.random() * 18;
       return { id: ++uid, dir, size, x: dir === 1 ? -size - 40 - i * 70 - Math.random() * 40 : W + 40 + i * 70 + Math.random() * 40, bottom: [GROUND + 2, FAR_LANE + 6, ROAD_H - 8][i % 3] + Math.random() * 8, ms: 0, hits: 0 };
@@ -3171,7 +3612,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     window.setTimeout(() => setEmus(list => list.map(e => {
       const f = flock.find(x => x.id === e.id);
       if (!f) return e;
-      const end = dir === 1 ? W + 100 : -f.size - 40;
+      const end = dir === 1 ? VW() + 100 : -f.size - 40;
       return { ...e, x: end, ms: Math.abs(end - f.x) * 3 };
     })), 60);
     add({ kind: "burst", x: dir === 1 ? 20 : W - 240, y: GROUND + 150, size: 0, text: "THUD THUD THUD THUD!" });
@@ -3179,7 +3620,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   }
   function rooMob() {
     if (!claimScene(8000)) return;
-    const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, count = 4 + Math.floor(Math.random() * 3), ms = 5500 + Math.random() * 2000;
+    const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, count = 8 + Math.floor(Math.random() * 4), ms = span(5500 + Math.random() * 2000);
     // Spread them across the back of the road; bigger ones are "closer".
     setRoos(list => [...list, ...Array.from({ length: count }, (_, i) => {
       const size = 62 + Math.random() * 30;
@@ -3701,7 +4142,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         style={{ left: `calc(50% - ${190 + i * 60}px)`, bottom: i % 2 ? 40 : 22, animationDelay: `${i * 0.1}s` }}><Brawler gang="red" seed={i} /></span>)}
       {(brawl === "guillotine" || brawl === "chop") && <span className={styles.guillotine}><Guillotine chopped={brawl === "chop"} /></span>}
     </div>}
-    {convoy > 0 && <div key={convoy} className={styles.convoy} aria-hidden style={{ ["--world" as string]: `${VW()}px` }}>
+    {convoy > 0 && <div key={convoy} className={styles.convoy} aria-hidden style={{ ["--world" as string]: `${VW()}px`, animationDuration: `${Math.round((11000 * (2980 + VW())) / 4580)}ms` }}>
       {Array.from({ length: 50 }, (_, i) => <span key={i} className={styles.convoyBike} style={{ left: Math.floor(i / 2) * 112 + (i % 2) * 50, bottom: i % 2 ? 36 : 72, animationDelay: `${(i % 7) * 0.07}s` }}><MiniBiker seed={i} /></span>)}
     </div>}
     {sign && <span className={`${styles.stopSign} ${sign.down ? styles.stopSignDown : ""}`} style={{ left: sign.x, bottom: 44 }}><StopSign holes={sign.holes} /></span>}
@@ -3946,6 +4387,40 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     {rides.map(r => <span key={r.id} className={styles.passingRide} aria-hidden style={{ left: r.x, bottom: r.lane, width: rideW(), height: (rideW() * 100) / 160, transitionDuration: `${r.ms}ms` }}>
       <span className={styles.ibisBody} style={{ transform: r.dir === -1 ? "scaleX(-1)" : undefined }}><span className={styles.carBody}><PassingBiker brand={r.brand} look={r.look} /></span></span>
     </span>)}
+    {dogPoops.map(item => <span key={item.id} className={styles.dogPoop} style={{ left: item.x, bottom: item.bottom }} aria-hidden />)}
+    {dogWalk && <span data-poopable="person" className={styles.dogWalker} role="button" aria-label="A bloke walking his dog" title="Bluey and his owner"
+      style={{ left: dogWalk.x, bottom: dogWalk.bottom, width: beachSize.dog(), height: (beachSize.dog() * 100) / 130, transitionDuration: `${dogWalk.ms}ms` }}
+      onClick={event => { event.stopPropagation(); add({ kind: "burst", x: dogWalk.x + beachSize.dog() * 0.6, y: dogWalk.bottom + 80, size: 0, text: pick(["WOOF!", "ARF ARF!", "*sniff sniff*", "Bluey! Heel!"]) }); }}>
+      <span className={styles.ibisBody} style={{ transform: dogWalk.faceLeft ? "scaleX(-1)" : undefined }}><DogWalker pose={dogWalk.pose} /></span>
+      {dogWalk.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{dogWalk.line}</span>}
+    </span>}
+    {binDiver && <span data-poopable="person" className={styles.trev} style={{ left: binDiver.x, bottom: binDiver.bottom, transitionDuration: `${binDiver.ms}ms` }}>
+      <span className={styles.ibisBody} style={{ transform: binDiver.faceLeft ? "scaleX(-1)" : undefined }}>{binDiver.who === "trev" ? <Trev pose={binDiver.pose} /> : <Kylie pose={binDiver.pose} />}</span>
+      {binDiver.line && <span className={styles.ibisBubble} style={{ bottom: 132 }}>{binDiver.line}</span>}
+    </span>}
+    {rescue?.swimmer && <span className={styles.beachActor} style={{ left: rescue.swimmer.x, bottom: rescue.swimmer.bottom, width: beachSize.swimmer(), height: beachSize.swimmer() * 2.5, transitionDuration: `${rescue.swimmer.ms}ms` }}>
+      <span className={styles.ibisBody} style={{ transform: rescue.swimmer.faceLeft ? "scaleX(-1)" : undefined }}><Swimmer pose={rescue.swimmer.pose} /></span>
+      {rescue.swimmer.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{rescue.swimmer.line}</span>}
+    </span>}
+    {rescue?.guard && <span data-poopable="person" className={styles.beachActor} style={{ left: rescue.guard.x, bottom: rescue.guard.bottom, width: beachSize.guard(), height: beachSize.guard() * 2, transitionDuration: `${rescue.guard.ms}ms` }}>
+      <span className={styles.ibisBody} style={{ transform: rescue.guard.faceLeft ? "scaleX(-1)" : undefined }}><Lifeguard pose={rescue.guard.pose} /></span>
+      {rescue.guard.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{rescue.guard.line}</span>}
+    </span>}
+    {seaBits.map(b => <span key={b.id} className={`${styles.seaThing} ${b.cls ? styles[b.cls] : ""} ${b.clip ? styles.seaClip : ""}`} aria-hidden
+      style={{ left: b.x, bottom: b.bottom, width: b.w, height: b.h, opacity: b.hide ? 0 : undefined, ...(b.tms !== undefined ? { transitionProperty: "left, opacity", transitionDuration: `${b.tms}ms, 900ms`, transitionTimingFunction: b.ease ?? "linear" } : {}), animationDuration: b.ms ? `${b.ms}ms` : undefined, animationDelay: b.delay ? `${b.delay}ms` : undefined, ["--dx" as string]: `${b.dx ?? 0}px`, ["--dy" as string]: `${b.dy ?? 0}px` }}>
+      {b.inner ? <span className={styles[b.inner]} style={{ display: "block", width: "100%", height: "100%" }}>{seaArt(b)}</span> : seaArt(b)}
+    </span>)}
+    {bazza && <span data-poopable="person" className={styles.beachActor} style={{ left: bazza.x, bottom: bazza.bottom, width: isPhone() ? 36 : 50, height: isPhone() ? 72 : 100, transitionDuration: `${bazza.ms}ms` }}>
+      <span className={styles.ibisBody} style={{ transform: bazza.faceLeft ? "scaleX(-1)" : undefined }}><Bazza pose={bazza.pose} /></span>
+      {bazza.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{bazza.line}</span>}
+    </span>}
+    {shark?.blood && <span className={styles.bloodPool} style={{ left: shark.blood.x, bottom: shark.blood.bottom }} aria-hidden />}
+    {shark?.surfer && <span className={`${styles.seaThing} ${styles.floatBob}`} style={{ left: shark.surfer.x, bottom: shark.surfer.bottom, width: beachSize.surfer(), height: (beachSize.surfer() * 30) / 70 }} aria-hidden><PaddleSurfer /></span>}
+    {shark?.fin && <span className={styles.seaFin} style={{ left: shark.fin.x, bottom: shark.fin.bottom, transitionDuration: `${shark.fin.ms}ms` }} aria-hidden><span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><SharkFin /></span></span>}
+    {shark?.board && <span className={`${styles.seaThing} ${styles.floatBob}`} style={{ left: shark.board.x, bottom: shark.board.bottom, width: 34, height: 14 }} aria-hidden>
+      <svg viewBox="0 0 40 16" width="100%" height="100%" overflow="visible"><path d="M2 10 Q18 3 30 7 L25 10 L31 13 Q16 16 2 10 Z" fill="#f97316" stroke="#111" strokeWidth={1.2} /></svg>
+    </span>}
+    {shark?.chomp && <span className={styles.sharkLeap} style={{ left: shark.chomp.x, bottom: shark.chomp.bottom, width: beachSize.shark(), height: (beachSize.shark() * 80) / 120 }} aria-hidden><SharkLunge /></span>}
     {commuters.map(c => <span key={c.id} data-poopable="person" className={styles.commuter} role="button" aria-label="Someone waiting for the bus" title="Waiting for the duck"
       style={{ left: c.x, bottom: c.bottom, transitionDuration: `${c.ms}ms` }} onClick={event => { event.stopPropagation(); commuterLine(c.id, pick(BUS_STOP_LINES)); }}>
       <span className={styles.ibisBody} style={{ transform: c.faceLeft ? "scaleX(-1)" : undefined }}><Commuter look={c.look} walking={c.walking} waving={c.waving} /></span>
@@ -3970,13 +4445,26 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       {dazza.line && <span className={styles.ibisBubble}>{dazza.line}</span>}
     </span>}
     {dazza && dazza.bearTop !== null && <span className={styles.fallingBear} aria-hidden style={{ left: dazza.x + 14, top: dazza.bearTop }}><DropBear /></span>}
+    {dancersOut && ([[2116, 378], [2160, 376]] as const).map(([sx, sy], i) => {
+      const sm = stripMap(), w = isPhone() ? 34 : 46;
+      return <span key={`dancer${i}`} data-poopable="person" className={styles.dancer} role="button" aria-label="A dancer from Sandy Bottoms on her smoko" title="Have a yarn"
+        style={{ left: sm.x(sx) - w / 2, bottom: sm.b(sy), width: w, height: w * 2.5 }} onClick={event => { event.stopPropagation(); void dancerChat(i as 0 | 1); }}>
+        <span className={styles.ibisBody} style={{ transform: i ? "scaleX(-1)" : undefined }}><SmokoGirl look={i} /></span>
+        {dancerLines[i] && <span className={styles.ibisBubble} style={{ bottom: "100%", zIndex: 2 }}>{dancerLines[i]}</span>}
+      </span>;
+    })}
+    {bats.map(b => {
+      const box = batBox(b);
+      return <span key={b.id} className={`${styles.wireBat} ${styles.shootable} ${b.shot ? styles.batFall : ""}`} {...shootProps({ kind: "bat", id: b.id }, "Shoot the fruit bat!")}
+        onPointerEnter={() => zapBat(b.id)} style={{ left: box.left, bottom: box.bottom, width: box.w, height: box.h }}><FruitBat open={b.open} zapped={b.zapped} /></span>;
+    })}
     {roaches.map(r => <span key={r.id} className={styles.roach} role="button" aria-label="Stomp the cockroach" title="Stomp it!"
       style={{ left: r.x, bottom: r.bottom, transitionDuration: `${r.ms}ms` }}
       onClick={event => { event.stopPropagation(); if (!r.squashed) stompRoach(r.id, r.x + 14, r.bottom); }}>
       <span className={styles.roachTurn} style={{ transform: r.squashed ? undefined : `rotate(${r.angle}deg)`, transitionDuration: `${Math.min(200, r.ms)}ms` }}><RoachArt squashed={r.squashed} /></span>
     </span>)}
     {emus.map(e => <span data-poopable="animal" data-emu={e.dir} key={e.id} className={`${styles.emu} ${styles.shootable}`} {...shootProps({ kind: "emu", id: e.id }, e.hits ? "Finish it off!" : "Shoot the emu!")}
-      onTransitionEnd={event => { if (event.target === event.currentTarget && (e.x > VW() || e.x < -e.size)) setEmus(list => list.filter(x => x.id !== e.id)); }}
+      onTransitionEnd={event => { if (event.target === event.currentTarget && e.ms > 0) setEmus(list => list.filter(x => x.id !== e.id)); }}
       style={{ left: e.x, bottom: e.bottom, width: e.size, height: e.size * 90 / 70, transitionDuration: `${e.ms}ms` }}>
       <span className={e.hits ? styles.emuHop : styles.emuRun}><span className={styles.ibisBody} style={{ transform: e.dir === -1 ? "scaleX(-1)" : undefined }}><Emu oneLeg={e.hits > 0} /></span></span>
     </span>)}
@@ -4190,6 +4678,17 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             <Trick label="💩 Magpie poop raid" onClick={pickTrick(() => poopRaid())} />
             <Trick label="🥊 Bike shop brawl" onClick={pickTrick(() => void shopBrawlStart())} />
             <Trick label="🏍️ Club ride-by" onClick={pickTrick(() => rideBy())} />
+            <Trick label="🗑️ Bin dive" onClick={pickTrick(() => void binDive(true))} />
+            <Trick label="🛟 Lifeguard rescue" onClick={pickTrick(() => void lifeguardRescue(true))} />
+            <Trick label="🦈 Shark attack" onClick={pickTrick(() => void sharkAttack(true))} />
+            <Trick label="🚤 Ski boat" onClick={pickTrick(() => void skiRun(true))} />
+            <Trick label="🌊 Jet skis" onClick={pickTrick(() => jetRun(true))} />
+            <Trick label="🪂 Parasail" onClick={pickTrick(() => void paraRun(true))} />
+            <Trick label="🐬 Dolphins" onClick={pickTrick(() => dolphinRun(true))} />
+            <Trick label="🐋 Whale" onClick={pickTrick(() => void whaleRun(true))} />
+            <Trick label="🪼 Steve's Wild Oz" onClick={pickTrick(() => void bazzaShow(true))} />
+            <Trick label="⚓ VMR tow" onClick={pickTrick(() => void vmrTow(true))} />
+            <Trick label="🪝 VMR recovery" onClick={pickTrick(() => void vmrRecover(undefined, true))} />
             <Trick label="🦜 Lorikeets" onClick={callIn(() => void lorikeetVisit())} />
             <Trick label="🦘 Roo mob" onClick={callIn(() => rooMob())} />
             <Trick label="🪶 Emus" onClick={callIn(() => emuFlock())} />
