@@ -1,0 +1,304 @@
+.contact-experience {
+  --contact-line: rgb(99 102 241 / 0.16);
+  --contact-glass: rgb(255 255 255 / 0.16);
+  --contact-field-fill: rgb(255 255 255 / 0.78);
+  --contact-field-focus: rgb(255 255 255 / 0.94);
+  --contact-active: rgb(99 102 241 / 0.65);
+}
+
+.dark .contact-experience {
+  --contact-line: rgb(165 180 252 / 0.15);
+  --contact-glass: rgb(165 180 252 / 0.025);
+  --contact-field-fill: rgb(255 255 255 / 0.07);
+  --contact-field-focus: rgb(255 255 255 / 0.1);
+  --contact-active: rgb(165 180 252 / 0.7);
+}
+
+/* One atmosphere runs through the heading, form and footer. */
+.contact-atmosphere {
+  background:
+    radial-gradient(ellipse at 22% 24%, rgb(45 212 191 / 0.13), transparent 48%),
+    radial-gradient(ellipse at 76% 36%, rgb(139 92 246 / 0.12), transparent 52%),
+    radial-gradient(ellipse at 48% 74%, rgb(99 102 241 / 0.1), transparent 50%),
+    radial-gradient(ellipse at 85% 65%, rgb(244 114 182 / 0.08), transparent 42%);
+  mask-image: radial-gradient(ellipse at center, black 35%, transparent 74%);
+}
+
+.dark .contact-atmosphere {
+  opacity: 0.7;
+}
+
+.contact-grid {
+  background-image:
+    linear-gradient(rgb(99 102 241 / 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(99 102 241 / 0.055) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse at 50% 40%, black, transparent 68%);
+}
+
+.dark .contact-grid {
+  opacity: 0.6;
+}
+
+.contact-orbit {
+  position: absolute;
+  width: 720px;
+  height: 720px;
+  border: 1px solid rgb(99 102 241 / 0.07);
+  border-radius: 50%;
+  mask-image: linear-gradient(transparent, black 40%, transparent);
+}
+
+.contact-orbit-one {
+  top: 4%;
+  left: calc(50% - 590px);
+  transform: rotate(-25deg) scaleX(0.7);
+}
+
+.contact-orbit-two {
+  top: 35%;
+  right: calc(50% - 620px);
+  transform: rotate(25deg) scaleX(0.8);
+}
+
+/* The form has no separate painted card or outer rectangle. */
+.contact-surface::before,
+.contact-surface::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  border-top: 1px solid var(--contact-active);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.contact-surface::before {
+  left: 0;
+  border-left: 1px solid var(--contact-active);
+  border-top-left-radius: 8px;
+}
+
+.contact-surface::after {
+  right: 0;
+  border-right: 1px solid var(--contact-active);
+  border-top-right-radius: 8px;
+}
+
+.contact-signal {
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(45 212 191 / 0.35), rgb(129 140 248 / 0.5), rgb(244 114 182 / 0.3), transparent);
+}
+
+.contact-experience .contact-field {
+  border: 1px solid var(--contact-line);
+  border-radius: 12px;
+  background: var(--contact-field-fill);
+  transition: background-color 350ms ease, border-color 350ms ease, box-shadow 350ms ease;
+}
+
+.contact-experience .contact-field:hover {
+  border-bottom-color: var(--contact-active);
+}
+
+.contact-experience .contact-field::placeholder {
+  color: #64748b;
+}
+
+.dark .contact-experience .contact-field::placeholder {
+  color: #94a3b8;
+}
+
+.contact-experience .contact-field:focus {
+  border-color: var(--contact-line);
+  border-bottom-color: var(--contact-active);
+  background-color: var(--contact-field-focus);
+  box-shadow: 0 8px 24px -16px rgb(99 102 241 / 0.3);
+}
+
+.contact-experience textarea.contact-field {
+  border-color: var(--contact-line);
+  border-radius: 16px;
+  background: var(--contact-field-fill);
+}
+
+.contact-experience textarea.contact-field:focus {
+  border-color: var(--contact-active);
+  background: var(--contact-field-focus);
+}
+
+.contact-experience .contact-tool {
+  background: transparent;
+  border-color: var(--contact-line);
+  border-radius: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.contact-experience .contact-tool:hover {
+  background: var(--contact-glass);
+  border-color: var(--contact-active);
+  box-shadow: 0 6px 20px -14px rgb(99 102 241 / 0.35);
+}
+
+.contact-experience .contact-attachment {
+  background: transparent;
+  border-color: var(--contact-line);
+  border-style: solid;
+}
+
+.contact-experience .contact-attachment:hover {
+  background: var(--contact-glass);
+  border-color: var(--contact-active);
+}
+
+.contact-experience .contact-send {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(129 140 248 / 0.35);
+  color: white;
+  background: linear-gradient(110deg, #4f46e5, #7c3aed 65%, #8b5cf6);
+  box-shadow: 0 8px 30px -14px rgb(99 102 241 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.2);
+}
+
+.contact-experience .contact-send:hover {
+  background: linear-gradient(110deg, #4338ca, #6d28d9 65%, #7c3aed);
+  box-shadow: 0 10px 34px -14px rgb(99 102 241 / 0.7), inset 0 1px 0 rgb(255 255 255 / 0.3);
+}
+
+.dark .contact-experience .contact-send {
+  background: linear-gradient(110deg, rgb(79 70 229 / 0.7), rgb(124 58 237 / 0.65));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contact-experience .contact-field,
+  .contact-experience .contact-tool,
+  .contact-experience .contact-send {
+    transition: none;
+  }
+}
+
+/* Project-card spotlight, scan line and lift, shared by the contact controls. */
+:is(.contact-experience form, .contact-assistant) button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition: transform 300ms ease-out, border-color 300ms ease-out, box-shadow 300ms ease-out, background-color 300ms ease-out;
+}
+
+.contact-assistant > button[aria-label="Close"] {
+  position: absolute;
+}
+
+:is(.contact-experience form, .contact-assistant) button::before,
+:is(.contact-experience form, .contact-assistant) button::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms ease-out;
+}
+
+:is(.contact-experience form, .contact-assistant) button::before {
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(320px circle at var(--x, 50%) var(--y, 0%), rgb(99 102 241 / 0.1), rgb(34 211 238 / 0.06) 40%, transparent 70%);
+}
+
+:is(.contact-experience form, .contact-assistant) button::after {
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(129 140 248 / 0.7), transparent);
+}
+
+:is(.contact-experience form, .contact-assistant) button:not(:disabled):is(:hover, :focus-visible) {
+  transform: translateY(-2px);
+  border-color: rgb(165 180 252 / 0.6);
+  box-shadow: 0 12px 40px -12px rgb(99 102 241 / 0.35);
+}
+
+:is(.contact-experience form, .contact-assistant) button:not(:disabled):is(:hover, :focus-visible)::before,
+:is(.contact-experience form, .contact-assistant) button:not(:disabled):is(:hover, :focus-visible)::after {
+  opacity: 1;
+}
+
+.contact-assistant[role="dialog"] {
+  border-color: rgb(129 140 248 / 0.3);
+  background:
+    radial-gradient(ellipse at 0% 0%, rgb(45 212 191 / 0.1), transparent 55%),
+    radial-gradient(ellipse at 100% 35%, rgb(139 92 246 / 0.1), transparent 65%),
+    linear-gradient(145deg, #f8fafc, #f5f3ff);
+  box-shadow: 0 30px 90px -25px rgb(49 46 129 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.8);
+}
+
+.dark .contact-assistant[role="dialog"] {
+  border-color: rgb(165 180 252 / 0.2);
+  background:
+    radial-gradient(ellipse at 0% 0%, rgb(45 212 191 / 0.08), transparent 55%),
+    radial-gradient(ellipse at 100% 35%, rgb(139 92 246 / 0.14), transparent 65%),
+    linear-gradient(145deg, #1a1d26, #1d1a29);
+  box-shadow: 0 30px 90px -25px rgb(0 0 0 / 0.7), inset 0 1px 0 rgb(255 255 255 / 0.07);
+}
+
+.contact-assistant-header {
+  position: relative;
+  background-image: linear-gradient(rgb(99 102 241 / 0.035) 1px, transparent 1px), linear-gradient(90deg, rgb(99 102 241 / 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.contact-assistant-header::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 6%;
+  right: 6%;
+  height: 1px;
+  background: linear-gradient(90deg, rgb(45 212 191 / 0.2), rgb(129 140 248 / 0.4), rgb(244 114 182 / 0.2));
+}
+
+.contact-assistant-icon,
+.contact-assistant .contact-assistant-apply {
+  color: white;
+  background: linear-gradient(120deg, #4f46e5, #7c3aed);
+  box-shadow: 0 6px 24px -10px rgb(99 102 241 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+.contact-assistant .contact-assistant-choice,
+.contact-assistant .contact-assistant-polish {
+  border-color: rgb(129 140 248 / 0.22);
+  background: rgb(255 255 255 / 0.65);
+}
+
+.dark .contact-assistant .contact-assistant-choice,
+.dark .contact-assistant .contact-assistant-polish {
+  background: rgb(255 255 255 / 0.04);
+}
+
+.contact-assistant .contact-assistant-choice[aria-pressed="true"] {
+  color: #4338ca;
+  border-color: rgb(99 102 241 / 0.6);
+  background: linear-gradient(120deg, rgb(99 102 241 / 0.14), rgb(45 212 191 / 0.1));
+  box-shadow: inset 0 0 0 1px rgb(99 102 241 / 0.12);
+}
+
+.dark .contact-assistant .contact-assistant-choice[aria-pressed="true"] {
+  color: #e0e7ff;
+  background: linear-gradient(120deg, rgb(99 102 241 / 0.3), rgb(45 212 191 / 0.12));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.contact-experience form, .contact-assistant) button,
+  :is(.contact-experience form, .contact-assistant) button::before,
+  :is(.contact-experience form, .contact-assistant) button::after {
+    transition: none;
+  }
+
+  :is(.contact-experience form, .contact-assistant) button:not(:disabled):is(:hover, :focus-visible) {
+    transform: none;
+  }
+}

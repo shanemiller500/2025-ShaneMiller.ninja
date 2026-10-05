@@ -55,6 +55,7 @@ export default function MoodToneAssistant({
   return (
     <AssistantModalShell
       title="Mood & tone"
+      description="Choose the feeling and voice of your message."
       icon={<Sparkles className="h-4 w-4" />}
       onClose={onClose}
       size="lg"
@@ -62,7 +63,7 @@ export default function MoodToneAssistant({
       <button
         type="button"
         onClick={handleDefaultEnhanceClick}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200/70 bg-indigo-50/50 px-4 py-2.5 text-xs font-medium text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-indigo-400/15 dark:bg-indigo-400/[0.05] dark:text-indigo-200 dark:hover:bg-indigo-400/[0.08]"
+        className="contact-assistant-polish flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-indigo-200/70 bg-indigo-50/50 px-4 py-2.5 text-xs font-medium text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-indigo-400/15 dark:bg-indigo-400/[0.05] dark:text-indigo-200 dark:hover:bg-indigo-400/[0.08]"
       >
         <WandSparkles className="h-4 w-4" />
         Auto polish
@@ -93,7 +94,7 @@ export default function MoodToneAssistant({
 
       <button
         type="button"
-        className="mt-5 w-full rounded-xl bg-slate-950 px-4 py-3 text-xs font-medium text-white transition hover:bg-indigo-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-white dark:text-slate-950 dark:hover:bg-indigo-300"
+        className="contact-assistant-apply mt-7 min-h-12 w-full rounded-xl bg-slate-950 px-4 py-3 text-xs font-medium text-white transition hover:bg-indigo-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-white dark:text-slate-950 dark:hover:bg-indigo-300"
         onClick={handleEnhanceClick}
       >
         Apply
@@ -109,11 +110,11 @@ interface SelectionSectionProps {
 
 function SelectionSection({ title, children }: SelectionSectionProps) {
   return (
-    <div className="mt-5">
-      <h3 className="mb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
+    <div className="mt-7">
+      <h3 className="mb-3 text-xs font-medium text-slate-500 dark:text-slate-400">
         {title}
       </h3>
-      <div className="grid grid-cols-3 gap-2">{children}</div>
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">{children}</div>
     </div>
   );
 }
@@ -134,7 +135,7 @@ function ChoiceButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+      className={`contact-assistant-choice inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
         active
           ? "border-indigo-500 bg-indigo-500 text-white"
           : "border-slate-200/80 bg-white/40 text-slate-600 hover:border-indigo-300 hover:text-indigo-700 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:border-indigo-400/20 dark:hover:text-indigo-200"

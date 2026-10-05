@@ -143,7 +143,7 @@ function ImageCarousel({
         ))}
       </div>
 
-      <div className="relative w-full aspect-[4/3] sm:aspect-[3/2]">
+      <div className="relative w-full aspect-[3/4]">
         <div
           className="absolute inset-0 flex transition-transform duration-1000 ease-in-out"
           style={{ transform: `translateX(-${currentIndex * 100}%)` }}
@@ -191,7 +191,7 @@ function ImageCarousel({
                           fill
                           priority={index === 0}
                           sizes="(max-width: 768px) 100vw, 760px"
-                          className="object-cover object-center"
+                          className="object-contain object-center"
                         />
                         {/* subtle hover/tap affordance */}
                         <div className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
@@ -212,7 +212,7 @@ function ImageCarousel({
                           alt={`Portfolio image ${index + 1} (back)`}
                           fill
                           sizes="(max-width: 768px) 100vw, 760px"
-                          className="object-cover object-center"
+                          className="object-contain object-center"
                         />
                         <div className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                           <div className="absolute inset-0 bg-black/5 dark:bg-black/15" />

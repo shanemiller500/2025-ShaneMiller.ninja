@@ -25,6 +25,8 @@ interface DashboardShellProps<K extends string> {
   id: string;
   /** Optional sidebar shown beside the panels on large screens (below them on small ones) */
   aside?: ReactNode;
+  /** Switch tabs from outside (e.g. a "compare" button in a popup). Bump `nonce` to re-trigger. */
+  requestTab?: { key: K; nonce: number } | null;
 }
 
 /**
@@ -42,6 +44,7 @@ export function DashboardShell<K extends string>({
   onTabChange,
   id,
   aside,
+  requestTab,
 }: DashboardShellProps<K>) {
   const first = tabs[0].key;
   const [activeTab, setActiveTab] = useState<K>(first);
@@ -64,6 +67,11 @@ export function DashboardShell<K extends string>({
     if (match) selectTab(match.key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (requestTab) selectTab(requestTab.key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestTab?.nonce]);
 
   const handleClick = (key: K) => {
     selectTab(key);

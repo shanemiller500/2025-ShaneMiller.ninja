@@ -24,6 +24,8 @@ import TextRefinementAssistant from "./TextRefinementAssistant";
 import { Button } from "@/components/ui/button";
 
 import UMail from "@/public/images/umailLogo.png";
+import "./contact.css";
+import { trackButtonSpotlight } from "./contact-effects";
 
 interface ContactFormState {
   name: string;
@@ -40,12 +42,9 @@ interface Language {
 }
 
 const INPUT_BASE_STYLES =
-  "w-full rounded-xl border border-slate-200/90 bg-white/70 px-4 py-3 text-[14px] " +
+  "contact-field w-full px-5 py-4 text-[16px] " +
   "leading-6 text-slate-900 outline-none placeholder:text-slate-400 " +
-  "transition duration-200 hover:border-slate-300 focus:border-indigo-500 " +
-  "focus:ring-2 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-white/[0.025] " +
-  "dark:text-white dark:placeholder:text-slate-500 dark:hover:border-white/20 " +
-  "dark:focus:border-indigo-400 dark:focus:ring-indigo-400/10";
+  "dark:text-white dark:placeholder:text-slate-500";
 
 const MIN_LOADING_DELAY_MS = 2000;
 const STYLE_LOADING_DELAY_MS = 3000;
@@ -343,26 +342,25 @@ export default function ContactPage() {
   }
 
   return (
-    <section className="relative isolate w-full min-w-0 flex-1 overflow-hidden py-8 text-slate-900 sm:py-12 dark:text-slate-100">
+    <section onPointerMove={trackButtonSpotlight} className="contact-experience relative isolate w-full min-w-0 flex-1 overflow-hidden pb-16 pt-10 text-slate-900 sm:pb-24 sm:pt-16 dark:text-slate-100">
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
-        <div
-          className="absolute inset-x-0 top-0 h-[520px] text-slate-300/70 dark:text-white/[0.07] [mask-image:radial-gradient(ellipse_at_top,black_25%,transparent_72%)]"
-          style={{ backgroundImage: "linear-gradient(currentColor 1px, transparent 1px), linear-gradient(90deg, currentColor 1px, transparent 1px)", backgroundSize: "36px 36px" }}
-        />
-        <div className="absolute -top-16 left-1/2 h-72 w-[46rem] max-w-full -translate-x-1/2 rounded-full bg-gradient-to-r from-emerald-300/25 via-indigo-300/25 to-rose-300/25 blur-3xl dark:from-emerald-500/10 dark:via-indigo-500/15 dark:to-rose-500/10" />
+        <div className="contact-atmosphere absolute inset-0" />
+        <div className="contact-grid absolute inset-0" />
+        <div className="contact-orbit contact-orbit-one" />
+        <div className="contact-orbit contact-orbit-two" />
       </div>
 
-      <div className="mx-auto w-full min-w-0 max-w-[720px] px-1 sm:px-4">
+      <div className="mx-auto w-full min-w-0 max-w-[880px] px-1 sm:px-5">
         <ContactIntro />
 
-        <div className="relative mt-7 min-w-0 max-w-full sm:mt-8">
-          <div className="overflow-hidden rounded-[1.75rem] border border-white/80 bg-white/60 shadow-[0_24px_80px_-48px_rgba(79,70,229,0.45)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.025] dark:shadow-[0_24px_80px_-48px_rgba(0,0,0,0.9)]">
-            <div className="h-px bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent dark:via-indigo-400/35" />
-            <form className="min-w-0 p-4 sm:p-6" onSubmit={handleSubmit}>
-              <div className="grid grid-cols-1 gap-4">
-                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="relative mt-10 min-w-0 max-w-full sm:mt-14">
+          <div className="contact-surface relative">
+            <div className="contact-signal" aria-hidden="true" />
+            <form className="min-w-0 px-5 py-8 sm:p-10 lg:p-12" onSubmit={handleSubmit}>
+              <div className="grid grid-cols-1 gap-8 sm:gap-10">
+                  <div className="grid grid-cols-1 gap-7 sm:grid-cols-2 sm:gap-8">
                     <label htmlFor="name" className="block">
-                      <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <span className="mb-3 block text-sm font-medium text-slate-600 dark:text-slate-300">
                         Name <span className="normal-case tracking-normal text-slate-400">· optional</span>
                       </span>
                       <input
@@ -378,7 +376,7 @@ export default function ContactPage() {
                     </label>
 
                     <label htmlFor="email" className="block">
-                      <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <span className="mb-3 block text-sm font-medium text-slate-600 dark:text-slate-300">
                         Email <span className="text-indigo-600 dark:text-indigo-400">*</span>
                       </span>
                       <input
@@ -397,7 +395,7 @@ export default function ContactPage() {
                   </div>
 
                   <label htmlFor="subject" className="block">
-                    <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <span className="mb-3 block text-sm font-medium text-slate-600 dark:text-slate-300">
                       Subject <span className="normal-case tracking-normal text-slate-400">· optional</span>
                     </span>
                     <input
@@ -411,10 +409,24 @@ export default function ContactPage() {
                     />
                   </label>
 
-                  <div className="rounded-2xl border border-indigo-200/60 bg-indigo-50/35 p-2.5 dark:border-indigo-400/10 dark:bg-indigo-400/[0.025]">
-                    <div className="mb-2 flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
-                      <Sparkles className="h-3 w-3" />
-                      AI tools
+                  <MessageTextArea
+                    value={formData.description}
+                    onChange={handleChange}
+                    textAreaRef={textAreaRef}
+                    onSelect={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      textAreaSelectionRef.current = {
+                        start: target.selectionStart,
+                        end: target.selectionEnd,
+                      };
+                    }}
+                  />
+
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
+                      <Sparkles className="h-4 w-4 text-indigo-500 dark:text-indigo-300" />
+                      Writing help
+                      <span className="ml-auto text-xs font-normal text-slate-400 dark:text-slate-500">Optional</span>
                     </div>
                     <AssistantToolbar
                       onMoodToneClick={() => {
@@ -439,19 +451,6 @@ export default function ContactPage() {
                       textAreaSelectionRef={textAreaSelectionRef}
                     />
                   </div>
-
-                  <MessageTextArea
-                    value={formData.description}
-                    onChange={handleChange}
-                    textAreaRef={textAreaRef}
-                    onSelect={(e) => {
-                      const target = e.target as HTMLTextAreaElement;
-                      textAreaSelectionRef.current = {
-                        start: target.selectionStart,
-                        end: target.selectionEnd,
-                      };
-                    }}
-                  />
 
                   <AttachmentDropZone
                     attachment={formData.attachment}
@@ -520,21 +519,16 @@ function ContactIntro() {
         <span className="text-indigo-500 dark:text-indigo-300">~/contact</span>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/60 bg-emerald-50/80 px-2 py-0.5 text-[10px] uppercase tracking-wider text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
           <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
           </span>
           Inbox open
         </span>
-        <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
-          <Image src={UMail} alt="" width={13} height={13} />
-          Sent via U-Mail
-        </span>
       </div>
 
-      <h1 className="mt-5 font-aspekta text-4xl font-[650] leading-none tracking-tight text-slate-950 sm:text-5xl dark:text-white">
+      <h1 className="mt-7 font-aspekta text-4xl font-[650] leading-[1.15] tracking-tight text-slate-950 sm:text-5xl dark:text-white">
         Say <span className="bg-gradient-to-r from-indigo-500 via-violet-500 to-rose-400 bg-clip-text text-transparent">hello.</span>
       </h1>
-      <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Send a message. I’ll take it from there.</p>
+      <p className="mt-5 text-base leading-7 text-slate-500 dark:text-slate-400">Send a message. I’ll take it from there.</p>
     </div>
   );
 }
@@ -564,12 +558,12 @@ function AssistantToolbar({
 }: AssistantToolbarProps) {
   return (
     <div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 md:grid-cols-4">
         <Button
           type="button"
           variant="secondary"
-          size="sm"
-          className="inline-flex min-w-0 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border-indigo-200/70 bg-white/60 px-1.5 text-[11px] font-medium shadow-none hover:border-indigo-300 hover:bg-white dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.06]"
+          size={null}
+          className="contact-tool inline-flex min-h-12 min-w-0 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border-slate-200/80 bg-white/60 px-3 py-3 text-xs font-medium shadow-none transition-colors duration-300 motion-reduce:transition-none hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.06]"
           onClick={onMoodToneClick}
           aria-label="Open Mood & Tone assistant"
         >
@@ -580,8 +574,8 @@ function AssistantToolbar({
         <Button
           type="button"
           variant="secondary"
-          size="sm"
-          className="inline-flex min-w-0 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border-indigo-200/70 bg-white/60 px-1.5 text-[11px] font-medium shadow-none hover:border-indigo-300 hover:bg-white dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.06]"
+          size={null}
+          className="contact-tool inline-flex min-h-12 min-w-0 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border-slate-200/80 bg-white/60 px-3 py-3 text-xs font-medium shadow-none transition-colors duration-300 motion-reduce:transition-none hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.06]"
           onClick={onWritingStyleClick}
           aria-label="Open Writing Style assistant"
         >
@@ -592,8 +586,8 @@ function AssistantToolbar({
         <Button
           type="button"
           variant="secondary"
-          size="sm"
-          className="inline-flex min-w-0 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border-indigo-200/70 bg-white/60 px-1.5 text-[11px] font-medium shadow-none hover:border-indigo-300 hover:bg-white dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.06]"
+          size={null}
+          className="contact-tool inline-flex min-h-12 min-w-0 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border-slate-200/80 bg-white/60 px-3 py-3 text-xs font-medium shadow-none transition-colors duration-300 motion-reduce:transition-none hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.06]"
           onClick={onLanguageClick}
           aria-label="Open Language assistant"
         >
@@ -627,11 +621,11 @@ interface MessageTextAreaProps {
 function MessageTextArea({ value, onChange, textAreaRef, onSelect }: MessageTextAreaProps) {
   return (
     <label htmlFor="description" className="relative block">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
           Message <span className="text-indigo-600 dark:text-indigo-400">*</span>
         </span>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] tabular-nums text-slate-400 dark:bg-white/[0.05] dark:text-slate-500">
+        <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
           {value.length}/2000
         </span>
       </div>
@@ -639,10 +633,10 @@ function MessageTextArea({ value, onChange, textAreaRef, onSelect }: MessageText
       <textarea
         id="description"
         name="description"
-        rows={6}
+        rows={7}
         ref={textAreaRef}
         onSelect={onSelect}
-        className={`${INPUT_BASE_STYLES} min-h-[150px] resize-none leading-7`}
+        className={`${INPUT_BASE_STYLES} min-h-[220px] resize-none leading-8 sm:min-h-[260px]`}
         placeholder="What would you like to discuss?"
         value={value}
         onChange={onChange}
@@ -678,10 +672,10 @@ function AttachmentDropZone({
 }: AttachmentDropZoneProps) {
   return (
     <div
-      className={`rounded-2xl border border-dashed p-3 transition duration-200 ${
+      className={`contact-attachment rounded-2xl border border-dashed p-4 transition-colors duration-300 motion-reduce:transition-none sm:p-5 ${
           isDragActive
             ? "border-indigo-500 bg-indigo-50 ring-4 ring-indigo-500/10 dark:bg-indigo-500/10"
-            : "border-slate-300 bg-slate-50/70 hover:border-indigo-300 hover:bg-indigo-50/40 dark:border-white/10 dark:bg-white/[0.025] dark:hover:border-indigo-400/30 dark:hover:bg-indigo-400/[0.05]"
+            : "border-slate-200 bg-slate-50/40 hover:border-indigo-300 hover:bg-indigo-50/40 dark:border-white/10 dark:bg-white/[0.025] dark:hover:border-indigo-400/30 dark:hover:bg-indigo-400/[0.05]"
         }`}
       onDragOver={onDragOver}
       onDragEnter={onDragEnter}
@@ -694,10 +688,12 @@ function AttachmentDropZone({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
-            {attachment ? attachment.name : "Attachment · 10 MB max"}
+          <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
+            {attachment ? attachment.name : "Attachment"}
           </p>
-          {attachment && <p className="mt-0.5 text-[10px] text-slate-400">{formatFileSize(attachment.size)}</p>}
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            {attachment ? formatFileSize(attachment.size) : "Up to 10 MB"}
+          </p>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
@@ -741,7 +737,7 @@ function formatFileSize(bytes: number) {
 
 function SubmitButton({ isSubmitting }: { isSubmitting: boolean }) {
   return (
-    <div className="pt-1">
+    <div className="border-t border-slate-200/60 pt-8 dark:border-white/10 sm:pt-10">
       <Button
         type="submit"
         variant="indigo"
@@ -749,7 +745,7 @@ function SubmitButton({ isSubmitting }: { isSubmitting: boolean }) {
         fullWidth
         disabled={isSubmitting}
         aria-busy={isSubmitting}
-        className="group inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-500 text-white shadow-[0_0_20px_-4px_rgba(99,102,241,0.7)] hover:bg-indigo-600 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:text-white dark:hover:bg-indigo-400"
+        className="contact-send group inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-indigo-500 text-white shadow-[0_6px_20px_-10px_rgba(99,102,241,0.35)] transition-colors duration-300 motion-reduce:transition-none hover:bg-indigo-600 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:text-white dark:hover:bg-indigo-400"
       >
         {isSubmitting ? (
           <>
@@ -764,9 +760,13 @@ function SubmitButton({ isSubmitting }: { isSubmitting: boolean }) {
         )}
       </Button>
 
-      <p className="mt-2.5 flex items-center justify-center gap-1.5 text-center font-mono text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+      <p className="mt-5 flex items-center justify-center gap-2 text-center text-xs leading-5 text-slate-400 dark:text-slate-500">
         <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
         Private · Never used for AI training
+      </p>
+      <p className="mt-3 flex items-center justify-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+        <Image src={UMail} alt="" width={13} height={13} />
+        Sent via U-Mail
       </p>
     </div>
   );

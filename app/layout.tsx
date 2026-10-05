@@ -118,7 +118,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Theme>
           <ConsoleGreeting />
 
-          {pathname === "/day-out" ? <main>{children}</main> : <>
+          {pathname === "/day-out" || pathname === "/dinosors" ? <main>{children}</main> : <>
           <div className="max-w-7xl mx-auto">
             <div className="min-h-screen flex">
               {/* Desktop sidebar */}

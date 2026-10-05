@@ -18,6 +18,9 @@ import Icon09 from "@/public/images/art-icon.jpg";
 import Icon12 from "@/public/images/project-icon-03.svg";
 import WorldIcon from "@/public/images/world.png";
 import CharlesIcon from "@/public/images/charles-icon.svg";
+import DinosorsIcon from "@/public/images/dinosors-icon.svg";
+import MarvelIcon from "@/public/images/marvel-icon.svg";
+import FightWorldIcon from "@/public/images/fight-world-icon.svg";
 
 /* ------------------------------------------------------------------ */
 /*  ProjectsPage Component                                             */
@@ -98,6 +101,15 @@ export default function ProjectsPage() {
     badge: "AI + Parser",
   },
   {
+    id: 18,
+    icon: DinosorsIcon,
+    slug: "/dinosors",
+    title: "Dinosaur Land",
+    excerpt:
+      "A living prehistoric sandbox for kids: herds, hunts, hatching eggs, storms, an erupting volcano and cave people discovering fire.",
+    badge: "Canvas Game",
+  },
+  {
     id: 16,
     icon: CharlesIcon,
     slug: "/Charles",
@@ -169,17 +181,25 @@ export default function ProjectsPage() {
     openSource: false,
   },
 
-  /*
   {
     id: 2,
-    icon: Icon05,
+    icon: MarvelIcon,
     slug: "/Marvel",
-    title: "Marvel API",
+    title: "Marvel Character Lab",
     excerpt:
-      "Lookup comics, characters, creators, events, series, and stories using the Marvel public API.",
-    badge: "Marvel API",
-    openSource: false,
+      "Browse 269 Marvel heroes and villains, open their files, and pit any two head to head on power stats.",
+    badge: "Superhero API",
   },
+  {
+    id: 19,
+    icon: FightWorldIcon,
+    slug: "/marvel-fight-world",
+    title: "Fight World",
+    excerpt:
+      "A fan-made arcade fighting game: 270+ fighters, combos, specials and ultimates, CPU or local versus, survival, tournaments and an explorable city.",
+    badge: "Canvas Game",
+  },
+  /*
   {
     id: 8,
     icon: Icon5,

@@ -90,7 +90,7 @@ export default function TextRefinementAssistant({
       type="button"
       onClick={handleRefineClick}
       disabled={globalLoading}
-      className="inline-flex min-w-0 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-indigo-200/70 bg-white/60 px-1.5 py-1.5 text-[11px] font-medium text-gray-800 shadow-none transition hover:border-indigo-300 hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.025] dark:text-gray-100 dark:hover:bg-white/[0.06]"
+      className="contact-tool inline-flex min-h-12 min-w-0 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200/80 bg-white/60 px-3 py-3 text-xs font-medium text-gray-800 shadow-none transition-colors duration-300 motion-reduce:transition-none hover:border-indigo-300 hover:bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.025] dark:text-gray-100 dark:hover:bg-white/[0.06]"
       aria-label="Refine selected text"
     >
       {globalLoading ? (
