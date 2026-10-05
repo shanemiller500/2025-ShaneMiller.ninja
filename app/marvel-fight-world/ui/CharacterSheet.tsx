@@ -77,7 +77,7 @@ export function CharacterSheet({
   ];
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-40 flex bg-black/80 backdrop-blur-md" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <motion.div data-pad-menu initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-40 flex bg-black/80 backdrop-blur-md" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <motion.div
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -85,7 +85,7 @@ export function CharacterSheet({
         transition={{ type: "spring", stiffness: 260, damping: 28 }}
         className="relative m-auto grid h-[min(92vh,940px)] w-[min(96vw,1280px)] overflow-hidden rounded-3xl bg-[#0b0c14] ring-1 ring-white/10 md:grid-cols-[minmax(0,380px)_1fr]"
       >
-        <button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 z-10 rounded-xl bg-black/40 p-2 text-white/70 hover:bg-white/10 hover:text-white">
+        <button type="button" data-pad-back onClick={onClose} aria-label="Close" className="absolute right-4 top-4 z-10 rounded-xl bg-black/40 p-2 text-white/70 hover:bg-white/10 hover:text-white">
           <X className="h-5 w-5" />
         </button>
 

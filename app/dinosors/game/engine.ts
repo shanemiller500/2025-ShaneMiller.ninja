@@ -11,7 +11,9 @@ import { canStand, emote, findSpawnSpot, isBaby, setState, sizeOf } from "../sim
 import { P } from "../sim/particles";
 import { TALL, shakeFruit } from "../sim/plants";
 import { LM, isWaterTile } from "../sim/terrain";
-import { TILE, WORLD_H, WORLD_W, type Dino, type DinoState, type Human, type SpeciesId, type TechId, type WeatherKind } from "../sim/types";
+import { TILE, WORLD_H, WORLD_W, type Danger, type Dino, type DinoState, type Human, type Role, type SpeciesId, type TechId, type WeatherKind } from "../sim/types";
+import { CAMP_LEVELS } from "../data/facts";
+import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genetics";
 import { World } from "../sim/world";
 import { Renderer, type Camera } from "../render/renderer";
 import { loadWorld, saveWorld } from "./save";
@@ -40,6 +42,9 @@ export interface DinoInfo {
   state: DinoState;
   mood: { icon: string; label: string };
   speedKmh: number;
+  gen: number;
+  traits: { icon: string; name: string }[];
+  genes: { size: number; speed: number; tough: number };
 }
 
 export interface HumanInfo {
@@ -48,6 +53,18 @@ export interface HumanInfo {
   name: string;
   child: boolean;
   activity: string;
+  role: Role;
+  autoRole: Role;
+  ordered: boolean;
+}
+
+export interface PersonRow {
+  id: number;
+  name: string;
+  child: boolean;
+  role: Role;
+  autoRole: Role;
+  state: string;
 }
 
 export interface Snapshot {
@@ -75,6 +92,28 @@ export interface Snapshot {
   unlocked: SpeciesId[];
   seen: SpeciesId[];
   fps: number;
+  tribe: {
+    level: number;
+    levelName: string;
+    levelIcon: string;
+    next: { name: string; icon: string; people: number; huts: number; need?: string; havePeople: number; haveHuts: number; haveTech: boolean } | null;
+    capacity: number;
+    danger: Danger;
+    evolution: number;
+    raidsWon: number;
+    raid: { phase: "warn" | "attack"; label: string; left: number; x: number; y: number; t: number } | null;
+    people: PersonRow[];
+    walls: { built: number; planned: number; damaged: number };
+    farms: number;
+    towers: number;
+  };
+  orderFor: number;
+  rallied: boolean;
+  evolution: {
+    leaps: number;
+    auto: boolean;
+    species: { id: SpeciesId; n: number; size: number; speed: number; tough: number; gen: number; mut: Mutation | null }[];
+  };
 }
 
 const HOME = { x: 66 * TILE, y: 46 * TILE, zoom: 0.75 };
@@ -132,6 +171,13 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
   eat: "Eating",
   lookUp: "Looking at the sky",
   explore: "Exploring",
+  hunt: "On the hunt",
+  aim: "Taking aim!",
+  haul: "Dragging dinner home",
+  cook: "Roasting food",
+  farm: "Farming",
+  guard: "Standing guard",
+  repair: "Fixing a wall",
 };
 
 export class Engine {
@@ -142,6 +188,8 @@ export class Engine {
   tool: ToolState = { ...DEFAULT_TOOL };
   selectedId = 0;
   followId = 0;
+  /** waiting for the player to tap a target for this person's order */
+  orderFor = 0;
   private canvas: HTMLCanvasElement;
   private raf = 0;
   private last = 0;
@@ -418,9 +466,14 @@ export class Engine {
 
   private pickHuman(x: number, y: number): Human | null {
     let best: Human | null = null;
+    let bd = 20;
     for (const h of this.world.humans) {
       if (this.renderer.hidden(h)) continue;
-      if (Math.hypot(h.x - x, h.y - h.z - 12 - y) < 18) best = h;
+      const d = Math.hypot(h.x - x, h.y - h.z - 12 - y);
+      if (d < bd) {
+        bd = d;
+        best = h;
+      }
     }
     return best;
   }
@@ -566,6 +619,7 @@ export class Engine {
     else if (k === "-" || k === "_") this.zoomBy(1 / 1.2);
     else if (k === "h") this.goHome();
     else if (k === "escape") {
+      this.orderFor = 0;
       this.tool = { ...this.tool, id: "hand" };
       this.select(0);
       this.followId = 0;
@@ -674,6 +728,26 @@ export class Engine {
     const dbl = now - this.lastTap.t < 320 && Math.hypot(sx - this.lastTap.x, sy - this.lastTap.y) < 24;
     this.lastTap = { t: now, x: sx, y: sy };
 
+    if (this.orderFor) {
+      const h = w.humans.find((o) => o.id === this.orderFor);
+      this.orderFor = 0;
+      if (h) {
+        const d = this.pickDino(x, y);
+        if (d) {
+          h.order = { kind: "hunt", id: d.id };
+          h.bubble = { text: `Get that ${sp(d.species).nick}!`, t: 2.5 };
+          w.toast("🎯", `${h.name} is going after the ${sp(d.species).nick}!`);
+        } else {
+          h.order = { kind: "guard", x, y };
+          h.bubble = { text: "I'll stand guard here!", t: 2.5 };
+          w.particles.spawn(P.Ring, x, y, { size: 8, max: 0.8, color: "rgba(255,215,90,0.9)" });
+        }
+        h.think = 0;
+        this.audio.play("pop", 0, 0, 0.5);
+      }
+      this.emit({ type: "select" });
+      return;
+    }
     if (this.tool.id !== "hand") {
       const ok = applyTool(w, this.tool, x, y, false);
       if (ok) this.audio.play("click", 0, 0, 0.3);
@@ -834,11 +908,19 @@ export class Engine {
       this.tool = { ...this.tool, id: prev === "weather" || prev === "disaster" ? "hand" : prev };
     };
     if (this.tool.id === "weather") {
-      if (t.weather) {
+      if (t.weather && t.weather === w.weather.kind && !w.weather.auto) {
+        w.weather.auto = true;
+        w.toast("🎲", "Weather is back on surprise mode.");
+      } else if (t.weather) {
         w.weather.auto = false;
         w.weather.set(w, t.weather);
         this.audio.play("pop", 0, 0, 0.4);
       }
+      back();
+    } else if (this.tool.id === "disaster" && t.disaster === "raid") {
+      if (w.tribe.danger === "calm") w.toast("🕊️", "Raids are off in Calm mode (change it in the menu).");
+      else if (!w.tribe.startRaid(w)) w.toast("🥁", "A raid is already on its way!");
+      else this.flyTo(w.camp.x, w.camp.y, Math.min(this.cam.zoom, 0.7));
       back();
     } else if (this.tool.id === "disaster" && (t.disaster === "volcano" || t.disaster === "quake")) {
       if (t.disaster === "volcano") {
@@ -848,6 +930,109 @@ export class Engine {
         } else w.toast("🌋", "The volcano is already busy!");
       } else w.startQuake();
       back();
+    }
+  }
+
+  /* ----------------------------- tribe API ----------------------------- */
+
+  setRole(id: number, role: Role) {
+    const h = this.world.humans.find((x) => x.id === id);
+    if (!h || h.child) return;
+    h.role = role;
+    h.order = null;
+    h.think = 0;
+    h.task = null;
+    h.bubble = { text: role === "auto" ? "I'll help wherever!" : `I'm a ${role}!`, t: 2 };
+    this.audio.play("pop", 0, 0, 0.4);
+  }
+
+  /** Next world tap gives this person an order (dino = hunt, ground = guard there). */
+  startOrder(id: number) {
+    this.orderFor = id;
+    this.tool = { ...this.tool, id: "hand" };
+  }
+
+  clearOrder(id: number) {
+    const h = this.world.humans.find((x) => x.id === id);
+    if (h) {
+      h.order = null;
+      h.think = 0;
+    }
+  }
+
+  /** jobs from before a rally, so "Stand down" can put everyone back */
+  private rallyRoles: Map<number, Role> | null = null;
+
+  /** Every grown-up grabs a weapon and defends the camp — tap again to stand down. */
+  rally() {
+    const w = this.world;
+    if (this.rallyRoles) {
+      for (const h of w.humans) {
+        const r = this.rallyRoles.get(h.id);
+        if (r) {
+          h.role = r;
+          h.think = 0;
+        }
+      }
+      this.rallyRoles = null;
+      w.toast("🏳️", "Stand down! Everyone goes back to their jobs.");
+      return;
+    }
+    this.rallyRoles = new Map(w.humans.filter((h) => !h.child).map((h) => [h.id, h.role]));
+    let n = 0;
+    for (const h of w.humans) {
+      if (h.child) continue;
+      h.role = "guard";
+      h.order = null;
+      h.think = 0;
+      n++;
+    }
+    w.sfx("drums", w.camp.x, w.camp.y, 0.8);
+    w.toast("📣", n ? `RALLY! ${n} cave people grab their weapons!` : "Nobody's old enough to fight yet!");
+  }
+
+  allAuto() {
+    this.rallyRoles = null;
+    for (const h of this.world.humans) {
+      h.role = "auto";
+      h.order = null;
+    }
+    this.world.toast("✨", "Everyone's back on Auto — the tribe decides.");
+  }
+
+  planWalls(kind: "palisade" | "stone") {
+    const w = this.world;
+    const tech = kind === "palisade" ? "palisade" : "stonewall";
+    if (!w.camp.learned.has(tech)) {
+      w.toast("🔒", `Invent ${kind === "palisade" ? "Palisade" : "Stone walls"} first!`);
+      return 0;
+    }
+    let n = w.tribe.planRing(w, kind);
+    if (kind === "stone") for (const wl of w.tribe.walls) if (wl.kind === "palisade" && !wl.upgrade) { wl.upgrade = true; n++; }
+    w.toast(kind === "stone" ? "🧱" : "🪵", n ? `Planned ${n} wall pieces around the camp. Builders, go!` : "The wall is already planned!");
+    this.flyTo(w.camp.x, w.camp.y + 30, Math.min(this.cam.zoom, 0.6));
+    return n;
+  }
+
+  /** Jump a million years: every species shifts the way its world pushes it. */
+  evolve() {
+    this.audio.unlock();
+    return evolveWorld(this.world);
+  }
+
+  setEvoAuto(on: boolean) {
+    this.world.evoAuto = on;
+    this.world.toast("🧬", on ? "Auto-evolve is ON — a million years pass every few minutes." : "Auto-evolve is off.");
+  }
+
+  setDanger(d: Danger) {
+    this.world.tribe.danger = d;
+    if (d === "calm" && this.world.tribe.raid) {
+      for (const id of this.world.tribe.raid.ids) {
+        const r = this.world.dinoById(id);
+        if (r) r.raider = false;
+      }
+      this.world.tribe.raid = null;
     }
   }
 
@@ -954,13 +1139,20 @@ export class Engine {
         energy: c.energy,
         state: c.state,
         mood: moodOf(c),
-        speedKmh: Math.round((def.run / TILE) * 3.6 * 2),
+        speedKmh: Math.round((def.run / TILE) * 3.6 * 2 * c.genes.speed),
+        gen: c.gen,
+        traits: traitsOf(c.genes),
+        genes: { size: c.genes.size, speed: c.genes.speed, tough: c.genes.tough },
       };
     } else if (c && c.kind === "human") {
       let activity = ACTIVITY[c.state] ?? "Busy";
       if (c.state === "gather" && c.task) activity = `Gathering ${c.task}`;
       if (c.state === "walk" && c.task) activity = `Off to get ${c.task === "craft" ? "inventing" : c.task === "build" ? "building" : c.task}`;
-      selected = { kind: "human", id: c.id, name: c.name, child: c.child, activity };
+      if (c.order?.kind === "hunt") {
+        const d = w.dinoById(c.order.id);
+        activity = d ? `Hunting the ${sp(d.species).nick}!` : activity;
+      } else if (c.order?.kind === "guard") activity = "Guarding the spot you picked";
+      selected = { kind: "human", id: c.id, name: c.name, child: c.child, activity, role: c.role, autoRole: c.autoRole, ordered: !!c.order };
     }
     const cr = w.camp.crafting;
     return {
@@ -988,6 +1180,49 @@ export class Engine {
       unlocked: Array.from(w.unlocked),
       seen: Array.from(w.seen),
       fps: this.fpsAcc.fps,
+      tribe: this.tribeSnapshot(),
+      orderFor: this.orderFor,
+      rallied: this.rallyRoles !== null,
+      evolution: { leaps: w.evoLeaps, auto: w.evoAuto, species: speciesStats(w) },
+    };
+  }
+
+  private tribeSnapshot(): Snapshot["tribe"] {
+    const w = this.world;
+    const t = w.tribe;
+    const lv = CAMP_LEVELS[t.level];
+    const raid = t.raid;
+    let left = 0;
+    let rx = w.camp.x;
+    let ry = w.camp.y;
+    if (raid) {
+      for (const id of raid.ids) {
+        const d = w.dinoById(id);
+        if (d && d.raider) {
+          left++;
+          rx = d.x;
+          ry = d.y;
+        }
+      }
+    }
+    return {
+      level: t.level,
+      levelName: lv.name,
+      levelIcon: lv.icon,
+      next: t.nextLevel(w),
+      capacity: t.capacity(w),
+      danger: t.danger,
+      evolution: t.evolution,
+      raidsWon: t.raidsWon,
+      raid: raid ? { phase: raid.phase, label: raid.label, left, x: rx, y: ry, t: raid.t } : null,
+      people: w.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, role: h.role, autoRole: h.autoRole, state: h.state })),
+      walls: {
+        built: t.walls.filter((x) => x.built >= 1 && x.hp > 0).length,
+        planned: t.walls.length,
+        damaged: t.walls.filter((x) => x.built >= 1 && x.hp < (x.kind === "stone" ? 300 : 110)).length,
+      },
+      farms: t.farms.length,
+      towers: t.towers.filter((x) => x.stage >= 3).length,
     };
   }
 

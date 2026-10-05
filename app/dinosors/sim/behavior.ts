@@ -8,6 +8,7 @@ import { FACTS } from "../data/facts";
 import { sp } from "../data/species";
 import { emote, isBaby, scaleOf, setState, sizeOf, walkable } from "./dinos";
 import { toss } from "./humans";
+import { actRaider, gobble, thinkRaider } from "./tribe";
 import { P } from "./particles";
 import { canReach, shakeFruit, TALL } from "./plants";
 import { pick } from "./rng";
@@ -30,6 +31,7 @@ const LOCKED = new Set<DinoState>([
   "splash",
   "shakeTree",
   "breach",
+  "attackWall",
 ]);
 
 const dd = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -436,6 +438,12 @@ function resolveTussle(w: World, d: Dino) {
   if (!other) return;
   const def = sp(d.species);
   if (other.kind === "human") {
+    // raiders mean business; everyday dinos just give people a fright
+    const chance = w.tribe.danger === "wild" ? 0.75 : w.tribe.danger === "normal" ? 0.5 : 0;
+    if (d.raider && w.rng() < chance) {
+      gobble(w, d, other);
+      return;
+    }
     toss(w, other, d.x);
     emote(d, "🤨", 2);
     d.hunger = Math.max(0, d.hunger - 0.05);
@@ -444,7 +452,7 @@ function resolveTussle(w: World, d: Dino) {
   if (other.state !== "tussle") return;
   const odef = sp(other.species);
   if (canEat(d, other) && d.hunger > 0.3) {
-    let p = 0.35 + def.attack * 0.45 - odef.defense * scaleOf(other) * 0.45 + d.hunger * 0.1;
+    let p = 0.35 + def.attack * 0.45 * d.genes.size - odef.defense * scaleOf(other) * 0.45 * other.genes.tough + d.hunger * 0.1;
     if (isBaby(other)) p += 0.25;
     if (other.health < 0.5) p += 0.2;
     p = Math.max(0.12, Math.min(0.9, p));
@@ -1117,6 +1125,10 @@ export function thinkDino(w: World, d: Dino) {
     setState(d, def.move === "walk" ? "wander" : d.state, t.x, t.y);
     return;
   }
+  if (d.raider) {
+    thinkRaider(w, d);
+    return;
+  }
   if (def.move === "fly") thinkFlyer(w, d, def);
   else if (def.move === "swim") thinkSwimmer(w, d, def);
   else thinkWalker(w, d, def);
@@ -1151,6 +1163,7 @@ export function actDino(w: World, d: Dino, dt: number) {
       if (w.inView(d.x, d.y)) w.discover("poop", d.x, d.y);
     }
   }
+  if (d.raider && actRaider(w, d, dt)) return;
   if (def.move === "fly") actFlyer(w, d, def, dt);
   else if (def.move === "swim") actSwimmer(w, d, dt);
   else actWalker(w, d, def, dt);

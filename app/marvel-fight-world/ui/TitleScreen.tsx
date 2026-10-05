@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
+import { ArrowLeft } from "lucide-react";
 
 import { audio } from "../audio/audio";
 import type { Roster } from "../data/roster";
 import { loadImage } from "../data/roster";
+import { applyPortraitPalette } from "../render/palette";
 import { DEFAULT_SETTINGS, type Settings } from "../data/storage";
 import { GameSession } from "../game/session";
 import { ARENAS } from "../render/arenas";
@@ -38,6 +41,8 @@ function AttractFight({ roster }: { roster: Roster }) {
     if (b.id === a.id) b = pool[(pool.indexOf(a) + 1) % pool.length];
     const arena = ARENAS[Math.floor(Math.random() * ARENAS.length)];
     Promise.all([loadImage(a.portrait.md), loadImage(b.portrait.md)]).then(([ia, ib]) => {
+      applyPortraitPalette(a, ia);
+      applyPortraitPalette(b, ib);
       if (!alive || !ref.current) return;
       session = new GameSession(
         ref.current,
@@ -99,6 +104,13 @@ export function TitleScreen({ roster, onChoose }: { roster: Roster; settings: Se
       <AttractFight roster={roster} />
       <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/55 to-black/10" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
+
+      <Link
+        href="/projects"
+        className="group absolute left-5 top-5 z-10 inline-flex items-center gap-2 rounded-xl bg-black/45 px-3.5 py-2 text-sm font-semibold text-white/75 ring-1 ring-white/15 backdrop-blur transition hover:bg-white/10 hover:text-white"
+      >
+        <ArrowLeft className="h-4 w-4 transition group-hover:-translate-x-0.5" /> Back to projects
+      </Link>
 
       <div className="relative flex h-full flex-col justify-center px-[6vw] py-10">
         <motion.div initial={{ x: -60, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: "spring", stiffness: 120, damping: 16 }}>

@@ -4,13 +4,18 @@ import { specialList } from "../engine/fighters";
 import type { FighterDef } from "../engine/types";
 import type { Settings } from "../data/storage";
 import { keyLabel } from "../input/input";
-import { Keycap, P_COLORS } from "./kit";
+import type { ReactNode } from "react";
+import { Gamepad2 } from "lucide-react";
+import { Keycap, P_COLORS, PadBtn } from "./kit";
+import { usePadConnected } from "./usePad";
 
 /** Key map + move list for one or both players. */
 export function ControlsCard({ settings, versus, p1, p2 }: { settings: Settings; versus: boolean; p1?: FighterDef; p2?: FighterDef }) {
   const players: (0 | 1)[] = versus ? [0, 1] : [0];
+  const pad = usePadConnected();
   return (
     <div className="grid gap-4 md:grid-cols-2">
+      {pad && <PadCard name={pad} def={p1} />}
       {players.map((p) => {
         const b = settings.bindings[p];
         const k = (a: keyof typeof b) => keyLabel(b[a][0] ?? "");
@@ -57,6 +62,36 @@ export function ControlsCard({ settings, versus, p1, p2 }: { settings: Settings;
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Xbox layout (standard mapping) - the same for every fighter. */
+function PadCard({ name, def }: { name: string; def?: FighterDef }) {
+  const rows: [ReactNode, string][] = [
+    [<PadBtn key="l">L</PadBtn>, "Move · ↑ jump · ↓ crouch (or D-pad)"],
+    [<PadBtn key="x" c="#3b82f6">X</PadBtn>, "Light punch"],
+    [<PadBtn key="y" c="#eab308">Y</PadBtn>, "Heavy punch"],
+    [<PadBtn key="a" c="#22c55e">A</PadBtn>, "Kick"],
+    [<PadBtn key="b" c="#ef4444">B</PadBtn>, "Special (↓B / →B for the others)"],
+    [<span key="lb" className="flex gap-1"><PadBtn>LB</PadBtn><PadBtn>LT</PadBtn></span>, "Block · + left/right to dodge"],
+    [<span key="rb" className="flex gap-1"><PadBtn c="#fde047">RB</PadBtn><PadBtn c="#fde047">RT</PadBtn></span>, "Ultimate (full meter)"],
+    [<PadBtn key="s">☰</PadBtn>, "Pause"],
+  ];
+  return (
+    <div className="rounded-2xl bg-emerald-400/[0.06] p-5 ring-1 ring-emerald-400/25">
+      <p className="fw-display mb-3 flex items-center gap-2 text-xl font-[650] uppercase text-emerald-300">
+        <Gamepad2 className="h-5 w-5" /> {name} {def && <span className="text-white/60">· {def.name}</span>}
+      </p>
+      <div className="grid gap-2 text-sm text-white/80">
+        {rows.map(([k, label], i) => (
+          <div key={i} className="flex items-center gap-3">
+            <span className="flex w-16 shrink-0 justify-end">{k}</span>
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 border-t border-white/10 pt-3 text-[12px] text-white/50">↓ + Y uppercut · ↓ + A sweep · X + A throw · chain X → X → A for combos</p>
     </div>
   );
 }

@@ -41,6 +41,10 @@ const RATE: Record<string, number> = {
   rustle: 0.2,
   thud: 0.1,
   yelp: 0.25,
+  twang: 0.06,
+  thunk: 0.06,
+  sizzle: 0.5,
+  drums: 4,
 };
 
 const CATEGORY: Record<string, Category> = {
@@ -185,7 +189,7 @@ export class AudioManager {
     const key = sound;
     if (now - (this.last.get(key) ?? -9) < rate) return;
     if (this.active > 28 && sound !== "boom" && sound !== "thunder") return;
-    const ui = sound === "pop" || sound === "click" || sound === "sticker";
+    const ui = sound === "pop" || sound === "click" || sound === "sticker" || sound === "drums" || sound === "evolve";
     const pl = ui ? { gain: vol, pan: 0, dist: 0 } : this.place(x, y, vol);
     if (!pl) return;
     this.last.set(key, now);
@@ -483,6 +487,48 @@ export class AudioManager {
       case "stampede":
         noise("lowpass", 200, 120, 1, 2.5, 0.7, 0.3);
         for (let i = 0; i < 12; i++) osc("sine", 70, 40, 0.12, 0.35, 0.005).frequency.setValueAtTime(70, at + i * 0.18);
+        break;
+      case "drums":
+        // a war-drum beat: BOOM boom boom-BOOM
+        [0, 0.32, 0.5, 0.82, 1.3, 1.62, 1.8, 2.12].forEach((dt, i) => {
+          const t2 = at + dt;
+          const o = ctx.createOscillator();
+          o.type = "sine";
+          o.frequency.setValueAtTime(i % 4 === 0 ? 95 : 130, t2);
+          o.frequency.exponentialRampToValueAtTime(48, t2 + 0.25);
+          const g = ctx.createGain();
+          this.env(g, t2, 0.004, i % 4 === 0 ? 0.9 : 0.55, 0.3);
+          o.connect(g).connect(out);
+          o.start(t2);
+          o.stop(t2 + 0.35);
+        });
+        break;
+      case "evolve":
+        // a rising shimmer
+        [0, 0.08, 0.16, 0.24, 0.32, 0.4].forEach((dt, i) => {
+          const t2 = at + dt;
+          const o = ctx.createOscillator();
+          o.type = "sine";
+          o.frequency.setValueAtTime(440 * Math.pow(1.26, i), t2);
+          o.frequency.exponentialRampToValueAtTime(440 * Math.pow(1.26, i) * 1.5, t2 + 0.5);
+          const g = ctx.createGain();
+          this.env(g, t2, 0.02, 0.18, 0.6);
+          o.connect(g).connect(out);
+          o.start(t2);
+          o.stop(t2 + 0.7);
+        });
+        break;
+      case "twang":
+        osc("triangle", 520, 260, 0.12, 0.35, 0.002);
+        noise("bandpass", 2500, 1500, 3, 0.06, 0.25);
+        break;
+      case "thunk":
+        osc("sine", 180, 70, 0.1, 0.6, 0.002);
+        noise("bandpass", 900, 500, 2, 0.06, 0.4);
+        break;
+      case "sizzle":
+        noise("highpass", 4500, 3500, 0.7, 0.9, 0.18, 0.08);
+        for (let i = 0; i < 5; i++) noise("highpass", 3000, 2500, 1, 0.02, 0.35, 0.001, Math.random() * 0.8);
         break;
       default:
         osc("sine", 440, 440, 0.1, 0.2);

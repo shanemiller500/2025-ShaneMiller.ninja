@@ -230,6 +230,16 @@ export interface Look {
   webLines?: boolean;
   emblem?: string;
   glow?: string;
+  /** Generic costume detail (chest mark + trim style) */
+  mark?: "diamond" | "bolt" | "circle" | "chevron" | "stripe";
+  /** Bare arms (forearms + upper arms in skin tone) */
+  bareArms?: boolean;
+  /** Bare chest (Hulk-style); never derived automatically */
+  bareChest?: boolean;
+  /** Silhouette family (from the dataset's gender) */
+  body?: "male" | "female";
+  /** Hair colour; long hair is drawn flowing behind female fighters */
+  hair?: string;
 }
 
 export interface FighterDef {

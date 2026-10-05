@@ -9,6 +9,26 @@
 import type { Fighter } from "../engine/fighter";
 import type { Pose } from "../engine/types";
 import { clamp, glow, lerp, shade, withAlpha } from "./util";
+import {
+  INK as BODY_INK,
+  boot,
+  drawCape,
+  drawHair,
+  drawHeadShape,
+  fist,
+  limb,
+  paintGroup,
+  drawNeck,
+  drawTorso,
+  flashPaths,
+  silhouetteFill,
+  torsoFrame,
+  type LimbProfile,
+  type Paint,
+  type TorsoFrame,
+  type V,
+} from "./body";
+import { costumeFor } from "./costume";
 
 export interface Joints {
   lean: number;
@@ -184,7 +204,7 @@ export interface Rig {
 export function buildRig(f: Fighter, j: Joints): Rig {
   const H = f.def.look.height;
   const B = f.def.look.bulk;
-  const L = { thigh: 46 * H, shin: 44 * H, torso: 62 * H * (0.96 + B * 0.04), upper: 33 * H * (0.92 + B * 0.08), fore: 31 * H, neck: 7 * H, headR: 21 * H * (0.92 + B * 0.08) };
+  const L = { thigh: 49 * H, shin: 47 * H, torso: 62 * H * (0.96 + B * 0.04), upper: 33 * H * (0.92 + B * 0.08), fore: 31 * H, neck: 7 * H, headR: 21 * H * (0.92 + B * 0.08) };
   const dir = f.facing;
   const limb = (o: [number, number], ang: number, len: number): [number, number] => [o[0] + dir * sinD(ang) * len, o[1] - cosD(ang) * len];
 
@@ -206,9 +226,13 @@ export function buildRig(f: Fighter, j: Joints): Rig {
   const lean = j.lean;
   const neck: [number, number] = [hip[0] + dir * sinD(lean) * L.torso, hip[1] + cosD(lean) * L.torso];
   const head: [number, number] = [neck[0] + dir * sinD(lean + j.head) * (L.neck + L.headR), neck[1] + cosD(lean + j.head) * (L.neck + L.headR)];
-  const shoulderW = 12 * B;
-  const fShoulder: [number, number] = [neck[0] + dir * shoulderW * 0.3, neck[1] - 6 * H];
-  const bShoulder: [number, number] = [neck[0] - dir * shoulderW * 0.5, neck[1] - 8 * H];
+  // Shoulder sockets sit inside the deltoids, following the torso lean
+  const fw: [number, number] = [dir * cosD(lean), -sinD(lean)];
+  const upv: [number, number] = [dir * sinD(lean), cosD(lean)];
+  const sock = (s: number, d: number): [number, number] => [neck[0] + fw[0] * s - upv[0] * d, neck[1] + fw[1] * s - upv[1] * d];
+  const fem = f.def.look.body === "female";
+  const fShoulder = sock((fem ? 9 : 11) * B, 9 * H);
+  const bShoulder = sock((fem ? -7.5 : -9) * B, 10 * H);
   // Arms: angles are relative to the body (torso lean added) so punches follow the lean
   const fElbow = limb(fShoulder, j.fU + lean * 0.3, L.upper);
   const fHand = limb(fElbow, j.fF + lean * 0.3, L.fore);
@@ -236,13 +260,13 @@ export function buildRig(f: Fighter, j: Joints): Rig {
 }
 
 /* ── Drawing ───────────────────────────────────────────────────────── */
-const INK = "#0a0c14";
+const INK = BODY_INK;
 
 function seg(ctx: CanvasRenderingContext2D, a: [number, number], b: [number, number], w: number, fill: string, ink = true) {
   ctx.lineCap = "round";
   if (ink) {
     ctx.strokeStyle = INK;
-    ctx.lineWidth = w + 6;
+    ctx.lineWidth = w + 5;
     ctx.beginPath();
     ctx.moveTo(a[0], -a[1]);
     ctx.lineTo(b[0], -b[1]);
@@ -254,19 +278,12 @@ function seg(ctx: CanvasRenderingContext2D, a: [number, number], b: [number, num
   ctx.moveTo(a[0], -a[1]);
   ctx.lineTo(b[0], -b[1]);
   ctx.stroke();
-  // rim highlight
-  ctx.strokeStyle = "rgba(255,255,255,0.16)";
-  ctx.lineWidth = w * 0.32;
-  ctx.beginPath();
-  ctx.moveTo(a[0] - w * 0.18, -a[1] - w * 0.18);
-  ctx.lineTo(b[0] - w * 0.18, -b[1] - w * 0.18);
-  ctx.stroke();
 }
 
 function dot(ctx: CanvasRenderingContext2D, p: [number, number], r: number, fill: string) {
   ctx.fillStyle = INK;
   ctx.beginPath();
-  ctx.arc(p[0], -p[1], r + 3, 0, Math.PI * 2);
+  ctx.arc(p[0], -p[1], r + 2.5, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = fill;
   ctx.beginPath();
@@ -285,7 +302,11 @@ export interface DrawOpts {
   ring: string;
   /** Weapon currently thrown (hide it from the hand) */
   weaponOut: boolean;
+  /** Arena light colour used for the rim light */
+  rim?: string;
 }
+
+const P2 = (a: [number, number], b: [number, number], t: number): [number, number] => [lerp(a[0], b[0], t), lerp(a[1], b[1], t)];
 
 export function drawFighter(ctx: CanvasRenderingContext2D, f: Fighter, j: Joints, rig: Rig, o: DrawOpts) {
   const look = f.def.look;
@@ -303,162 +324,103 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: Fighter, j: Joints
   }
   if (ghost) ctx.globalAlpha *= 0.28;
 
-  const col = (c: string, back = false) => (ghost ? ghost : back ? shade(c, -0.32) : c);
-  const ink = !ghost;
+  const paths: Path2D[] = [];
+  const front: Paint = { ctx, ghost, rim: o.rim ?? "#93c5fd", depth: 0, ink: 1, paths };
+  const back: Paint = { ...front, depth: 1 };
 
-  // ── Cape (behind everything) ───────────────────────────────────────
+  // Muscle profiles (W = girth; heavier characters are visibly beefier)
+  const female = look.body === "female";
+  const W = B * (0.86 + 0.14 * H) * (female ? 0.86 : 1);
+  const UPPER: LimbProfile = { r0: 9.4 * W, r1: 10.8 * W, r1b: 9.4 * W, r2: 6.2 * W, at: 0.44 };
+  const FORE: LimbProfile = { r0: 7 * W, r1: 8.6 * W, r1b: 7.4 * W, r2: 5 * W, at: 0.24 };
+  const CUFF: LimbProfile = { r0: 7.2 * W, r1: 6.9 * W, r2: 5.9 * W, at: 0.5 };
+  const THIGH: LimbProfile = { r0: 13.4 * W * (female ? 1.12 : 1), r1: 13.8 * W * (female ? 1.06 : 1), r1b: 12 * W, r2: 7.6 * W, at: 0.26 };
+  const SHIN: LimbProfile = { r0: 7.8 * W, r1: 7.6 * W, r1b: 10 * W, r2: 5.2 * W, at: 0.28 };
+  const SHAFT: LimbProfile = { r0: 8.6 * W, r1: 8.1 * W, r2: 6.6 * W, at: 0.4 };
+  const DELT: LimbProfile = { r0: 11.6 * W, r1: 12 * W, r2: 9.4 * W, at: 0.4 };
+
+  const c = costumeFor(look, f.def.name);
+  const casting = !!f.move && (f.move.kind === "special" || f.move.kind === "ultimate") && f.movePhase !== "recovery";
+
+  // Torso frame (screen space) and hip sockets
+  const fr = torsoFrame(rig.hip, rig.neck, dir);
+  const toW = (v: V): [number, number] => [v[0], -v[1]];
+  const fHip = toW(fr.at(5 * B, 6));
+  const bHip = toW(fr.at(-6 * B, 8));
+
+  // ── Cape (behind everything) ─────────────────────────────────────
   if (look.cape && !ghost) {
     const sway = Math.sin(o.t * 3 + f.index) * 6 - clamp(f.vx, -12, 12) * dir * 1.5;
-    const top1 = rig.bShoulder;
-    const top2 = rig.fShoulder;
-    const len = 118 * H;
-    ctx.fillStyle = shade(look.cape, -0.15);
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(top1[0] - dir * 6, -top1[1]);
-    ctx.quadraticCurveTo(top1[0] - dir * (26 + sway), -(top1[1] - len * 0.55), top1[0] - dir * (34 + sway * 1.6), -(top1[1] - len));
-    ctx.lineTo(top2[0] - dir * (6 + sway), -(top2[1] - len * 0.96));
-    ctx.quadraticCurveTo(top2[0] - dir * 4, -(top2[1] - len * 0.5), top2[0], -top2[1]);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+    drawCape(front, rig.bShoulder, rig.fShoulder, look.cape, dir, H, sway);
   }
 
-  // ── Back limbs ────────────────────────────────────────────────────
-  seg(ctx, rig.hip, rig.bKnee, 19 * B, col(look.secondary, true), ink);
-  seg(ctx, rig.bKnee, rig.bFoot, 15 * B, col(look.secondary, true), ink);
-  dot(ctx, rig.bFoot, 8 * B, col(look.accent, true));
-  seg(ctx, rig.bShoulder, rig.bElbow, 15 * B, col(look.primary, true), ink);
-  seg(ctx, rig.bElbow, rig.bHand, 13 * B, col(look.skin, true), ink);
+  // Each limb is one inked silhouette (no seams at the joints); costume
+  // pieces (gloves, boots, bracers, torn pants) are seamed overlays.
+  const leg = (pt: Paint, hip: [number, number], knee: [number, number], foot: [number, number], bootSize: number) => {
+    const parts = [
+      limb(pt, hip, knee, THIGH, c.thigh, { stripe: c.legStripe, costume: c, gloss: c.gloss }),
+      limb(pt, knee, foot, SHIN, c.shin, { stripe: c.tornPants ? undefined : c.legStripe, costume: c, gloss: c.gloss }),
+    ];
+    if (c.tornPants) parts.push(limb(pt, knee, P2(knee, foot, 0.3), { ...SHIN, r0: SHIN.r0 * 1.12, r1: SHIN.r1 * 1.14, r1b: (SHIN.r1b ?? SHIN.r1) * 1.1, r2: SHIN.r1 * 1.08 }, c.thigh, { seam: true, ragged: true }));
+    if (!c.barefoot) parts.push(limb(pt, P2(knee, foot, c.bootTall ? 0.1 : 0.42), foot, c.bootTall ? { ...SHAFT, r0: SHIN.r0 * 1.1, r1: SHIN.r1b! * 1.06 } : SHAFT, c.boot, { gloss: 0.45, seam: true, costume: c }));
+    parts.push(boot(pt, knee, foot, bootSize, c.barefoot ? c.shin : c.boot, dir, c.barefoot));
+    paintGroup(pt, parts);
+  };
+  const arm = (pt: Paint, sh: [number, number], el: [number, number], hand: [number, number], fistSize: number, open: boolean, gems: boolean) => {
+    const parts = [
+      limb(pt, P2(sh, el, -0.12), P2(sh, el, 0.34), DELT, c.yoke ?? c.upperArm, { costume: c, gloss: c.gloss }),
+      limb(pt, sh, el, UPPER, c.upperArm, { stripe: c.armStripe, costume: c, gloss: c.gloss }),
+      limb(pt, el, hand, FORE, c.foreArm, { stripe: c.armStripe, costume: c, gloss: c.gloss }),
+    ];
+    if (c.bracer) parts.push(limb(pt, P2(el, hand, 0.5), P2(el, hand, 0.9), CUFF, c.bracer, { gloss: 0.55, seam: true }));
+    else parts.push(limb(pt, P2(el, hand, c.gloveLong ? 0.18 : 0.55), hand, c.gloveLong ? { ...CUFF, r0: FORE.r1b! * 1.06, r1: FORE.r1b! * 1.02 } : CUFF, c.glove, { gloss: 0.45, seam: true, costume: c }));
+    parts.push(fist(pt, el, hand, fistSize, c.hand, open, gems));
+    paintGroup(pt, parts);
+  };
+
+  // ── Long hair (behind the body) ──────────────────────────────────
+  if (look.hair && female && !ghost) drawHair(front, rig.head, rig.neck, rig.headR, look.hair, dir, o.t, -clamp(f.vx, -10, 10) * dir);
+
+  // ── Back leg + arm ───────────────────────────────────────────────
+  leg(back, bHip, rig.bKnee, rig.bFoot, 10 * W);
+  arm(back, rig.bShoulder, rig.bElbow, rig.bHand, 12.5 * W, false, false);
   if (look.shield && !o.weaponOut && !ghost) drawShield(ctx, rig.bElbow, rig.bHand, B);
-  dot(ctx, rig.bHand, 8.5 * B, col(look.accent, true));
   if (look.claws && !ghost) drawClaws(ctx, rig.bElbow, rig.bHand, look.claws, B);
 
-  // ── Torso ─────────────────────────────────────────────────────────
-  const tw = 30 * B;
-  const hw = 21 * B;
-  const nx = rig.neck[0] - rig.hip[0];
-  const ny = rig.neck[1] - rig.hip[1];
-  const len = Math.hypot(nx, ny) || 1;
-  const px = -ny / len;
-  const py = nx / len;
-  ctx.beginPath();
-  ctx.moveTo(rig.hip[0] + px * hw, -(rig.hip[1] + py * hw));
-  ctx.lineTo(rig.neck[0] + px * tw, -(rig.neck[1] + py * tw));
-  ctx.quadraticCurveTo(rig.neck[0] + nx * 0.08, -(rig.neck[1] + ny * 0.12), rig.neck[0] - px * tw, -(rig.neck[1] - py * tw));
-  ctx.lineTo(rig.hip[0] - px * hw, -(rig.hip[1] - py * hw));
-  ctx.closePath();
-  if (ghost) ctx.fillStyle = ghost;
-  else {
-    const g = ctx.createLinearGradient(rig.hip[0] - px * tw * dir, -rig.hip[1], rig.hip[0] + px * tw * dir, -rig.hip[1]);
-    g.addColorStop(0, shade(look.primary, 0.18));
-    g.addColorStop(0.55, look.primary);
-    g.addColorStop(1, shade(look.primary, -0.3));
-    ctx.fillStyle = g;
-  }
-  ctx.fill();
-  if (ink) {
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 3.5;
-    ctx.stroke();
-  }
-
-  if (!ghost) {
-    // Belt
-    seg(ctx, [rig.hip[0] - px * hw, rig.hip[1] - py * hw + 4], [rig.hip[0] + px * hw, rig.hip[1] + py * hw + 4], 8 * B, look.secondary, false);
-    const chest: [number, number] = [lerp(rig.hip[0], rig.neck[0], 0.68), lerp(rig.hip[1], rig.neck[1], 0.68)];
-    if (look.webLines) drawWebLines(ctx, rig, px, py, tw, hw);
-    if (look.emblem) drawEmblem(ctx, chest, look.emblem, f.def.name, B);
-    if (look.reactor) {
-      glow(ctx, look.glow ?? "#9fe7ff", chest[0], -chest[1], 34 * B, 0.9);
-      dot(ctx, chest, 7 * B, "#e0fbff");
-    }
-    if (f.rage > 0 || (f.def.passive.id === "rage" && f.health < f.def.maxHealth * 0.35 && f.alive)) {
-      glow(ctx, "#ef4444", chest[0], -chest[1], 120 * B, 0.35 + Math.sin(o.t * 18) * 0.12);
-    }
-  }
-
-  // ── Front leg ─────────────────────────────────────────────────────
-  seg(ctx, rig.hip, rig.fKnee, 21 * B, col(look.secondary), ink);
-  seg(ctx, rig.fKnee, rig.fFoot, 17 * B, col(look.secondary), ink);
-  dot(ctx, rig.fFoot, 9 * B, col(look.accent));
-
-  // ── Head (portrait) ───────────────────────────────────────────────
-  seg(ctx, rig.neck, [lerp(rig.neck[0], rig.head[0], 0.4), lerp(rig.neck[1], rig.head[1], 0.4)], 11 * B, col(look.skin), ink);
-  drawHead(ctx, rig, o, look.primary, ghost);
-
-  // ── Front arm ─────────────────────────────────────────────────────
+  // ── Torso ────────────────────────────────────────────────────────
   if (look.swords && !ghost) drawSwordHilts(ctx, rig, dir, B);
-  seg(ctx, rig.fShoulder, rig.fElbow, 17 * B, col(look.primary), ink);
-  seg(ctx, rig.fElbow, rig.fHand, 15 * B, col(look.skin), ink);
-  dot(ctx, rig.fHand, 10 * B, col(look.accent));
+  drawTorso(front, fr, look, B, c);
+  if (!ghost) {
+    const chestS = fr.at(8 * B, fr.T * 0.72);
+    if (c.chest === "reactor") glow(ctx, look.glow ?? "#9fe7ff", chestS[0], chestS[1], 44 * B, 0.95);
+    if (f.rage > 0 || (f.def.passive.id === "rage" && f.health < f.def.maxHealth * 0.35 && f.alive)) {
+      glow(ctx, "#ef4444", chestS[0], chestS[1], 130 * B, 0.35 + Math.sin(o.t * 18) * 0.12);
+    }
+  }
+
+  // ── Front leg ────────────────────────────────────────────────────
+  leg(front, fHip, rig.fKnee, rig.fFoot, 10.5 * W);
+
+  // ── Neck + head ──────────────────────────────────────────────────
+  drawNeck(front, rig.neck, rig.head, (female ? 6.6 : 7.8) * W, c.torso === look.skin || look.bareArms ? look.skin : c.yoke ?? c.torso);
+  drawHeadShape(front, rig.head, rig.headR, j.lean * 0.35 + j.head, dir, ghost ? null : o.portrait, look.primary);
+
+  // ── Front arm ────────────────────────────────────────────────────
+  arm(front, rig.fShoulder, rig.fElbow, rig.fHand, 13.5 * W, casting, !!c.gauntlet);
   if (!ghost) {
     if (look.claws) drawClaws(ctx, rig.fElbow, rig.fHand, look.claws, B);
     if (look.hammer && !o.weaponOut) drawHammer(ctx, rig.fElbow, rig.fHand, B);
-    const casting = f.move && (f.move.kind === "special" || f.move.kind === "ultimate") && f.movePhase !== "recovery";
     if (casting && look.glow) {
-      glow(ctx, look.glow, rig.fHand[0], -rig.fHand[1], 46 * B, 0.85);
-      glow(ctx, look.glow, rig.bHand[0], -rig.bHand[1], 32 * B, 0.6);
+      glow(ctx, look.glow, rig.fHand[0], -rig.fHand[1], 52 * B, 0.85);
+      glow(ctx, look.glow, rig.bHand[0], -rig.bHand[1], 36 * B, 0.6);
     }
     if (f.move?.fx === "sword" && f.movePhase === "active") drawBlade(ctx, rig.fElbow, rig.fHand, B);
   }
 
-  // Hit flash overlay: re-stroke limbs in white
-  if (o.flash > 0 && !ghost) {
-    ctx.globalAlpha = o.flash * 0.75;
-    ctx.globalCompositeOperation = "lighter";
-    for (const [a, b, w] of [
-      [rig.hip, rig.neck, 30 * B],
-      [rig.fShoulder, rig.fElbow, 17 * B],
-      [rig.fElbow, rig.fHand, 15 * B],
-      [rig.hip, rig.fKnee, 21 * B],
-      [rig.fKnee, rig.fFoot, 17 * B],
-    ] as [[number, number], [number, number], number][]) seg(ctx, a, b, w, "#ffffff", false);
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 1;
-  }
+  // Hit flash: re-light the whole silhouette; afterimages fill it once
+  flashPaths(front, o.flash);
+  if (ghost) silhouetteFill(front, ghost, 1);
 
-  ctx.restore();
-  void H;
-}
-
-function drawHead(ctx: CanvasRenderingContext2D, rig: Rig, o: DrawOpts, rim: string, ghost?: string) {
-  const [hx, hy] = rig.head;
-  const r = rig.headR;
-  ctx.save();
-  // Ink + rim ring
-  ctx.fillStyle = INK;
-  ctx.beginPath();
-  ctx.arc(hx, -hy, r + 4.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = ghost ?? rim;
-  ctx.beginPath();
-  ctx.arc(hx, -hy, r + 2.2, 0, Math.PI * 2);
-  ctx.fill();
-  if (!ghost) {
-    ctx.beginPath();
-    ctx.arc(hx, -hy, r, 0, Math.PI * 2);
-    ctx.clip();
-    if (o.portrait && o.portrait.complete && o.portrait.naturalWidth) {
-      // Dataset portraits are 320×480 head-and-shoulders; crop the face area
-      const img = o.portrait;
-      const sw = img.naturalWidth * 0.78;
-      const sx = (img.naturalWidth - sw) / 2;
-      const sy = img.naturalHeight * 0.04;
-      ctx.drawImage(img, sx, sy, sw, sw, hx - r, -hy - r, r * 2, r * 2);
-      // soft shading for roundness
-      const g = ctx.createRadialGradient(hx - r * 0.35, -hy - r * 0.4, r * 0.2, hx, -hy, r * 1.05);
-      g.addColorStop(0, "rgba(255,255,255,0.18)");
-      g.addColorStop(0.6, "rgba(255,255,255,0)");
-      g.addColorStop(1, "rgba(0,0,0,0.35)");
-      ctx.fillStyle = g;
-      ctx.fillRect(hx - r, -hy - r, r * 2, r * 2);
-    } else {
-      ctx.fillStyle = shade(rim, -0.2);
-      ctx.fillRect(hx - r, -hy - r, r * 2, r * 2);
-    }
-  }
   ctx.restore();
 }
 
@@ -563,49 +525,6 @@ function drawBlade(ctx: CanvasRenderingContext2D, elbow: [number, number], hand:
   const tip: [number, number] = [hand[0] + (dx / l) * 78 * B, hand[1] + (dy / l) * 78 * B];
   seg(ctx, hand, tip, 4.5 * B, "#e2e8f0");
   glow(ctx, "#e2e8f0", tip[0], -tip[1], 26, 0.6);
-}
-
-function drawWebLines(ctx: CanvasRenderingContext2D, rig: Rig, px: number, py: number, tw: number, hw: number) {
-  ctx.strokeStyle = "rgba(10,12,20,0.55)";
-  ctx.lineWidth = 1.3;
-  const c: [number, number] = [lerp(rig.hip[0], rig.neck[0], 0.7), lerp(rig.hip[1], rig.neck[1], 0.7)];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(c[0], -c[1]);
-    ctx.lineTo(c[0] + Math.cos(a) * tw, -(c[1] + Math.sin(a) * tw * 1.2));
-    ctx.stroke();
-  }
-  for (const r of [10, 20]) {
-    ctx.beginPath();
-    ctx.arc(c[0], -c[1], r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  void px;
-  void py;
-  void hw;
-}
-
-function drawEmblem(ctx: CanvasRenderingContext2D, p: [number, number], color: string, name: string, B: number) {
-  if (name === "Captain America") {
-    star(ctx, p[0], -p[1], 13 * B, color);
-    return;
-  }
-  // Spider emblem (Venom / generic)
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 3 * B;
-  ctx.beginPath();
-  ctx.ellipse(p[0], -p[1], 5 * B, 9 * B, 0, 0, Math.PI * 2);
-  ctx.fill();
-  for (const s of [-1, 1]) {
-    for (const k of [-0.6, 0, 0.6]) {
-      ctx.beginPath();
-      ctx.moveTo(p[0], -p[1] + k * 8 * B);
-      ctx.quadraticCurveTo(p[0] + s * 14 * B, -p[1] + k * 8 * B - 8 * B, p[0] + s * 22 * B, -p[1] + k * 16 * B);
-      ctx.stroke();
-    }
-  }
 }
 
 /** Floor shadow */

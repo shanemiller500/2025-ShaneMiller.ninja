@@ -30,8 +30,18 @@ export function ArcadeStyles() {
       .fw-display { font-family: var(--font-aspekta), "Arial Black", system-ui, sans-serif; font-style: italic; letter-spacing: -0.01em; }
       .fw-outline { -webkit-text-stroke: 2px #05060a; paint-order: stroke fill; }
       .fw-no-scrollbar::-webkit-scrollbar { display: none; } .fw-no-scrollbar { scrollbar-width: none; }
+      .fw-pad [data-pad-menu] [data-pad-focused] { outline: 3px solid #fde047 !important; outline-offset: 3px; box-shadow: 0 0 28px rgba(253,224,71,.55); }
       .fw-thin-scroll::-webkit-scrollbar { width: 8px; } .fw-thin-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.25); border-radius: 8px; }
     `}</style>
+  );
+}
+
+/* ── Controller button glyph (Xbox colours) ────────────────────────── */
+export function PadBtn({ children, c = "#94a3b8" }: { children: ReactNode; c?: string }) {
+  return (
+    <span className="inline-grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-black leading-none text-slate-950" style={{ background: c, boxShadow: `0 0 10px ${c}66` }}>
+      {children}
+    </span>
   );
 }
 

@@ -12,6 +12,7 @@ import { Match } from "../engine/match";
 import type { FighterDef, InputFrame, MatchEvent } from "../engine/types";
 import { emptyInput } from "../engine/types";
 import { InputManager, keyLabel } from "../input/input";
+import { PAD_LABELS } from "../input/gamepad";
 import type { Settings } from "../data/storage";
 import type { ArenaDef } from "../render/arenas";
 import { Renderer } from "../render/renderer";
@@ -95,6 +96,8 @@ export class GameSession {
     ];
 
     const hint = (p: 0 | 1) => {
+      // Controller players see Xbox button names on the special dials
+      if (this.input.hasPad(p)) return [PAD_LABELS.special, `↓${PAD_LABELS.special}`, `→${PAD_LABELS.special}`, PAD_LABELS.ult];
       const b = s.bindings[p];
       const sp = keyLabel(b.special[0] ?? "");
       return [sp, `↓${sp}`, `→${sp}`, keyLabel(b.ult[0] ?? "")];
@@ -180,7 +183,7 @@ export class GameSession {
     this.last = ts;
 
     // Pause key (Escape / P / Start)
-    const pauseDown = this.input.isDown("Escape") || this.input.isDown("KeyP");
+    const pauseDown = this.input.isDown("Escape") || this.input.isDown("KeyP") || this.input.padButton(9);
     if (pauseDown && !this.pauseKeyHeld && this.match.phase !== "over") this.cfg.onPauseRequest?.();
     this.pauseKeyHeld = pauseDown;
 

@@ -6,12 +6,13 @@ import { DINO_NAMES } from "../data/facts";
 import { sp } from "../data/species";
 import { P } from "./particles";
 import { clamp, pick } from "./rng";
+import { baseGenes } from "./genetics";
 import { groundSpeed, isSwimTile, isWalkTile } from "./terrain";
 import { T, TILE, WORLD_H, WORLD_W, type Dino, type DinoState, type SpeciesDef, type SpeciesId } from "./types";
 import type { World } from "./world";
 
 export const scaleOf = (d: Dino) => 0.42 + 0.58 * d.growth;
-export const sizeOf = (d: Dino) => sp(d.species).size * scaleOf(d);
+export const sizeOf = (d: Dino) => sp(d.species).size * scaleOf(d) * (1 + d.tier * 0.14) * d.genes.size;
 export const isBaby = (d: Dino) => d.growth < 0.5;
 
 export function makeDino(w: World, species: SpeciesId, x: number, y: number, o: Partial<Dino> = {}): Dino {
@@ -58,6 +59,10 @@ export function makeDino(w: World, species: SpeciesId, x: number, y: number, o: 
     threat: 0,
     sleeping: false,
     lead: false,
+    raider: false,
+    tier: 0,
+    genes: baseGenes(w.rng),
+    gen: 1,
     wet: 0,
     muddy: 0,
     ...o,
@@ -117,6 +122,10 @@ export function emote(d: Dino, icon: string, t = 1.8) {
 
 /** Desired movement speed for the current state (px/s). */
 function stateSpeed(d: Dino, def: SpeciesDef) {
+  return stateSpeedBase(d, def) * d.genes.speed;
+}
+
+function stateSpeedBase(d: Dino, def: SpeciesDef) {
   const tired = d.energy < 0.15 ? 0.6 : 1;
   const baby = isBaby(d) ? 0.85 : 1;
   switch (d.state) {
@@ -127,6 +136,8 @@ function stateSpeed(d: Dino, def: SpeciesDef) {
       return def.run * tired * baby;
     case "migrate":
       return def.speed * 1.4;
+    case "raid":
+      return def.run * 0.6;
     case "stalk":
       return def.speed * 0.8;
     case "wander":
@@ -165,6 +176,7 @@ const MOVING = new Set<DinoState>([
   "play",
   "dive",
   "perch",
+  "raid",
 ]);
 
 export function isMoving(d: Dino) {
@@ -179,6 +191,7 @@ export function walkable(w: World, d: Dino, x: number, y: number) {
   const tx = Math.floor(x / TILE);
   const ty = Math.floor(y / TILE);
   if (w.lava.heatAt(tx, ty) > 0.15) return false;
+  if (w.tribe.blocks(tx, ty)) return false;
   if (d.state !== "flee" && w.fire.at(tx, ty) > 0.2) return false;
   if (t === T.Tar && d.state !== "flee") return false;
   return true;
@@ -261,7 +274,8 @@ export function moveDino(w: World, d: Dino, dt: number) {
   const resting = d.state === "sleep" || (d.state === "perch" && d.z < 2);
   if (!resting) d.energy = clamp(d.energy - dt * 0.0022 * active, 0, 1);
   else d.energy = clamp(d.energy + dt * 0.02, 0, 1);
-  d.hunger = clamp(d.hunger + dt * def.hungerRate * (d.state === "sleep" ? 0.4 : 1) * (isBaby(d) ? 1.3 : 1), 0, 1);
+  const appetite = d.genes.size * d.genes.size * (0.85 + d.genes.speed * 0.15);
+  d.hunger = clamp(d.hunger + dt * def.hungerRate * appetite * (d.state === "sleep" ? 0.4 : 1) * (isBaby(d) ? 1.3 : 1), 0, 1);
   d.thirst = clamp(d.thirst + dt * def.thirstRate * (w.weather.temp > 0.75 ? 1.8 : 1), 0, 1);
   if (d.hunger >= 1 || d.thirst >= 1) d.health -= dt * 0.006;
   else if (d.hunger < 0.6 && d.thirst < 0.6) d.health = Math.min(1, d.health + dt * 0.01);

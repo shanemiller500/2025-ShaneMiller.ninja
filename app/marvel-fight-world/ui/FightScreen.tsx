@@ -8,11 +8,13 @@ import { audio } from "../audio/audio";
 import type { Difficulty } from "../engine/ai";
 import type { Action, FighterDef } from "../engine/types";
 import { loadImage } from "../data/roster";
+import { applyPortraitPalette } from "../render/palette";
 import type { Settings } from "../data/storage";
 import { GameSession, type Controller, type MatchSummary } from "../game/session";
 import type { ArenaDef } from "../render/arenas";
 import { ArcadeButton, P_COLORS, cn } from "./kit";
 import { ControlsCard } from "./ControlsCard";
+import { suspendPadBridge } from "../input/gamepad";
 
 export type FightExit = "rematch" | "changeFighter" | "newArena" | "quit" | "continue";
 
@@ -48,6 +50,10 @@ export function FightScreen(props: Props) {
     setTouch(typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches);
   }, []);
 
+  // While this screen is up the GameSession reads the controller directly;
+  // the UI bridge only drives the pause / results overlays.
+  useEffect(() => suspendPadBridge(), []);
+
   // VS splash, then boot the session once portraits are ready
   useEffect(() => {
     let alive = true;
@@ -55,6 +61,9 @@ export function FightScreen(props: Props) {
     audio.unlock();
     audio.play("super", 0.6);
     Promise.all([loadImage(p1.portrait.md), loadImage(p2.portrait.md)]).then(([a, b]) => {
+      // Generic fighters wear their real colours, sampled from their art
+      applyPortraitPalette(p1, a);
+      applyPortraitPalette(p2, b);
       const wait = Math.max(0, 1900 - (performance.now() - t0));
       window.setTimeout(() => {
         if (!alive || !canvasRef.current) return;
@@ -156,11 +165,11 @@ export function FightScreen(props: Props) {
       {/* Pause */}
       <AnimatePresence>
         {paused && !summary && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6 backdrop-blur-md">
+          <motion.div data-pad-menu initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6 backdrop-blur-md">
             <div className="grid w-full max-w-5xl gap-8 lg:grid-cols-[320px_1fr]">
               <div className="flex flex-col gap-3">
                 <h2 className="fw-display fw-outline mb-2 text-6xl font-[650] uppercase text-white">Paused</h2>
-                <ArcadeButton size="lg" onClick={() => setPaused(false)}>Resume</ArcadeButton>
+                <ArcadeButton size="lg" data-pad-back autoFocus onClick={() => setPaused(false)}>Resume</ArcadeButton>
                 <ArcadeButton size="md" tone="ghost" onClick={() => exit("rematch")}>Restart match</ArcadeButton>
                 <ArcadeButton size="md" tone="ghost" onClick={() => exit("changeFighter")}>Change fighter</ArcadeButton>
                 <ArcadeButton size="md" tone="ghost" onClick={() => exit("quit")}>Quit to menu</ArcadeButton>
@@ -174,7 +183,7 @@ export function FightScreen(props: Props) {
       {/* Results */}
       <AnimatePresence>
         {summary && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="absolute inset-0 z-20 overflow-y-auto bg-gradient-to-b from-black/40 via-black/75 to-black/95 backdrop-blur-[2px]">
+          <motion.div data-pad-menu initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="absolute inset-0 z-20 overflow-y-auto bg-gradient-to-b from-black/40 via-black/75 to-black/95 backdrop-blur-[2px]">
             <Results summary={summary} p1={p1} p2={p2} youWon={youWon} actions={actions} onAction={exit} />
           </motion.div>
         )}

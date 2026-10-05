@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, RotateCcw } from "lucide-react";
+import { Gamepad2, Loader2, RotateCcw } from "lucide-react";
 
 import { trackEvent } from "@/utils/mixpanel";
 import { audio } from "../audio/audio";
@@ -35,7 +35,8 @@ import { ZONES } from "../world/zones";
 import { ArenaScreen } from "./ArenaScreen";
 import { CharacterSheet } from "./CharacterSheet";
 import { FightScreen, type FightExit } from "./FightScreen";
-import { ArcadeButton, ArcadeStyles, Backdrop } from "./kit";
+import { startPadBridge } from "../input/gamepad";
+import { ArcadeButton, ArcadeStyles, Backdrop, PadBtn, cn } from "./kit";
 import { SelectScreen } from "./SelectScreen";
 import { SettingsScreen } from "./SettingsScreen";
 import { StatsScreen } from "./StatsScreen";
@@ -97,10 +98,55 @@ function Loading({ error, retry }: { error: string | null; retry: () => void }) 
 
 export default function FightWorldApp() {
   const { roster, error, retry } = useFightRoster();
+  const [padUsed, setPadUsed] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Controller → UI bridge (menus, overlays). Fights read the pad directly.
+  useEffect(() => {
+    let hide = 0;
+    const show = (msg: string) => {
+      setToast(msg);
+      window.clearTimeout(hide);
+      hide = window.setTimeout(() => setToast(null), 3800);
+    };
+    const stop = startPadBridge({
+      onConnect: (name) => {
+        setPadUsed(true);
+        show(`${name} connected`);
+      },
+      onDisconnect: () => show("Controller disconnected"),
+      onActive: () => setPadUsed(true),
+    });
+    // Mouse or keyboard use hides the controller focus rings again
+    const off = () => setPadUsed(false);
+    window.addEventListener("mousemove", off);
+    return () => {
+      stop();
+      window.clearTimeout(hide);
+      window.removeEventListener("mousemove", off);
+    };
+  }, []);
+
   return (
-    <div className="dark fixed inset-0 z-40 select-none overflow-hidden bg-[#05060a] font-sans text-white antialiased">
+    <div className={cn("dark fixed inset-0 z-40 select-none overflow-hidden bg-[#05060a] font-sans text-white antialiased", padUsed && "fw-pad")}>
       <ArcadeStyles />
       {roster ? <Game roster={roster} /> : <Loading error={error} retry={retry} />}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            className="pointer-events-none absolute left-1/2 top-5 z-[60] flex -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#0b0c14]/90 px-4 py-2.5 shadow-2xl ring-1 ring-emerald-400/40 backdrop-blur"
+          >
+            <Gamepad2 className="h-5 w-5 text-emerald-300" />
+            <span className="text-sm font-semibold">{toast}</span>
+            <span className="hidden items-center gap-1.5 text-[12px] text-white/55 sm:flex">
+              <PadBtn c="#22c55e">A</PadBtn> select <PadBtn c="#ef4444">B</PadBtn> back <PadBtn c="#94a3b8">☰</PadBtn> pause
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

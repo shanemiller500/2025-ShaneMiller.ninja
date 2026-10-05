@@ -83,7 +83,7 @@ export function SettingsScreen({ settings, onChange, onBack }: { settings: Setti
   }, [listening, settings, onChange, onBack]);
 
   return (
-    <div className="absolute inset-0 isolate overflow-hidden text-white">
+    <div data-pad-menu className="absolute inset-0 isolate overflow-hidden text-white">
       <Backdrop tint="#0ea5e9" />
       <div className="fw-thin-scroll h-full overflow-y-auto">
         <div className="mx-auto max-w-5xl px-6 py-8">

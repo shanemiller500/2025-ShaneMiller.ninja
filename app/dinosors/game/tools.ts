@@ -11,11 +11,12 @@ import { isWaterTile, isWalkTile } from "../sim/terrain";
 import { MAP_W, T, TILE, type PlantKind, type SpeciesId, type WeatherKind } from "../sim/types";
 import type { World } from "../sim/world";
 
-export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire" | "weather" | "disaster" | "people" | "erase";
+export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire" | "weather" | "disaster" | "people" | "build" | "erase";
 export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
 export type LandOpt = "water" | "rock" | "mud" | "grass";
-export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake";
-export type PeopleOpt = "adult" | "child" | "shelter" | "campfire";
+export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid";
+export type PeopleOpt = "adult" | "child";
+export type BuildOpt = "hut" | "wall" | "stonewall" | "tower" | "farm" | "campfire";
 
 export interface ToolState {
   id: ToolId;
@@ -27,6 +28,7 @@ export interface ToolState {
   weather: WeatherKind;
   disaster: DisasterOpt;
   people: PeopleOpt;
+  build: BuildOpt;
 }
 
 export const DEFAULT_TOOL: ToolState = {
@@ -39,6 +41,7 @@ export const DEFAULT_TOOL: ToolState = {
   weather: "rain",
   disaster: "lightning",
   people: "adult",
+  build: "wall",
 };
 
 export interface Opt<V extends string> {
@@ -84,11 +87,18 @@ export const DISASTER_OPTS: Opt<DisasterOpt>[] = [
   { value: "meteor", icon: "☄️", label: "Meteor" },
   { value: "volcano", icon: "🌋", label: "Erupt!" },
   { value: "quake", icon: "🫨", label: "Quake" },
+  { value: "raid", icon: "🥁", label: "Dino raid!" },
 ];
 export const PEOPLE_OPTS: Opt<PeopleOpt>[] = [
   { value: "adult", icon: "🧔", label: "Cave person" },
   { value: "child", icon: "🧒", label: "Cave kid" },
-  { value: "shelter", icon: "🛖", label: "Hut plan" },
+];
+export const BUILD_OPTS: Opt<BuildOpt>[] = [
+  { value: "wall", icon: "🪵", label: "Wood wall" },
+  { value: "stonewall", icon: "🧱", label: "Stone wall" },
+  { value: "tower", icon: "🗼", label: "Watchtower" },
+  { value: "hut", icon: "🛖", label: "Hut" },
+  { value: "farm", icon: "🌾", label: "Farm" },
   { value: "campfire", icon: "🔥", label: "Campfire" },
 ];
 
@@ -111,7 +121,8 @@ export const TOOLS: ToolDef[] = [
   { id: "fire", icon: "🔥", label: "Fire", tip: "Light a fire (careful!)", brush: true },
   { id: "weather", icon: "🌦️", label: "Weather", tip: "Change the weather" },
   { id: "disaster", icon: "💥", label: "Boom", tip: "Lightning, meteors, volcano, quakes" },
-  { id: "people", icon: "🧔", label: "People", tip: "Cave people, huts and campfires" },
+  { id: "people", icon: "🧔", label: "People", tip: "Add cave people (tap one to give them a job!)" },
+  { id: "build", icon: "🛠️", label: "Build", tip: "Plan walls, towers, huts + farms. Drag to draw walls!", brush: true },
   { id: "erase", icon: "🧽", label: "Erase", tip: "Remove things", brush: true },
 ];
 
@@ -139,7 +150,9 @@ export function toolCursor(t: ToolState): { icon: string; radius: number } | nul
     case "disaster":
       return t.disaster === "lightning" ? { icon: "⚡", radius: 40 } : t.disaster === "meteor" ? { icon: "☄️", radius: 90 } : null;
     case "people":
-      return { icon: PEOPLE_OPTS.find((o) => o.value === t.people)!.icon, radius: t.people === "shelter" ? 34 : 16 };
+      return { icon: PEOPLE_OPTS.find((o) => o.value === t.people)!.icon, radius: 16 };
+    case "build":
+      return { icon: BUILD_OPTS.find((o) => o.value === t.build)!.icon, radius: t.build === "wall" || t.build === "stonewall" ? 16 : t.build === "farm" ? 38 : 30 };
     case "erase":
       return { icon: "🧽", radius: 28 };
   }
@@ -267,6 +280,7 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
     }
     case "disaster": {
       if (drag) return false;
+      if (tool.disaster === "raid") return false;
       if (tool.disaster === "lightning") w.lightning(x, y, true);
       else if (tool.disaster === "meteor") {
         if (w.meteors.length > 2) return false;
@@ -276,29 +290,78 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
     }
     case "people": {
       if (drag) return false;
-      if (tool.people === "adult" || tool.people === "child") {
-        if (!isWalkTile(tile) || isWaterTile(tile)) return false;
-        if (w.humans.length >= 24) {
-          hint(w, "🛖", "The camp is full!");
-          return false;
-        }
-        const h = addHuman(w, x, y, tool.people === "child");
-        h.bubble = { text: "Hello!", t: 2 };
-        w.sfx("babble", x, y, 0.7);
-        return true;
+      if (!isWalkTile(tile) || isWaterTile(tile)) return false;
+      if (w.humans.length >= 30) {
+        hint(w, "🛖", "The camp is full!");
+        return false;
       }
-      if (tool.people === "shelter") {
-        if (!isWalkTile(tile) || isWaterTile(tile)) return false;
-        if (Math.hypot(x - w.camp.x, y - w.camp.y) > 900) {
-          hint(w, "🛖", "Huts need to be near the cave camp.");
-          return false;
-        }
-        w.camp.addShelter(w, x, y);
-        if (!w.camp.learned.has("axe")) hint(w, "🪓", `They'll need a ${TECH.axe.name} to chop wood for the frame!`);
-        else w.toast("🛖", "Hut planned! The cave people will build it.");
-        return true;
+      const h = addHuman(w, x, y, tool.people === "child");
+      h.bubble = { text: "Hello!", t: 2 };
+      w.sfx("babble", x, y, 0.7);
+      return true;
+    }
+    case "build":
+      return build(w, tool, x, y, drag);
+    case "erase":
+      return erase(w, x, y, drag);
+    default:
+      return false;
+  }
+}
+
+function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): boolean {
+  const c = w.camp;
+  const tile = w.terrain.tileAt(x, y);
+  const near = Math.hypot(x - c.x, y - c.y) < 1100;
+  if (!near) {
+    if (!drag) hint(w, "🏕️", "Build close to the cave camp so the tribe can reach it.");
+    return false;
+  }
+  switch (tool.build) {
+    case "wall":
+    case "stonewall": {
+      const kind = tool.build === "wall" ? "palisade" : "stone";
+      const tech = kind === "palisade" ? "palisade" : "stonewall";
+      if (!c.learned.has(tech)) {
+        hint(w, TECH[tech].icon, `The tribe needs to invent ${TECH[tech].name} first — tap the camp to choose it!`);
+        return false;
       }
-      if (!w.camp.learned.has("fire")) {
+      const wl = w.tribe.addWall(w, Math.floor(x / TILE), Math.floor(y / TILE), kind);
+      if (wl && !drag) w.sfx("knock", x, y, 0.4);
+      return !!wl;
+    }
+    case "tower": {
+      if (drag) return false;
+      if (!c.learned.has("tower")) {
+        hint(w, "🗼", "Invent the Watchtower first — tap the camp to choose it!");
+        return false;
+      }
+      const t = w.tribe.addTower(w, x, y);
+      if (t) w.toast("🗼", "Tower planned! Builders will need wood + stone.");
+      return !!t;
+    }
+    case "farm": {
+      if (drag) return false;
+      if (!c.learned.has("farming")) {
+        hint(w, "🌾", "Invent Farming first — tap the camp to choose it!");
+        return false;
+      }
+      const f = w.tribe.addFarm(w, x, y);
+      if (f) w.toast("🌾", "New field! Farmers plant it with grass seeds.");
+      else hint(w, "🌾", "Fields need open soil (and a little space).");
+      return !!f;
+    }
+    case "hut": {
+      if (drag) return false;
+      if (!isWalkTile(tile) || isWaterTile(tile)) return false;
+      c.addShelter(w, x, y);
+      if (!c.learned.has("axe")) hint(w, "🪓", `They'll need a ${TECH.axe.name} to chop wood for the frame!`);
+      else w.toast("🛖", "Hut planned! More huts = room for more babies.");
+      return true;
+    }
+    case "campfire": {
+      if (drag) return false;
+      if (!c.learned.has("fire")) {
         hint(w, "🔥", "The cave people haven't discovered fire yet! Tap their camp to help.");
         return false;
       }
@@ -307,15 +370,29 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
       w.sfx("ignite", x, y, 0.7);
       return true;
     }
-    case "erase":
-      return erase(w, x, y, drag);
-    default:
-      return false;
   }
+  return false;
 }
 
 function erase(w: World, x: number, y: number, drag: boolean) {
   const R = 28;
+  const wl = w.tribe.wallAt(Math.floor(x / TILE), Math.floor(y / TILE));
+  if (wl) {
+    w.tribe.removeWall(wl);
+    w.particles.burst(P.Dust, x, y, 5, 30, { size: 8, max: 0.6, color: "rgba(160,130,90,0.6)" });
+    w.sfx("pop", x, y, 0.4);
+    return true;
+  }
+  const tower = w.tribe.towers.find((t) => Math.hypot(t.x - x, t.y - 30 - y) < 40);
+  if (tower && !drag) {
+    w.tribe.towers.splice(w.tribe.towers.indexOf(tower), 1);
+    return true;
+  }
+  const farm = w.tribe.farms.find((f) => Math.hypot(f.x - x, (f.y - y) * 1.6) < 40);
+  if (farm && !drag) {
+    w.tribe.farms.splice(w.tribe.farms.indexOf(farm), 1);
+    return true;
+  }
   const poof = (px: number, py: number) => {
     w.particles.burst(P.Poof, px, py, 6, 40, { size: 10, max: 0.6, color: "rgba(255,255,255,0.9)" });
     w.sfx("pop", px, py, 0.4);

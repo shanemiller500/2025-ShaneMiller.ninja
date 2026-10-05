@@ -3,6 +3,8 @@
 /*  and emits events; rendering, audio and React read from it.         */
 /* ------------------------------------------------------------------ */
 
+import type { Genes } from "./genetics";
+
 export const TILE = 32;
 export const MAP_W = 160;
 export const MAP_H = 112;
@@ -177,7 +179,9 @@ export type DinoState =
   | "steal"
   | "annoyed"
   | "faint"
-  | "stuck";
+  | "stuck"
+  | "raid"
+  | "attackWall";
 
 export interface Emote {
   icon: string;
@@ -234,6 +238,14 @@ export interface Dino {
   lead: boolean;
   wet: number;
   muddy: number;
+  /** marching on the cave camp */
+  raider: boolean;
+  /** evolution tier: 0 normal, 1 tough, 2 alpha */
+  tier: number;
+  /** inherited genes (size, speed, toughness, colour, mutation) */
+  genes: Genes;
+  /** generation number */
+  gen: number;
 }
 
 export type HumanState =
@@ -253,9 +265,21 @@ export type HumanState =
   | "tossed"
   | "eat"
   | "lookUp"
-  | "explore";
+  | "explore"
+  | "hunt"
+  | "aim"
+  | "haul"
+  | "cook"
+  | "farm"
+  | "guard"
+  | "repair";
 
-export type Resource = "stick" | "stone" | "grass" | "leaves" | "wood" | "fish" | "berries";
+export type Resource = "stick" | "stone" | "grass" | "leaves" | "wood" | "fish" | "berries" | "meat" | "cooked" | "crop";
+
+/** What a cave person does. "auto" lets the tribe decide. */
+export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer";
+
+export type HumanOrder = { kind: "hunt"; id: number } | { kind: "guard"; x: number; y: number } | null;
 
 export interface Human {
   id: number;
@@ -286,6 +310,14 @@ export interface Human {
   energy: number;
   hunger: number;
   fear: number;
+  role: Role;
+  /** the job the tribe picked when role is "auto" */
+  autoRole: Role;
+  order: HumanOrder;
+  /** seconds alive (kids grow up) */
+  age: number;
+  /** weapon cooldown */
+  cd: number;
 }
 
 export type ItemKind = "meat" | "fish" | "fruit" | "berries" | "poop" | "fossil" | "stick" | "stone";
@@ -302,6 +334,8 @@ export interface Item {
   amount: number;
   /** id of whoever is eating/carrying it */
   claimed: number;
+  /** cave person dragging this carcass home */
+  draggedBy?: number;
   /** fossil species */
   species?: SpeciesId;
 }
@@ -315,6 +349,8 @@ export interface Egg {
   hatchAt: number;
   herd: number;
   parent: number;
+  genes?: Genes;
+  gen?: number;
 }
 
 export type PlantKind = "conifer" | "palm" | "cycad" | "broadleaf" | "fruit" | "fern" | "bush" | "reeds" | "horsetail";
@@ -382,7 +418,60 @@ export interface FishSchool {
 
 export type WeatherKind = "clear" | "cloudy" | "rain" | "heavyRain" | "storm" | "fog" | "windy" | "hot";
 
-export type TechId = "tools" | "fire" | "spear" | "fishing" | "axe" | "basket" | "shelter";
+export type TechId = "tools" | "fire" | "spear" | "fishing" | "axe" | "basket" | "shelter" | "farming" | "palisade" | "bow" | "crossbow" | "stonewall" | "tower";
+
+export type WallKind = "palisade" | "stone";
+
+/** One wall tile. `built` < 1 means it's still a blueprint. */
+export interface Wall {
+  id: number;
+  tx: number;
+  ty: number;
+  kind: WallKind;
+  hp: number;
+  built: number;
+  /** stone blueprint waiting to replace a palisade */
+  upgrade?: boolean;
+  /** resources delivered so far */
+  have: number;
+}
+
+export interface Farm {
+  id: number;
+  x: number;
+  y: number;
+  /** 0 = bare, 0..1 growing, 1 = ripe */
+  growth: number;
+  planted: boolean;
+}
+
+export interface Tower {
+  id: number;
+  x: number;
+  y: number;
+  /** 0..3 build stages, 3 = done */
+  stage: number;
+  have: number;
+}
+
+export type ProjectileKind = "spear" | "arrow" | "bolt";
+
+export interface Projectile {
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  t: number;
+  dur: number;
+  kind: ProjectileKind;
+  target: number;
+  dmg: number;
+  hit: boolean;
+}
+
+export type Danger = "calm" | "normal" | "wild";
 
 export type GameEvent =
   | { type: "sfx"; sound: string; x: number; y: number; vol?: number; pitch?: number }

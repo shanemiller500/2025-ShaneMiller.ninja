@@ -12,7 +12,8 @@ import type { FighterDef } from "../engine/types";
 import type { ArenaDef } from "../render/arenas";
 import { WorldScene } from "../world/scene";
 import { ZONES, ZONE_HALF, neighbours, residentsFor, zoneById, type Resident } from "../world/zones";
-import { AlignmentChip, ArcadeButton, ArchetypeChip, Keycap, P_COLORS, StatBars, StatRadar, cn } from "./kit";
+import { AlignmentChip, ArcadeButton, ArchetypeChip, Keycap, P_COLORS, PadBtn, StatBars, StatRadar, cn } from "./kit";
+import { usePadConnected } from "./usePad";
 
 interface Props {
   roster: Roster;
@@ -40,6 +41,7 @@ export function WorldScreen(p: Props) {
   const [compare, setCompare] = useState<FighterDef | null>(null);
   const [touch, setTouch] = useState(false);
   const [fade, setFade] = useState(true);
+  const pad = usePadConnected();
   const cb = useRef(p);
   cb.current = p;
 
@@ -209,7 +211,7 @@ export function WorldScreen(p: Props) {
               </div>
               <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
                 <ArcadeButton size="sm" onClick={() => fight(near.def)}>
-                  <Swords className="h-4 w-4" /> Fight <span className="hidden opacity-60 sm:inline">E</span>
+                  <Swords className="h-4 w-4" /> Fight <span className="hidden opacity-60 sm:inline">{pad ? "A" : "E"}</span>
                 </ArcadeButton>
                 <div className="flex gap-1.5">
                   <button type="button" onClick={() => p.onView(near.def)} title="View file (V)" className="rounded-lg bg-white/[0.07] p-2.5 text-white/80 ring-1 ring-white/10 hover:bg-white/15">
@@ -226,7 +228,18 @@ export function WorldScreen(p: Props) {
       </AnimatePresence>
 
       {/* Controls hint */}
-      {!touch && !near && (
+      {!touch && !near && pad && (
+        <div className="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-4 rounded-full bg-black/50 px-5 py-2 text-[12px] text-white/70 ring-1 ring-white/10 backdrop-blur">
+          <span className="flex items-center gap-1.5"><PadBtn>L</PadBtn> walk</span>
+          <span className="flex items-center gap-1.5"><PadBtn>LB</PadBtn> run</span>
+          <span className="flex items-center gap-1.5"><PadBtn>↑</PadBtn> jump</span>
+          <span className="flex items-center gap-1.5"><PadBtn>⧉</PadBtn> map</span>
+          <span className="flex items-center gap-1.5"><PadBtn c="#22c55e">A</PadBtn> fight</span>
+          <span className="flex items-center gap-1.5"><PadBtn c="#3b82f6">X</PadBtn> compare</span>
+          <span className="flex items-center gap-1.5"><PadBtn c="#eab308">Y</PadBtn> file</span>
+        </div>
+      )}
+      {!touch && !near && !pad && (
         <div className="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-4 rounded-full bg-black/50 px-5 py-2 text-[12px] text-white/70 ring-1 ring-white/10 backdrop-blur">
           <span className="flex items-center gap-1.5"><Keycap>A</Keycap><Keycap>D</Keycap> walk</span>
           <span className="flex items-center gap-1.5"><Keycap>Shift</Keycap> run</span>
@@ -250,7 +263,7 @@ export function WorldScreen(p: Props) {
       {/* World map */}
       <AnimatePresence>
         {map && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20 grid place-items-center bg-black/75 p-6 backdrop-blur-md" onMouseDown={(e) => e.target === e.currentTarget && setMap(false)}>
+          <motion.div data-pad-menu initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20 grid place-items-center bg-black/75 p-6 backdrop-blur-md" onMouseDown={(e) => e.target === e.currentTarget && setMap(false)}>
             <motion.div initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }} className="w-[min(96vw,1100px)]">
               <div className="mb-5 flex items-end justify-between">
                 <div>
@@ -268,7 +281,7 @@ export function WorldScreen(p: Props) {
                     <button
                       key={z.id}
                       type="button"
-                      onClick={() => (here ? setMap(false) : travel(z.id, 0))}
+                      onClick={() => (here ? setMap(false) : travel(z.id, -ZONE_HALF + 300))}
                       className={cn("group relative h-32 overflow-hidden rounded-xl p-4 text-left transition hover:-translate-y-0.5", here ? "ring-2 ring-amber-300" : "ring-1 ring-white/15 hover:ring-white/40")}
                       style={{ background: `linear-gradient(135deg, ${z.arena.colors[0]}, ${z.arena.colors[1]})` }}
                     >
@@ -290,7 +303,7 @@ export function WorldScreen(p: Props) {
       {/* Compare */}
       <AnimatePresence>
         {compare && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20 grid place-items-center bg-black/75 p-6 backdrop-blur-md" onMouseDown={(e) => e.target === e.currentTarget && setCompare(null)}>
+          <motion.div data-pad-menu initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20 grid place-items-center bg-black/75 p-6 backdrop-blur-md" onMouseDown={(e) => e.target === e.currentTarget && setCompare(null)}>
             <motion.div initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }} className="fw-thin-scroll max-h-[92vh] w-[min(96vw,1000px)] overflow-y-auto rounded-3xl bg-[#0b0c14] p-6 ring-1 ring-white/10">
               <p className="fw-display text-center text-3xl font-[650] uppercase">
                 <span style={{ color: P_COLORS[0] }}>{player.name}</span> <span className="text-amber-300">vs</span> <span style={{ color: P_COLORS[1] }}>{compare.name}</span>
@@ -306,7 +319,7 @@ export function WorldScreen(p: Props) {
                 <ArcadeButton size="lg" onClick={() => fight(compare)}>
                   <Swords className="h-5 w-5" /> Fight {compare.name}
                 </ArcadeButton>
-                <ArcadeButton tone="ghost" onClick={() => setCompare(null)}>
+                <ArcadeButton tone="ghost" data-pad-back onClick={() => setCompare(null)}>
                   Close
                 </ArcadeButton>
               </div>

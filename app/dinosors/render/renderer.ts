@@ -11,10 +11,20 @@ import { P, type Particle } from "../sim/particles";
 import { PLANT_H, TALL } from "../sim/plants";
 import { hash2, valueNoise } from "../sim/rng";
 import { CHUNKS_X, CHUNK_TILES } from "../sim/terrain";
-import { MAP_H, MAP_W, T, TILE, WORLD_H, WORLD_W, type Dino, type Human, type Plant } from "../sim/types";
+import { MAP_H, MAP_W, T, TILE, WORLD_H, WORLD_W, type Dino, type Human, type Plant, type SpeciesDef } from "../sim/types";
+
+/** shade() returns rgb(); species looks want #hex */
+function toHex(rgb: string) {
+  const m = rgb.match(/\d+/g);
+  if (!m) return rgb;
+  return "#" + m.slice(0, 3).map((v) => (+v).toString(16).padStart(2, "0")).join("");
+}
 import type { World } from "../sim/world";
-import { drawDino, restPose, type DinoPose } from "./drawDino";
-import { drawCampfire, drawEgg, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawProp, drawShelter, drawStockpile, drawVolcano } from "./sprites";
+import { drawDino, restPose, shade, type DinoPose } from "./drawDino";
+import { lookKey } from "../sim/genetics";
+import { drawCampfire, drawEgg, drawFarm, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawProp, drawShelter, drawStockpile, drawTower, drawVolcano, drawWallTile, type WeaponLook } from "./sprites";
+import { WALL_HP } from "../sim/tribe";
+import { ROLES } from "../data/facts";
 import { TerrainRenderer } from "./terrainRenderer";
 
 export interface Camera {
@@ -47,6 +57,8 @@ const K_PILE = 9;
 const K_VOLCANO = 10;
 const K_PEAK = 11;
 const K_ROCK = 12;
+const K_WALL = 13;
+const K_TOWER = 14;
 
 interface Drop {
   x: number;
@@ -91,6 +103,7 @@ export class Renderer {
   private warmSprite = radial("rgba(255,170,70,0.9)", "rgba(255,120,40,0)");
   private cloudSprite = radial("rgba(255,255,255,0.95)", "rgba(255,255,255,0)");
   private shadowSprite = radial("rgba(20,30,40,0.55)", "rgba(20,30,40,0)");
+  private glowSprite = radial("rgba(95,243,230,0.85)", "rgba(95,243,230,0)");
   private pose: DinoPose = restPose();
   /** fraction of the view that is water (for ambient audio) */
   waterInView = 0;
@@ -235,6 +248,17 @@ export class Renderer {
     });
     this.fireInView = fires;
     for (let i = 0; i < vo.rocks.length; i++) list.push({ y: vo.rocks[i].y, k: K_ROCK, i });
+    const tribe = w.tribe;
+    for (let i = 0; i < tribe.walls.length; i++) {
+      const wl = tribe.walls[i];
+      const wx = wl.tx * TILE + TILE / 2;
+      const wy = wl.ty * TILE + TILE;
+      if (wx > x0 && wx < x1 && wy > y0 && wy < y1 + 40) list.push({ y: wy - 2, k: K_WALL, i });
+    }
+    for (let i = 0; i < tribe.towers.length; i++) {
+      const tw = tribe.towers[i];
+      if (tw.x > x0 && tw.x < x1 && tw.y > y0 && tw.y < y1 + 120) list.push({ y: tw.y, k: K_TOWER, i });
+    }
 
     // shadows first (cheap sprite stamps), offset by the sun
     const sunX = (w.time - 12) * -3;
@@ -274,6 +298,15 @@ export class Renderer {
     }
     c.globalAlpha = 1;
 
+    // farm fields
+    for (const f of w.tribe.farms) {
+      if (f.x < x0 - 60 || f.x > x1 + 60 || f.y < y0 - 40 || f.y > y1 + 40) continue;
+      c.save();
+      c.translate(f.x, f.y);
+      drawFarm(c, f.growth, f.planted, this.t);
+      c.restore();
+    }
+
     // nest decal
     for (const p of w.props) if (p.kind === "nest") {
       c.save();
@@ -300,7 +333,8 @@ export class Renderer {
     }
 
     list.sort((a, b) => a.y - b.y);
-    const hasSpear = w.camp.learned.has("spear");
+    const learned = w.camp.learned;
+    const weapon: WeaponLook = learned.has("crossbow") ? "crossbow" : learned.has("bow") ? "bow" : learned.has("spear") ? "spear" : null;
     for (const it of list) {
       switch (it.k) {
         case K_PLANT: {
@@ -318,7 +352,8 @@ export class Renderer {
           const h = w.humans[it.i];
           c.save();
           c.translate(h.x, h.y - h.z);
-          drawHuman(c, h, this.t, hasSpear);
+          const role = tribe.roleOf(h);
+          drawHuman(c, h, this.t, weapon, role === "guard" || role === "hunter" || !!h.order || tribe.raid !== null);
           c.restore();
           break;
         }
@@ -390,6 +425,22 @@ export class Renderer {
           if (!lod) drawFlame(c, fx, fy + 12, s * 0.7, this.t + idx * 0.7);
           break;
         }
+        case K_WALL: {
+          const wl = tribe.walls[it.i];
+          c.save();
+          c.translate(wl.tx * TILE + TILE / 2, wl.ty * TILE + TILE);
+          drawWallTile(c, wl.kind, wl.built, wl.built >= 1 ? wl.hp / WALL_HP[wl.kind] : 1, wl.tx + wl.ty, !!wl.upgrade, this.t);
+          c.restore();
+          break;
+        }
+        case K_TOWER: {
+          const tw = tribe.towers[it.i];
+          c.save();
+          c.translate(tw.x, tw.y);
+          drawTower(c, tw.stage, this.t);
+          c.restore();
+          break;
+        }
         case K_ROCK: {
           const r = vo.rocks[it.i];
           c.fillStyle = "#3a2a24";
@@ -410,6 +461,56 @@ export class Renderer {
     for (const dn of w.dinos) if (sp(dn.species).move === "fly" && dn.z > 6 && dn.x > x0 && dn.x < x1 && dn.y - dn.z > y0 - 200 && dn.y - dn.z < y1) flyers.push(dn);
     flyers.sort((a, b) => a.y - b.y);
     for (const dn of flyers) this.drawDinoAt(c, dn, ov);
+
+    // carcass ropes + flying arrows / bolts / spears
+    for (const it of w.items) {
+      if (!it.draggedBy) continue;
+      const h = w.humans.find((x) => x.id === it.draggedBy);
+      if (!h || h.x < x0 || h.x > x1) continue;
+      c.strokeStyle = "#c9a56a";
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(h.x - h.dir * 6, h.y - 10);
+      c.quadraticCurveTo((h.x + it.x) / 2, (h.y + it.y) / 2 - 2, it.x, it.y - 6);
+      c.stroke();
+    }
+    for (const p of tribe.projectiles) {
+      if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
+      const sx = p.x;
+      const sy = p.y - p.z;
+      const ang = Math.atan2(p.vy - p.vz, p.vx);
+      const len = p.kind === "spear" ? 22 : p.kind === "bolt" ? 13 : 15;
+      c.save();
+      c.translate(sx, sy);
+      c.rotate(ang);
+      c.strokeStyle = p.kind === "bolt" ? "#3d2b1c" : "#7a5534";
+      c.lineWidth = p.kind === "bolt" ? 2.4 : p.kind === "spear" ? 2 : 1.4;
+      c.beginPath();
+      c.moveTo(-len, 0);
+      c.lineTo(0, 0);
+      c.stroke();
+      c.fillStyle = "#9aa3ad";
+      c.beginPath();
+      c.moveTo(0, -2.2);
+      c.lineTo(5, 0);
+      c.lineTo(0, 2.2);
+      c.fill();
+      if (p.kind !== "spear") {
+        c.fillStyle = p.kind === "bolt" ? "#c0392b" : "#f2f2f2";
+        c.beginPath();
+        c.moveTo(-len, 0);
+        c.lineTo(-len - 4, -3);
+        c.lineTo(-len + 3, 0);
+        c.lineTo(-len - 4, 3);
+        c.fill();
+      }
+      c.restore();
+      // ground shadow
+      c.fillStyle = "rgba(0,0,0,0.18)";
+      c.beginPath();
+      c.ellipse(p.x, p.y, 5, 1.6, 0, 0, Math.PI * 2);
+      c.fill();
+    }
 
     this.drawParticles(c, x0, y0, x1, y1);
     this.skyWorld(c, v, z);
@@ -434,6 +535,7 @@ export class Renderer {
       c.fillRect(0, 0, this.w, this.h);
       c.globalAlpha = 1;
     }
+    this.raidArrows({ x: cx, y: cy, zoom: z });
     this.cost = this.cost * 0.92 + (performance.now() - t0) * 0.08;
   }
 
@@ -477,8 +579,55 @@ export class Renderer {
     return p;
   }
 
+  private looks = new Map<string, SpeciesDef>();
+
+  /** The species' look, tweaked by this individual's genes (colour, mutations). */
+  private lookFor(dn: Dino): SpeciesDef {
+    const base = sp(dn.species);
+    const g = dn.genes;
+    if (!g || (Math.abs(g.hue) < 0.13 && !g.mut)) return base;
+    const key = `${dn.species}|${lookKey(g)}`;
+    const hit = this.looks.get(key);
+    if (hit) return hit;
+    const k = Math.round(g.hue * 4) / 4;
+    const tint = (hex: string) => toHex(shade(hex, k * 0.3));
+    let look = { ...base.look, body: tint(base.look.body), belly: tint(base.look.belly) };
+    const shape = { ...base.shape };
+    switch (g.mut) {
+      case "albino":
+        look = { ...look, body: "#efe9dd", belly: "#fffaf2", accent: "#e7a9a9" };
+        break;
+      case "spotted":
+        look = { ...look, pattern: "spots", accent: toHex(shade(base.look.body, -0.55)) };
+        break;
+      case "striped":
+        look = { ...look, pattern: "stripes", accent: toHex(shade(base.look.body, -0.6)) };
+        break;
+      case "glow":
+        look = { ...look, accent: "#5ff3e6" };
+        break;
+      case "crested":
+        if (!shape.crest) shape.crest = base.plan === "pterosaur" ? "ptera" : "small";
+        if (base.plan === "hadrosaur") shape.crest = "tube";
+        look = { ...look, accent: "#e0457b" };
+        break;
+      case "spiky":
+        shape.spikes = true;
+        shape.plates = shape.plates || base.plan === "stegosaur";
+        if (base.plan === "theropod" || base.plan === "pachy") shape.horns = "carno";
+        break;
+      case "feathered":
+        shape.feathers = true;
+        look = { ...look, accent: "#4fa3e0" };
+        break;
+    }
+    const def = { ...base, look, shape };
+    this.looks.set(key, def);
+    return def;
+  }
+
   private drawDinoAt(c: CanvasRenderingContext2D, dn: Dino, ov: Overlay) {
-    const def = sp(dn.species);
+    const def = this.lookFor(dn);
     const L = sizeOf(dn);
     const pose = this.poseFor(dn);
     c.save();
@@ -500,7 +649,28 @@ export class Renderer {
       c.stroke();
       c.setLineDash([]);
     }
+    if (dn.genes?.mut === "glow" && this.world.daylight < 0.5) {
+      c.globalCompositeOperation = "lighter";
+      c.globalAlpha = (0.5 - this.world.daylight) * (0.8 + Math.sin(this.t * 2 + dn.id) * 0.2);
+      c.drawImage(this.glowSprite, -L * 0.7, -L * 0.75, L * 1.4, L * 1.1);
+      c.globalAlpha = 1;
+      c.globalCompositeOperation = "source-over";
+    }
+    if (dn.raider) {
+      // war paint: a pulsing aura under raiders, gold for evolved alphas
+      const pulse = 0.55 + Math.sin(this.t * 6 + dn.id) * 0.2;
+      c.strokeStyle = dn.tier >= 2 ? `rgba(255,205,60,${pulse})` : dn.tier >= 1 ? `rgba(255,120,40,${pulse})` : `rgba(230,50,50,${pulse})`;
+      c.lineWidth = 3 + dn.tier * 1.5;
+      c.beginPath();
+      c.ellipse(0, dn.z, L * 0.48, L * 0.16, 0, 0, Math.PI * 2);
+      c.stroke();
+    }
     drawDino(c, def, L, dn.dir, pose);
+    if (dn.tier >= 2 || (dn.raider && dn.tier >= 1)) {
+      c.font = `${Math.max(14, L * 0.22)}px sans-serif`;
+      c.textAlign = "center";
+      c.fillText(dn.tier >= 2 ? "👑" : "💢", dn.dir * L * 0.3, -L * (def.plan === "sauropod" ? 0.9 : 0.62) + Math.sin(this.t * 3) * 2);
+    }
     if (dn.state === "tussle") {
       // cartoon dust cloud hides the scuffle
       c.globalAlpha = 0.85;
@@ -1245,6 +1415,20 @@ export class Renderer {
       c.fillStyle = "#fff";
       c.fillText(label, lx, ly + 2 * inv);
     }
+    // job badges on cave people when zoomed in
+    if (z >= 0.95) {
+      c.font = `${11 * inv}px sans-serif`;
+      c.textAlign = "center";
+      for (const h of w.humans) {
+        if (h.child || h.x < x0 || h.x > x1 || h.y < y0 || h.y > y1 || this.hidden(h) || h.bubble) continue;
+        const role = w.tribe.roleOf(h);
+        if (role === "gatherer" && h.role === "auto") continue;
+        const icon = h.order ? "🎯" : ROLES.find((r) => r.id === role)?.icon ?? "";
+        c.globalAlpha = 0.9;
+        c.fillText(icon, h.x, h.y - h.z - 34);
+        c.globalAlpha = 1;
+      }
+    }
     // tool preview
     if (ov.hover) {
       const { x, y, icon, radius } = ov.hover;
@@ -1260,6 +1444,47 @@ export class Renderer {
       c.textAlign = "center";
       c.fillText(icon, x, y - 10 * inv);
       c.globalAlpha = 1;
+    }
+  }
+
+  /** Red markers at the screen edge pointing at raiders you can't see. */
+  raidArrows(cam: Camera) {
+    const w = this.world;
+    const raid = w.tribe.raid;
+    if (!raid) return;
+    const c = this.ctx;
+    c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const m = 42;
+    for (const id of raid.ids) {
+      const d = w.dinoById(id);
+      if (!d || !d.raider) continue;
+      const s = this.toScreen(cam, d.x, d.y - d.z);
+      if (s.x > 0 && s.x < this.w && s.y > 60 && s.y < this.h - 90) continue;
+      const cx = this.w / 2;
+      const cy = this.h / 2;
+      const a = Math.atan2(s.y - cy, s.x - cx);
+      const k = Math.min((this.w / 2 - m) / Math.abs(Math.cos(a) || 1e-6), (this.h / 2 - m - 50) / Math.abs(Math.sin(a) || 1e-6));
+      const ex = cx + Math.cos(a) * k;
+      const ey = cy + Math.sin(a) * k;
+      const pulse = 1 + Math.sin(this.t * 8) * 0.08;
+      c.save();
+      c.translate(ex, ey);
+      c.fillStyle = d.tier >= 2 ? "rgba(234,179,8,0.95)" : "rgba(220,38,38,0.92)";
+      c.beginPath();
+      c.arc(0, 0, 18 * pulse, 0, Math.PI * 2);
+      c.fill();
+      c.rotate(a);
+      c.beginPath();
+      c.moveTo(24 * pulse, 0);
+      c.lineTo(14, -8);
+      c.lineTo(14, 8);
+      c.fill();
+      c.restore();
+      c.font = "18px sans-serif";
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText(d.tier >= 2 ? "👑" : sp(d.species).emoji, ex, ey + 1);
+      c.textBaseline = "alphabetic";
     }
   }
 

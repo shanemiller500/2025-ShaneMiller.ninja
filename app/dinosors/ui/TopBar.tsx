@@ -24,6 +24,9 @@ interface Props {
   onNew: () => void;
   onReset: () => void;
   onCamp: () => void;
+  onEvolution: () => void;
+  campOpen: boolean;
+  evoOpen: boolean;
 }
 
 const fmtTime = (h: number) => {
@@ -46,6 +49,13 @@ export default function TopBar(p: Props) {
           <AnimatePresence>{panel === "time" && <TimePanel {...p} />}</AnimatePresence>
         </div>
         <div className="pointer-events-auto relative flex items-center gap-1.5 sm:gap-2">
+          <button type="button" className={`${btn} relative ${p.evoOpen ? "!bg-cyan-500/60" : ""}`} title="Evolution" aria-label="Evolution" aria-pressed={p.evoOpen} onClick={p.onEvolution}>
+            <span className="text-2xl leading-none">🧬</span>
+          </button>
+          <button type="button" className={`${btn} relative ${p.campOpen ? "!bg-amber-500/60" : ""}`} title="Your tribe" aria-label="Your tribe" aria-pressed={p.campOpen} onClick={p.onCamp}>
+            <span className="text-2xl leading-none">{snap.tribe.levelIcon}</span>
+            {snap.tribe.raid && <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-ping rounded-full bg-rose-500" />}
+          </button>
           <button type="button" className={btn} title="Places" aria-label="Places" onClick={() => toggle("places")}>
             <MapIcon className="h-6 w-6" />
           </button>

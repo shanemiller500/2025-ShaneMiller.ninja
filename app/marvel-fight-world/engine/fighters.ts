@@ -16,6 +16,7 @@ export interface HeroLike {
   powerstats: Stats;
   biography: { fullName: string; alignment: string };
   images: { xs: string; sm: string; md: string; lg: string };
+  appearance?: { gender?: string; hairColor?: string };
 }
 
 /* ── Archetypes ────────────────────────────────────────────────────── */
@@ -64,7 +65,7 @@ export function deriveArchetype(s: Stats): Archetype {
 /* ── Looks ─────────────────────────────────────────────────────────── */
 const LOOKS: Record<string, Partial<Look>> = {
   "Spider-Man": { primary: "#d4202f", secondary: "#1f45b8", accent: "#d4202f", skin: "#d4202f", webLines: true, bulk: 0.95, height: 0.98 },
-  Hulk: { primary: "#4f9e3a", secondary: "#6b3fa0", accent: "#4f9e3a", skin: "#4f9e3a", bulk: 1.45, height: 1.14 },
+  Hulk: { primary: "#4f9e3a", secondary: "#6b3fa0", accent: "#4f9e3a", skin: "#4f9e3a", bareArms: true, bareChest: true, bulk: 1.45, height: 1.14 },
   Wolverine: { primary: "#f2c21a", secondary: "#1d3f8f", accent: "#1d3f8f", skin: "#e0b48f", claws: "#dfe4ea", bulk: 1.08, height: 0.9 },
   "Iron Man": { primary: "#b3121b", secondary: "#c9a227", accent: "#e7c34a", skin: "#c9a227", reactor: true, glow: "#9fe7ff", bulk: 1.1, height: 1.0 },
   Thor: { primary: "#3b4a5e", secondary: "#262a33", accent: "#c3c9d3", skin: "#f0c7a0", cape: "#b3121b", hammer: true, bulk: 1.18, height: 1.06 },
@@ -95,7 +96,34 @@ export function nameHue(name: string) {
 
 const hsl = (h: number, s: number, l: number) => `hsl(${((h % 360) + 360) % 360} ${s}% ${l}%)`;
 
-function lookFor(name: string, s: Stats, alignment: Alignment): Look {
+const HAIR: Record<string, string> = {
+  black: "#1c1714",
+  brown: "#5b3a24",
+  "light brown": "#8a6142",
+  blond: "#e8c46a",
+  "strawberry blond": "#d9925b",
+  gold: "#e0b13c",
+  red: "#b83a1e",
+  auburn: "#8a3324",
+  orange: "#e0701e",
+  white: "#e8eaee",
+  silver: "#b8bec8",
+  grey: "#9ca3af",
+  green: "#3f9d4a",
+  purple: "#7c3aed",
+  blue: "#2563eb",
+  indigo: "#4338ca",
+  pink: "#ec6fae",
+  magenta: "#c026d3",
+};
+
+function hairColor(raw?: string) {
+  if (!raw) return undefined;
+  const k = raw.toLowerCase().split("/")[0].trim();
+  return HAIR[k];
+}
+
+function lookFor(name: string, s: Stats, alignment: Alignment, gender?: string, hair?: string): Look {
   const hue = nameHue(name);
   const tint = alignment === "bad" ? 0 : alignment === "good" ? 0 : 0;
   const base: Look = {
@@ -106,8 +134,13 @@ function lookFor(name: string, s: Stats, alignment: Alignment): Look {
     accent: hsl(hue + 35, 70, 58),
     skin: "#e0b48f",
     glow: s.power >= 80 ? hsl(hue + 180, 90, 65) : undefined,
+    mark: (["diamond", "bolt", "circle", "chevron", "stripe"] as const)[(hue >> 2) % 5],
+    bareArms: false,
+    body: gender?.toLowerCase() === "female" ? "female" : "male",
+    hair: hairColor(hair),
   };
-  return { ...base, ...(LOOKS[name] ?? {}) };
+  if (base.body === "female") base.bulk = Math.min(base.bulk, 1.08);
+  return LOOKS[name] ? { ...base, mark: undefined, bareArms: false, hair: undefined, ...LOOKS[name] } : base;
 }
 
 /* ── Balancing ─────────────────────────────────────────────────────── */
@@ -138,7 +171,7 @@ export function buildFighter(hero: HeroLike): FighterDef {
   const s = hero.powerstats;
   const alignment: Alignment = hero.biography.alignment === "good" || hero.biography.alignment === "bad" ? hero.biography.alignment : "neutral";
   const archetype = ARCHETYPE_OVERRIDES[hero.name] ?? deriveArchetype(s);
-  const look = lookFor(hero.name, s, alignment);
+  const look = lookFor(hero.name, s, alignment, hero.appearance?.gender, hero.appearance?.hairColor);
   const fx: FxKind = look.claws ? "claw" : ARCHETYPE_FX[archetype];
   const custom = !!SIGNATURE_KITS[hero.name];
   const kit: Kit = SIGNATURE_KITS[hero.name] ?? archetypeKit(archetype, fx);

@@ -8,6 +8,7 @@ import { Fighter, GRAVITY } from "../engine/fighter";
 import type { FighterDef } from "../engine/types";
 import type { Prop } from "../engine/match";
 import { loadImage } from "../data/roster";
+import { applyPortraitPalette } from "../render/palette";
 import type { Settings } from "../data/storage";
 import { InputManager } from "../input/input";
 import { drawBack, drawFloor, drawFront, drawProp } from "../render/arenas";
@@ -52,7 +53,6 @@ export class WorldScene {
   private near: Resident | null = null;
   private active = true;
   private edgeFired = false;
-  private dustTimer = 0;
   private alive = true;
 
   constructor(
@@ -76,8 +76,16 @@ export class WorldScene {
       f.facing = r.x > startX ? -1 : 1;
       return { f, home: r.x, target: r.x, wait: 60 + i * 47, portrait: null };
     });
-    loadImage(playerDef.portrait.md).then((img) => (this.playerPortrait = img));
-    this.npcs.forEach((n) => loadImage(n.f.def.portrait.md).then((img) => (n.portrait = img)));
+    loadImage(playerDef.portrait.md).then((img) => {
+      applyPortraitPalette(playerDef, img);
+      this.playerPortrait = img;
+    });
+    this.npcs.forEach((n) =>
+      loadImage(n.f.def.portrait.md).then((img) => {
+        applyPortraitPalette(n.f.def, img);
+        n.portrait = img;
+      })
+    );
   }
 
   get x() {
@@ -153,10 +161,7 @@ export class WorldScene {
         p.setState("air");
         this.particles.dust(p.x, 0, 1);
       } else p.setState(dir ? (running ? "run" : "walk") : "idle");
-      if (dir && running && (this.dustTimer -= 1) <= 0) {
-        this.dustTimer = 14;
-        this.particles.dust(p.x - dir * 20, 0, 0.25);
-      }
+
     } else {
       p.vx += dir * 0.35;
       p.vx = clamp(p.vx, -p.def.walk * 2.1, p.def.walk * 2.1);
@@ -247,7 +252,7 @@ export class WorldScene {
       const rig = buildRig(f, j);
       const isNear = npc && this.near && this.residents[this.npcs.indexOf(npc)] === this.near;
       if (isNear) glow(ctx, "#fde047", f.x, -f.def.height * 0.5, f.def.height * 0.9, 0.18 + Math.sin(this.t * 4) * 0.05);
-      drawFighter(ctx, f, j, rig, { portrait, t: this.t, flash: 0, ring: npc ? (isNear ? "#fde047" : "rgba(148,163,184,0.5)") : PLAYER_COLORS[0], weaponOut: false });
+      drawFighter(ctx, f, j, rig, { portrait, t: this.t, flash: 0, ring: npc ? (isNear ? "#fde047" : "rgba(148,163,184,0.5)") : PLAYER_COLORS[0], weaponOut: false, rim: this.zone.arena.colors[1] });
       this.drawTag(f, npc ? (isNear ? "#fde047" : "#e2e8f0") : PLAYER_COLORS[0], !npc, !!isNear);
     }
     this.particles.draw(ctx);

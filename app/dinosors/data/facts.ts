@@ -15,12 +15,13 @@ export const CAVE_NAMES = ["Ugg", "Oona", "Bok", "Mira", "Grug", "Tikki", "Zog",
 
 export const TECH: Record<
   TechId,
-  { icon: string; name: string; needs: Partial<Record<"stick" | "stone" | "grass" | "leaves" | "wood", number>>; after?: TechId[]; fact: string }
+  { icon: string; name: string; needs: Partial<Record<"stick" | "stone" | "grass" | "leaves" | "wood" | "berries", number>>; after?: TechId[]; fact: string; what: string }
 > = {
   tools: {
     icon: "🪨",
     name: "Stone tools",
     needs: { stone: 4 },
+    what: "Unlocks every other invention.",
     fact: "The oldest known stone tools are about 3.3 million years old!",
   },
   fire: {
@@ -28,6 +29,7 @@ export const TECH: Record<
     name: "Fire",
     needs: { stick: 6, grass: 4, stone: 2 },
     after: ["tools"],
+    what: "Campfires light the night, scare dinos and cook food.",
     fact: "Early humans learned to control fire hundreds of thousands of years ago.",
   },
   spear: {
@@ -35,6 +37,7 @@ export const TECH: Record<
     name: "Spear",
     needs: { stick: 3, stone: 2 },
     after: ["tools"],
+    what: "Hunters + guards can fight back.",
     fact: "Wooden spears found in Germany are about 300,000 years old.",
   },
   fishing: {
@@ -42,6 +45,7 @@ export const TECH: Record<
     name: "Fishing",
     needs: { stick: 4, grass: 3 },
     after: ["spear"],
+    what: "Fishing is fast and never misses.",
     fact: "People have been catching fish for at least 40,000 years.",
   },
   axe: {
@@ -49,6 +53,7 @@ export const TECH: Record<
     name: "Hand axe",
     needs: { stick: 2, stone: 3 },
     after: ["tools"],
+    what: "Chop trees for wood.",
     fact: "Teardrop-shaped hand axes were used for over a million years!",
   },
   basket: {
@@ -56,6 +61,7 @@ export const TECH: Record<
     name: "Baskets",
     needs: { grass: 6, leaves: 4 },
     after: ["tools"],
+    what: "Carry twice as much.",
     fact: "Woven containers let people carry more food home at once.",
   },
   shelter: {
@@ -63,11 +69,60 @@ export const TECH: Record<
     name: "Shelter",
     needs: {},
     after: ["axe"],
+    what: "Huts keep people dry and make room for babies.",
     fact: "People built huts from branches, leaves, hides and even mammoth bones!",
+  },
+  farming: {
+    icon: "🌾",
+    name: "Farming",
+    needs: { grass: 4, berries: 3 },
+    after: ["basket"],
+    what: "Farmers grow crops in fields.",
+    fact: "Farming started about 12,000 years ago — and changed everything!",
+  },
+  palisade: {
+    icon: "🪵",
+    name: "Palisade",
+    needs: { wood: 4, stick: 4 },
+    after: ["axe"],
+    what: "Build wooden walls dinos can't walk through.",
+    fact: "A palisade is a wall of sharpened logs standing side by side.",
+  },
+  bow: {
+    icon: "🏹",
+    name: "Bow & arrow",
+    needs: { stick: 4, grass: 3, stone: 2 },
+    after: ["spear"],
+    what: "Hunters + guards shoot from far away — even flying reptiles.",
+    fact: "Bows and arrows were invented over 60,000 years ago.",
+  },
+  tower: {
+    icon: "🗼",
+    name: "Watchtower",
+    needs: { wood: 4, stone: 2 },
+    after: ["palisade"],
+    what: "Guards in towers see further and shoot better.",
+    fact: "From up high you can spot danger long before it arrives.",
+  },
+  crossbow: {
+    icon: "🎯",
+    name: "Crossbow",
+    needs: { wood: 3, stone: 3, stick: 3 },
+    after: ["bow", "palisade"],
+    what: "Powerful bolts that can stop even a T. rex. (Fantasy tech!)",
+    fact: "Real crossbows came much later — about 2,500 years ago in China.",
+  },
+  stonewall: {
+    icon: "🧱",
+    name: "Stone walls",
+    needs: { stone: 6 },
+    after: ["palisade", "tower"],
+    what: "Super-strong walls. Upgrade your palisades!",
+    fact: "Some of the first stone walls were built around the town of Jericho.",
   },
 };
 
-export const TECH_ORDER: TechId[] = ["tools", "fire", "axe", "spear", "basket", "fishing", "shelter"];
+export const TECH_ORDER: TechId[] = ["tools", "fire", "axe", "spear", "basket", "fishing", "shelter", "farming", "palisade", "bow", "tower", "crossbow", "stonewall"];
 
 /** Each shelter stage: what has to be carried in, and what it looks like. */
 export const SHELTER_STAGES: { label: string; need: "wood" | "stick" | "leaves" | "stone"; n: number }[] = [
@@ -75,6 +130,24 @@ export const SHELTER_STAGES: { label: string; need: "wood" | "stick" | "leaves" 
   { label: "Walls", need: "stick", n: 6 },
   { label: "Roof", need: "leaves", n: 6 },
   { label: "Stones", need: "stone", n: 4 },
+];
+
+/** The camp grows through these levels. */
+export const CAMP_LEVELS: { name: string; icon: string; people: number; huts: number; need?: string; radius: number }[] = [
+  { name: "Cave Camp", icon: "🏕️", people: 0, huts: 0, radius: 260 },
+  { name: "Little Village", icon: "🛖", people: 9, huts: 2, radius: 340 },
+  { name: "Wooden Fort", icon: "🪵", people: 12, huts: 3, need: "palisade", radius: 420 },
+  { name: "Stone Town", icon: "🏰", people: 16, huts: 4, need: "stonewall", radius: 500 },
+];
+
+export const ROLES: { id: import("../sim/types").Role; icon: string; name: string; tip: string }[] = [
+  { id: "auto", icon: "✨", name: "Auto", tip: "Does whatever the tribe needs most" },
+  { id: "gatherer", icon: "🧺", name: "Gatherer", tip: "Collects sticks, stones, grass, fish" },
+  { id: "builder", icon: "🔨", name: "Builder", tip: "Builds huts, walls + towers, fixes damage" },
+  { id: "hunter", icon: "🏹", name: "Hunter", tip: "Hunts dinos + flyers and drags them home" },
+  { id: "guard", icon: "🛡️", name: "Guard", tip: "Stands watch and fights off raiders" },
+  { id: "cook", icon: "🍖", name: "Cook", tip: "Roasts meat + fish on the fire" },
+  { id: "farmer", icon: "🌾", name: "Farmer", tip: "Plants and harvests crops" },
 ];
 
 export const FACTS = {
@@ -135,6 +208,15 @@ export const DISCOVERIES: Discovery[] = [
   { id: "tossed", icon: "🤸‍♂️", name: "Yeet!", hint: "Cave people should keep their distance." },
   { id: "headbutt", icon: "⛑️", name: "Bonk!", hint: "Thick heads, big bonks." },
   { id: "allSpecies", icon: "🏆", name: "Dino Expert", hint: "Meet every species." },
+  { id: "hunted", icon: "🏹", name: "Great Hunter", hint: "Send a hunter out." },
+  { id: "feast", icon: "🍗", name: "Feast!", hint: "Cook something big." },
+  { id: "defended", icon: "🛡️", name: "Defenders", hint: "Survive a raid." },
+  { id: "alpha", icon: "👑", name: "Alpha Down", hint: "The strongest raiders wear crowns." },
+  { id: "harvest", icon: "🌾", name: "Harvest Time", hint: "Grow something." },
+  { id: "village", icon: "🏘️", name: "Growing Tribe", hint: "Help the camp grow." },
+  { id: "baby", icon: "👶", name: "New Baby", hint: "A well-fed tribe grows." },
+  { id: "mutant", icon: "🧬", name: "Mutant!", hint: "Watch the eggs hatch…" },
+  { id: "evolved", icon: "⏩", name: "Deep Time", hint: "Skip ahead a million years." },
 ];
 
 export const DISCOVERY_BY_ID = Object.fromEntries(DISCOVERIES.map((d) => [d.id, d]));

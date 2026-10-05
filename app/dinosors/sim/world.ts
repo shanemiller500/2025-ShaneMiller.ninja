@@ -38,6 +38,8 @@ import {
 } from "./types";
 import { LavaSystem, Volcano } from "./volcano";
 import { Weather } from "./weather";
+import { Tribe } from "./tribe";
+import { announceBirth, baseGenes, evolveWorld, inherit, type SpeciesEvo } from "./genetics";
 
 /** 24 in-game hours take this many real seconds at 1× speed. */
 export const DAY_SECONDS = 420;
@@ -98,7 +100,14 @@ export class World {
   volcano = new Volcano();
   weather = new Weather();
   camp: Camp;
+  tribe = new Tribe();
   randomEvents = new RandomEvents();
+  /** per-species evolution progress */
+  evo: Partial<Record<SpeciesId, SpeciesEvo>> = {};
+  evoLeaps = 0;
+  /** evolve a million years every couple of minutes by itself */
+  evoAuto = false;
+  private evoT = 0;
 
   creatureHash = new SpatialHash<Creature>(128);
   plantHash = new SpatialHash<Plant>(96);
@@ -242,7 +251,24 @@ export class World {
   }
 
   addEgg(species: SpeciesId, x: number, y: number, herd: number, parent: number, hatchIn = 60 + this.rng() * 40) {
-    const e: Egg = { id: this.nextId(), species, x, y, t: 0, hatchAt: hatchIn, herd, parent };
+    // genes come from mum + the nearest grown-up of the same species
+    const mum = parent ? this.dinoById(parent) : null;
+    let mate: Dino | null = null;
+    let md = 900;
+    let any: Dino | null = null;
+    for (const d of this.dinos) {
+      if (d.species !== species || d === mum || d.growth < 1) continue;
+      any = any ?? d;
+      const dist = mum ? Math.hypot(d.x - mum.x, d.y - mum.y) : 0;
+      if (dist < md) {
+        md = dist;
+        mate = d;
+      }
+    }
+    const a = mum ?? mate ?? any;
+    const genes = a ? inherit(this.rng, a.genes, mum ? mate?.genes ?? null : any?.genes ?? null) : baseGenes(this.rng);
+    const gen = (a?.gen ?? 0) + 1;
+    const e: Egg = { id: this.nextId(), species, x, y, t: 0, hatchAt: hatchIn, herd, parent, genes, gen };
     this.eggs.push(e);
     return e;
   }
@@ -527,6 +553,7 @@ export class World {
     }
     for (const h of this.humans) updateHuman(this, h, dt);
     this.camp.update(this, dt);
+    this.tribe.update(this, dt);
     if (this.camp.crafting) {
       const by = this.byId.get(this.camp.crafting.by);
       if (!by || by.kind !== "human" || by.state !== "craft") {
@@ -544,6 +571,13 @@ export class World {
     this.updateFish(dt);
     this.updateDisasters(dt);
     this.randomEvents.update(this, dt);
+    if (this.evoAuto) {
+      this.evoT += dt;
+      if (this.evoT > 150) {
+        this.evoT = 0;
+        evolveWorld(this);
+      }
+    }
     this.particles.update(dt);
 
     if (this.pois.length > 20) this.pois.splice(0, this.pois.length - 20);
@@ -603,7 +637,8 @@ export class World {
     const spot = def.move === "swim" ? findSpawnSpot(this, def, e.x, e.y, 400) : { x: e.x, y: e.y };
     if (!spot) return null;
     const parent = e.parent ? this.dinoById(e.parent) : null;
-    const baby = addDino(this, e.species, spot.x, spot.y, { growth: 0, herd: e.herd || parent?.herd || 0, parent: e.parent, hunger: 0.3, homeX: e.x, homeY: e.y });
+    const baby = addDino(this, e.species, spot.x, spot.y, { growth: 0, herd: e.herd || parent?.herd || 0, parent: e.parent, hunger: 0.3, homeX: e.x, homeY: e.y, ...(e.genes ? { genes: e.genes, gen: e.gen ?? 1 } : {}) });
+    announceBirth(this, baby);
     baby.emote = { icon: "🐣", t: 2.5 };
     this.particles.burst(P.Crumb, e.x, e.y, 10, 50, { vz: 60, g: 200, size: 3, max: 0.8, color: "#f3ead2" });
     this.sfx("crack", e.x, e.y, 0.8);
@@ -730,10 +765,17 @@ export class World {
         homeY: r(d.homeY),
         layT: r(d.layT),
         migrant: d.migrant,
+        tier: d.tier,
+        genes: { ...d.genes, size: r(d.genes.size), speed: r(d.genes.speed), tough: r(d.genes.tough), hue: r(d.genes.hue) },
+        gen: d.gen,
       })),
-      humans: this.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, x: r(h.x), y: r(h.y), hair: h.hair, skin: h.skin, fur: h.fur })),
+      humans: this.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, x: r(h.x), y: r(h.y), hair: h.hair, skin: h.skin, fur: h.fur, role: h.role, age: Math.round(h.age) })),
+      tribe: this.tribe.serialize(),
       items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species })),
-      eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent })),
+      eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent, genes: e.genes, gen: e.gen })),
+      evo: this.evo,
+      evoLeaps: this.evoLeaps,
+      evoAuto: this.evoAuto,
       plants: this.plants.map((p) => [p.kind, r(p.x), r(p.y), r(p.size), r(p.food), r(p.burnt), p.fruit, p.stump ? 1 : 0] as const),
       props: this.props.map((p) => ({ kind: p.kind, x: r(p.x), y: r(p.y), size: r(p.size), found: p.found })),
       shelters: this.shelters.map((s) => ({ x: r(s.x), y: r(s.y), stage: s.stage, have: s.have })),
@@ -764,7 +806,7 @@ export class World {
       d.id = s.id;
     }
     for (const h of data.humans) {
-      const hu = addHuman(w, h.x, h.y, h.child, { name: h.name, hair: h.hair, skin: h.skin, fur: h.fur });
+      const hu = addHuman(w, h.x, h.y, h.child, { name: h.name, hair: h.hair, skin: h.skin, fur: h.fur, role: h.role ?? "auto", age: h.age ?? (h.child ? 0 : 400) });
       hu.id = h.id;
     }
     for (const i of data.items) w.addItem(i.kind, i.x, i.y, { amount: i.amount, t: i.t, species: i.species });
@@ -785,6 +827,10 @@ export class World {
     for (const s of data.shelters) w.shelters.push({ id: w.nextId(), ...s });
     for (const f of data.campfires) w.campfires.push({ id: w.nextId(), ...f, cook: 0 });
     w.camp.stock = { ...w.camp.stock, ...data.camp.stock };
+    w.tribe.load(w, data.tribe);
+    w.evo = data.evo ?? {};
+    w.evoLeaps = data.evoLeaps ?? 0;
+    w.evoAuto = !!data.evoAuto;
     w.camp.learned = new Set(data.camp.learned);
     w.camp.goal = data.camp.goal;
     w.camp.pickGoal();

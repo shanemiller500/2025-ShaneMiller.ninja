@@ -30,6 +30,12 @@ export const CRAFT_STEPS: Record<TechId, string[]> = {
   axe: ["Shape a big stone", "Tie it to a handle", "Chop chop!"],
   basket: ["Collect long grass", "Weave over, under…", "A basket!"],
   shelter: ["Plan the hut"],
+  farming: ["Save the best seeds", "Dig a field", "Plant + water", "Crops!"],
+  palisade: ["Sharpen the logs", "Dig a trench", "Stand them up!"],
+  bow: ["Bend a springy branch", "Twist a strong string", "Feather the arrows", "Twang!"],
+  tower: ["Pick tall logs", "Lash a platform", "Climb up!"],
+  crossbow: ["Carve the stock", "Fit the bow", "Load a bolt", "Thunk!"],
+  stonewall: ["Shape square stones", "Stack them up", "Rock solid!"],
 };
 
 export class Camp {
@@ -37,7 +43,7 @@ export class Camp {
   y = LM.camp.y * TILE + TILE / 2;
   caveX = LM.cave.x * TILE + TILE / 2;
   caveY = 0;
-  stock: Stock = { stick: 0, stone: 0, grass: 0, leaves: 0, wood: 0, fish: 0, berries: 2 };
+  stock: Stock = { stick: 0, stone: 0, grass: 0, leaves: 0, wood: 0, fish: 0, berries: 2, meat: 0, cooked: 0, crop: 0 };
   learned = new Set<TechId>();
   goal: TechId | null = "tools";
   crafting: Crafting | null = null;
@@ -220,7 +226,22 @@ export class Camp {
     }
   }
 
+  private relightT = 0;
+
   update(w: World, dt: number) {
+    // somebody always gets the fire going again once it's dry
+    const out = this.learned.has("fire") ? w.campfires.find((f) => !f.lit) : undefined;
+    if (out && w.weather.rain < 0.3 && this.stock.stick >= 2) {
+      this.relightT += dt;
+      if (this.relightT > 12) {
+        this.relightT = 0;
+        this.stock.stick -= 2;
+        out.lit = true;
+        out.fuel = 1;
+        w.sfx("ignite", out.x, out.y, 0.6);
+        w.particles.burst(P.Spark, out.x, out.y, 6, 30, { vz: 40, g: 160, size: 2, max: 0.5, color: "#ffe680" });
+      }
+    } else this.relightT = 0;
     for (const f of w.campfires) {
       if (!f.lit) continue;
       const sheltered = w.shelters.some((s) => s.stage >= 3 && Math.hypot(s.x - f.x, s.y - f.y) < 70);

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { SPECIES } from "../data/species";
-import { DISASTER_OPTS, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type Opt, type ToolId, type ToolState } from "../game/tools";
+import { BUILD_OPTS, DISASTER_OPTS, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type Opt, type ToolId, type ToolState } from "../game/tools";
 import type { SpeciesId } from "../sim/types";
 import Portrait from "./Portrait";
 
@@ -12,7 +12,7 @@ import Portrait from "./Portrait";
 /*  choices pop a little drawer of options above the bar.              */
 /* ------------------------------------------------------------------ */
 
-const HAS_OPTIONS = new Set<ToolId>(["dino", "egg", "food", "plant", "land", "weather", "disaster", "people"]);
+const HAS_OPTIONS = new Set<ToolId>(["dino", "egg", "food", "plant", "land", "weather", "disaster", "people", "build"]);
 
 export default function Toolbar({ tool, setTool, unlocked }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[] }) {
   const [open, setOpen] = useState<ToolId | null>(null);
@@ -37,15 +37,29 @@ export default function Toolbar({ tool, setTool, unlocked }: { tool: ToolState; 
         return LAND_OPTS.find((o) => o.value === tool.land)!.icon;
       case "people":
         return PEOPLE_OPTS.find((o) => o.value === tool.people)!.icon;
+      case "build":
+        return BUILD_OPTS.find((o) => o.value === tool.build)!.icon;
       default:
         return TOOLS.find((t) => t.id === id)!.icon;
     }
   };
 
+  // every toy toggles: tap it to switch it on, tap it again to switch it off
   const press = (id: ToolId) => {
+    if (id === "hand") {
+      setTool({ id: "hand" });
+      setOpen(null);
+      return;
+    }
+    const active = tool.id === id;
+    if (active || open === id) {
+      setOpen(null);
+      if (active) setTool({ id: "hand" });
+      return;
+    }
     if (HAS_OPTIONS.has(id)) {
-      setOpen((o) => (o === id ? null : id));
-      // weather + boom choices act instantly, so don't switch tools until one is picked
+      setOpen(id);
+      // weather + most boom choices act instantly, so don't switch tools until one is picked
       if (id !== "weather" && id !== "disaster") setTool({ id });
     } else {
       setTool({ id });
@@ -54,6 +68,12 @@ export default function Toolbar({ tool, setTool, unlocked }: { tool: ToolState; 
   };
 
   const pick = <K extends keyof ToolState>(key: K, value: ToolState[K], close = true) => {
+    // tapping the option that's already on turns the toy off
+    if (open && open !== "weather" && tool.id === open && tool[key] === value) {
+      setTool({ id: "hand" });
+      setOpen(null);
+      return;
+    }
     setTool({ [key]: value, ...(open ? { id: open } : {}) } as Partial<ToolState>);
     if (close) setOpen(null);
   };
@@ -83,9 +103,13 @@ export default function Toolbar({ tool, setTool, unlocked }: { tool: ToolState; 
               {open === "plant" && <Options opts={PLANT_OPTS} value={tool.plant} onPick={(v) => pick("plant", v)} />}
               {open === "land" && <Options opts={LAND_OPTS} value={tool.land} onPick={(v) => pick("land", v)} />}
               {open === "people" && <Options opts={PEOPLE_OPTS} value={tool.people} onPick={(v) => pick("people", v)} />}
+              {open === "build" && <Options opts={BUILD_OPTS} value={tool.build} onPick={(v) => pick("build", v)} />}
               {open === "weather" && <Options opts={WEATHER_OPTS} value={tool.weather} onPick={(v) => pick("weather", v)} />}
               {open === "disaster" && <Options opts={DISASTER_OPTS} value={tool.disaster} onPick={(v) => pick("disaster", v)} />}
-              <p className="mt-2 px-1 text-center text-xs font-medium text-white/70">{TOOLS.find((t) => t.id === open)!.tip}</p>
+              <p className="mt-2 px-1 text-center text-xs font-medium text-white/70">
+                {TOOLS.find((t) => t.id === open)!.tip}
+                <span className="text-white/45"> · tap again to turn off</span>
+              </p>
             </motion.div>
             </div>
           )}
@@ -103,12 +127,13 @@ export default function Toolbar({ tool, setTool, unlocked }: { tool: ToolState; 
                   onMouseLeave={() => setTip(null)}
                   aria-label={t.label}
                   aria-pressed={active}
+                  title={active && t.id !== "hand" ? `${t.label} is on — tap to turn off` : t.label}
                   className={`group flex h-14 w-14 flex-col items-center justify-center rounded-[22px] transition duration-150 active:scale-90 sm:h-16 sm:w-16 ${
                     active ? "bg-gradient-to-b from-amber-300 to-amber-500 text-slate-900 shadow-lg shadow-amber-900/30" : "hover:-translate-y-1 hover:bg-white/15"
                   }`}
                 >
                   <span className={`text-[26px] leading-none transition group-hover:scale-110 sm:text-[30px] ${active ? "drop-shadow" : ""}`}>{iconFor(t.id)}</span>
-                  <span className={`mt-0.5 hidden text-[10px] font-semibold sm:block ${active ? "text-slate-900/80" : "text-white/75"}`}>{t.label}</span>
+                  <span className={`mt-0.5 hidden text-[10px] font-semibold sm:block ${active ? "text-slate-900/80" : "text-white/75"}`}>{tool.id === t.id && t.id !== "hand" ? "ON ✕" : t.label}</span>
                 </button>
               </div>
             );

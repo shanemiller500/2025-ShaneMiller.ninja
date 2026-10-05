@@ -16,6 +16,8 @@ import Toasts, { type Toast } from "./ui/Toasts";
 import Toolbar from "./ui/Toolbar";
 import TopBar, { type TopPanel } from "./ui/TopBar";
 import ViewControls from "./ui/ViewControls";
+import RaidBanner from "./ui/RaidBanner";
+import EvolutionPanel from "./ui/EvolutionPanel";
 
 /* ------------------------------------------------------------------ */
 /*  DinosorsClient: mounts the canvas game engine and the floating     */
@@ -31,6 +33,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [panel, setPanel] = useState<TopPanel>(null);
   const [campOpen, setCampOpen] = useState(false);
+  const [evoOpen, setEvoOpen] = useState(false);
   const [stickersOpen, setStickersOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [confirm, setConfirm] = useState<null | "new" | "reset">(null);
@@ -40,7 +43,8 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
 
   const pushToast = useCallback((t: Omit<Toast, "id">) => {
     const id = toastId.current++;
-    setToasts((list) => [...list.filter((x) => x.text !== t.text).slice(-2), { ...t, id }]);
+    // only the newest evolution update is worth keeping on screen
+    setToasts((list) => [...list.filter((x) => x.text !== t.text && !(t.icon === "🧬" && x.icon === "🧬")).slice(-2), { ...t, id }]);
   }, []);
 
   useEffect(() => {
@@ -166,7 +170,10 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             onSave={() => engine.save()}
             onNew={() => setConfirm("new")}
             onReset={() => setConfirm("reset")}
-            onCamp={() => setCampOpen(true)}
+            onCamp={() => setCampOpen((o) => !o)}
+            onEvolution={() => setEvoOpen((o) => !o)}
+            campOpen={campOpen}
+            evoOpen={evoOpen}
           />
           <Toasts
             toasts={toasts}
@@ -177,6 +184,17 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} />
           {snap.selected && <DinoCard info={snap.selected} engine={engine} onCamp={() => setCampOpen(true)} onClose={() => { engine.select(0); setSnap(engine.snapshot()); }} />}
           {campOpen && <CampPanel snap={snap} engine={engine} onClose={() => setCampOpen(false)} />}
+          <RaidBanner snap={snap} engine={engine} />
+          {evoOpen && <EvolutionPanel snap={snap} engine={engine} onClose={() => setEvoOpen(false)} />}
+          {snap.orderFor > 0 && (
+            <div className="dl-glass pointer-events-auto absolute left-1/2 top-24 z-30 flex -translate-x-1/2 items-center gap-3 rounded-3xl px-4 py-2.5 shadow-2xl sm:top-24">
+              <span className="text-2xl">🎯</span>
+              <span className="text-[15px] font-semibold">Tap a dino to hunt it — or tap the ground to guard that spot</span>
+              <button type="button" onClick={() => { engine.orderFor = 0; setSnap(engine.snapshot()); }} className="rounded-full bg-white/15 px-3 py-1 text-sm font-bold hover:bg-white/25">
+                Cancel
+              </button>
+            </div>
+          )}
           {disc && (
             <button
               type="button"
@@ -184,7 +202,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
                 setSticker(null);
                 setStickersOpen(true);
               }}
-              className="dl-pop pointer-events-auto absolute left-1/2 top-24 z-30 sm:top-auto sm:bottom-36 flex -translate-x-1/2 items-center gap-3 rounded-3xl border-2 border-amber-300/80 bg-gradient-to-br from-amber-400 to-orange-500 px-5 py-3 text-left shadow-2xl shadow-orange-900/40"
+              className={`dl-pop pointer-events-auto absolute left-1/2 top-24 z-30 sm:top-auto ${snap.tribe.raid ? "sm:bottom-[190px]" : "sm:bottom-36"} flex -translate-x-1/2 items-center gap-3 rounded-3xl border-2 border-amber-300/80 bg-gradient-to-br from-amber-400 to-orange-500 px-5 py-3 text-left shadow-2xl shadow-orange-900/40`}
             >
               <span className="text-4xl drop-shadow">{disc.icon}</span>
               <span>

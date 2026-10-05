@@ -41,7 +41,7 @@ export function StatsScreen({ roster, onBack }: { roster: Roster; onBack: () => 
   const winRate = stats.wins + stats.losses ? Math.round((stats.wins / (stats.wins + stats.losses)) * 100) : 0;
 
   return (
-    <div className="absolute inset-0 isolate overflow-hidden text-white">
+    <div data-pad-menu className="absolute inset-0 isolate overflow-hidden text-white">
       <Backdrop tint="#f59e0b" />
       <div className="fw-thin-scroll h-full overflow-y-auto">
         <div className="mx-auto max-w-6xl px-6 py-8">

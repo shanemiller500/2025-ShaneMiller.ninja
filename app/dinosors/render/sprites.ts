@@ -261,7 +261,9 @@ export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind
 
 /* ------------------------------- people ------------------------------- */
 
-export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, hasSpear: boolean) {
+export type WeaponLook = "spear" | "bow" | "crossbow" | null;
+
+export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean) {
   const H = h.child ? 18 : 26;
   const st = h.state;
   c.save();
@@ -275,10 +277,10 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, hasS
     c.translate(-H * 0.1 * h.dir, -2);
   }
   c.scale(h.dir, 1);
-  const moving = st === "walk" || st === "carry" || st === "flee" || st === "explore";
+  const moving = st === "walk" || st === "carry" || st === "flee" || st === "explore" || st === "hunt" || st === "haul";
   const sw = moving ? Math.sin(h.anim * 2.2) : 0;
   const sit = st === "sitFire" || st === "craft";
-  const bend = st === "gather" ? 0.5 : st === "build" ? 0.2 : 0;
+  const bend = st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" ? 0.2 : st === "haul" ? -0.25 : st === "hunt" ? 0.25 : 0;
   const hipY = sit ? -H * 0.22 : -H * 0.42;
 
   // legs
@@ -333,7 +335,25 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, hasS
     c.lineTo(-H * 0.22, shY - H * 0.32);
     c.moveTo(H * 0.12, shY);
     c.lineTo(H * 0.24, shY - H * 0.3);
-  } else if (st === "build" || st === "craft" || st === "gather") {
+  } else if (st === "aim") {
+    // both arms forward, holding the weapon level
+    c.moveTo(-H * 0.1, shY);
+    c.lineTo(H * 0.32, shY + H * 0.04);
+    c.moveTo(H * 0.1, shY);
+    c.lineTo(H * 0.42, shY + H * 0.02);
+  } else if (st === "haul") {
+    // leaning forward, pulling a rope behind
+    c.moveTo(-H * 0.1, shY);
+    c.lineTo(-H * 0.36, shY + H * 0.22);
+    c.moveTo(H * 0.1, shY);
+    c.lineTo(-H * 0.3, shY + H * 0.26);
+  } else if (st === "cook") {
+    const a = Math.sin(t * 5) * 0.4;
+    c.moveTo(H * 0.1, shY);
+    c.lineTo(H * 0.38, shY + H * 0.12 + a * H * 0.1);
+    c.moveTo(-H * 0.1, shY);
+    c.lineTo(H * 0.1, shY + H * 0.3);
+  } else if (st === "build" || st === "craft" || st === "gather" || st === "farm" || st === "repair") {
     const a = Math.sin(t * 12) * 0.6;
     c.moveTo(H * 0.1, shY);
     c.lineTo(H * 0.1 + Math.cos(a) * H * 0.3, shY + Math.sin(a) * H * 0.3 + H * 0.1);
@@ -352,33 +372,101 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, hasS
   }
   c.stroke();
 
-  // spear / fishing pole
-  if ((hasSpear && !h.child && !h.carry && (st === "idle" || st === "walk" || st === "flee" || st === "talk")) || st === "fish") {
+  // weapons, roasting stick, hoe or fishing pole
+  const showWeapon = weapon && !h.child && !h.carry && (st === "aim" || (armed && (st === "idle" || st === "walk" || st === "flee" || st === "talk" || st === "guard" || st === "hunt")));
+  if (st === "fish") {
     c.strokeStyle = "#8a6238";
     c.lineWidth = 1.4;
     c.beginPath();
-    if (st === "fish") {
-      c.moveTo(H * 0.1, shY + H * 0.2);
-      c.lineTo(H * 0.85, shY - H * 0.15);
-      c.stroke();
-      c.strokeStyle = "rgba(240,240,240,0.7)";
-      c.lineWidth = 0.6;
-      c.beginPath();
-      c.moveTo(H * 0.85, shY - H * 0.15);
-      c.lineTo(H * 0.95, H * 0.42 + Math.sin(t * 3) * 1.5);
+    c.moveTo(H * 0.1, shY + H * 0.2);
+    c.lineTo(H * 0.85, shY - H * 0.15);
+    c.stroke();
+    c.strokeStyle = "rgba(240,240,240,0.7)";
+    c.lineWidth = 0.6;
+    c.beginPath();
+    c.moveTo(H * 0.85, shY - H * 0.15);
+    c.lineTo(H * 0.95, H * 0.42 + Math.sin(t * 3) * 1.5);
+    c.stroke();
+  } else if (st === "cook") {
+    c.strokeStyle = "#6b4a2a";
+    c.lineWidth = 1.4;
+    c.beginPath();
+    c.moveTo(H * 0.3, shY + H * 0.12);
+    c.lineTo(H * 0.9, shY + H * 0.3);
+    c.stroke();
+    c.fillStyle = "#b5523a";
+    c.beginPath();
+    c.ellipse(H * 0.8, shY + H * 0.28, H * 0.12, H * 0.07, 0.3, 0, Math.PI * 2);
+    c.fill();
+  } else if (st === "farm") {
+    c.strokeStyle = "#7a5534";
+    c.lineWidth = 1.4;
+    c.beginPath();
+    c.moveTo(H * 0.3, shY + H * 0.1);
+    c.lineTo(H * 0.55, H * 0.4);
+    c.stroke();
+    c.fillStyle = "#8f8a82";
+    c.fillRect(H * 0.5, H * 0.36, H * 0.16, H * 0.06);
+  } else if (showWeapon && weapon === "spear") {
+    c.strokeStyle = "#8a6238";
+    c.lineWidth = 1.5;
+    c.beginPath();
+    if (st === "aim") {
+      c.moveTo(-H * 0.2, shY);
+      c.lineTo(H * 0.85, shY - H * 0.12);
     } else {
       c.moveTo(H * 0.15, H * 0.2);
       c.lineTo(H * 0.3, -H * 0.95);
     }
     c.stroke();
-    if (st !== "fish") {
-      c.fillStyle = "#8f8a82";
-      c.beginPath();
+    c.fillStyle = "#8f8a82";
+    c.beginPath();
+    if (st === "aim") {
+      c.moveTo(H * 0.85, shY - H * 0.17);
+      c.lineTo(H * 1.02, shY - H * 0.14);
+      c.lineTo(H * 0.85, shY - H * 0.07);
+    } else {
       c.moveTo(H * 0.27, -H * 0.95);
       c.lineTo(H * 0.32, -H * 1.12);
       c.lineTo(H * 0.35, -H * 0.93);
-      c.fill();
     }
+    c.fill();
+  } else if (showWeapon && weapon === "bow") {
+    const x = st === "aim" ? H * 0.42 : H * 0.18;
+    c.strokeStyle = "#7a4f2a";
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.arc(x - H * 0.18, shY + 1, H * 0.34, -1.1, 1.1);
+    c.stroke();
+    c.strokeStyle = "rgba(240,235,220,0.9)";
+    c.lineWidth = 0.6;
+    c.beginPath();
+    const pull = st === "aim" ? H * 0.12 : 0;
+    c.moveTo(x - H * 0.18 + Math.cos(-1.1) * H * 0.34, shY + 1 + Math.sin(-1.1) * H * 0.34);
+    c.lineTo(x - H * 0.18 - pull, shY + 1);
+    c.lineTo(x - H * 0.18 + Math.cos(1.1) * H * 0.34, shY + 1 + Math.sin(1.1) * H * 0.34);
+    c.stroke();
+    if (st === "aim") {
+      c.strokeStyle = "#5a3d24";
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(x - H * 0.18 - pull, shY + 1);
+      c.lineTo(x + H * 0.3, shY + 1);
+      c.stroke();
+    }
+  } else if (showWeapon && weapon === "crossbow") {
+    const x = st === "aim" ? H * 0.3 : H * 0.05;
+    const y = st === "aim" ? shY + 2 : shY + H * 0.25;
+    c.fillStyle = "#6b4a2a";
+    c.fillRect(x - H * 0.15, y - 1.5, H * 0.62, 3);
+    c.strokeStyle = "#3d2b1c";
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.moveTo(x + H * 0.36, y - H * 0.22);
+    c.quadraticCurveTo(x + H * 0.28, y, x + H * 0.36, y + H * 0.22);
+    c.stroke();
+    c.fillStyle = "#9aa3ad";
+    c.fillRect(x + H * 0.44, y - 1, H * 0.12, 2);
   }
 
   // head
@@ -962,4 +1050,199 @@ export function drawVolcano(c: CanvasRenderingContext2D, glow: number, lavaOn: b
   c.beginPath();
   c.ellipse(0, top + 8, 66, 17, 0, 0, Math.PI * 2);
   c.fill();
+}
+
+/* ------------------------------- tribe structures ------------------------------- */
+
+/** One wall tile with its base at (0,0) = bottom-centre of the tile. */
+export function drawWallTile(c: CanvasRenderingContext2D, kind: "palisade" | "stone", built: number, hpFrac: number, tx: number, upgrade: boolean, t: number) {
+  const W = 32;
+  if (built < 1) {
+    // blueprint ghost + whatever has been raised so far
+    c.strokeStyle = "rgba(255,255,255,0.7)";
+    c.setLineDash([4, 3]);
+    c.lineWidth = 1.2;
+    c.strokeRect(-W / 2 + 2, -26, W - 4, 26);
+    c.setLineDash([]);
+  }
+  const h = (kind === "stone" ? 28 : 34) * Math.max(0, Math.min(1, built));
+  if (h <= 0.5) return;
+  if (kind === "palisade") {
+    for (let i = 0; i < 4; i++) {
+      // knocked-out logs when badly damaged
+      if (hpFrac < 0.45 && (tx * 3 + i) % 4 === 0) continue;
+      const x = -W / 2 + 4 + i * 8;
+      const lh = h * (0.88 + ((tx * 7 + i * 13) % 5) * 0.03);
+      const tilt = hpFrac < 0.45 ? ((i % 2) - 0.5) * 0.18 : 0;
+      c.save();
+      c.translate(x, 0);
+      c.rotate(tilt);
+      c.fillStyle = i % 2 ? "#8a5f38" : "#7a5230";
+      c.fillRect(-3.4, -lh, 6.8, lh);
+      c.beginPath();
+      c.moveTo(-3.4, -lh);
+      c.lineTo(0, -lh - 6);
+      c.lineTo(3.4, -lh);
+      c.closePath();
+      c.fill();
+      c.fillStyle = "rgba(255,230,190,0.25)";
+      c.fillRect(-3.4, -lh, 2, lh);
+      c.strokeStyle = "rgba(40,25,15,0.5)";
+      c.lineWidth = 0.8;
+      c.strokeRect(-3.4, -lh, 6.8, lh);
+      c.restore();
+    }
+    // lashing rope
+    c.strokeStyle = "#c9a56a";
+    c.lineWidth = 1.4;
+    c.beginPath();
+    c.moveTo(-W / 2, -h * 0.55);
+    c.lineTo(W / 2, -h * 0.55);
+    c.stroke();
+  } else {
+    const g = c.createLinearGradient(0, -h, 0, 0);
+    g.addColorStop(0, "#b3ada4");
+    g.addColorStop(1, "#7d776f");
+    c.fillStyle = g;
+    c.fillRect(-W / 2, -h, W, h);
+    c.strokeStyle = "rgba(60,55,50,0.55)";
+    c.lineWidth = 1;
+    for (let r = 0; r < 3; r++) {
+      const y = -h + (r + 1) * (h / 3);
+      c.beginPath();
+      c.moveTo(-W / 2, y);
+      c.lineTo(W / 2, y);
+      const off = r % 2 ? 0 : 8;
+      for (let x = -W / 2 + off; x < W / 2; x += 16) {
+        c.moveTo(x, y);
+        c.lineTo(x, y - h / 3);
+      }
+      c.stroke();
+    }
+    c.fillStyle = "#c8c2b8";
+    c.fillRect(-W / 2 - 1, -h - 4, W + 2, 5);
+    if (hpFrac < 0.5) {
+      c.strokeStyle = "rgba(30,25,20,0.7)";
+      c.lineWidth = 1.4;
+      c.beginPath();
+      c.moveTo(-6, -h);
+      c.lineTo(-2, -h * 0.6);
+      c.lineTo(-7, -h * 0.3);
+      c.stroke();
+    }
+  }
+  if (upgrade) {
+    c.fillStyle = `rgba(255,255,255,${0.5 + Math.sin(t * 4) * 0.3})`;
+    c.font = "10px sans-serif";
+    c.textAlign = "center";
+    c.fillText("🧱", 0, -h - 8);
+  }
+}
+
+export function drawTower(c: CanvasRenderingContext2D, stage: number, t: number) {
+  if (stage <= 0) {
+    c.strokeStyle = "rgba(255,255,255,0.7)";
+    c.setLineDash([4, 3]);
+    c.strokeRect(-20, -70, 40, 70);
+    c.setLineDash([]);
+    return;
+  }
+  const leg = (x0: number, x1: number) => {
+    c.beginPath();
+    c.moveTo(x0, 0);
+    c.lineTo(x1, -62);
+    c.stroke();
+  };
+  c.strokeStyle = "#6b4a2a";
+  c.lineWidth = 4;
+  leg(-20, -14);
+  leg(20, 14);
+  c.lineWidth = 3;
+  leg(-8, -10);
+  leg(8, 10);
+  c.strokeStyle = "#8a6238";
+  c.lineWidth = 1.6;
+  for (let y = -12; y > -60; y -= 14) {
+    c.beginPath();
+    c.moveTo(-18 + (-y / 62) * 4, y);
+    c.lineTo(18 - (-y / 62) * 4, y - 8);
+    c.stroke();
+  }
+  if (stage >= 2) {
+    c.fillStyle = "#8a5f38";
+    c.fillRect(-22, -66, 44, 7);
+    c.fillStyle = "#7a5230";
+    for (let i = 0; i < 6; i++) c.fillRect(-22 + i * 8, -80, 5, 14);
+  }
+  if (stage >= 3) {
+    c.fillStyle = "#5f8f3a";
+    c.beginPath();
+    c.moveTo(-28, -82);
+    c.lineTo(0, -104);
+    c.lineTo(28, -82);
+    c.closePath();
+    c.fill();
+    c.fillStyle = "#4b7a30";
+    c.fillRect(-28, -84, 56, 3);
+    // a little flag
+    c.strokeStyle = "#5a3d24";
+    c.lineWidth = 1.2;
+    c.beginPath();
+    c.moveTo(0, -104);
+    c.lineTo(0, -120);
+    c.stroke();
+    c.fillStyle = "#e2462d";
+    c.beginPath();
+    c.moveTo(0, -120);
+    c.lineTo(12, -116 + Math.sin(t * 5) * 1.5);
+    c.lineTo(0, -112);
+    c.fill();
+  }
+}
+
+export function drawFarm(c: CanvasRenderingContext2D, growth: number, planted: boolean, t: number) {
+  const W = 72;
+  const H = 40;
+  c.fillStyle = "#7a5a3a";
+  c.beginPath();
+  c.ellipse(0, 0, W / 2 + 4, H / 2 + 3, 0, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = "#5f4329";
+  c.lineWidth = 2;
+  for (let r = 0; r < 4; r++) {
+    const y = -H / 2 + 6 + r * 9;
+    c.beginPath();
+    c.moveTo(-W / 2 + 6, y);
+    c.lineTo(W / 2 - 6, y);
+    c.stroke();
+  }
+  if (!planted) return;
+  for (let r = 0; r < 4; r++) {
+    for (let i = 0; i < 7; i++) {
+      const x = -W / 2 + 9 + i * 9;
+      const y = -H / 2 + 6 + r * 9;
+      const g = growth;
+      const hgt = 3 + g * 14;
+      const sway = Math.sin(t * 2 + i + r) * g * 1.5;
+      c.strokeStyle = g < 0.8 ? "#6aa83a" : "#a7a33a";
+      c.lineWidth = 1.4;
+      c.beginPath();
+      c.moveTo(x, y);
+      c.lineTo(x + sway, y - hgt);
+      c.stroke();
+      if (g >= 0.7) {
+        c.fillStyle = g >= 1 ? "#f2c94c" : "#c9b14a";
+        c.beginPath();
+        c.ellipse(x + sway, y - hgt - 2, 1.8, 3.6, 0, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+  }
+  if (growth >= 1) {
+    const a = (Math.sin(t * 3) + 1) / 2;
+    c.fillStyle = `rgba(255,250,200,${0.4 + a * 0.5})`;
+    c.font = "12px serif";
+    c.textAlign = "center";
+    c.fillText("✦", W / 2 - 4, -H / 2 - 6);
+  }
 }

@@ -176,6 +176,18 @@ export class InputManager {
     if (ay > 0.6) out.down = true;
   }
 
+  /** Is a button held on any connected pad (Start → pause etc.) */
+  padButton(i: number) {
+    if (typeof navigator === "undefined" || !navigator.getGamepads) return false;
+    return (navigator.getGamepads() ?? []).some((p) => !!p && p.buttons[i]?.pressed);
+  }
+
+  /** Is a pad connected for this player slot */
+  hasPad(player: 0 | 1) {
+    if (typeof navigator === "undefined" || !navigator.getGamepads) return false;
+    return (navigator.getGamepads() ?? []).filter(Boolean).length > player;
+  }
+
   /** Is a raw key down (menus/pause) */
   isDown(code: string) {
     return this.keys.has(code);

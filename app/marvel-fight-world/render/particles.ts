@@ -216,10 +216,12 @@ export class Particles {
         }
         case "smoke":
         case "dust": {
-          ctx.fillStyle = withAlpha(p.color, (p.kind === "dust" ? 0.35 : 0.45) * t);
-          ctx.beginPath();
-          ctx.arc(sx, sy, p.size * (1.4 - t * 0.6), 0, Math.PI * 2);
-          ctx.fill();
+          // Soft, feathered puff (sprite cached per colour) instead of a hard disc
+          const r = p.size * (1.9 - t * 0.8);
+          const a0 = ctx.globalAlpha;
+          ctx.globalAlpha = a0 * (p.kind === "dust" ? 0.5 : 0.6) * t;
+          ctx.drawImage(glowSprite(p.color), sx - r, sy - r, r * 2, r * 2);
+          ctx.globalAlpha = a0;
           break;
         }
         case "blood": {

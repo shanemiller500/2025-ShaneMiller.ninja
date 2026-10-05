@@ -12,6 +12,7 @@ import { LM, groundSpeed, isWalkTile } from "./terrain";
 import { T, TILE, type Dino, type Human, type HumanState, type Plant, type Resource } from "./types";
 import type { World } from "./world";
 import { TALL } from "./plants";
+import { buildTick, deliverBuild, roleAct, roleThink } from "./tribe";
 
 const HAIR = ["#3b2416", "#5a3a22", "#1f1a17", "#8a4b23", "#c58f4a"];
 const SKIN = ["#e0b48a", "#c98e62", "#a86b45", "#7c4c2f", "#f0c9a0"];
@@ -47,6 +48,11 @@ export function addHuman(w: World, x: number, y: number, child = false, o: Parti
     energy: 0.8,
     hunger: 0.2,
     fear: 0,
+    role: "auto",
+    autoRole: "gatherer",
+    order: null,
+    age: child ? 0 : 400,
+    cd: 0,
     ...o,
   };
   w.humans.push(h);
@@ -57,14 +63,12 @@ export function say(h: Human, text: string, t = 2.2) {
   h.bubble = { text, t };
 }
 
-function go(h: Human, s: HumanState, x: number, y: number) {
+export function go(h: Human, s: HumanState, x: number, y: number) {
   if (h.state !== s) h.stateT = 0;
   h.state = s;
   h.tx = x;
   h.ty = y;
 }
-
-const WALKING = new Set<HumanState>(["walk", "carry", "flee", "explore"]);
 
 function walkOk(w: World, x: number, y: number) {
   const t = w.terrain.tileAt(x, y);
@@ -74,12 +78,13 @@ function walkOk(w: World, x: number, y: number) {
   return w.lava.heatAt(tx, ty) < 0.1 && w.fire.at(tx, ty) < 0.2;
 }
 
-function move(w: World, h: Human, dt: number) {
+export function moveHuman(w: World, h: Human, dt: number) {
   const dx = h.tx - h.x;
   const dy = h.ty - h.y;
   const d = Math.hypot(dx, dy);
   const base = h.child ? 30 : 36;
-  const speed = (h.state === "flee" ? base * 2.3 : base) * groundSpeed(w.terrain.tileAt(h.x, h.y));
+  const fast = h.state === "flee" || h.state === "hunt" || (w.tribe.raid !== null && h.state === "walk");
+  const speed = (fast ? base * (h.state === "flee" ? 2.3 : 1.6) : base) * groundSpeed(w.terrain.tileAt(h.x, h.y));
   if (d < 3) {
     h.vx = 0;
     h.vy = 0;
@@ -132,7 +137,7 @@ function nearPlant(w: World, x: number, y: number, r: number, ok: (p: Plant) => 
 }
 
 /** Find somewhere to collect a resource. */
-function sourceFor(w: World, h: Human, r: Resource): { x: number; y: number; id: number } | null {
+export function sourceFor(w: World, h: Human, r: Resource): { x: number; y: number; id: number } | null {
   const cx = w.camp.x;
   const cy = w.camp.y;
   switch (r) {
@@ -160,6 +165,9 @@ function sourceFor(w: World, h: Human, r: Resource): { x: number; y: number; id:
       const s = w.terrain.nearestDrink(cx + 300, cy + 40, 1400);
       return s ? { ...s, id: 0 } : null;
     }
+    default:
+      // meat comes from hunting, crops from farms, cooked food from cooks
+      return null;
   }
 }
 
@@ -175,8 +183,30 @@ function think(w: World, h: Human) {
   if (h.state === "tossed" || h.state === "lookUp" || h.state === "celebrate") return;
   if (h.state === "craft" && camp.crafting?.by === h.id) return;
 
-  // 1. danger → run for the cave (or stand with spears by the fire)
+  const tribe = w.tribe;
+  const role = tribe.roleOf(h);
+  const weapon = tribe.weaponFor(w, h);
+  const fighter = !!weapon && (role === "guard" || role === "hunter" || !!h.order);
+
+  // raid! non-fighters (and kids) run for the cave
+  if (tribe.raid && (!fighter || h.child)) {
+    if (h.state === "hide") return;
+    const s = shelterSpot(w);
+    if (Math.hypot(h.x - s.x, h.y - s.y) < 14) go(h, "hide", h.x, h.y);
+    else {
+      if (h.state !== "flee") say(h, pick(w.rng, ["Raid!!", "Hide!", "To the cave!"]));
+      go(h, "flee", s.x, s.y);
+    }
+    return;
+  }
+
+  // 1. danger → fight (if armed + on duty) or run for the cave
   const threat = dangerNear(w, h);
+  if (threat && fighter && Math.hypot(threat.x - h.x, threat.y - h.y) > 50) {
+    h.targetId = threat.id;
+    go(h, "aim", h.x, h.y);
+    return;
+  }
   if (threat) {
     const def = sp(threat.species);
     const brave = !h.child && camp.learned.has("spear") && Math.hypot(h.x - camp.x, h.y - camp.y) < 220 && def.size < 110;
@@ -203,7 +233,8 @@ function think(w: World, h: Human) {
 
   // 2. storms + night → shelter / cave
   const night = w.daylight < 0.25;
-  if (w.weather.rain > 0.55 || w.weather.storm > 0.5 || (night && h.energy < 0.6)) {
+  const onWatch = role === "guard" && !h.child && h.energy > 0.15;
+  if (!onWatch && (w.weather.rain > 0.55 || w.weather.storm > 0.5 || (night && h.energy < 0.6))) {
     if (h.state === "hide" || h.state === "sleep") return;
     const s = shelterSpot(w);
     if (Math.hypot(h.x - s.x, h.y - s.y) < 14) {
@@ -221,20 +252,22 @@ function think(w: World, h: Human) {
 
   // busy with something that finishes on its own
   if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat") return;
+  if (h.state === "hunt" || h.state === "aim" || h.state === "haul" || h.state === "cook" || h.state === "farm" || h.state === "repair") return;
   if (h.state === "carry" || h.state === "walk" || h.state === "explore") {
     if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6) return;
   }
 
   // 3. hungry → eat from the stockpile
-  if (h.hunger > 0.6 && camp.stock.fish + camp.stock.berries > 0) {
+  if (h.hunger > 0.6 && tribe.foodTotal(w) + (h.hunger > 0.9 ? camp.stock.meat : 0) > 0) {
     if (Math.hypot(h.x - camp.pileX, h.y - camp.pileY) < 20) go(h, "eat", h.x, h.y);
     else go(h, "walk", camp.pileX - 14, camp.pileY + 8);
     return;
   }
 
-  // 4. evening by the fire
+  // 4. evening by the fire (except whoever is on duty)
   const fire = w.campfires.find((f) => f.lit);
-  if (fire && (w.daylight < 0.45 || (h.child && w.rng() < 0.2))) {
+  const offDuty = role === "gatherer" || h.child;
+  if (fire && offDuty && !h.order && (w.daylight < 0.45 || (h.child && w.rng() < 0.2))) {
     const a = (h.id * 2.4) % (Math.PI * 2);
     const sx = fire.x + Math.cos(a) * 34;
     const sy = fire.y + Math.sin(a) * 18;
@@ -252,12 +285,15 @@ function think(w: World, h: Human) {
     return;
   }
 
-  // 5. craft when the goal is ready
-  if (camp.ready() && !camp.crafting && !w.humans.some((o) => o !== h && o.task === "craft")) {
+  // 5. craft when the goal is ready (gatherers + builders are the inventors)
+  if ((role === "gatherer" || role === "builder") && !h.order && camp.ready() && !camp.crafting && !w.humans.some((o) => o !== h && o.task === "craft")) {
     h.task = "craft";
     go(h, "walk", camp.craftX + 12, camp.craftY);
     return;
   }
+
+  // 5b. the job they've been given (or picked up automatically)
+  if (roleThink(w, h)) return;
 
   // 6. build the shelter stage if the materials are in
   const site = camp.activeShelter(w);
@@ -320,6 +356,8 @@ function think(w: World, h: Human) {
 function arrive(w: World, h: Human) {
   const camp = w.camp;
   if (h.state === "carry") {
+    const tribe = w.tribe;
+    if (h.carry && (tribe.walls.some((x) => x.id === h.targetId) || tribe.towers.some((x) => x.id === h.targetId)) && deliverBuild(w, h)) return;
     const site = camp.activeShelter(w);
     if (site && h.carry && Math.hypot(h.x - site.x, h.y - site.y) < 50) {
       const used = camp.deliverToShelter(w, site, h.carry, h.carryN);
@@ -429,13 +467,16 @@ export function updateHuman(w: World, h: Human, dt: number) {
 
   h.think -= dt;
   if (h.think <= 0) think(w, h);
+  if (h.state !== "guard" && h.state !== "aim") h.z = 0;
+
+  if (roleAct(w, h, dt)) return;
 
   switch (h.state) {
     case "walk":
     case "carry":
     case "flee":
     case "explore":
-      if (move(w, h, dt)) {
+      if (moveHuman(w, h, dt)) {
         if (h.state === "flee") {
           go(h, "hide", h.x, h.y);
           break;
@@ -469,6 +510,7 @@ export function updateHuman(w: World, h: Human, dt: number) {
       break;
     }
     case "build": {
+      if (buildTick(w, h, dt)) break;
       const site = w.camp.activeShelter(w);
       if (!site) {
         h.task = null;
@@ -494,13 +536,15 @@ export function updateHuman(w: World, h: Human, dt: number) {
       break;
     case "eat":
       if (h.stateT > 2.5) {
-        const camp = w.camp;
-        const fish = camp.stock.fish > 0;
-        if (fish) camp.stock.fish--;
-        else if (camp.stock.berries > 0) camp.stock.berries--;
-        h.hunger = 0;
-        const cooked = fish && w.campfires.some((f) => f.lit);
-        say(h, cooked ? "Yum! Cooked!" : "Munch munch");
+        const s = w.camp.stock;
+        // best food first: roast > fish > crops > berries > (raw meat if starving)
+        const pickFood = (["cooked", "fish", "crop", "berries", "meat"] as Resource[]).find((r) => s[r] > 0);
+        if (pickFood) {
+          s[pickFood]--;
+          h.hunger = pickFood === "cooked" ? -0.3 : pickFood === "meat" ? 0.3 : 0;
+          if (pickFood === "cooked") h.energy = Math.min(1, h.energy + 0.2);
+          say(h, pickFood === "cooked" ? "Yum! Roast!" : pickFood === "meat" ? "Raw?! Ugh…" : pickFood === "crop" ? "Crunchy!" : "Munch munch");
+        }
         go(h, "idle", h.x, h.y);
       }
       break;

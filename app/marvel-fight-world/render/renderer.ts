@@ -189,7 +189,7 @@ export class Renderer {
       const j = poseFor(f, this.time);
       const rig = buildRig(f, j);
       const weaponOut = m.projectiles.some((p) => !p.dead && p.owner === f.index && (p.spec.fx === "shield" || p.spec.fx === "hammer"));
-      drawFighter(ctx, f, j, rig, { portrait: this.portraits[f.index], t: this.time, flash: this.flash[f.index], ring: PLAYER_COLORS[f.index], weaponOut });
+      drawFighter(ctx, f, j, rig, { portrait: this.portraits[f.index], t: this.time, flash: this.flash[f.index], ring: PLAYER_COLORS[f.index], weaponOut, rim: this.arena.colors[1] });
       drawMoveFx(ctx, f, this.time);
       this.drawMarker(ctx, f, rig);
     }

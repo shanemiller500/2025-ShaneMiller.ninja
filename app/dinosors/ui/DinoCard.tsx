@@ -6,6 +6,7 @@ import { Pencil, Trash2, Utensils, Video, X } from "lucide-react";
 import { sp } from "../data/species";
 import type { DinoInfo, Engine, HumanInfo } from "../game/engine";
 import Portrait from "./Portrait";
+import { ROLES } from "../data/facts";
 
 /* ------------------------------------------------------------------ */
 /*  Tap a dino → this little card. Live stats, a mood, kid-sized       */
@@ -115,6 +116,14 @@ function DinoBody({ info, engine }: { info: DinoInfo; engine: Engine }) {
         <span className="rounded-full bg-white/10 px-2.5 py-1">
           {info.mood.icon} {info.mood.label}
         </span>
+        <span className="rounded-full bg-cyan-400/20 px-2.5 py-1" title="Generation — how many parents came before it">
+          🧬 Gen {info.gen}
+        </span>
+        {info.traits.map((t) => (
+          <span key={t.name} className="rounded-full bg-violet-400/25 px-2.5 py-1">
+            {t.icon} {t.name}
+          </span>
+        ))}
       </div>
 
       <div className="mt-3 space-y-1.5">
@@ -167,28 +176,64 @@ function DinoBody({ info, engine }: { info: DinoInfo; engine: Engine }) {
 }
 
 function HumanBody({ info, engine, onCamp }: { info: HumanInfo; engine: Engine; onCamp: () => void }) {
+  const eff = info.role === "auto" ? info.autoRole : info.role;
+  const effRole = ROLES.find((r) => r.id === eff);
   return (
-    <div className="pr-6">
-      <div className="flex items-center gap-3">
+    <div>
+      <div className="flex items-center gap-3 pr-6">
         <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-b from-amber-300/30 to-orange-500/20 text-4xl">{info.child ? "🧒" : "🧔"}</span>
         <div>
           <div className="text-xl font-bold">{info.name}</div>
-          <div className="text-sm font-semibold text-amber-200">{info.child ? "Cave kid" : "Cave person"}</div>
+          <div className="text-sm font-semibold text-amber-200">
+            {info.child ? "Cave kid" : `${effRole?.icon} ${effRole?.name}${info.role === "auto" ? " (auto)" : ""}`}
+          </div>
           <div className="text-sm text-white/70">{info.activity}</div>
         </div>
       </div>
-      <p className="mt-3 rounded-2xl bg-white/5 p-2.5 text-sm text-white/80">💡 Early humans used stone tools, fire and shelters to survive. Help this tribe invent new things!</p>
-      <button
-        type="button"
-        onClick={() => {
-          const c = engine.world.camp;
-          engine.flyTo(c.x, c.y, Math.max(engine.cam.zoom, 0.9));
-          onCamp();
-        }}
-        className="mt-3 w-full rounded-2xl bg-amber-400 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-amber-300 active:scale-95"
-      >
-        🏕️ Open their camp
-      </button>
+      {info.child ? (
+        <p className="mt-3 rounded-2xl bg-white/5 p-2.5 text-sm text-white/80">🧒 Too little for a job — kids grow up into helpers. Keep the tribe fed!</p>
+      ) : (
+        <>
+          <div className="mt-3 text-sm font-bold">Job</div>
+          <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+            {ROLES.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                title={r.tip}
+                onClick={() => engine.setRole(info.id, r.id)}
+                className={`flex flex-col items-center rounded-2xl py-1.5 transition active:scale-95 ${info.role === r.id ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}
+              >
+                <span className="text-xl leading-none">{r.icon}</span>
+                <span className="mt-0.5 text-[10.5px] font-bold">{r.name}</span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11px] text-white/55">{ROLES.find((r) => r.id === info.role)?.tip}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {info.ordered ? (
+              <button type="button" onClick={() => engine.clearOrder(info.id)} className="rounded-2xl bg-white/10 py-2.5 text-sm font-bold transition hover:bg-white/20 active:scale-95">
+                ✋ Cancel mission
+              </button>
+            ) : (
+              <button type="button" onClick={() => engine.startOrder(info.id)} className="rounded-2xl bg-rose-500 py-2.5 text-sm font-bold transition hover:bg-rose-400 active:scale-95">
+                🎯 Give a mission
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const c = engine.world.camp;
+                engine.flyTo(c.x, c.y, Math.max(engine.cam.zoom, 0.9));
+                onCamp();
+              }}
+              className="rounded-2xl bg-amber-400 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-amber-300 active:scale-95"
+            >
+              🏕️ Camp
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
