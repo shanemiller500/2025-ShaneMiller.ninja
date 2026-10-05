@@ -1093,3 +1093,119 @@ export function handGlow(ctx: CanvasRenderingContext2D, handW: V, color: string,
   const h = sp(handW);
   glow(ctx, color, h[0], h[1], r, a);
 }
+
+
+/* ── Headgear silhouettes (signature fighters) ─────────────────────── */
+/**
+ * Iconic shapes around the portrait head so the silhouette reads as the
+ * character even at a glance: Wolverine's cowl fins, Thor's helmet
+ * wings, Cap's temple wings, Panther's ears, Strange's cloak collar.
+ * "back" pieces sit behind the head, "front" pieces overlap its edge.
+ */
+export function drawHeadgear(p: Paint, headW: V, r: number, tilt: number, facing: number, kind: string, layer: "back" | "front") {
+  const { ctx } = p;
+  const [hx, hy] = sp(headW);
+  ctx.save();
+  ctx.translate(hx, hy);
+  ctx.rotate(((-tilt * Math.PI) / 180) * facing);
+  ctx.lineJoin = "round";
+  const shape = (pts: [number, number][], fill: string | CanvasGradient, inkW = 3) => {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * r, y * r) : ctx.moveTo(x * r, y * r)));
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = inkW * p.ink;
+    ctx.stroke();
+  };
+  const metal = (x0: number, y0: number, x1: number, y1: number, a: string, b: string) => {
+    const g = ctx.createLinearGradient(x0 * r, y0 * r, x1 * r, y1 * r);
+    g.addColorStop(0, a);
+    g.addColorStop(1, b);
+    return g;
+  };
+  for (const s of [-1, 1]) {
+    if (layer === "back") {
+      if (kind === "wolverine") {
+        shape(
+          [
+            [s * 0.4, -0.72],
+            [s * 0.62, -1.15],
+            [s * 1.08, -1.78],
+            [s * 0.95, -1.15],
+            [s * 0.9, -0.3],
+          ],
+          metal(s * 0.4, -0.7, s * 1.0, -1.7, "#2a2b36", "#08080c")
+        );
+      } else if (kind === "thor") {
+        shape(
+          [
+            [s * 0.7, -0.74],
+            [s * 1.1, -1.02],
+            [s * 1.62, -1.36],
+            [s * 1.44, -1.0],
+            [s * 1.66, -0.86],
+            [s * 1.32, -0.64],
+            [s * 1.5, -0.44],
+            [s * 1.08, -0.26],
+            [s * 0.84, -0.04],
+          ],
+          metal(s * 0.8, -0.2, s * 1.8, -1.6, "#94a3b8", "#f8fafc")
+        );
+      } else if (kind === "panther") {
+        shape(
+          [
+            [s * 0.32, -0.86],
+            [s * 0.62, -1.4],
+            [s * 0.84, -0.66],
+          ],
+          "#1c1c26"
+        );
+      }
+    } else if (kind === "cap") {
+      shape(
+        [
+          [s * 0.8, -0.24],
+          [s * 1.4, -0.82],
+          [s * 1.14, -0.5],
+          [s * 1.34, -0.42],
+          [s * 1.06, -0.2],
+          [s * 1.2, -0.08],
+          [s * 0.88, 0.06],
+        ],
+        "#f8fafc",
+        2.4
+      );
+    }
+  }
+  if (layer === "back" && kind === "strange") {
+    // High red cloak collar fanning up behind the head
+    ctx.beginPath();
+    ctx.moveTo(-1.15 * r, 1.25 * r);
+    ctx.quadraticCurveTo(-1.65 * r, -0.4 * r, -0.95 * r, -1.05 * r);
+    ctx.quadraticCurveTo(-0.3 * r, -0.35 * r, 0, -0.55 * r);
+    ctx.quadraticCurveTo(0.3 * r, -0.35 * r, 0.95 * r, -1.05 * r);
+    ctx.quadraticCurveTo(1.65 * r, -0.4 * r, 1.15 * r, 1.25 * r);
+    ctx.closePath();
+    const g = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r * 1.7);
+    g.addColorStop(0, "#7f1d1d");
+    g.addColorStop(0.6, "#c8102e");
+    g.addColorStop(1, "#e3364e");
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3 * p.ink;
+    ctx.stroke();
+    // Gold trim on the collar edge
+    ctx.strokeStyle = "#c79a2a";
+    ctx.lineWidth = 2 * p.ink;
+    ctx.beginPath();
+    ctx.moveTo(-1.08 * r, 1.0 * r);
+    ctx.quadraticCurveTo(-1.5 * r, -0.4 * r, -0.92 * r, -0.95 * r);
+    ctx.moveTo(1.08 * r, 1.0 * r);
+    ctx.quadraticCurveTo(1.5 * r, -0.4 * r, 0.92 * r, -0.95 * r);
+    ctx.stroke();
+  }
+  ctx.restore();
+}

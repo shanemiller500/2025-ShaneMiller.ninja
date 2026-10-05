@@ -66,16 +66,16 @@ export function deriveArchetype(s: Stats): Archetype {
 const LOOKS: Record<string, Partial<Look>> = {
   "Spider-Man": { primary: "#d4202f", secondary: "#1f45b8", accent: "#d4202f", skin: "#d4202f", webLines: true, bulk: 0.95, height: 0.98 },
   Hulk: { primary: "#4f9e3a", secondary: "#6b3fa0", accent: "#4f9e3a", skin: "#4f9e3a", bareArms: true, bareChest: true, bulk: 1.45, height: 1.14 },
-  Wolverine: { primary: "#f2c21a", secondary: "#1d3f8f", accent: "#1d3f8f", skin: "#e0b48f", claws: "#dfe4ea", bulk: 1.08, height: 0.9 },
+  Wolverine: { headgear: "wolverine", primary: "#f2c21a", secondary: "#1d3f8f", accent: "#1d3f8f", skin: "#e0b48f", claws: "#dfe4ea", bulk: 1.08, height: 0.9 },
   "Iron Man": { primary: "#b3121b", secondary: "#c9a227", accent: "#e7c34a", skin: "#c9a227", reactor: true, glow: "#9fe7ff", bulk: 1.1, height: 1.0 },
-  Thor: { primary: "#3b4a5e", secondary: "#262a33", accent: "#c3c9d3", skin: "#f0c7a0", cape: "#b3121b", hammer: true, bulk: 1.18, height: 1.06 },
-  "Captain America": { primary: "#1f3f8f", secondary: "#1f3f8f", accent: "#c8102e", skin: "#1f3f8f", shield: true, emblem: "#f8fafc", bulk: 1.08, height: 1.02 },
-  "Black Panther": { primary: "#1c1c26", secondary: "#1c1c26", accent: "#8b7ad6", skin: "#1c1c26", claws: "#cfd5e2", glow: "#9b8cff", bulk: 1.0, height: 1.0 },
-  "Doctor Strange": { primary: "#1d3f8f", secondary: "#2b2240", accent: "#c79a2a", skin: "#f0c7a0", cape: "#c8102e", glow: "#ffb347", bulk: 0.96, height: 1.02 },
+  Thor: { headgear: "thor", primary: "#3b4a5e", secondary: "#262a33", accent: "#c3c9d3", skin: "#f0c7a0", cape: "#b3121b", hammer: true, bulk: 1.18, height: 1.06 },
+  "Captain America": { headgear: "cap", primary: "#1f3f8f", secondary: "#1f3f8f", accent: "#c8102e", skin: "#1f3f8f", shield: true, emblem: "#f8fafc", bulk: 1.08, height: 1.02 },
+  "Black Panther": { headgear: "panther", primary: "#1c1c26", secondary: "#1c1c26", accent: "#8b7ad6", skin: "#1c1c26", claws: "#cfd5e2", glow: "#9b8cff", bulk: 1.0, height: 1.0 },
+  "Doctor Strange": { headgear: "strange", primary: "#1d3f8f", secondary: "#2b2240", accent: "#c79a2a", skin: "#f0c7a0", cape: "#c8102e", glow: "#ffb347", bulk: 0.96, height: 1.02 },
   Deadpool: { primary: "#b3121b", secondary: "#1a1a1a", accent: "#1a1a1a", skin: "#b3121b", swords: true, bulk: 1.0, height: 1.0 },
   Venom: { primary: "#14141c", secondary: "#14141c", accent: "#f1f5f9", skin: "#14141c", emblem: "#f1f5f9", bulk: 1.25, height: 1.08 },
-  Magneto: { primary: "#8a1538", secondary: "#4b2a6b", accent: "#8a1538", skin: "#f0c7a0", cape: "#6b2a8a", glow: "#ff6ad5", bulk: 1.02, height: 1.02 },
-  Thanos: { primary: "#2f4b8f", secondary: "#2f4b8f", accent: "#d4a429", skin: "#7a5aa8", bulk: 1.32, height: 1.12 },
+  Magneto: { headgear: "magneto", primary: "#8a1538", secondary: "#4b2a6b", accent: "#8a1538", skin: "#f0c7a0", cape: "#6b2a8a", glow: "#ff6ad5", bulk: 1.02, height: 1.02 },
+  Thanos: { headgear: "thanos", primary: "#2f4b8f", secondary: "#2f4b8f", accent: "#d4a429", skin: "#7a5aa8", bulk: 1.32, height: 1.12 },
 };
 
 const ARCHETYPE_FX: Record<Archetype, FxKind> = {

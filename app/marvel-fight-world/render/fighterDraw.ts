@@ -14,6 +14,7 @@ import {
   boot,
   drawCape,
   drawHair,
+  drawHeadgear,
   drawHeadShape,
   fist,
   limb,
@@ -403,7 +404,11 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: Fighter, j: Joints
 
   // ── Neck + head ──────────────────────────────────────────────────
   drawNeck(front, rig.neck, rig.head, (female ? 6.6 : 7.8) * W, c.torso === look.skin || look.bareArms ? look.skin : c.yoke ?? c.torso);
-  drawHeadShape(front, rig.head, rig.headR, j.lean * 0.35 + j.head, dir, ghost ? null : o.portrait, look.primary);
+  // Iconic headgear silhouettes frame the portrait head (fins, wings, collar)
+  const tilt = j.lean * 0.35 + j.head;
+  if (look.headgear && !ghost) drawHeadgear(front, rig.head, rig.headR, tilt, dir, look.headgear, "back");
+  drawHeadShape(front, rig.head, rig.headR, tilt, dir, ghost ? null : o.portrait, look.primary);
+  if (look.headgear && !ghost) drawHeadgear(front, rig.head, rig.headR, tilt, dir, look.headgear, "front");
 
   // ── Front arm ────────────────────────────────────────────────────
   arm(front, rig.fShoulder, rig.fElbow, rig.fHand, 13.5 * W, casting, !!c.gauntlet);

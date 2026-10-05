@@ -240,6 +240,8 @@ export interface Look {
   body?: "male" | "female";
   /** Hair colour; long hair is drawn flowing behind female fighters */
   hair?: string;
+  /** Iconic headgear silhouette around the portrait head */
+  headgear?: "wolverine" | "thor" | "cap" | "panther" | "strange" | "magneto" | "thanos";
 }
 
 export interface FighterDef {
