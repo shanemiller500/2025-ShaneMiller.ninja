@@ -6,7 +6,7 @@
 /*  All per-frame work lives in GameSession / WorldScene, not here.     */
 /* ------------------------------------------------------------------ */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Gamepad2, Loader2, RotateCcw } from "lucide-react";
 
@@ -17,7 +17,12 @@ import type { FighterDef } from "../engine/types";
 import { useFightRoster, type Roster } from "../data/roster";
 import {
   DEFAULT_SETTINGS,
+  exportProgress,
+  loadStats,
+  importProgress,
   loadFavorites,
+  loadWorldProgress,
+  saveWorldProgress,
   loadRecent,
   loadSettings,
   pushRecent,
@@ -43,6 +48,13 @@ import { StatsScreen } from "./StatsScreen";
 import { TitleScreen, type MenuChoice } from "./TitleScreen";
 import { TournamentScreen } from "./TournamentScreen";
 import { WorldScreen } from "./WorldScreen";
+import { CloudChip, CloudPanel } from "./CloudPanel";
+import { useEmailCloud, type LocalProgress } from "@/utils/firebase/useEmailCloud";
+import type { FightMeta } from "../data/cloud";
+import { useRouter } from "next/navigation";
+import { tidyStorage } from "@/utils/storageJanitor";
+
+const loadFightCloud = () => import("../data/cloud").then((m) => m.fightCloud);
 
 type Mode = "cpu" | "versus" | "random" | "survival" | "tournament" | "world";
 
@@ -161,15 +173,64 @@ function Game({ roster }: { roster: Roster }) {
   const [bracket, setBracket] = useState<Bracket | null>(null);
   const [worldPlayer, setWorldPlayer] = useState<FighterDef | null>(null);
   const [worldPos, setWorldPos] = useState<{ zone: string; x: number }>({ zone: ZONES[0].id, x: -900 });
+  const [note, setNote] = useState<{ icon: string; text: string } | null>(null);
+  const noteTimer = useRef(0);
+  const worldLoaded = useRef(false);
 
-  // Persistence is browser-only: load after mount (SSR-safe)
-  useEffect(() => {
+  /** (Re)load everything from this browser's storage — on mount and after a cloud load. */
+  const reloadProfile = useCallback(() => {
     const s = loadSettings();
     setSettings(s);
     audio.setVolumes(s.sfxVolume, s.musicVolume);
     setFavorites(loadFavorites());
     setRecent(loadRecent());
+    const wp = loadWorldProgress();
+    const who = wp.playerId !== null ? roster.byId.get(wp.playerId) ?? null : null;
+    setWorldPlayer(who);
+    setWorldPos({ zone: wp.zone && ZONES.some((z) => z.id === wp.zone) ? wp.zone : ZONES[0].id, x: wp.x });
+    worldLoaded.current = true;
+  }, [roster]);
+
+  // Persistence is browser-only: load after mount (SSR-safe).
+  // The site's shared storage can fill up with other pages' caches: make room first.
+  useEffect(() => {
+    tidyStorage();
+    reloadProfile();
+  }, [reloadProfile]);
+
+  // remember who you explore Fight World as, and where you got to
+  useEffect(() => {
+    if (!worldLoaded.current) return;
+    saveWorldProgress({ playerId: worldPlayer?.id ?? null, zone: worldPos.zone, x: worldPos.x });
+  }, [worldPlayer, worldPos]);
+
+  /* ── Cloud saves (email-linked, shared with the site's other games) ── */
+  const showNote = useCallback((icon: string, text: string) => {
+    setNote({ icon, text });
+    window.clearTimeout(noteTimer.current);
+    noteTimer.current = window.setTimeout(() => setNote(null), 4200);
   }, []);
+  const local = useMemo<LocalProgress<FightMeta>>(
+    () => ({
+      exportSave() {
+        const b = exportProgress();
+        const st = b.stats;
+        return { data: JSON.stringify(b), meta: { matches: st.matches, wins: st.wins, knockouts: st.knockouts, tournamentWins: st.tournamentWins, survivalBest: st.survivalBest } };
+      },
+      importSave(data) {
+        const ok = importProgress(data);
+        if (ok) reloadProfile();
+        return ok;
+      },
+      hasProgress: () => loadStats().matches > 0,
+    }),
+    [reloadProfile],
+  );
+  const cloud = useEmailCloud<FightMeta>("fight-world", loadFightCloud, local, showNote);
+  const { saveNow } = cloud;
+  const cloudVisible = !!cloud.state.view;
+  const router = useRouter();
+  const leaveGame = useCallback(() => cloud.leave(() => router.push("/projects")), [cloud, router]);
 
   const updateSettings = useCallback((s: Settings) => {
     setSettings(s);
@@ -258,6 +319,9 @@ function Game({ roster }: { roster: Roster }) {
         case "settings":
           setScreen({ k: "settings" });
           break;
+        case "cloud":
+          cloud.show(cloud.state.status === "signedIn" ? "account" : "welcome");
+          break;
       }
     },
     [roster, worldPlayer, startFight, others]
@@ -305,7 +369,8 @@ function Game({ roster }: { roster: Roster }) {
         return sv;
       });
     }
-  }, []);
+    void saveNow(true);
+  }, [saveNow]);
 
   const resultActions = useCallback(
     (f: FightSetup) =>
@@ -420,7 +485,7 @@ function Game({ roster }: { roster: Roster }) {
   let body: React.ReactNode = null;
   switch (screen.k) {
     case "title":
-      body = <TitleScreen roster={roster} settings={settings} onChoose={onChoose} />;
+      body = <TitleScreen roster={roster} settings={settings} onChoose={onChoose} paused={cloudVisible} corner={<CloudChip cloud={cloud} />} onLeave={leaveGame} />;
       break;
     case "select": {
       const c = selectCopy[screen.mode];
@@ -534,6 +599,22 @@ function Game({ roster }: { roster: Roster }) {
         <motion.div key={screenKey} className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
           {body}
         </motion.div>
+      </AnimatePresence>
+      <AnimatePresence>
+        {cloudVisible && <CloudPanel cloud={cloud} hasLocal={loadStats().matches > 0} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {note && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            className="pointer-events-none absolute left-1/2 top-16 z-[60] flex -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#0b0c14]/90 px-4 py-2.5 shadow-2xl ring-1 ring-cyan-300/40 backdrop-blur"
+          >
+            <span className="text-lg">{note.icon}</span>
+            <span className="text-sm font-semibold">{note.text}</span>
+          </motion.div>
+        )}
       </AnimatePresence>
       <AnimatePresence>
         {sheet && (

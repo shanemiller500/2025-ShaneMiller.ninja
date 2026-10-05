@@ -25,6 +25,9 @@ interface Props {
   onReset: () => void;
   onCamp: () => void;
   onEvolution: () => void;
+  onCloud: () => void;
+  onLeave: () => void;
+  cloudStatus: string;
   campOpen: boolean;
   evoOpen: boolean;
 }
@@ -49,6 +52,12 @@ export default function TopBar(p: Props) {
           <AnimatePresence>{panel === "time" && <TimePanel {...p} />}</AnimatePresence>
         </div>
         <div className="pointer-events-auto relative flex items-center gap-1.5 sm:gap-2">
+          {p.cloudStatus !== "off" && (
+            <button type="button" className={`${btn} relative`} title={p.cloudStatus === "signedIn" ? "Cloud save: on" : "Save to the cloud"} aria-label="Cloud save" onClick={p.onCloud}>
+              <span className="text-2xl leading-none">☁️</span>
+              <span className={`absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-slate-900 ${p.cloudStatus === "signedIn" ? "bg-emerald-400" : p.cloudStatus === "linkSent" ? "bg-amber-400" : "bg-slate-400"}`} />
+            </button>
+          )}
           <button type="button" className={`${btn} relative ${p.evoOpen ? "!bg-cyan-500/60" : ""}`} title="Evolution" aria-label="Evolution" aria-pressed={p.evoOpen} onClick={p.onEvolution}>
             <span className="text-2xl leading-none">🧬</span>
           </button>
@@ -255,9 +264,17 @@ function MenuPanel(p: Props & { close: () => void }) {
         <Info className="h-5 w-5 text-amber-300" /> About Dinosaur Land
       </button>
       <div className="my-1 h-px bg-white/10" />
-      <Link href="/projects" className={item} onClick={() => p.engine.save(true)}>
+      <button
+        type="button"
+        className={item}
+        onClick={() => {
+          p.engine.save(true);
+          p.close();
+          p.onLeave();
+        }}
+      >
         <LogOut className="h-5 w-5 text-white/70" /> Leave to projects
-      </Link>
+      </button>
       <p className="px-3 pb-1 pt-1 text-[11px] text-white/45">
         {p.snap.dinos} dinos · {p.snap.humans} cave people · {p.snap.fps} fps
       </p>

@@ -14,7 +14,7 @@ import { LM, isWaterTile } from "../sim/terrain";
 import { TILE, WORLD_H, WORLD_W, type Danger, type Dino, type DinoState, type Human, type Role, type SpeciesId, type TechId, type WeatherKind } from "../sim/types";
 import { CAMP_LEVELS } from "../data/facts";
 import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genetics";
-import { World } from "../sim/world";
+import { World, type SaveData } from "../sim/world";
 import { Renderer, type Camera } from "../render/renderer";
 import { loadWorld, saveWorld } from "./save";
 import { DEFAULT_TOOL, TOOL_BY_ID, applyTool, toolCursor, type ToolState } from "./tools";
@@ -1092,6 +1092,44 @@ export class Engine {
     const ok = saveWorld(this.world);
     if (ok && !auto) this.emit({ type: "saved" });
     return ok;
+  }
+
+  /** The world as a save string + a few headline numbers (for cloud saves). */
+  exportSave() {
+    const w = this.world;
+    return {
+      data: JSON.stringify(w.serialize()),
+      meta: {
+        day: w.day,
+        dinos: w.dinos.length,
+        people: w.humans.length,
+        level: CAMP_LEVELS[w.tribe.level].name,
+        stickers: w.discoveries.size,
+      },
+    };
+  }
+
+  /** Swap in a world from a save string. Returns false if it couldn't be read. */
+  importSave(json: string) {
+    try {
+      const data = JSON.parse(json) as SaveData;
+      if (data?.v !== 1) return false;
+      const w = World.deserialize(data);
+      this.world = w;
+      this.renderer.setWorld(w);
+      this.selectedId = 0;
+      this.followId = 0;
+      this.orderFor = 0;
+      this.carried = null;
+      this.rallyRoles = null;
+      this.cam = { ...HOME };
+      this.clampCam();
+      this.save(true);
+      this.emit({ type: "select" });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   newWorld(seed = Math.floor(Math.random() * 1e9)) {

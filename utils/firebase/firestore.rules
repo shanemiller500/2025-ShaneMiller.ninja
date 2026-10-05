@@ -1,0 +1,70 @@
+rules_version = '2';
+
+// Cloud saves for the site's games (Dinosaur Land + Fight World).
+// Players sign in with a passwordless email link; each player can only
+// read/write their own documents, and only with a verified email.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null
+        && request.auth.uid == uid
+        && request.auth.token.email_verified == true;
+    }
+
+    function smallSave() {
+      return request.resource.data.data is string
+        && request.resource.data.data.size() < 900000;
+    }
+
+    /* ---------------- Dinosaur Land ---------------- */
+    match /dinosorsPlayers/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.keys().hasOnly(['email', 'createdAt', 'lastPlayedAt', 'lastSavedAt', 'day', 'level', 'stickers']);
+      allow delete: if false;
+
+      match /saves/{saveId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && saveId == 'current'
+          && smallSave()
+          && request.resource.data.keys().hasOnly(['data', 'version', 'size', 'savedAt', 'day', 'dinos', 'people', 'level', 'stickers']);
+        allow delete: if isOwner(uid);
+      }
+
+      match /sessions/{sessionId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['startedAt', 'lastSeenAt', 'seconds', 'device', 'startDay', 'endDay', 'startStickers', 'endStickers', 'startRaidsWon', 'endRaidsWon']);
+        allow delete: if false;
+      }
+    }
+
+    /* ---------------- Fight World ---------------- */
+    match /fightWorldPlayers/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.keys().hasOnly(['email', 'createdAt', 'lastPlayedAt', 'lastSavedAt', 'matches', 'wins', 'tournamentWins']);
+      allow delete: if false;
+
+      match /saves/{saveId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && saveId == 'current'
+          && smallSave()
+          && request.resource.data.keys().hasOnly(['data', 'version', 'size', 'savedAt', 'matches', 'wins', 'knockouts', 'tournamentWins', 'survivalBest']);
+        allow delete: if isOwner(uid);
+      }
+
+      match /sessions/{sessionId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['startedAt', 'lastSeenAt', 'seconds', 'device', 'startMatches', 'endMatches', 'startWins', 'endWins']);
+        allow delete: if false;
+      }
+    }
+  }
+}

@@ -18,6 +18,10 @@ import TopBar, { type TopPanel } from "./ui/TopBar";
 import ViewControls from "./ui/ViewControls";
 import RaidBanner from "./ui/RaidBanner";
 import EvolutionPanel from "./ui/EvolutionPanel";
+import CloudPanel from "./ui/CloudPanel";
+import { hasDinoProgress, useCloud } from "./ui/useCloud";
+import { useRouter } from "next/navigation";
+import { tidyStorage } from "@/utils/storageJanitor";
 
 /* ------------------------------------------------------------------ */
 /*  DinosorsClient: mounts the canvas game engine and the floating     */
@@ -40,6 +44,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [sticker, setSticker] = useState<string | null>(null);
   const toastId = useRef(1);
+  const router = useRouter();
 
   const pushToast = useCallback((t: Omit<Toast, "id">) => {
     const id = toastId.current++;
@@ -52,6 +57,8 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
+    // the site's shared storage can fill up with other pages' caches: make room first
+    tidyStorage();
     const s = loadSettings();
     setSettings(s);
     const engine = new Engine(canvas);
@@ -145,6 +152,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   };
 
   const engine = engineRef.current;
+  const cloud = useCloud(engine, (icon, text) => pushToast({ icon, text }));
   const disc = sticker ? DISCOVERY_BY_ID[sticker] : null;
 
   return (
@@ -167,7 +175,13 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             }}
             onStickers={() => setStickersOpen(true)}
             onAbout={() => setAboutOpen(true)}
-            onSave={() => engine.save()}
+            onSave={() => {
+              engine.save();
+              if (cloud.state.status === "signedIn") void cloud.saveNow();
+            }}
+            cloudStatus={cloud.state.status}
+            onCloud={() => cloud.show(cloud.state.view ? null : cloud.state.status === "signedIn" ? "account" : "welcome")}
+            onLeave={() => cloud.leave(() => router.push("/projects"))}
             onNew={() => setConfirm("new")}
             onReset={() => setConfirm("reset")}
             onCamp={() => setCampOpen((o) => !o)}
@@ -213,6 +227,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           )}
           <StickerBook open={stickersOpen} onClose={() => setStickersOpen(false)} found={snap.discoveries} seen={snap.seen} />
           <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
+          <CloudPanel cloud={cloud} fontClass={fontClass} hasLocal={hasDinoProgress(engine)} />
           <Modal open={!!confirm} onClose={() => setConfirm(null)} size="sm" accent="#f59e0b" labelledBy="dl-confirm">
             <div className={`p-6 text-slate-800 dark:text-slate-100 ${fontClass}`}>
               <div className="text-4xl">{confirm === "reset" ? "🧨" : "🌍"}</div>

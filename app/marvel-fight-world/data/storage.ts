@@ -3,17 +3,21 @@
 /*  windows / blocked storage just fall back to defaults.               */
 /* ------------------------------------------------------------------ */
 
+import { safeSetItem } from "@/utils/storageJanitor";
 import type { Difficulty } from "../engine/ai";
 import { DEFAULT_BINDINGS, type Bindings } from "../input/input";
 
 const PREFIX = "fightworld:";
 
+const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+
 function read<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(PREFIX + key);
-    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
+    // always hand back a fresh copy: callers mutate what they load (e.g. recordMatch)
+    return { ...clone(fallback), ...(raw ? JSON.parse(raw) : {}) };
   } catch {
-    return fallback;
+    return clone(fallback);
   }
 }
 
@@ -29,7 +33,7 @@ function readArray<T>(key: string): T[] {
 
 function write(key: string, value: unknown) {
   try {
-    localStorage.setItem(PREFIX + key, JSON.stringify(value));
+    safeSetItem(PREFIX + key, JSON.stringify(value));
   } catch {
     /* storage unavailable */
   }
@@ -174,4 +178,44 @@ export function recordTournamentWin() {
   const s = loadStats();
   s.tournamentWins++;
   saveStats(s);
+}
+
+/* ── Fight World exploring (fighter + where you are) ───────────────── */
+export interface WorldProgress {
+  playerId: number | null;
+  zone: string | null;
+  x: number;
+}
+export const EMPTY_WORLD: WorldProgress = { playerId: null, zone: null, x: -900 };
+export const loadWorldProgress = (): WorldProgress => read("world", EMPTY_WORLD);
+export const saveWorldProgress = (w: WorldProgress) => write("world", w);
+
+/* ── Whole-profile bundle (cloud saves) ────────────────────────────── */
+export interface ProgressBundle {
+  v: 1;
+  settings: Settings;
+  favorites: number[];
+  recent: number[];
+  stats: Stats;
+  world: WorldProgress;
+}
+
+export function exportProgress(): ProgressBundle {
+  return { v: 1, settings: loadSettings(), favorites: loadFavorites(), recent: loadRecent(), stats: loadStats(), world: loadWorldProgress() };
+}
+
+/** Replace everything stored locally with a saved bundle. */
+export function importProgress(json: string): boolean {
+  try {
+    const b = JSON.parse(json) as Partial<ProgressBundle>;
+    if (b?.v !== 1) return false;
+    if (b.settings) write("settings", b.settings);
+    if (Array.isArray(b.favorites)) write("favorites", b.favorites);
+    if (Array.isArray(b.recent)) write("recent", b.recent);
+    if (b.stats) write("stats", { ...EMPTY_STATS, ...b.stats });
+    if (b.world) write("world", { ...EMPTY_WORLD, ...b.world });
+    return true;
+  } catch {
+    return false;
+  }
 }

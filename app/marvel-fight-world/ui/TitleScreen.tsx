@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
@@ -14,7 +14,7 @@ import { GameSession } from "../game/session";
 import { ARENAS } from "../render/arenas";
 import { cn } from "./kit";
 
-export type MenuChoice = "cpu" | "versus" | "random" | "survival" | "tournament" | "world" | "roster" | "stats" | "settings";
+export type MenuChoice = "cpu" | "versus" | "random" | "survival" | "tournament" | "world" | "roster" | "stats" | "settings" | "cloud";
 
 const MENU: { id: MenuChoice; label: string; desc: string }[] = [
   { id: "cpu", label: "Quick Fight", desc: "Pick a fighter, pick an opponent, fight the CPU." },
@@ -26,6 +26,7 @@ const MENU: { id: MenuChoice; label: string; desc: string }[] = [
   { id: "roster", label: "Character Files", desc: "Browse all 272 fighters, bios and galleries." },
   { id: "stats", label: "Leaderboard", desc: "Your wins, combos and records." },
   { id: "settings", label: "Settings", desc: "Controls, difficulty, sound and blood level." },
+  { id: "cloud", label: "Save Progress", desc: "Save to your email and load it on any device." },
 ];
 
 /** Attract mode: CPU vs CPU demo fight behind the menu. */
@@ -73,11 +74,13 @@ function AttractFight({ roster }: { roster: Roster }) {
   return <canvas ref={ref} className="absolute inset-0 h-full w-full" />;
 }
 
-export function TitleScreen({ roster, onChoose }: { roster: Roster; settings: Settings; onChoose: (c: MenuChoice) => void }) {
+export function TitleScreen({ roster, onChoose, corner, paused = false, onLeave }: { roster: Roster; settings: Settings; onChoose: (c: MenuChoice) => void; corner?: ReactNode; paused?: boolean; onLeave?: () => void }) {
   const [sel, setSel] = useState(0);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // a dialog is open (typing an email etc.): the menu stays out of the way
+      if (paused || (e.target as HTMLElement | null)?.closest?.("input, textarea, [role=dialog]")) return;
       if (["ArrowDown", "KeyS"].includes(e.code)) {
         e.preventDefault();
         setSel((s) => (s + 1) % MENU.length);
@@ -97,7 +100,7 @@ export function TitleScreen({ roster, onChoose }: { roster: Roster; settings: Se
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sel, onChoose]);
+  }, [sel, onChoose, paused]);
 
   return (
     <div className="absolute inset-0 isolate overflow-hidden bg-black text-white">
@@ -107,10 +110,18 @@ export function TitleScreen({ roster, onChoose }: { roster: Roster; settings: Se
 
       <Link
         href="/projects"
+        onClick={(e) => {
+          // give unsaved progress a chance to be saved first
+          if (onLeave) {
+            e.preventDefault();
+            onLeave();
+          }
+        }}
         className="group absolute left-5 top-5 z-10 inline-flex items-center gap-2 rounded-xl bg-black/45 px-3.5 py-2 text-sm font-semibold text-white/75 ring-1 ring-white/15 backdrop-blur transition hover:bg-white/10 hover:text-white"
       >
         <ArrowLeft className="h-4 w-4 transition group-hover:-translate-x-0.5" /> Back to projects
       </Link>
+      {corner}
 
       <div className="relative flex h-full flex-col justify-center px-[6vw] py-10">
         <motion.div initial={{ x: -60, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: "spring", stiffness: 120, damping: 16 }}>

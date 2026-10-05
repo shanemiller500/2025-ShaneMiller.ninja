@@ -2,6 +2,7 @@
 /*  Local persistence. Everything is wrapped in try/catch: private     */
 /*  windows, full storage or blocked site data just mean "no save".    */
 /* ------------------------------------------------------------------ */
+import { safeSetItem } from "@/utils/storageJanitor";
 import { World, type SaveData } from "../sim/world";
 
 const WORLD_KEY = "dinosors:world:v1";
@@ -30,8 +31,7 @@ export function loadWorld(): World | null {
 
 export function saveWorld(w: World) {
   try {
-    localStorage.setItem(WORLD_KEY, JSON.stringify(w.serialize()));
-    return true;
+    return safeSetItem(WORLD_KEY, JSON.stringify(w.serialize()));
   } catch {
     return false;
   }
@@ -56,7 +56,7 @@ export function loadSettings(): Settings {
 
 export function saveSettings(s: Settings) {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    safeSetItem(SETTINGS_KEY, JSON.stringify(s));
   } catch {
     /* ignore */
   }

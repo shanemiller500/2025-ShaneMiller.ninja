@@ -33,6 +33,7 @@
     "dat.gui": "^0.7.9",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.7",
+    "firebase": "^12.19.0",
     "framer-motion": "^12.19.1",
     "json5": "^2.2.3",
     "leaflet": "^1.9.4",
