@@ -8,7 +8,7 @@ import { trackEvent } from "@/utils/mixpanel";
 import { Segmented } from "@/components/ui/segmented";
 import { IconBadge } from "@/components/ui/icon-badge";
 
-const API_KEY = process.env.NEXT_PUBLIC_NASA_API_KEY || "DEMO_KEY";
+import { nasaGet } from "./nasaFetch";
 type Range = "7" | "30" | "90";
 
 interface Flare { flrID: string; beginTime: string; peakTime?: string; endTime?: string; classType?: string; sourceLocation?: string; activeRegionNum?: number; link?: string; note?: string }
@@ -41,12 +41,9 @@ export default function NasaDONKIPage() {
     setLoading(true); setError(null);
     const end = new Date(), start = new Date();
     start.setUTCDate(start.getUTCDate() - Number(days));
-    const q = `startDate=${isoDay(start)}&endDate=${isoDay(end)}&api_key=${API_KEY}`;
+    const q = { startDate: isoDay(start), endDate: isoDay(end) };
     try {
-      const [f, c] = await Promise.all([
-        fetch(`https://api.nasa.gov/DONKI/FLR?${q}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
-        fetch(`https://api.nasa.gov/DONKI/CME?${q}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
-      ]);
+      const [f, c] = await Promise.all([nasaGet<Flare[]>("DONKI/FLR", q), nasaGet<CME[]>("DONKI/CME", q)]);
       const byTime = <T,>(list: T[], key: (x: T) => string) => [...list].sort((a, b) => +new Date(key(b)) - +new Date(key(a)));
       setFlares(byTime(Array.isArray(f) ? f : [], (x: Flare) => x.peakTime || x.beginTime));
       setCmes(byTime(Array.isArray(c) ? c : [], (x: CME) => x.startTime));
