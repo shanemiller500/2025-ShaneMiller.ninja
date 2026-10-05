@@ -1,0 +1,244 @@
+/* Fight World — global-ish game styles, scoped under .root */
+
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  background: #07070d;
+  color: #f8fafc;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+/* Halftone + speed-line backdrop for menus */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(220, 38, 38, 0.35), transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(37, 99, 235, 0.35), transparent 45%),
+    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.4px) 0 0 / 9px 9px,
+    #07070d;
+}
+
+.backdrop::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.025) 0deg 4deg, transparent 4deg 12deg);
+  animation: spin 80s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.root :global(.mfw-title) {
+  font-family: Impact, "Arial Black", "Haettenschweiler", system-ui, sans-serif;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 0.95;
+  text-transform: uppercase;
+  color: #fde047;
+  -webkit-text-stroke: 2px #0b0b12;
+  text-shadow:
+    4px 4px 0 #0b0b12,
+    0 0 24px rgba(250, 204, 21, 0.25);
+}
+
+.root :global(.mfw-btn) {
+  transform: skewX(-8deg);
+  box-shadow: 4px 4px 0 #0b0b12;
+}
+
+.root :global(.mfw-btn:hover) {
+  transform: skewX(-8deg) translate(-1px, -1px);
+  box-shadow: 6px 6px 0 #0b0b12;
+}
+
+.root :global(.mfw-panel) {
+  background: linear-gradient(160deg, rgba(30, 41, 59, 0.92), rgba(2, 6, 23, 0.94));
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.6);
+}
+
+.root :global(.mfw-scroll) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+/* Character select tiles */
+.tile {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: 2px solid #0b0b12;
+  background: #111827;
+  clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease;
+  cursor: pointer;
+}
+
+.tile:hover {
+  transform: scale(1.08);
+  z-index: 2;
+  filter: brightness(1.15);
+}
+
+.tile img {
+  width: 100%;
+  height: 100%;
+}
+
+.tileP1 {
+  outline: 4px solid #ef4444;
+  outline-offset: -4px;
+}
+
+.tileP2 {
+  outline: 4px solid #3b82f6;
+  outline-offset: -4px;
+}
+
+.tileBoth {
+  outline: 4px solid #a855f7;
+  outline-offset: -4px;
+}
+
+.tileName {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 10px 6px 3px;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.05;
+  text-transform: uppercase;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
+  text-align: center;
+}
+
+.slam {
+  animation: slam 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+@keyframes slam {
+  from {
+    transform: scale(1.6) translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.slideL {
+  animation: slideL 0.4s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+
+.slideR {
+  animation: slideR 0.4s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+
+@keyframes slideL {
+  from {
+    transform: translateX(-60px);
+    opacity: 0;
+  }
+}
+
+@keyframes slideR {
+  from {
+    transform: translateX(60px);
+    opacity: 0;
+  }
+}
+
+/* HUD */
+.hudBar {
+  position: relative;
+  height: 22px;
+  background: #1f0a0a;
+  border: 3px solid #0b0b12;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.hudTrail,
+.hudFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.hudTrail {
+  background: #ef4444;
+}
+
+.hudFill {
+  background: linear-gradient(180deg, #fef08a, #facc15 45%, #ca8a04);
+}
+
+.hudFillLow {
+  background: linear-gradient(180deg, #fecaca, #f87171 45%, #b91c1c);
+}
+
+.meter {
+  position: relative;
+  height: 12px;
+  background: #0b1220;
+  border: 2px solid #0b0b12;
+  overflow: hidden;
+}
+
+.meterFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #2563eb, #22d3ee);
+}
+
+.meterFull {
+  background: linear-gradient(90deg, #f59e0b, #fde047, #f59e0b);
+  background-size: 200% 100%;
+  animation: shimmer 0.6s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.timer {
+  font-family: Impact, "Arial Black", system-ui, sans-serif;
+  font-size: 44px;
+  line-height: 1;
+  color: #fde047;
+  -webkit-text-stroke: 2px #0b0b12;
+  text-shadow: 3px 3px 0 #0b0b12;
+}
+
+.touchBtn {
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  font-weight: 900;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+
+.touchBtn[data-on="true"] {
+  background: rgba(250, 204, 21, 0.55);
+}

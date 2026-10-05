@@ -18,6 +18,7 @@ import Icon09 from "@/public/images/art-icon.jpg";
 import Icon12 from "@/public/images/project-icon-03.svg";
 import WorldIcon from "@/public/images/world.png";
 import CharlesIcon from "@/public/images/charles-icon.svg";
+import FightWorldIcon from "@/public/images/fight-world-icon.svg";
 
 /* ------------------------------------------------------------------ */
 /*  ProjectsPage Component                                             */
@@ -96,6 +97,15 @@ export default function ProjectsPage() {
     excerpt:
       "Paste messy JSON/XML and get formatted output with helpful corrections.",
     badge: "AI + Parser",
+  },
+  {
+    id: 18,
+    icon: FightWorldIcon,
+    slug: "/marvel-fight-world",
+    title: "Fight World",
+    excerpt:
+      "An arcade fighting game with 270+ Marvel characters: combos, specials, ultimates, CPU opponents, local 2-player, tournaments and an explorable world.",
+    badge: "Canvas Game Engine",
   },
   {
     id: 16,
