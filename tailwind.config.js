@@ -4,6 +4,8 @@ module.exports = {
     './app/**/*.{js,ts,jsx,tsx}',
     './pages/**/*.{js,ts,jsx,tsx}',
     './components/**/*.{js,ts,jsx,tsx}',
+    // shared class helpers (e.g. utils/heat.ts heatmap colors) must be scanned too
+    './utils/**/*.{js,ts,jsx,tsx}',
   ],
   darkMode: 'class',
   theme: {
