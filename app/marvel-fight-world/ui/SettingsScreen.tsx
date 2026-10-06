@@ -88,7 +88,7 @@ export function SettingsScreen({ settings, onChange, onBack }: { settings: Setti
       <Backdrop tint="#0ea5e9" />
       <div className="fw-thin-scroll h-full overflow-y-auto">
         <div className="mx-auto max-w-5xl px-6 py-8">
-          <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-semibold text-white/60 hover:bg-white/10 hover:text-white">
+          <button type="button" data-pad-back onClick={onBack} className="mb-4 inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-semibold text-white/60 hover:bg-white/10 hover:text-white">
             <ArrowLeft className="h-4 w-4" /> Back
           </button>
           <ScreenTitle

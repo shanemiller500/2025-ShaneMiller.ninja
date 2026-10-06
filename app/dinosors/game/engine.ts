@@ -6,12 +6,17 @@
 import { FACTS } from "../data/facts";
 import { SPECIES, sp } from "../data/species";
 import { AudioManager } from "../audio/audio";
+import { CIV_TECH, ENERGY_GEN, PYRAMID_STAGES, SHIELD_HOLD, type CivPath, type CivTechId } from "../data/civ";
+import { buildingCost } from "../data/colony";
+import { go, say } from "../sim/humans";
+import type { ExperimentResult } from "../sim/civ";
+import type { ExtPhase, ExtStats } from "../sim/extinction";
 import { pokeDino } from "../sim/behavior";
 import { canStand, emote, findSpawnSpot, isBaby, setState, sizeOf } from "../sim/dinos";
 import { P } from "../sim/particles";
 import { TALL, shakeFruit } from "../sim/plants";
 import { LM, isWaterTile } from "../sim/terrain";
-import { TILE, WORLD_H, WORLD_W, type Danger, type Dino, type DinoState, type Dragon, type Human, type Role, type SpeciesId, type TechId, type WeaponKind, type WeatherKind } from "../sim/types";
+import { TILE, WORLD_H, WORLD_W, type Danger, type Dino, type DinoState, type Dragon, type Human, type Resource, type Role, type SpeciesId, type TechId, type WeaponKind, type WeatherKind } from "../sim/types";
 import { CAMP_LEVELS } from "../data/facts";
 import { BUILDINGS, FORGE_ITEMS, HOUSING, SCORPION_TIERS, WEAPON_BY_ID, type Cost } from "../data/colony";
 import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion, type Command } from "../sim/tasks";
@@ -32,6 +37,7 @@ export type UIEvent =
   | { type: "discover"; id: string }
   | { type: "unlock"; species: SpeciesId }
   | { type: "openCamp" }
+  | { type: "openCiv" }
   | { type: "select" }
   | { type: "saved" }
   | { type: "inspect" };
@@ -115,7 +121,7 @@ export interface CommandInfo {
 /** Tapped a building: what's inside, what it needs, what you can do. */
 export type InspectInfo =
   | { kind: "shelter"; id: number; icon: string; name: string; tier: number; cap: number; built: boolean; progress: string; hp: number; hearth: boolean; warmth: number; residents: { id: number; name: string; child: boolean; inside: boolean; state: string }[]; upgrade: { icon: string; name: string; cost: Cost; have: Cost; started: boolean } | null }
-  | { kind: "building"; id: number; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost }
+  | { kind: "building"; id: number; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost; stage?: { n: number; of: number; name: string; next: string | null }; note?: string }
   | { kind: "scorpion"; id: number; name: string; tier: number; built: number; hp: number; maxHp: number; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
   | { kind: "gate"; id: number; open: boolean; auto: boolean; hp: number; maxHp: number; material: string }
   | { kind: "tower"; id: number; stage: number; hp: number; guards: number }
@@ -175,11 +181,39 @@ export interface Snapshot {
     hasSmith: boolean;
   };
   colony: { buildings: number; scorpions: number; deposits: number; found: number; homes: number; dragons: number; strangers: number; snow: number; mega: boolean };
+  civ: CivInfo;
+  extinction: { phase: ExtPhase; countdown: number; stats: ExtStats | null; shelter: boolean; shield: boolean; shieldReady: boolean };
   evolution: {
     leaps: number;
     auto: boolean;
     species: { id: SpeciesId; n: number; size: number; speed: number; tough: number; gen: number; mut: Mutation | null }[];
   };
+}
+
+export interface CivInfo {
+  path: CivPath;
+  /** the chamber has surfaced somewhere */
+  chamber: boolean;
+  found: boolean;
+  pending: boolean;
+  ripe: boolean;
+  current: { id: CivTechId; rp: number; need: number; paid: boolean; missing: string | null; cost: Cost } | null;
+  done: CivTechId[];
+  options: { id: CivTechId; cost: Cost; rp: number; cross: boolean }[];
+  crossOpen: boolean;
+  energy: number;
+  cap: number;
+  gen: number;
+  use: number;
+  strain: number;
+  condensed: number;
+  tuned: string[];
+  notes: Record<string, number>;
+  canExperiment: boolean;
+  jobs: Record<string, number>;
+  grid: { kind: string; icon: string; name: string; n: number; gen: number }[];
+  monuments: { id: number; icon: string; name: string; built: number; stage: number; stages: number; stageName: string; done: boolean }[];
+  megaliths: number;
 }
 
 const HOME = { x: 66 * TILE, y: 46 * TILE, zoom: 0.75 };
@@ -197,7 +231,7 @@ interface Ptr {
   grab: Dino | null;
 }
 
-export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️" };
+export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️", researcher: "📜", shaper: "🔷", technician: "⚡", miner: "⛏️" };
 export function moodOf(d: Dino): { icon: string; label: string } {
   const s = d.state;
   if (s === "sleep") return { icon: "💤", label: "Sleepy" };
@@ -253,6 +287,8 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
   douse: "Throwing water on the fire",
   rest: "Resting",
   smith: "Forging",
+  research: "Researching",
+  resonate: "Working the stone + crystals",
 };
 
 export class Engine {
@@ -1008,6 +1044,16 @@ export class Engine {
 
   private tapProp(x: number, y: number) {
     const w = this.world;
+    // the humming chamber: go look, or open the civilization panel
+    const civ = w.civ;
+    if (civ.chamberX && Math.hypot(x - civ.chamberX, y - (civ.chamberY - 14)) < 42) {
+      if (!civ.found) {
+        this.goToChamber();
+        w.toast("🎵", "Someone's going to take a look at that humming…", civ.chamberX, civ.chamberY);
+      } else this.emit({ type: "openCiv" });
+      this.audio.play("pop", 0, 0, 0.4);
+      return true;
+    }
     for (const p of w.props) {
       const r = p.kind === "painting" ? 50 : p.kind === "fossilDig" ? 34 : 22;
       if (Math.hypot(p.x - x, p.y - 8 - y) > r) continue;
@@ -1621,6 +1667,134 @@ export class Engine {
     }
   }
 
+  /* ----------------------------- civilization ----------------------------- */
+
+  civInfo(): CivInfo {
+    const w = this.world;
+    const civ = w.civ;
+    const jobs: Record<string, number> = { researcher: 0, shaper: 0, technician: 0, miner: 0 };
+    for (const h of w.humans) {
+      const r = w.tribe.roleOf(h);
+      if (r in jobs) jobs[r]++;
+    }
+    const grid = new Map<string, { kind: string; icon: string; name: string; n: number; gen: number }>();
+    for (const b of w.colony.buildings) {
+      if (b.built < 1 || !(b.kind in ENERGY_GEN || b.kind === "condenser" || b.kind === "beamTower" || b.kind === "pylon" || b.kind === "levPad" || b.kind === "resShield")) continue;
+      const d = BUILDINGS[b.kind];
+      const g = grid.get(b.kind) ?? { kind: b.kind, icon: d.icon, name: d.name, n: 0, gen: 0 };
+      g.n++;
+      g.gen += ENERGY_GEN[b.kind] ?? 0;
+      grid.set(b.kind, g);
+    }
+    const notes: Record<string, number> = {};
+    civ.tuned.forEach((r) => (notes[r] = civ.noteOf(w, r)));
+    return {
+      path: civ.path,
+      chamber: civ.chamberX > 0,
+      found: civ.found,
+      pending: civ.choicePending,
+      ripe: civ.ripe(w),
+      current: civ.current ? { id: civ.current, rp: civ.rp, need: civ.rpOf(civ.current), paid: civ.paid, missing: civ.missing(w), cost: civ.costOf(civ.current) } : null,
+      done: Array.from(civ.done),
+      options: civ.options().map((id) => ({ id, cost: civ.costOf(id), rp: civ.rpOf(id), cross: civ.isCross(id) })),
+      crossOpen: civ.crossOpen(),
+      energy: civ.energy,
+      cap: civ.cap,
+      gen: civ.gen * (w.weather.storm > 0.3 ? 1.6 : 1),
+      use: civ.use,
+      strain: civ.strain,
+      condensed: civ.condensed,
+      tuned: Array.from(civ.tuned),
+      notes,
+      canExperiment: civ.canExperiment(w),
+      jobs,
+      grid: Array.from(grid.values()),
+      monuments: w.colony.buildings
+        .filter((b) => b.kind === "pyramid" || b.kind === "obelisk" || b.kind === "stoneCircle" || b.kind === "resShield" || b.kind === "shelterDeep")
+        .map((b) => {
+          const st = b.kind === "pyramid" ? PYRAMID_STAGES : null;
+          return { id: b.id, icon: BUILDINGS[b.kind].icon, name: BUILDINGS[b.kind].name, built: b.built, stage: st ? (b.stage ?? 0) : 0, stages: st ? st.length : 1, stageName: st ? st[Math.min(b.stage ?? 0, st.length - 1)].name : "", done: b.built >= 1 };
+        }),
+      megaliths: w.props.filter((p) => p.kind === "megalith").length,
+    };
+  }
+
+  chooseCivPath(path: Exclude<CivPath, "none">) {
+    const ok = this.world.civ.choose(this.world, path);
+    if (ok) this.save(true);
+    this.emit({ type: "select" });
+    return ok;
+  }
+
+  setCivResearch(id: CivTechId) {
+    const ok = this.world.civ.setResearch(this.world, id);
+    if (ok) this.audio.play("pop", 0, 0, 0.4);
+    return ok;
+  }
+
+  /** Ring a material on the Resonance table at a frequency (plays the tone). */
+  civExperiment(r: Resource, freq: number): ExperimentResult {
+    const w = this.world;
+    const res = w.civ.experiment(w, r, freq);
+    if (res.result !== "locked") {
+      this.audio.unlock();
+      this.audio.tone(freq, r, res.close, res.result === "resonant" ? 1.8 : 0.9);
+      if (res.result === "fracture") this.audio.play("crack", 0, 0, 0.8);
+      if (res.result === "spark") this.audio.play("zap", 0, 0, 0.7);
+      if (res.result === "resonant") window.setTimeout(() => this.audio.play("chime", 0, 0, 0.8), 400);
+    }
+    return res;
+  }
+
+  /** Preview a tone without using the table (the slider's "listen" button). */
+  civTone(freq: number, r: string) {
+    this.audio.unlock();
+    this.audio.tone(freq, r, 0, 0.6);
+  }
+
+  /** Fly to the humming chamber; if nobody has looked yet, send the nearest grown-up. */
+  goToChamber() {
+    const w = this.world;
+    const civ = w.civ;
+    if (!civ.chamberX) {
+      if (!civ.ripe(w)) return "The tribe needs to settle in first (6 inventions + 3 grown-ups).";
+      w.civ.update(w, 2.1);
+    }
+    if (!civ.chamberX) return "Couldn't find the chamber yet — try again soon.";
+    this.flyTo(civ.chamberX, civ.chamberY, Math.max(this.cam.zoom, 0.9));
+    if (!civ.found) {
+      const h = w.humans.filter((x) => !x.child && !x.stranger && x.state !== "down").sort((a, b) => Math.hypot(a.x - civ.chamberX, a.y - civ.chamberY) - Math.hypot(b.x - civ.chamberX, b.y - civ.chamberY))[0];
+      if (h) {
+        h.order = null;
+        h.taskId = 0;
+        go(h, "explore", civ.chamberX + 24, civ.chamberY + 16);
+        say(h, "I'll look!");
+      }
+    }
+    return null;
+  }
+
+  /** The player confirmed: call down the extinction asteroid. */
+  triggerExtinction() {
+    const ok = this.world.extinction.trigger(this.world);
+    if (ok) {
+      this.flyTo(this.world.camp.x, this.world.camp.y, Math.min(this.cam.zoom, 0.45));
+      this.closeInspect();
+    }
+    return ok;
+  }
+
+  /** Close "THE AGE ENDS" and keep watching the ruined world. */
+  observeRuins() {
+    this.world.extinction.observe();
+    this.flyTo(this.world.extinction.x, this.world.extinction.y, 0.4);
+  }
+
+  /** Start this same world again from its seed. */
+  restartWorld() {
+    this.newWorld(this.world.seed);
+  }
+
   newWorld(seed = Math.floor(Math.random() * 1e9)) {
     const keep = { discoveries: this.world.discoveries, unlocked: this.world.unlocked, seen: this.world.seen };
     this.world = new World(seed);
@@ -1757,6 +1931,15 @@ export class Engine {
         snow: w.snow.total,
         mega: w.volcano.megaOn,
       },
+      civ: this.civInfo(),
+      extinction: {
+        phase: w.extinction.phase,
+        countdown: Math.max(0, w.extinction.countdown()),
+        stats: w.extinction.stats,
+        shelter: w.colony.finished("shelterDeep"),
+        shield: w.colony.finished("resShield"),
+        shieldReady: w.colony.finished("resShield") && w.civ.energy >= SHIELD_HOLD,
+      },
     };
   }
 
@@ -1806,7 +1989,10 @@ export class Engine {
         const b = w.colony.buildings.find((x) => x.id === r.id);
         if (!b) return null;
         const d = BUILDINGS[b.kind];
-        return { kind: "building", id: b.id, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: d.cost, have: b.have };
+          const stage = b.kind === "pyramid" ? { n: (b.stage ?? 0) + (b.built >= 1 ? 1 : 0), of: PYRAMID_STAGES.length, name: PYRAMID_STAGES[Math.min(b.stage ?? 0, PYRAMID_STAGES.length - 1)].name, next: PYRAMID_STAGES[(b.stage ?? 0) + 1]?.name ?? null } : undefined;
+        const gen = ENERGY_GEN[b.kind];
+        const note = b.built < 1 && d.civ && !w.civ.has(d.civ) ? `🔒 Needs research: ${CIV_TECH[d.civ].icon} ${CIV_TECH[d.civ].name}` : gen && b.built >= 1 ? `⚡ Makes ${gen.toFixed(1)} energy/s${w.weather.storm > 0.3 ? " (storm boost!)" : ""}` : b.kind === "beamTower" && b.built >= 1 ? ((b.cd ?? 0) > 0 ? `Recharging… ${(b.cd ?? 0).toFixed(1)}s` : "Charged and watching") : undefined;
+        return { kind: "building", id: b.id, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage, note };
       }
       case "scorpion": {
         const s = w.colony.scorpions.find((x) => x.id === r.id);

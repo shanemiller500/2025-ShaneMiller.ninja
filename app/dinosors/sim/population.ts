@@ -25,7 +25,8 @@ export class Population {
 
   capacity(w: World) {
     let n = CAVE_ROOM;
-    for (const s of w.shelters) if (shelterDone(s)) n += HOUSING[s.tier].cap;
+    const hall = w.civ.has("greatHalls") ? 2 : 0;
+    for (const s of w.shelters) if (shelterDone(s)) n += HOUSING[s.tier].cap + hall;
     return n;
   }
 
@@ -100,7 +101,7 @@ export class Population {
   /** Give everyone a bed: families stay together, nicest houses first. */
   assignHomes(w: World) {
     const homes = w.shelters.filter((s) => shelterDone(s)).sort((a, b) => b.tier - a.tier);
-    const free = new Map(homes.map((s) => [s.id, HOUSING[s.tier].cap]));
+    const free = new Map(homes.map((s) => [s.id, HOUSING[s.tier].cap + (w.civ.has("greatHalls") ? 2 : 0)]));
     const people = w.humans.filter((h) => !h.stranger);
     // keep people where they are if there's still room
     for (const h of people) {

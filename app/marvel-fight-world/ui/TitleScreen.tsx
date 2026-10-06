@@ -78,15 +78,18 @@ function AttractFight({ roster }: { roster: Roster }) {
 export function TitleScreen({ roster, onChoose, corner, paused = false, onLeave }: { roster: Roster; settings: Settings; onChoose: (c: MenuChoice) => void; corner?: ReactNode; paused?: boolean; onLeave?: () => void }) {
   const [sel, setSel] = useState(0);
   const selRef = useRef(0);
-  const menuRef = useRef({ onChoose, paused });
-  menuRef.current = { onChoose, paused };
+  const menuRef = useRef({ onChoose, paused, onLeave });
+  menuRef.current = { onChoose, paused, onLeave };
   const pad = usePadConnected();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // a dialog is open (typing an email etc.): the menu stays out of the way
       if (menuRef.current.paused || (e.target as HTMLElement | null)?.closest?.("input, textarea, [role=dialog]")) return;
-      if (["ArrowDown", "KeyS"].includes(e.code)) {
+      if (e.code === "Escape") {
+        e.preventDefault();
+        menuRef.current.onLeave?.();
+      } else if (["ArrowDown", "KeyS"].includes(e.code)) {
         e.preventDefault();
         selRef.current = (selRef.current + 1) % MENU.length;
         setSel(selRef.current);

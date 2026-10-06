@@ -34,6 +34,9 @@ import { drawBarricade, drawCarcass, drawSpikes, drawTannery, drawTotem } from "
 import { carcassStage, harvested } from "../sim/carcass";
 import { OUTFIT_BY_ID } from "../data/colony";
 import { TerrainRenderer } from "./terrainRenderer";
+import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
+import { EXT_TIMES } from "../sim/extinction";
+import { LIFT } from "../data/civ";
 
 export interface Camera {
   x: number;
@@ -454,6 +457,7 @@ export class Renderer {
           else if (b.kind === "barricade") drawBarricade(c, b.built, b.hp / def.hp);
           else if (b.kind === "totem") drawTotem(c, b.built, this.t);
           else if (b.kind === "tannery") drawTannery(c, def.w * TILE, b.built, w.camp.stock.hide, this.t);
+          else if (CIV_KINDS.has(b.kind)) drawCivBuilding(c, b, def.w, def.h, { power: w.civ.energy > 1, night: night > 0.5, storm: w.weather.storm, t: this.t });
           else drawBuilding(c, b, def.w, def.h, night > 0.5, this.t);
           if (b.built < 1 && (b.kind === "spikes" || b.kind === "barricade" || b.kind === "totem" || b.kind === "tannery")) {
             c.strokeStyle = "rgba(255,255,255,0.75)";
@@ -519,7 +523,9 @@ export class Renderer {
           const p = w.props[it.i];
           c.save();
           c.translate(p.x, p.y);
-          drawProp(c, p, this.t);
+          if (p.kind === "chamber") drawChamber(c, this.t, w.civ.path === "none" ? (w.civ.found ? "found" : "hidden") : w.civ.path);
+          else if (p.kind === "megalith") drawMegalith(c, p);
+          else drawProp(c, p, this.t);
           c.restore();
           break;
         }
@@ -667,6 +673,10 @@ export class Renderer {
       const sx = p.x;
       const sy = p.y - p.z;
       const ang = Math.atan2(p.vy - p.vz, p.vx);
+      if (p.kind === "beam") {
+        drawBeamBolt(c, sx, sy, ang);
+        continue;
+      }
       const len = p.kind === "spear" ? 22 : p.kind === "scorpion" ? 30 : p.kind === "bolt" ? 13 : 15;
       c.save();
       c.translate(sx, sy);
@@ -700,8 +710,23 @@ export class Renderer {
       c.fill();
     }
 
+    // civilization effects: pylon barriers, crystal beams, floating blocks
+    const civ = w.civ;
+    if (civ.path !== "none") {
+      for (const [a, b] of civ.pylonLinks(w)) if (a.x > x0 - 300 && a.x < x1 + 300) drawPylonLink(c, a.x, a.y, b.x, b.y, this.t, civ.energy > 0);
+    }
+    for (const b of civ.beams) drawBeam(c, b);
+    for (const l of civ.lifts) drawLift(c, l);
+    const ex = w.extinction;
+    if (ex.stats?.shieldHeld && (ex.phase === "impact" || ex.phase === "aftermath")) {
+      const sh = w.colony.buildings.find((b) => b.kind === "resShield" && b.built >= 1);
+      if (sh) drawShieldDome(c, sh.x, sh.y, 420, this.t, ex.phase === "impact" ? 1 : Math.max(0, 1 - ex.t / EXT_TIMES.aftermath));
+    }
+
     this.drawParticles(c, x0, y0, x1, y1);
     this.skyWorld(c, v, z);
+    if (ex.phase === "incoming") drawAsteroid(c, ex.x, ex.y, Math.min(1, ex.t / EXT_TIMES.incoming), this.t);
+    if (ex.phase === "impact") drawShockwave(c, ex.x, ex.y, ex.wave, Math.max(0, 1 - ex.t / EXT_TIMES.impact));
 
     // lightning + meteors
     for (const b of w.bolts) this.drawBolt(c, b.x, b.y, b.seed, 1 - b.t / 0.6);
@@ -1469,7 +1494,7 @@ export class Renderer {
     const w = this.world;
     const night = 1 - w.daylight;
     const dusk = w.time > 16.5 && w.time < 21 ? Math.max(0, 1 - Math.abs(w.time - 19) / 2) : w.time > 4.5 && w.time < 8 ? Math.max(0, 1 - Math.abs(w.time - 6) / 1.5) : 0;
-    const dark = Math.min(0.78, night * 0.66 + w.weather.storm * 0.28 + w.weather.cloud * 0.06 + w.volcano.ash * 0.3 + w.weather.rain * 0.08);
+    const dark = Math.min(0.78, night * 0.66 + w.weather.storm * 0.28 + w.weather.cloud * 0.06 + w.volcano.ash * 0.3 + w.weather.rain * 0.08 + w.extinction.ash * 0.35);
     // warm sunrise / sunset wash
     if (dusk > 0.02) {
       c.fillStyle = `rgba(255,120,60,${dusk * 0.16})`;
@@ -1520,6 +1545,10 @@ export class Renderer {
     add(w.volcano.x, w.volcano.y - 150, 160 + w.volcano.glow * 240, 0.4 + w.volcano.glow * 0.5);
     for (const s of w.shelters) if (s.stage >= 2) add(s.x, s.y - 8, HOUSING[s.tier]?.hearth && shelterDone(s) ? 120 : 80, HOUSING[s.tier]?.hearth && shelterDone(s) ? 0.85 : 0.6);
     for (const b of w.colony.buildings) if (b.kind === "blacksmith" && b.built >= 1) add(b.x - 10, b.y - 12, 110, 0.75);
+    // crystals light up the night (brighter in storms)
+    if (w.civ.energy > 1) for (const b of w.colony.buildings) if (b.built >= 1 && (b.kind === "energyTower" || b.kind === "chamber" || b.kind === "beamTower" || b.kind === "obelisk" || b.kind === "pyramid" || b.kind === "resShield")) add(b.x, b.y - (b.kind === "pyramid" ? 120 : 50), b.kind === "pyramid" ? 260 : 90, 0.55 + w.weather.storm * 0.3);
+    if (w.civ.chamberX && w.civ.path !== "traditional") add(w.civ.chamberX, w.civ.chamberY - 14, 70, 0.6);
+    for (const b of w.civ.beams) add(b.x1, b.y1, 160, 1 - b.t / 0.35);
     for (const dr of w.dragons.list) if (dr.breath > 0.1) add(dr.x + dr.dir * 80, dr.y - dr.z * 0.5, 260, dr.breath);
     for (const m of w.meteors) add(m.x + (1 - m.t / m.dur) * 900, m.y - (1 - m.t / m.dur) * 1300, 300, 1);
     for (const b of w.bolts) add(b.x, b.y, 900, 1 - b.t / 0.6);
@@ -1593,6 +1622,27 @@ export class Renderer {
     if (w.volcano.ash > 0.02) {
       c.fillStyle = `rgba(110,90,70,${w.volcano.ash * 0.22})`;
       c.fillRect(0, 0, this.w, this.h);
+    }
+    // the end of an age: a blood-red omen sky, then choking ash
+    const ex = w.extinction;
+    if (ex.phase === "omen" || ex.phase === "incoming") {
+      const k = ex.phase === "omen" ? Math.min(1, ex.t / EXT_TIMES.omen) : 1;
+      const g = c.createLinearGradient(0, 0, 0, this.h);
+      g.addColorStop(0, `rgba(170,40,20,${0.32 * k})`);
+      g.addColorStop(1, `rgba(90,20,40,${0.12 * k})`);
+      c.fillStyle = g;
+      c.fillRect(0, 0, this.w, this.h);
+    }
+    if (ex.ash > 0.01) {
+      c.fillStyle = `rgba(55,45,40,${ex.ash * 0.6})`;
+      c.fillRect(0, 0, this.w, this.h);
+      // drifting ash flakes
+      c.fillStyle = `rgba(200,195,190,${0.25 + ex.ash * 0.4})`;
+      for (let i = 0; i < 90 * ex.ash; i++) {
+        const x = (i * 97.3 + this.t * (8 + (i % 7) * 3)) % this.w;
+        const y = (i * 53.1 + this.t * (20 + (i % 5) * 6)) % this.h;
+        c.fillRect(x, y, 2, 2);
+      }
     }
     // rainbow
     if (wt.rainbow > 0.01 && w.daylight > 0.4) {
@@ -1802,6 +1852,11 @@ export class Renderer {
   /** Where a building would go (green = fine, red = blocked). */
   private buildGhost(c: CanvasRenderingContext2D, p: { x: number; y: number; build: string }, inv: number) {
     const w = this.world;
+    if (p.build === "levitate") {
+      const pads = w.colony.buildings.filter((b) => b.kind === "levPad" && b.built >= 1);
+      drawLiftGhost(c, pads, LIFT.range, p.x, p.y, !("why" in w.civ.liftCheck(w, p.x, p.y)), this.t);
+      return;
+    }
     const def = BUILD_BY_ID[p.build as keyof typeof BUILD_BY_ID];
     if (!def) return;
     let tx = Math.floor(p.x / TILE);
@@ -1823,6 +1878,7 @@ export class Renderer {
       tw = th = 2;
     } else if (p.build === "tent" || p.build === "hut" || p.build === "farm" || p.build === "campfire") return;
     if (def.tech && !w.camp.learned.has(def.tech)) ok = false;
+    if (bdef?.civ && !w.civ.has(bdef.civ)) ok = false;
     c.fillStyle = ok ? "rgba(74,222,128,0.22)" : "rgba(248,113,113,0.25)";
     c.strokeStyle = ok ? "rgba(74,222,128,0.9)" : "rgba(248,113,113,0.95)";
     c.lineWidth = 2 * inv;

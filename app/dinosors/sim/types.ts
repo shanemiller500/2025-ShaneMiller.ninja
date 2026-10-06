@@ -294,7 +294,9 @@ export type HumanState =
   | "down"
   | "douse"
   | "rest"
-  | "smith";
+  | "smith"
+  | "research"
+  | "resonate";
 
 export type Resource =
   | "stick"
@@ -317,10 +319,16 @@ export type Resource =
   | "salt"
   | "hide"
   | "bone"
-  | "tooth";
+  | "tooth"
+  | "copper"
+  | "quartz"
+  | "magnetite"
+  | "crystal"
+  | "meteorite"
+  | "shaped";
 
 /** What a cave person does. "auto" lets the tribe decide. */
-export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith";
+export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner";
 
 export type HumanOrder = { kind: "hunt"; id: number } | { kind: "guard"; x: number; y: number; top?: boolean } | null;
 
@@ -472,7 +480,7 @@ export interface Plant {
   stump: boolean;
 }
 
-export type PropKind = "boulder" | "spire" | "fossilDig" | "painting" | "goldEgg" | "nest";
+export type PropKind = "boulder" | "spire" | "fossilDig" | "painting" | "goldEgg" | "nest" | "chamber" | "megalith";
 
 export interface Prop {
   id: number;
@@ -548,7 +556,7 @@ export type TechId =
   | "scorpion"
   | "firefighting";
 
-export type WallKind = "palisade" | "stone";
+export type WallKind = "palisade" | "stone" | "polygon";
 /** wall pieces: plain wall, a gate, or stairs up to the walkway */
 export type WallPart = "wall" | "gate" | "stairs";
 
@@ -565,8 +573,10 @@ export interface Wall {
   auto: boolean;
   hp: number;
   built: number;
-  /** stone blueprint waiting to replace a palisade */
+  /** blueprint waiting to replace this piece with a stronger kind */
   upgrade?: boolean;
+  /** what the upgrade turns it into (default stone) */
+  upTo?: WallKind;
   /** resources delivered so far */
   have: number;
 }
@@ -593,7 +603,22 @@ export interface Tower {
   hp: number;
 }
 
-export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "tannery" | "spikes" | "barricade" | "totem";
+export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "tannery" | "spikes" | "barricade" | "totem"
+  // the Old Ways' last-resort project
+  | "shelterDeep"
+  // resonance (fantasy) architecture
+  | "resTable"
+  | "chamber"
+  | "shapingYard"
+  | "energyTower"
+  | "condenser"
+  | "obelisk"
+  | "stoneCircle"
+  | "levPad"
+  | "beamTower"
+  | "pylon"
+  | "pyramid"
+  | "resShield";
 
 export interface Building {
   id: number;
@@ -609,6 +634,10 @@ export interface Building {
   /** materials delivered */
   have: Partial<Record<Resource, number>>;
   hp: number;
+  /** multi-stage projects (the pyramid): which stage is being built */
+  stage?: number;
+  /** beam towers: seconds until they can fire again */
+  cd?: number;
 }
 
 /** A giant crossbow. Sits on a wall tile, a tower or the ground. */
@@ -635,7 +664,7 @@ export interface Scorpion {
   kick: number;
 }
 
-export type NodeKind = "stone" | "clay" | "iron" | "gold" | "obsidian" | "flint" | "salt" | "tar" | "artifact" | "fossil";
+export type NodeKind = "stone" | "clay" | "iron" | "gold" | "obsidian" | "flint" | "salt" | "tar" | "artifact" | "fossil" | "copper" | "quartz" | "magnetite" | "crystal" | "meteorite";
 
 /** A resource deposit. Rare ones stay hidden until someone walks by. */
 export interface ResNode {
@@ -681,7 +710,7 @@ export interface Dragon {
   hit: number;
 }
 
-export type ProjectileKind = "spear" | "arrow" | "bolt" | "scorpion";
+export type ProjectileKind = "spear" | "arrow" | "bolt" | "scorpion" | "beam";
 
 export interface Projectile {
   x: number;

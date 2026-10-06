@@ -168,7 +168,7 @@ export function CharacterSheet({
                   </div>
                 )}
 
-                {tab === "how" && <HowToPlay def={def} />}
+                {tab === "how" && <HowToPlay def={def} settings={settings} />}
                 {tab === "moves" && <MoveGuide def={def} settings={settings} player={0} />}
 
                 {tab === "bio" && <BioTab bio={bio} loading={loading} error={error} />}

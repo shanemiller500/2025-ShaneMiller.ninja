@@ -189,6 +189,10 @@ export const ROLES: { id: import("../sim/types").Role; icon: string; name: strin
   { id: "cook", icon: "🍖", name: "Cook", tip: "Roasts meat + fish on the fire" },
   { id: "farmer", icon: "🌾", name: "Farmer", tip: "Plants and harvests crops" },
   { id: "smith", icon: "⚒️", name: "Smith", tip: "Crafts weapons, shields + Scorpion parts" },
+  { id: "researcher", icon: "📜", name: "Researcher", tip: "Studies your civilization's next idea (fastest at a Resonance table)" },
+  { id: "miner", icon: "⛏️", name: "Miner", tip: "Digs copper, quartz, magnetite, crystal + ore" },
+  { id: "shaper", icon: "🔷", name: "Stone shaper", tip: "Cuts raw stone into polygon blocks at the Shaping yard" },
+  { id: "technician", icon: "⚡", name: "Technician", tip: "Tends energy buildings: fixes overloads, keeps the hum clean" },
 ];
 
 export const FACTS = {
@@ -273,6 +277,15 @@ export const DISCOVERIES: Discovery[] = [
   { id: "butcher", icon: "🔪", name: "Nothing Wasted", hint: "A hunt gives more than meat." },
   { id: "rainproof", icon: "🌧️", name: "Rainproof", hint: "Tar + hide keep the rain out." },
   { id: "boneDefense", icon: "🦴", name: "Bone Fortress", hint: "Bones make walls scarier." },
+  { id: "chamber", icon: "💠", name: "The Humming Chamber", hint: "Something hums in the rocks once the tribe is settled." },
+  { id: "civTraditional", icon: "🔥", name: "The Old Ways", hint: "Learn an idea of the Old Ways." },
+  { id: "civResonance", icon: "🔔", name: "The Resonance", hint: "Learn an idea of the Resonance." },
+  { id: "tuned", icon: "🎶", name: "Perfect Pitch", hint: "Find a material's true note on the Resonance table." },
+  { id: "condenser", icon: "💧", name: "Water From Air", hint: "Squeeze water out of the fog." },
+  { id: "levitation", icon: "🪶", name: "Lighter Than Air", hint: "Make stone float." },
+  { id: "beam", icon: "🔆", name: "Beam!", hint: "A tower that shoots light." },
+  { id: "pyramid", icon: "🔺", name: "The Great Pyramid", hint: "Six stages, one capstone, a lot of energy." },
+  { id: "omen", icon: "🌘", name: "The Last Sunset", hint: "Only you can call it down." },
 ];
 
 export const DISCOVERY_BY_ID = Object.fromEntries(DISCOVERIES.map((d) => [d.id, d]));

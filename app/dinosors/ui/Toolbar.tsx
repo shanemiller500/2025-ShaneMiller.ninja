@@ -1,5 +1,6 @@
 "use client";
 
+import { CIV_TECH, type CivPath, type CivTechId } from "../data/civ";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { SPECIES } from "../data/species";
@@ -17,7 +18,7 @@ import { GameIcon } from "./GameIcon";
 
 const HAS_OPTIONS = new Set<ToolId>(["dino", "egg", "food", "plant", "land", "weather", "disaster", "people", "build"]);
 
-export default function Toolbar({ tool, setTool, unlocked, learned = [], stock = {} }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number> }) {
+export default function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none" }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath }) {
   const [open, setOpen] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<ToolId | null>(null);
 
@@ -106,7 +107,7 @@ export default function Toolbar({ tool, setTool, unlocked, learned = [], stock =
               {open === "plant" && <Options opts={PLANT_OPTS} value={tool.plant} onPick={(v) => pick("plant", v)} />}
               {open === "land" && <Options opts={LAND_OPTS} value={tool.land} onPick={(v) => pick("land", v)} />}
               {open === "people" && <Options opts={PEOPLE_OPTS} value={tool.people} onPick={(v) => pick("people", v)} />}
-              {open === "build" && <BuildMenu value={tool.build} learned={learned} stock={stock} onPick={(v) => pick("build", v, false)} />}
+              {open === "build" && <BuildMenu value={tool.build} learned={learned} civDone={civDone} civPath={civPath} stock={stock} onPick={(v) => pick("build", v, false)} />}
               {open === "weather" && <Options opts={WEATHER_OPTS} value={tool.weather} onPick={(v) => pick("weather", v)} />}
               {open === "disaster" && <Options opts={DISASTER_OPTS} value={tool.disaster} onPick={(v) => pick("disaster", v)} />}
               <p className="mt-2 px-1 text-center text-xs font-medium text-white/70">
@@ -161,16 +162,21 @@ const CATS: { id: BuildDef["cat"]; icon: string; label: string }[] = [
   { id: "defense", icon: "🛡️", label: "Defense" },
   { id: "work", icon: "⚒️", label: "Work" },
   { id: "land", icon: "🗺️", label: "Land" },
+  { id: "wonders", icon: "🏛️", label: "Wonders" },
 ];
 
 /** Icon grid of everything buildable, by category, with costs + what's still locked. */
-function BuildMenu({ value, learned, stock, onPick }: { value: BuildOpt; learned: TechId[]; stock: Record<string, number>; onPick: (v: BuildOpt) => void }) {
+function BuildMenu({ value, learned, civDone, civPath, stock, onPick }: { value: BuildOpt; learned: TechId[]; civDone: CivTechId[]; civPath: CivPath; stock: Record<string, number>; onPick: (v: BuildOpt) => void }) {
   const [cat, setCat] = useState<BuildDef["cat"]>(BUILD_BY_ID[value]?.cat ?? "homes");
   const has = new Set(learned);
+  const civ = new Set(civDone);
   const cur = BUILD_BY_ID[value];
+  // only show the other path's projects once one of them is actually learned
+  const visible = (b: BuildDef) => !b.civ || civ.has(b.civ) || CIV_TECH[b.civ].path === civPath;
+  const lockText = (b: BuildDef) => (b.tech && !has.has(b.tech) ? `invent ${TECH[b.tech].icon} ${TECH[b.tech].name} first.` : b.civ && !civ.has(b.civ) ? `research ${CIV_TECH[b.civ].icon} ${CIV_TECH[b.civ].name} first (🏛️ Civilization).` : null);
   return (
     <div className="w-[min(560px,calc(100vw-40px))]">
-      <div className="mb-2 grid grid-cols-4 gap-1 rounded-2xl bg-white/5 p-1 text-[12px] font-bold">
+      <div className="mb-2 grid grid-cols-5 gap-1 rounded-2xl bg-white/5 p-1 text-[12px] font-bold">
         {CATS.map((c) => (
           <button key={c.id} type="button" onClick={() => setCat(c.id)} className={`rounded-xl py-1.5 transition active:scale-95 ${cat === c.id ? "bg-amber-400 text-slate-900" : "hover:bg-white/10"}`}>
             {c.icon} {c.label}
@@ -178,15 +184,18 @@ function BuildMenu({ value, learned, stock, onPick }: { value: BuildOpt; learned
         ))}
       </div>
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-        {BUILD_DEFS.filter((b) => b.cat === cat).map((b) => {
-          const locked = !!b.tech && !has.has(b.tech);
+        {cat === "wonders" && !BUILD_DEFS.some((b) => b.cat === "wonders" && visible(b)) && (
+          <p className="col-span-full px-2 py-4 text-center text-[12px] text-white/60">🏛️ Great works unlock once your people find the humming chamber and choose a path.</p>
+        )}
+        {BUILD_DEFS.filter((b) => b.cat === cat && visible(b)).map((b) => {
+          const locked = !!lockText(b);
           const afford = (Object.entries(b.cost) as [Resource, number][]).every(([r, n]) => (stock[r] ?? 0) >= n);
           return (
             <button
               key={b.value}
               type="button"
               onClick={() => onPick(b.value)}
-              title={locked ? `Invent ${TECH[b.tech!].name} first` : b.tip}
+              title={lockText(b) ?? b.tip}
               className={`relative flex flex-col items-center rounded-2xl px-1 pb-1.5 pt-2 transition active:scale-95 ${b.value === value ? "bg-white/25 ring-2 ring-amber-300" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"} ${locked ? "opacity-50" : ""}`}
             >
               {["spikes", "barricade", "totem", "tannery"].includes(b.value) ? <GameIcon id={b.value} size={30} className={locked ? "grayscale" : ""} /> : <span className={`text-[28px] leading-none ${locked ? "grayscale" : ""}`}>{b.icon}</span>}
@@ -210,7 +219,7 @@ function BuildMenu({ value, learned, stock, onPick }: { value: BuildOpt; learned
           <span className="font-bold text-white">
             {cur.icon} {cur.label}:
           </span>{" "}
-          {cur.tech && !has.has(cur.tech) ? `invent ${TECH[cur.tech].icon} ${TECH[cur.tech].name} first.` : cur.tip}
+          {lockText(cur) ?? cur.tip}
           {cur.line && !/drag/i.test(cur.tip) ? " Drag to draw." : ""}
         </p>
       )}

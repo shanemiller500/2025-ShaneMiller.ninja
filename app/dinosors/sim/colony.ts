@@ -22,6 +22,9 @@ export interface DropOff {
 
 const FOOD = new Set<Resource>(["cooked", "fish", "crop", "berries", "meat"]);
 
+/** Mostly stone: fire barely scorches it. */
+const STONEWORK = new Set<BuildingKind>(["pyramid", "obelisk", "stoneCircle", "shelterDeep", "chamber", "shapingYard", "beamTower", "energyTower", "pylon", "resShield"]);
+
 export class Colony {
   buildings: Building[] = [];
   scorpions: Scorpion[] = [];
@@ -257,6 +260,49 @@ export class Colony {
     place("tar", 3, (t, tx, ty) => walk(t) && nextTo(tx, ty, (o) => o === T.Tar));
     place("artifact", 5, (t) => walk(t) && t !== T.Nest);
     place("fossil", 3, (t) => walk(t) && (t === T.Sand || t === T.Rock || t === T.Dirt || t === T.Grass));
+    this.generateCivNodes(w, salt + 40);
+  }
+
+  /** Copper, quartz, magnetite, crystal + an old meteor strike. */
+  generateCivNodes(w: World, salt = 60) {
+    const seed = w.seed;
+    const tiles = w.terrain.tiles;
+    const walk = (t: T) => isWalkTile(t) && !isWaterTile(t) && t !== T.Tar && t !== T.Cave;
+    const nextTo = (tx: number, ty: number, pred: (t: T) => boolean) => [tiles[ty * MAP_W + tx + 1], tiles[ty * MAP_W + tx - 1], tiles[(ty + 1) * MAP_W + tx], tiles[(ty - 1) * MAP_W + tx]].some((t) => pred(t as T));
+    const place = (kind: NodeKind, n: number, ok: (t: T, tx: number, ty: number) => boolean, near?: { x: number; y: number; r: number }) => {
+      let placed = 0;
+      for (let k = 0; k < 5000 && placed < n; k++) {
+        const r1 = hash2(k, salt * 29 + n, seed + 131);
+        const r2 = hash2(k * 5 + 1, salt * 13, seed + 171);
+        let tx = Math.floor(r1 * MAP_W);
+        let ty = Math.floor(r2 * MAP_H);
+        if (near) {
+          const a = r1 * Math.PI * 2;
+          const rr = Math.sqrt(r2) * near.r;
+          tx = Math.round(near.x + Math.cos(a) * rr);
+          ty = Math.round(near.y + Math.sin(a) * rr);
+        }
+        if (tx < 2 || ty < 2 || tx >= MAP_W - 2 || ty >= MAP_H - 2) continue;
+        const t = tiles[ty * MAP_W + tx] as T;
+        if (!walk(t) || !ok(t, tx, ty)) continue;
+        const x = tx * TILE + TILE / 2;
+        const y = ty * TILE + TILE / 2;
+        if (this.nodes.some((o) => Math.hypot(o.x - x, o.y - y) < 110)) continue;
+        if (Math.hypot(x - w.camp.x, y - w.camp.y) < 300) continue;
+        const def = NODES[kind];
+        const amt = Math.round(def.amount[0] + hash2(tx, ty, seed + 9) * (def.amount[1] - def.amount[0]));
+        this.nodes.push({ id: w.nextId(), kind, x, y, amount: amt, max: amt, found: !def.hidden, variant: Math.floor(hash2(ty, tx, seed + 2) * 4) });
+        placed++;
+      }
+      salt++;
+    };
+    const rocky = (o: T) => o === T.Rock || o === T.Cliff || o === T.Mountain;
+    place("copper", 4, (t, tx, ty) => t === T.Rock || nextTo(tx, ty, rocky));
+    place("quartz", 4, (_t, tx, ty) => nextTo(tx, ty, (o) => o === T.Mountain || o === T.Cliff));
+    place("magnetite", 3, (t, tx, ty) => t === T.Basalt || nextTo(tx, ty, (o) => o === T.Basalt || o === T.Mountain));
+    place("crystal", 2, (_t, tx, ty) => nextTo(tx, ty, (o) => o === T.Mountain || o === T.Cave));
+    place("crystal", 1, () => true, { x: LM.frost.x, y: LM.frost.y, r: 10 });
+    place("meteorite", 1, (t) => t === T.Grass || t === T.Dirt || t === T.Sand);
   }
 
   nodeById(id: number) {
@@ -280,7 +326,8 @@ export class Colony {
   /** One dig at a deposit. Returns what was dug up (and how much). */
   mine(w: World, n: ResNode): { r: Resource | null; amount: number } {
     const def = NODES[n.kind];
-    const take = Math.min(def.per, n.amount);
+    const boost = (n.kind === "copper" || n.kind === "quartz" || n.kind === "magnetite" || n.kind === "crystal") && this.kits.has("drill") ? 2 : n.kind === "stone" && this.kits.has("cutter") ? 1.5 : 1;
+    const take = Math.min(Math.round(def.per * boost), n.amount);
     n.amount -= take;
     w.particles.burst(P.Rock, n.x, n.y, 4, 40, { vz: 60, g: 200, size: 2.5, max: 0.7, color: def.color });
     if (n.kind === "artifact") {
@@ -308,6 +355,7 @@ export class Colony {
     const it = FORGE_ITEMS.find((f) => f.id === id);
     if (!it) return false;
     if (it.tech && !w.camp.learned.has(it.tech)) return false;
+    if (it.civ && !w.civ.has(it.civ)) return false;
     if (it.cat === "kits" && this.kits.has(id)) return false;
     if (it.at === "workshop") return this.finished("workshop") || this.finished("blacksmith");
     if (it.at === "blacksmith") return this.finished("blacksmith");
@@ -556,7 +604,7 @@ export class Colony {
       const i = tileOf(b.x, b.y - 8);
       const heat = w.fire.heat[i] + w.lava.heat[i] * 2;
       if (heat > 0.3) {
-        b.hp -= dt * 30 * heat * (b.kind === "blacksmith" ? 0.3 : 1);
+        b.hp -= dt * 30 * heat * (STONEWORK.has(b.kind) ? 0.15 : b.kind === "blacksmith" ? 0.3 : 1);
         if (b.hp <= 0) {
           w.toast("🔥", `The ${BUILDINGS[b.kind].name.toLowerCase()} burned down!`, b.x, b.y);
           w.particles.burst(P.Smoke, b.x, b.y, 10, 40, { vz: 30, size: 14, max: 2, color: "rgba(60,55,50,0.6)" });
@@ -604,7 +652,8 @@ export class Colony {
       this.reserveT.delete(s);
       s.reload = Math.max(0, s.reload - dt);
       const tier = SCORPION_TIERS[s.tier - 1];
-      const range = tier.range + (s.mount === "tower" ? 90 : s.mount === "wall" ? 40 : 0);
+      const siege = w.civ.has("siegecraft");
+      const range = tier.range + (s.mount === "tower" ? 90 : s.mount === "wall" ? 40 : 0) + (siege ? 80 : 0);
       const target = scorpionTarget(w, s.x, s.y, range);
       if (!target) {
         s.aim += angleTo(s.aim, Math.PI / 2) * Math.min(1, dt);
@@ -617,8 +666,8 @@ export class Colony {
       s.aim += angleTo(s.aim, want) * Math.min(1, dt * 2.6);
       crew.dir = ax > crew.x ? 1 : -1;
       if (s.reload <= 0 && Math.abs(angleTo(s.aim, want)) < 0.12) {
-        w.tribe.fireBolt(w, s.x + Math.cos(s.aim) * 16, s.y + Math.sin(s.aim) * 8, this.scorpionZ(s), target, tier.dmg, tier.speed, tier.big);
-        s.reload = tier.reload;
+        w.tribe.fireBolt(w, s.x + Math.cos(s.aim) * 16, s.y + Math.sin(s.aim) * 8, this.scorpionZ(s), target, tier.dmg * (siege ? 1.4 : 1), tier.speed, tier.big);
+        s.reload = tier.reload * (siege ? 0.75 : 1);
         s.kick = 1;
         w.sfx("twang", s.x, s.y, 0.9, 0.55);
         w.particles.burst(P.Dust, s.x, s.y, 3, 30, { z: this.scorpionZ(s), size: 5, max: 0.4, color: "rgba(220,210,190,0.6)" });
@@ -645,13 +694,14 @@ export class Colony {
   serialize() {
     const r = (n: number) => Math.round(n * 100) / 100;
     return {
-      buildings: this.buildings.map((b) => ({ kind: b.kind, tx: b.tx, ty: b.ty, built: r(b.built), have: b.have, hp: Math.round(b.hp) })),
+      buildings: this.buildings.map((b) => ({ kind: b.kind, tx: b.tx, ty: b.ty, built: r(b.built), have: b.have, hp: Math.round(b.hp), ...(b.stage ? { stage: b.stage } : {}) })),
       scorpions: this.scorpions.map((s) => ({ tx: s.tx, ty: s.ty, x: r(s.x), y: r(s.y), tier: s.tier, built: r(s.built), have: s.have, up: s.up, hp: Math.round(s.hp), mount: s.mount })),
       nodes: this.nodes.map((n) => [n.kind, Math.round(n.x), Math.round(n.y), n.amount, n.max, n.found ? 1 : 0] as const),
       armory: this.armory,
       queue: this.queue,
       kits: Array.from(this.kits),
       known: Array.from(this.known),
+      civNodes: 1,
     };
   }
 
@@ -663,7 +713,7 @@ export class Colony {
     for (const b of d.buildings ?? []) {
       const def = BUILDINGS[b.kind];
       if (!def) continue;
-      this.buildings.push({ id: w.nextId(), kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: b.built, have: b.have ?? {}, hp: b.hp ?? def.hp });
+      this.buildings.push({ id: w.nextId(), kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: b.built, have: b.have ?? {}, hp: b.hp ?? def.hp, ...((b as { stage?: number }).stage ? { stage: (b as { stage?: number }).stage } : {}) });
     }
     for (const s of d.scorpions ?? []) this.scorpions.push({ id: w.nextId(), ...s, aim: Math.PI / 2, reload: 0, crew: 0, kick: 0 });
     for (const [kind, x, y, amount, max, found] of d.nodes ?? []) {
@@ -675,6 +725,8 @@ export class Colony {
     this.kits = new Set(d.kits ?? []);
     this.known = new Set(d.known ?? []);
     this.primed = this.known.size > 0;
+    // saves from before the civilization update get the new deposits scattered in
+    if (!(d as { civNodes?: number }).civNodes) this.generateCivNodes(w);
     this.version++;
   }
 }

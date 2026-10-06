@@ -69,15 +69,19 @@ export function ControlsCard({ settings, versus, p1, p2 }: { settings: Settings;
 /** Xbox layout (standard mapping) - the same for every fighter. */
 function PadCard({ name, def }: { name: string; def?: FighterDef }) {
   const rows: [ReactNode, string][] = [
-    [<PadBtn key="l">LS</PadBtn>, "Move · ↑ jump · ↓ crouch (or D-pad)"],
+    [<PadBtn key="l">LS</PadBtn>, "Move; down to crouch (or D-pad)"],
     [<PadBtn key="rs">RS</PadBtn>, "World mode: press for random challenge"],
-    [<PadBtn key="jump">↑</PadBtn>, "Jump with D-Pad or Left Stick"],
+    [<PadBtn key="jump" c="#22c55e">A</PadBtn>, "Jump (or D-Pad / Left Stick up)"],
+    [<PadBtn key="crouch">↓</PadBtn>, "Crouch"],
     [<PadBtn key="x" c="#3b82f6">X</PadBtn>, "Light punch"],
     [<PadBtn key="y" c="#eab308">Y</PadBtn>, "Heavy punch"],
-    [<PadBtn key="a" c="#22c55e">A</PadBtn>, "Kick"],
-    [<PadBtn key="b" c="#ef4444">B</PadBtn>, "Special (↓ + B / → + B for variants)"],
-    [<span key="lb" className="flex gap-1"><PadBtn>LB</PadBtn><PadBtn>LT</PadBtn></span>, "Block · + left/right to dodge"],
-    [<span key="ult" className="flex gap-1"><PadBtn c="#fde047">RB</PadBtn><PadBtn c="#fde047">RT</PadBtn></span>, "Ultimate (full meter)"],
+    [<PadBtn key="b" c="#ef4444">B</PadBtn>, "Kick"],
+    [<PadBtn key="rb">RB</PadBtn>, "Special (↓ + RB / → + RB for variants)"],
+    [<PadBtn key="rt">RT</PadBtn>, "Block · + left/right to dodge"],
+    [<span key="grab" className="flex gap-1"><PadBtn c="#3b82f6">X</PadBtn><PadBtn c="#ef4444">B</PadBtn></span>, "Grab at close range"],
+    [<span key="dodge" className="flex gap-1"><PadBtn>RT</PadBtn><PadBtn>←/→</PadBtn></span>, "Dodge away from a strike"],
+    [<span key="ult" className="flex gap-1"><PadBtn>LT</PadBtn><PadBtn>RT</PadBtn></span>, "Ultimate (full meter)"],
+    [<PadBtn key="lb">LB</PadBtn>, "Previous character filter in select"],
     [<PadBtn key="s">Menu</PadBtn>, "Pause"],
     [<PadBtn key="v">View</PadBtn>, "World map"],
   ];
@@ -94,7 +98,7 @@ function PadCard({ name, def }: { name: string; def?: FighterDef }) {
           </div>
         ))}
       </div>
-      <p className="mt-3 border-t border-white/10 pt-3 text-[12px] text-white/50">↓ + Y uppercut · ↓ + A sweep · X + A throw · chain attacks for combos</p>
+      <p className="mt-3 border-t border-white/10 pt-3 text-[12px] text-white/50">↓ + Y uppercut · ↓ + B sweep · X + B grab · chain attacks for combos</p>
     </div>
   );
 }

@@ -45,6 +45,10 @@ const RATE: Record<string, number> = {
   thunk: 0.06,
   sizzle: 0.5,
   drums: 4,
+  hum: 0.8,
+  zap: 0.08,
+  tick: 0.5,
+  chime: 0.3,
 };
 
 const CATEGORY: Record<string, Category> = {
@@ -63,6 +67,8 @@ const CATEGORY: Record<string, Category> = {
   pop: "ui",
   click: "ui",
   sticker: "ui",
+  tone: "ui",
+  tick: "ui",
 };
 
 export class AudioManager {
@@ -189,7 +195,7 @@ export class AudioManager {
     const key = sound;
     if (now - (this.last.get(key) ?? -9) < rate) return;
     if (this.active > 28 && sound !== "boom" && sound !== "thunder") return;
-    const ui = sound === "pop" || sound === "click" || sound === "sticker" || sound === "drums" || sound === "evolve";
+    const ui = sound === "pop" || sound === "click" || sound === "sticker" || sound === "drums" || sound === "evolve" || sound === "tick";
     const pl = ui ? { gain: vol, pan: 0, dist: 0 } : this.place(x, y, vol);
     if (!pl) return;
     this.last.set(key, now);
@@ -203,6 +209,34 @@ export class AudioManager {
       out.disconnect();
     }, 4000);
     this.synth(sound, at, out, pitch * (0.94 + Math.random() * 0.12));
+  }
+
+  /**
+   * A pure test tone for the Resonance table: the exact frequency, coloured by the material.
+   * `close` (0..1) adds a shimmering overtone as you near the material's true note.
+   */
+  tone(freq: number, material: string, close = 0, dur = 0.9) {
+    const ctx = this.ctx;
+    if (!ctx || this.muted || ctx.state !== "running") return;
+    const at = ctx.currentTime + 0.01;
+    const out = this.out("ui", 0.8, 0);
+    const wave: OscillatorType = material === "copper" || material === "magnetite" ? "triangle" : material === "meteorite" ? "sawtooth" : "sine";
+    const voice = (f: number, peak: number, type: OscillatorType, detune = 0) => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(f, at);
+      o.detune.value = detune;
+      const g = ctx.createGain();
+      this.env(g, at, 0.02, peak, dur);
+      o.connect(g).connect(out);
+      o.start(at);
+      o.stop(at + dur + 0.1);
+    };
+    voice(freq, wave === "sawtooth" ? 0.08 : 0.22, wave);
+    if (material === "crystal" || material === "quartz") voice(freq * 2, 0.06, "sine", 4);
+    if (close > 0.5) voice(freq * 1.5, 0.12 * close, "sine", Math.sin(close * 9) * 8);
+    if (close > 0.95) [2, 3, 4].forEach((k) => voice(freq * k, 0.06, "sine", k * 2));
+    window.setTimeout(() => out.disconnect(), (dur + 0.6) * 1000);
   }
 
   private synth(sound: string, at: number, out: GainNode, p: number) {
@@ -529,6 +563,41 @@ export class AudioManager {
       case "sizzle":
         noise("highpass", 4500, 3500, 0.7, 0.9, 0.18, 0.08);
         for (let i = 0; i < 5; i++) noise("highpass", 3000, 2500, 1, 0.02, 0.35, 0.001, Math.random() * 0.8);
+        break;
+      case "hum":
+        // low, slightly beating drone of tuned stone
+        osc("sine", 110 * p, 112 * p, 1.4, 0.22, 0.25);
+        osc("sine", 165 * p, 166 * p, 1.4, 0.1, 0.3);
+        osc("triangle", 220 * p, 221 * p, 1.2, 0.05, 0.3);
+        break;
+      case "chime":
+        [784, 1046, 1318, 1568].forEach((f, i) => {
+          const o = ctx.createOscillator();
+          o.type = "sine";
+          o.frequency.value = f * p;
+          const g = ctx.createGain();
+          this.env(g, at + i * 0.07, 0.005, 0.18, 0.9);
+          o.connect(g).connect(out);
+          o.start(at + i * 0.07);
+          o.stop(at + i * 0.07 + 1);
+        });
+        break;
+      case "zap":
+        osc("sawtooth", 1800 * p, 300 * p, 0.18, 0.18, 0.002);
+        noise("bandpass", 4000, 1200, 3, 0.14, 0.3);
+        osc("sine", 90, 60, 0.2, 0.3, 0.005);
+        break;
+      case "crack":
+        noise("highpass", 3000, 1800, 1, 0.12, 0.6, 0.001);
+        osc("triangle", 2400 * p, 1200 * p, 0.25, 0.12, 0.002);
+        break;
+      case "powerdown":
+        osc("sawtooth", 420, 40, 1.1, 0.2, 0.01);
+        osc("sine", 220, 30, 1.2, 0.25, 0.01);
+        break;
+      case "tick":
+        osc("square", 1200 * p, 1200 * p, 0.05, 0.18, 0.002);
+        osc("sine", 300, 200, 0.12, 0.25, 0.002);
         break;
       default:
         osc("sine", 440, 440, 0.1, 0.2);

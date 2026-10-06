@@ -11,6 +11,7 @@ import { loadImage } from "../data/roster";
 import { applyPortraitPalette } from "../render/palette";
 import type { Settings } from "../data/storage";
 import { InputManager } from "../input/input";
+import { BTN } from "../input/gamepad";
 import { drawBack, drawFloor, drawFront, drawProp } from "../render/arenas";
 import { buildRig, drawFighter, drawShadow, poseFor } from "../render/fighterDraw";
 import { Particles } from "../render/particles";
@@ -147,7 +148,7 @@ export class WorldScene {
     this.t += STEP;
     const p = this.player;
     const inp = this.active ? this.input.read(0) : null;
-    const running = !!inp && (this.input.isDown("ShiftLeft") || this.input.isDown("ShiftRight") || inp.block);
+    const running = !!inp && (this.input.isDown("ShiftLeft") || this.input.isDown("ShiftRight") || this.input.padButton(BTN.LB) || inp.block);
     const dir = inp ? (inp.right ? 1 : 0) - (inp.left ? 1 : 0) : 0;
     const grounded = p.y <= 0 && p.vy <= 0;
 

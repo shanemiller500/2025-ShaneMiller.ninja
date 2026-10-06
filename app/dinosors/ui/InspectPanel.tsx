@@ -115,10 +115,19 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-3xl">{info.icon}</span>
             <div>
               <div className="text-lg font-bold leading-tight">{info.name}</div>
-              <div className="text-xs text-white/60">{info.built >= 1 ? "Finished" : `Under construction · ${Math.round(info.built * 100)}%`}</div>
+              <div className="text-xs text-white/60">{info.built >= 1 ? "Finished" : info.stage ? `Stage ${info.stage.n + 1} of ${info.stage.of}: ${info.stage.name}` : `Under construction · ${Math.round(info.built * 100)}%`}</div>
             </div>
           </div>
           <p className="mt-2 text-[13px] leading-snug text-white/80">{info.tip}</p>
+          {info.stage && (
+            <div className="mt-2 flex gap-1" aria-label="Stages">
+              {Array.from({ length: info.stage.of }, (_, i) => (
+                <span key={i} className={`h-1.5 flex-1 rounded-full ${info.built >= 1 || i < info.stage!.n ? "bg-amber-300" : i === info.stage!.n ? "bg-amber-300/50" : "bg-white/10"}`} />
+              ))}
+            </div>
+          )}
+          {info.stage?.next && info.built < 1 && <p className="mt-1 text-[11px] text-white/55">Then: {info.stage.next}</p>}
+          {info.note && <p className="mt-2 rounded-xl bg-cyan-500/10 px-2.5 py-1.5 text-[12px] text-cyan-100">{info.note}</p>}
           {info.built < 1 ? (
             <div className="mt-3">
               <div className="mb-1 text-[11px] font-semibold text-white/60">Materials delivered</div>

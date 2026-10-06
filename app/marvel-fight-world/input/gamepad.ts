@@ -14,7 +14,7 @@
 /*  6 LT, 7 RT, 8 View, 9 Menu/Start, 10 LS, 11 RS, 12-15 D-pad.        */
 /* ------------------------------------------------------------------ */
 
-export const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8, START: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 } as const;
+export const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8, START: 9, LS: 10, RS: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 } as const;
 
 export function connectedPads(): Gamepad[] {
   if (typeof navigator === "undefined" || !navigator.getGamepads) return [];
@@ -52,8 +52,11 @@ export function padState(p: Gamepad): PadState {
     for (let i = 0; i < 17; i++) b[i] = held(p, i);
     return { b, lx, ly };
   }
-  const id = p.id.toLowerCase();
-  const xboxHid = (id.includes("045e") || id.includes("xbox")) && p.buttons.length >= 15;
+  const id = (p.id ?? "").toLowerCase();
+  // Some Bluetooth pads report the standard 17-button order but leave
+  // `mapping` empty. The legacy Xbox HID order is identifiable by its
+  // separate hat axis; applying that order to every Xbox ID swaps X/Y/Menu.
+  const xboxHid = (id.includes("045e") || id.includes("xbox")) && p.buttons.length >= 15 && p.buttons.length < 17 && p.axes.length >= 10;
   const map: [number, number][] = xboxHid
     ? [
         [BTN.A, 0],
@@ -64,11 +67,11 @@ export function padState(p: Gamepad): PadState {
         [BTN.RB, 7],
         [BTN.VIEW, 10],
         [BTN.START, 11],
-        [10, 13],
-        [11, 14],
+        [BTN.LS, 13],
+        [BTN.RS, 14],
       ]
-    : // Unknown controller: assume the common SNES-style order for the first 12 buttons
-      Array.from({ length: Math.min(12, p.buttons.length) }, (_, i) => [i, i] as [number, number]);
+    : // Unlabelled standard-style controller: retain D-pad buttons 12-15.
+      Array.from({ length: Math.min(17, p.buttons.length) }, (_, i) => [i, i] as [number, number]);
   for (const [std, raw] of map) b[std] = held(p, raw);
   // Some HID layouts also report the triggers as buttons 8/9
   if (xboxHid) {
@@ -76,14 +79,14 @@ export function padState(p: Gamepad): PadState {
     b[BTN.RT] = held(p, 9);
   }
   // D-pad as a hat switch (Chrome/Windows HID: axis 9; -1 = up … 1 = up-left, >1 = centred)
-  const hat = p.axes.length >= 10 ? p.axes[9] : undefined;
+  const hat = xboxHid && Math.abs(p.axes[9] ?? 0) > 0.1 ? p.axes[9] : undefined;
   if (hat !== undefined && Math.abs(hat) <= 1.05) {
     const dir = Math.round(((hat + 1) * 7) / 2) % 8; // 0 up, 1 up-right, 2 right … 7 up-left
     b[BTN.UP] = dir === 7 || dir === 0 || dir === 1;
     b[BTN.RIGHT] = dir >= 1 && dir <= 3;
     b[BTN.DOWN] = dir >= 3 && dir <= 5;
     b[BTN.LEFT] = dir >= 5 && dir <= 7;
-  } else if (p.axes.length >= 8 && !xboxHid) {
+  } else if (p.axes.length >= 8 && !xboxHid && !b[BTN.UP] && !b[BTN.DOWN] && !b[BTN.LEFT] && !b[BTN.RIGHT]) {
     // Linux-style D-pad axes 6/7
     b[BTN.LEFT] = p.axes[6] < -0.5;
     b[BTN.RIGHT] = p.axes[6] > 0.5;
@@ -97,7 +100,7 @@ export function padState(p: Gamepad): PadState {
 
 /** Friendly controller name from the browser's id string. */
 export function padName(p: Gamepad) {
-  const id = p.id.toLowerCase();
+  const id = (p.id ?? "").toLowerCase();
   if (id.includes("xbox") || id.includes("xinput") || id.includes("045e")) return "Xbox controller";
   if (id.includes("dualsense") || id.includes("dualshock") || id.includes("054c")) return "PlayStation controller";
   if (id.includes("pro controller") || id.includes("057e")) return "Switch Pro controller";
@@ -108,11 +111,11 @@ export function padName(p: Gamepad) {
 export const PAD_LABELS = {
   lp: "X",
   hp: "Y",
-  kick: "A",
-  special: "B",
-  block: "LB",
-  ult: "RB",
-  pause: "☰",
+  kick: "B",
+  special: "RB",
+  block: "RT",
+  ult: "LT+RT",
+  pause: "Menu",
 } as const;
 
 /* ── Bridge state ──────────────────────────────────────────────────── */
@@ -127,7 +130,7 @@ export function suspendPadBridge() {
 
 type Dir = "up" | "down" | "left" | "right";
 const DIR_KEY: Record<Dir, string> = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
-const KEY_NAME: Record<string, string> = { Enter: "Enter", Escape: "Escape", KeyM: "m", KeyV: "v", KeyC: "c", KeyR: "r", ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight" };
+const KEY_NAME: Record<string, string> = { Enter: "Enter", Escape: "Escape", KeyM: "m", KeyV: "v", KeyC: "c", KeyR: "r", KeyF: "f", KeyQ: "q", KeyE: "e", ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight" };
 
 function sendKey(type: "keydown" | "keyup", code: string, repeat = false) {
   const target = document.body;
@@ -140,7 +143,7 @@ function activeMenu(): HTMLElement | null {
 }
 
 function focusables(root: HTMLElement) {
-  return Array.from(root.querySelectorAll<HTMLElement>("button:not([disabled]), a[href], [data-pad-item]")).filter((el) => {
+  return Array.from(root.querySelectorAll<HTMLElement>("button:not([disabled]), a[href], input[type=range]:not([disabled]), [data-pad-item]")).filter((el) => {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
   });
@@ -168,6 +171,15 @@ function moveFocus(root: HTMLElement, dir: Dir) {
   const cur = currentItem(root, items);
   if (!cur) {
     focusEl(items[0]);
+    return;
+  }
+  if (cur instanceof HTMLInputElement && cur.type === "range" && (dir === "left" || dir === "right")) {
+    const step = Number(cur.step) || 1;
+    const delta = (dir === "left" ? -1 : 1) * step;
+    const value = Math.min(Number(cur.max), Math.max(Number(cur.min), Number(cur.value) + delta));
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(cur, String(value));
+    cur.dispatchEvent(new Event("input", { bubbles: true }));
+    cur.dispatchEvent(new Event("change", { bubbles: true }));
     return;
   }
   const a = cur.getBoundingClientRect();
@@ -214,17 +226,26 @@ export function startPadBridge(opts: PadBridgeOptions = {}) {
     right: { down: false, next: 0 },
   };
   const heldKeys = new Set<string>();
+  const buttonKeys = new Map<string, string>();
 
-  const onConnect = (e: GamepadEvent) => opts.onConnect?.(padName(e.gamepad));
-  const onDisconnect = () => opts.onDisconnect?.();
+  let announced = false;
+  const onConnect = (e: GamepadEvent) => {
+    if (!announced) opts.onConnect?.(padName(e.gamepad));
+    announced = true;
+  };
+  const onDisconnect = () => {
+    if (connectedPads().length) return;
+    if (announced) opts.onDisconnect?.();
+    announced = false;
+  };
   window.addEventListener("gamepadconnected", onConnect);
   window.addEventListener("gamepaddisconnected", onDisconnect);
   // Pads already connected before the page loaded show up after the first press
-  let announced = false;
 
   const releaseAll = () => {
     heldKeys.forEach((k) => sendKey("keyup", k));
     heldKeys.clear();
+    buttonKeys.clear();
     for (const d of Object.keys(dirState) as Dir[]) dirState[d].down = false;
   };
 
@@ -239,7 +260,12 @@ export function startPadBridge(opts: PadBridgeOptions = {}) {
   const loop = (now: number) => {
     raf = requestAnimationFrame(loop);
     const pads = connectedPads();
-    if (!pads.length) return;
+    if (!pads.length) {
+      if (announced) opts.onDisconnect?.();
+      announced = false;
+      if (heldKeys.size) releaseAll();
+      return;
+    }
     if (!announced) {
       announced = true;
       opts.onConnect?.(padName(pads[0]));
@@ -275,13 +301,25 @@ export function startPadBridge(opts: PadBridgeOptions = {}) {
       b: edge(BTN.B),
       x: edge(BTN.X),
       y: edge(BTN.Y),
+      lb: edge(BTN.LB),
+      rb: edge(BTN.RB),
       view: edge(BTN.VIEW),
       start: edge(BTN.START),
+      ls: edge(BTN.LS),
+      rs: edge(BTN.RS),
     };
-    for (const i of [BTN.UP, BTN.DOWN, BTN.LEFT, BTN.RIGHT, BTN.LB, BTN.RB, BTN.LT, BTN.RT]) edge(i);
+    for (const i of [BTN.UP, BTN.DOWN, BTN.LEFT, BTN.RIGHT, BTN.LT, BTN.RT]) edge(i);
 
     const any = Object.values(e).some(Boolean) || Object.values(dirs).some(Boolean);
     if (any) opts.onActive?.();
+    const releaseButtons = () => {
+      for (const [k, state] of Object.entries(e)) {
+        if (state !== "up") continue;
+        const code = buttonKeys.get(k);
+        if (code) release(code);
+        buttonKeys.delete(k);
+      }
+    };
 
     const menu = activeMenu();
 
@@ -303,7 +341,11 @@ export function startPadBridge(opts: PadBridgeOptions = {}) {
 
     if (menu) {
       // Overlay with buttons: A presses the focused item, B goes back
-      if (e.a === "down" || e.start === "down") {
+      if (e.start === "down") {
+        const pause = document.querySelector<HTMLElement>("[data-pad-pause]");
+        if (pause?.getClientRects().length) pause.click();
+      }
+      if (e.a === "down") {
         const items = focusables(menu);
         const target = currentItem(menu, items) ?? items[0];
         target?.click();
@@ -322,22 +364,30 @@ export function startPadBridge(opts: PadBridgeOptions = {}) {
         const c = currentItem(menu, items) ?? items[0];
         if (c && !c.hasAttribute("data-pad-focused")) focusEl(c);
       }
+      releaseButtons();
       return;
     }
 
     // Plain screens: synthetic keys for the existing keyboard handlers
+    const onSelect = !!document.querySelector?.("[data-pad-select]");
+    const inWorld = !!document.querySelector?.("[data-pad-world]");
     const map: [keyof typeof e, string][] = [
       ["a", "Enter"],
-      ["start", "Enter"],
+      ["start", inWorld ? "KeyM" : "Enter"],
       ["b", "Escape"],
       ["x", "KeyC"],
       ["y", "KeyV"],
       ["view", "KeyM"],
+      ...(onSelect ? [["lb", "KeyQ"], ["rb", "KeyE"]] as [keyof typeof e, string][] : []),
+      ...(inWorld ? [["ls", "KeyF"], ["rs", "KeyR"]] as [keyof typeof e, string][] : []),
     ];
     for (const [k, code] of map) {
-      if (e[k] === "down") press(code);
-      else if (e[k] === "up") release(code);
+      if (e[k] === "down") {
+        press(code);
+        buttonKeys.set(k, code);
+      }
     }
+    releaseButtons();
   };
   raf = requestAnimationFrame(loop);
 

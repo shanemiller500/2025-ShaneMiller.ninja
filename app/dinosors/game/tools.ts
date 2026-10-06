@@ -3,6 +3,7 @@
 /*  one does when it touches the world (for the engine).               */
 /* ------------------------------------------------------------------ */
 import { TECH } from "../data/facts";
+import { CIV_TECH, LIFT, type CivTechId } from "../data/civ";
 import { BUILDINGS, HOUSING, SCORPION_TIERS, TENT_STAGES, type Cost } from "../data/colony";
 import { SHELTER_STAGES } from "../data/facts";
 import { sp } from "../data/species";
@@ -10,7 +11,7 @@ import { addHuman } from "../sim/humans";
 import { P } from "../sim/particles";
 import { makePlant } from "../sim/plants";
 import { isWaterTile, isWalkTile } from "../sim/terrain";
-import { MAP_W, T, TILE, type BuildingKind, type PlantKind, type SpeciesId, type TechId, type WeatherKind } from "../sim/types";
+import { MAP_W, T, TILE, type BuildingKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
 import type { World } from "../sim/world";
 
 export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire" | "weather" | "disaster" | "people" | "build" | "erase";
@@ -18,7 +19,7 @@ export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
 export type LandOpt = "water" | "rock" | "mud" | "grass";
 export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon";
 export type PeopleOpt = "adult" | "child";
-export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | BuildingKind;
+export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "levitate" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | BuildingKind;
 
 export interface ToolState {
   id: ToolId;
@@ -99,9 +100,11 @@ export const PEOPLE_OPTS: Opt<PeopleOpt>[] = [
   { value: "child", icon: "🧒", label: "Cave kid" },
 ];
 export interface BuildDef extends Opt<BuildOpt> {
-  cat: "homes" | "defense" | "work" | "land";
+  cat: "homes" | "defense" | "work" | "land" | "wonders";
   cost: Cost;
   tech?: TechId;
+  /** civilization research it needs */
+  civ?: CivTechId;
   tip: string;
   /** drag to paint a line of them */
   line?: boolean;
@@ -109,7 +112,7 @@ export interface BuildDef extends Opt<BuildOpt> {
 
 const hutCost = () => SHELTER_STAGES.reduce<Cost>((c, s) => ({ ...c, [s.need]: (c[s.need] ?? 0) + s.n }), {});
 const tentCost = () => TENT_STAGES.reduce<Cost>((c, s) => ({ ...c, [s.need]: (c[s.need] ?? 0) + s.n }), {});
-const bld = (kind: BuildingKind, cat: BuildDef["cat"], line = false): BuildDef => ({ value: kind, icon: BUILDINGS[kind].icon, label: BUILDINGS[kind].name, cat, cost: BUILDINGS[kind].cost, tech: BUILDINGS[kind].tech, tip: BUILDINGS[kind].tip, line });
+const bld = (kind: BuildingKind, cat: BuildDef["cat"], line = false): BuildDef => ({ value: kind, icon: BUILDINGS[kind].icon, label: BUILDINGS[kind].name, cat, cost: BUILDINGS[kind].cost, tech: BUILDINGS[kind].tech, civ: BUILDINGS[kind].civ, tip: BUILDINGS[kind].tip, line });
 
 export const BUILD_DEFS: BuildDef[] = [
   { value: "tent", icon: HOUSING[0].icon, label: "Tent", cat: "homes", cost: tentCost(), tip: `Quick shelter for ${HOUSING[0].cap}. Upgrade it later: tent → hut → house → stone house.` },
@@ -137,6 +140,23 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("post", "work"),
   bld("path", "land", true),
   bld("bridge", "land", true),
+  // civilization projects (each needs its research)
+  { value: "polywall", icon: "🔷", label: "Polygon wall", cat: "defense", cost: { shaped: 2 }, civ: "precisionStone", tip: "Drag to draw. Many-sided shaped blocks that lock together: the toughest wall. Draw over old walls to upgrade them (their materials come back).", line: true },
+  { value: "polygate", icon: "⛩️", label: "Monumental gate", cat: "defense", cost: { shaped: 3 }, civ: "precisionStone", tip: "A shaped-stone gate. Put it in a wall (or draw over an old gate)." },
+  bld("beamTower", "defense"),
+  bld("pylon", "defense"),
+  bld("shelterDeep", "wonders"),
+  bld("resTable", "wonders"),
+  bld("chamber", "wonders"),
+  bld("shapingYard", "wonders"),
+  bld("energyTower", "wonders"),
+  bld("condenser", "wonders"),
+  bld("obelisk", "wonders"),
+  bld("stoneCircle", "wonders"),
+  bld("levPad", "wonders"),
+  { value: "levitate", icon: "🪶", label: "Levitate stone", cat: "wonders", cost: { shaped: LIFT.shaped }, civ: "levitation", tip: `Float a megalith from a Lift pad to anywhere in its range (${LIFT.cost} energy + ${LIFT.shaped} shaped stone). The ring shows how far each pad reaches.` },
+  bld("pyramid", "wonders"),
+  bld("resShield", "wonders"),
 ];
 
 export const BUILD_BY_ID = Object.fromEntries(BUILD_DEFS.map((b) => [b.value, b])) as Record<BuildOpt, BuildDef>;
@@ -362,14 +382,26 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
     if (!drag) hint(w, TECH[def.tech].icon, `The tribe needs to invent ${TECH[def.tech].name} first — open the camp's 💡 Invent tab!`);
     return false;
   }
+  if (def.civ && !w.civ.has(def.civ)) {
+    if (!drag) hint(w, CIV_TECH[def.civ].icon, `Research ${CIV_TECH[def.civ].name} first — open the 🏛️ Civilization panel!`);
+    return false;
+  }
   if (drag && !def.line) return false;
   switch (tool.build) {
+    case "levitate": {
+      if (drag) return false;
+      const why = w.civ.levitate(w, x, y);
+      if (why) hint(w, "🪶", why);
+      return !why;
+    }
     case "wall":
     case "stonewall":
+    case "polywall":
+    case "polygate":
     case "gate":
     case "stairs": {
-      const kind = tool.build === "stonewall" ? "stone" : c.learned.has("stonewall") && tool.build !== "wall" && w.camp.stock.stone > w.camp.stock.stick ? "stone" : "palisade";
-      const part = tool.build === "gate" ? "gate" : tool.build === "stairs" ? "stairs" : "wall";
+      const kind: WallKind = tool.build === "polywall" || tool.build === "polygate" ? "polygon" : tool.build === "stonewall" ? "stone" : c.learned.has("stonewall") && tool.build !== "wall" && w.camp.stock.stone > w.camp.stock.stick ? "stone" : "palisade";
+      const part = tool.build === "gate" || tool.build === "polygate" ? "gate" : tool.build === "stairs" ? "stairs" : "wall";
       const tx = Math.floor(x / TILE);
       const ty = Math.floor(y / TILE);
       if (part === "stairs" && ![w.tribe.wallAt(tx + 1, ty), w.tribe.wallAt(tx - 1, ty), w.tribe.wallAt(tx, ty + 1), w.tribe.wallAt(tx, ty - 1)].some((o) => o && o.part !== "stairs")) {

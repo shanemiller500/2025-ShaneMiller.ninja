@@ -102,8 +102,12 @@ export class Tribe {
     if (!isWalkTile(t) || isWaterTile(t) || t === T.Cave || t === T.Tar) return null;
     const ex = this.wallAt(tx, ty);
     if (ex) {
-      if (kind === "stone" && ex.kind === "palisade" && !ex.upgrade && part === "wall") {
+      // drawing a stronger kind over a piece upgrades it (the old materials come back when it's swapped)
+      const rank = { palisade: 0, stone: 1, polygon: 2 } as const;
+      const goal = ex.upgrade ? ex.upTo ?? "stone" : ex.kind;
+      if (rank[kind] > rank[goal] && (part === "wall" || part === ex.part)) {
         ex.upgrade = true;
+        ex.upTo = kind;
         ex.have = 0;
         this.version++;
         return ex;
@@ -276,6 +280,7 @@ export class Tribe {
       if (c.learned.has("fire") && (c.stock.meat > 0 || c.stock.fish > 3)) quota.push(["cook", 1]);
       if (this.farms.length) quota.push(["farmer", Math.min(2, this.farms.length)]);
       if (w.colony.current(w)) quota.push(["smith", 1]);
+      quota.push(...w.civ.quotas(w, adults));
     }
     const free: Human[] = [];
     const counts = new Map<Role, number>();
@@ -389,8 +394,9 @@ export class Tribe {
     if (wp.melee) {
       // a swing: hits whatever is in reach
       w.sfx("whoosh", h.x, h.y, 0.5, 1.3);
-      if (d.kind === "dino") hitDino(w, d, wp.dmg, h.x, h.y);
-      else w.dragons.hit(w, d, wp.dmg * 0.5);
+      const mul = w.civ.dmgMul(w, h, wp.tier, wp.proj);
+      if (d.kind === "dino") hitDino(w, d, wp.dmg * mul, h.x, h.y);
+      else w.dragons.hit(w, d, wp.dmg * 0.5 * mul);
       return;
     }
     const dist = Math.hypot(d.x - h.x, d.y - h.y);
@@ -413,7 +419,7 @@ export class Tribe {
       dur: flight,
       kind: wp.proj ?? "spear",
       target: d.id,
-      dmg: wp.dmg,
+      dmg: wp.dmg * w.civ.dmgMul(w, h, wp.tier, wp.proj),
       hit: false,
     });
     w.sfx(wp.kind === "spear" ? "whoosh" : "twang", h.x, h.y, 0.5);
@@ -735,7 +741,7 @@ export class Tribe {
       this.planT = 6;
       this.autoPlan(w);
     }
-    for (const f of this.farms) if (f.planted && f.growth < 1) f.growth = Math.min(1, f.growth + (dt / 80) * (1 + w.weather.rain * 1.5) * (w.weather.temp > 0.85 ? 0.5 : 1));
+    for (const f of this.farms) if (f.planted && f.growth < 1) f.growth = Math.min(1, f.growth + (dt / 80) * (1 + w.weather.rain * 1.5) * (w.weather.temp > 0.85 ? 0.5 : 1) * (w.civ.has("cropRotation") ? 2 : 1));
     // crops near lava/fire get scorched
     for (const f of this.farms) {
       const tx = Math.floor(f.x / TILE);
@@ -795,7 +801,7 @@ export class Tribe {
 
   serialize() {
     return {
-      walls: this.walls.map((wl) => [wl.tx, wl.ty, wl.kind === "stone" ? 1 : 0, Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? 1 : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0] as const),
+      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0] as const),
       farms: this.farms.map((f) => [Math.round(f.x), Math.round(f.y), Math.round(f.growth * 100) / 100, f.planted ? 1 : 0] as const),
       towers: this.towers.map((t) => [Math.round(t.x), Math.round(t.y), t.stage, Math.max(0, t.have), t.tx, t.ty, Math.round(t.hp)] as const),
       level: this.level,
@@ -811,7 +817,8 @@ export class Tribe {
     for (const row of d.walls) {
       const [tx, ty, stone, hp, built, up] = row;
       const part: WallPart = row[6] === 1 ? "gate" : row[6] === 2 ? "stairs" : "wall";
-      const wl: Wall = { id: w.nextId(), tx, ty, kind: stone ? "stone" : "palisade", part, open: row[7] === undefined ? true : !!row[7], auto: true, hp, built, have: 0, upgrade: !!up };
+      const kind: WallKind = stone === 2 ? "polygon" : stone ? "stone" : "palisade";
+      const wl: Wall = { id: w.nextId(), tx, ty, kind, part, open: row[7] === undefined ? true : !!row[7], auto: true, hp, built, have: 0, upgrade: !!up, ...(up === 2 ? { upTo: "polygon" as WallKind } : {}) };
       this.walls.push(wl);
       this.wallMap.set(ty * MAP_W + tx, wl);
     }
@@ -836,6 +843,8 @@ export class Tribe {
 /* ======================================================================= */
 
 /** A spear/arrow/bolt struck a dinosaur. */
+const KIND_CODE: Record<WallKind, number> = { palisade: 0, stone: 1, polygon: 2 };
+
 export function hitDino(w: World, d: Dino, dmg: number, fx: number, fy: number) {
   const def = sp(d.species);
   // bigger bodies soak up far more hits: a T. rex takes ~2x, a Brachiosaurus ~2.7x, a raptor ~0.65x
@@ -1056,6 +1065,11 @@ export function roleThink(w: World, h: Human): boolean {
     }
     case "builder":
       return buildThink(w, h, () => true);
+    case "researcher":
+    case "shaper":
+    case "technician":
+    case "miner":
+      return w.civ.roleThink(w, h, role);
     case "smith": {
       const item = w.colony.current(w);
       if (!item) return false;
@@ -1183,7 +1197,7 @@ function findPrey(w: World, h: Human, wp: Weapon): Dino | null {
     if (dc > 1500) continue;
     if (def.move === "fly") {
       if (wp.kind === "spear" && d.z > 8) continue;
-    } else if (sizeOf(d) > wp.prey) continue;
+    } else if (sizeOf(d) > wp.prey * (w.civ.has("huntingHorns") ? 1.4 : 1)) continue;
     // don't poke the big scary ones unless armed with bolts
     if (def.diet !== "herbivore" && def.move === "walk" && sizeOf(d) > 60 && wp.tier < 3) continue;
     let score = Math.hypot(d.x - h.x, d.y - h.y);
@@ -1434,7 +1448,7 @@ export function thinkRaider(w: World, d: Dino) {
   const c = w.camp;
   if (Math.hypot(d.x - c.pileX, d.y - c.pileY) < 60) {
     let ate = false;
-    const wrapped = w.colony.kits.has("storageWraps");
+    const wrapped = w.colony.kits.has("storageWraps") || w.civ.has("granary");
     for (const r of ["cooked", "meat", "fish", "crop", "berries"] as Resource[]) {
       if (c.stock[r] > 0) {
         if (!wrapped || w.rng() < 0.4) c.stock[r] = Math.max(0, c.stock[r] - (wrapped ? 1 : 2));
@@ -1494,7 +1508,7 @@ export function actRaider(w: World, d: Dino, dt: number): boolean {
     }
     d.dir = wl.tx * TILE + 16 > d.x ? 1 : -1;
     if (w.rng() < dt * 4) {
-      w.particles.spawn(P.Crumb, wl.tx * TILE + 16, wl.ty * TILE + 10, { z: 16, vz: 50, vx: (w.rng() - 0.5) * 60, g: 160, size: 3, max: 0.6, color: wl.kind === "stone" ? "#8f8a82" : "#8a6238" });
+      w.particles.spawn(P.Crumb, wl.tx * TILE + 16, wl.ty * TILE + 10, { z: 16, vz: 50, vx: (w.rng() - 0.5) * 60, g: 160, size: 3, max: 0.6, color: wl.kind === "palisade" ? "#8a6238" : "#8f8a82" });
       w.sfx("thud", d.x, d.y, 0.6);
     }
     if (wl.hp <= 0) {

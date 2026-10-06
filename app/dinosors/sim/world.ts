@@ -42,6 +42,8 @@ import { Tribe } from "./tribe";
 import { announceBirth, baseGenes, evolveWorld, inherit, type SpeciesEvo } from "./genetics";
 import { Nav } from "./nav";
 import { Colony } from "./colony";
+import { Civ } from "./civ";
+import { Extinction } from "./extinction";
 import { Snow } from "./snow";
 import { Dragons } from "./dragons";
 import { TaskBoard } from "./tasks";
@@ -123,6 +125,8 @@ export class World {
   dragons = new Dragons();
   tasks = new TaskBoard();
   population = new Population();
+  civ = new Civ();
+  extinction = new Extinction();
   /** bumps when huts appear / change footprint (nav) */
   shelterVersion = 0;
   /** frames simulated (for staggering occasional checks) */
@@ -571,11 +575,11 @@ export class World {
     for (const wl of this.tribe.walls) {
       if (wl.built < 1) continue;
       const d = Math.hypot(wl.tx * TILE + 16 - x, wl.ty * TILE + 16 - y);
-      if (d < r) wl.hp -= (1 - d / r) * power * 500 * (wl.kind === "stone" ? 0.5 : 1);
+      if (d < r) wl.hp -= (1 - d / r) * power * 500 * (wl.kind === "polygon" ? 0.35 : wl.kind === "stone" ? 0.5 : 1);
     }
     for (const t of this.tribe.towers) if (Math.hypot(t.x - x, t.y - y) < r) t.hp -= power * 260;
     for (const s of this.shelters) if (s.stage > 0 && Math.hypot(s.x - x, s.y - y) < r) s.hp -= power * (1 - HOUSING[s.tier].protect * 0.6);
-    for (const b of this.colony.buildings) if (Math.hypot(b.x - x, b.y - y) < r) b.hp -= power * 220;
+    for (const b of this.colony.buildings) if (Math.hypot(b.x - x, b.y - y) < r) b.hp -= power * 220 * (b.kind === "pyramid" || b.kind === "shelterDeep" ? 0.2 : 1);
     for (const sc of this.colony.scorpions) if (Math.hypot(sc.x - x, sc.y - y) < r) sc.hp -= power * 200;
   }
 
@@ -649,6 +653,8 @@ export class World {
     this.colony.update(this, dt);
     this.dragons.update(this, dt);
     this.population.update(this, dt);
+    this.civ.update(this, dt);
+    this.extinction.update(this, dt);
     this.tasks.update(this, dt);
     this.snow.update(this, dt);
     this.healLand(dt);
@@ -905,6 +911,8 @@ export class World {
       shelters: this.shelters.map((s) => ({ id: s.id, x: r(s.x), y: r(s.y), stage: s.stage, have: s.have, plan: s.plan, tier: s.tier, hp: r(s.hp), up: s.up, upHave: s.upHave })),
       colony: this.colony.serialize(),
       population: this.population.serialize(),
+      civ: this.civ.serialize(),
+      extinction: this.extinction.serialize(),
       campfires: this.campfires.map((f) => ({ x: r(f.x), y: r(f.y), lit: f.lit, fuel: r(f.fuel) })),
       camp: { stock: this.camp.stock, learned: Array.from(this.camp.learned), goal: this.camp.goal },
       edits: this.terrain.edits(),
@@ -977,6 +985,8 @@ export class World {
     }
     w.colony.load(w, data.colony);
     w.population.load(data.population);
+    w.civ.load(data.civ);
+    w.extinction.load(data.extinction);
     for (const f of data.campfires) w.campfires.push({ id: w.nextId(), ...f, cook: 0 });
     w.camp.stock = { ...w.camp.stock, ...data.camp.stock };
     w.tribe.load(w, data.tribe);

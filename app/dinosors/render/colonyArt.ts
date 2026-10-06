@@ -8,6 +8,8 @@
 import type { Building, Dragon, ResNode, Scorpion, Shelter, Wall } from "../sim/types";
 import { HOUSING, NODES } from "../data/colony";
 import { shade } from "./drawDino";
+import { drawCivNode, polyBlocks } from "./civArt";
+import { CIV_NODES } from "../data/colony";
 
 const OUT = "rgba(30,22,16,0.55)";
 const T = 32;
@@ -23,7 +25,7 @@ export interface WallLook {
   t: number;
 }
 
-const WALL_H = { palisade: 30, stone: 26 } as const;
+const WALL_H = { palisade: 30, stone: 26, polygon: 30 } as const;
 
 function seeded(n: number) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -38,7 +40,8 @@ function seeded(n: number) {
  * Origin: bottom-centre of the tile.
  */
 export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) {
-  const stone = wl.kind === "stone";
+  const stone = wl.kind !== "palisade";
+  const poly = wl.kind === "polygon";
   const built = Math.max(0, Math.min(1, wl.built));
   if (built < 1) {
     // blueprint: a faint ghost of the wall, marked out with stakes + string
@@ -82,7 +85,13 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
   for (const [x0, x1, , y1, front] of pieces) {
     if (!front) continue;
     const fy = y1;
-    if (stone) {
+    if (poly) {
+      polyBlocks(c, x0, fy - h, x1, fy, seed + Math.round(x0) * 3);
+      if (broken) {
+        c.fillStyle = "rgba(40,35,30,0.5)";
+        c.fillRect(x0 + (x1 - x0) * 0.3, fy - h, (x1 - x0) * 0.25, h * 0.4);
+      }
+    } else if (stone) {
       const g = c.createLinearGradient(0, fy - h, 0, fy);
       g.addColorStop(0, "#aaa398");
       g.addColorStop(1, "#7c766d");
@@ -142,7 +151,7 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
   }
   // ---- walkway on top ----
   for (const [x0, x1, y0, y1] of pieces) {
-    c.fillStyle = stone ? "#c4bdb1" : "#9b7448";
+    c.fillStyle = poly ? "#d3cbbd" : stone ? "#c4bdb1" : "#9b7448";
     c.fillRect(x0, y0 - h, x1 - x0, y1 - y0);
   }
   // planks / flagstones + edge lines
@@ -165,7 +174,12 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
   const edge = stone ? "#d8d2c6" : "#7a5230";
   c.fillStyle = edge;
   const bump = (x: number, y: number) => {
-    if (stone) c.fillRect(x - 2, y - 4, 4, 4);
+    if (poly) {
+      // smooth, slightly rounded capstones
+      c.beginPath();
+      c.ellipse(x, y - 1.5, 2.6, 2, 0, Math.PI, 0);
+      c.fill();
+    } else if (stone) c.fillRect(x - 2, y - 4, 4, 4);
     else {
       c.beginPath();
       c.moveTo(x - 2.4, y);
@@ -283,7 +297,7 @@ function drawGateDoors(c: CanvasRenderingContext2D, stone: boolean, h: number, s
 }
 
 function drawStairs(c: CanvasRenderingContext2D, wl: Wall, look: WallLook, built: number) {
-  const stone = wl.kind === "stone";
+  const stone = wl.kind !== "palisade";
   const H = WALL_H[wl.kind] * built;
   // ramp rises toward the wall it leans on (N, E, W or S)
   const m = look.mask;
@@ -969,6 +983,7 @@ export function drawScorpion(c: CanvasRenderingContext2D, s: Scorpion) {
 /* ------------------------------ deposits ------------------------------ */
 
 export function drawNode(c: CanvasRenderingContext2D, n: ResNode, t: number) {
+  if (CIV_NODES.includes(n.kind)) return drawCivNode(c, n, t);
   const def = NODES[n.kind];
   const k = 0.55 + 0.45 * (n.amount / Math.max(1, n.max));
   const v = n.variant;

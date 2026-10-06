@@ -110,6 +110,7 @@ export function recover(w: World, h: Human, dt: number) {
     if (hut) rate *= 3;
   }
   if (w.camp.learned.has("medicine")) rate *= 1.4;
+  if (w.civ.has("herbalism")) rate *= 2;
   if (h.state === "down") {
     rate = 0.004;
     // nobody came: they come round by themselves eventually

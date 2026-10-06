@@ -153,7 +153,7 @@ export function WorldScreen(p: Props) {
   });
 
   return (
-    <div className="absolute inset-0 overflow-hidden bg-black text-white">
+    <div data-pad-world className="absolute inset-0 overflow-hidden bg-black text-white">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
       <div className={cn("pointer-events-none absolute inset-0 bg-black transition-opacity duration-300", fade ? "opacity-100" : "opacity-0")} />
 

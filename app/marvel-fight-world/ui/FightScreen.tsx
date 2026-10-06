@@ -17,6 +17,7 @@ import { ControlsCard } from "./ControlsCard";
 import { ScorePanel } from "./ScorePanel";
 import type { ScoreBreakdown } from "../data/score";
 import { suspendPadBridge } from "../input/gamepad";
+import { keyLabel } from "../input/input";
 import { usePadConnected } from "./usePad";
 import { MoveGuide, HowToPlay, guideFor } from "./MoveGuide";
 import { SettingsScreen } from "./SettingsScreen";
@@ -50,7 +51,13 @@ export function FightScreen(props: Props) {
   const sessionRef = useRef<GameSession | null>(null);
   const [phase, setPhase] = useState<"vs" | "fight">("vs");
   const [paused, setPaused] = useState(false);
+  const [tutorial, setTutorial] = useState(false);
+  const tutorialRef = useRef(false);
   const [pausePage, setPausePage] = useState<"menu" | "moves" | "controls" | "character" | "settings">("menu");
+  const pausePageRef = useRef(pausePage);
+  const pausedRef = useRef(paused);
+  pausePageRef.current = pausePage;
+  pausedRef.current = paused;
   const [guideSide, setGuideSide] = useState<0 | 1>(0);
   const [pinned, setPinned] = useState<string[]>([]);
   const [showPinned, setShowPinned] = useState(true);
@@ -97,7 +104,11 @@ export function FightScreen(props: Props) {
               setSummary(s);
               setScore(cbRef.current.onMatchOver?.(s) ?? null);
             },
-            onPauseRequest: () => setPaused((p) => !p),
+            onPauseRequest: () => {
+              if (tutorialRef.current) return;
+              if (pausedRef.current && pausePageRef.current !== "menu") setPausePage("menu");
+              else setPaused((p) => !p);
+            },
           },
           [a, b]
         );
@@ -131,6 +142,24 @@ export function FightScreen(props: Props) {
 
   useEffect(() => { if (!paused) setPausePage("menu"); }, [paused]);
 
+  useEffect(() => {
+    if (phase !== "fight" || !controllers.includes("human")) return;
+    try {
+      if (window.localStorage.getItem("fight-world-tutorial-seen")) return;
+    } catch { /* private browsing can disable storage */ }
+    tutorialRef.current = true;
+    sessionRef.current?.setPaused(true);
+    setTutorial(true);
+    setPaused(true);
+  }, [phase, controllers]);
+
+  const finishTutorial = () => {
+    tutorialRef.current = false;
+    setTutorial(false);
+    setPaused(false);
+    try { window.localStorage.setItem("fight-world-tutorial-seen", "1"); } catch { /* optional */ }
+  };
+
   const togglePin = (id: string) => setPinned((old) => {
     const key = `${player}:${id}`;
     if (old.includes(key)) return old.filter((x) => x !== key);
@@ -157,6 +186,21 @@ export function FightScreen(props: Props) {
   const fighter = player === 0 ? p1 : p2;
   const ownPins = pinned.filter((x) => x.startsWith(`${player}:`)).map((x) => x.slice(2));
   const pinGuide = guideFor(fighter, settings, bindingPlayer).filter((e) => ownPins.includes(e.id));
+  const trainingGuide = guideFor(fighter, settings, bindingPlayer);
+  const trainingInput = (id: string) => {
+    const entry = trainingGuide.find((e) => e.id === id);
+    return entry ? (pad ? entry.pad : entry.keyboard) : "";
+  };
+  const trainingRows: [string, string][] = [
+    ["Move", pad ? "Left Stick / D-Pad" : `${keyLabel(settings.bindings[bindingPlayer].left[0] ?? "")} / ${keyLabel(settings.bindings[bindingPlayer].right[0] ?? "")}`],
+    ["Jump", pad ? "A" : keyLabel(settings.bindings[bindingPlayer].up[0] ?? "")],
+    ["Light", trainingInput("lp")],
+    ["Heavy", trainingInput("hp")],
+    ["Kick", trainingInput("kick")],
+    ["Block", trainingInput("block")],
+    ["Special", trainingInput("s1")],
+    ["Ultimate", trainingInput("ult")],
+  ];
   const youWon = summary && human !== -1 && controllers[1] === "cpu" ? summary.winner === human : null;
   const actions = summary
     ? cbRef.current.resultActions?.(summary) ?? [
@@ -200,13 +244,24 @@ export function FightScreen(props: Props) {
       <AnimatePresence>
         {paused && !summary && (
           <motion.div data-pad-menu initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20 overflow-y-auto bg-[#05070d]/95 p-4 backdrop-blur-xl md:p-8">
-            {pausePage === "settings" ? <SettingsScreen settings={settings} onChange={(s) => props.onSettingsChange?.(s)} onBack={() => setPausePage("menu")} /> :
+            {tutorial ? <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-center gap-6 py-8">
+              <p className="font-mono text-xs font-bold uppercase tracking-[0.35em] text-amber-300">First fight · quick start</p>
+              <h2 className="fw-display text-5xl uppercase leading-none text-white sm:text-7xl">Fight as {fighter.name}</h2>
+              <p className="max-w-xl text-white/70">{fighter.blurb} The match waits here until you are ready.</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {trainingRows.map(([label, input]) =>
+                  <div key={label} className="flex justify-between gap-4 border-b border-white/10 px-2 py-2.5"><span className="text-white/65">{label}</span><strong className="font-mono text-amber-200">{input}</strong></div>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-3"><ArcadeButton size="lg" data-pad-pause autoFocus onClick={finishTutorial}>Begin fight</ArcadeButton><ArcadeButton tone="ghost" onClick={() => { tutorialRef.current = false; setTutorial(false); setPausePage("moves"); try { window.localStorage.setItem("fight-world-tutorial-seen", "1"); } catch { /* optional */ } }}>See {fighter.name}&apos;s moves</ArcadeButton><ArcadeButton tone="ghost" data-pad-back onClick={finishTutorial}>Skip</ArcadeButton></div>
+            </div> : pausePage === "settings" ? <SettingsScreen settings={settings} onChange={(s) => props.onSettingsChange?.(s)} onBack={() => setPausePage("menu")} /> :
             <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[280px_1fr]">
               <div className="flex flex-col gap-2">
                 <p className="font-mono text-xs uppercase tracking-[0.3em] text-amber-300">Fight World · {arena.name}</p>
                 <h2 className="fw-display fw-outline mb-4 text-6xl font-[650] uppercase text-white">Paused</h2>
                 {controllers[0] === "human" && controllers[1] === "human" && <div className="flex gap-2"><ArcadeButton tone="ghost" size="sm" onClick={() => setGuideSide(0)}>P1 moves</ArcadeButton><ArcadeButton tone="ghost" size="sm" onClick={() => setGuideSide(1)}>P2 moves</ArcadeButton></div>}
-                <ArcadeButton size="lg" data-pad-back data-pad-pause autoFocus onClick={() => pausePage === "menu" ? setPaused(false) : setPausePage("menu")}>{pausePage === "menu" ? "Resume" : "Back to pause"}</ArcadeButton>
+                {pausePage !== "menu" && <ArcadeButton tone="ghost" data-pad-back autoFocus onClick={() => setPausePage("menu")}>Back to pause</ArcadeButton>}
+                <ArcadeButton size="lg" data-pad-back={pausePage === "menu" ? "" : undefined} data-pad-pause autoFocus={pausePage === "menu"} onClick={() => setPaused(false)}>Resume</ArcadeButton>
                 <ArcadeButton tone="ghost" onClick={() => setPausePage("moves")}>Move List</ArcadeButton>
                 <ArcadeButton tone="ghost" onClick={() => setPausePage("controls")}>Controls</ArcadeButton>
                 <ArcadeButton tone="ghost" onClick={() => setPausePage("character")}>Character Info</ArcadeButton>
@@ -216,10 +271,10 @@ export function FightScreen(props: Props) {
                 <ArcadeButton tone="ghost" onClick={() => exit("quit")}>Quit Match</ArcadeButton>
               </div>
               <div className="min-h-[360px] max-h-[82vh] overflow-y-auto border-t-2 border-amber-300/60 bg-white/[0.035] p-5 lg:p-7">
-                {pausePage === "menu" && <><h3 className="fw-display text-4xl uppercase text-white">{fighter.name}</h3><p className="mt-2 text-white/60">{fighter.blurb}</p><p className="mt-6 text-sm text-amber-200">{pad ? "A Select · B Back · Menu Resume" : "Enter Select · Esc Resume"}</p><HowToPlay def={fighter} /></>}
+                {pausePage === "menu" && <><h3 className="fw-display text-4xl uppercase text-white">{fighter.name}</h3><p className="mt-2 text-white/60">{fighter.blurb}</p><p className="mt-6 text-sm text-amber-200">{pad ? "A Select · B Back · Menu Resume" : "Enter Select · Esc Resume"}</p><HowToPlay def={fighter} settings={settings} player={bindingPlayer} /></>}
                 {pausePage === "moves" && <><h3 className="fw-display mb-4 text-4xl uppercase">Move List</h3><MoveGuide def={fighter} settings={settings} player={bindingPlayer} pinned={ownPins} onTogglePin={togglePin} /></>}
                 {pausePage === "controls" && <><h3 className="fw-display mb-4 text-4xl uppercase">Controls</h3><ControlsCard settings={settings} versus={controllers[0] === "human" && controllers[1] === "human"} p1={controllers[0] === "cpu" ? fighter : p1} p2={p2} /></>}
-                {pausePage === "character" && <><h3 className="fw-display mb-4 text-4xl uppercase">How to Play {fighter.name}</h3><HowToPlay def={fighter} /></>}
+                {pausePage === "character" && <><h3 className="fw-display mb-4 text-4xl uppercase">How to Play {fighter.name}</h3><HowToPlay def={fighter} settings={settings} player={bindingPlayer} /></>}
               </div>
             </div>}
           </motion.div>

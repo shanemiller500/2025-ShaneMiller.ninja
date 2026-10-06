@@ -160,13 +160,15 @@ export class Renderer {
     const df = dt * 60 * m.timeScale;
     this.time += dt;
     this.impact.strength = Math.max(0, this.impact.strength - dt * 1.8);
-    this.frameNo++;
+    if (dt > 0) this.frameNo++;
     this.particles.blood = this.settings.blood;
     this.particles.update(m.superFreeze > 0 ? 0 : df);
     updateHud(this.hud, m, dt * 60);
     for (const i of [0, 1] as const) this.flash[i] = Math.max(0, this.flash[i] - dt * 7);
-    this.updateCamera(m, dt);
-    this.updateGhosts(m);
+    if (dt > 0) {
+      this.updateCamera(m, dt);
+      this.updateGhosts(m);
+    }
 
     const ctx = this.ctx;
     const VW = this.VW;
@@ -185,6 +187,12 @@ export class Renderer {
 
     drawFloor(ctx, this.arena, this.time);
     for (const p of m.props) drawProp(ctx, p, this.arena, this.time);
+    // A soft pool of arena-coloured light separates both silhouettes from
+    // detailed stage art without adding another scene layer or canvas pass.
+    for (const f of m.fighters) {
+      const color = f.def.look.glow ?? PLAYER_COLORS[f.index];
+      glow(ctx, color, f.x, -Math.max(0, f.y) - 95, 190, f.alive ? 0.11 : 0.035);
+    }
     for (const f of m.fighters) drawShadow(ctx, f);
 
     // Afterimages
@@ -204,6 +212,11 @@ export class Renderer {
       const j = poseFor(f, this.time);
       const rig = buildRig(f, j);
       const weaponOut = m.projectiles.some((p) => !p.dead && p.owner === f.index && (p.spec.fx === "shield" || p.spec.fx === "hammer"));
+      if (f.move && f.movePhase === "startup" && (f.move.kind === "heavy" || f.move.kind === "special" || f.move.kind === "ultimate")) {
+        const windup = Math.min(1, f.moveTime / Math.max(1, f.move.startup));
+        const color = f.def.look.glow ?? (f.move.kind === "ultimate" ? "#fde68a" : PLAYER_COLORS[f.index]);
+        glow(ctx, color, f.x + rig.fHand[0], -(f.y + rig.fHand[1]), 35 + windup * 50, (0.16 + windup * 0.32) * (0.85 + Math.sin(this.time * 18) * 0.15));
+      }
       drawFighter(ctx, f, j, rig, { portrait: this.portraits[f.index], t: this.time, flash: this.flash[f.index], ring: PLAYER_COLORS[f.index], weaponOut, rim: this.arena.colors[1] });
       drawMoveFx(ctx, f, this.time);
       this.drawMarker(ctx, f, rig);
@@ -278,13 +291,15 @@ export class Renderer {
     zoom = Math.min(zoom, (FLOOR_Y - 210) / (maxY + 60));
     if (m.superFreeze > 0 && m.superOwner !== null) {
       const f = m.fighters[m.superOwner];
-      cx = f.x;
-      zoom = Math.min(2.4, zoom * 1.3);
+      // Favor the attacker without pushing the defender off screen.
+      cx = cx * 0.75 + f.x * 0.25;
+      zoom = Math.min(2.4, zoom * 1.16);
     } else if (m.phase === "ko" && m.phaseTime < 80) {
       const loser = a.alive ? b : a;
       cx = cx * 0.5 + loser.x * 0.5;
       zoom *= 1.12;
     }
+    zoom = Math.min(zoom, VW / (dist + 500));
     const k = Math.min(1, dt * 6);
     this.cam.x += (cx - this.cam.x) * k;
     this.cam.zoom += (zoom - this.cam.zoom) * Math.min(1, dt * 4);

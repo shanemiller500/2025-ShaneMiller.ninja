@@ -809,3 +809,337 @@ test('evolving a million years pushes species the way their world does', () => {
   const p2 = w2.dinos.find((d) => d.id === p1.id);
   assert.ok(Math.abs(p2.genes.speed - p1.genes.speed) < 0.01 && p2.gen === p1.gen, 'genes survive save/load');
 });
+
+/* ------------------------------ civilization paths ------------------------------ */
+
+const { CIV_TECH, PYRAMID_STAGES, SHIELD_HOLD } = require(path.join(root, 'data', 'civ.ts'));
+const { BUILDINGS } = require(path.join(root, 'data', 'colony.ts'));
+const { wallMaxHp, sites } = require(path.join(root, 'sim', 'build.ts'));
+const { applyTool, DEFAULT_TOOL } = require(path.join(root, 'game', 'tools.ts'));
+
+const SETTLED = ['tools', 'fire', 'axe', 'spear', 'basket', 'palisade', 'stonewall', 'farming', 'shelter'];
+
+/** A settled tribe that has already opened the chamber (and picked a path). */
+function civWorld(seed, pathId) {
+  const w = tribeWorld(seed, SETTLED);
+  w.civ.update(w, 2.1);
+  w.civ.investigate(w);
+  if (pathId) w.civ.choose(w, pathId);
+  return w;
+}
+const finish = (w, kind, x, y) => {
+  const b = w.colony.addBuilding(w, kind, x, y);
+  assert.ok(b, `placed ${kind}`);
+  b.built = 1;
+  b.hp = BUILDINGS[kind].hp;
+  w.colony.version++;
+  return b;
+};
+const learn = (w, ...ids) => ids.forEach((id) => w.civ.done.add(id));
+const clone = (w) => World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+
+test('the humming chamber surfaces once the tribe is settled, and offers the choice', () => {
+  const w = tribeWorld(501, ['tools']);
+  run(w, 3);
+  assert.equal(w.civ.chamberX, 0, 'not before the tribe is settled');
+  for (const t of SETTLED) w.camp.learned.add(t);
+  run(w, 3);
+  assert.ok(w.civ.chamberX > 0, 'chamber surfaced');
+  assert.ok(w.props.some((p) => p.kind === 'chamber'), 'as a prop in the world');
+  const d = Math.hypot(w.civ.chamberX - w.camp.x, w.civ.chamberY - w.camp.y);
+  assert.ok(d > 300 && d < 1300, `a walk from camp (${Math.round(d)}px)`);
+  const h = w.humans.find((x) => !x.child);
+  h.x = w.civ.chamberX + 20;
+  h.y = w.civ.chamberY + 10;
+  run(w, 3);
+  assert.ok(w.civ.found && w.civ.choicePending, 'choice offered');
+  assert.equal(w.civ.path, 'none', 'nothing decided for the player');
+  const meteor = w.camp.stock.meteorite;
+  assert.ok(w.civ.choose(w, 'resonance'));
+  assert.equal(w.civ.current, 'resonance', 'starts on the first idea');
+  assert.equal(w.camp.stock.meteorite, meteor + 1, 'the meteor shard from the chamber');
+  assert.ok(!w.civ.choose(w, 'traditional'), 'the choice is final');
+  const w2 = clone(w);
+  assert.equal(w2.civ.path, 'resonance');
+  assert.equal(w2.civ.chamberX, w.civ.chamberX, 'chamber position saves');
+});
+
+test('Resonance research: researchers at the table learn ideas that unlock buildings', () => {
+  const w = civWorld(502, 'resonance');
+  Object.assign(w.camp.stock, { stone: 40, wood: 20, copper: 10, quartz: 10 });
+  finish(w, 'resTable', w.camp.x + 140, w.camp.y + 120);
+  const [a, b] = w.humans.filter((h) => !h.child);
+  a.role = 'researcher';
+  b.role = 'researcher';
+  const t0 = run(w, 150, (w) => w.civ.done.has('resonance') && w.civ.done.has('copperRes'));
+  assert.ok(t0 > 0, `learned two ideas (done: ${[...w.civ.done]}, current ${w.civ.current} ${w.civ.rp.toFixed(1)})`);
+  assert.ok(w.camp.stock.copper < 10, 'materials were used');
+  const tw = w.colony.addBuilding(w, 'energyTower', w.camp.x - 200, w.camp.y + 150);
+  assert.equal(sites(w).find((s) => s.kind === 'building' && s.id === tw.id).locked, null, 'energy tower unlocked');
+  const pyr = w.colony.addBuilding(w, 'pyramid', w.camp.x + 300, w.camp.y + 300);
+  assert.equal(sites(w).find((s) => s.id === pyr.id).locked, 'monumental', 'later wonders stay locked');
+});
+
+test('Old Ways: masonry toughens stone walls, crop rotation speeds farms, late cross-research opens', () => {
+  const w = civWorld(503, 'traditional');
+  const wl = w.tribe.addWall(w, Math.floor(w.camp.x / TILE) + 6, Math.floor(w.camp.y / TILE) + 6, 'stone');
+  const before = wallMaxHp(wl);
+  learn(w, 'masonry');
+  run(w, 0.1);
+  assert.ok(wallMaxHp(wl) > before * 1.4, 'masonry: +50% wall hp');
+  const f = w.tribe.addFarm(w, w.camp.x + 260, w.camp.y + 200) ?? w.tribe.farms[0];
+  assert.ok(f, 'a farm');
+  f.planted = true;
+  f.growth = 0;
+  run(w, 10);
+  const slow = f.growth;
+  f.growth = 0;
+  learn(w, 'cropRotation');
+  run(w, 10);
+  assert.ok(f.growth > slow * 1.7, `crop rotation doubles growth (${slow.toFixed(3)} -> ${f.growth.toFixed(3)})`);
+  assert.ok(!w.civ.crossOpen());
+  learn(w, 'ironForge', 'herbalism', 'granary', 'huntingHorns');
+  assert.ok(w.civ.crossOpen(), 'six ideas in: the fence opens');
+  const opts = w.civ.options();
+  assert.ok(opts.includes('waterAir') && opts.includes('precisionStone'), `can borrow (${opts})`);
+  assert.ok(!opts.includes('levitation'), 'but not the deep Resonance');
+  assert.equal(w.civ.rpOf('waterAir'), CIV_TECH.waterAir.rp * 2, 'borrowing costs double');
+});
+
+test('energy: towers charge up to their store, storms charge faster, condensers pull water from fog', () => {
+  const w = civWorld(504, 'resonance');
+  learn(w, 'resonance', 'copperRes', 'waterAir');
+  finish(w, 'energyTower', w.camp.x - 160, w.camp.y + 140);
+  finish(w, 'energyTower', w.camp.x - 120, w.camp.y + 200);
+  w.civ.energy = 0;
+  run(w, 20);
+  const calm = w.civ.energy;
+  assert.ok(calm > 10, `charged (${calm.toFixed(1)})`);
+  run(w, 400);
+  assert.ok(w.civ.energy <= w.civ.cap + 0.01 && w.civ.energy > w.civ.cap * 0.9, `fills to the cap (${w.civ.energy.toFixed(1)}/${w.civ.cap})`);
+  w.civ.energy = 0;
+  w.weather.set(w, 'storm');
+  w.weather.storm = 1;
+  run(w, 20);
+  assert.ok(w.civ.energy > calm * 1.3, `storm charges faster (${w.civ.energy.toFixed(1)} vs ${calm.toFixed(1)})`);
+  finish(w, 'condenser', w.camp.x + 240, w.camp.y + 260);
+  const humid = (o) => { Object.assign(w.weather, o); };
+  w.weather.set(w, 'hot');
+  humid({ rain: 0, fog: 0, storm: 0, temp: 0.95, snow: 0 });
+  w.civ.energy = 100;
+  w.camp.stock.water = 0;
+  run(w, 30, () => humid({ rain: 0, fog: 0, storm: 0, temp: 0.95, snow: 0 }));
+  const dry = w.camp.stock.water;
+  w.weather.set(w, 'fog');
+  w.camp.stock.water = 0;
+  w.civ.energy = 100;
+  run(w, 30, () => humid({ rain: 0, fog: 0.75, storm: 0, temp: 0.4, snow: 0 }));
+  assert.ok(w.camp.stock.water > dry * 2 && w.camp.stock.water > 0.2, `fog gives more water (${dry.toFixed(2)} vs ${w.camp.stock.water.toFixed(2)})`);
+});
+
+test('beam towers shoot raiders (costing energy) and pylon barriers push them back', () => {
+  const w = civWorld(505, 'resonance');
+  learn(w, 'resonance', 'copperRes', 'quartzTuning', 'energyStorage', 'energyWeapons', 'defensiveEnergy');
+  w.tribe.danger = 'normal';
+  const bt = finish(w, 'beamTower', w.camp.x + 40, w.camp.y + 200);
+  finish(w, 'energyTower', w.camp.x - 160, w.camp.y + 140);
+  w.civ.update(w, 1.1);
+  w.civ.energy = w.civ.cap;
+  const raptor = addDino(w, 'raptor', bt.x + 260, bt.y + 40, { raider: true, hunger: 0.9 });
+  const h0 = raptor.health;
+  const e0 = w.civ.energy;
+  run(w, 12, () => !w.dinos.includes(raptor));
+  assert.ok(!w.dinos.includes(raptor) || raptor.health < h0 - 0.3, 'beam tower hurt the raider');
+  assert.ok(w.civ.energy < e0, 'shots cost energy');
+  const p1 = finish(w, 'pylon', w.camp.x - 400, w.camp.y - 300);
+  const p2 = finish(w, 'pylon', w.camp.x - 240, w.camp.y - 300);
+  assert.equal(w.civ.pylonLinks(w).length, 1, 'linked');
+  w.civ.energy = w.civ.cap;
+  const r2 = addDino(w, 'raptor', (p1.x + p2.x) / 2, p1.y - 40, { raider: true, hunger: 0.9 });
+  for (let i = 0; i < 60; i++) {
+    r2.y += 2; // tries to walk south through the line
+    w.update(DT);
+  }
+  assert.ok(r2.y < p1.y - 6, `pushed back from the barrier (y ${r2.y.toFixed(0)} vs line ${p1.y})`);
+});
+
+test('shaped stone: shapers cut blocks, polygon walls need them and upgrades refund the old stone', () => {
+  const w = civWorld(506, 'resonance');
+  learn(w, 'resonance', 'copperRes', 'quartzTuning', 'precisionStone');
+  finish(w, 'shapingYard', w.camp.x + 180, w.camp.y + 130);
+  w.camp.stock.stone = 20;
+  w.camp.stock.shaped = 0;
+  const h = w.humans.find((x) => !x.child);
+  h.role = 'shaper';
+  run(w, 60, () => w.camp.stock.shaped >= 2);
+  assert.ok(w.camp.stock.shaped >= 2, `shaped blocks (${w.camp.stock.shaped})`);
+  assert.ok(w.camp.stock.stone <= 16);
+  h.role = 'gatherer';
+  const tx = Math.floor(w.camp.x / TILE) + 8;
+  const ty = Math.floor(w.camp.y / TILE) + 5;
+  const wl = w.tribe.addWall(w, tx, ty, 'stone');
+  wl.built = 1;
+  wl.hp = wallMaxHp(wl);
+  const up = w.tribe.addWall(w, tx, ty, 'polygon');
+  assert.equal(up, wl, 'same piece');
+  assert.ok(wl.upgrade && wl.upTo === 'polygon');
+  assert.equal(sites(w).find((s) => s.kind === 'wall' && s.id === wl.id).need, 'shaped');
+  const wl2 = clone(w).tribe.wallAt(tx, ty);
+  assert.ok(wl2.upgrade && wl2.upTo === 'polygon', 'polygon upgrade survives save/load');
+  wl.have = 2;
+  const stone0 = w.camp.stock.stone;
+  for (const b of w.humans.filter((x) => !x.child && x !== h)) b.role = 'builder';
+  run(w, 60, () => wl.kind === 'polygon' && wl.built >= 1);
+  assert.equal(wl.kind, 'polygon');
+  assert.ok(wallMaxHp(wl) > 800, 'toughest wall');
+  assert.ok(w.camp.stock.stone >= stone0, `old stone refunded (${stone0} -> ${w.camp.stock.stone})`);
+  assert.equal(clone(w).tribe.wallAt(tx, ty).kind, 'polygon', 'polygon walls save');
+});
+
+test('the pyramid rises stage by stage, lift pads float blocks onto it, and it needs energy to wake', () => {
+  const w = civWorld(507, 'resonance');
+  learn(w, 'resonance', 'copperRes', 'quartzTuning', 'precisionStone', 'levitation', 'monumental', 'energyStorage');
+  finish(w, 'levPad', w.camp.x + 140, w.camp.y + 260);
+  const pyr = w.colony.addBuilding(w, 'pyramid', w.camp.x + 420, w.camp.y + 320);
+  assert.ok(pyr, 'pyramid placed');
+  Object.assign(w.camp.stock, { stone: 80, shaped: 60, crystal: 10, copper: 10, gold: 3, quartz: 6 });
+  pyr.stage = 1;
+  pyr.built = 0.4;
+  w.civ.update(w, 1.1);
+  w.civ.energy = 50;
+  run(w, 8);
+  assert.ok((pyr.have.shaped ?? 0) > 0 || pyr.stage > 1, 'blocks floated over');
+  for (const h of w.humans.filter((x) => !x.child)) h.role = 'builder';
+  w.civ.energy = 0;
+  const seen = new Set();
+  run(w, 900, () => {
+    seen.add(pyr.stage ?? 0);
+    w.civ.energy = 0;
+    if ((pyr.stage ?? 0) === PYRAMID_STAGES.length - 1 && pyr.built >= 0.99) return true;
+  });
+  assert.ok(seen.size >= 4, `went through stages (${[...seen]})`);
+  assert.equal(pyr.stage, PYRAMID_STAGES.length - 1, 'reached activation');
+  assert.ok(pyr.built < 1, 'waiting for a charge');
+  run(w, 30, () => {
+    w.civ.cap = 400;
+    w.civ.energy = 200;
+    return pyr.built >= 1;
+  });
+  assert.ok(pyr.built >= 1, 'woke up with energy');
+  assert.ok(w.discoveries.has('pyramid'));
+  assert.equal(clone(w).colony.buildings.find((b) => b.kind === 'pyramid').stage, PYRAMID_STAGES.length - 1, 'stage saved');
+});
+
+test('Levitate tool floats a megalith (range, energy + shaped stone checked)', () => {
+  const w = civWorld(508, 'resonance');
+  learn(w, 'resonance', 'copperRes', 'quartzTuning', 'precisionStone', 'levitation');
+  const pad = finish(w, 'levPad', w.camp.x + 160, w.camp.y + 200);
+  w.camp.stock.shaped = 1;
+  w.civ.energy = 100;
+  w.civ.cap = 100;
+  const tool = { ...DEFAULT_TOOL, id: 'build', build: 'levitate' };
+  assert.ok(!applyTool(w, tool, pad.x + 120, pad.y + 60, false), 'not enough shaped stone');
+  w.camp.stock.shaped = 6;
+  assert.ok(!applyTool(w, tool, pad.x + 1400, pad.y, false), 'out of range');
+  assert.ok(applyTool(w, tool, pad.x + 120, pad.y + 60, false), 'lifted');
+  assert.ok(w.civ.energy < 100 && w.camp.stock.shaped === 4);
+  run(w, 4);
+  assert.ok(w.props.some((p) => p.kind === 'megalith'), 'megalith landed');
+  assert.ok(clone(w).props.some((p) => p.kind === 'megalith'), 'megaliths save');
+});
+
+test('tuning experiments: hints toward the hidden note, a perfect note tunes the material', () => {
+  const w = civWorld(509, 'resonance');
+  learn(w, 'resonance');
+  finish(w, 'resTable', w.camp.x + 140, w.camp.y + 120);
+  w.camp.stock.copper = 5;
+  const note = w.civ.noteOf(w, 'copper');
+  const far = w.civ.experiment(w, 'copper', note > 500 ? note - 300 : note + 300);
+  assert.ok(far.result === 'cold' || far.result === 'spark', far.result);
+  w.elapsed += 2;
+  const warm = w.civ.experiment(w, 'copper', Math.round(note * 1.08));
+  assert.equal(warm.result, 'warm');
+  assert.equal(warm.hint, 'lower');
+  w.elapsed += 2;
+  assert.equal(w.civ.experiment(w, 'copper', note).result, 'resonant');
+  assert.ok(w.civ.tuned.has('copper'));
+  w.camp.stock.crystal = 30;
+  const cn = w.civ.noteOf(w, 'crystal');
+  let cracked = 0;
+  for (let i = 0; i < 25; i++) {
+    w.elapsed += 2;
+    if (w.civ.experiment(w, 'crystal', Math.round(cn * 1.6)).result === 'fracture') cracked++;
+  }
+  if (cn * 1.6 <= 960) assert.ok(cracked > 0 && w.camp.stock.crystal < 30, 'shrill notes crack crystal');
+  const w2 = clone(w);
+  assert.ok(w2.civ.tuned.has('copper') && w2.civ.path === 'resonance', 'civ state saves');
+});
+
+test('an overloaded grid can fail (sparks, damage or power loss)', () => {
+  const w = civWorld(510, 'resonance');
+  learn(w, 'resonance', 'copperRes');
+  const towers = [0, 1, 2, 3].map((i) => finish(w, 'energyTower', w.camp.x - 260 + i * 50, w.camp.y + 200));
+  let fails = 0;
+  for (let i = 0; i < 80; i++) {
+    w.civ.strain = 1;
+    w.civ.energy = 50;
+    w.camp.stock.crystal = 5;
+    const hp = towers.reduce((s, t) => s + t.hp, 0);
+    const cr = w.camp.stock.crystal;
+    w.civ.failT = 0;
+    w.civ.update(w, 0.01);
+    if (towers.reduce((s, t) => s + t.hp, 0) < hp || w.civ.energy < 30 || w.camp.stock.crystal < cr) fails++;
+  }
+  assert.ok(fails > 0, `failures happen (${fails}/80)`);
+});
+
+test('the extinction asteroid: omen, countdown, impact; most life dies; deep shelters save some', () => {
+  const w = civWorld(511, 'traditional');
+  learn(w, 'deepShelter');
+  const bunker = finish(w, 'shelterDeep', w.camp.x - 220, w.camp.y + 160);
+  for (let i = 0; i < 4; i++) addHuman(w, w.camp.x + i * 10, w.camp.y + 40, false);
+  for (let i = 0; i < 30; i++) addDino(w, 'trike', 1400 + i * 60, 1500 + (i % 5) * 40);
+  const dinos0 = w.dinos.length;
+  const people0 = w.humans.length;
+  assert.ok(w.extinction.trigger(w));
+  assert.equal(w.extinction.phase, 'omen');
+  assert.ok(!w.extinction.trigger(w), 'only one at a time');
+  run(w, 8);
+  assert.equal(w.extinction.phase, 'incoming');
+  assert.ok(w.extinction.countdown() > 0 && w.extinction.countdown() <= 10);
+  const door = w.colony.door(bunker);
+  w.humans.slice(0, 6).forEach((h) => { h.x = door.x; h.y = door.y; });
+  run(w, 9.95);
+  w.humans.slice(0, 6).forEach((h) => { h.x = door.x; h.y = door.y; });
+  run(w, 1);
+  assert.equal(w.extinction.phase, 'impact');
+  run(w, 8);
+  const st = w.extinction.stats;
+  assert.ok(st.dinosLost > dinos0 * 0.6, `most dinosaurs died (${st.dinosLost}/${dinos0})`);
+  assert.ok(st.peopleLost > 0, 'people died');
+  assert.ok(w.humans.length > 0 && st.sheltered > 0, `some survived in the shelter (${w.humans.length}/${people0}, sheltered ${st.sheltered})`);
+  assert.ok(w.colony.nodes.some((n) => n.kind === 'meteorite' && n.amount === 4), 'meteor fragments around the crater');
+  assert.equal(clone(w).extinction.phase, 'aftermath', 'saves mid-way');
+  run(w, 16);
+  assert.equal(w.extinction.phase, 'ended');
+  w.extinction.observe();
+  assert.equal(w.extinction.phase, 'ruins');
+  run(w, 5);
+  assert.ok(w.extinction.ash > 0, 'ash hangs in the sky');
+});
+
+test('the Resonance shield holds when charged', () => {
+  const w = civWorld(512, 'resonance');
+  learn(w, 'advancedArch', 'monumental', 'defensiveEnergy', 'energyStorage');
+  const sh = finish(w, 'resShield', w.camp.x + 60, w.camp.y + 120);
+  const n0 = w.humans.length;
+  w.extinction.trigger(w);
+  run(w, 17.2, () => {
+    w.civ.cap = 400;
+    w.civ.energy = SHIELD_HOLD + 40;
+    for (const h of w.humans) { h.x = sh.x + ((h.id % 7) - 3) * 12; h.y = sh.y + 40; }
+  });
+  assert.ok(w.extinction.stats.shieldHeld, 'held');
+  run(w, 8);
+  assert.ok(w.humans.length >= Math.floor(n0 * 0.6), `most under the dome lived (${w.humans.length}/${n0})`);
+});

@@ -250,7 +250,9 @@ function rawPose(f: Fighter, t: number, mem: Memory | undefined): Joints {
       break;
     case "hit": {
       const k = Math.max(0, 1 - st / 16);
-      j = mix(j, { lean: -30, head: -26, fU: -24, fF: 10, bU: -14, bF: 20, fT: 6, bT: -28 }, 0.35 + k * 0.65);
+      const recoilDir = Math.abs(f.vx) > 1 ? Math.sign(-f.vx * f.facing) : 1;
+      const force = clamp(Math.abs(f.vx) / 12, 0.75, 1.35);
+      j = mix(j, { lean: -30 * recoilDir * force, head: -26 * recoilDir, fU: -24, fF: 10, bU: -14, bF: 20, fT: 6, bT: -28 }, 0.35 + k * 0.65);
       break;
     }
     case "dizzy":

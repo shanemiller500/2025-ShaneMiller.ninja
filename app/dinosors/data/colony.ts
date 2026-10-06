@@ -3,7 +3,8 @@
 /*  tiers and resource deposits. Pure data: the sim and the UI both    */
 /*  read it, so a cost shown on a button is the cost the builders pay. */
 /* ------------------------------------------------------------------ */
-import type { BuildingKind, NodeKind, ProjectileKind, Resource, TechId, WeaponKind } from "../sim/types";
+import type { Building, BuildingKind, NodeKind, ProjectileKind, Resource, TechId, WeaponKind } from "../sim/types";
+import { PYRAMID_STAGES, type CivTechId } from "./civ";
 
 export type Cost = Partial<Record<Resource, number>>;
 
@@ -29,6 +30,12 @@ export const RES_INFO: Record<Resource, { icon: string; name: string }> = {
   hide: { icon: "🟫", name: "Hide" },
   bone: { icon: "🦴", name: "Bone" },
   tooth: { icon: "🦷", name: "Teeth & claws" },
+  copper: { icon: "🟠", name: "Copper" },
+  quartz: { icon: "💠", name: "Quartz" },
+  magnetite: { icon: "🧲", name: "Magnetite" },
+  crystal: { icon: "🔮", name: "Crystal" },
+  meteorite: { icon: "☄️", name: "Meteor fragment" },
+  shaped: { icon: "🔷", name: "Shaped stone" },
 };
 
 export const costTotal = (c: Cost) => Object.values(c).reduce((s, n) => s + (n ?? 0), 0);
@@ -47,6 +54,8 @@ export interface BuildingDef {
   /** blocks movement (people use the door in front) */
   solid: boolean;
   tech?: TechId;
+  /** civilization research it needs (see data/civ) */
+  civ?: CivTechId;
   /** seconds of hammering once the materials are in */
   work: number;
   hp: number;
@@ -68,7 +77,30 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   spikes: { kind: "spikes", icon: "🦴", name: "Bone spikes", tip: "Sharpened bones angled outward. Hurt + slow small and medium attackers; big ones just get slowed. Drag to line your walls.", cost: { bone: 2, stick: 1 }, w: 1, h: 1, solid: false, tech: "spear", work: 3, hp: 10 },
   barricade: { kind: "barricade", icon: "✖️", name: "Bone barricade", tip: "A low crossed-bone barrier. Blocks the way like a short wall and pricks anything that shoves it.", cost: { bone: 4, wood: 1 }, w: 1, h: 1, solid: true, tech: "palisade", work: 4, hp: 170 },
   totem: { kind: "totem", icon: "💀", name: "Bone totem", tip: "A tall skull totem. Wild predators think twice about coming near (raiders don't care).", cost: { bone: 3, tooth: 1, stick: 2 }, w: 1, h: 1, solid: true, work: 4, hp: 150 },
+  shelterDeep: { kind: "shelterDeep", icon: "🕳️", name: "Deep shelter", tip: "A bunker dug deep and roofed with stone. When the sky falls, the people inside have a chance.", cost: { stone: 14, wood: 8 }, w: 3, h: 2, solid: true, civ: "deepShelter", work: 18, hp: 1200 },
+  resTable: { kind: "resTable", icon: "🔔", name: "Resonance table", tip: "Researchers study here (twice as fast). Tap it to run tuning experiments.", cost: { stone: 4, wood: 2 }, w: 2, h: 1, solid: true, civ: "resonance", work: 5, hp: 260 },
+  chamber: { kind: "chamber", icon: "🔮", name: "Crystal chamber", tip: "A small stone room around a tuned crystal: makes and stores a little energy.", cost: { stone: 6, quartz: 2, crystal: 1 }, w: 2, h: 2, solid: true, civ: "quartzTuning", work: 9, hp: 420 },
+  shapingYard: { kind: "shapingYard", icon: "🔷", name: "Shaping yard", tip: "Stone shapers cut raw stone into many-sided blocks (shaped stone) for polygon walls + monuments.", cost: { stone: 6, wood: 3 }, w: 2, h: 2, solid: true, civ: "precisionStone", work: 7, hp: 380 },
+  energyTower: { kind: "energyTower", icon: "⚡", name: "Energy tower", tip: "A copper-wound stone spire: makes and stores Resonance energy. Glows brighter in storms.", cost: { stone: 4, copper: 3, quartz: 1 }, w: 1, h: 1, solid: true, civ: "copperRes", work: 7, hp: 320 },
+  condenser: { kind: "condenser", icon: "💧", name: "Air condenser", tip: "Pulls water from the air into the jars. Best in rain + fog, slow in dry heat. Uses a little energy.", cost: { copper: 2, clay: 3, stone: 2 }, w: 1, h: 1, solid: true, civ: "waterAir", work: 6, hp: 260 },
+  obelisk: { kind: "obelisk", icon: "🗿", name: "Obelisk", tip: "A tall shaped-stone needle with a quartz tip: hums out a steady trickle of energy.", cost: { shaped: 3, quartz: 1 }, w: 1, h: 1, solid: true, civ: "precisionStone", work: 9, hp: 600 },
+  stoneCircle: { kind: "stoneCircle", icon: "⭕", name: "Stone circle", tip: "Standing megaliths in a ring. Makes energy, and plant-eaters like to gather around it.", cost: { shaped: 6 }, w: 3, h: 3, solid: false, civ: "monumental", work: 12, hp: 900 },
+  levPad: { kind: "levPad", icon: "🪶", name: "Lift pad", tip: "Floats shaped blocks to monuments within range (much faster building) and lets you place megaliths with the Levitate tool.", cost: { shaped: 2, magnetite: 2, copper: 1 }, w: 2, h: 2, solid: false, civ: "levitation", work: 8, hp: 400 },
+  beamTower: { kind: "beamTower", icon: "🔆", name: "Beam tower", tip: "Fires a crystal beam at attackers and dragons (uses energy, needs to cool down). Beams can light dry grass!", cost: { shaped: 2, crystal: 1, copper: 2 }, w: 1, h: 1, solid: true, civ: "energyWeapons", work: 10, hp: 520 },
+  pylon: { kind: "pylon", icon: "🔹", name: "Pylon", tip: "Pylons near each other link into a humming barrier that pushes dinosaurs back. Uses energy.", cost: { copper: 1, magnetite: 1, stone: 2 }, w: 1, h: 1, solid: true, civ: "defensiveEnergy", work: 5, hp: 320 },
+  pyramid: { kind: "pyramid", icon: "🔺", name: "Pyramid", tip: "A huge project in 6 stages: foundation, lower courses, main structure, inner chamber, capstone, activation. Then it powers everything.", cost: PYRAMID_STAGES[0].cost, w: 5, h: 4, solid: true, civ: "monumental", work: PYRAMID_STAGES[0].work, hp: 4000 },
+  resShield: { kind: "resShield", icon: "🌀", name: "Resonance shield", tip: "Raises a dome of energy over the camp. With enough stored energy it might hold when the sky falls.", cost: { crystal: 3, meteorite: 2, shaped: 4, copper: 4 }, w: 2, h: 2, solid: true, civ: "advancedArch", work: 16, hp: 900 },
 };
+
+/** What a building still costs right now (the pyramid goes up stage by stage). */
+export function buildingCost(b: Pick<Building, "kind" | "stage">): Cost {
+  if (b.kind === "pyramid") return PYRAMID_STAGES[Math.min(b.stage ?? 0, PYRAMID_STAGES.length - 1)].cost;
+  return BUILDINGS[b.kind].cost;
+}
+export function buildingWork(b: Pick<Building, "kind" | "stage">): number {
+  if (b.kind === "pyramid") return PYRAMID_STAGES[Math.min(b.stage ?? 0, PYRAMID_STAGES.length - 1)].work;
+  return BUILDINGS[b.kind].work;
+}
 
 /* ------------------------------ housing ------------------------------ */
 
@@ -123,6 +155,7 @@ export interface WeaponDef {
   /** building that crafts it */
   at: Station;
   tech?: TechId;
+  civ?: CivTechId;
 }
 
 /** Where things get made. */
@@ -144,6 +177,8 @@ export const WEAPONS: WeaponDef[] = [
   { id: "bow1", kind: "bow", tier: 1, name: "Simple bow", icon: "🏹", melee: false, proj: "arrow", range: 250, dmg: 22, cd: 1.3, speed: 620, prey: 95, cost: { stick: 3, grass: 2 }, at: "camp", tech: "bow" },
   { id: "bow2", kind: "bow", tier: 2, name: "Reinforced bow", icon: "🏹", melee: false, proj: "arrow", range: 290, dmg: 31, cd: 1.3, speed: 680, prey: 120, cost: { wood: 2, tar: 1, grass: 2 }, at: "workshop" },
   { id: "bow3", kind: "bow", tier: 3, name: "Heavy bow", icon: "🎯", melee: false, proj: "bolt", range: 340, dmg: 46, cd: 2, speed: 820, prey: 150, cost: { wood: 2, iron: 1, tar: 1 }, at: "blacksmith" },
+  // fantasy tech: a crystal-tipped staff that throws a bolt of light
+  { id: "lance", kind: "spear", tier: 3, name: "Resonance lance", icon: "🔆", melee: false, proj: "beam", range: 300, dmg: 58, cd: 1.9, speed: 1500, prey: 140, cost: { copper: 2, crystal: 1, wood: 1 }, at: "workshop", civ: "energyWeapons" },
 ];
 
 export const WEAPON_BY_ID: Record<string, WeaponDef> = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
@@ -212,6 +247,7 @@ export interface KitDef {
   cost: Cost;
   at: Station;
   tip: string;
+  civ?: CivTechId;
 }
 
 export const KITS: KitDef[] = [
@@ -219,6 +255,12 @@ export const KITS: KitDef[] = [
   { id: "waterSkins", name: "Water skins", icon: "💧", cost: { hide: 2 }, at: "tannery", tip: "Carry twice the water: faster fire fighting, fuller jars." },
   { id: "storageWraps", name: "Storage wraps", icon: "📦", cost: { hide: 3 }, at: "tannery", tip: "Food wrapped in hide: raiders steal far less from the stockpile." },
   { id: "hideCovers", name: "Hide tent covers", icon: "⛺", cost: { hide: 4, stick: 2 }, at: "tannery", tip: "Every tent + hut gets a hide cover: warmer, drier, fires stay lit." },
+  // Resonance tools (fantasy tech)
+  { id: "cutter", name: "Resonance cutters", icon: "🪚", cost: { copper: 2, quartz: 1 }, at: "workshop", civ: "precisionStone", tip: "Stone shapers cut twice as fast; quarries give more stone." },
+  { id: "drill", name: "Crystal drills", icon: "🔩", cost: { copper: 2, crystal: 1 }, at: "workshop", civ: "quartzTuning", tip: "Miners dig copper, quartz, magnetite + crystal twice as fast." },
+  { id: "harness", name: "Levitation harnesses", icon: "🪢", cost: { magnetite: 2, hide: 2 }, at: "workshop", civ: "levitation", tip: "Builders carry three times as much shaped stone." },
+  { id: "torch", name: "Energy torches", icon: "🔦", cost: { copper: 1, crystal: 1 }, at: "workshop", civ: "energyStorage", tip: "Builders hammer 50% faster; technicians fix overloads quicker." },
+  { id: "precision", name: "Precision tools", icon: "📐", cost: { quartz: 2, copper: 1 }, at: "workshop", civ: "precisionStone", tip: "Polygon walls + monuments go up 50% faster." },
 ];
 
 export const KIT_BY_ID: Record<string, KitDef> = Object.fromEntries(KITS.map((k) => [k.id, k]));
@@ -233,16 +275,17 @@ export interface ForgeItem {
   cost: Cost;
   at: string;
   tech: TechId | undefined;
+  civ?: CivTechId;
   cat: ForgeCat;
   tip?: string;
 }
 
 /** Anything a smith / tanner can make. */
 export const FORGE_ITEMS: ForgeItem[] = [
-  ...WEAPONS.map((w) => ({ id: w.id, name: w.name, icon: w.icon, tier: w.tier, cost: w.cost, at: w.at as string, tech: w.tech, cat: "weapons" as ForgeCat })),
+  ...WEAPONS.map((w) => ({ id: w.id, name: w.name, icon: w.icon, tier: w.tier, cost: w.cost, at: w.at as string, tech: w.tech, civ: w.civ, cat: "weapons" as ForgeCat })),
   ...SHIELDS.map((s) => ({ id: s.id, name: s.name, icon: "🛡️", tier: s.tier, cost: s.cost, at: s.at as string, tech: undefined, cat: "shields" as ForgeCat })),
   ...OUTFITS.map((o) => ({ id: o.id, name: o.name, icon: o.icon, tier: 1, cost: o.cost, at: o.at as string, tech: undefined, cat: "gear" as ForgeCat, tip: o.tip })),
-  ...KITS.map((k) => ({ id: k.id, name: k.name, icon: k.icon, tier: 1, cost: k.cost, at: k.at as string, tech: undefined, cat: "kits" as ForgeCat, tip: k.tip })),
+  ...KITS.map((k) => ({ id: k.id, name: k.name, icon: k.icon, tier: 1, cost: k.cost, at: k.at as string, tech: undefined, civ: k.civ, cat: "kits" as ForgeCat, tip: k.tip })),
 ];
 
 /** What a dead dinosaur gives (scales with its size). */
@@ -290,7 +333,15 @@ export const NODES: Record<NodeKind, { icon: string; name: string; gives: Resour
   tar: { icon: "🛢️", name: "Tar seep", gives: "tar", per: 1, amount: [8, 12], hidden: false, color: "#1d1a17" },
   artifact: { icon: "🏺", name: "Strange mound", gives: null, per: 1, amount: [1, 1], hidden: true, color: "#c2a26d" },
   fossil: { icon: "🦴", name: "Bone bed", gives: null, per: 1, amount: [2, 3], hidden: true, color: "#e8dcc0" },
+  copper: { icon: "🟠", name: "Copper vein", gives: "copper", per: 1, amount: [10, 16], hidden: false, color: "#c8743f", needs: "tools" },
+  quartz: { icon: "💠", name: "Quartz outcrop", gives: "quartz", per: 1, amount: [8, 12], hidden: true, color: "#dff1f7", needs: "tools" },
+  magnetite: { icon: "🧲", name: "Magnetite", gives: "magnetite", per: 1, amount: [6, 10], hidden: true, color: "#3d414b", needs: "tools" },
+  crystal: { icon: "🔮", name: "Crystal geode", gives: "crystal", per: 1, amount: [4, 7], hidden: true, color: "#8fe3ff", needs: "tools" },
+  meteorite: { icon: "☄️", name: "Meteor fragment", gives: "meteorite", per: 1, amount: [2, 4], hidden: false, color: "#5d4d70", needs: "tools" },
 };
+
+/** Deposits the civilization paths care about (older saves get them scattered on load). */
+export const CIV_NODES: NodeKind[] = ["copper", "quartz", "magnetite", "crystal", "meteorite"];
 
 /** Little treasures diggers find in artifact mounds. */
 export const ARTIFACTS = [

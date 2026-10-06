@@ -165,7 +165,7 @@ export function SelectScreen(p: Props) {
   ];
 
   return (
-    <div className="absolute inset-0 isolate flex flex-col overflow-hidden text-white">
+    <div data-pad-select className="absolute inset-0 isolate flex flex-col overflow-hidden text-white">
       <Backdrop tint={active === 0 ? "#0891b2" : "#be123c"} image={(preview[active] ?? preview[0])?.portrait.lg} />
 
       {/* Header */}

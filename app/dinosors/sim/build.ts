@@ -6,7 +6,8 @@
 /*  them: fetch from the stockpile, gather if it's empty, carry it     */
 /*  over, build, then move on to the next unfinished piece.            */
 /* ------------------------------------------------------------------ */
-import { BUILDINGS, HOUSING, SCORPION_TIERS, TENT_STAGES, type Cost } from "../data/colony";
+import { BUILDINGS, HOUSING, SCORPION_TIERS, TENT_STAGES, buildingCost, buildingWork, type Cost } from "../data/colony";
+import { PYRAMID_STAGES } from "../data/civ";
 import { SHELTER_STAGES } from "../data/facts";
 import { P } from "./particles";
 import { MAP_W, TILE, type Resource, type Shelter, type TechId, type Wall } from "./types";
@@ -27,22 +28,28 @@ export interface Site {
   need: Resource | null;
   /** damaged: only needs a builder's time */
   repair: boolean;
-  /** waiting on an invention */
-  locked: TechId | null;
+  /** waiting on an invention (or a civilization research) */
+  locked: string | null;
 }
 
 export const siteKey = (s: { kind: SiteKind; id: number }) => `${s.kind}:${s.id}`;
 
 /* ------------------------------ walls ------------------------------ */
 
-export const WALL_HP = { palisade: 220, stone: 600 } as const;
+export const WALL_HP = { palisade: 220, stone: 600, polygon: 900 } as const;
+/** Dressed masonry (Old Ways) toughens every stone piece. Set by the civ system each tick. */
+export const STONE_MUL = { v: 1 };
 
 export function wallMaxHp(wl: Wall) {
-  return WALL_HP[wl.kind] * (wl.part === "gate" ? 0.85 : wl.part === "stairs" ? 0.6 : 1);
+  return WALL_HP[wl.kind] * (wl.kind === "palisade" ? 1 : STONE_MUL.v) * (wl.part === "gate" ? 0.85 : wl.part === "stairs" ? 0.6 : 1);
 }
 
-/** Material + units for one wall piece (or its stone upgrade). */
+/** What a piece is (or becomes, once its upgrade is built). */
+export const wallTarget = (wl: Wall) => (wl.upgrade ? wl.upTo ?? "stone" : wl.kind);
+
+/** Material + units for one wall piece (or its upgrade). */
 export function wallNeed(wl: Wall): { r: Resource; n: number } {
+  if (wallTarget(wl) === "polygon") return { r: "shaped", n: wl.part === "gate" ? 3 : 2 };
   const stone = wl.kind === "stone" || wl.upgrade;
   if (wl.part === "gate") return stone ? { r: "stone", n: 3 } : { r: "wood", n: 2 };
   if (wl.part === "stairs") return stone ? { r: "stone", n: 2 } : { r: "stick", n: 2 };
@@ -76,9 +83,11 @@ export function sites(w: World): Site[] {
     if (!pending && !hurt) continue;
     const x = wl.tx * TILE + TILE / 2;
     const y = wl.ty * TILE + TILE / 2;
-    const tech: TechId = wl.kind === "stone" || wl.upgrade ? "stonewall" : "palisade";
+    const target = wallTarget(wl);
+    const tech: TechId = target === "palisade" ? "palisade" : "stonewall";
     const { r, n } = wallNeed(wl);
-    out.push({ kind: "wall", id: wl.id, x, y, sx: x, sy: y + 20, need: pending && wl.have < n ? r : null, repair: !pending, locked: L.has(tech) ? null : tech });
+    const locked = target === "polygon" && !w.civ.has("precisionStone") ? "precisionStone" : L.has(tech) ? null : tech;
+    out.push({ kind: "wall", id: wl.id, x, y, sx: x, sy: y + 20, need: pending && wl.have < n ? r : null, repair: !pending, locked });
   }
   for (const t of w.tribe.towers) {
     const hurt = t.stage >= TOWER_STAGES.length && t.hp < 300;
@@ -101,7 +110,8 @@ export function sites(w: World): Site[] {
     const def = BUILDINGS[b.kind];
     if (b.built >= 1 && b.hp >= def.hp * 0.6) continue;
     const d = w.colony.door(b);
-    out.push({ kind: "building", id: b.id, x: b.x, y: b.y, sx: d.x, sy: d.y, need: b.built < 1 ? firstMissing(def.cost, b.have) : null, repair: b.built >= 1, locked: def.tech && !L.has(def.tech) ? def.tech : null });
+    const locked = def.tech && !L.has(def.tech) ? def.tech : def.civ && !w.civ.has(def.civ) ? def.civ : null;
+    out.push({ kind: "building", id: b.id, x: b.x, y: b.y, sx: d.x, sy: d.y, need: b.built < 1 ? firstMissing(buildingCost(b), b.have) : null, repair: b.built >= 1, locked });
   }
   for (const s of w.colony.scorpions) {
     const spot = w.colony.crewSpot(s);
@@ -180,7 +190,7 @@ export function deliver(w: World, s: Site, r: Resource, n: number, hx: number, h
     case "building": {
       const b = w.colony.buildings.find((x) => x.id === s.id);
       if (b) {
-        const want = (BUILDINGS[b.kind].cost[r] ?? 0) - (b.have[r] ?? 0);
+        const want = (buildingCost(b)[r] ?? 0) - (b.have[r] ?? 0);
         used = Math.max(0, Math.min(n, want));
         b.have[r] = (b.have[r] ?? 0) + used;
       }
@@ -229,7 +239,7 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
         const wl = w.tribe.walls.find((x) => x.id === s.id);
         if (!wl) return "done";
         wl.hp = Math.min(wallMaxHp(wl), wl.hp + dt * 45);
-        chips(w, s.x, s.y, wl.kind === "stone" ? "#9a958c" : "#a07a4a", dt);
+        chips(w, s.x, s.y, wl.kind === "palisade" ? "#a07a4a" : "#9a958c", dt);
         return wl.hp >= wallMaxHp(wl) ? "done" : "work";
       }
       // hammer the nearest stocked piece around here (a crew finishes a whole stretch)
@@ -245,9 +255,9 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
       }
       if (!best) return "done";
       if (best.upgrade) {
-        // the old logs come down and go back on the stockpile for other jobs
-        if (best.kind === "palisade" && best.built >= 1) {
-          const old = wallNeed({ ...best, upgrade: false });
+        // the old logs (or blocks) come down and go back on the stockpile for other jobs
+        if (best.built >= 1) {
+          const old = wallNeed({ ...best, upgrade: false, upTo: undefined });
           w.camp.stock[old.r] += old.n;
           w.particles.burst(P.Crumb, best.tx * TILE + 16, best.ty * TILE + 16, 5, 40, { z: 10, vz: 40, g: 160, size: 2.5, max: 0.6, color: "#a07a4a" });
           if (!w.flags.has("refundTip")) {
@@ -255,12 +265,14 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
             w.toast("♻️", "Upgrading to stone: the old logs go back on the stockpile for other jobs.", best.tx * TILE, best.ty * TILE);
           }
         }
-        best.kind = "stone";
+        best.kind = best.upTo ?? "stone";
+        best.upTo = undefined;
         best.upgrade = false;
         best.built = 0.01;
       }
-      best.built = Math.min(1, best.built + dt * 0.9);
-      chips(w, best.tx * TILE + 16, best.ty * TILE + 16, best.kind === "stone" ? "#9a958c" : "#a07a4a", dt);
+      const fast = (w.colony.kits.has("torch") ? 1.5 : 1) * (best.kind === "polygon" && w.colony.kits.has("precision") ? 1.5 : 1);
+      best.built = Math.min(1, best.built + dt * 0.9 * fast * (best.kind === "polygon" ? 0.7 : 1));
+      chips(w, best.tx * TILE + 16, best.ty * TILE + 16, best.kind === "palisade" ? "#a07a4a" : best.kind === "polygon" ? "#b9b1a2" : "#9a958c", dt);
       if (best.built >= 1) {
         best.hp = wallMaxHp(best);
         best.have = 0;
@@ -328,8 +340,38 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
         return b.hp >= def.hp ? "done" : "work";
       }
       const before = b.built;
-      b.built = Math.min(1, b.built + dt / def.work);
+      const stoneWork = b.kind === "pyramid" || b.kind === "obelisk" || b.kind === "stoneCircle";
+      const fast = (w.colony.kits.has("torch") ? 1.5 : 1) * (stoneWork && w.colony.kits.has("precision") ? 1.5 : 1) * (stoneWork && w.civ.has("levitation") && w.colony.finished("levPad") ? 1.6 : 1);
+      // the pyramid's stages each run 0.4 → 1 (it stays solid between stages)
+      const span = b.kind === "pyramid" && (b.stage ?? 0) > 0 ? 0.6 : 1;
+      b.built = Math.min(1, b.built + (dt * fast * span) / buildingWork(b));
       if (before < 0.4 && b.built >= 0.4) w.colony.version++;
+      if (b.built >= 1 && b.kind === "pyramid" && (b.stage ?? 0) < PYRAMID_STAGES.length - 1) {
+        const st = PYRAMID_STAGES[(b.stage ?? 0) + 1];
+        b.stage = (b.stage ?? 0) + 1;
+        b.built = 0.4;
+        b.have = {};
+        w.colony.version++;
+        w.sfx("build", b.x, b.y, 1);
+        w.shake(3, 0.4);
+        w.toast("🔺", `Pyramid: ${PYRAMID_STAGES[b.stage - 1].name} done! Next: ${st.name}.`, b.x, b.y);
+        return "done";
+      }
+      if (b.built >= 1 && b.kind === "pyramid") {
+        // activation needs a charge from the grid
+        const need = PYRAMID_STAGES[PYRAMID_STAGES.length - 1].energy ?? 0;
+        if (!w.civ.spend(need)) {
+          b.built = 0.99;
+          if (!w.flags.has("pyramidCharge")) {
+            w.flags.add("pyramidCharge");
+            w.toast("🔋", `The pyramid needs ${need} stored energy to wake up. Build more energy towers!`, b.x, b.y);
+          }
+          return "wait";
+        }
+        w.flash(0.5, "#c8f4ff");
+        w.discover("pyramid", b.x, b.y);
+        w.celebrate("THE PYRAMID WAKES!");
+      }
       if (b.built >= 1) {
         b.hp = def.hp;
         w.colony.version++;

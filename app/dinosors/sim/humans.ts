@@ -323,6 +323,11 @@ export function sourceFor(w: World, h: Human, r: Resource): { x: number; y: numb
     case "flint":
     case "salt":
     case "tar":
+    case "copper":
+    case "quartz":
+    case "magnetite":
+    case "crystal":
+    case "meteorite":
       return nearestNode(w, cx, cy, r, 2600);
     case "grass": {
       const t = w.terrain.findTile(cx, cy, 500, (t) => t === T.Grass, w.rng, 60);
@@ -526,7 +531,7 @@ function think(w: World, h: Human) {
   }
 
   // busy with something that finishes on its own
-  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "smith" || h.state === "douse") return;
+  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate") return;
   if (h.state === "hunt" || h.state === "aim" || h.state === "haul" || h.state === "cook" || h.state === "farm" || h.state === "repair") return;
   if (h.state === "carry" || h.state === "walk" || h.state === "explore") {
     if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6) return;
@@ -621,7 +626,7 @@ function think(w: World, h: Human) {
   if (role === "gatherer" && autoButcher(w, h, 700)) return;
 
   // gather what the camp needs most (or fish / sticks for the fire / water for the jars)
-  let need = camp.missing(w) ?? w.colony.missing(w);
+  let need = camp.missing(w) ?? w.colony.missing(w) ?? w.civ.missing(w);
   if (!need) {
     const r = w.rng();
     if (r < 0.25) need = "fish";
@@ -1035,6 +1040,10 @@ export function updateHuman(w: World, h: Human, dt: number) {
       }
       break;
     }
+    case "research":
+    case "resonate":
+      w.civ.work(w, h, dt);
+      break;
     case "smith":
       h.anim += dt * 4;
       if (!w.colony.forgeTick(w, h, dt) && !w.colony.current(w)) go(h, "idle", h.x, h.y);

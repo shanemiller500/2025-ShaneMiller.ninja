@@ -22,6 +22,8 @@ import CloudPanel from "./ui/CloudPanel";
 import SelectionBar from "./ui/SelectionBar";
 import InspectPanel from "./ui/InspectPanel";
 import SavedGames from "./ui/SavedGames";
+import CivPanel, { CivChoice } from "./ui/CivPanel";
+import { AgeEnds, ExtinctionBanner, ExtinctionConfirm } from "./ui/Extinction";
 import { newestSlot, putSlot } from "./game/slots";
 import { hasDinoProgress, useCloud } from "./ui/useCloud";
 import { useRouter } from "next/navigation";
@@ -45,6 +47,9 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [stickersOpen, setStickersOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [savesOpen, setSavesOpen] = useState(false);
+  const [civOpen, setCivOpen] = useState(false);
+  const [choiceOpen, setChoiceOpen] = useState(false);
+  const [extOpen, setExtOpen] = useState(false);
   const [confirm, setConfirm] = useState<null | "new" | "reset">(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [sticker, setSticker] = useState<string | null>(null);
@@ -93,6 +98,9 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           break;
         case "openCamp":
           setCampOpen(true);
+          break;
+        case "openCiv":
+          setCivOpen(true);
           break;
         case "saved":
           pushToast({ icon: "💾", text: "World saved!" });
@@ -187,6 +195,16 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
 
   const engine = engineRef.current;
   const cloud = useCloud(engine, (icon, text) => pushToast({ icon, text }));
+  // the chamber was just opened: offer the big choice (once per discovery)
+  const pending = !!snap?.civ.pending;
+  const offered = useRef(false);
+  useEffect(() => {
+    if (pending && !offered.current) {
+      offered.current = true;
+      setChoiceOpen(true);
+    }
+    if (!pending) offered.current = false;
+  }, [pending]);
   const disc = sticker ? DISCOVERY_BY_ID[sticker] : null;
 
   return (
@@ -221,6 +239,9 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             onReset={() => setConfirm("reset")}
             onCamp={() => setCampOpen((o) => !o)}
             onEvolution={() => setEvoOpen((o) => !o)}
+            onCiv={() => setCivOpen((o) => !o)}
+            onExtinction={() => setExtOpen(true)}
+            civOpen={civOpen}
             campOpen={campOpen}
             evoOpen={evoOpen}
           />
@@ -230,7 +251,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             onGo={(x, y) => engine.flyTo(x, y, Math.max(engine.cam.zoom, 0.8))}
           />
           <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} />
-          <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} />
+          <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} />
           <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
           {snap.inspect && !snap.selected && <InspectPanel info={snap.inspect} snap={snap} engine={engine} />}
           {snap.selected && (
@@ -248,6 +269,24 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           {campOpen && <CampPanel snap={snap} engine={engine} onClose={() => setCampOpen(false)} />}
           <RaidBanner snap={snap} engine={engine} />
           {evoOpen && <EvolutionPanel snap={snap} engine={engine} onClose={() => setEvoOpen(false)} />}
+          {civOpen && <CivPanel snap={snap} engine={engine} onClose={() => setCivOpen(false)} onChoose={() => setChoiceOpen(true)} onExtinction={() => setExtOpen(true)} />}
+          <CivChoice open={choiceOpen} onClose={() => setChoiceOpen(false)} engine={engine} fontClass={fontClass} />
+          <ExtinctionConfirm open={extOpen} onClose={() => setExtOpen(false)} snap={snap} engine={engine} fontClass={fontClass} onToast={(icon, text) => pushToast({ icon, text })} />
+          <ExtinctionBanner snap={snap} />
+          <AgeEnds
+            snap={snap}
+            engine={engine}
+            fontClass={fontClass}
+            onLoad={() => {
+              engine.observeRuins();
+              setSavesOpen(true);
+            }}
+            onNew={() => {
+              void putSlot(engine.makeSlot("auto", `The age that ended · Day ${engine.world.day}`, "Ages"));
+              engine.newWorld();
+              pushToast({ icon: "🌋", text: "A fresh Dinosaur Land!" });
+            }}
+          />
           {snap.orderFor > 0 && (
             <div className="dl-glass pointer-events-auto absolute left-1/2 top-24 z-30 flex -translate-x-1/2 items-center gap-3 rounded-3xl px-4 py-2.5 shadow-2xl sm:top-24">
               <span className="text-2xl">🎯</span>

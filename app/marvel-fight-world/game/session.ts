@@ -12,7 +12,7 @@ import { Match } from "../engine/match";
 import type { FighterDef, InputFrame, MatchEvent } from "../engine/types";
 import { emptyInput } from "../engine/types";
 import { InputManager, keyLabel } from "../input/input";
-import { PAD_LABELS } from "../input/gamepad";
+import { BTN, PAD_LABELS } from "../input/gamepad";
 import type { Settings } from "../data/storage";
 import type { ArenaDef } from "../render/arenas";
 import { Renderer } from "../render/renderer";
@@ -114,10 +114,10 @@ export class GameSession {
 
   private hint(p: 0 | 1) {
     const slot: 0 | 1 = p === 1 && this.cfg.controllers[0] === "cpu" ? 0 : p;
-    if (this.input.hasPad(slot)) return [PAD_LABELS.special, `↓${PAD_LABELS.special}`, `→${PAD_LABELS.special}`, PAD_LABELS.ult];
+    if (this.input.hasPad(slot)) return [PAD_LABELS.special, `↓${PAD_LABELS.special}`, `F+${PAD_LABELS.special}`, PAD_LABELS.ult];
     const b = this.cfg.settings.bindings[slot];
     const sp = keyLabel(b.special[0] ?? "");
-    return [sp, `↓${sp}`, `→${sp}`, keyLabel(b.ult[0] ?? "")];
+    return [sp, `↓${sp}`, `F+${sp}`, keyLabel(b.ult[0] ?? "")];
   }
 
   private refreshHints() {
@@ -128,7 +128,7 @@ export class GameSession {
     if (!this.cfg.silent) {
       this.input.attach();
       audio.unlock();
-      audio.startMusic(this.cfg.arena.music);
+      if (!this.paused) audio.startMusic(this.cfg.arena.music);
     }
     this.startedAt = performance.now();
     this.last = performance.now();
@@ -207,7 +207,7 @@ export class GameSession {
     }
 
     // Pause key (Escape / P / Start)
-    const pauseDown = this.input.isDown("Escape") || this.input.isDown("KeyP") || this.input.padButton(9);
+    const pauseDown = this.input.isDown("Escape") || this.input.isDown("KeyP") || this.input.padButton(BTN.START);
     if (pauseDown && !this.pauseKeyHeld && this.match.phase !== "over") this.cfg.onPauseRequest?.();
     this.pauseKeyHeld = pauseDown;
 

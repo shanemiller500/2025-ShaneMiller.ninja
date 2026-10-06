@@ -6,7 +6,7 @@
 /* ------------------------------------------------------------------ */
 
 import { ACTIONS, type Action, type InputFrame, emptyInput } from "../engine/types";
-import { connectedPads, padState } from "./gamepad";
+import { BTN, connectedPads, padState } from "./gamepad";
 
 export type Bindings = Record<Action, string[]>;
 
@@ -76,16 +76,15 @@ export function keyLabel(code: string) {
 
 /** Standard gamepad layout → actions (fight-pad style). */
 const PAD: Partial<Record<Action, number[]>> = {
-  lp: [2], // X / Square
-  hp: [3], // Y / Triangle
-  kick: [0], // A / Cross
-  special: [1], // B / Circle
-  block: [4, 6], // LB / LT
-  ult: [5, 7], // RB / RT
-  up: [12],
-  down: [13],
-  left: [14],
-  right: [15],
+  lp: [BTN.X],
+  hp: [BTN.Y],
+  kick: [BTN.B],
+  special: [BTN.RB],
+  block: [BTN.LT, BTN.RT],
+  up: [BTN.A, BTN.UP],
+  down: [BTN.DOWN],
+  left: [BTN.LEFT],
+  right: [BTN.RIGHT],
 };
 
 export class InputManager {
@@ -171,6 +170,12 @@ export class InputManager {
       for (const a of ACTIONS) {
         const idx = PAD[a];
         if (idx?.some((i) => st.b[i])) out[a] = true;
+      }
+      // Ultimate is a deliberate two-trigger chord, never an accidental
+      // single-trigger press while guarding.
+      if (st.b[BTN.LT] && st.b[BTN.RT]) {
+        out.ult = true;
+        out.block = false;
       }
       if (st.lx < -0.5) out.left = true;
       if (st.lx > 0.5) out.right = true;

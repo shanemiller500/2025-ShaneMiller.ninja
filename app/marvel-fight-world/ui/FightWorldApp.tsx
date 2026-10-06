@@ -44,6 +44,7 @@ import { ArenaScreen } from "./ArenaScreen";
 import { CharacterSheet } from "./CharacterSheet";
 import { FightScreen, type FightExit } from "./FightScreen";
 import { startPadBridge } from "../input/gamepad";
+import { PadStatus } from "./PadStatus";
 import { ArcadeButton, ArcadeStyles, Backdrop, PadBtn, cn } from "./kit";
 import { SelectScreen } from "./SelectScreen";
 import { SettingsScreen } from "./SettingsScreen";
@@ -145,6 +146,7 @@ export default function FightWorldApp() {
   const { roster, error, retry } = useFightRoster();
   const [padUsed, setPadUsed] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const welcomedPad = useRef(false);
 
   // Controller → UI bridge (menus, overlays). Fights read the pad directly.
   useEffect(() => {
@@ -157,7 +159,10 @@ export default function FightWorldApp() {
     const stop = startPadBridge({
       onConnect: (name) => {
         setPadUsed(true);
-        show(`${name} connected`);
+        if (!welcomedPad.current) {
+          welcomedPad.current = true;
+          show(`${name} connected`);
+        }
       },
       onDisconnect: () => { setPadUsed(false); show("Controller disconnected · keyboard controls active"); },
       onActive: () => setPadUsed(true),
@@ -557,7 +562,12 @@ function Game({ roster }: { roster: Roster }) {
   let body: React.ReactNode = null;
   switch (screen.k) {
     case "title":
-      body = <TitleScreen roster={roster} settings={settings} onChoose={onChoose} paused={cloudVisible} corner={<CloudChip cloud={cloud} />} onLeave={leaveGame} />;
+      body = (
+        <>
+          <TitleScreen roster={roster} settings={settings} onChoose={onChoose} paused={cloudVisible} corner={<CloudChip cloud={cloud} />} onLeave={leaveGame} />
+          <PadStatus />
+        </>
+      );
       break;
     case "select": {
       const c = selectCopy[screen.mode];

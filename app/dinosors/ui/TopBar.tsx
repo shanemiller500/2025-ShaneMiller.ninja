@@ -26,6 +26,9 @@ interface Props {
   onReset: () => void;
   onCamp: () => void;
   onEvolution: () => void;
+  onCiv: () => void;
+  onExtinction: () => void;
+  civOpen: boolean;
   onCloud: () => void;
   onLeave: () => void;
   cloudStatus: string;
@@ -61,6 +64,15 @@ export default function TopBar(p: Props) {
           )}
           <button type="button" className={`${btn} relative ${p.evoOpen ? "!bg-cyan-500/60" : ""}`} title="Evolution" aria-label="Evolution" aria-pressed={p.evoOpen} onClick={p.onEvolution}>
             <span className="text-2xl leading-none">🧬</span>
+          </button>
+          <button type="button" className={`${btn} relative ${p.civOpen ? "!bg-cyan-500/60" : ""}`} title="Civilization" aria-label="Civilization" aria-pressed={p.civOpen} onClick={p.onCiv}>
+            <span className="text-2xl leading-none">{snap.civ.path === "resonance" ? "💠" : snap.civ.path === "traditional" ? "🔥" : "🏛️"}</span>
+            {(snap.civ.pending || (snap.civ.chamber && !snap.civ.found)) && <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-ping rounded-full bg-cyan-300" />}
+            {snap.civ.path === "resonance" && snap.civ.cap > 0 && (
+              <span className="absolute inset-x-2 bottom-1.5 h-1 overflow-hidden rounded-full bg-white/15">
+                <span className="block h-full rounded-full bg-cyan-300" style={{ width: `${Math.min(100, (snap.civ.energy / snap.civ.cap) * 100)}%` }} />
+              </span>
+            )}
           </button>
           <button type="button" className={`${btn} relative ${p.campOpen ? "!bg-amber-500/60" : ""}`} title="Your tribe" aria-label="Your tribe" aria-pressed={p.campOpen} onClick={p.onCamp}>
             <span className="text-2xl leading-none">{snap.tribe.levelIcon}</span>
@@ -266,6 +278,9 @@ function MenuPanel(p: Props & { close: () => void }) {
       </button>
       <button type="button" className={item} onClick={() => { p.onAbout(); p.close(); }}>
         <Info className="h-5 w-5 text-amber-300" /> About Dinosaur Land
+      </button>
+      <button type="button" className={item} disabled={p.snap.extinction.phase !== "idle" && p.snap.extinction.phase !== "ruins"} onClick={() => { p.onExtinction(); p.close(); }}>
+        <span className="w-5 text-center text-lg leading-none">☄️</span> End of an age…
       </button>
       <div className="my-1 h-px bg-white/10" />
       <button
