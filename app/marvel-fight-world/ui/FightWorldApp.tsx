@@ -27,6 +27,9 @@ import {
   loadSettings,
   pushRecent,
   recordMatch,
+  loadProfile,
+  saveProfile,
+  cleanName,
   recordSurvival,
   recordTournamentWin,
   saveFavorites,
@@ -45,6 +48,7 @@ import { ArcadeButton, ArcadeStyles, Backdrop, PadBtn, cn } from "./kit";
 import { SelectScreen } from "./SelectScreen";
 import { SettingsScreen } from "./SettingsScreen";
 import { StatsScreen } from "./StatsScreen";
+import { TOURNAMENT_BONUS, scoreMatch, type ScoreBreakdown } from "../data/score";
 import { TitleScreen, type MenuChoice } from "./TitleScreen";
 import { TournamentScreen } from "./TournamentScreen";
 import { WorldScreen } from "./WorldScreen";
@@ -176,6 +180,7 @@ function Game({ roster }: { roster: Roster }) {
   const [note, setNote] = useState<{ icon: string; text: string } | null>(null);
   const noteTimer = useRef(0);
   const worldLoaded = useRef(false);
+  const [playerName, setPlayerName] = useState("");
 
   /** (Re)load everything from this browser's storage — on mount and after a cloud load. */
   const reloadProfile = useCallback(() => {
@@ -184,6 +189,7 @@ function Game({ roster }: { roster: Roster }) {
     audio.setVolumes(s.sfxVolume, s.musicVolume);
     setFavorites(loadFavorites());
     setRecent(loadRecent());
+    setPlayerName(loadProfile().name);
     const wp = loadWorldProgress();
     const who = wp.playerId !== null ? roster.byId.get(wp.playerId) ?? null : null;
     setWorldPlayer(who);
@@ -231,6 +237,17 @@ function Game({ roster }: { roster: Roster }) {
   const cloudVisible = !!cloud.state.view;
   const router = useRouter();
   const leaveGame = useCallback(() => cloud.leave(() => router.push("/projects")), [cloud, router]);
+
+  /** Leaderboard name: stored with the profile, synced with the cloud save. */
+  const changeName = useCallback(
+    (n: string) => {
+      const name = cleanName(n);
+      saveProfile({ name });
+      setPlayerName(name);
+      if (cloud.state.status === "signedIn") void saveNow(true);
+    },
+    [cloud.state.status, saveNow]
+  );
 
   const updateSettings = useCallback((s: Settings) => {
     setSettings(s);
@@ -349,10 +366,31 @@ function Game({ roster }: { roster: Roster }) {
   );
 
   /* ── Match results ─────────────────────────────────────────────── */
-  const onMatchOver = useCallback((f: FightSetup, s: MatchSummary) => {
+  const onMatchOver = useCallback((f: FightSetup, s: MatchSummary): ScoreBreakdown | null => {
     const me = s.fighters[0];
     const won = s.winner === null ? null : s.winner === 0;
+    // Only fights against the CPU score (local versus can't be credited fairly)
+    const scored = f.controllers[0] === "human" && f.controllers[1] === "cpu";
+    const before = loadStats();
+    const score = scored
+      ? scoreMatch({
+          won,
+          difficulty: f.difficulty,
+          me: f.p1,
+          opponent: f.p2,
+          kos: me.kos,
+          perfects: me.perfects,
+          maxCombo: me.maxCombo,
+          ults: me.ults,
+          fastestKo: won ? s.fastestKo : null,
+          healthLeft: me.healthLeft,
+          streakBefore: before.streak ?? 0,
+          bestStreakBefore: before.bestStreak ?? 0,
+        })
+      : null;
     recordMatch({
+      points: score?.total ?? 0,
+      scored,
       fighterId: f.p1.id,
       fighterName: f.p1.name,
       opponentId: f.p2.id,
@@ -370,6 +408,7 @@ function Game({ roster }: { roster: Roster }) {
       });
     }
     void saveNow(true);
+    return score;
   }, [saveNow]);
 
   const resultActions = useCallback(
@@ -429,7 +468,10 @@ function Game({ roster }: { roster: Roster }) {
         case "tournament":
           if (bracket) {
             const next = advance(bracket, won);
-            if (next.result === true) recordTournamentWin();
+            if (next.result === true) {
+              recordTournamentWin(TOURNAMENT_BONUS);
+              showNote("🏆", `Champion! +${TOURNAMENT_BONUS} leaderboard points`);
+            }
             setBracket(next);
           }
           setScreen({ k: "tournament" });
@@ -550,6 +592,7 @@ function Game({ roster }: { roster: Roster }) {
           startHealth={f.startHealth}
           banner={f.banner}
           onMatchOver={(s) => onMatchOver(f, s)}
+          playerName={playerName}
           resultActions={resultActions(f)}
           onExit={(a, s) => onFightExit(f, a, s)}
         />
@@ -584,7 +627,17 @@ function Game({ roster }: { roster: Roster }) {
       );
       break;
     case "stats":
-      body = <StatsScreen roster={roster} onBack={back} />;
+      body = (
+        <StatsScreen
+          roster={roster}
+          onBack={back}
+          name={playerName}
+          signedIn={cloud.state.status === "signedIn"}
+          cloudOn={cloud.state.status !== "off"}
+          onJoin={() => cloud.show("saveEmail")}
+          onName={changeName}
+        />
+      );
       break;
     case "settings":
       body = <SettingsScreen settings={settings} onChange={updateSettings} onBack={back} />;
@@ -601,7 +654,7 @@ function Game({ roster }: { roster: Roster }) {
         </motion.div>
       </AnimatePresence>
       <AnimatePresence>
-        {cloudVisible && <CloudPanel cloud={cloud} hasLocal={loadStats().matches > 0} />}
+        {cloudVisible && <CloudPanel cloud={cloud} hasLocal={loadStats().matches > 0} name={playerName} onName={changeName} />}
       </AnimatePresence>
       <AnimatePresence>
         {note && (

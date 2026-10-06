@@ -183,3 +183,35 @@ test('AI vs AI plays complete matches to a K.O. winner, and rematch resets', () 
     assert.equal(m.fighters[0].health, m.fighters[0].def.maxHealth);
   }
 });
+
+test('scoring: harder CPUs, streaks and style pay more; losses reset the streak', () => {
+  const { scoreMatch } = require(path.join(root, '..', 'data', 'score.ts'));
+  const base = {
+    me: buildFighter(SPIDEY),
+    opponent: buildFighter(HULK),
+    kos: 2,
+    perfects: 0,
+    maxCombo: 5,
+    ults: 1,
+    fastestKo: 30,
+    healthLeft: 0.5,
+    streakBefore: 0,
+    bestStreakBefore: 0,
+  };
+  const easy = scoreMatch({ ...base, won: true, difficulty: 'easy' });
+  const insane = scoreMatch({ ...base, won: true, difficulty: 'insane' });
+  assert.ok(insane.total > easy.total * 3, 'insane pays far more than easy');
+  assert.equal(easy.streak, 1);
+  assert.ok(easy.lines.some((l) => l.label === 'Underdog win'), 'Spidey beating Hulk is an underdog win');
+
+  const streaky = scoreMatch({ ...base, won: true, difficulty: 'normal', streakBefore: 4, bestStreakBefore: 4 });
+  assert.equal(streaky.streak, 5);
+  assert.ok(streaky.newBestStreak);
+  assert.ok(streaky.lines.some((l) => l.label.startsWith('Win streak')));
+
+  const loss = scoreMatch({ ...base, won: false, difficulty: 'hard', streakBefore: 6, bestStreakBefore: 9 });
+  assert.equal(loss.streak, 0, 'a loss breaks the streak');
+  assert.equal(loss.bestStreak, 9, 'best streak is kept');
+  assert.ok(loss.total > 0 && loss.total < easy.total, 'losing still earns a little');
+  for (const r of [easy, insane, streaky, loss]) assert.ok(Number.isInteger(r.total) && r.lines.every((l) => Number.isInteger(l.points)));
+});

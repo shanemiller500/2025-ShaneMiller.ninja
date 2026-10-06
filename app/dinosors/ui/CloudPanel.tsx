@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import type { EmailCloud } from "@/utils/firebase/useEmailCloud";
+import { HumanCheck, humanCheckOn } from "@/utils/firebase/HumanCheck";
 import type { DinoMeta } from "../cloud/cloud";
 
 const ago = (d: Date | null) => {
@@ -22,6 +23,9 @@ export default function CloudPanel({ cloud, fontClass, hasLocal }: { cloud: Emai
   const { state } = cloud;
   const view = state.view;
   const [email, setEmail] = useState(state.draftEmail || state.email || "");
+  // reCAPTCHA token (single-use: the widget remounts after every attempt)
+  const [human, setHuman] = useState<string | null>(null);
+  const [humanKey, setHumanKey] = useState(0);
   useEffect(() => {
     if (state.draftEmail) setEmail(state.draftEmail);
   }, [state.draftEmail]);
@@ -37,7 +41,12 @@ export default function CloudPanel({ cloud, fontClass, hasLocal }: { cloud: Emai
       className="mt-3"
       onSubmit={(e) => {
         e.preventDefault();
-        void cloud.sendLink(email, intent);
+        void cloud.sendLink(email, intent, human).then((ok) => {
+          if (!ok) {
+            setHuman(null);
+            setHumanKey((k) => k + 1);
+          }
+        });
       }}
     >
       <input
@@ -51,8 +60,9 @@ export default function CloudPanel({ cloud, fontClass, hasLocal }: { cloud: Emai
         onChange={(e) => setEmail(e.target.value)}
         className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] outline-none focus:ring-2 focus:ring-sky-400 dark:border-white/10 dark:bg-white/5"
       />
-      <button type="submit" disabled={state.saving} className={`${primary} mt-3`}>
-        {state.saving ? "Sending…" : cta}
+      <HumanCheck key={humanKey} onToken={setHuman} theme="light" className="mt-3" />
+      <button type="submit" disabled={state.saving || (humanCheckOn && !human)} className={`${primary} mt-3`}>
+        {state.saving ? "Sending…" : humanCheckOn && !human ? "Tick the box above first" : cta}
       </button>
     </form>
   );

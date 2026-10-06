@@ -14,6 +14,8 @@ import { GameSession, type Controller, type MatchSummary } from "../game/session
 import type { ArenaDef } from "../render/arenas";
 import { ArcadeButton, P_COLORS, cn } from "./kit";
 import { ControlsCard } from "./ControlsCard";
+import { ScorePanel } from "./ScorePanel";
+import type { ScoreBreakdown } from "../data/score";
 import { suspendPadBridge } from "../input/gamepad";
 
 export type FightExit = "rematch" | "changeFighter" | "newArena" | "quit" | "continue";
@@ -29,7 +31,10 @@ interface Props {
   /** Small caption over the fight (e.g. "SURVIVAL · OPPONENT 4") */
   banner?: string;
   /** Called once per finished match (stats, survival/tournament progress) */
-  onMatchOver?: (s: MatchSummary) => void;
+  /** Called once per finished match; may return the points it earned */
+  onMatchOver?: (s: MatchSummary) => ScoreBreakdown | null | void;
+  /** Player name shown on the score card */
+  playerName?: string;
   /** Replace the default result buttons (survival/tournament/world) */
   resultActions?: (s: MatchSummary) => { label: string; action: FightExit; tone?: "primary" | "ghost" | "danger" }[];
   onExit: (action: FightExit, summary: MatchSummary | null) => void;
@@ -42,6 +47,7 @@ export function FightScreen(props: Props) {
   const [phase, setPhase] = useState<"vs" | "fight">("vs");
   const [paused, setPaused] = useState(false);
   const [summary, setSummary] = useState<MatchSummary | null>(null);
+  const [score, setScore] = useState<ScoreBreakdown | null>(null);
   const [touch, setTouch] = useState(false);
   const cbRef = useRef(props);
   cbRef.current = props;
@@ -80,7 +86,7 @@ export function FightScreen(props: Props) {
             startHealth,
             onMatchOver: (s) => {
               setSummary(s);
-              cbRef.current.onMatchOver?.(s);
+              setScore(cbRef.current.onMatchOver?.(s) ?? null);
             },
             onPauseRequest: () => setPaused((p) => !p),
           },
@@ -184,7 +190,7 @@ export function FightScreen(props: Props) {
       <AnimatePresence>
         {summary && (
           <motion.div data-pad-menu initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="absolute inset-0 z-20 overflow-y-auto bg-gradient-to-b from-black/40 via-black/75 to-black/95 backdrop-blur-[2px]">
-            <Results summary={summary} p1={p1} p2={p2} youWon={youWon} actions={actions} onAction={exit} />
+            <Results summary={summary} p1={p1} p2={p2} youWon={youWon} actions={actions} onAction={exit} score={score} playerName={props.playerName ?? ""} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -241,7 +247,11 @@ function Results({
   youWon,
   actions,
   onAction,
+  score,
+  playerName,
 }: {
+  score: ScoreBreakdown | null;
+  playerName: string;
   summary: MatchSummary;
   p1: FighterDef;
   p2: FighterDef;
@@ -280,6 +290,8 @@ function Results({
           </p>
         </div>
       </div>
+
+      {score && <ScorePanel score={score} name={playerName} />}
 
       <div className="grid w-full max-w-4xl gap-4 md:grid-cols-2">
         {([0, 1] as const).map((i) => {

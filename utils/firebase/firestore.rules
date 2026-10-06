@@ -1,6 +1,7 @@
 rules_version = '2';
 
-// Cloud saves for the site's games (Dinosaur Land + Fight World).
+// Cloud saves for the site's games (Dinosaur Land + Fight World),
+// plus Fight World's public leaderboard.
 // Players sign in with a passwordless email link; each player can only
 // read/write their own documents, and only with a verified email.
 service cloud.firestore {
@@ -43,6 +44,39 @@ service cloud.firestore {
     }
 
     /* ---------------- Fight World ---------------- */
+    // Public leaderboard: anyone can read; each player can only write their
+    // own row (name + scores, never the email), with sane value ranges.
+    function fighterRef(f) {
+      return f == null || (f is map && f.keys().hasOnly(['id', 'name']) && f.id is int && f.name is string && f.name.size() <= 40);
+    }
+    function boundedInt(v, max) {
+      return v is int && v >= 0 && v <= max;
+    }
+    match /fightWorldLeaderboard/{uid} {
+      allow read: if true;
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['name', 'score', 'wins', 'matches', 'kos', 'perfects', 'bestStreak', 'streak', 'bestCombo', 'titles', 'survivalBest', 'mainFighter', 'streakFighter', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 20
+        && boundedInt(request.resource.data.score, 100000000)
+        && boundedInt(request.resource.data.wins, 1000000)
+        && boundedInt(request.resource.data.matches, 1000000)
+        && request.resource.data.wins <= request.resource.data.matches
+        && boundedInt(request.resource.data.kos, 10000000)
+        && boundedInt(request.resource.data.perfects, 1000000)
+        && boundedInt(request.resource.data.bestStreak, 100000)
+        && request.resource.data.bestStreak <= request.resource.data.wins
+        && boundedInt(request.resource.data.streak, 100000)
+        && boundedInt(request.resource.data.bestCombo, 1000)
+        && boundedInt(request.resource.data.titles, 100000)
+        && boundedInt(request.resource.data.survivalBest, 100000)
+        && fighterRef(request.resource.data.mainFighter)
+        && fighterRef(request.resource.data.streakFighter)
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isOwner(uid);
+    }
+
     match /fightWorldPlayers/{uid} {
       allow read: if isOwner(uid);
       allow create, update: if isOwner(uid)

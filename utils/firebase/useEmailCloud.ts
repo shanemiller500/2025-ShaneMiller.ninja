@@ -1,5 +1,6 @@
 "use client";
 
+import { humanCheckOn, verifyHuman } from "./HumanCheck";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CloudIntent, User } from "./client";
 import { safeSetItem } from "../storageJanitor";
@@ -69,6 +70,30 @@ export interface CloudState<M> {
 type Client = typeof import("./client");
 
 const AUTOSAVE_MS = 60_000;
+
+/** Seconds before another sign-in email may go to this address (per browser). */
+const RESEND_SECONDS = 60;
+const SENT_KEY = "shanemiller:linkSentAt";
+function linkCooldown(email: string) {
+  try {
+    const map = JSON.parse(localStorage.getItem(SENT_KEY) || "{}") as Record<string, number>;
+    const at = map[email] ?? 0;
+    return Math.max(0, Math.ceil(RESEND_SECONDS - (Date.now() - at) / 1000));
+  } catch {
+    return 0;
+  }
+}
+function markLinkSent(email: string) {
+  try {
+    const map = JSON.parse(localStorage.getItem(SENT_KEY) || "{}") as Record<string, number>;
+    const now = Date.now();
+    for (const k of Object.keys(map)) if (now - map[k] > RESEND_SECONDS * 1000) delete map[k];
+    map[email] = now;
+    localStorage.setItem(SENT_KEY, JSON.stringify(map));
+  } catch {
+    /* storage unavailable: server-side limits still apply */
+  }
+}
 
 export function useEmailCloud<M>(
   gameId: string,
@@ -275,7 +300,7 @@ export function useEmailCloud<M>(
   /* ------------------------------ actions ------------------------------ */
 
   /** Email a sign-in link. Closes the popup on success. */
-  const sendLink = useCallback(async (email: string, intent: CloudIntent) => {
+  const sendLink = useCallback(async (email: string, intent: CloudIntent, humanToken?: string | null) => {
     const c = client.current;
     if (!c) return false;
     patch({ draftEmail: email });
@@ -283,9 +308,28 @@ export function useEmailCloud<M>(
       patch({ error: "That email doesn't look right." });
       return false;
     }
+    // Bot check: the reCAPTCHA token is verified (and rate-limited) on our server first
+    if (humanCheckOn && !humanToken) {
+      patch({ error: "Please tick “I'm not a robot” first." });
+      return false;
+    }
+    // Don't fire repeat emails at the same address
+    const wait = linkCooldown(c.cleanEmail(email));
+    if (wait > 0) {
+      patch({ error: `We just sent a link to that address — check your inbox (and spam). You can send another in ${wait}s.` });
+      return false;
+    }
     patch({ error: null, saving: true });
     try {
+      if (humanCheckOn && humanToken) {
+        const problem = await verifyHuman(humanToken, c.cleanEmail(email));
+        if (problem) {
+          patch({ error: problem, saving: false });
+          return false;
+        }
+      }
       await c.sendMagicLink(email, intent);
+      markLinkSent(c.cleanEmail(email));
       patch({ status: "linkSent", email: c.cleanEmail(email), view: null, saving: false });
       toast.current("📬", `Check ${c.cleanEmail(email)} — tap the link in the email to ${intent === "load" ? "load your game" : "start saving"}.`);
       // a pending "leave" can carry on now

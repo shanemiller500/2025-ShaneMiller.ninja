@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Security check</title>
+    <!--
+      Isolated reCAPTCHA v2 checkbox. Lives in its own frame so it never clashes
+      with the reCAPTCHA Enterprise script Firebase App Check loads on the page.
+      Talks to the parent (same origin only) with postMessage:
+        { source: "human-check", id, type: "ready" | "token" | "error" | "size", ... }
+    -->
+    <style>
+      html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <div id="widget"></div>
+    <script>
+      (function () {
+        var params = new URLSearchParams(location.search);
+        var siteKey = params.get("k") || "";
+        var theme = params.get("theme") === "light" ? "light" : "dark";
+        var id = params.get("id") || "";
+        function post(msg) {
+          msg.source = "human-check";
+          msg.id = id;
+          if (window.parent !== window) window.parent.postMessage(msg, location.origin);
+        }
+        window.onHumanCheckLoad = function () {
+          try {
+            grecaptcha.render("widget", {
+              sitekey: siteKey,
+              theme: theme,
+              callback: function (token) { post({ type: "token", token: token }); },
+              "expired-callback": function () { post({ type: "token", token: null }); },
+              "error-callback": function () { post({ type: "error" }); },
+            });
+            post({ type: "ready" });
+          } catch (e) {
+            post({ type: "error" });
+          }
+        };
+        // Grow the frame while Google's image challenge is open, shrink after
+        var last = "";
+        setInterval(function () {
+          var open = false;
+          var frames = document.querySelectorAll("iframe");
+          for (var i = 0; i < frames.length; i++) {
+            if (!/bframe/.test(frames[i].src)) continue;
+            var el = frames[i];
+            var visible = true;
+            while (el && el !== document.body) {
+              if (getComputedStyle(el).visibility === "hidden") { visible = false; break; }
+              el = el.parentElement;
+            }
+            if (visible) open = true;
+          }
+          var state = open ? "open" : "closed";
+          if (state !== last) {
+            last = state;
+            post({ type: "size", w: open ? 400 : 304, h: open ? 600 : 78 });
+          }
+        }, 250);
+      })();
+    </script>
+    <script src="https://www.google.com/recaptcha/api.js?onload=onHumanCheckLoad&render=explicit" async defer></script>
+  </body>
+</html>

@@ -107,6 +107,13 @@ export interface Stats {
   survivalBest: number;
   tournamentWins: number;
   fighters: Record<string, FighterRecord & { name: string }>;
+  /** Leaderboard points (CPU fights only) */
+  score: number;
+  /** Current consecutive CPU wins */
+  streak: number;
+  bestStreak: number;
+  bestStreakBy: string;
+  bestStreakById: number | null;
 }
 
 export const EMPTY_STATS: Stats = {
@@ -123,6 +130,11 @@ export const EMPTY_STATS: Stats = {
   survivalBest: 0,
   tournamentWins: 0,
   fighters: {},
+  score: 0,
+  streak: 0,
+  bestStreak: 0,
+  bestStreakBy: "",
+  bestStreakById: null,
 };
 
 export const loadStats = (): Stats => read("stats", EMPTY_STATS);
@@ -140,6 +152,10 @@ export interface MatchRecord {
   perfects: number;
   maxCombo: number;
   fastestKo: number | null;
+  /** Leaderboard points earned (0 / omitted for unscored local versus) */
+  points?: number;
+  /** Counts towards win streaks (CPU fights) */
+  scored?: boolean;
 }
 
 export function recordMatch(r: MatchRecord) {
@@ -164,8 +180,28 @@ export function recordMatch(r: MatchRecord) {
   if (r.won === true) f.wins++;
   if (r.won === false) f.losses++;
   f.kos += r.kos;
+  if (r.scored) {
+    s.score = (s.score ?? 0) + Math.max(0, Math.round(r.points ?? 0));
+    if (r.won === true) {
+      s.streak = (s.streak ?? 0) + 1;
+      if (s.streak > (s.bestStreak ?? 0)) {
+        s.bestStreak = s.streak;
+        s.bestStreakBy = r.fighterName;
+        s.bestStreakById = r.fighterId;
+      }
+    } else if (r.won === false) s.streak = 0;
+  }
   saveStats(s);
   return s;
+}
+
+/** The fighter you've won the most with (ties → most picked). */
+export function mainFighter(s: Stats): { id: number; name: string } | null {
+  let best: { id: number; name: string; w: number; p: number } | null = null;
+  for (const [id, r] of Object.entries(s.fighters)) {
+    if (!best || r.wins > best.w || (r.wins === best.w && r.picks > best.p)) best = { id: Number(id), name: r.name, w: r.wins, p: r.picks };
+  }
+  return best ? { id: best.id, name: best.name } : null;
 }
 
 export function recordSurvival(streak: number) {
@@ -174,9 +210,10 @@ export function recordSurvival(streak: number) {
   saveStats(s);
 }
 
-export function recordTournamentWin() {
+export function recordTournamentWin(bonus = 0) {
   const s = loadStats();
   s.tournamentWins++;
+  s.score = (s.score ?? 0) + bonus;
   saveStats(s);
 }
 
@@ -190,6 +227,18 @@ export const EMPTY_WORLD: WorldProgress = { playerId: null, zone: null, x: -900 
 export const loadWorldProgress = (): WorldProgress => read("world", EMPTY_WORLD);
 export const saveWorldProgress = (w: WorldProgress) => write("world", w);
 
+/* ── Player profile (leaderboard name) ─────────────────────────────── */
+export interface Profile {
+  name: string;
+}
+export const EMPTY_PROFILE: Profile = { name: "" };
+export const loadProfile = (): Profile => read("profile", EMPTY_PROFILE);
+export const saveProfile = (p: Profile) => write("profile", p);
+
+/** Leaderboard names: 2–20 letters, numbers, spaces and . _ - ' */
+export const cleanName = (n: string) => n.replace(/\s+/g, " ").trim().slice(0, 20);
+export const validName = (n: string) => /^[A-Za-z0-9À-ɏ ._'-]{2,20}$/.test(cleanName(n));
+
 /* ── Whole-profile bundle (cloud saves) ────────────────────────────── */
 export interface ProgressBundle {
   v: 1;
@@ -198,10 +247,11 @@ export interface ProgressBundle {
   recent: number[];
   stats: Stats;
   world: WorldProgress;
+  profile?: Profile;
 }
 
 export function exportProgress(): ProgressBundle {
-  return { v: 1, settings: loadSettings(), favorites: loadFavorites(), recent: loadRecent(), stats: loadStats(), world: loadWorldProgress() };
+  return { v: 1, settings: loadSettings(), favorites: loadFavorites(), recent: loadRecent(), stats: loadStats(), world: loadWorldProgress(), profile: loadProfile() };
 }
 
 /** Replace everything stored locally with a saved bundle. */
@@ -214,6 +264,8 @@ export function importProgress(json: string): boolean {
     if (Array.isArray(b.recent)) write("recent", b.recent);
     if (b.stats) write("stats", { ...EMPTY_STATS, ...b.stats });
     if (b.world) write("world", { ...EMPTY_WORLD, ...b.world });
+    // Keep a locally chosen name if the cloud save doesn't have one yet
+    if (b.profile?.name) write("profile", { ...EMPTY_PROFILE, ...b.profile });
     return true;
   } catch {
     return false;

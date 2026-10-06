@@ -2,9 +2,11 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { Cloud, KeyRound, LogOut, Mail, Play, Save, X } from "lucide-react";
+import { Cloud, KeyRound, LogOut, Mail, Play, Save, Trophy, UserRound, X } from "lucide-react";
 import type { EmailCloud } from "@/utils/firebase/useEmailCloud";
+import { HumanCheck, humanCheckOn } from "@/utils/firebase/HumanCheck";
 import type { FightMeta } from "../data/cloud";
+import { cleanName, validName } from "../data/storage";
 import { ArcadeButton } from "./kit";
 
 const ago = (d: Date | null) => {
@@ -56,10 +58,16 @@ function Shell({ kicker, title, onClose, children }: { kicker: string; title: st
  * All of Fight World's cloud-save popups, driven by `cloud.state.view`:
  * welcome · loadEmail · saveEmail · finish · offer · account · leave.
  */
-export function CloudPanel({ cloud, hasLocal }: { cloud: EmailCloud<FightMeta>; hasLocal: boolean }) {
+export function CloudPanel({ cloud, hasLocal, name, onName }: { cloud: EmailCloud<FightMeta>; hasLocal: boolean; name: string; onName: (n: string) => void }) {
   const { state } = cloud;
   const view = state.view;
   const [email, setEmail] = useState(state.draftEmail || state.email || "");
+  const [fighterName, setFighterName] = useState(name);
+  const [nameError, setNameError] = useState<string | null>(null);
+  // reCAPTCHA token (single-use: the widget remounts after every attempt)
+  const [human, setHuman] = useState<string | null>(null);
+  const [humanKey, setHumanKey] = useState(0);
+  useEffect(() => setFighterName(name), [name]);
   useEffect(() => {
     if (state.draftEmail) setEmail(state.draftEmail);
   }, [state.draftEmail]);
@@ -75,13 +83,13 @@ export function CloudPanel({ cloud, hasLocal }: { cloud: EmailCloud<FightMeta>; 
   }, [close]);
 
   const error = state.error && <p className="mt-4 rounded-lg bg-rose-500/15 p-2.5 text-[13px] font-semibold text-rose-200 ring-1 ring-rose-400/30">⚠ {state.error}</p>;
-  const field = (
+  const emailField = (autoFocus: boolean) => (
     <label className="mt-4 flex items-center gap-2 rounded-lg bg-white/[0.06] px-3 ring-1 ring-white/15 focus-within:ring-2 focus-within:ring-cyan-300">
       <Mail className="h-4 w-4 text-white/50" />
       <input
         type="email"
         required
-        autoFocus
+        autoFocus={autoFocus}
         inputMode="email"
         autoComplete="email"
         placeholder="you@example.com"
@@ -91,16 +99,62 @@ export function CloudPanel({ cloud, hasLocal }: { cloud: EmailCloud<FightMeta>; 
       />
     </label>
   );
+  const field = emailField(true);
+  const nameField = (
+    <>
+      <label className="mt-4 flex items-center gap-2 rounded-lg bg-white/[0.06] px-3 ring-1 ring-white/15 focus-within:ring-2 focus-within:ring-amber-300">
+        <UserRound className="h-4 w-4 text-white/50" />
+        <input
+          type="text"
+          required
+          maxLength={20}
+          autoComplete="nickname"
+          autoFocus={!name}
+          placeholder="Fighter name (shown on the leaderboard)"
+          value={fighterName}
+          onChange={(e) => {
+            setFighterName(e.target.value);
+            setNameError(null);
+          }}
+          className="w-full bg-transparent py-3 text-[15px] outline-none placeholder:text-white/30"
+        />
+      </label>
+      {nameError && <p className="mt-2 text-[12px] font-semibold text-rose-300">{nameError}</p>}
+    </>
+  );
+  /** Validate + store the name; false when it isn't usable yet. */
+  const commitName = () => {
+    const n = cleanName(fighterName);
+    if (!validName(n)) {
+      setNameError("Pick a name: 2–20 letters, numbers or spaces.");
+      return false;
+    }
+    onName(n);
+    return true;
+  };
   const emailForm = (intent: "load" | "save", cta: string) => (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void cloud.sendLink(email, intent);
+        if (intent === "save" && !commitName()) return;
+        void cloud.sendLink(email, intent, human).then((ok) => {
+          if (!ok) {
+            setHuman(null);
+            setHumanKey((k) => k + 1);
+          }
+        });
       }}
     >
-      {field}
-      <ArcadeButton tone="cyan" className="mt-4 w-full" type="submit" disabled={state.saving}>
-        {state.saving ? "Sending…" : cta}
+      {intent === "save" && nameField}
+      {intent === "save" ? emailField(!!name) : field}
+      {intent === "save" && (
+        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-white/45">
+          <Trophy className="mt-px h-3.5 w-3.5 shrink-0 text-amber-300/70" /> Your name goes on the global leaderboard with your wins, streaks and main fighter. Your email is never shown.
+        </p>
+      )}
+      <HumanCheck key={humanKey} onToken={setHuman} className="mt-4" />
+      <ArcadeButton tone="cyan" className="mt-4 w-full" type="submit" disabled={state.saving || (humanCheckOn && !human)}>
+        {state.saving ? "Sending…" : humanCheckOn && !human ? "Tick the box above to continue" : cta}
       </ArcadeButton>
     </form>
   );
@@ -136,8 +190,8 @@ export function CloudPanel({ cloud, hasLocal }: { cloud: EmailCloud<FightMeta>; 
       );
     case "saveEmail":
       return (
-        <Shell kicker="Optional" title="Save progress?" onClose={close}>
-          <p className="mt-3 text-sm text-white/70">Add your email and your stats, records, favourites and settings save to the cloud automatically. Play on any device. No password.</p>
+        <Shell kicker="Save & join the leaderboard" title="Save progress?" onClose={close}>
+          <p className="mt-3 text-sm text-white/70">Add your fighter name and email: your stats, records and settings save to the cloud automatically, and you join the global leaderboard. Play on any device. No password.</p>
           {error}
           {emailForm("save", "Save my progress")}
           {textBtn("Not now", cloud.skip)}
@@ -198,6 +252,19 @@ export function CloudPanel({ cloud, hasLocal }: { cloud: EmailCloud<FightMeta>; 
           <p className="mt-3 text-sm text-white/70">
             Signed in as <b className="text-white">{state.email}</b>
           </p>
+          <form
+            className="flex items-end gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              commitName();
+            }}
+          >
+            <div className="min-w-0 flex-1">{nameField}</div>
+            <ArcadeButton tone={cleanName(fighterName) === name && name ? "ghost" : "gold"} size="sm" type="submit" className="mb-0.5">
+              {name ? "Rename" : "Set name"}
+            </ArcadeButton>
+          </form>
+          {!name && <p className="mt-2 text-[12px] font-semibold text-amber-200">Set a fighter name to appear on the global leaderboard.</p>}
           <div className="mt-3 rounded-lg bg-emerald-400/10 p-3 text-[13px] font-semibold text-emerald-200 ring-1 ring-emerald-300/25">
             {state.saving ? "Saving…" : `✔ Last saved ${state.lastSaved ? ago(state.lastSaved) : "— saving soon"}`}
             <span className="block text-[11px] font-medium text-emerald-200/70">Saves after every match, every minute and when you leave.</span>

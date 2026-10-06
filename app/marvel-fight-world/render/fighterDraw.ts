@@ -8,7 +8,7 @@
 
 import type { Fighter } from "../engine/fighter";
 import type { Pose } from "../engine/types";
-import { clamp, glow, lerp, shade, withAlpha } from "./util";
+import { clamp, easeOut, easeOutBack, glow, lerp, shade, withAlpha } from "./util";
 import {
   INK as BODY_INK,
   boot,
@@ -84,31 +84,158 @@ const sinD = (d: number) => Math.sin((d * Math.PI) / 180);
 const cosD = (d: number) => Math.cos((d * Math.PI) / 180);
 
 /* ── Pose selection ────────────────────────────────────────────────── */
+/**
+ * Fighting stance per archetype — how a hero *stands* sells who they are:
+ * speedsters crouch low and springy (Spider-Man), powerhouses hunch wide
+ * with heavy fists (Hulk), brawlers keep a tight boxer's guard, technical
+ * fighters stand side-on with a palm forward.
+ */
+const STANCES: Record<string, Key> = {
+  speed: { lean: 20, fT: 34, fS: -34, bT: -8, bS: -56, fU: 62, fF: 112, bU: -24, bF: 52, head: 6 },
+  power: { lean: 16, fT: 24, fS: -14, bT: -24, bS: -36, fU: 30, fF: 76, bU: 22, bF: 66, head: 4 },
+  tank: { lean: 18, fT: 26, fS: -16, bT: -26, bS: -38, fU: 28, fF: 70, bU: 24, bF: 62, head: 6 },
+  brawler: { lean: 10, fT: 20, fS: -10, bT: -20, bS: -30, fU: 42, fF: 142, bU: 28, bF: 150 },
+  technical: { lean: 2, fT: 12, fS: -4, bT: -14, bS: -20, fU: 72, fF: 96, bU: 8, bF: 124 },
+  balanced: {},
+};
+
+/** Signature victory poses (fallback by archetype). */
+function victoryPose(f: Fighter, t: number): Key {
+  const bob = Math.sin(t * 6) * 6;
+  switch (f.def.name) {
+    case "Hulk":
+      return { fU: 100, fF: 175 + bob, bU: 100, bF: 175 - bob, lean: -8, head: -18, fT: 26, bT: -26 }; // double-biceps roar
+    case "Captain America":
+      return { bU: 125, bF: 172, fU: 10, fF: 110, lean: -4, head: -6 }; // shield raised
+    case "Spider-Man":
+      return { ...CROUCH, lean: 30, fU: 10, fF: 4, bU: 120, bF: 150 + bob, head: 10 }; // perched spider pose
+    case "Iron Man":
+      return { fU: 92, fF: 90, bU: 20, bF: 40, lean: -2 }; // repulsor aim
+    case "Doctor Strange":
+      return { fU: 70, fF: 160, bU: 60, bF: 150 + bob, lean: -2 }; // casting hands
+  }
+  switch (f.def.archetype) {
+    case "power":
+    case "tank":
+      return { fU: 100, fF: 175 + bob, bU: 100, bF: 175 - bob, lean: -6, head: -10 };
+    case "speed":
+      return { ...CROUCH, lean: 24, fU: 172, fF: 178 + bob, bU: -20, bF: 40 };
+    case "technical":
+      return { fU: 64, fF: 150, bU: 60, bF: 150, lean: -4 }; // arms folded
+    default:
+      return { fU: 172, fF: 178 + bob, bU: 14, bF: 140, lean: -6, head: -6 };
+  }
+}
+
+/** Per-fighter animation memory (smoothing, flips, landings). */
+interface Memory {
+  j: Joints;
+  t: number;
+  airJumps: number;
+  flipAt: number;
+  flipDir: number;
+  peakY: number;
+  wasAir: boolean;
+  landAt: number;
+}
+const memory = new WeakMap<Fighter, Memory>();
+
 export function poseFor(f: Fighter, t: number): Joints {
-  const breathe = Math.sin(t * 2.6 + f.index) * 2;
-  let j: Joints = { ...STANCE, lean: STANCE.lean + breathe * 0.6, fF: STANCE.fF + breathe, bF: STANCE.bF - breathe };
+  let m = memory.get(f);
+  if (m && m.t === t) return m.j; // same frame (afterimages ask again)
+  const raw = rawPose(f, t, m);
+  if (!m) {
+    m = { j: raw, t, airJumps: f.airJumpsLeft, flipAt: -1, flipDir: 1, peakY: 0, wasAir: false, landAt: -1 };
+    memory.set(f, m);
+    return raw;
+  }
+  // Critically-damped style smoothing: crisp for strikes and hits, fluid otherwise
+  const dt = t - m.t;
+  m.t = t;
+  if (dt <= 0 || dt > 0.25) {
+    m.j = raw;
+    return raw;
+  }
+  const rate = f.state === "attack" ? 38 : f.state === "hit" || f.state === "launched" || f.state === "thrown" || f.state === "blockstun" ? 30 : 15;
+  const a = 1 - Math.exp(-rate * dt);
+  const out = { ...raw };
+  for (const k of Object.keys(raw) as (keyof Joints)[]) {
+    if (k === "rot") continue; // flips / spins stay exact
+    out[k] = lerp(m.j[k], raw[k], a);
+  }
+  m.j = out;
+  return out;
+}
+
+function rawPose(f: Fighter, t: number, mem: Memory | undefined): Joints {
   const st = f.stateTime;
+  const arch = f.def.archetype;
+  // Archetype stance + a rhythmic fighter's bounce (knees + guard)
+  const stance = mix({ ...STANCE }, STANCES[arch] ?? {}, 1);
+  const bounce = (Math.sin(t * 5.2 + f.index * 1.7) + 1) / 2;
+  const breathe = Math.sin(t * 2.6 + f.index) * 2;
+  let j: Joints = {
+    ...stance,
+    lean: stance.lean + breathe * 0.5,
+    fT: stance.fT + bounce * 7,
+    fS: stance.fS - bounce * 11,
+    bT: stance.bT + bounce * 5,
+    bS: stance.bS - bounce * 10,
+    fF: stance.fF + bounce * 5,
+    bF: stance.bF - bounce * 4,
+  };
+
+  // Airborne tracking for flips and superhero landings
+  const airborne = f.y > 1;
+  if (mem) {
+    if (airborne) {
+      mem.peakY = mem.wasAir ? Math.max(mem.peakY, f.y) : f.y;
+      // Double jump (or a speedster's forward leap) → front flip
+      const usedAirJump = f.airJumpsLeft < mem.airJumps;
+      const forwardLeap = !mem.wasAir && arch === "speed" && f.vx * f.facing > 2;
+      if (usedAirJump || forwardLeap) {
+        mem.flipAt = t;
+        mem.flipDir = 1;
+      }
+    } else if (mem.wasAir) {
+      if (mem.peakY > 120 && (f.state === "idle" || f.state === "walk" || f.state === "crouch" || f.state === "run")) mem.landAt = t;
+      mem.peakY = 0;
+    }
+    mem.wasAir = airborne;
+    mem.airJumps = f.airJumpsLeft;
+  }
 
   switch (f.state) {
     case "walk": {
-      const ph = (f.x * 0.05) * f.facing;
+      const ph = f.x * 0.05 * f.facing;
       const s = Math.sin(ph);
-      j = mix(j, { fT: 8 + s * 28, bT: 8 - s * 28, fS: 8 + s * 28 - 14 - Math.max(0, -s) * 34, bS: 8 - s * 28 - 14 - Math.max(0, s) * 34 }, 1);
+      j = mix(j, { fT: 8 + s * 28, bT: 8 - s * 28, fS: 8 + s * 28 - 14 - Math.max(0, -s) * 34, bS: 8 - s * 28 - 14 - Math.max(0, s) * 34, fU: j.fU - s * 10, bU: j.bU + s * 10 }, 1);
       break;
     }
     case "run": {
-      const ph = (f.x * 0.045) * f.facing;
+      const ph = f.x * 0.045 * f.facing;
       const s = Math.sin(ph);
-      j = mix(j, { lean: 26, fT: 14 + s * 46, bT: 14 - s * 46, fS: -10 - Math.max(0, -s) * 60, bS: -10 - Math.max(0, s) * 60, fU: 40 - s * 50, fF: 120, bU: 20 + s * 50, bF: 110 }, 1);
+      const legs = { fT: 14 + s * 50, bT: 14 - s * 50, fS: -10 - Math.max(0, -s) * 66, bS: -10 - Math.max(0, s) * 66 };
+      // Speedsters sprint like heroes (arms swept back); others pump their arms
+      j = arch === "speed" ? mix(j, { lean: 38, ...legs, fU: -48, fF: -20, bU: -58, bF: -30, head: -8 }, 1) : mix(j, { lean: 26, ...legs, fU: 40 - s * 50, fF: 120, bU: 20 + s * 50, bF: 110 }, 1);
       break;
     }
     case "jumpSquat":
-      j = mix(j, { ...CROUCH, lean: 14 }, 0.7);
+      j = mix(j, { ...CROUCH, lean: 16, fU: 20, bU: -30 }, 0.8);
       break;
-    case "air":
+    case "air": {
       j = f.vy > 0 ? mix(j, { fT: 62, fS: -40, bT: 22, bS: -72, fU: 70, fF: 140, bU: 40, bF: 130 }, 1) : mix(j, { fT: 26, fS: 4, bT: -10, bS: -26, fU: 60, fF: 110, bU: -20, bF: 40 }, 1);
-      if (f.def.passive.id === "flight" && f.hoverFrames > 0) j = mix(j, { fT: 10, fS: 0, bT: -6, bS: -6, lean: 4 }, 0.8);
+      if (f.def.passive.id === "flight" && f.hoverFrames > 0) j = mix(j, { fT: 10, fS: 0, bT: -6, bS: -6, lean: 4, fU: 80, fF: 90 }, 0.8);
+      // Front flip: tuck tight and rotate a full turn
+      if (mem && mem.flipAt >= 0) {
+        const k = (t - mem.flipAt) / 0.5;
+        if (k < 1) {
+          j = mix(j, { fT: 100, fS: -120, bT: 90, bS: -125, fU: 80, fF: 60, bU: 70, bF: 60, lean: 20 }, Math.sin(Math.PI * k));
+          j.rot = 360 * easeOut(k);
+        }
+      }
       break;
+    }
     case "crouch":
       j = mix(j, CROUCH, 1);
       break;
@@ -119,11 +246,11 @@ export function poseFor(f: Fighter, t: number): Joints {
       j = mix(mix(j, CROUCH, 1), BLOCK_ARMS, 1);
       break;
     case "blockstun":
-      j = mix(mix(j, BLOCK_ARMS, 1), { lean: -12 }, Math.max(0, 1 - st / 10));
+      j = mix(mix(j, BLOCK_ARMS, 1), { lean: -14 }, Math.max(0, 1 - st / 10));
       break;
     case "hit": {
       const k = Math.max(0, 1 - st / 16);
-      j = mix(j, { lean: -26, head: -22, fU: -18, fF: 14, bU: -10, bF: 24, fT: 6, bT: -26 }, 0.35 + k * 0.65);
+      j = mix(j, { lean: -30, head: -26, fU: -24, fF: 10, bU: -14, bF: 20, fT: 6, bT: -28 }, 0.35 + k * 0.65);
       break;
     }
     case "dizzy":
@@ -143,27 +270,29 @@ export function poseFor(f: Fighter, t: number): Joints {
       j = mix(j, { lean: 0, head: -10, fU: 160, fF: 170, bU: 20, bF: 40, fT: 10, fS: 0, bT: -6, bS: 0, rot: -90 }, 1);
       break;
     case "getup": {
+      // Kip-up: roll from the floor through a crouch back into stance
       const k = clamp(st / 18, 0, 1);
-      j = mix(mix(j, CROUCH, 1 - k * 0.6), { rot: -90 * (1 - k) }, 1);
+      j = mix(mix(j, CROUCH, 1 - k * 0.6), { rot: -90 * (1 - easeOut(k)) }, 1);
       break;
     }
     case "dodge":
-      j = mix(j, { ...CROUCH, lean: -8 }, 0.8);
+      j = mix(j, { ...CROUCH, lean: -8, fU: 70, fF: 150, bU: 60, bF: 150 }, 0.85);
       break;
-    case "victory": {
-      const bob = Math.sin(t * 6) * 6;
-      j = mix(j, { fU: 172, fF: 178 + bob, bU: 14, bF: 140, lean: -6, head: -6 }, clamp(st / 12, 0, 1));
+    case "victory":
+      j = mix(j, victoryPose(f, t), clamp(st / 12, 0, 1));
       break;
-    }
     case "attack": {
       const m = f.move;
       if (!m) break;
       const key = ATTACK[m.pose] ?? ATTACK.jab;
       if (key.crouch || f.slot === "low") j = mix(j, CROUCH, 1);
       const ft = f.moveTime;
-      if (ft < m.startup) j = mix(j, key.w, clamp(ft / Math.max(1, m.startup), 0, 1));
-      else if (ft < m.startup + m.active) {
-        j = mix(mix(j, key.w, 1), key.s, clamp((ft - m.startup + 1) / 3, 0, 1));
+      if (ft < m.startup) {
+        // Anticipation: ease into the wind-up
+        j = mix(j, key.w, easeOut(clamp(ft / Math.max(1, m.startup), 0, 1)));
+      } else if (ft < m.startup + m.active) {
+        // Strike with a little overshoot for snap
+        j = mix(mix(j, key.w, 1), key.s, easeOutBack(clamp((ft - m.startup + 1) / 3, 0, 1)));
         if (m.pose === "spin") j.rot = ((ft * 40) % 360) * 0.25;
         if (m.rehit && m.pose !== "spin") {
           // Multi-hit flurry: alternate arms each rehit
@@ -171,13 +300,23 @@ export function poseFor(f: Fighter, t: number): Joints {
           if (alt) j = mix(j, { fU: 30, fF: 140, bU: 90, bF: 90 }, 1);
         }
       } else {
+        // Follow-through: hold the strike, then settle back into stance
         const r = clamp((ft - m.startup - m.active) / Math.max(1, m.recovery), 0, 1);
-        j = mix(mix(mix(j, key.w, 1), key.s, 1), {}, 0);
-        j = mix(j, { ...STANCE, ...(key.crouch ? CROUCH : {}) }, r);
+        const settle = { ...stance, ...(key.crouch ? CROUCH : {}) };
+        j = mix(mix(mix(j, key.w, 1), key.s, 1), settle, r * r);
       }
       if (!f.grounded && m.kind !== "air") j = mix(j, { fT: 50, fS: -30, bT: 20, bS: -60 }, 0.6);
       break;
     }
+  }
+
+  // Superhero landing: one knee down, fist to the floor, then rise
+  if (mem && mem.landAt >= 0 && (f.state === "idle" || f.state === "crouch" || f.state === "walk")) {
+    const k = (t - mem.landAt) / 0.42;
+    if (k < 1) {
+      const w = k < 0.55 ? 1 : 1 - (k - 0.55) / 0.45;
+      j = mix(j, { lean: 36, head: 14, fT: 88, fS: -40, bT: 38, bS: -96, fU: 8, fF: 2, bU: -64, bF: -30 }, w);
+    } else mem.landAt = -1;
   }
   return j;
 }
