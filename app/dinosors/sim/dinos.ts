@@ -9,6 +9,7 @@ import { clamp, pick } from "./rng";
 import { baseGenes } from "./genetics";
 import { groundSpeed, isSwimTile, isWalkTile } from "./terrain";
 import { T, TILE, WORLD_H, WORLD_W, type Dino, type DinoState, type SpeciesDef, type SpeciesId } from "./types";
+import { goalKey, nodePos, tileOf } from "./nav";
 import type { World } from "./world";
 
 export const scaleOf = (d: Dino) => 0.42 + 0.58 * d.growth;
@@ -65,6 +66,13 @@ export function makeDino(w: World, species: SpeciesId, x: number, y: number, o: 
     gen: 1,
     wet: 0,
     muddy: 0,
+    tame: 0,
+    owner: false,
+    rider: 0,
+    burn: 99,
+    path: null,
+    pathI: 0,
+    pathKey: 0,
     ...o,
   };
   return d;
@@ -138,6 +146,8 @@ function stateSpeedBase(d: Dino, def: SpeciesDef) {
       return def.speed * 1.4;
     case "raid":
       return def.run * 0.6;
+    case "attackWall":
+      return 0;
     case "stalk":
       return def.speed * 0.8;
     case "wander":
@@ -183,18 +193,36 @@ export function isMoving(d: Dino) {
   return MOVING.has(d.state);
 }
 
-/** Can a walker step onto this point? Also avoids lava + fire unless panicking. */
+/** Can a walker step onto this point? Walls, closed gates, buildings block; avoids lava + fire unless panicking. */
 export function walkable(w: World, d: Dino, x: number, y: number) {
   if (x < 6 || y < 6 || x > WORLD_W - 6 || y > WORLD_H - 6) return d.migrant;
   const t = w.terrain.tileAt(x, y);
-  if (!isWalkTile(t)) return false;
-  const tx = Math.floor(x / TILE);
-  const ty = Math.floor(y / TILE);
-  if (w.lava.heatAt(tx, ty) > 0.15) return false;
-  if (w.tribe.blocks(tx, ty)) return false;
-  if (d.state !== "flee" && w.fire.at(tx, ty) > 0.2) return false;
+  if (!isWalkTile(t) && !w.nav.passable("dino", x, y)) return false;
+  const i = tileOf(x, y);
+  if (!w.nav.ok("dino", i) && t !== T.Tar) return false;
+  if (w.lava.heat[i] > 0.15) return false;
+  if (d.state !== "flee" && w.fire.heat[i] > 0.2) return false;
   if (t === T.Tar && d.state !== "flee") return false;
   return true;
+}
+
+/**
+ * Plan a route when the straight line to the goal is blocked (walls,
+ * water, cliffs). Cheap: only re-plans when the goal tile changes.
+ */
+function planRoute(w: World, d: Dino, dist: number) {
+  const key = goalKey(d.tx, d.ty);
+  if (d.pathKey === key) return;
+  d.pathKey = key;
+  d.path = null;
+  d.pathI = 0;
+  if (dist < 70 || w.nav.lineClear("dino", d.x, d.y, d.tx, d.ty)) return;
+  // far-off animals don't need perfect routes every time
+  if (!w.inView(d.x, d.y, 600) && w.rng() < 0.5 && !d.raider) return;
+  const path = w.nav.find(w, "dino", d.x, d.y, 0, d.tx, d.ty, 0, d.raider ? 9000 : 4000);
+  if (path === undefined) d.pathKey = 0;
+  else if (path === null) d.pathI = -1; // no way there at all (raiders take that as "smash through")
+  else d.path = path;
 }
 
 function swimmable(w: World, x: number, y: number) {
@@ -212,7 +240,20 @@ function steer(w: World, d: Dino, speed: number, dt: number) {
     d.vy *= 0.8;
     return dist;
   }
-  let ang = Math.atan2(dy, dx);
+  let tgx = d.tx;
+  let tgy = d.ty;
+  if (def.move === "walk") {
+    planRoute(w, d, dist);
+    if (d.path && d.pathI < d.path.length) {
+      const np = nodePos(d.path[d.pathI]);
+      if (Math.hypot(np.x - d.x, np.y - d.y) < Math.max(14, sizeOf(d) * 0.3)) d.pathI++;
+      if (d.pathI < d.path.length) {
+        tgx = np.x;
+        tgy = np.y;
+      }
+    }
+  }
+  let ang = Math.atan2(tgy - d.y, tgx - d.x);
   const look = Math.max(18, sizeOf(d) * 0.45);
   const ok = (a: number) => {
     const px = d.x + Math.cos(a) * look;
@@ -240,7 +281,7 @@ function steer(w: World, d: Dino, speed: number, dt: number) {
     }
   }
   let mul = 1;
-  if (def.move === "walk") mul = groundSpeed(w.terrain.tileAt(d.x, d.y));
+  if (def.move === "walk") mul = groundSpeed(w.terrain.tileAt(d.x, d.y)) * (1 - w.snow.at(d.x, d.y) * 0.3) * (w.nav.cost[tileOf(d.x, d.y)] < 0.9 ? 1.1 : 1);
   if (def.move === "fly") {
     // wind pushes flyers around a little
     mul = 1;
@@ -285,6 +326,21 @@ export function moveDino(w: World, d: Dino, dt: number) {
     d.vy = 0;
     return;
   }
+  // a rider steers: the body just follows them (see moveHuman)
+  if (d.state === "ridden") {
+    const r = w.humans.find((h) => h.id === d.rider);
+    if (!r || r.riding !== d.id) {
+      d.rider = 0;
+      setState(d, "idle", d.x, d.y);
+    } else {
+      d.hunger = Math.max(0, d.hunger - dt * 0.001);
+      const v = Math.hypot(r.vx, r.vy);
+      if (v > 4) d.dir = r.vx > 0 ? 1 : r.vx < 0 ? -1 : d.dir;
+      if (v > 20 && w.rng() < dt * 5) w.particles.spawn(P.Dust, d.x - d.dir * sizeOf(d) * 0.3, d.y, { vz: 8, size: 5 + sizeOf(d) / 20, max: 0.8, color: "rgba(180,160,120,0.5)" });
+      return;
+    }
+  }
+  d.burn += dt;
 
   const speed = isMoving(d) ? stateSpeed(d, def) : 0;
   steer(w, d, speed, dt);
@@ -298,9 +354,18 @@ export function moveDino(w: World, d: Dino, dt: number) {
   const nx = d.x + d.vx * dt;
   const ny = d.y + d.vy * dt;
   if (def.move === "walk") {
-    if (walkable(w, d, nx, ny) || d.state === "flee" || !walkable(w, d, d.x, d.y)) {
+    // panicking animals run through fire + tar, but never through walls or into deep water
+    const panicOk = d.state === "flee" && w.nav.ok("dino", tileOf(nx, ny)) && w.lava.heat[tileOf(nx, ny)] < 0.5;
+    if (walkable(w, d, nx, ny) || panicOk || !w.nav.ok("dino", tileOf(d.x, d.y))) {
       d.x = nx;
       d.y = ny;
+    } else if (walkable(w, d, nx, d.y)) {
+      // slide along walls instead of sticking on corners
+      d.x = nx;
+      d.vy *= 0.3;
+    } else if (walkable(w, d, d.x, ny)) {
+      d.y = ny;
+      d.vx *= 0.3;
     } else {
       d.vx *= -0.2;
       d.vy *= -0.2;
@@ -347,6 +412,15 @@ export function moveDino(w: World, d: Dino, dt: number) {
       setState(d, "stuck");
       emote(d, "😖", 3);
       w.discover("tar", d.x, d.y);
+      // little animals get properly trapped
+      if (sizeOf(d) < 45) {
+        d.stateT = -18;
+        if (!w.flags.has("tarTrapFact") && w.inView(d.x, d.y, 200)) {
+          w.flags.add("tarTrapFact");
+          w.discover("tarTrap", d.x, d.y);
+          w.toast("🪤", `A little ${sp(d.species).nick} is stuck fast in the tar pit! Easy prey for hunters…`, d.x, d.y);
+        }
+      }
     }
     // footsteps for the big ones
     if (def.size > 85 && v > 8) {
@@ -360,6 +434,7 @@ export function moveDino(w: World, d: Dino, dt: number) {
   const ty = Math.floor(d.y / TILE);
   if (d.z < 4 && (w.lava.heatAt(tx, ty) > 0.15 || w.fire.at(tx, ty) > 0.3)) {
     d.health -= dt * 0.25;
+    d.burn = 0;
     d.fear = 1;
     if (w.rng() < dt * 4) w.particles.spawn(P.Smoke, d.x, d.y - 10, { vz: 20, size: 6, max: 1, color: "rgba(90,90,90,0.5)" });
     if (d.state !== "flee") {

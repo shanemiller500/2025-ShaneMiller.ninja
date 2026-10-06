@@ -8,7 +8,9 @@ import { FACTS } from "../data/facts";
 import { sp } from "../data/species";
 import { emote, isBaby, scaleOf, setState, sizeOf, walkable } from "./dinos";
 import { toss } from "./humans";
-import { actRaider, gobble, thinkRaider } from "./tribe";
+import { actRaider, bite, thinkRaider } from "./tribe";
+import { CAMP_LEVELS } from "../data/facts";
+import { eatCarcass, makeCarcass } from "./carcass";
 import { P } from "./particles";
 import { canReach, shakeFruit, TALL } from "./plants";
 import { pick } from "./rng";
@@ -32,6 +34,7 @@ const LOCKED = new Set<DinoState>([
   "shakeTree",
   "breach",
   "attackWall",
+  "ridden",
 ]);
 
 const dd = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -70,6 +73,15 @@ function findThreat(w: World, d: Dino, def: SpeciesDef): Dino | null {
   return best;
 }
 
+/** Is this spot inside a settlement that looks too dangerous to raid for dinner? */
+function guarded(w: World, d: Dino, x: number, y: number) {
+  const c = w.camp;
+  const R = CAMP_LEVELS[w.tribe.level].radius + 120;
+  if (Math.hypot(x - c.x, y - c.y) > R) return false;
+  // starving + huge predators take their chances
+  return w.tribe.defense(w) > 3 + sizeOf(d) / 30 && d.hunger < 0.92;
+}
+
 function findPrey(w: World, d: Dino, def: SpeciesDef): Dino | Human | null {
   let best: Dino | Human | null = null;
   let bestScore = Infinity;
@@ -78,12 +90,16 @@ function findPrey(w: World, d: Dino, def: SpeciesDef): Dino | Human | null {
     let score = Math.sqrt(d2);
     if (e.kind === "dino") {
       if (!canEat(d, e)) return;
+      if (e.owner && guarded(w, d, e.x, e.y)) return;
       if (isBaby(e)) score -= 120;
       if (e.health < 0.5) score -= 80;
+      // stuck in tar = an easy meal
+      if (e.state === "stuck") score -= 150;
     } else {
-      if (d.hunger < 0.75 || def.size < 40 || e.state === "hide" || e.state === "sleep" || e.state === "tossed") return;
-      if (nearFire(e.x, e.y)) return;
-      score += 140;
+      if (w.tribe.danger === "calm" || d.hunger < 0.55 || def.size < 40 || e.state === "hide" || e.state === "sleep" || e.state === "tossed" || e.level === 1) return;
+      if (nearFire(e.x, e.y) || guarded(w, d, e.x, e.y)) return;
+      // people are tempting; someone lying knocked out is an easy meal
+      score += e.state === "down" ? -100 : e.child ? 40 : 80;
     }
     if (score < bestScore) {
       bestScore = score;
@@ -96,8 +112,13 @@ function findPrey(w: World, d: Dino, def: SpeciesDef): Dino | Human | null {
 function findMeat(w: World, d: Dino, r: number, kinds: Item["kind"][]): Item | null {
   let best: Item | null = null;
   let bestD = r * r;
+  // meat-eaters smell bodies from further away
+  const bodies = kinds.includes("meat");
   for (const it of w.items) {
-    if (!kinds.includes(it.kind) || it.z > 2) continue;
+    if (it.z > 2) continue;
+    if (it.kind === "carcass") {
+      if (!bodies || !it.carcass || it.carcass.meat <= 0) continue;
+    } else if (!kinds.includes(it.kind)) continue;
     const d2 = (it.x - d.x) ** 2 + (it.y - d.y) ** 2;
     if (d2 < bestD) {
       bestD = d2;
@@ -126,6 +147,8 @@ function awayFrom(w: World, d: Dino, fx: number, fy: number, dist = 360) {
 }
 
 function wanderTarget(w: World, d: Dino, def: SpeciesDef) {
+  // befriended dinos potter about near home (the pen, or just outside camp)
+  if (d.owner) return { x: d.homeX + (w.rng() - 0.5) * 180, y: d.homeY + (w.rng() - 0.5) * 120 };
   const herd = d.herd ? w.herdCenters.get(d.herd) : undefined;
   if (herd && herd.n > 1 && dd(d, herd) > 160) return { x: herd.x + (w.rng() - 0.5) * 140, y: herd.y + (w.rng() - 0.5) * 100 };
   if (!d.migrant && Math.hypot(d.x - d.homeX, d.y - d.homeY) > 1300) return { x: d.homeX + (w.rng() - 0.5) * 300, y: d.homeY + (w.rng() - 0.5) * 300 };
@@ -136,6 +159,8 @@ function wanderTarget(w: World, d: Dino, def: SpeciesDef) {
     const x = (herd && herd.n > 1 ? herd.x : d.x) + Math.cos(a) * r;
     const y = (herd && herd.n > 1 ? herd.y : d.y) + Math.sin(a) * r;
     if (!walkable(w, d, x, y)) continue;
+    // predators keep clear of well-defended camps
+    if (def.diet !== "herbivore" && guarded(w, d, x, y)) continue;
     fallback = { x, y };
     if (def.biomes.includes(w.terrain.tileAt(x, y))) return fallback;
   }
@@ -158,6 +183,16 @@ function thinkWalker(w: World, d: Dino, def: SpeciesDef) {
       if (d.state !== "migrate" || d.stuckT > 2) setState(d, "migrate", d.homeX, d.homeY + (w.rng() - 0.5) * 200);
       return;
     }
+  }
+
+  // 0. a dragon swooping overhead → scatter
+  const dragon = w.dragons.list.find((dr) => dr.z < 200 && dr.state !== "leave" && Math.hypot(dr.x - d.x, dr.y - d.y) < 420);
+  if (dragon && !d.owner) {
+    const a = awayFrom(w, d, dragon.x, dragon.y, 420);
+    if (d.state !== "flee") emote(d, "🐉", 1.2);
+    setState(d, "flee", a.x, a.y);
+    d.fear = 1;
+    return;
   }
 
   // 1. fire / lava nearby → get away
@@ -326,8 +361,8 @@ function thinkWalker(w: World, d: Dino, def: SpeciesDef) {
   }
   if (d.state === "sleep") return;
 
-  // 7. storms → huddle under trees
-  if (w.weather.storm > 0.5 && def.diet === "herbivore" && d.state !== "shelter") {
+  // 7. storms + blizzards → huddle under trees
+  if ((w.weather.storm > 0.5 || w.weather.snow > 0.7) && def.diet === "herbivore" && d.state !== "shelter" && !d.owner) {
     const t = w.terrain.tileAt(d.x, d.y);
     if (t !== T.Forest && t !== T.Jungle) {
       const spot = w.terrain.findTile(d.x, d.y, 700, (t) => t === T.Forest || t === T.Jungle, w.rng, 30);
@@ -337,7 +372,7 @@ function thinkWalker(w: World, d: Dino, def: SpeciesDef) {
       }
     }
   }
-  if (d.state === "shelter" && w.weather.storm > 0.5) return;
+  if (d.state === "shelter" && (w.weather.storm > 0.5 || w.weather.snow > 0.7)) return;
 
   // 8. eggs
   if (!baby && d.layT <= 0 && d.hunger < 0.5 && d.thirst < 0.5 && d.health > 0.7 && w.canLayEgg(d.species) && !d.migrant) {
@@ -438,10 +473,11 @@ function resolveTussle(w: World, d: Dino) {
   if (!other) return;
   const def = sp(d.species);
   if (other.kind === "human") {
-    // raiders mean business; everyday dinos just give people a fright
-    const chance = w.tribe.danger === "wild" ? 0.75 : w.tribe.danger === "normal" ? 0.5 : 0;
-    if (d.raider && w.rng() < chance) {
-      gobble(w, d, other);
+    // raiders + hungry hunters bite (hurts, can knock someone out); everyday dinos give people a fright
+    if (d.raider || (w.tribe.danger !== "calm" && def.diet !== "herbivore" && d.hunger > 0.5 && sizeOf(d) > 40)) {
+      bite(w, d, other);
+      // small hunters fling people; big ones hang on
+      if (other.hp > 0 && sizeOf(d) < 70 && w.rng() < 0.4) toss(w, other, d.x);
       return;
     }
     toss(w, other, d.x);
@@ -457,9 +493,8 @@ function resolveTussle(w: World, d: Dino) {
     if (other.health < 0.5) p += 0.2;
     p = Math.max(0.12, Math.min(0.9, p));
     if (w.rng() < p) {
-      // cartoon "poof": the prey disappears into a dust cloud, dinner appears
-      const amount = Math.max(0.5, Math.min(3, sizeOf(other) / 45));
-      const meat = w.addItem("meat", other.x, other.y, { amount });
+      // the prey goes down; its body stays (meat for the hunter, hide + bones for people)
+      const meat = sizeOf(other) > 28 ? makeCarcass(w, other) : w.addItem("meat", other.x, other.y, { amount: Math.max(0.5, sizeOf(other) / 45) });
       w.particles.burst(P.Poof, other.x, other.y, 10, 60, { size: 14, max: 1, color: "rgba(230,220,200,0.9)" });
       w.removeDino(other);
       meat.claimed = d.id;
@@ -547,7 +582,20 @@ function actWalker(w: World, d: Dino, def: SpeciesDef, dt: number) {
       }
       const item = w.itemById(d.targetId);
       const plant = item ? null : d.targetId ? w.plantById(d.targetId) : null;
-      if (item) {
+      if (item && item.kind === "carcass") {
+        // tearing meat off a body: hide + bones stay behind for people
+        item.claimed = d.id;
+        const done = eatCarcass(item, dt * 0.5 * (def.size / 80 + 0.5));
+        d.hunger = Math.max(0, d.hunger - dt * 0.12);
+        if (w.rng() < dt * 1.5) w.sfx("chomp", d.x, d.y, 0.5);
+        if (w.rng() < dt * 3) w.particles.spawn(P.Crumb, item.x, item.y, { z: 6, vz: 30, vx: (w.rng() - 0.5) * 40, g: 150, size: 2, max: 0.5, color: "#c98a6a" });
+        if (done || d.hunger < 0.05) {
+          item.claimed = 0;
+          emote(d, "😋", 1.6);
+          if (def.diet !== "herbivore" && d.hunger < 0.25 && w.rng() < 0.6) setState(d, "sleep");
+          else setState(d, "idle");
+        }
+      } else if (item) {
         item.claimed = d.id;
         const bite = dt * 0.18 * (def.size / 80 + 0.5);
         item.amount -= bite / Math.max(0.6, item.amount > 1 ? 1 : 1);
@@ -626,7 +674,7 @@ function actWalker(w: World, d: Dino, def: SpeciesDef, dt: number) {
       }
       const catchR = (sizeOf(d) + (target.kind === "dino" ? sizeOf(target) : 16)) * 0.32;
       if (d.state === "chase" && dist < catchR) startTussle(w, d, target);
-      else if (d.state === "chase" && d.stateT > 10) {
+      else if (d.state === "chase" && d.stateT > (target.kind === "human" && d.hunger > 0.4 ? 22 : 10)) {
         emote(d, "😮‍💨", 1.6);
         d.energy = Math.max(0, d.energy - 0.1);
         d.targetId = 0;
@@ -1112,7 +1160,9 @@ function actSwimmer(w: World, d: Dino, dt: number) {
 export function thinkDino(w: World, d: Dino) {
   const def = sp(d.species);
   const onScreen = w.inView(d.x, d.y, 300);
-  d.think = (onScreen ? 0.35 : 1.1) + w.rng() * 0.35;
+  // brains far from the camera tick slower (bodies still move every frame)
+  const far = !w.inView(d.x, d.y, 1400);
+  d.think = (onScreen ? 0.35 : far ? 1.8 : 1.1) + w.rng() * 0.35;
   if (LOCKED.has(d.state)) return;
   if (d.health <= 0) {
     setState(d, "faint", d.x, d.y);
@@ -1129,6 +1179,7 @@ export function thinkDino(w: World, d: Dino) {
     thinkRaider(w, d);
     return;
   }
+  if (d.rider) return;
   if (def.move === "fly") thinkFlyer(w, d, def);
   else if (def.move === "swim") thinkSwimmer(w, d, def);
   else thinkWalker(w, d, def);
@@ -1136,6 +1187,13 @@ export function thinkDino(w: World, d: Dino) {
 
 function actFaint(w: World, d: Dino) {
   if (d.stateT <= 2) return;
+  // died in fire or lava: a charred skeleton (cartoon, not gory); otherwise a fossil for later
+  if (d.burn < 4) {
+    makeCarcass(w, d, { burnt: true });
+    w.particles.burst(P.Smoke, d.x, d.y, 8, 30, { vz: 30, size: 10, max: 1.4, color: "rgba(60,55,50,0.6)" });
+    w.removeDino(d);
+    return;
+  }
   w.addItem("fossil", d.x, d.y, { species: d.species });
   w.particles.burst(P.Poof, d.x, d.y, 8, 40, { size: 12, max: 1, color: "rgba(220,215,200,0.9)" });
   w.removeDino(d);

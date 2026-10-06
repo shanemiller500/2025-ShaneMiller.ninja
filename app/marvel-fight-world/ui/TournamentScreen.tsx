@@ -115,12 +115,13 @@ export function TournamentScreen({
   }, [opp, onFight, onBack]);
 
   return (
-    <div className="absolute inset-0 isolate overflow-hidden text-white">
+    <div data-pad-menu className="absolute inset-0 isolate overflow-hidden text-white">
       <Backdrop tint="#eab308" />
       <div className="fw-thin-scroll h-full overflow-y-auto">
         <div className="mx-auto flex min-h-full max-w-6xl flex-col px-6 py-8">
           <button
             type="button"
+            data-pad-back
             onClick={onBack}
             className="mb-4 inline-flex w-fit items-center gap-2 rounded-lg px-2 py-1 text-sm font-semibold text-white/60 hover:bg-white/10 hover:text-white"
           >
@@ -204,7 +205,7 @@ export function TournamentScreen({
               </ArcadeButton>
             ) : (
               <div className="flex gap-3">
-                <ArcadeButton size="lg" onClick={onNew}>
+                <ArcadeButton size="lg" onClick={onNew} autoFocus>
                   New tournament
                 </ArcadeButton>
                 <ArcadeButton size="lg" tone="ghost" onClick={onBack}>

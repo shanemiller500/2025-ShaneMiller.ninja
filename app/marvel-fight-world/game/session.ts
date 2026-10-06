@@ -73,6 +73,7 @@ export class GameSession {
   private perfects: [number, number] = [0, 0];
   private startedAt = 0;
   private pauseKeyHeld = false;
+  private padPresence: [boolean, boolean] = [false, false];
 
   constructor(canvas: HTMLCanvasElement, private cfg: SessionConfig, portraits: [HTMLImageElement | null, HTMLImageElement | null]) {
     const s = cfg.settings;
@@ -95,13 +96,7 @@ export class GameSession {
       cfg.controllers[1] === "cpu" ? new AIController(cfg.difficulty, 202) : null,
     ];
 
-    const hint = (p: 0 | 1) => {
-      // Controller players see Xbox button names on the special dials
-      if (this.input.hasPad(p)) return [PAD_LABELS.special, `↓${PAD_LABELS.special}`, `→${PAD_LABELS.special}`, PAD_LABELS.ult];
-      const b = s.bindings[p];
-      const sp = keyLabel(b.special[0] ?? "");
-      return [sp, `↓${sp}`, `→${sp}`, keyLabel(b.ult[0] ?? "")];
-    };
+    const hint = (p: 0 | 1) => this.hint(p);
     const labels: [string, string] = [
       cfg.controllers[0] === "cpu" ? "CPU" : "P1",
       cfg.controllers[1] === "cpu" ? "CPU" : cfg.controllers[0] === "cpu" ? "P1" : "P2",
@@ -114,6 +109,19 @@ export class GameSession {
     });
     audio.announcer = s.announcer;
     audio.setVolumes(s.sfxVolume, s.musicVolume);
+    this.padPresence = [this.input.hasPad(0), this.input.hasPad(1)];
+  }
+
+  private hint(p: 0 | 1) {
+    const slot: 0 | 1 = p === 1 && this.cfg.controllers[0] === "cpu" ? 0 : p;
+    if (this.input.hasPad(slot)) return [PAD_LABELS.special, `↓${PAD_LABELS.special}`, `→${PAD_LABELS.special}`, PAD_LABELS.ult];
+    const b = this.cfg.settings.bindings[slot];
+    const sp = keyLabel(b.special[0] ?? "");
+    return [sp, `↓${sp}`, `→${sp}`, keyLabel(b.ult[0] ?? "")];
+  }
+
+  private refreshHints() {
+    this.renderer.hud.hints = [this.cfg.controllers[0] === "cpu" ? ["", "", "", ""] : this.hint(0), this.cfg.controllers[1] === "cpu" ? ["", "", "", ""] : this.hint(1)];
   }
 
   start() {
@@ -144,6 +152,17 @@ export class GameSession {
       audio.startMusic(this.cfg.arena.music);
       this.last = performance.now();
     }
+  }
+
+  applySettings(s: Settings) {
+    this.cfg.settings = s;
+    this.input.setBindings(s.bindings);
+    this.refreshHints();
+    this.renderer.settings.screenShake = s.screenShake;
+    this.renderer.settings.blood = s.blood;
+    this.renderer.settings.showHitboxes = s.showHitboxes;
+    audio.announcer = s.announcer;
+    audio.setVolumes(s.sfxVolume, s.musicVolume);
   }
 
   get isPaused() {
@@ -181,6 +200,11 @@ export class GameSession {
     if (this.destroyed) return;
     const dt = Math.max(0, Math.min(0.1, (ts - this.last) / 1000));
     this.last = ts;
+    const pads: [boolean, boolean] = [this.input.hasPad(0), this.input.hasPad(1)];
+    if (pads[0] !== this.padPresence[0] || pads[1] !== this.padPresence[1]) {
+      this.padPresence = pads;
+      this.refreshHints();
+    }
 
     // Pause key (Escape / P / Start)
     const pauseDown = this.input.isDown("Escape") || this.input.isDown("KeyP") || this.input.padButton(9);

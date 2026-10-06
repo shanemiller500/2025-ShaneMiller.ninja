@@ -35,15 +35,39 @@ export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind
   const full = 0.65 + 0.35 * p.food;
 
   if (p.stump) {
-    c.fillStyle = trunk;
+    // a stump (charred if it burnt), with roots + a fresh shoot as it recovers
+    const charred = burnt > 0.5;
+    c.fillStyle = charred ? "#3b3430" : trunk;
     c.beginPath();
-    c.ellipse(0, -3, 5, 3, 0, 0, Math.PI * 2);
+    c.moveTo(-6, 0);
+    c.quadraticCurveTo(-4, -2, -4, -8);
+    c.lineTo(4, -8);
+    c.quadraticCurveTo(4, -2, 6, 0);
+    c.closePath();
     c.fill();
-    c.fillRect(-4, -8, 8, 6);
-    c.fillStyle = burnt > 0.5 ? CHAR : "#c9a06a";
+    c.fillStyle = charred ? "#26201c" : "#c9a06a";
     c.beginPath();
-    c.ellipse(0, -8, 4, 2, 0, 0, Math.PI * 2);
+    c.ellipse(0, -8, 4, 1.8, 0, 0, Math.PI * 2);
     c.fill();
+    if (!charred) {
+      c.strokeStyle = "rgba(120,80,45,0.6)";
+      c.lineWidth = 0.6;
+      c.beginPath();
+      c.ellipse(0, -8, 2, 0.9, 0, 0, Math.PI * 2);
+      c.stroke();
+    }
+    if (burnt < 0.6) {
+      c.strokeStyle = "#6faa45";
+      c.lineWidth = 1.3;
+      c.beginPath();
+      c.moveTo(2, -8);
+      c.quadraticCurveTo(4, -12, 6, -13);
+      c.stroke();
+      c.fillStyle = "#7fbb52";
+      c.beginPath();
+      c.ellipse(6, -13, 2.2, 1.2, -0.4, 0, Math.PI * 2);
+      c.fill();
+    }
     return;
   }
 
@@ -261,9 +285,17 @@ export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind
 
 /* ------------------------------- people ------------------------------- */
 
-export type WeaponLook = "spear" | "bow" | "crossbow" | null;
+export type WeaponLook = "spear" | "bow" | "crossbow" | "sword" | "axe" | null;
 
-export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean) {
+/** Hide clothing look (from data/colony OUTFITS). */
+export interface OutfitLook {
+  id: string;
+  color: string;
+  trim: string;
+  hood: boolean;
+}
+
+export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean, shield = 0, tier = 1, outfit: OutfitLook | null = null, wet = 0) {
   const H = h.child ? 18 : 26;
   const st = h.state;
   c.save();
@@ -272,15 +304,15 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.rotate(t * 12);
     c.translate(0, H * 0.5);
   }
-  if (st === "sleep") {
-    c.rotate(-Math.PI / 2 * h.dir);
+  if (st === "sleep" || st === "down" || st === "rest") {
+    c.rotate((-Math.PI / 2) * h.dir);
     c.translate(-H * 0.1 * h.dir, -2);
   }
   c.scale(h.dir, 1);
   const moving = st === "walk" || st === "carry" || st === "flee" || st === "explore" || st === "hunt" || st === "haul";
   const sw = moving ? Math.sin(h.anim * 2.2) : 0;
   const sit = st === "sitFire" || st === "craft";
-  const bend = st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" ? 0.2 : st === "haul" ? -0.25 : st === "hunt" ? 0.25 : 0;
+  const bend = st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" || st === "heal" ? 0.2 : st === "haul" ? -0.25 : st === "hunt" ? 0.25 : st === "tame" ? 0.15 : 0;
   const hipY = sit ? -H * 0.22 : -H * 0.42;
 
   // legs
@@ -324,18 +356,19 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.arc(-H * 0.05, -H * 0.15, H * 0.04, 0, Math.PI * 2);
   c.arc(H * 0.08, -H * 0.05, H * 0.035, 0, Math.PI * 2);
   c.fill();
+  if (outfit) drawOutfit(c, H, outfit, t, wet, st === "walk" || st === "carry" || st === "flee");
 
   // arms
   c.strokeStyle = h.skin;
   c.lineWidth = H * 0.09;
   c.beginPath();
   const shY = -H * 0.36;
-  if (st === "celebrate" || st === "lookUp" || st === "tossed") {
+  if (st === "celebrate" || st === "lookUp" || st === "tossed" || st === "douse") {
     c.moveTo(-H * 0.12, shY);
     c.lineTo(-H * 0.22, shY - H * 0.32);
     c.moveTo(H * 0.12, shY);
     c.lineTo(H * 0.24, shY - H * 0.3);
-  } else if (st === "aim") {
+  } else if (st === "aim" || st === "operate" || st === "tame") {
     // both arms forward, holding the weapon level
     c.moveTo(-H * 0.1, shY);
     c.lineTo(H * 0.32, shY + H * 0.04);
@@ -353,7 +386,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.lineTo(H * 0.38, shY + H * 0.12 + a * H * 0.1);
     c.moveTo(-H * 0.1, shY);
     c.lineTo(H * 0.1, shY + H * 0.3);
-  } else if (st === "build" || st === "craft" || st === "gather" || st === "farm" || st === "repair") {
+  } else if (st === "build" || st === "craft" || st === "gather" || st === "farm" || st === "repair" || st === "heal" || st === "smith") {
     const a = Math.sin(t * 12) * 0.6;
     c.moveTo(H * 0.1, shY);
     c.lineTo(H * 0.1 + Math.cos(a) * H * 0.3, shY + Math.sin(a) * H * 0.3 + H * 0.1);
@@ -374,6 +407,51 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
 
   // weapons, roasting stick, hoe or fishing pole
   const showWeapon = weapon && !h.child && !h.carry && (st === "aim" || (armed && (st === "idle" || st === "walk" || st === "flee" || st === "talk" || st === "guard" || st === "hunt")));
+  // shield on the off-arm
+  if (shield > 0 && !h.child && st !== "sleep" && st !== "down" && st !== "rest") {
+    c.fillStyle = shield >= 3 ? "#8a9099" : shield === 2 ? "#7a5230" : "#a07a4a";
+    c.beginPath();
+    c.ellipse(-H * 0.2, -H * 0.2, H * 0.14, H * 0.2, 0, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = shield >= 2 ? "#3c3a38" : "rgba(60,40,20,0.7)";
+    c.lineWidth = 1;
+    c.stroke();
+    c.fillStyle = shield >= 3 ? "#d0d5db" : "#c9a56a";
+    c.beginPath();
+    c.arc(-H * 0.2, -H * 0.2, H * 0.04, 0, Math.PI * 2);
+    c.fill();
+  }
+  const metal = tier >= 2 ? "#b8c0c8" : "#8f8a82";
+  if (showWeapon && weapon === "sword") {
+    const swing = st === "aim" ? Math.sin(t * 9) * 0.9 : 0;
+    c.save();
+    c.translate(H * 0.2, shY + H * 0.1);
+    c.rotate(-0.9 + swing);
+    c.fillStyle = metal;
+    c.fillRect(-1.2, -H * (0.5 + tier * 0.1), 2.4, H * (0.5 + tier * 0.1));
+    c.fillStyle = "#5a3d24";
+    c.fillRect(-3, -1, 6, 2);
+    c.fillRect(-1, 0, 2, H * 0.12);
+    c.restore();
+  } else if (showWeapon && weapon === "axe") {
+    const swing = st === "aim" ? Math.sin(t * 8) * 0.9 : 0;
+    c.save();
+    c.translate(H * 0.2, shY + H * 0.12);
+    c.rotate(-0.7 + swing);
+    c.strokeStyle = "#6b4a2a";
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.moveTo(0, H * 0.1);
+    c.lineTo(0, -H * (0.55 + tier * 0.08));
+    c.stroke();
+    c.fillStyle = metal;
+    c.beginPath();
+    c.moveTo(0, -H * (0.55 + tier * 0.08));
+    c.quadraticCurveTo(H * (0.22 + tier * 0.04), -H * (0.5 + tier * 0.08), H * 0.04, -H * (0.32 + tier * 0.04));
+    c.closePath();
+    c.fill();
+    c.restore();
+  }
   if (st === "fish") {
     c.strokeStyle = "#8a6238";
     c.lineWidth = 1.4;
@@ -478,13 +556,35 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.strokeStyle = OUT;
   c.lineWidth = 0.7;
   c.stroke();
-  c.fillStyle = h.hair;
-  c.beginPath();
-  c.arc(-H * 0.02, headY - H * 0.04, H * 0.16, Math.PI * 0.9, Math.PI * 2.05);
-  c.fill();
-  c.beginPath();
-  c.ellipse(-H * 0.12, headY + H * 0.04, H * 0.06, H * 0.13, 0.3, 0, Math.PI * 2);
-  c.fill();
+  if (outfit?.hood) {
+    // hood up: hide over the hair, trimmed edge round the face
+    c.fillStyle = outfit.color;
+    c.beginPath();
+    c.arc(-H * 0.03, headY - H * 0.02, H * 0.19, Math.PI * 0.78, Math.PI * 2.12);
+    c.lineTo(-H * 0.2, headY + H * 0.16);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = outfit.trim;
+    c.lineWidth = H * 0.05;
+    c.beginPath();
+    c.arc(H * 0.02, headY + H * 0.01, H * 0.15, Math.PI * 1.15, Math.PI * 1.95);
+    c.stroke();
+    if (outfit.id === "raincloak") {
+      c.strokeStyle = "rgba(255,255,255,0.35)";
+      c.lineWidth = 1;
+      c.beginPath();
+      c.arc(-H * 0.05, headY - H * 0.05, H * 0.13, Math.PI * 1.1, Math.PI * 1.45);
+      c.stroke();
+    }
+  } else {
+    c.fillStyle = h.hair;
+    c.beginPath();
+    c.arc(-H * 0.02, headY - H * 0.04, H * 0.16, Math.PI * 0.9, Math.PI * 2.05);
+    c.fill();
+    c.beginPath();
+    c.ellipse(-H * 0.12, headY + H * 0.04, H * 0.06, H * 0.13, 0.3, 0, Math.PI * 2);
+    c.fill();
+  }
   if (st !== "sleep") {
     c.fillStyle = "#1d1813";
     c.beginPath();
@@ -501,6 +601,100 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   if (h.carry) drawResource(c, h.carry, 0, headY - H * 0.32, H * 0.5);
   c.restore();
   c.restore();
+}
+
+/** Cloaks, tunics + furs drawn over the body (torso space, origin at the hip). */
+function drawOutfit(c: CanvasRenderingContext2D, H: number, o: OutfitLook, t: number, wet: number, moving: boolean) {
+  const sway = moving ? Math.sin(t * 9) * H * 0.03 : 0;
+  if (o.id === "tunic") {
+    c.fillStyle = o.color;
+    c.beginPath();
+    c.moveTo(-H * 0.17, -H * 0.4);
+    c.lineTo(H * 0.17, -H * 0.4);
+    c.lineTo(H * 0.2, H * 0.04);
+    c.lineTo(-H * 0.2, H * 0.04);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = "rgba(40,25,15,0.55)";
+    c.lineWidth = 0.7;
+    c.stroke();
+    // stitched seam + bone toggles + a shoulder pad
+    c.setLineDash([1.5, 1.5]);
+    c.beginPath();
+    c.moveTo(0, -H * 0.38);
+    c.lineTo(0, H * 0.02);
+    c.stroke();
+    c.setLineDash([]);
+    c.fillStyle = o.trim;
+    for (const y of [-0.3, -0.18, -0.06]) {
+      c.beginPath();
+      c.ellipse(H * 0.04, H * y, H * 0.035, H * 0.015, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = shade(o.color, -0.2);
+    c.beginPath();
+    c.ellipse(H * 0.12, -H * 0.38, H * 0.09, H * 0.05, 0.3, 0, Math.PI * 2);
+    c.fill();
+    return;
+  }
+  // cloaks + furs: hang from the shoulders down the back
+  const len = o.id === "furs" ? 0.5 : 0.55;
+  c.fillStyle = o.color;
+  c.beginPath();
+  c.moveTo(-H * 0.18, -H * 0.42);
+  c.quadraticCurveTo(-H * 0.36 - sway, -H * 0.05, -H * 0.3 - sway, H * len - H * 0.45);
+  c.lineTo(H * 0.04 - sway, H * len - H * 0.42);
+  c.quadraticCurveTo(-H * 0.02, -H * 0.1, H * 0.1, -H * 0.42);
+  c.closePath();
+  c.fill();
+  c.strokeStyle = "rgba(30,20,12,0.5)";
+  c.lineWidth = 0.7;
+  c.stroke();
+  // ragged hem
+  c.fillStyle = shade(o.color, -0.18);
+  for (let i = 0; i < 4; i++) {
+    c.beginPath();
+    c.moveTo(-H * 0.3 + i * H * 0.085 - sway, H * len - H * 0.45 + (i % 2) * 1.5);
+    c.lineTo(-H * 0.26 + i * H * 0.085 - sway, H * len - H * 0.38);
+    c.lineTo(-H * 0.22 + i * H * 0.085 - sway, H * len - H * 0.45);
+    c.fill();
+  }
+  if (o.id === "furs") {
+    // fluffy collar + cuffs
+    c.fillStyle = o.trim;
+    for (let i = 0; i < 5; i++) {
+      c.beginPath();
+      c.arc(-H * 0.16 + i * H * 0.08, -H * 0.42 + Math.abs(i - 2) * 0.6, H * 0.055, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.beginPath();
+    c.ellipse(-H * 0.04, H * 0.04, H * 0.21, H * 0.05, 0, 0, Math.PI * 2);
+    c.fill();
+  } else {
+    // bone clasp at the throat
+    c.fillStyle = "#efe6cf";
+    c.beginPath();
+    c.ellipse(H * 0.06, -H * 0.4, H * 0.045, H * 0.02, -0.4, 0, Math.PI * 2);
+    c.fill();
+  }
+  if (o.id === "raincloak") {
+    // tarred hide shines; rain beads roll off
+    c.strokeStyle = "rgba(255,255,255,0.32)";
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(-H * 0.2, -H * 0.36);
+    c.quadraticCurveTo(-H * 0.3, -H * 0.1, -H * 0.27, H * 0.02);
+    c.stroke();
+    if (wet > 0.2) {
+      c.fillStyle = "rgba(200,225,255,0.9)";
+      for (let i = 0; i < 3; i++) {
+        const k = (t * 1.6 + i / 3) % 1;
+        c.beginPath();
+        c.arc(-H * 0.28 + i * H * 0.1, -H * 0.3 + k * H * 0.4, 1, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+  }
 }
 
 export function drawResource(c: CanvasRenderingContext2D, r: string, x: number, y: number, s: number) {
@@ -554,8 +748,79 @@ export function drawResource(c: CanvasRenderingContext2D, r: string, x: number, 
         c.fill();
       }
       break;
+    case "hide":
+      drawHideGlyph(c, s);
+      break;
+    case "bone":
+      drawBoneGlyph(c, s);
+      break;
+    case "tooth":
+      c.fillStyle = "#f3ecd8";
+      c.beginPath();
+      c.moveTo(-s * 0.18, -s * 0.12);
+      c.quadraticCurveTo(0, -s * 0.2, s * 0.18, -s * 0.12);
+      c.lineTo(s * 0.04, s * 0.3);
+      c.closePath();
+      c.fill();
+      c.strokeStyle = "rgba(60,50,40,0.5)";
+      c.lineWidth = 0.6;
+      c.stroke();
+      break;
+    case "meat":
+      c.fillStyle = "#c8584a";
+      c.beginPath();
+      c.ellipse(0, 0, s * 0.3, s * 0.2, 0.3, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#efe6cf";
+      c.beginPath();
+      c.arc(s * 0.3, -s * 0.12, s * 0.07, 0, Math.PI * 2);
+      c.fill();
+      break;
   }
   c.restore();
+}
+
+/** A stretched pelt (hide icon). */
+export function drawHideGlyph(c: CanvasRenderingContext2D, s: number) {
+  c.fillStyle = "#9b6b43";
+  c.beginPath();
+  c.moveTo(-s * 0.32, -s * 0.22);
+  c.quadraticCurveTo(-s * 0.1, -s * 0.12, 0, -s * 0.3);
+  c.quadraticCurveTo(s * 0.1, -s * 0.12, s * 0.32, -s * 0.22);
+  c.quadraticCurveTo(s * 0.22, 0, s * 0.34, s * 0.24);
+  c.quadraticCurveTo(0, s * 0.14, -s * 0.34, s * 0.24);
+  c.quadraticCurveTo(-s * 0.22, 0, -s * 0.32, -s * 0.22);
+  c.fill();
+  c.strokeStyle = "rgba(50,30,15,0.6)";
+  c.lineWidth = Math.max(0.6, s * 0.04);
+  c.stroke();
+  c.fillStyle = "rgba(60,38,20,0.45)";
+  c.beginPath();
+  c.arc(-s * 0.08, -s * 0.02, s * 0.06, 0, Math.PI * 2);
+  c.arc(s * 0.1, s * 0.06, s * 0.05, 0, Math.PI * 2);
+  c.fill();
+}
+
+/** A cartoon bone. */
+export function drawBoneGlyph(c: CanvasRenderingContext2D, s: number) {
+  c.strokeStyle = "#efe6cf";
+  c.lineWidth = s * 0.14;
+  c.lineCap = "round";
+  c.beginPath();
+  c.moveTo(-s * 0.26, s * 0.12);
+  c.lineTo(s * 0.26, -s * 0.12);
+  c.stroke();
+  c.fillStyle = "#efe6cf";
+  for (const [x, y] of [
+    [-0.3, 0.06],
+    [-0.22, 0.2],
+    [0.3, -0.06],
+    [0.22, -0.2],
+  ]) {
+    c.beginPath();
+    c.arc(s * x, s * y, s * 0.1, 0, Math.PI * 2);
+    c.fill();
+  }
 }
 
 export function drawFish(c: CanvasRenderingContext2D, x: number, y: number, s: number, color: string) {
@@ -978,6 +1243,23 @@ export function drawStockpile(c: CanvasRenderingContext2D, stock: Stock) {
     ["fish", 62],
     ["berries", 78],
   ];
+  // stacked hides + a bone heap at the end of the stockpile
+  const hides = Math.min(6, stock.hide ?? 0);
+  for (let i = 0; i < hides; i++) {
+    c.save();
+    c.translate(102, -4 - i * 3);
+    c.scale(1, 0.55);
+    drawHideGlyph(c, 18);
+    c.restore();
+  }
+  const bones = Math.min(9, stock.bone ?? 0);
+  for (let i = 0; i < bones; i++) {
+    c.save();
+    c.translate(122 + (i % 3) * 5 - 5, -2 - Math.floor(i / 3) * 4);
+    c.rotate(((i * 37) % 7) * 0.4);
+    drawBoneGlyph(c, 12);
+    c.restore();
+  }
   for (const [r, x] of piles) {
     const n = Math.min(8, stock[r]);
     for (let i = 0; i < n; i++) {

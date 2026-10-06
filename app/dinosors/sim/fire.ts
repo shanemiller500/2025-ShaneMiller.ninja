@@ -153,7 +153,7 @@ export class FireSystem {
     // ash slowly turns green again (faster in rain)
     this.recoverT += dt;
     if (this.recoverT > 1) {
-      const step = this.recoverT * (0.004 + rain * 0.01);
+      const step = this.recoverT * (0.009 + rain * 0.011);
       this.recoverT = 0;
       const healed: number[] = [];
       for (const i of Array.from(this.scorched)) {

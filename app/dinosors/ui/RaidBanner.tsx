@@ -9,7 +9,7 @@ export default function RaidBanner({ snap, engine }: { snap: Snapshot; engine: E
   return (
     <AnimatePresence>
       {raid && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[150px] z-30 flex justify-center px-2 sm:bottom-[112px]">
+        <div className={`pointer-events-none absolute inset-x-0 z-30 flex justify-center px-2 ${snap.selection.length ? "bottom-[230px] sm:bottom-[200px]" : "bottom-[150px] sm:bottom-[150px]"}`}>
           <motion.div
             initial={{ y: 30, opacity: 0, scale: 0.9 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}

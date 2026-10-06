@@ -243,6 +243,18 @@ export function drawBack(ctx: CanvasRenderingContext2D, a: ArenaDef, v: View) {
         const on = day ? 0 : hash(i + Math.floor(t * 8)) > 0.12 ? 1 : 0.15;
         glow(ctx, "#fde68a", lx + 58, FLOOR_Y - 318, 80, 0.6 * on);
       }
+      // Distant traffic crosses behind the playable street. Keep it dim so
+      // the moving lights never compete with fighter silhouettes.
+      for (let i = 0; i < 3; i++) {
+        const travel = ((t * (45 + i * 12) + i * W * 0.38) % (W + 260)) - 130;
+        const tx = i % 2 ? W - travel : travel;
+        const ty = FLOOR_Y - 55 - i * 16;
+        ctx.fillStyle = day ? "rgba(30,41,59,0.5)" : "rgba(15,11,17,0.72)";
+        ctx.fillRect(tx - 58, ty - 18, 116, 22);
+        ctx.fillRect(tx - 30, ty - 31, 62, 14);
+        ctx.fillStyle = day ? "rgba(186,230,253,0.35)" : "rgba(254,240,138,0.72)";
+        ctx.fillRect(tx + (i % 2 ? -58 : 51), ty - 12, 7, 6);
+      }
       break;
     }
     case "lab": {
@@ -440,6 +452,19 @@ export function drawBack(ctx: CanvasRenderingContext2D, a: ArenaDef, v: View) {
         ctx.fillStyle = g;
         ctx.fillRect(lx - 26, FLOOR_Y * 0.25, 52, FLOOR_Y * 0.75);
         glow(ctx, "#f97316", lx, FLOOR_Y * 0.6, 200, 0.35);
+      }
+      // Slow distant rockfall: small, sparse silhouettes behind the ring.
+      for (let i = 0; i < 11; i++) {
+        const x = px(v, -2100 + i * 420, 0.22) + Math.sin(t * 0.5 + i) * 22;
+        const y = ((t * (24 + i % 4 * 7) + hash(i * 12) * FLOOR_Y) % (FLOOR_Y + 90)) - 45;
+        const r = 3 + hash(i * 7) * 8;
+        ctx.fillStyle = "rgba(24,8,9,0.65)";
+        ctx.beginPath();
+        ctx.moveTo(x - r, y);
+        ctx.lineTo(x + r * 0.3, y - r);
+        ctx.lineTo(x + r, y + r * 0.5);
+        ctx.closePath();
+        ctx.fill();
       }
       break;
     }

@@ -39,7 +39,7 @@ export const dinoCloud: GameCloudApi<DinoMeta> = {
 
   async write(user, data, m) {
     if (data.length > 900_000) throw new Error("This world is too big to save to the cloud.");
-    await setDoc(saveRef(user.uid), { data, version: 1, size: data.length, savedAt: serverTimestamp(), day: m.day, dinos: m.dinos, people: m.people, level: m.level, stickers: m.stickers });
+    await setDoc(saveRef(user.uid), { data, version: 2, size: data.length, savedAt: serverTimestamp(), day: m.day, dinos: m.dinos, people: m.people, level: m.level, stickers: m.stickers });
     await setDoc(
       playerRef(user.uid),
       { email: user.email ?? "", lastSavedAt: serverTimestamp(), lastPlayedAt: serverTimestamp(), day: m.day, level: m.level, stickers: m.stickers },

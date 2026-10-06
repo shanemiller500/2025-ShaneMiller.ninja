@@ -6,6 +6,7 @@
 /* ------------------------------------------------------------------ */
 
 import { ACTIONS, type Action, type InputFrame, emptyInput } from "../engine/types";
+import { connectedPads, padState } from "./gamepad";
 
 export type Bindings = Record<Action, string[]>;
 
@@ -161,31 +162,31 @@ export class InputManager {
   }
 
   private readPad(player: 0 | 1, out: InputFrame) {
-    if (typeof navigator === "undefined" || !navigator.getGamepads) return;
-    const pads = navigator.getGamepads().filter(Boolean) as Gamepad[];
-    const pad = pads[player];
-    if (!pad) return;
-    for (const a of ACTIONS) {
-      const idx = PAD[a];
-      if (idx?.some((i) => pad.buttons[i]?.pressed)) out[a] = true;
+    const pads = connectedPads();
+    // Single player (vs CPU): every connected controller drives player 1, so a
+    // second/virtual device sitting in slot 0 can never "steal" the real pad.
+    const mine = player === 0 && this.shareKeys ? pads : pads[player] ? [pads[player]] : [];
+    for (const pad of mine) {
+      const st = padState(pad);
+      for (const a of ACTIONS) {
+        const idx = PAD[a];
+        if (idx?.some((i) => st.b[i])) out[a] = true;
+      }
+      if (st.lx < -0.5) out.left = true;
+      if (st.lx > 0.5) out.right = true;
+      if (st.ly < -0.6) out.up = true;
+      if (st.ly > 0.6) out.down = true;
     }
-    const [ax, ay] = pad.axes;
-    if (ax < -0.5) out.left = true;
-    if (ax > 0.5) out.right = true;
-    if (ay < -0.6) out.up = true;
-    if (ay > 0.6) out.down = true;
   }
 
   /** Is a button held on any connected pad (Start → pause etc.) */
   padButton(i: number) {
-    if (typeof navigator === "undefined" || !navigator.getGamepads) return false;
-    return (navigator.getGamepads() ?? []).some((p) => !!p && p.buttons[i]?.pressed);
+    return connectedPads().some((p) => padState(p).b[i]);
   }
 
   /** Is a pad connected for this player slot */
   hasPad(player: 0 | 1) {
-    if (typeof navigator === "undefined" || !navigator.getGamepads) return false;
-    return (navigator.getGamepads() ?? []).filter(Boolean).length > player;
+    return connectedPads().length > player;
   }
 
   /** Is a raw key down (menus/pause) */

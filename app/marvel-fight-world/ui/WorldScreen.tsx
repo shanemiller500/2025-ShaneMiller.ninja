@@ -130,6 +130,7 @@ export function WorldScreen(p: Props) {
       }
       if (map || compare) return;
       if (e.code === "KeyR") randomChallenge();
+      if (e.code === "KeyF") cb.current.onChangeFighter();
       if (!near) return;
       if (e.code === "KeyE" || e.code === "Enter") {
         audio.ui("confirm");
@@ -214,11 +215,11 @@ export function WorldScreen(p: Props) {
                   <Swords className="h-4 w-4" /> Fight <span className="hidden opacity-60 sm:inline">{pad ? "A" : "E"}</span>
                 </ArcadeButton>
                 <div className="flex gap-1.5">
-                  <button type="button" onClick={() => p.onView(near.def)} title="View file (V)" className="rounded-lg bg-white/[0.07] p-2.5 text-white/80 ring-1 ring-white/10 hover:bg-white/15">
-                    <Eye className="h-4 w-4" />
+                  <button type="button" onClick={() => p.onView(near.def)} title={pad ? "Y · View file" : "V · View file"} className="rounded-lg bg-white/[0.07] p-2.5 text-white/80 ring-1 ring-white/10 hover:bg-white/15">
+                    <Eye className="h-4 w-4" /> {pad && <span className="text-xs">Y</span>}
                   </button>
-                  <button type="button" onClick={() => setCompare(near.def)} title="Compare (C)" className="rounded-lg bg-white/[0.07] p-2.5 text-white/80 ring-1 ring-white/10 hover:bg-white/15">
-                    <GitCompare className="h-4 w-4" />
+                  <button type="button" onClick={() => setCompare(near.def)} title={pad ? "X · Compare" : "C · Compare"} className="rounded-lg bg-white/[0.07] p-2.5 text-white/80 ring-1 ring-white/10 hover:bg-white/15">
+                    <GitCompare className="h-4 w-4" /> {pad && <span className="text-xs">X</span>}
                   </button>
                 </div>
               </div>
@@ -230,13 +231,12 @@ export function WorldScreen(p: Props) {
       {/* Controls hint */}
       {!touch && !near && pad && (
         <div className="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-4 rounded-full bg-black/50 px-5 py-2 text-[12px] text-white/70 ring-1 ring-white/10 backdrop-blur">
-          <span className="flex items-center gap-1.5"><PadBtn>L</PadBtn> walk</span>
+          <span className="flex items-center gap-1.5"><PadBtn>LS</PadBtn> walk</span>
           <span className="flex items-center gap-1.5"><PadBtn>LB</PadBtn> run</span>
           <span className="flex items-center gap-1.5"><PadBtn>↑</PadBtn> jump</span>
-          <span className="flex items-center gap-1.5"><PadBtn>⧉</PadBtn> map</span>
-          <span className="flex items-center gap-1.5"><PadBtn c="#22c55e">A</PadBtn> fight</span>
-          <span className="flex items-center gap-1.5"><PadBtn c="#3b82f6">X</PadBtn> compare</span>
-          <span className="flex items-center gap-1.5"><PadBtn c="#eab308">Y</PadBtn> file</span>
+          <span className="flex items-center gap-1.5"><PadBtn>View</PadBtn> map</span>
+          <span className="flex items-center gap-1.5"><PadBtn>LS</PadBtn> change fighter</span>
+          <span className="flex items-center gap-1.5"><PadBtn>RS</PadBtn> random</span>
         </div>
       )}
       {!touch && !near && !pad && (

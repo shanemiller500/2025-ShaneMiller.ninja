@@ -40,6 +40,21 @@ import { LavaSystem, Volcano } from "./volcano";
 import { Weather } from "./weather";
 import { Tribe } from "./tribe";
 import { announceBirth, baseGenes, evolveWorld, inherit, type SpeciesEvo } from "./genetics";
+import { Nav } from "./nav";
+import { Colony } from "./colony";
+import { Snow } from "./snow";
+import { Dragons } from "./dragons";
+import { TaskBoard } from "./tasks";
+import { Population } from "./population";
+import { sites, type Site } from "./build";
+import { HOUSING } from "../data/colony";
+import { hurtHuman } from "./injury";
+import { updateCarcass } from "./carcass";
+import type { Carcass } from "./types";
+import type { Gear, ShelterPlan } from "./types";
+
+/** Save format version. v1 = before the colony upgrade (still loads). */
+export const SAVE_VERSION = 2;
 
 /** 24 in-game hours take this many real seconds at 1× speed. */
 export const DAY_SECONDS = 420;
@@ -102,6 +117,21 @@ export class World {
   camp: Camp;
   tribe = new Tribe();
   randomEvents = new RandomEvents();
+  nav = new Nav();
+  colony = new Colony();
+  snow = new Snow();
+  dragons = new Dragons();
+  tasks = new TaskBoard();
+  population = new Population();
+  /** bumps when huts appear / change footprint (nav) */
+  shelterVersion = 0;
+  /** frames simulated (for staggering occasional checks) */
+  frame = 0;
+  /** when the save this world came from was written (0 = brand new world) */
+  savedAt = 0;
+  /** shared hammering timers per construction site */
+  workT = new Map<string, number>();
+  private sitesCache: { t: number; list: Site[] } = { t: -1, list: [] };
   /** per-species evolution progress */
   evo: Partial<Record<SpeciesId, SpeciesEvo>> = {};
   evoLeaps = 0;
@@ -134,8 +164,15 @@ export class World {
     this.terrain = new Terrain(seed);
     this.camp = new Camp(seed);
     this.fire.initFuel(this);
+    this.snow.init(this);
     for (const s of SPECIES) if (s.starter) this.unlocked.add(s.id);
     if (populate) this.populate();
+  }
+
+  /** Construction sites (cached per frame: several builders ask every tick). */
+  buildSites(): Site[] {
+    if (this.sitesCache.t !== this.elapsed) this.sitesCache = { t: this.elapsed, list: sites(this) };
+    return this.sitesCache.list;
   }
 
   nextId() {
@@ -189,12 +226,14 @@ export class World {
       this.addEgg(s, LM.nest.x * TILE + Math.cos(a) * 50, LM.nest.y * TILE + Math.sin(a) * 30, 0, 0, 40 + this.rng() * 60);
     }
 
-    // cave people
+    // cave people: three families
+    const fams = [this.nextId(), this.nextId(), this.nextId()];
     for (let i = 0; i < 8; i++) {
-      addHuman(this, this.camp.x + (this.rng() - 0.5) * 160, this.camp.y + (this.rng() - 0.5) * 80, i >= 5);
+      addHuman(this, this.camp.x + (this.rng() - 0.5) * 160, this.camp.y + (this.rng() - 0.5) * 80, i >= 5, { family: fams[i % 3] });
     }
     this.camp.stock.stick = 3;
     this.camp.stock.stone = 2;
+    this.colony.generateNodes(this);
 
     // props + secrets
     for (let i = 0; i < 3; i++) this.addProp("boulder", this.camp.x - 160 + i * 50 + this.rng() * 30, this.camp.y - 40 + this.rng() * 40);
@@ -447,6 +486,11 @@ export class World {
 
   private impact(m: Meteor) {
     const { x, y } = m;
+    // a direct hit on the volcano wakes something enormous
+    if (Math.hypot(x - this.volcano.x, (y - this.volcano.y) * 1.3) < 430 && this.volcano.phase === "idle") {
+      this.volcano.mega(this);
+    }
+    this.crush(x, y, 120, 0.5);
     this.shake(18, 1.4);
     this.flash(0.8, "#fff1d0");
     this.sfx("boom", x, y, 1.6);
@@ -478,7 +522,10 @@ export class World {
         d.y += Math.sin(a) * 30;
       }
     }
-    for (const h of this.humans) if (Math.hypot(h.x - x, h.y - y) < 300) {
+    for (const h of this.humans) if (Math.hypot(h.x - x, h.y - y) < 300 && h.state !== "down") {
+      if (Math.hypot(h.x - x, h.y - y) < 140) hurtHuman(this, h, 0.4, x, y, "rock");
+      if (h.hp <= 0) continue;
+      h.level = 0;
       h.state = "tossed";
       h.vx = Math.sign(h.x - x || 1) * 100;
       h.vy = 0;
@@ -488,6 +535,48 @@ export class World {
     this.alarm(x, y, 1600, 1, "😱", true);
     this.discover("meteor", x, y);
     this.toast("☄️", "METEOR IMPACT!", x, y, FACTS.meteor);
+  }
+
+  private healT = 0;
+
+  /**
+   * Ground that was ashed over (eruptions, meteors) slowly turns green again.
+   * Rock, lava rock, water and anything people built on stay as they are.
+   */
+  private healLand(dt: number) {
+    this.healT -= dt;
+    if (this.healT > 0) return;
+    this.healT = 1;
+    const tiles = this.terrain.tiles;
+    const base = this.terrain.base;
+    for (let k = 0; k < 40; k++) {
+      const i = Math.floor(this.rng() * tiles.length);
+      if (tiles[i] !== T.Dirt || !VEG_TILES.has(base[i] as T)) continue;
+      if (this.fire.heat[i] > 0 || this.lava.heat[i] > 0 || this.fire.scorched.has(i)) continue;
+      const x = (i % MAP_W) * TILE + TILE / 2;
+      const y = Math.floor(i / MAP_W) * TILE + TILE / 2;
+      if (Math.hypot(x - this.camp.x, y - this.camp.y) < 420) continue;
+      if (this.rng() > 0.35) continue;
+      this.terrain.setTile(i % MAP_W, Math.floor(i / MAP_W), base[i] as T);
+      // and something sprouts there
+      if (this.rng() < 0.4) {
+        this.plants.push(makePlant(this, this.rng() < 0.5 ? "fern" : "bush", x + (this.rng() - 0.5) * 20, y + (this.rng() - 0.5) * 20, 0.15));
+        this.plantsDirty = true;
+      }
+    }
+  }
+
+  /** Something heavy landed: walls, towers, homes + buildings nearby take damage. */
+  crush(x: number, y: number, r: number, power: number) {
+    for (const wl of this.tribe.walls) {
+      if (wl.built < 1) continue;
+      const d = Math.hypot(wl.tx * TILE + 16 - x, wl.ty * TILE + 16 - y);
+      if (d < r) wl.hp -= (1 - d / r) * power * 500 * (wl.kind === "stone" ? 0.5 : 1);
+    }
+    for (const t of this.tribe.towers) if (Math.hypot(t.x - x, t.y - y) < r) t.hp -= power * 260;
+    for (const s of this.shelters) if (s.stage > 0 && Math.hypot(s.x - x, s.y - y) < r) s.hp -= power * (1 - HOUSING[s.tier].protect * 0.6);
+    for (const b of this.colony.buildings) if (Math.hypot(b.x - x, b.y - y) < r) b.hp -= power * 220;
+    for (const sc of this.colony.scorpions) if (Math.hypot(sc.x - x, sc.y - y) < r) sc.hp -= power * 200;
   }
 
   startQuake() {
@@ -505,6 +594,7 @@ export class World {
 
   update(dt: number) {
     this.elapsed += dt;
+    this.frame++;
     if (!this.timePaused) {
       this.time += (dt * 24 * this.timeSpeed) / DAY_SECONDS;
       if (this.time >= 24) {
@@ -515,6 +605,8 @@ export class World {
     this.daylight = daylightAt(this.time);
 
     this.weather.update(this, dt);
+    this.nav.budget = 24000;
+    this.nav.sync(this);
 
     // spatial structures
     this.byId.clear();
@@ -554,6 +646,12 @@ export class World {
     for (const h of this.humans) updateHuman(this, h, dt);
     this.camp.update(this, dt);
     this.tribe.update(this, dt);
+    this.colony.update(this, dt);
+    this.dragons.update(this, dt);
+    this.population.update(this, dt);
+    this.tasks.update(this, dt);
+    this.snow.update(this, dt);
+    this.healLand(dt);
     if (this.camp.crafting) {
       const by = this.byId.get(this.camp.crafting.by);
       if (!by || by.kind !== "human" || by.state !== "craft") {
@@ -599,6 +697,10 @@ export class World {
       if (it.claimed) {
         const c = this.byId.get(it.claimed);
         if (!c || (c.kind === "dino" && c.state !== "eat" && c.state !== "seekFood" && c.state !== "steal")) it.claimed = 0;
+      }
+      if (it.kind === "carcass") {
+        updateCarcass(this, it, dt);
+        continue;
       }
       const life = it.kind === "fossil" ? 900 : it.kind === "poop" ? 45 : it.kind === "meat" ? 160 : 130;
       if (it.t > life) {
@@ -737,7 +839,10 @@ export class World {
   serialize() {
     const r = (n: number) => Math.round(n * 100) / 100;
     return {
-      v: 1,
+      v: SAVE_VERSION,
+      /** wall-clock time of this save (newest save wins on load) */
+      savedAt: Date.now(),
+      elapsed: r(this.elapsed),
       seed: this.seed,
       time: r(this.time),
       day: this.day,
@@ -768,17 +873,38 @@ export class World {
         tier: d.tier,
         genes: { ...d.genes, size: r(d.genes.size), speed: r(d.genes.speed), tough: r(d.genes.tough), hue: r(d.genes.hue) },
         gen: d.gen,
+        tame: r(d.tame),
+        owner: d.owner,
       })),
-      humans: this.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, x: r(h.x), y: r(h.y), hair: h.hair, skin: h.skin, fur: h.fur, role: h.role, age: Math.round(h.age) })),
+      humans: this.humans.map((h) => ({
+        id: h.id,
+        name: h.name,
+        child: h.child,
+        x: r(h.x),
+        y: r(h.y),
+        hair: h.hair,
+        skin: h.skin,
+        fur: h.fur,
+        role: h.role,
+        age: Math.round(h.age),
+        hp: r(Math.max(0.05, h.hp)),
+        warmth: r(h.warmth),
+        gear: h.gear,
+        home: h.home,
+        family: h.family,
+        stranger: h.stranger,
+      })),
       tribe: this.tribe.serialize(),
-      items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species })),
+      items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
       eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent, genes: e.genes, gen: e.gen })),
       evo: this.evo,
       evoLeaps: this.evoLeaps,
       evoAuto: this.evoAuto,
       plants: this.plants.map((p) => [p.kind, r(p.x), r(p.y), r(p.size), r(p.food), r(p.burnt), p.fruit, p.stump ? 1 : 0] as const),
       props: this.props.map((p) => ({ kind: p.kind, x: r(p.x), y: r(p.y), size: r(p.size), found: p.found })),
-      shelters: this.shelters.map((s) => ({ x: r(s.x), y: r(s.y), stage: s.stage, have: s.have })),
+      shelters: this.shelters.map((s) => ({ id: s.id, x: r(s.x), y: r(s.y), stage: s.stage, have: s.have, plan: s.plan, tier: s.tier, hp: r(s.hp), up: s.up, upHave: s.upHave })),
+      colony: this.colony.serialize(),
+      population: this.population.serialize(),
       campfires: this.campfires.map((f) => ({ x: r(f.x), y: r(f.y), lit: f.lit, fuel: r(f.fuel) })),
       camp: { stock: this.camp.stock, learned: Array.from(this.camp.learned), goal: this.camp.goal },
       edits: this.terrain.edits(),
@@ -791,6 +917,8 @@ export class World {
 
   static deserialize(data: SaveData): World {
     const w = new World(data.seed, false);
+    w.savedAt = data.savedAt ?? 0;
+    w.elapsed = data.elapsed ?? 0;
     w.time = data.time;
     w.day = data.day;
     w.timeSpeed = data.timeSpeed ?? 1;
@@ -799,6 +927,7 @@ export class World {
     w.weather.auto = data.weatherAuto ?? true;
     w.terrain.applyEdits(data.edits ?? []);
     w.fire.initFuel(w);
+    w.snow.init(w);
     w.idCounter = Math.max(data.idCounter ?? 1, 1);
     for (const s of data.dinos) {
       if (!SPECIES.some((x) => x.id === s.species)) continue;
@@ -806,10 +935,27 @@ export class World {
       d.id = s.id;
     }
     for (const h of data.humans) {
-      const hu = addHuman(w, h.x, h.y, h.child, { name: h.name, hair: h.hair, skin: h.skin, fur: h.fur, role: h.role ?? "auto", age: h.age ?? (h.child ? 0 : 400) });
+      const hu = addHuman(w, h.x, h.y, h.child, {
+        name: h.name,
+        hair: h.hair,
+        skin: h.skin,
+        fur: h.fur,
+        role: h.role ?? "auto",
+        age: h.age ?? (h.child ? 0 : 400),
+        hp: h.hp ?? 1,
+        warmth: h.warmth ?? 1,
+        gear: (h.gear as Gear | undefined) ?? { weapon: null, shield: 0 },
+        home: h.home ?? 0,
+        family: h.family ?? 0,
+        stranger: !!h.stranger,
+      });
       hu.id = h.id;
     }
-    for (const i of data.items) w.addItem(i.kind, i.x, i.y, { amount: i.amount, t: i.t, species: i.species });
+    for (const i of data.items) {
+      const carcass = (i as { carcass?: Carcass }).carcass;
+      if (i.kind === "carcass" && !carcass) continue;
+      w.addItem(i.kind, i.x, i.y, { amount: i.amount, t: i.t, species: i.species, ...(carcass ? { carcass: { ...carcass, max: { ...carcass.max } } } : {}) });
+    }
     for (const e of data.eggs) w.eggs.push({ id: w.nextId(), ...e });
     for (const [kind, x, y, size, food, burnt, fruit, stump] of data.plants) {
       const p = makePlant(w, kind, x, y, size);
@@ -824,7 +970,13 @@ export class World {
       const pr = w.addProp(p.kind, p.x, p.y, p.size);
       pr.found = p.found;
     }
-    for (const s of data.shelters) w.shelters.push({ id: w.nextId(), ...s });
+    for (const s of data.shelters) {
+      // v1 huts were all the 4-stage wooden hut
+      const plan: ShelterPlan = (s.plan as ShelterPlan | undefined) ?? "hut";
+      w.shelters.push({ id: s.id ?? w.nextId(), x: s.x, y: s.y, stage: s.stage, have: s.have, plan, tier: s.tier ?? (plan === "tent" ? 0 : 2), hp: s.hp ?? 1, up: !!s.up, upHave: s.upHave ?? {} });
+    }
+    w.colony.load(w, data.colony);
+    w.population.load(data.population);
     for (const f of data.campfires) w.campfires.push({ id: w.nextId(), ...f, cook: 0 });
     w.camp.stock = { ...w.camp.stock, ...data.camp.stock };
     w.tribe.load(w, data.tribe);
@@ -851,8 +1003,11 @@ export class World {
     w.events = [];
     // make sure ids never collide after load
     let maxId = w.idCounter;
-    for (const c of [...w.dinos, ...w.humans]) maxId = Math.max(maxId, c.id);
+    for (const c of [...w.dinos, ...w.humans, ...w.shelters]) maxId = Math.max(maxId, c.id);
     w.idCounter = maxId + 1;
+    // homes saved by id: drop any that no longer exist
+    for (const h of w.humans) if (h.home && !w.shelters.some((s) => s.id === h.home)) h.home = 0;
+    w.nav.sync(w);
     return w;
   }
 }

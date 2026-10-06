@@ -105,7 +105,8 @@ export function canReach(p: Plant, reach: "low" | "mid" | "high") {
   return true;
 }
 
-let cursor = 0;
+/** which plant each world's slow growth pass is up to */
+const cursors = new WeakMap<World, number>();
 
 export function updatePlants(w: World, dt: number) {
   const n = w.plants.length;
@@ -115,29 +116,31 @@ export function updatePlants(w: World, dt: number) {
   const step = dt * 40;
   const grow = 1 + w.weather.rain * 2.5;
   for (let k = 0; k < batch; k++) {
-    cursor = (cursor + 1) % n;
+    const cursor = ((cursors.get(w) ?? 0) + 1) % n;
+    cursors.set(w, cursor);
     const p = w.plants[cursor];
     if (!p) continue;
     if (p.burnt > 0) {
       const ti = Math.floor(p.y / TILE) * MAP_W + Math.floor(p.x / TILE);
-      // charred plants recover once the ground has healed
-      if (w.fire.heat[ti] === 0 && w.lava.heat[ti] === 0) p.burnt = Math.max(0, p.burnt - step * 0.002 * grow);
+      // charred plants recover once the fire is out (a couple of minutes, faster in rain)
+      if (w.fire.heat[ti] === 0 && w.lava.heat[ti] === 0) p.burnt = Math.max(0, p.burnt - step * 0.006 * grow);
       if (p.burnt <= 0.05 && p.stump) {
         p.stump = false;
-        p.size = 0.15;
+        p.size = 0.18;
         p.food = 0.5;
       }
       continue;
     }
     if (p.stump) {
       // chopped stumps sprout again
-      if (w.rng() < step * 0.003 * grow) {
+      if (w.rng() < step * 0.008 * grow) {
         p.stump = false;
-        p.size = 0.15;
+        p.size = 0.18;
       }
       continue;
     }
-    p.size = Math.min(1, p.size + step * 0.002 * grow);
+    // saplings shoot up quickly, then slow down as they fill out
+    p.size = Math.min(1, p.size + step * (p.size < 0.5 ? 0.006 : 0.003) * grow);
     p.food = Math.min(1, p.food + step * 0.006 * grow);
     if (p.kind === "fruit" && p.fruit < 4 && w.rng() < step * 0.004 * grow) p.fruit++;
   }

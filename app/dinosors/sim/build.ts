@@ -1,0 +1,399 @@
+/* ------------------------------------------------------------------ */
+/*  Construction sites. Every blueprint — wall, gate, stairs, tower,   */
+/*  hut, home upgrade, building, Scorpion — looks the same to a        */
+/*  builder: "what does it still need, where do I stand, and how do I  */
+/*  hammer it". Builders (auto job or player orders) work through      */
+/*  them: fetch from the stockpile, gather if it's empty, carry it     */
+/*  over, build, then move on to the next unfinished piece.            */
+/* ------------------------------------------------------------------ */
+import { BUILDINGS, HOUSING, SCORPION_TIERS, TENT_STAGES, type Cost } from "../data/colony";
+import { SHELTER_STAGES } from "../data/facts";
+import { P } from "./particles";
+import { MAP_W, TILE, type Resource, type Shelter, type TechId, type Wall } from "./types";
+import type { World } from "./world";
+
+export type SiteKind = "wall" | "tower" | "shelter" | "upgrade" | "building" | "scorpion";
+
+export interface Site {
+  kind: SiteKind;
+  id: number;
+  /** structure centre */
+  x: number;
+  y: number;
+  /** where builders stand */
+  sx: number;
+  sy: number;
+  /** next material it needs (null = everything delivered → hammer time) */
+  need: Resource | null;
+  /** damaged: only needs a builder's time */
+  repair: boolean;
+  /** waiting on an invention */
+  locked: TechId | null;
+}
+
+export const siteKey = (s: { kind: SiteKind; id: number }) => `${s.kind}:${s.id}`;
+
+/* ------------------------------ walls ------------------------------ */
+
+export const WALL_HP = { palisade: 220, stone: 600 } as const;
+
+export function wallMaxHp(wl: Wall) {
+  return WALL_HP[wl.kind] * (wl.part === "gate" ? 0.85 : wl.part === "stairs" ? 0.6 : 1);
+}
+
+/** Material + units for one wall piece (or its stone upgrade). */
+export function wallNeed(wl: Wall): { r: Resource; n: number } {
+  const stone = wl.kind === "stone" || wl.upgrade;
+  if (wl.part === "gate") return stone ? { r: "stone", n: 3 } : { r: "wood", n: 2 };
+  if (wl.part === "stairs") return stone ? { r: "stone", n: 2 } : { r: "stick", n: 2 };
+  return stone ? { r: "stone", n: 2 } : { r: "stick", n: 2 };
+}
+
+export const TOWER_STAGES: { need: Resource; n: number }[] = [
+  { need: "wood", n: 2 },
+  { need: "wood", n: 2 },
+  { need: "stone", n: 2 },
+];
+
+export function stagesOf(s: Shelter) {
+  return s.plan === "tent" ? TENT_STAGES : SHELTER_STAGES;
+}
+export const shelterDone = (s: Shelter) => s.stage >= stagesOf(s).length;
+
+function firstMissing(cost: Cost, have: Partial<Record<Resource, number>>): Resource | null {
+  for (const [r, n] of Object.entries(cost) as [Resource, number][]) if ((have[r] ?? 0) < n) return r;
+  return null;
+}
+
+/* ------------------------------ listing ------------------------------ */
+
+export function sites(w: World): Site[] {
+  const out: Site[] = [];
+  const L = w.camp.learned;
+  for (const wl of w.tribe.walls) {
+    const pending = wl.built < 1 || wl.upgrade;
+    const hurt = wl.built >= 1 && !wl.upgrade && wl.hp < wallMaxHp(wl) * 0.6;
+    if (!pending && !hurt) continue;
+    const x = wl.tx * TILE + TILE / 2;
+    const y = wl.ty * TILE + TILE / 2;
+    const tech: TechId = wl.kind === "stone" || wl.upgrade ? "stonewall" : "palisade";
+    const { r, n } = wallNeed(wl);
+    out.push({ kind: "wall", id: wl.id, x, y, sx: x, sy: y + 20, need: pending && wl.have < n ? r : null, repair: !pending, locked: L.has(tech) ? null : tech });
+  }
+  for (const t of w.tribe.towers) {
+    const hurt = t.stage >= TOWER_STAGES.length && t.hp < 300;
+    if (t.stage >= TOWER_STAGES.length && !hurt) continue;
+    const st = TOWER_STAGES[t.stage];
+    out.push({ kind: "tower", id: t.id, x: t.x, y: t.y, sx: t.x, sy: t.y + 22, need: st && t.have < st.n ? st.need : null, repair: !st, locked: L.has("tower") ? null : "tower" });
+  }
+  for (const s of w.shelters) {
+    if (!shelterDone(s)) {
+      const st = stagesOf(s)[s.stage];
+      const needAxe = st.need === "wood" && !L.has("axe");
+      out.push({ kind: "shelter", id: s.id, x: s.x, y: s.y, sx: s.x + 26, sy: s.y + 8, need: s.have < st.n ? st.need : null, repair: false, locked: needAxe ? "axe" : null });
+    } else if (s.up && HOUSING[s.tier + 1]) {
+      out.push({ kind: "upgrade", id: s.id, x: s.x, y: s.y, sx: s.x + 26, sy: s.y + 8, need: firstMissing(HOUSING[s.tier + 1].cost, s.upHave), repair: false, locked: null });
+    } else if (s.hp < 0.6) {
+      out.push({ kind: "upgrade", id: s.id, x: s.x, y: s.y, sx: s.x + 26, sy: s.y + 8, need: null, repair: true, locked: null });
+    }
+  }
+  for (const b of w.colony.buildings) {
+    const def = BUILDINGS[b.kind];
+    if (b.built >= 1 && b.hp >= def.hp * 0.6) continue;
+    const d = w.colony.door(b);
+    out.push({ kind: "building", id: b.id, x: b.x, y: b.y, sx: d.x, sy: d.y, need: b.built < 1 ? firstMissing(def.cost, b.have) : null, repair: b.built >= 1, locked: def.tech && !L.has(def.tech) ? def.tech : null });
+  }
+  for (const s of w.colony.scorpions) {
+    const spot = w.colony.crewSpot(s);
+    if (s.built < 1) out.push({ kind: "scorpion", id: s.id, x: s.x, y: s.y, sx: spot.x, sy: spot.y + (spot.top ? 0 : 0), need: firstMissing(SCORPION_TIERS[0].cost, s.have), repair: false, locked: L.has("scorpion") ? null : "scorpion" });
+    else if (s.up && SCORPION_TIERS[s.tier]) {
+      const next = SCORPION_TIERS[s.tier];
+      const locked = next.at === "blacksmith" && !w.colony.finished("blacksmith");
+      out.push({ kind: "scorpion", id: s.id, x: s.x, y: s.y, sx: spot.x, sy: spot.y, need: firstMissing(next.cost, s.have), repair: false, locked: locked ? "smelting" : null });
+    } else if (s.hp < SCORPION_TIERS[s.tier - 1].hp * 0.6) out.push({ kind: "scorpion", id: s.id, x: s.x, y: s.y, sx: spot.x, sy: spot.y, need: null, repair: true, locked: null });
+  }
+  return out;
+}
+
+export function siteByKey(w: World, key: string): Site | null {
+  if (!key) return null;
+  const [kind, id] = key.split(":");
+  return sites(w).find((s) => s.kind === kind && s.id === Number(id)) ?? null;
+}
+
+/** Do builders stand on the wall walkway for this site? (Scorpions on walls/towers.) */
+export function siteOnTop(w: World, s: Site) {
+  if (s.kind !== "scorpion") return false;
+  const sc = w.colony.scorpions.find((x) => x.id === s.id);
+  return !!sc && sc.mount !== "ground" && sc.built >= 1;
+}
+
+/* ------------------------------ deliver + work ------------------------------ */
+
+/** Unload carried materials into a site (walls share the load with neighbours). Returns units used. */
+export function deliver(w: World, s: Site, r: Resource, n: number, hx: number, hy: number): number {
+  let used = 0;
+  switch (s.kind) {
+    case "wall": {
+      for (const wl of w.tribe.walls) {
+        if (n - used < 1) break;
+        if (!(wl.built < 1 || wl.upgrade)) continue;
+        const need = wallNeed(wl);
+        if (need.r !== r || wl.have >= need.n) continue;
+        const x = wl.tx * TILE + TILE / 2;
+        const y = wl.ty * TILE + TILE / 2;
+        if (wl.id !== s.id && Math.hypot(x - hx, y - hy) > 90) continue;
+        const take = Math.min(n - used, need.n - wl.have);
+        wl.have += take;
+        used += take;
+      }
+      break;
+    }
+    case "tower": {
+      const t = w.tribe.towers.find((x) => x.id === s.id);
+      const st = t && TOWER_STAGES[t.stage];
+      if (t && st && st.need === r) {
+        used = Math.min(n, st.n - t.have);
+        t.have += used;
+      }
+      break;
+    }
+    case "shelter": {
+      const sh = w.shelters.find((x) => x.id === s.id);
+      const st = sh && stagesOf(sh)[sh.stage];
+      if (sh && st && st.need === r) {
+        used = Math.min(n, st.n - sh.have);
+        sh.have += used;
+      }
+      break;
+    }
+    case "upgrade": {
+      const sh = w.shelters.find((x) => x.id === s.id);
+      const next = sh && HOUSING[sh.tier + 1];
+      if (sh && next) {
+        const want = (next.cost[r] ?? 0) - (sh.upHave[r] ?? 0);
+        used = Math.max(0, Math.min(n, want));
+        sh.upHave[r] = (sh.upHave[r] ?? 0) + used;
+      }
+      break;
+    }
+    case "building": {
+      const b = w.colony.buildings.find((x) => x.id === s.id);
+      if (b) {
+        const want = (BUILDINGS[b.kind].cost[r] ?? 0) - (b.have[r] ?? 0);
+        used = Math.max(0, Math.min(n, want));
+        b.have[r] = (b.have[r] ?? 0) + used;
+      }
+      break;
+    }
+    case "scorpion": {
+      const sc = w.colony.scorpions.find((x) => x.id === s.id);
+      if (sc) {
+        const cost = sc.built < 1 ? SCORPION_TIERS[0].cost : SCORPION_TIERS[sc.tier]?.cost ?? {};
+        const want = (cost[r] ?? 0) - (sc.have[r] ?? 0);
+        used = Math.max(0, Math.min(n, want));
+        sc.have[r] = (sc.have[r] ?? 0) + used;
+      }
+      break;
+    }
+  }
+  return used;
+}
+
+/** Shared hammering timer per site (several builders speed it up). True when finished. */
+function progress(w: World, s: Site, dt: number, need: number) {
+  const k = siteKey(s);
+  const t = (w.workT.get(k) ?? 0) + dt;
+  if (t < need) {
+    w.workT.set(k, t);
+    return false;
+  }
+  w.workT.delete(k);
+  return true;
+}
+
+const chips = (w: World, x: number, y: number, color: string, dt: number) => {
+  if (w.rng() < dt * 5) w.particles.spawn(P.Crumb, x + (w.rng() - 0.5) * 24, y - 10, { z: 16, vz: 40, vx: (w.rng() - 0.5) * 40, g: 160, size: 2, max: 0.5, color });
+  if (w.rng() < dt * 3) w.sfx("knock", x, y, 0.4);
+};
+
+/**
+ * A builder hammers a site for dt seconds. Returns "done" when that site
+ * is finished, "work" while busy, or "wait" if it still needs materials.
+ */
+export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
+  if (s.need && !s.repair) return "wait";
+  switch (s.kind) {
+    case "wall": {
+      if (s.repair) {
+        const wl = w.tribe.walls.find((x) => x.id === s.id);
+        if (!wl) return "done";
+        wl.hp = Math.min(wallMaxHp(wl), wl.hp + dt * 45);
+        chips(w, s.x, s.y, wl.kind === "stone" ? "#9a958c" : "#a07a4a", dt);
+        return wl.hp >= wallMaxHp(wl) ? "done" : "work";
+      }
+      // hammer the nearest stocked piece around here (a crew finishes a whole stretch)
+      let best: Wall | null = null;
+      let bd = 110;
+      for (const wl of w.tribe.walls) {
+        if (!(wl.built < 1 || wl.upgrade) || wl.have < wallNeed(wl).n) continue;
+        const d = Math.hypot(wl.tx * TILE + 16 - s.x, wl.ty * TILE + 16 - s.y);
+        if (d < bd) {
+          bd = d;
+          best = wl;
+        }
+      }
+      if (!best) return "done";
+      if (best.upgrade) {
+        // the old logs come down and go back on the stockpile for other jobs
+        if (best.kind === "palisade" && best.built >= 1) {
+          const old = wallNeed({ ...best, upgrade: false });
+          w.camp.stock[old.r] += old.n;
+          w.particles.burst(P.Crumb, best.tx * TILE + 16, best.ty * TILE + 16, 5, 40, { z: 10, vz: 40, g: 160, size: 2.5, max: 0.6, color: "#a07a4a" });
+          if (!w.flags.has("refundTip")) {
+            w.flags.add("refundTip");
+            w.toast("♻️", "Upgrading to stone: the old logs go back on the stockpile for other jobs.", best.tx * TILE, best.ty * TILE);
+          }
+        }
+        best.kind = "stone";
+        best.upgrade = false;
+        best.built = 0.01;
+      }
+      best.built = Math.min(1, best.built + dt * 0.9);
+      chips(w, best.tx * TILE + 16, best.ty * TILE + 16, best.kind === "stone" ? "#9a958c" : "#a07a4a", dt);
+      if (best.built >= 1) {
+        best.hp = wallMaxHp(best);
+        best.have = 0;
+        w.tribe.version++;
+        if (!w.flags.has("firstWall")) {
+          w.flags.add("firstWall");
+          w.toast("🪵", "A wall! Dinos can't walk through it (but they can bash it…). Add a gate + stairs!", s.x, s.y);
+        }
+        if (best.part === "gate" && !w.flags.has("firstGate")) {
+          w.flags.add("firstGate");
+          w.toast("🚪", "Gate built! People use the side door; tap it to open or close it for everyone.", s.x, s.y);
+        }
+        return best.id === s.id ? "done" : "work";
+      }
+      return "work";
+    }
+    case "tower": {
+      const t = w.tribe.towers.find((x) => x.id === s.id);
+      if (!t) return "done";
+      chips(w, t.x, t.y - 30, "#a07a4a", dt);
+      if (s.repair) {
+        t.hp = Math.min(400, t.hp + dt * 40);
+        return t.hp >= 400 ? "done" : "work";
+      }
+      if (!progress(w, s, dt, 3.5)) return "work";
+      t.stage++;
+      t.have = 0;
+      w.tribe.version++;
+      w.sfx("build", t.x, t.y, 0.8);
+      if (t.stage >= TOWER_STAGES.length) {
+        t.hp = 400;
+        w.toast("🗼", "Watchtower finished! Guards climb up to see further and shoot better. Put a Scorpion on top!", t.x, t.y);
+        w.celebrate("Tower!");
+        return "done";
+      }
+      return "done";
+    }
+    case "shelter": {
+      const sh = w.shelters.find((x) => x.id === s.id);
+      if (!sh) return "done";
+      chips(w, sh.x, sh.y - 10, "#a07a4a", dt);
+      if (!progress(w, s, dt, 3.5)) return "work";
+      w.camp.advanceShelter(w, sh);
+      return "done";
+    }
+    case "upgrade": {
+      const sh = w.shelters.find((x) => x.id === s.id);
+      if (!sh) return "done";
+      chips(w, sh.x, sh.y - 10, sh.tier >= 2 ? "#9a958c" : "#a07a4a", dt);
+      if (s.repair) {
+        sh.hp = Math.min(1, sh.hp + dt * 0.12);
+        return sh.hp >= 1 ? "done" : "work";
+      }
+      if (!progress(w, s, dt, 5)) return "work";
+      w.camp.upgradeShelter(w, sh);
+      return "done";
+    }
+    case "building": {
+      const b = w.colony.buildings.find((x) => x.id === s.id);
+      if (!b) return "done";
+      const def = BUILDINGS[b.kind];
+      chips(w, b.x, b.y - 12, b.kind === "blacksmith" || b.kind === "path" ? "#9a958c" : "#a07a4a", dt);
+      if (s.repair) {
+        b.hp = Math.min(def.hp, b.hp + dt * 40);
+        return b.hp >= def.hp ? "done" : "work";
+      }
+      const before = b.built;
+      b.built = Math.min(1, b.built + dt / def.work);
+      if (before < 0.4 && b.built >= 0.4) w.colony.version++;
+      if (b.built >= 1) {
+        b.hp = def.hp;
+        w.colony.version++;
+        w.sfx("build", b.x, b.y, 0.8);
+        if (b.kind === "spikes" || b.kind === "barricade" || b.kind === "totem") {
+          if (!w.flags.has(`built-${b.kind}`)) {
+            w.flags.add(`built-${b.kind}`);
+            w.toast(def.icon, `${def.name} up! ${def.tip}`, b.x, b.y);
+          }
+          w.discover("boneDefense", b.x, b.y);
+        } else w.toast(def.icon, `${def.name} finished!`, b.x, b.y);
+        return "done";
+      }
+      return "work";
+    }
+    case "scorpion": {
+      const sc = w.colony.scorpions.find((x) => x.id === s.id);
+      if (!sc) return "done";
+      chips(w, sc.x, sc.y - 10, "#a07a4a", dt);
+      if (s.repair) {
+        sc.hp = Math.min(SCORPION_TIERS[sc.tier - 1].hp, sc.hp + dt * 40);
+        return sc.hp >= SCORPION_TIERS[sc.tier - 1].hp ? "done" : "work";
+      }
+      if (sc.built < 1) {
+        sc.built = Math.min(1, sc.built + dt / 6);
+        if (sc.built >= 1) {
+          sc.hp = SCORPION_TIERS[0].hp;
+          sc.have = {};
+          w.colony.version++;
+          w.sfx("build", sc.x, sc.y, 0.8);
+          w.toast("🎯", "Scorpion ready! Someone has to crew it — guards will jump on it when danger comes.", sc.x, sc.y);
+          return "done";
+        }
+        return "work";
+      }
+      // upgrade
+      if (!progress(w, s, dt, 6)) return "work";
+      sc.tier++;
+      sc.up = false;
+      sc.have = {};
+      sc.hp = SCORPION_TIERS[sc.tier - 1].hp;
+      w.toast("🎯", `Upgraded to a ${SCORPION_TIERS[sc.tier - 1].name}!`, sc.x, sc.y);
+      w.sfx("build", sc.x, sc.y, 0.8);
+      return "done";
+    }
+  }
+}
+
+/** All unbuilt wall pieces joined to this one (a stretch the player drew). */
+export function wallStretch(w: World, start: Wall): Set<number> {
+  const out = new Set<number>([start.id]);
+  const pending = (wl: Wall) => wl.built < 1 || wl.upgrade || wl.hp < wallMaxHp(wl) * 0.6;
+  const q = [start];
+  while (q.length) {
+    const cur = q.pop()!;
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const o = w.tribe.wallAt(cur.tx + dx, cur.ty + dy);
+        if (!o || out.has(o.id) || !pending(o)) continue;
+        out.add(o.id);
+        q.push(o);
+      }
+  }
+  return out;
+}
+
+export const wallTile = (wl: Wall) => wl.ty * MAP_W + wl.tx;

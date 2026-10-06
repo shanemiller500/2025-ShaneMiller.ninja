@@ -6,7 +6,7 @@ import { Modal } from "@/components/ui/modal";
 import { DISCOVERY_BY_ID } from "./data/facts";
 import { sp } from "./data/species";
 import { Engine, type Snapshot, type UIEvent } from "./game/engine";
-import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from "./game/save";
+import { DEFAULT_SETTINGS, hasIdbWorld, loadIdbWorld, loadSettings, saveSettings, type Settings } from "./game/save";
 import { DEFAULT_TOOL, type ToolState } from "./game/tools";
 import AboutPanel from "./ui/AboutPanel";
 import CampPanel from "./ui/CampPanel";
@@ -19,6 +19,10 @@ import ViewControls from "./ui/ViewControls";
 import RaidBanner from "./ui/RaidBanner";
 import EvolutionPanel from "./ui/EvolutionPanel";
 import CloudPanel from "./ui/CloudPanel";
+import SelectionBar from "./ui/SelectionBar";
+import InspectPanel from "./ui/InspectPanel";
+import SavedGames from "./ui/SavedGames";
+import { newestSlot, putSlot } from "./game/slots";
 import { hasDinoProgress, useCloud } from "./ui/useCloud";
 import { useRouter } from "next/navigation";
 import { tidyStorage } from "@/utils/storageJanitor";
@@ -40,6 +44,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [evoOpen, setEvoOpen] = useState(false);
   const [stickersOpen, setStickersOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [savesOpen, setSavesOpen] = useState(false);
   const [confirm, setConfirm] = useState<null | "new" | "reset">(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [sticker, setSticker] = useState<string | null>(null);
@@ -93,17 +98,40 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           pushToast({ icon: "💾", text: "World saved!" });
           break;
         case "select":
+        case "inspect":
           setSnap(engine.snapshot());
           break;
       }
     });
     engine.start();
     setSnap(engine.snapshot());
+    // the last world didn't fit in localStorage: it's waiting in IndexedDB
+    if (hasIdbWorld()) {
+      void loadIdbWorld().then((json) => {
+        if (json && engineRef.current === engine) engine.importSave(json);
+      });
+    }
+    // pick up where you left off: whichever save is newest wins (this browser's save or a saved-games slot)
+    void newestSlot().then((slot) => {
+      if (!slot || engineRef.current !== engine) return;
+      if (engine.startedFresh || slot.savedAt > engine.world.savedAt + 3000) {
+        if (engine.importSave(slot.data)) pushToast({ icon: "▶️", text: `Welcome back! Picked up where you left off — Day ${slot.day}.` });
+      }
+    });
+    // the "latest" save stays fresh; a snapshot every 5 minutes lets you go back in time
+    const keepLatest = () => {
+      if (engineRef.current === engine) void putSlot(engine.makeSlot("latest"));
+    };
+    const latestTimer = window.setInterval(keepLatest, 30_000);
+    const autoTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible" && engineRef.current === engine) void putSlot(engine.makeSlot("auto"));
+    }, 5 * 60_000);
     const poll = window.setInterval(() => setSnap(engine.snapshot()), 250);
 
     const onHide = () => {
       if (document.visibilityState === "hidden") {
         engine.save(true);
+        keepLatest();
         engine.audio.suspend();
         engine.stop();
       } else {
@@ -111,7 +139,10 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
         engine.start();
       }
     };
-    const onPageHide = () => engine.save(true);
+    const onPageHide = () => {
+      engine.save(true);
+      keepLatest();
+    };
     document.addEventListener("visibilitychange", onHide);
     window.addEventListener("pagehide", onPageHide);
 
@@ -122,6 +153,9 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
 
     return () => {
       engine.save(true);
+      keepLatest();
+      window.clearInterval(latestTimer);
+      window.clearInterval(autoTimer);
       off();
       ro.disconnect();
       window.clearInterval(poll);
@@ -174,6 +208,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
               updateSettings({ muted: !settings.muted });
             }}
             onStickers={() => setStickersOpen(true)}
+            onSaves={() => setSavesOpen(true)}
             onAbout={() => setAboutOpen(true)}
             onSave={() => {
               engine.save();
@@ -195,8 +230,21 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             onGo={(x, y) => engine.flyTo(x, y, Math.max(engine.cam.zoom, 0.8))}
           />
           <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} />
-          <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} />
-          {snap.selected && <DinoCard info={snap.selected} engine={engine} onCamp={() => setCampOpen(true)} onClose={() => { engine.select(0); setSnap(engine.snapshot()); }} />}
+          <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} />
+          <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
+          {snap.inspect && !snap.selected && <InspectPanel info={snap.inspect} snap={snap} engine={engine} />}
+          {snap.selected && (
+            <DinoCard
+              info={snap.selected}
+              engine={engine}
+              onCamp={() => setCampOpen(true)}
+              onClose={() => {
+                if (snap.selected?.kind === "human") engine.clearSelection();
+                else engine.select(0);
+                setSnap(engine.snapshot());
+              }}
+            />
+          )}
           {campOpen && <CampPanel snap={snap} engine={engine} onClose={() => setCampOpen(false)} />}
           <RaidBanner snap={snap} engine={engine} />
           {evoOpen && <EvolutionPanel snap={snap} engine={engine} onClose={() => setEvoOpen(false)} />}
@@ -227,6 +275,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           )}
           <StickerBook open={stickersOpen} onClose={() => setStickersOpen(false)} found={snap.discoveries} seen={snap.seen} />
           <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
+          <SavedGames open={savesOpen} onClose={() => setSavesOpen(false)} engine={engine} fontClass={fontClass} onToast={(icon, text) => pushToast({ icon, text })} />
           <CloudPanel cloud={cloud} fontClass={fontClass} hasLocal={hasDinoProgress(engine)} />
           <Modal open={!!confirm} onClose={() => setConfirm(null)} size="sm" accent="#f59e0b" labelledBy="dl-confirm">
             <div className={`p-6 text-slate-800 dark:text-slate-100 ${fontClass}`}>
@@ -235,7 +284,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
                 {confirm === "reset" ? "Reset everything?" : "Make a brand new world?"}
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {confirm === "reset" ? "This world, your stickers and unlocked dinos will all be wiped." : "This world will be replaced. Your stickers and unlocked dinos stay."}
+                {confirm === "reset" ? "This world, your stickers and unlocked dinos will all be wiped." : "This world will be replaced (a copy stays in 📂 Saved games). Your stickers and unlocked dinos stay."}
               </p>
               <div className="mt-5 flex gap-2">
                 <button type="button" onClick={() => setConfirm(null)} className="flex-1 rounded-2xl bg-slate-100 px-4 py-3 font-semibold text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-white dark:hover:bg-white/15">
@@ -244,6 +293,8 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
                 <button
                   type="button"
                   onClick={() => {
+                    // the world you're leaving stays in Saved games
+                    void putSlot(engine.makeSlot("auto", `Before ${confirm === "reset" ? "reset" : "new world"} · Day ${engine.world.day}`));
                     if (confirm === "reset") engine.resetEverything();
                     else engine.newWorld();
                     setConfirm(null);

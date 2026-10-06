@@ -12,12 +12,14 @@ import { useEffect, useState } from "react";
 import { loadDataset, normalizeHero, type Hero } from "@/app/Marvel/lib/roster";
 import { buildFighter } from "../engine/fighters";
 import { SIGNATURE_NAMES } from "../engine/moves";
+import { offlineFighters } from "./offlineRoster";
 import type { FighterDef } from "../engine/types";
 
 /** Thor, Deadpool, Venom — Marvel characters with a mislabeled publisher. */
 const EXTRA_MARVEL_IDS = new Set([659, 213, 687]);
 
 export interface Roster {
+  offline?: boolean;
   fighters: FighterDef[];
   byId: Map<number, FighterDef>;
   heroes: Map<number, Hero>;
@@ -51,9 +53,9 @@ export function loadFightRoster(): Promise<Roster> {
           featured: fighters.filter((f) => f.custom),
         };
       })
-      .catch((e) => {
-        cache = null;
-        throw e;
+      .catch(() => {
+        const fighters = offlineFighters();
+        return { offline: true, fighters, byId: new Map(fighters.map((f) => [f.id, f])), heroes: new Map<number, Hero>(), featured: fighters };
       });
   }
   return cache;
@@ -79,6 +81,9 @@ const imageCache = new Map<string, Promise<HTMLImageElement | null>>();
 
 export function loadImage(url: string): Promise<HTMLImageElement | null> {
   if (!url) return Promise.resolve(null);
+  // Offline portrait cards are graphic badges; canvas fighters use their
+  // procedural cowl instead of placing the badge over the face.
+  if (url.startsWith("data:image/svg+xml")) return Promise.resolve(null);
   if (!imageCache.has(url)) {
     imageCache.set(
       url,

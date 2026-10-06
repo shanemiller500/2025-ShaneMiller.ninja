@@ -7,6 +7,9 @@ import { sp } from "../data/species";
 import type { DinoInfo, Engine, HumanInfo } from "../game/engine";
 import Portrait from "./Portrait";
 import { ROLES } from "../data/facts";
+import { WEAPON_KINDS } from "../data/colony";
+import { CONDITION_LABEL } from "../sim/injury";
+import { GameIcon } from "./GameIcon";
 
 /* ------------------------------------------------------------------ */
 /*  Tap a dino → this little card. Live stats, a mood, kid-sized       */
@@ -178,20 +181,53 @@ function DinoBody({ info, engine }: { info: DinoInfo; engine: Engine }) {
 function HumanBody({ info, engine, onCamp }: { info: HumanInfo; engine: Engine; onCamp: () => void }) {
   const eff = info.role === "auto" ? info.autoRole : info.role;
   const effRole = ROLES.find((r) => r.id === eff);
+  const cond = CONDITION_LABEL[info.condition];
   return (
     <div>
       <div className="flex items-center gap-3 pr-6">
-        <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-b from-amber-300/30 to-orange-500/20 text-4xl">{info.child ? "🧒" : "🧔"}</span>
-        <div>
+        <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-b from-amber-300/30 to-orange-500/20 text-4xl">{info.child ? "🧒" : info.riding ? "🏇" : "🧔"}</span>
+        <div className="min-w-0">
           <div className="text-xl font-bold">{info.name}</div>
           <div className="text-sm font-semibold text-amber-200">
             {info.child ? "Cave kid" : `${effRole?.icon} ${effRole?.name}${info.role === "auto" ? " (auto)" : ""}`}
           </div>
-          <div className="text-sm text-white/70">{info.activity}</div>
+          <div className="truncate text-sm text-white/70">{info.task ? `${info.task.icon} ${info.task.label}` : info.activity}</div>
         </div>
       </div>
+      <div className="mt-3 space-y-1.5">
+        <Bar icon={cond.icon} label={cond.label} value={info.hp} color={`linear-gradient(90deg,${cond.color},#a3e635)`} />
+        <Bar icon={info.warmth < 0.3 ? "🥶" : "🔥"} label={info.warmth < 0.3 ? "Freezing" : "Warmth"} value={info.warmth} color="linear-gradient(90deg,#38bdf8,#fb923c)" />
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5 text-[12px] font-semibold">
+        <span className="rounded-full bg-white/10 px-2.5 py-1">{info.home}</span>
+        {info.weapon && (
+          <span className="rounded-full bg-white/10 px-2.5 py-1">
+            {info.weapon.icon} {info.weapon.name}
+          </span>
+        )}
+        {info.shield > 0 && <span className="rounded-full bg-white/10 px-2.5 py-1">🛡️ Shield {info.shield}</span>}
+        {info.outfit ? (
+          <span className="flex items-center gap-1 rounded-full bg-sky-400/20 px-2.5 py-1" title={`Keeps off ${Math.round(info.outfit.rain * 100)}% of the rain, ${Math.round(info.outfit.warmth * 100)}% of the cold`}>
+            {info.outfit.id === "raincloak" ? <GameIcon id="rainproof" size={14} /> : info.outfit.icon} {info.outfit.name}
+          </span>
+        ) : (
+          <span className="rounded-full bg-white/5 px-2.5 py-1 text-white/50" title="Make hide clothes at a Hide rack">No hide clothes</span>
+        )}
+        {info.riding && <span className="rounded-full bg-emerald-500/25 px-2.5 py-1">🏇 {info.riding}</span>}
+      </div>
+      {!info.child && info.canEquip.length > 0 && (
+        <div className="mt-2 flex items-center gap-1.5 text-[12px]">
+          <span className="text-white/60">Armory:</span>
+          {WEAPON_KINDS.filter((k) => info.canEquip.includes(k.kind)).map((k) => (
+            <button key={k.kind} type="button" title={`Take the best ${k.name.toLowerCase()}`} onClick={() => engine.equipSelected(k.kind)} className="rounded-lg bg-white/10 px-2 py-1 text-base transition hover:bg-white/20 active:scale-90">
+              {k.icon}
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="mt-2 rounded-2xl bg-amber-300/10 p-2 text-[12px] leading-snug text-amber-50/90">👆 {info.name} is picked: tap a tree, rock, water, a dino, a wall, a hurt friend… they'll work out what to do.</p>
       {info.child ? (
-        <p className="mt-3 rounded-2xl bg-white/5 p-2.5 text-sm text-white/80">🧒 Too little for a job — kids grow up into helpers. Keep the tribe fed!</p>
+        <p className="mt-3 rounded-2xl bg-white/5 p-2.5 text-sm text-white/80">🧒 Kids carry little things, follow grown-ups to learn, and hide when danger comes. They never fight.</p>
       ) : (
         <>
           <div className="mt-3 text-sm font-bold">Job</div>
@@ -212,12 +248,16 @@ function HumanBody({ info, engine, onCamp }: { info: HumanInfo; engine: Engine; 
           <p className="mt-1.5 text-[11px] text-white/55">{ROLES.find((r) => r.id === info.role)?.tip}</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {info.ordered ? (
-              <button type="button" onClick={() => engine.clearOrder(info.id)} className="rounded-2xl bg-white/10 py-2.5 text-sm font-bold transition hover:bg-white/20 active:scale-95">
-                ✋ Cancel mission
+              <button type="button" onClick={() => engine.cancelOrders()} className="rounded-2xl bg-white/10 py-2.5 text-sm font-bold transition hover:bg-white/20 active:scale-95">
+                ✋ Cancel order
+              </button>
+            ) : info.riding ? (
+              <button type="button" onClick={() => engine.dismountSelected()} className="rounded-2xl bg-white/10 py-2.5 text-sm font-bold transition hover:bg-white/20 active:scale-95">
+                ⬇️ Hop off
               </button>
             ) : (
-              <button type="button" onClick={() => engine.startOrder(info.id)} className="rounded-2xl bg-rose-500 py-2.5 text-sm font-bold transition hover:bg-rose-400 active:scale-95">
-                🎯 Give a mission
+              <button type="button" onClick={() => engine.selectAll(true)} className="rounded-2xl bg-white/10 py-2.5 text-sm font-bold transition hover:bg-white/20 active:scale-95">
+                👥 + idle people
               </button>
             )}
             <button

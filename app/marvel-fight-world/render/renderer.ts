@@ -44,6 +44,7 @@ export class Renderer {
   hud: HudState;
   private cam = { x: 0, zoom: 1.7, shake: 0, sx: 0, sy: 0 };
   private flash: [number, number] = [0, 0];
+  private impact = { strength: 0, x: 0.5, y: 0.5, color: "#ffffff" };
   private ghosts: [Ghost[], Ghost[]] = [[], []];
   private time = 0;
   private frameNo = 0;
@@ -65,7 +66,9 @@ export class Renderer {
 
   resize() {
     const rect = this.canvas.getBoundingClientRect();
-    this.dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 3);
+    // Bound the back buffer on large displays; the rig and effects are drawn
+    // every frame, so a 4K canvas at 3x would cost too many pixels.
+    this.dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2, Math.sqrt(8_000_000 / Math.max(1, rect.width * rect.height)));
     const w = Math.max(320, Math.round(rect.width * this.dpr));
     const h = Math.max(180, Math.round(rect.height * this.dpr));
     if (this.canvas.width !== w || this.canvas.height !== h) {
@@ -94,6 +97,13 @@ export class Renderer {
           const def = m.fighters[e.attacker === 0 ? 1 : 0];
           const dir = def.x > m.fighters[e.attacker].x ? 1 : -1;
           this.particles.hit(e.x, e.y, e.fx, e.power, dir, e.blocked, e.damage);
+          if (!e.blocked) {
+            this.cam.shake = Math.min(30, this.cam.shake + Math.min(12, 1.5 + e.power * 3));
+            this.impact.strength = Math.max(this.impact.strength, Math.min(0.23, 0.07 + e.power * 0.045));
+            this.impact.x = 0.5 + (e.x - this.cam.x) * this.cam.zoom / this.VW;
+            this.impact.y = (FLOOR_Y - e.y * this.cam.zoom) / VH;
+            this.impact.color = e.power > 1.5 ? "255,212,122" : "255,255,255";
+          }
           if (!e.blocked && e.damage > 0) {
             this.flash[def.index] = 1;
             noteDamage(this.hud, def.index);
@@ -123,6 +133,10 @@ export class Renderer {
           this.particles.burst(f.x, f.y + f.def.height * 0.6, "#fde047", 70, 26);
           this.particles.smoke(f.x, f.y + 40, 10);
           this.flash[e.loser] = 1;
+          this.impact.strength = 0.36;
+          this.impact.x = 0.5;
+          this.impact.y = 0.48;
+          this.impact.color = "255,210,90";
           break;
         }
         case "dust":
@@ -145,6 +159,7 @@ export class Renderer {
     // dt in seconds (real time); simulation-paced effects use frames
     const df = dt * 60 * m.timeScale;
     this.time += dt;
+    this.impact.strength = Math.max(0, this.impact.strength - dt * 1.8);
     this.frameNo++;
     this.particles.blood = this.settings.blood;
     this.particles.update(m.superFreeze > 0 ? 0 : df);
@@ -205,6 +220,14 @@ export class Renderer {
 
     // ── Screen space ──────────────────────────────────────────────
     drawFront(ctx, this.arena, view);
+    if (this.impact.strength > 0) {
+      const ix = this.impact.x * VW, iy = this.impact.y * VH;
+      const g = ctx.createRadialGradient(ix, iy, 20, ix, iy, 450);
+      g.addColorStop(0, `rgba(${this.impact.color},${this.impact.strength})`);
+      g.addColorStop(1, `rgba(${this.impact.color},0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, VW, VH);
+    }
     this.vignette(ctx, m);
     if (!this.settings.hideHud) drawHud(ctx, VW, m, this.hud, this.portraits, this.time);
   }

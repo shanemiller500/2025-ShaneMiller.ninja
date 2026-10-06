@@ -3,10 +3,12 @@
 /*  toward, crafting sequences (shown step by step), campfires and     */
 /*  shelters that go up in stages.                                     */
 /* ------------------------------------------------------------------ */
-import { FACTS, SHELTER_STAGES, TECH, TECH_ORDER } from "../data/facts";
+import { FACTS, TECH, TECH_ORDER } from "../data/facts";
+import { HOUSING } from "../data/colony";
 import { P } from "./particles";
 import { LM, cliffY } from "./terrain";
-import { TILE, type Campfire, type Resource, type Shelter, type TechId } from "./types";
+import { TILE, type Campfire, type Resource, type Shelter, type ShelterPlan, type TechId } from "./types";
+import { shelterDone, stagesOf } from "./build";
 import type { World } from "./world";
 
 export type Stock = Record<Resource, number>;
@@ -36,6 +38,11 @@ export const CRAFT_STEPS: Record<TechId, string[]> = {
   tower: ["Pick tall logs", "Lash a platform", "Climb up!"],
   crossbow: ["Carve the stock", "Fit the bow", "Load a bolt", "Thunk!"],
   stonewall: ["Shape square stones", "Stack them up", "Rock solid!"],
+  medicine: ["Pick healing leaves", "Crush them into paste", "Wrap the wound", "All better!"],
+  taming: ["Find a gentle giant", "Offer some berries", "Move slowly…", "Friends!"],
+  smelting: ["Build a clay furnace", "Pile in ore + charcoal", "Pump the bellows!", "Glowing metal!"],
+  scorpion: ["Carve a huge bow", "Twist the torsion ropes", "Fit the slider", "THWACK!"],
+  firefighting: ["Weave grass beaters", "Dig a fire break", "Pass the water along!", "Fire's out!"],
 };
 
 export class Camp {
@@ -43,7 +50,7 @@ export class Camp {
   y = LM.camp.y * TILE + TILE / 2;
   caveX = LM.cave.x * TILE + TILE / 2;
   caveY = 0;
-  stock: Stock = { stick: 0, stone: 0, grass: 0, leaves: 0, wood: 0, fish: 0, berries: 2, meat: 0, cooked: 0, crop: 0 };
+  stock: Stock = { stick: 0, stone: 0, grass: 0, leaves: 0, wood: 0, fish: 0, berries: 2, meat: 0, cooked: 0, crop: 0, water: 0, clay: 0, iron: 0, gold: 0, obsidian: 0, flint: 0, tar: 0, salt: 0, hide: 0, bone: 0, tooth: 0 };
   learned = new Set<TechId>();
   goal: TechId | null = "tools";
   crafting: Crafting | null = null;
@@ -77,9 +84,10 @@ export class Camp {
     // shelters under construction come first once they exist
     const site = this.activeShelter(w);
     if (site) {
-      const need = SHELTER_STAGES[site.stage].need;
+      const st = stagesOf(site)[site.stage];
+      const need = st.need;
       if (need === "wood" && !this.learned.has("axe")) return null;
-      if (this.stock[need] < SHELTER_STAGES[site.stage].n - site.have) return need;
+      if (this.stock[need] < st.n - site.have) return need;
     }
     if (!this.goal) return null;
     const needs = TECH[this.goal].needs;
@@ -117,7 +125,7 @@ export class Camp {
   }
 
   activeShelter(w: World): Shelter | null {
-    return w.shelters.find((s) => s.stage < SHELTER_STAGES.length) ?? null;
+    return w.shelters.find((s) => !shelterDone(s)) ?? null;
   }
 
   ensureShelterSite(w: World) {
@@ -127,10 +135,57 @@ export class Camp {
     this.addShelter(w, this.x + Math.cos(a) * 130, this.y + 40 + Math.sin(a) * 60);
   }
 
-  addShelter(w: World, x: number, y: number) {
-    const s: Shelter = { id: w.nextId(), x, y, stage: 0, have: 0 };
+  addShelter(w: World, x: number, y: number, plan: ShelterPlan = "hut") {
+    const s: Shelter = { id: w.nextId(), x, y, stage: 0, have: 0, plan, tier: plan === "tent" ? 0 : 2, hp: 1, up: false, upHave: {} };
     w.shelters.push(s);
+    w.shelterVersion++;
     return s;
+  }
+
+  /** Plan the next housing tier for a finished home. */
+  startUpgrade(w: World, s: Shelter) {
+    if (!shelterDone(s) || s.up || !HOUSING[s.tier + 1]) return false;
+    s.up = true;
+    s.upHave = {};
+    const next = HOUSING[s.tier + 1];
+    w.toast(next.icon, `Builders will turn this ${HOUSING[s.tier].name.toLowerCase()} into a ${next.name.toLowerCase()}.`, s.x, s.y);
+    return true;
+  }
+
+  upgradeShelter(w: World, s: Shelter) {
+    if (!HOUSING[s.tier + 1]) return;
+    // salvage: half of what the old home was made of goes back on the stockpile
+    const old = s.tier === 0 && s.plan === "tent" ? { stick: 3, leaves: 3 } : HOUSING[s.tier].cost;
+    const back: string[] = [];
+    for (const [r, n] of Object.entries(old) as [Resource, number][]) {
+      const k = Math.floor(n / 2);
+      if (k > 0) {
+        this.stock[r] += k;
+        back.push(`${k} ${r}`);
+      }
+    }
+    if (back.length && !w.flags.has("salvageTip")) {
+      w.flags.add("salvageTip");
+      w.toast("♻️", `Old materials salvaged: ${back.join(", ")} back on the stockpile.`, s.x, s.y);
+    }
+    s.tier++;
+    s.up = false;
+    s.upHave = {};
+    s.hp = 1;
+    w.shelterVersion++;
+    const t = HOUSING[s.tier];
+    w.particles.burst(P.Dust, s.x, s.y, 12, 60, { size: 9, max: 1, color: "rgba(170,150,120,0.55)" });
+    w.sfx("build", s.x, s.y, 0.9);
+    w.celebrate(t.hearth ? "Warm home!" : "Nice!");
+    w.toast(t.icon, `Upgraded to a ${t.name}! Room for ${t.cap}${t.hearth ? ", with a cosy hearth inside" : ""}.`, s.x, s.y);
+    if (s.tier >= 4) w.discover("stoneHouse", s.x, s.y);
+  }
+
+  relight(w: World, f: Campfire) {
+    f.lit = true;
+    f.fuel = 1;
+    w.sfx("ignite", f.x, f.y, 0.6);
+    w.particles.burst(P.Spark, f.x, f.y, 6, 30, { vz: 40, g: 160, size: 2, max: 0.5, color: "#ffe680" });
   }
 
   startCraft(w: World, humanId: number) {
@@ -200,7 +255,7 @@ export class Camp {
 
   /** Shelter stage delivery + building. */
   deliverToShelter(w: World, s: Shelter, r: Resource, n: number) {
-    const stage = SHELTER_STAGES[s.stage];
+    const stage = stagesOf(s)[s.stage];
     if (!stage || stage.need !== r) return 0;
     const used = Math.min(n, stage.n - s.have);
     s.have += used;
@@ -208,17 +263,19 @@ export class Camp {
   }
 
   advanceShelter(w: World, s: Shelter) {
-    if (s.stage >= SHELTER_STAGES.length) return;
+    if (shelterDone(s)) return;
     s.stage++;
     s.have = 0;
+    w.shelterVersion++;
     w.particles.burst(P.Dust, s.x, s.y, 10, 60, { size: 8, max: 1, color: "rgba(160,130,90,0.5)" });
     w.sfx("build", s.x, s.y, 0.8);
-    if (s.stage >= SHELTER_STAGES.length) {
+    if (shelterDone(s)) {
       const first = !this.learned.has("shelter");
       this.learned.add("shelter");
+      s.hp = 1;
       w.celebrate("Home!");
       w.discover("shelterDone", s.x, s.y);
-      if (first) w.toast("🛖", "A shelter! Now they can stay dry in storms.", s.x, s.y, TECH.shelter.fact);
+      if (first) w.toast(HOUSING[s.tier].icon, `A ${HOUSING[s.tier].name.toLowerCase()}! Now they can stay dry in storms. Tap it to see who lives there.`, s.x, s.y, TECH.shelter.fact);
       if (this.goal === "shelter") {
         this.goal = null;
         this.pickGoal();
@@ -231,20 +288,35 @@ export class Camp {
   update(w: World, dt: number) {
     // somebody always gets the fire going again once it's dry
     const out = this.learned.has("fire") ? w.campfires.find((f) => !f.lit) : undefined;
-    if (out && w.weather.rain < 0.3 && this.stock.stick >= 2) {
+    if (out && w.weather.rain < 0.3 && w.weather.snow < 0.5 && this.stock.stick >= 2) {
       this.relightT += dt;
       if (this.relightT > 12) {
         this.relightT = 0;
         this.stock.stick -= 2;
-        out.lit = true;
-        out.fuel = 1;
-        w.sfx("ignite", out.x, out.y, 0.6);
-        w.particles.burst(P.Spark, out.x, out.y, 6, 30, { vz: 40, g: 160, size: 2, max: 0.5, color: "#ffe680" });
+        this.relight(w, out);
       }
     } else this.relightT = 0;
+    // fire + falling rocks wear houses down; a broken home falls back to rubble (a blueprint)
+    for (const s of w.shelters) {
+      if (s.stage === 0) continue;
+      const tx = Math.floor(s.x / TILE);
+      const ty = Math.floor((s.y - 12) / TILE);
+      const heat = w.fire.at(tx, ty) + w.lava.heatAt(tx, ty) * 2;
+      if (heat > 0.3) s.hp -= dt * 0.08 * heat * (1 - HOUSING[s.tier].protect * 0.8);
+      if (s.hp <= 0) {
+        s.hp = 1;
+        s.stage = 0;
+        s.have = 0;
+        s.up = false;
+        s.upHave = {};
+        w.shelterVersion++;
+        w.particles.burst(P.Smoke, s.x, s.y - 10, 12, 40, { vz: 30, size: 14, max: 2, color: "rgba(60,55,50,0.6)" });
+        w.toast("🔥", `A ${HOUSING[s.tier].name.toLowerCase()} burned down! Builders can raise it again.`, s.x, s.y);
+      }
+    }
     for (const f of w.campfires) {
       if (!f.lit) continue;
-      const sheltered = w.shelters.some((s) => s.stage >= 3 && Math.hypot(s.x - f.x, s.y - f.y) < 70);
+      const sheltered = w.colony.kits.has("hideCovers") || w.shelters.some((s) => shelterDone(s) && Math.hypot(s.x - f.x, s.y - f.y) < 70);
       if (w.weather.rain > 0.6 && !sheltered && w.rng() < dt * 0.05 * w.weather.rain) {
         f.lit = false;
         w.particles.burst(P.Steam, f.x, f.y, 6, 20, { vz: 30, size: 10, max: 1.5, color: "rgba(220,220,220,0.6)" });

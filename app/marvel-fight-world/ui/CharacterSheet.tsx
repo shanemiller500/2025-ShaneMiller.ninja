@@ -9,20 +9,24 @@ import { BioSkeleton, BioTab, FactsGrid, FamilyTab, PowersTab, ReadMore, useBio 
 import { loadGallery, type Gallery } from "@/app/Marvel/lib/gallery";
 import type { Hero } from "@/app/Marvel/lib/roster";
 import { Lightbox, type LightboxImage } from "@/components/ui/lightbox";
-import { ARCHETYPE_INFO, specialList } from "../engine/fighters";
+import { ARCHETYPE_INFO } from "../engine/fighters";
 import type { FighterDef } from "../engine/types";
+import type { Settings } from "../data/storage";
+import { HowToPlay, MoveGuide } from "./MoveGuide";
 import { AlignmentChip, ArcadeButton, ArchetypeChip, StatBars, StatRadar, cn } from "./kit";
 
-type Tab = "overview" | "moves" | "bio" | "powers" | "family" | "gallery";
+type Tab = "overview" | "how" | "moves" | "bio" | "powers" | "family" | "gallery";
 
 export function CharacterSheet({
   def,
+  settings,
   hero,
   onClose,
   onFightAs,
   onFightAgainst,
 }: {
   def: FighterDef;
+  settings: Settings;
   hero: Hero | undefined;
   onClose: () => void;
   onFightAs?: (d: FighterDef) => void;
@@ -69,6 +73,7 @@ export function CharacterSheet({
 
   const TABS: [Tab, string, number?][] = [
     ["overview", "Overview"],
+    ["how", "How to Play"],
     ["moves", "Moves"],
     ["bio", "Bio", bio?.history.length],
     ["powers", "Powers", bio?.powers.reduce((n, s) => n + s.items.length, 0)],
@@ -163,42 +168,8 @@ export function CharacterSheet({
                   </div>
                 )}
 
-                {tab === "moves" && (
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      {specialList(def).map(({ input, move }) => (
-                        <div key={move.id} className={cn("flex items-center justify-between gap-4 rounded-xl px-4 py-3 ring-1", move.kind === "ultimate" ? "bg-amber-300/10 ring-amber-300/30" : "bg-white/[0.04] ring-white/10")}>
-                          <div>
-                            <p className={cn("fw-display text-xl font-[650] uppercase", move.kind === "ultimate" ? "text-amber-300" : "text-white")}>{move.name}</p>
-                            <p className="text-xs text-white/50">
-                              {move.projectile || move.volley ? "Projectile" : move.teleport ? "Teleport strike" : move.counter ? "Counter stance" : move.buff ? `Buff · ${move.buff.kind}` : move.lunge ? "Rushing strike" : "Strike"}
-                              {move.armor ? " · armored" : ""}
-                              {move.cooldown ? ` · ${(move.cooldown / 60).toFixed(1)}s cooldown` : ""}
-                            </p>
-                          </div>
-                          <span className="font-mono text-xs text-white/55">{input}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div>
-                      <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">Passive</p>
-                      <p className="text-white">
-                        <span className="font-bold">{def.passive.name}</span> — <span className="text-white/65">{def.passive.desc}</span>
-                      </p>
-                    </div>
-                    <div>
-                      <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-white/45">Named combos</p>
-                      <div className="space-y-1.5">
-                        {def.combos.map((c) => (
-                          <div key={c.name} className="flex items-center justify-between gap-4 rounded-lg bg-white/[0.04] px-4 py-2">
-                            <span className="font-semibold">{c.name}</span>
-                            <span className="font-mono text-xs text-white/55">{c.seq.map((s) => s.toUpperCase()).join(" → ")} · +{Math.round((c.bonus - 1) * 100)}%</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {tab === "how" && <HowToPlay def={def} />}
+                {tab === "moves" && <MoveGuide def={def} settings={settings} player={0} />}
 
                 {tab === "bio" && <BioTab bio={bio} loading={loading} error={error} />}
                 {tab === "powers" && <PowersTab bio={bio} loading={loading} error={error} />}

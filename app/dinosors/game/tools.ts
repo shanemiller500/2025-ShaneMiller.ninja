@@ -3,20 +3,22 @@
 /*  one does when it touches the world (for the engine).               */
 /* ------------------------------------------------------------------ */
 import { TECH } from "../data/facts";
+import { BUILDINGS, HOUSING, SCORPION_TIERS, TENT_STAGES, type Cost } from "../data/colony";
+import { SHELTER_STAGES } from "../data/facts";
 import { sp } from "../data/species";
 import { addHuman } from "../sim/humans";
 import { P } from "../sim/particles";
 import { makePlant } from "../sim/plants";
 import { isWaterTile, isWalkTile } from "../sim/terrain";
-import { MAP_W, T, TILE, type PlantKind, type SpeciesId, type WeatherKind } from "../sim/types";
+import { MAP_W, T, TILE, type BuildingKind, type PlantKind, type SpeciesId, type TechId, type WeatherKind } from "../sim/types";
 import type { World } from "../sim/world";
 
 export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire" | "weather" | "disaster" | "people" | "build" | "erase";
 export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
 export type LandOpt = "water" | "rock" | "mud" | "grass";
-export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid";
+export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon";
 export type PeopleOpt = "adult" | "child";
-export type BuildOpt = "hut" | "wall" | "stonewall" | "tower" | "farm" | "campfire";
+export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | BuildingKind;
 
 export interface ToolState {
   id: ToolId;
@@ -81,6 +83,8 @@ export const WEATHER_OPTS: Opt<WeatherKind>[] = [
   { value: "fog", icon: "🌫️", label: "Fog" },
   { value: "windy", icon: "💨", label: "Wind" },
   { value: "hot", icon: "🥵", label: "Heat" },
+  { value: "snow", icon: "🌨️", label: "Snow" },
+  { value: "blizzard", icon: "❄️", label: "Blizzard" },
 ];
 export const DISASTER_OPTS: Opt<DisasterOpt>[] = [
   { value: "lightning", icon: "⚡", label: "Lightning" },
@@ -88,19 +92,55 @@ export const DISASTER_OPTS: Opt<DisasterOpt>[] = [
   { value: "volcano", icon: "🌋", label: "Erupt!" },
   { value: "quake", icon: "🫨", label: "Quake" },
   { value: "raid", icon: "🥁", label: "Dino raid!" },
+  { value: "dragon", icon: "🐉", label: "Dragon!" },
 ];
 export const PEOPLE_OPTS: Opt<PeopleOpt>[] = [
   { value: "adult", icon: "🧔", label: "Cave person" },
   { value: "child", icon: "🧒", label: "Cave kid" },
 ];
-export const BUILD_OPTS: Opt<BuildOpt>[] = [
-  { value: "wall", icon: "🪵", label: "Wood wall" },
-  { value: "stonewall", icon: "🧱", label: "Stone wall" },
-  { value: "tower", icon: "🗼", label: "Watchtower" },
-  { value: "hut", icon: "🛖", label: "Hut" },
-  { value: "farm", icon: "🌾", label: "Farm" },
-  { value: "campfire", icon: "🔥", label: "Campfire" },
+export interface BuildDef extends Opt<BuildOpt> {
+  cat: "homes" | "defense" | "work" | "land";
+  cost: Cost;
+  tech?: TechId;
+  tip: string;
+  /** drag to paint a line of them */
+  line?: boolean;
+}
+
+const hutCost = () => SHELTER_STAGES.reduce<Cost>((c, s) => ({ ...c, [s.need]: (c[s.need] ?? 0) + s.n }), {});
+const tentCost = () => TENT_STAGES.reduce<Cost>((c, s) => ({ ...c, [s.need]: (c[s.need] ?? 0) + s.n }), {});
+const bld = (kind: BuildingKind, cat: BuildDef["cat"], line = false): BuildDef => ({ value: kind, icon: BUILDINGS[kind].icon, label: BUILDINGS[kind].name, cat, cost: BUILDINGS[kind].cost, tech: BUILDINGS[kind].tech, tip: BUILDINGS[kind].tip, line });
+
+export const BUILD_DEFS: BuildDef[] = [
+  { value: "tent", icon: HOUSING[0].icon, label: "Tent", cat: "homes", cost: tentCost(), tip: `Quick shelter for ${HOUSING[0].cap}. Upgrade it later: tent → hut → house → stone house.` },
+  { value: "hut", icon: HOUSING[2].icon, label: "Hut", cat: "homes", cost: hutCost(), tech: "axe", tip: `A wooden hut for ${HOUSING[2].cap}. Tap a finished home to upgrade it.` },
+  { value: "campfire", icon: "🔥", label: "Campfire", cat: "homes", cost: { stick: 2 }, tech: "fire", tip: "Warmth, light and cooking. Scares small dinos." },
+  bld("healer", "homes"),
+  { value: "wall", icon: "🪵", label: "Wood wall", cat: "defense", cost: { stick: 2 }, tech: "palisade", tip: "Drag to draw. Dinos can't walk through (but can bash it).", line: true },
+  { value: "stonewall", icon: "🧱", label: "Stone wall", cat: "defense", cost: { stone: 2 }, tech: "stonewall", tip: "Drag to draw. Much tougher. Draw over wood walls to upgrade them.", line: true },
+  { value: "gate", icon: "🚪", label: "Gate", cat: "defense", cost: { wood: 2 }, tech: "palisade", tip: "Put it in a wall. People use the side door; dinos only get through when it's open. Closes itself when danger comes." },
+  { value: "stairs", icon: "🪜", label: "Stairs", cat: "defense", cost: { stick: 2 }, tech: "palisade", tip: "Next to a wall: lets people climb up and defend from the walkway." },
+  { value: "tower", icon: "🗼", label: "Watchtower", cat: "defense", cost: { wood: 4, stone: 2 }, tech: "tower", tip: "Guards climb up to see + shoot further. Joins up with walls." },
+  { value: "scorpion", icon: "🎯", label: "Scorpion", cat: "defense", cost: SCORPION_TIERS[0].cost, tech: "scorpion", tip: "A giant crossbow. Put it on a wall, a tower or the ground. Someone has to crew it." },
+  bld("trap", "defense"),
+  bld("spikes", "defense", true),
+  bld("barricade", "defense", true),
+  bld("totem", "defense"),
+  { value: "farm", icon: "🌾", label: "Farm", cat: "work", cost: {}, tech: "farming", tip: "Farmers plant grass seed and harvest crops." },
+  bld("storage", "work"),
+  bld("foodStore", "work"),
+  bld("waterStore", "work"),
+  bld("tannery", "work"),
+  bld("workshop", "work"),
+  bld("blacksmith", "work"),
+  bld("pen", "work"),
+  bld("post", "work"),
+  bld("path", "land", true),
+  bld("bridge", "land", true),
 ];
+
+export const BUILD_BY_ID = Object.fromEntries(BUILD_DEFS.map((b) => [b.value, b])) as Record<BuildOpt, BuildDef>;
+export const BUILD_OPTS: Opt<BuildOpt>[] = BUILD_DEFS;
 
 export interface ToolDef {
   id: ToolId;
@@ -122,7 +162,7 @@ export const TOOLS: ToolDef[] = [
   { id: "weather", icon: "🌦️", label: "Weather", tip: "Change the weather" },
   { id: "disaster", icon: "💥", label: "Boom", tip: "Lightning, meteors, volcano, quakes" },
   { id: "people", icon: "🧔", label: "People", tip: "Add cave people (tap one to give them a job!)" },
-  { id: "build", icon: "🛠️", label: "Build", tip: "Plan walls, towers, huts + farms. Drag to draw walls!", brush: true },
+  { id: "build", icon: "🛠️", label: "Build", tip: "Plan homes, walls, gates, towers, Scorpions + workshops. Drag to draw walls + paths!", brush: true },
   { id: "erase", icon: "🧽", label: "Erase", tip: "Remove things", brush: true },
 ];
 
@@ -152,7 +192,7 @@ export function toolCursor(t: ToolState): { icon: string; radius: number } | nul
     case "people":
       return { icon: PEOPLE_OPTS.find((o) => o.value === t.people)!.icon, radius: 16 };
     case "build":
-      return { icon: BUILD_OPTS.find((o) => o.value === t.build)!.icon, radius: t.build === "wall" || t.build === "stonewall" ? 16 : t.build === "farm" ? 38 : 30 };
+      return { icon: BUILD_BY_ID[t.build].icon, radius: BUILD_BY_ID[t.build].line || t.build === "gate" || t.build === "stairs" || t.build === "scorpion" ? 16 : t.build === "farm" ? 38 : 30 };
     case "erase":
       return { icon: "🧽", radius: 28 };
   }
@@ -312,66 +352,90 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
 function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): boolean {
   const c = w.camp;
   const tile = w.terrain.tileAt(x, y);
-  const near = Math.hypot(x - c.x, y - c.y) < 1100;
+  const def = BUILD_BY_ID[tool.build];
+  const near = Math.hypot(x - c.x, y - c.y) < 1600;
   if (!near) {
-    if (!drag) hint(w, "🏕️", "Build close to the cave camp so the tribe can reach it.");
+    if (!drag) hint(w, "🏕️", "Build closer to camp so the tribe can reach it.");
     return false;
   }
+  if (def.tech && !c.learned.has(def.tech)) {
+    if (!drag) hint(w, TECH[def.tech].icon, `The tribe needs to invent ${TECH[def.tech].name} first — open the camp's 💡 Invent tab!`);
+    return false;
+  }
+  if (drag && !def.line) return false;
   switch (tool.build) {
     case "wall":
-    case "stonewall": {
-      const kind = tool.build === "wall" ? "palisade" : "stone";
-      const tech = kind === "palisade" ? "palisade" : "stonewall";
-      if (!c.learned.has(tech)) {
-        hint(w, TECH[tech].icon, `The tribe needs to invent ${TECH[tech].name} first — tap the camp to choose it!`);
+    case "stonewall":
+    case "gate":
+    case "stairs": {
+      const kind = tool.build === "stonewall" ? "stone" : c.learned.has("stonewall") && tool.build !== "wall" && w.camp.stock.stone > w.camp.stock.stick ? "stone" : "palisade";
+      const part = tool.build === "gate" ? "gate" : tool.build === "stairs" ? "stairs" : "wall";
+      const tx = Math.floor(x / TILE);
+      const ty = Math.floor(y / TILE);
+      if (part === "stairs" && ![w.tribe.wallAt(tx + 1, ty), w.tribe.wallAt(tx - 1, ty), w.tribe.wallAt(tx, ty + 1), w.tribe.wallAt(tx, ty - 1)].some((o) => o && o.part !== "stairs")) {
+        hint(w, "🪜", "Stairs go right next to a wall.");
         return false;
       }
-      const wl = w.tribe.addWall(w, Math.floor(x / TILE), Math.floor(y / TILE), kind);
+      const wl = w.tribe.addWall(w, tx, ty, kind, part);
       if (wl && !drag) w.sfx("knock", x, y, 0.4);
+      if (wl && part === "gate" && !w.flags.has("gateTip")) {
+        w.flags.add("gateTip");
+        w.toast("🚪", "Gate planned! Tap it once it's built to open or close it.", x, y);
+      }
       return !!wl;
     }
     case "tower": {
-      if (drag) return false;
-      if (!c.learned.has("tower")) {
-        hint(w, "🗼", "Invent the Watchtower first — tap the camp to choose it!");
-        return false;
-      }
       const t = w.tribe.addTower(w, x, y);
-      if (t) w.toast("🗼", "Tower planned! Builders will need wood + stone.");
+      if (t) w.toast("🗼", "Tower planned! Builders will need wood + stone. Walls can join right onto it.");
+      else hint(w, "🗼", "Not enough room for a tower there.");
       return !!t;
     }
-    case "farm": {
-      if (drag) return false;
-      if (!c.learned.has("farming")) {
-        hint(w, "🌾", "Invent Farming first — tap the camp to choose it!");
+    case "scorpion": {
+      const s = w.colony.addScorpion(w, x, y);
+      if (typeof s === "string") {
+        hint(w, "🎯", s);
         return false;
       }
+      w.toast("🎯", `Scorpion planned ${s.mount === "ground" ? "on the ground" : `on the ${s.mount}`}! Builders bring wood, sticks + stone.`, x, y);
+      return true;
+    }
+    case "tent": {
+      if (!isWalkTile(tile) || isWaterTile(tile)) return false;
+      if (w.colony.occupied(w).has(Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE))) return false;
+      c.addShelter(w, x, y, "tent");
+      w.toast("⛺", "Tent planned! Quick to build — upgrade it later.");
+      return true;
+    }
+    case "farm": {
       const f = w.tribe.addFarm(w, x, y);
       if (f) w.toast("🌾", "New field! Farmers plant it with grass seeds.");
       else hint(w, "🌾", "Fields need open soil (and a little space).");
       return !!f;
     }
     case "hut": {
-      if (drag) return false;
       if (!isWalkTile(tile) || isWaterTile(tile)) return false;
       c.addShelter(w, x, y);
-      if (!c.learned.has("axe")) hint(w, "🪓", `They'll need a ${TECH.axe.name} to chop wood for the frame!`);
-      else w.toast("🛖", "Hut planned! More huts = room for more babies.");
+      w.toast("🛖", "Hut planned! More homes = room for more people.");
       return true;
     }
     case "campfire": {
-      if (drag) return false;
-      if (!c.learned.has("fire")) {
-        hint(w, "🔥", "The cave people haven't discovered fire yet! Tap their camp to help.");
-        return false;
-      }
       if (!isWalkTile(tile) || isWaterTile(tile)) return false;
       w.campfires.push({ id: w.nextId(), x, y, lit: true, fuel: 1, cook: 0 });
       w.sfx("ignite", x, y, 0.7);
       return true;
     }
+    default: {
+      const kind = tool.build as BuildingKind;
+      const why = w.colony.canPlace(w, kind, x, y);
+      if (why) {
+        if (!drag) hint(w, BUILDINGS[kind].icon, why);
+        return false;
+      }
+      const b = w.colony.addBuilding(w, kind, x, y);
+      if (b && !drag) w.toast(BUILDINGS[kind].icon, `${BUILDINGS[kind].name} planned! Builders are on it.`, b.x, b.y);
+      return !!b;
+    }
   }
-  return false;
 }
 
 function erase(w: World, x: number, y: number, drag: boolean) {
@@ -386,6 +450,20 @@ function erase(w: World, x: number, y: number, drag: boolean) {
   const tower = w.tribe.towers.find((t) => Math.hypot(t.x - x, t.y - 30 - y) < 40);
   if (tower && !drag) {
     w.tribe.towers.splice(w.tribe.towers.indexOf(tower), 1);
+    w.tribe.version++;
+    return true;
+  }
+  const sc = w.colony.scorpions.find((s) => Math.hypot(s.x - x, s.y - 8 - y) < 22);
+  if (sc && !drag) {
+    w.colony.scorpions.splice(w.colony.scorpions.indexOf(sc), 1);
+    w.colony.version++;
+    return true;
+  }
+  const b = w.colony.buildings.find((bd) => x > bd.tx * TILE && x < (bd.tx + BUILDINGS[bd.kind].w) * TILE && y > bd.ty * TILE - 24 && y < bd.y + 6);
+  if (b) {
+    w.colony.removeBuilding(b);
+    w.particles.burst(P.Dust, b.x, b.y, 8, 40, { size: 9, max: 0.7, color: "rgba(160,130,90,0.6)" });
+    w.sfx("pop", x, y, 0.4);
     return true;
   }
   const farm = w.tribe.farms.find((f) => Math.hypot(f.x - x, (f.y - y) * 1.6) < 40);
@@ -430,6 +508,8 @@ function erase(w: World, x: number, y: number, drag: boolean) {
   const shelter = w.shelters.find((s) => Math.hypot(s.x - x, s.y - 16 - y) < 40);
   if (shelter && !drag) {
     w.shelters.splice(w.shelters.indexOf(shelter), 1);
+    w.shelterVersion++;
+    for (const h of w.humans) if (h.home === shelter.id) h.home = 0;
     poof(shelter.x, shelter.y);
     return true;
   }

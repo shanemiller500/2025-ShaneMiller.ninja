@@ -2,7 +2,7 @@
 /*  Bite-sized facts + names + the "sticker book" of secret            */
 /*  discoveries. Short on purpose: this is a toy, not homework.        */
 /* ------------------------------------------------------------------ */
-import type { TechId } from "../sim/types";
+import type { Resource, TechId } from "../sim/types";
 
 export const DINO_NAMES = [
   "Chompy", "Pebbles", "Stompy", "Twinkle", "Rex", "Noodle", "Biscuit", "Tank", "Sprout", "Mango",
@@ -15,7 +15,7 @@ export const CAVE_NAMES = ["Ugg", "Oona", "Bok", "Mira", "Grug", "Tikki", "Zog",
 
 export const TECH: Record<
   TechId,
-  { icon: string; name: string; needs: Partial<Record<"stick" | "stone" | "grass" | "leaves" | "wood" | "berries", number>>; after?: TechId[]; fact: string; what: string }
+  { icon: string; name: string; needs: Partial<Record<Resource, number>>; after?: TechId[]; fact: string; what: string }
 > = {
   tools: {
     icon: "🪨",
@@ -120,9 +120,49 @@ export const TECH: Record<
     what: "Super-strong walls. Upgrade your palisades!",
     fact: "Some of the first stone walls were built around the town of Jericho.",
   },
+  medicine: {
+    icon: "🌿",
+    name: "Medicine",
+    needs: { leaves: 4, grass: 3, berries: 2 },
+    after: ["fire"],
+    what: "Healing huts, and hurt people heal faster.",
+    fact: "Ancient people used plants like willow bark to ease pain.",
+  },
+  taming: {
+    icon: "🐾",
+    name: "Taming",
+    needs: { berries: 4, grass: 4 },
+    after: ["basket"],
+    what: "Befriend gentle plant-eaters, build pens and ride them!",
+    fact: "Dogs were the first animals people tamed, over 15,000 years ago. (Riding dinos is fantasy!)",
+  },
+  smelting: {
+    icon: "🔥",
+    name: "Smelting",
+    needs: { clay: 3, stone: 4, wood: 3 },
+    after: ["fire", "stonewall"],
+    what: "Melt ore into metal: blacksmiths forge metal weapons and shields.",
+    fact: "People first smelted copper about 7,000 years ago.",
+  },
+  firefighting: {
+    icon: "🪣",
+    name: "Fire fighting",
+    needs: { grass: 4, stick: 3, leaves: 3 },
+    after: ["fire"],
+    what: "The tribe learns to beat out flames and pass water along a bucket line. Without it they can only run!",
+    fact: "Firefighters still use fire breaks: clearing a strip of land so the fire has nothing to burn.",
+  },
+  scorpion: {
+    icon: "🏹",
+    name: "Scorpion",
+    needs: { wood: 4, stick: 4, stone: 2 },
+    after: ["crossbow", "tower"],
+    what: "Giant bolt-throwers for walls and towers. Great against dragons!",
+    fact: "Roman armies used a small catapult called a scorpio to shoot heavy bolts.",
+  },
 };
 
-export const TECH_ORDER: TechId[] = ["tools", "fire", "axe", "spear", "basket", "fishing", "shelter", "farming", "palisade", "bow", "tower", "crossbow", "stonewall"];
+export const TECH_ORDER: TechId[] = ["tools", "fire", "axe", "spear", "basket", "firefighting", "fishing", "shelter", "farming", "medicine", "taming", "palisade", "bow", "tower", "crossbow", "stonewall", "scorpion", "smelting"];
 
 /** Each shelter stage: what has to be carried in, and what it looks like. */
 export const SHELTER_STAGES: { label: string; need: "wood" | "stick" | "leaves" | "stone"; n: number }[] = [
@@ -148,6 +188,7 @@ export const ROLES: { id: import("../sim/types").Role; icon: string; name: strin
   { id: "guard", icon: "🛡️", name: "Guard", tip: "Stands watch and fights off raiders" },
   { id: "cook", icon: "🍖", name: "Cook", tip: "Roasts meat + fish on the fire" },
   { id: "farmer", icon: "🌾", name: "Farmer", tip: "Plants and harvests crops" },
+  { id: "smith", icon: "⚒️", name: "Smith", tip: "Crafts weapons, shields + Scorpion parts" },
 ];
 
 export const FACTS = {
@@ -217,6 +258,21 @@ export const DISCOVERIES: Discovery[] = [
   { id: "baby", icon: "👶", name: "New Baby", hint: "A well-fed tribe grows." },
   { id: "mutant", icon: "🧬", name: "Mutant!", hint: "Watch the eggs hatch…" },
   { id: "evolved", icon: "⏩", name: "Deep Time", hint: "Skip ahead a million years." },
+  { id: "gold", icon: "🪙", name: "Gold Rush", hint: "Something glitters near the mountains." },
+  { id: "artifact", icon: "🏺", name: "Archaeologist", hint: "Strange mounds hide old treasures." },
+  { id: "family", icon: "👨‍👩‍👧", name: "New Neighbours", hint: "Safe, well-fed camps attract wanderers." },
+  { id: "rider", icon: "🏇", name: "Dino Rider", hint: "Make friends with a gentle giant." },
+  { id: "scorpion", icon: "🎯", name: "Bullseye", hint: "A giant crossbow on the wall." },
+  { id: "dragon", icon: "🐉", name: "Here Be Dragons", hint: "Something huge circles the sky." },
+  { id: "dragonSlayer", icon: "🛡️", name: "Dragon Defenders", hint: "Drive a dragon away." },
+  { id: "megaEruption", icon: "☄️", name: "MEGA ERUPTION", hint: "What if something from space hit the volcano?" },
+  { id: "snow", icon: "❄️", name: "Snow Day", hint: "It gets cold up in the peaks." },
+  { id: "healer", icon: "🩹", name: "Patched Up", hint: "Look after the hurt." },
+  { id: "stoneHouse", icon: "🏡", name: "Stone Mason", hint: "Upgrade a home all the way." },
+  { id: "tarTrap", icon: "🪤", name: "Stuck Fast", hint: "Tar pits catch the little ones." },
+  { id: "butcher", icon: "🔪", name: "Nothing Wasted", hint: "A hunt gives more than meat." },
+  { id: "rainproof", icon: "🌧️", name: "Rainproof", hint: "Tar + hide keep the rain out." },
+  { id: "boneDefense", icon: "🦴", name: "Bone Fortress", hint: "Bones make walls scarier." },
 ];
 
 export const DISCOVERY_BY_ID = Object.fromEntries(DISCOVERIES.map((d) => [d.id, d]));

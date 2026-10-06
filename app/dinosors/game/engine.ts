@@ -11,12 +11,20 @@ import { canStand, emote, findSpawnSpot, isBaby, setState, sizeOf } from "../sim
 import { P } from "../sim/particles";
 import { TALL, shakeFruit } from "../sim/plants";
 import { LM, isWaterTile } from "../sim/terrain";
-import { TILE, WORLD_H, WORLD_W, type Danger, type Dino, type DinoState, type Human, type Role, type SpeciesId, type TechId, type WeatherKind } from "../sim/types";
+import { TILE, WORLD_H, WORLD_W, type Danger, type Dino, type DinoState, type Dragon, type Human, type Role, type SpeciesId, type TechId, type WeaponKind, type WeatherKind } from "../sim/types";
 import { CAMP_LEVELS } from "../data/facts";
+import { BUILDINGS, FORGE_ITEMS, HOUSING, SCORPION_TIERS, WEAPON_BY_ID, type Cost } from "../data/colony";
+import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion, type Command } from "../sim/tasks";
+import { carcassStage, makeCarcass, STAGE_LABEL } from "../sim/carcass";
+import { OUTFIT_BY_ID, type ForgeCat } from "../data/colony";
+import { condition, type Condition } from "../sim/injury";
+import { shelterDone, stagesOf, wallMaxHp } from "../sim/build";
+import { SAVE_VERSION } from "../sim/world";
 import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genetics";
 import { World, type SaveData } from "../sim/world";
 import { Renderer, type Camera } from "../render/renderer";
 import { loadWorld, saveWorld } from "./save";
+import { newId, type Slot, type SlotKind } from "./slots";
 import { DEFAULT_TOOL, TOOL_BY_ID, applyTool, toolCursor, type ToolState } from "./tools";
 
 export type UIEvent =
@@ -25,7 +33,8 @@ export type UIEvent =
   | { type: "unlock"; species: SpeciesId }
   | { type: "openCamp" }
   | { type: "select" }
-  | { type: "saved" };
+  | { type: "saved" }
+  | { type: "inspect" };
 
 export interface DinoInfo {
   kind: "dino";
@@ -56,6 +65,17 @@ export interface HumanInfo {
   role: Role;
   autoRole: Role;
   ordered: boolean;
+  hp: number;
+  warmth: number;
+  condition: Condition;
+  weapon: { id: string; name: string; icon: string } | null;
+  shield: number;
+  home: string;
+  task: { icon: string; label: string } | null;
+  riding: string | null;
+  /** weapon kinds this person could swap to from the armory */
+  canEquip: WeaponKind[];
+  outfit: { id: string; name: string; icon: string; rain: number; warmth: number } | null;
 }
 
 export interface PersonRow {
@@ -65,7 +85,41 @@ export interface PersonRow {
   role: Role;
   autoRole: Role;
   state: string;
+  hp: number;
+  condition: Condition;
+  task: string | null;
+  stranger: boolean;
 }
+
+/** One picked person in the selection bar. */
+export interface SelRow {
+  id: number;
+  name: string;
+  child: boolean;
+  hp: number;
+  condition: Condition;
+  icon: string;
+  activity: string;
+}
+
+/** What the last world click turned into (+ other things it could have meant). */
+export interface CommandInfo {
+  icon: string;
+  label: string;
+  alts: { icon: string; label: string; i: number }[];
+  weapons: WeaponKind[];
+  weapon: WeaponKind | null;
+  at: number;
+}
+
+/** Tapped a building: what's inside, what it needs, what you can do. */
+export type InspectInfo =
+  | { kind: "shelter"; id: number; icon: string; name: string; tier: number; cap: number; built: boolean; progress: string; hp: number; hearth: boolean; warmth: number; residents: { id: number; name: string; child: boolean; inside: boolean; state: string }[]; upgrade: { icon: string; name: string; cost: Cost; have: Cost; started: boolean } | null }
+  | { kind: "building"; id: number; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost }
+  | { kind: "scorpion"; id: number; name: string; tier: number; built: number; hp: number; maxHp: number; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
+  | { kind: "gate"; id: number; open: boolean; auto: boolean; hp: number; maxHp: number; material: string }
+  | { kind: "tower"; id: number; stage: number; hp: number; guards: number }
+  | { kind: "carcass"; id: number; name: string; stage: string; left: { r: string; n: number; max: number }[]; working: number; burnt: boolean; fresh: number };
 
 export interface Snapshot {
   time: number;
@@ -109,6 +163,18 @@ export interface Snapshot {
   };
   orderFor: number;
   rallied: boolean;
+  selection: SelRow[];
+  command: CommandInfo | null;
+  inspect: InspectInfo | null;
+  forge: {
+    queue: { id: string; name: string; icon: string; ok: boolean }[];
+    armory: { id: string; name: string; icon: string; n: number }[];
+    items: { id: string; name: string; icon: string; tier: number; cost: Cost; at: string; can: boolean; why: string | null; cat: ForgeCat; tip?: string; fresh: boolean; done: boolean }[];
+    hasTannery: boolean;
+    hasWorkshop: boolean;
+    hasSmith: boolean;
+  };
+  colony: { buildings: number; scorpions: number; deposits: number; found: number; homes: number; dragons: number; strangers: number; snow: number; mega: boolean };
   evolution: {
     leaps: number;
     auto: boolean;
@@ -131,6 +197,7 @@ interface Ptr {
   grab: Dino | null;
 }
 
+export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️" };
 export function moodOf(d: Dino): { icon: string; label: string } {
   const s = d.state;
   if (s === "sleep") return { icon: "💤", label: "Sleepy" };
@@ -177,7 +244,15 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
   cook: "Roasting food",
   farm: "Farming",
   guard: "Standing guard",
-  repair: "Fixing a wall",
+  repair: "Repairing",
+  heal: "Patching someone up",
+  operate: "Crewing a Scorpion",
+  tame: "Making friends with a dino",
+  ride: "Riding",
+  down: "Knocked out!",
+  douse: "Throwing water on the fire",
+  rest: "Resting",
+  smith: "Forging",
 };
 
 export class Engine {
@@ -190,6 +265,20 @@ export class Engine {
   followId = 0;
   /** waiting for the player to tap a target for this person's order */
   orderFor = 0;
+  /** selected people (the next world tap tells them what to do) */
+  selection: number[] = [];
+  /** "add to selection" mode for touch screens */
+  addMode = false;
+  /** last command + its alternatives (for the "instead…" chip) */
+  private lastCmd: { cmd: Command; people: number[]; at: number; weapon: WeaponKind | null } | null = null;
+  /** tapped building being looked at */
+  inspectRef: { kind: "shelter" | "building" | "scorpion" | "gate" | "tower" | "carcass"; id: number } | null = null;
+  /** shift-drag selection box (screen px) */
+  private box: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  private hoverHint: { x: number; y: number; icon: string; label: string } | null = null;
+  private hintT = 0;
+  /** where the last order points (a pulsing marker) */
+  private marker: { x: number; y: number; t: number; icon: string } | null = null;
   private canvas: HTMLCanvasElement;
   private raf = 0;
   private last = 0;
@@ -214,9 +303,13 @@ export class Engine {
   private w = 1;
   private h = 1;
 
+  /** no local save was found / readable: the newest saved-games slot should be offered */
+  startedFresh = false;
+
   constructor(canvas: HTMLCanvasElement, opts: { fresh?: boolean; seed?: number } = {}) {
     this.canvas = canvas;
     const saved = opts.fresh ? null : loadWorld();
+    this.startedFresh = !saved;
     this.world = saved ?? new World(opts.seed ?? Math.floor(Math.random() * 1e9));
     this.renderer = new Renderer(canvas, this.world);
     this.bind();
@@ -291,9 +384,21 @@ export class Engine {
     const sk = this.shake.t > 0 ? this.shake.amt * Math.min(1, this.shake.t * 2) : 0;
     this.flash.a = Math.max(0, this.flash.a - dt * 2.5);
     const cursor = this.hover ? toolCursor(this.tool) : null;
+    this.updateHoverHint(dt);
+    if (this.marker) {
+      this.marker.t += dt;
+      if (this.marker.t > 1.6) this.marker = null;
+    }
+    this.selection = this.selection.filter((id) => w.humans.some((h) => h.id === id));
     this.renderer.render(this.cam, {
       selectedId: this.selectedId,
       followId: this.followId,
+      selection: this.selection,
+      box: this.box,
+      hint: this.hoverHint,
+      marker: this.marker,
+      inspect: this.inspectRef,
+      buildPreview: this.tool.id === "build" && this.hover ? { x: this.hover.x, y: this.hover.y, build: this.tool.build } : null,
       hover: cursor && this.hover ? { ...this.hover, ...cursor } : null,
       shakeX: (Math.random() - 0.5) * sk * 2,
       shakeY: (Math.random() - 0.5) * sk * 2,
@@ -323,7 +428,7 @@ export class Engine {
     }
 
     this.saveT += dt;
-    if (this.saveT > 60) {
+    if (this.saveT > 20) {
       this.saveT = 0;
       this.save(true);
     }
@@ -379,12 +484,12 @@ export class Engine {
   private updateCamera(dt: number) {
     const cam = this.cam;
     if (this.followId) {
-      const d = this.world.dinoById(this.followId);
+      const d = this.world.dinoById(this.followId) ?? this.world.humans.find((h) => h.id === this.followId) ?? null;
       if (!d) this.followId = 0;
       else {
         const k = Math.min(1, dt * 3);
         cam.x += (d.x - cam.x) * k;
-        cam.y += (d.y - d.z - sizeOf(d) * 0.3 - cam.y) * k;
+        cam.y += (d.y - d.z - (d.kind === "dino" ? sizeOf(d) * 0.3 : 14) - cam.y) * k;
       }
     } else if (this.fly) {
       const f = this.fly;
@@ -464,12 +569,17 @@ export class Engine {
     return best;
   }
 
+  private pickDragon(x: number, y: number): Dragon | null {
+    for (const dr of this.world.dragons.list) if (Math.hypot(dr.x - x, dr.y - dr.z - 20 - y) < 90) return dr;
+    return null;
+  }
+
   private pickHuman(x: number, y: number): Human | null {
     let best: Human | null = null;
     let bd = 20;
     for (const h of this.world.humans) {
       if (this.renderer.hidden(h)) continue;
-      const d = Math.hypot(h.x - x, h.y - h.z - 12 - y);
+      const d = Math.hypot(h.x - x, h.y - h.z - (h.state === "down" ? 4 : 12) - y);
       if (d < bd) {
         bd = d;
         best = h;
@@ -485,7 +595,14 @@ export class Engine {
     this.canvas.setPointerCapture?.(e.pointerId);
     const { x: sx, y: sy } = this.local(e);
     const wp = this.renderer.toWorld(this.cam, sx, sy);
-    const grab = this.tool.id === "hand" && this.ptrs.size === 0 ? this.pickDino(wp.x, wp.y) : null;
+    // shift-drag draws a box to select people
+    if (e.shiftKey && this.tool.id === "hand" && e.pointerType === "mouse") {
+      this.box = { x0: sx, y0: sy, x1: sx, y1: sy };
+      this.canvas.setPointerCapture?.(e.pointerId);
+      this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: performance.now(), moved: false, grab: null });
+      return;
+    }
+    const grab = this.tool.id === "hand" && this.ptrs.size === 0 && !this.selection.length ? this.pickDino(wp.x, wp.y) : null;
     this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: performance.now(), moved: false, grab });
     this.vel.x = this.vel.y = 0;
     this.fly = null;
@@ -514,6 +631,11 @@ export class Engine {
     if (e.pointerType === "mouse") this.hover = this.renderer.toWorld(this.cam, sx, sy);
     const p = this.ptrs.get(e.pointerId);
     if (!p) return;
+    if (this.box) {
+      this.box.x1 = sx;
+      this.box.y1 = sy;
+      return;
+    }
     const dx = sx - p.x;
     const dy = sy - p.y;
     p.x = sx;
@@ -575,6 +697,24 @@ export class Engine {
     const p = this.ptrs.get(e.pointerId);
     this.ptrs.delete(e.pointerId);
     this.cancelHold();
+    if (this.box) {
+      const b = this.box;
+      this.box = null;
+      if (Math.abs(b.x1 - b.x0) > 8 || Math.abs(b.y1 - b.y0) > 8) {
+        const a = this.renderer.toWorld(this.cam, Math.min(b.x0, b.x1), Math.min(b.y0, b.y1));
+        const c = this.renderer.toWorld(this.cam, Math.max(b.x0, b.x1), Math.max(b.y0, b.y1));
+        const ids = this.world.humans.filter((h) => !h.stranger && h.x > a.x && h.x < c.x && h.y - 12 > a.y && h.y - 12 < c.y).map((h) => h.id);
+        this.selectPeople(e.ctrlKey || e.metaKey ? Array.from(new Set([...this.selection, ...ids])) : ids);
+        return;
+      }
+      if (p) {
+        // a shift-click: add / remove one person
+        const wp = this.renderer.toWorld(this.cam, p.sx, p.sy);
+        const h = this.pickHuman(wp.x, wp.y);
+        if (h) this.toggleSelect(h.id);
+        return;
+      }
+    }
     if (this.ptrs.size < 2) this.pinch = null;
     if (!p) return;
     if (this.carried) {
@@ -622,9 +762,12 @@ export class Engine {
       this.orderFor = 0;
       this.tool = { ...this.tool, id: "hand" };
       this.select(0);
+      this.selection = [];
+      this.inspectRef = null;
+      this.lastCmd = null;
       this.followId = 0;
       this.emit({ type: "select" });
-    } else if (k === "f" && this.selectedId) this.follow(this.selectedId);
+    } else if (k === "f" && (this.selectedId || this.selection.length === 1)) this.follow(this.selectedId || this.selection[0]);
   };
 
   private keyboardPan(dt: number) {
@@ -754,6 +897,30 @@ export class Engine {
       return;
     }
 
+    // people selected: the tap is an order (unless you tapped another person to pick them)
+    if (this.selection.length) {
+      const people = this.selectionHumans();
+      const picked = { dino: this.pickDino(x, y), human: this.pickHuman(x, y), dragon: this.pickDragon(x, y) };
+      if (picked.human && !people.includes(picked.human) && (this.addMode || condition(picked.human) === "healthy")) {
+        if (this.addMode) this.toggleSelect(picked.human.id);
+        else this.selectPeople([picked.human.id]);
+        return;
+      }
+      if (picked.human && people.includes(picked.human) && !picked.dino) {
+        // tapped someone already picked: just them
+        if (people.length > 1) this.selectPeople([picked.human.id]);
+        return;
+      }
+      const cmd = inferCommand(w, people, x, y, picked);
+      if (cmd) this.runCommand(cmd, people, null);
+      return;
+    }
+
+    const dr = this.pickDragon(x, y);
+    if (dr) {
+      this.toastOnce("dragonTap", "🐉", `${dr.name} the dragon! Select people with bows (or crew a Scorpion) and tap it to fight back.`);
+      return;
+    }
     const d = this.pickDino(x, y);
     if (d) {
       if (dbl) {
@@ -769,12 +936,16 @@ export class Engine {
     }
     const h = this.pickHuman(x, y);
     if (h) {
-      this.select(h.id);
-      h.bubble = { text: ["Hi!", "Ooga!", "Hello!", "Me busy!", "Dino?!"][Math.floor(w.rng() * 5)], t: 1.8 };
+      if (h.stranger) {
+        h.bubble = { text: "Is there room for us?", t: 2 };
+        return;
+      }
+      this.selectPeople([h.id]);
+      if (h.state !== "down") h.bubble = { text: ["Hi!", "Ooga!", "Yes?", "Ready!", "What job?"][Math.floor(w.rng() * 5)], t: 1.8 };
       w.sfx("babble", h.x, h.y, 0.6);
-      this.emit({ type: "select" });
       return;
     }
+    if (this.tapStructure(x, y)) return;
     if (this.tapProp(x, y)) return;
     // camp
     const camp = w.camp;
@@ -886,6 +1057,264 @@ export class Engine {
     return false;
   }
 
+  /** Tapped a building / gate / Scorpion / tower with nobody selected: inspect it (gates toggle). */
+  private tapStructure(x: number, y: number) {
+    const w = this.world;
+    const body = carcassAt(w, x, y);
+    if (body) return this.inspect({ kind: "carcass", id: body.id });
+    const tx = Math.floor(x / TILE);
+    const ty = Math.floor(y / TILE);
+    const sc = w.colony.scorpions.find((s) => Math.hypot(s.x - x, s.y - 10 - y) < 26);
+    if (sc) return this.inspect({ kind: "scorpion", id: sc.id });
+    const tower = w.tribe.towers.find((t) => x > t.tx * TILE - 6 && x < (t.tx + 2) * TILE + 6 && y > t.ty * TILE - 90 && y < (t.ty + 2) * TILE + 4);
+    if (tower) return this.inspect({ kind: "tower", id: tower.id });
+    const wl = w.tribe.wallAt(tx, ty) ?? w.tribe.wallAt(tx, Math.floor((y + 14) / TILE));
+    if (wl && wl.part === "gate" && wl.built >= 1) {
+      w.tribe.setGate(wl, !wl.open, true);
+      w.sfx(wl.open ? "whoosh" : "thud", x, y, 0.6);
+      w.toast("🚪", wl.open ? "Gate opened — dinos can wander through now." : "Gate shut! Only people can get through (by the side door).");
+      return this.inspect({ kind: "gate", id: wl.id });
+    }
+    const s = w.shelters.find((sh) => Math.abs(sh.x - x) < 32 && y < sh.y + 8 && y > sh.y - 58);
+    if (s) return this.inspect({ kind: "shelter", id: s.id });
+    const b = w.colony.buildings.find((bd) => x > bd.tx * TILE && x < (bd.tx + BUILDINGS[bd.kind].w) * TILE && y > bd.ty * TILE - 30 && y < bd.y + 6);
+    if (b) return this.inspect({ kind: "building", id: b.id });
+    return false;
+  }
+
+  private inspect(ref: NonNullable<Engine["inspectRef"]>) {
+    this.inspectRef = ref;
+    this.select(0);
+    this.audio.play("pop", 0, 0, 0.4);
+    this.emit({ type: "inspect" });
+    return true;
+  }
+
+  closeInspect() {
+    this.inspectRef = null;
+    this.emit({ type: "inspect" });
+  }
+
+  /* ----------------------------- selection + orders ----------------------------- */
+
+  selectionHumans() {
+    return this.selection.map((id) => this.world.humans.find((h) => h.id === id)).filter((h): h is Human => !!h);
+  }
+
+  selectPeople(ids: number[]) {
+    this.selection = ids.filter((id) => this.world.humans.some((h) => h.id === id && !h.stranger));
+    this.selectedId = this.selection.length === 1 ? this.selection[0] : 0;
+    this.lastCmd = null;
+    this.inspectRef = null;
+    if (this.selection.length) this.audio.play("pop", 0, 0, 0.4);
+    this.emit({ type: "select" });
+  }
+
+  toggleSelect(id: number) {
+    const has = this.selection.includes(id);
+    this.selectPeople(has ? this.selection.filter((x) => x !== id) : [...this.selection, id]);
+  }
+
+  clearSelection() {
+    this.selectPeople([]);
+  }
+
+  /** Everyone grown-up (or everyone idle) in one go. */
+  selectAll(idleOnly = false) {
+    const w = this.world;
+    const ids = w.humans.filter((h) => !h.child && !h.stranger && h.state !== "down" && (!idleOnly || (!h.taskId && (h.state === "idle" || h.state === "walk" || h.state === "talk" || h.state === "sitFire")))).map((h) => h.id);
+    this.selectPeople(ids);
+  }
+
+  private runCommand(cmd: Command, people: Human[], weapon: WeaponKind | null) {
+    const w = this.world;
+    const wpn = weapon ?? (cmd.weapons && cmd.weapons.length > 1 ? null : cmd.weapons?.[0] ?? null);
+    const t = issue(w, people, cmd, wpn ?? undefined);
+    this.lastCmd = { cmd, people: people.map((h) => h.id), at: performance.now(), weapon: wpn };
+    this.marker = { x: cmd.x, y: cmd.y, t: 0, icon: cmd.icon };
+    w.particles.spawn(P.Ring, cmd.x, cmd.y, { size: 10, max: 0.8, color: "rgba(255,215,90,0.95)" });
+    this.audio.play("pop", 0, 0, 0.5);
+    if (!t) this.toastOnce(`no-${cmd.kind}`, "🤷", "Nobody picked can do that.");
+    this.emit({ type: "select" });
+  }
+
+  /** Swap the last order for one of its alternatives (the "instead…" chip). */
+  commandAlt(i: number) {
+    const lc = this.lastCmd;
+    const alt = lc?.cmd.alts?.[i];
+    if (!lc || !alt) return;
+    const people = lc.people.map((id) => this.world.humans.find((h) => h.id === id)).filter((h): h is Human => !!h);
+    const swapped: Command = { ...alt, alts: [{ ...lc.cmd, alts: undefined }, ...(lc.cmd.alts ?? []).filter((_, k) => k !== i)] };
+    this.runCommand(swapped, people, null);
+  }
+
+  /** Re-issue the last fight order with a particular weapon. */
+  commandWeapon(kind: WeaponKind) {
+    const lc = this.lastCmd;
+    if (!lc) return;
+    const people = lc.people.map((id) => this.world.humans.find((h) => h.id === id)).filter((h): h is Human => !!h);
+    this.runCommand(lc.cmd, people, kind);
+  }
+
+  dismissCommand() {
+    this.lastCmd = null;
+  }
+
+  /** Stop what the selected people were told to do: back to auto. */
+  cancelOrders() {
+    const w = this.world;
+    for (const h of this.selectionHumans()) {
+      if (h.taskId) {
+        const t = w.tasks.get(h.taskId);
+        if (t) t.people = t.people.filter((id) => id !== h.id);
+        h.taskId = 0;
+      }
+      h.order = null;
+      h.site = "";
+      h.wantTop = false;
+      leaveScorpion(w, h);
+      h.think = 0;
+      h.bubble = { text: "Back to my job!", t: 1.6 };
+    }
+    this.lastCmd = null;
+    this.emit({ type: "select" });
+  }
+
+  dismountSelected() {
+    for (const h of this.selectionHumans()) if (h.riding) dismount(this.world, h);
+  }
+
+  equipSelected(kind: WeaponKind) {
+    for (const h of this.selectionHumans()) {
+      if (!this.world.colony.equipKind(h, kind)) h.bubble = { text: "None left in the armory!", t: 1.8 };
+      else h.bubble = { text: "Got it!", t: 1.4 };
+    }
+  }
+
+  private updateHoverHint(dt: number) {
+    this.hintT -= dt;
+    if (this.hintT > 0) return;
+    this.hintT = 0.12;
+    if (this.hover && !this.selection.length && this.tool.id === "hand" && !this.box) {
+      // nobody picked: still say what a dinosaur body is worth
+      const body = carcassAt(this.world, this.hover.x, this.hover.y);
+      this.hoverHint = body && body.species ? { x: this.hover.x, y: this.hover.y, icon: "🔪", label: `${sp(body.species).nick} · ${STAGE_LABEL[carcassStage(body.carcass!)]} · ${carcassSummary(body)} — tap to harvest` } : null;
+      return;
+    }
+    if (!this.hover || !this.selection.length || this.tool.id !== "hand" || this.box) {
+      this.hoverHint = null;
+      return;
+    }
+    const { x, y } = this.hover;
+    const people = this.selectionHumans();
+    const picked = { dino: this.pickDino(x, y), human: this.pickHuman(x, y), dragon: this.pickDragon(x, y) };
+    if (picked.human && !people.includes(picked.human) && condition(picked.human) === "healthy") {
+      this.hoverHint = { x, y, icon: "👆", label: `Pick ${picked.human.name}` };
+      return;
+    }
+    const cmd = inferCommand(this.world, people, x, y, picked);
+    this.hoverHint = cmd ? { x, y, icon: cmd.icon, label: cmd.label } : null;
+  }
+
+  /* ----------------------------- building actions ----------------------------- */
+
+  upgradeHome(id: number) {
+    const s = this.world.shelters.find((x) => x.id === id);
+    if (s && this.world.camp.startUpgrade(this.world, s)) this.emit({ type: "inspect" });
+  }
+
+  upgradeScorpion(id: number) {
+    const w = this.world;
+    const s = w.colony.scorpions.find((x) => x.id === id);
+    if (!s || s.up || s.built < 1 || !SCORPION_TIERS[s.tier]) return;
+    const next = SCORPION_TIERS[s.tier];
+    if (next.at === "blacksmith" && !w.colony.finished("blacksmith")) {
+      w.toast("⚒️", "That upgrade needs a finished Blacksmith.");
+      return;
+    }
+    s.up = true;
+    s.have = {};
+    w.toast("🎯", `Builders will upgrade it to a ${next.name}.`, s.x, s.y);
+    this.emit({ type: "inspect" });
+  }
+
+  setGateAuto(id: number) {
+    const g = this.world.tribe.walls.find((x) => x.id === id);
+    if (g) {
+      g.auto = true;
+      this.emit({ type: "inspect" });
+    }
+  }
+
+  toggleGate(id: number) {
+    const g = this.world.tribe.walls.find((x) => x.id === id);
+    if (g) {
+      this.world.tribe.setGate(g, !g.open, true);
+      this.emit({ type: "inspect" });
+    }
+  }
+
+  /** Send the nearest idle grown-ups to harvest a body. */
+  harvestWithIdle(itemId: number) {
+    const w = this.world;
+    const it = w.items.find((i) => i.id === itemId);
+    if (!it?.carcass) return;
+    const idle = w.humans
+      .filter((h) => !h.child && !h.stranger && !h.taskId && h.state !== "down" && h.state !== "operate")
+      .sort((a, b) => Math.hypot(a.x - it.x, a.y - it.y) - Math.hypot(b.x - it.x, b.y - it.y))
+      .slice(0, Math.min(4, 1 + Math.floor(it.carcass.size / 45)));
+    if (!idle.length) {
+      w.toast("🤷", "Nobody's free right now — pick someone and tap the body.");
+      return;
+    }
+    const cmd = inferCommand(w, idle, it.x, it.y - 8, { dino: null, human: null, dragon: null });
+    if (cmd) this.runCommand(cmd, idle, null);
+    this.selectPeople(idle.map((h) => h.id));
+  }
+
+  /** Dev/test helper: drop a dinosaur body (optionally part-harvested, 0..1). */
+  debugCarcass(species: SpeciesId, x: number, y: number, k = 0) {
+    const w = this.world;
+    const d = w.spawnDino(species, x, y);
+    if (!d) return null;
+    const it = makeCarcass(w, d);
+    w.removeDino(d);
+    const c = it.carcass!;
+    c.meat = c.max.meat * (1 - k);
+    c.hide = c.max.hide * (1 - k);
+    it.amount = c.meat;
+    return it.id;
+  }
+
+  /** The forge tab was opened: those recipes aren't "new" any more. */
+  seenRecipes() {
+    this.world.colony.fresh.clear();
+  }
+
+  /** Select whoever lives in a home (and wake them up: there's work to do). */
+  selectResidents(id: number) {
+    const ids = this.world.humans.filter((h) => h.home === id && !h.child && h.state !== "down").map((h) => h.id);
+    for (const h of this.world.humans) if (ids.includes(h.id) && (h.state === "hide" || h.state === "sleep" || h.state === "rest")) {
+      h.state = "idle";
+      h.think = 0;
+    }
+    this.selectPeople(ids);
+  }
+
+  queueForge(id: string) {
+    const w = this.world;
+    if (w.colony.queue.length >= 8) return;
+    w.colony.queue.push(id);
+    const it = FORGE_ITEMS.find((f) => f.id === id);
+    if (it && !w.colony.canCraft(w, id)) w.toast("⚒️", `${it.name} needs a ${it.at === "blacksmith" ? "Blacksmith" : "Workshop"} first — it'll wait in the queue.`);
+  }
+
+  unqueueForge(i: number) {
+    const w = this.world;
+    if (i === 0) w.colony.craftT = 0;
+    w.colony.queue.splice(i, 1);
+  }
+
   private onceKeys = new Set<string>();
   private toastOnce(key: string, icon: string, text: string, fact?: string) {
     if (this.onceKeys.has(key)) return;
@@ -921,6 +1350,10 @@ export class Engine {
       if (w.tribe.danger === "calm") w.toast("🕊️", "Raids are off in Calm mode (change it in the menu).");
       else if (!w.tribe.startRaid(w)) w.toast("🥁", "A raid is already on its way!");
       else this.flyTo(w.camp.x, w.camp.y, Math.min(this.cam.zoom, 0.7));
+      back();
+    } else if (this.tool.id === "disaster" && t.disaster === "dragon") {
+      const dr = w.dragons.summon(w);
+      if (!dr) w.toast("🐉", "The sky is crowded enough with dragons!");
       back();
     } else if (this.tool.id === "disaster" && (t.disaster === "volcano" || t.disaster === "quake")) {
       if (t.disaster === "volcano") {
@@ -1014,6 +1447,19 @@ export class Engine {
     return n;
   }
 
+  /** A row of bone spikes outside the walls. */
+  planSpikes() {
+    const w = this.world;
+    if (!w.camp.learned.has("spear")) {
+      w.toast("🔒", "Invent the Spear first: then the tribe knows how to sharpen bones.");
+      return 0;
+    }
+    const n = w.tribe.planSpikes(w);
+    w.toast("🦴", n ? `Planned ${n} bone spikes outside the walls. Builders need ${n * 2} bones: harvest some dinosaurs!` : "Build some walls first (or the spikes are already planned).");
+    if (n) this.flyTo(w.camp.x, w.camp.y + 30, Math.min(this.cam.zoom, 0.65));
+    return n;
+  }
+
   /** Jump a million years: every species shifts the way its world pushes it. */
   evolve() {
     this.audio.unlock();
@@ -1094,6 +1540,46 @@ export class Engine {
     return ok;
   }
 
+  /** A small JPEG of what's on screen (for the saved-games list). */
+  thumbnail(): string | undefined {
+    try {
+      const src = this.canvas;
+      const t = document.createElement("canvas");
+      t.width = 240;
+      t.height = 150;
+      const g = t.getContext("2d");
+      if (!g || !src.width) return undefined;
+      const sw = src.width;
+      const sh = src.height;
+      const k = Math.max(240 / sw, 150 / sh);
+      g.drawImage(src, (240 - sw * k) / 2, (150 - sh * k) / 2, sw * k, sh * k);
+      return t.toDataURL("image/jpeg", 0.62);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Package the world as a saved-games slot. */
+  makeSlot(kind: SlotKind, name?: string, group = ""): Slot {
+    const w = this.world;
+    const h = Math.floor(w.time);
+    const m = Math.floor((w.time - h) * 60);
+    const clock = `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")}${h < 12 ? "am" : "pm"}`;
+    return {
+      id: kind === "latest" ? "latest" : newId(),
+      kind,
+      name: name || (kind === "latest" ? "Latest" : `Day ${w.day} · ${clock}`),
+      group: group || (kind === "auto" ? "Autosaves" : kind === "latest" ? "" : "My saves"),
+      savedAt: Date.now(),
+      day: w.day,
+      time: w.time,
+      people: w.humans.filter((x) => !x.stranger).length,
+      level: CAMP_LEVELS[w.tribe.level].name,
+      thumb: this.thumbnail(),
+      data: JSON.stringify(w.serialize()),
+    };
+  }
+
   /** The world as a save string + a few headline numbers (for cloud saves). */
   exportSave() {
     const w = this.world;
@@ -1113,13 +1599,16 @@ export class Engine {
   importSave(json: string) {
     try {
       const data = JSON.parse(json) as SaveData;
-      if (data?.v !== 1) return false;
+      if (!data || typeof data.v !== "number" || data.v < 1 || data.v > SAVE_VERSION) return false;
       const w = World.deserialize(data);
       this.world = w;
       this.renderer.setWorld(w);
       this.selectedId = 0;
       this.followId = 0;
       this.orderFor = 0;
+      this.selection = [];
+      this.inspectRef = null;
+      this.lastCmd = null;
       this.carried = null;
       this.rallyRoles = null;
       this.cam = { ...HOME };
@@ -1142,6 +1631,9 @@ export class Engine {
     this.renderer.setWorld(this.world);
     this.selectedId = 0;
     this.followId = 0;
+    this.selection = [];
+    this.inspectRef = null;
+    this.lastCmd = null;
     this.carried = null;
     this.cam = { ...HOME };
     this.clampCam();
@@ -1189,8 +1681,33 @@ export class Engine {
       if (c.order?.kind === "hunt") {
         const d = w.dinoById(c.order.id);
         activity = d ? `Hunting the ${sp(d.species).nick}!` : activity;
-      } else if (c.order?.kind === "guard") activity = "Guarding the spot you picked";
-      selected = { kind: "human", id: c.id, name: c.name, child: c.child, activity, role: c.role, autoRole: c.autoRole, ordered: !!c.order };
+      } else if (c.order?.kind === "guard") activity = c.order.top ? "Defending from the wall" : "Guarding the spot you picked";
+      const task = w.tasks.get(c.taskId);
+      const wp = w.tribe.weaponFor(w, c);
+      const home = c.home ? w.shelters.find((s) => s.id === c.home) : null;
+      const mount = c.riding ? w.dinoById(c.riding) : null;
+      const kinds = new Set<WeaponKind>();
+      for (const [id, n] of Object.entries(w.colony.armory)) if (n > 0 && WEAPON_BY_ID[id]) kinds.add(WEAPON_BY_ID[id].kind);
+      selected = {
+        kind: "human",
+        id: c.id,
+        name: c.name,
+        child: c.child,
+        activity: c.state === "down" ? "Knocked out — needs help!" : activity,
+        role: c.role,
+        autoRole: c.autoRole,
+        ordered: !!c.order || !!c.taskId,
+        hp: c.hp,
+        warmth: c.warmth,
+        condition: condition(c),
+        weapon: wp ? { id: wp.id, name: wp.name, icon: wp.icon } : null,
+        shield: c.gear.shield,
+        home: home ? `${HOUSING[home.tier].icon} ${HOUSING[home.tier].name}` : "🪨 The cave",
+        task: task ? { icon: task.icon, label: task.label } : null,
+        riding: mount ? `${mount.name} the ${sp(mount.species).nick}` : null,
+        canEquip: Array.from(kinds),
+        outfit: c.gear.outfit && OUTFIT_BY_ID[c.gear.outfit] ? { id: c.gear.outfit, name: OUTFIT_BY_ID[c.gear.outfit].name, icon: OUTFIT_BY_ID[c.gear.outfit].icon, rain: OUTFIT_BY_ID[c.gear.outfit].rain, warmth: OUTFIT_BY_ID[c.gear.outfit].warmth } : null,
+      };
     }
     const cr = w.camp.crafting;
     return {
@@ -1222,6 +1739,136 @@ export class Engine {
       orderFor: this.orderFor,
       rallied: this.rallyRoles !== null,
       evolution: { leaps: w.evoLeaps, auto: w.evoAuto, species: speciesStats(w) },
+      selection: this.selectionHumans().map((h) => {
+        const task = w.tasks.get(h.taskId);
+        return { id: h.id, name: h.name, child: h.child, hp: h.hp, condition: condition(h), icon: h.child ? "🧒" : task ? task.icon : h.riding ? "🏇" : (ROLE_ICON[w.tribe.roleOf(h)] ?? "🧔"), activity: task ? task.label : ACTIVITY[h.state] ?? "Busy" };
+      }),
+      command: this.commandInfo(),
+      inspect: this.inspectInfo(),
+      forge: this.forgeInfo(),
+      colony: {
+        buildings: w.colony.buildings.filter((b) => b.built >= 1).length,
+        scorpions: w.colony.scorpions.filter((s) => s.built >= 1).length,
+        deposits: w.colony.nodes.length,
+        found: w.colony.nodes.filter((n) => n.found).length,
+        homes: w.shelters.filter((s) => shelterDone(s)).length,
+        dragons: w.dragons.list.length,
+        strangers: w.humans.filter((h) => h.stranger).length,
+        snow: w.snow.total,
+        mega: w.volcano.megaOn,
+      },
+    };
+  }
+
+  private commandInfo(): CommandInfo | null {
+    const lc = this.lastCmd;
+    if (!lc || performance.now() - lc.at > 7000) return null;
+    return {
+      icon: lc.cmd.icon,
+      label: lc.cmd.label,
+      alts: (lc.cmd.alts ?? []).map((a, i) => ({ icon: a.icon, label: a.label, i })),
+      weapons: lc.cmd.weapons && lc.cmd.weapons.length > 1 ? lc.cmd.weapons : [],
+      weapon: lc.weapon,
+      at: lc.at,
+    };
+  }
+
+  private inspectInfo(): InspectInfo | null {
+    const w = this.world;
+    const r = this.inspectRef;
+    if (!r) return null;
+    switch (r.kind) {
+      case "shelter": {
+        const s = w.shelters.find((x) => x.id === r.id);
+        if (!s) return null;
+        const done = shelterDone(s);
+        const t = HOUSING[s.tier];
+        const next = HOUSING[s.tier + 1];
+        const stages = stagesOf(s);
+        const st = stages[s.stage];
+        return {
+          kind: "shelter",
+          id: s.id,
+          icon: t.icon,
+          name: done ? t.name : `${s.plan === "tent" ? "Tent" : "Hut"} (building)`,
+          tier: s.tier,
+          cap: t.cap,
+          built: done,
+          progress: done ? "" : `${st.label}: ${s.have}/${st.n} ${st.need}`,
+          hp: s.hp,
+          hearth: t.hearth,
+          warmth: t.warmth,
+          residents: w.humans.filter((h) => h.home === s.id).map((h) => ({ id: h.id, name: h.name, child: h.child, inside: (h.state === "hide" || h.state === "sleep" || h.state === "rest") && Math.hypot(h.x - s.x, h.y - s.y - 6) < 30, state: ACTIVITY[h.state] ?? h.state })),
+          upgrade: done && next ? { icon: next.icon, name: next.name, cost: next.cost, have: s.upHave, started: s.up } : null,
+        };
+      }
+      case "building": {
+        const b = w.colony.buildings.find((x) => x.id === r.id);
+        if (!b) return null;
+        const d = BUILDINGS[b.kind];
+        return { kind: "building", id: b.id, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: d.cost, have: b.have };
+      }
+      case "scorpion": {
+        const s = w.colony.scorpions.find((x) => x.id === r.id);
+        if (!s) return null;
+        const t = SCORPION_TIERS[s.tier - 1];
+        const next = SCORPION_TIERS[s.tier];
+        const crew = s.crew ? w.humans.find((h) => h.id === s.crew) : null;
+        return {
+          kind: "scorpion",
+          id: s.id,
+          name: t.name,
+          tier: s.tier,
+          built: s.built,
+          hp: s.hp,
+          maxHp: t.hp,
+          crew: crew ? crew.name : null,
+          mount: s.mount,
+          cost: s.built < 1 ? SCORPION_TIERS[0].cost : next?.cost ?? {},
+          have: s.have,
+          next: next ? { name: next.name, cost: next.cost, locked: next.at === "blacksmith" && !w.colony.finished("blacksmith") } : null,
+          upgrading: s.up,
+        };
+      }
+      case "gate": {
+        const g = w.tribe.walls.find((x) => x.id === r.id);
+        if (!g) return null;
+        return { kind: "gate", id: g.id, open: g.open, auto: g.auto, hp: g.hp, maxHp: wallMaxHp(g), material: g.kind === "stone" ? "Stone" : "Wooden" };
+      }
+      case "carcass": {
+        const it = w.items.find((x) => x.id === r.id);
+        if (!it?.carcass || !it.species) return null;
+        const cc = it.carcass;
+        const left = (["meat", "hide", "bone", "tooth"] as const).filter((k) => cc.max[k] > 0).map((k) => ({ r: k, n: Math.round(cc[k]), max: cc.max[k] }));
+        return { kind: "carcass", id: it.id, name: sp(it.species).nick, stage: STAGE_LABEL[carcassStage(cc)], left, working: w.humans.filter((h) => h.targetId === -it.id).length, burnt: cc.burnt, fresh: Math.max(0, Math.round(120 - it.t)) };
+      }
+      case "tower": {
+        const t = w.tribe.towers.find((x) => x.id === r.id);
+        if (!t) return null;
+        const guards = w.humans.filter((h) => h.level === 1 && w.nav.isTower(Math.floor(h.y / TILE) * 160 + Math.floor(h.x / TILE)) && Math.abs(h.x - t.x) < 40).length;
+        return { kind: "tower", id: t.id, stage: t.stage, hp: t.hp, guards };
+      }
+    }
+  }
+
+  private forgeInfo(): Snapshot["forge"] {
+    const w = this.world;
+    const c = w.colony;
+    const nameOf = (id: string) => FORGE_ITEMS.find((f) => f.id === id);
+    return {
+      queue: c.queue.map((id) => ({ id, name: nameOf(id)?.name ?? id, icon: nameOf(id)?.icon ?? "⚒️", ok: c.canCraft(w, id) })),
+      armory: Object.entries(c.armory)
+        .filter(([, n]) => n > 0)
+        .map(([id, n]) => ({ id, name: nameOf(id)?.name ?? id, icon: nameOf(id)?.icon ?? "⚒️", n })),
+      items: FORGE_ITEMS.map((f) => {
+        const done = f.cat === "kits" && c.kits.has(f.id);
+        const can = c.canCraft(w, f.id);
+        const why = done ? "Done ✓" : can ? null : f.tech && !w.camp.learned.has(f.tech) ? `Invent ${f.tech}` : f.at === "blacksmith" ? "Needs a Blacksmith" : f.at === "workshop" ? "Needs a Workshop" : f.at === "tannery" ? "Needs a Hide rack" : null;
+        return { id: f.id, name: f.name, icon: f.icon, tier: f.tier, cost: f.cost, at: f.at, can, why, cat: f.cat, tip: f.tip, fresh: c.fresh.has(f.id), done };
+      }),
+      hasTannery: c.finished("tannery"),
+      hasWorkshop: c.finished("workshop"),
+      hasSmith: c.finished("blacksmith"),
     };
   }
 
@@ -1253,7 +1900,7 @@ export class Engine {
       evolution: t.evolution,
       raidsWon: t.raidsWon,
       raid: raid ? { phase: raid.phase, label: raid.label, left, x: rx, y: ry, t: raid.t } : null,
-      people: w.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, role: h.role, autoRole: h.autoRole, state: h.state })),
+      people: w.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, role: h.role, autoRole: h.autoRole, state: h.state, hp: h.hp, condition: condition(h), task: w.tasks.get(h.taskId)?.label ?? null, stranger: h.stranger })),
       walls: {
         built: t.walls.filter((x) => x.built >= 1 && x.hp > 0).length,
         planned: t.walls.length,

@@ -103,10 +103,11 @@ export class Particles {
     }
     if (!blocked && damage > 0) this.add("number", x, y + 30, (Math.random() - 0.5) * 2, 3.2, 40, 26 + Math.min(20, damage / 6), "#ffffff", { text: String(damage), drag: 0.9 });
     if (!blocked && this.blood !== "off" && ["punch", "claw", "sword", "bullet", "symbiote", "hammer"].includes(fx)) {
-      const drops = this.blood === "arcade" ? Math.round(8 + power * 10) : Math.round(2 + power * 3);
+      const force = Math.min(2, power + Math.min(1, damage / 160));
+      const drops = this.blood === "arcade" ? Math.round(5 + force * 10) : Math.round(1 + force * 3);
       for (let i = 0; i < drops; i++) {
-        const a = (Math.random() - 0.3) * Math.PI * 0.8;
-        const sp = 4 + Math.random() * 8;
+        const a = (Math.random() - 0.5) * Math.PI * 0.6;
+        const sp = 4 + force * 2 + Math.random() * 7;
         this.add("blood", x, y, Math.cos(a) * sp * dir, Math.sin(a) * sp + 3, 30 + Math.random() * 20, 2.5 + Math.random() * 3, Math.random() > 0.5 ? "#b91c1c" : "#7f1d1d", { grav: 0.55, drag: 0.98 });
       }
     }

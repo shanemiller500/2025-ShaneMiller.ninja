@@ -69,14 +69,17 @@ export function ControlsCard({ settings, versus, p1, p2 }: { settings: Settings;
 /** Xbox layout (standard mapping) - the same for every fighter. */
 function PadCard({ name, def }: { name: string; def?: FighterDef }) {
   const rows: [ReactNode, string][] = [
-    [<PadBtn key="l">L</PadBtn>, "Move · ↑ jump · ↓ crouch (or D-pad)"],
+    [<PadBtn key="l">LS</PadBtn>, "Move · ↑ jump · ↓ crouch (or D-pad)"],
+    [<PadBtn key="rs">RS</PadBtn>, "World mode: press for random challenge"],
+    [<PadBtn key="jump">↑</PadBtn>, "Jump with D-Pad or Left Stick"],
     [<PadBtn key="x" c="#3b82f6">X</PadBtn>, "Light punch"],
     [<PadBtn key="y" c="#eab308">Y</PadBtn>, "Heavy punch"],
     [<PadBtn key="a" c="#22c55e">A</PadBtn>, "Kick"],
-    [<PadBtn key="b" c="#ef4444">B</PadBtn>, "Special (↓B / →B for the others)"],
+    [<PadBtn key="b" c="#ef4444">B</PadBtn>, "Special (↓ + B / → + B for variants)"],
     [<span key="lb" className="flex gap-1"><PadBtn>LB</PadBtn><PadBtn>LT</PadBtn></span>, "Block · + left/right to dodge"],
-    [<span key="rb" className="flex gap-1"><PadBtn c="#fde047">RB</PadBtn><PadBtn c="#fde047">RT</PadBtn></span>, "Ultimate (full meter)"],
-    [<PadBtn key="s">☰</PadBtn>, "Pause"],
+    [<span key="ult" className="flex gap-1"><PadBtn c="#fde047">RB</PadBtn><PadBtn c="#fde047">RT</PadBtn></span>, "Ultimate (full meter)"],
+    [<PadBtn key="s">Menu</PadBtn>, "Pause"],
+    [<PadBtn key="v">View</PadBtn>, "World map"],
   ];
   return (
     <div className="rounded-2xl bg-emerald-400/[0.06] p-5 ring-1 ring-emerald-400/25">
@@ -91,7 +94,7 @@ function PadCard({ name, def }: { name: string; def?: FighterDef }) {
           </div>
         ))}
       </div>
-      <p className="mt-3 border-t border-white/10 pt-3 text-[12px] text-white/50">↓ + Y uppercut · ↓ + A sweep · X + A throw · chain X → X → A for combos</p>
+      <p className="mt-3 border-t border-white/10 pt-3 text-[12px] text-white/50">↓ + Y uppercut · ↓ + A sweep · X + A throw · chain attacks for combos</p>
     </div>
   );
 }

@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { SPECIES } from "../data/species";
-import { BUILD_OPTS, DISASTER_OPTS, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type Opt, type ToolId, type ToolState } from "../game/tools";
-import type { SpeciesId } from "../sim/types";
+import { TECH } from "../data/facts";
+import { RES_INFO } from "../data/colony";
+import { BUILD_BY_ID, BUILD_DEFS, DISASTER_OPTS, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type BuildDef, type BuildOpt, type Opt, type ToolId, type ToolState } from "../game/tools";
+import type { Resource, SpeciesId, TechId } from "../sim/types";
 import Portrait from "./Portrait";
+import { GameIcon } from "./GameIcon";
 
 /* ------------------------------------------------------------------ */
 /*  The toy box: big chunky tool buttons along the bottom. Tools with  */
@@ -14,7 +17,7 @@ import Portrait from "./Portrait";
 
 const HAS_OPTIONS = new Set<ToolId>(["dino", "egg", "food", "plant", "land", "weather", "disaster", "people", "build"]);
 
-export default function Toolbar({ tool, setTool, unlocked }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[] }) {
+export default function Toolbar({ tool, setTool, unlocked, learned = [], stock = {} }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number> }) {
   const [open, setOpen] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<ToolId | null>(null);
 
@@ -38,7 +41,7 @@ export default function Toolbar({ tool, setTool, unlocked }: { tool: ToolState; 
       case "people":
         return PEOPLE_OPTS.find((o) => o.value === tool.people)!.icon;
       case "build":
-        return BUILD_OPTS.find((o) => o.value === tool.build)!.icon;
+        return BUILD_BY_ID[tool.build].icon;
       default:
         return TOOLS.find((t) => t.id === id)!.icon;
     }
@@ -103,7 +106,7 @@ export default function Toolbar({ tool, setTool, unlocked }: { tool: ToolState; 
               {open === "plant" && <Options opts={PLANT_OPTS} value={tool.plant} onPick={(v) => pick("plant", v)} />}
               {open === "land" && <Options opts={LAND_OPTS} value={tool.land} onPick={(v) => pick("land", v)} />}
               {open === "people" && <Options opts={PEOPLE_OPTS} value={tool.people} onPick={(v) => pick("people", v)} />}
-              {open === "build" && <Options opts={BUILD_OPTS} value={tool.build} onPick={(v) => pick("build", v)} />}
+              {open === "build" && <BuildMenu value={tool.build} learned={learned} stock={stock} onPick={(v) => pick("build", v, false)} />}
               {open === "weather" && <Options opts={WEATHER_OPTS} value={tool.weather} onPick={(v) => pick("weather", v)} />}
               {open === "disaster" && <Options opts={DISASTER_OPTS} value={tool.disaster} onPick={(v) => pick("disaster", v)} />}
               <p className="mt-2 px-1 text-center text-xs font-medium text-white/70">
@@ -149,6 +152,68 @@ export default function Toolbar({ tool, setTool, unlocked }: { tool: ToolState; 
           )}
         </AnimatePresence>
       </div>
+    </div>
+  );
+}
+
+const CATS: { id: BuildDef["cat"]; icon: string; label: string }[] = [
+  { id: "homes", icon: "🏡", label: "Homes" },
+  { id: "defense", icon: "🛡️", label: "Defense" },
+  { id: "work", icon: "⚒️", label: "Work" },
+  { id: "land", icon: "🗺️", label: "Land" },
+];
+
+/** Icon grid of everything buildable, by category, with costs + what's still locked. */
+function BuildMenu({ value, learned, stock, onPick }: { value: BuildOpt; learned: TechId[]; stock: Record<string, number>; onPick: (v: BuildOpt) => void }) {
+  const [cat, setCat] = useState<BuildDef["cat"]>(BUILD_BY_ID[value]?.cat ?? "homes");
+  const has = new Set(learned);
+  const cur = BUILD_BY_ID[value];
+  return (
+    <div className="w-[min(560px,calc(100vw-40px))]">
+      <div className="mb-2 grid grid-cols-4 gap-1 rounded-2xl bg-white/5 p-1 text-[12px] font-bold">
+        {CATS.map((c) => (
+          <button key={c.id} type="button" onClick={() => setCat(c.id)} className={`rounded-xl py-1.5 transition active:scale-95 ${cat === c.id ? "bg-amber-400 text-slate-900" : "hover:bg-white/10"}`}>
+            {c.icon} {c.label}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+        {BUILD_DEFS.filter((b) => b.cat === cat).map((b) => {
+          const locked = !!b.tech && !has.has(b.tech);
+          const afford = (Object.entries(b.cost) as [Resource, number][]).every(([r, n]) => (stock[r] ?? 0) >= n);
+          return (
+            <button
+              key={b.value}
+              type="button"
+              onClick={() => onPick(b.value)}
+              title={locked ? `Invent ${TECH[b.tech!].name} first` : b.tip}
+              className={`relative flex flex-col items-center rounded-2xl px-1 pb-1.5 pt-2 transition active:scale-95 ${b.value === value ? "bg-white/25 ring-2 ring-amber-300" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"} ${locked ? "opacity-50" : ""}`}
+            >
+              {["spikes", "barricade", "totem", "tannery"].includes(b.value) ? <GameIcon id={b.value} size={30} className={locked ? "grayscale" : ""} /> : <span className={`text-[28px] leading-none ${locked ? "grayscale" : ""}`}>{b.icon}</span>}
+              <span className="mt-1 text-center text-[11px] font-semibold leading-tight">{b.label}</span>
+              <span className="mt-1 flex flex-wrap justify-center gap-0.5">
+                {(Object.entries(b.cost) as [Resource, number][]).map(([r, n]) => (
+                  <span key={r} className={`flex items-center gap-0.5 rounded-full px-1 text-[10px] font-bold ${(stock[r] ?? 0) >= n ? "bg-white/10" : "bg-rose-500/30"}`}>
+                    <GameIcon id={r} size={11} />
+                    {n}
+                  </span>
+                ))}
+              </span>
+              {locked && <span className="absolute right-1 top-1 text-[11px]">🔒</span>}
+              {!locked && !afford && <span className="absolute right-1 top-1 text-[10px]" title="Not enough yet: gatherers will fetch it">⏳</span>}
+            </button>
+          );
+        })}
+      </div>
+      {cur && (
+        <p className="mt-2 px-1 text-center text-[12px] leading-snug text-white/75">
+          <span className="font-bold text-white">
+            {cur.icon} {cur.label}:
+          </span>{" "}
+          {cur.tech && !has.has(cur.tech) ? `invent ${TECH[cur.tech].icon} ${TECH[cur.tech].name} first.` : cur.tip}
+          {cur.line && !/drag/i.test(cur.tip) ? " Drag to draw." : ""}
+        </p>
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { ARCHETYPE_INFO, specialList } from "../engine/fighters";
 import type { FighterDef } from "../engine/types";
 import type { Roster } from "../data/roster";
 import { AlignmentChip, ArcadeButton, ArchetypeChip, Backdrop, FighterTile, P_COLORS, StatBars, cn } from "./kit";
+import { usePadConnected } from "./usePad";
 
 type Filter = "all" | "featured" | "good" | "bad" | "neutral" | "favorites" | "recent";
 type Sort = "power" | "name" | "strength" | "speed" | "intelligence" | "durability" | "power2" | "combat";
@@ -43,6 +44,7 @@ export function SelectScreen(p: Props) {
   const [cursor, setCursor] = useState(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState(6);
+  const pad = usePadConnected();
 
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -136,6 +138,11 @@ export function SelectScreen(p: Props) {
       } else if (e.code === "Backspace" || e.code === "Escape") {
         if (chosen[0] || chosen[1]) undo();
         else p.onBack();
+      } else if (e.code === "KeyV") randomPick();
+      else if (e.code === "KeyC" && list[cursor]) p.onView(list[cursor]);
+      else if (e.code === "KeyQ" || e.code === "KeyE") {
+        const n = FILTERS.findIndex(([k]) => k === filter);
+        setFilter(FILTERS[(n + (e.code === "KeyQ" ? -1 : 1) + FILTERS.length) % FILTERS.length][0]);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -257,6 +264,7 @@ export function SelectScreen(p: Props) {
       </div>
 
       {/* Ready bar */}
+      {pad && <p className="pointer-events-none absolute bottom-3 left-4 z-10 bg-black/75 px-3 py-1.5 font-mono text-xs text-amber-200">D-Pad / Left Stick Move · A Select · B Back · LB/RB Filter · Y Random · X Details</p>}
       <AnimatePresence>
         {done && (
           <motion.div initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }} transition={{ type: "spring", stiffness: 260, damping: 26 }} className="flex items-center justify-center gap-4 border-t border-amber-300/30 bg-black/70 px-6 py-4 backdrop-blur">

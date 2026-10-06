@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import { CAMP_LEVELS, ROLES, SHELTER_STAGES, TECH, TECH_ORDER } from "../data/facts";
+import { RES_INFO } from "../data/colony";
+import { GameIcon } from "./GameIcon";
 import { CRAFT_STEPS } from "../sim/camp";
 import type { Engine, Snapshot } from "../game/engine";
 import type { Danger, Role, TechId } from "../sim/types";
@@ -16,20 +18,9 @@ import type { Danger, Role, TechId } from "../sim/types";
 /*   Invent – the tech tree                                            */
 /* ------------------------------------------------------------------ */
 
-type Tab = "camp" | "jobs" | "defend" | "invent";
+type Tab = "camp" | "jobs" | "defend" | "invent" | "forge";
 
-const RES: [string, string, string][] = [
-  ["stick", "🪵", "Sticks"],
-  ["stone", "🪨", "Stones"],
-  ["grass", "🌾", "Grass"],
-  ["leaves", "🍃", "Leaves"],
-  ["wood", "🪓", "Wood"],
-  ["meat", "🥩", "Raw meat"],
-  ["cooked", "🍗", "Roast"],
-  ["fish", "🐟", "Fish"],
-  ["crop", "🌽", "Crops"],
-  ["berries", "🫐", "Berries"],
-];
+const RES: [string, string, string][] = Object.entries(RES_INFO).map(([k, v]) => [k, v.icon, v.name]);
 const RES_ICON = Object.fromEntries(RES.map(([k, i]) => [k, i]));
 const ROLE_BY_ID = Object.fromEntries(ROLES.map((r) => [r.id, r])) as Record<Role, (typeof ROLES)[number]>;
 
@@ -57,16 +48,18 @@ export default function CampPanel({ snap, engine, onClose, tab: initial = "camp"
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-4 gap-1 rounded-2xl bg-white/5 p-1 text-[12px] font-bold">
+      <div className="mt-3 grid grid-cols-5 gap-1 rounded-2xl bg-white/5 p-1 text-[11.5px] font-bold">
         {(
           [
-            ["camp", "🏕️ Camp"],
-            ["jobs", "👥 Jobs"],
-            ["defend", "🛡️ Defend"],
-            ["invent", "💡 Invent"],
-          ] as [Tab, string][]
-        ).map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setTab(k)} className={`rounded-xl py-2 transition active:scale-95 ${tab === k ? "bg-amber-400 text-slate-900" : "hover:bg-white/10"}`}>
+            ["camp", "🏕️", "Camp"],
+            ["jobs", "👥", "Jobs"],
+            ["defend", "🛡️", "Defend"],
+            ["forge", "⚒️", "Forge"],
+            ["invent", "💡", "Invent"],
+          ] as [Tab, string, string][]
+        ).map(([k, icon, label]) => (
+          <button key={k} type="button" onClick={() => setTab(k)} className={`flex flex-col items-center rounded-xl py-1.5 transition active:scale-95 ${tab === k ? "bg-amber-400 text-slate-900" : "hover:bg-white/10"}`}>
+            <span className="text-base leading-none">{icon}</span>
             {label}
           </button>
         ))}
@@ -76,6 +69,7 @@ export default function CampPanel({ snap, engine, onClose, tab: initial = "camp"
       {tab === "jobs" && <JobsTab snap={snap} engine={engine} />}
       {tab === "defend" && <DefendTab snap={snap} engine={engine} />}
       {tab === "invent" && <InventTab snap={snap} engine={engine} />}
+      {tab === "forge" && <ForgeTab snap={snap} engine={engine} />}
     </motion.aside>
   );
 }
@@ -116,14 +110,20 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
         <span>Supplies</span>
         <span className="text-xs text-white/60">🍽️ {food} meals</span>
       </div>
-      <div className="mt-1.5 grid grid-cols-5 gap-1">
-        {RES.map(([k, icon, label]) => (
+      <div className="mt-1.5 grid grid-cols-6 gap-1">
+        {RES.filter(([k]) => (camp.stock[k] ?? 0) > 0 || ["stick", "stone", "wood", "grass", "leaves", "berries", "hide", "bone"].includes(k)).map(([k, icon, label]) => (
           <div key={k} title={label} className="flex flex-col items-center rounded-xl bg-white/5 py-1.5">
-            <span className="text-lg leading-none">{icon}</span>
+            <GameIcon id={k} fallback={icon} size={20} />
             <span className="mt-0.5 text-[12px] font-bold">{camp.stock[k] ?? 0}</span>
           </div>
         ))}
       </div>
+      <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+        <Stat icon="🏡" value={`${snap.colony.homes}`} label="homes" />
+        <Stat icon="⛏️" value={`${snap.colony.found}/${snap.colony.deposits}`} label="deposits found" />
+        <Stat icon="🏗️" value={`${snap.colony.buildings}`} label="buildings" />
+      </div>
+      {snap.colony.strangers > 0 && <p className="mt-2 rounded-xl bg-sky-500/20 p-2 text-[12px] font-semibold">🚶 {snap.colony.strangers} newcomer{snap.colony.strangers > 1 ? "s are" : " is"} on the way to camp.</p>}
       {camp.shelters.length > 0 && (
         <>
           <div className="mt-3 text-sm font-bold">Huts</div>
@@ -252,9 +252,10 @@ function DefendTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   ];
   return (
     <>
-      <div className="mt-3 grid grid-cols-3 gap-1.5 text-center">
+      <div className="mt-3 grid grid-cols-4 gap-1.5 text-center">
         <Stat icon="🪵" value={`${t.walls.built}/${t.walls.planned}`} label="walls" />
         <Stat icon="🗼" value={String(t.towers)} label="towers" />
+        <Stat icon="🎯" value={String(snap.colony.scorpions)} label="Scorpions" />
         <Stat icon="🧬" value={["Normal", "Tough", "Alpha"][Math.min(2, t.evolution)] ?? "Alpha"} label="raiders" />
       </div>
       {t.walls.damaged > 0 && <p className="mt-2 rounded-xl bg-rose-500/20 p-2 text-[12px] font-semibold">💥 {t.walls.damaged} wall pieces are damaged — builders will fix them.</p>}
@@ -269,7 +270,14 @@ function DefendTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
           <span className="block text-[11px] font-medium text-white/60">{learned.has("stonewall") ? "2 stones per piece" : "Needs 🧱 Stone walls"}</span>
         </button>
       </div>
-      <p className="mt-1.5 text-[11px] text-white/55">Or use the 🛠️ Build toy to draw walls, towers and farms wherever you like.</p>
+      <button type="button" disabled={!learned.has("spear")} onClick={() => engine.planSpikes()} className="mt-2 flex w-full items-center gap-2 rounded-2xl bg-white/10 p-2.5 text-left text-[13px] font-bold transition hover:bg-white/20 active:scale-95 disabled:opacity-40">
+        <GameIcon id="spikes" size={26} />
+        <span>
+          Line the walls with bone spikes
+          <span className="block text-[11px] font-medium text-white/60">{learned.has("spear") ? `2 bones each · you have ${snap.camp.stock.bone ?? 0} — harvest dinosaurs for more` : "Needs 🗡️ Spear"}</span>
+        </span>
+      </button>
+      <p className="mt-1.5 text-[11px] text-white/55">The ring comes with gates + stairs. Use the 🛠️ Build toy to draw more walls, gates, stairs, towers and 🎯 Scorpions. Tap a built gate to open/close it.</p>
       <div className="mt-3 text-sm font-bold">Danger level</div>
       <div className="mt-1.5 grid grid-cols-3 gap-1.5">
         {dangers.map(([k, label, sub]) => (
@@ -280,6 +288,104 @@ function DefendTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
         ))}
       </div>
       <p className="mt-2 text-[11px] text-white/55">Each raid you beat makes the next raiders a bit more evolved — watch out for 👑 Alphas!</p>
+    </>
+  );
+}
+
+function ForgeTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
+  const f = snap.forge;
+  const [kind, setKind] = useState<"weapons" | "shields" | "gear" | "kits">("gear");
+  // looking at the forge clears the NEW badges (after a moment, so you see them first)
+  useEffect(() => {
+    const id = window.setTimeout(() => engine.seenRecipes(), 4000);
+    return () => window.clearTimeout(id);
+  }, [engine]);
+  const items = f.items.filter((i) => i.cat === kind);
+  const newIn = (c: string) => f.items.some((i) => i.cat === c && i.fresh);
+  return (
+    <>
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[12px] font-bold">
+        <span className={`rounded-full px-2.5 py-1 ${f.hasWorkshop ? "bg-emerald-500/30" : "bg-white/10 text-white/50"}`}>🛠️ Workshop {f.hasWorkshop ? "✓" : "—"}</span>
+        <span className={`rounded-full px-2.5 py-1 ${f.hasSmith ? "bg-emerald-500/30" : "bg-white/10 text-white/50"}`}>⚒️ Blacksmith {f.hasSmith ? "✓" : "—"}</span>
+        <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 ${f.hasTannery ? "bg-emerald-500/30" : "bg-white/10 text-white/50"}`}>
+          <GameIcon id="tannery" size={14} /> Hide rack {f.hasTannery ? "✓" : "—"}
+        </span>
+      </div>
+      <div className="mt-3 text-sm font-bold">Armory</div>
+      <div className="mt-1.5 flex min-h-[32px] flex-wrap gap-1.5">
+        {f.armory.length ? (
+          f.armory.map((a) => (
+            <span key={a.id} className="rounded-full bg-white/10 px-2.5 py-1 text-[12px] font-bold">
+              {a.icon} {a.name} ×{a.n}
+            </span>
+          ))
+        ) : (
+          <span className="text-[12px] text-white/55">Empty — fighters grab gear from here automatically.</span>
+        )}
+      </div>
+      <div className="mt-3 flex items-center justify-between text-sm font-bold">
+        <span>Queue</span>
+        <span className="text-[11px] font-semibold text-white/50">a ⚒️ smith works through it</span>
+      </div>
+      <div className="mt-1.5 space-y-1">
+        {f.queue.length === 0 && <p className="text-[12px] text-white/55">Nothing queued. Pick something below.</p>}
+        {f.queue.map((q, i) => (
+          <div key={`${q.id}-${i}`} className="flex items-center justify-between rounded-xl bg-white/5 px-2.5 py-1.5 text-[13px]">
+            <span className={q.ok ? "" : "text-white/50"}>
+              {i === 0 ? "▸ " : ""}
+              {q.icon} {q.name}
+              {!q.ok && " (waiting for its workshop)"}
+            </span>
+            <button type="button" onClick={() => engine.unqueueForge(i)} className="rounded-lg px-1.5 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Remove">
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-4 gap-1 rounded-2xl bg-white/5 p-1 text-[11.5px] font-bold">
+        {(
+          [
+            ["gear", "Clothes"],
+            ["weapons", "Weapons"],
+            ["shields", "Shields"],
+            ["kits", "Kits"],
+          ] as const
+        ).map(([k, label]) => (
+          <button key={k} type="button" onClick={() => setKind(k)} className={`relative flex items-center justify-center gap-1 rounded-xl py-1.5 transition ${kind === k ? "bg-amber-400 text-slate-900" : "hover:bg-white/10"}`}>
+            {k === "gear" ? <GameIcon id="rainproof" size={14} /> : <span>{k === "weapons" ? "⚔️" : k === "shields" ? "🛡️" : "🧰"}</span>}
+            {label}
+            {newIn(k) && <span className="absolute -right-1 -top-1 rounded-full bg-rose-500 px-1 text-[9px] font-black text-white">NEW</span>}
+          </button>
+        ))}
+      </div>
+      {kind === "gear" && <p className="mt-1.5 text-[11px] text-white/60">Hide clothes keep workers going in rain + snow. People put on whatever suits the weather.</p>}
+      {kind === "kits" && <p className="mt-1.5 text-[11px] text-white/60">Made once, they help the whole tribe for good.</p>}
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
+        {items.map((it) => (
+          <button
+            key={it.id}
+            type="button"
+            disabled={it.done || (!!it.why && it.why.startsWith("Invent"))}
+            onClick={() => engine.queueForge(it.id)}
+            title={it.tip ? `${it.name}: ${it.tip}` : it.why ?? `Queue a ${it.name}`}
+            className={`relative flex flex-col items-center rounded-2xl px-1 py-2 transition active:scale-95 disabled:opacity-50 ${it.fresh ? "bg-amber-300/25 ring-2 ring-amber-300" : it.can ? "bg-white/10 hover:bg-white/20" : "bg-white/5"}`}
+          >
+            {it.id === "raincloak" ? <GameIcon id="rainproof" size={26} /> : <span className="text-2xl leading-none">{it.icon}</span>}
+            <span className="mt-1 text-center text-[10.5px] font-semibold leading-tight">{it.name}</span>
+            <span className="mt-1 flex flex-wrap justify-center gap-0.5">
+              {Object.entries(it.cost).map(([r, n]) => (
+                <span key={r} className={`flex items-center gap-0.5 rounded-full px-1 text-[10px] font-bold ${(snap.camp.stock[r] ?? 0) >= (n ?? 0) ? "bg-white/10" : "bg-rose-500/30"}`}>
+                  <GameIcon id={r} fallback={RES_INFO[r as keyof typeof RES_INFO]?.icon} size={11} />
+                  {n}
+                </span>
+              ))}
+            </span>
+            {it.cat === "weapons" || it.cat === "shields" ? <span className="absolute left-1 top-0.5 text-[10px] font-black text-amber-300">{"★".repeat(it.tier)}</span> : null}
+            {it.fresh && <span className="absolute right-1 top-0.5 rounded-full bg-rose-500 px-1 text-[8.5px] font-black text-white">NEW</span>}
+            {it.why && <span className={`mt-0.5 text-[9.5px] ${it.done ? "font-bold text-emerald-300" : "text-white/50"}`}>{it.why}</span>}
+          </button>
+        ))}
+      </div>
     </>
   );
 }

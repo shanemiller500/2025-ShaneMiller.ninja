@@ -112,6 +112,35 @@ function Loading({ error, retry }: { error: string | null; retry: () => void }) 
   );
 }
 
+/** Optional local diagnostic: append ?padDebug=1 to see what the browser receives. */
+function PadDiagnostic() {
+  const [enabled, setEnabled] = useState(false);
+  const [report, setReport] = useState("Waiting for controller input");
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("padDebug")) return;
+    setEnabled(true);
+    const check = () => {
+      if (!navigator.getGamepads) {
+        setReport("Gamepad API unavailable in this browser");
+        return;
+      }
+      try {
+        const pads = Array.from(navigator.getGamepads() ?? []).filter((p): p is Gamepad => !!p);
+        setReport(pads.length
+          ? pads.map((p) => `${p.id || "Controller"} | ${p.mapping || "unmapped"} | buttons ${p.buttons.map((b, i) => b.pressed || b.value > 0.5 ? i : -1).filter((i) => i >= 0).join(",") || "none"} | axes ${p.axes.slice(0, 2).map((v) => v.toFixed(1)).join(",")}`).join(" · ")
+          : "No controller exposed to this tab. Click the game, then press a controller button.");
+      } catch {
+        setReport("Browser blocked Gamepad API access");
+      }
+    };
+    check();
+    const timer = window.setInterval(check, 200);
+    return () => window.clearInterval(timer);
+  }, []);
+  if (!enabled) return null;
+  return <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-[70] rounded-lg border border-amber-300/60 bg-black/90 px-3 py-2 font-mono text-xs text-amber-100">Controller diagnostic: {report}</div>;
+}
+
 export default function FightWorldApp() {
   const { roster, error, retry } = useFightRoster();
   const [padUsed, setPadUsed] = useState(false);
@@ -130,7 +159,7 @@ export default function FightWorldApp() {
         setPadUsed(true);
         show(`${name} connected`);
       },
-      onDisconnect: () => show("Controller disconnected"),
+      onDisconnect: () => { setPadUsed(false); show("Controller disconnected · keyboard controls active"); },
       onActive: () => setPadUsed(true),
     });
     // Mouse or keyboard use hides the controller focus rings again
@@ -146,6 +175,7 @@ export default function FightWorldApp() {
   return (
     <div className={cn("dark fixed inset-0 z-40 select-none overflow-hidden bg-[#05060a] font-sans text-white antialiased", padUsed && "fw-pad")}>
       <ArcadeStyles />
+      <PadDiagnostic />
       {roster ? <Game roster={roster} /> : <Loading error={error} retry={retry} />}
       <AnimatePresence>
         {toast && (
@@ -589,6 +619,7 @@ function Game({ roster }: { roster: Roster }) {
           controllers={f.controllers}
           difficulty={f.difficulty}
           settings={settings}
+          onSettingsChange={updateSettings}
           startHealth={f.startHealth}
           banner={f.banner}
           onMatchOver={(s) => onMatchOver(f, s)}
@@ -674,6 +705,7 @@ function Game({ roster }: { roster: Roster }) {
           <CharacterSheet
             key={sheet.id}
             def={sheet}
+            settings={settings}
             hero={roster.heroes.get(sheet.id)}
             onClose={() => setSheet(null)}
             onFightAs={screen.k === "fight" ? undefined : fightAs}

@@ -10,6 +10,7 @@ import type { Prop } from "../engine/match";
 import { ARENAS, drawBack, drawFloor, drawFront, drawProp, type ArenaDef } from "../render/arenas";
 import { FLOOR_Y, VH } from "../render/util";
 import { ArcadeButton, Backdrop, P_COLORS, cn } from "./kit";
+import { usePadConnected } from "./usePad";
 
 /** Live, animated preview of an arena (same painters as the fight). */
 export function ArenaPreview({ arena, className, zoom = 1.25 }: { arena: ArenaDef; className?: string; zoom?: number }) {
@@ -54,6 +55,7 @@ export function ArenaPreview({ arena, className, zoom = 1.25 }: { arena: ArenaDe
 
 export function ArenaScreen({ p1, p2, onBack, onPick }: { p1: FighterDef; p2: FighterDef | null; onBack: () => void; onPick: (a: ArenaDef) => void }) {
   const [idx, setIdx] = useState(0);
+  const pad = usePadConnected();
   const arena = ARENAS[idx];
 
   useEffect(() => {
@@ -96,6 +98,7 @@ export function ArenaScreen({ p1, p2, onBack, onPick }: { p1: FighterDef; p2: Fi
       </div>
 
       <div className="grid min-h-0 flex-1 gap-5 p-5 lg:grid-cols-[360px_1fr]">
+        {pad && <p className="pointer-events-none absolute bottom-3 left-5 z-10 bg-black/70 px-3 py-1.5 font-mono text-xs text-amber-200">D-Pad / Left Stick Choose · A Confirm · B Back</p>}
         <div className="fw-thin-scroll flex min-h-0 flex-col gap-2 overflow-y-auto">
           {ARENAS.map((a, i) => (
             <button

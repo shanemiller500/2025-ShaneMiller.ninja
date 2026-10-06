@@ -8,7 +8,7 @@ import { LM } from "./terrain";
 import { TILE, WORLD_H, WORLD_W, type SpeciesId } from "./types";
 import type { World } from "./world";
 
-type EventId = "migration" | "hatch" | "storm" | "fish" | "rumble" | "star" | "trex" | "flock" | "stampede";
+type EventId = "migration" | "hatch" | "storm" | "fish" | "rumble" | "star" | "trex" | "flock" | "stampede" | "glint" | "stalker" | "snowstorm";
 
 const WEIGHTS: [EventId, number, number][] = [
   // id, weight, cooldown (s)
@@ -21,6 +21,9 @@ const WEIGHTS: [EventId, number, number][] = [
   ["trex", 1, 300],
   ["storm", 1, 400],
   ["rumble", 1, 300],
+  ["glint", 1.5, 240],
+  ["stalker", 1, 260],
+  ["snowstorm", 0.6, 600],
 ];
 
 export interface ShootingStar {
@@ -67,6 +70,12 @@ export class RandomEvents {
         return !w.volcano.active && w.volcano.cooldown <= 0;
       case "hatch":
         return true;
+      case "glint":
+        return w.colony.nodes.some((n) => !n.found) && w.daylight > 0.6;
+      case "stalker":
+        return w.tribe.danger !== "calm" && !w.tribe.raid && w.humans.length > 0;
+      case "snowstorm":
+        return w.weather.auto && w.weather.kind !== "snow" && w.weather.kind !== "blizzard" && w.elapsed > 600;
       case "trex":
         return w.dinos.filter((d) => d.species === "trex").length < 3;
       case "flock":
@@ -79,6 +88,30 @@ export class RandomEvents {
   fire(w: World, id: EventId) {
     const rng = w.rng;
     switch (id) {
+      case "glint": {
+        // sunlight catches something in the rocks: a hidden deposit near camp is spotted
+        const c = w.camp;
+        const hidden = w.colony.nodes.filter((n) => !n.found).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y));
+        const n = hidden[0];
+        if (n) w.colony.discoverAround(w, n.x, n.y, 10);
+        break;
+      }
+      case "stalker": {
+        // a hungry predator prowls the edge of camp, sizing it up
+        const c = w.camp;
+        const a = rng() * Math.PI * 2;
+        const species: SpeciesId = w.tribe.raidsWon >= 3 ? "allo" : "raptor";
+        const [d] = spawnGroup(w, species, c.x + Math.cos(a) * 900, c.y + Math.abs(Math.sin(a)) * 700, 1, { hunger: 0.85 });
+        if (d) {
+          setState(d, "stalk", c.x + Math.cos(a) * 420, c.y + Math.abs(Math.sin(a)) * 320);
+          d.think = 6;
+          w.toast("👀", `A hungry ${sp(species).nick} is stalking around the camp…`, d.x, d.y);
+        }
+        break;
+      }
+      case "snowstorm":
+        w.weather.set(w, rng() < 0.4 ? "blizzard" : "snow", false);
+        break;
       case "migration": {
         const species = (["para", "iguano", "trike", "apato"] as SpeciesId[])[Math.floor(rng() * 4)];
         const fromWest = rng() < 0.5;

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Info, LogOut, Menu, RefreshCw, Save, Sparkles, Trophy, Volume2, VolumeX, Map as MapIcon, Pause, Play } from "lucide-react";
+import { FolderOpen, Info, LogOut, Menu, RefreshCw, Save, Sparkles, Trophy, Volume2, VolumeX, Map as MapIcon, Pause, Play } from "lucide-react";
 import { DISCOVERIES } from "../data/facts";
 import { Engine, type Snapshot } from "../game/engine";
 import { WEATHER_LABEL } from "../sim/weather";
@@ -21,6 +21,7 @@ interface Props {
   onStickers: () => void;
   onAbout: () => void;
   onSave: () => void;
+  onSaves: () => void;
   onNew: () => void;
   onReset: () => void;
   onCamp: () => void;
@@ -252,7 +253,10 @@ function MenuPanel(p: Props & { close: () => void }) {
   return (
     <motion.div {...pop} className="dl-glass absolute right-0 top-[calc(100%+8px)] w-60 rounded-3xl p-2 shadow-2xl">
       <button type="button" className={item} onClick={() => { p.onSave(); p.close(); }}>
-        <Save className="h-5 w-5 text-emerald-300" /> Save world
+        <Save className="h-5 w-5 text-emerald-300" /> Save now
+      </button>
+      <button type="button" className={item} onClick={() => { p.onSaves(); p.close(); }}>
+        <FolderOpen className="h-5 w-5 text-amber-300" /> Saved games
       </button>
       <button type="button" className={item} onClick={() => { p.onNew(); p.close(); }}>
         <Sparkles className="h-5 w-5 text-sky-300" /> New world

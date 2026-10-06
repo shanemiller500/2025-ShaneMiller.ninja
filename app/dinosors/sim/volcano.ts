@@ -5,9 +5,11 @@
 /* ------------------------------------------------------------------ */
 import { FACTS } from "../data/facts";
 import { P } from "./particles";
-import { LM, isWaterTile } from "./terrain";
+import { LM, VEG_TILES, isWaterTile } from "./terrain";
 import { MAP_H, MAP_W, T, TILE } from "./types";
 import type { World } from "./world";
+import { hurtHuman } from "./injury";
+import { sizeOf } from "./dinos";
 
 interface LavaHead {
   x: number;
@@ -149,6 +151,10 @@ export class Volcano {
   ash = 0;
   cooldown = 0;
   rocks: Ejecta[] = [];
+  /** the asteroid-triggered MEGA eruption is running */
+  megaOn = false;
+  /** 0..1 glowing cracks down the cone (mega only) */
+  crack = 0;
   private puffT = 0;
   readonly x = LM.volcano.x * TILE + TILE / 2;
   readonly y = LM.volcano.y * TILE + TILE / 2;
@@ -167,6 +173,22 @@ export class Volcano {
   }
 
   rumbleOnly = false;
+
+  /** An asteroid hit the volcano: the biggest show in Dinosaur Land. */
+  mega(w: World) {
+    if (this.megaOn) return false;
+    this.phase = "rumble";
+    this.t = 0;
+    this.megaOn = true;
+    this.rumbleOnly = false;
+    this.crack = 0;
+    w.quake = 7;
+    w.shake(16, 6);
+    w.sfx("rumble", this.x, this.y, 1.6);
+    w.alarm(this.x, this.y, 6000, 1, "😱", true);
+    w.toast("☄️", "The asteroid cracked the volcano! The ground is shaking — MEGA ERUPTION incoming!", this.x, this.y);
+    return true;
+  }
 
   update(w: World, dt: number) {
     this.t += dt;
@@ -198,10 +220,18 @@ export class Volcano {
         this.ash = Math.max(0, this.ash - dt * 0.02);
         break;
       case "rumble":
-        this.glow += (0.45 - this.glow) * dt;
+        this.glow += ((this.megaOn ? 0.8 : 0.45) - this.glow) * dt;
+        if (this.megaOn) {
+          // the cone splits: glowing cracks spread, rocks tumble, everything panics
+          this.crack = Math.min(1, this.crack + dt * 0.16);
+          if (rng() < dt * 10) w.shake(9, 0.35);
+          if (rng() < dt * 3) w.alarm(this.x, this.y, 5000, 0.8, "😱", true);
+          if (rng() < dt * 4) this.launchRock(w, 0.6);
+          if (rng() < dt * 10) w.particles.spawn(P.Smoke, cx + (rng() - 0.5) * 300, cy + 100 * rng(), { z: 40 + rng() * 80, vz: 40, size: 24, max: 3, color: "rgba(70,60,55,0.5)" });
+        }
         if (rng() < dt * 4) w.shake(3, 0.3);
         if (rng() < dt * 6) w.particles.spawn(P.Dust, cx + (rng() - 0.5) * 300, cy + 120 + rng() * 140, { vz: 10, size: 10, max: 1.2, color: "rgba(150,130,110,0.5)" });
-        if (this.t > 3.5) {
+        if (this.t > (this.megaOn ? 6.5 : 3.5)) {
           if (this.rumbleOnly) {
             this.phase = "idle";
             w.toast("🌋", "The volcano grumbled… then settled down.");
@@ -214,8 +244,9 @@ export class Volcano {
         break;
       case "build":
         this.glow += (1 - this.glow) * dt * 0.8;
-        if (rng() < dt * 8) w.shake(5, 0.25);
-        if (this.t > 3) this.erupt(w);
+        if (this.megaOn) this.crack = Math.min(1, this.crack + dt * 0.3);
+        if (rng() < dt * 8) w.shake(this.megaOn ? 10 : 5, 0.25);
+        if (this.t > (this.megaOn ? 4 : 3)) this.erupt(w);
         break;
       case "erupt": {
         this.glow = 1;
@@ -226,9 +257,15 @@ export class Volcano {
             w.particles.spawn(P.Ember, cx + (rng() - 0.5) * 30, cy, { z: this.craterZ, vz: 150 + rng() * 200, vx: (rng() - 0.5) * 120, vy: (rng() - 0.5) * 60, g: 220, size: 3 + rng() * 3, max: 2, color: rng() < 0.5 ? "#ffdd55" : "#ff6a1f" });
           }
         }
-        if (rng() < dt * 3) this.launchRock(w);
-        if (rng() < dt * 3) w.shake(6, 0.3);
-        if (this.t > 7) {
+        if (rng() < dt * (this.megaOn ? 14 : 3)) this.launchRock(w, this.megaOn ? 2.6 : 1);
+        if (rng() < dt * 3) w.shake(this.megaOn ? 12 : 6, 0.3);
+        if (this.megaOn) {
+          // a column of ash + a second wave of lava halfway through
+          if (rng() < dt * 30) w.particles.spawn(P.Smoke, cx + (rng() - 0.5) * 80, cy, { z: this.craterZ + rng() * 120, vz: 120 + rng() * 120, vx: (rng() - 0.5) * 80 + w.weather.windX * 10, size: 40 + rng() * 40, max: 7, color: "rgba(55,48,46,0.6)" });
+          if (this.t > 6 && this.t - dt <= 6) this.pourLava(w, 5, 1.6);
+          if (rng() < dt * 0.8) this.ashFall(w);
+        }
+        if (this.t > (this.megaOn ? 16 : 7)) {
           this.phase = "ash";
           this.t = 0;
         }
@@ -236,11 +273,17 @@ export class Volcano {
       }
       case "ash":
         this.glow += (0.5 - this.glow) * dt * 0.1;
-        if (this.t < 30) this.ash = Math.min(1, this.ash + dt * 0.01);
+        if (this.t < (this.megaOn ? 70 : 30)) this.ash = Math.min(1, this.ash + dt * (this.megaOn ? 0.03 : 0.01));
         else this.ash = Math.max(0, this.ash - dt * 0.03);
-        if (this.t > 60) {
+        this.crack = Math.max(0, this.crack - dt * 0.006);
+        if (this.megaOn && rng() < dt * 0.4) this.ashFall(w);
+        if (this.t > (this.megaOn ? 110 : 60)) {
           this.phase = "idle";
           this.cooldown = 90;
+          if (this.megaOn) {
+            this.megaOn = false;
+            w.toast("🌄", "The sky is clearing. The land around the volcano will never be quite the same!");
+          }
         }
         break;
     }
@@ -262,38 +305,75 @@ export class Volcano {
       w.particles.burst(P.Ember, r.x, r.y, 5, 50, { vz: 60, g: 200, size: 2, max: 0.8, color: "#ff8a3d" });
       w.fire.ignite(w, tx, ty, 0.8);
       w.sfx("thud", r.x, r.y, 0.6);
-      w.knock(r.x, r.y, 50);
+      w.knock(r.x, r.y, 50 + r.size * 2);
+      // big lava bombs smash structures + hurt anyone underneath
+      if (r.size > 7) {
+        w.crush(r.x, r.y, 40 + r.size * 3, r.size / 14);
+        w.particles.spawn(P.Ring, r.x, r.y, { size: r.size * 2, max: 0.6, color: "rgba(255,180,90,0.8)" });
+      }
+      for (const h of w.humans) if (Math.hypot(h.x - r.x, h.y - r.y) < 34 + r.size && h.level === 0 && h.state !== "hide") hurtHuman(w, h, 0.18 + r.size * 0.02, r.x, r.y, "rock");
+      for (const d of w.dinos) if (Math.hypot(d.x - r.x, d.y - r.y) < 30 + r.size * 2 + sizeOf(d) * 0.3) {
+        d.health -= 0.15;
+        d.burn = 0;
+      }
+    }
+  }
+
+  /** Ash settles: grass + forest near the cone turn grey (temporarily ruined ground). */
+  private ashFall(w: World) {
+    const rng = w.rng;
+    for (let k = 0; k < 6; k++) {
+      const a = rng() * Math.PI * 2;
+      const rr = 10 + rng() * 26;
+      const tx = Math.round(LM.volcano.x + Math.cos(a) * rr);
+      const ty = Math.round(LM.volcano.y + 4 + Math.sin(a) * rr * 0.8);
+      if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) continue;
+      const t = w.terrain.tiles[ty * MAP_W + tx] as T;
+      if (VEG_TILES.has(t)) {
+        w.terrain.setTile(tx, ty, T.Dirt);
+        w.burnPlantsAt(tx * TILE + 16, ty * TILE + 16, 0.4);
+      }
+    }
+  }
+
+  private pourLava(w: World, n: number, vol: number) {
+    const rng = w.rng;
+    for (let k = 0; k < n; k++) {
+      const a = Math.PI * 0.5 + (rng() - 0.5) * Math.PI * 1.7;
+      w.lava.spawn(Math.round(LM.volcano.x + Math.cos(a) * 3), Math.round(LM.volcano.y + Math.sin(a) * 3), vol + rng() * 0.8);
     }
   }
 
   private erupt(w: World) {
     this.phase = "erupt";
     this.t = 0;
-    w.sfx("boom", this.x, this.y, 1.5);
-    w.shake(14, 1.2);
-    w.flash(0.5, "#ffb070");
-    w.particles.spawn(P.Ring, this.x, this.y, { z: this.craterZ, size: 20, max: 1.2, color: "rgba(255,200,140,0.8)" });
-    for (let k = 0; k < 6; k++) this.launchRock(w);
+    const mega = this.megaOn;
+    w.sfx("boom", this.x, this.y, mega ? 2 : 1.5);
+    w.shake(mega ? 26 : 14, mega ? 3 : 1.2);
+    w.flash(mega ? 0.9 : 0.5, "#ffb070");
+    w.particles.spawn(P.Ring, this.x, this.y, { z: this.craterZ, size: mega ? 60 : 20, max: mega ? 2 : 1.2, color: "rgba(255,200,140,0.8)" });
+    if (mega) w.particles.spawn(P.Ring, this.x, this.y, { size: 120, max: 2.6, color: "rgba(255,240,210,0.7)" });
+    for (let k = 0; k < (mega ? 24 : 6); k++) this.launchRock(w, mega ? 2.4 : 1);
     // lava pours over the rim, mostly downhill
     const rng = w.rng;
-    const n = 3 + Math.floor(rng() * 2);
-    for (let k = 0; k < n; k++) {
-      const a = Math.PI * 0.5 + (rng() - 0.5) * Math.PI * 1.3;
-      w.lava.spawn(Math.round(LM.volcano.x + Math.cos(a) * 3), Math.round(LM.volcano.y + Math.sin(a) * 3), 1 + rng() * 0.8);
-    }
+    this.pourLava(w, mega ? 9 : 3 + Math.floor(rng() * 2), mega ? 1.8 : 1);
     w.flags.add("lavaFlowed");
     w.flags.delete("lavaCool");
-    w.alarm(this.x, this.y, 2600, 1, "😱", true);
+    w.alarm(this.x, this.y, mega ? 8000 : 2600, 1, "😱", true);
     w.discover("eruption", this.x, this.y);
-    w.toast("🌋", "ERUPTION! Everybody run!", this.x, this.y, FACTS.volcano);
+    if (mega) {
+      w.discover("megaEruption", this.x, this.y);
+      w.toast("🌋", "MEGA ERUPTION!!! Lava rivers, flying rocks and an ash cloud — everybody take cover!", this.x, this.y, FACTS.volcano);
+      w.celebrate("RUN!!");
+    } else w.toast("🌋", "ERUPTION! Everybody run!", this.x, this.y, FACTS.volcano);
   }
 
-  private launchRock(w: World) {
+  private launchRock(w: World, power = 1) {
     const rng = w.rng;
     const a = rng() * Math.PI * 2;
-    const s = 120 + rng() * 260;
-    this.rocks.push({ x: this.x, y: this.y, z: this.craterZ, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.7, vz: 200 + rng() * 160, size: 5 + rng() * 6 });
-    if (this.rocks.length > 40) this.rocks.shift();
+    const s = (120 + rng() * 260) * (power > 1 ? 0.7 + rng() * power * 0.6 : power);
+    this.rocks.push({ x: this.x, y: this.y, z: this.craterZ, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.7, vz: 200 + rng() * 160 * Math.min(2, power), size: 5 + rng() * (power > 1 ? 9 : 6) });
+    if (this.rocks.length > (this.megaOn ? 90 : 40)) this.rocks.shift();
   }
 
   get active() {

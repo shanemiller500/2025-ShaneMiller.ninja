@@ -9,6 +9,7 @@ import { ACTIONS, type Action } from "../engine/types";
 import { DEFAULT_SETTINGS, type BloodLevel, type Settings } from "../data/storage";
 import { ACTION_LABEL, DEFAULT_BINDINGS, keyLabel } from "../input/input";
 import { ArcadeButton, Backdrop, Keycap, P_COLORS, ScreenTitle, cn } from "./kit";
+import { ControlsCard } from "./ControlsCard";
 
 function Choice<T extends string | number>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
@@ -141,6 +142,11 @@ export function SettingsScreen({ settings, onChange, onBack }: { settings: Setti
               <p className="py-4 text-[13px] text-white/45">All sounds are synthesized live in your browser — no recorded audio is used.</p>
             </section>
           </div>
+
+          <section className="mt-6 rounded-2xl bg-white/[0.04] p-6 ring-1 ring-white/10 backdrop-blur">
+            <h2 className="fw-display mb-4 text-xl font-[650] uppercase text-amber-300">How to Play · Controls</h2>
+            <ControlsCard settings={settings} versus={false} />
+          </section>
 
           <section className="mt-6 rounded-2xl bg-white/[0.04] p-6 ring-1 ring-white/10 backdrop-blur">
             <div className="flex flex-wrap items-end justify-between gap-3">

@@ -11,6 +11,10 @@ export default function AboutPanel({ open, onClose }: { open: boolean; onClose: 
     ["👆👆", "Double-tap a dino to follow it around"],
     ["🧰", "Use the toy box at the bottom to change the world"],
     ["🏕️", "Tap the cave camp to help the cave people invent"],
+    ["🧑", "Tap a person (shift-drag for a group), then tap a tree, rock, water, dino, wall… they work out the job"],
+    ["🛠️", "Build homes, walls with gates + stairs, towers, Scorpions and workshops"],
+    ["🛖", "Tap a home to see who lives there and upgrade it, tent → stone house"],
+    ["☄️", "Dragons, blizzards… and what happens if a meteor hits the volcano?"],
   ];
   return (
     <Modal open={open} onClose={onClose} size="wide" accent="#22c55e" labelledBy="dl-about">

@@ -31,6 +31,7 @@ function Shell({ kicker, title, onClose, children }: { kicker: string; title: st
     >
       <motion.div
         role="dialog"
+        data-pad-menu
         aria-modal="true"
         aria-labelledby="fw-cloud"
         initial={{ y: 30, scale: 0.96 }}
@@ -40,7 +41,7 @@ function Shell({ kicker, title, onClose, children }: { kicker: string; title: st
       >
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-300 via-sky-500 to-indigo-500" />
         {onClose && (
-          <button type="button" aria-label="Close" onClick={onClose} className="absolute right-3 top-3 rounded-lg p-1.5 text-white/50 hover:bg-white/10 hover:text-white">
+          <button type="button" aria-label="Close" data-pad-back onClick={onClose} className="absolute right-3 top-3 rounded-lg p-1.5 text-white/50 hover:bg-white/10 hover:text-white">
             <X className="h-5 w-5" />
           </button>
         )}
@@ -72,7 +73,7 @@ export function CloudPanel({ cloud, hasLocal, name, onName }: { cloud: EmailClou
     if (state.draftEmail) setEmail(state.draftEmail);
   }, [state.draftEmail]);
   const locked = view === "offer" || view === "finish";
-  const close = locked ? undefined : () => cloud.show(null);
+  const close = locked ? undefined : view === "welcome" ? cloud.skip : () => cloud.show(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -173,7 +174,7 @@ export function CloudPanel({ cloud, hasLocal, name, onName }: { cloud: EmailClou
             <ArcadeButton tone="cyan" onClick={() => cloud.show("loadEmail")}>
               <KeyRound className="h-4 w-4" /> Load my saved progress
             </ArcadeButton>
-            <ArcadeButton tone="ghost" onClick={() => cloud.show("saveEmail")}>
+            <ArcadeButton tone="ghost" onClick={cloud.skip}>
               <Play className="h-4 w-4" /> {hasLocal ? "Keep playing here" : "Start fresh"}
             </ArcadeButton>
           </div>

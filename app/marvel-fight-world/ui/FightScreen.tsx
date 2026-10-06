@@ -17,6 +17,9 @@ import { ControlsCard } from "./ControlsCard";
 import { ScorePanel } from "./ScorePanel";
 import type { ScoreBreakdown } from "../data/score";
 import { suspendPadBridge } from "../input/gamepad";
+import { usePadConnected } from "./usePad";
+import { MoveGuide, HowToPlay, guideFor } from "./MoveGuide";
+import { SettingsScreen } from "./SettingsScreen";
 
 export type FightExit = "rematch" | "changeFighter" | "newArena" | "quit" | "continue";
 
@@ -27,6 +30,7 @@ interface Props {
   controllers: [Controller, Controller];
   difficulty: Difficulty;
   settings: Settings;
+  onSettingsChange?: (settings: Settings) => void;
   startHealth?: [number, number];
   /** Small caption over the fight (e.g. "SURVIVAL · OPPONENT 4") */
   banner?: string;
@@ -46,6 +50,11 @@ export function FightScreen(props: Props) {
   const sessionRef = useRef<GameSession | null>(null);
   const [phase, setPhase] = useState<"vs" | "fight">("vs");
   const [paused, setPaused] = useState(false);
+  const [pausePage, setPausePage] = useState<"menu" | "moves" | "controls" | "character" | "settings">("menu");
+  const [guideSide, setGuideSide] = useState<0 | 1>(0);
+  const [pinned, setPinned] = useState<string[]>([]);
+  const [showPinned, setShowPinned] = useState(true);
+  const pad = usePadConnected();
   const [summary, setSummary] = useState<MatchSummary | null>(null);
   const [score, setScore] = useState<ScoreBreakdown | null>(null);
   const [touch, setTouch] = useState(false);
@@ -118,6 +127,17 @@ export function FightScreen(props: Props) {
     sessionRef.current?.setPaused(paused || !!summary);
   }, [paused, summary]);
 
+  useEffect(() => { sessionRef.current?.applySettings(settings); }, [settings]);
+
+  useEffect(() => { if (!paused) setPausePage("menu"); }, [paused]);
+
+  const togglePin = (id: string) => setPinned((old) => {
+    const key = `${player}:${id}`;
+    if (old.includes(key)) return old.filter((x) => x !== key);
+    const own = old.filter((x) => x.startsWith(`${player}:`));
+    return [...(own.length >= 4 ? old.filter((x) => x !== own[0]) : old), key];
+  });
+
   const exit = useCallback((action: FightExit) => {
     audio.ui("confirm");
     if (action === "rematch") {
@@ -132,6 +152,11 @@ export function FightScreen(props: Props) {
   const press = (action: Action, down: boolean) => sessionRef.current?.input.setTouch(controllers[0] === "human" ? 0 : 1, action, down);
 
   const human = controllers.indexOf("human") as 0 | 1 | -1;
+  const player: 0 | 1 = controllers[0] === "human" && controllers[1] === "human" ? guideSide : human === 1 ? 1 : 0;
+  const bindingPlayer: 0 | 1 = controllers[0] === "cpu" ? 0 : player;
+  const fighter = player === 0 ? p1 : p2;
+  const ownPins = pinned.filter((x) => x.startsWith(`${player}:`)).map((x) => x.slice(2));
+  const pinGuide = guideFor(fighter, settings, bindingPlayer).filter((e) => ownPins.includes(e.id));
   const youWon = summary && human !== -1 && controllers[1] === "cpu" ? summary.winner === human : null;
   const actions = summary
     ? cbRef.current.resultActions?.(summary) ?? [
@@ -158,7 +183,7 @@ export function FightScreen(props: Props) {
           onClick={() => setPaused(true)}
           className="absolute bottom-[3.5vh] left-1/2 -translate-x-1/2 rounded-lg bg-black/50 px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider text-white/70 ring-1 ring-white/15 backdrop-blur transition hover:text-white"
         >
-          Esc · Pause
+          {pad ? "Menu · Pause" : "Esc · Pause"}
         </button>
       )}
 
@@ -167,21 +192,36 @@ export function FightScreen(props: Props) {
 
       {/* Touch controls */}
       {touch && phase === "fight" && !summary && !paused && <TouchPad onPress={press} />}
+      {phase === "fight" && !summary && !paused && ownPins.length > 0 && showPinned && <div className="pointer-events-none absolute bottom-20 left-4 max-w-[min(320px,50vw)] border-l-2 border-amber-300 bg-black/65 px-3 py-2 text-xs text-white/85 backdrop-blur">
+        <p className="mb-1 font-bold uppercase tracking-widest text-amber-200">Pinned moves</p>{pinGuide.map((e) => <p key={e.id} className="truncate">{pad ? e.pad : e.keyboard} · {e.name}</p>)}
+      </div>}
 
       {/* Pause */}
       <AnimatePresence>
         {paused && !summary && (
-          <motion.div data-pad-menu initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6 backdrop-blur-md">
-            <div className="grid w-full max-w-5xl gap-8 lg:grid-cols-[320px_1fr]">
-              <div className="flex flex-col gap-3">
-                <h2 className="fw-display fw-outline mb-2 text-6xl font-[650] uppercase text-white">Paused</h2>
-                <ArcadeButton size="lg" data-pad-back autoFocus onClick={() => setPaused(false)}>Resume</ArcadeButton>
-                <ArcadeButton size="md" tone="ghost" onClick={() => exit("rematch")}>Restart match</ArcadeButton>
-                <ArcadeButton size="md" tone="ghost" onClick={() => exit("changeFighter")}>Change fighter</ArcadeButton>
-                <ArcadeButton size="md" tone="ghost" onClick={() => exit("quit")}>Quit to menu</ArcadeButton>
+          <motion.div data-pad-menu initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20 overflow-y-auto bg-[#05070d]/95 p-4 backdrop-blur-xl md:p-8">
+            {pausePage === "settings" ? <SettingsScreen settings={settings} onChange={(s) => props.onSettingsChange?.(s)} onBack={() => setPausePage("menu")} /> :
+            <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[280px_1fr]">
+              <div className="flex flex-col gap-2">
+                <p className="font-mono text-xs uppercase tracking-[0.3em] text-amber-300">Fight World · {arena.name}</p>
+                <h2 className="fw-display fw-outline mb-4 text-6xl font-[650] uppercase text-white">Paused</h2>
+                {controllers[0] === "human" && controllers[1] === "human" && <div className="flex gap-2"><ArcadeButton tone="ghost" size="sm" onClick={() => setGuideSide(0)}>P1 moves</ArcadeButton><ArcadeButton tone="ghost" size="sm" onClick={() => setGuideSide(1)}>P2 moves</ArcadeButton></div>}
+                <ArcadeButton size="lg" data-pad-back data-pad-pause autoFocus onClick={() => pausePage === "menu" ? setPaused(false) : setPausePage("menu")}>{pausePage === "menu" ? "Resume" : "Back to pause"}</ArcadeButton>
+                <ArcadeButton tone="ghost" onClick={() => setPausePage("moves")}>Move List</ArcadeButton>
+                <ArcadeButton tone="ghost" onClick={() => setPausePage("controls")}>Controls</ArcadeButton>
+                <ArcadeButton tone="ghost" onClick={() => setPausePage("character")}>Character Info</ArcadeButton>
+                <ArcadeButton tone="ghost" onClick={() => setPausePage("settings")}>Settings</ArcadeButton>
+                <ArcadeButton tone="ghost" onClick={() => setShowPinned((v) => !v)}>{showPinned ? "Hide" : "Show"} pinned moves ({ownPins.length}/4)</ArcadeButton>
+                <ArcadeButton tone="ghost" onClick={() => exit("rematch")}>Restart Match</ArcadeButton>
+                <ArcadeButton tone="ghost" onClick={() => exit("quit")}>Quit Match</ArcadeButton>
               </div>
-              <ControlsCard settings={settings} versus={controllers[0] === "human" && controllers[1] === "human"} p1={p1} p2={p2} />
-            </div>
+              <div className="min-h-[360px] max-h-[82vh] overflow-y-auto border-t-2 border-amber-300/60 bg-white/[0.035] p-5 lg:p-7">
+                {pausePage === "menu" && <><h3 className="fw-display text-4xl uppercase text-white">{fighter.name}</h3><p className="mt-2 text-white/60">{fighter.blurb}</p><p className="mt-6 text-sm text-amber-200">{pad ? "A Select · B Back · Menu Resume" : "Enter Select · Esc Resume"}</p><HowToPlay def={fighter} /></>}
+                {pausePage === "moves" && <><h3 className="fw-display mb-4 text-4xl uppercase">Move List</h3><MoveGuide def={fighter} settings={settings} player={bindingPlayer} pinned={ownPins} onTogglePin={togglePin} /></>}
+                {pausePage === "controls" && <><h3 className="fw-display mb-4 text-4xl uppercase">Controls</h3><ControlsCard settings={settings} versus={controllers[0] === "human" && controllers[1] === "human"} p1={controllers[0] === "cpu" ? fighter : p1} p2={p2} /></>}
+                {pausePage === "character" && <><h3 className="fw-display mb-4 text-4xl uppercase">How to Play {fighter.name}</h3><HowToPlay def={fighter} /></>}
+              </div>
+            </div>}
           </motion.div>
         )}
       </AnimatePresence>
@@ -259,6 +299,7 @@ function Results({
   actions: { label: string; action: FightExit; tone?: "primary" | "ghost" | "danger" }[];
   onAction: (a: FightExit) => void;
 }) {
+  const pad = usePadConnected();
   const w = summary.winner;
   const winner = w === null ? null : w === 0 ? p1 : p2;
   const title = w === null ? "DRAW" : youWon === false ? "DEFEATED" : `${winner!.name} WINS`;
@@ -324,12 +365,12 @@ function Results({
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.95 }} className="flex flex-wrap justify-center gap-3">
         {actions.map((a, i) => (
-          <ArcadeButton key={a.label} size={i === 0 ? "lg" : "md"} tone={i === 0 ? a.tone ?? "primary" : a.tone ?? "ghost"} onClick={() => onAction(a.action)} autoFocus={i === 0}>
+          <ArcadeButton key={a.label} data-pad-back={a.action === "quit" || (actions.length === 1 && i === 0) ? "" : undefined} size={i === 0 ? "lg" : "md"} tone={i === 0 ? a.tone ?? "primary" : a.tone ?? "ghost"} onClick={() => onAction(a.action)} autoFocus={i === 0}>
             {a.label}
           </ArcadeButton>
         ))}
       </motion.div>
-      <p className="font-mono text-xs text-white/40">Enter · {actions[0]?.label}</p>
+      <p className="font-mono text-xs text-white/50">{pad ? `A · ${actions[0]?.label} · B · ${actions.find((a) => a.action === "quit")?.label ?? actions[0]?.label}` : `Enter · ${actions[0]?.label}`}</p>
     </div>
   );
 }

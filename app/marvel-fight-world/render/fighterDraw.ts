@@ -546,7 +546,24 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: Fighter, j: Joints
   // Iconic headgear silhouettes frame the portrait head (fins, wings, collar)
   const tilt = j.lean * 0.35 + j.head;
   if (look.headgear && !ghost) drawHeadgear(front, rig.head, rig.headR, tilt, dir, look.headgear, "back");
-  drawHeadShape(front, rig.head, rig.headR, tilt, dir, ghost ? null : o.portrait, look.primary);
+  const headShape = drawHeadShape(front, rig.head, rig.headR, tilt, dir, ghost ? null : o.portrait, look.primary);
+  if (!ghost) {
+    // Light the portrait face with the fighter's state instead of drawing
+    // artificial features over the source artwork.
+    const mood = f.state === "hit" || f.state === "launched" || f.state === "thrown" ? "rgba(255,95,78,0.25)" :
+      f.state === "block" || f.state === "blockstun" ? "rgba(104,192,255,0.15)" :
+      f.state === "attack" && f.move?.kind === "ultimate" ? "rgba(255,219,95,0.28)" :
+      f.state === "attack" ? "rgba(255,180,108,0.12)" :
+      f.state === "victory" ? "rgba(255,227,139,0.17)" :
+      f.state === "defeated" ? "rgba(15,23,42,0.28)" : null;
+    if (mood) {
+      ctx.save();
+      ctx.clip(headShape);
+      ctx.fillStyle = mood;
+      ctx.fillRect(rig.head[0] - rig.headR * 1.2, -rig.head[1] - rig.headR * 1.2, rig.headR * 2.4, rig.headR * 2.4);
+      ctx.restore();
+    }
+  }
   if (look.headgear && !ghost) drawHeadgear(front, rig.head, rig.headR, tilt, dir, look.headgear, "front");
 
   // ── Front arm ────────────────────────────────────────────────────

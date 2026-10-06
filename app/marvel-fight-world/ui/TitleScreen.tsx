@@ -13,6 +13,7 @@ import { DEFAULT_SETTINGS, type Settings } from "../data/storage";
 import { GameSession } from "../game/session";
 import { ARENAS } from "../render/arenas";
 import { cn } from "./kit";
+import { usePadConnected } from "./usePad";
 
 export type MenuChoice = "cpu" | "versus" | "random" | "survival" | "tournament" | "world" | "roster" | "stats" | "settings" | "cloud";
 
@@ -76,31 +77,37 @@ function AttractFight({ roster }: { roster: Roster }) {
 
 export function TitleScreen({ roster, onChoose, corner, paused = false, onLeave }: { roster: Roster; settings: Settings; onChoose: (c: MenuChoice) => void; corner?: ReactNode; paused?: boolean; onLeave?: () => void }) {
   const [sel, setSel] = useState(0);
+  const selRef = useRef(0);
+  const menuRef = useRef({ onChoose, paused });
+  menuRef.current = { onChoose, paused };
+  const pad = usePadConnected();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // a dialog is open (typing an email etc.): the menu stays out of the way
-      if (paused || (e.target as HTMLElement | null)?.closest?.("input, textarea, [role=dialog]")) return;
+      if (menuRef.current.paused || (e.target as HTMLElement | null)?.closest?.("input, textarea, [role=dialog]")) return;
       if (["ArrowDown", "KeyS"].includes(e.code)) {
         e.preventDefault();
-        setSel((s) => (s + 1) % MENU.length);
+        selRef.current = (selRef.current + 1) % MENU.length;
+        setSel(selRef.current);
         audio.unlock();
         audio.ui("move");
       } else if (["ArrowUp", "KeyW"].includes(e.code)) {
         e.preventDefault();
-        setSel((s) => (s - 1 + MENU.length) % MENU.length);
+        selRef.current = (selRef.current - 1 + MENU.length) % MENU.length;
+        setSel(selRef.current);
         audio.unlock();
         audio.ui("move");
       } else if (e.code === "Enter" || e.code === "KeyJ" || e.code === "Space") {
         e.preventDefault();
         audio.unlock();
         audio.ui("confirm");
-        onChoose(MENU[sel].id);
+        menuRef.current.onChoose(MENU[selRef.current].id);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sel, onChoose, paused]);
+  }, []);
 
   return (
     <div className="absolute inset-0 isolate overflow-hidden bg-black text-white">
@@ -125,7 +132,7 @@ export function TitleScreen({ roster, onChoose, corner, paused = false, onLeave 
 
       <div className="relative flex h-full flex-col justify-center px-[6vw] py-10">
         <motion.div initial={{ x: -60, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: "spring", stiffness: 120, damping: 16 }}>
-          <p className="font-mono text-xs font-bold uppercase tracking-[0.45em] text-amber-300">Fan-made arcade brawler · {roster.fighters.length} fighters</p>
+          <p className="font-mono text-xs font-bold uppercase tracking-[0.45em] text-amber-300">Fan-made arcade brawler · {roster.fighters.length} fighters{roster.offline ? " · Offline roster" : ""}</p>
           <h1 className="fw-display mt-2 select-none text-[clamp(4rem,11vw,10rem)] font-[650] uppercase leading-[0.85]" style={{ WebkitTextStroke: "6px #05060a", paintOrder: "stroke fill" }}>
             <span className="bg-gradient-to-b from-white via-amber-200 to-orange-500 bg-clip-text text-transparent [filter:drop-shadow(0_0_30px_rgba(251,146,60,0.55))]">Fight</span>
             <br />
@@ -142,6 +149,7 @@ export function TitleScreen({ roster, onChoose, corner, paused = false, onLeave 
               animate={{ x: 0, opacity: 1 }}
               transition={{ delay: 0.15 + i * 0.04 }}
               onMouseEnter={() => {
+                selRef.current = i;
                 setSel(i);
                 audio.ui("move");
               }}
@@ -163,7 +171,7 @@ export function TitleScreen({ roster, onChoose, corner, paused = false, onLeave 
           ))}
         </nav>
 
-        <p className="mt-8 font-mono text-[11px] uppercase tracking-widest text-white/40">↑ ↓ to choose · Enter to select</p>
+        <p className="mt-8 font-mono text-[11px] uppercase tracking-widest text-white/60">{pad ? "D-Pad / Left Stick to choose · A to select" : "↑ ↓ to choose · Enter to select"}</p>
       </div>
 
       <p className="absolute inset-x-0 bottom-3 px-6 text-center text-[11px] text-white/40">

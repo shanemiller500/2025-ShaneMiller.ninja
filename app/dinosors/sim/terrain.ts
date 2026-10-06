@@ -29,7 +29,24 @@ export const LM = {
   forest: { x: 30, y: 22 },
   grass: { x: 110, y: 55 },
   mountains: { x: 80, y: 6 },
+  /** the snowy Frostpeak range in the south-east */
+  frost: { x: 147, y: 80 },
 } as const;
+
+/** Tar pits (tile coords + radius). The first is the original swamp pit. */
+export const TAR_PITS = [
+  { x: LM.tar.x, y: LM.tar.y, r: 2.4 },
+  { x: 104, y: 79, r: 1.6 },
+  { x: 132, y: 62, r: 1.4 },
+];
+
+/** Frostpeak ridge line (tile coords). */
+export const FROST_RIDGE: [number, number][] = [
+  [137, 77],
+  [146, 79],
+  [151, 81],
+  [156, 85],
+];
 
 export type LandmarkId = keyof typeof LM;
 
@@ -125,7 +142,17 @@ export class Terrain {
           else if (n2 < 0.3) t = T.Shallow;
           h -= 0.04;
         }
-        if (Math.hypot(x - LM.tar.x, y - LM.tar.y) < 2.4) t = T.Tar;
+        for (const pit of TAR_PITS) if (Math.hypot(x - pit.x, y - pit.y) < pit.r + (n2 - 0.5) * 0.6) t = T.Tar;
+
+        // Frostpeak: a short snowy ridge with rocky skirts
+        const fr = distToPolyline(x, y, FROST_RIDGE) + (n - 0.5) * 2.2;
+        if (fr < 2.3) {
+          t = T.Mountain;
+          h += 0.9;
+        } else if (fr < 5.2) {
+          t = n2 > 0.7 ? T.Mountain : T.Rock;
+          h += 0.45;
+        }
 
         // lava field from old eruptions
         if (Math.hypot(x - LM.lavaField.x, y - LM.lavaField.y) < 12 + (n2 - 0.5) * 6) t = T.Basalt;
