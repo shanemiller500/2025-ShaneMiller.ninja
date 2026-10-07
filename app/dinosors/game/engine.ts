@@ -7,7 +7,7 @@ import { FACTS } from "../data/facts";
 import { SPECIES, sp } from "../data/species";
 import { AudioManager } from "../audio/audio";
 import { DeepView, type DeepInfo } from "./deepView";
-import { canSend, pickMiners, recallAll, sendDown, setOrder, type OrderKind } from "../sim/miners";
+import { canSend, pickMiners, recallAll, resetMine, sendDown, setOrder, type OrderKind } from "../sim/miners";
 import { demolishDeep } from "../sim/deepBuild";
 import type { DeepKind } from "../data/mine";
 import { CIV_TECH, ENERGY_GEN, PYRAMID_STAGES, SHIELD_HOLD, type CivPath, type CivTechId } from "../data/civ";
@@ -1867,6 +1867,13 @@ export class Engine {
   }
 
   /** Back up to the surface. */
+  /** Start the mine over with new rock + minerals (keeps everything already made). */
+  deepReset() {
+    resetMine(this.world);
+    this.deepClearSelection();
+    this.world.toast("♻️", "Fresh mine! New rock, caves and mineral veins. Your rooms, lift and everything hauled up are kept.");
+  }
+
   leaveDeep() {
     if (this.view === "surface" || this.dive) return;
     this.dive = { t: 0, to: "surface", switched: false };

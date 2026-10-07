@@ -155,6 +155,27 @@ function surface(w: World, m: Miner, h: Human | undefined) {
   go(h, "walk", h.x + (mine.rand() - 0.5) * 60, h.y + 40);
 }
 
+/**
+ * Reset the mine: everyone comes straight up (dropping what they carry on the
+ * stockpile), then the rock, caves and mineral veins are re-rolled. Everything
+ * already made or hauled up is kept.
+ */
+export function resetMine(w: World) {
+  const mine = w.mine;
+  for (const m of [...mine.crew]) surface(w, m, w.humans.find((h) => h.id === m.id));
+  for (const h of w.humans) {
+    if (!h.under) continue;
+    h.under = false;
+    h.x = w.camp.caveX + (mine.rand() - 0.5) * 20;
+    h.y = w.camp.caveY + 14;
+    h.state = "idle";
+    h.think = 0;
+  }
+  mine.crew = [];
+  const seed = (Math.floor(mine.rand() * 0x7fffffff) ^ Math.imul(mine.seed, 2654435761)) >>> 0;
+  mine.reset(seed || 1);
+}
+
 export function recallAll(w: World) {
   const mine = w.mine;
   mine.pending.clear();

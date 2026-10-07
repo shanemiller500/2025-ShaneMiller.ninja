@@ -203,6 +203,30 @@ export default function DeepHud({ snap, engine }: { snap: Snapshot; engine: Engi
   );
 }
 
+/** Start the mine over (two taps so it never happens by accident). */
+function ResetMine({ engine }: { engine: Engine }) {
+  const [sure, setSure] = useState(false);
+  useEffect(() => {
+    if (!sure) return;
+    const id = window.setTimeout(() => setSure(false), 5000);
+    return () => window.clearTimeout(id);
+  }, [sure]);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!sure) return setSure(true);
+        setSure(false);
+        engine.deepReset();
+      }}
+      className={`mt-2 w-full rounded-xl py-1.5 text-[11.5px] font-bold transition active:scale-95 ${sure ? "bg-rose-500 text-white hover:bg-rose-400" : "bg-white/10 text-white/80 hover:bg-white/20"}`}
+      title="New rock, caves + mineral veins. Keeps your rooms, the lift and everything already hauled up."
+    >
+      {sure ? "Tap again: reset the whole mine?" : "♻️ Reset mine (new minerals)"}
+    </button>
+  );
+}
+
 const OrderBtn = ({ on, onClick, label: l }: { on: boolean; onClick: () => void; label: string }) => (
   <button type="button" onClick={onClick} className={`rounded-xl px-2.5 py-1.5 text-[12px] font-bold transition active:scale-95 ${on ? "bg-cyan-400 text-slate-950" : "bg-white/10 hover:bg-white/20"}`}>
     {on ? "✓ " : ""}
@@ -293,6 +317,7 @@ function CrewPanel({ snap, engine }: { snap: Snapshot; engine: Engine }) {
             </label>
             <p className={`mt-1 text-[10.5px] ${d.food < d.crew.length * 2 ? "text-amber-200" : "text-white/45"}`}>🍖 Food at camp: {d.food} (miners eat from it)</p>
             {d.hauled.length > 0 && <p className="mt-1 text-[10.5px] text-white/55">Lifted up so far: {d.hauled.map((x) => `${x.icon}${x.n}`).join(" ")}</p>}
+            <ResetMine engine={engine} />
           </motion.div>
         )}
       </AnimatePresence>

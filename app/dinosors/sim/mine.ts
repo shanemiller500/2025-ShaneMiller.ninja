@@ -102,7 +102,8 @@ export interface DigResult {
 }
 
 export class Mine {
-  readonly seed: number;
+  /** what the rock + ore are generated from (changes when the mine is reset) */
+  seed: number;
   /** rock per cell (M) */
   cells = new Uint8Array(N);
   /** the rock as generated (saves only store the differences) */
@@ -219,6 +220,69 @@ export class Mine {
     this.seed = seed;
     this.rng = makeRng((seed ^ 0x5eed_dee9) >>> 0);
     this.generate();
+  }
+
+  /** Throw away the rock + ore and grow a fresh mine from a new seed (no keeping). */
+  private regenerate(seed: number) {
+    this.seed = seed;
+    this.rng = makeRng((seed ^ 0x5eed_dee9) >>> 0);
+    this.cells.fill(0);
+    this.base.fill(0);
+    this.ore.fill(0);
+    this.oreKinds = [];
+    this.seen.fill(0);
+    this.water.fill(0);
+    this.anyWater = false;
+    this.springs.clear();
+    this.gas.clear();
+    this.supports.clear();
+    this.known.clear();
+    this.landmarks = [];
+    this.special.clear();
+    this.critters = [];
+    this.orders.clear();
+    this.charges = [];
+    this.crates = [];
+    this.blasts = [];
+    this.sfx = [];
+    this.lastSignals = [];
+    this.generate();
+    this.version++;
+  }
+
+  /**
+   * Start the mine over with new random rock, caves + mineral veins. Kept:
+   * the lift depth, rooms already built down here (their space is dug out
+   * again), stats, milestones and everything already hauled up. The crew
+   * must be on the surface first (see resetMine in miners.ts).
+   */
+  reset(seed: number) {
+    const keep = { liftMax: this.liftMax, builds: this.builds, stats: this.stats, milestones: this.milestones, landmarksDone: this.landmarksDone, hauled: this.hauled, autoMine: this.autoMine, pumped: this.pumped };
+    this.regenerate(seed);
+    this.liftMax = keep.liftMax;
+    this.liftY = this.liftTo = 0;
+    this.stats = keep.stats;
+    this.milestones = keep.milestones;
+    this.landmarksDone = keep.landmarksDone;
+    this.hauled = keep.hauled;
+    this.autoMine = keep.autoMine;
+    this.pumped = keep.pumped;
+    this.recall = false;
+    this.pending.clear();
+    // rooms stay where they were: clear the new rock out of them (and light them up)
+    this.builds = keep.builds;
+    for (const b of this.builds) {
+      const d = DEEP_DEFS[b.kind];
+      for (let dy = 0; dy < d.h; dy++)
+        for (let dx = 0; dx < d.w; dx++) {
+          if (!inMine(b.x + dx, b.y + dy)) continue;
+          const i = idx(b.x + dx, b.y + dy);
+          if (this.cells[i] !== M.Shaft) this.cells[i] = M.Open;
+          this.ore[i] = 0;
+          this.seen[i] = 1;
+        }
+    }
+    this.reindex();
   }
 
   /* ------------------------------ generation ------------------------------ */
@@ -1012,6 +1076,7 @@ export class Mine {
     });
     return {
       v: 1,
+      seed: this.seed,
       cells: diff.join(","),
       seen: rle(this.seen),
       water,
@@ -1038,6 +1103,8 @@ export class Mine {
 
   load(d: ReturnType<Mine["serialize"]> | undefined) {
     if (!d || d.v !== 1) return;
+    // a mine that was reset grows from its own seed
+    if (typeof d.seed === "number" && d.seed !== this.seed) this.regenerate(d.seed);
     this.cells.set(this.base);
     if (d.cells)
       for (const part of d.cells.split(",")) {

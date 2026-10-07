@@ -2349,3 +2349,31 @@ test('a whole Neanderthal raid plays out on its own and ends', () => {
   assert.ok(t >= 0, 'the raid ended');
   run(w, 5);
 });
+
+test('resetting the mine re-rolls rock + minerals but keeps rooms, lift, stock and saves', () => {
+  const { resetMine } = require(path.join(root, 'sim', 'miners.ts'));
+  const { LIFT_X, LIFT_START } = require(path.join(root, 'data', 'mine.ts'));
+  const w = tribeWorld(70, ['tools']);
+  const m = w.mine;
+  const seed0 = m.seed;
+  const ore0 = Array.from(m.ore).join('');
+  m.liftMax = LIFT_START + 4;
+  w.camp.stock.stone = 33;
+  m.builds.push({ id: 99, kind: 'home', x: LIFT_X + 2, y: 3, built: 1, have: true, grow: 0 });
+  m.reindex();
+  const h = w.humans.find((x) => !x.child);
+  h.under = true;
+  resetMine(w);
+  assert.notEqual(m.seed, seed0, 'new seed');
+  assert.notEqual(Array.from(m.ore).join(''), ore0, 'minerals moved');
+  assert.ok(m.ore.some((x) => x > 0), 'and there are still minerals');
+  assert.equal(m.liftMax, LIFT_START + 4, 'lift kept');
+  assert.equal(w.camp.stock.stone, 33, 'stockpile kept');
+  assert.equal(m.builds.length, 1, 'room kept');
+  assert.equal(m.cells[(3) * 0 + m.builds[0].y * require(path.join(root, 'data', 'mine.ts')).MINE_W + m.builds[0].x], 0, 'room space dug out');
+  assert.ok(!h.under, 'everyone came up');
+  const w2 = clone(w);
+  assert.equal(w2.mine.seed, m.seed, 'the new mine saves');
+  assert.equal(Array.from(w2.mine.ore).join(''), Array.from(m.ore).join(''), 'same minerals after load');
+  assert.equal(w2.mine.builds.length, 1);
+});
