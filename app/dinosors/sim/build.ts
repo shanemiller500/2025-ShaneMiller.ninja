@@ -41,14 +41,19 @@ export const WALL_HP = { palisade: 220, stone: 600, polygon: 900 } as const;
 export const STONE_MUL = { v: 1 };
 
 export function wallMaxHp(wl: Wall) {
-  return WALL_HP[wl.kind] * (wl.kind === "palisade" ? 1 : STONE_MUL.v) * (wl.part === "gate" ? 0.85 : wl.part === "stairs" ? 0.6 : 1);
+  return WALL_HP[wl.kind] * (wl.kind === "palisade" ? 1 : STONE_MUL.v) * (wl.part === "gate" ? (wl.bone ? 1.25 : 0.85) : wl.part === "stairs" ? 0.6 : 1);
 }
+
+/** Bones for one grand bone gate. */
+export const BONE_GATE = { r: "bone" as Resource, n: 5 };
 
 /** What a piece is (or becomes, once its upgrade is built). */
 export const wallTarget = (wl: Wall) => (wl.upgrade ? wl.upTo ?? "stone" : wl.kind);
 
 /** Material + units for one wall piece (or its upgrade). */
 export function wallNeed(wl: Wall): { r: Resource; n: number } {
+  // a bone gate: planned fresh, or a finished piece being rebuilt as one
+  if (wl.boneUp || (wl.bone && wl.built < 1 && wl.hp <= 0 && !wl.upgrade)) return BONE_GATE;
   if (wallTarget(wl) === "polygon") return { r: "shaped", n: wl.part === "gate" ? 3 : 2 };
   const stone = wl.kind === "stone" || wl.upgrade;
   if (wl.part === "gate") return stone ? { r: "stone", n: 3 } : { r: "wood", n: 2 };
@@ -78,7 +83,7 @@ export function sites(w: World): Site[] {
   const out: Site[] = [];
   const L = w.camp.learned;
   for (const wl of w.tribe.walls) {
-    const pending = wl.built < 1 || wl.upgrade;
+    const pending = wl.built < 1 || wl.upgrade || !!wl.boneUp;
     const hurt = wl.built >= 1 && !wl.upgrade && wl.hp < wallMaxHp(wl) * 0.6;
     if (!pending && !hurt) continue;
     const x = wl.tx * TILE + TILE / 2;
@@ -147,7 +152,7 @@ export function deliver(w: World, s: Site, r: Resource, n: number, hx: number, h
     case "wall": {
       for (const wl of w.tribe.walls) {
         if (n - used < 1) break;
-        if (!(wl.built < 1 || wl.upgrade)) continue;
+        if (!(wl.built < 1 || wl.upgrade || wl.boneUp)) continue;
         const need = wallNeed(wl);
         if (need.r !== r || wl.have >= need.n) continue;
         const x = wl.tx * TILE + TILE / 2;
@@ -246,7 +251,7 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
       let best: Wall | null = null;
       let bd = 110;
       for (const wl of w.tribe.walls) {
-        if (!(wl.built < 1 || wl.upgrade) || wl.have < wallNeed(wl).n) continue;
+        if (!(wl.built < 1 || wl.upgrade || wl.boneUp) || wl.have < wallNeed(wl).n) continue;
         const d = Math.hypot(wl.tx * TILE + 16 - s.x, wl.ty * TILE + 16 - s.y);
         if (d < bd) {
           bd = d;
@@ -254,6 +259,22 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
         }
       }
       if (!best) return "done";
+      if (best.boneUp) {
+        // up go the tusks + the rib cage: the old gate (or wall) becomes the grand bone entrance
+        best.boneUp = false;
+        best.bone = true;
+        if (best.part !== "gate") best.open = !w.tribe.raid;
+        best.part = "gate";
+        best.have = 0;
+        best.hp = wallMaxHp(best);
+        w.tribe.version++;
+        w.particles.burst(P.Crumb, best.tx * TILE + 16, best.ty * TILE + 10, 10, 60, { z: 20, vz: 60, g: 160, size: 3, max: 0.8, color: "#efe4c8" });
+        if (!w.flags.has("boneGateDone")) {
+          w.flags.add("boneGateDone");
+          w.toast("🦴", "The grand bone gate is up! Walk through the giant rib cage; the bone doors slam shut on dinos.", best.tx * TILE, best.ty * TILE);
+        }
+        return best.id === s.id ? "done" : "work";
+      }
       if (best.upgrade) {
         // the old logs (or blocks) come down and go back on the stockpile for other jobs
         if (best.built >= 1) {
@@ -423,7 +444,7 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
 /** All unbuilt wall pieces joined to this one (a stretch the player drew). */
 export function wallStretch(w: World, start: Wall): Set<number> {
   const out = new Set<number>([start.id]);
-  const pending = (wl: Wall) => wl.built < 1 || wl.upgrade || wl.hp < wallMaxHp(wl) * 0.6;
+  const pending = (wl: Wall) => wl.built < 1 || wl.upgrade || !!wl.boneUp || wl.hp < wallMaxHp(wl) * 0.6;
   const q = [start];
   while (q.length) {
     const cur = q.pop()!;

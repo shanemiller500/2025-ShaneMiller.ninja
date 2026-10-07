@@ -96,7 +96,7 @@ function findPrey(w: World, d: Dino, def: SpeciesDef): Dino | Human | null {
       // stuck in tar = an easy meal
       if (e.state === "stuck") score -= 150;
     } else {
-      if (w.tribe.danger === "calm" || d.hunger < 0.55 || def.size < 40 || e.state === "hide" || e.state === "sleep" || e.state === "tossed" || e.level === 1) return;
+      if (w.tribe.danger === "calm" || d.hunger < 0.55 || def.size < 40 || e.captive || e.state === "hide" || e.state === "sleep" || e.state === "tossed" || e.level === 1) return;
       if (nearFire(e.x, e.y) || guarded(w, d, e.x, e.y)) return;
       // people are tempting; someone lying knocked out is an easy meal
       score += e.state === "down" ? -100 : e.child ? 40 : 80;

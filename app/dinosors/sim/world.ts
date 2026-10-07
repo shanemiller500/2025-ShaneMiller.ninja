@@ -50,6 +50,7 @@ import { updateDeepBuilds } from "./deepBuild";
 import { updateDeepLife } from "./deepLife";
 import { Snow } from "./snow";
 import { Dragons } from "./dragons";
+import { Rivals } from "./rivals";
 import { TaskBoard } from "./tasks";
 import { Population } from "./population";
 import { sites, type Site } from "./build";
@@ -131,6 +132,8 @@ export class World {
   colony = new Colony();
   snow = new Snow();
   dragons = new Dragons();
+  /** Neanderthal clans (CPU rivals) */
+  rivals = new Rivals();
   tasks = new TaskBoard();
   population = new Population();
   civ = new Civ();
@@ -670,6 +673,7 @@ export class World {
     this.tribe.update(this, dt);
     this.colony.update(this, dt);
     this.dragons.update(this, dt);
+    this.rivals.update(this, dt);
     this.population.update(this, dt);
     this.civ.update(this, dt);
     this.extinction.update(this, dt);
@@ -922,8 +926,10 @@ export class World {
         family: h.family,
         stranger: h.stranger,
         ...(h.under ? { under: true } : {}),
+        ...(h.captive ? { captive: h.captive } : {}),
       })),
       tribe: this.tribe.serialize(),
+      rivals: this.rivals.serialize(),
       items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
       eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent, genes: e.genes, gen: e.gen })),
       evo: this.evo,
@@ -980,6 +986,7 @@ export class World {
         home: h.home ?? 0,
         family: h.family ?? 0,
         stranger: !!h.stranger,
+        ...((h as { captive?: number }).captive ? { captive: (h as { captive?: number }).captive, state: "captive" as const } : {}),
       });
       hu.id = h.id;
     }
@@ -1022,6 +1029,7 @@ export class World {
     for (const f of data.campfires) w.campfires.push({ id: w.nextId(), ...f, cook: 0 });
     w.camp.stock = { ...w.camp.stock, ...data.camp.stock };
     w.tribe.load(w, data.tribe);
+    w.rivals.load(w, (data as { rivals?: ReturnType<Rivals["serialize"]> }).rivals);
     w.evo = data.evo ?? {};
     w.evoLeaps = data.evoLeaps ?? 0;
     w.evoAuto = !!data.evoAuto;

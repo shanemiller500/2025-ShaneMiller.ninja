@@ -20,7 +20,7 @@ import { canStand, emote, findSpawnSpot, isBaby, setState, sizeOf } from "../sim
 import { P } from "../sim/particles";
 import { TALL, shakeFruit } from "../sim/plants";
 import { LM, isWaterTile } from "../sim/terrain";
-import { TILE, WORLD_H, WORLD_W, type Danger, type Dino, type DinoState, type Dragon, type Human, type Resource, type Role, type SpeciesId, type TechId, type WeaponKind, type WeatherKind } from "../sim/types";
+import { TILE, WORLD_H, WORLD_W, type Brute, type Danger, type Dino, type DinoState, type Dragon, type Human, type Resource, type Role, type SpeciesId, type TechId, type WeaponKind, type WeatherKind } from "../sim/types";
 import { CAMP_LEVELS } from "../data/facts";
 import { BUILDINGS, FORGE_ITEMS, HOUSING, SCORPION_TIERS, WEAPON_BY_ID, type Cost } from "../data/colony";
 import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion, type Command } from "../sim/tasks";
@@ -158,6 +158,10 @@ export interface Snapshot {
   unlocked: SpeciesId[];
   seen: SpeciesId[];
   fps: number;
+  /** Neanderthal clans around the map */
+  rivals: {
+    clans: { id: number; name: string; color: string; size: number; x: number; y: number; captives: string[]; wars: string[]; pacts: string[] }[];
+  };
   tribe: {
     level: number;
     levelName: string;
@@ -167,7 +171,7 @@ export interface Snapshot {
     danger: Danger;
     evolution: number;
     raidsWon: number;
-    raid: { phase: "warn" | "attack"; label: string; left: number; x: number; y: number; t: number } | null;
+    raid: { phase: "warn" | "attack"; label: string; left: number; x: number; y: number; t: number; brutes: boolean } | null;
     people: PersonRow[];
     walls: { built: number; planned: number; damaged: number };
     farms: number;
@@ -299,6 +303,7 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
   rest: "Resting",
   smith: "Forging",
   research: "Researching",
+  captive: "Held captive by Neanderthals!",
   resonate: "Working the stone + crystals",
 };
 
@@ -654,6 +659,19 @@ export class Engine {
       if (k < 1 && d.y > bestY) {
         bestY = d.y;
         best = d;
+      }
+    }
+    return best;
+  }
+
+  private pickBrute(x: number, y: number): Brute | null {
+    let best: Brute | null = null;
+    let bd = 24;
+    for (const b of this.world.rivals.brutes) {
+      const d = Math.hypot(b.x - x, b.y - 18 - y);
+      if (d < bd) {
+        bd = d;
+        best = b;
       }
     }
     return best;
@@ -1021,8 +1039,8 @@ export class Engine {
     // people selected: the tap is an order (unless you tapped another person to pick them)
     if (this.selection.length) {
       const people = this.selectionHumans();
-      const picked = { dino: this.pickDino(x, y), human: this.pickHuman(x, y), dragon: this.pickDragon(x, y) };
-      if (picked.human && !people.includes(picked.human) && (this.addMode || condition(picked.human) === "healthy")) {
+      const picked = { dino: this.pickDino(x, y), human: this.pickHuman(x, y), dragon: this.pickDragon(x, y), brute: this.pickBrute(x, y) };
+      if (picked.human && !people.includes(picked.human) && !picked.human.captive && (this.addMode || condition(picked.human) === "healthy")) {
         if (this.addMode) this.toggleSelect(picked.human.id);
         else this.selectPeople([picked.human.id]);
         return;
@@ -1037,6 +1055,12 @@ export class Engine {
       return;
     }
 
+    const br = this.pickBrute(x, y);
+    if (br) {
+      const cl = w.rivals.clan(br.clan);
+      w.toast("🪓", `${br.name} of the ${cl?.name ?? "?"} clan: a Neanderthal. Bigger + stronger than us, but no smarter. Select armed people and tap him to fight.`, br.x, br.y);
+      return;
+    }
     const dr = this.pickDragon(x, y);
     if (dr) {
       this.toastOnce("dragonTap", "🐉", `${dr.name} the dragon! Select people with bows (or crew a Scorpion) and tap it to fight back.`);
@@ -1338,8 +1362,8 @@ export class Engine {
     }
     const { x, y } = this.hover;
     const people = this.selectionHumans();
-    const picked = { dino: this.pickDino(x, y), human: this.pickHuman(x, y), dragon: this.pickDragon(x, y) };
-    if (picked.human && !people.includes(picked.human) && condition(picked.human) === "healthy") {
+    const picked = { dino: this.pickDino(x, y), human: this.pickHuman(x, y), dragon: this.pickDragon(x, y), brute: this.pickBrute(x, y) };
+    if (picked.human && !people.includes(picked.human) && !picked.human.captive && condition(picked.human) === "healthy") {
       this.hoverHint = { x, y, icon: "👆", label: `Pick ${picked.human.name}` };
       return;
     }
@@ -2238,6 +2262,22 @@ export class Engine {
       seen: Array.from(w.seen),
       fps: this.fpsAcc.fps,
       tribe: this.tribeSnapshot(),
+      rivals: {
+        clans: w.rivals.clans.map((cl) => {
+          const others = w.rivals.clans.filter((o) => o !== cl);
+          return {
+            id: cl.id,
+            name: cl.name,
+            color: cl.color,
+            size: w.rivals.members(cl.id).length,
+            x: cl.x,
+            y: cl.y,
+            captives: w.rivals.captives(w, cl.id).map((h) => h.name),
+            wars: others.filter((o) => w.rivals.relation(o.id, cl.id) === -1).map((o) => o.name),
+            pacts: others.filter((o) => w.rivals.relation(o.id, cl.id) === 1).map((o) => o.name),
+          };
+        }),
+      },
       orderFor: this.orderFor,
       rallied: this.rallyRoles !== null,
       evolution: { leaps: w.evoLeaps, auto: w.evoAuto, species: speciesStats(w) },
@@ -2352,7 +2392,7 @@ export class Engine {
       case "gate": {
         const g = w.tribe.walls.find((x) => x.id === r.id);
         if (!g) return null;
-        return { kind: "gate", id: g.id, open: g.open, auto: g.auto, hp: g.hp, maxHp: wallMaxHp(g), material: g.kind === "stone" ? "Stone" : "Wooden" };
+        return { kind: "gate", id: g.id, open: g.open, auto: g.auto, hp: g.hp, maxHp: wallMaxHp(g), material: g.bone ? "Bone" : g.kind === "polygon" ? "Polygon" : g.kind === "stone" ? "Stone" : "Wooden" };
       }
       case "carcass": {
         const it = w.items.find((x) => x.id === r.id);
@@ -2401,8 +2441,8 @@ export class Engine {
     let ry = w.camp.y;
     if (raid) {
       for (const id of raid.ids) {
-        const d = w.dinoById(id);
-        if (d && d.raider) {
+        const d = raid.by === "brute" ? w.rivals.byId(id) : w.dinoById(id);
+        if (d && (d.kind === "brute" ? d.raid || d.captive > 0 : d.raider)) {
           left++;
           rx = d.x;
           ry = d.y;
@@ -2418,7 +2458,7 @@ export class Engine {
       danger: t.danger,
       evolution: t.evolution,
       raidsWon: t.raidsWon,
-      raid: raid ? { phase: raid.phase, label: raid.label, left, x: rx, y: ry, t: raid.t } : null,
+      raid: raid ? { phase: raid.phase, label: raid.label, left, x: rx, y: ry, t: raid.t, brutes: raid.by === "brute" } : null,
       people: w.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, role: h.role, autoRole: h.autoRole, state: h.state, hp: h.hp, condition: condition(h), task: w.tasks.get(h.taskId)?.label ?? null, stranger: h.stranger })),
       walls: {
         built: t.walls.filter((x) => x.built >= 1 && x.hp > 0).length,

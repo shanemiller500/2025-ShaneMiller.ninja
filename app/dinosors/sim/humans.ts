@@ -295,7 +295,7 @@ export function sourceFor(w: World, h: Human, r: Resource): { x: number; y: numb
       return t ? { ...t, id: 0 } : null;
     }
     case "water": {
-      const s = w.terrain.nearestDrink(h.x, h.y, 1600);
+      const s = w.colony.nearestWater(w, h.x, h.y, 1600);
       return s ? { ...s, id: 0 } : null;
     }
     case "meat":
@@ -427,6 +427,21 @@ function think(w: World, h: Human) {
         h.carryN = 0;
       }
       go(h, "flee", s.x, s.y);
+    }
+    return;
+  }
+
+  // a Neanderthal coming at me: fight back if armed, otherwise run for it
+  const brute = h.child ? null : w.rivals.brutes.find((b) => b.state === "fight" && b.targetId === h.id && Math.hypot(b.x - h.x, b.y - h.y) < 160);
+  if (brute && h.level === 0 && h.state !== "aim" && h.state !== "hunt" && h.state !== "operate") {
+    if (weapon && h.hp > 0.35) {
+      h.targetId = brute.id;
+      go(h, "hunt", brute.x, brute.y);
+      say(h, pick(w.rng, ["Neanderthal!", "Back off, brute!", "Fight!"]));
+    } else {
+      const a = Math.atan2(h.y - brute.y, h.x - brute.x);
+      if (h.state !== "flee") say(h, pick(w.rng, ["RUN!", "Big brute!", "Help!"]));
+      go(h, "flee", h.x + Math.cos(a) * 220, h.y + Math.sin(a) * 170);
     }
     return;
   }
@@ -844,6 +859,12 @@ export function updateHuman(w: World, h: Human, dt: number) {
   if (h.bubble) {
     h.bubble.t -= dt;
     if (h.bubble.t <= 0) h.bubble = null;
+  }
+  if (h.captive) {
+    // carried off or held at a Neanderthal camp: the clan moves them, nothing else happens
+    h.vx = h.vy = 0;
+    if (h.state !== "captive") h.state = "captive";
+    return;
   }
   updateWarmth(w, h, dt);
   recover(w, h, dt);

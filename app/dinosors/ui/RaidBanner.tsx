@@ -19,7 +19,7 @@ export default function RaidBanner({ snap, engine }: { snap: Snapshot; engine: E
               raid.phase === "warn" ? "border-amber-300/80 bg-gradient-to-br from-amber-500 to-orange-600" : "border-rose-300/70 bg-gradient-to-br from-rose-600 to-red-700"
             }`}
           >
-            <span className={`text-3xl ${raid.phase === "attack" ? "animate-bounce" : ""}`}>{raid.phase === "warn" ? "🥁" : "⚔️"}</span>
+            <span className={`text-3xl ${raid.phase === "attack" ? "animate-bounce" : ""}`}>{raid.brutes ? "🪓" : raid.phase === "warn" ? "🥁" : "⚔️"}</span>
             <span className="leading-tight">
               <span className="block text-[11px] font-bold uppercase tracking-wider text-white/85">{raid.phase === "warn" ? "Raid incoming!" : "RAID!"}</span>
               <span className="block text-[15px] font-bold">

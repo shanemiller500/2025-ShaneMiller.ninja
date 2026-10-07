@@ -12,6 +12,8 @@ export const DINO_NAMES = [
 ];
 
 export const CAVE_NAMES = ["Ugg", "Oona", "Bok", "Mira", "Grug", "Tikki", "Zog", "Lulu", "Kip", "Nana", "Ruk", "Pim"];
+/** The women of the tribe (the rest are men). */
+export const FEMALE_NAMES = new Set(["Oona", "Mira", "Tikki", "Lulu", "Nana", "Pim"]);
 
 export const TECH: Record<
   TechId,

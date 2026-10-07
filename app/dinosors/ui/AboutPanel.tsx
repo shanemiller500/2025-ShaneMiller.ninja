@@ -17,7 +17,7 @@ export default function AboutPanel({ open, onClose }: { open: boolean; onClose: 
     ["☄️", "Dragons, blizzards… and what happens if a meteor hits the volcano?"],
   ];
   return (
-    <Modal open={open} onClose={onClose} size="wide" accent="#22c55e" labelledBy="dl-about">
+    <Modal className="dl-modal" open={open} onClose={onClose} size="wide" accent="#22c55e" labelledBy="dl-about">
       <div className="dl-scroll overflow-y-auto p-6 text-slate-800 dark:text-slate-100">
         <div className="text-4xl">🦕🌋🔥</div>
         <h2 id="dl-about" className="mt-2 text-2xl font-bold">

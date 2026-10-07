@@ -9,7 +9,7 @@ import Portrait from "./Portrait";
 /** Secret discoveries + every species you've met. Vague hints, no spoilers. */
 export default function StickerBook({ open, onClose, found, seen }: { open: boolean; onClose: () => void; found: string[]; seen: SpeciesId[] }) {
   return (
-    <Modal open={open} onClose={onClose} size="lg" accent="#f59e0b" labelledBy="dl-stickers">
+    <Modal className="dl-modal" open={open} onClose={onClose} size="lg" accent="#f59e0b" labelledBy="dl-stickers">
       <div className="dl-scroll overflow-y-auto p-5 text-slate-800 dark:text-slate-100 sm:p-6" style={{ fontFamily: "inherit" }}>
         <h2 id="dl-stickers" className="text-2xl font-bold">
           🏆 Sticker Book <span className="text-base font-semibold text-slate-400">{found.length}/{DISCOVERIES.length}</span>

@@ -20,7 +20,7 @@ export function ExtinctionConfirm({ open, onClose, snap, engine, fontClass, onTo
   }, [open]);
   const ext = snap.extinction;
   return (
-    <Modal open={open} onClose={onClose} size="md" accent="#ef4444" labelledBy="ext-confirm">
+    <Modal className="dl-modal" open={open} onClose={onClose} size="md" accent="#ef4444" labelledBy="ext-confirm">
       <div className={`bg-slate-950 p-6 text-white ${fontClass}`}>
         <div className="text-5xl">{sv ? "☄️🌋" : "☄️"}</div>
         <h2 id="ext-confirm" className="mt-2 text-2xl font-bold">{sv ? "Set off the SUPERVOLCANO?" : "Call down the extinction asteroid?"}</h2>

@@ -23,7 +23,7 @@ import { TALL } from "./plants";
 import { pick } from "./rng";
 import { isWaterTile } from "./terrain";
 import { tileOf } from "./nav";
-import { MAP_W, T, TILE, type Dino, type Dragon, type Human, type Item, type Plant, type Resource, type WeaponKind } from "./types";
+import { MAP_W, T, TILE, type Brute, type Dino, type Dragon, type Human, type Item, type Plant, type Resource, type WeaponKind } from "./types";
 import type { World } from "./world";
 
 export type TaskKind =
@@ -160,6 +160,7 @@ export interface Picked {
   dino: Dino | null;
   human: Human | null;
   dragon: Dragon | null;
+  brute?: Brute | null;
 }
 
 function armoryKinds(w: World, people: Human[]): WeaponKind[] {
@@ -187,6 +188,11 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
   const kinds = armoryKinds(w, people);
   const armed = kinds.length > 0 && adults.length > 0;
 
+  if (picked.brute) {
+    const b = picked.brute;
+    if (!armed) return { kind: "move", icon: "😬", label: "Nobody has a weapon to fight a Neanderthal!", x: b.x, y: b.y, target: 0 };
+    return { kind: "hunt", icon: "🪓", label: `Fight ${b.name} the Neanderthal`, x: b.x, y: b.y, target: b.id, weapons: kinds };
+  }
   if (picked.dragon) {
     const d = picked.dragon;
     return { kind: "hunt", icon: "🐉", label: `Attack ${d.name}!`, x: d.x, y: d.y, target: d.id, weapons: kinds.filter((k) => k === "bow" || k === "spear") };
@@ -244,10 +250,10 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
   if (wl) {
     const cx = wl.tx * TILE + TILE / 2;
     const cy = wl.ty * TILE + TILE / 2;
-    if (wl.built < 1 || wl.upgrade) {
+    if (wl.built < 1 || wl.upgrade || wl.boneUp) {
       const group = Array.from(wallStretch(w, wl)).map((id) => `wall:${id}`);
       const site = sites(w).find((k) => k.kind === "wall" && k.id === wl.id);
-      if (site) return { ...buildCmd(site, wl.part === "gate" ? "🚪" : wl.part === "stairs" ? "🪜" : "🧱", `Build this ${wl.part === "wall" ? "wall" : wl.part} (${group.length} piece${group.length > 1 ? "s" : ""})`), group };
+      if (site) return { ...buildCmd(site, wl.bone || wl.boneUp ? "🦴" : wl.part === "gate" ? "🚪" : wl.part === "stairs" ? "🪜" : "🧱", `Build this ${wl.part === "wall" ? "wall" : wl.part} (${group.length} piece${group.length > 1 ? "s" : ""})`), group };
     }
     if (wl.hp < wallMaxHp(wl) * 0.95) {
       const group = Array.from(wallStretch(w, wl)).filter((id) => {
@@ -437,7 +443,7 @@ export function release(w: World, h: Human) {
 
 /** Pick up another unfinished player task nearby (prefer the closest). */
 export function joinTask(w: World, h: Human, idleOnly = false): boolean {
-  if (h.child || h.stranger || h.taskId) return false;
+  if (h.child || h.stranger || h.captive || h.taskId) return false;
   let best: Task | null = null;
   let bd = idleOnly ? 700 : 1600;
   for (const t of w.tasks.list) {
@@ -468,7 +474,7 @@ function taskAlive(w: World, t: Task): boolean {
       return (t.group ?? []).some((k) => all.some((s) => siteKey(s) === k && !s.locked));
     }
     case "hunt":
-      return !!(w.dinoById(t.target) || w.dragons.byId(t.target));
+      return !!(w.dinoById(t.target) || w.dragons.byId(t.target) || w.rivals.byId(t.target));
     case "heal": {
       const p = w.humans.find((x) => x.id === t.target);
       return !!p && p.hp < 0.95;
@@ -543,7 +549,7 @@ export function taskThink(w: World, h: Human): boolean {
     }
     case "hunt": {
       const d = w.dinoById(t.target);
-      const dr = w.dragons.byId(t.target);
+      const dr = w.dragons.byId(t.target) ?? w.rivals.byId(t.target);
       if (!d && !dr) {
         say(h, pick(w.rng, ["Got it!", "Done!", "Phew!"]));
         personDone(w, h, t);
@@ -847,7 +853,7 @@ function harvestSource(w: World, h: Human, t: Task): { x: number; y: number; id:
     if (b) return { x: b.x + 18, y: b.y + 6, id: b.id, res: "stone" };
   }
   if (t.kind === "water" || t.kind === "fish") {
-    const s = w.terrain.nearestDrink(t.x, t.y, 600);
+    const s = t.kind === "water" ? w.colony.nearestWater(w, t.x, t.y, 600) : w.terrain.nearestDrink(t.x, t.y, 600);
     return s ? { x: s.x, y: s.y, id: 0, res: t.kind === "fish" ? "fish" : "water" } : null;
   }
   if (res === "tar") {
@@ -1072,7 +1078,7 @@ export function douseThink(w: World, h: Human, done: () => void): boolean {
     h.task = null;
     return true;
   }
-  const s = w.terrain.nearestDrink(h.x, h.y, 1400);
+  const s = w.colony.nearestWater(w, h.x, h.y, 1400);
   if (!s) {
     done();
     return false;

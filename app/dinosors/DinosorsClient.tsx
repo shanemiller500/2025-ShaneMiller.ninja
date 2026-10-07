@@ -356,7 +356,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
           <SavedGames open={savesOpen} onClose={() => setSavesOpen(false)} engine={engine} fontClass={fontClass} onToast={(icon, text) => pushToast({ icon, text })} />
           <CloudPanel cloud={cloud} fontClass={fontClass} hasLocal={hasDinoProgress(engine)} />
-          <Modal open={!!confirm} onClose={() => setConfirm(null)} size="sm" accent="#f59e0b" labelledBy="dl-confirm">
+          <Modal className="dl-modal" open={!!confirm} onClose={() => setConfirm(null)} size="sm" accent="#f59e0b" labelledBy="dl-confirm">
             <div className={`p-6 text-slate-800 dark:text-slate-100 ${fontClass}`}>
               <div className="text-4xl">{confirm === "reset" ? "🧨" : "🌍"}</div>
               <h2 id="dl-confirm" className="mt-2 text-xl font-bold">
@@ -392,7 +392,38 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
       <style>{`
         @keyframes dl-pop { 0% { transform: translate(-50%, 30px) scale(.6); opacity: 0 } 60% { transform: translate(-50%, -6px) scale(1.06); opacity: 1 } 100% { transform: translate(-50%, 0) scale(1) } }
         .dl-pop { animation: dl-pop .55s cubic-bezier(.2,1.4,.4,1) both }
-        .dl-glass { background: rgba(15, 23, 42, 0.62); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.12) }
+        /* cartoon stone-age chrome, after the cave people art: warm hide/wood, bold ink outline, sticker shadow */
+        .dl-glass {
+          background:
+            radial-gradient(ellipse 9px 7px at 18% 22%, rgba(26,14,6,.16) 60%, transparent 62%),
+            radial-gradient(ellipse 7px 6px at 62% 70%, rgba(26,14,6,.14) 60%, transparent 62%),
+            radial-gradient(ellipse 8px 6px at 85% 30%, rgba(26,14,6,.12) 60%, transparent 62%),
+            linear-gradient(180deg, rgba(92,58,33,.95), rgba(61,37,20,.96));
+          background-size: 64px 52px, 58px 64px, 70px 58px, 100% 100%;
+          backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+          border: 3px solid #24140a;
+          box-shadow: inset 0 2px 0 rgba(255,214,150,.22), inset 0 -3px 0 rgba(0,0,0,.18), 0 5px 0 #24140a, 0 14px 28px rgba(20,10,4,.35) !important;
+        }
+        .dl-paper {
+          color: #3a2414;
+          background: radial-gradient(120% 80% at 50% 0%, #fff8e6, #f6e4bd);
+          border: 3px solid #3a2414;
+          box-shadow: inset 0 2px 0 #fffdf5, inset 0 -4px 0 rgba(150,95,40,.18), 0 5px 0 #3a2414, 0 16px 30px rgba(20,10,4,.35);
+        }
+        .dl-leopard {
+          background-color: #f2a43a;
+          background-image:
+            radial-gradient(ellipse 5px 4px at 25% 30%, #6b3a12 55%, transparent 60%),
+            radial-gradient(ellipse 4px 5px at 70% 65%, #6b3a12 55%, transparent 60%),
+            radial-gradient(ellipse 3px 3px at 80% 20%, #6b3a12 55%, transparent 60%);
+          background-size: 26px 20px, 24px 22px, 30px 26px;
+        }
+        .dl-btn { border: 2.5px solid #3a2414; box-shadow: inset 0 2px 0 rgba(255,255,255,.45), 0 3px 0 #3a2414; transition: transform .1s, box-shadow .1s }
+        .dl-btn:active { transform: translateY(2px); box-shadow: inset 0 2px 0 rgba(255,255,255,.45), 0 1px 0 #3a2414 }
+        .dl-ink { text-shadow: 0 2px 0 #24140a, 2px 0 0 #24140a, -2px 0 0 #24140a, 0 -2px 0 #24140a, 2px 2px 0 #24140a, -2px 2px 0 #24140a }
+        .dl-modal { border: 4px solid #3a2414 !important; box-shadow: 0 8px 0 #3a2414, 0 30px 60px rgba(20,10,4,.5) !important; background: #fdf3dc !important }
+        .dark .dl-modal { background: #2b1d12 !important }
+        .dl-modal.dl-modal-paper, .dark .dl-modal.dl-modal-paper { background: #f6e4bd !important }
         .dl-scroll::-webkit-scrollbar { display: none }
         .dl-scroll { scrollbar-width: none }
       `}</style>

@@ -133,11 +133,11 @@ export default function Toolbar({ tool, setTool, unlocked, learned = [], stock =
                   aria-pressed={active}
                   title={active && t.id !== "hand" ? `${t.label} is on — tap to turn off` : t.label}
                   className={`group flex h-14 w-14 flex-col items-center justify-center rounded-[22px] transition duration-150 active:scale-90 sm:h-16 sm:w-16 ${
-                    active ? "bg-gradient-to-b from-amber-300 to-amber-500 text-slate-900 shadow-lg shadow-amber-900/30" : "hover:-translate-y-1 hover:bg-white/15"
+                    active ? "dl-btn bg-gradient-to-b from-amber-300 to-amber-500 text-[#3a2414]" : "hover:-translate-y-1 hover:bg-white/15"
                   }`}
                 >
                   <span className={`text-[26px] leading-none transition group-hover:scale-110 sm:text-[30px] ${active ? "drop-shadow" : ""}`}>{iconFor(t.id)}</span>
-                  <span className={`mt-0.5 hidden text-[10px] font-semibold sm:block ${active ? "text-slate-900/80" : "text-white/75"}`}>{tool.id === t.id && t.id !== "hand" ? "ON ✕" : t.label}</span>
+                  <span className={`mt-0.5 hidden text-[10px] font-semibold sm:block ${active ? "text-[#3a2414]/80" : "text-[#fde9c4]/85"}`}>{tool.id === t.id && t.id !== "hand" ? "ON ✕" : t.label}</span>
                 </button>
               </div>
             );
@@ -146,7 +146,7 @@ export default function Toolbar({ tool, setTool, unlocked, learned = [], stock =
         <AnimatePresence>
           {tip && !open && (
             <div className="pointer-events-none absolute bottom-[calc(100%+8px)] left-0 right-0 hidden justify-center sm:flex">
-              <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="whitespace-nowrap rounded-2xl bg-slate-900/90 px-3 py-1.5 text-sm font-medium shadow-lg">
+              <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="dl-paper whitespace-nowrap rounded-2xl px-3 py-1.5 text-sm font-semibold">
                 {TOOLS.find((t) => t.id === tip)!.tip}
               </motion.div>
             </div>
@@ -196,7 +196,7 @@ function BuildMenu({ value, learned, civDone, civPath, stock, onPick }: { value:
               type="button"
               onClick={() => onPick(b.value)}
               title={lockText(b) ?? b.tip}
-              className={`relative flex flex-col items-center rounded-2xl px-1 pb-1.5 pt-2 transition active:scale-95 ${b.value === value ? "bg-white/25 ring-2 ring-amber-300" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"} ${locked ? "opacity-50" : ""}`}
+              className={`relative flex flex-col items-center rounded-2xl px-1 pb-1.5 pt-2 transition active:scale-95 ${b.value === value ? "dl-btn bg-amber-400/90 text-[#3a2414]" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"} ${locked ? "opacity-50" : ""}`}
             >
               {["spikes", "barricade", "totem", "tannery"].includes(b.value) ? <GameIcon id={b.value} size={30} className={locked ? "grayscale" : ""} /> : <span className={`text-[28px] leading-none ${locked ? "grayscale" : ""}`}>{b.icon}</span>}
               <span className="mt-1 text-center text-[11px] font-semibold leading-tight">{b.label}</span>
@@ -235,7 +235,7 @@ function Options<V extends string>({ opts, value, onPick }: { opts: Opt<V>[]; va
           key={o.value}
           type="button"
           onClick={() => onPick(o.value)}
-          className={`flex h-[72px] w-[72px] flex-col items-center justify-center rounded-2xl transition active:scale-90 ${o.value === value ? "bg-white/25 ring-2 ring-amber-300" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"}`}
+          className={`flex h-[72px] w-[72px] flex-col items-center justify-center rounded-2xl transition active:scale-90 ${o.value === value ? "dl-btn bg-amber-400/90 text-[#3a2414]" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"}`}
         >
           <span className="text-3xl leading-none">{o.icon}</span>
           <span className="mt-1 text-[11px] font-semibold text-white/85">{o.label}</span>
@@ -257,7 +257,7 @@ function SpeciesGrid({ value, unlocked, egg, onPick }: { value: SpeciesId; unloc
             type="button"
             onClick={() => onPick(s.id)}
             title={ok ? s.name : "Find this dino in the world to unlock it!"}
-            className={`relative flex w-[92px] flex-col items-center rounded-2xl px-1 pb-1.5 pt-1 transition active:scale-95 ${s.id === value ? "bg-white/25 ring-2 ring-amber-300" : "bg-white/5 hover:bg-white/15"}`}
+            className={`relative flex w-[92px] flex-col items-center rounded-2xl px-1 pb-1.5 pt-1 transition active:scale-95 ${s.id === value ? "dl-btn bg-amber-400/90 text-[#3a2414]" : "bg-white/5 hover:bg-white/15"}`}
           >
             <Portrait species={s.id} locked={!ok} baby={egg} w={84} h={58} />
             <span className={`text-[12px] font-semibold ${ok ? "" : "text-white/50"}`}>{ok ? s.nick : "???"}</span>

@@ -34,6 +34,7 @@ import { drawBarricade, drawCarcass, drawSpikes, drawTannery, drawTotem } from "
 import { carcassStage, harvested } from "../sim/carcass";
 import { HELMET_BY_ID, OUTFIT_BY_ID } from "../data/colony";
 import { drawRefinery } from "./metalArt";
+import { drawBrute, drawBruteMissile, drawClanCamp } from "./bruteArt";
 import { TerrainRenderer } from "./terrainRenderer";
 import { drawEruptionColumn, drawGhost, drawPyroclastic } from "./civArt";
 import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
@@ -84,6 +85,9 @@ const K_BUILDING = 15;
 const K_SCORPION = 16;
 const K_NODE = 17;
 const K_DRAGON = 18;
+const K_BRUTE = 19;
+const K_CLAN = 20;
+const K_BMISSILE = 21;
 
 interface Drop {
   x: number;
@@ -275,6 +279,20 @@ export class Renderer {
       const dr = w.dragons.list[i];
       if (dr.z <= 6 && dr.x > x0 - 100 && dr.x < x1 + 100 && dr.y > y0 && dr.y < y1 + 100) list.push({ y: dr.y, k: K_DRAGON, i });
     }
+    // Neanderthals, their camps and anything they've thrown
+    const rv = w.rivals;
+    for (let i = 0; i < rv.clans.length; i++) {
+      const cl = rv.clans[i];
+      if (cl.x > x0 - 160 && cl.x < x1 + 160 && cl.y > y0 - 40 && cl.y < y1 + 100) list.push({ y: cl.y - 40, k: K_CLAN, i });
+    }
+    for (let i = 0; i < rv.brutes.length; i++) {
+      const b = rv.brutes[i];
+      if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1 + 40) list.push({ y: b.y, k: K_BRUTE, i });
+    }
+    for (let i = 0; i < rv.missiles.length; i++) {
+      const m = rv.missiles[i];
+      if (m.x > x0 && m.x < x1 && m.y > y0 && m.y < y1) list.push({ y: m.y, k: K_BMISSILE, i });
+    }
     for (let i = 0; i < w.items.length; i++) {
       const it = w.items[i];
       if (it.x > x0 && it.x < x1 && it.y > y0 && it.y < y1) list.push({ y: it.y, k: K_ITEM, i });
@@ -317,7 +335,7 @@ export class Renderer {
       const wl = tribe.walls[i];
       const wx = wl.tx * TILE + TILE / 2;
       const wy = wl.ty * TILE + TILE;
-      if (wx > x0 && wx < x1 && wy > y0 && wy < y1 + 40) list.push({ y: wy - 2, k: K_WALL, i });
+      if (wx > x0 && wx < x1 && wy > y0 && wy < y1 + 40) list.push({ y: wy - (tribe.walls[i].bone ? 1.5 : 2), k: K_WALL, i });
     }
     for (let i = 0; i < tribe.towers.length; i++) {
       const tw = tribe.towers[i];
@@ -506,6 +524,30 @@ export class Renderer {
           c.save();
           c.translate(n.x, n.y);
           drawNode(c, n, this.t);
+          c.restore();
+          break;
+        }
+        case K_CLAN: {
+          const cl = w.rivals.clans[it.i];
+          c.save();
+          c.translate(cl.x, cl.y);
+          drawClanCamp(c, cl, this.t, night > 0.5, w.rivals.members(cl.id).length);
+          c.restore();
+          break;
+        }
+        case K_BRUTE: {
+          const b = w.rivals.brutes[it.i];
+          c.save();
+          c.translate(b.x, b.y - b.z);
+          drawBrute(c, b, this.t, w.rivals.clan(b.clan)?.color ?? "#c0392b");
+          c.restore();
+          break;
+        }
+        case K_BMISSILE: {
+          const m = w.rivals.missiles[it.i];
+          c.save();
+          c.translate(m.x, m.y);
+          drawBruteMissile(c, m.kind, m.z, Math.atan2(m.vy - m.vz * 0.6, m.vx));
           c.restore();
           break;
         }
@@ -1750,6 +1792,16 @@ export class Renderer {
       if (!h.bubble || h.x < x0 || h.x > x1 || h.y < y0 || h.y > y1 || this.hidden(h)) continue;
       const k = Math.min(1, h.bubble.t * 3);
       this.speech(c, h.x, h.y - h.z - 34, h.bubble.text, inv, k);
+    }
+    // …and over Neanderthals, plus a name plate over each clan camp
+    for (const b of w.rivals.brutes) {
+      if (!b.bubble || b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
+      this.speech(c, b.x, b.y - 46, b.bubble.text, inv, Math.min(1, b.bubble.t * 3));
+    }
+    for (const cl of w.rivals.clans) {
+      if (cl.x < x0 - 100 || cl.x > x1 + 100 || cl.y < y0 || cl.y > y1 + 80) continue;
+      const held = w.rivals.captives(w, cl.id).length;
+      this.speech(c, cl.x + 44, cl.y - 72, `🪓 ${cl.name} clan${held ? ` · ${held} captive${held > 1 ? "s" : ""}` : ""}`, inv * 0.9, 1);
     }
     // crafting progress
     const cr = w.camp.crafting;

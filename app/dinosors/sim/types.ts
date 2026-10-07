@@ -298,7 +298,8 @@ export type HumanState =
   | "rest"
   | "smith"
   | "research"
-  | "resonate";
+  | "resonate"
+  | "captive";
 
 export type Resource =
   | "stick"
@@ -416,6 +417,67 @@ export interface Human {
   stranger: boolean;
   /** down in the mine (the surface brain leaves them alone; see sim/miners.ts) */
   under?: boolean;
+  /** carried off by a Neanderthal clan (its id); 0 / missing = free */
+  captive?: number;
+}
+
+/* ------------------------------ Neanderthals ------------------------------ */
+
+/** Basic weapons only: Neanderthals never invent bows, metal or energy weapons. */
+export type BruteWeapon = "club" | "axe" | "spear" | "rock";
+
+export type BruteState = "idle" | "wander" | "walk" | "sleep" | "fight" | "hunt" | "bash" | "carry" | "flee" | "home" | "loot" | "rally";
+
+/** A Neanderthal: bigger + stronger than our people, not as clever. CPU-run. */
+export interface Brute {
+  id: number;
+  kind: "brute";
+  name: string;
+  clan: number;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  dir: 1 | -1;
+  /** 0..1 */
+  hp: number;
+  weapon: BruteWeapon;
+  state: BruteState;
+  stateT: number;
+  think: number;
+  tx: number;
+  ty: number;
+  /** who / what they're after (human, brute, dino or wall id) */
+  targetId: number;
+  cd: number;
+  anim: number;
+  path: number[] | null;
+  pathI: number;
+  pathKey: number;
+  stuckT: number;
+  /** marching on our camp right now */
+  raid: boolean;
+  /** off to fight another clan (its id) */
+  war: number;
+  /** person being carried off (id) */
+  captive: number;
+  /** food grabbed from a stockpile */
+  loot: number;
+  bubble: { text: string; t: number } | null;
+}
+
+/** A small Neanderthal band with its own camp. Relations: -1 war, 0 wary, 1 allies. */
+export interface Clan {
+  id: number;
+  name: string;
+  color: string;
+  x: number;
+  y: number;
+  food: number;
+  /** seconds until they raid our camp */
+  raidT: number;
+  growT: number;
 }
 
 export type ItemKind = "meat" | "fish" | "fruit" | "berries" | "poop" | "fossil" | "stick" | "stone" | "bones" | "carcass";
@@ -590,6 +652,10 @@ export interface Wall {
   upTo?: WallKind;
   /** resources delivered so far */
   have: number;
+  /** gates: the grand bone entrance (crossed tusks, rib-cage arch, bone doors) */
+  bone?: boolean;
+  /** a finished piece waiting to be rebuilt as a bone gate (works as before until then) */
+  boneUp?: boolean;
 }
 
 export interface Farm {
@@ -614,7 +680,7 @@ export interface Tower {
   hp: number;
 }
 
-export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "tannery" | "spikes" | "barricade" | "totem"
+export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "well" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "tannery" | "spikes" | "barricade" | "totem"
   // the Old Ways' last-resort project
   | "shelterDeep"
   | "refinery"

@@ -119,7 +119,7 @@ export default function SavedGames({ open, onClose, engine, fontClass, onToast }
     });
 
   return (
-    <Modal open={open} onClose={onClose} size="wide" accent="#f59e0b" labelledBy="dl-saves">
+    <Modal className="dl-modal" open={open} onClose={onClose} size="wide" accent="#f59e0b" labelledBy="dl-saves">
       <div className={`dl-scroll max-h-[82vh] overflow-y-auto p-5 text-slate-800 dark:text-slate-100 sm:p-6 ${fontClass}`}>
         <div className="flex items-center gap-3">
           <span className="text-4xl">📂</span>

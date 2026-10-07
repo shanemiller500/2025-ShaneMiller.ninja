@@ -28,7 +28,7 @@ export const CONDITION_LABEL: Record<Condition, { icon: string; label: string; c
   down: { icon: "😵", label: "Knocked out", color: "#f87171" },
 };
 
-export type HurtCause = "bite" | "burn" | "rock" | "cold" | "kick";
+export type HurtCause = "bite" | "burn" | "rock" | "cold" | "kick" | "club";
 
 /** Damage a person. Returns true if it knocked them out. */
 export function hurtHuman(w: World, h: Human, dmg: number, fx: number, fy: number, cause: HurtCause): boolean {
@@ -37,7 +37,7 @@ export function hurtHuman(w: World, h: Human, dmg: number, fx: number, fy: numbe
   if (shield && cause !== "cold") dmg *= 1 - shield.block * (cause === "burn" ? 0.5 : 1);
   // hide tunics + furs soften bites
   const coat = h.gear.outfit ? OUTFIT_BY_ID[h.gear.outfit] : null;
-  if (coat && (cause === "bite" || cause === "kick")) dmg *= 1 - coat.armor;
+  if (coat && (cause === "bite" || cause === "kick" || cause === "club")) dmg *= 1 - coat.armor;
   const helm = h.gear.helmet ? HELMET_BY_ID[h.gear.helmet] : null;
   if (helm && cause !== "cold") dmg *= 1 - helm.armor;
   if (h.child) dmg *= 0.8;

@@ -91,7 +91,7 @@ const NB = (i: number) => {
 
 /** Can this person go down the mine? */
 export function canSend(h: Human) {
-  return !h.child && !h.stranger && !h.under && h.state !== "down" && h.hp > 0.35;
+  return !h.child && !h.stranger && !h.under && !h.captive && h.state !== "down" && h.hp > 0.35;
 }
 
 /** Ask someone to walk to the cave and go down. */

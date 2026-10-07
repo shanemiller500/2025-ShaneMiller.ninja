@@ -109,46 +109,52 @@ export function TipCoach({ snap, enabled, busy, onOff, onHelp }: { snap: Snapsho
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 16, scale: 0.96 }}
           transition={{ type: "spring", stiffness: 360, damping: 28 }}
-          className={`pointer-events-auto absolute left-2 z-30 flex w-[min(360px,calc(100vw-16px))] items-end sm:left-4 ${deep ? "bottom-[160px] sm:bottom-28" : "bottom-[100px] sm:bottom-32"}`}
+          className={`pointer-events-auto absolute left-1 z-30 flex w-[min(420px,calc(100vw-8px))] items-end sm:left-3 ${deep ? "bottom-[160px] sm:bottom-28" : "bottom-[100px] sm:bottom-32"}`}
           role="status"
         >
           <motion.img
             src={GUIDE_IMG(tip.art)}
             alt={tip.who}
-            width={96}
-            height={96}
-            initial={{ y: 30, rotate: -6 }}
-            animate={{ y: 0, rotate: [0, -3, 2, 0] }}
-            transition={{ y: { type: "spring", stiffness: 260, damping: 16 }, rotate: { duration: 1.6, delay: 0.3 } }}
-            className="relative z-10 -mr-5 h-24 w-24 shrink-0 object-contain drop-shadow-[0_6px_12px_rgba(0,0,0,0.45)]"
+            width={128}
+            height={128}
+            initial={{ y: 40, rotate: -8 }}
+            animate={{ y: 0, rotate: [0, -4, 3, 0] }}
+            transition={{ y: { type: "spring", stiffness: 260, damping: 15 }, rotate: { duration: 1.6, delay: 0.3 } }}
+            className="relative z-20 -mr-1 h-28 w-28 shrink-0 object-contain drop-shadow-[0_5px_0_rgba(36,20,10,0.55)] sm:h-32 sm:w-32"
           />
-          <div className="dl-glass relative flex-1 rounded-3xl rounded-bl-md p-3 pl-6 shadow-2xl">
-            <button type="button" aria-label="Close tip" onClick={() => setTip(null)} className="absolute right-2 top-2 rounded-full p-1 text-white/50 hover:bg-white/10 hover:text-white">
-              <X className="h-3.5 w-3.5" />
-            </button>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">{tip.who} says</div>
-            <p className="mt-0.5 pr-4 text-[13.5px] leading-snug text-white/90">{tip.text}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <button type="button" onClick={() => setTip(null)} className="rounded-full bg-amber-400 px-3 py-1 text-[12px] font-bold text-slate-900 hover:bg-amber-300 active:scale-95">
-                Got it
+          <div className="relative mb-6 min-w-0 flex-1">
+            <div className="dl-paper relative rounded-[26px] px-4 pb-3 pt-4">
+              <div className="dl-leopard dl-btn absolute -top-3.5 left-4 rounded-full px-3 py-0.5 text-[12px] font-bold uppercase tracking-wider text-[#fff6dd]">
+                <span className="dl-ink">{tip.who} says</span>
+              </div>
+              <button type="button" aria-label="Close tip" onClick={() => setTip(null)} className="absolute right-2.5 top-2.5 rounded-full p-1 text-[#3a2414]/50 hover:bg-[#3a2414]/10 hover:text-[#3a2414]">
+                <X className="h-4 w-4" strokeWidth={3} />
               </button>
-              <button type="button" onClick={() => show(choose(true))} className="rounded-full bg-white/10 px-3 py-1 text-[12px] font-bold hover:bg-white/20 active:scale-95">
-                Another tip
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setTip(null);
-                  onHelp(tip.help);
-                }}
-                className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-[12px] font-bold hover:bg-white/20 active:scale-95"
-              >
-                <BookOpen className="h-3.5 w-3.5" /> Help
-              </button>
-              <button type="button" onClick={onOff} className="ml-auto text-[11px] font-semibold text-white/45 underline-offset-2 hover:text-white/80 hover:underline">
+              <p className="pr-5 text-[15px] font-semibold leading-snug">{tip.text}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => setTip(null)} className="dl-btn rounded-full bg-amber-400 px-3.5 py-1 text-[13px] font-bold text-[#3a2414] hover:bg-amber-300">
+                  Got it!
+                </button>
+                <button type="button" onClick={() => show(choose(true))} className="dl-btn rounded-full bg-[#fffaf0] px-3 py-1 text-[13px] font-bold text-[#3a2414] hover:bg-white">
+                  Another tip
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTip(null);
+                    onHelp(tip.help);
+                  }}
+                  className="dl-btn flex items-center gap-1 rounded-full bg-[#fffaf0] px-3 py-1 text-[13px] font-bold text-[#3a2414] hover:bg-white"
+                >
+                  <BookOpen className="h-3.5 w-3.5" strokeWidth={2.5} /> Help
+                </button>
+              </div>
+              <button type="button" onClick={onOff} className="mt-2 text-[11.5px] font-semibold text-[#3a2414]/55 underline-offset-2 hover:text-[#3a2414] hover:underline">
                 Turn tips off
               </button>
             </div>
+            {/* speech tail toward the speaker */}
+            <span aria-hidden className="absolute -left-[10px] bottom-6 z-10 h-5 w-5 rotate-45 border-b-[3px] border-l-[3px] border-[#3a2414] bg-[#f8e8c8]" />
           </div>
         </motion.div>
       )}
@@ -161,6 +167,9 @@ export function HintBubbles({ engine, enabled, busy, view }: { engine: Engine; e
   const [hint, setHint] = useState<{ key: string; x: number; y: number; open: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const shown = useRef<Record<string, number>>({});
+  // near the top of the screen there's no room above the thing: show the card below it
+  const [below, setBelow] = useState(false);
+  const belowRef = useRef(false);
 
   // every so often, pick something on screen we haven't explained lately
   useEffect(() => {
@@ -191,6 +200,11 @@ export function HintBubbles({ engine, enabled, busy, view }: { engine: Engine; e
       if (el) {
         const p = engine.screenOf(hint.x, hint.y);
         el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+        const b = p.y < 250;
+        if (b !== belowRef.current) {
+          belowRef.current = b;
+          setBelow(b);
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -210,30 +224,38 @@ export function HintBubbles({ engine, enabled, busy, view }: { engine: Engine; e
   if (!info) return null;
   return (
     <div ref={ref} className="pointer-events-none absolute left-0 top-0 z-20" style={{ willChange: "transform" }}>
-      <div className="pointer-events-auto absolute -translate-x-1/2 -translate-y-full pb-2">
+      <div className={`pointer-events-auto absolute -translate-x-1/2 ${hint.open && below ? "pt-12" : "-translate-y-full pb-3"}`}>
         {hint.open ? (
-          <motion.div initial={{ opacity: 0, scale: 0.85, y: 6 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="dl-glass flex w-[230px] items-start gap-2 rounded-2xl p-2.5 shadow-2xl">
-            <img src={GUIDE_IMG(info.art)} alt="" width={44} height={44} className="h-11 w-11 shrink-0 object-contain" />
-            <div className="min-w-0 flex-1">
-              <div className="text-[12.5px] font-bold text-amber-200">{info.title}</div>
-              <p className="text-[12px] leading-snug text-white/85">{info.text}</p>
+          <motion.div initial={{ opacity: 0, scale: 0.8, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: "spring", stiffness: 420, damping: 24 }} className="relative w-[min(360px,calc(100vw-24px))]">
+            <div className="dl-paper flex items-start gap-3.5 rounded-[26px] p-4 pr-10">
+              <img src={GUIDE_IMG(info.art)} alt="" width={104} height={104} className="-mb-2 -ml-2 -mt-10 h-[104px] w-[104px] shrink-0 object-contain drop-shadow-[0_3px_0_rgba(36,20,10,0.45)]" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[18px] font-bold leading-tight">{info.title}</div>
+                <p className="mt-1.5 text-[15.5px] font-medium leading-snug text-[#3a2414]/85">{info.text}</p>
+              </div>
+              <button type="button" aria-label="Close" onClick={() => setHint(null)} className="absolute right-2.5 top-2.5 rounded-full p-1.5 text-[#3a2414]/50 hover:bg-[#3a2414]/10 hover:text-[#3a2414]">
+                <X className="h-5 w-5" strokeWidth={3} />
+              </button>
             </div>
-            <button type="button" aria-label="Close" onClick={() => setHint(null)} className="rounded-full p-0.5 text-white/50 hover:text-white">
-              <X className="h-3.5 w-3.5" />
-            </button>
+            {/* tail down to the thing */}
+            <span aria-hidden className={`absolute left-1/2 h-6 w-6 -translate-x-1/2 rotate-45 border-[#3a2414] ${below ? "-top-[11px] border-l-[3px] border-t-[3px] bg-[#fff6e0]" : "-bottom-[11px] border-b-[3px] border-r-[3px] bg-[#f6e4bd]"}`} />
           </motion.div>
         ) : (
-          <motion.button
-            type="button"
-            aria-label={`What's this? ${info.title}`}
-            onClick={() => setHint({ ...hint, open: true })}
-            initial={{ scale: 0, y: 8 }}
-            animate={{ scale: 1, y: [0, -5, 0] }}
-            transition={{ scale: { type: "spring", stiffness: 400, damping: 14 }, y: { duration: 1.8, repeat: Infinity, ease: "easeInOut" } }}
-            className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white/80 bg-amber-400 text-base font-black text-slate-900 shadow-[0_4px_14px_rgba(0,0,0,0.4)] hover:bg-amber-300"
-          >
-            ?
-          </motion.button>
+          <div className="relative flex flex-col items-center">
+            <span aria-hidden className="absolute top-0 h-12 w-12 animate-ping rounded-full bg-amber-300/50" />
+            <motion.button
+              type="button"
+              aria-label={`What's this? ${info.title}`}
+              onClick={() => setHint({ ...hint, open: true })}
+              initial={{ scale: 0, y: 8 }}
+              animate={{ scale: 1, y: [0, -5, 0] }}
+              transition={{ scale: { type: "spring", stiffness: 400, damping: 14 }, y: { duration: 1.8, repeat: Infinity, ease: "easeInOut" } }}
+              className="dl-btn relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-b from-amber-300 to-amber-500 text-2xl font-black text-[#3a2414] hover:from-amber-200"
+            >
+              ?
+            </motion.button>
+            <span aria-hidden className="mt-0.5 h-0 w-0 border-x-[7px] border-t-[9px] border-x-transparent border-t-[#3a2414]" />
+          </div>
         )}
       </div>
     </div>

@@ -17,6 +17,7 @@ import { isWalkTile, isWaterTile } from "./terrain";
 import { TOWER_STAGES, WALL_HP, wallMaxHp, shelterDone } from "./build";
 import { buildAct, buildThink } from "./tasks";
 import type { Target } from "./colony";
+import type { Brute } from "./types";
 import { hurtHuman } from "./injury";
 import { makeCarcass } from "./carcass";
 import { autoButcher } from "./tasks";
@@ -57,6 +58,10 @@ export interface RaidState {
   fromY: number;
   breached: boolean;
   label: string;
+  /** a Neanderthal raid (ids are brutes, not dinos) */
+  by?: "brute";
+  /** people they killed or carried off */
+  took?: number;
 }
 
 const isFood = (r: Resource) => r === "cooked" || r === "fish" || r === "crop" || r === "berries";
@@ -144,6 +149,73 @@ export class Tribe {
     this.walls.splice(this.walls.indexOf(wl), 1);
     this.wallMap.delete(wl.ty * MAP_W + wl.tx);
     this.version++;
+  }
+
+  /**
+   * Plan a grand bone gate here: a fresh one in a gap, a blueprint turned into one,
+   * or a finished gate / wall piece queued to be rebuilt (it keeps working meanwhile).
+   */
+  planBoneGate(w: World, tx: number, ty: number, kind: WallKind) {
+    const ex = this.wallAt(tx, ty);
+    if (ex) {
+      if (ex.bone || ex.boneUp || ex.part === "stairs") return null;
+      if (ex.built < 1) {
+        ex.part = "gate";
+        ex.bone = true;
+        ex.open = true;
+        ex.have = 0;
+      } else ex.boneUp = true;
+      this.version++;
+      return ex;
+    }
+    const wl = this.addWall(w, tx, ty, kind, "gate");
+    if (wl) wl.bone = true;
+    return wl;
+  }
+
+  /** Every wall ring gets one grand entrance: its front gate (or a straight stretch) becomes a bone gate. */
+  planEntrances(w: World) {
+    const seen = new Set<Wall>();
+    let n = 0;
+    const flat = (g: Wall) => !!this.wallAt(g.tx - 1, g.ty) && !!this.wallAt(g.tx + 1, g.ty) && !this.wallAt(g.tx, g.ty - 1) && !this.wallAt(g.tx, g.ty + 1);
+    for (const start of this.walls) {
+      if (seen.has(start) || start.part === "stairs") continue;
+      const group: Wall[] = [];
+      const q = [start];
+      seen.add(start);
+      while (q.length) {
+        const a = q.pop()!;
+        group.push(a);
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const b = this.wallAt(a.tx + dx, a.ty + dy);
+            if (b && !seen.has(b) && b.part !== "stairs") {
+              seen.add(b);
+              q.push(b);
+            }
+          }
+      }
+      if (group.length < 10 || group.some((g) => g.bone || g.boneUp)) continue;
+      // the front (south-most) gate, best in a straight east-west stretch; else a straight bit of wall
+      let best: Wall | null = null;
+      let bs = -Infinity;
+      for (const g of group) {
+        const f = flat(g);
+        if (g.part !== "gate" && !f) continue;
+        const s = (g.part === "gate" ? 10000 : 0) + (f ? 1000 : 0) + g.ty;
+        if (s > bs) {
+          bs = s;
+          best = g;
+        }
+      }
+      if (best && this.planBoneGate(w, best.tx, best.ty, best.kind)) n++;
+    }
+    if (n && !w.flags.has("boneGateTip")) {
+      w.flags.add("boneGateTip");
+      const g = this.walls.find((x) => x.bone || x.boneUp)!;
+      w.toast("🦴", "The tribe is raising a grand bone gate as the way in! Builders need 🦴 bones.", g.tx * TILE, g.ty * TILE);
+    }
+    return n;
   }
 
   /** Open / close a gate (manual = the player decided; the tribe stops auto-managing it for a while). */
@@ -369,7 +441,7 @@ export class Tribe {
       if (r === "guard" || r === "hunter" || h.order || threat) w.colony.equip(w, h, r === "hunter" ? "bow" : undefined);
     }
     // scorpions need crews when danger is near: the closest guards take them (powered ones don't)
-    if (!w.colony.dronesPowered(w) && (threat || w.dinos.some((d) => this.hostile(w, d)))) {
+    if (!w.colony.dronesPowered(w) && (threat || w.dinos.some((d) => this.hostile(w, d)) || w.rivals.threatNear(w, w.camp.x, w.camp.y, 900))) {
       for (const s of w.colony.scorpions) {
         if (s.built < 1 || s.crew) continue;
         let best: Human | null = null;
@@ -400,7 +472,7 @@ export class Tribe {
       if (!g.auto) continue;
       const gx = g.tx * TILE + 16;
       const gy = g.ty * TILE + 16;
-      const danger = !!this.raid || w.dinos.some((d) => this.hostile(w, d) && Math.hypot(d.x - gx, d.y - gy) < 520);
+      const danger = !!this.raid || w.dinos.some((d) => this.hostile(w, d) && Math.hypot(d.x - gx, d.y - gy) < 520) || w.rivals.threatNear(w, gx, gy, 520);
       if (danger && g.open) {
         this.setGate(g, false);
         w.sfx("thud", gx, gy, 0.6);
@@ -449,7 +521,7 @@ export class Tribe {
   }
 
   /** Throw / shoot at a dino or a dragon. */
-  shoot(w: World, h: Human, d: Dino | Dragon, wp: Weapon, bonus = 0) {
+  shoot(w: World, h: Human, d: Dino | Dragon | Brute, wp: Weapon, bonus = 0) {
     h.dir = d.x > h.x ? 1 : -1;
     h.cd = wp.cd * (0.85 + w.rng() * 0.3);
     if (wp.melee) {
@@ -457,6 +529,7 @@ export class Tribe {
       w.sfx("whoosh", h.x, h.y, 0.5, 1.3);
       const mul = w.civ.dmgMul(w, h, wp.tier, wp.proj);
       if (d.kind === "dino") hitDino(w, d, wp.dmg * mul, h.x, h.y);
+      else if (d.kind === "brute") w.rivals.hit(w, d, wp.dmg * mul, h.x, h.y);
       else w.dragons.hit(w, d, wp.dmg * 0.5 * mul);
       return;
     }
@@ -468,7 +541,7 @@ export class Tribe {
     const tx = d.x + d.vx * flight + (w.rng() - 0.5) * miss;
     const ty = d.y + d.vy * flight + (w.rng() - 0.5) * miss * 0.6;
     const sz = h.z + 14;
-    const tz = d.z + (d.kind === "dino" ? sizeOf(d) * 0.2 : 10);
+    const tz = d.z + (d.kind === "dino" ? sizeOf(d) * 0.2 : d.kind === "brute" ? 18 : 10);
     this.projectiles.push({
       x: h.x + h.dir * 6,
       y: h.y,
@@ -515,6 +588,10 @@ export class Tribe {
             w.particles.burst(P.Spark, d.x, d.y, 12, 110, { z: sizeOf(d) * 0.4, vz: 80, g: 120, size: 2, max: 0.6, color: "#c9f7ff" });
             w.sfx("zap", d.x, d.y, 0.6, 1.3);
           }
+        } else if (!d && !dr && w.rivals.byId(p.target) && Math.hypot(w.rivals.byId(p.target)!.x - p.x, w.rivals.byId(p.target)!.y - p.y) < (p.kind === "scorpion" ? 30 : 20)) {
+          const b = w.rivals.byId(p.target)!;
+          w.rivals.hit(w, b, p.dmg, p.x - p.vx * 0.1, p.y - p.vy * 0.1);
+          if (p.kind === "scorpion") w.particles.spawn(P.Ring, b.x, b.y, { z: 18, size: 12, max: 0.5, color: p.glow ? "rgba(150,240,255,0.95)" : "rgba(255,230,180,0.9)" });
         } else if (dr && Math.hypot(dr.x - p.x, dr.y - p.y) < 70) {
           // arrows mostly bounce off dragon scales; Scorpion bolts punch through
           w.dragons.hit(w, dr, p.dmg * (p.big ?? 0.5));
@@ -603,6 +680,7 @@ export class Tribe {
       return;
     }
     r.t += dt;
+    if (r.by === "brute") return this.updateBruteRaid(w, r);
     const alive = r.ids.map((id) => w.dinoById(id)).filter((d): d is Dino => !!d && d.raider);
     if (r.phase === "warn") {
       if (r.t > 9) {
@@ -631,6 +709,32 @@ export class Tribe {
       }
       return;
     }
+  }
+
+  /** Neanderthals: rally at their camp, march, smash, grab, go home. */
+  private updateBruteRaid(w: World, r: RaidState) {
+    const party = r.ids.map((id) => w.rivals.byId(id)).filter((b): b is Brute => !!b);
+    if (r.phase === "warn") {
+      if (r.t > 9) {
+        r.phase = "attack";
+        r.t = 0;
+        for (const b of party) b.think = 0;
+        w.alarm(w.camp.x, w.camp.y, 600, 0.6, "❗");
+        for (const h of w.humans) if (h.child) h.think = 0;
+      }
+      return;
+    }
+    const marching = party.filter((b) => b.raid);
+    if (marching.length && r.t <= 240) return;
+    this.raid = null;
+    for (const b of marching) b.raid = false;
+    if (!r.took && r.t <= 240) {
+      this.wonCheer = 10;
+      this.raidsWon++;
+      w.discover("defended", w.camp.x, w.camp.y);
+      w.celebrate("We did it!");
+      w.toast("🛡️", `We drove off the Neanderthals! (${this.raidsWon} raids won)`, w.camp.x, w.camp.y);
+    } else if (r.took) w.toast("😞", `The Neanderthals are heading home… we lost ${r.took} of our people to them.`, w.camp.x, w.camp.y);
   }
 
   /* ------------------------------ growth ------------------------------ */
@@ -735,6 +839,8 @@ export class Tribe {
   /* ------------------------------ update ------------------------------ */
 
   private planT = 20;
+  /** wall version the entrances were last checked at */
+  private entranceV = -1;
 
   /** What an un-bossed tribe decides to build next (each plan happens once; kids can erase/redo). */
   private autoPlan(w: World) {
@@ -778,6 +884,32 @@ export class Tribe {
     if (c.learned.has("fire") && !f.has("planWater") && w.camp.stock.clay >= 2) {
       f.add("planWater");
       w.colony.addBuilding(w, "waterStore", c.x + 120, c.y + 70);
+    }
+    // every wall ring gets a grand bone entrance
+    if (c.learned.has("palisade") && this.entranceV !== this.version) {
+      this.planEntrances(w);
+      this.entranceV = this.version;
+    }
+    // polygon age: every wall is rebuilt in shaped polygon stone
+    if (w.civ.polygonAge) {
+      let n = 0;
+      for (const wl of this.walls) {
+        if (wl.kind === "polygon" || wl.upTo === "polygon") continue;
+        if (wl.built < 1 && wl.hp <= 0) wl.kind = "polygon";
+        else {
+          wl.upgrade = true;
+          wl.upTo = "polygon";
+        }
+        wl.have = 0;
+        n++;
+      }
+      if (n) {
+        this.version++;
+        if (!f.has("planPolyWalls")) {
+          f.add("planPolyWalls");
+          w.toast("🔷", "Polygon age! Builders will rebuild every wall in shaped polygon stone (fire can't touch it).", c.x, c.y);
+        }
+      }
     }
     if (c.learned.has("stonewall") && this.raidsWon >= 3 && !f.has("planStone")) {
       f.add("planStone");
@@ -844,6 +976,11 @@ export class Tribe {
   /** A wall piece broke: it's rubble (a blueprint again) until rebuilt. */
   collapse(w: World, wl: Wall) {
     if (wl.built < 1) return;
+    if (wl.boneUp) {
+      wl.boneUp = false;
+      wl.bone = true;
+      wl.part = "gate";
+    }
     wl.hp = 0;
     wl.built = 0;
     wl.have = 0;
@@ -869,7 +1006,7 @@ export class Tribe {
 
   serialize() {
     return {
-      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0] as const),
+      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0)] as const),
       farms: this.farms.map((f) => [Math.round(f.x), Math.round(f.y), Math.round(f.growth * 100) / 100, f.planted ? 1 : 0] as const),
       towers: this.towers.map((t) => [Math.round(t.x), Math.round(t.y), t.stage, Math.max(0, t.have), t.tx, t.ty, Math.round(t.hp)] as const),
       level: this.level,
@@ -887,6 +1024,9 @@ export class Tribe {
       const part: WallPart = row[6] === 1 ? "gate" : row[6] === 2 ? "stairs" : "wall";
       const kind: WallKind = stone === 2 ? "polygon" : stone ? "stone" : "palisade";
       const wl: Wall = { id: w.nextId(), tx, ty, kind, part, open: row[7] === undefined ? true : !!row[7], auto: true, hp, built, have: 0, upgrade: !!up, ...(up === 2 ? { upTo: "polygon" as WallKind } : {}) };
+      const bone = row[8] ?? 0;
+      if (bone & 1) wl.bone = true;
+      if (bone & 2) wl.boneUp = true;
       this.walls.push(wl);
       this.wallMap.set(ty * MAP_W + tx, wl);
     }
@@ -1057,6 +1197,20 @@ export function roleThink(w: World, h: Human): boolean {
   const wp = tribe.weaponFor(w, h);
 
   // direct orders from the player win (dragons first: they aren't dinos)
+  // a Neanderthal: go get him
+  const bruteOrder = h.order?.kind === "hunt" ? w.rivals.byId(h.order.id) : null;
+  if (bruteOrder) {
+    if (!wp) {
+      say(h, "Need a weapon!");
+      h.order = null;
+    } else {
+      h.targetId = bruteOrder.id;
+      const reach = wp.melee ? wp.range + 14 : wp.range * 0.85;
+      if (Math.hypot(bruteOrder.x - h.x, bruteOrder.y - h.y) < reach) go(h, "aim", h.x, h.y);
+      else go(h, "hunt", bruteOrder.x, bruteOrder.y);
+      return true;
+    }
+  }
   const dragonOrder = h.order?.kind === "hunt" ? w.dragons.byId(h.order.id) : null;
   if (dragonOrder) {
     if (!wp || wp.melee) {
@@ -1069,7 +1223,7 @@ export function roleThink(w: World, h: Human): boolean {
       return true;
     }
   }
-  if (h.order?.kind === "hunt") {
+  if (h.order?.kind === "hunt" && !bruteOrder) {
     const d = w.dinoById(h.order.id);
     if (!d) {
       h.order = null;
@@ -1210,7 +1364,7 @@ function guardAt(w: World, h: Human, x: number, y: number, wp: Weapon | null, to
     return true;
   }
   // anything nasty in range? (melee fighters on the wall stay up there)
-  let target: Dino | Dragon | null = null;
+  let target: Dino | Dragon | Brute | null = null;
   let bd = range;
   for (const d of w.dinos) {
     if (!tribe.hostile(w, d)) continue;
@@ -1218,6 +1372,15 @@ function guardAt(w: World, h: Human, x: number, y: number, wp: Weapon | null, to
     if (dist < bd) {
       bd = dist;
       target = d;
+    }
+  }
+  for (const b of w.rivals.brutes) {
+    if (!w.rivals.hostile(w, b)) continue;
+    // carriers first: that's one of ours on his shoulder
+    const dist = Math.hypot(b.x - h.x, b.y - h.y) - (b.captive ? 60 : 0);
+    if (dist < bd) {
+      bd = dist;
+      target = b;
     }
   }
   if (wp && !wp.melee) {
@@ -1240,7 +1403,7 @@ function guardAt(w: World, h: Human, x: number, y: number, wp: Weapon | null, to
     if (!wp) {
       say(h, pick(w.rng, ["Shoo!", "Go away!", "Hyaaa!"]));
       if (target.kind === "dino") target.fear = Math.min(1, target.fear + 0.4);
-    } else if (w.rng() < 0.15) say(h, pick(w.rng, ["Fire!", "Hold the line!", "Get back!", "Dino!"]));
+    } else if (w.rng() < 0.15) say(h, pick(w.rng, target.kind === "brute" ? ["Fire!", "Neanderthals!", "Stop that brute!", "Hold the line!"] : ["Fire!", "Hold the line!", "Get back!", "Dino!"]));
     return true;
   }
   if (Math.hypot(h.x - x, h.y - y) > 10 || (top && h.level !== 1)) {
@@ -1335,7 +1498,7 @@ export function roleAct(w: World, h: Human, dt: number): boolean {
         }
         return true;
       }
-      const d = w.dinoById(h.targetId) ?? w.dragons.byId(h.targetId);
+      const d = w.dinoById(h.targetId) ?? w.dragons.byId(h.targetId) ?? w.rivals.byId(h.targetId);
       const wp = tribe.weaponFor(w, h);
       if (!d || !wp || h.stateT > 40) {
         if (h.order?.kind === "hunt" && !d) h.order = null;
@@ -1353,7 +1516,7 @@ export function roleAct(w: World, h: Human, dt: number): boolean {
       return true;
     }
     case "aim": {
-      const d = w.dinoById(h.targetId) ?? w.dragons.byId(h.targetId);
+      const d = w.dinoById(h.targetId) ?? w.dragons.byId(h.targetId) ?? w.rivals.byId(h.targetId);
       const wp = tribe.weaponFor(w, h);
       h.vx = h.vy = 0;
       if (!d) {
@@ -1365,7 +1528,7 @@ export function roleAct(w: World, h: Human, dt: number): boolean {
       h.dir = d.x > h.x ? 1 : -1;
       const high = h.level === 1;
       const tower = high && w.nav.isTower(Math.floor(h.y / TILE) * MAP_W + Math.floor(h.x / TILE));
-      const size = d.kind === "dino" ? sizeOf(d) : 60;
+      const size = d.kind === "dino" ? sizeOf(d) : d.kind === "brute" ? 34 : 60;
       const range = wp?.melee ? wp.range + size * 0.4 : (wp?.range ?? 90) + (high ? (tower ? 140 : 60) : 0);
       const dist = Math.hypot(d.x - h.x, d.y - h.y);
       if (dist > range * 1.15 || h.stateT > 20 || (d.kind === "dragon" && (d.z > 280 || wp?.melee))) {
@@ -1375,7 +1538,7 @@ export function roleAct(w: World, h: Human, dt: number): boolean {
       }
       if (wp && h.cd <= 0) tribe.shoot(w, h, d, wp, high ? (tower ? 0.2 : 0.1) : 0);
       // ranged fighters keep their distance from things that bite (unless safe up on the wall)
-      if (d.kind === "dino" && !wp?.melee && dist < 45 && !high && sp(d.species).diet !== "herbivore") {
+      if (((d.kind === "dino" && sp(d.species).diet !== "herbivore") || d.kind === "brute") && !wp?.melee && dist < 45 && !high) {
         const a = Math.atan2(h.y - d.y, h.x - d.x);
         go(h, "flee", h.x + Math.cos(a) * 160, h.y + Math.sin(a) * 120);
       }

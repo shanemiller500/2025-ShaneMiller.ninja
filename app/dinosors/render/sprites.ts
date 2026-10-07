@@ -4,7 +4,7 @@
 /*  All drawn with their base at (0,0) of the current transform.       */
 /* ------------------------------------------------------------------ */
 import { sp } from "../data/species";
-import { SHELTER_STAGES } from "../data/facts";
+import { FEMALE_NAMES, SHELTER_STAGES } from "../data/facts";
 import type { Stock } from "../sim/camp";
 import { PLANT_H } from "../sim/plants";
 import type { Egg, Human, Item, Plant, Prop, Shelter } from "../sim/types";
@@ -311,14 +311,14 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.rotate(t * 12);
     c.translate(0, H * 0.5);
   }
-  if (st === "sleep" || st === "down" || st === "rest") {
+  if (st === "sleep" || st === "down" || st === "rest" || (st === "captive" && h.z > 0)) {
     c.rotate((-Math.PI / 2) * h.dir);
     c.translate(-H * 0.1 * h.dir, -2);
   }
   c.scale(h.dir, 1);
   const moving = st === "walk" || st === "carry" || st === "flee" || st === "explore" || st === "hunt" || st === "haul";
   const sw = moving ? Math.sin(h.anim * 2.2) : 0;
-  const sit = st === "sitFire" || st === "craft";
+  const sit = st === "sitFire" || st === "craft" || (st === "captive" && h.z <= 0);
   const bend = st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" || st === "heal" ? 0.2 : st === "haul" ? -0.25 : st === "hunt" ? 0.25 : st === "tame" ? 0.15 : 0;
   const hipY = sit ? -H * 0.22 : -H * 0.42;
 
@@ -639,6 +639,15 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     }
   } else {
     c.fillStyle = h.hair;
+    if (!h.child && FEMALE_NAMES.has(h.name)) {
+      // long wild hair down the back, like Oona in the art
+      c.beginPath();
+      c.ellipse(-H * 0.11, headY + H * 0.12, H * 0.1, H * 0.22, 0.18, 0, Math.PI * 2);
+      c.fill();
+      c.beginPath();
+      c.arc(-H * 0.16, headY + H * 0.28, H * 0.06, 0, Math.PI * 2);
+      c.fill();
+    }
     c.beginPath();
     c.arc(-H * 0.02, headY - H * 0.04, H * 0.16, Math.PI * 0.9, Math.PI * 2.05);
     c.fill();

@@ -68,7 +68,7 @@ export default function CloudPanel({ cloud, fontClass, hasLocal }: { cloud: Emai
   );
 
   return (
-    <Modal open={!!view} onClose={() => (locked ? undefined : cloud.show(null))} hideClose={locked} size="sm" accent="#38bdf8" labelledBy="dl-cloud">
+    <Modal className="dl-modal" open={!!view} onClose={() => (locked ? undefined : cloud.show(null))} hideClose={locked} size="sm" accent="#38bdf8" labelledBy="dl-cloud">
       <div className={`p-6 text-slate-800 dark:text-slate-100 ${fontClass}`}>
         {view === "welcome" && (
           <>

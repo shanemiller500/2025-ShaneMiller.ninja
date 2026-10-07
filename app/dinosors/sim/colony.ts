@@ -50,6 +50,8 @@ export class Colony {
   fresh = new Set<string>();
   private primed = false;
   private recipeT = 0;
+  private wellT = 0;
+  private settledWells = new WeakSet<Building>();
   /** last time spikes bit each dino */
   private spiked = new WeakMap<Dino, number>();
 
@@ -73,7 +75,9 @@ export class Colony {
         const ty = fp.ty + dy;
         if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1) return "Too close to the edge of the world.";
         const t = w.terrain.tiles[ty * MAP_W + tx] as T;
-        if (kind === "bridge") {
+        if (kind === "well") {
+          if (t !== T.Shallow || w.terrain.salt[ty * MAP_W + tx]) return "Wells need shallow fresh water.";
+        } else if (kind === "bridge") {
           if (!isWaterTile(t)) return "Bridges go over water.";
         } else if (!isWalkTile(t) || isWaterTile(t) || t === T.Tar || t === T.Cave) return "That ground won't hold a building.";
         if (occupied.has(ty * MAP_W + tx)) return "Something is already there.";
@@ -128,6 +132,36 @@ export class Colony {
 
   finished(kind: BuildingKind) {
     return this.buildings.some((b) => b.kind === kind && b.built >= 1);
+  }
+
+  /** The water around a completed well settles into grass; rivers stay open. */
+  private settleWell(w: World, well: Building) {
+    const start = well.ty * MAP_W + well.tx;
+    if (w.terrain.tiles[start] !== T.Shallow) return;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      if (Math.hypot(dx, dy) > 2.5) continue;
+      const tx = well.tx + dx;
+      const ty = well.ty + dy;
+      if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) continue;
+      const i = ty * MAP_W + tx;
+      const tile = w.terrain.tiles[i] as T;
+      if ((tile === T.Shallow || tile === T.Deep) && !w.terrain.salt[i]) w.terrain.setTile(tx, ty, T.Grass);
+    }
+  }
+
+  /** People can still draw fresh water after the pool around a well turns to grass. */
+  nearestWater(w: World, x: number, y: number, maxDist = 2400): { x: number; y: number } | null {
+    let best = w.terrain.nearestDrink(x, y, maxDist);
+    let distance = best ? Math.hypot(best.x - x, best.y - y) : maxDist;
+    for (const b of this.buildings) {
+      if (b.kind !== "well" || b.built < 1) continue;
+      const d = Math.hypot(b.x - x, b.y - y);
+      if (d < distance) {
+        best = { x: b.x, y: b.y };
+        distance = d;
+      }
+    }
+    return best;
   }
 
   /** Door spot in front of a solid building (where people stand to use it). */
@@ -617,6 +651,25 @@ export class Colony {
   /* ----------------------------- update ----------------------------- */
 
   update(w: World, dt: number) {
+    for (const b of this.buildings) {
+      if (b.kind !== "well") continue;
+      if (b.built < 1) {
+        this.settledWells.delete(b);
+        continue;
+      }
+      if (this.settledWells.has(b)) continue;
+      this.settleWell(w, b);
+      this.settledWells.add(b);
+    }
+    const wells = this.buildings.filter((b) => b.kind === "well" && b.built >= 1).length;
+    if (wells && w.camp.stock.water < 60) {
+      this.wellT += wells * dt * 0.6;
+      const drawn = Math.floor(this.wellT);
+      if (drawn) {
+        w.camp.stock.water = Math.min(60, w.camp.stock.water + drawn);
+        this.wellT -= drawn;
+      }
+    } else this.wellT = 0;
     this.recipeT -= dt;
     if (this.recipeT <= 0) {
       this.recipeT = 2;
@@ -849,6 +902,16 @@ export function scorpionTarget(w: World, x: number, y: number, range: number): T
     if (s < bs) {
       bs = s;
       best = { id: d.id, x: d.x, y: d.y, z: d.z + sizeOf(d) * 0.2, vx: d.vx, vy: d.vy, dragon: false };
+    }
+  }
+  for (const b of w.rivals.brutes) {
+    if (!w.rivals.hostile(w, b)) continue;
+    const dist = Math.hypot(b.x - x, b.y - y);
+    if (dist > range) continue;
+    const s = dist - (b.raid || b.captive ? 170 : 0);
+    if (s < bs) {
+      bs = s;
+      best = { id: b.id, x: b.x, y: b.y, z: 18, vx: b.vx, vy: b.vy, dragon: false };
     }
   }
   return best;

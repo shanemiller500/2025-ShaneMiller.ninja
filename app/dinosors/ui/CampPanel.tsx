@@ -24,6 +24,20 @@ const RES: [string, string, string][] = Object.entries(RES_INFO).map(([k, v]) =>
 const RES_ICON = Object.fromEntries(RES.map(([k, i]) => [k, i]));
 const ROLE_BY_ID = Object.fromEntries(ROLES.map((r) => [r.id, r])) as Record<Role, (typeof ROLES)[number]>;
 
+/** Keep stock counts readable in the six-column supplies grid. */
+function amountLabel(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  if (value > 0 && value < 1) return "<1";
+  const whole = Math.trunc(value);
+  if (Math.abs(whole) < 1000) return String(whole);
+  const unit = Math.floor(Math.log10(Math.abs(whole)) / 3);
+  if (unit > 5) return whole.toExponential(1).replace("e+", "e");
+  const scaled = whole / 1000 ** unit;
+  const rounded = Math.abs(scaled) < 10 ? Number(scaled.toFixed(1)) : Math.round(scaled);
+  if (Math.abs(rounded) >= 1000) return unit < 5 ? `${Math.sign(whole)}${["", "K", "M", "B", "T", "Q"][unit + 1]}` : whole.toExponential(1).replace("e+", "e");
+  return `${rounded}${["", "K", "M", "B", "T", "Q"][unit]}`;
+}
+
 export default function CampPanel({ snap, engine, onClose, tab: initial = "camp" }: { snap: Snapshot; engine: Engine; onClose: () => void; tab?: Tab }) {
   const [tab, setTab] = useState<Tab>(initial);
   useEffect(() => setTab(initial), [initial]);
@@ -108,13 +122,13 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
       )}
       <div className="mt-3 flex items-center justify-between text-sm font-bold">
         <span>Supplies</span>
-        <span className="text-xs text-white/60">🍽️ {food} meals</span>
+        <span className="text-xs text-white/60" title={`${food.toLocaleString("en-US", { maximumFractionDigits: 2 })} meals`}>🍽️ {amountLabel(food)} meals</span>
       </div>
       <div className="mt-1.5 grid grid-cols-6 gap-1">
         {RES.filter(([k]) => (camp.stock[k] ?? 0) > 0 || ["stick", "stone", "wood", "grass", "leaves", "berries", "hide", "bone"].includes(k)).map(([k, icon, label]) => (
-          <div key={k} title={label} className="flex flex-col items-center rounded-xl bg-white/5 py-1.5">
+          <div key={k} title={`${label}: ${(camp.stock[k] ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}`} className="flex min-w-0 flex-col items-center rounded-xl bg-white/5 py-1.5">
             <GameIcon id={k} fallback={icon} size={20} />
-            <span className="mt-0.5 text-[12px] font-bold">{camp.stock[k] ?? 0}</span>
+            <span className="mt-0.5 max-w-full truncate px-0.5 text-[11px] font-bold tabular-nums">{amountLabel(camp.stock[k] ?? 0)}</span>
           </div>
         ))}
       </div>
@@ -123,6 +137,33 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
         <Stat icon="⛏️" value={`${snap.colony.found}/${snap.colony.deposits}`} label="deposits found" />
         <Stat icon="🏗️" value={`${snap.colony.buildings}`} label="buildings" />
       </div>
+      {snap.rivals.clans.length > 0 && (
+        <>
+          <div className="mt-3 flex items-center justify-between text-sm font-bold">
+            <span>🪓 Neanderthal clans</span>
+            <span className="text-[11px] font-semibold text-white/55">big, strong, not clever</span>
+          </div>
+          <div className="mt-1.5 space-y-1.5">
+            {snap.rivals.clans.map((cl) => (
+              <div key={cl.id} className="flex items-center gap-2 rounded-2xl bg-white/5 p-2 text-[12px]">
+                <span className="h-3 w-3 shrink-0 rounded-full border-2 border-black/40" style={{ background: cl.color }} />
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold">
+                    {cl.name} clan <span className="font-semibold text-white/60">· {cl.size} brute{cl.size === 1 ? "" : "s"}</span>
+                  </div>
+                  <div className="truncate text-white/65">
+                    {cl.wars.length ? `⚔️ at war with ${cl.wars.join(", ")}` : cl.pacts.length ? `🤝 friends with ${cl.pacts.join(", ")}` : "Keeping to themselves"}
+                  </div>
+                  {cl.captives.length > 0 && <div className="font-bold text-rose-300">😢 Holding {cl.captives.join(", ")}: send armed people to bring them home!</div>}
+                </div>
+                <button type="button" onClick={() => engine.flyTo(cl.x, cl.y, 0.9)} className="shrink-0 rounded-xl bg-white/10 px-2.5 py-1.5 font-bold hover:bg-white/20 active:scale-95">
+                  📍 Look
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {snap.colony.strangers > 0 && <p className="mt-2 rounded-xl bg-sky-500/20 p-2 text-[12px] font-semibold">🚶 {snap.colony.strangers} newcomer{snap.colony.strangers > 1 ? "s are" : " is"} on the way to camp.</p>}
       {camp.shelters.length > 0 && (
         <>
@@ -274,7 +315,7 @@ function DefendTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
         <GameIcon id="spikes" size={26} />
         <span>
           Line the walls with bone spikes
-          <span className="block text-[11px] font-medium text-white/60">{learned.has("spear") ? `2 bones each · you have ${snap.camp.stock.bone ?? 0} — harvest dinosaurs for more` : "Needs 🗡️ Spear"}</span>
+          <span className="block text-[11px] font-medium text-white/60">{learned.has("spear") ? `2 bones each · you have ${amountLabel(snap.camp.stock.bone ?? 0)} — harvest dinosaurs for more` : "Needs 🗡️ Spear"}</span>
         </span>
       </button>
       <p className="mt-1.5 text-[11px] text-white/55">The ring comes with gates + stairs. Use the 🛠️ Build toy to draw more walls, gates, stairs, towers and 🎯 Scorpions. Tap a built gate to open/close it.</p>
@@ -437,7 +478,7 @@ function InventTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
               const have = Math.min(n!, camp.stock[r] ?? 0);
               return (
                 <span key={r} className={`rounded-full px-2.5 py-1 text-[12px] font-bold ${have >= n! ? "bg-emerald-500/30" : "bg-white/10"}`}>
-                  {RES_ICON[r]} {have}/{n}
+                  {RES_ICON[r]} {amountLabel(have)}/{n}
                 </span>
               );
             })}

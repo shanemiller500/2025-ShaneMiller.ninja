@@ -487,7 +487,7 @@ export function CivChoice({ open, onClose, engine, fontClass }: { open: boolean;
   }, [open]);
   const paths = useMemo(() => ["traditional", "resonance"] as const, []);
   return (
-    <Modal open={open} onClose={onClose} size="lg" accent="#59d0e6" labelledBy="civ-choice">
+    <Modal className="dl-modal" open={open} onClose={onClose} size="lg" accent="#59d0e6" labelledBy="civ-choice">
       <div className={`max-h-[88dvh] overflow-y-auto bg-slate-950 p-5 text-white sm:p-6 ${fontClass}`}>
         <h2 id="civ-choice" className="text-center text-2xl font-bold">💠 The chamber hums. Which way will your people grow?</h2>
         <p className="mx-auto mt-1 max-w-xl text-center text-sm text-white/60">This choice shapes the rest of your world. Late in the game you can borrow a few ideas from the other path, at a price.</p>

@@ -2147,3 +2147,205 @@ test('the tribe can grow to 100 people', () => {
   run(w, 3);
   assert.ok(w.humans.length >= 99, 'they all live on');
 });
+
+test('every wall ring gets a grand bone gate entrance: built from bones, shuts dinos out, saves', () => {
+  const w = tribeWorld(48, ['tools', 'axe', 'palisade']);
+  w.tribe.planRing(w, 'palisade');
+  for (const wl of w.tribe.walls) { wl.built = 1; wl.hp = wallMaxHp(wl); }
+  assert.equal(w.tribe.planEntrances(w), 1, 'one entrance for the ring');
+  const g = w.tribe.walls.find((x) => x.boneUp);
+  assert.ok(g && g.part === 'gate', 'the front gate is queued to become bone');
+  assert.equal(w.tribe.walls.filter((x) => x.part === 'gate' && !x.boneUp).length, 1, 'the side gate stays as it is');
+  assert.equal(w.tribe.planEntrances(w), 0, 'only one per ring');
+  assert.equal(sites(w).find((s) => s.kind === 'wall' && s.id === g.id).need, 'bone');
+  assert.ok(clone(w).tribe.wallAt(g.tx, g.ty).boneUp, 'the plan saves');
+  w.camp.stock.bone = 10;
+  for (const b of w.humans.filter((x) => !x.child)) b.role = 'builder';
+  run(w, 180, () => g.bone && !g.boneUp);
+  assert.ok(g.bone && !g.boneUp && g.built >= 1, 'the bone gate went up');
+  assert.ok(wallMaxHp(g) > 220, 'tougher than a wood gate');
+  w.tribe.setGate(g, false, true);
+  assert.ok(w.tribe.blocks(g.tx, g.ty), 'shut bone doors stop dinos');
+  w.tribe.setGate(g, true, true);
+  assert.ok(!w.tribe.blocks(g.tx, g.ty), 'open, anything walks through the rib cage');
+  const g2 = clone(w).tribe.wallAt(g.tx, g.ty);
+  assert.ok(g2.bone && g2.part === 'gate', 'bone gates save');
+});
+
+test('the Bone gate tool fills a gap in a wall or swaps an old gate', () => {
+  const w = tribeWorld(49, ['tools', 'palisade', 'stonewall']);
+  const ty = Math.floor(w.camp.y / TILE) + 8;
+  const tx0 = Math.floor(w.camp.x / TILE) - 3;
+  for (let tx = tx0; tx <= tx0 + 6; tx++) if (tx !== tx0 + 3) { const wl = w.tribe.addWall(w, tx, ty, 'stone'); wl.built = 1; wl.hp = 600; }
+  const tool = { ...DEFAULT_TOOL, id: 'build', build: 'bonegate' };
+  assert.ok(applyTool(w, tool, (tx0 + 3) * TILE + 16, ty * TILE + 16, false), 'planted in the gap');
+  const gap = w.tribe.wallAt(tx0 + 3, ty);
+  assert.ok(gap.bone && gap.part === 'gate' && gap.kind === 'stone', 'matches the wall it sits in');
+  assert.ok(!applyTool(w, tool, (tx0 + 3) * TILE + 16, ty * TILE + 16, false), 'already a bone gate');
+  assert.ok(applyTool(w, tool, (tx0 + 1) * TILE + 16, ty * TILE + 16, false), 'swaps a finished wall piece');
+  assert.ok(w.tribe.wallAt(tx0 + 1, ty).boneUp, 'queued; it keeps standing until the bones arrive');
+});
+
+test('researching polygon stonework auto-upgrades every wall to polygon', () => {
+  const w = civWorld(508, 'resonance');
+  const ty = Math.floor(w.camp.y / TILE) + 8;
+  const tx0 = Math.floor(w.camp.x / TILE) - 2;
+  const done = [];
+  for (let tx = tx0; tx <= tx0 + 3; tx++) { const wl = w.tribe.addWall(w, tx, ty, 'stone'); wl.built = 1; wl.hp = 600; done.push(wl); }
+  const plan = w.tribe.addWall(w, tx0 + 4, ty, 'palisade');
+  run(w, 8);
+  assert.ok(done.every((x) => !x.upgrade), 'nothing before the research');
+  learn(w, 'resonance', 'copperRes', 'quartzTuning', 'precisionStone');
+  run(w, 25, () => done.every((x) => x.upgrade));
+  assert.ok(done.every((x) => x.upgrade && x.upTo === 'polygon'), 'finished walls queued for polygon');
+  assert.ok(plan.kind === 'polygon' || plan.upTo === 'polygon', `the new wall goes polygon too (${plan.kind}, built ${plan.built})`);
+});
+
+/* ------------------------------ Neanderthals ------------------------------ */
+const rivals = require(path.join(root, 'sim', 'rivals.ts'));
+const { scorpionTarget } = require(path.join(root, 'sim', 'colony.ts'));
+const { knockOut } = require(path.join(root, 'sim', 'injury.ts'));
+
+/** A clan close to camp, with our people named so we know who's who. */
+function bruteWorld(seed, n = 2, dx = 700) {
+  const w = tribeWorld(seed, ['tools', 'spear']);
+  w.rivals.started = true;
+  const clan = w.rivals.spawnClan(w, n, { x: w.camp.x + dx, y: w.camp.y + 120 });
+  assert.ok(clan, 'clan placed');
+  const adults = w.humans.filter((h) => !h.child);
+  while (adults.length < 2) adults.push(addHuman(w, w.camp.x, w.camp.y + 40));
+  adults[0].name = 'Ugg';
+  adults[1].name = 'Oona';
+  return { w, clan, man: adults[0], woman: adults[1], brutes: w.rivals.members(clan.id) };
+}
+const bruteRaid = (w, ids) => { w.tribe.raid = { phase: 'attack', t: 0, ids, fromX: 0, fromY: 0, breached: false, label: 'test', by: 'brute' }; };
+
+test('Neanderthal clans settle far from camp with only basic weapons, and save + load', () => {
+  const w = tribeWorld(60, ['tools', 'spear', 'bow', 'crossbow', 'smelting', 'stonewall']);
+  run(w, 152);
+  assert.ok(w.rivals.started, 'they showed up');
+  assert.ok(w.rivals.clans.length >= 2, `${w.rivals.clans.length} clans`);
+  for (const c of w.rivals.clans) assert.ok(Math.hypot(c.x - w.camp.x, c.y - w.camp.y) >= 1300, 'camps keep their distance');
+  assert.ok(w.rivals.brutes.length >= 6);
+  assert.ok(w.rivals.brutes.every((b) => ['club', 'axe', 'spear', 'rock'].includes(b.weapon)), 'clubs, axes, spears + rocks only');
+  const [a, b] = w.rivals.clans;
+  w.rivals.setRelation(a.id, b.id, -1);
+  const w2 = clone(w);
+  assert.equal(w2.rivals.clans.length, w.rivals.clans.length);
+  assert.equal(w2.rivals.brutes.length, w.rivals.brutes.length);
+  assert.equal(w2.rivals.relation(a.id, b.id), -1, 'feuds are remembered');
+  assert.ok(w2.rivals.started);
+});
+
+test('raiding Neanderthals finish off the men and carry women off; killing the carrier frees her', () => {
+  const { w, clan, man, woman, brutes } = bruteWorld(61);
+  const [b1, b2] = brutes;
+  bruteRaid(w, [b1.id, b2.id]);
+  b1.raid = b2.raid = true;
+  // a man already knocked out: the brute finishes him
+  knockOut(w, man);
+  Object.assign(b1, { x: man.x + 12, y: man.y, state: 'fight', targetId: man.id, cd: 0, think: 5 });
+  run(w, 3, () => !w.humans.includes(man));
+  assert.ok(!w.humans.includes(man), 'the man was killed');
+  assert.ok(w.tribe.raid.took >= 1);
+  // a woman: grabbed and carried, not hurt
+  woman.think = 99;
+  Object.assign(b2, { x: woman.x + 12, y: woman.y, state: 'fight', targetId: woman.id, cd: 0, think: 5 });
+  run(w, 3, () => !!woman.captive);
+  assert.equal(woman.captive, clan.id, 'carried off');
+  assert.equal(b2.captive, woman.id);
+  assert.equal(woman.state, 'captive');
+  run(w, 2);
+  assert.ok(woman.z > 0 && Math.hypot(woman.x - b2.x, woman.y - b2.y) < 10, 'over his shoulder');
+  w.rivals.hit(w, b2, 9999, b2.x, b2.y);
+  assert.ok(!w.rivals.brutes.includes(b2), 'carrier down');
+  assert.ok(!woman.captive && woman.state !== 'captive', 'she is free');
+});
+
+test('captives are held at the clan camp and come home when rescued (or the clan is wiped out)', () => {
+  const { w, clan, woman, brutes } = bruteWorld(62, 3, 520);
+  const [b1, b2, b3] = brutes;
+  bruteRaid(w, [b1.id]);
+  b1.raid = true;
+  Object.assign(b1, { x: woman.x + 12, y: woman.y, state: 'fight', targetId: woman.id, cd: 0, think: 5 });
+  woman.think = 99;
+  run(w, 3, () => !!woman.captive);
+  assert.equal(woman.captive, clan.id);
+  run(w, 60, () => b1.captive === 0);
+  assert.equal(b1.captive, 0, 'got her home');
+  assert.ok(Math.hypot(woman.x - clan.x, woman.y - clan.y) < 80, 'held at their camp');
+  assert.ok(clone(w).humans.find((h) => h.id === woman.id).captive === clan.id, 'captives save');
+  // guarded: a friend nearby isn't enough
+  const friend = w.humans.find((h) => !h.child && h !== woman);
+  friend.x = woman.x + 20; friend.y = woman.y; friend.think = 99;
+  for (const b of [b1, b2, b3]) { b.x = woman.x + 30; b.y = woman.y; b.state = 'idle'; b.think = 99; }
+  run(w, 1.5);
+  assert.ok(woman.captive, 'still guarded');
+  // guards wander off: the friend sneaks her out
+  for (const b of [b1, b2, b3]) { b.x = clan.x + 600; b.y = clan.y; b.tx = b.x; b.ty = b.y; }
+  friend.x = woman.x + 20; friend.y = woman.y;
+  run(w, 1.5);
+  assert.ok(!woman.captive, 'rescued');
+});
+
+test('guards, Scorpions + drones target raiding Neanderthals, and our bolts hurt them', () => {
+  const { w, brutes } = bruteWorld(63);
+  const b = brutes[0];
+  b.raid = true;
+  b.x = w.camp.x + 160; b.y = w.camp.y + 60; b.think = 99; b.state = 'idle';
+  const t = scorpionTarget(w, w.camp.x, w.camp.y, 400);
+  assert.ok(t && t.id === b.id, 'Scorpions aim at him');
+  w.tribe.fireBolt(w, w.camp.x, w.camp.y, 20, t, 60, 700, 0.5);
+  run(w, 1);
+  assert.ok(b.hp < 1 && b.hp > 0.3, `a bolt hurts but he's tough (${b.hp.toFixed(2)})`);
+  // far away at home they're left alone
+  const home = brutes[1];
+  assert.ok(!w.rivals.hostile(w, home), 'not a target at their own camp');
+});
+
+test('Neanderthals cannot get through closed walls: they bash them', () => {
+  const { w, brutes } = bruteWorld(64, 2, 600);
+  const cx = Math.floor(w.camp.x / TILE);
+  const cy = Math.floor(w.camp.y / TILE);
+  walledBox(w, cx - 7, cy - 1, cx + 7, cy + 8);
+  const b = brutes[0];
+  bruteRaid(w, [b.id]);
+  b.raid = true;
+  b.x = (cx + 12) * TILE; b.y = (cy + 4) * TILE; b.think = 0;
+  let broke = false;
+  run(w, 50, () => { broke = w.tribe.walls.some((x) => x.hp < 220); if (!broke) assert.ok(!w.tribe.enclosed(w, b.x, b.y), 'never inside before breaking a wall'); return broke; });
+  assert.ok(broke, 'he bashed at the wall');
+});
+
+test('clans feud with each other, and allies merge into one band', () => {
+  const w = tribeWorld(65, ['tools']);
+  w.rivals.started = true;
+  const a = w.rivals.spawnClan(w, 4, { x: w.camp.x + 1500, y: w.camp.y });
+  const b = w.rivals.spawnClan(w, 2, { x: w.camp.x + 1500, y: w.camp.y + 450 });
+  w.rivals.setRelation(a.id, b.id, -1);
+  assert.ok(w.rivals.warParty(w, a, b), 'war party set off');
+  const before = w.rivals.members(b.id).length + w.rivals.members(a.id).length;
+  run(w, 90, () => w.rivals.brutes.length < before);
+  assert.ok(w.rivals.brutes.length < before, 'somebody lost the fight');
+  // a pact: the small clan joins the big one
+  const c = w.rivals.spawnClan(w, 2, { x: w.camp.x - 1500, y: w.camp.y });
+  const d = w.rivals.spawnClan(w, 3, { x: w.camp.x - 1500, y: w.camp.y + 450 });
+  w.rivals.setRelation(c.id, d.id, 1);
+  const n = w.rivals.members(c.id).length + w.rivals.members(d.id).length;
+  w.rivals.merge(w, c, d);
+  assert.ok(!w.rivals.clan(c.id), 'the small clan is gone');
+  assert.equal(w.rivals.members(d.id).length, n, 'everyone joined');
+});
+
+test('a whole Neanderthal raid plays out on its own and ends', () => {
+  const { w, clan } = bruteWorld(66, 4, 900);
+  for (const h of w.humans) if (!h.child) h.role = 'guard';
+  assert.ok(w.rivals.startRaid(w, clan), 'raid started');
+  assert.equal(w.tribe.raid.by, 'brute');
+  assert.ok(w.tribe.raid.ids.length >= 2 && w.tribe.raid.ids.length <= 4, 'one stays home');
+  run(w, 12);
+  assert.equal(w.tribe.raid.phase, 'attack');
+  const t = run(w, 260, () => !w.tribe.raid);
+  assert.ok(t >= 0, 'the raid ended');
+  run(w, 5);
+});

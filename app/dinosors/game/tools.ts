@@ -19,7 +19,7 @@ export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
 export type LandOpt = "water" | "rock" | "mud" | "grass";
 export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon" | "supervolcano";
 export type PeopleOpt = "adult" | "child";
-export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "levitate" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | BuildingKind;
+export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "bonegate" | "levitate" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | "cleanMud" | BuildingKind;
 
 export interface ToolState {
   id: ToolId;
@@ -123,6 +123,7 @@ export const BUILD_DEFS: BuildDef[] = [
   { value: "wall", icon: "🪵", label: "Wood wall", cat: "defense", cost: { stick: 2 }, tech: "palisade", tip: "Drag to draw. Dinos can't walk through (but can bash it).", line: true },
   { value: "stonewall", icon: "🧱", label: "Stone wall", cat: "defense", cost: { stone: 2 }, tech: "stonewall", tip: "Drag to draw. Much tougher. Draw over wood walls to upgrade them.", line: true },
   { value: "gate", icon: "🚪", label: "Gate", cat: "defense", cost: { wood: 2 }, tech: "palisade", tip: "Put it in a wall. People use the side door; dinos only get through when it's open. Closes itself when danger comes." },
+  { value: "bonegate", icon: "🦴", label: "Bone gate", cat: "defense", cost: { bone: 5 }, tech: "palisade", tip: "The grand entrance: giant crossed tusks, a dino rib-cage arch to walk through and bone doors that shut dinos out. Tap a gap, a wall or an old gate to put one in." },
   { value: "stairs", icon: "🪜", label: "Stairs", cat: "defense", cost: { stick: 2 }, tech: "palisade", tip: "Next to a wall: lets people climb up and defend from the walkway." },
   { value: "tower", icon: "🗼", label: "Watchtower", cat: "defense", cost: { wood: 4, stone: 2 }, tech: "tower", tip: "Guards climb up to see + shoot further. Joins up with walls." },
   { value: "scorpion", icon: "🎯", label: "Scorpion", cat: "defense", cost: SCORPION_TIERS[0].cost, tech: "scorpion", tip: "A giant crossbow. Put it on a wall, a tower or the ground. Someone has to crew it." },
@@ -134,6 +135,7 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("storage", "work"),
   bld("foodStore", "work"),
   bld("waterStore", "work"),
+  bld("well", "land"),
   bld("tannery", "work"),
   bld("workshop", "work"),
   bld("blacksmith", "work"),
@@ -142,6 +144,7 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("post", "work"),
   bld("path", "land", true),
   bld("bridge", "land", true),
+  { value: "cleanMud", icon: "🧹", label: "Clean mud", cat: "land", cost: {}, tip: "Tap or drag over mud, swamp or bare dirt near camp to turn it into clean grass. The change is saved and stays clean.", line: true },
   // civilization projects (each needs its research)
   { value: "polywall", icon: "🔷", label: "Polygon wall", cat: "defense", cost: { shaped: 2 }, civ: "precisionStone", tip: "Drag to draw. Many-sided shaped blocks that lock together: the toughest wall. Draw over old walls to upgrade them (their materials come back).", line: true },
   { value: "polygate", icon: "⛩️", label: "Monumental gate", cat: "defense", cost: { shaped: 3 }, civ: "precisionStone", tip: "A shaped-stone gate. Put it in a wall (or draw over an old gate)." },
@@ -214,7 +217,7 @@ export function toolCursor(t: ToolState): { icon: string; radius: number } | nul
     case "people":
       return { icon: PEOPLE_OPTS.find((o) => o.value === t.people)!.icon, radius: 16 };
     case "build":
-      return { icon: BUILD_BY_ID[t.build].icon, radius: BUILD_BY_ID[t.build].line || t.build === "gate" || t.build === "stairs" || t.build === "scorpion" ? 16 : t.build === "farm" ? 38 : 30 };
+      return { icon: BUILD_BY_ID[t.build].icon, radius: t.build === "cleanMud" ? TILE * 1.6 : BUILD_BY_ID[t.build].line || t.build === "gate" || t.build === "bonegate" || t.build === "stairs" || t.build === "scorpion" ? 16 : t.build === "farm" ? 38 : 30 };
     case "erase":
       return { icon: "🧽", radius: 28 };
   }
@@ -395,6 +398,31 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
       const why = w.civ.levitate(w, x, y);
       if (why) hint(w, "🪶", why);
       return !why;
+    }
+    case "cleanMud": {
+      const n = paintTiles(w, x, y, 1.6, (t) => (t === T.Mud || t === T.Swamp || t === T.Dirt ? T.Grass : null));
+      if (n) {
+        w.particles.burst(P.Leaf, x, y, 5, 30, { z: 6, vz: 25, g: 60, size: 3, max: 0.8, color: "#79ad58" });
+        if (!drag) w.sfx("rustle", x, y, 0.4);
+      } else if (!drag) hint(w, "🧹", "Tap mud, swamp or bare dirt near camp to clean it.");
+      return n > 0;
+    }
+    case "bonegate": {
+      const tx = Math.floor(x / TILE);
+      const ty = Math.floor(y / TILE);
+      const nb = [w.tribe.wallAt(tx, ty), w.tribe.wallAt(tx - 1, ty), w.tribe.wallAt(tx + 1, ty), w.tribe.wallAt(tx, ty - 1), w.tribe.wallAt(tx, ty + 1)].find((o) => o && o.part !== "stairs");
+      const kind: WallKind = nb?.kind ?? (w.civ.polygonAge ? "polygon" : c.learned.has("stonewall") ? "stone" : "palisade");
+      const ex = w.tribe.wallAt(tx, ty);
+      if (ex?.bone || ex?.boneUp) {
+        hint(w, "🦴", "That's already a bone gate.");
+        return false;
+      }
+      const wl = w.tribe.planBoneGate(w, tx, ty, kind);
+      if (wl) {
+        w.sfx("knock", x, y, 0.4);
+        w.toast("🦴", ex ? "Bone gate planned! Builders swap it in once they have 🦴 5 bones." : "Bone gate planned in the gap! Builders need 🦴 5 bones.", x, y);
+      } else hint(w, "🦴", "A bone gate goes in a wall, an old gate or a gap between walls.");
+      return !!wl;
     }
     case "wall":
     case "stonewall":

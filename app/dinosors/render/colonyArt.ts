@@ -209,7 +209,16 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
     c.fillStyle = "rgba(0,0,0,0.14)";
     c.fillRect(tw / 2 - 2, (N ? -T : cy - tw / 2) - h, 2, (S ? 0 : cy + tw / 2) - (N ? -T : cy - tw / 2));
   }
-  if (wl.part === "gate") {
+  if (wl.part === "gate" && wl.bone) {
+    c.save();
+    if (S) {
+      // in a north-south run: a smaller monument astride the walkway
+      c.translate(0, cy + 6);
+      c.scale(0.72, 0.72);
+    } else c.translate(0, cy + tw / 2);
+    drawBoneGate(c, wl, look.swing, look.t, look.hpFrac);
+    c.restore();
+  } else if (wl.part === "gate") {
     if (!S) {
       c.save();
       c.translate(0, cy + tw / 2);
@@ -233,13 +242,315 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
     c.lineTo(-4, cy + tw / 2 - h * 0.2);
     c.stroke();
   }
-  if (wl.upgrade) {
+  if (wl.upgrade || wl.boneUp) {
     c.globalAlpha = 0.6 + Math.sin(look.t * 4) * 0.3;
     c.font = "11px sans-serif";
     c.textAlign = "center";
-    c.fillText("🧱", 0, cy - h - 10);
+    c.fillText(wl.boneUp ? "🦴" : wl.upTo === "polygon" ? "🔷" : "🧱", 0, cy - h - 10);
     c.globalAlpha = 1;
   }
+}
+
+/* ------------------------------ the grand bone gate ------------------------------ */
+
+const INK = "#3a2616";
+const IVORY = "#f6ecd6";
+const IVORY_D = "#d9c7a2";
+
+/** One bone: a shaft with knobbed ends, ink outline then ivory fill so the knobs merge. */
+function bone(c: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, w: number, fill = IVORY) {
+  const a = Math.atan2(y1 - y0, x1 - x0);
+  const nx = -Math.sin(a) * w * 0.55;
+  const ny = Math.cos(a) * w * 0.55;
+  const knobs = (pad: number, col: string) => {
+    c.fillStyle = col;
+    for (const [x, y] of [[x0, y0], [x1, y1]] as const)
+      for (const s of [-1, 1]) {
+        c.beginPath();
+        c.arc(x + nx * s, y + ny * s, w * 0.62 + pad, 0, Math.PI * 2);
+        c.fill();
+      }
+  };
+  c.lineCap = "round";
+  c.strokeStyle = INK;
+  c.lineWidth = w + 2.4;
+  c.beginPath();
+  c.moveTo(x0, y0);
+  c.lineTo(x1, y1);
+  c.stroke();
+  knobs(1.2, INK);
+  c.strokeStyle = fill;
+  c.lineWidth = w;
+  c.beginPath();
+  c.moveTo(x0, y0);
+  c.lineTo(x1, y1);
+  c.stroke();
+  knobs(0, fill);
+  // a little shine down the shaft
+  c.strokeStyle = "rgba(255,255,255,0.55)";
+  c.lineWidth = Math.max(0.8, w * 0.22);
+  c.beginPath();
+  c.moveTo(x0 + (x1 - x0) * 0.2 - nx * 0.4, y0 + (y1 - y0) * 0.2 - ny * 0.4);
+  c.lineTo(x0 + (x1 - x0) * 0.75 - nx * 0.4, y0 + (y1 - y0) * 0.75 - ny * 0.4);
+  c.stroke();
+}
+
+/** A hide lashing wrapped round a bone / tusk at (x, y). */
+function lashing(c: CanvasRenderingContext2D, x: number, y: number, a: number, w: number) {
+  c.save();
+  c.translate(x, y);
+  c.rotate(a);
+  c.fillStyle = "#8a4b22";
+  c.strokeStyle = INK;
+  c.lineWidth = 1;
+  for (const o of [-2.2, 1.2]) {
+    c.beginPath();
+    c.rect(o, -w / 2 - 1, 2.2, w + 2);
+    c.fill();
+    c.stroke();
+  }
+  c.restore();
+}
+
+/** A giant curved tusk rising beside the gate, arcing over the top to cross its twin. */
+function tusk(c: CanvasRenderingContext2D, side: number, t: number) {
+  // rises outward from its post, sweeps in and crosses its twin high above the arch, tip flaring out past it
+  const p0 = { x: side * 28, y: -8 };
+  const p1 = { x: side * 52, y: -46 };
+  const p2 = { x: side * 24, y: -86 };
+  const p3 = { x: -side * 30, y: -94 };
+  const at = (u: number) => {
+    const v = 1 - u;
+    return {
+      x: v * v * v * p0.x + 3 * v * v * u * p1.x + 3 * v * u * u * p2.x + u * u * u * p3.x,
+      y: v * v * v * p0.y + 3 * v * v * u * p1.y + 3 * v * u * u * p2.y + u * u * u * p3.y,
+    };
+  };
+  const L: { x: number; y: number }[] = [];
+  const R: { x: number; y: number }[] = [];
+  const n = 28;
+  for (let i = 0; i <= n; i++) {
+    const u = i / n;
+    const p = at(u);
+    const q = at(Math.min(1, u + 0.01));
+    const r = at(Math.max(0, u - 0.01));
+    const a = Math.atan2(q.y - r.y, q.x - r.x);
+    const wdt = 6.5 * (1 - u) ** 0.8 + 0.4;
+    L.push({ x: p.x - Math.sin(a) * wdt, y: p.y + Math.cos(a) * wdt });
+    R.push({ x: p.x + Math.sin(a) * wdt, y: p.y - Math.cos(a) * wdt });
+  }
+  c.beginPath();
+  c.moveTo(L[0].x, L[0].y);
+  for (const p of L) c.lineTo(p.x, p.y);
+  for (let i = R.length - 1; i >= 0; i--) c.lineTo(R[i].x, R[i].y);
+  c.closePath();
+  const g = c.createLinearGradient(side * 44, -60, side * 10, -60);
+  g.addColorStop(0, "#fffaf0");
+  g.addColorStop(0.55, IVORY);
+  g.addColorStop(1, IVORY_D);
+  c.fillStyle = g;
+  c.fill();
+  c.strokeStyle = INK;
+  c.lineWidth = 1.8;
+  c.lineJoin = "round";
+  c.stroke();
+  // growth rings + a glint that slides along it
+  c.strokeStyle = "rgba(150,120,80,0.45)";
+  c.lineWidth = 0.8;
+  for (const u of [0.32, 0.4, 0.48]) {
+    const i = Math.round(u * n);
+    c.beginPath();
+    c.moveTo(L[i].x, L[i].y);
+    c.lineTo(R[i].x, R[i].y);
+    c.stroke();
+  }
+  const gu = 0.25 + ((t * 0.15 + (side > 0 ? 0.5 : 0)) % 1) * 0.6;
+  const gp = at(gu);
+  c.fillStyle = "rgba(255,255,255,0.7)";
+  c.beginPath();
+  c.ellipse(gp.x, gp.y, 1.4, 2.6, 0.6 * side, 0, Math.PI * 2);
+  c.fill();
+  // lashed to its post
+  for (const u of [0.08, 0.16]) {
+    const p = at(u);
+    const q = at(u + 0.02);
+    lashing(c, p.x, p.y, Math.atan2(q.y - p.y, q.x - p.x), 15 * (1 - u));
+  }
+}
+
+/** The post a tusk is planted in: logs, a stone block or polygon blocks (matches the wall). */
+function gatePost(c: CanvasRenderingContext2D, x: number, kind: Wall["kind"], seed: number) {
+  if (kind === "polygon") {
+    polyBlocks(c, x - 9, -22, x + 9, 2, seed);
+    c.strokeStyle = INK;
+    c.lineWidth = 1.4;
+    c.strokeRect(x - 9, -22, 18, 24);
+  } else if (kind === "stone") {
+    const g = c.createLinearGradient(0, -22, 0, 2);
+    g.addColorStop(0, "#b4ada2");
+    g.addColorStop(1, "#7c766d");
+    c.fillStyle = g;
+    c.strokeStyle = INK;
+    c.lineWidth = 1.4;
+    c.beginPath();
+    c.moveTo(x - 10, 2);
+    c.lineTo(x - 8, -22);
+    c.lineTo(x + 8, -22);
+    c.lineTo(x + 10, 2);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    c.strokeStyle = "rgba(55,50,45,0.5)";
+    c.beginPath();
+    c.moveTo(x - 9, -10);
+    c.lineTo(x + 9, -10);
+    c.stroke();
+  } else {
+    for (const o of [-6, 0, 6]) {
+      const g = c.createLinearGradient(x + o - 3, 0, x + o + 3, 0);
+      g.addColorStop(0, "#a3774a");
+      g.addColorStop(1, "#5e3f24");
+      c.fillStyle = g;
+      c.strokeStyle = INK;
+      c.lineWidth = 1;
+      c.beginPath();
+      c.rect(x + o - 3, -20 + Math.abs(o) * 0.4, 6, 22 - Math.abs(o) * 0.4);
+      c.fill();
+      c.stroke();
+    }
+    c.fillStyle = "#8a4b22";
+    c.fillRect(x - 9, -12, 18, 3);
+  }
+}
+
+/** One rib of the arch (side = -1 left, 1 right), scaled + lifted for depth. */
+function rib(c: CanvasRenderingContext2D, side: number, s: number, oy: number, fill: string, w: number) {
+  const path = () => {
+    c.beginPath();
+    c.moveTo(side * 19 * s, oy + 1);
+    c.bezierCurveTo(side * 23 * s, oy - 16 * s, side * 21 * s, oy - 40 * s, side * 3, oy - 52 * s);
+  };
+  c.lineCap = "round";
+  c.strokeStyle = INK;
+  c.lineWidth = w + 2.4;
+  path();
+  c.stroke();
+  c.strokeStyle = fill;
+  c.lineWidth = w;
+  path();
+  c.stroke();
+  // the rib's foot curls into a knob at the ground
+  c.fillStyle = INK;
+  c.beginPath();
+  c.arc(side * 19 * s, oy + 1, w * 0.8 + 1.2, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = fill;
+  c.beginPath();
+  c.arc(side * 19 * s, oy + 1, w * 0.8, 0, Math.PI * 2);
+  c.fill();
+}
+
+/**
+ * The grand entrance, seen from the front: a dinosaur rib cage arching
+ * over the way in, bone-bar doors that swing shut, two giant tusks crossing
+ * overhead and a crossed-bones crest on top. Origin: front base centre.
+ */
+export function drawBoneGate(c: CanvasRenderingContext2D, wl: Wall, swing: number, t: number, hpFrac: number) {
+  const seed = wl.tx * 31 + wl.ty * 17;
+  const grow = Math.max(0, Math.min(1, wl.built));
+  c.save();
+  c.scale(1, 0.35 + grow * 0.65);
+  // ground shadow
+  c.fillStyle = "rgba(20,14,8,0.3)";
+  c.beginPath();
+  c.ellipse(0, 1, 40, 7, 0, 0, Math.PI * 2);
+  c.fill();
+
+  // dark way through under the ribs
+  c.fillStyle = "#1d140d";
+  c.beginPath();
+  c.moveTo(-15, 0);
+  c.bezierCurveTo(-17, -30, -9, -50, 0, -52);
+  c.bezierCurveTo(9, -50, 17, -30, 15, 0);
+  c.closePath();
+  c.fill();
+  // the rib cage, back to front (back ribs sit higher up the screen)
+  const ribs = 4;
+  for (let i = 0; i < ribs - 1; i++) {
+    const d = (ribs - 1 - i) / (ribs - 1); // 1 = far back
+    if (hpFrac < 0.45 && i === 1) continue; // a rib knocked out
+    const fill = d > 0.6 ? "#bfae8c" : d > 0.2 ? "#ddd0b2" : IVORY;
+    for (const side of [-1, 1]) rib(c, side, 1 - d * 0.16, -d * 20, fill, 3.2);
+  }
+  // the spine running back along the top
+  for (let k = 6; k >= 0; k--) {
+    const d = k / 6;
+    const y = -52 - d * 18;
+    const r = 4.2 - d * 1.4;
+    c.fillStyle = INK;
+    c.beginPath();
+    c.ellipse(0, y, r + 1.2, r * 0.75 + 1.2, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = d > 0.5 ? "#d6c8a8" : IVORY;
+    c.beginPath();
+    c.ellipse(0, y, r, r * 0.75, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  // bone-bar doors (swing in, seen edge-on when open)
+  const open = Math.max(0, Math.min(1, swing));
+  const DW = 13;
+  const DH = 36;
+  for (const side of [-1, 1]) {
+    const w = DW * (1 - open * 0.85);
+    if (w < 1.5) continue;
+    const x0 = side * DW;
+    const bars = 3;
+    for (let b = 0; b < bars; b++) {
+      const x = x0 - (side * (w * (b + 0.5))) / bars;
+      bone(c, x, -3, x, -DH + 4 + open * 3, 2.6, b % 2 ? IVORY_D : IVORY);
+    }
+    // hide straps lash the bars together
+    c.lineCap = "butt";
+    for (const [col, lw] of [[INK, 3.4], ["#8a4b22", 2]] as const) {
+      c.strokeStyle = col;
+      c.lineWidth = lw;
+      for (const yy of [-10, -26]) {
+        c.beginPath();
+        c.moveTo(x0, yy);
+        c.lineTo(x0 - side * w, yy + open * 2);
+        c.stroke();
+      }
+    }
+  }
+  // shut: a great thigh bone barred across both doors
+  if (open < 0.15) bone(c, -16, -19, 16, -19, 3.4);
+
+  // the front rib frames the doors
+  for (const side of [-1, 1]) {
+    rib(c, side, 1, 0, IVORY, 4.4);
+    c.strokeStyle = "rgba(255,255,255,0.6)";
+    c.lineWidth = 1.2;
+    c.beginPath();
+    c.moveTo(side * 18, -8);
+    c.bezierCurveTo(side * 21, -20, side * 19, -36, side * 6, -47);
+    c.stroke();
+  }
+
+  // posts + giant crossing tusks
+  gatePost(c, -27, wl.kind, seed);
+  gatePost(c, 27, wl.kind, seed + 5);
+  tusk(c, -1, t);
+  tusk(c, 1, t);
+
+  // crossed bones crest on top
+  c.save();
+  c.translate(0, -104);
+  bone(c, -14, -10, 14, 10, 4.4);
+  bone(c, -14, 10, 14, -10, 4.4);
+  lashing(c, 0, 0, Math.PI / 2, 9);
+  c.restore();
+  c.restore();
 }
 
 function drawGateDoors(c: CanvasRenderingContext2D, stone: boolean, h: number, swing: number, t: number) {
@@ -795,6 +1106,38 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
         c.ellipse(x, -22 * s, 3.5 * s, 1.5, 0, 0, Math.PI * 2);
         c.fill();
       }
+      break;
+    }
+    case "well": {
+      // stone rim over the shallow water, with a small bucket and winch
+      c.fillStyle = "#665f57";
+      c.beginPath();
+      c.ellipse(0, -3, 15, 11, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#b8b5aa";
+      c.beginPath();
+      c.ellipse(0, -8, 15, 11, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#397fac";
+      c.beginPath();
+      c.ellipse(0, -9, 10, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = "#6b4728";
+      c.lineWidth = 2.5;
+      c.beginPath();
+      c.moveTo(-11, -12);
+      c.lineTo(-11, -29);
+      c.lineTo(11, -29);
+      c.lineTo(11, -12);
+      c.stroke();
+      c.strokeStyle = "#d5b57b";
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(0, -29);
+      c.lineTo(0, -20);
+      c.stroke();
+      c.fillStyle = "#b77b49";
+      c.fillRect(-4, -20, 8, 6);
       break;
     }
     case "healer": {

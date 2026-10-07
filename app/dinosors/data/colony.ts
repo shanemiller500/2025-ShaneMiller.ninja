@@ -72,6 +72,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   blacksmith: { kind: "blacksmith", icon: "⚒️", name: "Blacksmith", tip: "Forges metal weapons, metal shields and Scorpion parts.", cost: { stone: 8, wood: 4, clay: 4 }, w: 2, h: 2, solid: true, tech: "smelting", work: 9, hp: 420 },
   foodStore: { kind: "foodStore", icon: "🍱", name: "Food store", tip: "Keeps food safe: raiders steal far less.", cost: { wood: 4, leaves: 4 }, w: 2, h: 1, solid: true, tech: "basket", work: 5, hp: 260 },
   waterStore: { kind: "waterStore", icon: "🏺", name: "Water store", tip: "Clay jars of water for fighting fires and greener fields.", cost: { clay: 4, wood: 2 }, w: 1, h: 1, solid: true, tech: "fire", work: 4, hp: 220 },
+  well: { kind: "well", icon: "🪣", name: "Freshwater well", tip: "Build on shallow fresh water. A finished well keeps the camp supplied with water.", cost: { stone: 3, stick: 3 }, w: 1, h: 1, solid: false, work: 4, hp: 240 },
   healer: { kind: "healer", icon: "🌿", name: "Healing hut", tip: "Hurt people rest here and heal twice as fast.", cost: { wood: 4, leaves: 6 }, w: 2, h: 2, solid: true, tech: "medicine", work: 6, hp: 280 },
   pen: { kind: "pen", icon: "🐾", name: "Animal pen", tip: "Home for befriended dinosaurs.", cost: { stick: 8, wood: 2 }, w: 3, h: 2, solid: false, tech: "taming", work: 5, hp: 200 },
   post: { kind: "post", icon: "🚩", name: "Gathering post", tip: "A far-away drop-off for wood, stone and ore.", cost: { stick: 4 }, w: 1, h: 1, solid: false, work: 2, hp: 120 },
