@@ -9,6 +9,7 @@ import type { Building, Dragon, ResNode, Scorpion, Shelter, Wall } from "../sim/
 import { HOUSING, NODES } from "../data/colony";
 import { shade } from "./drawDino";
 import { drawCivNode, polyBlocks } from "./civArt";
+import { drawPolygonHouse } from "./metalArt";
 import { CIV_NODES } from "../data/colony";
 
 const OUT = "rgba(30,22,16,0.55)";
@@ -464,6 +465,10 @@ export function drawHome(c: CanvasRenderingContext2D, s: Shelter, done: boolean,
   if (!done) return false; // caller falls back to the staged hut / tent drawing
   const tier = s.tier;
   const glow = night ? `rgba(255,${180 + Math.sin(t * 7) * 20},90,0.95)` : "#2b1e14";
+  if (tier >= 5) {
+    drawPolygonHouse(c, night, t);
+    return true;
+  }
   switch (tier) {
     case 0:
     case 1: {
@@ -903,6 +908,29 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
 /** A ballista on its swivel mount, aimed along s.aim. Origin: base centre (raised by the mount). */
 export function drawScorpion(c: CanvasRenderingContext2D, s: Scorpion) {
   const built = s.built;
+  if (s.drone && built >= 1) {
+    // powered: a glowing crystal core, a spinning targeting ring
+    const t = performance.now() / 1000;
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    const g = c.createRadialGradient(0, -10, 0, 0, -10, 30);
+    g.addColorStop(0, `rgba(140,235,255,${0.45 + Math.sin(t * 5) * 0.15})`);
+    g.addColorStop(1, "rgba(140,235,255,0)");
+    c.fillStyle = g;
+    c.beginPath();
+    c.arc(0, -10, 30, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    c.save();
+    c.strokeStyle = "rgba(150,240,255,0.7)";
+    c.lineWidth = 1.2;
+    c.setLineDash([5, 4]);
+    c.lineDashOffset = -t * 20;
+    c.beginPath();
+    c.ellipse(0, 0, 20, 8, 0, 0, Math.PI * 2);
+    c.stroke();
+    c.restore();
+  }
   if (built < 1) {
     c.strokeStyle = "rgba(255,255,255,0.8)";
     c.setLineDash([4, 3]);

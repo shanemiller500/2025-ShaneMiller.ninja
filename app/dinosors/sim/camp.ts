@@ -50,7 +50,7 @@ export class Camp {
   y = LM.camp.y * TILE + TILE / 2;
   caveX = LM.cave.x * TILE + TILE / 2;
   caveY = 0;
-  stock: Stock = { stick: 0, stone: 0, grass: 0, leaves: 0, wood: 0, fish: 0, berries: 2, meat: 0, cooked: 0, crop: 0, water: 0, clay: 0, iron: 0, gold: 0, obsidian: 0, flint: 0, tar: 0, salt: 0, hide: 0, bone: 0, tooth: 0, copper: 0, quartz: 0, magnetite: 0, crystal: 0, meteorite: 0, shaped: 0 };
+  stock: Stock = { stick: 0, stone: 0, grass: 0, leaves: 0, wood: 0, fish: 0, berries: 2, meat: 0, cooked: 0, crop: 0, water: 0, clay: 0, iron: 0, gold: 0, obsidian: 0, flint: 0, tar: 0, salt: 0, hide: 0, bone: 0, tooth: 0, copper: 0, quartz: 0, magnetite: 0, crystal: 0, meteorite: 0, shaped: 0, diamond: 0, silver: 0, goldBar: 0, silverBar: 0, copperBar: 0 };
   learned = new Set<TechId>();
   goal: TechId | null = "tools";
   crafting: Crafting | null = null;
@@ -145,6 +145,10 @@ export class Camp {
   /** Plan the next housing tier for a finished home. */
   startUpgrade(w: World, s: Shelter) {
     if (!shelterDone(s) || s.up || !HOUSING[s.tier + 1]) return false;
+    if (HOUSING[s.tier + 1].polygon && !w.civ.polygonAge) {
+      w.toast("💠", "Polygon houses need polygon stonework: research Precision stone (Resonance) or Dressed masonry (Old Ways).", s.x, s.y);
+      return false;
+    }
     s.up = true;
     s.upHave = {};
     const next = HOUSING[s.tier + 1];
@@ -302,7 +306,7 @@ export class Camp {
       const tx = Math.floor(s.x / TILE);
       const ty = Math.floor((s.y - 12) / TILE);
       const heat = w.fire.at(tx, ty) + w.lava.heatAt(tx, ty) * 2;
-      if (heat > 0.3) s.hp -= dt * 0.08 * heat * (1 - HOUSING[s.tier].protect * 0.8);
+      if (heat > 0.3 && !HOUSING[s.tier].polygon) s.hp -= dt * 0.08 * heat * (1 - HOUSING[s.tier].protect * 0.8);
       if (s.hp <= 0) {
         s.hp = 1;
         s.stage = 0;

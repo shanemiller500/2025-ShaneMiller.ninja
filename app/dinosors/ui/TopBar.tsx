@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { FolderOpen, Info, LogOut, Menu, RefreshCw, Save, Sparkles, Trophy, Volume2, VolumeX, Map as MapIcon, Pause, Play } from "lucide-react";
+import { BookOpen, FolderOpen, Info, Lightbulb, LogOut, Menu, RefreshCw, Save, Sparkles, Trophy, Volume2, VolumeX, Map as MapIcon, Pause, Play } from "lucide-react";
 import { DISCOVERIES } from "../data/facts";
 import { Engine, type Snapshot } from "../game/engine";
 import { WEATHER_LABEL } from "../sim/weather";
@@ -27,6 +27,10 @@ interface Props {
   onCamp: () => void;
   onEvolution: () => void;
   onCiv: () => void;
+  onDeep: () => void;
+  onHelp: () => void;
+  onTips: () => void;
+  tipsOn: boolean;
   onExtinction: () => void;
   civOpen: boolean;
   onCloud: () => void;
@@ -64,6 +68,10 @@ export default function TopBar(p: Props) {
           )}
           <button type="button" className={`${btn} relative ${p.evoOpen ? "!bg-cyan-500/60" : ""}`} title="Evolution" aria-label="Evolution" aria-pressed={p.evoOpen} onClick={p.onEvolution}>
             <span className="text-2xl leading-none">🧬</span>
+          </button>
+          <button type="button" className={`${btn} relative ${snap.view === "deep" ? "!bg-cyan-600/70" : ""}`} title={snap.view === "deep" ? "Back to the surface" : "The Deep: the mine under the cave"} aria-label="The Deep" aria-pressed={snap.view === "deep"} onClick={p.onDeep}>
+            <span className="text-2xl leading-none">{snap.view === "deep" ? "🌤️" : "⛏️"}</span>
+            {snap.view === "surface" && snap.crew > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-cyan-400 px-1.5 text-[11px] font-bold text-slate-900">{snap.crew}</span>}
           </button>
           <button type="button" className={`${btn} relative ${p.civOpen ? "!bg-cyan-500/60" : ""}`} title="Civilization" aria-label="Civilization" aria-pressed={p.civOpen} onClick={p.onCiv}>
             <span className="text-2xl leading-none">{snap.civ.path === "resonance" ? "💠" : snap.civ.path === "traditional" ? "🔥" : "🏛️"}</span>
@@ -275,6 +283,12 @@ function MenuPanel(p: Props & { close: () => void }) {
       </button>
       <button type="button" className={item} onClick={() => { p.onReset(); p.close(); }}>
         <RefreshCw className="h-5 w-5 text-rose-300" /> Reset everything
+      </button>
+      <button type="button" className={item} onClick={() => { p.onHelp(); p.close(); }}>
+        <BookOpen className="h-5 w-5 text-amber-300" /> How to play
+      </button>
+      <button type="button" className={item} onClick={() => p.onTips()} aria-pressed={p.tipsOn}>
+        <Lightbulb className={`h-5 w-5 ${p.tipsOn ? "text-amber-300" : "text-white/40"}`} /> Tips: {p.tipsOn ? "On" : "Off"}
       </button>
       <button type="button" className={item} onClick={() => { p.onAbout(); p.close(); }}>
         <Info className="h-5 w-5 text-amber-300" /> About Dinosaur Land

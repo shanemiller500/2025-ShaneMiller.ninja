@@ -150,7 +150,7 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
             <div>
               <div className="text-lg font-bold leading-tight">{info.name}</div>
               <div className="text-xs text-white/60">
-                On the {info.mount} · {info.built < 1 ? `building ${Math.round(info.built * 100)}%` : info.crew ? `crewed by ${info.crew}` : "nobody crewing it"}
+                On the {info.mount} · {info.built < 1 ? `building ${Math.round(info.built * 100)}%` : info.drone ? "⚡ powered: aims + fires on its own" : info.crew ? `crewed by ${info.crew}` : "nobody crewing it"}
               </div>
             </div>
           </div>

@@ -55,7 +55,7 @@ const T = (d: CivTechDef) => d;
 
 export const CIV_TECH: Record<CivTechId, CivTechDef> = {
   // ---------------- the Old Ways ----------------
-  masonry: T({ id: "masonry", path: "traditional", icon: "🧱", name: "Dressed masonry", what: "Stone walls get 50% tougher and repairs go faster.", rp: 40, cost: { stone: 8, clay: 4 }, after: [] }),
+  masonry: T({ id: "masonry", path: "traditional", icon: "🧱", name: "Dressed masonry", what: "Stone walls get 50% tougher, and your masons learn polygon stonework: shaped stone, polygon walls and polygon houses.", rp: 40, cost: { stone: 8, clay: 4 }, after: [] }),
   ironForge: T({ id: "ironForge", path: "traditional", icon: "⚒️", name: "Iron forging", what: "Every metal weapon hits 35% harder.", rp: 55, cost: { iron: 4, wood: 4 }, after: ["masonry"], cross: true }),
   cropRotation: T({ id: "cropRotation", path: "traditional", icon: "🌾", name: "Crop rotation", what: "Farms grow twice as fast and give more.", rp: 45, cost: { grass: 6, berries: 4 }, after: [], cross: true }),
   herbalism: T({ id: "herbalism", path: "traditional", icon: "🌿", name: "Herbal medicine", what: "Injuries heal twice as fast; the healing hut saves more people.", rp: 45, cost: { leaves: 8, salt: 1 }, after: ["cropRotation"] }),

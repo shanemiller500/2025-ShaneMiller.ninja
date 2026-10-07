@@ -36,6 +36,11 @@ export const RES_INFO: Record<Resource, { icon: string; name: string }> = {
   crystal: { icon: "🔮", name: "Crystal" },
   meteorite: { icon: "☄️", name: "Meteor fragment" },
   shaped: { icon: "🔷", name: "Shaped stone" },
+  diamond: { icon: "💎", name: "Diamond" },
+  silver: { icon: "🪨", name: "Silver ore" },
+  goldBar: { icon: "🟨", name: "Gold bars" },
+  silverBar: { icon: "⬜", name: "Silver bars" },
+  copperBar: { icon: "🟧", name: "Copper bars" },
 };
 
 export const costTotal = (c: Cost) => Object.values(c).reduce((s, n) => s + (n ?? 0), 0);
@@ -77,6 +82,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   spikes: { kind: "spikes", icon: "🦴", name: "Bone spikes", tip: "Sharpened bones angled outward. Hurt + slow small and medium attackers; big ones just get slowed. Drag to line your walls.", cost: { bone: 2, stick: 1 }, w: 1, h: 1, solid: false, tech: "spear", work: 3, hp: 10 },
   barricade: { kind: "barricade", icon: "✖️", name: "Bone barricade", tip: "A low crossed-bone barrier. Blocks the way like a short wall and pricks anything that shoves it.", cost: { bone: 4, wood: 1 }, w: 1, h: 1, solid: true, tech: "palisade", work: 4, hp: 170 },
   totem: { kind: "totem", icon: "💀", name: "Bone totem", tip: "A tall skull totem. Wild predators think twice about coming near (raiders don't care).", cost: { bone: 3, tooth: 1, stick: 2 }, w: 1, h: 1, solid: true, work: 4, hp: 150 },
+  refinery: { kind: "refinery", icon: "🏭", name: "Refinery", tip: "Smelts raw gold, silver and copper from the mine into bars (burns a log per bar). Raw ore and stacks of bars pile up outside it.", cost: { stone: 6, clay: 4, iron: 2 }, w: 3, h: 2, solid: true, tech: "smelting", work: 10, hp: 520 },
   shelterDeep: { kind: "shelterDeep", icon: "🕳️", name: "Deep shelter", tip: "A bunker dug deep and roofed with stone. When the sky falls, the people inside have a chance.", cost: { stone: 14, wood: 8 }, w: 3, h: 2, solid: true, civ: "deepShelter", work: 18, hp: 1200 },
   resTable: { kind: "resTable", icon: "🔔", name: "Resonance table", tip: "Researchers study here (twice as fast). Tap it to run tuning experiments.", cost: { stone: 4, wood: 2 }, w: 2, h: 1, solid: true, civ: "resonance", work: 5, hp: 260 },
   chamber: { kind: "chamber", icon: "🔮", name: "Crystal chamber", tip: "A small stone room around a tuned crystal: makes and stores a little energy.", cost: { stone: 6, quartz: 2, crystal: 1 }, w: 2, h: 2, solid: true, civ: "quartzTuning", work: 9, hp: 420 },
@@ -117,6 +123,8 @@ export interface HousingTier {
   hearth: boolean;
   /** cost to upgrade INTO this tier */
   cost: Cost;
+  /** needs the polygon age (shaped stone): Precision stone or Dressed masonry */
+  polygon?: boolean;
 }
 
 export const HOUSING: HousingTier[] = [
@@ -125,6 +133,7 @@ export const HOUSING: HousingTier[] = [
   { icon: "🛖", name: "Wooden hut", cap: 4, warmth: 0.58, protect: 0.5, hearth: false, cost: { wood: 4, stick: 4, leaves: 4 } },
   { icon: "🏠", name: "Reinforced house", cap: 5, warmth: 0.78, protect: 0.72, hearth: true, cost: { wood: 6, stone: 4, clay: 2 } },
   { icon: "🏡", name: "Stone house", cap: 6, warmth: 0.92, protect: 0.92, hearth: true, cost: { stone: 8, clay: 3, wood: 2 } },
+  { icon: "💠", name: "Polygon house", cap: 8, warmth: 1, protect: 1, hearth: true, cost: { shaped: 6, stone: 2, copperBar: 1 }, polygon: true },
 ];
 
 /** Quick blueprint stages: a tent goes up fast. (Huts use SHELTER_STAGES.) */
@@ -178,7 +187,7 @@ export const WEAPONS: WeaponDef[] = [
   { id: "bow2", kind: "bow", tier: 2, name: "Reinforced bow", icon: "🏹", melee: false, proj: "arrow", range: 290, dmg: 31, cd: 1.3, speed: 680, prey: 120, cost: { wood: 2, tar: 1, grass: 2 }, at: "workshop" },
   { id: "bow3", kind: "bow", tier: 3, name: "Heavy bow", icon: "🎯", melee: false, proj: "bolt", range: 340, dmg: 46, cd: 2, speed: 820, prey: 150, cost: { wood: 2, iron: 1, tar: 1 }, at: "blacksmith" },
   // fantasy tech: a crystal-tipped staff that throws a bolt of light
-  { id: "lance", kind: "spear", tier: 3, name: "Resonance lance", icon: "🔆", melee: false, proj: "beam", range: 300, dmg: 58, cd: 1.9, speed: 1500, prey: 140, cost: { copper: 2, crystal: 1, wood: 1 }, at: "workshop", civ: "energyWeapons" },
+  { id: "lance", kind: "spear", tier: 3, name: "Resonance lance", icon: "🔆", melee: false, proj: "beam", range: 300, dmg: 58, cd: 1.9, speed: 1500, prey: 140, cost: { copper: 2, crystal: 1, wood: 1 }, at: "workshop", civ: "precisionStone" },
 ];
 
 export const WEAPON_BY_ID: Record<string, WeaponDef> = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
@@ -238,6 +247,34 @@ export const OUTFITS: OutfitDef[] = [
 
 export const OUTFIT_BY_ID: Record<string, OutfitDef> = Object.fromEntries(OUTFITS.map((o) => [o.id, o]));
 
+/* ------------------------------ helmets (metal from the mine) ------------------------------ */
+
+export interface HelmetDef {
+  id: string;
+  name: string;
+  icon: string;
+  /** fraction of damage blocked (bites, rocks, cave-ins) */
+  armor: number;
+  cost: Cost;
+  at: Station;
+  civ?: CivTechId;
+  color: string;
+  trim: string;
+  /** a magical glow (the crystal helm) */
+  glow?: boolean;
+  tip: string;
+}
+
+export const HELMETS: HelmetDef[] = [
+  { id: "helmCopper", name: "Copper helmet", icon: "🪖", armor: 0.12, cost: { copperBar: 1 }, at: "blacksmith", color: "#d07a42", trim: "#8f4a22", tip: "Hammered copper: takes the edge off bites and falling rock." },
+  { id: "helmIron", name: "Iron helmet", icon: "⛑️", armor: 0.18, cost: { iron: 2 }, at: "blacksmith", color: "#9aa3ad", trim: "#5d646d", tip: "Plain and tough." },
+  { id: "helmSilver", name: "Silver helmet", icon: "🪖", armor: 0.22, cost: { silverBar: 1, iron: 1 }, at: "blacksmith", color: "#e4e8ee", trim: "#9aa3b2", tip: "Bright silver over an iron cap." },
+  { id: "helmGold", name: "Gold helmet", icon: "👑", armor: 0.24, cost: { goldBar: 1, iron: 1 }, at: "blacksmith", color: "#f4c84a", trim: "#b8861d", tip: "Gold-plated: heavy, shiny and very proud." },
+  { id: "helmCrystal", name: "Crystal helm", icon: "💠", armor: 0.32, cost: { silverBar: 1, crystal: 1, shaped: 1 }, at: "blacksmith", civ: "precisionStone", color: "#8fe3ff", trim: "#e4e8ee", glow: true, tip: "Polygon-cut crystal set in silver. It hums and glows." },
+];
+
+export const HELMET_BY_ID: Record<string, HelmetDef> = Object.fromEntries(HELMETS.map((h) => [h.id, h]));
+
 /* ------------------------------ tribe kits (one-time crafts) ------------------------------ */
 
 export interface KitDef {
@@ -261,6 +298,8 @@ export const KITS: KitDef[] = [
   { id: "harness", name: "Levitation harnesses", icon: "🪢", cost: { magnetite: 2, hide: 2 }, at: "workshop", civ: "levitation", tip: "Builders carry three times as much shaped stone." },
   { id: "torch", name: "Energy torches", icon: "🔦", cost: { copper: 1, crystal: 1 }, at: "workshop", civ: "energyStorage", tip: "Builders hammer 50% faster; technicians fix overloads quicker." },
   { id: "precision", name: "Precision tools", icon: "📐", cost: { quartz: 2, copper: 1 }, at: "workshop", civ: "precisionStone", tip: "Polygon walls + monuments go up 50% faster." },
+  // from the Deep
+  { id: "diamondDrill", name: "Diamond drill", icon: "💎", cost: { diamond: 2, iron: 2 }, at: "blacksmith", tip: "Down the mine: cuts granite + volcanic rock twice as fast (and counts as a drill)." },
 ];
 
 export const KIT_BY_ID: Record<string, KitDef> = Object.fromEntries(KITS.map((k) => [k.id, k]));
@@ -285,6 +324,7 @@ export const FORGE_ITEMS: ForgeItem[] = [
   ...WEAPONS.map((w) => ({ id: w.id, name: w.name, icon: w.icon, tier: w.tier, cost: w.cost, at: w.at as string, tech: w.tech, civ: w.civ, cat: "weapons" as ForgeCat })),
   ...SHIELDS.map((s) => ({ id: s.id, name: s.name, icon: "🛡️", tier: s.tier, cost: s.cost, at: s.at as string, tech: undefined, cat: "shields" as ForgeCat })),
   ...OUTFITS.map((o) => ({ id: o.id, name: o.name, icon: o.icon, tier: 1, cost: o.cost, at: o.at as string, tech: undefined, cat: "gear" as ForgeCat, tip: o.tip })),
+  ...HELMETS.map((h) => ({ id: h.id, name: h.name, icon: h.icon, tier: 2, cost: h.cost, at: h.at as string, tech: undefined, civ: h.civ, cat: "gear" as ForgeCat, tip: h.tip })),
   ...KITS.map((k) => ({ id: k.id, name: k.name, icon: k.icon, tier: 1, cost: k.cost, at: k.at as string, tech: undefined, civ: k.civ, cat: "kits" as ForgeCat, tip: k.tip })),
 ];
 

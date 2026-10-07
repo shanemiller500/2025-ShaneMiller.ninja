@@ -11,7 +11,8 @@ import { putSlot } from "../game/slots";
 /*  the "THE AGE ENDS" screen with what to do next.                    */
 /* ------------------------------------------------------------------ */
 
-export function ExtinctionConfirm({ open, onClose, snap, engine, fontClass, onToast }: { open: boolean; onClose: () => void; snap: Snapshot; engine: Engine; fontClass: string; onToast: (icon: string, text: string) => void }) {
+export function ExtinctionConfirm({ open, onClose, snap, engine, fontClass, onToast, cause = "asteroid" }: { open: boolean; onClose: () => void; snap: Snapshot; engine: Engine; fontClass: string; onToast: (icon: string, text: string) => void; cause?: "asteroid" | "supervolcano" }) {
+  const sv = cause === "supervolcano";
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -21,17 +22,23 @@ export function ExtinctionConfirm({ open, onClose, snap, engine, fontClass, onTo
   return (
     <Modal open={open} onClose={onClose} size="md" accent="#ef4444" labelledBy="ext-confirm">
       <div className={`bg-slate-950 p-6 text-white ${fontClass}`}>
-        <div className="text-5xl">☄️</div>
-        <h2 id="ext-confirm" className="mt-2 text-2xl font-bold">Call down the extinction asteroid?</h2>
-        <p className="mt-2 text-sm text-white/70">
-          The sky will change, the animals will panic, and then it hits. A shockwave rolls across the whole map: fires, eruptions, falling rock and ash. <b className="text-rose-300">Most dinosaurs and most of your people will die.</b> Buildings in its path are flattened.
-        </p>
-        <div className="mt-3 rounded-2xl bg-white/5 p-3 text-[13px]">
+        <div className="text-5xl">{sv ? "☄️🌋" : "☄️"}</div>
+        <h2 id="ext-confirm" className="mt-2 text-2xl font-bold">{sv ? "Set off the SUPERVOLCANO?" : "Call down the extinction asteroid?"}</h2>
+        {sv ? (
+          <p className="mt-2 text-sm text-white/70">
+            A meteor slams straight into the volcano and the whole mountain explodes. A wall of fire rolls across the entire map, stone melts into lava, the rivers boil away. <b className="text-rose-300">Every dinosaur, every person — even the miners deep underground — is incinerated. Nothing is spared.</b> What's left is a burning wasteland.
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-white/70">
+            The sky will change, the animals will panic, and then it hits. A shockwave rolls across the whole map: fires, eruptions, falling rock and ash. <b className="text-rose-300">Most dinosaurs and most of your people will die.</b> Buildings in its path are flattened.
+          </p>
+        )}
+        {!sv && <div className="mt-3 rounded-2xl bg-white/5 p-3 text-[13px]">
           <p className="font-bold">Your chances</p>
           <p className="mt-1">{ext.shelter ? "✅ A Deep shelter is built: people who reach it have a good chance." : "⬜ No Deep shelter."}</p>
           <p>{ext.shield ? (ext.shieldReady ? "✅ The Resonance shield is charged." : "⚠️ The Resonance shield needs more stored energy to hold.") : "⬜ No Resonance shield."}</p>
           <p className="mt-1 text-[11px] text-white/50">Even with them, survival isn&apos;t guaranteed.</p>
-        </div>
+        </div>}
         <div className="mt-5 grid gap-2 sm:grid-cols-3">
           <button type="button" onClick={onClose} className="rounded-2xl bg-white/10 px-3 py-3 text-sm font-bold hover:bg-white/20">
             Cancel
@@ -41,7 +48,7 @@ export function ExtinctionConfirm({ open, onClose, snap, engine, fontClass, onTo
             disabled={saving || saved}
             onClick={async () => {
               setSaving(true);
-              await putSlot(engine.makeSlot("manual", `Before the asteroid · Day ${engine.world.day}`, "Ages"));
+              await putSlot(engine.makeSlot("manual", `Before the ${sv ? "supervolcano" : "asteroid"} · Day ${engine.world.day}`, "Ages"));
               engine.save(true);
               setSaving(false);
               setSaved(true);
@@ -54,12 +61,12 @@ export function ExtinctionConfirm({ open, onClose, snap, engine, fontClass, onTo
           <button
             type="button"
             onClick={() => {
-              engine.triggerExtinction();
+              engine.triggerExtinction(cause);
               onClose();
             }}
             className="rounded-2xl bg-rose-600 px-3 py-3 text-sm font-bold shadow-lg shadow-rose-900/40 hover:bg-rose-500"
           >
-            Trigger Extinction
+            {sv ? "Burn It All" : "Trigger Extinction"}
           </button>
         </div>
       </div>
@@ -70,17 +77,17 @@ export function ExtinctionConfirm({ open, onClose, snap, engine, fontClass, onTo
 /** Countdown + warnings while it's happening. */
 export function ExtinctionBanner({ snap }: { snap: Snapshot }) {
   const ext = snap.extinction;
-  const on = ext.phase === "omen" || ext.phase === "incoming" || ext.phase === "impact";
+  const on = ext.phase === "omen" || ext.phase === "shower" || ext.phase === "incoming" || ext.phase === "impact";
   const n = Math.ceil(ext.countdown);
   return (
     <AnimatePresence>
       {on && (
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="pointer-events-none absolute left-1/2 top-[34%] z-30 -translate-x-1/2 text-center">
           {ext.phase === "impact" ? (
-            <p className="text-3xl font-black tracking-widest text-amber-100 drop-shadow-[0_0_20px_rgba(255,120,60,0.9)] sm:text-5xl">IMPACT</p>
+            <p className="text-3xl font-black tracking-widest text-amber-100 drop-shadow-[0_0_20px_rgba(255,120,60,0.9)] sm:text-5xl">{ext.cause === "supervolcano" ? "SUPERERUPTION" : "IMPACT"}</p>
           ) : (
             <>
-              <p className="text-sm font-bold uppercase tracking-[0.3em] text-rose-200/90">{ext.phase === "omen" ? "The sky is changing…" : "Take cover!"}</p>
+              <p className="text-sm font-bold uppercase tracking-[0.3em] text-rose-200/90">{ext.cause === "supervolcano" ? (ext.phase === "omen" ? "The volcano is waking…" : ext.phase === "shower" ? "Meteor shower — the big one is coming" : "The big one hits the volcano in") : ext.phase === "omen" ? "The sky is changing…" : "Take cover!"}</p>
               <motion.p key={n} initial={{ scale: 1.4, opacity: 0.4 }} animate={{ scale: 1, opacity: 1 }} className="text-5xl font-black tabular-nums text-white drop-shadow-[0_0_24px_rgba(255,80,60,0.9)] sm:text-7xl">
                 {n}
               </motion.p>
@@ -102,10 +109,10 @@ export function AgeEnds({ snap, engine, fontClass, onLoad, onNew }: { snap: Snap
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 1.6 }} className={`pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-gradient-to-b from-black/90 via-stone-950/85 to-black/95 p-4 ${fontClass}`}>
           <div className="w-full max-w-lg text-center">
             <motion.h2 initial={{ letterSpacing: "0.1em", opacity: 0 }} animate={{ letterSpacing: "0.35em", opacity: 1 }} transition={{ duration: 3 }} className="text-4xl font-black text-stone-100 sm:text-6xl">
-              THE AGE ENDS
+              {ext.cause === "supervolcano" ? "THE WORLD BURNS" : "THE AGE ENDS"}
             </motion.h2>
             <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.5, duration: 1.5 }} className="mt-3 text-sm text-stone-400">
-              Day {snap.day}. The ash will take a long time to settle.
+              {ext.cause === "supervolcano" ? `Day ${snap.day}. The supervolcano tore the world open. Only fire and ash remain.` : `Day ${snap.day}. The ash will take a long time to settle.`}
             </motion.p>
             {s && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2.2, duration: 1 }} className="mx-auto mt-6 grid max-w-md grid-cols-2 gap-2 text-left text-sm">

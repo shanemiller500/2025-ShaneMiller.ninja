@@ -21,9 +21,11 @@ export interface Settings {
   volume: number;
   /** first-visit hint already shown */
   welcomed: boolean;
+  /** little guide tips + "?" bubbles */
+  tips: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { muted: false, volume: 0.8, welcomed: false };
+export const DEFAULT_SETTINGS: Settings = { muted: false, volume: 0.8, welcomed: false, tips: true };
 
 /** Any save version this build understands (v1 = before the colony upgrade). */
 export function readSave(raw: string | null): World | null {

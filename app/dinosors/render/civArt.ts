@@ -701,6 +701,21 @@ export function drawBeamBolt(c: CanvasRenderingContext2D, x: number, y: number, 
   c.moveTo(-18, 0);
   c.lineTo(2, 0);
   c.stroke();
+  // a spiral of sparkles wound around the bolt
+  const tt = performance.now() / 1000;
+  for (let k = 0; k < 8; k++) {
+    const f = k / 8;
+    const yy = Math.sin(f * 12 + tt * 30) * 4;
+    c.fillStyle = k % 2 ? "rgba(190,240,255,0.95)" : "rgba(255,240,180,0.9)";
+    c.fillRect(-26 * f - 1, yy - 1, 2, 2);
+  }
+  const head = c.createRadialGradient(2, 0, 0, 2, 0, 9);
+  head.addColorStop(0, "rgba(255,255,255,1)");
+  head.addColorStop(1, "rgba(120,220,255,0)");
+  c.fillStyle = head;
+  c.beginPath();
+  c.arc(2, 0, 9, 0, Math.PI * 2);
+  c.fill();
   c.restore();
 }
 
@@ -860,6 +875,180 @@ export function drawAsteroid(c: CanvasRenderingContext2D, x: number, y: number, 
   c.beginPath();
   c.ellipse(x, y, 140, 60, 0, 0, Math.PI * 2);
   c.stroke();
+}
+
+/** The supervolcano's column: fire and ash punching into the sky, a mushroom of smoke on top. */
+export function drawEruptionColumn(c: CanvasRenderingContext2D, x: number, y: number, k: number, t: number) {
+  // tall enough to dwarf everything, short enough that the cap stays on the map
+  const H = Math.max(500, Math.min(1700, y + 150)) * Math.min(1, k * 1.6);
+  const top = y - 140 - H;
+  c.save();
+  // white-hot base where the mountain used to be
+  c.globalCompositeOperation = "lighter";
+  const base = c.createRadialGradient(x, y - 80, 0, x, y - 80, 520);
+  base.addColorStop(0, `rgba(255,250,220,${0.75 * Math.min(1, k * 3)})`);
+  base.addColorStop(0.3, "rgba(255,160,60,0.45)");
+  base.addColorStop(1, "rgba(255,90,30,0)");
+  c.fillStyle = base;
+  c.beginPath();
+  c.arc(x, y - 80, 520, 0, Math.PI * 2);
+  c.fill();
+  c.globalCompositeOperation = "source-over";
+  // the fire stem
+  const stem = c.createLinearGradient(0, y - 120, 0, top);
+  stem.addColorStop(0, "rgba(255,240,180,0.95)");
+  stem.addColorStop(0.15, "rgba(255,150,50,0.9)");
+  stem.addColorStop(0.6, "rgba(160,50,20,0.75)");
+  stem.addColorStop(1, "rgba(40,25,25,0.0)");
+  c.fillStyle = stem;
+  c.beginPath();
+  c.moveTo(x - 260, y - 100);
+  for (let k2 = 0; k2 <= 20; k2++) {
+    const f = k2 / 20;
+    c.lineTo(x - 260 + f * 120 + Math.sin(t * 3 + f * 9) * 40, y - 100 - H * f);
+  }
+  for (let k2 = 20; k2 >= 0; k2--) {
+    const f = k2 / 20;
+    c.lineTo(x + 260 - f * 120 + Math.sin(t * 3.3 + f * 8) * 40, y - 100 - H * f);
+  }
+  c.closePath();
+  c.fill();
+  // the mushroom cap: billowing dark smoke lit from below
+  if (k > 0.25) {
+    const cap = Math.min(1, (k - 0.25) * 2);
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2;
+      const r = 700 * cap * (0.7 + 0.3 * Math.sin(i * 1.7));
+      const px = x + Math.cos(a) * r * 1.4 + Math.sin(t + i) * 30;
+      const py = top + Math.sin(a) * r * 0.35;
+      const s = 320 * cap + (i % 4) * 40;
+      const g = c.createRadialGradient(px, py, 0, px, py, s);
+      // lit from below by the fire
+      const under = Math.sin(a) > 0;
+      g.addColorStop(0, under ? "rgba(255,150,70,0.85)" : "rgba(150,85,55,0.85)");
+      g.addColorStop(0.5, under ? "rgba(170,70,35,0.6)" : "rgba(90,55,45,0.55)");
+      g.addColorStop(1, "rgba(30,22,22,0)");
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc(px, py, s, 0, Math.PI * 2);
+      c.fill();
+    }
+    // lightning in the ash cloud
+    if (Math.sin(t * 11) > 0.93) {
+      c.strokeStyle = "rgba(220,230,255,0.95)";
+      c.lineWidth = 6;
+      c.beginPath();
+      let lx = x + (Math.sin(t * 7) * 500);
+      let ly = top;
+      c.moveTo(lx, ly);
+      for (let s2 = 0; s2 < 6; s2++) {
+        lx += (Math.sin(t * 13 + s2) * 0.5) * 160;
+        ly += 120;
+        c.lineTo(lx, ly);
+      }
+      c.stroke();
+    }
+  }
+  c.restore();
+}
+
+/** The supervolcano's pyroclastic flow: a boiling wall of fire and ash rolling outward. */
+export function drawPyroclastic(c: CanvasRenderingContext2D, x: number, y: number, r: number, t: number, a: number) {
+  if (r <= 0) return;
+  c.save();
+  // scorched interior
+  c.fillStyle = `rgba(40,12,8,${0.25 * a})`;
+  c.beginPath();
+  c.ellipse(x, y, r, r / 1.1, 0, 0, Math.PI * 2);
+  c.fill();
+  // the billowing front
+  const n = Math.max(40, Math.min(160, Math.floor(r / 40)));
+  for (let i = 0; i < n; i++) {
+    const ang = (i / n) * Math.PI * 2;
+    const wob = Math.sin(i * 2.3 + t * 4) * 30;
+    const px = x + Math.cos(ang) * (r + wob);
+    const py = y + (Math.sin(ang) * (r + wob)) / 1.1;
+    const s = 120 + (i % 5) * 26;
+    const g = c.createRadialGradient(px, py, 0, px, py, s);
+    g.addColorStop(0, `rgba(255,200,90,${0.85 * a})`);
+    g.addColorStop(0.35, `rgba(220,80,30,${0.7 * a})`);
+    g.addColorStop(0.75, `rgba(60,35,30,${0.55 * a})`);
+    g.addColorStop(1, "rgba(30,20,20,0)");
+    c.fillStyle = g;
+    c.beginPath();
+    c.arc(px, py, s, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.restore();
+}
+
+/** A creature caught by the blast: white flash → charred skeleton with embers → crumbling to dust. */
+export function drawGhost(c: CanvasRenderingContext2D, g: { x: number; y: number; size: number; t: number; kind: string; face: number }) {
+  const L = g.size;
+  const k = g.t;
+  c.save();
+  c.translate(g.x, g.y);
+  c.scale(g.face < 0 ? -1 : 1, 1);
+  if (k < 0.18) {
+    // vaporizing flash: a white-hot silhouette
+    const s = 1 + k * 3;
+    c.fillStyle = `rgba(255,255,240,${1 - k * 3})`;
+    c.beginPath();
+    c.ellipse(0, -L * 0.3, L * 0.55 * s, L * 0.35 * s, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    return;
+  }
+  const crumble = Math.max(0, (k - 1.4) / 1.6);
+  const a = 1 - crumble;
+  // charred bones (a generic ribcage + skull, scaled to the body)
+  c.strokeStyle = `rgba(28,22,20,${a})`;
+  c.fillStyle = `rgba(28,22,20,${a})`;
+  c.lineWidth = Math.max(1.2, L * 0.05);
+  c.lineCap = "round";
+  const sink = crumble * L * 0.3;
+  c.translate(0, sink);
+  if (g.kind === "human") {
+    c.beginPath();
+    c.arc(0, -L * 1.25, L * 0.22, 0, Math.PI * 2);
+    c.fill();
+    c.beginPath();
+    c.moveTo(0, -L);
+    c.lineTo(0, -L * 0.35);
+    c.moveTo(-L * 0.3, -L * 0.75);
+    c.lineTo(L * 0.3, -L * 0.75);
+    c.moveTo(0, -L * 0.35);
+    c.lineTo(-L * 0.2, 0);
+    c.moveTo(0, -L * 0.35);
+    c.lineTo(L * 0.2, 0);
+    c.stroke();
+  } else {
+    // spine with ribs, a skull, a tail
+    c.beginPath();
+    c.moveTo(-L * 0.55, -L * 0.25);
+    c.quadraticCurveTo(0, -L * 0.42, L * 0.38, -L * 0.3);
+    c.stroke();
+    for (let i = 0; i < 5; i++) {
+      const rx = -L * 0.25 + i * L * 0.12;
+      c.beginPath();
+      c.moveTo(rx, -L * 0.36);
+      c.quadraticCurveTo(rx + L * 0.03, -L * 0.18, rx - L * 0.02, -L * 0.1);
+      c.stroke();
+    }
+    c.beginPath();
+    c.ellipse(L * 0.48, -L * 0.32, L * 0.12, L * 0.08, 0.2, 0, Math.PI * 2);
+    c.fill();
+    c.beginPath();
+    c.moveTo(-L * 0.55, -L * 0.25);
+    c.lineTo(-L * 0.85, -L * 0.12);
+    c.stroke();
+  }
+  // embers still glowing in the bones
+  if (k < 2) {
+    c.fillStyle = `rgba(255,120,40,${(1 - k / 2) * 0.9})`;
+    for (let i = 0; i < 6; i++) c.fillRect(Math.sin(i * 7.3) * L * 0.4, -L * (0.2 + (i % 3) * 0.08) - (g.kind === "human" ? L * 0.5 : 0), 2, 2);
+  }
+  c.restore();
 }
 
 /** The shockwave front rolling over the land. */

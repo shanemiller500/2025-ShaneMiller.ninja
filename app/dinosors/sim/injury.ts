@@ -5,6 +5,7 @@
 /*  friend helps them up (or they slowly come round). Only a raider    */
 /*  biting someone who's already down ends in the cartoon "gobble".    */
 /* ------------------------------------------------------------------ */
+import { HELMET_BY_ID } from "../data/colony";
 import { OUTFIT_BY_ID, SHIELDS } from "../data/colony";
 import { P } from "./particles";
 import { pick } from "./rng";
@@ -37,6 +38,8 @@ export function hurtHuman(w: World, h: Human, dmg: number, fx: number, fy: numbe
   // hide tunics + furs soften bites
   const coat = h.gear.outfit ? OUTFIT_BY_ID[h.gear.outfit] : null;
   if (coat && (cause === "bite" || cause === "kick")) dmg *= 1 - coat.armor;
+  const helm = h.gear.helmet ? HELMET_BY_ID[h.gear.helmet] : null;
+  if (helm && cause !== "cold") dmg *= 1 - helm.armor;
   if (h.child) dmg *= 0.8;
   if (h.state === "down") return false;
   h.hp = Math.max(0, h.hp - dmg);

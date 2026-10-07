@@ -6,6 +6,7 @@ import { Pencil, Trash2, Utensils, Video, X } from "lucide-react";
 import { sp } from "../data/species";
 import type { DinoInfo, Engine, HumanInfo } from "../game/engine";
 import Portrait from "./Portrait";
+import { GUIDE_IMG } from "../data/guide";
 import { ROLES } from "../data/facts";
 import { WEAPON_KINDS } from "../data/colony";
 import { CONDITION_LABEL } from "../sim/injury";
@@ -178,6 +179,25 @@ function DinoBody({ info, engine }: { info: DinoInfo; engine: Engine }) {
   );
 }
 
+/** A cut-out from the cave-people art that suits their job. */
+function portraitFor(role: string, id: number) {
+  const by: Record<string, string[]> = {
+    hunter: ["hunter", "spearmaker"],
+    guard: ["hunter", "spearmaker"],
+    builder: ["builder", "logs", "stonecutter"],
+    miner: ["crystal-miner", "stonecutter"],
+    gatherer: ["forager", "berries", "water-carrier", "water"],
+    farmer: ["berries", "forager"],
+    cook: ["basket", "berries"],
+    smith: ["knapper", "spearmaker"],
+    researcher: ["weaver", "knapper"],
+    shaper: ["stonecutter", "builder"],
+    technician: ["crystal-miner", "builder"],
+  };
+  const list = by[role] ?? ["forager", "berries", "builder", "basket", "weaver", "logs"];
+  return list[id % list.length];
+}
+
 function HumanBody({ info, engine, onCamp }: { info: HumanInfo; engine: Engine; onCamp: () => void }) {
   const eff = info.role === "auto" ? info.autoRole : info.role;
   const effRole = ROLES.find((r) => r.id === eff);
@@ -185,7 +205,13 @@ function HumanBody({ info, engine, onCamp }: { info: HumanInfo; engine: Engine; 
   return (
     <div>
       <div className="flex items-center gap-3 pr-6">
-        <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-b from-amber-300/30 to-orange-500/20 text-4xl">{info.child ? "🧒" : info.riding ? "🏇" : "🧔"}</span>
+        {info.child ? (
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-b from-amber-300/30 to-orange-500/20 text-4xl">🧒</span>
+        ) : (
+          <span className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-b from-sky-300/40 to-emerald-400/30 ring-1 ring-white/15">
+            <img src={GUIDE_IMG(portraitFor(eff, info.id))} alt="" width={64} height={64} className="h-[86px] w-16 object-cover object-top" />
+          </span>
+        )}
         <div className="min-w-0">
           <div className="text-xl font-bold">{info.name}</div>
           <div className="text-sm font-semibold text-amber-200">
@@ -246,6 +272,11 @@ function HumanBody({ info, engine, onCamp }: { info: HumanInfo; engine: Engine; 
             ))}
           </div>
           <p className="mt-1.5 text-[11px] text-white/55">{ROLES.find((r) => r.id === info.role)?.tip}</p>
+          {!info.child && info.condition !== "down" && (
+            <button type="button" onClick={() => engine.sendToDeep(info.id)} className="mt-3 w-full rounded-2xl bg-cyan-500/80 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-400 active:scale-95">
+              ⛏️ Send down the mine
+            </button>
+          )}
           <div className="mt-3 grid grid-cols-2 gap-2">
             {info.ordered ? (
               <button type="button" onClick={() => engine.cancelOrders()} className="rounded-2xl bg-white/10 py-2.5 text-sm font-bold transition hover:bg-white/20 active:scale-95">

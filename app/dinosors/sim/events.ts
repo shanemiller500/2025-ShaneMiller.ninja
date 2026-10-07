@@ -40,6 +40,8 @@ export class RandomEvents {
   private last = new Map<EventId, number>();
 
   update(w: World, dt: number) {
+    // no migrations or visitors into a burning wasteland
+    if (w.extinction.wasteland) return;
     for (const s of this.stars) s.t += dt;
     this.stars = this.stars.filter((s) => s.t < 1.6);
     if (!this.enabled) return;

@@ -175,7 +175,7 @@ export class Volcano {
   rumbleOnly = false;
 
   /** An asteroid hit the volcano: the biggest show in Dinosaur Land. */
-  mega(w: World) {
+  mega(w: World, quiet = false) {
     if (this.megaOn) return false;
     this.phase = "rumble";
     this.t = 0;
@@ -186,7 +186,7 @@ export class Volcano {
     w.shake(16, 6);
     w.sfx("rumble", this.x, this.y, 1.6);
     w.alarm(this.x, this.y, 6000, 1, "😱", true);
-    w.toast("☄️", "The asteroid cracked the volcano! The ground is shaking — MEGA ERUPTION incoming!", this.x, this.y);
+    if (!quiet) w.toast("☄️", "The asteroid cracked the volcano! The ground is shaking — MEGA ERUPTION incoming!", this.x, this.y);
     return true;
   }
 

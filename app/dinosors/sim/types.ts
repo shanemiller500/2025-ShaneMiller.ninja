@@ -6,6 +6,8 @@
 import type { Genes } from "./genetics";
 
 export const TILE = 32;
+/** The most people a tribe can grow to. */
+export const MAX_PEOPLE = 100;
 export const MAP_W = 160;
 export const MAP_H = 112;
 export const WORLD_W = MAP_W * TILE;
@@ -325,7 +327,12 @@ export type Resource =
   | "magnetite"
   | "crystal"
   | "meteorite"
-  | "shaped";
+  | "shaped"
+  | "diamond"
+  | "silver"
+  | "goldBar"
+  | "silverBar"
+  | "copperBar";
 
 /** What a cave person does. "auto" lets the tribe decide. */
 export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner";
@@ -341,6 +348,8 @@ export interface Gear {
   shield: number;
   /** hide clothing id ("cloak", "raincloak", "tunic", "furs") */
   outfit?: string | null;
+  /** metal helmet id ("helmCopper", "helmGold"…) */
+  helmet?: string | null;
 }
 
 export interface Human {
@@ -405,6 +414,8 @@ export interface Human {
   wantTop: boolean;
   /** a wanderer who hasn't joined yet */
   stranger: boolean;
+  /** down in the mine (the surface brain leaves them alone; see sim/miners.ts) */
+  under?: boolean;
 }
 
 export type ItemKind = "meat" | "fish" | "fruit" | "berries" | "poop" | "fossil" | "stick" | "stone" | "bones" | "carcass";
@@ -606,6 +617,7 @@ export interface Tower {
 export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "tannery" | "spikes" | "barricade" | "totem"
   // the Old Ways' last-resort project
   | "shelterDeep"
+  | "refinery"
   // resonance (fantasy) architecture
   | "resTable"
   | "chamber"
@@ -662,6 +674,8 @@ export interface Scorpion {
   mount: "wall" | "tower" | "ground";
   /** recoil animation */
   kick: number;
+  /** powered by an energy tower: aims + fires on its own (not saved; set every frame) */
+  drone?: boolean;
 }
 
 export type NodeKind = "stone" | "clay" | "iron" | "gold" | "obsidian" | "flint" | "salt" | "tar" | "artifact" | "fossil" | "copper" | "quartz" | "magnetite" | "crystal" | "meteorite";
@@ -727,6 +741,8 @@ export interface Projectile {
   hit: boolean;
   /** damage multiplier against dragons */
   big?: number;
+  /** a glowing energy bolt (from a powered Scorpion) */
+  glow?: boolean;
 }
 
 export type Danger = "calm" | "normal" | "wild";

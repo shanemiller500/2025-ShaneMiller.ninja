@@ -23,6 +23,9 @@ import SelectionBar from "./ui/SelectionBar";
 import InspectPanel from "./ui/InspectPanel";
 import SavedGames from "./ui/SavedGames";
 import CivPanel, { CivChoice } from "./ui/CivPanel";
+import DeepHud from "./ui/DeepHud";
+import { HintBubbles, TipCoach } from "./ui/Guide";
+import HelpPanel from "./ui/HelpPanel";
 import { AgeEnds, ExtinctionBanner, ExtinctionConfirm } from "./ui/Extinction";
 import { newestSlot, putSlot } from "./game/slots";
 import { hasDinoProgress, useCloud } from "./ui/useCloud";
@@ -50,6 +53,8 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [civOpen, setCivOpen] = useState(false);
   const [choiceOpen, setChoiceOpen] = useState(false);
   const [extOpen, setExtOpen] = useState(false);
+  const [help, setHelp] = useState<{ open: boolean; section?: string }>({ open: false });
+  const [extCause, setExtCause] = useState<"asteroid" | "supervolcano">("asteroid");
   const [confirm, setConfirm] = useState<null | "new" | "reset">(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [sticker, setSticker] = useState<string | null>(null);
@@ -101,6 +106,17 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           break;
         case "openCiv":
           setCivOpen(true);
+          break;
+        case "confirmEnd":
+          setExtCause(e.cause);
+          setExtOpen(true);
+          break;
+        case "view":
+          // panels from the other world would sit on top of the HUD
+          setCampOpen(false);
+          setEvoOpen(false);
+          setCivOpen(false);
+          setSnap(engine.snapshot());
           break;
         case "saved":
           pushToast({ icon: "💾", text: "World saved!" });
@@ -240,7 +256,14 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             onCamp={() => setCampOpen((o) => !o)}
             onEvolution={() => setEvoOpen((o) => !o)}
             onCiv={() => setCivOpen((o) => !o)}
-            onExtinction={() => setExtOpen(true)}
+            onDeep={() => (engine.view === "deep" ? engine.leaveDeep() : engine.enterDeep())}
+            onHelp={() => setHelp({ open: true })}
+            onTips={() => updateSettings({ tips: !settings.tips })}
+            tipsOn={settings.tips}
+            onExtinction={() => {
+              setExtCause("asteroid");
+              setExtOpen(true);
+            }}
             civOpen={civOpen}
             campOpen={campOpen}
             evoOpen={evoOpen}
@@ -250,11 +273,17 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             onDismiss={(id) => setToasts((l) => l.filter((t) => t.id !== id))}
             onGo={(x, y) => engine.flyTo(x, y, Math.max(engine.cam.zoom, 0.8))}
           />
-          <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} />
-          <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} />
-          <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
-          {snap.inspect && !snap.selected && <InspectPanel info={snap.inspect} snap={snap} engine={engine} />}
-          {snap.selected && (
+          {snap.view === "deep" ? (
+            <DeepHud snap={snap} engine={engine} />
+          ) : (
+            <>
+              <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} />
+              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} />
+              <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
+              {snap.inspect && !snap.selected && <InspectPanel info={snap.inspect} snap={snap} engine={engine} />}
+            </>
+          )}
+          {snap.view === "surface" && snap.selected && (
             <DinoCard
               info={snap.selected}
               engine={engine}
@@ -271,8 +300,19 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           {evoOpen && <EvolutionPanel snap={snap} engine={engine} onClose={() => setEvoOpen(false)} />}
           {civOpen && <CivPanel snap={snap} engine={engine} onClose={() => setCivOpen(false)} onChoose={() => setChoiceOpen(true)} onExtinction={() => setExtOpen(true)} />}
           <CivChoice open={choiceOpen} onClose={() => setChoiceOpen(false)} engine={engine} fontClass={fontClass} />
-          <ExtinctionConfirm open={extOpen} onClose={() => setExtOpen(false)} snap={snap} engine={engine} fontClass={fontClass} onToast={(icon, text) => pushToast({ icon, text })} />
+          <ExtinctionConfirm open={extOpen} cause={extCause} onClose={() => setExtOpen(false)} snap={snap} engine={engine} fontClass={fontClass} onToast={(icon, text) => pushToast({ icon, text })} />
           <ExtinctionBanner snap={snap} />
+          {(() => {
+            // tips + bubbles stay out of the way while anything else is open
+            const busy = campOpen || civOpen || evoOpen || savesOpen || stickersOpen || aboutOpen || help.open || extOpen || choiceOpen || !!confirm || !!snap.selected || snap.extinction.phase !== "idle" && snap.extinction.phase !== "ruins";
+            return (
+              <>
+                <TipCoach snap={snap} enabled={settings.tips} busy={busy} onOff={() => updateSettings({ tips: false })} onHelp={(section) => setHelp({ open: true, section })} />
+                <HintBubbles engine={engine} enabled={settings.tips} busy={busy || tool.id !== "hand"} view={snap.view} />
+              </>
+            );
+          })()}
+          <HelpPanel open={help.open} section={help.section} onClose={() => setHelp({ open: false })} fontClass={fontClass} tipsOn={settings.tips} onTips={() => updateSettings({ tips: !settings.tips })} />
           <AgeEnds
             snap={snap}
             engine={engine}

@@ -286,6 +286,19 @@ export const DISCOVERIES: Discovery[] = [
   { id: "beam", icon: "🔆", name: "Beam!", hint: "A tower that shoots light." },
   { id: "pyramid", icon: "🔺", name: "The Great Pyramid", hint: "Six stages, one capstone, a lot of energy." },
   { id: "omen", icon: "🌘", name: "The Last Sunset", hint: "Only you can call it down." },
+  { id: "supervolcano", icon: "🌋", name: "The World Burns", hint: "What if something hit the volcano… really hard?" },
+  { id: "deep30", icon: "🪨", name: "Through the Topsoil", hint: "Dig down to the bedrock." },
+  { id: "deep70", icon: "⛰️", name: "Granite Deep", hint: "Keep going…" },
+  { id: "deep110", icon: "🦇", name: "The Cavern World", hint: "Caves full of crystal and bone." },
+  { id: "deep150", icon: "🌋", name: "The Furnace", hint: "It gets hot down there." },
+  { id: "deep185", icon: "🏆", name: "Bottom of the World", hint: "As deep as it goes." },
+  { id: "diamond", icon: "💎", name: "Diamond!", hint: "Deep, deep down." },
+  { id: "motherLode", icon: "⛓️", name: "The Mother Lode", hint: "A mountain of iron, somewhere below." },
+  { id: "giantFossil", icon: "🦕", name: "Giant Skeleton", hint: "Something enormous died in the caverns." },
+  { id: "geode", icon: "💠", name: "Singing Geode", hint: "A hollow full of crystal." },
+  { id: "meteorCore", icon: "☄️", name: "Star Metal", hint: "Something fell from the sky, long ago." },
+  { id: "troglodon", icon: "🦎", name: "Troglodon", hint: "Pale things live in the dark." },
+  { id: "deepVillage", icon: "🏘️", name: "Underground Village", hint: "Homes, a vault and a farm, all underground." },
 ];
 
 export const DISCOVERY_BY_ID = Object.fromEntries(DISCOVERIES.map((d) => [d.id, d]));

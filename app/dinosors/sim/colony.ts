@@ -3,7 +3,7 @@
 /*  resource deposits, the armory and the forge queue. Walls, towers,  */
 /*  farms and raids stay in tribe.ts; huts stay in camp.ts.            */
 /* ------------------------------------------------------------------ */
-import { ARTIFACTS, BUILDINGS, FORGE_ITEMS, KIT_BY_ID, NODES, OUTFITS, OUTFIT_BY_ID, SCORPION_TIERS, SHIELD_BY_ID, WEAPON_BY_ID, type Cost } from "../data/colony";
+import { ARTIFACTS, BUILDINGS, FORGE_ITEMS, HELMETS, HELMET_BY_ID, KIT_BY_ID, NODES, OUTFITS, OUTFIT_BY_ID, RES_INFO, SCORPION_TIERS, SHIELD_BY_ID, WEAPON_BY_ID, type Cost } from "../data/colony";
 import { hitDino } from "./tribe";
 import { sp } from "../data/species";
 import { sizeOf } from "./dinos";
@@ -24,6 +24,9 @@ const FOOD = new Set<Resource>(["cooked", "fish", "crop", "berries", "meat"]);
 
 /** Mostly stone: fire barely scorches it. */
 const STONEWORK = new Set<BuildingKind>(["pyramid", "obelisk", "stoneCircle", "shelterDeep", "chamber", "shapingYard", "beamTower", "energyTower", "pylon", "resShield"]);
+
+/** Energy one powered Scorpion shot uses. */
+export const DRONE_SHOT = 3;
 
 export class Colony {
   buildings: Building[] = [];
@@ -465,6 +468,51 @@ export class Colony {
     }
   }
 
+  /** Pull on the best metal helmet in the armory (grown-ups only). */
+  helm(w: World, h: Human) {
+    if (h.child) return;
+    const cur = h.gear.helmet ?? null;
+    const armor = (id: string | null) => (id && HELMET_BY_ID[id] ? HELMET_BY_ID[id].armor : 0);
+    let best = cur;
+    for (const def of HELMETS) if ((this.armory[def.id] ?? 0) > 0 && def.armor > armor(best)) best = def.id;
+    if (best && best !== cur) {
+      this.armory[best]--;
+      if (cur) this.armory[cur] = (this.armory[cur] ?? 0) + 1;
+      h.gear.helmet = best;
+      h.bubble = { text: HELMET_BY_ID[best].glow ? "It's glowing!" : "Shiny!", t: 1.8 };
+    }
+  }
+
+  /* ----------------------------- refinery ----------------------------- */
+
+  private refineT = 0;
+
+  /** Refineries smelt raw metal into bars: 2 ore + a log → 1 bar, every few seconds. */
+  private refine(w: World, dt: number) {
+    const refs = this.buildings.filter((b) => b.kind === "refinery" && b.built >= 1);
+    if (!refs.length) return;
+    this.refineT -= dt * refs.length;
+    if (this.refineT > 0) return;
+    this.refineT = 7;
+    const s = w.camp.stock;
+    if (s.wood < 1) return;
+    const pairs: [Resource, Resource][] = [["gold", "goldBar"], ["silver", "silverBar"], ["copper", "copperBar"]];
+    // keep a little raw copper for other recipes; smelt whatever there's most of
+    const pick = pairs.filter(([raw]) => s[raw] >= (raw === "copper" ? 6 : 2)).sort((a, b) => s[b[0]] - s[a[0]])[0];
+    if (!pick) return;
+    const [raw, bar] = pick;
+    s[raw] -= 2;
+    s.wood -= 1;
+    s[bar] += 1;
+    const r = refs[0];
+    w.particles.burst(P.Spark, r.x + 20, r.y - 30, 8, 60, { z: 20, vz: 60, g: 200, size: 2, max: 0.6, color: "#ffcf6b" });
+    w.sfx("clack", r.x, r.y, 0.5);
+    if (!w.flags.has(`firstBar-${bar}`)) {
+      w.flags.add(`firstBar-${bar}`);
+      w.toast(RES_INFO[bar].icon, `The refinery poured its first ${RES_INFO[bar].name.toLowerCase().replace(/s$/, "")}!`, r.x, r.y);
+    }
+  }
+
   /** Mark freshly unlocked recipes (toast once each). */
   private checkRecipes(w: World) {
     for (const f of FORGE_ITEMS) {
@@ -575,6 +623,7 @@ export class Colony {
       this.checkRecipes(w);
     }
     this.updateBoneDefenses(w, dt);
+    this.refine(w, dt);
     // traps bite whatever steps on them
     for (const b of this.buildings) {
       if (b.kind !== "trap" || b.built < 1) continue;
@@ -603,7 +652,8 @@ export class Colony {
       if (b.built < 1 || b.kind === "path" || b.kind === "trap" || b.kind === "spikes") continue;
       const i = tileOf(b.x, b.y - 8);
       const heat = w.fire.heat[i] + w.lava.heat[i] * 2;
-      if (heat > 0.3) {
+      // in the polygon age everything is faced in fire-proof shaped stone
+      if (heat > 0.3 && !w.civ.polygonAge) {
         b.hp -= dt * 30 * heat * (STONEWORK.has(b.kind) ? 0.15 : b.kind === "blacksmith" ? 0.3 : 1);
         if (b.hp <= 0) {
           w.toast("🔥", `The ${BUILDINGS[b.kind].name.toLowerCase()} burned down!`, b.x, b.y);
@@ -628,9 +678,21 @@ export class Colony {
         w.particles.burst(P.Dust, s.x, s.y, 8, 50, { size: 8, max: 0.9, color: "rgba(160,130,90,0.6)" });
       }
     }
+    const powered = this.dronesPowered(w);
     for (const s of this.scorpions) {
       s.kick = Math.max(0, s.kick - dt * 3);
+      s.drone = powered && s.built >= 1;
       if (s.built < 1) continue;
+      if (s.drone) {
+        // an energy tower runs it: nobody needs to crew it
+        if (s.crew) {
+          const was = w.humans.find((h) => h.id === s.crew);
+          if (was && was.state === "operate") was.state = "idle";
+          s.crew = 0;
+        }
+        this.aimAndFire(w, s, dt, null);
+        continue;
+      }
       const crew = s.crew ? w.humans.find((h) => h.id === s.crew) : undefined;
       // a crew member on the way keeps the seat; one who's gone / hurt / busy elsewhere loses it
       const task = crew ? w.tasks.get(crew.taskId) : null;
@@ -650,26 +712,51 @@ export class Colony {
         continue;
       }
       this.reserveT.delete(s);
+      this.aimAndFire(w, s, dt, crew);
+    }
+  }
+
+  /** Energy towers power the Scorpions (as long as the grid has a charge). */
+  dronesPowered(w: World) {
+    return w.civ.energy >= DRONE_SHOT && this.buildings.some((b) => b.kind === "energyTower" && b.built >= 1);
+  }
+
+  /** Powered Scorpions on the map (they count as defenders). */
+  drones(w: World) {
+    return this.dronesPowered(w) ? this.scorpions.filter((s) => s.built >= 1).length : 0;
+  }
+
+  private aimAndFire(w: World, s: Scorpion, dt: number, crew: Human | null) {
+    {
       s.reload = Math.max(0, s.reload - dt);
       const tier = SCORPION_TIERS[s.tier - 1];
       const siege = w.civ.has("siegecraft");
       const range = tier.range + (s.mount === "tower" ? 90 : s.mount === "wall" ? 40 : 0) + (siege ? 80 : 0);
       const target = scorpionTarget(w, s.x, s.y, range);
       if (!target) {
-        s.aim += angleTo(s.aim, Math.PI / 2) * Math.min(1, dt);
-        continue;
+        // drones sweep slowly while they watch
+        s.aim += s.drone ? dt * 0.6 : angleTo(s.aim, Math.PI / 2) * Math.min(1, dt);
+        return;
       }
       const lead = Math.hypot(target.x - s.x, target.y - s.y) / tier.speed;
       const ax = target.x + target.vx * lead;
       const ay = target.y + target.vy * lead;
       const want = Math.atan2(ay - s.y, ax - s.x);
-      s.aim += angleTo(s.aim, want) * Math.min(1, dt * 2.6);
-      crew.dir = ax > crew.x ? 1 : -1;
+      s.aim += angleTo(s.aim, want) * Math.min(1, dt * (s.drone ? 4 : 2.6));
+      if (crew) crew.dir = ax > crew.x ? 1 : -1;
       if (s.reload <= 0 && Math.abs(angleTo(s.aim, want)) < 0.12) {
-        w.tribe.fireBolt(w, s.x + Math.cos(s.aim) * 16, s.y + Math.sin(s.aim) * 8, this.scorpionZ(s), target, tier.dmg * (siege ? 1.4 : 1), tier.speed, tier.big);
-        s.reload = tier.reload * (siege ? 0.75 : 1);
+        w.tribe.fireBolt(w, s.x + Math.cos(s.aim) * 16, s.y + Math.sin(s.aim) * 8, this.scorpionZ(s), target, tier.dmg * (siege ? 1.4 : 1) * (s.drone ? 1.15 : 1), tier.speed * (s.drone ? 1.4 : 1), tier.big, !!s.drone);
+        s.reload = tier.reload * (siege ? 0.75 : 1) * (s.drone ? 0.8 : 1);
         s.kick = 1;
-        w.sfx("twang", s.x, s.y, 0.9, 0.55);
+        if (s.drone) {
+          w.civ.energy = Math.max(0, w.civ.energy - DRONE_SHOT);
+          w.sfx("zap", s.x, s.y, 0.7, 0.8);
+          w.particles.burst(P.Spark, s.x, s.y, 5, 50, { z: this.scorpionZ(s) + 8, vz: 40, g: 120, size: 2, max: 0.4, color: "#9feaff" });
+          if (!w.flags.has("droneShot")) {
+            w.flags.add("droneShot");
+            w.toast("🎯", "Powered Scorpions! The energy towers aim and fire them on their own — nobody has to crew them now.", s.x, s.y);
+          }
+        } else w.sfx("twang", s.x, s.y, 0.9, 0.55);
         w.particles.burst(P.Dust, s.x, s.y, 3, 30, { z: this.scorpionZ(s), size: 5, max: 0.4, color: "rgba(220,210,190,0.6)" });
         if (!w.flags.has("scorpionShot")) {
           w.flags.add("scorpionShot");

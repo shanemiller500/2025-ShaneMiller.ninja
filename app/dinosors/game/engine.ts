@@ -6,6 +6,10 @@
 import { FACTS } from "../data/facts";
 import { SPECIES, sp } from "../data/species";
 import { AudioManager } from "../audio/audio";
+import { DeepView, type DeepInfo } from "./deepView";
+import { canSend, pickMiners, recallAll, sendDown, setOrder, type OrderKind } from "../sim/miners";
+import { demolishDeep } from "../sim/deepBuild";
+import type { DeepKind } from "../data/mine";
 import { CIV_TECH, ENERGY_GEN, PYRAMID_STAGES, SHIELD_HOLD, type CivPath, type CivTechId } from "../data/civ";
 import { buildingCost } from "../data/colony";
 import { go, say } from "../sim/humans";
@@ -38,6 +42,8 @@ export type UIEvent =
   | { type: "unlock"; species: SpeciesId }
   | { type: "openCamp" }
   | { type: "openCiv" }
+  | { type: "view" }
+  | { type: "confirmEnd"; cause: "asteroid" | "supervolcano" }
   | { type: "select" }
   | { type: "saved" }
   | { type: "inspect" };
@@ -122,7 +128,7 @@ export interface CommandInfo {
 export type InspectInfo =
   | { kind: "shelter"; id: number; icon: string; name: string; tier: number; cap: number; built: boolean; progress: string; hp: number; hearth: boolean; warmth: number; residents: { id: number; name: string; child: boolean; inside: boolean; state: string }[]; upgrade: { icon: string; name: string; cost: Cost; have: Cost; started: boolean } | null }
   | { kind: "building"; id: number; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost; stage?: { n: number; of: number; name: string; next: string | null }; note?: string }
-  | { kind: "scorpion"; id: number; name: string; tier: number; built: number; hp: number; maxHp: number; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
+  | { kind: "scorpion"; id: number; name: string; tier: number; built: number; hp: number; maxHp: number; drone: boolean; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
   | { kind: "gate"; id: number; open: boolean; auto: boolean; hp: number; maxHp: number; material: string }
   | { kind: "tower"; id: number; stage: number; hp: number; guards: number }
   | { kind: "carcass"; id: number; name: string; stage: string; left: { r: string; n: number; max: number }[]; working: number; burnt: boolean; fresh: number };
@@ -182,7 +188,12 @@ export interface Snapshot {
   };
   colony: { buildings: number; scorpions: number; deposits: number; found: number; homes: number; dragons: number; strangers: number; snow: number; mega: boolean };
   civ: CivInfo;
-  extinction: { phase: ExtPhase; countdown: number; stats: ExtStats | null; shelter: boolean; shield: boolean; shieldReady: boolean };
+  /** which world you're looking at: the surface or the Deep */
+  view: "surface" | "deep";
+  deep: DeepInfo | null;
+  /** people down the mine (+ on their way) */
+  crew: number;
+  extinction: { phase: ExtPhase; cause: "asteroid" | "supervolcano"; countdown: number; stats: ExtStats | null; shelter: boolean; shield: boolean; shieldReady: boolean };
   evolution: {
     leaps: number;
     auto: boolean;
@@ -341,6 +352,12 @@ export class Engine {
 
   /** no local save was found / readable: the newest saved-games slot should be offered */
   startedFresh = false;
+  /** looking at the surface or down the mine */
+  view: "surface" | "deep" = "surface";
+  deep: DeepView;
+  private svCam = false;
+  /** the fade between the two views */
+  private dive: { t: number; to: "surface" | "deep"; switched: boolean } | null = null;
 
   constructor(canvas: HTMLCanvasElement, opts: { fresh?: boolean; seed?: number } = {}) {
     this.canvas = canvas;
@@ -348,6 +365,8 @@ export class Engine {
     this.startedFresh = !saved;
     this.world = saved ?? new World(opts.seed ?? Math.floor(Math.random() * 1e9));
     this.renderer = new Renderer(canvas, this.world);
+    this.deep = new DeepView(canvas);
+    this.deep.world = () => this.world;
     this.bind();
   }
 
@@ -383,6 +402,7 @@ export class Engine {
     this.w = w;
     this.h = h;
     this.renderer.resize(w, h, Math.min(2, window.devicePixelRatio || 1));
+    this.deep.resize(w, h, Math.min(2, window.devicePixelRatio || 1));
     this.clampCam();
   }
 
@@ -426,6 +446,35 @@ export class Engine {
       if (this.marker.t > 1.6) this.marker = null;
     }
     this.selection = this.selection.filter((id) => w.humans.some((h) => h.id === id));
+    // the dive: fade to black, swap views, fade back in
+    const DIVE = 0.55;
+    let fade = 0;
+    if (this.dive) {
+      const dv = this.dive;
+      dv.t += dt;
+      if (dv.t >= DIVE && !dv.switched) {
+        dv.switched = true;
+        this.view = dv.to;
+        if (dv.to === "deep") this.deep.enter(w.mine);
+        this.emit({ type: "view" });
+      }
+      fade = dv.t < DIVE ? dv.t / DIVE : Math.max(0, 1 - (dv.t - DIVE) / DIVE);
+      if (dv.t >= DIVE * 2) this.dive = null;
+    }
+    this.mineSounds();
+    // the supervolcano: swing round to watch the mountain go up
+    const ex = w.extinction;
+    if (ex.cause === "supervolcano" && ex.phase === "impact" && ex.t < 0.1 && !this.svCam) {
+      this.svCam = true;
+      this.flyTo(ex.x, ex.y - 260, 0.3);
+    } else if (ex.phase !== "impact") this.svCam = false;
+    if (this.view === "deep") {
+      this.deep.update(dt);
+      this.deep.render(w, dt, fade);
+      this.deepAudio(dt);
+      this.tickSave(dt);
+      return;
+    }
     this.renderer.render(this.cam, {
       selectedId: this.selectedId,
       followId: this.followId,
@@ -441,6 +490,7 @@ export class Engine {
       flash: this.flash.a,
       flashColor: this.flash.color,
     }, dt);
+    if (fade > 0) this.deep.renderer.fade(fade);
 
     // adaptive quality: fewer cosmetic particles if frames get heavy
     const cost = this.renderer.cost;
@@ -463,6 +513,10 @@ export class Engine {
       }, 0.25);
     }
 
+    this.tickSave(dt);
+  }
+
+  private tickSave(dt: number) {
     this.saveT += dt;
     if (this.saveT > 20) {
       this.saveT = 0;
@@ -630,6 +684,10 @@ export class Engine {
     this.audio.unlock();
     this.canvas.setPointerCapture?.(e.pointerId);
     const { x: sx, y: sy } = this.local(e);
+    if (this.view === "deep") {
+      this.deep.down(e.pointerId, sx, sy);
+      return;
+    }
     const wp = this.renderer.toWorld(this.cam, sx, sy);
     // shift-drag draws a box to select people
     if (e.shiftKey && this.tool.id === "hand" && e.pointerType === "mouse") {
@@ -664,6 +722,10 @@ export class Engine {
 
   private onMove = (e: PointerEvent) => {
     const { x: sx, y: sy } = this.local(e);
+    if (this.view === "deep") {
+      this.deep.move(e.pointerId, sx, sy, e.pointerType === "mouse");
+      return;
+    }
     if (e.pointerType === "mouse") this.hover = this.renderer.toWorld(this.cam, sx, sy);
     const p = this.ptrs.get(e.pointerId);
     if (!p) return;
@@ -730,6 +792,17 @@ export class Engine {
   };
 
   private onUp = (e: PointerEvent) => {
+    if (this.view === "deep") {
+      if (this.deep.up(e.pointerId, e.type === "pointercancel")) {
+        this.audio.play("click", 0, 0, 0.3);
+        if (this.deep.lastWhy) {
+          this.world.toast("⛏️", this.deep.lastWhy);
+          this.deep.lastWhy = null;
+        }
+        this.emit({ type: "select" });
+      }
+      return;
+    }
     const p = this.ptrs.get(e.pointerId);
     this.ptrs.delete(e.pointerId);
     this.cancelHold();
@@ -739,7 +812,7 @@ export class Engine {
       if (Math.abs(b.x1 - b.x0) > 8 || Math.abs(b.y1 - b.y0) > 8) {
         const a = this.renderer.toWorld(this.cam, Math.min(b.x0, b.x1), Math.min(b.y0, b.y1));
         const c = this.renderer.toWorld(this.cam, Math.max(b.x0, b.x1), Math.max(b.y0, b.y1));
-        const ids = this.world.humans.filter((h) => !h.stranger && h.x > a.x && h.x < c.x && h.y - 12 > a.y && h.y - 12 < c.y).map((h) => h.id);
+        const ids = this.world.humans.filter((h) => !h.stranger && !h.under && h.x > a.x && h.x < c.x && h.y - 12 > a.y && h.y - 12 < c.y).map((h) => h.id);
         this.selectPeople(e.ctrlKey || e.metaKey ? Array.from(new Set([...this.selection, ...ids])) : ids);
         return;
       }
@@ -770,18 +843,30 @@ export class Engine {
 
   private onLeave = () => {
     this.hover = null;
+    this.deep.leave();
   };
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
     const { x, y } = this.local(e);
     const delta = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
+    if (this.view === "deep") {
+      this.deep.wheel(delta, x, y, e.ctrlKey);
+      return;
+    }
     this.zoomBy(Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.0015)), x, y);
   };
 
   private onKey = (e: KeyboardEvent) => {
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
+    if (this.view === "deep") {
+      if (this.deep.key(e.key.toLowerCase(), e.type === "keydown")) {
+        e.preventDefault();
+        this.emit({ type: "select" });
+      }
+      return;
+    }
     if (e.type === "keyup") {
       this.keys.delete(e.key.toLowerCase());
       return;
@@ -1168,7 +1253,7 @@ export class Engine {
   /** Everyone grown-up (or everyone idle) in one go. */
   selectAll(idleOnly = false) {
     const w = this.world;
-    const ids = w.humans.filter((h) => !h.child && !h.stranger && h.state !== "down" && (!idleOnly || (!h.taskId && (h.state === "idle" || h.state === "walk" || h.state === "talk" || h.state === "sitFire")))).map((h) => h.id);
+    const ids = w.humans.filter((h) => !h.child && !h.stranger && !h.under && h.state !== "down" && (!idleOnly || (!h.taskId && (h.state === "idle" || h.state === "walk" || h.state === "talk" || h.state === "sitFire")))).map((h) => h.id);
     this.selectPeople(ids);
   }
 
@@ -1396,6 +1481,11 @@ export class Engine {
       if (w.tribe.danger === "calm") w.toast("🕊️", "Raids are off in Calm mode (change it in the menu).");
       else if (!w.tribe.startRaid(w)) w.toast("🥁", "A raid is already on its way!");
       else this.flyTo(w.camp.x, w.camp.y, Math.min(this.cam.zoom, 0.7));
+      back();
+    } else if (this.tool.id === "disaster" && t.disaster === "supervolcano") {
+      // game-ending: ask first
+      if (w.extinction.active) w.toast("🌋", "The world is already ending!");
+      else this.emit({ type: "confirmEnd", cause: "supervolcano" });
       back();
     } else if (this.tool.id === "disaster" && t.disaster === "dragon") {
       const dr = w.dragons.summon(w);
@@ -1667,6 +1757,241 @@ export class Engine {
     }
   }
 
+  /* ----------------------------- guide bubbles ----------------------------- */
+
+  /** Things on screen right now that a "?" bubble could explain (world coords of the current view). */
+  hintTargets(): { key: string; x: number; y: number }[] {
+    const w = this.world;
+    const out: { key: string; x: number; y: number }[] = [];
+    if (this.view === "deep") {
+      const m = w.mine;
+      const r = this.deep.renderer;
+      const { w: sw, h: sh } = r.size;
+      const inView = (x: number, y: number) => {
+        const p = r.toScreen(this.deep.cam, x, y);
+        return p.x > 60 && p.y > 120 && p.x < sw - 60 && p.y < sh - 160;
+      };
+      const lift = { x: 4 * 32 + 16, y: m.liftY * 32 };
+      if (inView(lift.x, lift.y)) out.push({ key: "lift", ...lift });
+      const a = r.toWorld(this.deep.cam, 0, 0);
+      const b = r.toWorld(this.deep.cam, sw, sh);
+      const x0 = Math.max(0, Math.floor(a.x / 32));
+      const x1 = Math.min(47, Math.floor(b.x / 32));
+      const y0 = Math.max(0, Math.floor(a.y / 32));
+      const y1 = Math.min(199, Math.floor(b.y / 32));
+      let vein = false;
+      let bed = false;
+      for (let y = y0; y <= y1 && !(vein && bed); y++)
+        for (let x = x0; x <= x1; x++) {
+          const i = y * 48 + x;
+          const cx = x * 32 + 16;
+          const cy = y * 32 + 16;
+          if (!vein && m.seen[i] === 2 && m.ore[i] && inView(cx, cy)) {
+            out.push({ key: `vein:${i}`, x: cx, y: cy - 10 });
+            vein = true;
+          }
+          if (!bed && m.seen[i] && m.cells[i] === 11 && inView(cx, cy)) {
+            out.push({ key: `bedrock:${i}`, x: cx, y: cy - 10 });
+            bed = true;
+          }
+        }
+      return out;
+    }
+    const v = this.renderer.viewRect(this.cam);
+    const pad = 80;
+    const inView = (x: number, y: number) => x > v.x0 + pad && x < v.x1 - pad && y > v.y0 + pad * 1.6 && y < v.y1 - pad * 2;
+    const add = (key: string, x: number, y: number) => {
+      if (inView(x, y)) out.push({ key, x, y });
+    };
+    const c = w.camp;
+    const fire = w.campfires.find((f) => f.lit);
+    if (fire) add("campfire", fire.x, fire.y - 24);
+    add("cave", c.caveX, c.caveY - 30);
+    add("pile", c.pileX, c.pileY - 24);
+    const site = w.buildSites().find((s) => !s.repair);
+    if (site) add(`site:${site.kind}${site.id}`, site.x, site.y - 40);
+    const node = w.colony.nodes.find((n) => n.found && inView(n.x, n.y));
+    if (node) add(`node:${node.id}`, node.x, node.y - 24);
+    if (w.civ.chamberX) add("chamber", w.civ.chamberX, w.civ.chamberY - 50);
+    const body = w.items.find((it) => it.kind === "carcass" && inView(it.x, it.y));
+    if (body) add(`carcass:${body.id}`, body.x, body.y - 30);
+    add("volcano", w.volcano.x, w.volcano.y - 160);
+    const egg = w.eggs.find((e) => inView(e.x, e.y));
+    if (egg) add(`egg:${egg.id}`, egg.x, egg.y - 20);
+    const dino = w.dinos.find((d) => inView(d.x, d.y) && d.state !== "carried");
+    if (dino) add(`dino:${dino.id}`, dino.x, dino.y - sizeOf(dino) * 0.7);
+    return out;
+  }
+
+  /** Screen position of a point in whichever view is showing. */
+  screenOf(x: number, y: number) {
+    return this.view === "deep" ? this.deep.renderer.toScreen(this.deep.cam, x, y) : this.renderer.toScreen(this.cam, x, y);
+  }
+
+  /* ----------------------------- the Deep ----------------------------- */
+
+  /** Go down the mine (zooms into the cave mouth, fades, comes out underground). */
+  enterDeep() {
+    if (this.view === "deep" || this.dive) return;
+    this.flyTo(this.world.camp.caveX, this.world.camp.caveY, Math.min(MAX_ZOOM, 2.2));
+    this.select(0);
+    this.selection = [];
+    this.inspectRef = null;
+    this.tool = { ...this.tool, id: "hand" };
+    this.dive = { t: 0, to: "deep", switched: false };
+    this.audio.play("whoosh", 0, 0, 0.6, 0.6);
+  }
+
+  /** Back up to the surface. */
+  leaveDeep() {
+    if (this.view === "surface" || this.dive) return;
+    this.dive = { t: 0, to: "surface", switched: false };
+    this.cam = { x: this.world.camp.caveX, y: this.world.camp.caveY, zoom: Math.min(MAX_ZOOM, 2) };
+    this.flyTo(this.world.camp.caveX, this.world.camp.caveY + 60, 1);
+    this.audio.play("whoosh", 0, 0, 0.6, 1.2);
+  }
+
+  /** Send up to n people down the mine. */
+  deepSend(n: number) {
+    const list = pickMiners(this.world, n);
+    for (const h of list) sendDown(this.world, h);
+    if (!list.length) this.world.toast("⛏️", "Nobody free to send: grown-ups who aren't hurt or busy guarding.");
+    else this.world.mine.recall = false;
+    this.emit({ type: "select" });
+    return list.length;
+  }
+
+  /** From a person's card on the surface. */
+  sendToDeep(id: number) {
+    const h = this.world.humans.find((x) => x.id === id);
+    if (!h || !canSend(h)) return false;
+    this.world.mine.recall = false;
+    const ok = sendDown(this.world, h);
+    if (ok) {
+      this.world.toast("⛏️", `${h.name} is heading for the cave to go down the mine.`);
+      this.select(0);
+      this.emit({ type: "select" });
+    }
+    return ok;
+  }
+
+  deepRecall() {
+    recallAll(this.world);
+    this.world.toast("⬆️", "Everyone's heading back up the lift.");
+    this.emit({ type: "select" });
+  }
+
+  /** Pick a room to place (switches to build mode). */
+  deepBuild(kind: DeepKind) {
+    this.deep.buildKind = kind;
+    this.deep.mode = "build";
+    this.deep.sel = null;
+    this.emit({ type: "select" });
+  }
+
+  deepDemolish(id: number) {
+    if (demolishDeep(this.world, id)) {
+      this.world.toast("🧱", "Taken down — half the materials went back on the stockpile.");
+      this.deep.sel = null;
+    }
+    this.emit({ type: "select" });
+  }
+
+  deepMode(mode: "look" | OrderKind | "clear" | "build") {
+    this.deep.mode = mode;
+    if (mode !== "look") this.deep.sel = null;
+    this.emit({ type: "select" });
+  }
+
+  /** Put an order on the selected cell (null = remove it). */
+  deepOrder(kind: OrderKind | null) {
+    const s = this.deep.sel;
+    if (s === null) return;
+    const why = setOrder(this.world, s % 48, Math.floor(s / 48), kind);
+    if (why) this.world.toast("⛏️", why);
+    else this.audio.play("click", 0, 0, 0.3);
+    this.emit({ type: "select" });
+  }
+
+  deepToggleAuto() {
+    this.world.mine.autoMine = !this.world.mine.autoMine;
+    this.emit({ type: "select" });
+  }
+
+  /** Mine sounds (only heard while you're looking down there). */
+  private mineSounds() {
+    const mine = this.world.mine;
+    if (!mine.sfx.length) return;
+    if (this.view === "deep") {
+      const camRow = this.deep.cam.y / 32;
+      for (const e of mine.sfx.slice(0, 4)) {
+        const d = Math.abs(Math.floor(e.cell / 48) - camRow);
+        const vol = Math.max(0, 1 - d / 25) * (e.s === "boom" ? 1.4 : e.s === "rumble" ? 1 : 0.35);
+        if (vol > 0.05) this.audio.play(e.s, this.cam.x, this.cam.y, vol, e.s === "knock" ? 0.8 + Math.random() * 0.4 : 0.8);
+      }
+    }
+    mine.sfx.length = 0;
+  }
+
+  deepPing() {
+    const why = this.deep.ping(this.world.mine);
+    if (why) this.world.toast("📡", why);
+    else this.audio.play("chime", 0, 0, 0.5, 0.7);
+    this.emit({ type: "select" });
+    return why;
+  }
+
+  deepUpgradeLift() {
+    const why = this.world.mine.upgradeLift(this.world);
+    if (why) this.world.toast("🛗", why);
+    else {
+      this.world.toast("🛗", `The lift now reaches ${this.world.mine.liftMax * 6} ft down!`);
+      this.audio.play("build", 0, 0, 0.7);
+      this.save(true);
+    }
+    this.emit({ type: "select" });
+    return why;
+  }
+
+  deepCallLift(row: number) {
+    this.world.mine.callLift(row);
+    this.audio.play("hum", 0, 0, 0.4, 1.4);
+  }
+
+  deepFocus(x: number | null, row: number) {
+    this.deep.focus(x, row);
+  }
+
+  deepClearSelection() {
+    this.deep.sel = null;
+    this.emit({ type: "select" });
+  }
+
+  drawDeepMinimap(canvas: HTMLCanvasElement) {
+    this.deep.drawMinimap(this.world, canvas);
+  }
+
+  /** Muffled surface sounds, dripping water, the deep rumble. */
+  private deepAudio(dt: number) {
+    const w = this.world;
+    this.bedT -= dt;
+    if (this.bedT > 0) return;
+    this.bedT = 0.25;
+    const depth = Math.max(0, this.deep.cam.y / (200 * 32));
+    // drips + far-off creaks in the dark
+    if (Math.random() < 0.12) this.audio.play("plop", this.cam.x, this.cam.y, 0.12 + Math.random() * 0.12, 0.7 + Math.random() * 0.6);
+    if (depth > 0.5 && Math.random() < 0.05) this.audio.play("rumble", this.cam.x, this.cam.y, 0.25, 0.6);
+    this.audio.updateBeds({
+      rain: w.weather.rain * 0.15,
+      wind: 0,
+      water: Math.min(1, w.mine.springs.size * 0.3),
+      fire: 0,
+      night: 0.6,
+      day: 0,
+      volcano: Math.min(1, depth * depth * 1.2),
+    }, 0.25);
+  }
+
   /* ----------------------------- civilization ----------------------------- */
 
   civInfo(): CivInfo {
@@ -1695,7 +2020,7 @@ export class Engine {
       pending: civ.choicePending,
       ripe: civ.ripe(w),
       current: civ.current ? { id: civ.current, rp: civ.rp, need: civ.rpOf(civ.current), paid: civ.paid, missing: civ.missing(w), cost: civ.costOf(civ.current) } : null,
-      done: Array.from(civ.done),
+      done: civ.polygonAge && !civ.done.has("precisionStone") ? [...Array.from(civ.done), "precisionStone" as CivTechId] : Array.from(civ.done),
       options: civ.options().map((id) => ({ id, cost: civ.costOf(id), rp: civ.rpOf(id), cross: civ.isCross(id) })),
       crossOpen: civ.crossOpen(),
       energy: civ.energy,
@@ -1775,10 +2100,13 @@ export class Engine {
   }
 
   /** The player confirmed: call down the extinction asteroid. */
-  triggerExtinction() {
-    const ok = this.world.extinction.trigger(this.world);
+  triggerExtinction(cause: "asteroid" | "supervolcano" = "asteroid") {
+    if (this.view === "deep") this.leaveDeep();
+    const ok = this.world.extinction.trigger(this.world, cause);
     if (ok) {
-      this.flyTo(this.world.camp.x, this.world.camp.y, Math.min(this.cam.zoom, 0.45));
+      // the supervolcano is best watched from between the volcano and the camp
+      if (cause === "supervolcano") this.flyTo((this.world.camp.x + this.world.volcano.x) / 2, (this.world.camp.y + this.world.volcano.y) / 2, 0.3);
+      else this.flyTo(this.world.camp.x, this.world.camp.y, Math.min(this.cam.zoom, 0.45));
       this.closeInspect();
     }
     return ok;
@@ -1932,8 +2260,12 @@ export class Engine {
         mega: w.volcano.megaOn,
       },
       civ: this.civInfo(),
+      view: this.view,
+      deep: this.view === "deep" ? this.deep.info(w) : null,
+      crew: w.mine.crew.length + w.mine.pending.size,
       extinction: {
         phase: w.extinction.phase,
+        cause: w.extinction.cause,
         countdown: Math.max(0, w.extinction.countdown()),
         stats: w.extinction.stats,
         shelter: w.colony.finished("shelterDeep"),
@@ -2003,6 +2335,7 @@ export class Engine {
         return {
           kind: "scorpion",
           id: s.id,
+          drone: !!s.drone,
           name: t.name,
           tier: s.tier,
           built: s.built,

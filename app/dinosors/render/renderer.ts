@@ -32,8 +32,10 @@ import { TOWER_Z } from "../sim/nav";
 import { condition, CONDITION_LABEL } from "../sim/injury";
 import { drawBarricade, drawCarcass, drawSpikes, drawTannery, drawTotem } from "./boneArt";
 import { carcassStage, harvested } from "../sim/carcass";
-import { OUTFIT_BY_ID } from "../data/colony";
+import { HELMET_BY_ID, OUTFIT_BY_ID } from "../data/colony";
+import { drawRefinery } from "./metalArt";
 import { TerrainRenderer } from "./terrainRenderer";
+import { drawEruptionColumn, drawGhost, drawPyroclastic } from "./civArt";
 import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
 import { EXT_TIMES } from "../sim/extinction";
 import { LIFT } from "../data/civ";
@@ -436,9 +438,10 @@ export class Renderer {
           if (h.stranger) c.globalAlpha = 0.85;
           const role = tribe.roleOf(h);
           const wp = !h.child ? tribe.weaponFor(w, h) : null;
-          const look: WeaponLook = wp ? (wp.kind === "bow" ? (wp.tier >= 3 ? "crossbow" : "bow") : wp.kind) : weapon;
+          const look: WeaponLook = wp ? (wp.proj === "beam" ? "lance" : wp.kind === "bow" ? (wp.tier >= 3 ? "crossbow" : "bow") : wp.kind) : weapon;
+          const helmDef = h.gear.helmet ? HELMET_BY_ID[h.gear.helmet] : null;
           const coat = h.gear.outfit ? OUTFIT_BY_ID[h.gear.outfit] : null;
-          drawHuman(c, h, this.t, look, role === "guard" || role === "hunter" || !!h.order || h.taskId > 0 || tribe.raid !== null, h.gear.shield, wp?.tier ?? 1, coat, w.weather.rain);
+          drawHuman(c, h, this.t, look, role === "guard" || role === "hunter" || !!h.order || h.taskId > 0 || tribe.raid !== null, h.gear.shield, wp?.tier ?? 1, coat, w.weather.rain, helmDef ? { color: helmDef.color, trim: helmDef.trim, glow: helmDef.glow } : null);
           if (h.state === "down") {
             const a = this.t * 3;
             c.font = "9px sans-serif";
@@ -457,6 +460,7 @@ export class Renderer {
           else if (b.kind === "barricade") drawBarricade(c, b.built, b.hp / def.hp);
           else if (b.kind === "totem") drawTotem(c, b.built, this.t);
           else if (b.kind === "tannery") drawTannery(c, def.w * TILE, b.built, w.camp.stock.hide, this.t);
+          else if (b.kind === "refinery" && b.built >= 1) drawRefinery(c, def.w * TILE, w.camp.stock, this.t, night > 0.5);
           else if (CIV_KINDS.has(b.kind)) drawCivBuilding(c, b, def.w, def.h, { power: w.civ.energy > 1, night: night > 0.5, storm: w.weather.storm, t: this.t });
           else drawBuilding(c, b, def.w, def.h, night > 0.5, this.t);
           if (b.built < 1 && (b.kind === "spikes" || b.kind === "barricade" || b.kind === "totem" || b.kind === "tannery")) {
@@ -476,6 +480,24 @@ export class Renderer {
           const lift = s.mount === "tower" ? TOWER_Z : s.mount === "wall" ? 26 : 0;
           c.translate(s.x, s.y - lift);
           drawScorpion(c, s);
+          if (s.drone) {
+            // the crystal that powers it, bobbing over the bow
+            const bob = Math.sin(this.t * 3 + s.id) * 2;
+            c.fillStyle = "#bff6ff";
+            c.beginPath();
+            c.moveTo(0, -30 + bob);
+            c.lineTo(4, -24 + bob);
+            c.lineTo(0, -18 + bob);
+            c.lineTo(-4, -24 + bob);
+            c.closePath();
+            c.fill();
+            c.strokeStyle = "rgba(150,240,255,0.5)";
+            c.lineWidth = 1;
+            c.beginPath();
+            c.moveTo(0, -18 + bob);
+            c.lineTo(0, -8);
+            c.stroke();
+          }
           c.restore();
           break;
         }
@@ -673,8 +695,9 @@ export class Renderer {
       const sx = p.x;
       const sy = p.y - p.z;
       const ang = Math.atan2(p.vy - p.vz, p.vx);
-      if (p.kind === "beam") {
+      if (p.kind === "beam" || p.glow) {
         drawBeamBolt(c, sx, sy, ang);
+        if (p.glow) drawBeamBolt(c, sx - Math.cos(ang) * 14, sy - Math.sin(ang) * 14, ang);
         continue;
       }
       const len = p.kind === "spear" ? 22 : p.kind === "scorpion" ? 30 : p.kind === "bolt" ? 13 : 15;
@@ -726,11 +749,12 @@ export class Renderer {
     this.drawParticles(c, x0, y0, x1, y1);
     this.skyWorld(c, v, z);
     if (ex.phase === "incoming") drawAsteroid(c, ex.x, ex.y, Math.min(1, ex.t / EXT_TIMES.incoming), this.t);
-    if (ex.phase === "impact") drawShockwave(c, ex.x, ex.y, ex.wave, Math.max(0, 1 - ex.t / EXT_TIMES.impact));
+    const sv = ex.cause === "supervolcano";
+    if (ex.phase === "impact" && !sv) drawShockwave(c, ex.x, ex.y, ex.wave, Math.max(0, 1 - ex.t / EXT_TIMES.impact));
 
     // lightning + meteors
     for (const b of w.bolts) this.drawBolt(c, b.x, b.y, b.seed, 1 - b.t / 0.6);
-    for (const m of w.meteors) this.drawMeteor(c, m.x, m.y, m.t / m.dur);
+    for (const m of w.meteors) this.drawMeteor(c, m.x, m.y, m.t / m.dur, m.size ?? 1);
 
     // screen-space passes
     c.setTransform(d, 0, 0, d, 0, 0);
@@ -740,6 +764,13 @@ export class Renderer {
     // overlays that should stay readable at night
     c.setTransform(d * z, 0, 0, d * z, d * (this.w / 2 - cx * z), d * (this.h / 2 - cy * z));
     this.overlays(c, ov, x0, y0, x1, y1, z);
+    // the supervolcano glows through the darkness: drawn after the lighting pass
+    const exv = w.extinction;
+    if (exv.cause === "supervolcano" && (exv.phase === "impact" || exv.phase === "aftermath")) {
+      drawPyroclastic(c, exv.x, exv.y, exv.wave, this.t, exv.phase === "impact" ? 1 : Math.max(0, 1 - exv.t / 6));
+      drawEruptionColumn(c, exv.x, exv.y, exv.phase === "impact" ? exv.t / EXT_TIMES.impact : 1, this.t);
+    }
+    for (const g of exv.ghosts) if (g.x > x0 - 200 && g.x < x1 + 200 && g.y > y0 - 200 && g.y < y1 + 200) drawGhost(c, g);
 
     c.setTransform(d, 0, 0, d, 0, 0);
     if (ov.flash > 0.01) {
@@ -1464,29 +1495,32 @@ export class Renderer {
     c.fill();
   }
 
-  private drawMeteor(c: CanvasRenderingContext2D, x: number, y: number, k: number) {
+  private drawMeteor(c: CanvasRenderingContext2D, x: number, y: number, k: number, S = 1) {
     // warning ring on the ground
-    c.strokeStyle = `rgba(255,80,40,${0.4 + Math.sin(this.t * 12) * 0.3})`;
-    c.lineWidth = 3;
-    c.beginPath();
-    c.ellipse(x, y, 90 * (1.2 - k * 0.6), 34 * (1.2 - k * 0.6), 0, 0, Math.PI * 2);
-    c.stroke();
+    if (S > 0.3) {
+      c.strokeStyle = `rgba(255,80,40,${0.4 + Math.sin(this.t * 12) * 0.3})`;
+      c.lineWidth = 3;
+      c.beginPath();
+      c.ellipse(x, y, 90 * S * (1.2 - k * 0.6), 34 * S * (1.2 - k * 0.6), 0, 0, Math.PI * 2);
+      c.stroke();
+    }
     const mx = x + (1 - k) * 900;
     const my = y - (1 - k) * 1300;
-    const g = c.createLinearGradient(mx, my, mx + 260, my - 380);
+    const tail = 120 + 140 * S;
+    const g = c.createLinearGradient(mx, my, mx + tail, my - tail * 1.46);
     g.addColorStop(0, "rgba(255,240,180,0.95)");
     g.addColorStop(0.3, "rgba(255,140,50,0.7)");
     g.addColorStop(1, "rgba(255,80,20,0)");
     c.strokeStyle = g;
     c.lineCap = "round";
-    c.lineWidth = 26;
+    c.lineWidth = Math.max(5, 26 * S);
     c.beginPath();
     c.moveTo(mx, my);
-    c.lineTo(mx + 260, my - 380);
+    c.lineTo(mx + tail, my - tail * 1.46);
     c.stroke();
     c.fillStyle = "#fff6d8";
     c.beginPath();
-    c.arc(mx, my, 16, 0, Math.PI * 2);
+    c.arc(mx, my, Math.max(4, 16 * S), 0, Math.PI * 2);
     c.fill();
   }
 
@@ -1633,8 +1667,25 @@ export class Renderer {
       c.fillStyle = g;
       c.fillRect(0, 0, this.w, this.h);
     }
+    if (ex.cause === "supervolcano" && ex.phase !== "idle") {
+      // a burning sky: deep red under black ash, embers raining down
+      const k = ex.phase === "omen" ? Math.min(1, ex.t / EXT_TIMES.omen) * 0.5 : 1;
+      const g = c.createLinearGradient(0, 0, 0, this.h);
+      g.addColorStop(0, `rgba(30,8,6,${0.55 * k})`);
+      g.addColorStop(1, `rgba(150,40,10,${0.35 * k})`);
+      c.fillStyle = g;
+      c.fillRect(0, 0, this.w, this.h);
+      if (ex.phase !== "omen") {
+        for (let i = 0; i < 140; i++) {
+          const x = (i * 131.7 + this.t * (30 + (i % 9) * 8)) % this.w;
+          const y = (i * 71.3 + this.t * (60 + (i % 7) * 14)) % this.h;
+          c.fillStyle = i % 3 ? `rgba(255,${120 + (i % 5) * 20},40,0.85)` : "rgba(255,230,140,0.9)";
+          c.fillRect(x, y, 2 + (i % 2), 2 + (i % 2));
+        }
+      }
+    }
     if (ex.ash > 0.01) {
-      c.fillStyle = `rgba(55,45,40,${ex.ash * 0.6})`;
+      c.fillStyle = ex.cause === "supervolcano" ? `rgba(40,18,14,${ex.ash * 0.55})` : `rgba(55,45,40,${ex.ash * 0.6})`;
       c.fillRect(0, 0, this.w, this.h);
       // drifting ash flakes
       c.fillStyle = `rgba(200,195,190,${0.25 + ex.ash * 0.4})`;

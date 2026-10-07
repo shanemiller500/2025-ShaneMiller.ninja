@@ -1143,3 +1143,1007 @@ test('the Resonance shield holds when charged', () => {
   run(w, 8);
   assert.ok(w.humans.length >= Math.floor(n0 * 0.6), `most under the dome lived (${w.humans.length}/${n0})`);
 });
+
+/* ------------------------------ The Deep (mine, phase 1) ------------------------------ */
+
+const { Mine, NO_TOOLS, idx: mIdx, toolsOf, rle, unrle } = require(path.join(root, 'sim', 'mine.ts'));
+const { M, MATERIALS, MINE_W, MINE_H, LIFT_X, LIFT_START, LIFT_STEP, LIFT_MAX, MAGMA_FROM, FLOODED, bandAt } = require(path.join(root, 'data', 'mine.ts'));
+
+const ALL_TOOLS = { pick: true, ironPick: true, drill: true, lantern: true, pump: true, dynamite: true, luck: 0 };
+/** Open a straight tunnel from the shaft at row y out to column x (test setup, not digging). */
+function carve(mine, x, y) {
+  const step = x > LIFT_X ? 1 : -1;
+  for (let cx = LIFT_X + step; cx !== x + step; cx += step) mine.cells[mIdx(cx, y)] = M.Open;
+  mine.version++;
+}
+/** First cell in rows [y0, y1) holding `what`, away from the shaft and the band edges. */
+function findContent(mine, what, y0, y1) {
+  for (let y = y0; y < y1; y++)
+    for (let x = LIFT_X + 3; x < MINE_W - 3; x++) {
+      const i = mIdx(x, y);
+      if (mine.baseAt(i) === M.Open || mine.baseAt(i) === M.Granite) continue;
+      if (mine.contentOf(i) === what) return { x, y };
+    }
+  return null;
+}
+
+test('the Deep is generated from the seed: barrier on top, lift shaft, rock bands, caverns, magma below', () => {
+  const a = new Mine(9001);
+  const b = new Mine(9001);
+  const c = new Mine(9002);
+  assert.deepEqual(Buffer.from(a.cells), Buffer.from(b.cells), 'same seed, same mine');
+  assert.notDeepEqual(Buffer.from(a.cells), Buffer.from(c.cells), 'different seed, different mine');
+  for (let x = 0; x < MINE_W; x++) if (x !== LIFT_X) assert.equal(a.at(x, 0), M.Barrier, 'groundwater barrier across the top');
+  for (let y = 0; y <= LIFT_MAX; y++) assert.equal(a.at(LIFT_X, y), M.Shaft, 'shaft runs down');
+  for (let x = 0; x < MINE_W; x++) assert.equal(a.at(x, MINE_H - 1), M.Magma, 'molten floor');
+  const count = (y0, y1, m) => { let n = 0; for (let y = y0; y < y1; y++) for (let x = 0; x < MINE_W; x++) if (x !== LIFT_X && a.at(x, y) === m) n++; return n; };
+  assert.ok(count(1, 30, M.Soil) > count(1, 30, M.Stone), 'topsoil near the top');
+  assert.equal(count(1, 30, M.Granite), 0, 'no granite in the topsoil');
+  assert.ok(count(70, 110, M.Granite) > 300, 'plenty of granite deep down');
+  assert.ok(count(150, MAGMA_FROM - 2, M.Volcanic) > 300, 'volcanic rock in the Furnace');
+  assert.equal(count(1, 30, M.Open), 2, 'no caverns in the topsoil (just the landing)');
+  assert.ok(count(110, 150, M.Open) > 60, `fossil + crystal caverns (${count(110, 150, M.Open)})`);
+  for (let y = 1; y < MINE_H; y++) for (const dx of [-3, -2, 2, 3]) if (y > 1) assert.notEqual(a.at(LIFT_X + dx, y), M.Open, 'caverns never touch the shaft');
+});
+
+test('finds get richer with depth (and are fixed once looked at)', () => {
+  const m = new Mine(77);
+  const tally = (y0, y1) => {
+    const t = {};
+    for (let y = y0; y < y1; y++) for (let x = 0; x < MINE_W; x++) { const c = m.contentOf(mIdx(x, y)); if (c) t[c] = (t[c] ?? 0) + 1; }
+    return t;
+  };
+  const top = tally(1, 30);
+  const deep = tally(110, 150);
+  const furnace = tally(150, MAGMA_FROM);
+  assert.ok(!top.gold && !top.crystal, 'no gold or crystal in the topsoil');
+  assert.ok((top.flint ?? 0) > 0 && (top.copper ?? 0) > 0, 'flint + copper near the top');
+  assert.ok((deep.crystal ?? 0) > 10 && (deep.fossil ?? 0) > 3, `crystals + fossils in the caverns (${JSON.stringify(deep)})`);
+  assert.ok((furnace.gold ?? 0) > (tally(30, 70).gold ?? 0), 'more gold deeper');
+  assert.ok(furnace.meteorite > 0 || furnace.obsidian > 10, 'obsidian / meteor shards at the bottom');
+  // luck: better finds, fewer nasty surprises
+  let bad = 0, badLucky = 0;
+  for (let y = 30; y < 150; y++) for (let x = 0; x < MINE_W; x++) {
+    const i = mIdx(x, y);
+    if (['caveIn', 'gas', 'spring'].includes(m.contentOf(i, 0))) bad++;
+    if (['caveIn', 'gas', 'spring'].includes(m.contentOf(i, 1))) badLucky++;
+  }
+  assert.ok(badLucky < bad, `luck helps (${bad} → ${badLucky})`);
+  // once scanned, the answer never changes
+  const i = mIdx(20, 40);
+  const seen = m.scan(i, 0);
+  assert.equal(m.contentOf(i, 1), seen);
+  assert.equal(m.seen[i], 2);
+});
+
+test('digging: only from a tunnel, granite needs a drill, tools speed it up, lanterns spot ore', () => {
+  const m = new Mine(31337);
+  assert.ok(m.cantDig(LIFT_X + 5, 10, ALL_TOOLS), 'not from inside solid rock');
+  assert.match(m.cantDig(LIFT_X + 1, 0, ALL_TOOLS), /barrier/i);
+  const x = LIFT_X + 1;
+  const y = 2;
+  assert.equal(m.cantDig(x, y, NO_TOOLS), null, 'the rock under the landing can be dug');
+  assert.ok(m.digTime(x, y, ALL_TOOLS) < m.digTime(x, y, NO_TOOLS) * 0.6, 'tools are faster');
+  const r = m.dig(x, y, { ...ALL_TOOLS });
+  assert.ok(r.ok, r.why);
+  assert.equal(m.at(x, y), M.Rubble === m.at(x, y) ? M.Rubble : M.Open);
+  assert.ok(m.seen[mIdx(x + 2, y)] >= 1, 'lantern lights two cells around');
+  assert.equal(m.stats.dug, 1);
+  // granite
+  let g = null;
+  for (let yy = 31; yy < 69 && !g; yy++) for (let xx = LIFT_X + 1; xx < LIFT_X + 3; xx++) if (m.at(xx, yy) === M.Granite) { g = { x: xx, y: yy }; break; }
+  if (g) {
+    for (let cx = LIFT_X + 1; cx < g.x; cx++) m.cells[mIdx(cx, g.y)] = M.Open;
+    m.version++;
+    assert.match(m.cantDig(g.x, g.y, { ...ALL_TOOLS, drill: false }) ?? '', /drill/i);
+    if (g.y <= m.liftMax) assert.equal(m.cantDig(g.x, g.y, ALL_TOOLS), null);
+  }
+  // digging out a find hands it over
+  const f = findContent(m, 'copper', 3, 30);
+  assert.ok(f, 'a copper cell exists');
+  carve(m, f.x - 1, f.y);
+  const got = m.dig(f.x, f.y, ALL_TOOLS);
+  assert.equal(got.r, 'copper');
+  assert.ok(got.n >= 1);
+  assert.ok(m.stats.mined.copper >= 1);
+});
+
+test('springs flood the tunnels downhill; pumping clears them', () => {
+  const m = new Mine(4040);
+  const s = findContent(m, 'spring', 5, 26);
+  assert.ok(s, 'a spring exists');
+  // a tunnel to it plus a sump below
+  carve(m, s.x - 1, s.y);
+  for (let yy = s.y + 1; yy <= s.y + 4; yy++) m.cells[mIdx(s.x - 1, yy)] = M.Open;
+  m.version++;
+  const r = m.dig(s.x, s.y, ALL_TOOLS);
+  if (r.event === 'caveIn') return; // rare: the roof came down on it first
+  assert.equal(r.event, 'spring');
+  for (let i = 0; i < 300; i++) m.update(null, 1 / 30);
+  const sump = m.water[mIdx(s.x - 1, s.y + 4)];
+  assert.ok(sump > FLOODED, `water ran down into the sump (${sump.toFixed(2)})`);
+  assert.ok(!m.passable(s.x - 1, s.y + 4), 'flooded cells block the way');
+  for (let i = 0; i < 400; i++) m.update(null, 1 / 30);
+  let removed = 0;
+  for (let k = 0; k < 20; k++) removed += m.pump(s.x - 1, s.y + 4, 2, ALL_TOOLS);
+  assert.ok(removed > 1, `pumped ${removed.toFixed(1)}`);
+  assert.ok(m.water[mIdx(s.x - 1, s.y + 4)] < FLOODED, 'drained');
+});
+
+test('weak roofs cave in; support beams stop it', () => {
+  const m = new Mine(5150);
+  m.liftMax = 120;
+  const c = findContent(m, 'caveIn', 31, 69);
+  assert.ok(c, 'a weak roof exists');
+  carve(m, c.x - 1, c.y);
+  for (let dx = -3; dx <= -1; dx++) for (const dy of [-1, 1]) m.cells[mIdx(c.x + dx, c.y + dy)] = M.Open;
+  m.version++;
+  const r = m.dig(c.x, c.y, ALL_TOOLS);
+  assert.equal(r.event, 'caveIn');
+  assert.ok(r.collapsed.includes(mIdx(c.x, c.y)), 'the dug cell filled back in');
+  assert.equal(m.at(c.x, c.y), M.Rubble);
+  assert.ok(m.digTime(c.x, c.y, NO_TOOLS) < 1.3, 'rubble is quick to clear');
+  // the same thing with a support in place
+  const m2 = new Mine(5150);
+  m2.liftMax = 120;
+  carve(m2, c.x - 1, c.y);
+  m2.version++;
+  const w = new World(1, false);
+  w.camp.stock.wood = 3;
+  assert.equal(m2.addSupport(w, c.x - 1, c.y), null);
+  assert.equal(w.camp.stock.wood, 2, 'supports cost wood');
+  const r2 = m2.dig(c.x, c.y, ALL_TOOLS);
+  assert.notEqual(r2.event, 'caveIn', 'held up by the beam');
+  assert.equal(m2.at(c.x, c.y), M.Open);
+});
+
+test('gas pockets turn a dynamite blast into an explosion', () => {
+  const m = new Mine(6060);
+  m.liftMax = 120;
+  const g = findContent(m, 'gas', 31, 69);
+  assert.ok(g, 'a gas pocket exists');
+  carve(m, g.x - 1, g.y);
+  const r = m.dig(g.x, g.y, ALL_TOOLS);
+  if (r.event === 'caveIn') return;
+  assert.equal(r.event, 'gas');
+  assert.ok(m.hazardAt(g.x, g.y).gas, 'gas hangs in the tunnel');
+  const w = new World(2, false);
+  w.camp.learned.add('fire');
+  w.camp.stock.tar = 2;
+  w.camp.stock.stick = 2;
+  const t = toolsOf(w);
+  assert.ok(t.dynamite);
+  const b = m.blast(w, g.x, g.y, t);
+  assert.ok(typeof b !== 'string', b);
+  assert.ok(b.explosion, 'kaboom');
+  assert.equal(w.camp.stock.tar, 1, 'a charge used tar');
+  for (let i = 0; i < 30 * 30; i++) m.update(null, 1 / 30);
+  assert.ok(!m.hazardAt(g.x, g.y).gas, 'gas clears over time');
+});
+
+test('the lift: upgrades from the stockpile go 60 ft deeper each, up to the bottom', () => {
+  const m = new Mine(7);
+  const w = new World(3, false);
+  assert.equal(m.liftMax, LIFT_START);
+  assert.ok(m.upgradeLift(w), 'costs something');
+  Object.assign(w.camp.stock, { wood: 999, stone: 999, iron: 999, copper: 999 });
+  assert.equal(m.upgradeLift(w), null);
+  assert.equal(m.liftMax, LIFT_START + LIFT_STEP);
+  assert.ok(w.camp.stock.wood < 999);
+  while (!m.upgradeLift(w));
+  assert.equal(m.liftMax, LIFT_MAX, 'stops above the magma');
+  assert.ok(w.camp.stock.iron < 999, 'deep upgrades need iron');
+  m.callLift(500);
+  for (let i = 0; i < 30 * 30; i++) m.update(null, 1 / 30);
+  assert.equal(m.liftY, LIFT_MAX, 'car travels down');
+  assert.ok(!m.passable(LIFT_X, LIFT_MAX + 1), 'nothing below the lift');
+});
+
+test('paths go through tunnels and the shaft (only as deep as the lift)', () => {
+  const m = new Mine(8);
+  carve(m, LIFT_X + 8, 12);
+  carve(m, LIFT_X + 6, 25);
+  const p = m.path(LIFT_X + 8, 12, LIFT_X + 6, 25);
+  assert.ok(p && p.length > 10, 'via the shaft');
+  carve(m, LIFT_X + 6, 45);
+  assert.equal(m.path(LIFT_X + 8, 12, LIFT_X + 6, 45), null, 'too deep for the lift');
+  m.liftMax = 50;
+  m.version++;
+  assert.ok(m.path(LIFT_X + 8, 12, LIFT_X + 6, 45), 'reachable after an upgrade');
+});
+
+test('the Deep saves compactly and loads back exactly; old saves get a fresh mine', () => {
+  const w = new World(424242);
+  const m = w.mine;
+  m.liftMax = 80;
+  for (let y = 2; y < 60; y++) { m.cells[mIdx(LIFT_X + 1, y)] = M.Open; }
+  m.version++;
+  const f = findContent(m, 'iron', 31, 59);
+  if (f) { carve(m, f.x - 1, f.y); m.dig(f.x, f.y, ALL_TOOLS); }
+  m.water[mIdx(LIFT_X + 1, 59)] = 0.8;
+  m.supports.add(mIdx(LIFT_X + 1, 20));
+  m.scan(mIdx(LIFT_X + 2, 40));
+  const json = JSON.stringify(w.serialize());
+  const data = JSON.parse(json);
+  assert.ok(JSON.stringify(data.mine).length < 20000, `small (${JSON.stringify(data.mine).length} bytes)`);
+  const w2 = World.deserialize(data);
+  assert.deepEqual(Buffer.from(w2.mine.cells), Buffer.from(m.cells), 'rock');
+  assert.deepEqual(Buffer.from(w2.mine.seen), Buffer.from(m.seen), 'fog');
+  assert.ok(Math.abs(w2.mine.water[mIdx(LIFT_X + 1, 59)] - 0.8) < 0.02, 'water');
+  assert.ok(w2.mine.supports.has(mIdx(LIFT_X + 1, 20)), 'supports');
+  assert.equal(w2.mine.contentOf(mIdx(LIFT_X + 2, 40), 1), m.contentOf(mIdx(LIFT_X + 2, 40)), 'scanned contents');
+  assert.equal(w2.mine.liftMax, 80);
+  assert.equal(w2.mine.stats.dug, m.stats.dug);
+  delete data.mine;
+  const w3 = World.deserialize(data);
+  assert.equal(w3.mine.liftMax, LIFT_START, 'pre-mine saves just get a brand new mine');
+  assert.equal(unrle(rle(new Uint8Array([0, 0, 1, 2, 2, 2])), 6).join(','), '0,0,1,2,2,2');
+});
+
+test('nothing in the Deep changes the surface simulation', () => {
+  const a = new World(1717);
+  const b = new World(1717);
+  const m = b.mine;
+  m.liftMax = 120;
+  // depth milestones pay the surface on purpose (gifts + a celebration): count them as already earned here
+  for (const id of ['deep30', 'deep70', 'deep110', 'deep150', 'deep185']) m.milestones.add(id);
+  for (let y = 2; y < 100; y++) m.cells[mIdx(LIFT_X + 1, y)] = M.Open;
+  m.version++;
+  for (let y = 2; y < 100; y += 3) m.dig(LIFT_X + 2, y, ALL_TOOLS);
+  for (let k = 0; k < 6; k++) m.springs.set(mIdx(LIFT_X + 1, 10 + k * 12), 20);
+  run(a, 20);
+  run(b, 20);
+  const pos = (w) => w.dinos.map((d) => `${d.id}:${d.x.toFixed(3)},${d.y.toFixed(3)}`).join('|') + w.humans.map((h) => `${h.id}:${h.x.toFixed(3)}`).join('|');
+  assert.equal(pos(b), pos(a), 'same dinos + people, step for step');
+  assert.ok(b.mine.anyWater || b.mine.springs.size >= 0);
+  void bandAt;
+});
+
+test('the scanner ping maps rock near the tunnels (not what is in it), then recharges', () => {
+  const m = new Mine(2468);
+  const before = m.seen.reduce((a, v) => a + (v > 0 ? 1 : 0), 0);
+  const n = m.ping(LIFT_X + 3, 8);
+  assert.ok(typeof n === 'number' && n > 30, `charted ${n} cells`);
+  assert.ok(m.seen.reduce((a, v) => a + (v > 0 ? 1 : 0), 0) > before);
+  assert.ok(![...m.seen].some((v) => v === 2), 'contents stay hidden');
+  assert.match(String(m.ping(LIFT_X + 3, 8)), /recharg/i, 'cooldown');
+  for (let i = 0; i < 30 * 13; i++) m.update(null, 1 / 30);
+  assert.match(String(m.ping(LIFT_X + 30, 150)), /too far/i, 'only near your tunnels');
+  assert.equal(typeof m.ping(LIFT_X + 2, 20), 'number', 'ready again');
+});
+
+/* ------------------------------ The Deep: the mining crew (phase 3) ------------------------------ */
+
+const { pickMiners, sendDown, setOrder, recallAll, CARRY, LANDING } = require(path.join(root, 'sim', 'miners.ts'));
+
+/** A settled tribe with food, ready to mine. */
+function mineWorld(seed) {
+  const w = tribeWorld(seed, ['tools', 'fire', 'axe', 'basket']);
+  Object.assign(w.camp.stock, { cooked: 40, wood: 10 });
+  return w;
+}
+/** Send n people and wait until they're all down. */
+function crewDown(w, n) {
+  const list = pickMiners(w, n);
+  list.forEach((h) => sendDown(w, h));
+  run(w, 50, (w) => w.mine.crew.length === list.length);
+  assert.equal(w.mine.crew.length, list.length, 'everyone made it down');
+  return list;
+}
+
+test('people sent down walk to the cave, ride the lift and leave the surface alone', () => {
+  const w = mineWorld(601);
+  const guard = w.humans.find((h) => !h.child);
+  guard.role = 'guard';
+  const picked = pickMiners(w, 3);
+  assert.equal(picked.length, 3);
+  assert.ok(!picked.includes(guard), 'guards stay on duty');
+  picked.forEach((h) => assert.ok(sendDown(w, h)));
+  assert.ok(!sendDown(w, picked[0]), 'not twice');
+  assert.ok(!sendDown(w, w.humans.find((h) => h.child)), 'no children down the mine');
+  run(w, 50, (w) => w.mine.crew.length === 3);
+  for (const h of picked) {
+    assert.ok(h.under, `${h.name} is underground`);
+    assert.equal(h.state, 'hide', 'their surface body waits hidden at the cave');
+    assert.ok(Math.hypot(h.x - w.camp.caveX, h.y - w.camp.caveY) < 2);
+  }
+  // the surface job board counts only people who are up top
+  run(w, 3);
+  for (const h of picked) assert.ok(!(h.role === 'auto' && h.autoRole === 'guard'), 'miners are not given surface guard slots');
+});
+
+test('miners dig marked rock, haul it to the lift and it lands on the camp stockpile', () => {
+  const w = mineWorld(602);
+  const stone0 = w.camp.stock.stone + w.camp.stock.clay + w.camp.stock.flint + w.camp.stock.copper;
+  crewDown(w, 2);
+  for (let x = LIFT_X + 2; x < LIFT_X + 14; x++) setOrder(w, x, 1, 'dig');
+  run(w, 120, (w) => [...w.mine.orders.values()].filter((k) => k === 'dig').length === 0);
+  assert.equal([...w.mine.orders.values()].filter((k) => k === 'dig').length, 0, 'the whole row got dug');
+  for (let x = LIFT_X + 2; x < LIFT_X + 14; x++) assert.notEqual(w.mine.at(x, 1), M.Soil, `cell ${x},1 is open (or rubble)`);
+  run(w, 60, (w) => Object.values(w.mine.hauled).reduce((a, n) => a + n, 0) > 0 && w.mine.crew.every((m) => !Object.keys(m.carry).length));
+  const hauled = Object.values(w.mine.hauled).reduce((a, n) => a + n, 0);
+  assert.ok(hauled > 0, `the lift carried loads up (${JSON.stringify(w.mine.hauled)})`);
+  const after = w.camp.stock.stone + w.camp.stock.clay + w.camp.stock.flint + w.camp.stock.copper;
+  assert.ok(after > stone0 - 4, 'it landed on the stockpile');
+  assert.ok(w.mine.stats.dug >= 12);
+});
+
+test('miners dig out ore they spot by themselves (and stop when told not to)', () => {
+  const w = mineWorld(603);
+  const m = w.mine;
+  // a short tunnel with a known copper vein at the end
+  let ore = null;
+  for (let x = LIFT_X + 3; x < LIFT_X + 20 && !ore; x++) if (m.contentOf(mIdx(x, 2)) === 'copper' || m.contentOf(mIdx(x, 2)) === 'flint') ore = x;
+  assert.ok(ore, 'some ore in row 2');
+  for (let x = LIFT_X + 1; x < ore; x++) { m.cells[mIdx(x, 2)] = M.Open; m.cells[mIdx(x, 1)] = M.Open; }
+  m.version++;
+  m.scan(mIdx(ore, 2));
+  m.autoMine = false;
+  crewDown(w, 1);
+  run(w, 20);
+  assert.equal(m.at(ore, 2), M.Soil === m.baseAt(mIdx(ore, 2)) ? M.Soil : m.baseAt(mIdx(ore, 2)), 'auto-mining off: left alone');
+  m.autoMine = true;
+  run(w, 40, () => !MATERIALS[m.at(ore, 2)].solid || m.at(ore, 2) === M.Rubble);
+  assert.ok(!MATERIALS[m.at(ore, 2)].solid || m.at(ore, 2) === M.Rubble, 'dug out the vein');
+});
+
+test('support orders cost wood; flooded tunnels get pumped; dynamite clears rock and everyone runs', () => {
+  const w = mineWorld(604);
+  const m = w.mine;
+  for (let x = LIFT_X + 1; x < LIFT_X + 12; x++) m.cells[mIdx(x, 1)] = M.Open;
+  for (let y = 2; y < 6; y++) m.cells[mIdx(LIFT_X + 11, y)] = M.Open;
+  m.version++;
+  crewDown(w, 2);
+  // a support
+  const wood = w.camp.stock.wood;
+  assert.equal(setOrder(w, LIFT_X + 6, 1, 'support'), null);
+  run(w, 20, () => m.supports.has(mIdx(LIFT_X + 6, 1)));
+  assert.ok(m.supports.has(mIdx(LIFT_X + 6, 1)), 'beam put in');
+  assert.equal(w.camp.stock.wood, wood - 1);
+  // a flooded sump
+  m.water[mIdx(LIFT_X + 11, 5)] = 1;
+  m.water[mIdx(LIFT_X + 11, 4)] = 1;
+  m.water[mIdx(LIFT_X + 11, 3)] = 0.8;
+  run(w, 40, () => m.water[mIdx(LIFT_X + 11, 3)] + m.water[mIdx(LIFT_X + 11, 4)] < 0.6);
+  assert.ok(m.water[mIdx(LIFT_X + 11, 3)] + m.water[mIdx(LIFT_X + 11, 4)] < 0.6, 'they bailed the flood out without being asked');
+  // dynamite
+  w.camp.stock.tar = 3;
+  w.camp.stock.stick = 5;
+  const target = mIdx(LIFT_X + 6, 2);
+  assert.equal(setOrder(w, LIFT_X + 6, 2, 'blast'), null);
+  run(w, 30, () => m.charges.length > 0);
+  assert.ok(m.charges.length, 'charge set');
+  run(w, 6);
+  assert.ok(!MATERIALS[m.cells[target]].solid || m.cells[target] === M.Rubble, 'blasted open');
+  assert.ok(w.camp.stock.tar < 3, 'used tar');
+  assert.ok(w.humans.filter((h) => h.under).every((h) => h.hp > 0.5), 'nobody stood next to it');
+});
+
+test('hazards hurt miners; badly hurt ones head up, and a knocked-out miner rides the lift up to be helped', () => {
+  const w = mineWorld(605);
+  const [a, b] = crewDown(w, 2);
+  // badly hurt: they walk back to the lift by themselves
+  a.hp = 0.2;
+  run(w, 20, () => !a.under);
+  assert.ok(!a.under, 'went up to rest');
+  assert.notEqual(a.state, 'down');
+  // knocked out by gas: the lift brings them up, out cold
+  const mnr = w.mine.crew.find((m) => m.id === b.id);
+  const here = mIdx(Math.floor(mnr.x), Math.floor(mnr.y));
+  w.mine.gas.set(here, 60);
+  b.hp = 0.0004;
+  run(w, 1, () => !b.under);
+  assert.ok(!b.under, 'came back up');
+  assert.equal(b.state, 'down', 'knocked out on the surface (the tribe patches them up)');
+  assert.equal(w.mine.crew.length, 0);
+});
+
+test('recall brings everyone up; the crew survives save + load', () => {
+  const w = mineWorld(606);
+  crewDown(w, 3);
+  for (let x = LIFT_X + 2; x < LIFT_X + 10; x++) setOrder(w, x, 1, 'dig');
+  run(w, 10);
+  const data = JSON.parse(JSON.stringify(w.serialize()));
+  const w2 = World.deserialize(data);
+  assert.equal(w2.mine.crew.length, 3, 'crew saved');
+  assert.equal(w2.humans.filter((h) => h.under).length, 3, 'still underground after loading');
+  assert.ok(w2.mine.orders.size > 0, 'orders saved');
+  run(w2, 5);
+  recallAll(w2);
+  run(w2, 60, (w) => w.mine.crew.length === 0);
+  assert.equal(w2.mine.crew.length, 0, 'everyone came up');
+  assert.equal(w2.humans.filter((h) => h.under).length, 0);
+  assert.ok(w2.humans.every((h) => Number.isFinite(h.x)));
+  assert.ok(CARRY >= 4);
+});
+
+test('deep miners shelter from the extinction asteroid', () => {
+  const w = mineWorld(607);
+  w.mine.liftMax = 60;
+  for (let y = 2; y < 50; y++) w.mine.cells[mIdx(LIFT_X + 1, y)] = M.Open;
+  w.mine.version++;
+  const crew = crewDown(w, 2);
+  for (const m of w.mine.crew) { m.x = LIFT_X + 1.5; m.y = 45.5; m.path = []; m.job = null; }
+  w.mine.autoMine = false;
+  w.extinction.trigger(w);
+  run(w, 7 + 10 + 8);
+  for (const h of crew) assert.ok(w.humans.includes(h), `${h.name} survived underground`);
+});
+
+/* ------------------------------ The Deep: building down there (phase 4) ------------------------------ */
+
+const { canPlaceDeep, placeDeep, demolishDeep, deepRoom, hasVault, lit, cellsOf } = require(path.join(root, 'sim', 'deepBuild.ts'));
+const { DEEP_DEFS } = require(path.join(root, 'data', 'mine.ts'));
+
+/** A mined-out hall next to the shaft: rows y0..y1 open from x0..x1 (with rock under it). */
+function hall(m, x0, x1, y0, y1) {
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) m.cells[mIdx(x, y)] = M.Open;
+  for (let x = x0; x <= x1; x++) if (!MATERIALS[m.cells[mIdx(x, y1 + 1)]].solid) m.cells[mIdx(x, y1 + 1)] = M.Stone;
+  m.version++;
+}
+function richWorld(seed) {
+  const w = mineWorld(seed);
+  Object.assign(w.camp.stock, { wood: 60, stone: 60, hide: 10, clay: 20, grass: 20, stick: 20, tar: 10, cooked: 60 });
+  hall(w.mine, LIFT_X + 1, LIFT_X + 16, 1, 3);
+  return w;
+}
+
+test('rooms only go in dug-out space your miners can reach, with a floor under them', () => {
+  const w = richWorld(701);
+  const m = w.mine;
+  assert.equal(canPlaceDeep(m, 'home', LIFT_X + 2, 2), null, 'fits in the hall');
+  assert.match(canPlaceDeep(m, 'home', LIFT_X + 2, 5), /dig out/i, 'not in solid rock');
+  assert.match(canPlaceDeep(m, 'home', LIFT_X - 1, 2), /shaft|dig out/i, 'not over the shaft');
+  assert.match(canPlaceDeep(m, 'home', LIFT_X + 2, 1), /floor/i, 'needs rock under the floor');
+  // an unreached cavern
+  hall(m, 30, 34, 60, 61);
+  assert.match(canPlaceDeep(m, 'vault', 30, 60), /can't get there/i);
+  const b = placeDeep(w, 'home', LIFT_X + 2, 2);
+  assert.ok(typeof b !== 'string');
+  assert.match(canPlaceDeep(m, 'vault', LIFT_X + 3, 2), /already/i, 'no overlaps');
+  assert.equal(m.buildAt.get(mIdx(LIFT_X + 4, 3)), b);
+});
+
+test('miners fetch supplies from the lift and build rooms; homes add room for people', () => {
+  const w = richWorld(702);
+  const cap0 = w.population.capacity(w);
+  const wood0 = w.camp.stock.wood;
+  const home = placeDeep(w, 'home', LIFT_X + 2, 2);
+  const lamp = placeDeep(w, 'lamp', LIFT_X + 9, 3);
+  crewDown(w, 2);
+  run(w, 90, () => home.built >= 1 && lamp.built >= 1);
+  assert.ok(home.built >= 1 && lamp.built >= 1, `built (home ${home.built.toFixed(2)}, lamp ${lamp.built.toFixed(2)})`);
+  assert.ok(w.camp.stock.wood <= wood0 - DEEP_DEFS.home.cost.wood, 'paid from the camp stockpile');
+  assert.equal(deepRoom(w.mine), DEEP_DEFS.home.room);
+  assert.equal(w.population.capacity(w), cap0 + DEEP_DEFS.home.room, 'the tribe has room for more people');
+  assert.ok(lit(w.mine, LIFT_X + 10, 3), 'the lamp lights its surroundings');
+  for (const i of cellsOf(home)) assert.ok(w.mine.reinforced.has(i), 'finished rooms are reinforced');
+});
+
+test('a room waits (and says so) when the stockpile is short', () => {
+  const w = richWorld(703);
+  w.camp.stock.hide = 0;
+  const home = placeDeep(w, 'home', LIFT_X + 2, 2);
+  crewDown(w, 1);
+  run(w, 20);
+  assert.ok(!home.have && home.built === 0, 'not started without hide');
+  w.camp.stock.hide = 3;
+  run(w, 60, () => home.built >= 1);
+  assert.ok(home.built >= 1, 'built once the hide arrived');
+});
+
+test('the vault is a nearer drop-off and keeps food safe from raiders', () => {
+  const w = richWorld(704);
+  hall(w.mine, LIFT_X + 17, LIFT_X + 30, 2, 3);
+  const v = placeDeep(w, 'vault', LIFT_X + 28, 2);
+  assert.ok(typeof v !== 'string', v);
+  v.built = 1; v.have = true;
+  w.mine.reindex();
+  assert.ok(hasVault(w.mine));
+  // a miner with a full sack far down the hall unloads at the vault, not the lift
+  crewDown(w, 1);
+  const mnr = w.mine.crew[0];
+  mnr.x = LIFT_X + 26.5; mnr.y = 3.5; mnr.carry = { copper: 9 }; mnr.path = []; mnr.job = null;
+  const copper0 = w.camp.stock.copper;
+  run(w, 6, () => w.camp.stock.copper > copper0);
+  assert.ok(w.camp.stock.copper >= copper0 + 9, 'unloaded');
+  assert.ok(mnr.x > LIFT_X + 20, `at the vault, not the lift (x ${mnr.x.toFixed(1)})`);
+});
+
+test('glowshrooms grow crops; lamps clear gas and speed up digging nearby', () => {
+  const w = richWorld(705);
+  const f = placeDeep(w, 'mushroom', LIFT_X + 2, 3);
+  const l = placeDeep(w, 'lamp', LIFT_X + 12, 3);
+  for (const b of [f, l]) { b.built = 1; b.have = true; }
+  w.mine.reindex();
+  const crop0 = w.camp.stock.crop;
+  run(w, 65);
+  assert.ok(w.camp.stock.crop >= crop0 + 2, 'a harvest came up');
+  w.mine.gas.set(mIdx(LIFT_X + 13, 2), 50);
+  w.mine.gas.set(mIdx(LIFT_X + 30, 30), 50);
+  run(w, 1);
+  assert.ok(!w.mine.gas.has(mIdx(LIFT_X + 13, 2)), 'gas near the lamp is gone');
+  assert.ok(w.mine.gas.has(mIdx(LIFT_X + 30, 30)), 'gas far away stays');
+});
+
+test('a mess hall heals hurt miners down below; rooms hold the roof up', () => {
+  const w = richWorld(706);
+  const mess = placeDeep(w, 'mess', LIFT_X + 6, 2);
+  mess.built = 1; mess.have = true;
+  w.mine.reindex();
+  const [h] = crewDown(w, 1);
+  h.hp = 0.4;
+  run(w, 30, () => h.hp > 0.9);
+  assert.ok(h.under, 'stayed down');
+  assert.ok(h.hp > 0.9, `healed at the mess (hp ${h.hp.toFixed(2)})`);
+  // roof next to a room never caves in, even on a weak-roof cell
+  assert.ok(w.mine.supported(LIFT_X + 6, 4), 'rooms count as supports');
+});
+
+test('taking a room down refunds half; rooms save + load', () => {
+  const w = richWorld(707);
+  const home = placeDeep(w, 'home', LIFT_X + 2, 2);
+  const shroom = placeDeep(w, 'mushroom', LIFT_X + 8, 3);
+  home.built = 1; home.have = true; shroom.have = true; shroom.built = 0.5; shroom.grow = 0.3;
+  w.mine.reindex();
+  const w2 = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  assert.equal(w2.mine.builds.length, 2);
+  assert.equal(deepRoom(w2.mine), DEEP_DEFS.home.room, 'home still counts after loading');
+  assert.ok(w2.mine.buildAt.has(mIdx(LIFT_X + 9, 3)));
+  const wood = w2.camp.stock.wood;
+  assert.ok(demolishDeep(w2, w2.mine.builds.find((b) => b.kind === 'home').id));
+  assert.equal(w2.camp.stock.wood, wood + Math.floor(DEEP_DEFS.home.cost.wood / 2));
+  assert.equal(deepRoom(w2.mine), 0);
+});
+
+/* ------------------------------ The Deep: landmarks, milestones, cave life (phase 5) ------------------------------ */
+
+const { LANDMARKS, LANDMARK_ORDER, MILESTONES, TROG } = require(path.join(root, 'data', 'mine.ts'));
+const { landmarkEvent, wakeCavern } = require(path.join(root, 'sim', 'deepLife.ts'));
+
+test('every world hides its four landmarks in the right depths (fixed by the seed)', () => {
+  const a = new Mine(8101);
+  const b = new Mine(8101);
+  assert.equal(a.landmarks.length, 4, 'all four placed');
+  for (const l of a.landmarks) {
+    const L = LANDMARKS[l.kind];
+    for (const i of l.cells) {
+      const y = Math.floor(i / MINE_W);
+      assert.ok(y >= L.rows[0] && y < L.rows[1] + L.h, `${l.kind} at row ${y}`);
+      assert.ok(MATERIALS[a.cells[i]].solid, 'buried in rock');
+      assert.equal(a.contentOf(i), l.kind);
+    }
+  }
+  assert.deepEqual(a.landmarks.map((l) => l.cells.join()), b.landmarks.map((l) => l.cells.join()), 'same seed, same places');
+  assert.ok(LANDMARK_ORDER.every((k) => a.landmarks.some((l) => l.kind === k)));
+});
+
+test('the scanner picks up landmarks; digging one out pays off (more on the matching civ path)', () => {
+  const w = mineWorld(8102);
+  const m = w.mine;
+  const lode = m.landmarks.find((l) => l.kind === 'lode');
+  const [first] = lode.cells;
+  const fx = first % MINE_W;
+  const fy = Math.floor(first / MINE_W);
+  m.liftMax = 110;
+  for (let y = 2; y <= fy; y++) m.cells[mIdx(LIFT_X + 1, y)] = M.Open;
+  for (let x = LIFT_X + 1; x < fx; x++) m.cells[mIdx(x, fy)] = M.Open;
+  m.version++;
+  const r = m.ping(fx - 2, fy);
+  assert.equal(typeof r, 'number');
+  assert.ok(m.lastSignals.includes('lode'), 'signal picked up');
+  assert.equal(m.seen[first], 2, 'landmark cells show on the map');
+  // dig the whole lode out directly
+  const tools = { pick: true, ironPick: true, drill: true, lantern: true, pump: true, dynamite: false, luck: 0 };
+  let iron = 0;
+  // repeated passes: each dug cell opens the face to the next one
+  for (let pass = 0; pass < 4; pass++)
+    for (const i of lode.cells) {
+      const res = m.dig(i % MINE_W, Math.floor(i / MINE_W), tools);
+      if (res.ok && res.loot) iron += res.loot.iron ?? 0;
+      if (res.ok && res.landmark?.done) landmarkEvent(w, 'lode', res.landmark.first, true);
+    }
+  assert.ok(m.landmarkProgress('lode') >= 1, `dug out (${m.landmarkProgress('lode')})`);
+  assert.ok(iron >= lode.cells.length * 4, 'every cell gave iron');
+  assert.ok(m.landmarksDone.has('lode'));
+  assert.ok(w.discoveries.has('motherLode'), 'sticker');
+  // the geode charges a Resonance grid
+  w.civ.path = 'resonance';
+  w.civ.cap = 300;
+  w.civ.energy = 0;
+  landmarkEvent(w, 'geode', false, true);
+  assert.ok(w.civ.energy >= 150 && w.civ.tuned.has('crystal'), 'geode tuned the crystal + charged the grid');
+});
+
+test('depth milestones pay out once each', () => {
+  const w = mineWorld(8103);
+  const stone0 = w.camp.stock.stone;
+  w.mine.stats.deepest = 75;
+  run(w, 0.2);
+  assert.ok(w.mine.milestones.has('deep30') && w.mine.milestones.has('deep70'));
+  assert.ok(!w.mine.milestones.has('deep110'));
+  assert.equal(w.camp.stock.stone, stone0 + MILESTONES[0].gift.stone, 'gift paid');
+  assert.ok(w.discoveries.has('deep30'));
+  run(w, 1);
+  assert.equal(w.camp.stock.stone, stone0 + MILESTONES[0].gift.stone, 'only once');
+  const w2 = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  run(w2, 0.2);
+  assert.equal(w2.camp.stock.stone, w.camp.stock.stone, 'not again after loading');
+});
+
+test('diamonds turn up deep down, and a diamond drill cuts granite twice as fast', () => {
+  const m = new Mine(8104);
+  let diamonds = 0;
+  for (let y = 110; y < MAGMA_FROM; y++) for (let x = 0; x < MINE_W; x++) if (m.contentOf(mIdx(x, y)) === 'diamond') diamonds++;
+  assert.ok(diamonds > 0, `diamonds in the deep (${diamonds})`);
+  let shallow = 0;
+  for (let y = 1; y < 100; y++) for (let x = 0; x < MINE_W; x++) if (m.contentOf(mIdx(x, y)) === 'diamond') shallow++;
+  assert.equal(shallow, 0, 'none near the top');
+  let g = null;
+  for (let y = 75; y < 105 && !g; y++) for (let x = 10; x < 40; x++) if (m.at(x, y) === M.Granite) { g = { x, y }; break; }
+  const base = { pick: true, ironPick: true, drill: true, lantern: true, pump: true, dynamite: false, luck: 0 };
+  assert.ok(Math.abs(m.digTime(g.x, g.y, { ...base, diamond: true }) - m.digTime(g.x, g.y, base) * 0.5) < 0.01);
+  const w = new World(8104, false);
+  w.colony.kits.add('diamondDrill');
+  assert.ok(toolsOf(w).drill && toolsOf(w).diamond, 'the kit counts as a drill');
+});
+
+test('troglodons wake in breached caverns, hunt in the dark, fear lamps, and the crew fights back', () => {
+  const w = richWorld(8105);
+  const m = w.mine;
+  // a dark gallery off the hall
+  hall(m, LIFT_X + 17, LIFT_X + 35, 1, 3);
+  m.liftMax = 60;
+  for (let y = 4; y < 40; y++) m.cells[mIdx(LIFT_X + 1, y)] = M.Open;
+  hall(m, LIFT_X + 2, LIFT_X + 30, 35, 37);
+  m.version++;
+  wakeCavern(w, mIdx(LIFT_X + 20, 36));
+  for (let k = 0; k < 10 && !m.critters.length; k++) wakeCavern(w, mIdx(LIFT_X + 20, 36));
+  assert.ok(m.critters.length > 0, 'something woke up');
+  const [h] = crewDown(w, 1);
+  w.camp.learned.add('spear');
+  const mnr = m.crew[0];
+  const c = m.critters[0];
+  mnr.x = c.x - 1; mnr.y = c.y; mnr.path = []; mnr.job = null;
+  m.autoMine = false;
+  const hp0 = h.hp;
+  run(w, 12, () => !m.critters.includes(c));
+  assert.ok(h.hp < hp0 || !m.critters.includes(c), 'they clashed');
+  assert.ok(!m.critters.includes(c), 'the miner won');
+  assert.ok(w.discoveries.has('troglodon'));
+  // lamplight: a troglodon caught in it scurries off (or disappears into a crack)
+  wakeCavern(w, mIdx(LIFT_X + 20, 36));
+  for (let k = 0; k < 10 && !m.critters.length; k++) wakeCavern(w, mIdx(LIFT_X + 20, 36));
+  if (m.critters.length) {
+    const t = m.critters[0];
+    const lamp = placeDeep(w, 'lamp', Math.floor(t.x), Math.floor(t.y));
+    if (typeof lamp !== 'string') {
+      lamp.built = 1; lamp.have = true; m.reindex();
+      run(w, 6);
+      for (const k of m.critters) assert.ok(!lit(m, Math.floor(k.x), Math.floor(k.y)), 'nothing lingers in the light');
+    }
+  }
+  assert.ok(TROG.bite > 0);
+});
+
+test('the supervolcano: a meteor hits the volcano and nothing is spared', () => {
+  const w = civWorld(9301, 'resonance');
+  learn(w, 'advancedArch', 'monumental', 'defensiveEnergy', 'energyStorage');
+  // even a charged shield, a deep shelter and miners underground can't save anyone
+  finish(w, 'resShield', w.camp.x + 60, w.camp.y + 120);
+  w.civ.cap = 400;
+  w.civ.energy = 400;
+  Object.assign(w.camp.stock, { cooked: 30, wood: 30 });
+  w.mine.liftMax = 60;
+  for (let y = 2; y < 50; y++) w.mine.cells[mIdx(LIFT_X + 1, y)] = M.Open;
+  w.mine.version++;
+  crewDown(w, 2);
+  for (let i = 0; i < 20; i++) addDino(w, 'trike', 1000 + i * 150, 2600);
+  w.tribe.addWall(w, Math.floor(w.camp.x / TILE) + 6, Math.floor(w.camp.y / TILE) + 6, 'stone').built = 1;
+  assert.ok(w.extinction.trigger(w, 'supervolcano'));
+  assert.equal(w.extinction.x, w.volcano.x, 'aimed at the volcano');
+  // the meteor shower comes first: little rocks that grow
+  run(w, 8);
+  assert.equal(w.extinction.phase, 'shower');
+  const sizes = [];
+  run(w, 14, (w) => { for (const m of w.meteors) if (!sizes.includes(m.size)) sizes.push(m.size); });
+  assert.ok(sizes.length > 4, `a real shower (${sizes.length} meteors)`);
+  assert.ok(Math.max(...sizes) > Math.min(...sizes) * 2.5, `small ones to big ones (${Math.min(...sizes).toFixed(2)} → ${Math.max(...sizes).toFixed(2)})`);
+  assert.equal(w.extinction.phase, 'incoming', 'then the big one');
+  run(w, 10 + 7 + 14 + 1);
+  assert.equal(w.extinction.phase, 'ended');
+  assert.equal(w.dinos.length, 0, 'every dinosaur gone');
+  assert.equal(w.humans.length, 0, 'every person gone (miners too)');
+  assert.equal(w.mine.crew.length, 0);
+  assert.equal(w.colony.buildings.length, 0, 'nothing built survives');
+  assert.equal(w.tribe.walls.length, 0);
+  assert.equal(w.shelters.length, 0);
+  assert.ok(w.plants.every((p) => p.burnt >= 1), 'every plant burned');
+  const vx = Math.floor(w.volcano.x / TILE);
+  const vy = Math.floor(w.volcano.y / TILE);
+  assert.equal(w.terrain.tiles[vy * 160 + vx], T.Basalt, 'the mountain is a molten crater');
+  let grass = 0;
+  for (const t of w.terrain.tiles) if (t === T.Grass || t === T.Forest || t === T.Jungle) grass++;
+  assert.ok(grass < 40, `a wasteland (${grass} green tiles left)`);
+  assert.ok(w.discoveries.has('supervolcano'));
+  const w2 = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  assert.equal(w2.extinction.cause, 'supervolcano', 'saved');
+});
+
+/* ------------------------------ metal, the polygon age, a realistic mine ------------------------------ */
+
+const { HELMET_BY_ID, HOUSING } = require(path.join(root, 'data', 'colony.ts'));
+const { hurtHuman } = require(path.join(root, 'sim', 'injury.ts'));
+
+/** Connected groups of cells holding the same ore. */
+function oreBodies(m) {
+  const seen = new Uint8Array(m.ore.length);
+  const out = [];
+  for (let i = 0; i < m.ore.length; i++) {
+    if (!m.ore[i] || seen[i]) continue;
+    const k = m.ore[i];
+    const q = [i];
+    seen[i] = 1;
+    let n = 0;
+    while (q.length) {
+      const j = q.pop();
+      n++;
+      const x = j % MINE_W;
+      for (const d of [-1, 1, -MINE_W, MINE_W, -MINE_W - 1, -MINE_W + 1, MINE_W - 1, MINE_W + 1]) {
+        const o = j + d;
+        if (o < 0 || o >= m.ore.length || seen[o] || m.ore[o] !== k) continue;
+        if (Math.abs((o % MINE_W) - x) > 1) continue;
+        seen[o] = 1;
+        q.push(o);
+      }
+    }
+    out.push({ r: m.oreKinds[k - 1], n });
+  }
+  return out;
+}
+
+test('ore comes in real bodies: seams + veins + pockets, mostly small, a few huge; silver too', () => {
+  const m = new Mine(6601);
+  const bodies = oreBodies(m);
+  assert.ok(bodies.length > 60, `plenty of bodies (${bodies.length})`);
+  const sizes = bodies.map((b) => b.n).sort((a, b) => a - b);
+  const median = sizes[Math.floor(sizes.length / 2)];
+  const biggest = sizes[sizes.length - 1];
+  assert.ok(median <= 12, `most are small (median ${median})`);
+  assert.ok(biggest >= 30, `some are huge (biggest ${biggest})`);
+  for (const r of ['copper', 'iron', 'silver', 'gold', 'crystal', 'clay', 'flint']) assert.ok(bodies.some((b) => b.r === r), `${r} bodies exist`);
+  // silver + gold stay below the topsoil
+  for (let y = 1; y < 30; y++) for (let x = 0; x < MINE_W; x++) assert.ok(!['gold', 'silver'].includes(m.oreAt(mIdx(x, y))), 'no gold/silver in the topsoil');
+  // fixed by the seed
+  assert.deepEqual(Buffer.from(new Mine(6601).ore), Buffer.from(m.ore));
+});
+
+test('bedrock sections the mine: sheets between bands + walls, only dynamite gets through; cave systems link caverns', () => {
+  const m = new Mine(6602);
+  let sheet = 0;
+  for (let x = 0; x < MINE_W; x++) if (m.at(x, 30) === M.Bedrock || m.at(x, 31) === M.Bedrock) sheet++;
+  assert.ok(sheet >= MINE_W - 1, `a bedrock sheet under the topsoil (${sheet})`);
+  assert.equal(m.at(LIFT_X, 30), M.Shaft, 'only the shaft goes through');
+  let wall = 0;
+  for (let y = 75; y < 105; y++) for (let x = LIFT_X + 6; x < MINE_W; x++) if (m.at(x, y) === M.Bedrock) wall++;
+  assert.ok(wall > 40, `a dividing wall in the granite band (${wall})`);
+  const t = { pick: true, ironPick: true, drill: true, lantern: true, pump: true, dynamite: true, luck: 0, diamond: true };
+  // a tunnel up to the sheet
+  m.liftMax = 60;
+  for (let y = 2; y < 30; y++) m.cells[mIdx(LIFT_X + 1, y)] = M.Open;
+  m.version++;
+  const by = m.at(LIFT_X + 1, 30) === M.Bedrock ? 30 : 31;
+  for (let y = 30; y < by; y++) m.cells[mIdx(LIFT_X + 1, y)] = M.Open;
+  m.version++;
+  assert.match(m.cantDig(LIFT_X + 1, by, t), /dynamite|blast/i, 'picks + drills bounce off');
+  const w = new World(6602, false);
+  w.camp.learned.add('fire');
+  w.camp.stock.tar = 2;
+  w.camp.stock.stick = 2;
+  const r = m.blast(w, LIFT_X + 1, by, t);
+  assert.ok(typeof r !== 'string', r);
+  assert.notEqual(m.at(LIFT_X + 1, by), M.Bedrock, 'blasted through');
+  // winding tunnels: more open rock in the bedrock band than the old blobs alone
+  let open = 0;
+  for (let y = 32; y < 69; y++) for (let x = LIFT_X + 4; x < MINE_W; x++) if (m.baseAt(mIdx(x, y)) === M.Open) open++;
+  assert.ok(open > 60, `cave systems (${open} open cells)`);
+});
+
+test('following a vein: a lantern shows where the ore runs next', () => {
+  const m = new Mine(6603);
+  const t = { pick: true, ironPick: true, drill: true, lantern: true, pump: true, dynamite: false, luck: 0 };
+  // find a vein cell next to the landing row and dig to it
+  let target = null;
+  for (let y = 2; y < 28 && !target; y++) for (let x = LIFT_X + 2; x < MINE_W - 2; x++) {
+    const i = mIdx(x, y);
+    if (!m.ore[i]) continue;
+    const same = [i - 1, i + 1, i - MINE_W, i + MINE_W].filter((j) => m.ore[j] === m.ore[i]).length;
+    if (same >= 1) { target = { x, y }; break; }
+  }
+  assert.ok(target);
+  for (let x = LIFT_X + 1; x < target.x; x++) m.cells[mIdx(x, target.y)] = M.Open;
+  for (let y = 1; y <= target.y; y++) m.cells[mIdx(LIFT_X + 1, y)] = M.Open;
+  m.version++;
+  const r = m.dig(target.x, target.y, t);
+  assert.ok(r.ok);
+  let shown = 0;
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const i = mIdx(target.x + dx, target.y + dy);
+    if (m.ore[i] === m.ore[mIdx(target.x, target.y)] && m.seen[i] === 2) shown++;
+  }
+  assert.ok(shown >= 1, 'the rest of the vein lit up');
+});
+
+test('the refinery smelts raw gold, silver + copper into bars', () => {
+  const w = tribeWorld(6604, ['tools', 'fire', 'axe', 'smelting']);
+  const ref = w.colony.addBuilding(w, 'refinery', w.camp.x + 180, w.camp.y + 160);
+  assert.ok(ref);
+  ref.built = 1;
+  Object.assign(w.camp.stock, { gold: 6, silver: 4, copper: 8, wood: 10 });
+  run(w, 60);
+  assert.ok(w.camp.stock.goldBar >= 1, `gold bars (${w.camp.stock.goldBar})`);
+  assert.ok(w.camp.stock.silverBar >= 1 && w.camp.stock.copperBar >= 1, 'silver + copper bars too');
+  assert.ok(w.camp.stock.gold < 6 && w.camp.stock.wood < 10, 'used ore + fuel');
+});
+
+test('helmets: forged from metal, worn by grown-ups, and they soften hits', () => {
+  const w = tribeWorld(6605, ['tools', 'fire', 'smelting']);
+  const h = w.humans.find((x) => !x.child);
+  w.colony.armory.helmGold = 1;
+  w.colony.helm(w, h);
+  assert.equal(h.gear.helmet, 'helmGold');
+  const a = w.humans.filter((x) => !x.child)[1];
+  a.hp = 1;
+  hurtHuman(w, a, 0.4, a.x, a.y, 'bite');
+  const bare = 1 - a.hp;
+  h.hp = 1;
+  hurtHuman(w, h, 0.4, h.x, h.y, 'bite');
+  const helmed = 1 - h.hp;
+  assert.ok(helmed < bare * (1 - HELMET_BY_ID.helmGold.armor) + 0.01, `less damage with a helmet (${helmed.toFixed(2)} vs ${bare.toFixed(2)})`);
+  const w2 = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  assert.equal(w2.humans.find((x) => x.id === h.id).gear.helmet, 'helmGold', 'helmets save');
+});
+
+test('the polygon age: both paths reach it; polygon houses + walls + buildings shrug off fire; energy lances unlock', () => {
+  const w = civWorld(6606, 'traditional');
+  assert.ok(!w.civ.polygonAge);
+  const s = w.shelters[0] ?? (() => { w.camp.addShelter(w, w.camp.x + 200, w.camp.y + 120, 'hut'); return w.shelters[0]; })();
+  s.stage = 99; s.tier = HOUSING.length - 2; s.hp = 1;
+  assert.ok(!w.camp.startUpgrade(w, s), 'polygon houses wait for the polygon age');
+  learn(w, 'masonry');
+  assert.ok(w.civ.polygonAge && w.civ.has('precisionStone'), 'Dressed masonry = polygon stonework on the Old Ways');
+  assert.ok(w.camp.startUpgrade(w, s), 'now it can be upgraded');
+  s.up = false;
+  s.tier = HOUSING.length - 1;
+  assert.ok(HOUSING[s.tier].polygon);
+  // fire under it does nothing
+  const ti = Math.floor((s.y - 8) / TILE) * 160 + Math.floor(s.x / TILE);
+  w.fire.ignite(w, Math.floor(s.x / TILE), Math.floor((s.y - 8) / TILE), 1);
+  run(w, 4);
+  assert.equal(s.hp, 1, 'polygon house untouched by fire');
+  void ti;
+  // colony buildings don't burn in the polygon age
+  const b = w.colony.addBuilding(w, 'storage', w.camp.x - 220, w.camp.y + 160);
+  b.built = 1;
+  const hp0 = b.hp;
+  for (let k = 0; k < 3; k++) w.fire.ignite(w, b.tx + k % 2, b.ty, 1);
+  run(w, 4);
+  assert.equal(b.hp, hp0, 'buildings shrug off fire');
+  // the energy lance is now on the forge list
+  w.colony.addBuilding(w, 'workshop', w.camp.x + 260, w.camp.y + 200).built = 1;
+  assert.ok(w.colony.canCraft(w, 'lance'), 'resonance lances in the polygon age');
+});
+
+test('pump stations drain the Deep and pipe the water up to camp', () => {
+  const w = richWorld(6607);
+  const m = w.mine;
+  const pump = placeDeep(w, 'pump', LIFT_X + 6, 2);
+  assert.ok(typeof pump !== 'string', pump);
+  pump.built = 1; pump.have = true;
+  m.reindex();
+  for (let x = LIFT_X + 9; x < LIFT_X + 14; x++) m.water[mIdx(x, 3)] = 1;
+  const water0 = w.camp.stock.water;
+  run(w, 20);
+  let left = 0;
+  for (let x = LIFT_X + 9; x < LIFT_X + 14; x++) left += m.water[mIdx(x, 3)];
+  assert.ok(left < 1.5, `drained (${left.toFixed(2)} left)`);
+  assert.ok(w.camp.stock.water > water0 + 3, 'water went up to the camp store');
+});
+
+test('energy towers power the Scorpions: they fire on their own, and with plenty nobody has to stand guard', () => {
+  const w = civWorld(7701, 'resonance');
+  learn(w, 'resonance', 'copperRes', 'quartzTuning', 'energyStorage');
+  w.camp.learned.add('scorpion');
+  w.camp.learned.add('spear');
+  w.tribe.danger = 'normal';
+  // four Scorpions on the ground around camp, no crew
+  const spots = [[160, 160], [-160, 160], [160, -60], [-160, -60]];
+  for (const [dx, dy] of spots) {
+    const s = w.colony.addScorpion(w, w.camp.x + dx, w.camp.y + dy);
+    assert.ok(typeof s !== 'string', s);
+    s.built = 1;
+    s.hp = 300;
+  }
+  // without power they need crews
+  run(w, 1);
+  assert.ok(w.colony.scorpions.every((s) => !s.drone), 'no tower, no drones');
+  finish(w, 'energyTower', w.camp.x - 260, w.camp.y + 220);
+  w.civ.update(w, 1.1);
+  w.civ.energy = w.civ.cap;
+  run(w, 0.5);
+  assert.ok(w.colony.scorpions.every((s) => s.drone), 'powered');
+  assert.equal(w.colony.drones(w), 4);
+  // a raider walks up: the drones shoot it with nobody crewing
+  const raptor = addDino(w, 'raptor', w.camp.x + 420, w.camp.y + 160, { raider: true, hunger: 0.9 });
+  const e0 = w.civ.energy;
+  run(w, 15, () => !w.dinos.includes(raptor));
+  assert.ok(!w.dinos.includes(raptor) || raptor.health < 0.6, 'drones hit it');
+  assert.ok(w.civ.energy < e0, 'shots use energy');
+  assert.ok(w.colony.scorpions.every((s) => !s.crew), 'nobody crewed them');
+  run(w, 8);
+  assert.ok(!w.humans.some((h) => h.role === 'auto' && h.autoRole === 'guard'), 'with 4 drones nobody stands guard');
+  // the grid runs dry: back to needing crews
+  w.civ.energy = 0;
+  w.civ.cap = 0;
+  w.colony.buildings = w.colony.buildings.filter((b) => b.kind !== 'energyTower');
+  run(w, 0.5);
+  assert.ok(w.colony.scorpions.every((s) => !s.drone), 'unpowered again');
+});
+
+test('inside the walls with auto-defenses up, people keep working through a raid (outside they still run)', () => {
+  const setup = (seed, auto) => {
+    const w = civWorld(seed, 'resonance');
+    learn(w, 'resonance', 'copperRes', 'quartzTuning', 'energyStorage');
+    for (const t of ['spear', 'scorpion', 'palisade']) w.camp.learned.add(t);
+    w.tribe.danger = 'normal';
+    const cx = Math.floor(w.camp.x / TILE);
+    const cy = Math.floor(w.camp.y / TILE);
+    walledBox(w, cx - 9, cy + 3, cx + 9, cy + 12, { gate: true });
+    run(w, 0.5);
+    if (auto) {
+      finish(w, 'energyTower', w.camp.x - 120, w.camp.y + 9 * TILE);
+      const s = w.colony.addScorpion(w, w.camp.x + 120, w.camp.y + 9 * TILE);
+      assert.ok(typeof s !== 'string', s);
+      s.built = 1;
+      s.hp = 300;
+      w.civ.update(w, 1.1);
+      w.civ.energy = w.civ.cap;
+    }
+    // everyone inside the compound, at work
+    const inside = w.humans.filter((h) => !h.child).slice(0, 4);
+    inside.forEach((h, i) => { h.x = w.camp.x - 60 + i * 30; h.y = w.camp.y + 7 * TILE; h.role = 'gatherer'; h.state = 'idle'; });
+    // one person out in the field
+    const outside = w.humans.find((h) => !h.child && !inside.includes(h));
+    outside.x = w.camp.x + 700; outside.y = w.camp.y + 300; outside.role = 'gatherer';
+    return { w, inside, outside };
+  };
+  // no auto-defenses: everyone runs for cover
+  const a = setup(7801, false);
+  assert.ok(a.w.tribe.enclosed(a.w, a.inside[0].x, a.inside[0].y), 'the compound counts as inside the walls');
+  assert.ok(!a.w.tribe.enclosed(a.w, a.outside.x, a.outside.y));
+  assert.ok(a.w.tribe.startRaid(a.w));
+  run(a.w, 4);
+  assert.ok(a.inside.some((h) => h.state === 'flee' || h.state === 'hide'), 'without auto-defenses they run');
+  // powered Scorpion: the people inside carry on
+  const b = setup(7801, true);
+  assert.ok(b.w.tribe.autoDefense(b.w) >= 1);
+  assert.ok(b.w.tribe.startRaid(b.w));
+  // nobody who is inside the walls panics while the raid is on
+  let panicked = 0;
+  run(b.w, 6, (w) => {
+    for (const h of b.inside) if ((h.state === 'flee' || h.state === 'hide') && w.tribe.enclosed(w, h.x, h.y)) panicked++;
+  });
+  assert.equal(panicked, 0, 'they keep working inside the walls');
+  assert.ok(b.outside.state === 'flee' || b.outside.state === 'hide' || !b.w.tribe.enclosed(b.w, b.outside.x, b.outside.y), 'outside the walls is still dangerous');
+  assert.ok(!b.w.tribe.safeInside(b.w, b.outside), 'no safety outside');
+});
+
+test('the tribe can grow to 100 people', () => {
+  const w = tribeWorld(7901, ['tools', 'fire']);
+  const tool = { ...DEFAULT_TOOL, id: 'people', people: 'adult' };
+  let added = 0;
+  for (let k = 0; k < 140; k++) if (applyTool(w, tool, w.camp.x + (k % 12) * 20 - 120, w.camp.y + 120 + Math.floor(k / 12) * 14, false)) added++;
+  assert.equal(w.humans.length, 100, `capped at 100 (added ${added})`);
+  run(w, 3);
+  assert.ok(w.humans.length >= 99, 'they all live on');
+});

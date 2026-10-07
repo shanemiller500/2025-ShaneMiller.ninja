@@ -109,6 +109,8 @@ export function canReach(p: Plant, reach: "low" | "mid" | "high") {
 const cursors = new WeakMap<World, number>();
 
 export function updatePlants(w: World, dt: number) {
+  // after the supervolcano nothing grows until the ash thins
+  if (w.extinction.wasteland) return;
   const n = w.plants.length;
   if (!n) return;
   // ~1/40th of plants per frame, scaled dt

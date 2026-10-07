@@ -92,7 +92,14 @@ export class Civ {
   private expT = 0;
 
   has(id: CivTechId) {
+    // the Old Ways reach the polygon age through Dressed masonry
+    if (id === "precisionStone" && this.done.has("masonry")) return true;
     return this.done.has(id);
+  }
+
+  /** Shaped, many-sided stonework: polygon walls, polygon houses, fire-proof buildings, energy lances. */
+  get polygonAge() {
+    return this.has("precisionStone");
   }
   get resonance() {
     return this.path === "resonance";

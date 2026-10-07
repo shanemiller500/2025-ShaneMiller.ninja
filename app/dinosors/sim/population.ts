@@ -7,6 +7,8 @@
 /*    walks in from the wilds. If the camp is safe, fed and has room   */
 /*    they join; otherwise they wait at the edge of camp.              */
 /* ------------------------------------------------------------------ */
+import { MAX_PEOPLE } from "./types";
+import { deepRoom } from "./deepBuild";
 import { HOUSING } from "../data/colony";
 import { findSpawnSpot } from "./dinos";
 import { shelterDone } from "./build";
@@ -27,10 +29,13 @@ export class Population {
     let n = CAVE_ROOM;
     const hall = w.civ.has("greatHalls") ? 2 : 0;
     for (const s of w.shelters) if (shelterDone(s)) n += HOUSING[s.tier].cap + hall;
+    // burrow homes down in the Deep
+    n += deepRoom(w.mine);
     return n;
   }
 
   update(w: World, dt: number) {
+    if (w.extinction.wasteland) return;
     this.homeT -= dt;
     if (this.homeT <= 0) {
       this.homeT = 4;
@@ -43,7 +48,7 @@ export class Population {
     const strangers = w.humans.length - residents;
     const safe = !w.tribe.raid && !w.dragons.list.length && w.daylight > 0.4;
     const fed = w.tribe.foodTotal(w) >= 3;
-    if (!safe || !fed || strangers > 0 || residents >= Math.min(40, this.capacity(w) + 2) || residents < 2) return;
+    if (!safe || !fed || strangers > 0 || residents >= Math.min(MAX_PEOPLE, this.capacity(w) + 2) || residents < 2) return;
     this.spawnWanderers(w);
   }
 

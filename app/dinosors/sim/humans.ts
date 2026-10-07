@@ -36,7 +36,7 @@ export function coatWarmth(h: Human) {
 
 const HAIR = ["#3b2416", "#5a3a22", "#1f1a17", "#8a4b23", "#c58f4a"];
 const SKIN = ["#e0b48a", "#c98e62", "#a86b45", "#7c4c2f", "#f0c9a0"];
-const FUR = ["#8a5a2b", "#a87a45", "#6e4a2a", "#b8956a", "#5b4636"];
+const FUR = ["#e39a35", "#d9892a", "#eaa748", "#c97a22", "#a87a45", "#8a5a2b"];
 
 export function addHuman(w: World, x: number, y: number, child = false, o: Partial<Human> = {}): Human {
   const h: Human = {
@@ -401,9 +401,20 @@ function think(w: World, h: Human) {
   const fightTask = !!task && (task.kind === "hunt" || task.kind === "guard" || task.kind === "defend" || task.kind === "operate");
   const fighter = !!weapon && (role === "guard" || role === "hunter" || !!h.order || fightTask || h.state === "operate");
 
-  // raid or a dragon overhead! non-fighters (and kids) run home
+  // raid or a dragon overhead! non-fighters (and kids) run home…
   const dragon = dragonNear(w, h);
-  if ((tribe.raid || (dragon && (dragon.state === "strafe" || dragon.state === "circle" || dragon.state === "hunt"))) && (!fighter || h.child) && !(task && task.kind === "douse")) {
+  const dragonAttack = !!dragon && (dragon.state === "strafe" || dragon.state === "circle" || dragon.state === "hunt");
+  // …unless it's a raid, they're inside the walls and the automatic defenses have it covered
+  const safe = !!tribe.raid && !dragonAttack && tribe.safeInside(w, h);
+  if (safe && !w.flags.has("safeInside")) {
+    w.flags.add("safeInside");
+    w.toast("🛡️", "Raid! But the walls are shut and the auto-defenses are up — everyone inside keeps working.", h.x, h.y);
+  }
+  if (safe && h.state === "hide" && h.stateT > 1) {
+    go(h, "idle", h.x, h.y);
+    say(h, "We're safe in here!");
+  }
+  if ((tribe.raid || dragonAttack) && !safe && (!fighter || h.child) && !(task && task.kind === "douse")) {
     if (h.state === "hide") return;
     if (h.state === "operate") leaveScorpion(w, h);
     const s = shelterSpot(w, h);

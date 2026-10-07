@@ -285,7 +285,14 @@ export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind
 
 /* ------------------------------- people ------------------------------- */
 
-export type WeaponLook = "spear" | "bow" | "crossbow" | "sword" | "axe" | null;
+export type WeaponLook = "spear" | "bow" | "crossbow" | "sword" | "axe" | "lance" | null;
+
+/** A metal helmet drawn over the hair. */
+export interface HelmetLook {
+  color: string;
+  trim: string;
+  glow?: boolean;
+}
 
 /** Hide clothing look (from data/colony OUTFITS). */
 export interface OutfitLook {
@@ -295,7 +302,7 @@ export interface OutfitLook {
   hood: boolean;
 }
 
-export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean, shield = 0, tier = 1, outfit: OutfitLook | null = null, wet = 0) {
+export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean, shield = 0, tier = 1, outfit: OutfitLook | null = null, wet = 0, helmet: HelmetLook | null = null) {
   const H = h.child ? 18 : 26;
   const st = h.state;
   c.save();
@@ -351,6 +358,14 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.strokeStyle = OUT;
   c.lineWidth = 0.8;
   c.stroke();
+  // leopard-print spots (dark rosettes on the light furs)
+  c.fillStyle = shade(h.fur, -0.55);
+  c.beginPath();
+  for (const [sx, sy, sr] of [[-0.09, -0.3, 0.035], [0.06, -0.24, 0.03], [-0.02, -0.15, 0.032], [0.1, -0.08, 0.028], [-0.12, -0.05, 0.03], [0.02, -0.02, 0.026]] as [number, number, number][]) {
+    c.moveTo(H * sx + H * sr, H * sy);
+    c.arc(H * sx, H * sy, H * sr, 0, Math.PI * 2);
+  }
+  c.fill();
   c.fillStyle = shade(h.fur, -0.25);
   c.beginPath();
   c.arc(-H * 0.05, -H * 0.15, H * 0.04, 0, Math.PI * 2);
@@ -432,6 +447,52 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.fillStyle = "#5a3d24";
     c.fillRect(-3, -1, 6, 2);
     c.fillRect(-1, 0, 2, H * 0.12);
+    c.restore();
+  } else if ((showWeapon || (weapon === "lance" && armed && !h.child && !h.carry)) && weapon === "lance") {
+    // a crystal-tipped staff, humming with light
+    const aiming = st === "aim";
+    c.save();
+    c.translate(H * 0.2, shY + H * 0.12);
+    c.rotate(aiming ? -1.25 : -0.25);
+    c.strokeStyle = "#c8743f";
+    c.lineWidth = 1.8;
+    c.beginPath();
+    c.moveTo(0, H * 0.25);
+    c.lineTo(0, -H * 0.62);
+    c.stroke();
+    c.strokeStyle = "#e4e8ee";
+    c.lineWidth = 0.8;
+    for (let k = 0; k < 3; k++) {
+      c.beginPath();
+      c.moveTo(-1.5, -H * (0.1 + k * 0.15));
+      c.lineTo(1.5, -H * (0.16 + k * 0.15));
+      c.stroke();
+    }
+    const pulse = (Math.sin(t * 6) + 1) / 2;
+    c.globalCompositeOperation = "lighter";
+    const g = c.createRadialGradient(0, -H * 0.7, 0, 0, -H * 0.7, H * (0.35 + pulse * 0.15 + (aiming ? 0.2 : 0)));
+    g.addColorStop(0, "rgba(200,250,255,0.95)");
+    g.addColorStop(0.4, "rgba(110,220,255,0.55)");
+    g.addColorStop(1, "rgba(110,220,255,0)");
+    c.fillStyle = g;
+    c.beginPath();
+    c.arc(0, -H * 0.7, H * 0.6, 0, Math.PI * 2);
+    c.fill();
+    c.globalCompositeOperation = "source-over";
+    c.fillStyle = "#bff6ff";
+    c.beginPath();
+    c.moveTo(0, -H * 0.86);
+    c.lineTo(H * 0.07, -H * 0.7);
+    c.lineTo(0, -H * 0.6);
+    c.lineTo(-H * 0.07, -H * 0.7);
+    c.closePath();
+    c.fill();
+    // little motes orbiting the crystal
+    for (let k = 0; k < 3; k++) {
+      const a = t * 4 + (k * Math.PI * 2) / 3;
+      c.fillStyle = "rgba(220,250,255,0.9)";
+      c.fillRect(Math.cos(a) * H * 0.18 - 0.6, -H * 0.7 + Math.sin(a) * H * 0.1 - 0.6, 1.2, 1.2);
+    }
     c.restore();
   } else if (showWeapon && weapon === "axe") {
     const swing = st === "aim" ? Math.sin(t * 8) * 0.9 : 0;
@@ -598,6 +659,64 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.fill();
   }
   // carried stuff
+  // a tooth necklace, and (for some) a bone clipped in the hair, like the cave-people art
+  if (!h.child && st !== "sleep" && st !== "down" && st !== "rest") {
+    c.fillStyle = "#f4ead2";
+    for (let k = -1; k <= 1; k++) {
+      c.beginPath();
+      c.moveTo(k * H * 0.06 - H * 0.02, headY + H * 0.16);
+      c.lineTo(k * H * 0.06 + H * 0.02, headY + H * 0.16);
+      c.lineTo(k * H * 0.06, headY + H * 0.22);
+      c.closePath();
+      c.fill();
+    }
+    if (!helmet && !outfit?.hood && h.id % 3 === 0) {
+      c.fillStyle = "#f6efe0";
+      c.strokeStyle = "rgba(60,40,20,0.5)";
+      c.lineWidth = 0.5;
+      const bx = -H * 0.05;
+      const by = headY - H * 0.19;
+      c.fillRect(bx - H * 0.08, by - H * 0.015, H * 0.16, H * 0.03);
+      for (const ex of [-1, 1]) {
+        c.beginPath();
+        c.arc(bx + ex * H * 0.09, by - H * 0.015, H * 0.025, 0, Math.PI * 2);
+        c.arc(bx + ex * H * 0.09, by + H * 0.015, H * 0.025, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+  }
+  if (helmet && !h.child && st !== "sleep" && st !== "down" && st !== "rest") {
+    // a domed metal helmet with a rim + nose guard
+    c.fillStyle = helmet.color;
+    c.beginPath();
+    c.arc(-H * 0.01, headY - H * 0.02, H * 0.165, Math.PI * 1.02, Math.PI * 1.98);
+    c.closePath();
+    c.fill();
+    c.fillStyle = helmet.trim;
+    c.fillRect(-H * 0.2, headY - H * 0.035, H * 0.38, H * 0.045);
+    c.fillRect(H * 0.08, headY - H * 0.03, H * 0.035, H * 0.11);
+    c.fillStyle = "rgba(255,255,255,0.45)";
+    c.fillRect(-H * 0.09, headY - H * 0.14, H * 0.06, H * 0.03);
+    if (helmet.glow) {
+      c.globalCompositeOperation = "lighter";
+      const g = c.createRadialGradient(0, headY - H * 0.1, 0, 0, headY - H * 0.1, H * 0.4);
+      g.addColorStop(0, `rgba(140,235,255,${0.45 + Math.sin(t * 4) * 0.15})`);
+      g.addColorStop(1, "rgba(140,235,255,0)");
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc(0, headY - H * 0.1, H * 0.4, 0, Math.PI * 2);
+      c.fill();
+      c.globalCompositeOperation = "source-over";
+      c.fillStyle = "#e9fdff";
+      c.beginPath();
+      c.moveTo(0, headY - H * 0.3);
+      c.lineTo(H * 0.05, headY - H * 0.2);
+      c.lineTo(0, headY - H * 0.16);
+      c.lineTo(-H * 0.05, headY - H * 0.2);
+      c.closePath();
+      c.fill();
+    }
+  }
   if (h.carry) drawResource(c, h.carry, 0, headY - H * 0.32, H * 0.5);
   c.restore();
   c.restore();

@@ -11,13 +11,13 @@ import { addHuman } from "../sim/humans";
 import { P } from "../sim/particles";
 import { makePlant } from "../sim/plants";
 import { isWaterTile, isWalkTile } from "../sim/terrain";
-import { MAP_W, T, TILE, type BuildingKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
+import { MAP_W, MAX_PEOPLE, T, TILE, type BuildingKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
 import type { World } from "../sim/world";
 
 export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire" | "weather" | "disaster" | "people" | "build" | "erase";
 export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
 export type LandOpt = "water" | "rock" | "mud" | "grass";
-export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon";
+export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon" | "supervolcano";
 export type PeopleOpt = "adult" | "child";
 export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "levitate" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | BuildingKind;
 
@@ -94,6 +94,7 @@ export const DISASTER_OPTS: Opt<DisasterOpt>[] = [
   { value: "quake", icon: "🫨", label: "Quake" },
   { value: "raid", icon: "🥁", label: "Dino raid!" },
   { value: "dragon", icon: "🐉", label: "Dragon!" },
+  { value: "supervolcano", icon: "☄️🌋", label: "SUPERVOLCANO" },
 ];
 export const PEOPLE_OPTS: Opt<PeopleOpt>[] = [
   { value: "adult", icon: "🧔", label: "Cave person" },
@@ -136,6 +137,7 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("tannery", "work"),
   bld("workshop", "work"),
   bld("blacksmith", "work"),
+  bld("refinery", "work"),
   bld("pen", "work"),
   bld("post", "work"),
   bld("path", "land", true),
@@ -351,7 +353,7 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
     case "people": {
       if (drag) return false;
       if (!isWalkTile(tile) || isWaterTile(tile)) return false;
-      if (w.humans.length >= 30) {
+      if (w.humans.length >= MAX_PEOPLE) {
         hint(w, "🛖", "The camp is full!");
         return false;
       }

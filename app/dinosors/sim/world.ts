@@ -44,6 +44,10 @@ import { Nav } from "./nav";
 import { Colony } from "./colony";
 import { Civ } from "./civ";
 import { Extinction } from "./extinction";
+import { Mine } from "./mine";
+import { updateCrew } from "./miners";
+import { updateDeepBuilds } from "./deepBuild";
+import { updateDeepLife } from "./deepLife";
 import { Snow } from "./snow";
 import { Dragons } from "./dragons";
 import { TaskBoard } from "./tasks";
@@ -66,6 +70,10 @@ export interface Meteor {
   y: number;
   t: number;
   dur: number;
+  /** 1 = a normal meteor; shower rocks start tiny and grow */
+  size?: number;
+  /** part of a shower: no toast, nobody stops to stare */
+  quiet?: boolean;
 }
 
 export interface Bolt {
@@ -127,6 +135,8 @@ export class World {
   population = new Population();
   civ = new Civ();
   extinction = new Extinction();
+  /** The Deep: the mine under the cave (its own grid + random numbers) */
+  mine: Mine;
   /** bumps when huts appear / change footprint (nav) */
   shelterVersion = 0;
   /** frames simulated (for staggering occasional checks) */
@@ -167,6 +177,7 @@ export class World {
     this.rng = makeRng(seed);
     this.terrain = new Terrain(seed);
     this.camp = new Camp(seed);
+    this.mine = new Mine(seed);
     this.fire.initFuel(this);
     this.snow.init(this);
     for (const s of SPECIES) if (s.starter) this.unlocked.add(s.id);
@@ -474,10 +485,11 @@ export class World {
     }
   }
 
-  meteor(x: number, y: number) {
-    const dur = 3.2;
-    this.meteors.push({ x, y, t: 0, dur });
-    this.sfx("whoosh", x, y, 1);
+  meteor(x: number, y: number, size = 1, quiet = false) {
+    const dur = 2 + Math.min(1.2, size * 1.2);
+    this.meteors.push({ x, y, t: 0, dur, size, quiet });
+    this.sfx("whoosh", x, y, Math.min(1, 0.3 + size * 0.7), 1.3 - Math.min(0.6, size * 0.4));
+    if (quiet) return;
     // everyone looks up!
     for (const d of this.dinos) if (Math.hypot(d.x - x, d.y - y) < 1800) lookUp(d);
     for (const h of this.humans) {
@@ -490,44 +502,47 @@ export class World {
 
   private impact(m: Meteor) {
     const { x, y } = m;
+    const S = m.size ?? 1;
     // a direct hit on the volcano wakes something enormous
-    if (Math.hypot(x - this.volcano.x, (y - this.volcano.y) * 1.3) < 430 && this.volcano.phase === "idle") {
+    if (!m.quiet && S >= 1 && Math.hypot(x - this.volcano.x, (y - this.volcano.y) * 1.3) < 430 && this.volcano.phase === "idle") {
       this.volcano.mega(this);
     }
-    this.crush(x, y, 120, 0.5);
-    this.shake(18, 1.4);
-    this.flash(0.8, "#fff1d0");
-    this.sfx("boom", x, y, 1.6);
-    this.particles.spawn(P.Ring, x, y, { size: 30, max: 1.4, color: "rgba(255,240,200,0.9)" });
-    this.particles.burst(P.Dust, x, y, 30, 220, { size: 18, max: 2, color: "rgba(150,120,90,0.6)" });
-    this.particles.burst(P.Rock, x, y, 16, 200, { vz: 160, g: 260, size: 4, max: 1.6, color: "#5a4a40" });
+    this.crush(x, y, 120 * S, 0.5 * Math.min(1.6, S));
+    this.shake(Math.min(26, 18 * S), 0.6 + S * 0.8);
+    // shower rocks only flash the screen when they get big (and softly), so the view stays readable
+    if (m.quiet ? S > 1 : S > 0.35) this.flash(m.quiet ? 0.22 : Math.min(0.8, 0.25 + S * 0.5), "#fff1d0");
+    this.sfx("boom", x, y, Math.min(1.8, 0.5 + S * 1.1), 1.4 - Math.min(0.8, S * 0.5));
+    this.particles.spawn(P.Ring, x, y, { size: 30 * S, max: 1.4, color: "rgba(255,240,200,0.9)" });
+    this.particles.burst(P.Dust, x, y, Math.round(8 + 22 * S), 220 * S, { size: 18 * Math.max(0.4, S), max: 2, color: "rgba(150,120,90,0.6)" });
+    this.particles.burst(P.Rock, x, y, Math.round(5 + 11 * S), 200 * S, { vz: 160, g: 260, size: 4 * Math.max(0.5, S), max: 1.6, color: "#5a4a40" });
     const tx = Math.floor(x / TILE);
     const ty = Math.floor(y / TILE);
-    for (let dy = -3; dy <= 3; dy++) {
-      for (let dx = -3; dx <= 3; dx++) {
+    const CR = Math.max(1, 3.2 * S);
+    for (let dy = -Math.ceil(CR); dy <= Math.ceil(CR); dy++) {
+      for (let dx = -Math.ceil(CR); dx <= Math.ceil(CR); dx++) {
         const d = Math.hypot(dx, dy);
-        if (d > 3.2) continue;
+        if (d > CR) continue;
         const t = this.terrain.tiles[(ty + dy) * MAP_W + tx + dx];
         if (t === undefined || t === T.Mountain || isWaterTile(t)) continue;
-        if (d < 1.8) this.terrain.setTile(tx + dx, ty + dy, T.Basalt);
+        if (d < CR * 0.56) this.terrain.setTile(tx + dx, ty + dy, T.Basalt);
         else if (VEG_TILES.has(t)) this.terrain.setTile(tx + dx, ty + dy, T.Dirt);
-        if (d >= 1.8) this.fire.ignite(this, tx + dx, ty + dy, 0.8);
+        if (d >= CR * 0.56) this.fire.ignite(this, tx + dx, ty + dy, 0.8);
       }
     }
-    burnPlantsAt(this, x, y, 1);
-    for (const p of this.plants) if (Math.hypot(p.x - x, p.y - y) < 140) p.shake = 1;
+    burnPlantsAt(this, x, y, Math.min(1, S));
+    for (const p of this.plants) if (Math.hypot(p.x - x, p.y - y) < 140 * S) p.shake = 1;
     for (const d of this.dinos) {
       const dist = Math.hypot(d.x - x, d.y - y);
-      if (dist < 90) d.health -= 0.6;
-      if (dist < 380 && sp(d.species).move === "walk") {
+      if (dist < 90 * S) d.health -= 0.6 * Math.min(1.5, S);
+      if (dist < 380 * S && sp(d.species).move === "walk") {
         knock(this, d, 2.2);
         const a = Math.atan2(d.y - y, d.x - x);
         d.x += Math.cos(a) * 40;
         d.y += Math.sin(a) * 30;
       }
     }
-    for (const h of this.humans) if (Math.hypot(h.x - x, h.y - y) < 300 && h.state !== "down") {
-      if (Math.hypot(h.x - x, h.y - y) < 140) hurtHuman(this, h, 0.4, x, y, "rock");
+    for (const h of this.humans) if (!h.under && Math.hypot(h.x - x, h.y - y) < 300 * S && h.state !== "down") {
+      if (Math.hypot(h.x - x, h.y - y) < 140 * S) hurtHuman(this, h, 0.4 * Math.min(1.5, S), x, y, "rock");
       if (h.hp <= 0) continue;
       h.level = 0;
       h.state = "tossed";
@@ -536,7 +551,8 @@ export class World {
       h.vz = 160;
       h.z = 2;
     }
-    this.alarm(x, y, 1600, 1, "😱", true);
+    this.alarm(x, y, 1600 * Math.min(1, S + 0.2), 1, "😱", true);
+    if (m.quiet) return;
     this.discover("meteor", x, y);
     this.toast("☄️", "METEOR IMPACT!", x, y, FACTS.meteor);
   }
@@ -550,6 +566,8 @@ export class World {
   private healLand(dt: number) {
     this.healT -= dt;
     if (this.healT > 0) return;
+    // a supervolcano wasteland stays dead until the ash thins
+    if (this.extinction.wasteland) return;
     this.healT = 1;
     const tiles = this.terrain.tiles;
     const base = this.terrain.base;
@@ -647,7 +665,7 @@ export class World {
       moveDino(this, d, dt);
       if (this.dinos[i] === d) actDino(this, d, dt);
     }
-    for (const h of this.humans) updateHuman(this, h, dt);
+    for (const h of this.humans) if (!h.under) updateHuman(this, h, dt);
     this.camp.update(this, dt);
     this.tribe.update(this, dt);
     this.colony.update(this, dt);
@@ -658,6 +676,10 @@ export class World {
     this.tasks.update(this, dt);
     this.snow.update(this, dt);
     this.healLand(dt);
+    this.mine.update(this, dt);
+    updateCrew(this, dt);
+    updateDeepBuilds(this, dt);
+    updateDeepLife(this, dt);
     if (this.camp.crafting) {
       const by = this.byId.get(this.camp.crafting.by);
       if (!by || by.kind !== "human" || by.state !== "craft") {
@@ -899,6 +921,7 @@ export class World {
         home: h.home,
         family: h.family,
         stranger: h.stranger,
+        ...(h.under ? { under: true } : {}),
       })),
       tribe: this.tribe.serialize(),
       items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
@@ -913,6 +936,7 @@ export class World {
       population: this.population.serialize(),
       civ: this.civ.serialize(),
       extinction: this.extinction.serialize(),
+      mine: this.mine.serialize(),
       campfires: this.campfires.map((f) => ({ x: r(f.x), y: r(f.y), lit: f.lit, fuel: r(f.fuel) })),
       camp: { stock: this.camp.stock, learned: Array.from(this.camp.learned), goal: this.camp.goal },
       edits: this.terrain.edits(),
@@ -987,6 +1011,14 @@ export class World {
     w.population.load(data.population);
     w.civ.load(data.civ);
     w.extinction.load(data.extinction);
+    w.mine.load(data.mine);
+    // people down the mine stay down (anyone the mine lost track of comes back up)
+    const crew = new Set(w.mine.crew.map((m) => m.id));
+    for (const h of w.humans) {
+      h.under = crew.has(h.id) && !!(data.humans.find((x) => x.id === h.id) as { under?: boolean } | undefined)?.under;
+      if (h.under) h.state = "hide";
+    }
+    w.mine.crew = w.mine.crew.filter((m) => w.humans.some((h) => h.id === m.id && h.under));
     for (const f of data.campfires) w.campfires.push({ id: w.nextId(), ...f, cook: 0 });
     w.camp.stock = { ...w.camp.stock, ...data.camp.stock };
     w.tribe.load(w, data.tribe);

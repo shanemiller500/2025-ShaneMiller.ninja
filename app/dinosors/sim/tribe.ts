@@ -5,6 +5,7 @@
 /*  Kid-safe cartoon rules: downed dinos poof into drumsticks, and     */
 /*  "gobbled" cave people vanish in a dust cloud.                      */
 /* ------------------------------------------------------------------ */
+import { hasVault } from "./deepBuild";
 import { CAMP_LEVELS, FACTS } from "../data/facts";
 import { WEAPON_BY_ID, type WeaponDef } from "../data/colony";
 import { sp } from "../data/species";
@@ -21,6 +22,7 @@ import { makeCarcass } from "./carcass";
 import { autoButcher } from "./tasks";
 import {
   MAP_H,
+  MAX_PEOPLE,
   MAP_W,
   T,
   TILE,
@@ -251,6 +253,59 @@ export class Tribe {
     return null;
   }
 
+  /* ------------------------------ inside the walls ------------------------------ */
+
+  private enclosedCache: { v: number; inside: Uint8Array } | null = null;
+
+  /**
+   * Is this spot sealed off by the walls? Flood from the edge of the map over
+   * open ground (walls + gates count as closed); whatever it can't reach is inside.
+   */
+  enclosed(w: World, x: number, y: number) {
+    const tx = Math.floor(x / TILE);
+    const ty = Math.floor(y / TILE);
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
+    if (!this.enclosedCache || this.enclosedCache.v !== w.nav.version) {
+      const N = MAP_W * MAP_H;
+      const blocked = (i: number) => {
+        const wl = this.wallMap.get(i);
+        if (wl && wl.built >= 0.5 && wl.hp > 0) return true;
+        return !w.nav.passable("dino", (i % MAP_W) * TILE + TILE / 2, Math.floor(i / MAP_W) * TILE + TILE / 2) && !(wl && wl.part === "gate");
+      };
+      const out = new Uint8Array(N);
+      const q: number[] = [];
+      for (let x2 = 0; x2 < MAP_W; x2++) for (const y2 of [0, MAP_H - 1]) q.push(y2 * MAP_W + x2);
+      for (let y2 = 0; y2 < MAP_H; y2++) for (const x2 of [0, MAP_W - 1]) q.push(y2 * MAP_W + x2);
+      for (const i of q) out[i] = 1;
+      while (q.length) {
+        const i = q.pop()!;
+        if (blocked(i)) continue;
+        const cx = i % MAP_W;
+        for (const j of [i - 1, i + 1, i - MAP_W, i + MAP_W]) {
+          if (j < 0 || j >= N || out[j]) continue;
+          if (Math.abs((j % MAP_W) - cx) > 1) continue;
+          out[j] = 1;
+          q.push(j);
+        }
+      }
+      // inside = not reachable from outside (and not a wall itself)
+      const inside = new Uint8Array(N);
+      for (let i = 0; i < N; i++) inside[i] = out[i] || this.wallMap.has(i) ? 0 : 1;
+      this.enclosedCache = { v: w.nav.version, inside };
+    }
+    return this.enclosedCache.inside[ty * MAP_W + tx] === 1;
+  }
+
+  /** Automatic weapons that defend the walls with nobody manning them. */
+  autoDefense(w: World) {
+    return w.colony.drones(w) + w.colony.buildings.filter((b) => b.kind === "beamTower" && b.built >= 1).length;
+  }
+
+  /** Raids don't send people inside the walls running for cover when the auto-defenses are up. */
+  safeInside(w: World, h: Human) {
+    return this.autoDefense(w) > 0 && this.enclosed(w, h.x, h.y) && !w.dinos.some((d) => d.raider && this.enclosed(w, d.x, d.y));
+  }
+
   roleOf(h: Human): Role {
     return h.role === "auto" ? h.autoRole : h.role;
   }
@@ -264,15 +319,18 @@ export class Tribe {
 
   private assignJobs(w: World) {
     const c = w.camp;
-    const autos = w.humans.filter((h) => !h.child && h.role === "auto").sort((a, b) => a.id - b.id);
-    const adults = this.adults(w).length;
+    // people down the mine don't fill surface jobs
+    const autos = w.humans.filter((h) => !h.child && !h.under && h.role === "auto").sort((a, b) => a.id - b.id);
+    const adults = this.adults(w).filter((h) => !h.under).length;
     const armed = c.learned.has("spear");
     const quota: [Role, number][] = [];
     const threat = this.raid || w.dragons.list.some((d) => d.state !== "leave" && d.state !== "flee");
+    // powered Scorpions defend by themselves: plenty of them = nobody has to stand guard
+    const drones = w.colony.drones(w);
     if (threat) {
-      quota.push(["guard", armed ? autos.length : 0]);
+      quota.push(["guard", !armed || drones >= 4 ? 0 : Math.max(1, autos.length - drones * 2)]);
     } else {
-      if (armed) quota.push(["guard", Math.max(1, Math.round(adults * 0.18))]);
+      if (armed && drones < 4) quota.push(["guard", Math.max(drones ? 0 : 1, Math.round(adults * 0.18) - drones)]);
       // more blueprints → more builders (up to about half the grown-ups)
       const pending = w.buildSites().filter((s) => !s.locked).length + (c.activeShelter(w) ? 2 : 0);
       if (pending) quota.push(["builder", Math.min(Math.max(1, Math.floor(adults * 0.55)), Math.max(1, Math.round(adults * 0.28), Math.ceil(pending / 6)))]);
@@ -300,15 +358,18 @@ export class Tribe {
     }
     for (const h of free) h.autoRole = "gatherer";
     // everyone pulls on hide clothes that suit the weather
-    for (const h of w.humans) if (!h.stranger) w.colony.dress(w, h);
+    for (const h of w.humans) if (!h.stranger) {
+      w.colony.dress(w, h);
+      w.colony.helm(w, h);
+    }
     // fighters grab the best gear in the armory (hunters like bows, guards like spears + shields)
     for (const h of w.humans) {
       if (h.child || h.stranger) continue;
       const r = this.roleOf(h);
       if (r === "guard" || r === "hunter" || h.order || threat) w.colony.equip(w, h, r === "hunter" ? "bow" : undefined);
     }
-    // scorpions need crews when danger is near: the closest guards take them
-    if (threat || w.dinos.some((d) => this.hostile(w, d))) {
+    // scorpions need crews when danger is near: the closest guards take them (powered ones don't)
+    if (!w.colony.dronesPowered(w) && (threat || w.dinos.some((d) => this.hostile(w, d)))) {
       for (const s of w.colony.scorpions) {
         if (s.built < 1 || s.crew) continue;
         let best: Human | null = null;
@@ -426,12 +487,12 @@ export class Tribe {
   }
 
   /** A Scorpion bolt: heavy, fast, extra nasty to dragons. */
-  fireBolt(w: World, x: number, y: number, z: number, t: Target, dmg: number, speed: number, big: number) {
+  fireBolt(w: World, x: number, y: number, z: number, t: Target, dmg: number, speed: number, big: number, glow = false) {
     const dist = Math.hypot(t.x - x, t.y - y);
     const flight = Math.max(0.15, dist / speed);
     const tx = t.x + t.vx * flight;
     const ty = t.y + t.vy * flight;
-    this.projectiles.push({ x, y, z, vx: (tx - x) / flight, vy: (ty - y) / flight, vz: (t.z - z) / flight + 0.5 * 260 * flight, t: 0, dur: flight, kind: "scorpion", target: t.id, dmg, hit: false, big });
+    this.projectiles.push({ x, y, z, vx: (tx - x) / flight, vy: (ty - y) / flight, vz: (t.z - z) / flight + 0.5 * 260 * flight, t: 0, dur: flight, kind: "scorpion", target: t.id, dmg, hit: false, big, ...(glow ? { glow: true } : {}) });
   }
 
   private updateProjectiles(w: World, dt: number) {
@@ -448,6 +509,12 @@ export class Tribe {
         if (d && Math.hypot(d.x - p.x, d.y - p.y) < sizeOf(d) * 0.45 + (p.kind === "scorpion" ? 24 : 14)) {
           hitDino(w, d, p.dmg, p.x - p.vx * 0.1, p.y - p.vy * 0.1);
           if (p.kind === "scorpion") w.particles.spawn(P.Ring, d.x, d.y, { z: sizeOf(d) * 0.4, size: 12, max: 0.5, color: "rgba(255,230,180,0.9)" });
+          if (p.kind === "beam") {
+            // a burst of light where the bolt lands
+            w.particles.spawn(P.Ring, d.x, d.y, { z: sizeOf(d) * 0.4, size: 16, max: 0.5, color: "rgba(150,240,255,0.95)" });
+            w.particles.burst(P.Spark, d.x, d.y, 12, 110, { z: sizeOf(d) * 0.4, vz: 80, g: 120, size: 2, max: 0.6, color: "#c9f7ff" });
+            w.sfx("zap", d.x, d.y, 0.6, 1.3);
+          }
         } else if (dr && Math.hypot(dr.x - p.x, dr.y - p.y) < 70) {
           // arrows mostly bounce off dragon scales; Scorpion bolts punch through
           w.dragons.hit(w, dr, p.dmg * (p.big ?? 0.5));
@@ -582,7 +649,7 @@ export class Tribe {
       this.birthT = 75 + w.rng() * 40;
       const people = w.humans.length;
       const adults = this.adults(w).length;
-      if (adults >= 2 && people < this.capacity(w) && this.foodTotal(w) >= Math.max(4, people * 0.8) && people < 40) {
+      if (adults >= 2 && people < this.capacity(w) && this.foodTotal(w) >= Math.max(4, people * 0.8) && people < MAX_PEOPLE) {
         // the feast feeds the new arrival
         let pay = 3;
         for (const r of ["cooked", "crop", "fish", "berries"] as Resource[]) {
@@ -674,7 +741,7 @@ export class Tribe {
     const c = w.camp;
     const f = w.flags;
     // full camp → another hut
-    if (c.learned.has("shelter") && w.humans.length >= this.capacity(w) && !c.activeShelter(w) && w.shelters.length < 8) {
+    if (c.learned.has("shelter") && w.humans.length >= this.capacity(w) && !c.activeShelter(w) && w.shelters.length < 30) {
       const n = w.shelters.length;
       const a = -0.4 + n * 0.9;
       const R = CAMP_LEVELS[this.level].radius * 0.5;
@@ -754,7 +821,8 @@ export class Tribe {
     // lava eats walls; fire eats palisades
     for (const wl of this.walls) {
       if (wl.built < 1 || wl.hp <= 0) continue;
-      const lava = w.lava.heatAt(wl.tx, wl.ty) > 0.3;
+      // polygon stone shrugs off fire and lava
+      const lava = wl.kind !== "polygon" && w.lava.heatAt(wl.tx, wl.ty) > 0.3;
       const fire = wl.kind === "palisade" && w.fire.at(wl.tx, wl.ty) > 0.3;
       if (lava || fire) {
         wl.hp = Math.max(0, wl.hp - dt * (lava ? 80 : 25));
@@ -1448,7 +1516,7 @@ export function thinkRaider(w: World, d: Dino) {
   const c = w.camp;
   if (Math.hypot(d.x - c.pileX, d.y - c.pileY) < 60) {
     let ate = false;
-    const wrapped = w.colony.kits.has("storageWraps") || w.civ.has("granary");
+    const wrapped = w.colony.kits.has("storageWraps") || w.civ.has("granary") || hasVault(w.mine);
     for (const r of ["cooked", "meat", "fish", "crop", "berries"] as Resource[]) {
       if (c.stock[r] > 0) {
         if (!wrapped || w.rng() < 0.4) c.stock[r] = Math.max(0, c.stock[r] - (wrapped ? 1 : 2));
