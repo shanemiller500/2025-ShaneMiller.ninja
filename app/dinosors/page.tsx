@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { Fredoka } from "next/font/google";
+import localFont from "next/font/local";
 import DinosorsClient from "./DinosorsClient";
 
-const fredoka = Fredoka({ subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" });
+const fredoka = localFont({ src: "../../public/fonts/Fredoka-latin.woff2", weight: "400 700", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Dinosaur Land | A prehistoric sandbox for kids",

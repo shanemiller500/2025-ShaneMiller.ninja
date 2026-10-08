@@ -2,7 +2,6 @@
 
 import "./css/style.css";
 import Script from "next/script";
-import { Inter } from "next/font/google";
 import localFont from "next/font/local";
 import Theme from "./theme-provider";
 import SideNavigation from "@/components/ui/side-navigation";
@@ -28,8 +27,9 @@ declare global {
 
 const GA_TRACKING_ID = process.env.NEXT_PUBLIC_GA_ID;
 
-const inter = Inter({
-  subsets: ["latin"],
+const inter = localFont({
+  src: "../public/fonts/Inter-latin.woff2",
+  weight: "100 900",
   variable: "--font-inter",
   display: "swap",
 });
