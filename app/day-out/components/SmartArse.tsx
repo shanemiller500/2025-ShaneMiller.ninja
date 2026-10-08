@@ -24,7 +24,7 @@ import HoopSnake from "./HoopSnake";
 import Bludger from "./Bludger";
 import OldNev from "./OldNev";
 import StoreBiker from "./StoreBiker";
-import { MiniCam, SpyBird } from "./SpyCams";
+import { MiniCam, SpyBird, CCTVVan, CCTVTech } from "./SpyCams";
 import Bubble, { readMs } from "./Bubble";
 import SmokoGirl from "./SmokoGirl";
 import FruitBat from "./FruitBat";
@@ -32,7 +32,7 @@ import { WIRES, onWire, type WireName } from "./streetWires";
 import DogWalker from "./DogWalker";
 import { Seagull, ChipEater } from "./BeachGulls";
 import { Lifeguard, Swimmer, PaddleSurfer, SharkFin, SharkLunge } from "./BeachRescue";
-import { SkiBoat, StackedSkier, JetSki, Parasail, FallingRider, DolphinPod, WhaleBreach, WhaleTail, Bazza, VMRBoat, BrokenBoat, Floater, Helicopter, PilotChute, ChopperWreck } from "./SeaLife";
+import { SkiBoat, StackedSkier, JetSki, Parasail, FallingRider, DolphinPod, WhaleBreach, WhaleTail, Bazza, VMRBoat, BrokenBoat, Floater, Helicopter, PilotChute, ChopperWreck, StefanBoat } from "./SeaLife";
 import BeachGoer from "./BeachGoer";
 import PassingBiker from "./PassingBiker";
 import { HarleyBadge, IndianBadge } from "./BikeLogos";
@@ -330,7 +330,7 @@ const SHARK_SCREAMS = ["SHAAAARK!", "GET OUTTA THE WATER!", "Not again...", "He 
 // Out on the water: ski boats, jet skis, parasailers, dolphins, whales (and what happens to people
 // who fall in). Each bit is a positioned span; `cls` moves it, `inner` animates what's inside.
 // `tms` makes a bit slide (CSS transition on left) to its x instead, with `ease`; `hide` fades it out.
-type SeaBit = { id: number; kind: "ski" | "skier" | "jet" | "para" | "rider" | "pod" | "whale" | "tail" | "fin" | "chomp" | "blood" | "vmr" | "broke" | "floater" | "pelicans" | "pelicanDiver" | "chute" | "wreck"; x: number; bottom: number; w: number; h: number; cls?: string; inner?: string; clip?: boolean; dx?: number; dy?: number; ms?: number; delay?: number; on?: boolean; colour?: string; tms?: number; ease?: string; hide?: boolean; hook?: boolean };
+type SeaBit = { id: number; kind: "ski" | "skier" | "jet" | "para" | "rider" | "pod" | "whale" | "tail" | "fin" | "chomp" | "blood" | "vmr" | "broke" | "floater" | "pelicans" | "pelicanDiver" | "chute" | "wreck" | "stefan"; x: number; bottom: number; w: number; h: number; cls?: string; inner?: string; clip?: boolean; dx?: number; dy?: number; ms?: number; delay?: number; on?: boolean; colour?: string; tms?: number; ease?: string; hide?: boolean; hook?: boolean };
 type BazzaState = { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "walk" | "hold" | "zapped" | "hop"; line: string | null };
 // Flying foxes hanging off the power lines: hover over one and it touches two wires (ZZZT), shoot one
 // and it drops; another one hangs up there again later.
@@ -407,12 +407,12 @@ const span = (ms: number) => ms * Math.max(1, VW() / 1600);
 // Sportsbikes are drawn 110×60; this keeps them road-sized next to the cars and Shazz.
 const sportbikeW = () => (isPhone() ? 150 : 205);
 // Everything Shazz can take a shot at. Birds and pests go up in a puff; the rest drop as dinner.
-type Target = { kind: "flyer"; id: number } | { kind: "flock"; index: number } | { kind: "raider" } | { kind: "ibis" } | { kind: "magpie"; id: number } | { kind: "swooper"; id: number } | { kind: "bat"; id: number }
+type Target = { kind: "flyer"; id: number } | { kind: "flock"; index: number } | { kind: "raider" } | { kind: "ibis" } | { kind: "magpie"; id: number } | { kind: "swooper"; id: number } | { kind: "bat"; id: number } | { kind: "cam"; id: string } | { kind: "spybird"; id: number }
   | { kind: "roo"; id: number } | { kind: "crossing"; id: number } | { kind: "snake"; id: number } | { kind: "strikeRoo" }
   | { kind: "dropBear" } | { kind: "dangler"; id: number } | { kind: "koala"; tree: number } | { kind: "lorikeet"; id: number } | { kind: "emu"; id: number };
 const FUR: Partial<Record<Target["kind"], string[]>> = {
   roo: ["#b5733a", "#e6c49a"], strikeRoo: ["#b5733a", "#e6c49a"], koala: ["#9aa0a6", "#e8e8e8"], dropBear: ["#8a7f72", "#5b5148"], dangler: ["#8a7f72", "#5b5148"],
-  snake: ["#7a5c2e", "#c9a86a"], magpie: ["#111", "#fff", "#111"], swooper: ["#111", "#fff", "#111"], bat: ["#3b2a20", "#b07a3c", "#22160f"], emu: ["#5b4636", "#3b2f26", "#7a6048"], lorikeet: ["#16a34a", "#1d4ed8", "#f97316", "#dc2626", "#facc15"],
+  snake: ["#7a5c2e", "#c9a86a"], magpie: ["#111", "#fff", "#111"], swooper: ["#111", "#fff", "#111"], bat: ["#3b2a20", "#b07a3c", "#22160f"], cam: ["#e5e7eb", "#9ca3af", "#111"], spybird: ["#9ca3af", "#cbd5e1", "#374151"], emu: ["#5b4636", "#3b2f26", "#7a6048"], lorikeet: ["#16a34a", "#1d4ed8", "#f97316", "#dc2626", "#facc15"],
 };
 const POSTIE_W = 170, KID_W = 115;
 type DolePerson = { id: number; who: "trev" | "kylie"; tint: string; x: number; bottom: number; ms: number; faceLeft: boolean; pose: "run" | "peek" | "dance" | "scratch"; line: string | null; inside: boolean; cash: boolean; beer: boolean; stagger: boolean; gone: boolean; enter?: "climb" | "pop"; weird?: boolean };
@@ -1461,6 +1461,20 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         break;
       case "magpie": setKid(k => k && { ...k, magpies: k.magpies.filter(m => m.id !== target.id) }); break;
       case "swooper": setSwoopers(list => list.filter(b => b.id !== target.id)); break;
+      case "cam": {
+        add({ kind: "burst", x: x - 40, y: y + 30, size: 0, text: pick(["BZZZT!", "*FZZT* POOF!", "KZZZK!", "*sparks*"]) });
+        for (let i = 0; i < 5; i++) add({ kind: "smoke", x: x + (Math.random() - 0.5) * 16, y: y + Math.random() * 10, size: 12 + Math.random() * 14 });
+        const camId = target.id;
+        setShotCams(list => (list.includes(camId) ? list : [...list, camId]));
+        if (!camQueue.current.some(job => job.id === camId)) camQueue.current.push({ id: camId, x, y });
+        void cctvVanRun();
+        break;
+      }
+      case "spybird":
+        add({ kind: "burst", x: x - 40, y: y + 30, size: 0, text: pick(["BZZZT! KRSSHH!", "*SPARKS*", "ERROR 404: BIRD NOT FOUND"]) });
+        for (let i = 0; i < 6; i++) add({ kind: "smoke", x: x + (Math.random() - 0.5) * 30, y: y + Math.random() * 16, size: 14 + Math.random() * 16 });
+        setSpyBirds(list => list.filter(b => b.id !== target.id));
+        break;
       case "bat": {
         const fell = bats.find(b => b.id === target.id);
         setBats(list => list.map(b => (b.id === target.id ? { ...b, shot: true, zapped: false } : b)));
@@ -3035,7 +3049,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   };
   const quackAt = (x: number) => add({ kind: "burst", x, y: FAR_LANE + duckW() * 0.5, size: 0, text: pick(["QUACK QUACK!", "QUAAACK!", "QUACK QUACK QUACK!"]) });
   useEffect(() => {
-    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setDogWalk(null); setDogPoops([]); setBinDiver(null); setRescue(null); setShark(null); setSeaBits([]); setBazza(null); setBats([]); setChips(null); chipsOn.current = false; setHelis([]); setGawkers([]); heliOn.current = false; setChoppers([]); setSpyBirds([]); setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
+    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setDogWalk(null); setDogPoops([]); setBinDiver(null); setRescue(null); setShark(null); setSeaBits([]); setBazza(null); setBats([]); setChips(null); chipsOn.current = false; setHelis([]); setGawkers([]); heliOn.current = false; setChoppers([]); setSpyBirds([]); setCctvVan(null); vanOn.current = false; setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
     let alive = true, target = 4 + (Math.random() < 0.5 ? 1 : 0), look = Math.floor(Math.random() * 6);
     const busComes = async () => {
       const bw = duckW(), sm = stripMap(), stopAt = sm.x(505) - bw * 0.6, startX = -bw - 40, driveMs = Math.max(2500, (stopAt - startX) * 3);
@@ -3278,21 +3292,27 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   useEffect(() => {
     if (!immersive && phase === "hidden") { setDogWalk(null); setDogPoops([]); return; }
     let alive = true;
+    // Shopfronts shifts the park drawing 160 units right. Visit its whole lawn at different depths.
+    const parkRoute = [[2440, 365], [2510, 340], [2590, 357], [2670, 328], [2750, 365], [2830, 342], [2910, 369], [2970, 361]] as const;
     const run = async () => {
-      setDogWalk({ x: stripMap().x(2430), bottom: stripMap().b(377), ms: 0, faceLeft: false, pose: "walk", line: null });
+      const first = parkRoute[0], firstMap = stripMap();
+      setDogWalk({ x: firstMap.x(first[0]) - beachSize.dog() / 2, bottom: firstMap.b(first[1]), ms: 0, faceLeft: false, pose: "walk", line: null });
       await later(500);
+      let stop = 0, direction = 1, visits = 0;
       while (alive) {
         const sm = stripMap(), w = beachSize.dog(), cur = dogRef.current;
         if (!cur) { await later(500); continue; }
-        const x = sm.x(2440 + Math.random() * 540) - w / 2, ms = Math.max(1200, Math.abs(x - cur.x) * 16);
-        setDogWalk(d => d && { ...d, x, bottom: sm.b(373 + Math.random() * 5), ms, faceLeft: x < d.x, pose: "walk", line: null });
+        if (stop === parkRoute.length - 1) direction = -1;
+        else if (stop === 0) direction = 1;
+        stop += direction;
+        const [svgX, svgY] = parkRoute[stop], x = sm.x(svgX) - w / 2, bottom = sm.b(svgY);
+        const ms = Math.max(1200, Math.hypot(x - cur.x, bottom - cur.bottom) * 16);
+        setDogWalk(d => d && { ...d, x, bottom, ms, faceLeft: x < d.x, pose: "walk", line: null });
         await later(ms);
         if (!alive) return;
+        visits++;
         const roll = Math.random();
-        if (roll < 0.3) {
-          setDogWalk(d => d && { ...d, ms: 0, pose: "pee", line: Math.random() < 0.5 ? pick(DOG_PEE_LINES) : null });
-          await later(2800);
-        } else if (roll < 0.55) {
+        if (visits % 3 === 0 || roll < 0.16) {
           setDogWalk(d => d && { ...d, ms: 0, pose: "poop", line: null });
           await later(2400);
           if (!alive) return;
@@ -3303,6 +3323,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             window.setTimeout(() => setDogPoops(list => list.filter(item => item.id !== id)), 120_000);
           }
           setDogWalk(d => d && { ...d, pose: "stand", line: pick(DOG_POOP_LINES) });
+          await later(2800);
+        } else if (roll < 0.4) {
+          setDogWalk(d => d && { ...d, ms: 0, pose: "pee", line: Math.random() < 0.5 ? pick(DOG_PEE_LINES) : null });
           await later(2800);
         } else {
           setDogWalk(d => d && { ...d, ms: 0, pose: "stand" });
@@ -3654,6 +3677,56 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     await later(outMs + 100);
     setChoppers(list => list.filter(c => c.id !== id));
   }
+  // ---- Shot-out cameras, and the Prison Island CCTV van that comes to fix them ----
+  const [shotCams, setShotCams] = useState<string[]>([]);
+  const camQueue = useRef<{ id: string; x: number; y: number }[]>([]), vanOn = useRef(false);
+  const [cctvVan, setCctvVan] = useState<{ x: number; ms: number; faceLeft: boolean; ladder: { x: number; bottom: number; h: number } | null; tech: { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "walk" | "climb"; line: string | null } | null } | null>(null);
+  const updTech = (change: Partial<NonNullable<NonNullable<typeof cctvVan>["tech"]>>) => setCctvVan(v => v && v.tech ? { ...v, tech: { ...v.tech, ...change } } : v);
+  async function cctvVanRun() {
+    if (vanOn.current) return;
+    vanOn.current = true;
+    await later(5000 + Math.random() * 3000);
+    while (camQueue.current.length && (immersive || phaseRef.current !== "hidden")) {
+      const job = camQueue.current.shift()!, sm = stripMap(), vw = isPhone() ? 220 : 300, tw = isPhone() ? 32 : 40, th = tw * 2.5, foot = sm.b(386), dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+      const stop = job.x - vw / 2, start = stop - dir * 1300;
+      setCctvVan({ x: start, ms: 0, faceLeft: dir === -1, ladder: null, tech: null });
+      await later(80);
+      setCctvVan(v => v && { ...v, x: stop, ms: 3400 });
+      await later(3500);
+      add({ kind: "burst", x: stop + vw * 0.2, y: FAR_LANE + vw * 0.5, size: 0, text: "BEEP BEEP" });
+      // Out hops the tech, ladder up against the wall.
+      const door = stop + (dir === 1 ? vw * 0.7 : vw * 0.3);
+      setCctvVan(v => v && { ...v, tech: { x: door - tw / 2, bottom: FAR_LANE + 10, ms: 0, faceLeft: job.x < door, pose: "walk", line: pick(["Righto, who did this?", "Third one today.", "Welcome to the penitentiary, mate."]) } });
+      await later(500);
+      const walkMs = Math.max(900, Math.abs(job.x - door) * 9);
+      updTech({ x: job.x - tw / 2 - 14, bottom: foot, ms: walkMs });
+      await later(walkMs);
+      const h = Math.max(40, job.y - foot);
+      setCctvVan(v => v && { ...v, ladder: { x: job.x - 22, bottom: foot, h } });
+      updTech({ line: null });
+      await later(500);
+      // Up the ladder, fix it.
+      const upMs = Math.max(800, h * 9);
+      updTech({ pose: "climb", x: job.x - tw / 2 - 16, bottom: foot + Math.max(0, h - th * 0.8), ms: upMs });
+      await later(upMs + 200);
+      add({ kind: "burst", x: job.x - 50, y: job.y + 24, size: 0, text: "*click* *whirr*" });
+      setShotCams(list => list.filter(id => id !== job.id));
+      updTech({ line: pick(["Good as new. Smile!", "There ya go. We see EVERYTHING.", "Try that again, I dare ya.", "Prison Island thanks you for your co-operation."]) });
+      await later(2600);
+      updTech({ bottom: foot, ms: upMs, line: null });
+      await later(upMs + 100);
+      setCctvVan(v => v && { ...v, ladder: null });
+      updTech({ pose: "walk", x: door - tw / 2, bottom: FAR_LANE + 10, ms: walkMs, faceLeft: door < job.x });
+      await later(walkMs + 100);
+      setCctvVan(v => v && { ...v, tech: null });
+      await later(400);
+      // And off to the next job.
+      setCctvVan(v => v && { ...v, x: stop + dir * 1400, ms: 3400 });
+      await later(3500);
+      setCctvVan(null);
+    }
+    vanOn.current = false;
+  }
   // Spy birds: one or two "birds" do laps over whatever you're looking at, hovering over people. When
   // one turns up, somebody on screen clocks it.
   const [spyBirds, setSpyBirds] = useState<SpyBirdState[]>([]);
@@ -3682,11 +3755,22 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     await later(2700);
     setSpyBirds(list => list.filter(b => !ids.includes(b.id)));
   }
+  // Stefan's pink race boat screaming across the bay, rooster tail and all. Faster than anything else
+  // out there.
+  function stefanRun(pan = false) {
+    const { sm, k } = seaLane(), w = 260 * k * 0.6, h = (w * 70) / 260, water = sm.b(290);
+    // The sea spans x=2250..4060 in Beachfront, which Shopfronts shifts 160 units right.
+    const start = sm.x(4230), end = sm.x(2410) - w, ms = 6000;
+    if (pan) seaPan();
+    addSea({ kind: "stefan", x: start, bottom: water - h * 0.17, w, h, cls: "seaCross", dx: end - start, ms }, ms + 300);
+    window.setTimeout(() => add({ kind: "burst", x: panX() + window.innerWidth / 2 - 120, y: water + 80, size: 0, text: "VRRRRROOOOOOM!" }), 600);
+    window.setTimeout(() => add({ kind: "burst", x: panX() + window.innerWidth / 2 - 100, y: water + 130, size: 0, text: pick(["Believe in yourself!", "444! GO STEFAN!", "Pink is FAST, mate!"]) }), 1600);
+  }
   // Something's always going on out there, one thing at a time-ish.
   useEffect(() => {
     if (!immersive && phase === "hidden") { setSeaBits([]); setBazza(null); bazzaOn.current = false; return; }
     let timer = 0;
-    const shows = [() => void skiRun(), () => jetRun(), () => void paraRun(), () => dolphinRun(), () => void whaleRun(), () => void skiRun(), () => jetRun(), () => void bazzaShow(), () => void vmrTow(), () => void pelicanFlock()];
+    const shows = [() => void skiRun(), () => jetRun(), () => void paraRun(), () => dolphinRun(), () => void whaleRun(), () => void skiRun(), () => jetRun(), () => void bazzaShow(), () => void vmrTow(), () => void pelicanFlock(), () => stefanRun(), () => stefanRun()];
     const next = () => { timer = window.setTimeout(() => { if (seaBitsRef.current.length < 3) pick(shows)(); next(); }, 14_000 + Math.random() * 12_000); };
     next();
     return () => clearTimeout(timer);
@@ -3698,7 +3782,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         {[[0, 0], [60, 30], [120, 60], [180, 90], [60, 110], [0, 140], [-60, 160]].map(([px, py], i) => <svg key={i} x={300 - px} y={py * 0.5} width={90} height={50} overflow="visible"><Pelican /></svg>)}
       </svg></span>
       : b.kind === "pelicanDiver" ? <span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><Pelican fish={b.on} /></span>
-      : b.kind === "chute" ? <PilotChute /> : b.kind === "wreck" ? <ChopperWreck />
+      : b.kind === "stefan" ? <StefanBoat /> : b.kind === "chute" ? <PilotChute /> : b.kind === "wreck" ? <ChopperWreck />
       : b.kind === "vmr" ? <VMRBoat tow={b.on} hook={b.hook} /> : b.kind === "broke" ? <BrokenBoat /> : b.kind === "floater" ? <Floater />
       : b.kind === "tail" ? <WhaleTail /> : b.kind === "fin" ? <span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><SharkFin /></span> : b.kind === "chomp" ? <SharkLunge /> : null;
 
@@ -4301,7 +4385,12 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         </span>
       </span>;
     })}</span>}
-    {(immersive || phase !== "hidden") && <div className={styles.shopStrip} aria-hidden onClick={event => event.stopPropagation()}><Shopfronts sky={false} closed={{ harley: closedShops.harley > 0, indian: closedShops.indian > 0 }} /></div>}
+    {(immersive || phase !== "hidden") && <div className={styles.shopStrip} aria-hidden onClick={event => {
+      event.stopPropagation();
+      // The cameras in the street drawing are shootable: they carry their target in data-shoot.
+      const el = (event.target as Element).closest?.("[data-shoot]");
+      if (el instanceof SVGElement && el.dataset.shoot) void blast(JSON.parse(el.dataset.shoot) as Target, el);
+    }}><Shopfronts sky={false} closed={{ harley: closedShops.harley > 0, indian: closedShops.indian > 0 }} shotCams={shotCams} /></div>}
     <div className={`${styles.road} ${onRoad ? styles.roadOn : ""} ${phase === "parked" ? styles.roadClickable : ""}`} onClick={event => void rideTo(event.clientX + panX())} title={phase === "parked" ? "Click to move Shazz here" : undefined} />
     {cars.map(car => <span key={car.id} data-vehicle={`car-${car.id}`} data-lane={car.lane} className={`${styles.car} ${car.turnAt !== undefined ? styles.carTurn : ""} ${phase === "parked" ? styles.carClickable : ""} ${heldCar === car.id ? styles.carHeld : ""}`}
       onClick={event => void lassoCar(car.id, event.currentTarget)} title={phase === "parked" ? "Lasso it!" : undefined} onAnimationEnd={event => event.target === event.currentTarget && setCars(list => list.filter(item => item.id !== car.id))}
@@ -4375,12 +4464,12 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       <Bubble text={trev.line} className={styles.ibisBubble} style={{ bottom: 132 }} />
     </span>}
     {phase !== "hidden" && palmSpots().map(pt => <span key={`palm${pt.i}`} className={styles.palmTree} aria-hidden style={{ left: pt.left, bottom: pt.base, width: pt.w, height: pt.h }}>
-      <span className={styles.treeCam} style={{ left: pt.w * 0.5, bottom: pt.h * 0.32, transform: pt.i % 2 ? "scaleX(-1)" : undefined }} aria-hidden><MiniCam /></span>
+      {!shotCams.includes(`palm${pt.i}`) && <span className={`${styles.treeCam} ${styles.shootable}`} {...shootProps({ kind: "cam", id: `palm${pt.i}` }, "Shoot the camera!")} style={{ left: pt.w * 0.5, bottom: pt.h * 0.32, transform: pt.i % 2 ? "scaleX(-1)" : undefined, pointerEvents: "auto" }}><MiniCam /></span>}
       <PalmTree lean={pt.lean} variant={pt.i} />
     </span>)}
     {phase !== "hidden" && treeSpots().map((t, i) => (
       <span key={i} className={styles.gumTree} style={{ left: t.x, bottom: TREE_BOTTOM, width: TREE.W, height: TREE.H }}>
-        <span className={styles.treeCam} style={{ left: TREE.W * 0.46, bottom: TREE.H * 0.34 }} aria-hidden><MiniCam /></span>
+        {!shotCams.includes(`tree${i}`) && <span className={`${styles.treeCam} ${styles.shootable}`} {...shootProps({ kind: "cam", id: `tree${i}` }, "Shoot the camera!")} style={{ left: TREE.W * 0.46, bottom: TREE.H * 0.34, pointerEvents: "auto" }}><MiniCam /></span>}
         <GumTree koala={t.koala && !shotKoalas.includes(i)} variant={i} />
         {t.koala && !shotKoalas.includes(i) && phase === "parked" && <span className={`${styles.koalaTarget} ${styles.shootable}`} {...shootProps({ kind: "koala", tree: i }, "Shoot the koala!")}
           style={{ left: TREE.W * (80 / 120) - 16, top: TREE.H * (98 / 220) - 22, width: 32, height: 40 }} />}
@@ -4503,7 +4592,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       </span>)}
     </span>}
     {strike && <span className={styles.strikeCar} aria-hidden
-      style={{ left: strike.carX, bottom: FAR_LANE, width: isPhone() ? 150 : 200, height: (isPhone() ? 150 : 200) * 0.45, transitionDuration: `${strike.carMs}ms` }}>
+      style={{ left: strike.carX, bottom: FAR_LANE, width: isPhone() ? 220 : 300, height: (isPhone() ? 220 : 300) * 0.45, transitionDuration: `${strike.carMs}ms` }}>
       <span className={`${styles.carBody} ${strike.shaking ? styles.carShake : ""}`}><FamilyCar color={strike.color} dented={strike.dented} /></span>
       {strike.dented && <span className={styles.carShock} style={{ animationDelay: "0ms" }}>!!</span>}
     </span>}
@@ -4621,7 +4710,17 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       style={{ left: h.x, bottom: h.bottom, width: 120 * stripMap().k * 0.6, height: 60 * stripMap().k * 0.6, transitionDuration: `${h.ms}ms`, ["--dy" as string]: `${h.dy}px` }}>
       <span className={styles.ibisBody} style={{ transform: h.faceLeft ? undefined : "scaleX(-1)" }}><Helicopter livery={h.livery} /></span>
     </span>)}
-    {spyBirds.map(b => <span key={b.id} className={styles.spyBird} aria-hidden style={{ left: b.x, bottom: b.bottom, transitionDuration: `${b.ms}ms` }}>
+    {cctvVan && <>
+      <span className={styles.cctvVan} style={{ left: cctvVan.x, bottom: FAR_LANE - 8, width: isPhone() ? 220 : 300, height: (isPhone() ? 220 : 300) * 0.45, transitionDuration: `${cctvVan.ms}ms` }} aria-hidden>
+        <span className={cctvVan.ms ? styles.carBody : styles.ibisBody}><CCTVVan faceLeft={cctvVan.faceLeft} /></span>
+      </span>
+      {cctvVan.ladder && <span className={styles.cctvLadder} style={{ left: cctvVan.ladder.x, bottom: cctvVan.ladder.bottom, height: cctvVan.ladder.h }} aria-hidden />}
+      {cctvVan.tech && <span data-poopable="person" className={styles.cctvTech} style={{ left: cctvVan.tech.x, bottom: cctvVan.tech.bottom, width: isPhone() ? 32 : 40, height: (isPhone() ? 32 : 40) * 2.5, transitionDuration: `${cctvVan.tech.ms}ms` }}>
+        <span className={styles.ibisBody} style={{ transform: cctvVan.tech.faceLeft ? "scaleX(-1)" : undefined }}><CCTVTech pose={cctvVan.tech.pose} /></span>
+        <Bubble text={cctvVan.tech.line} className={styles.ibisBubble} style={{ bottom: "100%" }} />
+      </span>}
+    </>}
+    {spyBirds.map(b => <span key={b.id} className={`${styles.spyBird} ${styles.shootable}`} {...shootProps({ kind: "spybird", id: b.id }, "Shoot the 'bird'!")} style={{ left: b.x, bottom: b.bottom, transitionDuration: `${b.ms}ms`, pointerEvents: "auto" }}>
       <span className={styles.heliBob}><span className={styles.ibisBody} style={{ transform: b.faceLeft ? "scaleX(-1)" : undefined }}><SpyBird /></span></span>
     </span>)}
     {choppers.map(c => <span key={c.id} className={styles.heli} aria-hidden
@@ -4919,6 +5018,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             <Trick label="⚓ VMR tow" onClick={pickTrick(() => void vmrTow(true))} />
             <Trick label="🍟 Seagull chip heist" onClick={pickTrick(() => void chipRaid(true))} />
             <Trick label="🐦 Pelican flock" onClick={pickTrick(() => void pelicanFlock(true))} />
+            <Trick label="💗 Stefan's pink boat" onClick={pickTrick(() => stefanRun(true))} />
             <Trick label="🪝 VMR recovery" onClick={pickTrick(() => void vmrRecover(undefined, true))} />
             <Trick label="🦜 Lorikeets" onClick={callIn(() => void lorikeetVisit())} />
             <Trick label="🦘 Roo mob" onClick={callIn(() => rooMob())} />

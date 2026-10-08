@@ -250,3 +250,28 @@ export function ChopperWreck() {
     <path d="M0 36 q6 -4 12 0 t12 0 t12 0 t12 0" stroke="#e0f2fe" strokeWidth={2} fill="none" />
   </svg>;
 }
+
+// Stefan's pink offshore race boat: a long, low pink hull with the rainbow stripe, the 444 race
+// number, the "Stefan" signature down the side, a bubble canopy, and a rooster tail of spray that
+// goes on forever. Bow at the left (it races right-to-left); viewBox 260×70, waterline y≈58.
+export function StefanBoat() {
+  const rainbow = ["#ef4444", "#f97316", "#facc15", "#22c55e", "#3b82f6", "#a855f7"];
+  return <svg viewBox="0 0 260 70" width="100%" height="100%" aria-hidden overflow="visible">
+    {/* Rooster tail and wake */}
+    <path className={styles.wakeFoam} d="M190 50 Q230 20 300 6 Q280 30 320 26 Q290 46 330 50" stroke="#f8fafc" strokeWidth={8} fill="none" strokeLinecap="round" opacity={0.9} />
+    <path d="M196 54 Q240 36 300 30 Q270 46 320 48 Q270 58 200 58 Z" fill="#f8fafc" opacity={0.85} />
+    <path className={styles.wakeFoam} d="M20 62 q30 -5 60 0 t60 0 t60 0 t60 0 t60 0" stroke="#e0f2fe" strokeWidth={3} fill="none" />
+    {/* Hull */}
+    <path d="M0 44 Q40 30 120 28 H196 L200 54 H26 Q8 52 0 44 Z" fill="#f472b6" stroke="#111" strokeWidth={1.8} />
+    <path d="M6 48 Q40 46 200 50 L200 54 H26 Q12 53 6 48 Z" fill="#f9fafb" stroke="#111" strokeWidth={1} />
+    {rainbow.map((c, i) => <path key={c} d={`M150 ${33 + i * 2.6} L196 ${33 + i * 2.6}`} stroke={c} strokeWidth={2.6} />)}
+    {/* Canopy */}
+    <path d="M86 28 Q96 14 122 14 Q140 14 146 28 Z" fill="#f472b6" stroke="#111" strokeWidth={1.4} />
+    <path d="M96 26 Q102 18 118 18 Q130 18 134 26 Z" fill="#1e293b" />
+    <path d="M168 28 V18 M176 28 V20" stroke="#4b5563" strokeWidth={3} strokeLinecap="round" />
+    {/* 444 and the signature */}
+    <rect x={56} y={33} width={30} height={14} rx={1.5} fill="#f8fafc" stroke="#111" strokeWidth={1.2} />
+    <text x={71} y={44.5} textAnchor="middle" fontSize={12} fontWeight={900} fill="#111" fontFamily="Impact, 'Arial Black', sans-serif">444</text>
+    <text x={122} y={45} textAnchor="middle" fontSize={17} fontStyle="italic" fontWeight={700} fill="#1e1b4b" fontFamily="'Brush Script MT', 'Segoe Script', cursive">Stefan</text>
+  </svg>;
+}

@@ -913,3 +913,9 @@
 @media (max-width:640px){.spyBird{width:38px;height:26px}}
 .treeCam{position:absolute;width:26px;height:17px;pointer-events:none}
 .emuCam{position:absolute;left:76%;top:-8%;width:30%;height:22%;pointer-events:none}
+/* Shootable cameras and the Prison Island CCTV van */
+.camTarget{cursor:crosshair}
+.camTarget:hover{filter:drop-shadow(0 0 3px #fde047)}
+.cctvVan{position:absolute;pointer-events:none;transition-property:left;transition-timing-function:ease-in-out}
+.cctvLadder{position:absolute;width:20px;pointer-events:none;border-left:3px solid #9ca3af;border-right:3px solid #9ca3af;background:repeating-linear-gradient(to top,transparent 0 11px,#9ca3af 11px 14px);animation:bubbleIn .3s ease-out}
+.cctvTech{position:absolute;pointer-events:none;transition-property:left,bottom;transition-timing-function:linear}
