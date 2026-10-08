@@ -42,6 +42,8 @@ export function GlobalBoard({
   name,
   signedIn,
   cloudOn,
+  publicUpdatedAt,
+  syncError,
   onJoin,
   onName,
 }: {
@@ -49,8 +51,10 @@ export function GlobalBoard({
   name: string;
   signedIn: boolean;
   cloudOn: boolean;
+  publicUpdatedAt: Date | null;
+  syncError: string | null;
   onJoin: () => void;
-  onName: (n: string) => void;
+  onName: (n: string) => Promise<boolean>;
 }) {
   const [sort, setSort] = useState<LeaderSort>("score");
   const [rows, setRows] = useState<LeaderRow[] | null>(null);
@@ -58,22 +62,25 @@ export function GlobalBoard({
   const [myUid, setMyUid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState(name);
+  const [publishing, setPublishing] = useState(false);
 
   const load = useCallback(async () => {
     if (!cloudOn) return;
     setError(null);
     setRows(null);
+    setMine(null);
     try {
       const m = await loadCloud();
-      const [top, me] = await Promise.all([m.loadLeaderboard(sort, 50), m.myLeaderboardRank(sort).catch(() => null)]);
+      const [top, ownRank] = await Promise.all([m.loadLeaderboard(sort, 50), m.myLeaderboardRank(sort).then((row) => ({ row, error: false }), () => ({ row: null, error: true }))]);
       setRows(top);
-      setMine(me);
+      setMine(ownRank.row);
       setMyUid(m.currentUid());
+      if (ownRank.error) setError("The leaderboard loaded, but your rank could not be checked. Try refreshing.");
     } catch {
-      setError("The leaderboard is offline right now. Your points are still saved — try again in a moment.");
+      setError("The leaderboard could not be loaded. Check your connection or Firebase access, then try again.");
       setRows([]);
     }
-  }, [sort, cloudOn]);
+  }, [sort, cloudOn, signedIn, publicUpdatedAt]);
 
   useEffect(() => {
     void load();
@@ -108,16 +115,22 @@ export function GlobalBoard({
       ) : !name ? (
         <form
           className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl bg-amber-300/10 p-5 ring-1 ring-amber-300/30"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            if (validName(draft)) onName(cleanName(draft));
+            if (!validName(draft) || publishing) return;
+            setPublishing(true);
+            try {
+              if (!(await onName(cleanName(draft)))) setError("Your cloud save is still being set up. Your name will publish automatically when it is ready.");
+            } finally {
+              setPublishing(false);
+            }
           }}
         >
           <UserRound className="h-6 w-6 text-amber-300" />
           <p className="font-semibold">Pick your leaderboard name:</p>
           <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={20} placeholder="Fighter name" className="min-w-[180px] flex-1 rounded-lg bg-black/30 px-3 py-2 outline-none ring-1 ring-white/15 focus:ring-2 focus:ring-amber-300" />
-          <ArcadeButton tone="gold" size="sm" type="submit" disabled={!validName(draft)}>
-            Save name
+          <ArcadeButton tone="gold" size="sm" type="submit" disabled={!validName(draft) || publishing}>
+            {publishing ? "Saving…" : "Save name"}
           </ArcadeButton>
         </form>
       ) : null}
@@ -140,7 +153,7 @@ export function GlobalBoard({
       </div>
 
       {error && <p className="mt-4 rounded-xl bg-rose-500/10 p-4 text-sm text-rose-200 ring-1 ring-rose-400/30">{error}</p>}
-
+      {signedIn && syncError && <p className="mt-4 rounded-xl bg-rose-500/10 p-4 text-sm text-rose-200 ring-1 ring-rose-400/30">{syncError}</p>}
       {rows === null ? (
         <div className="grid place-items-center py-16 text-white/50">
           <Loader2 className="h-6 w-6 animate-spin" />

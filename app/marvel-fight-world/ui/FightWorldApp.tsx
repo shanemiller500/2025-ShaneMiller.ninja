@@ -275,11 +275,11 @@ function Game({ roster }: { roster: Roster }) {
 
   /** Leaderboard name: stored with the profile, synced with the cloud save. */
   const changeName = useCallback(
-    (n: string) => {
+    async (n: string) => {
       const name = cleanName(n);
       saveProfile({ name });
       setPlayerName(name);
-      if (cloud.state.status === "signedIn") void saveNow(true);
+      return cloud.state.status === "signedIn" ? saveNow(true) : false;
     },
     [cloud.state.status, saveNow]
   );
@@ -505,6 +505,7 @@ function Game({ roster }: { roster: Roster }) {
             const next = advance(bracket, won);
             if (next.result === true) {
               recordTournamentWin(TOURNAMENT_BONUS);
+              void saveNow(true);
               showNote("🏆", `Champion! +${TOURNAMENT_BONUS} leaderboard points`);
             }
             setBracket(next);
@@ -526,7 +527,7 @@ function Game({ roster }: { roster: Roster }) {
           else setScreen({ k: "select", mode: f.mode, initial: [f.p1, f.p2] });
       }
     },
-    [home, survival.streak, startSurvivalBout, bracket, roster, startFight, others]
+    [home, survival.streak, startSurvivalBout, bracket, roster, startFight, others, saveNow, showNote]
   );
 
   /* ── Character sheet actions ───────────────────────────────────── */
@@ -675,6 +676,8 @@ function Game({ roster }: { roster: Roster }) {
           name={playerName}
           signedIn={cloud.state.status === "signedIn"}
           cloudOn={cloud.state.status !== "off"}
+          publicUpdatedAt={cloud.state.publicUpdatedAt}
+          syncError={cloud.state.error}
           onJoin={() => cloud.show("saveEmail")}
           onName={changeName}
         />

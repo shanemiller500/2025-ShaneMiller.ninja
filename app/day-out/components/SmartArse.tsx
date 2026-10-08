@@ -24,13 +24,15 @@ import HoopSnake from "./HoopSnake";
 import Bludger from "./Bludger";
 import OldNev from "./OldNev";
 import StoreBiker from "./StoreBiker";
+import Bubble, { readMs } from "./Bubble";
 import SmokoGirl from "./SmokoGirl";
 import FruitBat from "./FruitBat";
 import { WIRES, onWire, type WireName } from "./streetWires";
 import DogWalker from "./DogWalker";
 import { Seagull, ChipEater } from "./BeachGulls";
 import { Lifeguard, Swimmer, PaddleSurfer, SharkFin, SharkLunge } from "./BeachRescue";
-import { SkiBoat, StackedSkier, JetSki, Parasail, FallingRider, DolphinPod, WhaleBreach, WhaleTail, Bazza, VMRBoat, BrokenBoat, Floater } from "./SeaLife";
+import { SkiBoat, StackedSkier, JetSki, Parasail, FallingRider, DolphinPod, WhaleBreach, WhaleTail, Bazza, VMRBoat, BrokenBoat, Floater, Helicopter, PilotChute, ChopperWreck } from "./SeaLife";
+import BeachGoer from "./BeachGoer";
 import PassingBiker from "./PassingBiker";
 import { HarleyBadge, IndianBadge } from "./BikeLogos";
 import Commuter from "./Commuter";
@@ -327,7 +329,7 @@ const SHARK_SCREAMS = ["SHAAAARK!", "GET OUTTA THE WATER!", "Not again...", "He 
 // Out on the water: ski boats, jet skis, parasailers, dolphins, whales (and what happens to people
 // who fall in). Each bit is a positioned span; `cls` moves it, `inner` animates what's inside.
 // `tms` makes a bit slide (CSS transition on left) to its x instead, with `ease`; `hide` fades it out.
-type SeaBit = { id: number; kind: "ski" | "skier" | "jet" | "para" | "rider" | "pod" | "whale" | "tail" | "fin" | "chomp" | "blood" | "vmr" | "broke" | "floater" | "pelicans" | "pelicanDiver"; x: number; bottom: number; w: number; h: number; cls?: string; inner?: string; clip?: boolean; dx?: number; dy?: number; ms?: number; delay?: number; on?: boolean; colour?: string; tms?: number; ease?: string; hide?: boolean; hook?: boolean };
+type SeaBit = { id: number; kind: "ski" | "skier" | "jet" | "para" | "rider" | "pod" | "whale" | "tail" | "fin" | "chomp" | "blood" | "vmr" | "broke" | "floater" | "pelicans" | "pelicanDiver" | "chute" | "wreck"; x: number; bottom: number; w: number; h: number; cls?: string; inner?: string; clip?: boolean; dx?: number; dy?: number; ms?: number; delay?: number; on?: boolean; colour?: string; tms?: number; ease?: string; hide?: boolean; hook?: boolean };
 type BazzaState = { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "walk" | "hold" | "zapped" | "hop"; line: string | null };
 // Flying foxes hanging off the power lines: hover over one and it touches two wires (ZZZT), shoot one
 // and it drops; another one hangs up there again later.
@@ -362,6 +364,10 @@ const DANCER_CHAT: [string, string][] = [
 // one of them makes off with the lot.
 type Gull = { id: number; x: number; bottom: number; ms: number; faceLeft: boolean; flying: boolean; carrying: boolean };
 type ChipRaid = { eater: { x: number; bottom: number; ms: number; faceLeft: boolean; pose: "walk" | "eat" | "shoo" | "robbed"; line: string | null }; gulls: Gull[] };
+// Two choppers collide over the beach; the crowd on the sand has thoughts.
+type Heli = { id: number; x: number; bottom: number; ms: number; faceLeft: boolean; falling: boolean; dy: number; livery: 0 | 1 };
+type Gawker = { id: number; x: number; bottom: number; look: number; line: string | null };
+const GAWKER_LINES = ["What a tragedy.", "I'm gonna mark meself safe on Facebook.", "We will rebuild...", "We're all in this together.", "A fucken dog ate my lunch!!"];
 type Phase = "hidden" | "enter" | "parked" | "leave";
 type Action = "flip" | "moon" | "drink" | "smoke" | "throw";
 type Line = { text: string; ai: boolean };
@@ -3020,7 +3026,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   };
   const quackAt = (x: number) => add({ kind: "burst", x, y: FAR_LANE + duckW() * 0.5, size: 0, text: pick(["QUACK QUACK!", "QUAAACK!", "QUACK QUACK QUACK!"]) });
   useEffect(() => {
-    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setDogWalk(null); setDogPoops([]); setBinDiver(null); setRescue(null); setShark(null); setSeaBits([]); setBazza(null); setBats([]); setChips(null); chipsOn.current = false; setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
+    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setDogWalk(null); setDogPoops([]); setBinDiver(null); setRescue(null); setShark(null); setSeaBits([]); setBazza(null); setBats([]); setChips(null); chipsOn.current = false; setHelis([]); setGawkers([]); heliOn.current = false; setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
     let alive = true, target = 4 + (Math.random() < 0.5 ? 1 : 0), look = Math.floor(Math.random() * 6);
     const busComes = async () => {
       const bw = duckW(), sm = stripMap(), stopAt = sm.x(505) - bw * 0.6, startX = -bw - 40, driveMs = Math.max(2500, (stopAt - startX) * 3);
@@ -3573,6 +3579,52 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     add({ kind: "burst", x: px - 40, y: water + 40, size: 0, text: "SPLOOSH!" });
     addSea({ kind: "pelicanDiver", x: px, bottom: water - pw * 0.2, w: pw, h: pw * 0.55, cls: "floatBob", on: true }, 7000);
   }
+  // Two choppers buzzing the beach, one each way, and neither one looking. KER-RUNCH. Both pilots
+  // bail out under little parachutes; the choppers spin down into the drink. A row of punters
+  // sitting on the sand watch the whole thing and have their say.
+  const [helis, setHelis] = useState<Heli[]>([]);
+  const [gawkers, setGawkers] = useState<Gawker[]>([]);
+  const heliOn = useRef(false);
+  async function heliCrash(pan = false) {
+    if (heliOn.current || (!immersive && phaseRef.current === "hidden")) return;
+    heliOn.current = true;
+    const sm = stripMap(), k = sm.k, hw = 120 * k * 0.6, hh = hw / 2, cx = sm.x(3360 + Math.random() * 300), alt = sm.b(150), water = sm.b(292);
+    if (pan) panTo(cx);
+    const gw = isPhone() ? 32 : 44;
+    setGawkers([3070, 3125, 3180, 3235, 3290].map((sx, i) => ({ id: ++uid, x: sm.x(sx) - gw / 2, bottom: sm.b(368 + (i % 2) * 5), look: i, line: null })));
+    const a = ++uid, b = ++uid, spread = Math.max(700, window.innerWidth * 0.6);
+    setHelis([
+      { id: a, x: cx - spread - hw, bottom: alt + hh * 0.3, ms: 0, faceLeft: false, falling: false, dy: 0, livery: 0 },
+      { id: b, x: cx + spread, bottom: alt - hh * 0.2, ms: 0, faceLeft: true, falling: false, dy: 0, livery: 1 },
+    ]);
+    await later(80);
+    setHelis(list => list.map(h => ({ ...h, x: h.id === a ? cx - hw * 0.92 : cx - hw * 0.08, bottom: alt, ms: 4600 })));
+    add({ kind: "burst", x: cx - 90, y: alt + 120, size: 0, text: "WHUP WHUP WHUP WHUP" });
+    await later(4650);
+    // KER-RUNCH.
+    add({ kind: "boom", x: cx - 140, y: alt - 20, size: 0, text: "KABOOM!" });
+    add({ kind: "burst", x: cx - 60, y: alt + hh + 40, size: 0, text: "KER-RUNCH!!" });
+    for (let i = 0; i < 8; i++) add({ kind: "smoke", x: cx + (Math.random() - 0.5) * hw, y: alt + Math.random() * hh, size: 26 + Math.random() * 30 });
+    setHelis(list => list.map(h => ({ ...h, falling: true, dy: alt - water + hh * 0.3 })));
+    // Both pilots punch out.
+    [-1, 1].forEach(side => addSea({ kind: "chute", x: cx + side * hw * 0.5 - 14, bottom: alt + hh, w: 28 * k, h: 40 * k, cls: "chuteDrift", dy: alt + hh - water, ms: 7000 }, 13_000));
+    await later(1600);
+    setHelis([]);
+    add({ kind: "burst", x: cx - 120, y: water + 50, size: 0, text: "SPLOOSH!" });
+    window.setTimeout(() => add({ kind: "burst", x: cx + 10, y: water + 40, size: 0, text: "SPLOOSH!" }), 300);
+    addSea({ kind: "wreck", x: cx - 25 * k, bottom: water - 8, w: 50 * k, h: 40 * k, cls: "floatBob" }, 16_000);
+    // The commentary.
+    await later(1200);
+    for (let i = 0; i < GAWKER_LINES.length; i++) {
+      const line = GAWKER_LINES[i];
+      setGawkers(list => list.map((g, j) => ({ ...g, line: j === i ? line : null })));
+      await later(readMs(line) + 300);
+    }
+    setGawkers(list => list.map(g => ({ ...g, line: null })));
+    await later(1500);
+    setGawkers([]);
+    heliOn.current = false;
+  }
   // Something's always going on out there, one thing at a time-ish.
   useEffect(() => {
     if (!immersive && phase === "hidden") { setSeaBits([]); setBazza(null); bazzaOn.current = false; return; }
@@ -3589,6 +3641,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         {[[0, 0], [60, 30], [120, 60], [180, 90], [60, 110], [0, 140], [-60, 160]].map(([px, py], i) => <svg key={i} x={300 - px} y={py * 0.5} width={90} height={50} overflow="visible"><Pelican /></svg>)}
       </svg></span>
       : b.kind === "pelicanDiver" ? <span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><Pelican fish={b.on} /></span>
+      : b.kind === "chute" ? <PilotChute /> : b.kind === "wreck" ? <ChopperWreck />
       : b.kind === "vmr" ? <VMRBoat tow={b.on} hook={b.hook} /> : b.kind === "broke" ? <BrokenBoat /> : b.kind === "floater" ? <Floater />
       : b.kind === "tail" ? <WhaleTail /> : b.kind === "fin" ? <span className={styles.ibisBody} style={{ transform: "scaleX(-1)" }}><SharkFin /></span> : b.kind === "chomp" ? <SharkLunge /> : null;
 
@@ -3668,6 +3721,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     every(() => void lifeguardRescue(), 70_000, 60_000);
     every(() => void sharkAttack(), 100_000, 70_000);
     every(() => void chipRaid(), 60_000, 50_000);
+    every(() => void heliCrash(), 150_000, 120_000);
     return () => timers.forEach(clearTimeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, immersive]);
@@ -4210,12 +4264,12 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       {thieves.trev && <span className={styles.thief} style={{ left: thieves.trev.x, bottom: 44, width: 128, height: 130, transitionDuration: `${thieves.trev.ms}ms` }}>
         {thieves.trev.riding && <span className={`${styles.thiefBike} ${styles.moving}`}><span className={styles.facingLeft}><MiniBiker seed={1} gang="red" riderless /></span></span>}
         <span className={styles.thiefBody} style={thieves.trev.riding ? { left: 34, bottom: 22 } : undefined}><span className={styles.ibisBody} style={{ transform: thieves.trev.riding ? "scaleX(-1)" : undefined }}><Trev pose={thieves.trev.riding ? "cook" : "run"} /></span></span>
-        {thieves.trev.line && <span className={styles.ibisBubble} style={{ bottom: 140 }}>{thieves.trev.line}</span>}
+        <Bubble text={thieves.trev.line} className={styles.ibisBubble} style={{ bottom: 140 }} />
       </span>}
       {thieves.kylie && <span className={styles.thief} style={{ left: thieves.kylie.x, bottom: 60, width: 70, height: 121, transitionDuration: `${thieves.kylie.ms}ms` }}>
         <span className={styles.thiefBody}><span className={styles.ibisBody} style={{ transform: thieves.kylie.leaving ? undefined : "scaleX(-1)" }}><Kylie pose="run" /></span></span>
         {thieves.kylie.wheel && <span className={styles.stolenWheel} />}
-        {thieves.kylie.line && <span className={styles.ibisBubble} style={{ bottom: 132 }}>{thieves.kylie.line}</span>}
+        <Bubble text={thieves.kylie.line} className={styles.ibisBubble} style={{ bottom: 132 }} />
       </span>}
       {brawl === "dynamite" && <span className={styles.dynamite} style={{ left: `calc(50% + ${PILE_X + 34}px)`, bottom: 150 }}><Dynamite /></span>}
       {brawl === "boom" && <><span className={styles.bikeBoom} style={{ left: `calc(50% + ${PILE_X + 64}px)` }} /><span className={styles.scorch} style={{ left: `calc(50% + ${PILE_X - 40}px)` }} /></>}
@@ -4257,7 +4311,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       <span className={trev.pose === "peek" ? styles.trevTwitch : styles.ibisBody}>
         <span className={styles.ibisBody} style={{ transform: trev.faceLeft ? "scaleX(-1)" : undefined }}><Trev pose={trev.pose} carrying={trev.carrying} /></span>
       </span>
-      {trev.line && <span className={styles.ibisBubble} style={{ bottom: 132 }}>{trev.line}</span>}
+      <Bubble text={trev.line} className={styles.ibisBubble} style={{ bottom: 132 }} />
     </span>}
     {phase !== "hidden" && palmSpots().map(pt => <span key={`palm${pt.i}`} className={styles.palmTree} aria-hidden style={{ left: pt.left, bottom: pt.base, width: pt.w, height: pt.h }}>
       <PalmTree lean={pt.lean} variant={pt.i} />
@@ -4280,7 +4334,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
               {who === "trev" ? <Trev pose={t.pose} carrying={t.carrying} stick={t.stick} /> : <Kylie pose={t.pose} carrying={t.carrying} stick={t.stick} />}
             </span>
           </span>
-          {cookout.line?.who === who && <span key={cookout.line.text} className={styles.ibisBubble} style={{ bottom: 132 }}>{cookout.line.text}</span>}
+          <Bubble text={cookout.line?.who === who ? cookout.line.text : null} className={styles.ibisBubble} style={{ bottom: 132 }} />
         </span>;
       })}
       {cookout.cop && <span className={styles.strikeCar} aria-hidden style={{ left: cookout.cop.x, bottom: FAR_LANE, width: isPhone() ? 150 : 190, height: (isPhone() ? 150 : 190) * 0.42, transitionDuration: `${cookout.cop.ms}ms` }}>
@@ -4293,7 +4347,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     </span>)}
     {bev && <span data-poopable="person" className={styles.bev} style={{ left: bev.x, bottom: ROAD_H - 10, transitionDuration: `${bev.ms}ms` }}>
       <span className={bev.pose === "shout" ? styles.trevTwitch : styles.ibisBody}><span className={styles.ibisBody} style={{ transform: bev.faceLeft ? "scaleX(-1)" : undefined }}><Bev pose={bev.pose} /></span></span>
-      {bev.line && <span key={bev.line} className={styles.ibisBubble} style={{ bottom: 124 }}>{bev.line}</span>}
+      <Bubble text={bev.line} className={styles.ibisBubble} style={{ bottom: 124 }} />
     </span>}
     {dole && (() => {
       const m = stripMap();
@@ -4306,7 +4360,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             </span>
           </span>
           {(d.cash || d.beer) && <span className={styles.heldFish} style={{ left: d.faceLeft ? 0 : 44, bottom: 64, fontSize: 18 }}>{d.beer ? "🍺" : "💵"}</span>}
-          {d.line && <span key={d.line} className={styles.ibisBubble} style={{ bottom: 132 }}>{d.line}</span>}
+          <Bubble text={d.line} className={styles.ibisBubble} style={{ bottom: 132 }} />
         </span>)}
       </>;
     })()}
@@ -4331,11 +4385,11 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
           </span>
         </span>
         {r.board && <span className={styles.boardHeld}><WobbleBoard /></span>}
-        {r.line && <span className={styles.ibisBubble} style={{ bottom: 132 }}>{r.line}</span>}
+        <Bubble text={r.line} className={styles.ibisBubble} style={{ bottom: 132 }} />
       </span>)}
       {rave.cops.map(c => !c.gone && <span key={c.id} className={styles.raveCop} style={{ left: c.x, bottom: c.bottom, transitionDuration: `${c.ms}ms` }}>
         <span className={styles.ibisBody} style={{ transform: c.faceLeft ? "scaleX(-1)" : undefined }}><RaveCop zap={c.zap} walking={c.walking} baton={c.baton} /></span>
-        {c.line && <span className={styles.ibisBubble} style={{ bottom: 118 }}>{c.line}</span>}
+        <Bubble text={c.line} className={styles.ibisBubble} style={{ bottom: 118 }} />
       </span>)}
     </div>}
     {lorikeets.map(b => <span key={b.id} className={`${styles.lorikeet} ${styles.shootable}`} {...shootProps({ kind: "lorikeet", id: b.id }, "Shoot the lorikeet!")}
@@ -4377,7 +4431,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     </span>}
     {kid && <span data-poopable="person" className={`${styles.kid} ${styles.moving}`} style={{ left: kid.x, bottom: GROUND + 2, width: KID_W, height: KID_W, transitionDuration: `${kid.ms}ms` }}>
       <span className={styles.carFlip} style={{ transform: kid.dir === -1 ? "scaleX(-1)" : undefined }}><KidBike panic={kid.panic} /></span>
-      {kid.line && <span className={styles.ibisBubble} style={{ bottom: KID_W + 56 }}>{kid.line}</span>}
+      <Bubble text={kid.line} className={styles.ibisBubble} style={{ bottom: KID_W + 56 }} />
       {kid.magpies.map(m => <span key={m.id} className={`${styles.magpie} ${styles.shootable}`} {...shootProps({ kind: "magpie", id: m.id }, "Shoot the magpie!")}
         style={{ left: m.ox, bottom: m.oy, animationDelay: `${m.delay}ms`, ["--sx" as string]: `${m.sx}px`, ["--sy" as string]: `${m.sy}px` }}>
         <span className={styles.magpieSwoop} style={{ animationDelay: `${m.delay + 800}ms` }}>
@@ -4408,7 +4462,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
           <Trev pose={gary.pose} shorts="#4d7c0f" carrying={gary.carrying && gary.carrying !== "fish" ? gary.carrying : null} />
         </span>
         {gary.fish && <span className={styles.heldFish} style={{ left: gary.faceLeft ? 4 : 34, bottom: 92 }}>🐟</span>}
-        {gary.line && <span className={styles.ibisBubble} style={{ bottom: 128 }}>{gary.line}</span>}
+        <Bubble text={gary.line} className={styles.ibisBubble} style={{ bottom: 128 }} />
       </span>)}
     {roadFish && <span className={styles.roadFish} style={{ left: roadFish.x, bottom: GROUND + 4 }}>🐟</span>}
     {/* True Blue and his visitors */}
@@ -4425,7 +4479,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         <span className={styles.ibisBody} style={{ transform: blue.faceLeft ? "scaleX(-1)" : undefined }}><TrueBlue pose={blue.pose} /></span>
       </span>
       {blue.fish && <span className={styles.heldFish} style={{ left: 36, bottom: 96 }}>🐟</span>}
-      {blue.line && <span className={styles.ibisBubble} style={{ bottom: 130 }}>{blue.line}</span>}
+      <Bubble text={blue.line} className={styles.ibisBubble} style={{ bottom: 130 }} />
     </span>}
     {blueBirds?.lori && <span className={styles.blueBird} style={{ left: blueBirds.lori.x, bottom: blueBirds.lori.bottom, width: 30, height: 21, transitionDuration: `${blueBirds.lori.ms}ms` }}><Lorikeet flying={!blueBirds.lori.landed} /></span>}
     {blueBirds?.ibis && <span className={styles.blueBird} style={{ left: blueBirds.ibis.x, bottom: blueBirds.ibis.bottom, width: 70, height: 70, transitionDuration: `${blueBirds.ibis.ms}ms` }}><BinChicken flying={!blueBirds.ibis.landed} /></span>}
@@ -4437,18 +4491,18 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
           {fighter.who === "kylie" ? <Kylie pose={fighter.pose} carrying={fighter.carrying} /> : <Trev pose={fighter.pose} carrying={fighter.carrying} shorts={fighter.who === "gary" ? "#4d7c0f" : undefined} />}
         </span>
       </span>
-      {fighter.line && <span key={fighter.line} className={styles.ibisBubble} style={{ bottom: 132 }}>{fighter.line}</span>}
+      <Bubble text={fighter.line} className={styles.ibisBubble} style={{ bottom: 132 }} />
     </span>}
     {boogie && <span data-poopable="person" className={styles.trev} aria-hidden style={{ left: boogie.x, bottom: TREE_BOTTOM - 6 }}>
       <span className={styles.wildDance}>
         <span className={styles.ibisBody}>{boogie.who === "kylie" ? <Kylie pose="dance" /> : <Trev pose="dance" shorts={boogie.who === "gary" ? "#4d7c0f" : undefined} />}</span>
       </span>
-      <span key={boogie.line} className={styles.ibisBubble} style={{ bottom: 132 }}>{boogie.line}</span>
+      <Bubble text={boogie.line} className={styles.ibisBubble} style={{ bottom: 132 }} />
     </span>}
     {shopBikers.map(bk => <span key={bk.id} data-poopable="person" className={styles.storeBiker} role="button" aria-label={`${bk.brand === "harley" ? "Harley" : "Indian"} biker`} title={bk.brand === "harley" ? "Harley bloke" : "Indian bloke"}
       style={{ left: bk.x, bottom: bk.bottom, transitionDuration: `${bk.ms}ms`, visibility: bk.brawling ? "hidden" : undefined }} onClick={event => { event.stopPropagation(); void crewJoke(bk.id); }}>
       <span className={styles.ibisBody} style={{ transform: bk.faceLeft ? "scaleX(-1)" : undefined }}><StoreBiker brand={bk.brand} look={bk.look} walking={bk.walking} flipping={bk.flipping} laughing={bk.laughing} cheering={bk.cheering} /></span>
-      {bk.line && <span className={styles.ibisBubble} style={{ bottom: `calc(105% + ${bk.lift ?? 0}px)`, zIndex: 2 }}>{bk.line}</span>}
+      <Bubble text={bk.line} className={styles.ibisBubble} style={{ bottom: `calc(105% + ${bk.lift ?? 0}px)`, zIndex: 2 }} />
     </span>)}
     {rumble && <div className={styles.brawl} aria-hidden>
       {rumble.bikes.map(b => <span key={b.id} className={styles.passingRide} style={{ left: b.x, bottom: b.bottom, width: rideW(), height: (rideW() * 100) / 160, transitionDuration: `${b.ms}ms`, transitionTimingFunction: rumble.stage === "ride" ? "ease-out" : "ease-in" }}>
@@ -4479,26 +4533,34 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       style={{ left: dogWalk.x, bottom: dogWalk.bottom, width: beachSize.dog(), height: (beachSize.dog() * 100) / 130, transitionDuration: `${dogWalk.ms}ms` }}
       onClick={event => { event.stopPropagation(); add({ kind: "burst", x: dogWalk.x + beachSize.dog() * 0.6, y: dogWalk.bottom + 80, size: 0, text: pick(["WOOF!", "ARF ARF!", "*sniff sniff*", "Bluey! Heel!"]) }); }}>
       <span className={styles.ibisBody} style={{ transform: dogWalk.faceLeft ? "scaleX(-1)" : undefined }}><DogWalker pose={dogWalk.pose} /></span>
-      {dogWalk.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{dogWalk.line}</span>}
+      <Bubble text={dogWalk.line} className={styles.ibisBubble} style={{ bottom: "100%" }} />
     </span>}
     {binDiver && <span data-poopable="person" className={styles.trev} style={{ left: binDiver.x, bottom: binDiver.bottom, transitionDuration: `${binDiver.ms}ms` }}>
       <span className={styles.ibisBody} style={{ transform: binDiver.faceLeft ? "scaleX(-1)" : undefined }}>{binDiver.who === "trev" ? <Trev pose={binDiver.pose} /> : <Kylie pose={binDiver.pose} />}</span>
-      {binDiver.line && <span className={styles.ibisBubble} style={{ bottom: 132 }}>{binDiver.line}</span>}
+      <Bubble text={binDiver.line} className={styles.ibisBubble} style={{ bottom: 132 }} />
     </span>}
     {rescue?.swimmer && <span className={styles.beachActor} style={{ left: rescue.swimmer.x, bottom: rescue.swimmer.bottom, width: beachSize.swimmer(), height: beachSize.swimmer() * 2.5, transitionDuration: `${rescue.swimmer.ms}ms` }}>
       <span className={styles.ibisBody} style={{ transform: rescue.swimmer.faceLeft ? "scaleX(-1)" : undefined }}><Swimmer pose={rescue.swimmer.pose} /></span>
-      {rescue.swimmer.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{rescue.swimmer.line}</span>}
+      <Bubble text={rescue.swimmer.line} className={styles.ibisBubble} style={{ bottom: "100%" }} />
     </span>}
     {rescue?.guard && <span data-poopable="person" className={styles.beachActor} style={{ left: rescue.guard.x, bottom: rescue.guard.bottom, width: beachSize.guard(), height: beachSize.guard() * 2, transitionDuration: `${rescue.guard.ms}ms` }}>
       <span className={styles.ibisBody} style={{ transform: rescue.guard.faceLeft ? "scaleX(-1)" : undefined }}><Lifeguard pose={rescue.guard.pose} /></span>
-      {rescue.guard.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{rescue.guard.line}</span>}
+      <Bubble text={rescue.guard.line} className={styles.ibisBubble} style={{ bottom: "100%" }} />
     </span>}
     {chips && <span data-poopable="person" className={styles.beachActor} style={{ left: chips.eater.x, bottom: chips.eater.bottom, width: isPhone() ? 32 : 44, height: isPhone() ? 80 : 110, transitionDuration: `${chips.eater.ms}ms` }}>
       <span className={styles.ibisBody} style={{ transform: chips.eater.faceLeft ? "scaleX(-1)" : undefined }}><ChipEater pose={chips.eater.pose} /></span>
-      {chips.eater.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{chips.eater.line}</span>}
+      <Bubble text={chips.eater.line} className={styles.ibisBubble} style={{ bottom: "100%" }} />
     </span>}
     {chips?.gulls.map(g => <span key={g.id} data-poopable="animal" className={styles.gull} style={{ left: g.x, bottom: g.bottom, width: isPhone() ? 28 : 36, height: isPhone() ? 21 : 27, transitionDuration: `${g.ms}ms` }}>
       <span className={styles.ibisBody} style={{ transform: g.faceLeft ? "scaleX(-1)" : undefined }}><Seagull flying={g.flying} carrying={g.carrying} /></span>
+    </span>)}
+    {helis.map(h => <span key={h.id} className={`${styles.heli} ${h.falling ? styles.heliFall : ""}`} aria-hidden
+      style={{ left: h.x, bottom: h.bottom, width: 120 * stripMap().k * 0.6, height: 60 * stripMap().k * 0.6, transitionDuration: `${h.ms}ms`, ["--dy" as string]: `${h.dy}px` }}>
+      <span className={styles.ibisBody} style={{ transform: h.faceLeft ? "scaleX(-1)" : undefined }}><Helicopter livery={h.livery} /></span>
+    </span>)}
+    {gawkers.map(g => <span key={g.id} data-poopable="person" className={styles.beachActor} style={{ left: g.x, bottom: g.bottom, width: isPhone() ? 32 : 44, height: isPhone() ? 80 : 110 }}>
+      <span className={styles.ibisBody}><BeachGoer look={g.look} pose="sit" /></span>
+      <Bubble text={g.line && (clean ? bleep(g.line) : g.line)} className={styles.ibisBubble} style={{ bottom: "72%" }} />
     </span>)}
     {seaBits.map(b => <span key={b.id} className={`${styles.seaThing} ${b.cls ? styles[b.cls] : ""} ${b.clip ? styles.seaClip : ""}`} aria-hidden
       style={{ left: b.x, bottom: b.bottom, width: b.w, height: b.h, opacity: b.hide ? 0 : undefined, ...(b.tms !== undefined ? { transitionProperty: "left, opacity", transitionDuration: `${b.tms}ms, 900ms`, transitionTimingFunction: b.ease ?? "linear" } : {}), animationDuration: b.ms ? `${b.ms}ms` : undefined, animationDelay: b.delay ? `${b.delay}ms` : undefined, ["--dx" as string]: `${b.dx ?? 0}px`, ["--dy" as string]: `${b.dy ?? 0}px` }}>
@@ -4506,7 +4568,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     </span>)}
     {bazza && <span data-poopable="person" className={styles.beachActor} style={{ left: bazza.x, bottom: bazza.bottom, width: isPhone() ? 36 : 50, height: isPhone() ? 72 : 100, transitionDuration: `${bazza.ms}ms` }}>
       <span className={styles.ibisBody} style={{ transform: bazza.faceLeft ? "scaleX(-1)" : undefined }}><Bazza pose={bazza.pose} /></span>
-      {bazza.line && <span className={styles.ibisBubble} style={{ bottom: "100%" }}>{bazza.line}</span>}
+      <Bubble text={bazza.line} className={styles.ibisBubble} style={{ bottom: "100%" }} />
     </span>}
     {shark?.blood && <span className={styles.bloodPool} style={{ left: shark.blood.x, bottom: shark.blood.bottom }} aria-hidden />}
     {shark?.surfer && <span className={`${styles.seaThing} ${styles.floatBob}`} style={{ left: shark.surfer.x, bottom: shark.surfer.bottom, width: beachSize.surfer(), height: (beachSize.surfer() * 30) / 70 }} aria-hidden><PaddleSurfer /></span>}
@@ -4518,7 +4580,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     {commuters.map(c => <span key={c.id} data-poopable="person" className={styles.commuter} role="button" aria-label="Someone waiting for the bus" title="Waiting for the duck"
       style={{ left: c.x, bottom: c.bottom, transitionDuration: `${c.ms}ms` }} onClick={event => { event.stopPropagation(); commuterLine(c.id, pick(BUS_STOP_LINES)); }}>
       <span className={styles.ibisBody} style={{ transform: c.faceLeft ? "scaleX(-1)" : undefined }}><Commuter look={c.look} walking={c.walking} waving={c.waving} /></span>
-      {c.line && <span className={styles.ibisBubble} style={{ bottom: "105%" }}>{c.line}</span>}
+      <Bubble text={c.line} className={styles.ibisBubble} style={{ bottom: "105%" }} />
     </span>)}
     {duck && <span className={styles.aquaDuck} role="button" aria-label="The Aquaduck" title="Quack quack!"
       style={{ left: duck.x, bottom: FAR_LANE - 12, width: duckW(), height: (duckW() * 140) / 300, transitionDuration: `${duck.ms}ms`, transitionTimingFunction: duck.leaving ? "ease-in" : "ease-out" }}
@@ -4531,12 +4593,12 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     </span>)}
     {nev && <span data-poopable="person" className={styles.nev} role="button" aria-label="Talk to Old Nev" title="Old Nev" style={{ left: nev.x, bottom: ROAD_H - 10, transitionDuration: `${nev.ms}ms` }} onClick={nevSays}>
       <span className={styles.ibisBody} style={{ transform: nev.faceLeft ? "scaleX(-1)" : undefined }}><OldNev walking={nev.walking} shaking={nev.shaking} /></span>
-      {nev.line && <span className={styles.ibisBubble} style={{ bottom: 128 }}>{nev.line}</span>}
+      <Bubble text={nev.line} className={styles.ibisBubble} style={{ bottom: 128 }} />
     </span>}
     {dazza && <span data-poopable="person" className={styles.dazza} aria-hidden style={{ left: dazza.x, bottom: GROUND + 2, transitionDuration: `${dazza.ms}ms` }}>
       <span className={styles.ibisBody} style={{ transform: dazza.faceLeft ? "scaleX(-1)" : undefined }}><Bludger pose={dazza.pose} /></span>
       {dazza.bear && <span className={styles.bearOnHead}><DropBear /></span>}
-      {dazza.line && <span className={styles.ibisBubble}>{dazza.line}</span>}
+      <Bubble text={dazza.line} className={styles.ibisBubble} />
     </span>}
     {dazza && dazza.bearTop !== null && <span className={styles.fallingBear} aria-hidden style={{ left: dazza.x + 14, top: dazza.bearTop }}><DropBear /></span>}
     {dancersOut && ([[2116, 378], [2160, 376]] as const).map(([sx, sy], i) => {
@@ -4544,7 +4606,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       return <span key={`dancer${i}`} data-poopable="person" className={styles.dancer} role="button" aria-label="A dancer from Sandy Bottoms on her smoko" title="Have a yarn"
         style={{ left: sm.x(sx) - w / 2, bottom: sm.b(sy), width: w, height: w * 2.5 }} onClick={event => { event.stopPropagation(); void dancerChat(i as 0 | 1); }}>
         <span className={styles.ibisBody} style={{ transform: i ? "scaleX(-1)" : undefined }}><SmokoGirl look={i} /></span>
-        {dancerLines[i] && <span className={styles.ibisBubble} style={{ bottom: "100%", zIndex: 2 }}>{dancerLines[i]}</span>}
+        <Bubble text={dancerLines[i]} className={styles.ibisBubble} style={{ bottom: "100%", zIndex: 2 }} />
       </span>;
     })}
     {bats.map(b => {
@@ -4611,7 +4673,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     {ibis && <span className={`${styles.ibis} ${styles.shootable} ${ibis.stage === "grab" ? styles.ibisPecking : styles.ibisWalking}`}
       style={{ left: ibis.x, bottom: GROUND - 2, transitionDuration: `${ibis.ms}ms` }} {...shootProps({ kind: "ibis" }, "Shoot the bin chicken!")}>
       <span className={styles.ibisBody} style={{ transform: ibis.faceLeft ? "scaleX(-1)" : undefined }}><BinChicken carrying={ibis.carrying} /></span>
-      {ibis.line && <span className={styles.ibisBubble}>{ibis.line}</span>}
+      <Bubble text={ibis.line} className={styles.ibisBubble} />
     </span>}
     {fx.map(item => {
       if (item.kind === "fog") return null;
@@ -4649,7 +4711,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
         <span className={styles.bottleY} style={{ ["--dy" as string]: `${item.dy}px`, ["--arc" as string]: `${item.arc ?? -110}px` }}><span className={styles.junk}>{item.text}</span></span>
       </span>;
       if (item.kind === "bullet") return <span key={item.id} className={styles.bullet} style={{ left: item.x, bottom: item.y, ["--dx" as string]: `${item.dx}px`, ["--dy" as string]: `${item.dy}px`, ["--angle" as string]: `${Math.atan2(item.dy || 0, item.dx || 1)}rad` }} onAnimationEnd={() => bulletLanded(item)} />;
-      if (item.kind === "burst" || item.kind === "stars" || item.kind === "boom") return <span key={item.id} className={styles[item.kind]} style={{ left: item.x, bottom: item.y }} onAnimationEnd={() => remove(item.id)}>{item.text}</span>;
+      if (item.kind === "burst" || item.kind === "stars" || item.kind === "boom") return <span key={item.id} className={styles[item.kind]} style={{ left: item.x, bottom: item.y, animationDuration: item.kind === "burst" && item.text && item.text.length > 10 ? `${Math.max(2600, readMs(item.text) - 600)}ms` : undefined }} onAnimationEnd={() => remove(item.id)}>{item.text}</span>;
       if (item.kind === "bottle") return <span key={item.id} className={styles.bottleX} style={{ left: item.x, bottom: item.y, ["--dx" as string]: `${item.dx}px` }} onAnimationEnd={event => event.target === event.currentTarget && smash(item)}>
         <span className={styles.bottleY} style={{ ["--dy" as string]: `${item.dy}px`, ["--arc" as string]: `${item.arc ?? -110}px` }}><span className={styles.bottle} /></span>
       </span>;
@@ -4784,6 +4846,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             <Trick label="⚓ VMR tow" onClick={pickTrick(() => void vmrTow(true))} />
             <Trick label="🍟 Seagull chip heist" onClick={pickTrick(() => void chipRaid(true))} />
             <Trick label="🐦 Pelican flock" onClick={pickTrick(() => void pelicanFlock(true))} />
+            <Trick label="🚁 Chopper crash" onClick={pickTrick(() => void heliCrash(true))} />
             <Trick label="🪝 VMR recovery" onClick={pickTrick(() => void vmrRecover(undefined, true))} />
             <Trick label="🦜 Lorikeets" onClick={callIn(() => void lorikeetVisit())} />
             <Trick label="🦘 Roo mob" onClick={callIn(() => rooMob())} />

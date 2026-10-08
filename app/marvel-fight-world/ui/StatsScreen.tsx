@@ -11,14 +11,13 @@ import {
   Skull,
   Swords,
   Timer,
-  Trash2,
   Trophy,
   Zap,
 } from "lucide-react";
 
 import type { Roster } from "../data/roster";
-import { loadStats, resetStats, type Stats } from "../data/storage";
-import { ArcadeButton, Backdrop, ScreenTitle, cn } from "./kit";
+import { loadStats } from "../data/storage";
+import { Backdrop, ScreenTitle, cn } from "./kit";
 import { GlobalBoard } from "./GlobalBoard";
 
 function Tile({
@@ -64,6 +63,8 @@ export function StatsScreen({
   name,
   signedIn,
   cloudOn,
+  publicUpdatedAt,
+  syncError,
   onJoin,
   onName,
 }: {
@@ -72,14 +73,15 @@ export function StatsScreen({
   name: string;
   signedIn: boolean;
   cloudOn: boolean;
+  publicUpdatedAt: Date | null;
+  syncError: string | null;
   onJoin: () => void;
-  onName: (n: string) => void;
+  onName: (n: string) => Promise<boolean>;
 }) {
   const [tab, setTab] = useState<"global" | "mine">(
     cloudOn ? "global" : "mine",
   );
-  const [stats, setStats] = useState<Stats>(() => loadStats());
-  const [confirm, setConfirm] = useState(false);
+  const stats = useMemo(() => loadStats(), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.code === "Escape" && onBack();
@@ -123,39 +125,6 @@ export function StatsScreen({
               tab === "global" ? "Every player · live" : "Saved on this device"
             }
             title="Leaderboard"
-            right={
-              confirm ? (
-                <div className="flex gap-2">
-                  <ArcadeButton
-                    tone="danger"
-                    size="sm"
-                    onClick={() => {
-                      resetStats();
-                      setStats(loadStats());
-                      setConfirm(false);
-                    }}
-                  >
-                    Erase everything
-                  </ArcadeButton>
-                  <ArcadeButton
-                    tone="ghost"
-                    size="sm"
-                    onClick={() => setConfirm(false)}
-                  >
-                    Cancel
-                  </ArcadeButton>
-                </div>
-              ) : (
-                <ArcadeButton
-                  tone="ghost"
-                  size="sm"
-                  onClick={() => setConfirm(true)}
-                  disabled={!stats.matches}
-                >
-                  <Trash2 className="h-4 w-4" /> Reset
-                </ArcadeButton>
-              )
-            }
           />
 
           <div className="mt-6 inline-flex rounded-xl bg-black/30 p-1 ring-1 ring-white/10">
@@ -187,6 +156,8 @@ export function StatsScreen({
               name={name}
               signedIn={signedIn}
               cloudOn={cloudOn}
+              publicUpdatedAt={publicUpdatedAt}
+              syncError={syncError}
               onJoin={onJoin}
               onName={onName}
             />

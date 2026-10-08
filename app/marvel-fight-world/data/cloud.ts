@@ -11,8 +11,8 @@
 /*                                                                     */
 /*  Browser-only: loaded with a dynamic import.                        */
 /* ------------------------------------------------------------------ */
-import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, serverTimestamp, setDoc, Timestamp, where } from "firebase/firestore";
-import { deviceKind, firebase } from "@/utils/firebase/client";
+import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, runTransaction, serverTimestamp, setDoc, Timestamp, where } from "firebase/firestore";
+import { deviceKind, firebase, friendlyError } from "@/utils/firebase/client";
 import type { GameCloudApi } from "@/utils/firebase/useEmailCloud";
 import { EMPTY_STATS, cleanName, mainFighter, validName, type ProgressBundle } from "./storage";
 
@@ -30,6 +30,17 @@ const sessionRef = (uid: string, id: string) => doc(firebase().db, "fightWorldPl
 const boardRef = (uid: string) => doc(firebase().db, "fightWorldLeaderboard", uid);
 const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : 0);
 const int = (v: unknown) => Math.max(0, Math.floor(num(v)));
+const LIFETIME_TOTALS = ["score", "wins", "matches", "kos", "perfects", "bestStreak", "bestCombo", "titles", "survivalBest"] as const;
+const pendingWrites = new Map<string, Promise<unknown>>();
+function queueWrite<T>(uid: string, work: () => Promise<T>): Promise<T> {
+  const previous = pendingWrites.get(uid);
+  const task = (previous ?? Promise.resolve()).catch(() => undefined).then(work);
+  const queued = task.finally(() => {
+    if (pendingWrites.get(uid) === queued) pendingWrites.delete(uid);
+  });
+  pendingWrites.set(uid, queued);
+  return queued;
+}
 
 /* ── Public leaderboard ────────────────────────────────────────────── */
 export interface LeaderRow {
@@ -58,13 +69,13 @@ async function publishLeaderboard(uid: string, bundleJson: string) {
   try {
     b = JSON.parse(bundleJson);
   } catch {
-    return;
+    return false;
   }
   const name = cleanName(b.profile?.name ?? "");
-  if (!validName(name)) return;
+  if (!validName(name)) return false;
   const st = { ...EMPTY_STATS, ...(b.stats ?? {}) };
   const main = mainFighter(st);
-  await setDoc(boardRef(uid), {
+  const row = {
     name,
     score: int(st.score),
     wins: int(st.wins),
@@ -77,9 +88,21 @@ async function publishLeaderboard(uid: string, bundleJson: string) {
     titles: int(st.tournamentWins),
     survivalBest: int(st.survivalBest),
     mainFighter: main ? { id: int(main.id), name: main.name.slice(0, 40) } : null,
-    streakFighter: st.bestStreakById !== null && st.bestStreak > 0 ? { id: int(st.bestStreakById), name: st.bestStreakBy.slice(0, 40) } : null,
+    streakFighter: st.bestStreakById != null && st.bestStreak > 0 ? { id: int(st.bestStreakById), name: (st.bestStreakBy || "").slice(0, 40) } : null,
     updatedAt: serverTimestamp(),
+  };
+  await runTransaction(firebase().db, async (transaction) => {
+    const ref = boardRef(uid);
+    const existing = await transaction.get(ref);
+    if (existing.exists()) {
+      const previous = toRow(uid, existing.data());
+      for (const field of LIFETIME_TOTALS) row[field] = Math.max(row[field], previous[field]);
+      if (previous.bestStreak > int(st.bestStreak)) row.streakFighter = previous.streakFighter;
+      if (!row.mainFighter) row.mainFighter = previous.mainFighter;
+    }
+    transaction.set(ref, row);
   });
+  return true;
 }
 
 const toRow = (id: string, d: Record<string, unknown>): LeaderRow => {
@@ -144,20 +167,27 @@ export const fightCloud: GameCloudApi<FightMeta> = {
     };
   },
 
-  async write(user, data, m) {
-    if (data.length > 900_000) throw new Error("This save is too big for the cloud.");
-    await setDoc(saveRef(user.uid), { data, version: 1, size: data.length, savedAt: serverTimestamp(), ...m });
-    await setDoc(
-      playerRef(user.uid),
-      { email: user.email ?? "", lastSavedAt: serverTimestamp(), lastPlayedAt: serverTimestamp(), matches: m.matches, wins: m.wins, tournamentWins: m.tournamentWins },
-      { merge: true },
-    );
-    // Public leaderboard row — best effort, never blocks the save itself
-    try {
-      await publishLeaderboard(user.uid, data);
-    } catch {
-      /* leaderboard rules not deployed yet / offline */
-    }
+  write(user, data, m) {
+    // Autosave, name changes and match results can overlap. Keep their Firestore
+    // writes in invocation order so an older score cannot replace a newer one.
+    return queueWrite(user.uid, async () => {
+      if (data.length > 900_000) throw new Error("This save is too big for the cloud.");
+      await setDoc(saveRef(user.uid), { data, version: 1, size: data.length, savedAt: serverTimestamp(), ...m });
+      await setDoc(
+        playerRef(user.uid),
+        { email: user.email ?? "", lastSavedAt: serverTimestamp(), lastPlayedAt: serverTimestamp(), matches: m.matches, wins: m.wins, tournamentWins: m.tournamentWins },
+        { merge: true },
+      );
+      try {
+        return { publicUpdated: await publishLeaderboard(user.uid, data) };
+      } catch (error) {
+        return { warning: `Progress saved, but leaderboard publishing failed: ${friendlyError(error)}` };
+      }
+    });
+  },
+
+  publishPublic(user, data) {
+    return queueWrite(user.uid, () => publishLeaderboard(user.uid, data));
   },
 
   async startSession(user, m) {

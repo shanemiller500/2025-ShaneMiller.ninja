@@ -30,7 +30,8 @@ export interface CloudOffer<M> {
 
 export interface GameCloudApi<M> {
   load(user: User): Promise<CloudOffer<M> | null>;
-  write(user: User, data: string, meta: M): Promise<void>;
+  write(user: User, data: string, meta: M): Promise<{ warning?: string; publicUpdated?: boolean } | void>;
+  publishPublic?(user: User, data: string): Promise<boolean>;
   startSession(user: User, meta: M): Promise<string>;
   touchSession(user: User, id: string, seconds: number, meta: M): Promise<void>;
 }
@@ -59,6 +60,7 @@ export interface CloudState<M> {
   status: CloudStatus;
   email: string | null;
   lastSaved: Date | null;
+  publicUpdatedAt: Date | null;
   saving: boolean;
   error: string | null;
   offer: CloudOffer<M> | null;
@@ -105,6 +107,7 @@ export function useEmailCloud<M>(
     status: "loading",
     email: null,
     lastSaved: null,
+    publicUpdatedAt: null,
     saving: false,
     error: null,
     offer: null,
@@ -115,6 +118,7 @@ export function useEmailCloud<M>(
   const game = useRef<GameCloudApi<M> | null>(null);
   const user = useRef<User | null>(null);
   const session = useRef<{ id: string; started: number } | null>(null);
+  const lastWarning = useRef<string | null>(null);
   // only sync once the player has decided what to do with an existing cloud save
   const ready = useRef(false);
   const leaveTo = useRef<(() => void) | null>(null);
@@ -160,11 +164,15 @@ export function useEmailCloud<M>(
     if (!c || !g || !u || !snap || !ready.current) return false;
     patch({ saving: true });
     try {
-      await g.write(u, snap.data, snap.meta);
+      const result = await g.write(u, snap.data, snap.meta);
       if (session.current) await g.touchSession(u, session.current.id, (Date.now() - session.current.started) / 1000, snap.meta);
-      patch({ saving: false, lastSaved: new Date(), error: null });
+      const warning = result?.warning ?? null;
+      patch({ saving: false, lastSaved: new Date(), error: warning, ...(result?.publicUpdated ? { publicUpdatedAt: new Date() } : {}) });
       markSynced(Date.now());
-      if (!quiet) toast.current("☁️", "Saved to the cloud!");
+      if (warning) {
+        if (warning !== lastWarning.current) toast.current("⚠️", warning);
+      } else if (!quiet) toast.current("☁️", "Saved to the cloud!");
+      lastWarning.current = warning;
       return true;
     } catch (err) {
       patch({ saving: false, error: c.friendlyError(err) });
@@ -175,6 +183,20 @@ export function useEmailCloud<M>(
 
   /* ------------------------------ sign-in ------------------------------ */
 
+  const publishReady = useCallback(async (u: User, data: string) => {
+    const g = game.current;
+    const c = client.current;
+    if (!g?.publishPublic || !c) return;
+    try {
+      if (await g.publishPublic(u, data)) patch({ publicUpdatedAt: new Date(), error: null });
+    } catch (err) {
+      const warning = `Progress saved, but leaderboard publishing failed: ${c.friendlyError(err)}`;
+      patch({ error: warning });
+      if (warning !== lastWarning.current) toast.current("⚠️", warning);
+      lastWarning.current = warning;
+    }
+  }, []);
+
   const begin = useCallback(
     async (u: User) => {
       const c = client.current!;
@@ -184,15 +206,18 @@ export function useEmailCloud<M>(
       const intent = c.takeIntent();
       try {
         const save = await g.load(u);
+        let readySave: string | null = null;
         // this device made (or already loaded) the newest cloud save: just keep playing
         const known = !!save && !!save.savedAt && lastSynced(u.uid) >= save.savedAt.getTime() - 5000;
         if (save && intent !== "load" && known) {
           ready.current = true;
           patch({ view: null, offer: null, lastSaved: save.savedAt });
+          readySave = save.data;
         } else if (save && intent === "load") {
           // they asked to load it: no second question
           const ok = localRef.current.importSave(save.data);
           if (ok) markSynced(save.savedAt?.getTime() ?? Date.now());
+          if (ok) readySave = save.data;
           ready.current = true;
           patch({ view: null, offer: null });
           toast.current(ok ? "🎉" : "⚠️", ok ? "Welcome back! Your saved game is loaded." : "Couldn't read that save — keeping this one.");
@@ -204,6 +229,7 @@ export function useEmailCloud<M>(
           if (intent === "load") toast.current("🔎", `No saved game for ${u.email} yet — we'll save this one from now on.`);
           else if (intent === "save") toast.current("✅", `Signed in! Your progress now saves to ${u.email}.`);
         }
+        if (readySave) await publishReady(u, readySave);
         const meta = localRef.current.exportSave()?.meta;
         if (meta) session.current = { id: await g.startSession(u, meta), started: Date.now() };
         if (!save) await saveNow(true);
@@ -213,7 +239,7 @@ export function useEmailCloud<M>(
         patch({ error: c.friendlyError(err) });
       }
     },
-    [saveNow],
+    [publishReady, saveNow],
   );
 
   // boot: load firebase, finish a magic-link sign-in, follow the signed-in user
@@ -365,7 +391,8 @@ export function useEmailCloud<M>(
     ready.current = true;
     patch({ offer: null, view: null });
     toast.current(ok ? "🎉" : "⚠️", ok ? "Welcome back! Your saved game is loaded." : "Couldn't read that save — keeping this one.");
-  }, [state.offer]);
+    if (ok && user.current) void publishReady(user.current, o.data);
+  }, [publishReady, state.offer]);
 
   const declineOffer = useCallback(() => {
     // keep what's on screen; it becomes the cloud save from now on

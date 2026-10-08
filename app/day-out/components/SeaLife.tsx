@@ -210,3 +210,43 @@ export function Floater() {
     <path d="M0 16 q6 -3 12 0 t12 0 t12 0 t12 0" stroke="#e0f2fe" strokeWidth={1.6} fill="none" />
   </svg>;
 }
+
+// A helicopter, side-on: bubble cockpit with the pilot, tail boom and fin, skids, and the rotors
+// blurring round. Livery 0 is a red joy-flight chopper, 1 a yellow news chopper. Faces right;
+// viewBox 120×60.
+export function Helicopter({ livery = 0 }: { livery?: 0 | 1 }) {
+  const body = livery ? "#facc15" : "#dc2626", stripe = livery ? "#1d4ed8" : "#f8fafc", label = livery ? "COAST NEWS" : "JOYFLIGHTS";
+  return <svg viewBox="0 0 120 60" width="100%" height="100%" aria-hidden overflow="visible">
+    <path d="M50 26 L112 22 L112 28 L52 34 Z" fill={body} stroke={INK} strokeWidth={1.4} />
+    <path d="M106 22 L114 8 L118 8 L114 26 Z" fill={body} stroke={INK} strokeWidth={1.2} />
+    <g className={styles.tailRotor} style={{ transformOrigin: "114px 22px" }}><path d="M114 14 V30" stroke="#374151" strokeWidth={2.4} strokeLinecap="round" /></g>
+    <path d="M14 50 H62 M22 50 L26 42 M52 50 L48 42" stroke="#374151" strokeWidth={2.4} strokeLinecap="round" />
+    <path d="M8 30 Q8 12 30 10 H52 Q66 12 66 30 Q60 42 34 42 H16 Q8 40 8 30 Z" fill={body} stroke={INK} strokeWidth={1.6} />
+    <path d="M10 34 Q30 38 64 32" stroke={stripe} strokeWidth={3} fill="none" />
+    <path d="M12 28 Q14 16 30 14 H40 V30 Z" fill="#7dd3fc" stroke={INK} strokeWidth={1.2} />
+    <circle cx={30} cy={22} r={4} fill="#e0a982" stroke={INK} strokeWidth={0.8} /><path d="M26 20 q4 -5 8 0 z" fill="#111" />
+    <text x={52} y={28} textAnchor="middle" fontSize={5} fontWeight={900} fill={stripe} fontFamily="sans-serif">{label}</text>
+    <path d="M36 10 V4" stroke="#374151" strokeWidth={2.4} />
+    <ellipse cx={36} cy={3} rx={48} ry={2.6} fill="#11111155" className={styles.rotorBlur} />
+  </svg>;
+}
+// A pilot who bailed out, drifting down under a little round parachute. viewBox 40×56.
+export function PilotChute() {
+  return <svg viewBox="0 0 40 56" width="100%" height="100%" aria-hidden overflow="visible">
+    <path d="M2 16 Q20 -6 38 16 Q29 12 20 14 Q11 12 2 16 Z" fill="#f97316" stroke={INK} strokeWidth={1.2} />
+    <path d="M10 6 Q20 -2 30 6 L27 12 Q20 9 13 12 Z" fill="#f8fafc" />
+    <path d="M3 16 L18 38 M37 16 L22 38 M14 13 L19 38 M26 13 L21 38" stroke="#4b5563" strokeWidth={0.6} />
+    <path d="M16 38 h8 v8 h-8 z" fill="#1e3a8a" stroke={INK} strokeWidth={0.8} />
+    <path d="M17 46 L15 54 M23 46 L25 54 M16 39 L12 32 M24 39 L28 32" stroke="#e0a982" strokeWidth={2} strokeLinecap="round" />
+    <circle cx={20} cy={34} r={3.6} fill="#e0a982" stroke={INK} strokeWidth={0.8} /><ellipse cx={20} cy={35.4} rx={1.4} ry={1.1} fill={INK} />
+  </svg>;
+}
+// What's left: a tail boom sticking up out of the water, bubbles coming up. viewBox 50×40.
+export function ChopperWreck() {
+  return <svg viewBox="0 0 50 40" width="100%" height="100%" aria-hidden overflow="visible">
+    <path d="M18 34 L30 6 L36 8 L26 36 Z" fill="#dc2626" stroke={INK} strokeWidth={1.2} />
+    <path d="M30 6 L38 0 L40 3 L35 9 Z" fill="#dc2626" stroke={INK} strokeWidth={1} />
+    {[[12, 26], [40, 28], [8, 32]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r={1.8} fill="#e0f2fe" className={styles.smokePuff} style={{ animationDelay: `${-i * 0.7}s` }} />)}
+    <path d="M0 36 q6 -4 12 0 t12 0 t12 0 t12 0" stroke="#e0f2fe" strokeWidth={2} fill="none" />
+  </svg>;
+}

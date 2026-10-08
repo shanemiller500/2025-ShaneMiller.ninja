@@ -1,0 +1,8 @@
+{
+    "firestore":  [
+                      {
+                          "database":  "shanemiller",
+                          "rules":  "utils/firebase/firestore.rules"
+                      }
+                  ]
+}

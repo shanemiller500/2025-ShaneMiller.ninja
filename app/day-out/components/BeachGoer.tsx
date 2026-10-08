@@ -3,7 +3,7 @@ import styles from "../day-out.module.css";
 // Beachgoers, drawn the same way as the street's commuters: a bloke in boardies, a woman in a
 // bikini, a bloke in budgie smugglers, a woman in a one-piece, a bloke with a beer gut, a woman in
 // a pink bikini. `kid` shrinks them into a little'un in a rashie. Faces right; viewBox 40×100, feet
-// on y=98. `pose`: stand, walk (legs going), throw (arm swinging, for the frisbee), wave.
+// on y=98. `pose`: stand, walk (legs going), throw (arm swinging, for the frisbee), wave, sit.
 const INK = "#111";
 const LOOKS = [
   { skin: "#f1c7a3", hair: "#7c2d12", wear: "boardies", c: "#2563eb", long: false },
@@ -14,15 +14,20 @@ const LOOKS = [
   { skin: "#f9d5b8", hair: "#fde047", wear: "bikini", c: "#ec4899", long: true },
 ] as const;
 
-export default function BeachGoer({ look = 0, pose = "stand", kid = false }: { look?: number; pose?: "stand" | "walk" | "throw" | "wave"; kid?: boolean }) {
-  const L = LOOKS[look % LOOKS.length], gut = L.wear === "gut" ? 5 : 0;
+export default function BeachGoer({ look = 0, pose = "stand", kid = false }: { look?: number; pose?: "stand" | "walk" | "throw" | "wave" | "sit"; kid?: boolean }) {
+  const L = LOOKS[look % LOOKS.length], gut = L.wear === "gut" ? 5 : 0, sit = pose === "sit";
   return <svg viewBox="0 0 40 100" width="100%" height="100%" aria-hidden overflow="visible">
-    <g transform={kid ? "translate(4 22) scale(0.78)" : undefined}>
+    {/* Sitting: legs stretched out on the sand, the rest of them dropped down to sit on it */}
+    {sit && <path d="M14 93 H37" stroke={INK} strokeWidth={6} strokeLinecap="round" />}
+    {sit && <path d="M14 93 H37" stroke={L.skin} strokeWidth={4} strokeLinecap="round" />}
+    <g transform={kid ? "translate(4 22) scale(0.78)" : sit ? "translate(0 30)" : undefined}>
+      {!sit && <>
       <g className={pose === "walk" ? styles.bludgerLegs : undefined}>
         <path d="M17 64 L15 95 M24 64 L26 95" stroke={INK} strokeWidth={6} strokeLinecap="round" />
         <path d="M17 64 L15 95 M24 64 L26 95" stroke={L.skin} strokeWidth={4} strokeLinecap="round" />
       </g>
       <path d="M11 97 h7 M23 97 h7" stroke={kid ? "#f97316" : "#3f3f46"} strokeWidth={2.5} strokeLinecap="round" />
+      </>}
       {/* Body (bare skin), then whatever they're wearing */}
       <path d={`M11 34 q9 -6 18 0 q${2 + gut} 14 2 30 h-22 q-2 -16 2 -30 z`} fill={L.skin} stroke={INK} strokeWidth={1.5} />
       {kid ? <path d="M11 34 q9 -6 18 0 l1 22 h-20 z" fill="#38bdf8" stroke={INK} strokeWidth={1.2} />

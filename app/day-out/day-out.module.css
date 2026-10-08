@@ -890,3 +890,13 @@
 /* A pelican plunge-diving for a fish */
 .pelicanDive{animation-name:pelicanDive;animation-timing-function:ease-in;animation-fill-mode:forwards}
 @keyframes pelicanDive{0%{transform:translateY(0) rotate(0)}30%{transform:translateY(-14px) rotate(-20deg)}100%{transform:translateY(var(--dy)) rotate(75deg)}}
+/* Choppers */
+.heli{position:absolute;pointer-events:none;transition-property:left,bottom;transition-timing-function:ease-in-out}
+.heliFall{animation:heliFall 1.6s ease-in forwards}
+@keyframes heliFall{to{transform:translateY(var(--dy)) rotate(560deg)}}
+.rotorBlur{transform-box:fill-box;transform-origin:center;animation:rotorBlur .08s linear infinite alternate}
+@keyframes rotorBlur{from{transform:scaleX(1)}to{transform:scaleX(.25)}}
+.tailRotor{animation:tailRotor .12s linear infinite}
+@keyframes tailRotor{to{transform:rotate(360deg)}}
+.chuteDrift{animation-name:chuteDrift;animation-timing-function:ease-out;animation-fill-mode:forwards}
+@keyframes chuteDrift{0%{transform:translate(0,0) rotate(0)}25%{transform:translate(14px,calc(var(--dy) * .25)) rotate(8deg)}50%{transform:translate(-10px,calc(var(--dy) * .5)) rotate(-8deg)}75%{transform:translate(12px,calc(var(--dy) * .75)) rotate(6deg)}100%{transform:translate(0,var(--dy)) rotate(0)}}

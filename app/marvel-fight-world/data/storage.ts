@@ -139,7 +139,6 @@ export const EMPTY_STATS: Stats = {
 
 export const loadStats = (): Stats => read("stats", EMPTY_STATS);
 export const saveStats = (s: Stats) => write("stats", s);
-export const resetStats = () => write("stats", EMPTY_STATS);
 
 export interface MatchRecord {
   /** Human player's fighter (player 1 in versus) */
