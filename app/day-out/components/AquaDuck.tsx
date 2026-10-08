@@ -9,6 +9,14 @@ const HEADS = [["#f1c7a3", "#7c2d12"], ["#c68642", "#111"], ["#f5d0b5", "#e5e7eb
 
 export default function AquaDuck({ riders = 0, quack = false }: { riders?: number; quack?: boolean }) {
   return <svg viewBox="0 0 300 140" width="100%" height="100%" aria-hidden overflow="visible">
+    {/* The duck cam on the roof: a rubber duck on a bracket with a lens for an eye */}
+    <path d="M150 14 V4" stroke="#6b7280" strokeWidth={2} />
+    <g className={styles.camPan}>
+      <path d="M140 2 q-2 -10 8 -10 q8 0 8 6 q8 -2 12 6 q-2 8 -16 8 q-12 0 -12 -10 z" fill="#facc15" stroke={INK} strokeWidth={1.2} />
+      <path d="M154 -6 l7 1 l-7 2 z" fill="#f97316" stroke={INK} strokeWidth={0.6} />
+      <circle cx={150} cy={-6} r={2.6} fill="#111" /><circle cx={150.6} cy={-6.6} r={0.8} fill="#7dd3fc" />
+      <circle cx={146} cy={1} r={1.1} fill="#ef4444" className={styles.camLed} />
+    </g>
     {/* Canopy: white roof on posts, passengers in the open sides */}
     <rect x={14} y={8} width={70} height={7} rx={2} fill="#f97316" stroke={INK} strokeWidth={1.5} />
     <rect x={8} y={14} width={196} height={10} rx={4} fill="#f8fafc" stroke={INK} strokeWidth={2} />

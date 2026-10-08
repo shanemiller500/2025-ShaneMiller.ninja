@@ -900,3 +900,16 @@
 @keyframes tailRotor{to{transform:rotate(360deg)}}
 .chuteDrift{animation-name:chuteDrift;animation-timing-function:ease-out;animation-fill-mode:forwards}
 @keyframes chuteDrift{0%{transform:translate(0,0) rotate(0)}25%{transform:translate(14px,calc(var(--dy) * .25)) rotate(8deg)}50%{transform:translate(-10px,calc(var(--dy) * .5)) rotate(-8deg)}75%{transform:translate(12px,calc(var(--dy) * .75)) rotate(6deg)}100%{transform:translate(0,var(--dy)) rotate(0)}}
+.heliBob{display:block;width:100%;height:100%;animation:heliBob 1.6s ease-in-out infinite alternate}
+@keyframes heliBob{from{transform:translateY(-3px) rotate(-3deg)}to{transform:translateY(3px) rotate(2deg)}}
+/* Big Brother: panning CCTV, blinking lights, periscope cam, spy birds, cameras on trees and emus */
+.camPan{transform-box:fill-box;transform-origin:0% 30%;animation:camPan 6s ease-in-out infinite alternate}
+@keyframes camPan{0%,10%{transform:rotate(-12deg)}45%,55%{transform:rotate(26deg)}90%,100%{transform:rotate(6deg)}}
+.camLed{animation:camLed 1.2s steps(1) infinite}
+@keyframes camLed{50%{opacity:.15}}
+.periscope{animation:periscope 16s ease-in-out infinite}
+@keyframes periscope{0%,55%{transform:translateY(54px)}62%{transform:translateY(0)}68%{transform:translateY(0) translateX(-3px)}76%{transform:translateY(0) translateX(3px)}84%{transform:translateY(0)}92%,100%{transform:translateY(54px)}}
+.spyBird{position:absolute;width:50px;height:34px;pointer-events:none;transition-property:left,bottom;transition-timing-function:ease-in-out;z-index:3}
+@media (max-width:640px){.spyBird{width:38px;height:26px}}
+.treeCam{position:absolute;width:26px;height:17px;pointer-events:none}
+.emuCam{position:absolute;left:76%;top:-8%;width:30%;height:22%;pointer-events:none}

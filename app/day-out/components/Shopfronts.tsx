@@ -380,6 +380,7 @@ function Playground() {
     {/* Flying fox: cable from the tall start pole to the low end post, a kid zooming along it */}
     <path d="M2456 336 V222 M2672 336 V292" stroke="#8b5a2b" strokeWidth={5} />
     <path d="M2456 226 L2672 298" stroke="#4b5563" strokeWidth={1.6} />
+    <CCTV x={2459} y={240} delay={-1.3} /><CCTV x={2532} y={274} flip delay={-3.1} />
     <g className={styles.flyingFox}>
       <rect x={2452} y={222} width={10} height={6} rx={2} fill="#9ca3af" stroke={INK} strokeWidth={0.8} />
       <path d="M2457 228 V244" stroke="#111" strokeWidth={1.2} />
@@ -403,6 +404,7 @@ function Playground() {
     <path d="M2570 230 v13 M2575 230 v13 M2580 230 v13 M2566 236 h20" stroke="#64748b" strokeWidth={0.6} />
     <rect x={2552} y={218} width={76} height={9} fill="#2dd4bf" stroke={INK} strokeWidth={1.4} />
     <Goer x={2604} base={246} h={26} look={5} kid pose="wave" />
+    <CCTV x={2626} y={222} delay={-0.7} /><CCTV x={2554} y={222} flip delay={-2.2} />
     {/* Rope net up the left side */}
     <path d="M2558 236 L2528 336 M2558 236 L2546 336" stroke="#d6c7a1" strokeWidth={1.4} />
     {Array.from({ length: 6 }, (_, i) => <path key={i} d={`M${2554 - i * 4.6} ${252 + i * 14} L${2556 - i * 1.8} ${252 + i * 14}`} stroke="#d6c7a1" strokeWidth={1.4} />)}
@@ -493,11 +495,15 @@ function Beachfront() {
     <path d="M2896 330 Q2912 316 2920 316 L2920 326 Z M2930 318 Q2944 322 2948 327 L2928 326 Z" fill="#fde047" />
     <path d="M3106 374 Q3100 344 3110 322 Q3120 344 3114 374 Z" fill="#f97316" stroke={INK} strokeWidth={1.3} />
     <path d="M3110 328 V370" stroke="#fff" strokeWidth={1.5} />
-    <path d="M3006 374 q8 -12 16 0 z" fill="#facc15" stroke={INK} strokeWidth={1} /><path d="M3010 368 l-6 -4 M3018 368 l6 -4" stroke="#78350f" strokeWidth={1.2} />
+    <CCTV x={3113} y={336} delay={-1.9} /><CCTV x={2917} y={342} flip delay={-2.9} /><CCTV x={3577} y={342} delay={-0.9} />
+    <path d="M3006 374 q8 -12 16 0 z" fill="#facc15" stroke={INK} strokeWidth={1} />
+    {/* ...with a lens in the sandcastle window */}
+    <circle cx={3014} cy={369} r={1.8} fill="#111" /><circle cx={3014.5} cy={368.5} r={0.5} fill="#7dd3fc" /><circle cx={3018} cy={366} r={0.7} fill="#ef4444" className={styles.camLed} /><path d="M3010 368 l-6 -4 M3018 368 l6 -4" stroke="#78350f" strokeWidth={1.2} />
     {/* Patrol flags: swim between 'em */}
     {[2990, 3230].map(fx => <g key={fx}>
       <path d={`M${fx} 372 V318`} stroke="#9ca3af" strokeWidth={2.5} />
       <g className={styles.flagWave}><path d={`M${fx} 318 h22 v15 h-22 z`} fill="#facc15" stroke={INK} strokeWidth={1} /><path d={`M${fx} 318 h22 l-22 15 z`} fill="#dc2626" /></g>
+      <CCTV x={fx} y={344} flip={fx > 3100} delay={-fx / 400} />
     </g>)}
     {/* Further along: another brolly and sunbaker, an esky, and the pelican mob loafing about */}
     <path d="M3572 374 L3580 330" stroke="#78350f" strokeWidth={2.5} />
@@ -508,9 +514,19 @@ function Beachfront() {
     <SandPelican x={3610} base={302} floating />
     <SandPelican x={3660} base={308} floating flip s={0.9} />
     {[[3760, 372, false, 1], [3800, 366, true, 0.9], [3836, 376, false, 1.05], [3876, 368, true, 0.95], [3912, 374, false, 1], [3950, 364, true, 0.85]].map(([x, base, flip, sc], i) => <SandPelican key={i} x={x as number} base={base as number} flip={flip as boolean} s={sc as number} />)}
+    {/* The periscope cam that pops up out of the rocks every now and then, has a look round, and ducks back down */}
+    <g className={styles.periscope}>
+      <rect x={4026} y={296} width={6} height={50} fill="#6b7280" stroke={INK} strokeWidth={1} />
+      <rect x={4012} y={288} width={20} height={11} rx={2} fill="#9ca3af" stroke={INK} strokeWidth={1} />
+      <circle cx={4012} cy={293.5} r={3.4} fill="#111" /><circle cx={4011} cy={292.6} r={1} fill="#7dd3fc" />
+      <circle cx={4028} cy={290.5} r={1.2} fill="#ef4444" className={styles.camLed} />
+    </g>
     {/* Rocks at the far end of the beach */}
     <path d="M3990 380 L3996 340 Q4010 318 4030 326 Q4044 306 4060 312 V380 Z" fill="#78716c" stroke={INK} strokeWidth={1.6} />
     <path d="M4000 352 q10 -8 20 -2 M4030 338 q10 -6 20 0" stroke="#57534e" strokeWidth={2} fill="none" />
+    {/* A "rock" on the dunes. With a lens. */}
+    <path d="M2818 372 q4 -12 16 -12 q12 0 14 12 z" fill="#a8a29e" stroke={INK} strokeWidth={1.2} />
+    <circle cx={2832} cy={366} r={2.4} fill="#111" /><circle cx={2832.6} cy={365.4} r={0.7} fill="#7dd3fc" /><circle cx={2840} cy={363} r={0.8} fill="#ef4444" className={styles.camLed} />
     {/* The lifeguard hut, up on stilts on the sand */}
     <path d="M3298 376 V350 M3352 376 V350" stroke="#a16207" strokeWidth={4} />
     <path d="M3304 376 L3346 350 M3346 376 L3304 350" stroke="#a16207" strokeWidth={1.6} />
@@ -518,6 +534,7 @@ function Beachfront() {
     <path d="M3284 328 L3325 300 L3366 328 Z" fill="#dc2626" stroke={INK} strokeWidth={1.6} />
     <rect x={3302} y={332} width={46} height={12} fill="#1e293b" />
     <text x={3325} y={341.5} textAnchor="middle" fontSize={7} fontWeight={900} fill="#facc15" fontFamily="sans-serif">LIFEGUARD</text>
+    <CCTV x={3292} y={330} flip delay={-1.5} /><CCTV x={3358} y={330} delay={-3} />
     {/* The esplanade park: bright mowed grass rolling down in terraces to the sand */}
     <path d="M2250 380 V300 Q2420 290 2580 296 Q2720 302 2790 318 Q2830 330 2846 356 L2856 380 Z" fill="#8cc63f" stroke={INK} strokeWidth={2} />
     {[2290, 2370, 2450, 2530, 2610, 2690].map(sx => <path key={sx} d={`M${sx} 300 L${sx + 26} 380`} stroke="#a3d55a" strokeWidth={24} opacity={0.55} />)}
@@ -533,6 +550,7 @@ function Beachfront() {
     <Playground />
     {/* Council BBQ and a picnic table */}
     <path d="M2318 318 L2346 304 L2374 318 Z" fill="#166534" stroke={INK} strokeWidth={1.4} />
+    <CCTV x={2372} y={316} delay={-2.6} />
     <path d="M2322 318 V340 M2370 318 V340" stroke="#4b5563" strokeWidth={3} />
     <rect x={2320} y={340} width={52} height={8} fill="#6b7280" stroke={INK} strokeWidth={1.2} />
     <rect x={2324} y={346} width={44} height={30} fill="#9ca3af" stroke={INK} strokeWidth={1.5} />
@@ -550,9 +568,11 @@ function Beachfront() {
     <rect x={2692} y={338} width={60} height={20} rx={3} fill="#166534" stroke="#f8fafc" strokeWidth={1.5} />
     <text x={2722} y={347} textAnchor="middle" fontSize={6.2} fontWeight={900} fill="#f8fafc" fontFamily="sans-serif">ESPLANADE PARK</text>
     <text x={2722} y={354.5} textAnchor="middle" fontSize={4.8} fontWeight={800} fill="#bbf7d0" fontFamily="sans-serif">NO DOGS ON BEACH</text>
-    {/* Pines up front, dotted about rather than in a row */}
+    <CCTV x={2750} y={340} delay={-0.4} />
+    {/* Pines up front, dotted about rather than in a row (each with a camera strapped to it) */}
     <NorfolkPine x={2302} h={300} base={378} />
     <NorfolkPine x={2862} h={220} base={378} />
+    <CCTV x={2305} y={250} delay={-2} /><CCTV x={2859} y={288} flip delay={-4} /><CCTV x={2443} y={252} delay={-1} /><CCTV x={2777} y={250} flip delay={-3.5} />
     {/* The last power pole, where the wires run out (clear of the lane's corner building) */}
     <rect x={2262} y={52} width={10} height={348} fill="#8a7a5f" stroke={INK} strokeWidth={1.5} />
     <path d="M2250 72 h34 M2252 104 h30" stroke="#5b4636" strokeWidth={5} />
@@ -664,6 +684,33 @@ function WooliesFootpath() {
   </g>;
 }
 
+// A CCTV camera on a wall bracket, panning back and forth, red light blinking. Bracket at (x, y);
+// it looks right (`flip` looks left). Big Brother is always watching.
+function CCTV({ x, y, flip = false, delay = 0 }: { x: number; y: number; flip?: boolean; delay?: number }) {
+  return <g transform={`translate(${x} ${y}) scale(${flip ? -1 : 1} 1)`}>
+    <rect x={-2} y={-5} width={4} height={10} fill="#9ca3af" stroke={INK} strokeWidth={0.8} />
+    <g className={styles.camPan} style={{ animationDelay: `${delay}s` }}>
+      <path d="M0 0 L6 3" stroke="#6b7280" strokeWidth={2} />
+      <rect x={5} y={-1} width={15} height={8} rx={2} fill="#e5e7eb" stroke={INK} strokeWidth={0.9} />
+      <path d="M4 -2 h17" stroke="#9ca3af" strokeWidth={1.6} />
+      <circle cx={20.5} cy={3} r={2.6} fill="#111" /><circle cx={21} cy={2.4} r={0.8} fill="#7dd3fc" />
+      <circle cx={8} cy={1.5} r={1.1} fill="#ef4444" className={styles.camLed} />
+    </g>
+  </g>;
+}
+// Every building gets two, one at each top corner of its front.
+const BUILDING_CAMS: [number, number, boolean][] = [
+  [-1092, 248, false], [-612, 248, true],   // Woolies
+  [-444, 166, false], [-6, 166, true],      // Indian
+  [6, 104, false], [244, 104, true],        // fish & chips
+  [256, 88, false], [494, 88, true],        // milk bar
+  [506, 86, false], [994, 110, true],       // Centrelink
+  [1006, 40, false], [1444, 100, true],     // Harley
+  [1456, 100, false], [1694, 100, true],    // bottlo
+  [1706, 124, false], [2044, 124, true],    // chemist
+  [2180, 230, false], [2414, 230, true],    // Sandy Bottoms
+];
+
 // `sky={false}` leaves the sky transparent so a separate sky layer (with the jets in it) shows
 // through behind the buildings.
 // `closed`: a shop that lost the last brawl is boarded up, its showbike and parked bikes gone.
@@ -685,6 +732,8 @@ export default function Shopfronts({ sky = true, closed = {} }: { sky?: boolean;
     {[-880, -860, -840, -820, -800].map(x => <line key={x} x1={x} y1={22} x2={x} y2={378} stroke="#2a2a2e" strokeWidth={2} />)}
     <BarAndShield cx={-840} cy={92} s={1.15} />
     <path d="M-760 76 V6 M-540 76 V6" stroke="#9ca3af" strokeWidth={3} /><circle cx={-760} cy={5} r={3} fill="#facc15" /><circle cx={-540} cy={5} r={3} fill="#facc15" />
+    {/* A camera up every flagpole, under the finial, looking the other way from the flag */}
+    <CCTV x={-762} y={12} flip delay={-1.1} /><CCTV x={-542} y={12} flip delay={-2.7} />
     <ShopFlag x={-758} y={8} brand="harley" slot={0} design={3} />
     <ShopFlag x={-538} y={8} brand="harley" slot={1} />
     <rect x={-780} y={84} width={330} height={296} fill="url(#sfBrickOrange)" stroke={INK} strokeWidth={2.5} />
@@ -728,6 +777,7 @@ export default function Shopfronts({ sky = true, closed = {} }: { sky?: boolean;
     </>}
     {/* Roof flags */}
     <path d="M-440 56 V4 M-60 56 V4" stroke="#9ca3af" strokeWidth={3} /><circle cx={-440} cy={4} r={3} fill="#facc15" /><circle cx={-60} cy={4} r={3} fill="#facc15" />
+    <CCTV x={-442} y={11} flip delay={-0.6} /><CCTV x={-62} y={11} flip delay={-3.3} />
     <ShopFlag x={-438} y={6} brand="indian" slot={0} />
     <ShopFlag x={-58} y={6} brand="indian" slot={2} />
     {/* Glass door */}
@@ -888,6 +938,8 @@ export default function Shopfronts({ sky = true, closed = {} }: { sky?: boolean;
 
     {/* ---- Past Snag Alley: the esplanade park and the surf beach ---- */}
     <g transform="translate(160 0)"><Beachfront /></g>
+    {/* ---- Big Brother: two cameras on every building ---- */}
+    {BUILDING_CAMS.map(([x, y, flip], i) => <CCTV key={i} x={x} y={y} flip={flip} delay={-i * 0.83} />)}
     {/* ---- Street furniture ---- */}
     <rect x={-1120} y={380} width={5330} height={40} fill="#b9b4aa" />
     {Array.from({ length: 178 }, (_, i) => <line key={i} x1={-1120 + i * 30} y1={380} x2={-1120 + i * 30} y2={420} stroke="#a39e93" strokeWidth={1.5} />)}

@@ -212,7 +212,7 @@ export function Floater() {
 }
 
 // A helicopter, side-on: bubble cockpit with the pilot, tail boom and fin, skids, and the rotors
-// blurring round. Livery 0 is a red joy-flight chopper, 1 a yellow news chopper. Faces right;
+// blurring round. Livery 0 is a red joy-flight chopper, 1 a yellow news chopper. Faces left;
 // viewBox 120×60.
 export function Helicopter({ livery = 0 }: { livery?: 0 | 1 }) {
   const body = livery ? "#facc15" : "#dc2626", stripe = livery ? "#1d4ed8" : "#f8fafc", label = livery ? "COAST NEWS" : "JOYFLIGHTS";

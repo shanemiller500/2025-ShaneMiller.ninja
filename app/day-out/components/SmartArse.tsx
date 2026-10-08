@@ -24,6 +24,7 @@ import HoopSnake from "./HoopSnake";
 import Bludger from "./Bludger";
 import OldNev from "./OldNev";
 import StoreBiker from "./StoreBiker";
+import { MiniCam, SpyBird } from "./SpyCams";
 import Bubble, { readMs } from "./Bubble";
 import SmokoGirl from "./SmokoGirl";
 import FruitBat from "./FruitBat";
@@ -358,6 +359,10 @@ const DANCER_CHAT: [string, string][] = [
   ["Bloke asked me what a girl like me's doin' in a place like this.", "Rent, mate. It's called rent."],
   ["Me stage name's Sandy. 'Cos of the club.", "Mine's Chardonnay. 'Cos of the chardonnay."],
   ["True Blue come in again. Paid in shrimp off the barbie.", "Better than the bloke who paid in exposure."],
+  ["Management reckons the body cams are for our safety.", "Management reckons a lot of things, love."],
+  ["Me earring's a camera now. Council issued.", "Mine's in me durry. Prison island, babe."],
+  ["Some bloke asked if he's bein' filmed.", "Mate, the EMUS are filmin' ya."],
+  ["Smile for Big Brother.", "Big Brother still owes me forty bucks."],
   ["I'm savin' up for a house.", "On the Gold Coast? Better learn a few more moves, love."],
 ];
 // The seagull chip heist: someone brings fish and chips down to the beach, the gulls gather, and
@@ -367,7 +372,11 @@ type ChipRaid = { eater: { x: number; bottom: number; ms: number; faceLeft: bool
 // Two choppers collide over the beach; the crowd on the sand has thoughts.
 type Heli = { id: number; x: number; bottom: number; ms: number; faceLeft: boolean; falling: boolean; dy: number; livery: 0 | 1 };
 type Gawker = { id: number; x: number; bottom: number; look: number; line: string | null };
+const CHOPPER_CHATTER = ["WHUP WHUP WHUP WHUP", "...and traffic's backed up on the M1...", "LIVE from the Gold Coast!", "Joy flights! Forty bucks!", "...police are searchin' for a man in a singlet..."];
 const GAWKER_LINES = ["What a tragedy.", "I'm gonna mark meself safe on Facebook.", "We will rebuild...", "We're all in this together.", "A fucken dog ate my lunch!!"];
+// Big Brother's "birds", and what people reckon when one goes over.
+type SpyBirdState = { id: number; x: number; bottom: number; ms: number; faceLeft: boolean };
+const WATCHED_LINES = ["Big Brother's always watchin'!", "Prison island it is!!", "Smile, ya on camera!", "That bird's got a USB port!", "Wave to the government, kids!", "Since when do seagulls have propellers?", "It's filmin' me again!", "Act natural. ACT NATURAL."];
 type Phase = "hidden" | "enter" | "parked" | "leave";
 type Action = "flip" | "moon" | "drink" | "smoke" | "throw";
 type Line = { text: string; ai: boolean };
@@ -548,7 +557,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   // A tweaker clicked out of their tree for a five-second boogie.
   const [boogie, setBoogie] = useState<{ who: "trev" | "kylie" | "gary"; x: number; line: string } | null>(null);
   // Emus: each takes two shots. `hits` 1 = one leg gone, hopping slower.
-  const [emus, setEmus] = useState<{ id: number; dir: 1 | -1; x: number; bottom: number; size: number; ms: number; hits: number }[]>([]);
+  const [emus, setEmus] = useState<{ id: number; dir: 1 | -1; x: number; bottom: number; size: number; ms: number; hits: number; cam?: boolean }[]>([]);
   const [roos, setRoos] = useState<{ id: number; dir: 1 | -1; bottom: number; size: number; ms: number; delay: number; hop: number; joey: boolean }[]>([]);
   // The bin chicken's wheelie bin, out the front of Centrelink where the scrappy street tree used to be.
   const binX = () => Math.round(stripMap().x(760) - BIN_W / 2);
@@ -3026,7 +3035,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   };
   const quackAt = (x: number) => add({ kind: "burst", x, y: FAR_LANE + duckW() * 0.5, size: 0, text: pick(["QUACK QUACK!", "QUAAACK!", "QUACK QUACK QUACK!"]) });
   useEffect(() => {
-    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setDogWalk(null); setDogPoops([]); setBinDiver(null); setRescue(null); setShark(null); setSeaBits([]); setBazza(null); setBats([]); setChips(null); chipsOn.current = false; setHelis([]); setGawkers([]); heliOn.current = false; setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
+    if (!immersive && phase === "hidden") { setCommuters([]); setDuck(null); setSwoopers([]); diving.current.clear(); setSledge(null); setShopBrawl(null); setRumble(null); setDogWalk(null); setDogPoops([]); setBinDiver(null); setRescue(null); setShark(null); setSeaBits([]); setBazza(null); setBats([]); setChips(null); chipsOn.current = false; setHelis([]); setGawkers([]); heliOn.current = false; setChoppers([]); setSpyBirds([]); setRides([]); brawlOn.current = false; crewBusy.current = { harley: false, indian: false }; return; }
     let alive = true, target = 4 + (Math.random() < 0.5 ? 1 : 0), look = Math.floor(Math.random() * 6);
     const busComes = async () => {
       const bw = duckW(), sm = stripMap(), stopAt = sm.x(505) - bw * 0.6, startX = -bw - 40, driveMs = Math.max(2500, (stopAt - startX) * 3);
@@ -3625,6 +3634,54 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     setGawkers([]);
     heliOn.current = false;
   }
+  // Choppers just doing the rounds: one comes across the sky, hovers for a look at something, then
+  // carries on out the other side. No crashing (that's heliCrash).
+  const [choppers, setChoppers] = useState<{ id: number; x: number; bottom: number; ms: number; faceLeft: boolean; livery: 0 | 1 }[]>([]);
+  async function chopperFlyover() {
+    if (!immersive && phaseRef.current === "hidden") return;
+    const sm = stripMap(), hw = 120 * sm.k * 0.6, L = panX(), W = window.innerWidth, H = window.innerHeight, dir = Math.random() < 0.5 ? 1 : -1, id = ++uid;
+    const lo = sm.b(40), hi = Math.max(lo + 40, Math.min(H - 70, sm.b(0) + 110)), alt = () => lo + Math.random() * (hi - lo);
+    const from = dir === 1 ? L - hw - 40 : L + W + 40, mid = L + W * (0.25 + Math.random() * 0.5) - hw / 2, end = dir === 1 ? L + W + 60 : L - hw - 60;
+    setChoppers(list => [...list, { id, x: from, bottom: alt(), ms: 0, faceLeft: dir === -1, livery: Math.random() < 0.5 ? 0 : 1 }]);
+    await later(80);
+    const inMs = Math.max(2500, Math.abs(mid - from) * 4.5);
+    setChoppers(list => list.map(c => (c.id === id ? { ...c, x: mid, bottom: alt(), ms: inMs } : c)));
+    await later(inMs);
+    add({ kind: "burst", x: mid - 60, y: alt() + 50, size: 0, text: pick(CHOPPER_CHATTER) });
+    await later(2400 + Math.random() * 2000);
+    const outMs = Math.max(2500, Math.abs(end - mid) * 4.5);
+    setChoppers(list => list.map(c => (c.id === id ? { ...c, x: end, bottom: alt(), ms: outMs } : c)));
+    await later(outMs + 100);
+    setChoppers(list => list.filter(c => c.id !== id));
+  }
+  // Spy birds: one or two "birds" do laps over whatever you're looking at, hovering over people. When
+  // one turns up, somebody on screen clocks it.
+  const [spyBirds, setSpyBirds] = useState<SpyBirdState[]>([]);
+  async function spyFlyby() {
+    if (!immersive && phaseRef.current === "hidden") return;
+    const sm = stripMap(), L = panX(), W = window.innerWidth, H = window.innerHeight, n = Math.random() < 0.4 ? 2 : 1;
+    const lo = sm.b(260), hi = Math.max(lo + 60, Math.min(H - 60, sm.b(60))), alt = () => lo + Math.random() * (hi - lo);
+    const ids = Array.from({ length: n }, () => ++uid), fromLeft = Math.random() < 0.5;
+    setSpyBirds(list => [...list, ...ids.map((id, i) => ({ id, x: fromLeft ? L - 80 - i * 70 : L + W + 20 + i * 70, bottom: alt(), ms: 0, faceLeft: !fromLeft }))]);
+    for (let hop = 0; hop < 5; hop++) {
+      await later(hop ? 2600 : 80);
+      setSpyBirds(list => list.map(b => {
+        if (!ids.includes(b.id)) return b;
+        const x = L + 40 + Math.random() * (W - 120);
+        return { ...b, x, bottom: alt(), ms: 2200 + Math.random() * 800, faceLeft: x < b.x };
+      }));
+      if (hop === 1) {
+        // Somebody clocks it.
+        const people = Array.from(document.querySelectorAll<HTMLElement>('[data-poopable="person"]')).map(el => sRect(el)).filter(r => r.right > L && r.left < L + W);
+        if (people.length) { const r = pick(people); add({ kind: "burst", x: r.left - 40, y: window.innerHeight - r.top + 30, size: 0, text: pick(WATCHED_LINES) }); }
+      }
+    }
+    await later(2600);
+    const away = Math.random() < 0.5;
+    setSpyBirds(list => list.map(b => (ids.includes(b.id) ? { ...b, x: away ? L - 200 : L + W + 200, ms: 2600, faceLeft: away } : b)));
+    await later(2700);
+    setSpyBirds(list => list.filter(b => !ids.includes(b.id)));
+  }
   // Something's always going on out there, one thing at a time-ish.
   useEffect(() => {
     if (!immersive && phase === "hidden") { setSeaBits([]); setBazza(null); bazzaOn.current = false; return; }
@@ -3722,6 +3779,8 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     every(() => void sharkAttack(), 100_000, 70_000);
     every(() => void chipRaid(), 60_000, 50_000);
     every(() => void heliCrash(), 150_000, 120_000);
+    every(() => void chopperFlyover(), 35_000, 35_000);
+    every(() => void spyFlyby(), 30_000, 30_000);
     return () => timers.forEach(clearTimeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, immersive]);
@@ -3745,9 +3804,11 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
   function emuFlock() {
     if (!claimScene(8000)) return;
     const W = VW(), dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1, count = 10 + Math.floor(Math.random() * 4);
+    // One of them is a government camera emu. Nobody's fooled.
+    const camEmu = Math.floor(Math.random() * count);
     const flock = Array.from({ length: count }, (_, i) => {
       const size = 62 + Math.random() * 18;
-      return { id: ++uid, dir, size, x: dir === 1 ? -size - 40 - i * 70 - Math.random() * 40 : W + 40 + i * 70 + Math.random() * 40, bottom: [GROUND + 2, FAR_LANE + 6, ROAD_H - 8][i % 3] + Math.random() * 8, ms: 0, hits: 0 };
+      return { id: ++uid, cam: i === camEmu, dir, size, x: dir === 1 ? -size - 40 - i * 70 - Math.random() * 40 : W + 40 + i * 70 + Math.random() * 40, bottom: [GROUND + 2, FAR_LANE + 6, ROAD_H - 8][i % 3] + Math.random() * 8, ms: 0, hits: 0 };
     });
     setEmus(list => [...list, ...flock]);
     window.setTimeout(() => setEmus(list => list.map(e => {
@@ -4314,10 +4375,12 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
       <Bubble text={trev.line} className={styles.ibisBubble} style={{ bottom: 132 }} />
     </span>}
     {phase !== "hidden" && palmSpots().map(pt => <span key={`palm${pt.i}`} className={styles.palmTree} aria-hidden style={{ left: pt.left, bottom: pt.base, width: pt.w, height: pt.h }}>
+      <span className={styles.treeCam} style={{ left: pt.w * 0.5, bottom: pt.h * 0.32, transform: pt.i % 2 ? "scaleX(-1)" : undefined }} aria-hidden><MiniCam /></span>
       <PalmTree lean={pt.lean} variant={pt.i} />
     </span>)}
     {phase !== "hidden" && treeSpots().map((t, i) => (
       <span key={i} className={styles.gumTree} style={{ left: t.x, bottom: TREE_BOTTOM, width: TREE.W, height: TREE.H }}>
+        <span className={styles.treeCam} style={{ left: TREE.W * 0.46, bottom: TREE.H * 0.34 }} aria-hidden><MiniCam /></span>
         <GumTree koala={t.koala && !shotKoalas.includes(i)} variant={i} />
         {t.koala && !shotKoalas.includes(i) && phase === "parked" && <span className={`${styles.koalaTarget} ${styles.shootable}`} {...shootProps({ kind: "koala", tree: i }, "Shoot the koala!")}
           style={{ left: TREE.W * (80 / 120) - 16, top: TREE.H * (98 / 220) - 22, width: 32, height: 40 }} />}
@@ -4556,7 +4619,14 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     </span>)}
     {helis.map(h => <span key={h.id} className={`${styles.heli} ${h.falling ? styles.heliFall : ""}`} aria-hidden
       style={{ left: h.x, bottom: h.bottom, width: 120 * stripMap().k * 0.6, height: 60 * stripMap().k * 0.6, transitionDuration: `${h.ms}ms`, ["--dy" as string]: `${h.dy}px` }}>
-      <span className={styles.ibisBody} style={{ transform: h.faceLeft ? "scaleX(-1)" : undefined }}><Helicopter livery={h.livery} /></span>
+      <span className={styles.ibisBody} style={{ transform: h.faceLeft ? undefined : "scaleX(-1)" }}><Helicopter livery={h.livery} /></span>
+    </span>)}
+    {spyBirds.map(b => <span key={b.id} className={styles.spyBird} aria-hidden style={{ left: b.x, bottom: b.bottom, transitionDuration: `${b.ms}ms` }}>
+      <span className={styles.heliBob}><span className={styles.ibisBody} style={{ transform: b.faceLeft ? "scaleX(-1)" : undefined }}><SpyBird /></span></span>
+    </span>)}
+    {choppers.map(c => <span key={c.id} className={styles.heli} aria-hidden
+      style={{ left: c.x, bottom: c.bottom, width: 120 * stripMap().k * 0.6, height: 60 * stripMap().k * 0.6, transitionDuration: `${c.ms}ms` }}>
+      <span className={styles.heliBob}><span className={styles.ibisBody} style={{ transform: c.faceLeft ? undefined : "scaleX(-1)" }}><Helicopter livery={c.livery} /></span></span>
     </span>)}
     {gawkers.map(g => <span key={g.id} data-poopable="person" className={styles.beachActor} style={{ left: g.x, bottom: g.bottom, width: isPhone() ? 32 : 44, height: isPhone() ? 80 : 110 }}>
       <span className={styles.ibisBody}><BeachGoer look={g.look} pose="sit" /></span>
@@ -4622,7 +4692,7 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
     {emus.map(e => <span data-poopable="animal" data-emu={e.dir} key={e.id} className={`${styles.emu} ${styles.shootable}`} {...shootProps({ kind: "emu", id: e.id }, e.hits ? "Finish it off!" : "Shoot the emu!")}
       onTransitionEnd={event => { if (event.target === event.currentTarget && e.ms > 0) setEmus(list => list.filter(x => x.id !== e.id)); }}
       style={{ left: e.x, bottom: e.bottom, width: e.size, height: e.size * 90 / 70, transitionDuration: `${e.ms}ms` }}>
-      <span className={e.hits ? styles.emuHop : styles.emuRun}><span className={styles.ibisBody} style={{ transform: e.dir === -1 ? "scaleX(-1)" : undefined }}><Emu oneLeg={e.hits > 0} /></span></span>
+      <span className={e.hits ? styles.emuHop : styles.emuRun}><span className={styles.ibisBody} style={{ position: "relative", transform: e.dir === -1 ? "scaleX(-1)" : undefined }}><Emu oneLeg={e.hits > 0} />{e.cam && <span className={styles.emuCam} aria-hidden><MiniCam /></span>}</span></span>
     </span>)}
     {roos.map(r => <span data-poopable="animal" key={r.id} className={`${styles.roo} ${styles.shootable}`} {...shootProps({ kind: "roo", id: r.id }, "Shoot the roo!")} onAnimationEnd={event => event.target === event.currentTarget && setRoos(list => list.filter(x => x.id !== r.id))}
       style={{ bottom: r.bottom, width: r.size, height: r.size * 0.9, animationDuration: `${r.ms}ms`, animationDelay: `${r.delay}ms`, ["--from" as string]: `${r.dir === 1 ? -r.size - 20 : VW() + 20}px`, ["--to" as string]: `${r.dir === 1 ? VW() + 20 : -r.size - 20}px`, ["--hop" as string]: `${r.hop}ms` }}>
@@ -4824,6 +4894,9 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             <Trick label="👴 Dad?" onClick={pickTrick(nevVisit)} />
             <Trick label="🪩 Bush doof" onClick={pickTrick(() => void bushRave())} />
             <Trick label="💸 Dole day" onClick={pickTrick(() => void doleDay())} />
+            <Trick label="🚁 Chopper flyover" onClick={pickTrick(() => void chopperFlyover())} />
+            <Trick label="💥 Chopper crash" onClick={pickTrick(() => void heliCrash(true))} />
+            <Trick label="📹 Spy birds" onClick={pickTrick(() => void spyFlyby())} />
           </div>
           <p className={styles.trickHeading}>Wildlife & locals</p>
           <div className={styles.trickGroup}>
@@ -4846,7 +4919,6 @@ export default function SmartArse({ topic, summon, dismiss = 0, onPresence, imme
             <Trick label="⚓ VMR tow" onClick={pickTrick(() => void vmrTow(true))} />
             <Trick label="🍟 Seagull chip heist" onClick={pickTrick(() => void chipRaid(true))} />
             <Trick label="🐦 Pelican flock" onClick={pickTrick(() => void pelicanFlock(true))} />
-            <Trick label="🚁 Chopper crash" onClick={pickTrick(() => void heliCrash(true))} />
             <Trick label="🪝 VMR recovery" onClick={pickTrick(() => void vmrRecover(undefined, true))} />
             <Trick label="🦜 Lorikeets" onClick={callIn(() => void lorikeetVisit())} />
             <Trick label="🦘 Roo mob" onClick={callIn(() => rooMob())} />

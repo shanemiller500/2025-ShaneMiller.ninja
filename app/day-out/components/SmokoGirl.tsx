@@ -2,7 +2,8 @@ import styles from "../day-out.module.css";
 
 // One of the dancers from Sandy Bottoms on a smoko out the back: big teased hair, full face of
 // makeup (eyeshadow, lashes, red lips), sparkly two-piece stage outfit, platform heels, a durry on
-// the go. Drawn like the street's commuters. Faces right; viewBox 40×100, feet on y=98.
+// the go, and (it's Big Brother's town) a body cam clipped to the strap and a camera for an earring.
+// Drawn like the street's commuters. Faces right; viewBox 40×100, feet on y=98.
 const INK = "#111";
 const LOOKS = [
   { skin: "#f1c7a3", hair: "#fef3c7", outfit: "#db2777", heels: "#f8fafc", shadow: "#3b82f6" },
@@ -23,6 +24,10 @@ export default function SmokoGirl({ look = 0 }: { look?: number }) {
     <path d="M12 58 h17 l-1 7 q-7 2 -15 0 z" fill={L.outfit} stroke={INK} strokeWidth={1} />
     {[[16, 42], [24, 41], [15, 61], [21, 62], [26, 60]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r={0.9} fill="#fef9c3" className={styles.sparkle} style={{ animationDelay: `${-i * 0.3}s` }} />)}
     <path d="M14 66 l-1 8 M27 66 l1 8" stroke={L.outfit} strokeWidth={1} opacity={0.6} />
+    <path d="M24 34 L25 39" stroke={L.outfit} strokeWidth={1.2} />
+    <rect x={22.5} y={33} width={6} height={5} rx={1} fill="#111" stroke="#374151" strokeWidth={0.5} />
+    <circle cx={25.5} cy={35.5} r={1.4} fill="#1f2937" stroke="#9ca3af" strokeWidth={0.4} /><circle cx={25.8} cy={35.2} r={0.4} fill="#7dd3fc" />
+    <circle cx={27.6} cy={33.8} r={0.6} fill="#ef4444" className={styles.camLed} />
     {/* Arm folded under, the other bringing the durry up for a drag */}
     <path d="M13 38 Q16 50 24 50" stroke={L.skin} strokeWidth={4} fill="none" strokeLinecap="round" />
     <g className={styles.cigDrag} style={{ transformOrigin: "27px 37px" }}>
@@ -39,5 +44,6 @@ export default function SmokoGirl({ look = 0 }: { look?: number }) {
     <path d="M22 27 q2.4 1.6 4.6 0 q-2.3 -1 -4.6 0 z" fill="#dc2626" stroke="#991b1b" strokeWidth={0.5} />
     <path d="M13 22 q0 -12 9 -12 q-6 4 -5 12 z" fill={L.hair} />
     <circle cx={13.6} cy={26.5} r={2} fill="none" stroke="#fde047" strokeWidth={0.9} />
+    <circle cx={13.6} cy={28.6} r={1.1} fill="#111" stroke="#fde047" strokeWidth={0.4} /><circle cx={14.4} cy={27.2} r={0.45} fill="#ef4444" className={styles.camLed} />
   </svg>;
 }
