@@ -110,7 +110,7 @@ export function Lightbox({ images, index, open, onClose, onIndexChange, referrer
           role="dialog"
           aria-modal="true"
           aria-label={`Image viewer: ${img.alt}`}
-          className="fixed inset-0 z-[80] flex flex-col bg-slate-950/95 text-white backdrop-blur-sm"
+          className="fixed inset-0 z-[80] flex flex-col bg-[#1a1a1d] text-white"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -136,7 +136,7 @@ export function Lightbox({ images, index, open, onClose, onIndexChange, referrer
                 <ExternalLink className="h-4 w-4" />
               </a>
             )}
-            <button type="button" onClick={onClose} autoFocus aria-label="Close viewer" title="Close (Esc)" className="rounded-xl p-2 text-white/70 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
+            <button type="button" onClick={onClose} autoFocus aria-label="Close viewer" title="Close (Esc)" className="rounded-xl p-2 text-white/70 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -205,7 +205,7 @@ export function Lightbox({ images, index, open, onClose, onIndexChange, referrer
                   }}
                   aria-label={`Show image ${i + 1}`}
                   aria-current={i === index}
-                  className={`h-16 w-12 shrink-0 overflow-hidden rounded-md ring-2 transition ${i === index ? "opacity-100 ring-indigo-400" : "opacity-50 ring-transparent hover:opacity-90"}`}
+                  className={`h-16 w-12 shrink-0 overflow-hidden rounded-md ring-2 transition ${i === index ? "opacity-100 ring-amber-300" : "opacity-50 ring-transparent hover:opacity-90"}`}
                 >
                   <img src={im.thumb ?? im.src} alt="" loading="lazy" referrerPolicy={referrerPolicy} className="h-full w-full object-cover" />
                 </button>

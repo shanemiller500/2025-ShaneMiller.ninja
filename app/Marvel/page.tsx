@@ -1,23 +1,25 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { GitCompareArrows, LayoutGrid, Trophy } from "lucide-react";
+import { GitCompareArrows, LayoutGrid, Orbit, Trophy } from "lucide-react";
 
 import { DashboardShell, type DashboardTab } from "@/components/ui/dashboard-shell";
 import { trackEvent } from "@/utils/mixpanel";
 import { HeroModal } from "./components";
+import { MarvelverseTab, type MarvelverseMode } from "./marvelverse";
 import { DATA_SOURCE, loadRoster, type Hero } from "./lib/roster";
 import { CompareTab, LeaderboardTab, RosterTab, TabError, TabLoading } from "./tabs";
 
 /* ------------------------------------------------------------------ */
 /*  Tabs                                                               */
 /* ------------------------------------------------------------------ */
-type TabKey = "roster" | "compare" | "leaders";
+type TabKey = "roster" | "compare" | "leaders" | "marvelverse";
 
 const TABS: DashboardTab<TabKey>[] = [
   { key: "roster",  label: "Roster",      hint: "All characters", icon: <LayoutGrid       className="h-4 w-4" /> },
   { key: "compare", label: "Compare",     hint: "Head to head",   icon: <GitCompareArrows className="h-4 w-4" /> },
   { key: "leaders", label: "Leaderboard", hint: "Top 15",         icon: <Trophy           className="h-4 w-4" /> },
+  { key: "marvelverse", label: "Marvelverse", hint: "Explore connections", icon: <Orbit className="h-4 w-4" /> },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -32,6 +34,7 @@ export default function MarvelPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [pair, setPair] = useState<[Hero | null, Hero | null]>([null, null]);
   const [requestTab, setRequestTab] = useState<{ key: TabKey; nonce: number } | null>(null);
+  const [requestFocus, setRequestFocus] = useState<{ id: number; nonce: number; mode: MarvelverseMode } | null>(null);
 
   useEffect(() => {
     trackEvent("Marvel Page Viewed", { page: "Marvel" });
@@ -66,11 +69,18 @@ export default function MarvelPage() {
     setRequestTab((r) => ({ key: "compare", nonce: (r?.nonce ?? 0) + 1 }));
   }, []);
 
+  const exploreHero = useCallback((h: Hero, mode: MarvelverseMode = "map") => {
+    setModalOpen(false);
+    setRequestFocus((current) => ({ id: h.id, mode, nonce: (current?.nonce ?? 0) + 1 }));
+    setRequestTab((current) => ({ key: "marvelverse", nonce: (current?.nonce ?? 0) + 1 }));
+  }, []);
+
   const renderPanel = (key: TabKey): ReactNode => {
     if (error) return <TabError message={error} onRetry={() => setAttempt((n) => n + 1)} />;
     if (!roster) return <TabLoading />;
     if (key === "roster") return <RosterTab roster={roster} onSelect={openHero} />;
     if (key === "compare") return <CompareTab roster={roster} pair={pair} setPair={setPair} onSelect={openHero} />;
+    if (key === "marvelverse") return <MarvelverseTab roster={roster} onOpen={openHero} requestFocus={requestFocus} />;
     return <LeaderboardTab roster={roster} onSelect={openHero} />;
   };
 
@@ -83,8 +93,8 @@ export default function MarvelPage() {
         title="Marvel Character Lab"
         description={
           <>
-            Browse the roster, open any character&apos;s file, and pit two of them against each other on power stats.
-            Marvel retired its public API, so this runs on the open-source{" "}
+            Browse the roster, read character files, explore their connections in Marvelverse, and compare power stats.
+            Character and stat data comes from the open-source{" "}
             <a href="https://github.com/akabab/superhero-api" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline decoration-indigo-300 underline-offset-2 hover:decoration-indigo-600 dark:text-indigo-300">
               {DATA_SOURCE}
             </a>{" "}
@@ -97,7 +107,7 @@ export default function MarvelPage() {
         onTabChange={(key) => trackEvent("Marvel Tab Clicked", { tab: key })}
       />
 
-      <HeroModal hero={selected} open={modalOpen} onClose={() => setModalOpen(false)} onCompare={compareWith} />
+      <HeroModal hero={selected} open={modalOpen} onClose={() => setModalOpen(false)} onCompare={compareWith} onExplore={exploreHero} roster={roster ?? []} onSelectRelated={openHero} />
     </>
   );
 }

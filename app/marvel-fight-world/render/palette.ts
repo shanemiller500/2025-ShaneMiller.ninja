@@ -122,6 +122,30 @@ export function extractPalette(img: HTMLImageElement): Palette | null {
   return { primary: main, secondary: tame(r1 * 0.55, g1 * 0.55, b1 * 0.55, 0.16, 0.26), accent: tame(r1, g1, b1, 0.58, 0.7) };
 }
 
+/** Sample the face region only when it contains enough plausible uncovered skin. */
+export function extractSkinTone(img: HTMLImageElement): string | null {
+  if (!img.naturalWidth) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 40;
+  canvas.height = 60;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0, 40, 60);
+  let pixels: Uint8ClampedArray;
+  try { pixels = ctx.getImageData(13, 9, 14, 20).data; } catch { return null; }
+  const samples: [number, number, number][] = [];
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+    const [h, s, l] = rgbToHsl(r, g, b);
+    if (h >= 9 && h <= 48 && s >= 0.13 && s <= 0.72 && l >= 0.18 && l <= 0.87 && r > g * 1.08 && g > b * 0.9) samples.push([r, g, b]);
+  }
+  if (samples.length < 38) return null;
+  samples.sort((a, b) => (a[0] + a[1] + a[2]) - (b[0] + b[1] + b[2]));
+  const mid = samples.slice(Math.floor(samples.length * 0.35), Math.ceil(samples.length * 0.65));
+  const avg = mid.reduce((sum, p) => [sum[0] + p[0], sum[1] + p[1], sum[2] + p[2]], [0, 0, 0]);
+  return hex(avg[0] / mid.length, avg[1] / mid.length, avg[2] / mid.length);
+}
+
 /**
  * Re-colour a generic fighter's costume from its portrait (once per
  * fighter). Signature fighters keep their hand-authored suits.
@@ -130,8 +154,11 @@ export function applyPortraitPalette(def: FighterDef, img: HTMLImageElement | nu
   if (!img || def.custom || done.has(def.id)) return;
   done.add(def.id);
   const pal = extractPalette(img);
-  if (!pal) return;
-  def.look.primary = pal.primary;
-  def.look.secondary = pal.secondary;
-  def.look.accent = pal.accent;
+  if (pal) {
+    def.look.primary = pal.primary;
+    def.look.secondary = pal.secondary;
+    def.look.accent = pal.accent;
+  }
+  const skin = extractSkinTone(img);
+  if (skin && !def.look.headgear) def.look.skin = skin;
 }

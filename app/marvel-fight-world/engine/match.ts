@@ -130,6 +130,7 @@ export class Match {
 
   /** Restart the whole match with the same fighters. */
   rematch() {
+    this.frame = 0;
     this.wins = [0, 0];
     this.round = 1;
     this.winner = null;
@@ -141,6 +142,11 @@ export class Match {
       f.hitsLanded = 0;
       f.specialsUsed = 0;
       f.ultsUsed = 0;
+      f.damageTaken = 0;
+      f.counters = 0;
+      f.dodges = 0;
+      f.blocks = 0;
+      f.finishingMove = null;
     }
     this.startRound();
   }
@@ -201,7 +207,10 @@ export class Match {
       const w = this.roundWinner;
       if (w !== null) {
         const f = this.fighters[w];
-        if (f.grounded && f.state !== "victory" && f.state !== "attack") f.setState("victory");
+        if (f.grounded && f.state !== "victory" && f.state !== "attack") {
+          f.fightDance = (f.def.id + this.round + this.frame) % 4;
+          f.setState("victory");
+        }
       }
       if (this.phaseTime >= ROUND_END_FRAMES) this.nextRound();
     }
@@ -365,6 +374,7 @@ export class Match {
     }
 
     f.lightChain = slot === "lp" ? (f.slot === "lp" ? f.lightChain + 1 : 1) : 0;
+    f.heavyChain = slot === "hp" ? (f.slot === "hp" ? f.heavyChain + 1 : 1) : 0;
     const wasRunning = f.state === "run";
     f.endMove();
     f.move = m;
@@ -468,6 +478,7 @@ export class Match {
     // Dodge: block + direction, or double-tap back
     const dodgeDir = input.block && pressed(f.facing === 1 ? "right" : "left") ? 1 : input.block && pressed(f.facing === 1 ? "left" : "right") ? -1 : backdash ? -1 : 0;
     if (dodgeDir !== 0 && f.stamina >= 22) {
+      f.dodges++;
       f.stamina -= 22;
       f.setState("dodge");
       f.vx = f.facing * dodgeDir * d.walk * 2.4;
@@ -490,19 +501,20 @@ export class Match {
       return;
     }
     if (fwd) {
+      const accel = Math.max(0.28, Math.min(0.8, 0.85 / d.physical.movementWeight));
       if (runIntent && f.stamina > 5) {
         f.setState("run");
-        f.vx = f.facing * d.run;
+        f.vx += (f.facing * d.run - f.vx) * accel;
         f.stamina = Math.max(0, f.stamina - 0.25);
       } else {
         f.setState("walk");
-        f.vx = f.facing * d.walk;
+        f.vx += (f.facing * d.walk - f.vx) * accel;
       }
       return;
     }
     if (back) {
       f.setState("walk");
-      f.vx = -f.facing * d.walk * 0.8;
+      f.vx += (-f.facing * d.walk * 0.8 - f.vx) * Math.max(0.28, Math.min(0.8, 0.85 / d.physical.movementWeight));
       return;
     }
     f.setState("idle");
@@ -688,6 +700,8 @@ export class Match {
     if (guarding && !lowBeatsStand && !overheadBeatsCrouch) {
       // Parry: block pressed just before the hit
       if (d.def.passive.id === "counter" && !proj && d.clock - d.blockPressedAt <= 8) {
+        d.counters++;
+        d.blocks++;
         this.text("PARRY!", d.index, true);
         this.emit({ type: "sfx", key: "block" });
         this.emit({ type: "hit", x: px, y: py, fx: "shield", power: 0.8, attacker: a.index, blocked: true, counter: true, damage: 0 });
@@ -701,6 +715,8 @@ export class Match {
       }
       const chip = m.kind === "special" || m.kind === "ultimate" ? Math.round(this.computeDamage(a, d, m, 1, false, 1) * 0.15) : 0;
       if (chip > 0) d.health = Math.max(1, d.health - chip);
+      d.damageTaken += chip;
+      d.blocks++;
       d.guard -= m.guard * (d.def.passive.id === "armor" ? 0.7 : 1);
       d.endMove();
       d.setState("blockstun");
@@ -762,6 +778,7 @@ export class Match {
 
     const dmg = this.computeDamage(a, d, m, a.combo, counterHit || forced, bonus);
     d.health = Math.max(0, d.health - dmg);
+    d.damageTaken += dmg;
     d.sinceHurt = 0;
     a.damageDealt += dmg;
     a.hitsLanded++;
@@ -778,7 +795,9 @@ export class Match {
     this.emit({ type: "hit", x: px, y: py, fx: m.fx, power, attacker: a.index, blocked: false, counter: counterHit, damage: dmg });
     this.emit({ type: "sfx", key: m.kind === "light" ? "jab" : m.sfx === "whoosh" ? "heavy" : m.sfx, volume: Math.min(1, 0.55 + power * 0.4) });
     if (dmg >= 60 || m.kind === "ultimate") this.emit({ type: "shake", amount: Math.min(14, dmg / 9) });
+    if (counterHit || forced) a.counters++;
     if (counterHit) this.text("COUNTER", a.index, false);
+    if (ko) a.finishingMove = slot;
     if (a.combo >= 2) {
       this.emit({ type: "combo", player: a.index, hits: a.combo, label });
       if (label) this.text(label.toUpperCase(), a.index, false);

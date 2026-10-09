@@ -7,7 +7,7 @@
 /* ------------------------------------------------------------------ */
 
 import { NORMALS, SIGNATURE_KITS, archetypeKit, type Kit } from "./moves";
-import type { Alignment, Archetype, FighterDef, FxKind, Look, MoveData, MoveSlot, Stats } from "./types";
+import type { Alignment, Archetype, FighterDef, FxKind, Look, MoveData, MoveSlot, PhysicalProfile, Stats } from "./types";
 
 /** Minimal shape we need from the dataset (app/Marvel/lib/roster Hero). */
 export interface HeroLike {
@@ -16,7 +16,7 @@ export interface HeroLike {
   powerstats: Stats;
   biography: { fullName: string; alignment: string };
   images: { xs: string; sm: string; md: string; lg: string };
-  appearance?: { gender?: string; hairColor?: string };
+  appearance?: { gender?: string; hairColor?: string; height?: string[]; weight?: string[] };
 }
 
 /* ── Archetypes ────────────────────────────────────────────────────── */
@@ -27,21 +27,26 @@ export const ARCHETYPE_INFO: Record<Archetype, { label: string; color: string; d
   power: { label: "Power", color: "#facc15", desc: "Energy specials and big beams from range." },
   tank: { label: "Tank", color: "#94a3b8", desc: "Absorbs punishment, armored attacks." },
   balanced: { label: "Balanced", color: "#4ade80", desc: "No weak spots. Great for learning." },
+  powerhouse: { label: "Powerhouse", color: "#fb923c", desc: "Heavy strikes and strong knockback." },
+  martial: { label: "Martial Artist", color: "#34d399", desc: "Fast precision and counters." },
+  acrobat: { label: "Acrobat", color: "#67e8f9", desc: "Air mobility and quick recoveries." },
+  ranged: { label: "Ranged", color: "#c4b5fd", desc: "Controls space with projectiles." },
+  grappler: { label: "Grappler", color: "#fda4af", desc: "Throws and close-range pressure." },
 };
 
 /** Manual archetype overrides where the raw stats tell the wrong story. */
 const ARCHETYPE_OVERRIDES: Record<string, Archetype> = {
-  "Spider-Man": "speed",
-  Hulk: "brawler",
+  "Spider-Man": "acrobat",
+  Hulk: "powerhouse",
   Wolverine: "brawler",
-  "Iron Man": "power",
-  Thor: "power",
+  "Iron Man": "ranged",
+  Thor: "powerhouse",
   "Captain America": "balanced",
-  "Black Panther": "speed",
+  "Black Panther": "martial",
   "Doctor Strange": "technical",
   Deadpool: "speed",
   Venom: "brawler",
-  Magneto: "power",
+  Magneto: "ranged",
   Thanos: "tank",
 };
 
@@ -54,6 +59,11 @@ export function deriveArchetype(s: Stats): Archetype {
     technical: s.intelligence * 0.8 + s.combat * 0.6 - s.strength * 0.25,
     power: s.power * 1.15 - s.combat * 0.15 + s.intelligence * 0.1,
     balanced: 0,
+    powerhouse: s.strength * 1 + s.durability * 0.3 - s.speed * 0.05,
+    martial: s.combat * 0.95 + s.speed * 0.48 - s.power * 0.25,
+    acrobat: s.speed * 0.95 + s.combat * 0.5 - s.durability * 0.15,
+    ranged: s.power * 0.9 + s.intelligence * 0.42 - s.strength * 0.25,
+    grappler: s.strength * 0.75 + s.combat * 0.6 - s.power * 0.35,
   };
   const vals = Object.values(s);
   const spread = Math.max(...vals) - Math.min(...vals);
@@ -85,6 +95,11 @@ const ARCHETYPE_FX: Record<Archetype, FxKind> = {
   power: "energy",
   tank: "ground",
   balanced: "energy",
+  powerhouse: "ground",
+  martial: "kinetic",
+  acrobat: "kinetic",
+  ranged: "energy",
+  grappler: "punch",
 };
 
 /** Stable 0–359 hue from a name (generic fighters get distinct costumes). */
@@ -143,6 +158,32 @@ function lookFor(name: string, s: Stats, alignment: Alignment, gender?: string, 
   return LOOKS[name] ? { ...base, mark: undefined, bareArms: false, hair: undefined, ...LOOKS[name] } : base;
 }
 
+const bounded = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** The dataset gives height/weight for many heroes; curated silhouettes handle comic outliers. */
+export function physicalFor(hero: HeroLike, look: Look, archetype: Archetype): PhysicalProfile {
+  const cm = Number(hero.appearance?.height?.find((v) => /\d+\s*cm/i.test(v))?.match(/\d+/)?.[0]);
+  const kg = Number(hero.appearance?.weight?.find((v) => /\d+\s*kg/i.test(v))?.match(/\d+/)?.[0]);
+  const heightCm = bounded(cm || 178 * look.height, 145, 230);
+  const mass = bounded(kg || 76 * look.bulk, 42, 250);
+  const massIndex = mass / Math.pow(heightCm / 100, 2);
+  const build: PhysicalProfile["build"] = massIndex > 37 || look.bulk > 1.3 ? "massive" : massIndex > 29 || look.bulk > 1.13 ? "muscular" : massIndex < 21 || archetype === "speed" ? "lean" : "athletic";
+  const wide = build === "massive" ? 1.21 : build === "muscular" ? 1.1 : build === "lean" ? 0.91 : 1;
+  const tall = bounded(heightCm / 178, 0.86, 1.22);
+  return {
+    heightCm, bodyScale: tall, build,
+    shoulder: wide * (look.body === "female" ? 0.94 : 1),
+    chest: wide, waist: bounded(1 + (massIndex - 25) / 90, 0.84, 1.2),
+    arm: bounded(0.94 + (tall - 1) * 0.55 + (archetype === "technical" ? 0.035 : 0), 0.86, 1.14),
+    leg: bounded(0.96 + (tall - 1) * 0.5 + (archetype === "speed" ? 0.04 : 0), 0.87, 1.14),
+    head: bounded(1 - (tall - 1) * 0.27, 0.91, 1.08),
+    stance: archetype === "tank" || archetype === "brawler" || archetype === "powerhouse" || archetype === "grappler" ? 1.2 : archetype === "speed" || archetype === "acrobat" ? 1.11 : 1,
+    movementWeight: bounded((mass / 76) * (archetype === "speed" ? 0.82 : 1), 0.7, 1.5),
+    movementSpeed: bounded(0.82 + hero.powerstats.speed / 300, 0.82, 1.16),
+    reach: bounded((tall * (0.92 + (archetype === "technical" ? 0.1 : 0))) * (1 + (wide - 1) * 0.2), 0.82, 1.27),
+  };
+}
+
 /* ── Balancing ─────────────────────────────────────────────────────── */
 const lerp = (a: number, b: number, t: number) => a + (b - a) * Math.max(0, Math.min(1, t / 100));
 
@@ -172,6 +213,8 @@ export function buildFighter(hero: HeroLike): FighterDef {
   const alignment: Alignment = hero.biography.alignment === "good" || hero.biography.alignment === "bad" ? hero.biography.alignment : "neutral";
   const archetype = ARCHETYPE_OVERRIDES[hero.name] ?? deriveArchetype(s);
   const look = lookFor(hero.name, s, alignment, hero.appearance?.gender, hero.appearance?.hairColor);
+  const physical = physicalFor(hero, look, archetype);
+  look.height = physical.heightCm / 178;
   const fx: FxKind = look.claws ? "claw" : ARCHETYPE_FX[archetype];
   const custom = !!SIGNATURE_KITS[hero.name];
   const kit: Kit = SIGNATURE_KITS[hero.name] ?? archetypeKit(archetype, fx);
@@ -194,7 +237,7 @@ export function buildFighter(hero: HeroLike): FighterDef {
   };
 
   const passive = kit.passive;
-  const airJumps = passive.id === "doubleJump" || passive.id === "spiderSense" ? 1 : archetype === "speed" ? 1 : 0;
+  const airJumps = passive.id === "doubleJump" || passive.id === "spiderSense" ? 1 : archetype === "speed" || archetype === "acrobat" ? 1 : 0;
 
   return {
     id: hero.id,
@@ -206,11 +249,11 @@ export function buildFighter(hero: HeroLike): FighterDef {
     archetype,
     custom,
     maxHealth: b.maxHealth,
-    walk: b.walk,
-    run: b.walk * 1.85,
+    walk: b.walk * physical.movementSpeed / (0.8 + physical.movementWeight * 0.2),
+    run: (b.walk * physical.movementSpeed / (0.8 + physical.movementWeight * 0.2)) * 1.85,
     jump: b.jump,
     airJumps,
-    weight: b.weight,
+    weight: b.weight * physical.movementWeight,
     defense: b.defense,
     physMul: b.physMul,
     powerMul: b.powerMul,
@@ -219,6 +262,7 @@ export function buildFighter(hero: HeroLike): FighterDef {
     width: Math.round(56 * look.bulk),
     height: Math.round(176 * look.height),
     look,
+    physical,
     moves,
     passive,
     combos: kit.combos,

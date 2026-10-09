@@ -3,12 +3,16 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ExternalLink, GitCompareArrows, Images, Maximize2, Search, X } from "lucide-react";
+import { BookOpen, ChevronDown, ExternalLink, GitBranch, GitCompareArrows, IdCard, Images, LayoutDashboard, Maximize2, Orbit, Search, Users, X, Zap } from "lucide-react";
 
 import { Lightbox, type LightboxImage } from "@/components/ui/lightbox";
 import { Modal } from "@/components/ui/modal";
-import { BioSkeleton, BioTab, FactsGrid, FamilyTab, Label, PowersTab, QuoteCard, ReadMore, WikiLink, useBio } from "./bio-panels";
+import { FactsGrid, FamilyTab, Label, QuoteCard, WikiLink, useBio } from "./bio-panels";
+import { BioTab, ComicOverview, PowersTab, rosterOverview } from "./story-panels";
 import { loadGallery, type Gallery } from "./lib/gallery";
+import type { RelationPortrait } from "./lib/relations";
+import { RelationProfile } from "./relation-profile";
+import type { MarvelverseMode } from "./marvelverse";
 import { ALIGNMENT, STATS, STAT_LABEL, alignmentOf, clean, type Hero, type StatKey } from "./lib/roster";
 
 const cn = (...xs: Array<string | false | null | undefined>) => xs.filter(Boolean).join(" ");
@@ -190,8 +194,14 @@ export function RadarHowTo({ compare = false }: { compare?: boolean }) {
 /* ------------------------------------------------------------------ */
 /*  StatBars                                                           */
 /* ------------------------------------------------------------------ */
-const statColor = (v: number) =>
-  v >= 85 ? "from-rose-500 to-amber-400" : v >= 60 ? "from-violet-500 to-indigo-400" : v >= 35 ? "from-sky-500 to-cyan-400" : "from-slate-400 to-slate-300";
+const statColor: Record<StatKey, string> = {
+  intelligence: "from-violet-400 to-fuchsia-400",
+  strength: "from-orange-400 to-red-500",
+  speed: "from-cyan-300 to-sky-500",
+  durability: "from-emerald-300 to-green-500",
+  power: "from-yellow-300 to-amber-500",
+  combat: "from-rose-300 to-pink-500",
+};
 
 export function StatBars({
   hero,
@@ -212,20 +222,20 @@ export function StatBars({
           <div
             key={k}
             onMouseEnter={() => onHighlight?.(k)}
-            className={cn("flex items-center gap-2 rounded-lg transition-colors", !compact && "px-1.5 py-1", highlight === k && "bg-indigo-50 dark:bg-indigo-400/10")}
+            className={cn("flex items-center gap-2 rounded-lg transition-colors", !compact && "px-1.5 py-1", highlight === k && "bg-amber-50 dark:bg-amber-300/10")}
           >
-            <span className={cn("shrink-0 font-mono uppercase tracking-wider text-slate-400", compact ? "w-7 text-[8px]" : "w-24 text-[10px]")}>
+            <span className={cn("shrink-0 font-mono font-bold uppercase tracking-wider text-slate-400", compact ? "w-7 text-[8px]" : "w-24 text-[10px]")}>
               {compact ? STAT_LABEL[k].slice(0, 3) : STAT_LABEL[k]}
             </span>
-            <span className={cn("relative flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.06]", compact ? "h-1" : "h-1.5")}>
+            <span className={cn("relative flex-1 -skew-x-12 overflow-hidden rounded-sm bg-slate-100 dark:bg-white/10", compact ? "h-2" : "h-2.5")}>
               <motion.span
-                className={cn("absolute inset-y-0 left-0 rounded-full bg-gradient-to-r", statColor(v))}
+                className={cn("absolute inset-y-0 left-0 bg-gradient-to-r", statColor[k])}
                 initial={{ width: 0 }}
                 animate={{ width: `${v}%` }}
                 transition={{ duration: 0.7, delay: i * 0.05, ease: "easeOut" }}
               />
             </span>
-            {!compact && <span className="w-7 shrink-0 text-right font-mono text-[11px] tabular-nums text-slate-700 dark:text-slate-200">{v}</span>}
+            {!compact && <span className="w-7 shrink-0 text-right font-mono text-xs font-bold tabular-nums text-slate-700 dark:text-white">{v}</span>}
           </div>
         );
       })}
@@ -318,14 +328,14 @@ function PowerPanel({ hero }: { hero: Hero }) {
   const [hl, setHl] = useState<StatKey | null>(null);
   const shape = readShape(hero);
   return (
-    <div className="mt-5 rounded-2xl border border-slate-200/70 p-4 dark:border-white/[0.08]">
+    <div className="rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04] sm:p-5">
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Power profile</p>
         <p className="font-mono text-[11px] text-slate-400">
           Total <span className="font-semibold text-slate-900 dark:text-white">{hero.total}</span>/600
         </p>
       </div>
-      <div className="mt-3 grid items-center gap-4 sm:grid-cols-[1fr_220px]">
+      <div className="mt-4 grid items-center gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
         <div>
           <p className="text-sm font-semibold text-slate-900 dark:text-white">{shape.title}</p>
           <p className="mt-0.5 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">{shape.detail}</p>
@@ -333,7 +343,7 @@ function PowerPanel({ hero }: { hero: Hero }) {
             <StatBars hero={hero} highlight={hl} onHighlight={setHl} />
           </div>
         </div>
-        <div className="mx-auto w-full max-w-[240px]">
+        <div className="mx-auto w-full max-w-[260px]">
           <Radar heroes={[hero]} size={260} highlight={hl} onHighlight={setHl} />
         </div>
       </div>
@@ -368,16 +378,15 @@ function useGallery(hero: Hero | null) {
   return state;
 }
 
-/** Whole image, never cropped: contained artwork over a blurred fill of itself. */
+/** Whole image, never cropped, against the character file background. */
 function FullPortrait({ hero, count, onOpen }: { hero: Hero; count: number; onOpen: () => void }) {
   return (
     <button
       type="button"
       onClick={onOpen}
       aria-label={`View ${hero.name} full size`}
-      className="group relative block aspect-[3/4] w-full overflow-hidden bg-slate-900 sm:aspect-auto sm:h-full sm:min-h-[460px]"
+      className="group relative block aspect-[16/10] w-full overflow-hidden bg-[#1a1a1d] sm:aspect-auto sm:h-full"
     >
-      <img src={hero.images.lg} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl" />
       <img src={hero.images.lg} alt={hero.name} className="relative h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.02]" />
       <span className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-white backdrop-blur transition group-hover:bg-black/75">
         <Maximize2 className="h-3 w-3" />
@@ -455,9 +464,9 @@ function GallerySection({
   );
 }
 
-type HeroTab = "overview" | "bio" | "powers" | "family" | "gallery";
+type HeroTab = "overview" | "bio" | "powers" | "family" | "journey" | "gallery";
 
-export function HeroModal({ hero, open, onClose, onCompare }: { hero: Hero | null; open: boolean; onClose: () => void; onCompare: (h: Hero) => void }) {
+export function HeroModal({ hero, open, onClose, onCompare, onExplore, roster, onSelectRelated }: { hero: Hero | null; open: boolean; onClose: () => void; onCompare: (h: Hero) => void; onExplore: (h: Hero, mode?: MarvelverseMode) => void; roster: Hero[]; onSelectRelated: (h: Hero) => void }) {
   const a = hero ? ALIGNMENT[alignmentOf(hero)] : ALIGNMENT.neutral;
   const active = open ? hero : null;
 
@@ -465,11 +474,14 @@ export function HeroModal({ hero, open, onClose, onCompare }: { hero: Hero | nul
   const { loading: bioLoading, bio, error: bioError } = useBio(active);
   const [viewer, setViewer] = useState<number | null>(null);
   const [tab, setTab] = useState<HeroTab>("overview");
+  const [wikiRelative, setWikiRelative] = useState<{ label: string; portrait: RelationPortrait } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setViewer(null);
     setTab("overview");
+    setWikiRelative(null);
+    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [hero?.id, open]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
@@ -483,13 +495,14 @@ export function HeroModal({ hero, open, onClose, onCompare }: { hero: Hero | nul
     : [];
 
   const powerCount = bio?.powers.reduce((n, s) => n + s.items.length, 0) ?? 0;
-  const TABS: { key: HeroTab; label: string; count?: number }[] = [
-    { key: "overview", label: "Overview" },
-    { key: "bio", label: "Bio", count: bio?.history.length || undefined },
-    { key: "powers", label: "Powers", count: powerCount || undefined },
-    { key: "family", label: "Family" },
-    { key: "gallery", label: "Gallery", count: gallery?.images.length || undefined },
-  ];
+  const TABS = [
+    { key: "overview", label: "Overview", icon: LayoutDashboard, count: undefined },
+    { key: "bio", label: "Bio", icon: BookOpen, count: bio?.history.length || undefined },
+    { key: "powers", label: "Powers", icon: Zap, count: powerCount || undefined },
+    { key: "family", label: "Family", icon: Users, count: undefined },
+    { key: "journey", label: "Journey", icon: GitBranch, count: bio?.history.length || undefined },
+    { key: "gallery", label: "Gallery", icon: Images, count: gallery?.images.length || undefined },
+  ] as const;
 
   const same = (x: string, y: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === y.toLowerCase().replace(/[^a-z0-9]/g, "");
   const subtitle = hero
@@ -499,12 +512,12 @@ export function HeroModal({ hero, open, onClose, onCompare }: { hero: Hero | nul
     : "";
 
   return (
-    <Modal open={open} onClose={onClose} labelledBy="hero-modal-title" size="lg" accent={a.hex}>
+    <Modal open={open} onClose={() => wikiRelative ? setWikiRelative(null) : onClose()} labelledBy="hero-modal-title" size="full" accent={a.hex} className="!max-h-[96dvh] sm:h-[calc(100dvh-48px)]">
       {hero && (
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="grid sm:grid-cols-[minmax(0,240px)_1fr]">
+          <div className="grid sm:grid-cols-[minmax(0,300px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
             {/* portrait column — pinned while the file scrolls */}
-            <div className="relative sm:sticky sm:top-0 sm:h-[min(92dvh,760px)] sm:self-start">
+            <div className="relative sm:sticky sm:top-0 sm:h-[calc(100dvh-48px)] sm:self-start">
               <FullPortrait hero={hero} count={viewerImages.length} onOpen={() => setViewer(0)} />
               <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap gap-1.5 sm:hidden">
                 <AlignmentChip hero={hero} />
@@ -523,10 +536,12 @@ export function HeroModal({ hero, open, onClose, onCompare }: { hero: Hero | nul
                   <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400">#{hero.id}</span>
                   {bio?.pageUrl && <WikiLink href={bio.pageUrl}>Wiki file</WikiLink>}
                 </div>
-                <h3 id="hero-modal-title" className="mt-2 font-aspekta text-2xl font-[650] tracking-tight text-slate-900 dark:text-white">
+                <h3 id="hero-modal-title" className="mt-2 font-aspekta text-3xl font-[650] tracking-tight text-slate-900 dark:text-white sm:text-4xl">
                   {hero.name}
                 </h3>
                 {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
+                <div className="mt-5"><ComicOverview title="Overview" text={bio?.overview || rosterOverview(hero)} kicker={bioLoading ? "Loading extended file" : "Character file"} /></div>
+                <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => onExplore(hero, "map")} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-300/10 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-300/20 dark:text-amber-200"><Orbit className="h-3.5 w-3.5" /> Explore connections</button><button type="button" onClick={() => onExplore(hero, "family")} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/40 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-amber-300/10 dark:text-slate-200"><Users className="h-3.5 w-3.5" /> View family</button><button type="button" onClick={() => onExplore(hero, "timeline")} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/40 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-amber-300/10 dark:text-slate-200"><GitBranch className="h-3.5 w-3.5" /> View timeline</button></div>
               </div>
 
               {/* section tabs */}
@@ -538,13 +553,13 @@ export function HeroModal({ hero, open, onClose, onCompare }: { hero: Hero | nul
                       type="button"
                       role="tab"
                       aria-selected={tab === t.key}
-                      onClick={() => setTab(t.key)}
+                      onClick={() => { scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" }); setTab(t.key); }}
                       className={cn(
-                        "relative shrink-0 py-2.5 text-[13px] font-medium transition-colors",
+                        "relative inline-flex shrink-0 items-center gap-1.5 py-3 text-[12px] font-bold uppercase tracking-wider transition-colors",
                         tab === t.key ? "text-slate-900 dark:text-white" : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                       )}
                     >
-                      {t.label}
+                      <t.icon aria-hidden className="h-3.5 w-3.5" />{t.label}
                       {t.count ? <span className="ml-1 font-mono text-[10px] text-slate-400">{t.count}</span> : null}
                       {tab === t.key && <motion.span layoutId="heroTabLine" className="absolute inset-x-0 -bottom-px h-0.5 rounded-full" style={{ background: a.hex }} />}
                     </button>
@@ -557,30 +572,30 @@ export function HeroModal({ hero, open, onClose, onCompare }: { hero: Hero | nul
                   <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}>
                     {tab === "overview" && (
                       <>
-                        {bioLoading ? (
-                          <BioSkeleton lines={4} />
-                        ) : bio?.overview ? (
-                          <ReadMore text={bio.overview} limit={520} />
-                        ) : null}
-                        {bio && <QuoteCard bio={bio} accent={a.hex} />}
                         <PowerPanel hero={hero} />
-                        <div className="mt-5">
-                          <Label>Profile</Label>
-                          <FactsGrid hero={hero} bio={bio} />
+                        <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+                          <div className="min-w-0">
+                            {bio && <QuoteCard bio={bio} accent={a.hex} />}
+                            <button
+                              type="button"
+                              onClick={() => onCompare(hero)}
+                              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-medium text-white transition hover:bg-indigo-600 dark:bg-white dark:text-slate-900 dark:hover:bg-indigo-300"
+                            >
+                              <GitCompareArrows className="h-3.5 w-3.5" />
+                              Compare {hero.name.split(" ")[0]} with…
+                            </button>
+                          </div>
+                          <div className="min-w-0 rounded-2xl border border-slate-200/70 p-4 dark:border-white/10 sm:p-5">
+                            <Label icon={IdCard}>Profile</Label>
+                            <FactsGrid hero={hero} bio={bio} />
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => onCompare(hero)}
-                          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-medium text-white transition hover:bg-indigo-600 dark:bg-white dark:text-slate-900 dark:hover:bg-indigo-300"
-                        >
-                          <GitCompareArrows className="h-3.5 w-3.5" />
-                          Compare {hero.name.split(" ")[0]} with…
-                        </button>
                       </>
                     )}
-                    {tab === "bio" && <BioTab bio={bio} loading={bioLoading} error={bioError} />}
-                    {tab === "powers" && <PowersTab bio={bio} loading={bioLoading} error={bioError} />}
-                    {tab === "family" && <FamilyTab hero={hero} bio={bio} loading={bioLoading} />}
+                    {tab === "bio" && <BioTab bio={bio} loading={bioLoading} error={bioError} fallbackText={rosterOverview(hero)} art={viewerImages} onOpenArt={setViewer} />}
+                    {tab === "powers" && <PowersTab bio={bio} loading={bioLoading} error={bioError} fallbackText={rosterOverview(hero)} art={viewerImages} onOpenArt={setViewer} />}
+                    {tab === "family" && <FamilyTab hero={hero} bio={bio} loading={bioLoading} roster={roster} onSelect={onSelectRelated} onSelectWiki={(label, portrait) => setWikiRelative({ label, portrait })} />}
+                    {tab === "journey" && <div className="rounded-[24px] border border-amber-400/25 bg-[#fffaf0] p-5 dark:bg-[#222226] sm:p-6"><p className="font-mono text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-300">Character journey / source order</p><h4 className="mt-2 font-aspekta text-2xl font-black text-slate-950 dark:text-white">{hero.name} through the story</h4><p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Chapters follow the Marvel Database file. Dates are shown only when supplied by the source.</p>{clean(hero.biography.firstAppearance) && <p className="mt-5 border-l-4 border-amber-400 bg-amber-300/10 p-3 text-sm text-slate-700 dark:text-slate-200"><strong className="block text-xs uppercase tracking-wider">First appearance</strong>{clean(hero.biography.firstAppearance)}</p>}<ol className="relative mt-5 space-y-3 border-l-2 border-amber-400/40 pl-5">{bio?.history.map((chapter, index) => <li key={`${chapter.title}-${index}`} className="relative rounded-xl border border-slate-200 bg-white/75 p-4 dark:border-white/10 dark:bg-white/[.035]"><span className="absolute -left-[29px] top-4 grid h-4 w-4 place-items-center rounded-full bg-amber-400 ring-4 ring-[#fffaf0] dark:ring-[#222226]" /><span className="font-mono text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300">Chapter {String(index + 1).padStart(2, "0")}</span><h5 className="mt-1 text-base font-bold text-slate-950 dark:text-white">{chapter.title}</h5><p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-700 dark:text-slate-200">{chapter.text}</p></li>)}{!bio?.history.length && <li className="text-sm text-slate-500">No detailed chapters are available for this character.</li>}</ol></div>}
                     {tab === "gallery" && <GallerySection loading={galLoading} error={galError} gallery={gallery} onOpen={setViewer} />}
                   </motion.div>
                 </AnimatePresence>
@@ -589,6 +604,7 @@ export function HeroModal({ hero, open, onClose, onCompare }: { hero: Hero | nul
           </div>
         </div>
       )}
+      {wikiRelative && <RelationProfile key={wikiRelative.portrait.page} label={wikiRelative.label} portrait={wikiRelative.portrait} onBack={() => setWikiRelative(null)} />}
       <Lightbox
         images={viewerImages}
         index={viewer ?? 0}

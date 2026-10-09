@@ -38,6 +38,15 @@ export interface ScoreInput {
   healthLeft: number;
   streakBefore: number;
   bestStreakBefore: number;
+  damageTaken?: number;
+  damageDealt?: number;
+  counters?: number;
+  dodges?: number;
+  blocks?: number;
+  specials?: number;
+  finishingMove?: string | null;
+  finalKo?: boolean;
+  seconds?: number;
 }
 
 const power = (d: FighterDef) => Object.values(d.stats).reduce((a, b) => a + b, 0);
@@ -52,11 +61,15 @@ export function scoreMatch(i: ScoreInput): ScoreBreakdown {
 
   const streak = i.won === true ? i.streakBefore + 1 : i.won === false ? 0 : i.streakBefore;
   if (i.won === true) {
-    add(`Victory · ${i.difficulty} CPU`, 100 * mult);
+    add(`Victory · ${i.difficulty} CPU`, 1000 * mult);
     const ratio = power(i.opponent) / Math.max(1, power(i.me));
     if (ratio > 1.05) add("Underdog win", Math.min(150, (ratio - 1) * 160) * mult);
-    add("Health left", i.healthLeft * 60 * mult);
+    add("Health left", i.healthLeft * 250 * mult);
+    if (i.damageTaken === 0) add("CLEAN SWEEP", 1500 * mult);
+    if (i.finalKo ?? (i.kos > 0)) add("KNOCKOUT BONUS", 500 * mult);
+    if (i.damageTaken === 0 && (i.finalKo ?? (i.kos > 0))) add("PERFECT KO", 3000 * mult);
     if (i.fastestKo !== null && i.fastestKo < 40) add("Speed K.O.", (40 - i.fastestKo) * 4 * mult);
+    if (i.seconds !== undefined && i.seconds < 120) add("Fast victory", (120 - i.seconds) * 3 * mult);
     if (streak >= 2) add(`Win streak ×${streak}`, Math.min(400, streak * 20) * mult);
   } else if (i.won === null) {
     add("Draw", 30 * mult);
@@ -67,6 +80,12 @@ export function scoreMatch(i: ScoreInput): ScoreBreakdown {
   add(`Perfect round${i.perfects === 1 ? "" : "s"}`, i.perfects * 75 * mult);
   if (i.maxCombo >= 3) add(`${i.maxCombo}-hit combo`, i.maxCombo * 8 * mult);
   add(`Ultimate${i.ults === 1 ? "" : "s"} landed`, i.ults * 20 * mult);
+  add("Damage dealt", Math.min(400, (i.damageDealt ?? 0) * 0.15) * mult);
+  add("Counters", (i.counters ?? 0) * 35 * mult);
+  add("Dodges", (i.dodges ?? 0) * 12 * mult);
+  add("Blocks", (i.blocks ?? 0) * 10 * mult);
+  add("Special moves", (i.specials ?? 0) * 15 * mult);
+  if (i.won && i.finishingMove && (i.finalKo ?? (i.kos > 0))) add(`Finisher · ${i.finishingMove.toUpperCase()}`, 150 * mult);
 
   const total = lines.reduce((a, l) => a + l.points, 0);
   const bestStreak = Math.max(i.bestStreakBefore, streak);

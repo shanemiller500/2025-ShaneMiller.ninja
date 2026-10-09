@@ -37,7 +37,7 @@ import {
   type Settings,
 } from "../data/storage";
 import type { Controller, MatchSummary } from "../game/session";
-import { advance, newBracket, playerBout, type Bracket } from "../game/tournament";
+import { advance, boutSeed, continueBracket, newBracket, playerBout, resolveCpuBout, roundName, type Bracket } from "../game/tournament";
 import { ARENAS, type ArenaDef } from "../render/arenas";
 import { ZONES } from "../world/zones";
 import { ArenaScreen } from "./ArenaScreen";
@@ -61,7 +61,7 @@ import { tidyStorage } from "@/utils/storageJanitor";
 
 const loadFightCloud = () => import("../data/cloud").then((m) => m.fightCloud);
 
-type Mode = "cpu" | "versus" | "random" | "survival" | "tournament" | "world";
+type Mode = "cpu" | "versus" | "random" | "survival" | "tournament" | "spectate" | "world";
 
 interface FightSetup {
   mode: Mode;
@@ -72,6 +72,9 @@ interface FightSetup {
   difficulty: Difficulty;
   banner?: string;
   startHealth?: [number, number];
+  boutIndex?: number;
+  speed?: 1 | 2 | 4;
+  tournamentSeed?: number;
   /** Bumped to remount the fight (new opponent in survival etc.) */
   key: number;
 }
@@ -338,7 +341,7 @@ function Game({ roster }: { roster: Roster }) {
       if (!bout) return;
       const me = roster.byId.get(br.playerId)!;
       const opp = bout.a.id === br.playerId ? bout.b : bout.a;
-      startFight({ mode: "tournament", p1: me, p2: opp, arena: pickRandom(ARENAS), difficulty: (["normal", "hard", "insane"] as Difficulty[])[br.current] ?? "hard", banner: ["Quarter-final", "Semi-final", "Grand final"][br.current] });
+      startFight({ mode: "tournament", p1: me, p2: opp, arena: pickRandom(ARENAS), difficulty: br.current < 1 ? "easy" : br.current < 2 ? "normal" : br.current < 4 ? "hard" : "insane", banner: roundName(br.size, br.current) });
     },
     [roster, startFight]
   );
@@ -405,6 +408,7 @@ function Game({ roster }: { roster: Roster }) {
     const me = s.fighters[0];
     const won = s.winner === null ? null : s.winner === 0;
     // Only fights against the CPU score (local versus can't be credited fairly)
+    if (f.mode === "spectate") return null;
     const scored = f.controllers[0] === "human" && f.controllers[1] === "cpu";
     const before = loadStats();
     const score = scored
@@ -421,6 +425,15 @@ function Game({ roster }: { roster: Roster }) {
           healthLeft: me.healthLeft,
           streakBefore: before.streak ?? 0,
           bestStreakBefore: before.bestStreak ?? 0,
+          damageTaken: me.damageTaken,
+          damageDealt: me.damage,
+          counters: me.counters,
+          dodges: me.dodges,
+          blocks: me.blocks,
+          specials: me.specials,
+          finishingMove: me.finishingMove,
+          finalKo: won === true && s.fighters[1].healthLeft <= 0,
+          seconds: s.seconds,
         })
       : null;
     recordMatch({
@@ -463,6 +476,8 @@ function Game({ roster }: { roster: Roster }) {
                 ];
           case "tournament":
             return [{ label: won ? "Advance" : "See the bracket", action: "continue", tone: "primary" }];
+          case "spectate":
+            return [{ label: "Back to bracket", action: "continue", tone: "primary" }];
           case "world":
             return [
               { label: "Back to the world", action: "continue", tone: "primary" },
@@ -492,6 +507,17 @@ function Game({ roster }: { roster: Roster }) {
       if (action === "quit") return home();
       const won = s?.winner === 0;
       switch (f.mode) {
+        case "spectate":
+          if (bracket && f.boutIndex !== undefined && s) {
+            const bout = bracket.rounds[bracket.current][f.boutIndex];
+            setBracket(resolveCpuBout(bracket, f.boutIndex, {
+              winner: s.winner === 1 ? bout.b : bout.a,
+              ko: s.fighters[s.winner === 1 ? 0 : 1].healthLeft <= 0,
+              result: `${s.fighters[0].roundWins}–${s.fighters[1].roundWins} rounds`,
+            }));
+          }
+          setScreen({ k: "tournament" });
+          return;
         case "survival":
           if (action === "continue" && s) {
             const streak = survival.streak + 1;
@@ -502,8 +528,9 @@ function Game({ roster }: { roster: Roster }) {
           return;
         case "tournament":
           if (bracket) {
-            const next = advance(bracket, won);
-            if (next.result === true) {
+            const next = advance(bracket, won, (s?.fighters[won ? 1 : 0].healthLeft ?? 1) <= 0, s ? `${s.fighters[0].roundWins}–${s.fighters[1].roundWins} rounds` : undefined);
+            if (won && bracket.rounds[bracket.current].length === 1) {
+              next.result = true;
               recordTournamentWin(TOURNAMENT_BONUS);
               void saveNow(true);
               showNote("🏆", `Champion! +${TOURNAMENT_BONUS} leaderboard points`);
@@ -557,6 +584,7 @@ function Game({ roster }: { roster: Roster }) {
     random: { title: "Quick Fight", picks: 2, p2: "CPU" },
     survival: { title: "Survival", picks: 1, p2: "Gauntlet", confirm: "Start survival" },
     tournament: { title: "Tournament", picks: 1, p2: "Bracket", confirm: "Enter tournament" },
+    spectate: { title: "Spectate", picks: 1, p2: "CPU" },
     world: { title: "Fight World", picks: 1, p2: "The city", confirm: "Explore" },
   };
 
@@ -633,6 +661,8 @@ function Game({ roster }: { roster: Roster }) {
           onSettingsChange={updateSettings}
           startHealth={f.startHealth}
           banner={f.banner}
+          speed={f.speed}
+          tournamentSeed={f.tournamentSeed}
           onMatchOver={(s) => onMatchOver(f, s)}
           playerName={playerName}
           resultActions={resultActions(f)}
@@ -645,9 +675,24 @@ function Game({ roster }: { roster: Roster }) {
       body = bracket && (
         <TournamentScreen
           bracket={bracket}
+          availableSizes={([8, 16, 32, 64] as const).filter((size) => roster.fighters.length >= size)}
           onFight={() => startTournamentBout(bracket)}
+          onWatch={(index, speed) => {
+            const bout = bracket.rounds[bracket.current][index];
+            startFight({ mode: "spectate", p1: bout.a, p2: bout.b, arena: pickRandom(ARENAS), controllers: ["cpu", "cpu"], difficulty: "hard", boutIndex: index, speed, tournamentSeed: boutSeed(bracket, index), banner: `${roundName(bracket.size, bracket.current)} · CPU match` });
+          }}
+          onSimulate={(index) => setBracket(resolveCpuBout(bracket, index))}
+          onSimulateAll={() => {
+            let next = bracket;
+            bracket.rounds[bracket.current].forEach((bout, index) => { if (!bout.player && !bout.winner) next = resolveCpuBout(next, index); });
+            setBracket(next);
+          }}
+          onContinue={() => setBracket(continueBracket(bracket))}
           onBack={back}
-          onNew={() => setScreen({ k: "select", mode: "tournament", initial: [roster.byId.get(bracket.playerId) ?? null, null] })}
+          onNew={(size, random) => {
+            const player = roster.byId.get(bracket.playerId);
+            if (player) setBracket(newBracket(player, roster.fighters, random, size));
+          }}
         />
       );
       break;
@@ -720,6 +765,8 @@ function Game({ roster }: { roster: Roster }) {
             def={sheet}
             settings={settings}
             hero={roster.heroes.get(sheet.id)}
+            relatedHeroes={roster.heroes.values()}
+            onSelectRelated={(hero) => { const fighter = roster.byId.get(hero.id); if (fighter) setSheet(fighter); }}
             onClose={() => setSheet(null)}
             onFightAs={screen.k === "fight" ? undefined : fightAs}
             onFightAgainst={screen.k === "fight" || (screen.k === "world" && !worldPlayer) ? undefined : fightAgainst}

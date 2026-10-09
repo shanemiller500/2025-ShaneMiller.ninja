@@ -12,7 +12,7 @@ import type { Roster } from "../data/roster";
 import { AlignmentChip, ArcadeButton, ArchetypeChip, Backdrop, FighterTile, P_COLORS, StatBars, cn } from "./kit";
 import { usePadConnected } from "./usePad";
 
-type Filter = "all" | "featured" | "good" | "bad" | "neutral" | "favorites" | "recent";
+type Filter = "all" | "featured" | "good" | "bad" | "neutral" | "favorites" | "recent" | "brawler" | "speed" | "technical" | "power" | "tank" | "balanced" | "powerhouse" | "martial" | "acrobat" | "ranged" | "grappler";
 type Sort = "power" | "name" | "strength" | "speed" | "intelligence" | "durability" | "power2" | "combat";
 
 const total = (d: FighterDef) => Object.values(d.stats).reduce((a, b) => a + b, 0);
@@ -54,6 +54,7 @@ export function SelectScreen(p: Props) {
       if (filter === "good" || filter === "bad" || filter === "neutral") return d.alignment === filter;
       if (filter === "favorites") return favorites.includes(d.id);
       if (filter === "recent") return recent.includes(d.id);
+      if (["brawler", "speed", "technical", "power", "tank", "balanced", "powerhouse", "martial", "acrobat", "ranged", "grappler"].includes(filter)) return d.archetype === filter;
       return true;
     });
     if (filter === "recent") l = [...l].sort((a, b) => recent.indexOf(a.id) - recent.indexOf(b.id));
@@ -157,6 +158,17 @@ export function SelectScreen(p: Props) {
   const FILTERS: [Filter, string][] = [
     ["all", `All ${roster.fighters.length}`],
     ["featured", "★ Featured"],
+    ["brawler", "Brawlers"],
+    ["powerhouse", "Powerhouses"],
+    ["speed", "Speed"],
+    ["acrobat", "Acrobats"],
+    ["technical", "Technical"],
+    ["martial", "Martial arts"],
+    ["power", "Ranged power"],
+    ["ranged", "Ranged"],
+    ["grappler", "Grapplers"],
+    ["tank", "Tanks"],
+    ["balanced", "Balanced"],
     ["good", "Heroes"],
     ["bad", "Villains"],
     ["neutral", "Neutral"],
@@ -189,7 +201,7 @@ export function SelectScreen(p: Props) {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search 272 fighters"
+            placeholder={`Search ${roster.fighters.length} fighters`}
             aria-label="Search fighters"
             className="w-full rounded-lg border border-white/15 bg-black/40 py-2 pl-9 pr-8 text-sm text-white outline-none placeholder:text-white/35 focus:border-amber-300/60 focus:ring-4 focus:ring-amber-300/10"
           />
@@ -204,7 +216,7 @@ export function SelectScreen(p: Props) {
         </ArcadeButton>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-white/5 bg-black/20 px-5 py-2">
+      <div className="fw-thin-scroll flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-white/5 bg-black/20 px-5 py-2">
         {FILTERS.map(([k, label]) => (
           <button
             key={k}
@@ -214,14 +226,14 @@ export function SelectScreen(p: Props) {
               audio.ui("move");
             }}
             className={cn(
-              "-skew-x-12 rounded px-3 py-1 text-xs font-black uppercase tracking-wider transition",
+              "-skew-x-12 shrink-0 whitespace-nowrap rounded px-3 py-1 text-xs font-black uppercase tracking-wider transition",
               filter === k ? "bg-amber-300 text-slate-950" : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
             )}
           >
             <span className="inline-block skew-x-12">{label}</span>
           </button>
         ))}
-        <span className="ml-auto flex items-center gap-1.5 text-xs text-white/50">
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-white/50">
           Sort
           {(
             [

@@ -97,11 +97,22 @@ const STANCES: Record<string, Key> = {
   brawler: { lean: 10, fT: 20, fS: -10, bT: -20, bS: -30, fU: 42, fF: 142, bU: 28, bF: 150 },
   technical: { lean: 2, fT: 12, fS: -4, bT: -14, bS: -20, fU: 72, fF: 96, bU: 8, bF: 124 },
   balanced: {},
+  powerhouse: { lean: 16, fT: 30, fS: -20, bT: -30, bS: -42, fU: 26, fF: 82, bU: 20, bF: 78 },
+  martial: { lean: 5, fT: 23, fS: -15, bT: -20, bS: -36, fU: 75, fF: 110, bU: 52, bF: 134 },
+  acrobat: { lean: 27, fT: 43, fS: -49, bT: -12, bS: -64, fU: 35, fF: 92, bU: -24, bF: 45 },
+  ranged: { lean: -2, fT: 14, fS: -9, bT: -21, bS: -18, fU: 82, fF: 93, bU: 55, bF: 103 },
+  grappler: { lean: 22, fT: 32, fS: -20, bT: -25, bS: -44, fU: 46, fF: 124, bU: 42, bF: 132 },
 };
 
 /** Signature victory poses (fallback by archetype). */
 function victoryPose(f: Fighter, t: number): Key {
   const bob = Math.sin(t * 6) * 6;
+  const beat = Math.sin(f.stateTime * 0.13);
+  if (f.fightDance === 1) return { fU: 160, fF: 178 + bob, bU: 154, bF: 175 - bob, lean: -7 + beat * 3, head: -12, fT: 16 + beat * 7, bT: -20 - beat * 7 }; // arms raised
+  if (f.fightDance === 2) return { fU: 82, fF: 155, bU: -20, bF: 40, lean: f.def.archetype === "speed" ? 25 : 5, head: -8, fT: 25 + beat * 9, bT: -18 - beat * 9 }; // step and point
+  if (f.fightDance === 3) return f.def.custom
+    ? { fU: 115 + beat * 22, fF: 175, bU: 115 - beat * 22, bF: 175, lean: beat * 15, head: beat * 8, fT: 25 + beat * 18, bT: -25 - beat * 18, rot: Math.sin(f.stateTime * 0.04) * 8 } // signature flourish
+    : { fU: 58, fF: 152, bU: 52, bF: 148, lean: -10 + beat * 4, head: -8, fT: 15, bT: -15 }; // calm salute
   switch (f.def.name) {
     case "Hulk":
       return { fU: 100, fF: 175 + bob, bU: 100, bF: 175 - bob, lean: -8, head: -18, fT: 26, bT: -26 }; // double-biceps roar
@@ -116,11 +127,16 @@ function victoryPose(f: Fighter, t: number): Key {
   }
   switch (f.def.archetype) {
     case "power":
+    case "powerhouse":
     case "tank":
+    case "grappler":
       return { fU: 100, fF: 175 + bob, bU: 100, bF: 175 - bob, lean: -6, head: -10 };
     case "speed":
+    case "acrobat":
       return { ...CROUCH, lean: 24, fU: 172, fF: 178 + bob, bU: -20, bF: 40 };
     case "technical":
+    case "martial":
+    case "ranged":
       return { fU: 64, fF: 150, bU: 60, bF: 150, lean: -4 }; // arms folded
     default:
       return { fU: 172, fF: 178 + bob, bU: 14, bF: 140, lean: -6, head: -6 };
@@ -192,7 +208,7 @@ function rawPose(f: Fighter, t: number, mem: Memory | undefined): Joints {
       mem.peakY = mem.wasAir ? Math.max(mem.peakY, f.y) : f.y;
       // Double jump (or a speedster's forward leap) → front flip
       const usedAirJump = f.airJumpsLeft < mem.airJumps;
-      const forwardLeap = !mem.wasAir && arch === "speed" && f.vx * f.facing > 2;
+      const forwardLeap = !mem.wasAir && (arch === "speed" || arch === "acrobat") && f.vx * f.facing > 2;
       if (usedAirJump || forwardLeap) {
         mem.flipAt = t;
         mem.flipDir = 1;
@@ -217,7 +233,7 @@ function rawPose(f: Fighter, t: number, mem: Memory | undefined): Joints {
       const s = Math.sin(ph);
       const legs = { fT: 14 + s * 50, bT: 14 - s * 50, fS: -10 - Math.max(0, -s) * 66, bS: -10 - Math.max(0, s) * 66 };
       // Speedsters sprint like heroes (arms swept back); others pump their arms
-      j = arch === "speed" ? mix(j, { lean: 38, ...legs, fU: -48, fF: -20, bU: -58, bF: -30, head: -8 }, 1) : mix(j, { lean: 26, ...legs, fU: 40 - s * 50, fF: 120, bU: 20 + s * 50, bF: 110 }, 1);
+      j = arch === "speed" || arch === "acrobat" ? mix(j, { lean: 38, ...legs, fU: -48, fF: -20, bU: -58, bF: -30, head: -8 }, 1) : mix(j, { lean: 26, ...legs, fU: 40 - s * 50, fF: 120, bU: 20 + s * 50, bF: 110 }, 1);
       break;
     }
     case "jumpSquat":
@@ -346,15 +362,16 @@ export interface Rig {
 export function buildRig(f: Fighter, j: Joints): Rig {
   const H = f.def.look.height;
   const B = f.def.look.bulk;
-  const L = { thigh: 49 * H, shin: 47 * H, torso: 62 * H * (0.96 + B * 0.04), upper: 33 * H * (0.92 + B * 0.08), fore: 31 * H, neck: 7 * H, headR: 21 * H * (0.92 + B * 0.08) };
+  const p = f.def.physical;
+  const L = { thigh: 49 * H * p.leg, shin: 47 * H * p.leg, torso: 62 * H * (0.96 + B * 0.04) / p.leg, upper: 33 * H * p.arm, fore: 31 * H * p.arm, neck: 7 * H, headR: 21 * H * p.head };
   const dir = f.facing;
   const limb = (o: [number, number], ang: number, len: number): [number, number] => [o[0] + dir * sinD(ang) * len, o[1] - cosD(ang) * len];
 
   // Legs from a provisional hip at 0, then lift so the lowest foot touches the floor
   const hip0: [number, number] = [0, 0];
-  const fK0 = limb(hip0, j.fT, L.thigh);
+  const fK0 = limb(hip0, j.fT * p.stance, L.thigh);
   const fF0 = limb(fK0, j.fS, L.shin);
-  const bK0 = limb([-dir * 4 * B, 0], j.bT, L.thigh);
+  const bK0 = limb([-dir * 4 * B * p.stance, 0], j.bT * p.stance, L.thigh);
   const bF0 = limb(bK0, j.bS, L.shin);
   const lowest = Math.min(fF0[1], bF0[1]);
   const airborne = f.y > 0.5 || f.state === "launched" || f.state === "thrown";
@@ -373,8 +390,8 @@ export function buildRig(f: Fighter, j: Joints): Rig {
   const upv: [number, number] = [dir * sinD(lean), cosD(lean)];
   const sock = (s: number, d: number): [number, number] => [neck[0] + fw[0] * s - upv[0] * d, neck[1] + fw[1] * s - upv[1] * d];
   const fem = f.def.look.body === "female";
-  const fShoulder = sock((fem ? 9 : 11) * B, 9 * H);
-  const bShoulder = sock((fem ? -7.5 : -9) * B, 10 * H);
+  const fShoulder = sock((fem ? 9 : 11) * B * p.shoulder, 9 * H);
+  const bShoulder = sock((fem ? -7.5 : -9) * B * p.shoulder, 10 * H);
   // Arms: angles are relative to the body (torso lean added) so punches follow the lean
   const fElbow = limb(fShoulder, j.fU + lean * 0.3, L.upper);
   const fHand = limb(fElbow, j.fF + lean * 0.3, L.fore);
@@ -472,7 +489,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: Fighter, j: Joints
 
   // Muscle profiles (W = girth; heavier characters are visibly beefier)
   const female = look.body === "female";
-  const W = B * (0.86 + 0.14 * H) * (female ? 0.86 : 1);
+  const W = B * (0.86 + 0.14 * H) * (female ? 0.86 : 1) * f.def.physical.chest;
   const UPPER: LimbProfile = { r0: 9.4 * W, r1: 10.8 * W, r1b: 9.4 * W, r2: 6.2 * W, at: 0.44 };
   const FORE: LimbProfile = { r0: 7 * W, r1: 8.6 * W, r1b: 7.4 * W, r2: 5 * W, at: 0.24 };
   const CUFF: LimbProfile = { r0: 7.2 * W, r1: 6.9 * W, r2: 5.9 * W, at: 0.5 };
@@ -531,7 +548,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: Fighter, j: Joints
 
   // ── Torso ────────────────────────────────────────────────────────
   if (look.swords && !ghost) drawSwordHilts(ctx, rig, dir, B);
-  drawTorso(front, fr, look, B, c);
+  drawTorso(front, fr, look, B, c, f.def.physical);
   if (!ghost) {
     const chestS = fr.at(8 * B, fr.T * 0.72);
     if (c.chest === "reactor") glow(ctx, look.glow ?? "#9fe7ff", chestS[0], chestS[1], 44 * B, 0.95);

@@ -33,6 +33,8 @@ interface Props {
   settings: Settings;
   onSettingsChange?: (settings: Settings) => void;
   startHealth?: [number, number];
+  speed?: 1 | 2 | 4;
+  tournamentSeed?: number;
   /** Small caption over the fight (e.g. "SURVIVAL · OPPONENT 4") */
   banner?: string;
   /** Called once per finished match (stats, survival/tournament progress) */
@@ -100,6 +102,8 @@ export function FightScreen(props: Props) {
             difficulty,
             settings,
             startHealth,
+            speed: props.speed,
+            tournamentSeed: props.tournamentSeed,
             onMatchOver: (s) => {
               setSummary(s);
               setScore(cbRef.current.onMatchOver?.(s) ?? null);
@@ -388,6 +392,8 @@ function Results({
       </div>
 
       {score && <ScorePanel score={score} name={playerName} />}
+      {score?.lines.some((l) => l.label === "PERFECT KO") && <motion.p initial={{ scale: 1.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="fw-display -mt-4 text-4xl uppercase tracking-widest text-amber-300 drop-shadow-[0_0_30px_rgba(252,211,77,0.9)]">Perfect KO · +{score.lines.find((l) => l.label === "PERFECT KO")!.points.toLocaleString()} bonus</motion.p>}
+      {score?.lines.some((l) => l.label === "CLEAN SWEEP") && !score.lines.some((l) => l.label === "PERFECT KO") && <motion.p initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="fw-display -mt-4 text-3xl uppercase tracking-widest text-cyan-300">Clean Sweep</motion.p>}
 
       <div className="grid w-full max-w-4xl gap-4 md:grid-cols-2">
         {([0, 1] as const).map((i) => {

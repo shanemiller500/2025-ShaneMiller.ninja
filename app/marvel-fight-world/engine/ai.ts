@@ -69,6 +69,9 @@ export class AIController {
   private thinkTimer = 0;
   private reactTimer = -1;
   private reactPlan: Step[] | null = null;
+  private lastOppMove: MoveSlot | null = null;
+  private repeats = 0;
+  private lastObservedMoveTime = 0;
 
   constructor(readonly difficulty: Difficulty, seed = 7) {
     this.profile = AI_PROFILES[difficulty];
@@ -81,6 +84,9 @@ export class AIController {
     this.thinkTimer = 0;
     this.reactTimer = -1;
     this.reactPlan = null;
+    this.lastOppMove = null;
+    this.repeats = 0;
+    this.lastObservedMoveTime = 0;
   }
 
   private resolve(me: Fighter, h: Hold): InputFrame {
@@ -108,6 +114,11 @@ export class AIController {
     }
     const p = this.profile;
     const dist = Math.abs(opp.x - me.x);
+    if (opp.slot && opp.moveTime <= 2 && (this.lastObservedMoveTime > opp.moveTime || this.lastOppMove !== opp.slot)) {
+      this.repeats = opp.slot === this.lastOppMove ? this.repeats + 1 : 0;
+      this.lastOppMove = opp.slot;
+    }
+    this.lastObservedMoveTime = opp.moveTime;
 
     // ── Defensive reactions (incoming attack or projectile) ─────────
     if (this.reactTimer < 0 && me.state !== "attack" && me.grounded) {
@@ -158,7 +169,8 @@ export class AIController {
     const p = this.profile;
     if (t.projectile && this.rng.chance(p.jump * 4)) return [{ hold: { up: true, fwd: true }, frames: 3 }];
     if (this.rng.chance(p.dodge) && me.stamina > 30) return [{ hold: { block: true }, frames: 1 }, { hold: { block: true, back: true }, frames: 2 }];
-    if (this.rng.chance(p.block)) return [{ hold: { block: true, down: t.low }, frames: 18 + this.rng.int(0, 10) }];
+    const patternRead = this.difficulty === "hard" || this.difficulty === "insane" ? Math.min(0.15, this.repeats * 0.035) : 0;
+    if (this.rng.chance(p.block + patternRead)) return [{ hold: { block: true, down: t.low }, frames: 18 + this.rng.int(0, 10) }];
     return null;
   }
 
@@ -166,6 +178,15 @@ export class AIController {
     const p = this.profile;
     const r = this.rng;
     const d = me.def;
+    const myHealth = me.health / d.maxHealth;
+    const theirHealth = opp.health / opp.def.maxHealth;
+    const behind = myHealth + 0.12 < theirHealth;
+    const protectingLead = myHealth > theirHealth + 0.22;
+    const ownRanged = !!(d.moves.s1.projectile || d.moves.s1.volley);
+    const enemyRanged = !!(opp.def.moves.s1.projectile || opp.def.moves.s1.volley);
+    const range = ownRanged ? (enemyRanged ? 220 : 275) : 95 * d.physical.reach;
+    const matchupPressure = enemyRanged && !ownRanged ? 0.1 : d.archetype === "speed" && opp.def.archetype === "tank" ? 0.06 : 0;
+    const aggression = Math.max(0.15, Math.min(0.95, p.aggression + matchupPressure + (behind ? 0.17 : 0) - (protectingLead ? 0.12 : 0)));
     this.drift = {};
     const busy = opp.state === "knockdown" || opp.state === "getup";
 
@@ -187,13 +208,13 @@ export class AIController {
       return;
     }
 
-    const ranged = !!(d.moves.s1.projectile || d.moves.s1.volley);
-    if (dist > 320) {
+    const ranged = ownRanged;
+    if (dist > Math.max(320, range + 60)) {
       if (ranged && r.chance(p.special * 1.6) && !me.cooldowns.s1) {
         this.queue = this.press("s1", 12);
       } else if (r.chance(p.jump)) {
         this.queue = [{ hold: { up: true, fwd: true }, frames: 3 }, { hold: { fwd: true }, frames: 16 }, ...this.press("air", 10)];
-      } else if (r.chance(p.aggression)) {
+      } else if (r.chance(aggression)) {
         this.drift = { fwd: true };
         if (r.chance(0.3)) this.queue = [{ hold: { fwd: true }, frames: 1 }, { hold: {}, frames: 2 }, { hold: { fwd: true }, frames: 18 }];
       } else {
@@ -202,9 +223,10 @@ export class AIController {
       return;
     }
 
-    if (dist > 150) {
+    if (dist > Math.max(150, range)) {
       if (r.chance(p.special) && !me.cooldowns.s3) this.queue = this.press("s3", 14);
-      else if (r.chance(p.aggression)) this.drift = { fwd: true };
+      else if (ranged && protectingLead && r.chance(0.5)) this.drift = { back: true };
+      else if (r.chance(aggression)) this.drift = { fwd: true };
       else if (r.chance(0.25)) this.drift = { block: true };
       return;
     }
@@ -218,7 +240,7 @@ export class AIController {
       this.queue = this.press("throw", 10);
       return;
     }
-    if (r.chance(p.aggression)) {
+    if (r.chance(aggression)) {
       const combos = d.combos.filter((c) => c.seq.length <= p.comboLen + 1);
       const seq: MoveSlot[] =
         combos.length && r.chance(0.6) ? r.pick(combos).seq : (["lp", "lp", "hp", "kick", "low"] as MoveSlot[]).slice(0, Math.max(1, p.comboLen) + r.int(0, 1));

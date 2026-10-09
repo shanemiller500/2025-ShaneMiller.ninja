@@ -33,6 +33,8 @@ export interface SessionConfig {
   /** Attract mode: no audio, no announcer, no keyboard */
   silent?: boolean;
   hideHud?: boolean;
+  speed?: 1 | 2 | 4;
+  tournamentSeed?: number;
 }
 
 export interface FighterSummary {
@@ -48,6 +50,11 @@ export interface FighterSummary {
   perfects: number;
   /** Health remaining at the final bell (0..1) */
   healthLeft: number;
+  damageTaken: number;
+  counters: number;
+  dodges: number;
+  blocks: number;
+  finishingMove: string | null;
 }
 
 export interface MatchSummary {
@@ -71,7 +78,6 @@ export class GameSession {
   private destroyed = false;
   private kos: [number, number] = [0, 0];
   private perfects: [number, number] = [0, 0];
-  private startedAt = 0;
   private pauseKeyHeld = false;
   private padPresence: [boolean, boolean] = [false, false];
 
@@ -81,10 +87,10 @@ export class GameSession {
     this.match = new Match({
       p1: cfg.p1,
       p2: cfg.p2,
-      roundsToWin: s.roundsToWin,
+      roundsToWin: cfg.tournamentSeed === undefined ? s.roundsToWin : 1,
       damageMul: [cfg.controllers[0] === "cpu" ? cpuMul : 1, cfg.controllers[1] === "cpu" ? cpuMul : 1],
-      props: cfg.arena.props,
-      seed: (Date.now() & 0xffff) + 1,
+      props: cfg.tournamentSeed === undefined ? cfg.arena.props : undefined,
+      seed: cfg.tournamentSeed ?? (Date.now() & 0xffff) + 1,
     });
     if (cfg.startHealth) {
       cfg.startHealth.forEach((h, i) => (this.match.fighters[i].health = Math.max(1, Math.round(this.match.fighters[i].def.maxHealth * h))));
@@ -92,8 +98,8 @@ export class GameSession {
     this.input = new InputManager(s.bindings);
     this.input.shareKeys = cfg.controllers[1] === "cpu";
     this.ai = [
-      cfg.controllers[0] === "cpu" ? new AIController(cfg.difficulty, 101) : null,
-      cfg.controllers[1] === "cpu" ? new AIController(cfg.difficulty, 202) : null,
+      cfg.controllers[0] === "cpu" ? new AIController(cfg.difficulty, cfg.tournamentSeed === undefined ? 101 : cfg.tournamentSeed + 1) : null,
+      cfg.controllers[1] === "cpu" ? new AIController(cfg.difficulty, cfg.tournamentSeed === undefined ? 202 : cfg.tournamentSeed + 2) : null,
     ];
 
     const hint = (p: 0 | 1) => this.hint(p);
@@ -130,7 +136,6 @@ export class GameSession {
       audio.unlock();
       if (!this.paused) audio.startMusic(this.cfg.arena.music);
     }
-    this.startedAt = performance.now();
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.loop);
   }
@@ -175,7 +180,6 @@ export class GameSession {
     this.renderer.reset();
     this.kos = [0, 0];
     this.perfects = [0, 0];
-    this.startedAt = performance.now();
     this.paused = false;
     audio.startMusic(this.cfg.arena.music);
   }
@@ -212,16 +216,17 @@ export class GameSession {
     this.pauseKeyHeld = pauseDown;
 
     if (!this.paused) {
-      this.acc += dt * this.match.timeScale;
+      this.acc += dt * this.match.timeScale * (this.cfg.speed ?? 1);
       let steps = 0;
-      while (this.acc >= STEP && steps < 5) {
+      const maxSteps = 5 * (this.cfg.speed ?? 1);
+      while (this.acc >= STEP && steps < maxSteps) {
         this.match.step([this.read(0), this.read(1)]);
         this.handleEvents(this.match.events);
         this.match.events.length = 0;
         this.acc -= STEP;
         steps++;
       }
-      if (steps === 5) this.acc = 0;
+      if (steps === maxSteps) this.acc = 0;
       this.renderer.frame(this.match, dt);
     } else {
       this.renderer.frame(this.match, 0);
@@ -284,9 +289,14 @@ export class GameSession {
         kos: this.kos[i],
         perfects: this.perfects[i],
         healthLeft: Math.max(0, x.health / x.def.maxHealth),
+        damageTaken: x.damageTaken,
+        counters: x.counters,
+        dodges: x.dodges,
+        blocks: x.blocks,
+        finishingMove: x.finishingMove,
       };
     };
-    return { winner, fighters: [f(0), f(1)], fastestKo: m.fastestKo, seconds: (performance.now() - this.startedAt) / 1000 };
+    return { winner, fighters: [f(0), f(1)], fastestKo: m.fastestKo, seconds: m.frame / 60 };
   }
 
   /** Neutral input helper for menus/demos */

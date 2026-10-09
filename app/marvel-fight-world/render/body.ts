@@ -13,7 +13,7 @@
 /*  fighter's position.                                                 */
 /* ------------------------------------------------------------------ */
 
-import type { Look } from "../engine/types";
+import type { Look, PhysicalProfile } from "../engine/types";
 import { patternApplies, type CostumeSpec } from "./costume";
 import { clamp, glow, lerp, rgb, shade } from "./util";
 
@@ -406,46 +406,47 @@ export function torsoFrame(hipW: V, neckW: V, facing: number): TorsoFrame {
   return { hip, neck, up, front, T, at: (s, h) => add(add(hip, mul(front, s)), mul(up, h)) };
 }
 
-export function drawTorso(p: Paint, fr: TorsoFrame, look: Look, B: number, c: CostumeSpec): Path2D {
+export function drawTorso(p: Paint, fr: TorsoFrame, look: Look, B: number, c: CostumeSpec, profile?: PhysicalProfile): Path2D {
   const { at, T } = fr;
   const female = look.body === "female";
   const bare = c.torso === look.skin;
   const b = B * (female ? 1.02 : 1.12);
+  const edge = (x: number, y: number): V => at(x * (y < T * 0.45 ? profile?.shoulder ?? 1 : profile?.waist ?? 1), y);
   // Silhouette (3/4 side view). Male: broad delts, deep chest, lats, narrow
   // waist. Female: narrower shoulders, defined bust, tight waist, fuller hips.
   const pts: V[] = female
     ? [
-        at(-17 * b, -4),
-        at(17 * b, -4),
-        at(18 * b, T * 0.16),
-        at(12 * b, T * 0.42),
-        at(15 * b, T * 0.58),
-        at(21 * b, T * 0.68),
-        at(19 * b, T * 0.8),
-        at(16 * b, T * 0.95),
-        at(7 * b, T * 1.03),
-        at(-6 * b, T * 1.03),
-        at(-16 * b, T * 0.94),
-        at(-16 * b, T * 0.76),
-        at(-12 * b, T * 0.5),
-        at(-13 * b, T * 0.34),
-        at(-17.5 * b, T * 0.14),
+        edge(-17 * b, -4),
+        edge(17 * b, -4),
+        edge(18 * b, T * 0.16),
+        edge(12 * b, T * 0.42),
+        edge(15 * b, T * 0.58),
+        edge(21 * b, T * 0.68),
+        edge(19 * b, T * 0.8),
+        edge(16 * b, T * 0.95),
+        edge(7 * b, T * 1.03),
+        edge(-6 * b, T * 1.03),
+        edge(-16 * b, T * 0.94),
+        edge(-16 * b, T * 0.76),
+        edge(-12 * b, T * 0.5),
+        edge(-13 * b, T * 0.34),
+        edge(-17.5 * b, T * 0.14),
       ]
     : [
-        at(-16 * b, -4),
-        at(16 * b, -4),
-        at(17 * b, T * 0.18),
-        at(14.5 * b, T * 0.4),
-        at(21 * b, T * 0.66),
-        at(24 * b, T * 0.82),
-        at(21 * b, T * 0.97),
-        at(9 * b, T * 1.04),
-        at(-6 * b, T * 1.04),
-        at(-20 * b, T * 0.95),
-        at(-22 * b, T * 0.78),
-        at(-17 * b, T * 0.55),
-        at(-14 * b, T * 0.36),
-        at(-16.5 * b, T * 0.16),
+        edge(-16 * b, -4),
+        edge(16 * b, -4),
+        edge(17 * b, T * 0.18),
+        edge(14.5 * b, T * 0.4),
+        edge(21 * b, T * 0.66),
+        edge(24 * b, T * 0.82),
+        edge(21 * b, T * 0.97),
+        edge(9 * b, T * 1.04),
+        edge(-6 * b, T * 1.04),
+        edge(-20 * b, T * 0.95),
+        edge(-22 * b, T * 0.78),
+        edge(-17 * b, T * 0.55),
+        edge(-14 * b, T * 0.36),
+        edge(-16.5 * b, T * 0.16),
       ];
   const path = spline(pts, 0.55);
   const { ctx } = p;

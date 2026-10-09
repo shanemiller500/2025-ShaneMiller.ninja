@@ -168,6 +168,26 @@ export const PASSIVES: Record<string, Passive> = {
 /* ── Archetype kits (every fighter without a custom kit) ───────────── */
 export function archetypeKit(a: Archetype, fx: FxKind): Kit {
   switch (a) {
+    case "powerhouse": {
+      const base = archetypeKit("brawler", fx);
+      return { ...base, s1: { ...base.s1, name: "Crushing Blow", damage: 95, startup: 15, pose: "slam" }, s3: { ...base.s3, name: "Titan Charge", startup: 13, damage: 96 }, combos: [{ name: "Heavy Impact", seq: ["lp", "hp", "s1"], bonus: 1.35 }, { name: "Final Blow", seq: ["hp", "s3"], bonus: 1.3 }], blurb: "Slow to start, wide in stance, devastating at close range." };
+    }
+    case "martial": {
+      const base = archetypeKit("technical", fx);
+      return { ...base, s1: riser("s1", "Rising Palm", "kinetic", 62), s3: lungeStrike("s3", "Flying Kick", "kinetic", 68, { overhead: true, pose: "airKick" }), normals: { kick: { startup: 7, recovery: 12 }, hp: { pose: "cross" } }, combos: [{ name: "Three-Point Strike", seq: ["lp", "low", "launcher"], bonus: 1.3 }, { name: "Counter Flow", seq: ["lp", "kick", "s3"], bonus: 1.3 }], blurb: "Precise footwork, low attacks and sharp counters." };
+    }
+    case "acrobat": {
+      const base = archetypeKit("speed", fx);
+      return { ...base, s2: riser("s2", "Aerial Flip", "kinetic", 60, { pose: "spin", lunge: { vx: 8, vy: 14, from: 3, frames: 8 } }), normals: { air: { damage: 52, recovery: 10 } }, combos: [{ name: "Launch and Land", seq: ["lp", "launcher", "air"], bonus: 1.3 }, { name: "Flying Finish", seq: ["kick", "s2"], bonus: 1.3 }], blurb: "Airborne angles, quick recoveries and evasive landings." };
+    }
+    case "ranged": {
+      const base = archetypeKit("power", fx);
+      return { ...base, s1: { ...base.s1, startup: 9, damage: 48, name: "Precision Shot" }, s3: { ...base.s3, recovery: 28 }, combos: [{ name: "Keep Away", seq: ["lp", "hp", "s1"], bonus: 1.3 }, { name: "Range Break", seq: ["kick", "s3"], bonus: 1.3 }], blurb: "Controls space with projectiles and protects distance." };
+    }
+    case "grappler": {
+      const base = archetypeKit("tank", fx);
+      return { ...base, s1: { ...base.s1, name: "Clinch Charge", damage: 68, recovery: 19 }, s3: { ...base.s3, name: "Power Throw", grabRange: 145 }, combos: [{ name: "Clinch Finish", seq: ["lp", "hp", "s3"], bonus: 1.35 }, { name: "Ground Control", seq: ["low", "s3"], bonus: 1.3 }], blurb: "Closes distance and turns a missed block into a throw." };
+    }
     case "brawler":
       return {
         s1: slam("s1", "Ground Pound", "ground", 80, { hitbox: { x: 40, y: 0, w: 240, h: 60 }, cooldown: 90 }),

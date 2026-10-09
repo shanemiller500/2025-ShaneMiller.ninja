@@ -66,25 +66,35 @@ async function imagesOn(title: string): Promise<GalleryImage[]> {
 
 /* ── Cache: one lookup per character per page load ───────────────────── */
 const cache = new Map<number, Promise<Gallery>>();
+const pageCache = new Map<string, Promise<Gallery>>();
+
+export function loadGalleryForPage(page: string): Promise<Gallery> {
+  if (!pageCache.has(page)) {
+    const request = (async (): Promise<Gallery> => {
+      const seen = new Set<string>();
+      const images: GalleryImage[] = [];
+      for (const title of [`${page}/Gallery`, page]) {
+        const list = await imagesOn(title).catch(() => []);
+        for (const image of list) {
+          if (seen.has(image.id)) continue;
+          seen.add(image.id);
+          images.push(image);
+        }
+        if (images.length >= MAX_IMAGES) break;
+      }
+      return { page, pageUrl: wikiUrl(page), images: images.slice(0, MAX_IMAGES) };
+    })().catch((error) => { pageCache.delete(page); throw error; });
+    pageCache.set(page, request);
+  }
+  return pageCache.get(page)!;
+}
 
 export function loadGallery(h: Hero): Promise<Gallery> {
   if (!cache.has(h.id)) {
     const p = (async (): Promise<Gallery> => {
       const page = await resolveWikiPage(h);
       if (!page) return { page: null, pageUrl: null, images: [] };
-      const seen = new Set<string>();
-      const images: GalleryImage[] = [];
-      // Dedicated gallery subpage first (curated art), then the main article
-      for (const t of [`${page}/Gallery`, page]) {
-        const list = await imagesOn(t).catch(() => []);
-        for (const img of list) {
-          if (seen.has(img.id)) continue;
-          seen.add(img.id);
-          images.push(img);
-        }
-        if (images.length >= MAX_IMAGES) break;
-      }
-      return { page, pageUrl: wikiUrl(page), images: images.slice(0, MAX_IMAGES) };
+      return loadGalleryForPage(page);
     })().catch((e) => {
       cache.delete(h.id);
       throw e;

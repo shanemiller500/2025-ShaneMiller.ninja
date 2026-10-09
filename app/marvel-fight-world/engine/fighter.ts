@@ -47,6 +47,7 @@ export class Fighter {
   projectileFired = false;
   volleyFired = 0;
   lightChain = 0;
+  heavyChain = 0;
   airAttackUsed = false;
 
   /** Frames left in hit/block/stun-type states */
@@ -80,6 +81,12 @@ export class Fighter {
   hitsLanded = 0;
   specialsUsed = 0;
   ultsUsed = 0;
+  damageTaken = 0;
+  counters = 0;
+  dodges = 0;
+  blocks = 0;
+  finishingMove: MoveSlot | null = null;
+  fightDance = 0;
 
   constructor(def: FighterDef, index: 0 | 1, x: number) {
     this.def = def;
@@ -174,6 +181,7 @@ export class Fighter {
     if (m.kind === "special" || m.kind === "ultimate" || m.kind === "throw" || m.kind === "air") return false;
     if (toKind === "special") return true;
     if (from === "lp" && next === "lp") return this.lightChain < 3;
+    if (from === "hp" && next === "hp" && ["tank", "powerhouse", "grappler"].includes(this.def.archetype)) return this.heavyChain < 2;
     const a = RANK[from] ?? 9;
     const b = RANK[next] ?? 9;
     return b > a;
@@ -194,7 +202,8 @@ export class Fighter {
     if (!m || !m.hitbox || this.movePhase !== "active") return null;
     const b: Box = m.hitbox;
     const scale = this.def.look.height;
-    const cx = this.x + this.facing * b.x * Math.max(0.9, this.def.look.bulk * 0.95);
+    const reach = m.projectile || m.volley ? 1 : this.def.physical.reach;
+    const cx = this.x + this.facing * b.x * Math.max(0.9, this.def.look.bulk * 0.95) * reach;
     return { x: cx - b.w / 2, y: this.y + b.y * scale, w: b.w, h: b.h * scale };
   }
 

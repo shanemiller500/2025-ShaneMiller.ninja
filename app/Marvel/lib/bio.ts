@@ -223,12 +223,12 @@ const POWER_FIELDS: [string, string][] = [
 ];
 
 const cache = new Map<number, Promise<Bio | null>>();
+const pageCache = new Map<string, Promise<Bio | null>>();
 
-export function loadBio(h: Hero): Promise<Bio | null> {
-  if (!cache.has(h.id)) {
-    const p = (async (): Promise<Bio | null> => {
-      const page = await resolveWikiPage(h);
-      if (!page) return null;
+/** Load a known character page, including characters absent from the game roster. */
+export function loadBioForPage(page: string): Promise<Bio | null> {
+  if (!pageCache.has(page)) {
+    const request = (async (): Promise<Bio | null> => {
       const j = await api({ action: "query", titles: page, prop: "revisions", rvprop: "content", rvslots: "main", redirects: "1" });
       const pg: any = Object.values(j.query?.pages ?? {})[0];
       const wikitext: string = pg?.revisions?.[0]?.slots?.main?.["*"] ?? "";
@@ -265,6 +265,18 @@ export function loadBio(h: Hero): Promise<Bio | null> {
           .filter((t) => t.length > 20 && t.length < 600)
           .slice(0, 8),
       };
+    })().catch((e) => { pageCache.delete(page); throw e; });
+    pageCache.set(page, request);
+  }
+  return pageCache.get(page)!;
+}
+
+export function loadBio(h: Hero): Promise<Bio | null> {
+  if (!cache.has(h.id)) {
+    const p = (async (): Promise<Bio | null> => {
+      const page = await resolveWikiPage(h);
+      if (!page) return null;
+      return loadBioForPage(page);
     })().catch((e) => {
       cache.delete(h.id);
       throw e;

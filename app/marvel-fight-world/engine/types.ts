@@ -30,7 +30,7 @@ export const STAT_KEYS = ["intelligence", "strength", "speed", "durability", "po
 export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
-export type Archetype = "brawler" | "speed" | "technical" | "power" | "tank" | "balanced";
+export type Archetype = "brawler" | "speed" | "technical" | "power" | "tank" | "balanced" | "powerhouse" | "martial" | "acrobat" | "ranged" | "grappler";
 export type Alignment = "good" | "bad" | "neutral";
 
 /* ── Visual / audio hooks (engine only names them) ─────────────────── */
@@ -244,6 +244,23 @@ export interface Look {
   headgear?: "wolverine" | "thor" | "cap" | "panther" | "strange" | "magneto" | "thanos";
 }
 
+/** Proportions are independent of the costume palette and drive the canvas rig. */
+export interface PhysicalProfile {
+  heightCm: number;
+  bodyScale: number;
+  build: "lean" | "athletic" | "muscular" | "massive";
+  shoulder: number;
+  chest: number;
+  waist: number;
+  arm: number;
+  leg: number;
+  head: number;
+  stance: number;
+  movementWeight: number;
+  movementSpeed: number;
+  reach: number;
+}
+
 export interface FighterDef {
   /** Dataset id */
   id: number;
@@ -275,6 +292,7 @@ export interface FighterDef {
   width: number;
   height: number;
   look: Look;
+  physical: PhysicalProfile;
   moves: Record<MoveSlot, MoveData>;
   passive: Passive;
   combos: ComboDef[];
