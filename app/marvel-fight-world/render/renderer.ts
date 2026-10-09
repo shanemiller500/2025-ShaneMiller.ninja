@@ -201,7 +201,7 @@ export class Renderer {
       for (const g of this.ghosts[i]) {
         const proxy = this.proxy(f, g);
         ctx.globalAlpha = g.life;
-        drawFighter(ctx, proxy, g.j, g.rig, { portrait: null, t: this.time, flash: 0, ghost: f.def.look.glow ?? PLAYER_COLORS[i], ring: PLAYER_COLORS[i], weaponOut: false });
+        drawFighter(ctx, proxy, g.j, g.rig, { t: this.time, flash: 0, ghost: f.def.look.glow ?? PLAYER_COLORS[i], ring: PLAYER_COLORS[i], weaponOut: false });
         ctx.globalAlpha = 1;
       }
     }
@@ -217,7 +217,7 @@ export class Renderer {
         const color = f.def.look.glow ?? (f.move.kind === "ultimate" ? "#fde68a" : PLAYER_COLORS[f.index]);
         glow(ctx, color, f.x + rig.fHand[0], -(f.y + rig.fHand[1]), 35 + windup * 50, (0.16 + windup * 0.32) * (0.85 + Math.sin(this.time * 18) * 0.15));
       }
-      drawFighter(ctx, f, j, rig, { portrait: this.portraits[f.index], t: this.time, flash: this.flash[f.index], ring: PLAYER_COLORS[f.index], weaponOut, rim: this.arena.colors[1] });
+      drawFighter(ctx, f, j, rig, { t: this.time, flash: this.flash[f.index], ring: PLAYER_COLORS[f.index], weaponOut, rim: this.arena.colors[1] });
       drawMoveFx(ctx, f, this.time);
       this.drawMarker(ctx, f, rig);
     }

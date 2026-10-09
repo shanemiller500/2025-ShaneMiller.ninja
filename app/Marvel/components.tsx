@@ -13,6 +13,7 @@ import { loadGallery, type Gallery } from "./lib/gallery";
 import type { RelationPortrait } from "./lib/relations";
 import { RelationProfile } from "./relation-profile";
 import type { MarvelverseMode } from "./marvelverse";
+import { characterAccent } from "./lib/accent";
 import { ALIGNMENT, STATS, STAT_LABEL, alignmentOf, clean, type Hero, type StatKey } from "./lib/roster";
 
 const cn = (...xs: Array<string | false | null | undefined>) => xs.filter(Boolean).join(" ");
@@ -468,6 +469,7 @@ type HeroTab = "overview" | "bio" | "powers" | "family" | "journey" | "gallery";
 
 export function HeroModal({ hero, open, onClose, onCompare, onExplore, roster, onSelectRelated }: { hero: Hero | null; open: boolean; onClose: () => void; onCompare: (h: Hero) => void; onExplore: (h: Hero, mode?: MarvelverseMode) => void; roster: Hero[]; onSelectRelated: (h: Hero) => void }) {
   const a = hero ? ALIGNMENT[alignmentOf(hero)] : ALIGNMENT.neutral;
+  const accent = hero ? characterAccent(hero) : { primary: a.hex, secondary: "#fbbf24" };
   const active = open ? hero : null;
 
   const { loading: galLoading, gallery, error: galError } = useGallery(active);
@@ -512,7 +514,7 @@ export function HeroModal({ hero, open, onClose, onCompare, onExplore, roster, o
     : "";
 
   return (
-    <Modal open={open} onClose={() => wikiRelative ? setWikiRelative(null) : onClose()} labelledBy="hero-modal-title" size="full" accent={a.hex} className="!max-h-[96dvh] sm:h-[calc(100dvh-48px)]">
+    <Modal open={open} onClose={() => wikiRelative ? setWikiRelative(null) : onClose()} labelledBy="hero-modal-title" size="full" accent={accent.primary} className="!max-h-[96dvh] sm:h-[calc(100dvh-48px)]">
       {hero && (
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div className="grid sm:grid-cols-[minmax(0,300px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
@@ -526,7 +528,7 @@ export function HeroModal({ hero, open, onClose, onCompare, onExplore, roster, o
 
             {/* details column */}
             <div className="relative isolate min-w-0">
-              <div aria-hidden className="pointer-events-none absolute -top-16 right-0 -z-10 h-48 w-64 rounded-full opacity-20 blur-3xl" style={{ background: a.hex }} />
+              <div aria-hidden className="pointer-events-none absolute -top-16 right-0 -z-10 h-48 w-64 rounded-full opacity-20 blur-3xl" style={{ background: `linear-gradient(120deg, ${accent.primary}, ${accent.secondary})` }} />
 
               <div className="px-5 pt-5 sm:px-7 sm:pt-7">
                 <div className="flex flex-wrap items-center gap-2 pr-8">
@@ -561,7 +563,7 @@ export function HeroModal({ hero, open, onClose, onCompare, onExplore, roster, o
                     >
                       <t.icon aria-hidden className="h-3.5 w-3.5" />{t.label}
                       {t.count ? <span className="ml-1 font-mono text-[10px] text-slate-400">{t.count}</span> : null}
-                      {tab === t.key && <motion.span layoutId="heroTabLine" className="absolute inset-x-0 -bottom-px h-0.5 rounded-full" style={{ background: a.hex }} />}
+                      {tab === t.key && <motion.span layoutId="heroTabLine" className="absolute inset-x-0 -bottom-px h-0.5 rounded-full" style={{ background: `linear-gradient(90deg, ${accent.primary}, ${accent.secondary})` }} />}
                     </button>
                   ))}
                 </div>
@@ -575,7 +577,7 @@ export function HeroModal({ hero, open, onClose, onCompare, onExplore, roster, o
                         <PowerPanel hero={hero} />
                         <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
                           <div className="min-w-0">
-                            {bio && <QuoteCard bio={bio} accent={a.hex} />}
+                            {bio && <QuoteCard bio={bio} accent={accent.primary} />}
                             <button
                               type="button"
                               onClick={() => onCompare(hero)}
@@ -592,7 +594,7 @@ export function HeroModal({ hero, open, onClose, onCompare, onExplore, roster, o
                         </div>
                       </>
                     )}
-                    {tab === "bio" && <BioTab bio={bio} loading={bioLoading} error={bioError} fallbackText={rosterOverview(hero)} art={viewerImages} onOpenArt={setViewer} />}
+                    {tab === "bio" && <BioTab bio={bio} loading={bioLoading} error={bioError} fallbackText={rosterOverview(hero)} art={viewerImages} onOpenArt={setViewer} editorial />}
                     {tab === "powers" && <PowersTab bio={bio} loading={bioLoading} error={bioError} fallbackText={rosterOverview(hero)} art={viewerImages} onOpenArt={setViewer} />}
                     {tab === "family" && <FamilyTab hero={hero} bio={bio} loading={bioLoading} roster={roster} onSelect={onSelectRelated} onSelectWiki={(label, portrait) => setWikiRelative({ label, portrait })} />}
                     {tab === "journey" && <div className="rounded-[24px] border border-amber-400/25 bg-[#fffaf0] p-5 dark:bg-[#222226] sm:p-6"><p className="font-mono text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-300">Character journey / source order</p><h4 className="mt-2 font-aspekta text-2xl font-black text-slate-950 dark:text-white">{hero.name} through the story</h4><p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Chapters follow the Marvel Database file. Dates are shown only when supplied by the source.</p>{clean(hero.biography.firstAppearance) && <p className="mt-5 border-l-4 border-amber-400 bg-amber-300/10 p-3 text-sm text-slate-700 dark:text-slate-200"><strong className="block text-xs uppercase tracking-wider">First appearance</strong>{clean(hero.biography.firstAppearance)}</p>}<ol className="relative mt-5 space-y-3 border-l-2 border-amber-400/40 pl-5">{bio?.history.map((chapter, index) => <li key={`${chapter.title}-${index}`} className="relative rounded-xl border border-slate-200 bg-white/75 p-4 dark:border-white/10 dark:bg-white/[.035]"><span className="absolute -left-[29px] top-4 grid h-4 w-4 place-items-center rounded-full bg-amber-400 ring-4 ring-[#fffaf0] dark:ring-[#222226]" /><span className="font-mono text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300">Chapter {String(index + 1).padStart(2, "0")}</span><h5 className="mt-1 text-base font-bold text-slate-950 dark:text-white">{chapter.title}</h5><p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-700 dark:text-slate-200">{chapter.text}</p></li>)}{!bio?.history.length && <li className="text-sm text-slate-500">No detailed chapters are available for this character.</li>}</ol></div>}

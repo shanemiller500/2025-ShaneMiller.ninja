@@ -28,7 +28,6 @@ interface Npc {
   home: number;
   target: number;
   wait: number;
-  portrait: HTMLImageElement | null;
 }
 
 export interface SceneCallbacks {
@@ -40,7 +39,6 @@ export class WorldScene {
   private ctx: CanvasRenderingContext2D;
   private input: InputManager;
   private player: Fighter;
-  private playerPortrait: HTMLImageElement | null = null;
   private npcs: Npc[] = [];
   private props: Prop[];
   private particles = new Particles();
@@ -75,16 +73,14 @@ export class WorldScene {
     this.npcs = residents.map((r, i) => {
       const f = new Fighter(r.def, 1, r.x);
       f.facing = r.x > startX ? -1 : 1;
-      return { f, home: r.x, target: r.x, wait: 60 + i * 47, portrait: null };
+      return { f, home: r.x, target: r.x, wait: 60 + i * 47 };
     });
     loadImage(playerDef.portrait.md).then((img) => {
       applyPortraitPalette(playerDef, img);
-      this.playerPortrait = img;
     });
     this.npcs.forEach((n) =>
       loadImage(n.f.def.portrait.md).then((img) => {
         applyPortraitPalette(n.f.def, img);
-        n.portrait = img;
       })
     );
   }
@@ -246,14 +242,14 @@ export class WorldScene {
     for (const pr of this.props) drawProp(ctx, pr, a, this.t);
     this.drawGates();
 
-    const all = [...this.npcs.map((n) => ({ f: n.f, portrait: n.portrait, npc: n })), { f: this.player, portrait: this.playerPortrait, npc: null as Npc | null }];
+    const all = [...this.npcs.map((n) => ({ f: n.f, npc: n })), { f: this.player, npc: null as Npc | null }];
     for (const { f } of all) drawShadow(ctx, f);
-    for (const { f, portrait, npc } of all) {
+    for (const { f, npc } of all) {
       const j = poseFor(f, this.t);
       const rig = buildRig(f, j);
       const isNear = npc && this.near && this.residents[this.npcs.indexOf(npc)] === this.near;
       if (isNear) glow(ctx, "#fde047", f.x, -f.def.height * 0.5, f.def.height * 0.9, 0.18 + Math.sin(this.t * 4) * 0.05);
-      drawFighter(ctx, f, j, rig, { portrait, t: this.t, flash: 0, ring: npc ? (isNear ? "#fde047" : "rgba(148,163,184,0.5)") : PLAYER_COLORS[0], weaponOut: false, rim: this.zone.arena.colors[1] });
+      drawFighter(ctx, f, j, rig, { t: this.t, flash: 0, ring: npc ? (isNear ? "#fde047" : "rgba(148,163,184,0.5)") : PLAYER_COLORS[0], weaponOut: false, rim: this.zone.arena.colors[1] });
       this.drawTag(f, npc ? (isNear ? "#fde047" : "#e2e8f0") : PLAYER_COLORS[0], !npc, !!isNear);
     }
     this.particles.draw(ctx);

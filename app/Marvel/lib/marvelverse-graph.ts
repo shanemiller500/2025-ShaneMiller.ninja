@@ -2,7 +2,7 @@ import type { Bio } from "./bio";
 import { clean, type Hero } from "./roster";
 import { relationName } from "./relations";
 
-export type RelationshipKind = "parent" | "child" | "sibling" | "partner" | "extended" | "alternate" | "team";
+export type RelationshipKind = "parent" | "child" | "sibling" | "partner" | "extended" | "alternate" | "origin" | "team";
 export type EvidenceLevel = "explicit" | "inferred";
 
 export interface CharacterNode {
@@ -72,17 +72,20 @@ export function splitSourceList(value: string): string[] {
 
 export function teamNames(value: string): string[] {
   return splitSourceList(value)
-    .map((item) => item.replace(/^formerly\s*:?(?:\s+(?:a\s+)?member of)?\s*/i, "").replace(/\s*\([^)]*\)\s*/g, " ").trim())
+    .map((item) => item.replace(/^(?:formerly|former)\s*:?(?:\s+(?:a\s+)?member of)?\s*/i, "").replace(/^(?:member|leader|founder) of (?:the )?/i, "").replace(/^the\s+/i, "").replace(/\s*\([^)]*\)\s*/g, " ").trim())
     .filter((item) => item.length > 3 && item.length < 48 && !/^(none|unknown|various|formerly)$/i.test(item) && !/\b(?:partner|ally|enemy|lover|friend|relative) of\b/i.test(item));
 }
 
-function relationKind(group: string, raw: string): RelationshipKind {
-  if (/Earth-\d+|alternate.universe|multiverse/i.test(raw)) return "alternate";
+function relationKind(group: string, raw: string): RelationshipKind | null {
+  // An Earth identifier alone does not prove a cross-universe relationship.
+  if (/alternate[ -](?:universe|reality)|multiverse/i.test(raw)) return "alternate";
   const role = `${group} ${raw.match(/\(([^)]*)\)/)?.[1] ?? ""}`;
+  if (/genetic template|(?:fellow )?clone|bit by same spider|\bcreator\b/i.test(role)) return "origin";
   if (/parent|grandparent|father|mother/i.test(role)) return "parent";
   if (/children|child|son|daughter/i.test(role)) return "child";
   if (/sibling|brother|sister/i.test(role)) return "sibling";
-  if (/spouse|partner|wife|husband|married/i.test(role)) return "partner";
+  if (/spouse|wife|husband|married|fianc|romantic|lover/i.test(role)) return "partner";
+  if (/\bpartner\b/i.test(role)) return null;
   return "extended";
 }
 
@@ -114,6 +117,7 @@ export function buildUniverseGraph(heroes: Hero[], bios: ReadonlyMap<number, Bio
   for (const hero of heroes) {
     for (const label of teamNames(hero.connections.groupAffiliation)) {
       const id = key(label);
+      if (names.has(id)) continue;
       if (!groupMembers.has(id)) groupMembers.set(id, { label, ids: new Set() });
       groupMembers.get(id)!.ids.add(hero.id);
     }
@@ -146,8 +150,9 @@ export function buildUniverseGraph(heroes: Hero[], bios: ReadonlyMap<number, Bio
       const target = names.get(key(relationName(raw)));
       if (!target || target.id === hero.id) continue;
       const kind = relationKind(group, raw);
+      if (!kind) continue;
       const pair = [hero.id, target.id].sort((a, b) => a - b);
-      add({ id: `family:${pair.join(":")}:${kind}`, from: hero.id, to: target.id, kind, evidence: "explicit", detail: raw, strength: kind === "extended" ? 86 : 96, sourceUrl: url });
+      add({ id: `relation:${pair.join(":")}:${kind}`, from: hero.id, to: target.id, kind, evidence: "explicit", detail: raw, strength: kind === "origin" ? 72 : kind === "extended" ? 86 : 96, sourceUrl: url });
     }
   }
 

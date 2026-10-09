@@ -13,7 +13,8 @@
 /*  fighter's position.                                                 */
 /* ------------------------------------------------------------------ */
 
-import type { Look, PhysicalProfile } from "../engine/types";
+import type { FighterState, Look, PhysicalProfile } from "../engine/types";
+import { drawHeroFace, heroFaceBase } from "./face";
 import { patternApplies, type CostumeSpec } from "./costume";
 import { clamp, glow, lerp, rgb, shade } from "./util";
 
@@ -878,13 +879,14 @@ export function drawHeadShape(
   r: number,
   tilt: number,
   facing: number,
-  portrait: HTMLImageElement | null,
-  cowl: string
+  look: Look,
+  name: string,
+  state: FighterState
 ): Path2D {
   const [hx, hy] = sp(headW);
   const { ctx } = p;
-  const rx = r * 0.92;
-  const ry = r * 1.08;
+  const rx = r * (name === "Hulk" || name === "Thanos" ? 1.04 : look.faceShape === "round" ? 1 : look.faceShape === "angular" ? 0.85 : look.body === "female" ? 0.86 : 0.92);
+  const ry = r * (name === "Hulk" || name === "Thanos" ? 1.14 : look.faceShape === "round" ? 1.01 : look.faceShape === "angular" ? 1.15 : 1.08);
   // Head with a slight jaw: ellipse top + tapered chin
   const path = new Path2D();
   const rot = (-tilt * Math.PI) / 180 * facing;
@@ -897,7 +899,7 @@ export function drawHeadShape(
     if (y > 0) {
       // Narrow the lower half toward the chin, chin slightly forward
       const k = y / ry;
-      x *= 1 - k * 0.22;
+      x *= 1 - k * (name === "Hulk" || name === "Thanos" || look.faceShape === "square" ? 0.1 : look.faceShape === "angular" ? 0.38 : look.body === "female" ? 0.32 : 0.22);
       x += facing * k * k * r * 0.12;
     }
     pts.push(pt(x, y));
@@ -911,39 +913,24 @@ export function drawHeadShape(
   }
   ctx.save();
   ctx.clip(path);
-  if (portrait && portrait.complete && portrait.naturalWidth) {
-    // Dataset portraits are 320×480 head-and-shoulders art: crop the face
-    const img = portrait;
-    const sw = img.naturalWidth * 0.6;
-    const sx = (img.naturalWidth - sw) / 2;
-    const sy = img.naturalHeight * 0.07;
-    ctx.translate(hx, hy);
-    ctx.rotate(rot);
-    ctx.drawImage(img, sx, sy, sw, sw * (ry / rx), -rx * 1.08, -ry * 1.04, rx * 2.16, ry * 2.16);
-  } else {
-    ctx.fillStyle = shade(cowl, -0.1);
-    ctx.fill(path);
-  }
+  const base = heroFaceBase(look, name);
+  ctx.fillStyle = shade(base, -0.12);
+  ctx.fill(path);
+  // Cel lighting belongs to the same geometry as the body, before details.
+  const g = ctx.createRadialGradient(hx + LIGHT[0] * r * 0.5, hy + LIGHT[1] * r * 0.55, r * 0.15, hx, hy, r * 1.15);
+  g.addColorStop(0, "rgba(255,255,255,0.3)");
+  g.addColorStop(0.55, "rgba(255,255,255,0)");
+  g.addColorStop(0.82, "rgba(0,0,0,0.13)");
+  g.addColorStop(1, "rgba(0,0,0,0.38)");
+  ctx.fillStyle = g;
+  ctx.fill(path);
+  ctx.translate(hx, hy);
+  ctx.rotate(rot);
+  ctx.scale(r, r);
+  drawHeroFace(ctx, look, name, facing, state);
   ctx.restore();
   ctx.save();
   ctx.clip(path);
-  // Hood: fade the portrait's own background into the costume colour so
-  // the head reads as a masked character, not a photo in a bubble
-  const [cr, cg, cb] = rgb(cowl);
-  const hood = ctx.createRadialGradient(hx, hy + r * 0.08, r * 0.52, hx, hy, r * 1.08);
-  hood.addColorStop(0, `rgba(${cr},${cg},${cb},0)`);
-  hood.addColorStop(0.55, `rgba(${cr},${cg},${cb},0.55)`);
-  hood.addColorStop(1, `rgba(${cr},${cg},${cb},0.96)`);
-  ctx.fillStyle = hood;
-  ctx.fill(path);
-  // Volume: soft key light + core shadow + rim light on the dark side
-  const g = ctx.createRadialGradient(hx + LIGHT[0] * r * 0.5, hy + LIGHT[1] * r * 0.55, r * 0.15, hx, hy, r * 1.15);
-  g.addColorStop(0, "rgba(255,255,255,0.22)");
-  g.addColorStop(0.55, "rgba(255,255,255,0)");
-  g.addColorStop(0.82, "rgba(0,0,0,0.18)");
-  g.addColorStop(1, "rgba(0,0,0,0.5)");
-  ctx.fillStyle = g;
-  ctx.fill(path);
   ctx.globalCompositeOperation = "lighter";
   ctx.strokeStyle = p.rim;
   ctx.globalAlpha = 0.45;
@@ -1207,6 +1194,21 @@ export function drawHeadgear(p: Paint, headW: V, r: number, tilt: number, facing
     ctx.moveTo(1.08 * r, 1.0 * r);
     ctx.quadraticCurveTo(1.5 * r, -0.4 * r, 0.92 * r, -0.95 * r);
     ctx.stroke();
+  }
+  if (layer === "front" && kind === "magneto") {
+    const red = metal(-0.9, -0.9, 0.7, 0.8, "#ba335d", "#64122e");
+    shape([[-0.9, -0.82], [-0.55, -1.1], [0, -1.17], [0.55, -1.1], [0.9, -0.82], [0.86, -0.14], [0.64, 0.48], [0.55, 0.15], [0.64, -0.6], [0, -0.33], [-0.64, -0.6], [-0.55, 0.15], [-0.64, 0.48], [-0.86, -0.14]], red, 2.6);
+    ctx.strokeStyle = "#ed7891"; ctx.lineWidth = 1.6 * p.ink;
+    ctx.beginPath(); ctx.moveTo(-0.52 * r, -0.9 * r); ctx.quadraticCurveTo(0, -1.08 * r, 0.52 * r, -0.9 * r); ctx.stroke();
+  }
+  if (layer === "front" && kind === "thanos") {
+    const gold = metal(-0.7, -0.9, 0.8, 0.6, "#efd35d", "#9b7028");
+    shape([[-0.75, -0.9], [-0.5, -1.2], [0, -1.31], [0.5, -1.2], [0.75, -0.9], [0.7, -0.17], [0.56, -0.05], [0.5, -0.76], [0, -0.55], [-0.5, -0.76], [-0.56, -0.05], [-0.7, -0.17]], gold, 2.8);
+    shape([[-0.75, 0.15], [-0.55, 0.2], [-0.51, 0.62], [-0.69, 0.48]], gold, 2.2);
+    shape([[0.75, 0.15], [0.55, 0.2], [0.51, 0.62], [0.69, 0.48]], gold, 2.2);
+  }
+  if (layer === "front" && kind === "thor") {
+    shape([[-0.85, -0.82], [-0.56, -1.0], [0.56, -1.0], [0.85, -0.82], [0.62, -0.53], [0, -0.68], [-0.62, -0.53]], metal(-0.8, -1, 0.8, -0.5, "#dbe2ec", "#637184"), 2.4);
   }
   ctx.restore();
 }

@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------------ */
 /*  Procedural fighter: a skeletal rig posed per state/move, drawn as   */
-/*  inked, shaded limbs with the character's portrait as the head.      */
+/*  inked, shaded limbs and drawn comic faces on the same moving rig.    */
 /*                                                                      */
 /*  Angles are degrees. Limbs: 0° points straight down, positive        */
 /*  rotates forward (toward the opponent). Torso: 0° is upright.        */
@@ -451,7 +451,6 @@ function dot(ctx: CanvasRenderingContext2D, p: [number, number], r: number, fill
 }
 
 export interface DrawOpts {
-  portrait: HTMLImageElement | null;
   t: number;
   /** White flash 0..1 after taking a hit */
   flash: number;
@@ -562,13 +561,12 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: Fighter, j: Joints
 
   // ── Neck + head ──────────────────────────────────────────────────
   drawNeck(front, rig.neck, rig.head, (female ? 6.6 : 7.8) * W, c.torso === look.skin || look.bareArms ? look.skin : c.yoke ?? c.torso);
-  // Iconic headgear silhouettes frame the portrait head (fins, wings, collar)
+  // Headgear and drawn facial details share the body's animated rig.
   const tilt = j.lean * 0.35 + j.head;
   if (look.headgear && !ghost) drawHeadgear(front, rig.head, rig.headR, tilt, dir, look.headgear, "back");
-  const headShape = drawHeadShape(front, rig.head, rig.headR, tilt, dir, ghost ? null : o.portrait, look.primary);
+  const headShape = drawHeadShape(front, rig.head, rig.headR, tilt, dir, look, f.def.name, f.state);
   if (!ghost) {
-    // Light the portrait face with the fighter's state instead of drawing
-    // artificial features over the source artwork.
+    // State lighting is a final pass over the drawn head.
     const mood = f.state === "hit" || f.state === "launched" || f.state === "thrown" ? "rgba(255,95,78,0.25)" :
       f.state === "block" || f.state === "blockstun" ? "rgba(104,192,255,0.15)" :
       f.state === "attack" && f.move?.kind === "ultimate" ? "rgba(255,219,95,0.28)" :

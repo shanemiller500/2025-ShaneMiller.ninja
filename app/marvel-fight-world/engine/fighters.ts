@@ -16,7 +16,7 @@ export interface HeroLike {
   powerstats: Stats;
   biography: { fullName: string; alignment: string };
   images: { xs: string; sm: string; md: string; lg: string };
-  appearance?: { gender?: string; hairColor?: string; height?: string[]; weight?: string[] };
+  appearance?: { gender?: string; hairColor?: string; eyeColor?: string; height?: string[]; weight?: string[] };
 }
 
 /* ── Archetypes ────────────────────────────────────────────────────── */
@@ -138,7 +138,7 @@ function hairColor(raw?: string) {
   return HAIR[k];
 }
 
-function lookFor(name: string, s: Stats, alignment: Alignment, gender?: string, hair?: string): Look {
+function lookFor(name: string, s: Stats, alignment: Alignment, gender?: string, hair?: string, eyes?: string): Look {
   const hue = nameHue(name);
   const tint = alignment === "bad" ? 0 : alignment === "good" ? 0 : 0;
   const base: Look = {
@@ -153,6 +153,10 @@ function lookFor(name: string, s: Stats, alignment: Alignment, gender?: string, 
     bareArms: false,
     body: gender?.toLowerCase() === "female" ? "female" : "male",
     hair: hairColor(hair),
+    faceShape: s.strength >= 80 ? "square" : s.speed >= 78 ? "angular" : hue % 3 === 0 ? "round" : "oval",
+    hairStyle: /no hair|bald/i.test(hair ?? "") ? "shaved" : gender?.toLowerCase() === "female" && hue % 3 !== 0 ? "long" : (["short", "swept", "spiked"] as const)[hue % 3],
+    eyeColor: /blue/i.test(eyes ?? "") ? "#6daee1" : /green/i.test(eyes ?? "") ? "#7bbd7a" : /red/i.test(eyes ?? "") ? "#d46b6b" : /grey|gray/i.test(eyes ?? "") ? "#a9b5c6" : "#694b37",
+    faceVariant: hue % 9,
   };
   if (base.body === "female") base.bulk = Math.min(base.bulk, 1.08);
   return LOOKS[name] ? { ...base, mark: undefined, bareArms: false, hair: undefined, ...LOOKS[name] } : base;
@@ -212,7 +216,7 @@ export function buildFighter(hero: HeroLike): FighterDef {
   const s = hero.powerstats;
   const alignment: Alignment = hero.biography.alignment === "good" || hero.biography.alignment === "bad" ? hero.biography.alignment : "neutral";
   const archetype = ARCHETYPE_OVERRIDES[hero.name] ?? deriveArchetype(s);
-  const look = lookFor(hero.name, s, alignment, hero.appearance?.gender, hero.appearance?.hairColor);
+  const look = lookFor(hero.name, s, alignment, hero.appearance?.gender, hero.appearance?.hairColor, hero.appearance?.eyeColor);
   const physical = physicalFor(hero, look, archetype);
   look.height = physical.heightCm / 178;
   const fx: FxKind = look.claws ? "claw" : ARCHETYPE_FX[archetype];
