@@ -26,7 +26,7 @@ export type OrderKind = "dig" | "support" | "blast" | "pump";
 export type MinerMode = "walk" | "dig" | "build" | "pump" | "plant" | "idle" | "flee" | "eat";
 
 export interface MinerJob {
-  kind: OrderKind | "haul" | "ore" | "exit" | "flee" | "rest" | "fetch" | "build" | "heal";
+  kind: OrderKind | "haul" | "ore" | "pickup" | "exit" | "flee" | "rest" | "fetch" | "build" | "heal";
   /** the cell worked on */
   cell: number;
   /** where the miner stands */
@@ -54,6 +54,10 @@ export interface Miner {
   bubble: { text: string; t: number } | null;
   /** fighting a cave critter */
   fightT?: number;
+  /** Player-directed rock face; retained until mined or unreachable. */
+  target?: number;
+  /** Completed excavation cells. */
+  experience?: number;
 }
 
 export interface Charge {
@@ -67,6 +71,7 @@ export const CARRY = 6;
 const SPEED = 2.6;
 const SHAFT_SPEED = 7;
 const FOODS: Resource[] = ["cooked", "meat", "fish", "berries", "crop"];
+const FOSSIL_FINDS = ["dinosaur tooth", "fossilized fern", "prehistoric fish", "dinosaur egg shell", "ancient footprint", "skull fragment", "rib bone"];
 /** where people step off the lift at the top */
 export const LANDING = idx(LIFT_X + 1, 1);
 
@@ -387,6 +392,20 @@ function think(w: World, m: Miner, h: Human) {
     return plan(w, m, out, "Up we go!");
   }
   if (full) return plan(w, m, search(mine, here, (s) => (dock(mine, s) ? { kind: "haul", cell: s, stand: s } : null)), "Sack's full!");
+  if (m.target !== undefined) {
+    const target = m.target;
+    if (mine.loose.has(target)) {
+      const directed = search(mine, here, (s) => s === target && !claimed(w, m, target) ? { kind: "pickup", cell: target, stand: s } : null);
+      if (directed) return plan(w, m, directed, "A nugget!");
+      m.target = undefined;
+    } else if (!MATERIALS[mine.cells[target] as M].solid) m.target = undefined;
+    else {
+      const directed = search(mine, here, (s) => NB(s).includes(target) && !mine.cantDig(cx(target), cy(target), tools) && !claimed(w, m, target) ? { kind: "dig", cell: target, stand: s } : null);
+      if (directed) return plan(w, m, directed, "On my way!");
+      // Keep the order on the rock so it becomes reachable as the tunnel grows.
+      m.target = undefined;
+    }
+  }
   // the player's orders, nearest first
   const order = search(mine, here, (s) => {
     for (const t of [s, ...NB(s)]) {
@@ -400,6 +419,8 @@ function think(w: World, m: Miner, h: Human) {
     return null;
   });
   if (order) return plan(w, m, order, order.job.kind === "dig" ? "On it!" : undefined);
+  const loose = search(mine, here, (s) => mine.seen[s] && mine.loose.has(s) && !claimed(w, m, s) ? { kind: "pickup", cell: s, stand: s } : null, 2500);
+  if (loose) return plan(w, m, loose, "Found a nugget!");
   const site = buildJob(w, m, here);
   if (site) return plan(w, m, site, site.job.kind === "fetch" ? "Fetching supplies." : "Building!");
   // flooded tunnels get pumped out without being asked
@@ -414,7 +435,7 @@ function think(w: World, m: Miner, h: Human) {
       for (const t of NB(s)) {
         if (mine.seen[t] !== 2 || claimed(w, m, t)) continue;
         const c = mine.known.get(t);
-        if (c && (c in FIND_AMOUNT || c === "fossil" || c in LANDMARKS) && !mine.cantDig(cx(t), cy(t), tools)) return { kind: "ore", cell: t, stand: s };
+        if (c && (c in FIND_AMOUNT || c === "fossil" || c === "artifact" || c in LANDMARKS) && !mine.cantDig(cx(t), cy(t), tools)) return { kind: "ore", cell: t, stand: s };
       }
       return null;
     }, 2500);
@@ -505,6 +526,23 @@ function work(w: World, m: Miner, h: Human, dt: number) {
   m.face = cx(job.cell) > Math.floor(m.x) ? 1 : cx(job.cell) < Math.floor(m.x) ? -1 : m.face;
   m.t += dt;
   switch (job.kind) {
+    case "pickup": {
+      const find = mine.loose.get(job.cell);
+      m.job = null;
+      m.thinkT = 0.2;
+      if (!find) return;
+      mine.loose.delete(job.cell);
+      mine.looseTaken.add(job.cell);
+      mine.version++;
+      m.carry[find.metal] = (m.carry[find.metal] ?? 0) + find.amount;
+      mine.stats.mined[find.metal] = (mine.stats.mined[find.metal] ?? 0) + find.amount;
+      mine.discoveries.push({ kind: "nugget", name: `${find.size} ${find.metal} nugget`, detail: `Picked up by ${h.name} at ${cy(job.cell) * 6} ft. Worth ${find.amount} ${find.metal}.`, cell: job.cell });
+      if (mine.discoveries.length > 30) mine.discoveries.shift();
+      mine.finds.push({ cell: job.cell, t: 0, metal: find.metal });
+      mine.sfx.push({ s: "chime", cell: job.cell });
+      w.toast(find.metal === "gold" ? "🟡" : "⚪", `${h.name} picked up a ${find.size} ${find.metal} nugget (+${find.amount})!`);
+      return;
+    }
     case "dig":
     case "ore": {
       if (mine.cantDig(cx(job.cell), cy(job.cell), tools)) {
@@ -514,8 +552,18 @@ function work(w: World, m: Miner, h: Human, dt: number) {
       }
       m.mode = "dig";
       if (mine.rand() < dt * 2.5) mine.sfx.push({ s: "knock", cell: job.cell });
-      if (m.t < mine.digTime(cx(job.cell), cy(job.cell), tools) * (lit(mine, cx(job.cell), cy(job.cell)) ? 0.8 : 1)) return;
+      const litFace = tools.lantern || lit(mine, cx(job.cell), cy(job.cell)) || cy(job.cell) <= 2;
+      if (!litFace) {
+        m.job = null;
+        m.bubble = { text: "Need a lamp!", t: 2 };
+        m.thinkT = 2;
+        return;
+      }
+      const skill = Math.min(0.35, Math.floor(m.experience ?? 0) / 12 * 0.07);
+      if (m.t < mine.digTime(cx(job.cell), cy(job.cell), tools) * (lit(mine, cx(job.cell), cy(job.cell)) ? 0.8 : 1) * (1 - skill)) return;
       const r = mine.dig(cx(job.cell), cy(job.cell), tools);
+      if (r.ok) m.experience = (m.experience ?? 0) + 1;
+      if (m.target === job.cell) m.target = undefined;
       mine.orders.delete(job.cell);
       m.job = null;
       m.mode = "idle";
@@ -523,8 +571,17 @@ function work(w: World, m: Miner, h: Human, dt: number) {
       if (!r.ok) return;
       if (r.r && r.n) m.carry[r.r] = (m.carry[r.r] ?? 0) + r.n;
       if (r.loot) for (const [res, n] of Object.entries(r.loot) as [Resource, number][]) m.carry[res] = (m.carry[res] ?? 0) + n;
+      if (r.nugget) {
+        const { metal, size, amount } = r.nugget;
+        mine.discoveries.push({ kind: "nugget", name: `${size} ${metal} nugget`, detail: `Found by ${h.name} at ${cy(job.cell) * 6} ft. Worth ${amount} extra ${metal}.`, cell: job.cell });
+        m.bubble = { text: `${size.toUpperCase()} ${metal} nugget!`, t: 3 };
+        w.toast(metal === "gold" ? "🟡" : "⚪", `${h.name} found a ${size} ${metal} nugget (+${amount} ${metal})!`);
+        mine.sfx.push({ s: "chime", cell: job.cell });
+        mine.finds.push({ cell: job.cell, t: 0, metal });
+      }
       if (r.landmark) {
         landmarkEvent(w, r.landmark.kind, r.landmark.first, r.landmark.done);
+        if (r.landmark.first) mine.discoveries.push({ kind: "landmark", name: LANDMARKS[r.landmark.kind].name, detail: LANDMARKS[r.landmark.kind].signal, cell: job.cell });
         if (r.landmark.first) m.bubble = { text: "What IS this?!", t: 2.5 };
       }
       if (r.r === "diamond" && !w.flags.has("deepDiamond")) {
@@ -534,15 +591,24 @@ function work(w: World, m: Miner, h: Human, dt: number) {
       }
       if (r.event === "cavern") wakeCavern(w, job.cell);
       if (r.fossil) {
+        const name = FOSSIL_FINDS[Math.abs((job.cell * 2654435761 + mine.seed) | 0) % FOSSIL_FINDS.length];
+        mine.discoveries.push({ kind: "fossil", name, detail: `Recovered by ${h.name} at ${cy(job.cell) * 6} ft. Stored with the settlement's bone collection.`, cell: job.cell });
         m.bubble = { text: "A fossil!", t: 2.5 };
-        w.toast("🦴", `${h.name} dug a fossil out of the Deep!`);
+        w.toast("🦴", `${h.name} uncovered a ${name} in the Deep!`);
         w.discover("fossil");
         m.carry.bone = (m.carry.bone ?? 0) + 2;
+      } else if (r.artifact) {
+        mine.discoveries.push({ kind: "artifact", name: r.artifact, detail: `Recovered by ${h.name} at ${cy(job.cell) * 6} ft. Its markings gave the settlement new research clues.`, cell: job.cell });
+        m.bubble = { text: "An artifact!", t: 3 };
+        w.toast("🏺", `${h.name} uncovered a ${r.artifact}!`);
+        w.discover("artifact");
+        w.civ.addRp(w, 8);
       } else if (r.r && (r.r === "gold" || r.r === "crystal" || r.r === "meteorite") && !w.flags.has(`deepFind-${r.r}`)) {
         w.flags.add(`deepFind-${r.r}`);
         w.toast(r.r === "gold" ? "🪙" : r.r === "crystal" ? "🔮" : "☄️", `${h.name} struck ${r.r} down in the Deep!`);
       }
       eventToast(w, h, r.event);
+      if (mine.discoveries.length > 30) mine.discoveries.splice(0, mine.discoveries.length - 30);
       if (r.collapsed?.length) caveIn(w, r.collapsed, job.cell);
       return;
     }
@@ -615,7 +681,7 @@ function work(w: World, m: Miner, h: Human, dt: number) {
         mine.reindex();
         m.job = null;
         const d = DEEP_DEFS[b.kind];
-        if (b.kind === "lamp") mine.light(b.x, b.y, 4);
+        if (b.kind === "lamp" || b.kind === "torch") mine.light(b.x, b.y, b.kind === "lamp" ? 4 : 3);
         w.toast(d.icon, `${d.name} finished down in the Deep!${d.room ? ` Room for ${d.room} more people.` : ""}`);
       }
       return;

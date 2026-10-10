@@ -66,7 +66,7 @@ export const MATERIALS: Record<M, MaterialDef> = {
 };
 
 /** What a cell holds (hidden until dug or scanned). */
-export type Content = Resource | "fossil" | "spring" | "caveIn" | "gas" | LandmarkKind | null;
+export type Content = Resource | "fossil" | "artifact" | "spring" | "caveIn" | "gas" | LandmarkKind | null;
 
 export interface Band {
   name: string;
@@ -102,7 +102,7 @@ export const BANDS: Band[] = [
     from: 30,
     rock: [[M.Stone, 0.62], [M.Sandstone, 0.24], [M.Granite, 0.14]],
     rich: 0.045,
-    finds: [["spring", 1.4], ["caveIn", 1], ["gas", 0.5], ["fossil", 0.4]],
+    finds: [["spring", 1.4], ["caveIn", 1], ["gas", 0.5], ["fossil", 0.4], ["artifact", 0.12]],
     collapse: 0.03,
     caverns: 0.12,
     heat: 0,
@@ -122,7 +122,7 @@ export const BANDS: Band[] = [
     from: 110,
     rock: [[M.Stone, 0.55], [M.Granite, 0.35], [M.Sandstone, 0.1]],
     rich: 0.09,
-    finds: [["fossil", 1.6], ["diamond", 0.15], ["spring", 0.7], ["caveIn", 0.7], ["gas", 0.6]],
+    finds: [["fossil", 1.6], ["artifact", 0.4], ["diamond", 0.15], ["spring", 0.7], ["caveIn", 0.7], ["gas", 0.6]],
     collapse: 0.025,
     caverns: 0.3,
     heat: 0,
@@ -155,6 +155,7 @@ export const FIND_AMOUNT: Partial<Record<Resource, [number, number]>> = {
   copper: [1, 3],
   salt: [1, 2],
   iron: [1, 3],
+  coal: [2, 4],
   quartz: [1, 2],
   gold: [1, 2],
   magnetite: [1, 2],
@@ -183,7 +184,7 @@ export const FLOODED = 0.55;
 
 /* ------------------------------ building down here (Phase 4) ------------------------------ */
 
-export type DeepKind = "home" | "vault" | "mushroom" | "lamp" | "mess" | "pump";
+export type DeepKind = "home" | "vault" | "mushroom" | "gallery" | "lamp" | "torch" | "mess" | "pump";
 
 export interface DeepDef {
   kind: DeepKind;
@@ -206,12 +207,14 @@ export const DEEP_DEFS: Record<DeepKind, DeepDef> = {
   home: { kind: "home", name: "Burrow home", icon: "🏠", tip: "A snug home carved into the rock: room for 4 more people in the tribe. Warm, dry and safe from raids.", w: 3, h: 2, cost: { wood: 4, stone: 3, hide: 1 }, work: 14, floor: true, room: 4 },
   vault: { kind: "vault", name: "Deep vault", icon: "🗄️", tip: "Miners unload here instead of walking to the lift (it's sent up for them). Food stored down here is safe from raiders.", w: 2, h: 2, cost: { wood: 3, stone: 4 }, work: 10, floor: true },
   mushroom: { kind: "mushroom", name: "Glowshroom farm", icon: "🍄", tip: "Glowing mushrooms grow in the dark: crops come up the lift. Faster with water close by.", w: 3, h: 1, cost: { wood: 2, clay: 2, grass: 2 }, work: 8, floor: true },
+  gallery: { kind: "gallery", name: "Fossil gallery", icon: "🦴", tip: "Displays fossils recovered from the Deep. A studied collection gives a small steady research bonus.", w: 3, h: 2, cost: { stone: 4, wood: 3, bone: 4 }, work: 10, floor: true },
   lamp: { kind: "lamp", name: "Crystal lamp", icon: "💡", tip: "Lights up the rock around it for good: digging nearby goes 25% faster and gas can't build up.", w: 1, h: 1, cost: { stick: 2, tar: 1 }, work: 4, floor: false },
+  torch: { kind: "torch", name: "Mine torch", icon: "🔥", tip: "A quick light for dark tunnels. Miners can work within three cells of it.", w: 1, h: 1, cost: { stick: 1, tar: 1 }, work: 2, floor: false },
   pump: { kind: "pump", name: "Pump station", icon: "🚰", tip: "Drains flooded tunnels nearby by itself and pipes the water up to the camp's water store.", w: 1, h: 2, cost: { copper: 2, wood: 2, stone: 2 }, work: 8, floor: true },
   mess: { kind: "mess", name: "Mess hall", icon: "🍲", tip: "A table and a cook-pot: hurt miners rest and heal here instead of going up.", w: 2, h: 2, cost: { wood: 3, stone: 2, clay: 1 }, work: 10, floor: true },
 };
 
-export const DEEP_ORDER: DeepKind[] = ["home", "vault", "pump", "mushroom", "lamp", "mess"];
+export const DEEP_ORDER: DeepKind[] = ["home", "vault", "pump", "mushroom", "gallery", "torch", "lamp", "mess"];
 /** how far a pump station reaches (cells) */
 export const PUMP_REACH = 8;
 /** how far a crystal lamp lights (cells) */
@@ -296,6 +299,7 @@ export const ORE_BODIES: { band: number; count: number; bodies: OreBody[] }[] = 
     count: 26,
     bodies: [
       { r: "iron", shape: "seam", weight: 3, size: [8, 40] },
+      { r: "coal", shape: "seam", weight: 2, size: [10, 34] },
       { r: "iron", shape: "vein", weight: 2, size: [6, 28] },
       { r: "copper", shape: "vein", weight: 3, size: [6, 30] },
       { r: "silver", shape: "vein", weight: 1.2, size: [4, 16] },
@@ -308,6 +312,7 @@ export const ORE_BODIES: { band: number; count: number; bodies: OreBody[] }[] = 
     count: 26,
     bodies: [
       { r: "iron", shape: "vein", weight: 3, size: [8, 44] },
+      { r: "coal", shape: "seam", weight: 1, size: [8, 30] },
       { r: "gold", shape: "vein", weight: 1.6, size: [4, 22] },
       { r: "silver", shape: "vein", weight: 2, size: [5, 26] },
       { r: "copper", shape: "seam", weight: 1.5, size: [8, 30] },

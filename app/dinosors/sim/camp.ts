@@ -50,7 +50,7 @@ export class Camp {
   y = LM.camp.y * TILE + TILE / 2;
   caveX = LM.cave.x * TILE + TILE / 2;
   caveY = 0;
-  stock: Stock = { stick: 0, stone: 0, grass: 0, leaves: 0, wood: 0, fish: 0, berries: 2, meat: 0, cooked: 0, crop: 0, water: 0, clay: 0, iron: 0, gold: 0, obsidian: 0, flint: 0, tar: 0, salt: 0, hide: 0, bone: 0, tooth: 0, copper: 0, quartz: 0, magnetite: 0, crystal: 0, meteorite: 0, shaped: 0, diamond: 0, silver: 0, goldBar: 0, silverBar: 0, copperBar: 0 };
+  stock: Stock = { stick: 0, stone: 0, grass: 0, leaves: 0, wood: 0, fish: 0, berries: 2, meat: 0, cooked: 0, crop: 0, water: 0, clay: 0, iron: 0, gold: 0, obsidian: 0, flint: 0, tar: 0, salt: 0, hide: 0, bone: 0, tooth: 0, copper: 0, quartz: 0, magnetite: 0, crystal: 0, meteorite: 0, shaped: 0, diamond: 0, silver: 0, coal: 0, goldBar: 0, silverBar: 0, copperBar: 0 };
   learned = new Set<TechId>();
   goal: TechId | null = "tools";
   crafting: Crafting | null = null;

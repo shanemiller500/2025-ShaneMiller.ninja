@@ -95,10 +95,18 @@ export interface DigResult {
   /** broke into / finished a landmark */
   landmark?: { kind: LandmarkKind; first: boolean; done: boolean };
   fossil?: boolean;
+  artifact?: string;
+  nugget?: { metal: "gold" | "silver"; size: "tiny" | "small" | "large" | "giant"; amount: number };
   /** what happened */
   event?: "spring" | "caveIn" | "gas" | "cavern" | "explosion";
   /** cells that filled with rubble */
   collapsed?: number[];
+}
+
+export interface LooseFind {
+  metal: "gold" | "silver";
+  size: "tiny" | "small" | "large" | "giant";
+  amount: number;
 }
 
 export class Mine {
@@ -111,6 +119,9 @@ export class Mine {
   /** ore bodies (from the seed): 0 = none, else 1 + index into oreKinds */
   ore = new Uint8Array(N);
   oreKinds: Resource[] = [];
+  /** Visible nuggets on natural cave floors; workers carry them out. */
+  loose = new Map<number, LooseFind>();
+  looseTaken = new Set<number>();
   /** 0 unknown, 1 seen, 2 scanned (contents known) */
   seen = new Uint8Array(N);
   /** 0..1 water in open cells */
@@ -128,7 +139,7 @@ export class Mine {
   /** the lift car (row, smooth) and where it's going */
   liftY = 0;
   liftTo = 0;
-  stats = { dug: 0, deepest: 0, mined: {} as Partial<Record<Resource, number>>, caveIns: 0, springs: 0, fossils: 0, trogs: 0 };
+  stats = { dug: 0, deepest: 0, mined: {} as Partial<Record<Resource, number>>, caveIns: 0, springs: 0, fossils: 0, artifacts: 0, trogs: 0 };
 
   /* ---- Phase 5: landmarks, milestones, cave life ---- */
   /** this world's one-of-a-kind finds (from the seed) */
@@ -137,6 +148,7 @@ export class Mine {
   special = new Map<number, LandmarkKind>();
   landmarksDone = new Set<LandmarkKind>();
   milestones = new Set<string>();
+  discoveries: { kind: "fossil" | "nugget" | "landmark" | "artifact"; name: string; detail: string; cell: number }[] = [];
   critters: Critter[] = [];
   nextCritterId = 1;
   /** landmarks the last scanner ping picked up (for the HUD message) */
@@ -162,6 +174,7 @@ export class Mine {
   /** cosmetic: loads riding up the shaft, blast flashes, sounds for the view (not saved) */
   crates: { y: number; t: number }[] = [];
   blasts: { cell: number; t: number }[] = [];
+  finds: { cell: number; t: number; metal: "gold" | "silver" }[] = [];
   sfx: { s: string; cell: number }[] = [];
   /** last time each kind of message was shown (spam guard) */
   toastAt = new Map<string, number>();
@@ -230,6 +243,8 @@ export class Mine {
     this.base.fill(0);
     this.ore.fill(0);
     this.oreKinds = [];
+    this.loose.clear();
+    this.looseTaken.clear();
     this.seen.fill(0);
     this.water.fill(0);
     this.anyWater = false;
@@ -244,8 +259,10 @@ export class Mine {
     this.charges = [];
     this.crates = [];
     this.blasts = [];
+    this.finds = [];
     this.sfx = [];
     this.lastSignals = [];
+    this.discoveries = [];
     this.generate();
     this.version++;
   }
@@ -257,13 +274,14 @@ export class Mine {
    * must be on the surface first (see resetMine in miners.ts).
    */
   reset(seed: number) {
-    const keep = { liftMax: this.liftMax, builds: this.builds, stats: this.stats, milestones: this.milestones, landmarksDone: this.landmarksDone, hauled: this.hauled, autoMine: this.autoMine, pumped: this.pumped };
+    const keep = { liftMax: this.liftMax, builds: this.builds, stats: this.stats, milestones: this.milestones, landmarksDone: this.landmarksDone, discoveries: this.discoveries, hauled: this.hauled, autoMine: this.autoMine, pumped: this.pumped };
     this.regenerate(seed);
     this.liftMax = keep.liftMax;
     this.liftY = this.liftTo = 0;
     this.stats = keep.stats;
     this.milestones = keep.milestones;
     this.landmarksDone = keep.landmarksDone;
+    this.discoveries = keep.discoveries;
     this.hauled = keep.hauled;
     this.autoMine = keep.autoMine;
     this.pumped = keep.pumped;
@@ -279,6 +297,7 @@ export class Mine {
           const i = idx(b.x + dx, b.y + dy);
           if (this.cells[i] !== M.Shaft) this.cells[i] = M.Open;
           this.ore[i] = 0;
+          this.loose.delete(i);
           this.seen[i] = 1;
         }
     }
@@ -322,11 +341,26 @@ export class Mine {
     for (let y = 0; y <= LIFT_MAX; y++) this.cells[idx(LIFT_X, y)] = M.Shaft;
     this.placeLandmarks();
     this.placeOres();
+    this.placeLooseFinds();
     // the landing at the top: a little room beside the shaft
     for (const x of [LIFT_X - 1, LIFT_X + 1]) this.cells[idx(x, 1)] = M.Open;
     this.base.set(this.cells);
     this.seen.fill(0);
     this.revealRect(LIFT_X - 2, 0, LIFT_X + 2, 2, 1);
+  }
+
+  private placeLooseFinds() {
+    this.loose.clear();
+    for (let y = 35; y < MAGMA_FROM - 2; y++) for (let x = LIFT_X + 4; x < MINE_W - 2; x++) {
+      const i = idx(x, y);
+      if (this.cells[i] !== M.Open || this.special.has(i)) continue;
+      const chance = hash2(x, y, this.seed + 0x301d);
+      if (chance > 0.0022) continue;
+      const metal: LooseFind["metal"] = hash2(y, x, this.seed + 0x51ee) < 0.62 ? "gold" : "silver";
+      const roll = hash2(x, y, this.seed + 0x517e);
+      const size: LooseFind["size"] = roll > 0.998 ? "giant" : roll > 0.93 ? "large" : roll > 0.42 ? "small" : "tiny";
+      this.loose.set(i, { metal, size, amount: size === "giant" ? 16 : size === "large" ? 7 : size === "small" ? 3 : 1 });
+    }
   }
 
   /** Winding tunnels that link the caverns into cave systems (never near the shaft). */
@@ -676,9 +710,21 @@ export class Mine {
       const [lo, hi] = FIND_AMOUNT[content as Resource]!;
       out.r = content as Resource;
       out.n = lo + Math.floor(this.rng() * (hi - lo + 1));
+      // Deterministic geology chooses pockets; only the yield roll is random.
+      if ((content === "gold" || content === "silver") && hash2(x, y, this.seed + 0x6a11) < (content === "gold" ? 0.16 : 0.12)) {
+        const roll = hash2(y, x, this.seed + 0x51ae);
+        const size = roll > 0.995 ? "giant" : roll > 0.9 ? "large" : roll > 0.45 ? "small" : "tiny";
+        const amount = size === "giant" ? 16 : size === "large" ? 7 : size === "small" ? 3 : 1;
+        out.n += amount;
+        out.nugget = { metal: content, size, amount };
+      }
     } else if (content === "fossil") {
       out.fossil = true;
       this.stats.fossils++;
+    } else if (content === "artifact") {
+      const artifacts = ["carved stone tablet", "ancient mining hammer", "spiral crystal pendant", "buried stone figurine", "prehistoric map shard"];
+      out.artifact = artifacts[Math.floor(hash2(x, y, this.seed + 0xa711) * artifacts.length)];
+      this.stats.artifacts++;
     } else if (MATERIALS[m].spoil && m !== M.Rubble && this.rng() < 0.4) {
       out.r = MATERIALS[m].spoil;
       out.n = 1;
@@ -924,6 +970,8 @@ export class Mine {
     if (this.crates.length) this.crates = this.crates.filter((c) => c.t < 2.5);
     for (const b of this.blasts) b.t += dt;
     if (this.blasts.length) this.blasts = this.blasts.filter((b) => b.t < 1);
+    for (const f of this.finds) f.t += dt;
+    if (this.finds.length) this.finds = this.finds.filter((f) => f.t < 1.5);
     // the lift car glides toward its target
     if (this.liftY !== this.liftTo) {
       const d = this.liftTo - this.liftY;
@@ -1084,11 +1132,12 @@ export class Mine {
       gas: Array.from(this.gas, ([i, n]) => [i, Math.round(n)] as [number, number]),
       supports: Array.from(this.supports),
       known,
+      looseTaken: Array.from(this.looseTaken),
       liftMax: this.liftMax,
       liftY: r2(this.liftY),
       stats: this.stats,
       orders: Array.from(this.orders),
-      crew: this.crew.map((m) => ({ id: m.id, x: r2(m.x), y: r2(m.y), carry: m.carry, eatT: Math.round(m.eatT) })),
+      crew: this.crew.map((m) => ({ id: m.id, x: r2(m.x), y: r2(m.y), carry: m.carry, eatT: Math.round(m.eatT), target: m.target, experience: m.experience ?? 0 })),
       pending: Array.from(this.pending.keys()),
       charges: this.charges.map((c) => [c.cell, r2(c.t), c.by] as [number, number, number]),
       autoMine: this.autoMine,
@@ -1098,6 +1147,7 @@ export class Mine {
       critters: this.critters.map((c) => [r2(c.x), r2(c.y), r2(c.hp)] as [number, number, number]),
       milestones: Array.from(this.milestones),
       landmarksDone: Array.from(this.landmarksDone),
+      discoveries: this.discoveries,
     };
   }
 
@@ -1122,11 +1172,13 @@ export class Mine {
     this.gas = new Map(d.gas ?? []);
     this.supports = new Set(d.supports ?? []);
     this.known = new Map(d.known ?? []);
+    this.looseTaken = new Set((d.looseTaken ?? []).filter((i) => i >= 0 && i < N));
+    for (const i of Array.from(this.looseTaken)) this.loose.delete(i);
     this.liftMax = Math.max(LIFT_START, Math.min(LIFT_MAX, d.liftMax ?? LIFT_START));
     this.liftY = this.liftTo = Math.min(this.liftMax, d.liftY ?? 0);
     this.stats = { ...this.stats, ...(d.stats ?? {}), mined: { ...(d.stats?.mined ?? {}) } };
     this.orders = new Map((d.orders ?? []).filter(([i]) => i >= 0 && i < N));
-    this.crew = (d.crew ?? []).map((c) => ({ id: c.id, x: c.x, y: c.y, path: [], pi: 0, job: null, mode: "idle" as const, t: 0, carry: { ...(c.carry ?? {}) }, face: 1 as const, eatT: c.eatT ?? 90, anim: 0, thinkT: 0, bubble: null }));
+    this.crew = (d.crew ?? []).map((c) => ({ id: c.id, x: c.x, y: c.y, path: [], pi: 0, job: null, mode: "idle" as const, t: 0, carry: { ...(c.carry ?? {}) }, face: 1 as const, eatT: c.eatT ?? 90, target: Number.isInteger(c.target) && c.target! >= 0 && c.target! < N ? c.target : undefined, experience: c.experience ?? 0, anim: 0, thinkT: 0, bubble: null }));
     this.pending = new Map((d.pending ?? []).map((id) => [id, 0]));
     this.charges = (d.charges ?? []).map(([cell, t, by]) => ({ cell, t, by }));
     this.autoMine = d.autoMine ?? true;
@@ -1135,6 +1187,7 @@ export class Mine {
     this.critters = (d.critters ?? []).map(([x, y, hp]) => ({ id: this.nextCritterId++, x, y, hp, face: 1 as const, path: [], pi: 0, thinkT: 1, biteT: 0, hit: 0, anim: 0 }));
     this.milestones = new Set(d.milestones ?? []);
     this.landmarksDone = new Set((d.landmarksDone ?? []).filter((k) => k in LANDMARKS));
+    this.discoveries = (d.discoveries ?? []).filter((x) => x && typeof x.name === "string" && x.cell >= 0 && x.cell < N).slice(-30);
     this.builds = (d.builds ?? []).filter(([k]) => k in DEEP_DEFS).map(([kind, x, y, built, have, grow]) => ({ id: this.nextBuildId++, kind: kind as DeepKind, x, y, built, have: !!have, grow }));
     this.reindex();
   }

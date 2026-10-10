@@ -331,6 +331,7 @@ export type Resource =
   | "shaped"
   | "diamond"
   | "silver"
+  | "coal"
   | "goldBar"
   | "silverBar"
   | "copperBar";

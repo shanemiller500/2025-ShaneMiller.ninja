@@ -1468,6 +1468,53 @@ test('miners dig marked rock, haul it to the lift and it lands on the camp stock
   assert.ok(w.mine.stats.dug >= 12);
 });
 
+test('a directed miner excavates a chosen face and keeps skill across saves', () => {
+  const w = mineWorld(2602);
+  crewDown(w, 1);
+  const miner = w.mine.crew[0];
+  const target = mIdx(LIFT_X + 2, 1);
+  assert.equal(setOrder(w, LIFT_X + 2, 1, 'dig'), null);
+  miner.target = target;
+  miner.thinkT = 0;
+  run(w, 30, () => !MATERIALS[w.mine.cells[target]].solid);
+  assert.ok(!MATERIALS[w.mine.cells[target]].solid, 'directed rock face was excavated');
+  assert.ok(miner.experience > 0, 'excavation earns miner experience');
+  w.mine.discoveries.push({ kind: 'fossil', name: 'dinosaur tooth', detail: 'Recovered in the Deep.', cell: target });
+  const restored = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  assert.equal(restored.mine.crew[0].experience, miner.experience);
+  assert.equal(restored.mine.discoveries[0].name, 'dinosaur tooth');
+});
+
+test('loose cave nuggets are carried out and stay collected after loading', () => {
+  const w = mineWorld(2603);
+  const m = w.mine;
+  const entry = [...m.loose.entries()][0];
+  assert.ok(entry, 'natural caverns hold loose nuggets');
+  const [cell, find] = entry;
+  const x = cell % MINE_W;
+  const y = Math.floor(cell / MINE_W);
+  m.liftMax = Math.max(m.liftMax, y);
+  carve(m, x - 1, y);
+  m.seen[cell] = 1;
+  crewDown(w, 1);
+  m.crew[0].target = cell;
+  m.crew[0].thinkT = 0;
+  run(w, 90, () => m.looseTaken.has(cell));
+  assert.ok(m.looseTaken.has(cell), 'miner picked up the nugget');
+  assert.ok((m.crew[0]?.carry[find.metal] ?? 0) > 0 || (m.hauled[find.metal] ?? 0) > 0, 'the nugget was carried or hauled');
+  const restored = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  assert.ok(!restored.mine.loose.has(cell), 'collected nugget stays gone');
+});
+test('buried artifacts remain distinct discoveries in the Deep', () => {
+  const m = new Mine(9001);
+  const find = findContent(m, 'artifact', 110, 145);
+  assert.ok(find, 'an artifact is hidden in a deep cave band');
+  m.liftMax = find.y;
+  carve(m, find.x - 1, find.y);
+  const result = m.dig(find.x, find.y, ALL_TOOLS);
+  assert.ok(result.ok && result.artifact, 'excavation identifies the artifact');
+  assert.equal(m.stats.artifacts, 1);
+});
 test('miners dig out ore they spot by themselves (and stop when told not to)', () => {
   const w = mineWorld(603);
   const m = w.mine;
@@ -1620,6 +1667,32 @@ test('miners fetch supplies from the lift and build rooms; homes add room for pe
   for (const i of cellsOf(home)) assert.ok(w.mine.reinforced.has(i), 'finished rooms are reinforced');
 });
 
+test('miners build torches that light nearby excavation', () => {
+  const w = richWorld(7702);
+  const torch = placeDeep(w, 'torch', LIFT_X + 5, 2);
+  assert.ok(typeof torch !== 'string');
+  crewDown(w, 1);
+  run(w, 30, () => torch.built >= 1);
+  assert.equal(torch.built, 1);
+  assert.ok(lit(w.mine, LIFT_X + 8, 2));
+  assert.ok(!lit(w.mine, LIFT_X + 10, 2), 'torchlight has a limited range');
+  const restored = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  assert.ok(lit(restored.mine, LIFT_X + 8, 2), 'torch survives the save');
+});
+test('a fossil gallery turns recovered specimens into research', () => {
+  const { updateDeepBuilds } = require(path.join(root, 'sim', 'deepBuild.ts'));
+  const w = richWorld(7703);
+  w.mine.stats.fossils = 5;
+  w.civ.path = 'resonance';
+  w.civ.current = 'copperRes';
+  w.civ.paid = true;
+  const gallery = placeDeep(w, 'gallery', LIFT_X + 5, 2);
+  assert.ok(typeof gallery !== 'string');
+  gallery.built = 1;
+  w.mine.reindex();
+  updateDeepBuilds(w, 45);
+  assert.ok(w.civ.rp > 0, 'displayed fossils advanced active research');
+});
 test('a room waits (and says so) when the stockpile is short', () => {
   const w = richWorld(703);
   w.camp.stock.hide = 0;
@@ -1986,6 +2059,16 @@ test('the refinery smelts raw gold, silver + copper into bars', () => {
   assert.ok(w.camp.stock.gold < 6 && w.camp.stock.wood < 10, 'used ore + fuel');
 });
 
+test('coal seams fuel the refinery when no logs are available', () => {
+  const w = tribeWorld(7604, ['tools', 'fire', 'axe', 'smelting']);
+  const ref = w.colony.addBuilding(w, 'refinery', w.camp.x + 180, w.camp.y + 160);
+  assert.ok(ref);
+  ref.built = 1;
+  Object.assign(w.camp.stock, { gold: 2, silver: 0, copper: 0, wood: 0, coal: 1 });
+  run(w, 3, () => w.camp.stock.goldBar > 0);
+  assert.equal(w.camp.stock.goldBar, 1);
+  assert.equal(w.camp.stock.coal, 0);
+});
 test('helmets: forged from metal, worn by grown-ups, and they soften hits', () => {
   const w = tribeWorld(6605, ['tools', 'fire', 'smelting']);
   const h = w.humans.find((x) => !x.child);
