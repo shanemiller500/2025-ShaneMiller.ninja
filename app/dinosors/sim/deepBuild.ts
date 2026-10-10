@@ -47,6 +47,7 @@ export function canPlaceDeep(mine: Mine, kind: DeepKind, x: number, y: number): 
       if (mine.cells[i] !== M.Open) return `Dig out a ${d.w}×${d.h} space first.`;
       if (!reach[i]) return "Your miners can't get there yet.";
       if (mine.buildAt.has(i)) return "Something is already built there.";
+      if (mine.loose.has(i)) return "Collect the nugget before building here.";
       if (mine.water[i] > 0.3) return "It's flooded — pump it out first.";
     }
   if (d.floor) for (let dx = 0; dx < d.w; dx++) if (!MATERIALS[mine.at(x + dx, y + d.h) as M].solid) return "Needs solid rock under the whole floor.";
@@ -55,6 +56,7 @@ export function canPlaceDeep(mine: Mine, kind: DeepKind, x: number, y: number): 
 
 export function placeDeep(w: World, kind: DeepKind, x: number, y: number): DeepBuilding | string {
   const mine = w.mine;
+  if (kind === "torch" && !w.camp.learned.has("fire")) return "Learn fire before placing a mine torch.";
   const why = canPlaceDeep(mine, kind, x, y);
   if (why) return why;
   const b: DeepBuilding = { id: mine.nextBuildId++, kind, x, y, built: 0, have: false, grow: 0 };
@@ -88,7 +90,7 @@ export function hasVault(mine: Mine) {
 
 /** Is a finished crystal lamp lighting this cell? */
 export function lit(mine: Mine, x: number, y: number) {
-  return mine.builds.some((b) => b.kind === "lamp" && finished(b) && Math.max(Math.abs(b.x - x), Math.abs(b.y - y)) <= LAMP_REACH);
+  return mine.builds.some((b) => finished(b) && ((b.kind === "lamp" && Math.max(Math.abs(b.x - x), Math.abs(b.y - y)) <= LAMP_REACH) || (b.kind === "torch" && Math.max(Math.abs(b.x - x), Math.abs(b.y - y)) <= 3)));
 }
 
 /** Farms grow, lamps keep the air clear. */
@@ -97,7 +99,14 @@ export function updateDeepBuilds(w: World, dt: number) {
   if (!mine.builds.length) return;
   for (const b of mine.builds) {
     if (!finished(b)) continue;
-    if (b.kind === "mushroom") {
+    if (b.kind === "gallery") {
+      if (mine.stats.fossils <= 0 || !w.civ.current) continue;
+      b.grow += dt / 45;
+      if (b.grow >= 1) {
+        b.grow = 0;
+        w.civ.addRp(w, Math.min(4, 1 + Math.floor(mine.stats.fossils / 4)));
+      }
+    } else if (b.kind === "mushroom") {
       // damp rock nearby = faster
       let wet = 0;
       for (const i of cellsOf(b)) for (const j of [i - 1, i + 1, i - MINE_W, i + MINE_W]) if (j >= 0 && j < mine.water.length && mine.water[j] > 0.05) wet = 1;

@@ -47,11 +47,12 @@ export interface DeepInfo {
   mined: { r: string; icon: string; name: string; n: number }[];
   stock: { r: string; icon: string; name: string; n: number }[];
   hazards: { flooded: number; springs: number; gas: number; caveIns: number; knownTraps: number };
+  lighting: { lamps: number; lanterns: number };
   tools: { id: string; icon: string; name: string; on: boolean }[];
   charted: number;
   pingReady: number;
   sel: DeepCell | null;
-  crew: { id: number; name: string; hp: number; activity: string; icon: string; load: number; cap: number; carry: string }[];
+  crew: { id: number; name: string; hp: number; activity: string; icon: string; load: number; cap: number; carry: string; skill: string }[];
   pending: number;
   canSend: number;
   orders: Record<string, number>;
@@ -67,10 +68,12 @@ export interface DeepInfo {
   palette: { kind: string; name: string; icon: string; tip: string; cost: Cost; w: number; h: number; afford: boolean }[];
   settlement: { kind: string; icon: string; name: string; built: number; planned: number }[];
   room: number;
+  selectedMiners: number[];
+  discoveries: { kind: string; name: string; detail: string; cell: number }[];
 }
 
-const NAMES: Record<string, string> = { spring: "Underground spring", caveIn: "Weak roof (cave-in!)", gas: "Gas pocket", fossil: "Fossil" };
-const MINERALS: Resource[] = ["stone", "clay", "flint", "copper", "iron", "silver", "gold", "salt", "quartz", "magnetite", "crystal", "obsidian", "meteorite", "diamond", "goldBar", "silverBar", "copperBar"];
+const NAMES: Record<string, string> = { spring: "Underground spring", caveIn: "Weak roof (cave-in!)", gas: "Gas pocket", fossil: "Fossil", artifact: "Buried artifact" };
+const MINERALS: Resource[] = ["stone", "clay", "flint", "coal", "copper", "iron", "silver", "gold", "salt", "quartz", "magnetite", "crystal", "obsidian", "meteorite", "diamond", "goldBar", "silverBar", "copperBar"];
 
 interface Ptr {
   x: number;
@@ -82,6 +85,11 @@ interface Ptr {
 }
 
 export class DeepView {
+  selectedMiners = new Set<number>();
+  selectMiner(id: number, multiple = false) {
+    if (!multiple) this.selectedMiners.clear();
+    if (id) this.selectedMiners.add(id);
+  }
   cam: DeepCam = { x: (MINE_W * CELL) / 2, y: 4 * CELL, zoom: 1 };
   sel: number | null = null;
   hover: number | null = null;
@@ -175,7 +183,7 @@ export class DeepView {
   }
 
   render(world: World, dt: number, fade: number) {
-    this.renderer.render(world.mine, this.cam, { stock: world.camp.stock as unknown as Record<string, number>, ghost: this.ghost(world), crew: this.crewLooks(world), mode: this.mode, sel: this.sel, hover: this.hover, pings: this.pings, daylight: world.daylight, fade }, dt);
+    this.renderer.render(world.mine, this.cam, { stock: world.camp.stock as unknown as Record<string, number>, ghost: this.ghost(world), crew: this.crewLooks(world), selectedMiners: Array.from(this.selectedMiners), lantern: toolsOf(world).lantern, mode: this.mode, sel: this.sel, hover: this.hover, pings: this.pings, daylight: world.daylight, fade }, dt);
   }
 
   private crewLooks(world: World): CrewLook[] {
@@ -304,6 +312,30 @@ export class DeepView {
         return true;
       }
       const c = this.renderer.cellAt(this.cam, p.sx, p.sy);
+      const w = this.world();
+      if (w && c) {
+        const miner = w.mine.crew.find((m) => Math.hypot(m.x - c.x - 0.5, m.y - c.y - 0.5) < 0.8);
+        if (miner) {
+          this.selectMiner(miner.id);
+          return true;
+        }
+        if (this.selectedMiners.size && (MATERIALS[w.mine.cells[idx(c.x, c.y)] as M].solid || (w.mine.seen[idx(c.x, c.y)] && w.mine.loose.has(idx(c.x, c.y))))) {
+          const isLoose = !!w.mine.seen[idx(c.x, c.y)] && w.mine.loose.has(idx(c.x, c.y));
+          const why = isLoose ? null : setOrder(w, c.x, c.y, "dig");
+          if (why) this.lastWhy = why;
+          else {
+            const selected = w.mine.crew.filter((m) => this.selectedMiners.has(m.id));
+            for (const m of selected) {
+              m.target = idx(c.x, c.y);
+              m.job = null;
+              m.path = [];
+              m.thinkT = 0;
+            }
+          }
+          this.sel = idx(c.x, c.y);
+          return true;
+        }
+      }
       this.sel = c ? (this.sel === idx(c.x, c.y) ? null : idx(c.x, c.y)) : null;
       return true;
     }
@@ -396,6 +428,7 @@ export class DeepView {
       mined: (Object.entries(mine.stats.mined) as [Resource, number][]).filter(([, n]) => n > 0).map(([r, n]) => ({ r, icon: RES_INFO[r]?.icon ?? "❔", name: RES_INFO[r]?.name ?? r, n })),
       stock: MINERALS.map((r) => ({ r, icon: RES_INFO[r].icon, name: RES_INFO[r].name, n: Math.floor(world.camp.stock[r] ?? 0) })),
       hazards: { flooded, springs: mine.springs.size, gas: mine.gas.size, caveIns: mine.stats.caveIns, knownTraps },
+      lighting: { lamps: mine.builds.filter((b) => (b.kind === "lamp" || b.kind === "torch") && finished(b)).length, lanterns: tools.lantern ? mine.crew.length : 0 },
       tools: [
         { id: "pick", icon: "⛏️", name: "Stone pick", on: tools.pick },
         { id: "ironPick", icon: "⚒️", name: "Iron pick", on: tools.ironPick },
@@ -410,8 +443,10 @@ export class DeepView {
       crew: mine.crew.map((m) => {
         const hu = world.humans.find((x) => x.id === m.id);
         const kind = m.job?.kind;
-        const [icon, activity] = kind === "dig" ? ["⛏️", "Digging"] : kind === "ore" ? ["💎", "Digging out ore"] : kind === "haul" ? ["🛗", "Hauling to the lift"] : kind === "support" ? ["🪵", "Propping the roof"] : kind === "pump" ? ["💧", "Pumping water"] : kind === "blast" ? ["🧨", "Setting a charge"] : kind === "exit" ? ["⬆️", "Heading up"] : kind === "flee" ? ["🏃", "Running from the blast!"] : ["🧍", mine.orders.size ? "Looking for a way in" : "Waiting for orders"];
-        return { id: m.id, name: hu?.name ?? "?", hp: hu?.hp ?? 0, activity, icon, load: load(m), cap: CARRY, carry: (Object.entries(m.carry) as [Resource, number][]).filter(([, n]) => n > 0).map(([r, n]) => `${RES_INFO[r]?.icon ?? r}${n}`).join(" ") };
+        const [icon, activity] = kind === "dig" ? ["⛏️", "Digging"] : kind === "ore" ? ["💎", "Digging out ore"] : kind === "pickup" ? ["✦", "Collecting a nugget"] : kind === "haul" ? ["🛗", "Hauling to the lift"] : kind === "support" ? ["🪵", "Propping the roof"] : kind === "pump" ? ["💧", "Pumping water"] : kind === "blast" ? ["🧨", "Setting a charge"] : kind === "exit" ? ["⬆️", "Heading up"] : kind === "flee" ? ["🏃", "Running from the blast!"] : ["🧍", mine.orders.size ? "Looking for a way in" : "Waiting for orders"];
+        const xp = m.experience ?? 0;
+        const skill = xp >= 60 ? "Master miner" : xp >= 30 ? "Experienced miner" : xp >= 12 ? "Miner" : "Novice";
+        return { id: m.id, name: hu?.name ?? "?", hp: hu?.hp ?? 0, activity, icon, load: load(m), cap: CARRY, skill, carry: (Object.entries(m.carry) as [Resource, number][]).filter(([, n]) => n > 0).map(([r, n]) => `${RES_INFO[r]?.icon ?? r}${n}`).join(" ") };
       }),
       pending: mine.pending.size,
       canSend: world.humans.filter((h) => canSend(h) && !mine.pending.has(h.id)).length,
@@ -436,6 +471,8 @@ export class DeepView {
       }),
       settlement: DEEP_ORDER.map((k) => ({ kind: k, icon: DEEP_DEFS[k].icon, name: DEEP_DEFS[k].name, built: mine.builds.filter((b) => b.kind === k && finished(b)).length, planned: mine.builds.filter((b) => b.kind === k && !finished(b)).length })).filter((s) => s.built || s.planned),
       room: deepRoom(mine),
+      selectedMiners: Array.from(this.selectedMiners).filter((id) => mine.crew.some((m) => m.id === id)),
+      discoveries: mine.discoveries.slice(-6).reverse(),
     };
   }
 
@@ -458,7 +495,7 @@ export class DeepView {
       band: bandAt(y).name,
       material: seen ? MATERIALS[m].name : "Uncharted",
       state: m === M.Shaft ? "shaft" : !seen ? "uncharted" : solid ? "rock" : "open",
-      content: known && look ? { icon: look.icon, name: NAMES[known] ?? RES_INFO[known as Resource]?.name ?? known, hazard: known === "spring" || known === "caveIn" || known === "gas" } : null,
+      content: mine.loose.has(i) && seen ? { icon: mine.loose.get(i)!.metal === "gold" ? "🟡" : "⚪", name: `${mine.loose.get(i)!.size} ${mine.loose.get(i)!.metal} nugget (${mine.loose.get(i)!.amount})`, hazard: false } : known && look ? { icon: look.icon, name: NAMES[known] ?? RES_INFO[known as Resource]?.name ?? known, hazard: known === "spring" || known === "caveIn" || known === "gas" } : null,
       digTime: seen && solid && !why ? Math.round(mine.digTime(x, y, tools) * 10) / 10 : null,
       why,
       order: mine.orders.get(i) ?? null,

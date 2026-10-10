@@ -64,6 +64,7 @@ export default function DeepHud({ snap, engine }: { snap: Snapshot; engine: Engi
                     <Hz icon="⚠️" n={d.hazards.caveIns} label="cave-ins" />
                   </div>
                   {d.hazards.knownTraps > 0 && <p className="mt-1 text-[10.5px] text-amber-200/80">◇ {d.hazards.knownTraps} spotted hazard{d.hazards.knownTraps === 1 ? "" : "s"} marked in the rock</p>}
+                  <p className="mt-1 text-[10.5px] text-cyan-100/70">Lighting: {d.lighting.lanterns} miner lanterns · {d.lighting.lamps} fixed lamps</p>
                 </div>
                 <div>
                   <div className={label}>Minerals at camp</div>
@@ -112,6 +113,15 @@ export default function DeepHud({ snap, engine }: { snap: Snapshot; engine: Engi
                     ))}
                   </div>
                   {d.critters > 0 && <p className="mt-1 text-[10.5px] text-rose-200">🦎 {d.critters} troglodon{d.critters === 1 ? "" : "s"} in the dark — lamps keep them away</p>}
+                </div>
+                <div>
+                  <div className={label}>Field discoveries</div>
+                  <div className="mt-1 max-h-36 space-y-1 overflow-y-auto">
+                    {d.discoveries.length ? d.discoveries.map((find, i) => <div key={`${find.cell}-${i}`} className="rounded-lg border border-amber-200/15 bg-amber-100/5 px-2 py-1.5">
+                      <div className="text-[11px] font-semibold text-amber-100">{find.kind === "fossil" ? "🦴" : find.kind === "nugget" ? "✦" : find.kind === "artifact" ? "🏺" : "◇"} {find.name}</div>
+                      <div className="text-[10px] leading-snug text-white/55">{find.detail}</div>
+                    </div>) : <p className="text-[10.5px] text-white/45">Rare fossils and precious finds will be recorded here.</p>}
+                  </div>
                 </div>
                 <div>
                   <div className={label}>Settlement</div>
@@ -282,7 +292,7 @@ function CrewPanel({ snap, engine }: { snap: Snapshot; engine: Engine }) {
             {d.crew.length === 0 && <p className="text-[11.5px] text-white/60">Nobody is down here. Send a few grown-ups: they walk to the cave and ride the lift.</p>}
             <div className="dl-scroll max-h-[34vh] space-y-1.5 overflow-y-auto">
               {d.crew.map((m) => (
-                <div key={m.id} className="rounded-xl bg-white/[0.04] px-2 py-1.5">
+                <button type="button" key={m.id} onClick={(e) => engine.deep.selectMiner(m.id, e.shiftKey)} title="Select miner, then click a rock face. Shift-click to select several." className={`w-full rounded-xl px-2 py-1.5 text-left ${d.selectedMiners.includes(m.id) ? "bg-cyan-400/20 ring-1 ring-cyan-300" : "bg-white/[0.04]"}`}>
                   <div className="flex items-center gap-1.5 text-[12px] font-bold">
                     <span>{m.icon}</span>
                     <span className="flex-1 truncate">{m.name}</span>
@@ -296,10 +306,15 @@ function CrewPanel({ snap, engine }: { snap: Snapshot; engine: Engine }) {
                     </div>
                     <span className="truncate text-[10px] text-white/55">{m.activity}</span>
                   </div>
+                  <div className="mt-0.5 text-[10px] text-cyan-200/65">{m.skill}</div>
                   {m.carry && <div className="mt-0.5 text-[10px] text-white/60">{m.carry}</div>}
-                </div>
+                </button>
               ))}
             </div>
+            {d.selectedMiners.length > 0 && <div className="mt-2 flex items-start gap-2 text-[10.5px] text-cyan-100">
+              <span className="flex-1">{d.selectedMiners.length} selected · click a rock face to send them. Shift-click crew to add miners.</span>
+              <button type="button" onClick={() => engine.deep.selectMiner(0)} className="rounded bg-white/10 px-1.5 py-0.5 text-white/70 hover:bg-white/20">Clear</button>
+            </div>}
             <div className="mt-2 grid grid-cols-3 gap-1">
               <button type="button" disabled={!d.canSend} onClick={() => engine.deepSend(1)} className="rounded-xl bg-cyan-500/80 py-1.5 text-[11.5px] font-bold text-slate-950 hover:bg-cyan-400 disabled:bg-white/10 disabled:text-white/40">
                 +1

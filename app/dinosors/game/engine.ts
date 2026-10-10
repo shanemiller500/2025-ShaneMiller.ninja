@@ -328,6 +328,7 @@ export class Engine {
   /** shift-drag selection box (screen px) */
   private box: { x0: number; y0: number; x1: number; y1: number } | null = null;
   private hoverHint: { x: number; y: number; icon: string; label: string } | null = null;
+  private hoverItem: { x: number; y: number; radius: number } | null = null;
   private hintT = 0;
   /** where the last order points (a pulsing marker) */
   private marker: { x: number; y: number; t: number; icon: string } | null = null;
@@ -486,6 +487,7 @@ export class Engine {
       selection: this.selection,
       box: this.box,
       hint: this.hoverHint,
+      hoverItem: this.hoverItem,
       marker: this.marker,
       inspect: this.inspectRef,
       buildPreview: this.tool.id === "build" && this.hover ? { x: this.hover.x, y: this.hover.y, build: this.tool.build } : null,
@@ -1219,7 +1221,7 @@ export class Engine {
     if (body) return this.inspect({ kind: "carcass", id: body.id });
     const tx = Math.floor(x / TILE);
     const ty = Math.floor(y / TILE);
-    const sc = w.colony.scorpions.find((s) => Math.hypot(s.x - x, s.y - 10 - y) < 26);
+    const sc = w.colony.scorpions.find((s) => Math.hypot(s.x - x, s.y - (s.mount === "tower" ? 46 : s.mount === "wall" ? 26 : 10) - y) < 30);
     if (sc) return this.inspect({ kind: "scorpion", id: sc.id });
     const tower = w.tribe.towers.find((t) => x > t.tx * TILE - 6 && x < (t.tx + 2) * TILE + 6 && y > t.ty * TILE - 90 && y < (t.ty + 2) * TILE + 4);
     if (tower) return this.inspect({ kind: "tower", id: tower.id });
@@ -1351,11 +1353,14 @@ export class Engine {
     if (this.hintT > 0) return;
     this.hintT = 0.12;
     if (this.hover && !this.selection.length && this.tool.id === "hand" && !this.box) {
+      const target = this.hoverStructure(this.hover.x, this.hover.y);
+      this.hoverItem = target ? { x: target.x, y: target.y, radius: target.radius } : null;
       // nobody picked: still say what a dinosaur body is worth
       const body = carcassAt(this.world, this.hover.x, this.hover.y);
-      this.hoverHint = body && body.species ? { x: this.hover.x, y: this.hover.y, icon: "🔪", label: `${sp(body.species).nick} · ${STAGE_LABEL[carcassStage(body.carcass!)]} · ${carcassSummary(body)} — tap to harvest` } : null;
+      this.hoverHint = body && body.species ? { x: this.hover.x, y: this.hover.y, icon: "🔪", label: `${sp(body.species).nick} · ${STAGE_LABEL[carcassStage(body.carcass!)]} · ${carcassSummary(body)} — tap to harvest` } : target ? { x: this.hover.x, y: this.hover.y, icon: target.icon, label: target.label } : null;
       return;
     }
+    this.hoverItem = null;
     if (!this.hover || !this.selection.length || this.tool.id !== "hand" || this.box) {
       this.hoverHint = null;
       return;
@@ -1369,6 +1374,19 @@ export class Engine {
     }
     const cmd = inferCommand(this.world, people, x, y, picked);
     this.hoverHint = cmd ? { x, y, icon: cmd.icon, label: cmd.label } : null;
+  }
+
+  private hoverStructure(x: number, y: number) {
+    const w = this.world;
+    const sc = w.colony.scorpions.find((s) => Math.hypot(s.x - x, s.y - (s.mount === "tower" ? 46 : s.mount === "wall" ? 26 : 10) - y) < 30);
+    if (sc) return { x: sc.x, y: sc.y - (sc.mount === "tower" ? 46 : sc.mount === "wall" ? 26 : 10), radius: 27, icon: "🎯", label: "Scorpion · tap to inspect" };
+    const tower = w.tribe.towers.find((t) => x >= t.x - 34 && x <= t.x + 34 && y >= t.y - 90 && y <= t.y + 4);
+    if (tower) return { x: tower.x, y: tower.y - 46, radius: 36, icon: "🗼", label: "Watchtower · tap to inspect" };
+    const shelter = w.shelters.find((s) => Math.abs(s.x - x) < 32 && y < s.y + 8 && y > s.y - 58);
+    if (shelter) return { x: shelter.x, y: shelter.y - 18, radius: 34, icon: "🏠", label: "Home · tap to inspect" };
+    const building = w.colony.buildings.find((b) => x > b.tx * TILE && x < (b.tx + BUILDINGS[b.kind].w) * TILE && y > b.ty * TILE - 30 && y < b.y + 6);
+    if (building) return { x: building.x, y: building.y - 8, radius: BUILDINGS[building.kind].w * 18, icon: BUILDINGS[building.kind].icon, label: `${BUILDINGS[building.kind].name} · tap to inspect` };
+    return null;
   }
 
   /* ----------------------------- building actions ----------------------------- */
@@ -2004,6 +2022,7 @@ export class Engine {
 
   deepClearSelection() {
     this.deep.sel = null;
+    this.deep.selectMiner(0);
     this.emit({ type: "select" });
   }
 

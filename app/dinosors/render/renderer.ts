@@ -10,7 +10,7 @@ import { isBaby, sizeOf } from "../sim/dinos";
 import { P, type Particle } from "../sim/particles";
 import { PLANT_H, TALL } from "../sim/plants";
 import { hash2, valueNoise } from "../sim/rng";
-import { CHUNKS_X, CHUNK_TILES } from "../sim/terrain";
+import { CHUNKS_X, CHUNK_TILES, isWaterTile } from "../sim/terrain";
 import { MAP_H, MAP_W, T, TILE, WORLD_H, WORLD_W, type Dino, type Human, type Plant, type SpeciesDef } from "../sim/types";
 
 /** shade() returns rgb(); species looks want #hex */
@@ -55,6 +55,7 @@ export interface Overlay {
   box: { x0: number; y0: number; x1: number; y1: number } | null;
   /** what tapping here would make the selected people do */
   hint: { x: number; y: number; icon: string; label: string } | null;
+  hoverItem: { x: number; y: number; radius: number } | null;
   marker: { x: number; y: number; t: number; icon: string } | null;
   inspect: { kind: string; id: number } | null;
   buildPreview: { x: number; y: number; build: string } | null;
@@ -1899,6 +1900,7 @@ export class Renderer {
     }
     // build ghost: footprint in green (ok) or red (blocked)
     if (ov.buildPreview) this.buildGhost(c, ov.buildPreview, inv);
+    if (ov.hoverItem) this.inspectRing(c, ov.hoverItem.x, ov.hoverItem.y, ov.hoverItem.radius);
     // what a click would do right here
     if (ov.hint) {
       const { x, y, icon, label } = ov.hint;
@@ -1978,6 +1980,12 @@ export class Renderer {
       tw = fp.w;
       th = fp.h;
       ok = !w.colony.canPlace(w, bdef.kind, p.x, p.y);
+    } else if (p.build === "scorpion") {
+      const spot = w.colony.scorpionSpot(w, p.x, p.y);
+      tx = spot.tx;
+      ty = spot.ty;
+      tw = th = spot.mount === "tower" ? 2 : 1;
+      ok = !spot.why && Math.hypot(spot.x - w.camp.x, spot.y - w.camp.y) < 1600;
     } else if (p.build === "tower") {
       // show the 2x2 it will snap to, or each square that's blocked if there's no fit
       const spot = w.tribe.towerSpot(w, p.x, p.y);
@@ -2007,6 +2015,14 @@ export class Renderer {
     c.lineWidth = 2 * inv;
     c.fillRect(tx * TILE, ty * TILE, tw * TILE, th * TILE);
     c.strokeRect(tx * TILE, ty * TILE, tw * TILE, th * TILE);
+    if (p.build === "scorpion") {
+      const spot = w.colony.scorpionSpot(w, p.x, p.y);
+      const label = spot.why ?? (ok ? `Place on ${spot.mount === "tower" ? "tower" : spot.mount === "wall" ? "wall" : "ground"}` : "Too far from camp");
+      c.font = `700 ${12 * inv}px ui-rounded, system-ui, sans-serif`;
+      c.textAlign = "center";
+      c.fillStyle = ok ? "#bbf7d0" : "#fecaca";
+      c.fillText(label, (tx + tw / 2) * TILE, ty * TILE - 12 * inv);
+    }
   }
 
   /** Snow lying on the ground (per tile, soft edges). */
@@ -2038,13 +2054,31 @@ export class Renderer {
   private flatStructures(c: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
     const w = this.world;
     const night = 1 - w.daylight;
+    const bridges = new Set(w.colony.buildings.filter((b) => b.kind === "bridge").map((b) => b.ty * MAP_W + b.tx));
     for (const b of w.colony.buildings) {
       if (b.kind !== "path" && b.kind !== "bridge" && b.kind !== "pen" && b.kind !== "trap") continue;
       if (b.x < x0 - 80 || b.x > x1 + 80 || b.y < y0 - 60 || b.y > y1 + 60) continue;
       const def = BUILDINGS[b.kind];
+      let bridgeMask = 0;
+      if (b.kind === "bridge") {
+        const neighbours = [
+          [b.tx, b.ty - 1, 1], [b.tx + 1, b.ty, 2],
+          [b.tx, b.ty + 1, 4], [b.tx - 1, b.ty, 8],
+        ];
+        for (const [tx, ty, bit] of neighbours) {
+          if (bridges.has(ty * MAP_W + tx)) bridgeMask |= bit;
+        }
+        // A single shore tile still points toward the bank before the next
+        // bridge section is placed. Neighbouring bridges take precedence.
+        if (!bridgeMask) {
+          for (const [tx, ty, bit] of neighbours) {
+            if (tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H && !isWaterTile(w.terrain.tiles[ty * MAP_W + tx] as T)) bridgeMask |= bit;
+          }
+        }
+      }
       c.save();
       c.translate(b.x, b.y + (b.kind === "pen" ? 0 : TILE / 2));
-      drawBuilding(c, b, def.w, def.h, night > 0.5, this.t);
+      drawBuilding(c, b, def.w, def.h, night > 0.5, this.t, bridgeMask);
       c.restore();
     }
   }

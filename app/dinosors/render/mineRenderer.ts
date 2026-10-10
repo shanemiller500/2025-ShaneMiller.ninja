@@ -46,6 +46,8 @@ export interface DeepOverlay {
   /** where a building would go (build mode) */
   ghost: { kind: DeepKind; x: number; y: number; ok: boolean } | null;
   crew: CrewLook[];
+  selectedMiners?: number[];
+  lantern?: boolean;
   /** painting mode (shows a hint on hover) */
   mode: string;
   sel: number | null;
@@ -59,6 +61,7 @@ export interface DeepOverlay {
 const CONTENT_LOOK: Partial<Record<Exclude<Content, null>, { color: string; glow: string; icon: string }>> = {
   copper: { color: "#3fbf9f", glow: "90,230,190", icon: "🟠" },
   iron: { color: "#b5654a", glow: "220,120,90", icon: "⛓️" },
+  coal: { color: "#272a2f", glow: "105,120,140", icon: "⚫" },
   gold: { color: "#f6cf4a", glow: "255,215,90", icon: "🪙" },
   quartz: { color: "#e6f6fb", glow: "220,245,255", icon: "💠" },
   crystal: { color: "#8fe3ff", glow: "140,230,255", icon: "🔮" },
@@ -75,6 +78,7 @@ const CONTENT_LOOK: Partial<Record<Exclude<Content, null>, { color: string; glow
   geode: { color: "#8fe3ff", glow: "140,230,255", icon: "💠" },
   core: { color: "#a77fe0", glow: "255,140,110", icon: "☄️" },
   fossil: { color: "#efe4c8", glow: "255,245,220", icon: "🦴" },
+  artifact: { color: "#cda974", glow: "220,175,110", icon: "🏺" },
   spring: { color: "#4fb6ff", glow: "90,180,255", icon: "💧" },
   caveIn: { color: "#ff9d5c", glow: "255,150,90", icon: "⚠️" },
   gas: { color: "#9be36b", glow: "150,230,110", icon: "☁️" },
@@ -402,6 +406,41 @@ export class MineRenderer {
       g.stroke();
       return;
     }
+    if (c === "artifact") {
+      g.fillStyle = "#8c6949";
+      g.fillRect(px + 10, py + 8, 13, 17);
+      g.fillStyle = color;
+      g.fillRect(px + 12, py + 10, 9, 13);
+      g.strokeStyle = "#fae6b7";
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(px + 14, py + 14);
+      g.lineTo(px + 18, py + 14);
+      g.lineTo(px + 16, py + 19);
+      g.stroke();
+      return;
+    }
+    if (c === "gold" || c === "silver") {
+      // Irregular metallic nuggets are easy to tell apart from stone and crystal.
+      const light = c === "gold" ? "#fff3ae" : "#ffffff";
+      const shadow = c === "gold" ? "#8f5b17" : "#667b90";
+      for (let k = 0; k < 3; k++) {
+        const nx = px + 7 + hash2(x * 13 + k, y, s + 71) * 18;
+        const ny = py + 7 + hash2(x, y * 13 + k, s + 71) * 18;
+        const r = 3 + hash2(k, x + y, s + 19) * 3;
+        g.fillStyle = shadow;
+        g.beginPath();
+        g.ellipse(nx + 1, ny + 1, r + 2, r, -0.35, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = color;
+        g.beginPath();
+        g.ellipse(nx, ny, r + 1, r - 0.5, -0.35, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = light;
+        g.fillRect(nx - r * 0.35, ny - r * 0.5, Math.max(1, r * 0.7), 1.5);
+      }
+      return;
+    }
     // ore: a few faceted nuggets / a vein
     for (let k = 0; k < 4; k++) {
       const cx = px + 6 + hash2(x * 9 + k, y, s + 5) * 20;
@@ -444,14 +483,74 @@ export class MineRenderer {
 
     this.drawMagma(c, x0, x1, y0, y1);
     this.drawLive(c, mine, x0, x1, y0, y1);
+    for (const [i, find] of Array.from(mine.loose)) {
+      const x = i % MINE_W;
+      const y = Math.floor(i / MINE_W);
+      if (x < x0 || x > x1 || y < y0 || y > y1 || !mine.seen[i] || mine.cells[i] !== M.Open) continue;
+      const px = x * CELL + 16;
+      const py = y * CELL + 24;
+      const r = find.size === "giant" ? 10 : find.size === "large" ? 8 : find.size === "small" ? 6 : 4;
+      c.fillStyle = find.metal === "gold" ? "#a36d1b" : "#66798d";
+      c.beginPath();
+      c.ellipse(px + 1, py + 2, r + 2, r * 0.62, -0.2, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = find.metal === "gold" ? "#f9d361" : "#e2eaf2";
+      c.beginPath();
+      c.ellipse(px, py, r, r * 0.6, -0.2, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#ffffff";
+      c.fillRect(px - r * 0.3, py - r * 0.35, Math.max(1, r * 0.6), 1.5);
+    }
     this.drawSupports(c, mine, x0, x1, y0, y1);
     for (const b of mine.builds) if (b.x <= x1 + 1 && b.x + DEEP_DEFS[b.kind].w >= x0 - 1 && b.y <= y1 + 1 && b.y + DEEP_DEFS[b.kind].h >= y0 - 1) this.drawDeepBuilding(c, b, ov.stock);
+    this.drawDarkness(c, mine, ov, x0, x1, y0, y1);
     if (ov.ghost) this.drawGhost(c, ov.ghost);
     this.drawOrders(c, mine, x0, x1, y0, y1);
+    for (const worker of ov.crew) {
+      if (worker.jobCell === null || worker.mode !== "dig" || worker.progress <= 0) continue;
+      const px = (worker.jobCell % MINE_W) * CELL;
+      const py = Math.floor(worker.jobCell / MINE_W) * CELL;
+      c.fillStyle = `rgba(8,6,5,${Math.min(0.5, worker.progress * 0.5)})`;
+      c.fillRect(px + 2, py + 2, CELL - 4, CELL - 4);
+      c.strokeStyle = "rgba(242,216,166,0.7)";
+      c.lineWidth = 1 + worker.progress * 2;
+      c.beginPath();
+      c.moveTo(px + 9, py + 4);
+      c.lineTo(px + 13 + worker.progress * 12, py + 15);
+      c.lineTo(px + 8, py + 27);
+      c.moveTo(px + 22, py + 2);
+      c.lineTo(px + 20 - worker.progress * 9, py + 14);
+      c.stroke();
+      c.fillStyle = "#e6c991";
+      c.fillRect(px + 3, py + CELL - 4, (CELL - 6) * worker.progress, 2);
+    }
     this.drawLift(c, mine);
     this.drawCrates(c, mine);
+    for (const find of mine.finds) {
+      const x = (find.cell % MINE_W + 0.5) * CELL;
+      const y = (Math.floor(find.cell / MINE_W) + 0.5) * CELL;
+      c.save();
+      c.globalAlpha = Math.max(0, 1 - find.t / 1.5);
+      c.fillStyle = find.metal === "gold" ? "#ffe477" : "#e3f4ff";
+      for (let k = 0; k < 8; k++) {
+        const a = k * Math.PI / 4 + hash2(k, find.cell, mine.seed) * 0.35;
+        const dist = find.t * (18 + k * 2);
+        const size = k % 3 === 0 ? 4 : 2;
+        c.fillRect(x + Math.cos(a) * dist - size / 2, y + Math.sin(a) * dist - size / 2 - find.t * 12, size, size);
+      }
+      c.restore();
+    }
     for (const cr of mine.critters) this.drawTroglodon(c, cr);
-    for (const m of ov.crew) this.drawMiner(c, m);
+    for (const m of ov.crew) {
+      if (ov.selectedMiners?.includes(m.id)) {
+        c.strokeStyle = "#67e8f9";
+        c.lineWidth = 2;
+        c.beginPath();
+        c.ellipse(m.x * CELL, m.y * CELL + 12, 14, 5, 0, 0, Math.PI * 2);
+        c.stroke();
+      }
+      this.drawMiner(c, m);
+    }
     this.drawCharges(c, mine);
     this.drawRuler(c, mine, cam, y0, y1);
     this.drawPings(c, ov.pings);
@@ -480,6 +579,24 @@ export class MineRenderer {
     if (ov.fade > 0) {
       c.fillStyle = `rgba(0,0,0,${Math.min(1, ov.fade)})`;
       c.fillRect(0, 0, this.w, this.h);
+    }
+  }
+
+  private drawDarkness(c: CanvasRenderingContext2D, mine: Mine, ov: DeepOverlay, x0: number, x1: number, y0: number, y1: number) {
+    const lamps = mine.builds.filter((b) => (b.kind === "lamp" || b.kind === "torch") && b.built >= 1 && b.x >= x0 - 6 && b.x <= x1 + 6 && b.y >= y0 - 6 && b.y <= y1 + 6);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const i = idx(x, y);
+      if (!mine.seen[i] || mine.cells[i] === M.Magma) continue;
+      let brightness = x === LIFT_X && y <= mine.liftMax ? 0.7 : y <= 2 ? 0.45 : 0.06;
+      for (const lamp of lamps) brightness = Math.max(brightness, 1 - Math.hypot(lamp.x - x, lamp.y - y) / (lamp.kind === "torch" ? 4 : LAMP_REACH + 1));
+      for (const miner of ov.crew) brightness = Math.max(brightness, 1 - Math.hypot(miner.x - x - 0.5, miner.y - y - 0.5) / (ov.lantern ? 5 : 2));
+      const content = mine.known.get(i);
+      if (mine.seen[i] === 2 && (content === "crystal" || content === "geode")) brightness = Math.max(brightness, 0.65);
+      const alpha = Math.max(0, Math.min(0.78, (1 - brightness) * 0.73));
+      if (alpha > 0.02) {
+        c.fillStyle = `rgba(1,4,9,${alpha})`;
+        c.fillRect(x * CELL, y * CELL, CELL, CELL);
+      }
     }
   }
 
@@ -885,6 +1002,35 @@ export class MineRenderer {
         c.fillRect(X + W - 9, Y + H / 2 - 2, 4, 4);
         break;
       }
+      case "gallery": {
+        c.fillStyle = "#6b5137";
+        c.fillRect(X + 6, floor - 9, W - 12, 4);
+        c.fillRect(X + 13, floor - 19, 3, 10);
+        c.fillRect(X + W - 16, floor - 19, 3, 10);
+        c.strokeStyle = "#e6ddc8";
+        c.lineWidth = 4;
+        c.lineCap = "round";
+        c.beginPath();
+        c.moveTo(X + 20, Y + 28);
+        c.lineTo(X + 72, Y + 28);
+        for (let k = 0; k < 5; k++) {
+          const bx = X + 29 + k * 9;
+          c.moveTo(bx, Y + 28);
+          c.quadraticCurveTo(bx - 3, Y + 14, bx - 8, Y + 16);
+          c.moveTo(bx, Y + 28);
+          c.quadraticCurveTo(bx + 1, Y + 40, bx + 6, Y + 39);
+        }
+        c.stroke();
+        c.fillStyle = "#f0e5cb";
+        c.beginPath();
+        c.ellipse(X + 16, Y + 25, 10, 8, -0.2, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = "#3a302a";
+        c.fillRect(X + 12, Y + 21, 3, 3);
+        c.fillStyle = "#c8a16c";
+        c.fillRect(X + 16, floor - 7, W - 32, 2);
+        break;
+      }
       case "mushroom": {
         // glowing mushrooms, growing toward the next harvest
         const g = 0.35 + b.grow * 0.65;
@@ -906,6 +1052,26 @@ export class MineRenderer {
         }
         c.fillStyle = "#4a3828";
         c.fillRect(X + 3, floor - 4, W - 6, 3);
+        break;
+      }
+      case "torch": {
+        const r = 3.5 * CELL;
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        const glow = c.createRadialGradient(X + 16, Y + 9, 0, X + 16, Y + 9, r);
+        glow.addColorStop(0, `rgba(255,170,65,${0.3 + Math.sin(t * 9) * 0.04})`);
+        glow.addColorStop(1, "rgba(255,170,65,0)");
+        c.fillStyle = glow;
+        c.fillRect(X + 16 - r, Y + 9 - r, r * 2, r * 2);
+        c.restore();
+        c.fillStyle = "#8c6037";
+        c.fillRect(X + 14, Y + 12, 4, 19);
+        c.fillStyle = "#ffb54e";
+        c.beginPath();
+        c.ellipse(X + 16 + Math.sin(t * 8) * 1.5, Y + 8, 5, 8, 0, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = "#fff2b4";
+        c.fillRect(X + 15, Y + 4, 2, 6);
         break;
       }
       case "lamp": {

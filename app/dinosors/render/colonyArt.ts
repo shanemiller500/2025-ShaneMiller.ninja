@@ -1050,7 +1050,7 @@ export function drawScaffold(c: CanvasRenderingContext2D, k: number) {
 
 /* ------------------------------ buildings ------------------------------ */
 
-export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number, h: number, night: boolean, t: number) {
+export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number, h: number, night: boolean, t: number, bridgeMask = 0) {
   const built = Math.max(0, Math.min(1, b.built));
   const W = w * T;
   if (built < 1) {
@@ -1323,23 +1323,52 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
       break;
     }
     case "bridge": {
+      // A bridge occupies the whole water tile. Its boards run across the
+      // direction of travel; connected sides stay open at bends and junctions.
+      const north = (bridgeMask & 1) !== 0;
+      const east = (bridgeMask & 2) !== 0;
+      const south = (bridgeMask & 4) !== 0;
+      const west = (bridgeMask & 8) !== 0;
+      const horizontal = east || west;
+      const vertical = north || south;
       c.fillStyle = "#9b7448";
-      c.fillRect(-T / 2, -T / 2 - 4, T, T * 0.75);
+      c.fillRect(-T / 2, -T, T, T);
       c.strokeStyle = "rgba(60,40,22,0.6)";
       c.lineWidth = 1;
-      for (let x = -T / 2 + 4; x < T / 2; x += 5) {
-        c.beginPath();
-        c.moveTo(x, -T / 2 - 4);
-        c.lineTo(x, T / 4 - 4);
-        c.stroke();
+      if (!vertical) {
+        for (let x = -T / 2 + 4; x < T / 2; x += 5) {
+          c.beginPath();
+          c.moveTo(x, -T);
+          c.lineTo(x, 0);
+          c.stroke();
+        }
+      } else {
+        for (let y = -T + 4; y < 0; y += 5) {
+          c.beginPath();
+          c.moveTo(-T / 2, y);
+          c.lineTo(T / 2, y);
+          c.stroke();
+        }
       }
       c.strokeStyle = "#5e3f24";
       c.lineWidth = 2;
       c.beginPath();
-      c.moveTo(-T / 2, -T / 2 - 4);
-      c.lineTo(T / 2, -T / 2 - 4);
-      c.moveTo(-T / 2, T / 4 - 4);
-      c.lineTo(T / 2, T / 4 - 4);
+      if (horizontal && vertical) {
+        if (!north) { c.moveTo(-T / 2, -T + 1); c.lineTo(T / 2, -T + 1); }
+        if (!east) { c.moveTo(T / 2 - 1, -T); c.lineTo(T / 2 - 1, 0); }
+        if (!south) { c.moveTo(-T / 2, -1); c.lineTo(T / 2, -1); }
+        if (!west) { c.moveTo(-T / 2 + 1, -T); c.lineTo(-T / 2 + 1, 0); }
+      } else if (vertical) {
+        c.moveTo(-T / 2 + 1, -T);
+        c.lineTo(-T / 2 + 1, 0);
+        c.moveTo(T / 2 - 1, -T);
+        c.lineTo(T / 2 - 1, 0);
+      } else {
+        c.moveTo(-T / 2, -T + 1);
+        c.lineTo(T / 2, -T + 1);
+        c.moveTo(-T / 2, -1);
+        c.lineTo(T / 2, -1);
+      }
       c.stroke();
       break;
     }

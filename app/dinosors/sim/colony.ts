@@ -216,12 +216,12 @@ export class Colony {
     return this.scorpions.find((s) => s.tx === tx && s.ty === ty) ?? null;
   }
 
-  addScorpion(w: World, x: number, y: number): Scorpion | string {
-    const tx = Math.floor(x / TILE);
-    const ty = Math.floor(y / TILE);
-    if (this.scorpions.some((s) => Math.abs(s.tx - tx) <= 1 && Math.abs(s.ty - ty) <= 1)) return "There's a Scorpion right there.";
-    const wl = w.tribe.wallAt(tx, ty);
-    const tower = w.tribe.towers.find((t) => tx >= t.tx && tx <= t.tx + 1 && ty >= t.ty && ty <= t.ty + 1);
+  /** The visible tower, including its raised platform, snaps to one mount. */
+  scorpionSpot(w: World, x: number, y: number) {
+    const tower = w.tribe.towers.find((t) => x >= t.x - 34 && x <= t.x + 34 && y >= t.y - 90 && y <= t.y + 4);
+    const tx = tower ? tower.tx : Math.floor(x / TILE);
+    const ty = tower ? tower.ty : Math.floor(y / TILE);
+    const wl = tower ? null : w.tribe.wallAt(tx, ty);
     let mount: Scorpion["mount"] = "ground";
     if (tower) mount = "tower";
     else if (wl && wl.part !== "stairs") mount = "wall";
@@ -229,7 +229,23 @@ export class Colony {
       if (wl) return "Not on the stairs!";
       if (!this.footing(w, tx, ty)) return "It needs solid ground.";
       if (this.occupied(w).has(ty * MAP_W + tx)) return "Something is already there.";
+    let why: string | null = null;
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) why = "Outside the world.";
+    else if (this.scorpions.some((s) => Math.abs(s.tx - tx) <= 1 && Math.abs(s.ty - ty) <= 1)) why = "There's a Scorpion right there.";
+    else if (!tower && (!wl || wl.part === "stairs")) {
+      if (wl) why = "Not on the stairs!";
+      const t = w.terrain.tiles[ty * MAP_W + tx] as T;
+      if (!why && (!isWalkTile(t) || isWaterTile(t) || t === T.Tar)) why = "It needs solid ground.";
+      if (!why && this.occupied(w).has(ty * MAP_W + tx)) why = "Something is already there.";
     }
+    return { x: tower ? tower.x : x, y: tower ? tower.y : y, tx, ty, mount, why };
+  }
+
+  addScorpion(w: World, x: number, y: number): Scorpion | string {
+    const spot = this.scorpionSpot(w, x, y);
+    if (spot.why) return spot.why;
+    const { tx, ty, mount } = spot;
+    const tower = mount === "tower" ? w.tribe.towers.find((t) => t.tx === tx && t.ty === ty) : null;
     const s: Scorpion = {
       id: w.nextId(),
       x: tower ? tower.x : tx * TILE + TILE / 2,
@@ -543,14 +559,15 @@ export class Colony {
     if (this.refineT > 0) return;
     this.refineT = 7;
     const s = w.camp.stock;
-    if (s.wood < 1) return;
+    if (s.coal < 1 && s.wood < 1) return;
     const pairs: [Resource, Resource][] = [["gold", "goldBar"], ["silver", "silverBar"], ["copper", "copperBar"]];
     // keep a little raw copper for other recipes; smelt whatever there's most of
     const pick = pairs.filter(([raw]) => s[raw] >= (raw === "copper" ? 6 : 2)).sort((a, b) => s[b[0]] - s[a[0]])[0];
     if (!pick) return;
     const [raw, bar] = pick;
     s[raw] -= 2;
-    s.wood -= 1;
+    if (s.coal > 0) s.coal -= 1;
+    else s.wood -= 1;
     s[bar] += 1;
     const r = refs[0];
     w.particles.burst(P.Spark, r.x + 20, r.y - 30, 8, 60, { z: 20, vz: 60, g: 200, size: 2, max: 0.6, color: "#ffcf6b" });
