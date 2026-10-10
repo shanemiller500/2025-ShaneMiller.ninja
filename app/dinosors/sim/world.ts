@@ -92,6 +92,9 @@ export interface Poi {
 
 const MAX_DINOS = 110;
 
+/** How many cave people a new game starts with (the headless tests use the original, bigger tribe). */
+export const START = { people: 3 };
+
 export class World {
   seed: number;
   rng: Rng;
@@ -244,10 +247,12 @@ export class World {
       this.addEgg(s, LM.nest.x * TILE + Math.cos(a) * 50, LM.nest.y * TILE + Math.sin(a) * 30, 0, 0, 40 + this.rng() * 60);
     }
 
-    // cave people: start small, one family (two grown-ups + a kid); the tribe grows from there
-    const fam = this.nextId();
-    for (let i = 0; i < 3; i++) {
-      addHuman(this, this.camp.x + (this.rng() - 0.5) * 160, this.camp.y + (this.rng() - 0.5) * 80, i >= 2, { family: fam });
+    // cave people: start small (by default one family, two grown-ups + a kid); the tribe grows from there
+    const n = START.people;
+    const fams = Array.from({ length: Math.max(1, Math.ceil(n / 3)) }, () => this.nextId());
+    const adults = n <= 3 ? Math.max(1, n - 1) : Math.ceil(n * 0.62);
+    for (let i = 0; i < n; i++) {
+      addHuman(this, this.camp.x + (this.rng() - 0.5) * 160, this.camp.y + (this.rng() - 0.5) * 80, i >= adults, { family: fams[i % fams.length] });
     }
     this.camp.stock.stick = 3;
     this.camp.stock.stone = 2;

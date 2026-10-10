@@ -225,17 +225,13 @@ export class Colony {
     let mount: Scorpion["mount"] = "ground";
     if (tower) mount = "tower";
     else if (wl && wl.part !== "stairs") mount = "wall";
-    else {
-      if (wl) return "Not on the stairs!";
-      if (!this.footing(w, tx, ty)) return "It needs solid ground.";
-      if (this.occupied(w).has(ty * MAP_W + tx)) return "Something is already there.";
     let why: string | null = null;
     if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) why = "Outside the world.";
     else if (this.scorpions.some((s) => Math.abs(s.tx - tx) <= 1 && Math.abs(s.ty - ty) <= 1)) why = "There's a Scorpion right there.";
     else if (!tower && (!wl || wl.part === "stairs")) {
       if (wl) why = "Not on the stairs!";
-      const t = w.terrain.tiles[ty * MAP_W + tx] as T;
-      if (!why && (!isWalkTile(t) || isWaterTile(t) || t === T.Tar)) why = "It needs solid ground.";
+      // firm ground, or the deck of a finished bridge
+      if (!why && !this.footing(w, tx, ty)) why = "It needs solid ground.";
       if (!why && this.occupied(w).has(ty * MAP_W + tx)) why = "Something is already there.";
     }
     return { x: tower ? tower.x : x, y: tower ? tower.y : y, tx, ty, mount, why };
