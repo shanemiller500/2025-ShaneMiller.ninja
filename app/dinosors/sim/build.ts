@@ -10,7 +10,7 @@ import { BUILDINGS, HOUSING, SCORPION_TIERS, TENT_STAGES, buildingCost, building
 import { PYRAMID_STAGES } from "../data/civ";
 import { SHELTER_STAGES } from "../data/facts";
 import { P } from "./particles";
-import { MAP_W, TILE, type Resource, type Shelter, type TechId, type Wall } from "./types";
+import { MAP_W, TILE, type Resource, type Shelter, type TechId, type Tower, type Wall } from "./types";
 import type { World } from "./world";
 
 export type SiteKind = "wall" | "tower" | "shelter" | "upgrade" | "building" | "scorpion";
@@ -66,6 +66,24 @@ export const TOWER_STAGES: { need: Resource; n: number }[] = [
   { need: "wood", n: 2 },
   { need: "stone", n: 2 },
 ];
+/** Once the tribe knows stone walls, towers go up in stone (same number of stages). */
+export const STONE_TOWER_STAGES: { need: Resource; n: number }[] = [
+  { need: "stone", n: 3 },
+  { need: "stone", n: 3 },
+  { need: "stone", n: 2 },
+];
+/** Rebuilding a finished wooden tower in stone. */
+export const STONE_TOWER_UP = { need: "stone" as Resource, n: 6 };
+export const towerStages = (t: Tower) => (t.stone ? STONE_TOWER_STAGES : TOWER_STAGES);
+export const towerMaxHp = (t: Tower) => (t.stone ? 900 : 400);
+
+/** Stone towers come with a Scorpion: plan one on top if there isn't one yet. */
+export function armTower(w: World, t: Tower) {
+  if (!t.stone || !w.camp.learned.has("scorpion")) return;
+  if (w.colony.scorpions.some((s) => s.tx >= t.tx && s.tx <= t.tx + 1 && s.ty >= t.ty && s.ty <= t.ty + 1)) return;
+  const s = w.colony.addScorpion(w, t.x, t.y);
+  if (typeof s !== "string") w.toast("🎯", "A Scorpion is planned on top of the stone tower!", t.x, t.y - 60);
+}
 
 export function stagesOf(s: Shelter) {
   return s.plan === "tent" ? TENT_STAGES : SHELTER_STAGES;
@@ -95,9 +113,14 @@ export function sites(w: World): Site[] {
     out.push({ kind: "wall", id: wl.id, x, y, sx: x, sy: y + 20, need: pending && wl.have < n ? r : null, repair: !pending, locked });
   }
   for (const t of w.tribe.towers) {
-    const hurt = t.stage >= TOWER_STAGES.length && t.hp < 300;
-    if (t.stage >= TOWER_STAGES.length && !hurt) continue;
-    const st = TOWER_STAGES[t.stage];
+    const done = t.stage >= towerStages(t).length;
+    if (done && t.up) {
+      out.push({ kind: "tower", id: t.id, x: t.x, y: t.y, sx: t.x, sy: t.y + 22, need: t.have < STONE_TOWER_UP.n ? STONE_TOWER_UP.need : null, repair: false, locked: L.has("stonewall") ? null : "stonewall" });
+      continue;
+    }
+    const hurt = done && t.hp < towerMaxHp(t) * 0.75;
+    if (done && !hurt) continue;
+    const st = towerStages(t)[t.stage];
     out.push({ kind: "tower", id: t.id, x: t.x, y: t.y, sx: t.x, sy: t.y + 22, need: st && t.have < st.n ? st.need : null, repair: !st, locked: L.has("tower") ? null : "tower" });
   }
   for (const s of w.shelters) {
@@ -166,7 +189,14 @@ export function deliver(w: World, s: Site, r: Resource, n: number, hx: number, h
     }
     case "tower": {
       const t = w.tribe.towers.find((x) => x.id === s.id);
-      const st = t && TOWER_STAGES[t.stage];
+      if (t && t.up && t.stage >= towerStages(t).length) {
+        if (r === STONE_TOWER_UP.need) {
+          used = Math.min(n, STONE_TOWER_UP.n - t.have);
+          t.have += used;
+        }
+        break;
+      }
+      const st = t && towerStages(t)[t.stage];
       if (t && st && st.need === r) {
         used = Math.min(n, st.n - t.have);
         t.have += used;
@@ -313,20 +343,34 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
     case "tower": {
       const t = w.tribe.towers.find((x) => x.id === s.id);
       if (!t) return "done";
-      chips(w, t.x, t.y - 30, "#a07a4a", dt);
+      chips(w, t.x, t.y - 30, t.stone || t.up ? "#9a948a" : "#a07a4a", dt);
       if (s.repair) {
-        t.hp = Math.min(400, t.hp + dt * 40);
-        return t.hp >= 400 ? "done" : "work";
+        t.hp = Math.min(towerMaxHp(t), t.hp + dt * 40);
+        return t.hp >= towerMaxHp(t) ? "done" : "work";
+      }
+      if (t.up) {
+        // rebuild the wooden tower in stone (guards keep using it meanwhile)
+        if (!progress(w, s, dt, 6)) return "work";
+        t.up = false;
+        t.stone = true;
+        t.have = 0;
+        t.hp = towerMaxHp(t);
+        w.tribe.version++;
+        w.sfx("build", t.x, t.y, 0.9);
+        w.toast("🏰", "Stone tower! Much tougher than wood.", t.x, t.y);
+        armTower(w, t);
+        return "done";
       }
       if (!progress(w, s, dt, 3.5)) return "work";
       t.stage++;
       t.have = 0;
       w.tribe.version++;
       w.sfx("build", t.x, t.y, 0.8);
-      if (t.stage >= TOWER_STAGES.length) {
-        t.hp = 400;
-        w.toast("🗼", "Watchtower finished! Guards climb up to see further and shoot better. Put a Scorpion on top!", t.x, t.y);
+      if (t.stage >= towerStages(t).length) {
+        t.hp = towerMaxHp(t);
+        w.toast(t.stone ? "🏰" : "🗼", t.stone ? "Stone tower finished! Guards climb up to see further and shoot better." : "Watchtower finished! Guards climb up to see further and shoot better. Put a Scorpion on top!", t.x, t.y);
         w.celebrate("Tower!");
+        armTower(w, t);
         return "done";
       }
       return "done";

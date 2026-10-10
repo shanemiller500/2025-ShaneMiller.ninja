@@ -109,6 +109,8 @@ export interface BuildDef extends Opt<BuildOpt> {
   tip: string;
   /** drag to paint a line of them */
   line?: boolean;
+  /** what it costs once the tribe builds it in stone (gates, stairs, towers) */
+  stoneCost?: Cost;
 }
 
 const hutCost = () => SHELTER_STAGES.reduce<Cost>((c, s) => ({ ...c, [s.need]: (c[s.need] ?? 0) + s.n }), {});
@@ -118,14 +120,14 @@ const bld = (kind: BuildingKind, cat: BuildDef["cat"], line = false): BuildDef =
 export const BUILD_DEFS: BuildDef[] = [
   { value: "tent", icon: HOUSING[0].icon, label: "Tent", cat: "homes", cost: tentCost(), tip: `Quick shelter for ${HOUSING[0].cap}. Upgrade it later: tent → hut → house → stone house.` },
   { value: "hut", icon: HOUSING[2].icon, label: "Hut", cat: "homes", cost: hutCost(), tech: "axe", tip: `A wooden hut for ${HOUSING[2].cap}. Tap a finished home to upgrade it.` },
-  { value: "campfire", icon: "🔥", label: "Campfire", cat: "homes", cost: { stick: 2 }, tech: "fire", tip: "Warmth, light and cooking. Scares small dinos." },
+  { value: "campfire", icon: "🔥", label: "Campfire", cat: "homes", cost: { stick: 2 }, tech: "fire", tip: "Warmth, light and cooking. Scares small dinos. Once you can smelt iron, fires burn in iron baskets: safe on wooden decks + bridges." },
   bld("healer", "homes"),
   { value: "wall", icon: "🪵", label: "Wood wall", cat: "defense", cost: { stick: 2 }, tech: "palisade", tip: "Drag to draw. Dinos can't walk through (but can bash it).", line: true },
   { value: "stonewall", icon: "🧱", label: "Stone wall", cat: "defense", cost: { stone: 2 }, tech: "stonewall", tip: "Drag to draw. Much tougher. Draw over wood walls to upgrade them.", line: true },
-  { value: "gate", icon: "🚪", label: "Gate", cat: "defense", cost: { wood: 2 }, tech: "palisade", tip: "Put it in a wall. People use the side door; dinos only get through when it's open. Closes itself when danger comes." },
+  { value: "gate", icon: "🚪", label: "Gate", cat: "defense", cost: { wood: 2 }, stoneCost: { stone: 3 }, tech: "palisade", tip: "Put it in a wall. People use the side door; dinos only get through when it's open. Closes itself when danger comes." },
   { value: "bonegate", icon: "🦴", label: "Bone gate", cat: "defense", cost: { bone: 5 }, tech: "palisade", tip: "The grand entrance: giant crossed tusks, a dino rib-cage arch to walk through and bone doors that shut dinos out. Tap a gap, a wall or an old gate to put one in." },
-  { value: "stairs", icon: "🪜", label: "Stairs", cat: "defense", cost: { stick: 2 }, tech: "palisade", tip: "Next to a wall: lets people climb up and defend from the walkway." },
-  { value: "tower", icon: "🗼", label: "Watchtower", cat: "defense", cost: { wood: 4, stone: 2 }, tech: "tower", tip: "Guards climb up to see + shoot further. Joins up with walls." },
+  { value: "stairs", icon: "🪜", label: "Stairs", cat: "defense", cost: { stick: 2 }, stoneCost: { stone: 2 }, tech: "palisade", tip: "Next to a wall: lets people climb up and defend from the walkway." },
+  { value: "tower", icon: "🗼", label: "Watchtower", cat: "defense", cost: { wood: 4, stone: 2 }, stoneCost: { stone: 8 }, tech: "tower", tip: "Guards climb up to see + shoot further. Joins up with walls. Once you know stone walls, towers go up in stone with a Scorpion on top: tap an old wooden tower with this to rebuild it in stone." },
   { value: "scorpion", icon: "🎯", label: "Scorpion", cat: "defense", cost: SCORPION_TIERS[0].cost, tech: "scorpion", tip: "A giant crossbow. Put it on a wall, a tower or the ground. Someone has to crew it." },
   bld("trap", "defense"),
   bld("spikes", "defense", true),
@@ -165,6 +167,35 @@ export const BUILD_DEFS: BuildDef[] = [
 ];
 
 export const BUILD_BY_ID = Object.fromEntries(BUILD_DEFS.map((b) => [b.value, b])) as Record<BuildOpt, BuildDef>;
+
+/** Has the tribe invented (and researched) everything this needs? */
+export function buildUnlocked(b: BuildDef, learned: (t: TechId) => boolean, civ: (c: CivTechId) => boolean) {
+  return (!b.tech || learned(b.tech)) && (!b.civ || civ(b.civ));
+}
+
+/** Old versions give way once a better one is known (best first): wood → stone → polygon walls, tents → huts. */
+const BETTER: Partial<Record<BuildOpt, BuildOpt[]>> = {
+  wall: ["polywall", "stonewall"],
+  stonewall: ["polywall"],
+  gate: ["polygate"],
+  tent: ["hut"],
+};
+
+/** The version of this build option the tribe should actually make now. */
+export function bestBuild(opt: BuildOpt, learned: (t: TechId) => boolean, civ: (c: CivTechId) => boolean): BuildOpt {
+  for (const o of BETTER[opt] ?? []) if (buildUnlocked(BUILD_BY_ID[o], learned, civ)) return o;
+  return opt;
+}
+
+/** Shown in the build menu: unlocked, and not replaced by a better version. */
+export function buildVisible(b: BuildDef, learned: (t: TechId) => boolean, civ: (c: CivTechId) => boolean) {
+  return buildUnlocked(b, learned, civ) && bestBuild(b.value, learned, civ) === b.value;
+}
+
+/** What it costs right now (gates, stairs + towers are stone once stone walls are known). */
+export function buildCost(b: BuildDef, learned: (t: TechId) => boolean): Cost {
+  return b.stoneCost && learned("stonewall") ? b.stoneCost : b.cost;
+}
 export const BUILD_OPTS: Opt<BuildOpt>[] = BUILD_DEFS;
 
 export interface ToolDef {
@@ -376,8 +407,11 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
 
 function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): boolean {
   const c = w.camp;
-  const tile = w.terrain.tileAt(x, y);
-  const def = BUILD_BY_ID[tool.build];
+  // an old option (wood wall, tent…) builds its better version once that's known
+  const opt = bestBuild(tool.build, (t) => c.learned.has(t), (k) => w.civ.has(k));
+  const def = BUILD_BY_ID[opt];
+  // solid footing: dry land, or the deck of a finished bridge
+  const footing = w.colony.footing(w, Math.floor(x / TILE), Math.floor(y / TILE));
   const near = Math.hypot(x - c.x, y - c.y) < 1600;
   if (!near) {
     if (!drag) hint(w, "🏕️", "Build closer to camp so the tribe can reach it.");
@@ -392,7 +426,7 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
     return false;
   }
   if (drag && !def.line) return false;
-  switch (tool.build) {
+  switch (opt) {
     case "levitate": {
       if (drag) return false;
       const why = w.civ.levitate(w, x, y);
@@ -430,8 +464,9 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
     case "polygate":
     case "gate":
     case "stairs": {
-      const kind: WallKind = tool.build === "polywall" || tool.build === "polygate" ? "polygon" : tool.build === "stonewall" ? "stone" : c.learned.has("stonewall") && tool.build !== "wall" && w.camp.stock.stone > w.camp.stock.stick ? "stone" : "palisade";
-      const part = tool.build === "gate" || tool.build === "polygate" ? "gate" : tool.build === "stairs" ? "stairs" : "wall";
+      // once stone walls are known everything here is built in stone
+      const kind: WallKind = opt === "polywall" || opt === "polygate" ? "polygon" : opt === "stonewall" || c.learned.has("stonewall") ? "stone" : "palisade";
+      const part = opt === "gate" || opt === "polygate" ? "gate" : opt === "stairs" ? "stairs" : "wall";
       const tx = Math.floor(x / TILE);
       const ty = Math.floor(y / TILE);
       if (part === "stairs" && ![w.tribe.wallAt(tx + 1, ty), w.tribe.wallAt(tx - 1, ty), w.tribe.wallAt(tx, ty + 1), w.tribe.wallAt(tx, ty - 1)].some((o) => o && o.part !== "stairs")) {
@@ -447,9 +482,20 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
       return !!wl;
     }
     case "tower": {
+      // tapping an old wooden tower rebuilds it in stone
+      const old = w.tribe.towers.find((o) => x > o.tx * TILE - 6 && x < (o.tx + 2) * TILE + 6 && y > o.ty * TILE - 90 && y < (o.ty + 2) * TILE + 4);
+      if (old) {
+        if (drag) return false;
+        if (w.tribe.upgradeTower(w, old)) {
+          w.toast("🏰", "Builders will rebuild this tower in stone, with a Scorpion on top!", old.x, old.y);
+          return true;
+        }
+        hint(w, "🗼", old.stone ? "That's already a stone tower." : old.stage < 3 ? "Let them finish building it first." : "Invent 🧱 Stone walls to rebuild towers in stone.");
+        return false;
+      }
       const t = w.tribe.addTower(w, x, y);
-      if (t) w.toast("🗼", "Tower planned! Builders will need wood + stone. Walls can join right onto it.");
-      else hint(w, "🗼", "Not enough room for a tower there.");
+      if (t) w.toast(t.stone ? "🏰" : "🗼", t.stone ? "Stone tower planned! Builders will need stone. Walls can join right onto it." : "Tower planned! Builders will need wood + stone. Walls can join right onto it.");
+      else hint(w, "🗼", "A tower needs 2×2 squares of solid ground or finished bridge deck, with nothing else on them (the green squares).");
       return !!t;
     }
     case "scorpion": {
@@ -462,7 +508,7 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
       return true;
     }
     case "tent": {
-      if (!isWalkTile(tile) || isWaterTile(tile)) return false;
+      if (!footing) return false;
       if (w.colony.occupied(w).has(Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE))) return false;
       c.addShelter(w, x, y, "tent");
       w.toast("⛺", "Tent planned! Quick to build — upgrade it later.");
@@ -475,19 +521,20 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
       return !!f;
     }
     case "hut": {
-      if (!isWalkTile(tile) || isWaterTile(tile)) return false;
+      if (!footing) return false;
+      if (w.colony.occupied(w).has(Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE))) return false;
       c.addShelter(w, x, y);
       w.toast("🛖", "Hut planned! More homes = room for more people.");
       return true;
     }
     case "campfire": {
-      if (!isWalkTile(tile) || isWaterTile(tile)) return false;
+      if (!footing) return false;
       w.campfires.push({ id: w.nextId(), x, y, lit: true, fuel: 1, cook: 0 });
       w.sfx("ignite", x, y, 0.7);
       return true;
     }
     default: {
-      const kind = tool.build as BuildingKind;
+      const kind = opt as BuildingKind;
       const why = w.colony.canPlace(w, kind, x, y);
       if (why) {
         if (!drag) hint(w, BUILDINGS[kind].icon, why);
@@ -521,7 +568,10 @@ function erase(w: World, x: number, y: number, drag: boolean) {
     w.colony.version++;
     return true;
   }
-  const b = w.colony.buildings.find((bd) => x > bd.tx * TILE && x < (bd.tx + BUILDINGS[bd.kind].w) * TILE && y > bd.ty * TILE - 24 && y < bd.y + 6);
+  // things built on a bridge go before the bridge itself
+  const hit = (bd: (typeof w.colony.buildings)[number]) => x > bd.tx * TILE && x < (bd.tx + BUILDINGS[bd.kind].w) * TILE && y > bd.ty * TILE - 24 && y < bd.y + 6;
+  const onDeck = w.colony.bridgeAt(Math.floor(x / TILE), Math.floor(y / TILE)) && (w.shelters.some((s) => Math.hypot(s.x - x, s.y - 16 - y) < 40) || w.campfires.some((f) => Math.hypot(f.x - x, f.y - y) < R));
+  const b = w.colony.buildings.find((bd) => bd.kind !== "bridge" && hit(bd)) ?? (onDeck ? undefined : w.colony.buildings.find(hit));
   if (b) {
     w.colony.removeBuilding(b);
     w.particles.burst(P.Dust, b.x, b.y, 8, 40, { size: 9, max: 0.7, color: "rgba(160,130,90,0.6)" });

@@ -78,7 +78,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   pen: { kind: "pen", icon: "🐾", name: "Animal pen", tip: "Home for befriended dinosaurs.", cost: { stick: 8, wood: 2 }, w: 3, h: 2, solid: false, tech: "taming", work: 5, hp: 200 },
   post: { kind: "post", icon: "🚩", name: "Gathering post", tip: "A far-away drop-off for wood, stone and ore.", cost: { stick: 4 }, w: 1, h: 1, solid: false, work: 2, hp: 120 },
   trap: { kind: "trap", icon: "🪤", name: "Spike trap", tip: "Hurts and slows dinosaurs that step on it.", cost: { stick: 3, wood: 1 }, w: 1, h: 1, solid: false, tech: "spear", work: 3, hp: 3 },
-  bridge: { kind: "bridge", icon: "🌉", name: "Bridge", tip: "Walk across rivers and shallows at full speed.", cost: { wood: 3 }, w: 1, h: 1, solid: false, tech: "axe", work: 4, hp: 200 },
+  bridge: { kind: "bridge", icon: "🌉", name: "Bridge", tip: "Walk across rivers and shallows at full speed. Too wobbly for big dinosaurs — only chicken-sized ones can cross.", cost: { wood: 3 }, w: 1, h: 1, solid: false, tech: "axe", work: 4, hp: 200 },
   path: { kind: "path", icon: "🟨", name: "Path", tip: "Packed stone: people walk faster.", cost: { stone: 1 }, w: 1, h: 1, solid: false, work: 1, hp: 100 },
   tannery: { kind: "tannery", icon: "🪵", name: "Hide rack", tip: "Stretch + dry dinosaur hides. Makes cloaks, rainproof gear, tunics, furs and hide tent covers.", cost: { stick: 6, bone: 2 }, w: 2, h: 1, solid: true, tech: "tools", work: 5, hp: 220 },
   spikes: { kind: "spikes", icon: "🦴", name: "Bone spikes", tip: "Sharpened bones angled outward. Hurt + slow small and medium attackers; big ones just get slowed. Drag to line your walls.", cost: { bone: 2, stick: 1 }, w: 1, h: 1, solid: false, tech: "spear", work: 3, hp: 10 },

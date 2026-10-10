@@ -1,16 +1,21 @@
 /* ------------------------------------------------------------------ */
 /*  Neanderthals: rival clans the computer runs. A few small bands     */
 /*  live in rough camps around the map. They're bigger and stronger    */
-/*  than our people but never get any cleverer: clubs, stone axes,     */
-/*  wooden spears and thrown rocks, forever. They hunt, feud with each */
-/*  other, make pacts, merge, and every so often march on our camp:    */
-/*  they club the men, carry the women off to their camp and grab      */
+/*  than our people: clubs, stone axes, wooden spears + thrown rocks.  */
+/*  They hunt, feud with each other, make pacts, merge, and every so   */
+/*  often march on our camp: they club the men, carry the women (and,  */
+/*  once they're cunning, the children) off to their camp and grab     */
 /*  food. Kill the carrier (or reach their camp while it's unguarded)  */
-/*  and she comes home. They're dumb about walls: no stairs, no gates, */
-/*  they just bash.                                                    */
+/*  and they come home. We never get along with them.                  */
+/*                                                                     */
+/*  They get cleverer by spying on us. Each spy who makes it home      */
+/*  teaches the clan something: first to ambush our people out in the  */
+/*  wild, then to carry hide shields (good against our energy lances), */
+/*  then to raid our stores for wood + stone as well as food.          */
+/*  Everyone drops what they carried when they fall.                   */
 /* ------------------------------------------------------------------ */
 import { sp } from "../data/species";
-import { FEMALE_NAMES } from "../data/facts";
+import { CAMP_LEVELS, FEMALE_NAMES } from "../data/facts";
 import { findSpawnSpot, isBaby, sizeOf } from "./dinos";
 import { go } from "./humans";
 import { hurtHuman } from "./injury";
@@ -18,7 +23,7 @@ import { goalKey, nodePos, tileOf } from "./nav";
 import { P } from "./particles";
 import { pick } from "./rng";
 import { hitDino } from "./tribe";
-import { MAP_H, MAP_W, TILE, type Brute, type BruteState, type BruteWeapon, type Clan, type Human, type Resource, type Wall } from "./types";
+import { MAP_H, MAP_W, TILE, type Brute, type BruteState, type BruteWeapon, type Clan, type Human, type ItemKind, type Resource, type Wall } from "./types";
 import type { World } from "./world";
 
 const WORLD_W = MAP_W * TILE;
@@ -97,11 +102,9 @@ export class Rivals {
     return w.humans.filter((h) => h.captive && (clan === undefined || h.captive === clan));
   }
 
-  /** Should our guards + defenses shoot this one? */
+  /** Should our guards + defenses shoot this one? Always: the clans and us never get along. */
   hostile(w: World, b: Brute) {
-    if (b.raid || b.captive) return true;
-    const c = w.camp;
-    return Math.hypot(b.x - c.x, b.y - c.y) < 700 || (b.state === "fight" && w.humans.some((h) => h.id === b.targetId));
+    return !!w && !!b;
   }
   /** Any hostile Neanderthal within r of (x, y)? */
   threatNear(w: World, x: number, y: number, r: number) {
@@ -194,7 +197,14 @@ export class Rivals {
   /* ------------------------------ fighting ------------------------------ */
 
   /** Our spear / arrow / bolt (or another Neanderthal's club) lands. */
-  hit(w: World, b: Brute, dmg: number, fx: number, fy: number, byBrute = false) {
+  hit(w: World, b: Brute, dmg: number, fx: number, fy: number, byBrute = false, proj?: string) {
+    // cunning clans carry hide shields: they soak up a lot of an energy lance, some of an arrow
+    const clan = this.clan(b.clan);
+    if (!byBrute && clan && (clan.smarts ?? 0) >= 2 && b.state !== "carry") {
+      const block = proj === "beam" || proj === "lance" ? 0.55 : proj ? 0.25 : 0.1;
+      dmg *= 1 - block;
+      if (block > 0.3 && w.rng() < 0.4) w.particles.burst(P.Spark, b.x + b.dir * 8, b.y, 6, 60, { z: 20, size: 2, max: 0.4, color: "#c9f7ff" });
+    }
     b.hp -= byBrute ? dmg : dmg / BRUTE_TOUGH;
     w.particles.burst(P.Star, b.x, b.y, 2, 30, { z: 26, size: 5, max: 0.6 });
     w.sfx("thunk", b.x, b.y, 0.7, 0.8);
@@ -213,9 +223,17 @@ export class Rivals {
 
   kill(w: World, b: Brute) {
     this.dropCaptive(w, b, true);
-    if (b.loot) w.addItem("berries", b.x, b.y, { amount: 1 });
+    // whatever he stole comes back; and every Neanderthal drops a little something
+    if (b.loot) {
+      const kind = b.lootKind ?? "berries";
+      w.camp.stock[kind] += b.loot;
+      w.toast("🎒", `Got back ${b.loot} ${kind} that ${b.name} stole!`, b.x, b.y);
+      b.loot = 0;
+    }
     w.particles.burst(P.Poof, b.x, b.y, 10, 60, { size: 12, max: 0.9, color: "rgba(200,190,170,0.9)" });
     w.addItem("bones", b.x, b.y);
+    w.addItem("meat", b.x + 10, b.y + 4, { amount: 1 });
+    if (w.rng() < 0.6) w.addItem(b.weapon === "rock" ? "stone" : "stick", b.x - 10, b.y + 2);
     const i = this.brutes.indexOf(b);
     if (i >= 0) this.brutes.splice(i, 1);
     const clan = this.clan(b.clan);
@@ -302,6 +320,90 @@ export class Rivals {
       w.toast("⚠️", "Neanderthals club the men and carry women off to their camp. Kill the carrier to free her!", clan.x, clan.y);
     }
     return true;
+  }
+
+  /* ------------------------------ cunning ------------------------------ */
+
+  /** Send one Neanderthal to creep up and watch our camp from the edge. */
+  sendSpy(w: World, clan: Clan) {
+    const b = this.members(clan.id).find((o) => o.hp > 0.6 && !o.raid && !o.war && !o.captive && !o.ambush && o.state !== "spy");
+    if (!b) return false;
+    const c = w.camp;
+    const a = Math.atan2(clan.y - c.y, clan.x - c.x) + (w.rng() - 0.5) * 0.8;
+    const r = CAMP_R(w) + 160;
+    let x = c.x + Math.cos(a) * r;
+    let y = c.y + Math.sin(a) * r * 0.8;
+    if (!w.nav.passable("dino", x, y)) {
+      x = c.x + Math.cos(a) * (r + 80);
+      y = c.y + Math.sin(a) * (r + 80) * 0.8;
+    }
+    setB(b, "spy", x, y);
+    if (!w.flags.has("spyTip")) {
+      w.flags.add("spyTip");
+      w.toast("👀", `A Neanderthal from the ${clan.name} clan is sneaking up to spy on the camp! Stop him before he gets home — every spy teaches his clan new tricks.`, x, y);
+    } else w.toast("👀", `${b.name} of the ${clan.name} clan is spying on the camp!`, x, y);
+    return true;
+  }
+
+  /** A spy made it back: the clan learns from what it saw. */
+  learn(w: World, clan: Clan) {
+    clan.intel = (clan.intel ?? 0) + 1;
+    const next = clan.intel >= 5 ? 3 : clan.intel >= 3 ? 2 : clan.intel >= 1 ? 1 : 0;
+    if (next <= (clan.smarts ?? 0)) return;
+    clan.smarts = next;
+    const what = [
+      "",
+      "learned to set ambushes for anyone working far from camp",
+      "made hide shields — our energy lances and arrows hurt them much less now",
+      "worked out where we keep our stores: they'll raid them for wood + stone, and snatch children too",
+    ][next];
+    w.toast("🧠", `The ${clan.name} clan has been watching us and ${what}!`, clan.x, clan.y);
+  }
+
+  /** Hide 2-3 warriors in the grass next to one of ours working out in the wild. */
+  setAmbush(w: World, clan: Clan) {
+    const c = w.camp;
+    const prey = w.humans.filter((h) => !h.child && !h.stranger && !h.captive && !h.under && h.level === 0 && Math.hypot(h.x - c.x, h.y - c.y) > CAMP_R(w) + 120 && Math.hypot(h.x - clan.x, h.y - clan.y) < 2200 && !w.tribe.enclosed(w, h.x, h.y));
+    if (!prey.length) return false;
+    const h = prey[Math.floor(w.rng() * prey.length)];
+    const party = this.members(clan.id).filter((o) => o.hp > 0.6 && !o.raid && !o.war && !o.captive && !o.ambush && o.state !== "spy").slice(0, 3);
+    if (party.length < 2) return false;
+    const a = w.rng() * Math.PI * 2;
+    for (const [i, o] of party.entries()) {
+      const x = h.x + Math.cos(a + i * 0.5) * 120;
+      const y = h.y + Math.sin(a + i * 0.5) * 80;
+      o.ambush = true;
+      setB(o, "walk", w.nav.passable("dino", x, y) ? x : h.x + Math.cos(a) * 90, w.nav.passable("dino", x, y) ? y : h.y);
+    }
+    return true;
+  }
+
+  /** Where a raider heads for loot: the stockpile, or (cunning clans) the nearest storehouse. */
+  private storeFor(w: World, b: Brute, clan: Clan) {
+    const c = w.camp;
+    let best = { x: c.pileX, y: c.pileY };
+    if ((clan.smarts ?? 0) < 3) return best;
+    let bd = Math.hypot(b.x - c.pileX, b.y - c.pileY);
+    for (const s of w.colony.buildings) {
+      if ((s.kind !== "storage" && s.kind !== "foodStore") || s.built < 1) continue;
+      const door = w.colony.door(s);
+      const d = Math.hypot(b.x - door.x, b.y - door.y);
+      if (d < bd) {
+        bd = d;
+        best = door;
+      }
+    }
+    return best;
+  }
+
+  /** Our people reached an empty clan camp: carry off their food (+ whatever they stole). */
+  plunder(w: World, clan: Clan) {
+    const food = Math.floor(Math.min(clan.food, 6));
+    clan.food -= food;
+    w.camp.stock.meat += food;
+    // a raid hurts them: they lose some of what they learned about us
+    if ((clan.intel ?? 0) > 0) clan.intel = (clan.intel ?? 0) - 1;
+    return food;
   }
 
   /* ------------------------------ clan politics ------------------------------ */
@@ -433,6 +535,22 @@ export class Rivals {
           say(b, "Grr!");
         }
       }
+      // spies come to watch us; a clan that's learned how sets ambushes for our people out in the wild
+      const day = w.daylight > 0.45;
+      if (t.danger !== "calm" && w.elapsed > 300 && day && !t.raid) {
+        clan.spyT = (clan.spyT ?? 150 + w.rng() * 120) - dt;
+        if (clan.spyT <= 0) {
+          clan.spyT = 200 + w.rng() * 160;
+          this.sendSpy(w, clan);
+        }
+        if ((clan.smarts ?? 0) >= 1) {
+          clan.ambushT = (clan.ambushT ?? 120) - dt;
+          if (clan.ambushT <= 0) {
+            clan.ambushT = 180 + w.rng() * 160;
+            this.setAmbush(w, clan);
+          }
+        }
+      }
       // raids on us: hungry clans come sooner; nobody raids a calm world
       const ready = t.danger !== "calm" && w.elapsed > 480 && (w.camp.learned.has("spear") || t.level >= 1 || w.elapsed > 900);
       if (ready && !t.raid) {
@@ -488,6 +606,42 @@ export class Rivals {
     }
     if (b.loot && b.state !== "home") return this.goHome(w, b);
     if (b.hp < 0.25) return this.goHome(w, b, "flee");
+    // a spy watching our camp: once they've seen enough, run home and tell the clan
+    if (b.state === "spy") {
+      if (Math.hypot(b.x - b.tx, b.y - b.ty) < 20 && b.stateT > 14) {
+        this.learn(w, clan);
+        say(b, "Hrm. Me see.", 1.6);
+        return this.goHome(w, b);
+      }
+      if (b.stateT > 70) return this.goHome(w, b);
+      return;
+    }
+    // an ambush: lie low in the grass until one of ours wanders close, then jump
+    if (b.ambush) {
+      const h = this.preyFor(w, b, 170, null);
+      if (h) {
+        for (const o of this.brutes) {
+          if (!o.ambush || o.clan !== b.clan || Math.hypot(o.x - b.x, o.y - b.y) > 260) continue;
+          o.ambush = false;
+          o.targetId = h.id;
+          setB(o, "fight", h.x, h.y);
+          say(o, pick(w.rng, ["NOW!", "GET!", "RAAAH!"]), 1.6);
+        }
+        w.alarm(h.x, h.y, 500, 0.8, "😱", false);
+        w.toast("🌿", `Ambush! The ${clan.name} clan was hiding in the grass by ${h.name}!`, h.x, h.y);
+        if (!w.flags.has("packs")) {
+          w.flags.add("packs");
+          w.toast("🛡️", "Your tribe learned a lesson: hunters now walk out with anyone working far from camp. Go out in packs!", h.x, h.y);
+        }
+        return;
+      }
+      if (b.stateT > 90) {
+        b.ambush = false;
+        return this.goHome(w, b);
+      }
+      if (b.state !== "lurk" && b.state !== "walk") setB(b, "walk", b.tx, b.ty);
+      return;
+    }
 
     // 1) an enemy clan member close by: fight
     const foe = this.nearestFoe(w, b, b.war ? 260 : 150);
@@ -507,15 +661,18 @@ export class Rivals {
     }
     // 3) raiding: make for the stockpile (bashing whatever's in the way)
     if (b.raid) {
-      const c = w.camp;
-      if (Math.hypot(b.x - c.pileX, b.y - c.pileY) < 70) {
-        b.loot = takeFood(w, 4);
-        say(b, b.loot ? "FOOD!" : "No food?!", 2);
+      // cunning clans know where we keep things: the stockpile or a storehouse
+      const store = this.storeFor(w, b, clan);
+      if (Math.hypot(b.x - store.x, b.y - store.y) < 70) {
+        const got = takeLoot(w, 4, (clan.smarts ?? 0) >= 3);
+        b.loot = got.n;
+        b.lootKind = got.r;
+        say(b, b.loot ? (got.r === "wood" || got.r === "stone" ? "MINE NOW!" : "FOOD!") : "Nothing?!", 2);
         this.goHome(w, b);
-        if (b.loot) w.toast("😠", `${b.name} the Neanderthal is running off with our food!`, b.x, b.y);
+        if (b.loot) w.toast("😠", `${b.name} the Neanderthal is running off with our ${got.r}!`, b.x, b.y);
         return;
       }
-      if (b.state !== "walk" || Math.hypot(b.tx - c.pileX, b.ty - c.pileY) > 40) setB(b, "walk", c.pileX + (w.rng() - 0.5) * 30, c.pileY);
+      if (b.state !== "walk" || Math.hypot(b.tx - store.x, b.ty - store.y) > 40) setB(b, "walk", store.x + (w.rng() - 0.5) * 30, store.y);
       return;
     }
     // 4) off to fight another clan
@@ -583,7 +740,9 @@ export class Rivals {
     let best: Human | null = null;
     let bd = r;
     for (const h of w.humans) {
-      if (h.captive || h.child || h.stranger || h.under) continue;
+      if (h.captive || h.stranger || h.under) continue;
+      // kids are only snatched on raids by a cunning clan
+      if (h.child && !(b.raid && (this.clan(b.clan)?.smarts ?? 0) >= 3)) continue;
       if (h.state === "tossed") continue;
       // hiding at home only works while the walls hold (or there's someone to hide behind)
       if ((h.state === "hide" || h.state === "sleep") && !(b.raid && inside)) continue;
@@ -646,9 +805,21 @@ export class Rivals {
         const arrived = moveBrute(w, b, dt, b.raid || b.war ? SPEED : SPEED * 0.8);
         if (b.raid) this.bashIfBlocked(w, b);
         if (arrived) {
-          setB(b, "idle", b.x, b.y);
+          setB(b, b.ambush ? "lurk" : "idle", b.x, b.y);
           b.think = 0;
         }
+        return;
+      }
+      case "spy": {
+        // creep up to a lookout spot, then crouch + watch
+        if (Math.hypot(b.x - b.tx, b.y - b.ty) > 6) {
+          moveBrute(w, b, dt, SPEED * 0.7);
+          b.stateT = Math.min(b.stateT, 1);
+        } else b.vx = b.vy = 0;
+        return;
+      }
+      case "lurk": {
+        b.vx = b.vy = 0;
         return;
       }
       case "carry": {
@@ -670,7 +841,7 @@ export class Rivals {
           h.x = clan.x + (w.rng() - 0.5) * 50;
           h.y = clan.y + 24 + w.rng() * 10;
           say(h, "Help…", 3);
-          w.toast("😢", `${h.name} is a captive at the ${clan.name} camp. Send people to bring her home!`, h.x, h.y);
+          w.toast("😢", `${h.name} is a captive at the ${clan.name} camp. Send people to bring ${h.child ? "them" : "her"} home!`, h.x, h.y);
           setB(b, "idle", b.x, b.y);
         }
         return;
@@ -783,10 +954,11 @@ export class Rivals {
   /** Club a man (and finish him if he's down); grab a woman and run. */
   private strike(w: World, b: Brute, h: Human) {
     const wp = BRUTE_WEAPONS[b.weapon];
-    if (b.raid && isFemale(h) && !b.captive && h.level === 0) {
+    if (b.raid && (isFemale(h) || h.child) && !b.captive && h.level === 0) {
       this.grab(w, b, h);
       return;
     }
+    if (h.child) return; // never club a kid
     if (h.state === "down") {
       if (isFemale(h)) return; // they want the women alive
       killHuman(w, h, `${h.name} was killed by ${b.name} the Neanderthal!`);
@@ -832,7 +1004,7 @@ export class Rivals {
     w.alarm(h.x, h.y, 400, 0.8, "😱", false);
     const r = w.tribe.raid;
     if (r && r.by === "brute") r.took = (r.took ?? 0) + 1;
-    w.toast("😱", `${b.name} grabbed ${h.name} and is carrying her off to the ${clan.name} camp! Stop him!`, h.x, h.y);
+    w.toast("😱", `${b.name} grabbed ${h.name} and is carrying ${h.child ? "them" : "her"} off to the ${clan.name} camp! Stop him!`, h.x, h.y);
   }
 
   private throwAt(w: World, b: Brute, h: Human) {
@@ -898,7 +1070,7 @@ export class Rivals {
     return {
       started: this.started,
       next: this.nextClan,
-      clans: this.clans.map((c) => ({ id: c.id, name: c.name, color: c.color, x: r(c.x), y: r(c.y), food: Math.round(c.food * 10) / 10, raidT: r(c.raidT), growT: r(c.growT) })),
+      clans: this.clans.map((c) => ({ id: c.id, name: c.name, color: c.color, x: r(c.x), y: r(c.y), food: Math.round(c.food * 10) / 10, raidT: r(c.raidT), growT: r(c.growT), smarts: c.smarts ?? 0, intel: c.intel ?? 0 })),
       brutes: this.brutes.map((b) => ({ clan: b.clan, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon })),
       rel: Array.from(this.rel.entries()).filter(([, v]) => v !== 0),
     };
@@ -947,21 +1119,31 @@ function nearestHuman(w: World, x: number, y: number, r: number, any: boolean): 
   return best;
 }
 
-/** Take some food off our stockpile (wrapped stores lose less). */
-function takeFood(w: World, n: number) {
+/** Take one load off our stores: food first; cunning raiders go for materials too. */
+function takeLoot(w: World, n: number, materials: boolean): { r: Resource; n: number } {
   const s = w.camp.stock;
-  let got = 0;
-  for (const r of ["cooked", "meat", "fish", "crop", "berries"] as Resource[]) {
-    const k = Math.min(n - got, s[r]);
+  const kinds: Resource[] = ["cooked", "meat", "fish", "crop", "berries"];
+  if (materials) kinds.unshift(...(w.rng() < 0.5 ? (["wood", "stone"] as Resource[]) : []));
+  for (const r of kinds) {
+    const k = Math.min(n, Math.floor(s[r]));
+    if (k <= 0) continue;
     s[r] -= k;
-    got += k;
-    if (got >= n) break;
+    return { r, n: k };
   }
-  return got;
+  return { r: "berries", n: 0 };
 }
+
+/** How far out our camp reaches (spies + ambushes stay just beyond it). */
+const CAMP_R = (w: World) => CAMP_LEVELS[w.tribe.level]?.radius ?? 300;
 
 /** Remove one of our people for good. */
 export function killHuman(w: World, h: Human, msg: string) {
+  // whatever they were carrying falls where they fell (back to the tribe, or to whoever finds it)
+  if (h.carry && h.carryN > 0) {
+    const item = ({ stick: "stick", stone: "stone", meat: "meat", fish: "fish", berries: "berries" } as Partial<Record<Resource, ItemKind>>)[h.carry];
+    if (item) w.addItem(item, h.x, h.y, { amount: Math.max(1, h.carryN) });
+    else w.camp.stock[h.carry] += h.carryN;
+  }
   w.particles.burst(P.Poof, h.x, h.y, 10, 60, { size: 12, max: 0.9, color: "rgba(235,228,210,0.95)" });
   w.sfx("thud", h.x, h.y, 0.9, 0.6);
   const i = w.humans.indexOf(h);

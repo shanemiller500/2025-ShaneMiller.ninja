@@ -24,13 +24,19 @@ function windup(b: Brute) {
   return 0.15;
 }
 
-export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, color: string) {
+export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, color: string, shield = false) {
   const H = 36;
   const skin = pickOf(SKINS, b.id);
   const hair = pickOf(HAIRS, b.id * 7);
   const pelt = pickOf(PELTS, b.id * 3);
   const st = b.state;
+  // spies + ambushers crouch low in the grass, hard to spot
+  const hiding = st === "lurk" || (st === "spy" && Math.hypot(b.vx, b.vy) < 2);
   c.save();
+  if (hiding) {
+    c.globalAlpha = 0.6;
+    c.scale(1, 0.8);
+  }
   // shadow
   c.fillStyle = "rgba(0,0,0,0.22)";
   c.beginPath();
@@ -228,7 +234,40 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
   c.arc(0, carrying ? H * 0.37 : 0, 3.6, 0, Math.PI * 2);
   c.fill();
   c.restore();
+  if (shield && !carrying && st !== "sleep") {
+    // a round hide shield on a wicker frame, daubed in the clan's colour
+    c.fillStyle = "#a07a4a";
+    c.strokeStyle = INK;
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.ellipse(-1, -H * 0.2, 8.5, 11.5, 0, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+    c.strokeStyle = color;
+    c.lineWidth = 2.2;
+    c.beginPath();
+    c.moveTo(-1, -H * 0.2 - 10);
+    c.lineTo(-1, -H * 0.2 + 10);
+    c.stroke();
+    c.fillStyle = "#e9dcc0";
+    c.beginPath();
+    c.arc(-1, -H * 0.2, 2.2, 0, Math.PI * 2);
+    c.fill();
+  }
   c.restore();
+
+  if (hiding) {
+    // grass in front of them
+    c.globalAlpha = 1;
+    c.strokeStyle = "#5f8f3a";
+    c.lineWidth = 2;
+    for (let i = -3; i <= 3; i++) {
+      c.beginPath();
+      c.moveTo(i * 4, 0);
+      c.lineTo(i * 4 + Math.sin(t * 2 + i) * 2, -14 - (i % 2 ? 6 : 0));
+      c.stroke();
+    }
+  }
 
   // health bar when hurt
   c.restore();

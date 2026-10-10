@@ -50,7 +50,8 @@ export type TaskKind =
   | "farm"
   | "smith"
   | "douse"
-  | "butcher";
+  | "butcher"
+  | "raid";
 
 export interface Task {
   id: number;
@@ -65,6 +66,10 @@ export interface Task {
   res?: Resource;
   /** construction: the site keys this order covers */
   group?: string[];
+  /** build orders: centres (x, y pairs) of every site this order has taken on, so it can spread to the next blueprint along */
+  area?: number[];
+  /** build orders: how many times in a row the crew found nothing they could do yet */
+  stall?: number;
   /** stand on the wall walkway */
   top?: boolean;
   weapon?: WeaponKind;
@@ -134,7 +139,11 @@ export class TaskBoard {
       t.people = t.people.filter((id) => w.humans.some((h) => h.id === id && h.taskId === t.id));
       if (!t.people.length && !t.open) this.remove(t);
       else if (!t.people.length && t.t > 240) this.remove(t);
-      else if (!taskAlive(w, t)) this.finish(w, t);
+      else {
+        // build orders keep picking up blueprints next to what they're building (new ones too)
+        if (t.kind === "build" && (Math.floor(t.t) !== Math.floor(t.t - dt) || !taskAlive(w, t))) growBuild(w, t);
+        if (!taskAlive(w, t)) this.finish(w, t);
+      }
     }
   }
 
@@ -220,6 +229,13 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
     const o = picked.human;
     if (condition(o) !== "healthy") return { kind: "heal", icon: "🩹", label: `Help ${o.name}`, x: o.x, y: o.y, target: o.id };
     return null;
+  }
+  // a Neanderthal camp: raid it (beat whoever's home, take their food, bring our people back)
+  const enemy = w.rivals.clans.find((k) => Math.hypot(k.x - x, k.y - y) < 110);
+  if (enemy) {
+    if (!armed) return { kind: "move", icon: "😬", label: "Nobody has a weapon to raid a Neanderthal camp!", x: enemy.x, y: enemy.y, target: 0 };
+    const held = w.rivals.captives(w, enemy.id).length;
+    return { kind: "raid", icon: "⚔️", label: `Raid the ${enemy.name} camp${held ? ` + free ${held} of ours` : ""}`, x: enemy.x, y: enemy.y, target: enemy.id, weapons: kinds };
   }
   // dinosaur bodies: harvest them
   const body = carcassAt(w, x, y);
@@ -403,11 +419,13 @@ export function issue(w: World, people: Human[], c: Command, weapon?: WeaponKind
     for (const h of crew) say(h, "I'm too little!");
     return null;
   }
-  if (c.kind === "hunt" || c.kind === "guard" || c.kind === "defend" || c.kind === "operate") {
+  if (c.kind === "hunt" || c.kind === "guard" || c.kind === "defend" || c.kind === "operate" || c.kind === "raid") {
     // fighters only: kids head home instead
     for (const h of crew) if (h.child) say(h, "I'll stay safe!");
   }
   const t = w.tasks.add(w, c, workers, weapon);
+  const more = c.kind === "build" ? growBuild(w, t) : 0;
+  if (more) t.label = `${c.label} + ${more} more nearby`;
   for (const h of workers) {
     const old = w.tasks.get(h.taskId);
     if (old && old !== t) old.people = old.people.filter((id) => id !== h.id);
@@ -421,9 +439,46 @@ export function issue(w: World, people: Human[], c: Command, weapon?: WeaponKind
     if (h.state === "operate") leaveScorpion(w, h);
     if (h.state !== "carry" && h.state !== "haul") go(h, "idle", h.x, h.y);
     h.think = 0;
-    say(h, pick(w.rng, ["On it!", "Okay!", "Ugh! (yes)", "Right away!", "Me go!"]));
+    say(h, more ? pick(w.rng, ["We build it all!", "All of it? Okay!", "Lots to build!"]) : pick(w.rng, ["On it!", "Okay!", "Ugh! (yes)", "Right away!", "Me go!"]));
   }
   return t;
+}
+
+/** Blueprints this close to one already in a build order join it (chained, so a whole deck or wall line comes along). */
+const BUILD_LINK = TILE * 3.5;
+
+/**
+ * Grow a build order over the unbuilt blueprints around it: anything
+ * within reach of the spot the player picked, or of another site the
+ * order has already taken on. Returns how many sites were added.
+ */
+function growBuild(w: World, t: Task): number {
+  const all = sites(w);
+  const group = new Set(t.group ?? []);
+  const area = t.area ?? (t.area = [t.x, t.y]);
+  const known = (x: number, y: number) => {
+    for (let k = 0; k < area.length; k += 2) if (area[k] === x && area[k + 1] === y) return true;
+    return false;
+  };
+  for (const s of all) if (group.has(siteKey(s)) && !known(s.x, s.y)) area.push(s.x, s.y);
+  const free = all.filter((s) => !s.locked && !s.repair && !group.has(siteKey(s)));
+  let added = 0;
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (let i = free.length - 1; i >= 0; i--) {
+      const s = free[i];
+      let close = false;
+      for (let k = 0; k < area.length && !close; k += 2) close = Math.hypot(s.x - area[k], s.y - area[k + 1]) < BUILD_LINK;
+      if (!close) continue;
+      group.add(siteKey(s));
+      area.push(s.x, s.y);
+      free.splice(i, 1);
+      added++;
+      grew = true;
+    }
+  }
+  if (added) t.group = Array.from(group);
+  return added;
 }
 
 /** Leave the current task (done or cancelled) and look for more player work. */
@@ -475,6 +530,8 @@ function taskAlive(w: World, t: Task): boolean {
     }
     case "hunt":
       return !!(w.dinoById(t.target) || w.dragons.byId(t.target) || w.rivals.byId(t.target));
+    case "raid":
+      return !!w.rivals.clan(t.target);
     case "heal": {
       const p = w.humans.find((x) => x.id === t.target);
       return !!p && p.hp < 0.95;
@@ -536,15 +593,57 @@ export function taskThink(w: World, h: Human): boolean {
     case "build":
     case "repair": {
       const group = new Set(t.group ?? []);
-      if (!buildThink(w, h, (s) => group.has(siteKey(s)))) {
-        if (!taskAlive(w, t)) personDone(w, h, t);
-        else {
-          // waiting on something (an invention, a busy stretch): help elsewhere meanwhile
-          say(h, "Waiting for materials…");
-          personDone(w, h, t);
-        }
+      if (buildThink(w, h, (s) => group.has(siteKey(s)))) {
+        t.stall = 0;
+        return true;
+      }
+      if (!taskAlive(w, t)) {
+        personDone(w, h, t);
         return false;
       }
+      // nothing to do this moment (no materials found yet, a busy stretch): stay on the job and look
+      // again shortly; only after a long wait go help elsewhere
+      t.stall = (t.stall ?? 0) + 1;
+      if (t.stall > 12) {
+        say(h, "Can't find materials…");
+        personDone(w, h, t);
+        return false;
+      }
+      say(h, "Looking for materials…");
+      h.think = 2.5;
+      return true;
+    }
+    case "raid": {
+      const clan = w.rivals.clan(t.target);
+      if (!clan) {
+        say(h, pick(w.rng, ["We won!", "They're gone!", "Ha!"]));
+        personDone(w, h, t);
+        return false;
+      }
+      // beat whoever is at home (or on the way) first
+      let foe: ReturnType<typeof w.rivals.byId> = null;
+      let fd = 420;
+      for (const b of w.rivals.members(clan.id)) {
+        const d = Math.min(Math.hypot(b.x - h.x, b.y - h.y), Math.hypot(b.x - clan.x, b.y - clan.y) + 80);
+        if (d < fd) {
+          fd = d;
+          foe = b;
+        }
+      }
+      if (foe && Math.hypot(h.x - clan.x, h.y - clan.y) < 900) {
+        h.order = { kind: "hunt", id: foe.id };
+        return false; // roleThink runs the fight
+      }
+      h.order = null;
+      if (Math.hypot(h.x - clan.x, h.y - clan.y) < 50) {
+        // nobody home: carry off their food (captives walk free once no one guards them)
+        const got = w.rivals.plunder(w, clan);
+        say(h, got ? "Food for us!" : "Nothing here…");
+        if (got) w.toast("⚔️", `Raided the ${clan.name} camp: ${got} food carried home!`, clan.x, clan.y);
+        personDone(w, h, t);
+        return false;
+      }
+      go(h, "walk", clan.x + (w.rng() - 0.5) * 40, clan.y + 20);
       return true;
     }
     case "hunt": {
@@ -938,8 +1037,8 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
     }
     return true;
   }
-  // nothing in the stockpile: go and get some
-  const src = sourceFor(w, h, s.need);
+  // nothing in the stockpile: go and get some (near camp first, then around the site, then wherever we are)
+  const src = sourceFor(w, h, s.need) ?? sourceFor(w, h, s.need, s.x, s.y) ?? sourceFor(w, h, s.need, h.x, h.y);
   if (!src) {
     h.site = "";
     return false;

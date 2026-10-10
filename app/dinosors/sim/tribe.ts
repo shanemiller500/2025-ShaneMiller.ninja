@@ -14,7 +14,7 @@ import { addHuman, go, moveHuman, say, sourceFor } from "./humans";
 import { P } from "./particles";
 import { pick } from "./rng";
 import { isWalkTile, isWaterTile } from "./terrain";
-import { TOWER_STAGES, WALL_HP, wallMaxHp, shelterDone } from "./build";
+import { TOWER_STAGES, WALL_HP, towerMaxHp, wallMaxHp, shelterDone } from "./build";
 import { buildAct, buildThink } from "./tasks";
 import type { Target } from "./colony";
 import type { Brute } from "./types";
@@ -105,8 +105,7 @@ export class Tribe {
 
   addWall(w: World, tx: number, ty: number, kind: WallKind, part: WallPart = "wall") {
     if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1) return null;
-    const t = w.terrain.tiles[ty * MAP_W + tx];
-    if (!isWalkTile(t) || isWaterTile(t) || t === T.Cave || t === T.Tar) return null;
+    if (!w.colony.footing(w, tx, ty)) return null;
     const ex = this.wallAt(tx, ty);
     if (ex) {
       // drawing a stronger kind over a piece upgrades it (the old materials come back when it's swapped)
@@ -529,7 +528,7 @@ export class Tribe {
       w.sfx("whoosh", h.x, h.y, 0.5, 1.3);
       const mul = w.civ.dmgMul(w, h, wp.tier, wp.proj);
       if (d.kind === "dino") hitDino(w, d, wp.dmg * mul, h.x, h.y);
-      else if (d.kind === "brute") w.rivals.hit(w, d, wp.dmg * mul, h.x, h.y);
+      else if (d.kind === "brute") w.rivals.hit(w, d, wp.dmg * mul, h.x, h.y, false, "melee");
       else w.dragons.hit(w, d, wp.dmg * 0.5 * mul);
       return;
     }
@@ -590,7 +589,7 @@ export class Tribe {
           }
         } else if (!d && !dr && w.rivals.byId(p.target) && Math.hypot(w.rivals.byId(p.target)!.x - p.x, w.rivals.byId(p.target)!.y - p.y) < (p.kind === "scorpion" ? 30 : 20)) {
           const b = w.rivals.byId(p.target)!;
-          w.rivals.hit(w, b, p.dmg, p.x - p.vx * 0.1, p.y - p.vy * 0.1);
+          w.rivals.hit(w, b, p.dmg, p.x - p.vx * 0.1, p.y - p.vy * 0.1, false, p.kind);
           if (p.kind === "scorpion") w.particles.spawn(P.Ring, b.x, b.y, { z: 18, size: 12, max: 0.5, color: p.glow ? "rgba(150,240,255,0.95)" : "rgba(255,230,180,0.9)" });
         } else if (dr && Math.hypot(dr.x - p.x, dr.y - p.y) < 70) {
           // arrows mostly bounce off dragon scales; Scorpion bolts punch through
@@ -809,31 +808,55 @@ export class Tribe {
     return f;
   }
 
+  /** Can one footprint tile of a tower go here? (solid ground or a finished bridge deck, nothing in the way but walls) */
+  towerTileOk(w: World, tx: number, ty: number, occupied = w.colony.occupied(w)) {
+    if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1) return false;
+    if (!w.colony.footing(w, tx, ty)) return false;
+    // a wall piece where the tower goes gets replaced by the tower
+    return !!this.wallAt(tx, ty) || !occupied.has(ty * MAP_W + tx);
+  }
+
+  /**
+   * Where a tower tapped at (x, y) would stand: the 2x2 centred under the
+   * pointer, or else any other 2x2 that still covers the tapped tile (so a
+   * tower snaps onto a deck that's just big enough). Null if none fits.
+   */
+  towerSpot(w: World, x: number, y: number): { tx: number; ty: number } | null {
+    const occupied = w.colony.occupied(w);
+    const fits = (tx: number, ty: number) => this.towerTileOk(w, tx, ty, occupied) && this.towerTileOk(w, tx + 1, ty, occupied) && this.towerTileOk(w, tx, ty + 1, occupied) && this.towerTileOk(w, tx + 1, ty + 1, occupied);
+    const cx = Math.floor(x / TILE - 0.5);
+    const cy = Math.floor(y / TILE) - 1;
+    const px = Math.floor(x / TILE);
+    const py = Math.floor(y / TILE);
+    for (const [tx, ty] of [[cx, cy], [px - 1, py - 1], [px, py - 1], [px - 1, py], [px, py]]) if (fits(tx, ty)) return { tx, ty };
+    return null;
+  }
+
   /** Towers stand on a 2x2 tile footprint so walls can butt right up against them. */
   addTower(w: World, x: number, y: number) {
-    const tx = Math.floor(x / TILE - 0.5);
-    const ty = Math.floor(y / TILE) - 1;
-    const occupied = w.colony.occupied(w);
-    for (let dy = 0; dy < 2; dy++)
-      for (let dx = 0; dx < 2; dx++) {
-        const i = (ty + dy) * MAP_W + tx + dx;
-        const t = w.terrain.tiles[i];
-        if (tx + dx < 1 || ty + dy < 1 || tx + dx >= MAP_W - 1 || ty + dy >= MAP_H - 1) return null;
-        if (!isWalkTile(t) || isWaterTile(t) || t === T.Tar) return null;
-        // a wall piece where the tower goes gets replaced by the tower
-        const wl = this.wallAt(tx + dx, ty + dy);
-        if (wl) continue;
-        if (occupied.has(i)) return null;
-      }
+    const spot = this.towerSpot(w, x, y);
+    if (!spot) return null;
+    const { tx, ty } = spot;
     for (let dy = 0; dy < 2; dy++)
       for (let dx = 0; dx < 2; dx++) {
         const wl = this.wallAt(tx + dx, ty + dy);
         if (wl) this.removeWall(wl);
       }
-    const tw: Tower = { id: w.nextId(), x: (tx + 1) * TILE, y: (ty + 2) * TILE - 4, tx, ty, stage: 0, have: 0, hp: 400 };
+    // once the tribe knows stonework, new towers go straight up in stone
+    const stone = w.camp.learned.has("stonewall");
+    const tw: Tower = { id: w.nextId(), x: (tx + 1) * TILE, y: (ty + 2) * TILE - 4, tx, ty, stage: 0, have: 0, hp: stone ? 900 : 400, ...(stone ? { stone } : {}) };
     this.towers.push(tw);
     this.version++;
     return tw;
+  }
+
+  /** Queue a finished wooden tower to be rebuilt in stone. Returns false if it can't be. */
+  upgradeTower(w: World, t: Tower) {
+    if (t.stone || t.up || t.stage < TOWER_STAGES.length || !w.camp.learned.has("stonewall")) return false;
+    t.up = true;
+    t.have = 0;
+    this.version++;
+    return true;
   }
 
   /* ------------------------------ update ------------------------------ */
@@ -963,7 +986,8 @@ export class Tribe {
     }
     for (const t of this.towers) if (t.stage >= 1 && t.hp <= 0) {
       t.stage = 0;
-      t.hp = 400;
+      t.up = false;
+      t.hp = towerMaxHp(t);
       this.version++;
       w.particles.burst(P.Dust, t.x, t.y - 20, 14, 70, { size: 12, max: 1.2, color: "rgba(160,130,90,0.6)" });
       w.toast("💥", "A watchtower came crashing down!", t.x, t.y);
@@ -1008,7 +1032,7 @@ export class Tribe {
     return {
       walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0)] as const),
       farms: this.farms.map((f) => [Math.round(f.x), Math.round(f.y), Math.round(f.growth * 100) / 100, f.planted ? 1 : 0] as const),
-      towers: this.towers.map((t) => [Math.round(t.x), Math.round(t.y), t.stage, Math.max(0, t.have), t.tx, t.ty, Math.round(t.hp)] as const),
+      towers: this.towers.map((t) => [Math.round(t.x), Math.round(t.y), t.stage, Math.max(0, t.have), t.tx, t.ty, Math.round(t.hp), (t.stone ? 1 : 0) | (t.up ? 2 : 0)] as const),
       level: this.level,
       danger: this.danger,
       evolution: this.evolution,
@@ -1036,7 +1060,8 @@ export class Tribe {
       // older saves stored towers by position only: snap them onto the tile grid
       const tx = row[4] ?? Math.floor(x / TILE - 0.5);
       const ty = row[5] ?? Math.floor(y / TILE) - 1;
-      this.towers.push({ id: w.nextId(), x: (tx + 1) * TILE, y: (ty + 2) * TILE - 4, tx, ty, stage, have, hp: row[6] ?? 400 });
+      const flags = row[7] ?? 0;
+      this.towers.push({ id: w.nextId(), x: (tx + 1) * TILE, y: (ty + 2) * TILE - 4, tx, ty, stage, have, hp: row[6] ?? (flags & 1 ? 900 : 400), ...(flags & 1 ? { stone: true } : {}), ...(flags & 2 ? { up: true } : {}) });
     }
     this.level = d.level;
     this.danger = d.danger;
@@ -1244,6 +1269,8 @@ export function roleThink(w: World, h: Human): boolean {
     }
     case "hunter": {
       if (!wp) return false;
+      // packs: walk out with anyone working far from camp (once an ambush taught us)
+      if (escort(w, h, wp)) return true;
       if (autoButcher(w, h, 1500)) return true;
       if (haulSomething(w, h)) return true;
       const prey = findPrey(w, h, wp);
@@ -1307,6 +1334,35 @@ export function roleThink(w: World, h: Human): boolean {
     default:
       return false;
   }
+}
+
+/**
+ * Packs: once the clans have ambushed us, an armed hunter keeps close to
+ * one of our people working out in the wild and fights off anything that
+ * comes for them. One escort per worker.
+ */
+function escort(w: World, h: Human, wp: Weapon): boolean {
+  h.escort = 0;
+  if (!w.flags.has("packs") || w.tribe.raid || !w.rivals.clans.length) return false;
+  const c = w.camp;
+  const R = CAMP_LEVELS[w.tribe.level].radius + 60;
+  let best: Human | null = null;
+  let bd = 1400;
+  for (const o of w.humans) {
+    if (o === h || o.child || o.stranger || o.captive || o.under || o.level !== 0) continue;
+    if (o.state !== "gather" && o.state !== "walk" && o.state !== "carry" && o.state !== "fish" && o.state !== "haul") continue;
+    if (Math.hypot(o.x - c.x, o.y - c.y) < R || w.tribe.enclosed(w, o.x, o.y)) continue;
+    if (w.humans.some((q) => q !== h && q.escort === o.id)) continue;
+    const d = Math.hypot(o.x - h.x, o.y - h.y);
+    if (d < bd) {
+      bd = d;
+      best = o;
+    }
+  }
+  if (!best) return false;
+  h.escort = best.id;
+  if (w.rng() < 0.05) say(h, pick(w.rng, ["I watch your back!", "Stay close!", "I'm with you."]));
+  return guardAt(w, h, best.x + (h.id % 2 ? 24 : -24), best.y + 12, wp);
 }
 
 function guardPost(w: World, h: Human): { x: number; y: number; tower?: Tower; top?: boolean } {

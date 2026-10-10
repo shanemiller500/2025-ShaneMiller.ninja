@@ -241,18 +241,23 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
       {info.kind === "tower" && (
         <>
           <div className="flex items-center gap-3 pr-8">
-            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-3xl">🗼</span>
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-3xl">{info.stone ? "🏰" : "🗼"}</span>
             <div>
-              <div className="text-lg font-bold leading-tight">Watchtower</div>
-              <div className="text-xs text-white/60">{info.stage >= 3 ? `${info.guards} on watch up top` : `Building (stage ${info.stage + 1}/3)`}</div>
+              <div className="text-lg font-bold leading-tight">{info.stone ? "Stone tower" : "Watchtower"}</div>
+              <div className="text-xs text-white/60">{info.up ? "Being rebuilt in stone…" : info.stage >= 3 ? `${info.guards} on watch up top` : `Building (stage ${info.stage + 1}/3)`}</div>
             </div>
           </div>
           {info.stage >= 3 && (
             <div className="mt-2">
-              <Bar value={info.hp / 400} color="linear-gradient(90deg,#22c55e,#a3e635)" />
+              <Bar value={info.hp / info.maxHp} color="linear-gradient(90deg,#22c55e,#a3e635)" />
             </div>
           )}
-          <p className="mt-2 text-[12px] text-white/70">Archers up here shoot further and better. Place a 🎯 Scorpion on top for dragons. Pick people and tap the tower to send them up.</p>
+          {info.canUpgrade && (
+            <button type="button" onClick={() => engine.upgradeTower(info.id)} className="mt-2 w-full rounded-xl bg-white/10 py-2 text-sm font-bold transition hover:bg-white/20 active:scale-95">
+              🏰 Rebuild in stone (🪨 {info.upCost}) + 🎯 Scorpion
+            </button>
+          )}
+          <p className="mt-2 text-[12px] text-white/70">{info.stone ? "Stone towers are much tougher and come with a 🎯 Scorpion on top (once it's invented)." : "Archers up here shoot further and better. Place a 🎯 Scorpion on top for dragons."} Pick people and tap the tower to send them up.</p>
         </>
       )}
     </motion.aside>
