@@ -15,7 +15,10 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 const root = path.join(__dirname, '..', 'app', 'dinosors');
-const { World } = require(path.join(root, 'sim', 'world.ts'));
+const { World, START } = require(path.join(root, 'sim', 'world.ts'));
+// a real game starts with a small family; these scenarios were written for (and tuned with) the original 8-person tribe
+const NEW_GAME_PEOPLE = START.people;
+START.people = 8;
 const { LM } = require(path.join(root, 'sim', 'terrain.ts'));
 const { T, TILE } = require(path.join(root, 'sim', 'types.ts'));
 const { addDino } = require(path.join(root, 'sim', 'dinos.ts'));
@@ -51,6 +54,17 @@ test('species catalog is complete and data-driven', () => {
   }
   for (const s of SPECIES) {
     assert.ok(s.facts.length >= 2 && s.size > 0 && s.speed > 0 && s.run >= s.speed, s.id);
+  }
+});
+
+test('a new game starts small: two grown-ups and a kid', () => {
+  START.people = NEW_GAME_PEOPLE;
+  try {
+    const w = new World(42);
+    assert.equal(w.humans.length, 3);
+    assert.equal(w.humans.filter((h) => h.child).length, 1);
+  } finally {
+    START.people = 8;
   }
 });
 
@@ -2381,9 +2395,9 @@ test('guards, Scorpions + drones target raiding Neanderthals, and our bolts hurt
   w.tribe.fireBolt(w, w.camp.x, w.camp.y, 20, t, 60, 700, 0.5);
   run(w, 1);
   assert.ok(b.hp < 1 && b.hp > 0.3, `a bolt hurts but he's tough (${b.hp.toFixed(2)})`);
-  // far away at home they're left alone
+  // the clans and us never get along: even at home they're fair game
   const home = brutes[1];
-  assert.ok(!w.rivals.hostile(w, home), 'not a target at their own camp');
+  assert.ok(w.rivals.hostile(w, home), 'a target even at their own camp');
 });
 
 test('Neanderthals cannot get through closed walls: they bash them', () => {
@@ -2459,4 +2473,58 @@ test('resetting the mine re-rolls rock + minerals but keeps rooms, lift, stock a
   assert.equal(w2.mine.seed, m.seed, 'the new mine saves');
   assert.equal(Array.from(w2.mine.ore).join(''), Array.from(m.ore).join(''), 'same minerals after load');
   assert.equal(w2.mine.builds.length, 1);
+});
+
+test('a finished bridge deck holds a 2x2 tower; open water does not', () => {
+  const w = new World(12345);
+  const { isWaterTile } = require(path.join(root, 'sim', 'terrain.ts'));
+  let at = null;
+  for (let ty = 5; ty < 100 && !at; ty++) for (let tx = 5; tx < 150 && !at; tx++) {
+    let ok = true;
+    for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++) if (!isWaterTile(w.terrain.tiles[(ty + dy) * 160 + tx + dx])) ok = false;
+    if (ok) at = [tx, ty];
+  }
+  assert.ok(at, 'found open water');
+  const [x0, y0] = at;
+  const px = x0 * TILE + TILE, py = y0 * TILE + TILE + 16;
+  assert.equal(w.tribe.towerSpot(w, px, py), null, 'no tower on bare water');
+  for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+    const b = w.colony.addBuilding(w, 'bridge', (x0 + dx) * TILE + 16, (y0 + dy) * TILE + 16);
+    assert.ok(b, 'bridge planned');
+    b.built = 1;
+  }
+  w.camp.learned.add('tower');
+  const t = w.tribe.addTower(w, px, py);
+  assert.ok(t && t.tx === x0 && t.ty === y0, 'tower snaps onto the deck');
+});
+
+test('only chicken-sized dinos can step onto a bridge', () => {
+  const w = new World(12345, false);
+  const { isWaterTile } = require(path.join(root, 'sim', 'terrain.ts'));
+  let i = -1;
+  for (let ty = 5; ty < 100 && i < 0; ty++) for (let tx = 5; tx < 150 && i < 0; tx++) if (isWaterTile(w.terrain.tiles[ty * 160 + tx])) i = ty * 160 + tx;
+  assert.ok(i >= 0, 'found water');
+  const tx = i % 160, ty = Math.floor(i / 160);
+  const b = w.colony.addBuilding(w, 'bridge', tx * TILE + 16, ty * TILE + 16);
+  assert.ok(b, 'bridge planned');
+  b.built = 1;
+  w.nav.sync(w);
+  assert.ok(w.nav.ok('human', i), 'people walk the bridge');
+  assert.ok(w.nav.ok('dino', i), 'a compy can cross');
+  assert.ok(!w.nav.ok('bigDino', i), 'a big dino cannot');
+});
+
+test('a Scorpion tapped near a free finished tower snaps onto it', () => {
+  const w = new World(12345);
+  const t = w.tribe.addTower(w, w.camp.x + 260, w.camp.y + 140);
+  assert.ok(t, 'tower planned');
+  t.stage = 3;
+  // a little off to the side of the tower, not on its outline
+  const spot = w.colony.scorpionSpot(w, t.x + 50, t.y + 20);
+  assert.equal(spot.mount, 'tower');
+  assert.ok(w.colony.towerFree(t), 'free before');
+  w.camp.learned.add('scorpion');
+  const s = w.colony.addScorpion(w, t.x + 50, t.y + 20);
+  assert.ok(typeof s !== 'string' && s.mount === 'tower', 'mounted on the tower');
+  assert.ok(!w.colony.towerFree(t), 'taken after');
 });

@@ -2017,7 +2017,26 @@ export class Renderer {
     c.strokeRect(tx * TILE, ty * TILE, tw * TILE, th * TILE);
     if (p.build === "scorpion") {
       const spot = w.colony.scorpionSpot(w, p.x, p.y);
-      const label = spot.why ?? (ok ? `Place on ${spot.mount === "tower" ? "tower" : spot.mount === "wall" ? "wall" : "ground"}` : "Too far from camp");
+      // every free tower glows as a slot; the one it will go on gets a ghost Scorpion on its platform
+      for (const t of w.tribe.towers) {
+        if (!w.colony.towerFree(t)) continue;
+        const target = spot.mount === "tower" && t.tx === spot.tx && t.ty === spot.ty;
+        c.strokeStyle = target ? "rgba(74,222,128,0.95)" : `rgba(251,191,36,${0.45 + Math.sin(this.t * 4) * 0.25})`;
+        c.lineWidth = (target ? 3 : 2) * inv;
+        c.setLineDash(target ? [] : [6 * inv, 5 * inv]);
+        c.beginPath();
+        c.ellipse(t.x, t.y - TOWER_Z, 34, 15, 0, 0, Math.PI * 2);
+        c.stroke();
+        c.setLineDash([]);
+        if (target) {
+          c.globalAlpha = 0.55 + Math.sin(this.t * 6) * 0.2;
+          c.font = `${22}px sans-serif`;
+          c.textAlign = "center";
+          c.fillText("🎯", t.x, t.y - TOWER_Z - 8);
+          c.globalAlpha = 1;
+        }
+      }
+      const label = spot.why ?? (ok ? (spot.mount === "tower" ? "Tap: Scorpion on this tower" : `Place on ${spot.mount === "wall" ? "wall" : "ground"}`) : "Too far from camp");
       c.font = `700 ${12 * inv}px ui-rounded, system-ui, sans-serif`;
       c.textAlign = "center";
       c.fillStyle = ok ? "#bbf7d0" : "#fecaca";

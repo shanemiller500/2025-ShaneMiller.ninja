@@ -216,9 +216,29 @@ export class Colony {
     return this.scorpions.find((s) => s.tx === tx && s.ty === ty) ?? null;
   }
 
-  /** The visible tower, including its raised platform, snaps to one mount. */
+  /** Is there room for a Scorpion on top of this tower? (finished, nothing mounted yet) */
+  towerFree(t: { tx: number; ty: number; stage: number }) {
+    return t.stage >= 3 && !this.scorpions.some((s) => s.tx >= t.tx && s.tx <= t.tx + 1 && s.ty >= t.ty && s.ty <= t.ty + 1);
+  }
+
+  /**
+   * The visible tower, including its raised platform, snaps to one mount.
+   * Near a free finished tower (not on a wall) it snaps onto that tower
+   * too, so you don't have to hit the platform exactly.
+   */
   scorpionSpot(w: World, x: number, y: number) {
-    const tower = w.tribe.towers.find((t) => x >= t.x - 34 && x <= t.x + 34 && y >= t.y - 90 && y <= t.y + 4);
+    let tower = w.tribe.towers.find((t) => x >= t.x - 34 && x <= t.x + 34 && y >= t.y - 90 && y <= t.y + 4);
+    if (!tower && !w.tribe.wallAt(Math.floor(x / TILE), Math.floor(y / TILE))) {
+      let bd = 80;
+      for (const t of w.tribe.towers) {
+        if (!this.towerFree(t)) continue;
+        const d = Math.hypot(t.x - x, t.y - 40 - y);
+        if (d < bd) {
+          bd = d;
+          tower = t;
+        }
+      }
+    }
     const tx = tower ? tower.tx : Math.floor(x / TILE);
     const ty = tower ? tower.ty : Math.floor(y / TILE);
     const wl = tower ? null : w.tribe.wallAt(tx, ty);
@@ -230,8 +250,8 @@ export class Colony {
     else if (this.scorpions.some((s) => Math.abs(s.tx - tx) <= 1 && Math.abs(s.ty - ty) <= 1)) why = "There's a Scorpion right there.";
     else if (!tower && (!wl || wl.part === "stairs")) {
       if (wl) why = "Not on the stairs!";
-      const t = w.terrain.tiles[ty * MAP_W + tx] as T;
-      if (!why && (!isWalkTile(t) || isWaterTile(t) || t === T.Tar)) why = "It needs solid ground.";
+      // firm ground, or the deck of a finished bridge
+      if (!why && !this.footing(w, tx, ty)) why = "It needs solid ground.";
       if (!why && this.occupied(w).has(ty * MAP_W + tx)) why = "Something is already there.";
     }
     return { x: tower ? tower.x : x, y: tower ? tower.y : y, tx, ty, mount, why };

@@ -1353,8 +1353,30 @@ export class Engine {
     this.hintT -= dt;
     if (this.hintT > 0) return;
     this.hintT = 0.12;
+    if (this.hover && this.tool.id === "build" && !this.box) {
+      // building: ring whatever a tap would act on (the tower a Scorpion goes on, a tower to rebuild in stone)
+      const w = this.world;
+      const { x, y } = this.hover;
+      this.hoverItem = null;
+      this.hoverHint = null;
+      if (this.tool.build === "scorpion") {
+        const spot = w.colony.scorpionSpot(w, x, y);
+        const t = spot.mount === "tower" ? w.tribe.towers.find((o) => o.tx === spot.tx && o.ty === spot.ty) : null;
+        if (t && !spot.why) {
+          this.hoverItem = { x: t.x, y: t.y - 46, radius: 38 };
+          this.hoverHint = { x, y, icon: "🎯", label: "Tap to put a Scorpion on this tower" };
+        }
+      } else if (this.tool.build === "tower") {
+        const t = w.tribe.towers.find((o) => x >= o.x - 34 && x <= o.x + 34 && y >= o.y - 90 && y <= o.y + 4);
+        if (t && t.stage >= 3 && !t.stone) {
+          this.hoverItem = { x: t.x, y: t.y - 46, radius: 38 };
+          this.hoverHint = { x, y, icon: "🏰", label: w.camp.learned.has("stonewall") ? (t.up ? "Already being rebuilt in stone" : "Tap to rebuild this tower in stone") : "Invent 🧱 Stone walls to rebuild it in stone" };
+        }
+      }
+      return;
+    }
     if (this.hover && !this.selection.length && this.tool.id === "hand" && !this.box) {
-      const target = this.hoverStructure(this.hover.x, this.hover.y);
+      const target = this.hoverStructure(this.hover.x, this.hover.y) ?? this.hoverThing(this.hover.x, this.hover.y);
       this.hoverItem = target ? { x: target.x, y: target.y, radius: target.radius } : null;
       // nobody picked: still say what a dinosaur body is worth
       const body = carcassAt(this.world, this.hover.x, this.hover.y);
@@ -1367,6 +1389,9 @@ export class Engine {
       return;
     }
     const { x, y } = this.hover;
+    // with people picked, still ring what the pointer is over so it's clear what the order is about
+    const ring = this.hoverStructure(x, y) ?? this.hoverThing(x, y);
+    this.hoverItem = ring ? { x: ring.x, y: ring.y, radius: ring.radius } : null;
     const people = this.selectionHumans();
     const picked = { dino: this.pickDino(x, y), human: this.pickHuman(x, y), dragon: this.pickDragon(x, y), brute: this.pickBrute(x, y) };
     if (picked.human && !people.includes(picked.human) && !picked.human.captive && condition(picked.human) === "healthy") {
@@ -1375,6 +1400,25 @@ export class Engine {
     }
     const cmd = inferCommand(this.world, people, x, y, picked);
     this.hoverHint = cmd ? { x, y, icon: cmd.icon, label: cmd.label } : null;
+  }
+
+  /** A creature or thing under the pointer, to ring on hover. */
+  private hoverThing(x: number, y: number): { x: number; y: number; radius: number; icon: string; label: string } | null {
+    const w = this.world;
+    const d = this.pickDino(x, y);
+    if (d) {
+      const def = sp(d.species);
+      return { x: d.x, y: d.y - d.z, radius: Math.max(16, sizeOf(d) * 0.42), icon: def.emoji, label: `${def.nick} · tap to look` };
+    }
+    const b = this.pickBrute(x, y);
+    if (b) return { x: b.x, y: b.y, radius: 20, icon: "🪓", label: `${b.name} of the ${w.rivals.clan(b.clan)?.name ?? "wild"} clan` };
+    const clan = w.rivals.clans.find((k) => Math.hypot(k.x - x, k.y - y) < 110);
+    if (clan) return { x: clan.x, y: clan.y, radius: 90, icon: "⚔️", label: `The ${clan.name} clan's camp · pick people and tap to raid it` };
+    const fire = w.campfires.find((f) => Math.hypot(f.x - x, f.y - y) < 26);
+    if (fire) return { x: fire.x, y: fire.y, radius: 20, icon: "🔥", label: fire.lit ? "Campfire" : "Campfire (out)" };
+    const it = w.items.find((i) => i.kind !== "poop" && Math.hypot(i.x - x, i.y - y) < 22);
+    if (it) return { x: it.x, y: it.y, radius: it.carcass ? Math.max(20, it.carcass.size * 0.45) : 14, icon: "✨", label: it.kind };
+    return null;
   }
 
   private hoverStructure(x: number, y: number) {
