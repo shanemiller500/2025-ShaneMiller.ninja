@@ -7,7 +7,7 @@
 /* ------------------------------------------------------------------ */
 import { hasVault } from "./deepBuild";
 import { CAMP_LEVELS, FACTS } from "../data/facts";
-import { WEAPON_BY_ID, type WeaponDef } from "../data/colony";
+import { HOUSING, SCORPION_TIERS, WEAPON_BY_ID, type WeaponDef } from "../data/colony";
 import { sp } from "../data/species";
 import { addDino, emote, findSpawnSpot, isBaby, setState, sizeOf } from "./dinos";
 import { addHuman, go, moveHuman, say, sourceFor } from "./humans";
@@ -27,6 +27,7 @@ import {
   MAP_W,
   T,
   TILE,
+  type BuildingKind,
   type Danger,
   type Dino,
   type Dragon,
@@ -375,6 +376,39 @@ export class Tribe {
   /** Raids don't send people inside the walls running for cover when the auto-defenses are up. */
   safeInside(w: World, h: Human) {
     return this.autoDefense(w) > 0 && this.enclosed(w, h.x, h.y) && !w.dinos.some((d) => d.raider && this.enclosed(w, d.x, d.y));
+  }
+
+  /** A bridge under fire from an occupied or powered weapon on a finished tower. */
+  coveredBridge(w: World, h: Human): { x: number; y: number } | null {
+    if (!this.raid) return null;
+    let best: { x: number; y: number } | null = null;
+    let distance = Infinity;
+    for (const b of w.colony.buildings) {
+      if (b.kind !== "bridge" || b.built < 1 || b.hp <= 0) continue;
+      const x = b.tx * TILE + TILE / 2;
+      const y = b.ty * TILE + TILE / 2;
+      if (!isWaterTile(w.terrain.tiles[b.ty * MAP_W + b.tx] as T) || !w.nav.passable("human", x, y)) continue;
+      if (w.dinos.some((d) => d.raider && Math.hypot(d.x - x, d.y - y) < 85) || w.rivals.brutes.some((r) => w.rivals.hostile(w, r) && Math.hypot(r.x - x, r.y - y) < 85)) continue;
+      const covered = this.towers.some((t) => {
+        if (t.stage < TOWER_STAGES.length || t.hp <= 0) return false;
+        return w.colony.scorpions.some((s) => {
+          if (s.mount !== "tower" || s.built < 1 || s.hp <= 0 || s.tx !== t.tx || s.ty !== t.ty) return false;
+          const crew = w.humans.find((o) => o.id === s.crew);
+          const armed = w.colony.dronesPowered(w) || !!crew && crew.state === "operate" && crew.level === 1 && Math.hypot(crew.x - s.x, crew.y - s.y) < 26;
+          return armed && Math.hypot(s.x - x, s.y - y) < SCORPION_TIERS[s.tier - 1].range + 90;
+        }) || w.humans.some((o) => {
+          if (o.level !== 1 || o.state === "down" || (this.roleOf(o) !== "guard" && o.order?.kind !== "guard") || Math.hypot(o.x - t.x, o.y - (t.y - 18)) >= 45) return false;
+          const weapon = this.weaponFor(w, o);
+          return !!weapon && !weapon.melee && Math.hypot(o.x - x, o.y - y) < weapon.range + 140;
+        });
+      });
+      const d = Math.hypot(h.x - x, h.y - y);
+      if (covered && d < distance) {
+        best = { x, y };
+        distance = d;
+      }
+    }
+    return best;
   }
 
   roleOf(h: Human): Role {
@@ -802,6 +836,7 @@ export class Tribe {
   addFarm(w: World, x: number, y: number) {
     const t = w.terrain.tileAt(x, y);
     if (!isWalkTile(t) || isWaterTile(t) || t === T.Tar || t === T.Rock || t === T.Basalt) return null;
+    if (w.colony.occupied(w).has(Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE))) return null;
     if (this.farms.some((f) => Math.hypot(f.x - x, f.y - y) < 70)) return null;
     const f: Farm = { id: w.nextId(), x, y, growth: 0, planted: false };
     this.farms.push(f);
@@ -862,6 +897,7 @@ export class Tribe {
   /* ------------------------------ update ------------------------------ */
 
   private planT = 20;
+  private improvementDay = 1;
   /** wall version the entrances were last checked at */
   private entranceV = -1;
 
@@ -878,10 +914,12 @@ export class Tribe {
       w.toast("🛖", "The tribe planned a new hut so the camp can grow!");
     }
     if (c.learned.has("farming") && !f.has("planFarms")) {
-      f.add("planFarms");
-      this.addFarm(w, c.x - 120, c.y + 150);
-      this.addFarm(w, c.x - 30, c.y + 165);
-      w.toast("🌾", "Farm fields planned! Farmers will plant crops.", c.x, c.y + 150);
+      const a = this.addFarm(w, c.x - 120, c.y + 150);
+      const b = this.addFarm(w, c.x - 30, c.y + 165);
+      if (a || b) {
+        f.add("planFarms");
+        w.toast("🌾", "Farm fields planned! Farmers will plant crops.", c.x, c.y + 150);
+      }
     }
     if (c.learned.has("palisade") && this.raidsWon + (this.raid ? 1 : 0) >= 1 && !f.has("planRing")) {
       f.add("planRing");
@@ -889,24 +927,26 @@ export class Tribe {
       if (n) w.toast("🪵", "After that raid, the tribe planned a palisade wall around the camp!", c.x, c.y);
     }
     if (c.learned.has("tower") && !f.has("planTower")) {
-      f.add("planTower");
-      this.addTower(w, c.x + 150, c.y + 130);
+      if (this.addTower(w, c.x + 150, c.y + 130)) f.add("planTower");
     }
     if (c.learned.has("scorpion") && !f.has("planScorpion")) {
       const tower = this.towers.find((t) => t.stage >= TOWER_STAGES.length);
       if (tower) {
-        f.add("planScorpion");
         const s = w.colony.addScorpion(w, tower.x, tower.y - 10);
-        if (typeof s !== "string") w.toast("🎯", "The tribe planned a Scorpion on top of the watchtower!", tower.x, tower.y);
+        if (typeof s !== "string") {
+          f.add("planScorpion");
+          w.toast("🎯", "The tribe planned a Scorpion on top of the watchtower!", tower.x, tower.y);
+        }
       }
     }
     if (c.learned.has("medicine") && !f.has("planHealer") && w.humans.length >= 8) {
-      f.add("planHealer");
-      if (w.colony.addBuilding(w, "healer", c.x - 190, c.y + 120)) w.toast("🌿", "The tribe planned a healing hut.", c.x - 190, c.y + 120);
+      if (w.colony.addBuilding(w, "healer", c.x - 190, c.y + 120)) {
+        f.add("planHealer");
+        w.toast("🌿", "The tribe planned a healing hut.", c.x - 190, c.y + 120);
+      }
     }
     if (c.learned.has("fire") && !f.has("planWater") && w.camp.stock.clay >= 2) {
-      f.add("planWater");
-      w.colony.addBuilding(w, "waterStore", c.x + 120, c.y + 70);
+      if (w.colony.addBuilding(w, "waterStore", c.x + 120, c.y + 70)) f.add("planWater");
     }
     // every wall ring gets a grand bone entrance
     if (c.learned.has("palisade") && this.entranceV !== this.version) {
@@ -941,6 +981,57 @@ export class Tribe {
     }
   }
 
+  /** After the first day, Auto workers plan one useful project per day. */
+  private autoImprove(w: World) {
+    if (w.day < 2 || this.improvementDay >= w.day) return;
+    if (!w.humans.some((h) => h.role === "auto" && !h.child && !h.under && !h.stranger)) return;
+    if (w.buildSites().some((site) => !site.repair && !site.locked)) return;
+    this.improvementDay = w.day;
+    const c = w.camp;
+    const adults = w.humans.filter((h) => !h.child && !h.stranger).length;
+    if (c.learned.has("shelter") && adults >= this.capacity(w) * 0.8 && !c.activeShelter(w) && w.shelters.length < 30) {
+      const n = w.shelters.length;
+      const a = -0.4 + n * 0.9;
+      const radius = CAMP_LEVELS[this.level].radius * 0.5;
+      c.addShelter(w, c.x + Math.cos(a) * radius, c.y + 50 + Math.sin(a) * radius * 0.6);
+      w.toast("🛖", "Auto planned another home for the growing camp.");
+      return;
+    }
+    if (c.learned.has("farming") && this.foodTotal(w) < adults * 2 && this.farms.length < Math.min(8, Math.ceil(adults / 8))) {
+      for (let i = 0; i < 16; i++) {
+        const a = i * Math.PI / 8;
+        const x = c.x + Math.cos(a) * 190;
+        const y = c.y + 90 + Math.sin(a) * 130;
+        if (this.addFarm(w, x, y)) {
+          w.toast("🌾", "Auto planned another farm to grow more food.", x, y);
+          return;
+        }
+      }
+    }
+    const plan = (kind: BuildingKind) => {
+      for (const radius of [140, 205, 270]) for (let i = 0; i < 16; i++) {
+        const a = (i + w.day * 3) * Math.PI / 8;
+        const x = c.x + Math.cos(a) * radius;
+        const y = c.y + 35 + Math.sin(a) * radius * 0.7;
+        if (Math.hypot(x - c.pileX, y - c.pileY) < 70 || Math.hypot(x - c.caveX, y - c.caveY) < 70) continue;
+        const b = w.colony.addBuilding(w, kind, x, y);
+        if (b) {
+          w.toast("🏗️", `Auto planned a ${kind === "foodStore" ? "food store" : kind === "waterStore" ? "water store" : kind === "healer" ? "healing hut" : "storage hut"}.`, b.x, b.y);
+          return true;
+        }
+      }
+      return false;
+    };
+    if (c.learned.has("basket") && !w.colony.buildings.some((b) => b.kind === "foodStore") && plan("foodStore")) return;
+    if (c.learned.has("fire") && !w.colony.buildings.some((b) => b.kind === "waterStore") && plan("waterStore")) return;
+    if (c.learned.has("axe") && !w.colony.buildings.some((b) => b.kind === "storage") && plan("storage")) return;
+    if (c.learned.has("medicine") && !w.colony.buildings.some((b) => b.kind === "healer") && plan("healer")) return;
+    const home = w.shelters.filter((s) => shelterDone(s) && !s.up && HOUSING[s.tier + 1] && (!HOUSING[s.tier + 1].polygon || w.civ.polygonAge)).sort((a, b) => a.tier - b.tier)[0];
+    if (home && c.startUpgrade(w, home)) return;
+    const tower = this.towers.find((t) => t.stage >= TOWER_STAGES.length && t.hp > 0 && !t.stone && !t.up);
+    if (tower && c.learned.has("stonewall")) this.upgradeTower(w, tower);
+  }
+
   update(w: World, dt: number) {
     this.wonCheer = Math.max(0, this.wonCheer - dt);
     this.assignT -= dt;
@@ -962,6 +1053,7 @@ export class Tribe {
     if (this.planT <= 0) {
       this.planT = 6;
       this.autoPlan(w);
+      this.autoImprove(w);
     }
     for (const f of this.farms) if (f.planted && f.growth < 1) f.growth = Math.min(1, f.growth + (dt / 80) * (1 + w.weather.rain * 1.5) * (w.weather.temp > 0.85 ? 0.5 : 1) * (w.civ.has("cropRotation") ? 2 : 1));
     // crops near lava/fire get scorched
@@ -1038,6 +1130,7 @@ export class Tribe {
       evolution: this.evolution,
       raidsWon: this.raidsWon,
       raidTimer: Math.round(this.raidTimer),
+      improvementDay: this.improvementDay,
     };
   }
 
@@ -1068,6 +1161,7 @@ export class Tribe {
     this.evolution = d.evolution;
     this.raidsWon = d.raidsWon;
     this.raidTimer = d.raidTimer;
+    this.improvementDay = d.improvementDay ?? w.day;
   }
 }
 

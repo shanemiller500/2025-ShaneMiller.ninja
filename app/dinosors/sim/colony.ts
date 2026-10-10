@@ -225,10 +225,6 @@ export class Colony {
     let mount: Scorpion["mount"] = "ground";
     if (tower) mount = "tower";
     else if (wl && wl.part !== "stairs") mount = "wall";
-    else {
-      if (wl) return "Not on the stairs!";
-      if (!this.footing(w, tx, ty)) return "It needs solid ground.";
-      if (this.occupied(w).has(ty * MAP_W + tx)) return "Something is already there.";
     let why: string | null = null;
     if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) why = "Outside the world.";
     else if (this.scorpions.some((s) => Math.abs(s.tx - tx) <= 1 && Math.abs(s.ty - ty) <= 1)) why = "There's a Scorpion right there.";

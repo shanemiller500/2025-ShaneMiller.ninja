@@ -101,6 +101,7 @@ export interface PersonRow {
   condition: Condition;
   task: string | null;
   stranger: boolean;
+  availableForJob: boolean;
 }
 
 /** One picked person in the selection bar. */
@@ -1555,15 +1556,54 @@ export class Engine {
 
   /* ----------------------------- tribe API ----------------------------- */
 
+  private availableForJob(h: Human) {
+    return !h.child && !h.stranger && !h.captive && !h.under && h.state !== "down" && h.state !== "tossed" && !this.world.mine.pending.has(h.id);
+  }
+
+  private changeRole(h: Human, role: Role) {
+    if (h.role === role) return;
+    const task = this.world.tasks.get(h.taskId);
+    if (task) task.people = task.people.filter((id) => id !== h.id);
+    h.taskId = 0;
+    h.taskStep = 0;
+    h.site = "";
+    h.order = null;
+    h.wantTop = false;
+    leaveScorpion(this.world, h);
+    if (h.carry && h.carryN > 0) this.world.camp.stock[h.carry] += h.carryN;
+    h.carry = null;
+    h.carryN = 0;
+    h.role = role;
+    h.task = null;
+    h.think = 0;
+    if (!h.under && h.state !== "down" && h.state !== "tossed") go(h, "idle", h.x, h.y);
+  }
+
   setRole(id: number, role: Role) {
     const h = this.world.humans.find((x) => x.id === id);
     if (!h || h.child) return;
-    h.role = role;
-    h.order = null;
-    h.think = 0;
-    h.task = null;
+    this.changeRole(h, role);
     h.bubble = { text: role === "auto" ? "I'll help wherever!" : `I'm a ${role}!`, t: 2 };
     this.audio.play("pop", 0, 0, 0.4);
+  }
+
+  /** Set the exact number of available surface adults manually assigned to a duty. */
+  setRoleCount(role: Role, requested: number) {
+    const people = this.world.humans.filter((h) => this.availableForJob(h)).sort((a, b) => a.id - b.id);
+    const count = Number.isFinite(requested) ? Math.max(0, Math.min(people.length, Math.trunc(requested))) : 0;
+    const assigned = people.filter((h) => h.role === role);
+    for (const h of assigned.slice(count)) this.changeRole(h, role === "auto" ? "gatherer" : "auto");
+    const need = count - Math.min(count, assigned.length);
+    const priority = (h: Human) => h.role === "auto" ? 0 : h.role === "gatherer" ? 1 : 2;
+    const candidates = people.filter((h) => h.role !== role).sort((a, b) => priority(a) - priority(b) || a.id - b.id);
+    for (const h of candidates.slice(0, need)) this.changeRole(h, role);
+    this.rallyRoles = null;
+    this.world.toast("👥", `${count} ${count === 1 ? "person" : "people"} assigned to ${role === "auto" ? "Auto" : role}.`);
+    return count;
+  }
+
+  setAllRoles(role: Role) {
+    return this.setRoleCount(role, this.world.humans.filter((h) => this.availableForJob(h)).length);
   }
 
   /** Next world tap gives this person an order (dino = hunt, ground = guard there). */
@@ -1612,12 +1652,7 @@ export class Engine {
   }
 
   allAuto() {
-    this.rallyRoles = null;
-    for (const h of this.world.humans) {
-      h.role = "auto";
-      h.order = null;
-    }
-    this.world.toast("✨", "Everyone's back on Auto — the tribe decides.");
+    this.setAllRoles("auto");
   }
 
   planWalls(kind: "palisade" | "stone") {
@@ -2494,7 +2529,7 @@ export class Engine {
       evolution: t.evolution,
       raidsWon: t.raidsWon,
       raid: raid ? { phase: raid.phase, label: raid.label, left, x: rx, y: ry, t: raid.t, brutes: raid.by === "brute" } : null,
-      people: w.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, role: h.role, autoRole: h.autoRole, state: h.state, hp: h.hp, condition: condition(h), task: w.tasks.get(h.taskId)?.label ?? null, stranger: h.stranger })),
+      people: w.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, role: h.role, autoRole: h.autoRole, state: h.state, hp: h.hp, condition: condition(h), task: w.tasks.get(h.taskId)?.label ?? null, stranger: h.stranger, availableForJob: this.availableForJob(h) })),
       walls: {
         built: t.walls.filter((x) => x.built >= 1 && x.hp > 0).length,
         planned: t.walls.length,

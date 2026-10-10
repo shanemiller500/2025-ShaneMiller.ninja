@@ -698,7 +698,7 @@ export interface Tower {
   up?: boolean;
 }
 
-export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "well" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "tannery" | "spikes" | "barricade" | "totem"
+export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "well" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "boneTorch" | "tannery" | "spikes" | "barricade" | "totem"
   // the Old Ways' last-resort project
   | "shelterDeep"
   | "refinery"

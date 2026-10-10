@@ -10,13 +10,13 @@ import { sizeOf } from "./dinos";
 import { P } from "./particles";
 import { clamp, pick } from "./rng";
 import { LM, groundSpeed } from "./terrain";
-import { T, TILE, type Dino, type Dragon, type Human, type HumanState, type Plant, type Resource } from "./types";
+import { MAP_W, T, TILE, type Dino, type Dragon, type Human, type HumanState, type Plant, type Resource } from "./types";
 import type { World } from "./world";
 import { TALL } from "./plants";
 import { roleAct, roleThink } from "./tribe";
 import { goalKey, nodePos, tileOf, TOWER_Z, WALK_Z, type NavClass } from "./nav";
 import { shelterDone, stagesOf } from "./build";
-import { buildAct, deliverToSite, douseThink, joinTask, leaveScorpion, taskCarrying, taskThink } from "./tasks";
+import { buildAct, buildThink, deliverToSite, douseThink, joinTask, leaveScorpion, taskCarrying, taskThink } from "./tasks";
 import { healTick, hurtHuman, recover } from "./injury";
 import { autoButcher } from "./tasks";
 import { cutCarcass, cutTime, hasYield } from "./carcass";
@@ -205,6 +205,7 @@ export function moveHuman(w: World, h: Human, dt: number) {
   h.vy = Math.sin(a) * s;
   const nx = h.x + h.vx * dt;
   const ny = h.y + h.vy * dt;
+  const fromTile = !h.level && !mount ? tileOf(h.x, h.y) : -1;
   // up on the walkway the path itself keeps us safe; on the ground, don't walk into walls
   const climbing = wl === 1 || h.level === 1;
   if (climbing || walkOk(w, h, nx, ny) || !walkOk(w, h, h.x, h.y)) {
@@ -222,6 +223,10 @@ export function moveHuman(w: World, h: Human, dt: number) {
   }
   if (wl === 1 && d < 18) h.level = 1;
   else if (wl === 0 && h.level === 1 && h.path && h.pathI < h.path.length && d < 18) h.level = 0;
+  if (fromTile >= 0 && !h.level && tileOf(h.x, h.y) !== fromTile) {
+    w.trails.mark(w, (fromTile % MAP_W) * TILE + TILE / 2, Math.floor(fromTile / MAP_W) * TILE + TILE / 2);
+    w.trails.mark(w, h.x, h.y);
+  }
   if (Math.abs(h.vx) > 3) h.dir = h.vx > 0 ? 1 : -1;
   h.anim += (s * dt) / 7;
   if (mount) {
@@ -358,6 +363,27 @@ function nearestNode(w: World, x: number, y: number, r: Resource, max: number): 
   return best;
 }
 
+/** Refill the lowest relative supply first, counting loads already on their way home. */
+export function stockPriorities(w: World): Resource[] {
+  const adults = w.humans.filter((h) => !h.child && !h.stranger).length;
+  const target = Math.max(6, Math.ceil(adults * 0.6));
+  const goals: [Resource, number][] = [
+    ["stick", target], ["stone", target], ["grass", target], ["leaves", target],
+    ["berries", target * 2], ["fish", target * 2],
+  ];
+  if (w.camp.learned.has("axe")) goals.push(["wood", target]);
+  if (w.colony.finished("waterStore")) goals.push(["water", target * 2]);
+  for (const node of w.colony.nodes) {
+    const def = NODES[node.kind];
+    if (!node.found || node.amount <= 0 || !def.gives || (def.needs && !w.camp.learned.has(def.needs))) continue;
+    if (!goals.some(([r]) => r === def.gives)) goals.push([def.gives, Math.max(3, Math.ceil(target / 2))]);
+  }
+  return goals.map(([r, n]) => ({
+    r,
+    ratio: (w.camp.stock[r] + w.humans.reduce((sum, h) => sum + (h.carry === r ? h.carryN : h.task === r ? 1 : 0), 0)) / n,
+  })).filter((x) => x.ratio < 1).sort((a, b) => a.ratio - b.ratio).map((x) => x.r);
+}
+
 /** Where this person goes to hide / sleep: their home, else the cave. */
 export function shelterSpot(w: World, h?: Human): { x: number; y: number } {
   const home = h?.home ? w.shelters.find((s) => s.id === h.home && shelterDone(s)) : undefined;
@@ -413,17 +439,30 @@ function think(w: World, h: Human) {
     say(h, "We're safe in here!");
   }
   if ((tribe.raid || dragonAttack) && !safe && (!fighter || h.child) && !(task && task.kind === "douse")) {
-    if (h.state === "hide") return;
+    const shelter = shelterSpot(w, h);
+    const bridge = !dragonAttack && !h.riding ? tribe.coveredBridge(w, h) : null;
+    const s = bridge && Math.hypot(h.x - bridge.x, h.y - bridge.y) < Math.hypot(h.x - shelter.x, h.y - shelter.y) + 80 ? bridge : shelter;
+    const atBridge = s === bridge && Math.hypot(h.x - s.x, h.y - s.y) < 14;
+    if (atBridge && !h.child && weapon && !weapon.melee) {
+      const target = w.dinos.find((d) => d.raider && Math.hypot(d.x - h.x, d.y - h.y) < weapon.range)
+        ?? w.rivals.brutes.find((b) => w.rivals.hostile(w, b) && Math.hypot(b.x - h.x, b.y - h.y) < weapon.range);
+      if (target) {
+        h.targetId = target.id;
+        go(h, "aim", h.x, h.y);
+        return;
+      }
+    }
+    if (h.state === "hide" && (atBridge || !w.colony.bridgeAt(Math.floor(h.x / TILE), Math.floor(h.y / TILE)))) return;
     if (h.state === "operate") leaveScorpion(w, h);
-    const s = shelterSpot(w, h);
     if (Math.hypot(h.x - s.x, h.y - s.y) < 14) go(h, "hide", h.x, h.y);
     else {
-      if (h.state !== "flee") say(h, pick(w.rng, dragon && !tribe.raid ? ["DRAGON!", "Get inside!", "Fire from the sky!"] : h.child ? ["Mama!", "Hide!", "Eek!"] : ["Raid!!", "Hide!", "To the cave!"]));
+      if (h.state !== "flee") say(h, s === bridge ? "To the covered bridge!" : pick(w.rng, dragon && !tribe.raid ? ["DRAGON!", "Get inside!", "Fire from the sky!"] : h.child ? ["Mama!", "Hide!", "Eek!"] : ["Raid!!", "Hide!", "To the cave!"]));
       if (h.carry && h.carry !== "fish" && h.carry !== "water") {
         // drop what you're carrying and run
         h.carry = null;
         h.carryN = 0;
       }
+      h.wantTop = false;
       go(h, "flee", s.x, s.y);
     }
     return;
@@ -626,6 +665,9 @@ function think(w: World, h: Human) {
   // 5b. the job they've been given (or picked up automatically)
   if (roleThink(w, h)) return;
 
+  // Once their assigned work runs out, adults help finish new builds and upgrades.
+  if (role !== "builder" && !h.order && !h.taskId && !tribe.raid && buildThink(w, h, () => true)) return;
+
   // build the shelter stage if the materials are in
   const site = camp.activeShelter(w);
   if (site) {
@@ -649,16 +691,10 @@ function think(w: World, h: Human) {
   // a dinosaur body lying near camp: harvest it
   if (role === "gatherer" && autoButcher(w, h, 700)) return;
 
-  // gather what the camp needs most (or fish / sticks for the fire / water for the jars)
-  let need = camp.missing(w) ?? w.colony.missing(w) ?? w.civ.missing(w);
-  if (!need) {
-    const r = w.rng();
-    if (r < 0.25) need = "fish";
-    else if (r < 0.35 && camp.stock.stick < 8) need = "stick";
-    else if (r < 0.45) need = "berries";
-    else if (r < 0.52 && w.colony.finished("waterStore") && camp.stock.water < 10) need = "water";
-  }
-  if (need) {
+  // Urgent plans first, then restock the lowest supplies evenly.
+  const urgent = camp.missing(w) ?? w.colony.missing(w) ?? w.civ.missing(w);
+  const needs = urgent ? [urgent, ...stockPriorities(w).filter((r) => r !== urgent)] : stockPriorities(w);
+  for (const need of needs) {
     const src = sourceFor(w, h, need);
     if (src) {
       h.task = need;

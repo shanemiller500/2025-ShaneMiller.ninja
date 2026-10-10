@@ -120,7 +120,7 @@ export class Nav {
   /** Rebuild the grid if terrain or any structure changed. Cheap otherwise. */
   sync(w: World) {
     const tr = w.tribe;
-    const key = `${w.terrain.version}|${tr.version}|${w.colony.version}|${w.shelters.length}:${w.shelterVersion}|${w.snow.navVersion}`;
+    const key = `${w.terrain.version}|${tr.version}|${w.colony.version}|${w.shelters.length}:${w.shelterVersion}|${w.snow.navVersion}|${w.trails.version}`;
     if (key === this.key) return;
     this.key = key;
     this.rebuild(w);
@@ -143,7 +143,7 @@ export class Nav {
       else if (t === T.Mud) c = 1.8;
       else if (t === T.Volcano) c = 1.4;
       else if (t === T.Sand) c = 1.1;
-      cost[i] = c + snow[i] * 0.5;
+      cost[i] = (w.trails.wear[i] >= 5 ? Math.min(c, 0.78) : c) + snow[i] * 0.5;
     }
     const tribe = w.tribe;
     for (const wl of tribe.walls) {

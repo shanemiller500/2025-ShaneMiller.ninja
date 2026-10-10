@@ -13,7 +13,7 @@ import type { Danger, Role, TechId } from "../sim/types";
 /* ------------------------------------------------------------------ */
 /*  The tribe's HQ. Tabs:                                              */
 /*   Camp   – level, growth, food + supplies, huts                     */
-/*   Jobs   – who does what (Auto or a chosen job), rally, all-auto    */
+/*   Jobs   – individual and bulk duties, rally, Auto                   */
 /*   Defend – walls, towers, raids, danger level                       */
 /*   Invent – the tech tree                                            */
 /* ------------------------------------------------------------------ */
@@ -221,6 +221,12 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
 function JobsTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   const people = snap.tribe.people;
   const adults = people.filter((p) => !p.child);
+  const available = adults.filter((p) => p.availableForJob);
+  const [bulkRole, setBulkRole] = useState<Role>("auto");
+  const [amount, setAmount] = useState("1");
+  const selected = ROLE_BY_ID[bulkRole];
+  const requested = Number(amount);
+  const validAmount = amount.trim() !== "" && Number.isInteger(requested) && requested >= 0 && requested <= available.length;
   const counts = new Map<Role, number>();
   for (const p of adults) {
     const r = p.role === "auto" ? p.autoRole : p.role;
@@ -228,28 +234,53 @@ function JobsTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   }
   return (
     <>
-      <div className="mt-3 flex flex-wrap gap-1.5 text-[12px] font-bold">
+      <p className="mt-3 text-[10.5px] font-semibold text-white/55">Current duties, including Auto picks</p>
+      <div className="mt-1 flex flex-wrap gap-1.5 text-[12px] font-bold">
         {ROLES.filter((r) => r.id !== "auto").map((r) => (
           <span key={r.id} title={r.tip} className={`rounded-full px-2.5 py-1 ${counts.get(r.id) ? "bg-white/15" : "bg-white/5 text-white/40"}`}>
             {r.icon} {counts.get(r.id) ?? 0}
           </span>
         ))}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <div className="mt-2">
         <button
           type="button"
           role="switch"
           aria-checked={snap.rallied}
           onClick={() => engine.rally()}
-          className={`rounded-2xl py-2.5 text-sm font-bold transition active:scale-95 ${snap.rallied ? "bg-white text-rose-700 hover:bg-rose-50" : "bg-rose-500 hover:bg-rose-400"}`}
+          className={`w-full rounded-2xl py-2.5 text-sm font-bold transition active:scale-95 ${snap.rallied ? "bg-white text-rose-700 hover:bg-rose-50" : "bg-rose-500 hover:bg-rose-400"}`}
         >
           {snap.rallied ? "🏳️ Stand down" : "📣 Rally! Everyone fight"}
         </button>
-        <button type="button" onClick={() => engine.allAuto()} className="rounded-2xl bg-white/10 py-2.5 text-sm font-bold transition hover:bg-white/20 active:scale-95">
-          ✨ All on Auto
-        </button>
       </div>
-      <p className="mt-2 text-[11px] text-white/55">Tap a job to give it to someone. ✨ Auto means the tribe decides. Tap a person in the world to send them on a mission!</p>
+      <div className="mt-2 rounded-2xl bg-white/5 p-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-[12px] font-bold">Assign a duty</h3>
+          <span className="text-[10.5px] text-white/55">{available.length} available adults</span>
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-1">
+          {ROLES.map((r) => (
+            <button key={r.id} type="button" aria-pressed={bulkRole === r.id} title={r.tip} onClick={() => setBulkRole(r.id)}
+              className={`flex min-h-9 items-center gap-1 rounded-lg px-1.5 text-left text-[10.5px] font-semibold transition ${bulkRole === r.id ? "bg-amber-400 text-slate-950" : "bg-white/[0.07] text-white/80 hover:bg-white/15"}`}>
+              <span className="text-sm">{r.icon}</span><span className="min-w-0 flex-1 truncate">{r.name}</span>
+              <span className="tabular-nums opacity-70">{available.filter((p) => p.role === r.id).length}</span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 flex items-end gap-1.5">
+          <label className="min-w-0 flex-1 text-[10.5px] font-semibold text-white/65">How many {selected.name.toLowerCase()}?
+            <input type="number" min={0} max={available.length} step={1} inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950/35 px-2 py-1.5 text-sm font-bold tabular-nums text-white outline-none focus:border-amber-300" />
+          </label>
+          <button type="button" disabled={!validAmount} onClick={() => engine.setRoleCount(bulkRole, requested)}
+            className="rounded-lg bg-white/15 px-2.5 py-1.5 text-[11px] font-bold hover:bg-white/25 disabled:opacity-40">Set number</button>
+          <button type="button" disabled={!available.length} onClick={() => engine.setAllRoles(bulkRole)}
+            className="rounded-lg bg-amber-400 px-2.5 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-amber-300 disabled:opacity-40">All</button>
+        </div>
+        <p className="mt-1.5 text-[10.5px] leading-snug text-white/55">Set number makes exactly that many manual assignments. All gives every available adult this duty. Auto balances supplies and plans a building or upgrade each day after day one.</p>
+        {bulkRole === "miner" && <p className="mt-1 text-[10.5px] text-cyan-100/75">Miner works surface deposits. Send a crew underground from the Deep panel.</p>}
+      </div>
+      <p className="mt-2 text-[11px] text-white/55">Tap a job below to assign one person. Tap a person in the world to send them on a mission.</p>
       <div className="mt-2 space-y-1.5">
         {adults.map((p) => {
           const eff = p.role === "auto" ? p.autoRole : p.role;

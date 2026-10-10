@@ -369,7 +369,8 @@ export class Rivals {
     const party = this.members(clan.id).filter((o) => o.hp > 0.6 && !o.raid && !o.war && !o.captive && !o.ambush && o.state !== "spy").slice(0, 3);
     if (party.length < 2) return false;
     const a = w.rng() * Math.PI * 2;
-    for (const [i, o] of party.entries()) {
+    for (let i = 0; i < party.length; i++) {
+      const o = party[i];
       const x = h.x + Math.cos(a + i * 0.5) * 120;
       const y = h.y + Math.sin(a + i * 0.5) * 80;
       o.ambush = true;

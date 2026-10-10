@@ -53,6 +53,7 @@ import { Dragons } from "./dragons";
 import { Rivals } from "./rivals";
 import { TaskBoard } from "./tasks";
 import { Population } from "./population";
+import { Trails } from "./trails";
 import { sites, type Site } from "./build";
 import { HOUSING } from "../data/colony";
 import { hurtHuman } from "./injury";
@@ -129,6 +130,7 @@ export class World {
   tribe = new Tribe();
   randomEvents = new RandomEvents();
   nav = new Nav();
+  trails = new Trails();
   colony = new Colony();
   snow = new Snow();
   dragons = new Dragons();
@@ -944,6 +946,7 @@ export class World {
       extinction: this.extinction.serialize(),
       mine: this.mine.serialize(),
       campfires: this.campfires.map((f) => ({ x: r(f.x), y: r(f.y), lit: f.lit, fuel: r(f.fuel) })),
+      trails: this.trails.serialize(),
       camp: { stock: this.camp.stock, learned: Array.from(this.camp.learned), goal: this.camp.goal },
       edits: this.terrain.edits(),
       discoveries: Array.from(this.discoveries),
@@ -964,6 +967,7 @@ export class World {
     w.weather.kind = data.weather;
     w.weather.auto = data.weatherAuto ?? true;
     w.terrain.applyEdits(data.edits ?? []);
+    w.trails.load((data as { trails?: [number, number][] }).trails);
     w.fire.initFuel(w);
     w.snow.init(w);
     w.idCounter = Math.max(data.idCounter ?? 1, 1);

@@ -145,6 +145,7 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("pen", "work"),
   bld("post", "work"),
   bld("path", "land", true),
+  bld("boneTorch", "land", true),
   bld("bridge", "land", true),
   { value: "cleanMud", icon: "🧹", label: "Clean mud", cat: "land", cost: {}, tip: "Tap or drag over mud, swamp or bare dirt near camp to turn it into clean grass. The change is saved and stays clean.", line: true },
   // civilization projects (each needs its research)
