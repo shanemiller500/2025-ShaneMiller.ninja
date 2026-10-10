@@ -2513,3 +2513,18 @@ test('only chicken-sized dinos can step onto a bridge', () => {
   assert.ok(w.nav.ok('dino', i), 'a compy can cross');
   assert.ok(!w.nav.ok('bigDino', i), 'a big dino cannot');
 });
+
+test('a Scorpion tapped near a free finished tower snaps onto it', () => {
+  const w = new World(12345);
+  const t = w.tribe.addTower(w, w.camp.x + 260, w.camp.y + 140);
+  assert.ok(t, 'tower planned');
+  t.stage = 3;
+  // a little off to the side of the tower, not on its outline
+  const spot = w.colony.scorpionSpot(w, t.x + 50, t.y + 20);
+  assert.equal(spot.mount, 'tower');
+  assert.ok(w.colony.towerFree(t), 'free before');
+  w.camp.learned.add('scorpion');
+  const s = w.colony.addScorpion(w, t.x + 50, t.y + 20);
+  assert.ok(typeof s !== 'string' && s.mount === 'tower', 'mounted on the tower');
+  assert.ok(!w.colony.towerFree(t), 'taken after');
+});
