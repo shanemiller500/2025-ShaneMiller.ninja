@@ -419,6 +419,8 @@ export interface Human {
   under?: boolean;
   /** carried off by a Neanderthal clan (its id); 0 / missing = free */
   captive?: number;
+  /** walking out with this person to protect them (packs) */
+  escort?: number;
 }
 
 /* ------------------------------ Neanderthals ------------------------------ */
@@ -426,7 +428,7 @@ export interface Human {
 /** Basic weapons only: Neanderthals never invent bows, metal or energy weapons. */
 export type BruteWeapon = "club" | "axe" | "spear" | "rock";
 
-export type BruteState = "idle" | "wander" | "walk" | "sleep" | "fight" | "hunt" | "bash" | "carry" | "flee" | "home" | "loot" | "rally";
+export type BruteState = "idle" | "wander" | "walk" | "sleep" | "fight" | "hunt" | "bash" | "carry" | "flee" | "home" | "loot" | "rally" | "spy" | "lurk";
 
 /** A Neanderthal: bigger + stronger than our people, not as clever. CPU-run. */
 export interface Brute {
@@ -464,6 +466,10 @@ export interface Brute {
   captive: number;
   /** food grabbed from a stockpile */
   loot: number;
+  /** what that loot was (food unless they raided our stores) */
+  lootKind?: Resource;
+  /** hiding in the grass waiting to jump on our people */
+  ambush?: boolean;
   bubble: { text: string; t: number } | null;
 }
 
@@ -478,6 +484,13 @@ export interface Clan {
   /** seconds until they raid our camp */
   raidT: number;
   growT: number;
+  /** how cunning they've become from spying on us: 1 ambushes, 2 shields, 3 raid our stores + take kids */
+  smarts?: number;
+  /** spy reports brought home */
+  intel?: number;
+  /** seconds until they send the next spy / ambush party */
+  spyT?: number;
+  ambushT?: number;
 }
 
 export type ItemKind = "meat" | "fish" | "fruit" | "berries" | "poop" | "fossil" | "stick" | "stone" | "bones" | "carcass";
@@ -678,6 +691,10 @@ export interface Tower {
   stage: number;
   have: number;
   hp: number;
+  /** built (or being built) in stone: much tougher */
+  stone?: boolean;
+  /** a finished wooden tower waiting to be rebuilt in stone */
+  up?: boolean;
 }
 
 export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "well" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "tannery" | "spikes" | "barricade" | "totem"

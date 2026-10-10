@@ -11,6 +11,8 @@ import type { Egg, Human, Item, Plant, Prop, Shelter } from "../sim/types";
 import { shade } from "./drawDino";
 
 const OUT = "rgba(35,28,22,0.5)";
+/** People get the storybook look: a dark ink outline round limbs, head + clothes. */
+const INK = "rgba(43,28,18,0.85)";
 const CHAR = "#3b3430";
 
 function mix(a: string, b: string, t: number) {
@@ -302,8 +304,15 @@ export interface OutfitLook {
   hood: boolean;
 }
 
-export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean, shield = 0, tier = 1, outfit: OutfitLook | null = null, wet = 0, helmet: HelmetLook | null = null) {
-  const H = h.child ? 18 : 26;
+/**
+ * How well-dressed the tribe is, from what it has learned:
+ * 0 a leopard loincloth, 1 rope belts, pouches + wristbands (palisades),
+ * 2 a studded leather jerkin + bracers (smelting), 3 a dyed tunic + cape (the polygon age).
+ */
+export type GarbLevel = 0 | 1 | 2 | 3;
+
+export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean, shield = 0, tier = 1, outfit: OutfitLook | null = null, wet = 0, helmet: HelmetLook | null = null, garb: GarbLevel = 0) {
+  const H = h.child ? 20 : 29;
   const st = h.state;
   c.save();
   if (st === "tossed") {
@@ -323,24 +332,45 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   const hipY = sit ? -H * 0.22 : -H * 0.42;
 
   // legs
-  c.strokeStyle = shade(h.skin, -0.15);
-  c.lineWidth = H * 0.11;
+  const feet: [number, number][] = sit ? [[H * 0.22, 0], [H * 0.3, 0]] : [[-H * 0.04 + sw * H * 0.18, 0], [H * 0.04 - sw * H * 0.18, 0]];
   c.lineCap = "round";
   c.beginPath();
   if (sit) {
     c.moveTo(-H * 0.05, hipY);
     c.lineTo(H * 0.2, hipY + H * 0.05);
-    c.lineTo(H * 0.22, 0);
+    c.lineTo(feet[0][0], 0);
     c.moveTo(H * 0.02, hipY);
     c.lineTo(H * 0.26, hipY + H * 0.02);
-    c.lineTo(H * 0.3, 0);
+    c.lineTo(feet[1][0], 0);
   } else {
     c.moveTo(-H * 0.04, hipY);
-    c.lineTo(-H * 0.04 + sw * H * 0.18, 0);
+    c.lineTo(feet[0][0], 0);
     c.moveTo(H * 0.04, hipY);
-    c.lineTo(H * 0.04 - sw * H * 0.18, 0);
+    c.lineTo(feet[1][0], 0);
   }
+  c.strokeStyle = INK;
+  c.lineWidth = H * 0.11 + 1.1;
   c.stroke();
+  c.strokeStyle = shade(h.skin, -0.15);
+  c.lineWidth = H * 0.11;
+  c.stroke();
+  // rope-wrapped ankles + flat wooden sandals, like the storybook art
+  for (const [fx] of feet) {
+    c.fillStyle = "#6b4a2a";
+    c.beginPath();
+    c.ellipse(fx + H * 0.03, -H * 0.005, H * 0.09, H * 0.03, 0, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = "#b08a5a";
+    c.lineWidth = H * 0.035;
+    c.lineCap = "butt";
+    c.beginPath();
+    c.moveTo(fx - H * 0.065, -H * 0.06);
+    c.lineTo(fx + H * 0.065, -H * 0.08);
+    c.moveTo(fx - H * 0.065, -H * 0.11);
+    c.lineTo(fx + H * 0.065, -H * 0.13);
+    c.stroke();
+    c.lineCap = "round";
+  }
 
   c.save();
   c.translate(0, hipY);
@@ -355,8 +385,8 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.closePath();
   c.fillStyle = h.fur;
   c.fill();
-  c.strokeStyle = OUT;
-  c.lineWidth = 0.8;
+  c.strokeStyle = INK;
+  c.lineWidth = 0.9;
   c.stroke();
   // leopard-print spots (dark rosettes on the light furs)
   c.fillStyle = shade(h.fur, -0.55);
@@ -371,6 +401,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.arc(-H * 0.05, -H * 0.15, H * 0.04, 0, Math.PI * 2);
   c.arc(H * 0.08, -H * 0.05, H * 0.035, 0, Math.PI * 2);
   c.fill();
+  if (garb > 0) drawGarb(c, H, garb, h.child);
   if (outfit) drawOutfit(c, H, outfit, t, wet, st === "walk" || st === "carry" || st === "flee");
 
   // arms
@@ -418,7 +449,31 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.moveTo(H * 0.12, shY);
     c.lineTo(H * 0.12 + sw * H * 0.15, shY + H * 0.32);
   }
+  c.strokeStyle = INK;
+  c.lineWidth = H * 0.09 + 1;
   c.stroke();
+  c.strokeStyle = h.skin;
+  c.lineWidth = H * 0.09;
+  c.stroke();
+  // shoulder pieces over the arms: fur tufts → leather + studs → gold-trimmed cloth
+  if (garb > 0 && !h.child) {
+    for (const sx of [-H * 0.12, H * 0.12]) {
+      c.fillStyle = garb >= 3 ? "#2a8f8a" : garb >= 2 ? "#6b4428" : shade(h.fur, -0.35);
+      c.strokeStyle = INK;
+      c.lineWidth = 0.8;
+      c.beginPath();
+      c.ellipse(sx, shY + H * 0.01, H * 0.085, H * 0.06, 0, Math.PI, Math.PI * 2.0001);
+      c.lineTo(sx + H * 0.085, shY + H * 0.04);
+      c.lineTo(sx - H * 0.085, shY + H * 0.04);
+      c.closePath();
+      c.fill();
+      c.stroke();
+      if (garb >= 2) {
+        c.fillStyle = garb >= 3 ? "#e8c45a" : "#c9ccd1";
+        c.fillRect(sx - H * 0.085, shY + H * 0.025, H * 0.17, H * 0.022);
+      }
+    }
+  }
 
   // weapons, roasting stick, hoe or fishing pole
   const showWeapon = weapon && !h.child && !h.carry && (st === "aim" || (armed && (st === "idle" || st === "walk" || st === "flee" || st === "talk" || st === "guard" || st === "hunt")));
@@ -614,9 +669,20 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.beginPath();
   c.arc(0, headY, H * 0.15, 0, Math.PI * 2);
   c.fill();
-  c.strokeStyle = OUT;
-  c.lineWidth = 0.7;
+  c.strokeStyle = INK;
+  c.lineWidth = 0.9;
   c.stroke();
+  const man = !h.child && !FEMALE_NAMES.has(h.name);
+  if (man && !helmet && st !== "sleep") {
+    // a big bushy beard round the jaw
+    c.fillStyle = shade(h.hair, 0.05);
+    c.beginPath();
+    c.moveTo(-H * 0.08, headY - H * 0.02);
+    c.quadraticCurveTo(-H * 0.06, headY + H * 0.2, H * 0.06, headY + H * 0.19);
+    c.quadraticCurveTo(H * 0.17, headY + H * 0.14, H * 0.15, headY + H * 0.03);
+    c.quadraticCurveTo(H * 0.06, headY + H * 0.06, -H * 0.08, headY - H * 0.02);
+    c.fill();
+  }
   if (outfit?.hood) {
     // hood up: hide over the hair, trimmed edge round the face
     c.fillStyle = outfit.color;
@@ -654,12 +720,80 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.beginPath();
     c.ellipse(-H * 0.12, headY + H * 0.04, H * 0.06, H * 0.13, 0.3, 0, Math.PI * 2);
     c.fill();
+    if (h.child) {
+      // a mop of tight curls
+      c.beginPath();
+      for (const [cx, cy] of [[-0.14, -0.1], [-0.07, -0.17], [0.02, -0.19], [0.1, -0.14], [-0.17, -0.01]] as [number, number][]) {
+        c.moveTo(H * cx + H * 0.065, headY + H * cy);
+        c.arc(H * cx, headY + H * cy, H * 0.065, 0, Math.PI * 2);
+      }
+      c.fill();
+    } else if (FEMALE_NAMES.has(h.name)) {
+      // big curly hair piled up, with a bone tie
+      c.beginPath();
+      for (const [cx, cy, r] of [[-0.17, -0.06, 0.08], [-0.12, -0.17, 0.085], [-0.02, -0.22, 0.085], [0.08, -0.18, 0.07], [-0.21, 0.06, 0.07], [-0.17, 0.17, 0.065]] as [number, number, number][]) {
+        c.moveTo(H * cx + H * r, headY + H * cy);
+        c.arc(H * cx, headY + H * cy, H * r, 0, Math.PI * 2);
+      }
+      c.fill();
+    } else {
+      // wild, messy tufts sticking up and back
+      c.beginPath();
+      c.moveTo(-H * 0.19, headY + H * 0.02);
+      const tufts: [number, number][] = [[-0.26, -0.08], [-0.17, -0.12], [-0.22, -0.22], [-0.1, -0.2], [-0.08, -0.3], [0.0, -0.21], [0.07, -0.29], [0.1, -0.18], [0.19, -0.2], [0.15, -0.1]];
+      for (const [tx, ty] of tufts) c.lineTo(H * tx, headY + H * ty);
+      c.lineTo(H * 0.12, headY - H * 0.06);
+      c.lineTo(-H * 0.05, headY - H * 0.1);
+      c.closePath();
+      c.fill();
+    }
+  }
+  if (garb > 0 && !helmet && !outfit?.hood) {
+    // a headband: plain cloth → studded leather → a gold circlet
+    c.strokeStyle = garb >= 3 ? "#e8c45a" : garb >= 2 ? "#6b4428" : "#c0392b";
+    c.lineWidth = H * (garb >= 3 ? 0.04 : 0.055);
+    c.beginPath();
+    c.arc(-H * 0.01, headY + H * 0.02, H * 0.155, Math.PI * 1.08, Math.PI * 1.9);
+    c.stroke();
+    if (garb >= 2) {
+      c.fillStyle = garb >= 3 ? "#7fe0ff" : "#c9ccd1";
+      c.beginPath();
+      c.arc(H * 0.02, headY - H * 0.135, H * 0.03, 0, Math.PI * 2);
+      c.fill();
+    }
   }
   if (st !== "sleep") {
+    // big friendly cartoon eye + a round nose + a grin
+    const ey = headY + (st === "lookUp" ? -H * 0.05 : -H * 0.01);
+    c.fillStyle = "#fffaf0";
+    c.beginPath();
+    c.ellipse(H * 0.075, ey, H * 0.042, H * 0.05, 0, 0, Math.PI * 2);
+    c.fill();
     c.fillStyle = "#1d1813";
     c.beginPath();
-    c.arc(H * 0.07, headY + (st === "lookUp" ? -H * 0.05 : -H * 0.01), H * 0.028, 0, Math.PI * 2);
+    c.arc(H * 0.088, ey + H * 0.005, H * 0.026, 0, Math.PI * 2);
     c.fill();
+    c.strokeStyle = shade(h.hair, -0.2);
+    c.lineWidth = H * 0.03;
+    c.beginPath();
+    c.moveTo(H * 0.03, ey - H * 0.07);
+    c.lineTo(H * 0.12, ey - H * 0.075);
+    c.stroke();
+    c.fillStyle = shade(h.skin, -0.12);
+    c.beginPath();
+    c.arc(H * 0.15, headY + H * 0.035, H * 0.04, 0, Math.PI * 2);
+    c.fill();
+    if (st !== "flee" && st !== "tossed" && st !== "down") {
+      c.fillStyle = "#fffaf0";
+      c.strokeStyle = INK;
+      c.lineWidth = 0.6;
+      c.beginPath();
+      c.moveTo(H * 0.03, headY + H * 0.08);
+      c.quadraticCurveTo(H * 0.09, headY + H * 0.15, H * 0.14, headY + H * 0.08);
+      c.closePath();
+      c.fill();
+      c.stroke();
+    }
   }
   if (st === "flee" || st === "tossed") {
     c.fillStyle = "#4a1d1d";
@@ -729,6 +863,88 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   if (h.carry) drawResource(c, h.carry, 0, headY - H * 0.32, H * 0.5);
   c.restore();
   c.restore();
+}
+
+/** The tribe's everyday clothes getting better as it learns (torso space, origin at the hip). */
+function drawGarb(c: CanvasRenderingContext2D, H: number, garb: GarbLevel, child: boolean) {
+  if (garb >= 3) {
+    // dyed cloth tunic with a gold-trimmed hem + a cape behind
+    c.fillStyle = "#1f6f78";
+    c.beginPath();
+    c.moveTo(-H * 0.2, -H * 0.42);
+    c.lineTo(-H * 0.3, H * 0.12);
+    c.lineTo(-H * 0.14, H * 0.1);
+    c.lineTo(-H * 0.12, -H * 0.38);
+    c.closePath();
+    c.fill();
+    c.fillStyle = "#2a8f8a";
+    c.beginPath();
+    c.moveTo(-H * 0.17, -H * 0.41);
+    c.lineTo(H * 0.17, -H * 0.41);
+    c.lineTo(H * 0.21, H * 0.07);
+    c.lineTo(-H * 0.21, H * 0.07);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = INK;
+    c.lineWidth = 0.9;
+    c.stroke();
+    c.fillStyle = "#e8c45a";
+    c.fillRect(-H * 0.21, H * 0.03, H * 0.42, H * 0.045);
+    c.beginPath();
+    c.moveTo(-H * 0.05, -H * 0.41);
+    c.lineTo(0, -H * 0.3);
+    c.lineTo(H * 0.05, -H * 0.41);
+    c.closePath();
+    c.fill();
+  } else if (garb >= 2) {
+    // a laced leather jerkin with metal studs over the furs
+    c.fillStyle = "#7a4f2c";
+    c.beginPath();
+    c.moveTo(-H * 0.16, -H * 0.4);
+    c.lineTo(H * 0.16, -H * 0.4);
+    c.lineTo(H * 0.18, -H * 0.06);
+    c.lineTo(-H * 0.18, -H * 0.06);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = INK;
+    c.lineWidth = 0.9;
+    c.stroke();
+    c.fillStyle = "#c9ccd1";
+    for (const [sx, sy] of [[-0.1, -0.33], [0.1, -0.33], [-0.1, -0.2], [0.1, -0.2], [0, -0.26]] as [number, number][]) {
+      c.beginPath();
+      c.arc(H * sx, H * sy, H * 0.022, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.strokeStyle = "#d9b98a";
+    c.lineWidth = 0.7;
+    c.beginPath();
+    c.moveTo(0, -H * 0.39);
+    c.lineTo(0, -H * 0.08);
+    c.stroke();
+  }
+  if (garb >= 1) {
+    // a rope belt with a pouch, and (grown-ups) a fur strap over the shoulder
+    c.strokeStyle = "#b08a5a";
+    c.lineWidth = H * 0.045;
+    c.beginPath();
+    c.moveTo(-H * 0.2, -H * 0.02);
+    c.lineTo(H * 0.2, -H * 0.04);
+    c.stroke();
+    c.fillStyle = garb >= 2 ? "#c79a3b" : "#8a6238";
+    c.fillRect(-H * 0.035, -H * 0.06, H * 0.07, H * 0.06);
+    c.fillStyle = "#6b4a2a";
+    c.beginPath();
+    c.ellipse(-H * 0.15, H * 0.03, H * 0.06, H * 0.075, 0, 0, Math.PI * 2);
+    c.fill();
+    if (!child && garb < 3) {
+      c.strokeStyle = shade("#8a6238", -0.1);
+      c.lineWidth = H * 0.06;
+      c.beginPath();
+      c.moveTo(-H * 0.14, -H * 0.4);
+      c.lineTo(H * 0.16, -H * 0.06);
+      c.stroke();
+    }
+  }
 }
 
 /** Cloaks, tunics + furs drawn over the body (torso space, origin at the hip). */
@@ -1313,7 +1529,11 @@ export function drawShelter(c: CanvasRenderingContext2D, s: Shelter, night: bool
   }
 }
 
-export function drawCampfire(c: CanvasRenderingContext2D, lit: boolean, t: number, scale = 1) {
+export function drawCampfire(c: CanvasRenderingContext2D, lit: boolean, t: number, scale = 1, iron = false) {
+  if (iron) {
+    drawFireBasket(c, lit, t, scale);
+    return;
+  }
   c.save();
   c.scale(scale, scale);
   c.fillStyle = "#8f8a82";
@@ -1339,6 +1559,68 @@ export function drawCampfire(c: CanvasRenderingContext2D, lit: boolean, t: numbe
     c.ellipse(0, -1, 7, 3, 0, 0, Math.PI * 2);
     c.fill();
   }
+  c.restore();
+}
+
+/** Once the tribe can smelt iron, fires burn in a cast-iron basket on three legs (safe on wooden decks + bridges). */
+function drawFireBasket(c: CanvasRenderingContext2D, lit: boolean, t: number, scale: number) {
+  c.save();
+  c.scale(scale, scale);
+  // shadow
+  c.fillStyle = "rgba(0,0,0,0.25)";
+  c.beginPath();
+  c.ellipse(0, 1, 13, 4, 0, 0, Math.PI * 2);
+  c.fill();
+  // legs
+  c.strokeStyle = "#2f2b29";
+  c.lineWidth = 2.2;
+  c.lineCap = "round";
+  c.beginPath();
+  c.moveTo(-10, 1);
+  c.lineTo(-7, -9);
+  c.moveTo(10, 1);
+  c.lineTo(7, -9);
+  c.moveTo(0, 3);
+  c.lineTo(0, -8);
+  c.stroke();
+  // logs + embers inside the bowl
+  c.strokeStyle = "#5a3d24";
+  c.lineWidth = 3;
+  c.beginPath();
+  c.moveTo(-7, -14);
+  c.lineTo(6, -18);
+  c.moveTo(-6, -18);
+  c.lineTo(7, -14);
+  c.stroke();
+  if (lit) {
+    c.fillStyle = `rgba(255,${120 + Math.sin(t * 8) * 30},40,0.9)`;
+    c.beginPath();
+    c.ellipse(0, -14, 8, 2.6, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+  // the basket: a bowl of iron bands
+  c.fillStyle = "#3b3633";
+  c.beginPath();
+  c.moveTo(-11, -15);
+  c.quadraticCurveTo(-10, -6, 0, -6);
+  c.quadraticCurveTo(10, -6, 11, -15);
+  c.closePath();
+  c.fill();
+  c.strokeStyle = lit ? "#7a4a2a" : "#55504b";
+  c.lineWidth = 1;
+  c.beginPath();
+  for (const x of [-6, 0, 6]) {
+    c.moveTo(x, -15);
+    c.lineTo(x * 0.8, -7);
+  }
+  c.stroke();
+  // rim
+  c.strokeStyle = "#1f1c1a";
+  c.lineWidth = 1.8;
+  c.beginPath();
+  c.ellipse(0, -15, 11, 3, 0, 0, Math.PI * 2);
+  c.stroke();
+  if (lit) drawFlame(c, 0, -16, 0.9, t);
   c.restore();
 }
 

@@ -9,12 +9,16 @@ import { clamp, pick } from "./rng";
 import { baseGenes } from "./genetics";
 import { groundSpeed, isSwimTile, isWalkTile } from "./terrain";
 import { T, TILE, WORLD_H, WORLD_W, type Dino, type DinoState, type SpeciesDef, type SpeciesId } from "./types";
-import { goalKey, nodePos, tileOf } from "./nav";
+import { goalKey, nodePos, tileOf, type NavClass } from "./nav";
 import type { World } from "./world";
 
 export const scaleOf = (d: Dino) => 0.42 + 0.58 * d.growth;
 export const sizeOf = (d: Dino) => sp(d.species).size * scaleOf(d) * (1 + d.tier * 0.14) * d.genes.size;
 export const isBaby = (d: Dino) => d.growth < 0.5;
+
+/** Bridges only hold chicken-sized dinos (compys, little hatchlings). */
+const BRIDGE_MAX_SIZE = 34;
+const navClassOf = (d: Dino): NavClass => (sizeOf(d) <= BRIDGE_MAX_SIZE ? "dino" : "bigDino");
 
 export function makeDino(w: World, species: SpeciesId, x: number, y: number, o: Partial<Dino> = {}): Dino {
   const def = sp(species);
@@ -197,9 +201,9 @@ export function isMoving(d: Dino) {
 export function walkable(w: World, d: Dino, x: number, y: number) {
   if (x < 6 || y < 6 || x > WORLD_W - 6 || y > WORLD_H - 6) return d.migrant;
   const t = w.terrain.tileAt(x, y);
-  if (!isWalkTile(t) && !w.nav.passable("dino", x, y)) return false;
+  if (!isWalkTile(t) && !w.nav.passable(navClassOf(d), x, y)) return false;
   const i = tileOf(x, y);
-  if (!w.nav.ok("dino", i) && t !== T.Tar) return false;
+  if (!w.nav.ok(navClassOf(d), i) && t !== T.Tar) return false;
   if (w.lava.heat[i] > 0.15) return false;
   if (d.state !== "flee" && w.fire.heat[i] > 0.2) return false;
   if (t === T.Tar && d.state !== "flee") return false;
@@ -216,10 +220,10 @@ function planRoute(w: World, d: Dino, dist: number) {
   d.pathKey = key;
   d.path = null;
   d.pathI = 0;
-  if (dist < 70 || w.nav.lineClear("dino", d.x, d.y, d.tx, d.ty)) return;
+  if (dist < 70 || w.nav.lineClear(navClassOf(d), d.x, d.y, d.tx, d.ty)) return;
   // far-off animals don't need perfect routes every time
   if (!w.inView(d.x, d.y, 600) && w.rng() < 0.5 && !d.raider) return;
-  const path = w.nav.find(w, "dino", d.x, d.y, 0, d.tx, d.ty, 0, d.raider ? 9000 : 4000);
+  const path = w.nav.find(w, navClassOf(d), d.x, d.y, 0, d.tx, d.ty, 0, d.raider ? 9000 : 4000);
   if (path === undefined) d.pathKey = 0;
   else if (path === null) d.pathI = -1; // no way there at all (raiders take that as "smash through")
   else d.path = path;
@@ -355,8 +359,8 @@ export function moveDino(w: World, d: Dino, dt: number) {
   const ny = d.y + d.vy * dt;
   if (def.move === "walk") {
     // panicking animals run through fire + tar, but never through walls or into deep water
-    const panicOk = d.state === "flee" && w.nav.ok("dino", tileOf(nx, ny)) && w.lava.heat[tileOf(nx, ny)] < 0.5;
-    if (walkable(w, d, nx, ny) || panicOk || !w.nav.ok("dino", tileOf(d.x, d.y))) {
+    const panicOk = d.state === "flee" && w.nav.ok(navClassOf(d), tileOf(nx, ny)) && w.lava.heat[tileOf(nx, ny)] < 0.5;
+    if (walkable(w, d, nx, ny) || panicOk || !w.nav.ok(navClassOf(d), tileOf(d.x, d.y))) {
       d.x = nx;
       d.y = ny;
     } else if (walkable(w, d, nx, d.y)) {

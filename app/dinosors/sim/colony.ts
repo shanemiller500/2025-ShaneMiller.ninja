@@ -65,6 +65,19 @@ export class Colony {
     return { tx, ty, w: def.w, h: def.h };
   }
 
+  /** A finished bridge deck on this tile: anything can be built on top of it. */
+  bridgeAt(tx: number, ty: number) {
+    return this.buildings.some((b) => b.kind === "bridge" && b.built >= 1 && b.tx === tx && b.ty === ty);
+  }
+
+  /** Solid footing for a structure: dry, firm land or a finished bridge deck. */
+  footing(w: World, tx: number, ty: number) {
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
+    const t = w.terrain.tiles[ty * MAP_W + tx] as T;
+    if (isWaterTile(t) || !isWalkTile(t)) return this.bridgeAt(tx, ty);
+    return t !== T.Tar && t !== T.Cave;
+  }
+
   canPlace(w: World, kind: BuildingKind, x: number, y: number): string | null {
     const def = BUILDINGS[kind];
     const fp = this.footprint(kind, x, y);
@@ -79,23 +92,25 @@ export class Colony {
           if (t !== T.Shallow || w.terrain.salt[ty * MAP_W + tx]) return "Wells need shallow fresh water.";
         } else if (kind === "bridge") {
           if (!isWaterTile(t)) return "Bridges go over water.";
-        } else if (!isWalkTile(t) || isWaterTile(t) || t === T.Tar || t === T.Cave) return "That ground won't hold a building.";
+          if (this.buildings.some((b) => b.kind === "bridge" && b.tx === tx && b.ty === ty)) return "There's a bridge there already.";
+        } else if (!this.footing(w, tx, ty)) return "That ground won't hold a building.";
         if (occupied.has(ty * MAP_W + tx)) return "Something is already there.";
       }
     // keep the door free for solid buildings
     if (def.solid) {
       const door = (fp.ty + fp.h) * MAP_W + fp.tx + Math.floor(fp.w / 2);
-      if (occupied.has(door) || !isWalkTile(w.terrain.tiles[door] as T)) return "The doorway would be blocked.";
+      if (occupied.has(door) || !(isWalkTile(w.terrain.tiles[door] as T) || this.bridgeAt(door % MAP_W, Math.floor(door / MAP_W)))) return "The doorway would be blocked.";
     }
     return null;
   }
 
-  /** Tiles used by walls, towers, huts, buildings + ground Scorpions. */
+  /** Tiles used by walls, towers, huts, buildings + ground Scorpions (bridge decks are free to build on). */
   occupied(w: World) {
     const s = new Set<number>();
     for (const wl of w.tribe.walls) s.add(wl.ty * MAP_W + wl.tx);
     for (const t of w.tribe.towers) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) s.add((t.ty + dy) * MAP_W + t.tx + dx);
     for (const b of this.buildings) {
+      if (b.kind === "bridge") continue;
       const d = BUILDINGS[b.kind];
       for (let dy = 0; dy < d.h; dy++) for (let dx = 0; dx < d.w; dx++) s.add((b.ty + dy) * MAP_W + b.tx + dx);
     }
@@ -212,8 +227,7 @@ export class Colony {
     else if (wl && wl.part !== "stairs") mount = "wall";
     else {
       if (wl) return "Not on the stairs!";
-      const t = w.terrain.tiles[ty * MAP_W + tx] as T;
-      if (!isWalkTile(t) || isWaterTile(t) || t === T.Tar) return "It needs solid ground.";
+      if (!this.footing(w, tx, ty)) return "It needs solid ground.";
       if (this.occupied(w).has(ty * MAP_W + tx)) return "Something is already there.";
     }
     const s: Scorpion = {

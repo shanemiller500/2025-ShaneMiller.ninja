@@ -1,12 +1,11 @@
 "use client";
 
-import { CIV_TECH, type CivPath, type CivTechId } from "../data/civ";
+import { type CivPath, type CivTechId } from "../data/civ";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { SPECIES } from "../data/species";
-import { TECH } from "../data/facts";
 import { RES_INFO } from "../data/colony";
-import { BUILD_BY_ID, BUILD_DEFS, DISASTER_OPTS, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type BuildDef, type BuildOpt, type Opt, type ToolId, type ToolState } from "../game/tools";
+import { BUILD_BY_ID, BUILD_DEFS, bestBuild, buildCost, buildVisible, DISASTER_OPTS, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type BuildDef, type BuildOpt, type Opt, type ToolId, type ToolState } from "../game/tools";
 import type { Resource, SpeciesId, TechId } from "../sim/types";
 import Portrait from "./Portrait";
 import { GameIcon } from "./GameIcon";
@@ -42,7 +41,7 @@ export default function Toolbar({ tool, setTool, unlocked, learned = [], stock =
       case "people":
         return PEOPLE_OPTS.find((o) => o.value === tool.people)!.icon;
       case "build":
-        return BUILD_BY_ID[tool.build].icon;
+        return BUILD_BY_ID[bestBuild(tool.build, (t) => learned.includes(t), (c) => civDone.includes(c))].icon;
       default:
         return TOOLS.find((t) => t.id === id)!.icon;
     }
@@ -165,63 +164,66 @@ const CATS: { id: BuildDef["cat"]; icon: string; label: string }[] = [
   { id: "wonders", icon: "🏛️", label: "Wonders" },
 ];
 
-/** Icon grid of everything buildable, by category, with costs + what's still locked. */
-function BuildMenu({ value, learned, civDone, civPath, stock, onPick }: { value: BuildOpt; learned: TechId[]; civDone: CivTechId[]; civPath: CivPath; stock: Record<string, number>; onPick: (v: BuildOpt) => void }) {
-  const [cat, setCat] = useState<BuildDef["cat"]>(BUILD_BY_ID[value]?.cat ?? "homes");
+/** Icon grid of what the tribe can build right now, by category, with costs. Future eras stay hidden until they're learned. */
+function BuildMenu({ value, learned, civDone, stock, onPick }: { value: BuildOpt; learned: TechId[]; civDone: CivTechId[]; civPath: CivPath; stock: Record<string, number>; onPick: (v: BuildOpt) => void }) {
   const has = new Set(learned);
   const civ = new Set(civDone);
-  const cur = BUILD_BY_ID[value];
-  // only show the other path's projects once one of them is actually learned
-  const visible = (b: BuildDef) => !b.civ || civ.has(b.civ) || CIV_TECH[b.civ].path === civPath;
-  const lockText = (b: BuildDef) => (b.tech && !has.has(b.tech) ? `invent ${TECH[b.tech].icon} ${TECH[b.tech].name} first.` : b.civ && !civ.has(b.civ) ? `research ${CIV_TECH[b.civ].icon} ${CIV_TECH[b.civ].name} first (🏛️ Civilization).` : null);
+  const knows = (t: TechId) => has.has(t);
+  const did = (c: CivTechId) => civ.has(c);
+  // only what can be built now, and only the newest version of it (no wood walls once stone is known)
+  const visible = (b: BuildDef) => buildVisible(b, knows, did);
+  const cats = CATS.filter((c) => BUILD_DEFS.some((b) => b.cat === c.id && visible(b)));
+  const best = bestBuild(value, knows, did);
+  const [pickedCat, setCat] = useState<BuildDef["cat"]>(BUILD_BY_ID[best]?.cat ?? "homes");
+  const cat = cats.some((c) => c.id === pickedCat) ? pickedCat : cats[0]?.id ?? "homes";
+  const cur = visible(BUILD_BY_ID[best]) ? BUILD_BY_ID[best] : null;
   return (
     <div className="w-[min(560px,calc(100vw-40px))]">
-      <div className="mb-2 grid grid-cols-5 gap-1 rounded-2xl bg-white/5 p-1 text-[12px] font-bold">
-        {CATS.map((c) => (
+      <div className="mb-2 grid gap-1 rounded-2xl bg-white/5 p-1 text-[12px] font-bold" style={{ gridTemplateColumns: `repeat(${Math.max(1, cats.length)}, minmax(0, 1fr))` }}>
+        {cats.map((c) => (
           <button key={c.id} type="button" onClick={() => setCat(c.id)} className={`rounded-xl py-1.5 transition active:scale-95 ${cat === c.id ? "bg-amber-400 text-slate-900" : "hover:bg-white/10"}`}>
             {c.icon} {c.label}
           </button>
         ))}
       </div>
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-        {cat === "wonders" && !BUILD_DEFS.some((b) => b.cat === "wonders" && visible(b)) && (
-          <p className="col-span-full px-2 py-4 text-center text-[12px] text-white/60">🏛️ Great works unlock once your people find the humming chamber and choose a path.</p>
-        )}
         {BUILD_DEFS.filter((b) => b.cat === cat && visible(b)).map((b) => {
-          const locked = !!lockText(b);
-          const afford = (Object.entries(b.cost) as [Resource, number][]).every(([r, n]) => (stock[r] ?? 0) >= n);
+          const cost = buildCost(b, knows);
+          const afford = (Object.entries(cost) as [Resource, number][]).every(([r, n]) => (stock[r] ?? 0) >= n);
+          const stoneTower = b.value === "tower" && knows("stonewall");
           return (
             <button
               key={b.value}
               type="button"
               onClick={() => onPick(b.value)}
-              title={lockText(b) ?? b.tip}
-              className={`relative flex flex-col items-center rounded-2xl px-1 pb-1.5 pt-2 transition active:scale-95 ${b.value === value ? "dl-btn bg-amber-400/90 text-[#3a2414]" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"} ${locked ? "opacity-50" : ""}`}
+              title={b.tip}
+              className={`relative flex flex-col items-center rounded-2xl px-1 pb-1.5 pt-2 transition active:scale-95 ${b.value === best ? "dl-btn bg-amber-400/90 text-[#3a2414]" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"}`}
             >
-              {["spikes", "barricade", "totem", "tannery"].includes(b.value) ? <GameIcon id={b.value} size={30} className={locked ? "grayscale" : ""} /> : <span className={`text-[28px] leading-none ${locked ? "grayscale" : ""}`}>{b.icon}</span>}
-              <span className="mt-1 text-center text-[11px] font-semibold leading-tight">{b.label}</span>
+              {["spikes", "barricade", "totem", "tannery"].includes(b.value) ? <GameIcon id={b.value} size={30} /> : <span className="text-[28px] leading-none">{stoneTower ? "🏰" : b.icon}</span>}
+              <span className="mt-1 text-center text-[11px] font-semibold leading-tight">{stoneTower ? "Stone tower" : b.label}</span>
               <span className="mt-1 flex flex-wrap justify-center gap-0.5">
-                {(Object.entries(b.cost) as [Resource, number][]).map(([r, n]) => (
+                {(Object.entries(cost) as [Resource, number][]).map(([r, n]) => (
                   <span key={r} className={`flex items-center gap-0.5 rounded-full px-1 text-[10px] font-bold ${(stock[r] ?? 0) >= n ? "bg-white/10" : "bg-rose-500/30"}`}>
                     <GameIcon id={r} size={11} />
                     {n}
                   </span>
                 ))}
               </span>
-              {locked && <span className="absolute right-1 top-1 text-[11px]">🔒</span>}
-              {!locked && !afford && <span className="absolute right-1 top-1 text-[10px]" title="Not enough yet: gatherers will fetch it">⏳</span>}
+              {!afford && <span className="absolute right-1 top-1 text-[10px]" title="Not enough yet: gatherers will fetch it">⏳</span>}
             </button>
           );
         })}
       </div>
-      {cur && (
+      {cur ? (
         <p className="mt-2 px-1 text-center text-[12px] leading-snug text-white/75">
           <span className="font-bold text-white">
             {cur.icon} {cur.label}:
           </span>{" "}
-          {lockText(cur) ?? cur.tip}
+          {cur.tip}
           {cur.line && !/drag/i.test(cur.tip) ? " Drag to draw." : ""}
         </p>
+      ) : (
+        <p className="mt-2 px-1 text-center text-[12px] leading-snug text-white/60">💡 Invent new things at camp to unlock more to build.</p>
       )}
     </div>
   );

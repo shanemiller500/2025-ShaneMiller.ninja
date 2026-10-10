@@ -22,11 +22,11 @@ function toHex(rgb: string) {
 import type { World } from "../sim/world";
 import { drawDino, restPose, shade, type DinoPose } from "./drawDino";
 import { lookKey } from "../sim/genetics";
-import { drawCampfire, drawEgg, drawFarm, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
+import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
 import { ROLES } from "../data/facts";
 import { BUILDINGS, HOUSING } from "../data/colony";
 import { drawBar, drawBones, drawBuilding, drawDragon, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
-import { shelterDone, stagesOf, wallMaxHp } from "../sim/build";
+import { shelterDone, stagesOf, towerMaxHp, wallMaxHp } from "../sim/build";
 import { BUILD_BY_ID } from "../game/tools";
 import { TOWER_Z } from "../sim/nav";
 import { condition, CONDITION_LABEL } from "../sim/injury";
@@ -459,7 +459,9 @@ export class Renderer {
           const look: WeaponLook = wp ? (wp.proj === "beam" ? "lance" : wp.kind === "bow" ? (wp.tier >= 3 ? "crossbow" : "bow") : wp.kind) : weapon;
           const helmDef = h.gear.helmet ? HELMET_BY_ID[h.gear.helmet] : null;
           const coat = h.gear.outfit ? OUTFIT_BY_ID[h.gear.outfit] : null;
-          drawHuman(c, h, this.t, look, role === "guard" || role === "hunter" || !!h.order || h.taskId > 0 || tribe.raid !== null, h.gear.shield, wp?.tier ?? 1, coat, w.weather.rain, helmDef ? { color: helmDef.color, trim: helmDef.trim, glow: helmDef.glow } : null);
+          // everyday clothes get better as the tribe learns
+          const garb: GarbLevel = w.civ.polygonAge ? 3 : w.camp.learned.has("smelting") ? 2 : w.camp.learned.has("palisade") ? 1 : 0;
+          drawHuman(c, h, this.t, look, role === "guard" || role === "hunter" || !!h.order || h.taskId > 0 || tribe.raid !== null, h.gear.shield, wp?.tier ?? 1, coat, w.weather.rain, helmDef ? { color: helmDef.color, trim: helmDef.trim, glow: helmDef.glow } : null, garb);
           if (h.state === "down") {
             const a = this.t * 3;
             c.font = "9px sans-serif";
@@ -539,7 +541,8 @@ export class Renderer {
           const b = w.rivals.brutes[it.i];
           c.save();
           c.translate(b.x, b.y - b.z);
-          drawBrute(c, b, this.t, w.rivals.clan(b.clan)?.color ?? "#c0392b");
+          const bc = w.rivals.clan(b.clan);
+          drawBrute(c, b, this.t, bc?.color ?? "#c0392b", (bc?.smarts ?? 0) >= 2);
           c.restore();
           break;
         }
@@ -630,7 +633,7 @@ export class Renderer {
           const f = w.campfires[it.i];
           c.save();
           c.translate(f.x, f.y);
-          drawCampfire(c, f.lit, this.t);
+          drawCampfire(c, f.lit, this.t, 1, w.camp.learned.has("smelting"));
           c.restore();
           break;
         }
@@ -687,7 +690,7 @@ export class Renderer {
           const tw = tribe.towers[it.i];
           c.save();
           c.translate(tw.x, tw.y);
-          drawTower2(c, tw.stage, tw.hp / 400, this.t, w.camp.learned.has("stonewall"));
+          drawTower2(c, tw.stage, tw.hp / towerMaxHp(tw), this.t, w.camp.learned.has("stonewall"), !!tw.stone);
           if (ov.inspect?.kind === "tower" && ov.inspect.id === tw.id) this.inspectRing(c, 0, -4, 40);
           c.restore();
           break;
@@ -1976,10 +1979,27 @@ export class Renderer {
       th = fp.h;
       ok = !w.colony.canPlace(w, bdef.kind, p.x, p.y);
     } else if (p.build === "tower") {
-      tx = Math.floor(p.x / TILE - 0.5);
-      ty = Math.floor(p.y / TILE) - 1;
+      // show the 2x2 it will snap to, or each square that's blocked if there's no fit
+      const spot = w.tribe.towerSpot(w, p.x, p.y);
+      tx = spot?.tx ?? Math.floor(p.x / TILE - 0.5);
+      ty = spot?.ty ?? Math.floor(p.y / TILE) - 1;
       tw = th = 2;
-    } else if (p.build === "tent" || p.build === "hut" || p.build === "farm" || p.build === "campfire") return;
+      if (!spot) {
+        c.lineWidth = 2 * inv;
+        for (let dy = 0; dy < 2; dy++)
+          for (let dx = 0; dx < 2; dx++) {
+            const good = w.tribe.towerTileOk(w, tx + dx, ty + dy);
+            c.fillStyle = good ? "rgba(74,222,128,0.22)" : "rgba(248,113,113,0.3)";
+            c.strokeStyle = good ? "rgba(74,222,128,0.9)" : "rgba(248,113,113,0.95)";
+            c.fillRect((tx + dx) * TILE, (ty + dy) * TILE, TILE, TILE);
+            c.strokeRect((tx + dx) * TILE, (ty + dy) * TILE, TILE, TILE);
+          }
+        return;
+      }
+    } else if (p.build === "tent" || p.build === "hut" || p.build === "campfire") {
+      // homes + fires: the square under the pointer needs firm ground or a finished deck
+      ok = w.colony.footing(w, tx, ty) && !w.colony.occupied(w).has(ty * MAP_W + tx);
+    } else if (p.build === "farm") return;
     if (def.tech && !w.camp.learned.has(def.tech)) ok = false;
     if (bdef?.civ && !w.civ.has(bdef.civ)) ok = false;
     c.fillStyle = ok ? "rgba(74,222,128,0.22)" : "rgba(248,113,113,0.25)";

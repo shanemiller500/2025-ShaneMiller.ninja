@@ -271,10 +271,8 @@ function nearPlant(w: World, x: number, y: number, r: number, ok: (p: Plant) => 
   return w.plantHash.nearest(x, y, r, ok);
 }
 
-/** Find somewhere to collect a resource. */
-export function sourceFor(w: World, h: Human, r: Resource): { x: number; y: number; id: number } | null {
-  const cx = w.camp.x;
-  const cy = w.camp.y;
+/** Find somewhere to collect a resource: searched around the camp unless another centre is given. */
+export function sourceFor(w: World, h: Human, r: Resource, cx = w.camp.x, cy = w.camp.y): { x: number; y: number; id: number } | null {
   switch (r) {
     case "stick":
     case "wood": {

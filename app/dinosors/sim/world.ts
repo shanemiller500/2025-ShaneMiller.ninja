@@ -244,10 +244,10 @@ export class World {
       this.addEgg(s, LM.nest.x * TILE + Math.cos(a) * 50, LM.nest.y * TILE + Math.sin(a) * 30, 0, 0, 40 + this.rng() * 60);
     }
 
-    // cave people: three families
-    const fams = [this.nextId(), this.nextId(), this.nextId()];
-    for (let i = 0; i < 8; i++) {
-      addHuman(this, this.camp.x + (this.rng() - 0.5) * 160, this.camp.y + (this.rng() - 0.5) * 80, i >= 5, { family: fams[i % 3] });
+    // cave people: start small, one family (two grown-ups + a kid); the tribe grows from there
+    const fam = this.nextId();
+    for (let i = 0; i < 3; i++) {
+      addHuman(this, this.camp.x + (this.rng() - 0.5) * 160, this.camp.y + (this.rng() - 0.5) * 80, i >= 2, { family: fam });
     }
     this.camp.stock.stick = 3;
     this.camp.stock.stone = 2;

@@ -20,7 +20,8 @@ import { MAP_H, MAP_W, T, TILE } from "./types";
 import type { World } from "./world";
 
 export const NT = MAP_W * MAP_H;
-export type NavClass = "human" | "dino" | "rider";
+/** "bigDino": a ground dino too big for bridges (anything bigger than a chicken) */
+export type NavClass = "human" | "dino" | "bigDino" | "rider";
 
 const F_TERRAIN = 1; // deep water, mountain, cliff
 const F_SOLID = 2; // walls, buildings, huts: nobody walks through
@@ -197,6 +198,7 @@ export class Nav {
     if (f & (F_TERRAIN | F_SOLID)) return false;
     if (cls === "human") return !(f & F_TAR);
     if (f & (F_STAIRS | F_TOWER)) return false;
+    if (cls === "bigDino" && f & F_BRIDGE) return false;
     if ((f & F_GATE) && !(f & F_OPEN)) return false;
     if (cls === "rider" && f & F_TAR) return false;
     return true;

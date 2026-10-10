@@ -654,7 +654,7 @@ function drawStairs(c: CanvasRenderingContext2D, wl: Wall, look: WallLook, built
 /* ------------------------------ towers ------------------------------ */
 
 /** A 2x2-tile watchtower. Origin: bottom-centre of the footprint. */
-export function drawTower2(c: CanvasRenderingContext2D, stage: number, hpFrac: number, t: number, stoneBase: boolean) {
+export function drawTower2(c: CanvasRenderingContext2D, stage: number, hpFrac: number, t: number, stoneBase: boolean, stone = false) {
   const W = 58;
   const PZ = 46; // platform height (matches TOWER_Z)
   if (stage <= 0) {
@@ -663,6 +663,10 @@ export function drawTower2(c: CanvasRenderingContext2D, stage: number, hpFrac: n
     c.lineWidth = 1.2;
     c.strokeRect(-W / 2, -60, W, 56);
     c.setLineDash([]);
+    return;
+  }
+  if (stone) {
+    drawStoneTower(c, stage, hpFrac, t);
     return;
   }
   // stone footing
@@ -765,6 +769,111 @@ export function drawTower2(c: CanvasRenderingContext2D, stage: number, hpFrac: n
     c.beginPath();
     c.moveTo(-W / 2 + 8, -20);
     c.lineTo(-W / 2 + 18, -36);
+    c.stroke();
+  }
+}
+
+/** The stone version: a tapering masonry keep with a battlemented top. Same footprint + platform height. */
+function drawStoneTower(c: CanvasRenderingContext2D, stage: number, hpFrac: number, t: number) {
+  const W = 58;
+  const PZ = 46;
+  const top = stage >= 2 ? -PZ - 6 : -PZ * 0.55;
+  const tw = W - 10; // narrower at the top
+  // shadow + footing
+  c.fillStyle = "rgba(0,0,0,0.22)";
+  c.beginPath();
+  c.ellipse(0, -2, W / 2 + 6, 9, 0, 0, Math.PI * 2);
+  c.fill();
+  // body
+  const body = () => {
+    c.beginPath();
+    c.moveTo(-W / 2, -2);
+    c.lineTo(-tw / 2, top);
+    c.lineTo(tw / 2, top);
+    c.lineTo(W / 2, -2);
+    c.closePath();
+  };
+  c.fillStyle = "#a39d92";
+  body();
+  c.fill();
+  // shade the right side
+  c.fillStyle = "rgba(40,36,32,0.18)";
+  c.beginPath();
+  c.moveTo(W / 6, -2);
+  c.lineTo(tw / 6, top);
+  c.lineTo(tw / 2, top);
+  c.lineTo(W / 2, -2);
+  c.closePath();
+  c.fill();
+  // block courses
+  c.save();
+  body();
+  c.clip();
+  c.strokeStyle = "rgba(60,55,48,0.45)";
+  c.lineWidth = 1;
+  let row = 0;
+  for (let y = -2; y > top; y -= 8, row++) {
+    c.beginPath();
+    c.moveTo(-W / 2 - 4, y);
+    c.lineTo(W / 2 + 4, y);
+    for (let x = -W / 2 + (row % 2 ? 6 : 0); x < W / 2; x += 12) {
+      c.moveTo(x, y);
+      c.lineTo(x, y - 8);
+    }
+    c.stroke();
+  }
+  c.restore();
+  // ink outline, like the storybook art
+  c.strokeStyle = "rgba(43,30,20,0.85)";
+  c.lineWidth = 1.4;
+  body();
+  c.stroke();
+  // arched door
+  c.fillStyle = "#2b231c";
+  c.beginPath();
+  c.moveTo(-7, -2);
+  c.lineTo(-7, -14);
+  c.arc(0, -14, 7, Math.PI, 0);
+  c.lineTo(7, -2);
+  c.closePath();
+  c.fill();
+  if (stage >= 2) {
+    // walkway (people stand on it at z = PZ) behind a battlemented parapet
+    c.fillStyle = "#b7b1a6";
+    c.fillRect(-W / 2 - 2, -PZ - 30, W + 4, 24);
+    c.fillStyle = "#8d877c";
+    c.fillRect(-W / 2 - 3, -PZ - 8, W + 6, 6);
+    c.fillStyle = "#a39d92";
+    for (let i = 0; i < 5; i++) c.fillRect(-W / 2 - 3 + i * 13.2, -PZ - 18, 8, 11);
+    c.strokeStyle = "rgba(60,55,48,0.4)";
+    c.lineWidth = 1;
+    for (let i = 0; i < 5; i++) c.strokeRect(-W / 2 - 3 + i * 13.2, -PZ - 18, 8, 11);
+    // arrow slit
+    c.fillStyle = "#2b231c";
+    c.fillRect(-1.5, top + 14, 3, 10);
+  }
+  if (stage >= 3) {
+    // banner pole
+    c.strokeStyle = "#5a3d24";
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.moveTo(W / 2 - 6, -PZ - 18);
+    c.lineTo(W / 2 - 6, -PZ - 52);
+    c.stroke();
+    c.fillStyle = "#e2462d";
+    c.beginPath();
+    c.moveTo(W / 2 - 6, -PZ - 52);
+    c.lineTo(W / 2 + 10, -PZ - 47 + Math.sin(t * 5) * 1.5);
+    c.lineTo(W / 2 - 6, -PZ - 42);
+    c.fill();
+  }
+  if (hpFrac < 0.5) {
+    c.strokeStyle = "rgba(20,14,10,0.7)";
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(-W / 2 + 10, -14);
+    c.lineTo(-W / 2 + 16, -26);
+    c.lineTo(-W / 2 + 12, -34);
     c.stroke();
   }
 }

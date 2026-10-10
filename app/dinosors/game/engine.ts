@@ -27,7 +27,7 @@ import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion
 import { carcassStage, makeCarcass, STAGE_LABEL } from "../sim/carcass";
 import { OUTFIT_BY_ID, type ForgeCat } from "../data/colony";
 import { condition, type Condition } from "../sim/injury";
-import { shelterDone, stagesOf, wallMaxHp } from "../sim/build";
+import { STONE_TOWER_UP, shelterDone, stagesOf, towerMaxHp, wallMaxHp } from "../sim/build";
 import { SAVE_VERSION } from "../sim/world";
 import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genetics";
 import { World, type SaveData } from "../sim/world";
@@ -130,7 +130,7 @@ export type InspectInfo =
   | { kind: "building"; id: number; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost; stage?: { n: number; of: number; name: string; next: string | null }; note?: string }
   | { kind: "scorpion"; id: number; name: string; tier: number; built: number; hp: number; maxHp: number; drone: boolean; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
   | { kind: "gate"; id: number; open: boolean; auto: boolean; hp: number; maxHp: number; material: string }
-  | { kind: "tower"; id: number; stage: number; hp: number; guards: number }
+  | { kind: "tower"; id: number; stage: number; hp: number; maxHp: number; guards: number; stone: boolean; up: boolean; canUpgrade: boolean; upCost: number }
   | { kind: "carcass"; id: number; name: string; stage: string; left: { r: string; n: number; max: number }[]; working: number; burnt: boolean; fresh: number };
 
 export interface Snapshot {
@@ -1378,6 +1378,15 @@ export class Engine {
     if (s && this.world.camp.startUpgrade(this.world, s)) this.emit({ type: "inspect" });
   }
 
+  /** Rebuild a finished wooden watchtower in stone (it gets a Scorpion on top). */
+  upgradeTower(id: number) {
+    const w = this.world;
+    const t = w.tribe.towers.find((x) => x.id === id);
+    if (!t || !w.tribe.upgradeTower(w, t)) return;
+    w.toast("🏰", `Builders will rebuild this tower in stone (🪨 ${STONE_TOWER_UP.n}).`, t.x, t.y);
+    this.emit({ type: "inspect" });
+  }
+
   upgradeScorpion(id: number) {
     const w = this.world;
     const s = w.colony.scorpions.find((x) => x.id === id);
@@ -2412,7 +2421,7 @@ export class Engine {
         const t = w.tribe.towers.find((x) => x.id === r.id);
         if (!t) return null;
         const guards = w.humans.filter((h) => h.level === 1 && w.nav.isTower(Math.floor(h.y / TILE) * 160 + Math.floor(h.x / TILE)) && Math.abs(h.x - t.x) < 40).length;
-        return { kind: "tower", id: t.id, stage: t.stage, hp: t.hp, guards };
+        return { kind: "tower", id: t.id, stage: t.stage, hp: t.hp, maxHp: towerMaxHp(t), guards, stone: !!t.stone, up: !!t.up, canUpgrade: !t.stone && !t.up && t.stage >= 3 && w.camp.learned.has("stonewall"), upCost: STONE_TOWER_UP.n };
       }
     }
   }
