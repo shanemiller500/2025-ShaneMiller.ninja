@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
-import { Plus, Users, Video, X } from "lucide-react";
+import { LifeBuoy, MousePointer2, Plus, Users, Video, X } from "lucide-react";
 import { WEAPON_KINDS } from "../data/colony";
 import { CONDITION_LABEL } from "../sim/injury";
 import type { Engine, Snapshot } from "../game/engine";
@@ -18,6 +18,8 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
   const cmd = snap.command;
   const kidsOnly = sel.length > 0 && sel.every((p) => p.child);
   const [hidePickTip, setHidePickTip] = useState(false);
+  const [rescueOpen, setRescueOpen] = useState(false);
+  const rescueClans = snap.rivals.clans.filter((clan) => clan.captives.length > 0);
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-[78px] z-30 flex flex-col-reverse items-center gap-2 px-2 sm:bottom-[96px]">
       <AnimatePresence mode="popLayout">
@@ -32,6 +34,9 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
             <button type="button" onClick={() => engine.selectAll(true)} title="Pick everyone who isn't busy (or tap a person, shift-drag a box)" className="flex items-center gap-2">
               <Users className="h-4 w-4" /> Pick idle people
             </button>
+            <button type="button" onClick={() => engine.toggleGroupSelectMode()} aria-pressed={engine.groupSelectMode} title="Drag a box around people with your mouse or finger" className={`flex min-h-10 items-center gap-1.5 rounded-full px-3 transition active:scale-95 ${engine.groupSelectMode ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
+              <MousePointer2 className="h-4 w-4" /> Group select
+            </button>
             <span className="hidden text-[11px] font-medium text-white/50 sm:inline">· or tap someone</span>
             <button type="button" onClick={() => setHidePickTip(true)} aria-label="Close pick people tip" className="ml-1 rounded-full p-0.5 text-white/60 hover:bg-white/15 hover:text-white"><X className="h-3.5 w-3.5" /></button>
           </motion.div>
@@ -42,7 +47,7 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.97 }}
             transition={{ type: "spring", stiffness: 480, damping: 34 }}
-            className="dl-glass pointer-events-auto flex max-w-[min(760px,calc(100vw-16px))] items-center gap-2 rounded-3xl px-2.5 py-2 shadow-2xl"
+            className="dl-glass pointer-events-auto relative flex max-w-[min(760px,calc(100vw-16px))] items-center gap-2 rounded-3xl px-2.5 py-2 shadow-2xl"
           >
             <div className="dl-scroll flex min-w-0 items-center gap-1 overflow-x-auto">
               {sel.slice(0, 10).map((p) => (
@@ -69,6 +74,26 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
             <div className="hidden h-10 w-px shrink-0 bg-white/10 sm:block" />
             <div className="flex shrink-0 items-center gap-1">
               <span className="hidden max-w-[150px] text-[11.5px] leading-tight text-white/65 md:block">{kidsOnly ? "Kids help with light jobs near camp" : "Tap anything in the world to give an order"}</span>
+              <button type="button" onClick={() => engine.toggleGroupSelectMode()} aria-pressed={engine.groupSelectMode} title="Drag a box around more people" className={`flex min-h-10 items-center gap-1 rounded-xl px-2 transition active:scale-90 ${engine.groupSelectMode ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
+                <MousePointer2 className="h-4 w-4" /><span className="hidden text-[11px] font-bold sm:inline">Box</span>
+              </button>
+              {rescueClans.length > 0 && (
+                <div className="relative">
+                  <button type="button" onClick={() => setRescueOpen((open) => !open)} title="Choose a clan camp to attack and rescue captives" className="flex min-h-10 items-center gap-1 rounded-xl bg-rose-600 px-2.5 text-xs font-extrabold text-white transition hover:bg-rose-500 active:scale-95">
+                    <LifeBuoy className="h-4 w-4" /><span className="hidden sm:inline">Rescue</span><span>{rescueClans.reduce((n, clan) => n + clan.captives.length, 0)}</span>
+                  </button>
+                  {rescueOpen && (
+                    <div className="absolute bottom-full right-0 z-40 mb-2 min-w-56 rounded-2xl border border-amber-200/30 bg-[#402819] p-2 shadow-2xl">
+                      <div className="px-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-white/55">Choose a camp to attack</div>
+                      {rescueClans.map((clan) => (
+                        <button key={clan.id} type="button" onClick={() => { engine.raidClan(clan.id); setRescueOpen(false); }} className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-2.5 text-left text-sm font-bold transition hover:bg-white/10 active:scale-[.98]">
+                          <span className="truncate">🛟 {clan.name}</span><span className="shrink-0 text-amber-300">{clan.captives.length} held</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => (engine.addMode = !engine.addMode)}

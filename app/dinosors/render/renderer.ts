@@ -313,7 +313,12 @@ export class Renderer {
       const s = w.shelters[i];
       if (s.x > x0 && s.x < x1 && s.y > y0 && s.y < y1 + 60) list.push({ y: s.y, k: K_SHELTER, i });
     }
-    for (let i = 0; i < w.campfires.length; i++) list.push({ y: w.campfires[i].y, k: K_CAMPFIRE, i });
+    for (let i = 0; i < w.campfires.length; i++) {
+      const f = w.campfires[i];
+      if (f.x > x0 - 80 && f.x < x1 + 80 && f.y > y0 - 80 && f.y < y1 + 80) {
+        list.push({ y: f.y, k: K_CAMPFIRE, i });
+      }
+    }
     if (w.camp.pileX > x0 && w.camp.pileX < x1 && w.camp.pileY > y0 && w.camp.pileY < y1) list.push({ y: w.camp.pileY, k: K_PILE, i: 0 });
     if (Object.values(w.mineLoads).some((n) => (n ?? 0) > 0) && w.camp.caveX > x0 - 100 && w.camp.caveX < x1 + 100 && w.camp.caveY > y0 - 80 && w.camp.caveY < y1 + 80) list.push({ y: w.camp.caveY + 36, k: K_MINE_LOAD, i: 0 });
     const vo = w.volcano;

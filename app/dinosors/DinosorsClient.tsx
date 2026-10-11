@@ -163,6 +163,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
         case "select":
         case "inspect":
           setSnap(engine.snapshot());
+          setToolState({ ...engine.tool });
           break;
       }
     });
@@ -189,7 +190,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
     const autoTimer = window.setInterval(() => {
       if (document.visibilityState === "visible" && engineRef.current === engine) void putSlot(engine.makeSlot("auto"));
     }, 5 * 60_000);
-    const poll = window.setInterval(() => setSnap(engine.snapshot()), 250);
+    const poll = window.setInterval(() => setSnap(engine.snapshot()), 500);
 
     const onHide = () => {
       if (document.visibilityState === "hidden") {

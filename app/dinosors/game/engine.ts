@@ -23,7 +23,7 @@ import { LM, isWaterTile } from "../sim/terrain";
 import { TILE, WORLD_H, WORLD_W, type Brute, type Danger, type Dino, type DinoState, type Dragon, type Human, type Resource, type Role, type SpeciesId, type TechId, type WeaponKind, type WeatherKind } from "../sim/types";
 import { CAMP_LEVELS } from "../data/facts";
 import { BUILDINGS, FORGE_ITEMS, HOUSING, RIDEABLE, SCORPION_TIERS, WEAPON_BY_ID, type Cost } from "../data/colony";
-import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion, rallyBattlePets, type Command } from "../sim/tasks";
+import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion, rallyBattlePets, weaponKindsFor, type Command } from "../sim/tasks";
 import { carcassStage, makeCarcass, STAGE_LABEL } from "../sim/carcass";
 import { OUTFIT_BY_ID, type ForgeCat } from "../data/colony";
 import { condition, type Condition } from "../sim/injury";
@@ -331,6 +331,8 @@ export class Engine {
   selection: number[] = [];
   /** "add to selection" mode for touch screens */
   addMode = false;
+  /** lets mouse, pen or touch drag a box around several people */
+  groupSelectMode = false;
   /** last command + its alternatives (for the "instead…" chip) */
   private lastCmd: { cmd: Command; people: number[]; at: number; weapon: WeaponKind | null } | null = null;
   /** tapped building being looked at */
@@ -462,7 +464,7 @@ export class Engine {
       this.marker.t += dt;
       if (this.marker.t > 1.6) this.marker = null;
     }
-    this.selection = this.selection.filter((id) => w.humans.some((h) => h.id === id));
+    this.selection = this.selection.filter((id) => w.creatureById(id)?.kind === "human");
     // the dive: fade to black, swap views, fade back in
     const DIVE = 0.55;
     let fade = 0;
@@ -735,7 +737,7 @@ export class Engine {
     }
     const wp = this.renderer.toWorld(this.cam, sx, sy);
     // shift-drag draws a box to select people
-    if (e.shiftKey && this.tool.id === "hand" && e.pointerType === "mouse") {
+    if ((e.shiftKey && e.pointerType === "mouse" || this.groupSelectMode) && this.tool.id === "hand") {
       this.box = { x0: sx, y0: sy, x1: sx, y1: sy };
       this.canvas.setPointerCapture?.(e.pointerId);
       this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: performance.now(), moved: false, grab: null });
@@ -859,7 +861,8 @@ export class Engine {
         const a = this.renderer.toWorld(this.cam, Math.min(b.x0, b.x1), Math.min(b.y0, b.y1));
         const c = this.renderer.toWorld(this.cam, Math.max(b.x0, b.x1), Math.max(b.y0, b.y1));
         const ids = this.world.humans.filter((h) => !h.stranger && !h.under && h.x > a.x && h.x < c.x && h.y - 12 > a.y && h.y - 12 < c.y).map((h) => h.id);
-        this.selectPeople(e.ctrlKey || e.metaKey ? Array.from(new Set([...this.selection, ...ids])) : ids);
+        this.groupSelectMode = false;
+        this.selectPeople(e.ctrlKey || e.metaKey || this.addMode ? Array.from(new Set([...this.selection, ...ids])) : ids);
         return;
       }
       if (p) {
@@ -930,6 +933,7 @@ export class Engine {
     else if (k === "h") this.goHome();
     else if (k === "escape") {
       this.orderFor = 0;
+      this.groupSelectMode = false;
       this.tool = { ...this.tool, id: "hand" };
       this.select(0);
       this.selection = [];
@@ -1329,6 +1333,42 @@ export class Engine {
 
   clearSelection() {
     this.selectPeople([]);
+  }
+
+  toggleGroupSelectMode() {
+    this.groupSelectMode = !this.groupSelectMode;
+    this.emit({ type: "select" });
+  }
+
+  /** Send the currently selected adult fighters to a specific clan camp. */
+  raidClan(clanId: number) {
+    const w = this.world;
+    const clan = w.rivals.clan(clanId);
+    const fighters = this.selectionHumans().filter((h) => !h.child && !h.stranger && !h.captive && !h.under && h.state !== "down");
+    if (!clan) return false;
+    if (!fighters.length) {
+      w.toast("⚔️", "Select at least one available adult before starting a rescue raid.");
+      this.emit({ type: "select" });
+      return false;
+    }
+    const weapons = weaponKindsFor(w, fighters);
+    if (!weapons.length) {
+      w.toast("🛡️", "Your group needs weapons before it can raid a clan camp.", clan.x, clan.y);
+      this.emit({ type: "select" });
+      return false;
+    }
+    const held = w.rivals.captives(w, clan.id).length;
+    const cmd: Command = {
+      kind: "raid",
+      icon: "🛟",
+      label: held ? `Rescue ${held} camp ${held === 1 ? "member" : "members"} from ${clan.name}` : `Attack the ${clan.name} clan camp`,
+      x: clan.x,
+      y: clan.y,
+      target: clan.id,
+      weapons,
+    };
+    this.runCommand(cmd, fighters, null);
+    return true;
   }
 
   /** Everyone grown-up (or everyone idle) in one go. */

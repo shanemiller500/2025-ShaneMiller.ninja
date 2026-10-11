@@ -175,7 +175,7 @@ export interface Picked {
   brute?: Brute | null;
 }
 
-function armoryKinds(w: World, people: Human[]): WeaponKind[] {
+export function weaponKindsFor(w: World, people: Human[]): WeaponKind[] {
   const kinds = new Set<WeaponKind>();
   for (const [id, n] of Object.entries(w.colony.armory)) if (n > 0 && WEAPON_BY_ID[id]) kinds.add(WEAPON_BY_ID[id].kind);
   for (const h of people) {
@@ -197,7 +197,7 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
   }
   const adults = people.filter((p) => !p.child);
   const L = w.camp.learned;
-  const kinds = armoryKinds(w, people);
+  const kinds = weaponKindsFor(w, people);
   const armed = kinds.length > 0 && adults.length > 0;
 
   if (picked.brute) {
