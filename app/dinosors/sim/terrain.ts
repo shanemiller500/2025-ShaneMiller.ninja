@@ -373,5 +373,3 @@ export function groundSpeed(t: T) {
 }
 
 export const VEG_TILES = new Set<T>([T.Grass, T.Jungle, T.Forest, T.Swamp, T.Nest]);
-
-export const tileCenter = (tx: number, ty: number) => ({ x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2 });

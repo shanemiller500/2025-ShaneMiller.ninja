@@ -169,24 +169,29 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
     });
     engine.start();
     setSnap(engine.snapshot());
-    // the last world didn't fit in localStorage: it's waiting in IndexedDB
-    if (hasIdbWorld()) {
-      void loadIdbWorld().then((json) => {
-        if (json && engineRef.current === engine) engine.importSave(json);
-      });
-    }
-    // pick up where you left off: whichever save is newest wins (this browser's save or a saved-games slot)
-    void newestSlot().then((slot) => {
-      if (!slot || engineRef.current !== engine) return;
-      if (engine.startedFresh || slot.savedAt > engine.world.savedAt + 3000) {
-        if (engine.importSave(slot.data)) pushToast({ icon: "▶️", text: `Welcome back! Picked up where you left off — Day ${slot.day}.` });
+    // pick up where you left off: whichever save is newest wins (this browser's save, the IndexedDB
+    // overflow copy when localStorage was full, or a saved-games slot). Decide first, then load once.
+    void Promise.all([hasIdbWorld() ? loadIdbWorld() : Promise.resolve(null), newestSlot()]).then(([idb, slot]) => {
+      if (engineRef.current !== engine) return;
+      let best: { data: string; at: number; day?: number } | null = engine.startedFresh ? null : { data: "", at: engine.world.savedAt };
+      if (idb) {
+        let at = 0;
+        try {
+          at = Number((JSON.parse(idb) as { savedAt?: number }).savedAt) || 0;
+        } catch {
+          /* unreadable: importSave below will refuse it too */
+        }
+        if (!best || at > best.at) best = { data: idb, at };
       }
+      if (slot && (!best || slot.savedAt > best.at + 3000)) best = { data: slot.data, at: slot.savedAt, day: slot.day };
+      if (!best?.data) return;
+      if (engine.importSave(best.data) && best.day) pushToast({ icon: "▶️", text: `Welcome back! Picked up where you left off — Day ${best.day}.` });
     });
-    // the "latest" save stays fresh; a snapshot every 5 minutes lets you go back in time
+    // the engine refreshes the "latest" slot with every autosave; this one is for leaving the page
     const keepLatest = () => {
       if (engineRef.current === engine) void putSlot(engine.makeSlot("latest"));
     };
-    const latestTimer = window.setInterval(keepLatest, 30_000);
+    // a snapshot every 5 minutes lets you go back in time
     const autoTimer = window.setInterval(() => {
       if (document.visibilityState === "visible" && engineRef.current === engine) void putSlot(engine.makeSlot("auto"));
     }, 5 * 60_000);
@@ -218,7 +223,6 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
     return () => {
       engine.save(true);
       keepLatest();
-      window.clearInterval(latestTimer);
       window.clearInterval(autoTimer);
       off();
       ro.disconnect();
@@ -229,6 +233,18 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
       engineRef.current = null;
     };
   }, [pushToast]);
+
+  // stable (so the memoized toolbar doesn't re-render every poll); reads the latest value from a ref
+  const trainOpenRef = useRef(trainOpen);
+  trainOpenRef.current = trainOpen;
+  const toggleTrain = useCallback(() => {
+    if (!trainOpenRef.current) {
+      setCampOpen(false);
+      setEvoOpen(false);
+      setCivOpen(false);
+    }
+    setTrainOpen((open) => !open);
+  }, []);
 
   const setTool = useCallback((t: Partial<ToolState>) => {
     const e = engineRef.current;
@@ -319,14 +335,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           ) : (
             <>
               <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} />
-              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={() => {
-                if (!trainOpen) {
-                  setCampOpen(false);
-                  setEvoOpen(false);
-                  setCivOpen(false);
-                }
-                setTrainOpen((open) => !open);
-              }} />
+              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} />
               {trainOpen && <TrainPanel engine={engine} onClose={() => setTrainOpen(false)} />}
               <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
               {snap.inspect && !snap.selected && <InspectPanel info={snap.inspect} snap={snap} engine={engine} />}

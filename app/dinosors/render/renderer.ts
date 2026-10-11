@@ -22,7 +22,7 @@ function toHex(rgb: string) {
 import type { World } from "../sim/world";
 import { drawDino, restPose, shade, type DinoPose } from "./drawDino";
 import { lookKey } from "../sim/genetics";
-import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
+import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawPlantLod, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
 import { ROLES } from "../data/facts";
 import { BUILDINGS, HOUSING } from "../data/colony";
 import { drawBar, drawBones, drawBuilding, drawDragon, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
@@ -127,6 +127,11 @@ export class Renderer {
   private drops: Drop[] = [];
   private drawables: Drawable[] = [];
   private visPlants: Plant[] = [];
+  /** finished healer huts' doors (people resting there aren't drawn); rebuilt when the colony changes */
+  private healerDoors: { v: number; n: number; doors: { x: number; y: number }[] } = { v: -1, n: -1, doors: [] };
+  /** shelter id -> people resting inside, counted once per frame */
+  private insideCount = new Map<number, number>();
+  private insideFrame = -1;
   private peaks: { x: number; y: number; s: number }[] = [];
   private cloudX = 0;
   private cloudY = 0;
@@ -253,7 +258,7 @@ export class Renderer {
     for (let i = 0; i < this.visPlants.length; i++) list.push({ y: this.visPlants[i].y, k: K_PLANT, i });
     for (let i = 0; i < w.dinos.length; i++) {
       const dn = w.dinos[i];
-      if (sp(dn.species).move === "fly" && dn.z > 6) continue;
+      if (dn.under || (sp(dn.species).move === "fly" && dn.z > 6)) continue;
       if (dn.x < x0 || dn.x > x1 || dn.y < y0 || dn.y > y1 + 150) continue;
       list.push({ y: dn.y, k: K_DINO, i });
     }
@@ -436,6 +441,11 @@ export class Renderer {
       switch (it.k) {
         case K_PLANT: {
           const p = this.visPlants[it.i];
+          // zoomed out: a plain blob drawn in place (no save/translate/restore per plant)
+          if (lod && !p.stump) {
+            drawPlantLod(c, p, p.x, p.y);
+            break;
+          }
           c.save();
           c.translate(p.x, p.y);
           drawPlant(c, p, this.t, w.weather.wind, lod);
@@ -610,7 +620,7 @@ export class Renderer {
           c.save();
           c.translate(s.x, s.y);
           const done = shelterDone(s);
-          const inside = done ? w.humans.filter((h) => h.home === s.id && (h.state === "hide" || h.state === "sleep" || h.state === "rest")).length : 0;
+          const inside = done ? this.restingIn(s.id) : 0;
           if (!drawHome(c, s, done, night > 0.5, this.t, inside)) {
             if (s.plan === "tent" && !done) {
               // tent going up: dashed footprint, then poles
@@ -753,8 +763,8 @@ export class Renderer {
     // carcass ropes + flying arrows / bolts / spears
     for (const it of w.items) {
       if (!it.draggedBy) continue;
-      const h = w.humans.find((x) => x.id === it.draggedBy);
-      if (!h || h.x < x0 || h.x > x1) continue;
+      const h = w.creatureById(it.draggedBy);
+      if (!h || h.kind !== "human" || h.x < x0 || h.x > x1) continue;
       c.strokeStyle = "#c9a56a";
       c.lineWidth = 1.5;
       c.beginPath();
@@ -869,8 +879,29 @@ export class Renderer {
     if (h.state !== "hide" && h.state !== "sleep" && h.state !== "rest") return false;
     const w = this.world;
     if (Math.hypot(h.x - w.camp.caveX, h.y - w.camp.caveY) < 30) return true;
-    if (w.colony.buildings.some((b) => b.kind === "healer" && b.built >= 1 && Math.hypot(h.x - w.colony.door(b).x, h.y - w.colony.door(b).y) < 24)) return true;
+    for (const d of this.healerDoorList()) if (Math.hypot(h.x - d.x, h.y - d.y) < 24) return true;
     return w.shelters.some((s) => shelterDone(s) && Math.hypot(h.x - s.x, h.y - s.y) < 30);
+  }
+
+  private healerDoorList() {
+    const col = this.world.colony;
+    const c = this.healerDoors;
+    if (c.v !== col.version || c.n !== col.buildings.length) {
+      c.v = col.version;
+      c.n = col.buildings.length;
+      c.doors = col.buildings.filter((b) => b.kind === "healer" && b.built >= 1).map((b) => col.door(b));
+    }
+    return c.doors;
+  }
+
+  /** People resting inside a home (counted for every shelter once per frame). */
+  private restingIn(id: number) {
+    if (this.insideFrame !== this.world.frame) {
+      this.insideFrame = this.world.frame;
+      this.insideCount.clear();
+      for (const h of this.world.humans) if (h.home && (h.state === "hide" || h.state === "sleep" || h.state === "rest")) this.insideCount.set(h.home, (this.insideCount.get(h.home) ?? 0) + 1);
+    }
+    return this.insideCount.get(id) ?? 0;
   }
 
   /* ----------------------------- dinos ----------------------------- */

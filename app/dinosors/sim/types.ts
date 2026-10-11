@@ -248,6 +248,8 @@ export interface Dino {
   raider: boolean;
   /** evolution tier: 0 normal, 1 tough, 2 alpha */
   tier: number;
+  /** working down the mine as a pack animal (parked + hidden on the surface; see packs.ts) */
+  under?: boolean;
   /** inherited genes (size, speed, toughness, colour, mutation) */
   genes: Genes;
   /** generation number */

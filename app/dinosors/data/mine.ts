@@ -18,6 +18,13 @@ export const LIFT_STEP = 10;
 /** The lift can never go into the magma floor. */
 export const LIFT_MAX = MINE_H - 12;
 
+/** Rock you can shift with a shovel (soft ground + cave-in rubble). */
+export const SOFT_ROCK = new Set<number>([1, 2, 3, 7]);
+/** Without a chisel, this share of fossils + artifacts crack on the way out (they give less). */
+export const CRACK_CHANCE = 0.35;
+/** How far (cells) a lamp lights + how far the miners spot what's in the rock. */
+export const LANTERN = { none: { light: 1, spot: 0 }, lantern: { light: 2, spot: 1 }, crystal: { light: 3, spot: 2 } };
+
 /** Rock. 0 = open space (dug out, or a natural cavern). */
 export enum M {
   Open = 0,
@@ -166,6 +173,76 @@ export const FIND_AMOUNT: Partial<Record<Resource, [number, number]>> = {
   silver: [1, 2],
 };
 
+/**
+ * Rich ore: how many hits a cell of each ore takes before it's dug out (each hit pays out
+ * FIND_AMOUNT). The cell stays rock (and its nuggets shrink) until the last hit opens it.
+ * Pockets are the rich ones: one extra hit.
+ */
+export const ORE_HITS: Partial<Record<Resource, [number, number]>> = {
+  clay: [1, 2],
+  flint: [1, 2],
+  salt: [1, 2],
+  coal: [2, 3],
+  copper: [2, 3],
+  iron: [2, 4],
+  silver: [2, 3],
+  gold: [2, 4],
+  quartz: [1, 2],
+  magnetite: [2, 3],
+  crystal: [2, 3],
+  obsidian: [1, 3],
+  meteorite: [1, 2],
+  diamond: [1, 1],
+};
+
+/**
+ * Pick tiers, from what the tribe has (see pickTier in sim/mine.ts). Better picks chip an
+ * extra unit off a rich deposit more often. Speed comes from MineTools (digTime).
+ */
+export const PICK_TIERS: { name: string; icon: string; bonus: number }[] = [
+  { name: "Bare hands", icon: "✋", bonus: 0 },
+  { name: "Stone pick", icon: "⛏️", bonus: 0 },
+  { name: "Copper pick", icon: "⛏️", bonus: 0.1 },
+  { name: "Iron pick", icon: "⚒️", bonus: 0.2 },
+  { name: "Reinforced pick", icon: "⚒️", bonus: 0.25 },
+  { name: "Drill", icon: "🔩", bonus: 0.3 },
+  { name: "Diamond drill", icon: "💎", bonus: 0.4 },
+];
+
+/* ------------------------------ cave features ------------------------------ */
+/*  Shaped places grown from the seed on top of the random caverns: chambers  */
+/*  lined with crystal, rooms with old things in the walls, sealed pockets of */
+/*  gold, rivers running along a tunnel floor, and shafts + ramps joining the */
+/*  levels. Found the first time any of their cells comes into view.         */
+
+export type FeatureKind = "crystalCave" | "artifactRoom" | "hiddenChamber" | "river" | "shaft" | "ramp";
+
+export interface FeatureDef {
+  name: string;
+  icon: string;
+  /** how many per world */
+  count: number;
+  /** rows they can sit in */
+  rows: [number, number];
+  /** shown when it's found (none = found quietly) */
+  found?: string;
+  /** sticker for the first one */
+  sticker?: string;
+}
+
+export const FEATURES: Record<FeatureKind, FeatureDef> = {
+  crystalCave: { name: "Crystal cave", icon: "💠", count: 2, rows: [72, 146], found: "A cave lined with glowing crystal! Every wall is worth mining.", sticker: "crystalCave" },
+  artifactRoom: { name: "Lost room", icon: "🏛️", count: 2, rows: [55, 185], found: "A flat-floored room… someone carved this, long ago. Things are set into its walls.", sticker: "lostRoom" },
+  hiddenChamber: { name: "Hidden chamber", icon: "💰", count: 2, rows: [40, 185], found: "A sealed pocket in the rock with nuggets lying on the floor!", sticker: "hiddenHoard" },
+  river: { name: "Underground river", icon: "🏞️", count: 2, rows: [36, 146], found: "An underground river! Its bank is a ready-made tunnel, and a pump station beside it never runs dry.", sticker: "undergroundRiver" },
+  shaft: { name: "Natural shaft", icon: "⬇️", count: 3, rows: [33, 185] },
+  ramp: { name: "Rock ramp", icon: "↘️", count: 2, rows: [33, 185] },
+};
+
+export const FEATURE_ORDER: FeatureKind[] = ["river", "crystalCave", "artifactRoom", "hiddenChamber", "shaft", "ramp"];
+/** Water a pump station lifts from a river every second (it never runs dry). */
+export const RIVER_PUMP = 1.2;
+
 /** Lift upgrades get pricier the deeper they go. */
 export function liftUpgradeCost(max: number): Partial<Record<Resource, number>> {
   const step = Math.max(0, Math.round((max - LIFT_START) / LIFT_STEP));
@@ -179,8 +256,21 @@ export const SUPPORT_COST: Partial<Record<Resource, number>> = { wood: 1 };
 export const BLAST_COST: Partial<Record<Resource, number>> = { tar: 1, stick: 1 };
 /** How far a support beam holds the roof up (cells, square). */
 export const SUPPORT_REACH = 2;
+/**
+ * Cave-ins. A dug cell risks its band's `collapse` chance, plus `spanRisk` for every open
+ * cell around it (5x5) beyond `spanFree`: wide unsupported rooms are the dangerous ones.
+ * When the roof comes down, nearby open cells fill with rubble at `spread` (`spreadSupported`
+ * if a beam is close), and anyone under the rubble takes `hurt`.
+ */
+export const CAVE_IN = { spanFree: 11, spanRisk: 0.008, spread: 0.28, spreadSupported: 0.1, hurt: 0.3 };
 /** Water above this blocks walking. */
 export const FLOODED = 0.55;
+/**
+ * Underground pools: some natural caverns in the middle bands (`bands`, inclusive) are
+ * generated with water settled in their lowest watertight hollows, `depth` rows deep.
+ * Pump stations draw them down only when the camp's water store needs it.
+ */
+export const POOLS = { chance: 0.45, minCells: 10, depth: [1, 3] as [number, number], bands: [1, 3] as [number, number] };
 
 /* ------------------------------ building down here (Phase 4) ------------------------------ */
 

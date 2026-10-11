@@ -10,7 +10,7 @@ import { BUILDINGS, HOUSING, SCORPION_TIERS, TENT_STAGES, buildingCost, building
 import { PYRAMID_STAGES } from "../data/civ";
 import { SHELTER_STAGES } from "../data/facts";
 import { P } from "./particles";
-import { MAP_W, TILE, type Resource, type Shelter, type TechId, type Tower, type Wall } from "./types";
+import { TILE, type Resource, type Shelter, type TechId, type Tower, type Wall } from "./types";
 import type { World } from "./world";
 
 export type SiteKind = "wall" | "tower" | "shelter" | "upgrade" | "building" | "scorpion";
@@ -536,5 +536,3 @@ export function wallStretch(w: World, start: Wall): Set<number> {
   }
   return out;
 }
-
-export const wallTile = (wl: Wall) => wl.ty * MAP_W + wl.tx;

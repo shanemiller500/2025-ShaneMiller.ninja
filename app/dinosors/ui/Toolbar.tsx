@@ -1,10 +1,9 @@
 "use client";
 
 import { type CivPath, type CivTechId } from "../data/civ";
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { SPECIES } from "../data/species";
-import { RES_INFO } from "../data/colony";
 import { BUILD_BY_ID, BUILD_DEFS, bestBuild, buildCost, buildVisible, DISASTER_OPTS, FARM_CROP_OPTS, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type BuildDef, type BuildOpt, type Opt, type ToolId, type ToolState } from "../game/tools";
 import type { Resource, SpeciesId, TechId } from "../sim/types";
 import Portrait from "./Portrait";
@@ -18,7 +17,10 @@ import { useClickAway } from "./useClickAway";
 
 const HAS_OPTIONS = new Set<ToolId>(["dino", "egg", "food", "plant", "land", "weather", "disaster", "people", "build"]);
 
-export default function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none", trainOpen = false, onTrain }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void }) {
+export default memo(Toolbar);
+
+/** The toy box: memoized, so it only re-renders when the tool, unlocks, techs or stock actually change. */
+function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none", trainOpen = false, onTrain }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void }) {
   const [open, setOpen] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<ToolId | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);

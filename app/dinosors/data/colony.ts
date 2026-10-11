@@ -45,8 +45,6 @@ export const RES_INFO: Record<Resource, { icon: string; name: string }> = {
   copperBar: { icon: "🟧", name: "Copper bars" },
 };
 
-export const costTotal = (c: Cost) => Object.values(c).reduce((s, n) => s + (n ?? 0), 0);
-
 /* ------------------------------ buildings ------------------------------ */
 
 export interface BuildingDef {
@@ -304,6 +302,13 @@ export const KITS: KitDef[] = [
   { id: "harness", name: "Levitation harnesses", icon: "🪢", cost: { magnetite: 2, hide: 2 }, at: "workshop", civ: "levitation", tip: "Builders carry three times as much shaped stone." },
   { id: "torch", name: "Energy torches", icon: "🔦", cost: { copper: 1, crystal: 1 }, at: "workshop", civ: "energyStorage", tip: "Builders hammer 50% faster; technicians fix overloads quicker." },
   { id: "precision", name: "Precision tools", icon: "📐", cost: { quartz: 2, copper: 1 }, at: "workshop", civ: "precisionStone", tip: "Polygon walls + monuments go up 50% faster." },
+  // down the mine
+  { id: "copperPick", name: "Copper picks", icon: "⛏️", cost: { copper: 3, stick: 2 }, at: "camp", tip: "Down the mine: miners dig 15% faster and chip extra ore off rich deposits." },
+  { id: "shovel", name: "Copper shovels", icon: "🪏", cost: { wood: 2, copper: 1 }, at: "camp", tip: "Down the mine: soil, clay, sandstone and cave-in rubble shift almost twice as fast." },
+  { id: "chisel", name: "Fossil chisels", icon: "🔨", cost: { copper: 1, flint: 2 }, at: "camp", tip: "Down the mine: fossils and artifacts come out whole (without one, some crack) and give more." },
+  { id: "minerPack", name: "Miner's packs", icon: "🎒", cost: { hide: 3, stick: 2 }, at: "tannery", tip: "Down the mine: every miner carries half as much again before walking back to the lift." },
+  { id: "crystalLantern", name: "Crystal lanterns", icon: "🏮", cost: { crystal: 1, copper: 1, tar: 1 }, at: "workshop", tip: "Down the mine: miners light up much more rock and spot what's in it from two cells away." },
+  { id: "reinforcedPick", name: "Reinforced picks", icon: "⚒️", cost: { iron: 3, magnetite: 2 }, at: "blacksmith", tip: "Down the mine: iron picks hardened with magnetite. Faster again, and they can chew through granite (slowly) without a drill." },
   // from the Deep
   { id: "diamondDrill", name: "Diamond drill", icon: "💎", cost: { diamond: 2, iron: 2 }, at: "blacksmith", tip: "Down the mine: cuts granite + volcanic rock twice as fast (and counts as a drill)." },
 ];

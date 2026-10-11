@@ -1,7 +1,8 @@
 /* ------------------------------------------------------------------ */
 /*  The Deep, drawn side-on. Rock is baked into chunk canvases (only   */
-/*  rebuilt when the mine changes); water, gas, magma, ore glow, the  */
-/*  lift, scanner pings and the selection are drawn live on top.      */
+/*  a chunk whose cells changed is rebuilt); water, gas, magma, ore    */
+/*  glow, the lift, pings and the selection are drawn live on top.    */
+/*  Darkness is a one-pixel-per-cell light map, scaled up smoothly.   */
 /*  Look: dark rock with a cyan "survey scanner" overlay — uncharted  */
 /*  rock is a faint grid, charted rock gets real texture.             */
 /* ------------------------------------------------------------------ */
@@ -9,11 +10,27 @@ import { BANDS, DEEP_DEFS, FLOODED, LAMP_REACH, LIFT_X, M, MAGMA_FROM, MATERIALS
 import type { DeepBuilding } from "../sim/deepBuild";
 import { idx, type Mine } from "../sim/mine";
 import { fbm, hash2 } from "../sim/rng";
+import { sp } from "../data/species";
+import type { SpeciesId } from "../sim/types";
+import { drawDino, restPose, type DinoPose } from "./drawDino";
 
 export const CELL = 32;
 /** rows of sky + ground drawn above the barrier */
 export const SKY_ROWS = 6;
 const CHUNK = 16;
+/** How bright charted-but-unlit rock is (0 = black). Raised so tunnels + pools stay readable. */
+const AMBIENT = 0.3;
+/** Water glows a little and lights the rock right around it. */
+const WATER_LIGHT = 0.6;
+const WATER_HALO = 0.42;
+/** Content kinds as small numbers (for the chunk fingerprints). */
+const CONTENT_ID = new Map<string, number>();
+const contentId = (c: Content) => {
+  if (c === null) return 0;
+  let n = CONTENT_ID.get(c);
+  if (n === undefined) CONTENT_ID.set(c, (n = CONTENT_ID.size + 1));
+  return n;
+};
 
 export interface DeepCam {
   x: number;
@@ -40,14 +57,32 @@ export interface CrewLook {
   jobCell: number | null;
 }
 
+/** What the renderer needs to draw one pack dinosaur. */
+export interface PackLook {
+  id: number;
+  x: number;
+  y: number;
+  face: 1 | -1;
+  walking: boolean;
+  anim: number;
+  species: SpeciesId;
+  /** body length on the surface (px) */
+  size: number;
+  load: number;
+  cap: number;
+}
+
 export interface DeepOverlay {
   /** the camp stockpile (vaults show their ore) */
   stock: Record<string, number>;
   /** where a building would go (build mode) */
   ghost: { kind: DeepKind; x: number; y: number; ok: boolean } | null;
   crew: CrewLook[];
+  packs?: PackLook[];
   selectedMiners?: number[];
   lantern?: boolean;
+  /** how far each miner's lamp lights (cells), when better than a plain lantern */
+  lanternR?: number;
   /** painting mode (shows a hint on hover) */
   mode: string;
   sel: number | null;
@@ -97,8 +132,17 @@ export class MineRenderer {
   private h = 1;
   private dpr = 1;
   private t = 0;
-  private chunks = new Map<number, { v: number; c: HTMLCanvasElement }>();
+  /** baked rock per chunk: v = mine.version when last checked, sig = what its cells looked like */
+  private chunks = new Map<number, { v: number; sig: number; c: HTMLCanvasElement }>();
   private motes: { x: number; y: number; s: number; v: number }[] = [];
+  /** the light map: one pixel per cell, alpha = darkness */
+  private lightCanvas: HTMLCanvasElement | null = null;
+  private lightImg: ImageData | null = null;
+  private bright = new Float32Array(MINE_W * MINE_H);
+  /** soft glow sprites for known ore (one per colour), the vignette + survey sweep */
+  private glows = new Map<string, HTMLCanvasElement>();
+  private vignette: { w: number; h: number; g: CanvasGradient } | null = null;
+  private sweepGrad: CanvasGradient | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -131,9 +175,32 @@ export class MineRenderer {
 
   /* ------------------------------ chunks (baked rock) ------------------------------ */
 
+  /**
+   * A fingerprint of everything a chunk's baked look depends on: rock, how well each cell is
+   * charted and what's known inside, plus the row above + below (rims, floors and veins look
+   * at their neighbours). Only chunks whose fingerprint changed get re-baked.
+   */
+  private chunkSig(mine: Mine, k: number) {
+    let h = (2166136261 ^ mine.seed) >>> 0;
+    const r0 = Math.max(0, k * CHUNK - 1);
+    const r1 = Math.min(MINE_H - 1, (k + 1) * CHUNK);
+    for (let i = r0 * MINE_W; i < (r1 + 1) * MINE_W; i++) {
+      const seen = mine.seen[i];
+      const v = mine.cells[i] | (seen << 4) | (seen === 2 ? (contentId(mine.known.get(i) ?? null) << 6) | (mine.oreLeft[i] << 12) : 0);
+      h = Math.imul(h ^ v, 16777619);
+    }
+    return h >>> 0;
+  }
+
   private chunk(mine: Mine, k: number) {
     const have = this.chunks.get(k);
     if (have && have.v === mine.version) return have.c;
+    const sig = this.chunkSig(mine, k);
+    if (have && have.sig === sig) {
+      // something changed elsewhere in the mine, not here
+      have.v = mine.version;
+      return have.c;
+    }
     const c = have?.c ?? document.createElement("canvas");
     c.width = MINE_W * CELL;
     c.height = CHUNK * CELL;
@@ -144,7 +211,7 @@ export class MineRenderer {
       if (y >= MINE_H) break;
       for (let x = 0; x < MINE_W; x++) this.bakeCell(g, mine, x, y, x * CELL, ry * CELL);
     }
-    this.chunks.set(k, { v: mine.version, c });
+    this.chunks.set(k, { v: mine.version, sig, c });
     // keep memory in check: drop chunks far from this one
     if (this.chunks.size > 8) for (const key of Array.from(this.chunks.keys())) if (Math.abs(key - k) > 4) this.chunks.delete(key);
     return c;
@@ -160,11 +227,11 @@ export class MineRenderer {
       // uncharted: near-black with a faint survey grid
       g.fillStyle = "#06080a";
       g.fillRect(px, py, CELL, CELL);
-      g.strokeStyle = "rgba(80,200,230,0.06)";
+      g.strokeStyle = "rgba(80,200,230,0.11)";
       g.lineWidth = 1;
       g.strokeRect(px + 0.5, py + 0.5, CELL - 1, CELL - 1);
       if (hash2(x, y, s + 3) > 0.93) {
-        g.fillStyle = "rgba(120,220,255,0.12)";
+        g.fillStyle = "rgba(120,220,255,0.22)";
         g.fillRect(px + 14, py + 14, 2, 2);
       }
       return;
@@ -304,11 +371,15 @@ export class MineRenderer {
         g.arc(px + 16, py + 16, 6, 0, Math.PI * 2);
         g.stroke();
       }
-      if (look) this.bakeContent(g, c!, look.color, px, py, x, y, s);
+      if (look) {
+        // a rich deposit shows fewer, smaller nuggets as it's chipped away
+        const rem = mine.oreRemaining(i);
+        this.bakeContent(g, c!, look.color, px, py, x, y, s, rem ? rem.left / rem.max : 1);
+      }
     }
   }
 
-  private bakeContent(g: CanvasRenderingContext2D, c: Exclude<Content, null>, color: string, px: number, py: number, x: number, y: number, s: number) {
+  private bakeContent(g: CanvasRenderingContext2D, c: Exclude<Content, null>, color: string, px: number, py: number, x: number, y: number, s: number, full = 1) {
     if (c === "spring" || c === "caveIn" || c === "gas") {
       // hazard marker: a hollow diamond
       g.strokeStyle = color;
@@ -424,10 +495,11 @@ export class MineRenderer {
       // Irregular metallic nuggets are easy to tell apart from stone and crystal.
       const light = c === "gold" ? "#fff3ae" : "#ffffff";
       const shadow = c === "gold" ? "#8f5b17" : "#667b90";
-      for (let k = 0; k < 3; k++) {
+      const count = Math.max(1, Math.ceil(3 * full));
+      for (let k = 0; k < count; k++) {
         const nx = px + 7 + hash2(x * 13 + k, y, s + 71) * 18;
         const ny = py + 7 + hash2(x, y * 13 + k, s + 71) * 18;
-        const r = 3 + hash2(k, x + y, s + 19) * 3;
+        const r = (3 + hash2(k, x + y, s + 19) * 3) * (0.6 + 0.4 * full);
         g.fillStyle = shadow;
         g.beginPath();
         g.ellipse(nx + 1, ny + 1, r + 2, r, -0.35, 0, Math.PI * 2);
@@ -441,11 +513,12 @@ export class MineRenderer {
       }
       return;
     }
-    // ore: a few faceted nuggets / a vein
-    for (let k = 0; k < 4; k++) {
+    // ore: a few faceted nuggets / a vein (fewer + smaller as a rich deposit runs out)
+    const count = Math.max(1, Math.ceil(4 * full));
+    for (let k = 0; k < count; k++) {
       const cx = px + 6 + hash2(x * 9 + k, y, s + 5) * 20;
       const cy = py + 6 + hash2(x, y * 9 + k, s + 5) * 20;
-      const r = 2.5 + hash2(k, x + y, s) * 3;
+      const r = (2.5 + hash2(k, x + y, s) * 3) * (0.6 + 0.4 * full);
       g.fillStyle = shadeHex(color, -0.25);
       g.beginPath();
       g.moveTo(cx, cy - r);
@@ -504,6 +577,8 @@ export class MineRenderer {
     this.drawSupports(c, mine, x0, x1, y0, y1);
     for (const b of mine.builds) if (b.x <= x1 + 1 && b.x + DEEP_DEFS[b.kind].w >= x0 - 1 && b.y <= y1 + 1 && b.y + DEEP_DEFS[b.kind].h >= y0 - 1) this.drawDeepBuilding(c, b, ov.stock);
     this.drawDarkness(c, mine, ov, x0, x1, y0, y1);
+    // water sits on top of the darkness so pools stay readable away from the lamps
+    this.drawWater(c, mine, x0, x1, y0, y1);
     if (ov.ghost) this.drawGhost(c, ov.ghost);
     this.drawOrders(c, mine, x0, x1, y0, y1);
     for (const worker of ov.crew) {
@@ -541,6 +616,7 @@ export class MineRenderer {
       c.restore();
     }
     for (const cr of mine.critters) this.drawTroglodon(c, cr);
+    for (const p of ov.packs ?? []) this.drawPack(c, p);
     for (const m of ov.crew) {
       if (ov.selectedMiners?.includes(m.id)) {
         c.strokeStyle = "#67e8f9";
@@ -564,40 +640,267 @@ export class MineRenderer {
       if (m.y > 1) m.y -= 1;
       c.fillRect(m.x * this.w + Math.sin(this.t + m.v) * 6, m.y * this.h, m.s, m.s);
     }
-    const g = c.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.35, this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.75);
-    g.addColorStop(0, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(0,0,0,0.65)");
-    c.fillStyle = g;
+    if (!this.vignette || this.vignette.w !== this.w || this.vignette.h !== this.h) {
+      const g = c.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.35, this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.75);
+      g.addColorStop(0, "rgba(0,0,0,0)");
+      g.addColorStop(1, "rgba(0,0,0,0.55)");
+      this.vignette = { w: this.w, h: this.h, g };
+    }
+    c.fillStyle = this.vignette.g;
     c.fillRect(0, 0, this.w, this.h);
     // a faint scanline sweep (the survey overlay)
     const sweep = ((this.t * 0.12) % 1) * (this.h + 200) - 100;
-    const sg = c.createLinearGradient(0, sweep - 60, 0, sweep);
-    sg.addColorStop(0, "rgba(90,220,255,0)");
-    sg.addColorStop(1, "rgba(90,220,255,0.05)");
-    c.fillStyle = sg;
-    c.fillRect(0, sweep - 60, this.w, 60);
+    if (!this.sweepGrad) {
+      this.sweepGrad = c.createLinearGradient(0, -60, 0, 0);
+      this.sweepGrad.addColorStop(0, "rgba(90,220,255,0)");
+      this.sweepGrad.addColorStop(1, "rgba(90,220,255,0.05)");
+    }
+    c.translate(0, sweep);
+    c.fillStyle = this.sweepGrad;
+    c.fillRect(0, -60, this.w, 60);
+    c.setTransform(d, 0, 0, d, 0, 0);
     if (ov.fade > 0) {
       c.fillStyle = `rgba(0,0,0,${Math.min(1, ov.fade)})`;
       c.fillRect(0, 0, this.w, this.h);
     }
   }
 
+  /**
+   * Darkness: work out how lit each visible cell is (ambient, the lift, lamps, miners' lamps,
+   * glowing crystal + water), write it into a one-pixel-per-cell image and stretch that over
+   * the view with smoothing on. One drawImage instead of thousands of little rectangles.
+   */
   private drawDarkness(c: CanvasRenderingContext2D, mine: Mine, ov: DeepOverlay, x0: number, x1: number, y0: number, y1: number) {
-    const lamps = mine.builds.filter((b) => (b.kind === "lamp" || b.kind === "torch") && b.built >= 1 && b.x >= x0 - 6 && b.x <= x1 + 6 && b.y >= y0 - 6 && b.y <= y1 + 6);
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-      const i = idx(x, y);
-      if (!mine.seen[i] || mine.cells[i] === M.Magma) continue;
-      let brightness = x === LIFT_X && y <= mine.liftMax ? 0.7 : y <= 2 ? 0.45 : 0.06;
-      for (const lamp of lamps) brightness = Math.max(brightness, 1 - Math.hypot(lamp.x - x, lamp.y - y) / (lamp.kind === "torch" ? 4 : LAMP_REACH + 1));
-      for (const miner of ov.crew) brightness = Math.max(brightness, 1 - Math.hypot(miner.x - x - 0.5, miner.y - y - 0.5) / (ov.lantern ? 5 : 2));
-      const content = mine.known.get(i);
-      if (mine.seen[i] === 2 && (content === "crystal" || content === "geode")) brightness = Math.max(brightness, 0.65);
-      const alpha = Math.max(0, Math.min(0.78, (1 - brightness) * 0.73));
-      if (alpha > 0.02) {
-        c.fillStyle = `rgba(1,4,9,${alpha})`;
-        c.fillRect(x * CELL, y * CELL, CELL, CELL);
-      }
+    // one cell of margin so the smoothing never samples stale pixels at the edges
+    const ax = Math.max(0, x0 - 1);
+    const bx = Math.min(MINE_W - 1, x1 + 1);
+    const ay = Math.max(0, y0 - 1);
+    const by = Math.min(MINE_H - 1, y1 + 1);
+    const B = this.bright;
+    for (let y = ay; y <= by; y++) {
+      const base = y <= 2 ? 0.45 : AMBIENT;
+      for (let x = ax; x <= bx; x++) B[idx(x, y)] = x === LIFT_X && y <= mine.liftMax ? 0.7 : base;
     }
+    const stamp = (cx: number, cy: number, r: number, f: (d: number) => number) => {
+      const lx = Math.max(ax, Math.floor(cx - r));
+      const hx = Math.min(bx, Math.ceil(cx + r));
+      const ly = Math.max(ay, Math.floor(cy - r));
+      const hy = Math.min(by, Math.ceil(cy + r));
+      for (let y = ly; y <= hy; y++)
+        for (let x = lx; x <= hx; x++) {
+          const b = f(Math.hypot(cx - x, cy - y));
+          const i = idx(x, y);
+          if (b > B[i]) B[i] = b;
+        }
+    };
+    for (const b of mine.builds) {
+      if ((b.kind !== "lamp" && b.kind !== "torch") || b.built < 1) continue;
+      const R = b.kind === "torch" ? 4 : LAMP_REACH + 1;
+      stamp(b.x, b.y, R, (d) => 1 - d / R);
+    }
+    const R = ov.lanternR ?? (ov.lantern ? 5 : 2);
+    for (const m of ov.crew) stamp(m.x - 0.5, m.y - 0.5, R, (d) => 1 - d / R);
+    for (let y = ay; y <= by; y++)
+      for (let x = ax; x <= bx; x++) {
+        const i = idx(x, y);
+        if ((mine.water[i] > 0.05 || mine.river[i]) && mine.seen[i]) stamp(x, y, 1.5, (d) => (d < 0.5 ? WATER_LIGHT : WATER_HALO));
+        else if (mine.seen[i] === 2) {
+          const content = mine.known.get(i);
+          if ((content === "crystal" || content === "geode") && B[i] < 0.65) B[i] = 0.65;
+        }
+      }
+    if (!this.lightCanvas) {
+      this.lightCanvas = document.createElement("canvas");
+      this.lightCanvas.width = MINE_W;
+      this.lightCanvas.height = MINE_H;
+      this.lightImg = this.lightCanvas.getContext("2d")!.createImageData(MINE_W, MINE_H);
+    }
+    const px = this.lightImg!.data;
+    for (let y = ay; y <= by; y++)
+      for (let x = ax; x <= bx; x++) {
+        const i = idx(x, y);
+        const o = i * 4;
+        px[o] = 1;
+        px[o + 1] = 4;
+        px[o + 2] = 9;
+        // magma glows by itself; everything else is shaded by how lit it is
+        px[o + 3] = mine.cells[i] === M.Magma ? 0 : Math.round(Math.max(0, Math.min(0.78, (1 - B[i]) * 0.73)) * 255);
+      }
+    const w = bx - ax + 1;
+    const h = by - ay + 1;
+    this.lightCanvas.getContext("2d")!.putImageData(this.lightImg!, 0, 0, ax, ay, w, h);
+    c.save();
+    c.imageSmoothingEnabled = true;
+    c.drawImage(this.lightCanvas, ax, ay, w, h, ax * CELL, ay * CELL, w * CELL, h * CELL);
+    c.restore();
+  }
+
+  /**
+   * Underground water, drawn over the darkness: a bright, readable body with a deeper
+   * bottom, a shimmering surface line and faint reflected glints. Batched into a few
+   * paths per frame (no gradient per cell).
+   */
+  private drawWater(c: CanvasRenderingContext2D, mine: Mine, x0: number, x1: number, y0: number, y1: number) {
+    const t = this.t;
+    const body = new Path2D();
+    const under = new Path2D();
+    const deep = new Path2D();
+    const flood = new Path2D();
+    const shine = new Path2D();
+    let any = false;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        const wv = mine.water[i];
+        if (wv <= 0.01 || !mine.seen[i]) continue;
+        any = true;
+        const px = x * CELL;
+        const py = y * CELL;
+        const h = Math.min(1, wv) * CELL;
+        const top = py + CELL - h;
+        // lighter at the surface, darker further down, darkest along the bottom
+        const surface = y === 0 || mine.water[i - MINE_W] <= 0.05;
+        (surface ? (wv > FLOODED ? flood : body) : under).rect(px, top, CELL, h);
+        if (y + 1 >= MINE_H || mine.water[i + MINE_W] <= 0.05) deep.rect(px, top + h * 0.55, CELL, h * 0.45);
+        if (surface) shine.rect(px, top, CELL, 1.5 + Math.sin(t * 4 + x) * 0.5);
+      }
+    this.drawRivers(c, mine, x0, x1, y0, y1);
+    if (!any) return;
+    c.fillStyle = "rgba(76,178,255,0.62)";
+    c.fill(body);
+    c.fillStyle = "rgba(86,190,255,0.78)";
+    c.fill(flood);
+    c.fillStyle = "rgba(44,128,222,0.78)";
+    c.fill(under);
+    c.fillStyle = "rgba(18,70,150,0.45)";
+    c.fill(deep);
+    c.fillStyle = "rgba(215,245,255,0.85)";
+    c.fill(shine);
+    // reflected glints drifting along the surface
+    c.fillStyle = "rgba(235,250,255,0.55)";
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        const wv = mine.water[i];
+        if (wv <= 0.2 || !mine.seen[i] || (y > 0 && mine.water[i - MINE_W] > 0.05)) continue;
+        const k = (t * 0.35 + hash2(x, y, 9)) % 1;
+        const top = y * CELL + CELL - Math.min(1, wv) * CELL;
+        c.fillRect(x * CELL + 4 + k * 22, top + 4, 5 - Math.abs(k - 0.5) * 6, 1);
+      }
+  }
+
+  /**
+   * Underground rivers: a stream along the tunnel floor that isn't simulated, just drawn
+   * flowing, with streaks moving downstream, a spout where it comes out of the rock and a
+   * swirl where it sinks back in.
+   */
+  private drawRivers(c: CanvasRenderingContext2D, mine: Mine, x0: number, x1: number, y0: number, y1: number) {
+    const t = this.t;
+    const H = CELL * 0.72;
+    let any = false;
+    const body = new Path2D();
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        if (!mine.river[i] || !mine.seen[i]) continue;
+        any = true;
+        body.rect(x * CELL, y * CELL + CELL - H, CELL, H);
+      }
+    if (!any) return;
+    c.fillStyle = "rgba(60,160,245,0.82)";
+    c.fill(body);
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const i = idx(x, y);
+        const dir = mine.river[i];
+        if (!dir || !mine.seen[i]) continue;
+        const sgn = dir === 1 ? 1 : -1;
+        const px = x * CELL;
+        const top = y * CELL + CELL - H;
+        // the darker water low down
+        c.fillStyle = "rgba(16,64,140,0.5)";
+        c.fillRect(px, top + H * 0.55, CELL, H * 0.45);
+        // a rippling surface line
+        c.fillStyle = "rgba(220,245,255,0.85)";
+        c.fillRect(px, top + Math.sin(t * 5 + x * 1.7) * 0.8, CELL, 1.5);
+        // streaks carried downstream
+        c.fillStyle = "rgba(230,250,255,0.6)";
+        for (let k = 0; k < 2; k++) {
+          const f = (((t * 0.9 * sgn + hash2(x, y + k, 7)) % 1) + 1) % 1;
+          c.fillRect(px + f * (CELL - 8), top + 5 + k * 7, 8, 1.2);
+        }
+        // where it comes out of the rock + where it sinks away
+        const up = mine.river[i - sgn];
+        const down = mine.river[i + sgn];
+        if (!up) {
+          c.fillStyle = "rgba(200,240,255,0.7)";
+          for (let k = 0; k < 3; k++) {
+            const f = (t * 2 + k / 3) % 1;
+            c.fillRect(px + (sgn > 0 ? 2 + f * 10 : CELL - 4 - f * 10), top - 4 + f * 8, 2, 2);
+          }
+        }
+        if (!down) {
+          c.strokeStyle = "rgba(200,240,255,0.55)";
+          c.lineWidth = 1.2;
+          c.beginPath();
+          c.arc(px + CELL / 2, top + H * 0.5, 4 + Math.sin(t * 4) * 1.5, t * 3, t * 3 + Math.PI * 1.4);
+          c.stroke();
+        }
+      }
+  }
+
+  private packPose: DinoPose = restPose();
+
+  /** A pack dinosaur: the real species art, a bit smaller, with panniers that fill up. */
+  private drawPack(c: CanvasRenderingContext2D, p: PackLook) {
+    const def = sp(p.species);
+    // fits two cells of headroom: about one and a half cells long at most
+    const L = Math.min(CELL * 1.9, p.size * 0.62);
+    const pose = this.packPose;
+    pose.walk = p.anim * Math.PI * 2.2;
+    pose.stride = p.walking ? 1 : 0;
+    pose.t = this.t + p.id * 0.37;
+    pose.headDown = p.walking ? 0.15 : 0.3 + Math.sin(this.t * 1.3 + p.id) * 0.15;
+    const feet = (p.y + 0.5) * CELL - 1;
+    const px = p.x * CELL;
+    c.save();
+    c.fillStyle = "rgba(0,0,0,0.3)";
+    c.beginPath();
+    c.ellipse(px, feet, L * 0.42, 3, 0, 0, Math.PI * 2);
+    c.fill();
+    c.translate(px, feet);
+    drawDino(c, def, L, p.face, pose);
+    // panniers on its back: fuller as it fills up
+    const k = p.cap > 0 ? Math.min(1, p.load / p.cap) : 0;
+    const by = -L * 0.42;
+    for (const side of [-1, 1]) {
+      const bx = side * L * 0.1;
+      c.fillStyle = "#7a5032";
+      c.fillRect(bx - 5, by, 10, 9);
+      c.fillStyle = k > 0 ? "#c9a25c" : "#4b3020";
+      c.fillRect(bx - 4, by + 9 - 8 * k, 8, 8 * k);
+      c.strokeStyle = "#2b1a10";
+      c.lineWidth = 1;
+      c.strokeRect(bx - 5, by, 10, 9);
+    }
+    c.restore();
+  }
+
+  /** A soft round glow in one colour, drawn once and stamped wherever it's needed. */
+  private glowSprite(rgb: string) {
+    let g = this.glows.get(rgb);
+    if (!g) {
+      g = document.createElement("canvas");
+      g.width = g.height = 48;
+      const x = g.getContext("2d")!;
+      const grad = x.createRadialGradient(24, 24, 0, 24, 24, 24);
+      grad.addColorStop(0, `rgba(${rgb},1)`);
+      grad.addColorStop(1, `rgba(${rgb},0)`);
+      x.fillStyle = grad;
+      x.fillRect(0, 0, 48, 48);
+      this.glows.set(rgb, g);
+    }
+    return g;
   }
 
   /** Black fade drawn over whatever is on the canvas (for the dive). */
@@ -717,17 +1020,6 @@ export class MineRenderer {
         const i = idx(x, y);
         const px = x * CELL;
         const py = y * CELL;
-        const wv = mine.water[i];
-        if (wv > 0.01 && mine.seen[i]) {
-          const h = Math.min(1, wv) * CELL;
-          const g = c.createLinearGradient(0, py + CELL - h, 0, py + CELL);
-          g.addColorStop(0, wv > FLOODED ? "rgba(70,170,255,0.75)" : "rgba(70,170,255,0.5)");
-          g.addColorStop(1, "rgba(20,70,140,0.85)");
-          c.fillStyle = g;
-          c.fillRect(px, py + CELL - h, CELL, h);
-          c.fillStyle = "rgba(200,240,255,0.6)";
-          c.fillRect(px, py + CELL - h, CELL, 1.5 + Math.sin(t * 4 + x) * 0.5);
-        }
         if (mine.springs.has(i) && mine.seen[i]) {
           const k = (t * 2 + x) % 1;
           c.fillStyle = "rgba(160,220,255,0.9)";
@@ -745,12 +1037,9 @@ export class MineRenderer {
         if (mine.seen[i] === 2 && mine.known.has(i)) {
           const look = contentLook(mine.known.get(i) ?? null);
           if (look) {
-            const pulse = 0.25 + (Math.sin(t * 2.2 + x * 1.3 + y) + 1) * 0.15;
-            const g = c.createRadialGradient(px + 16, py + 16, 0, px + 16, py + 16, 24);
-            g.addColorStop(0, `rgba(${look.glow},${pulse})`);
-            g.addColorStop(1, `rgba(${look.glow},0)`);
-            c.fillStyle = g;
-            c.fillRect(px - 8, py - 8, CELL + 16, CELL + 16);
+            c.globalAlpha = 0.25 + (Math.sin(t * 2.2 + x * 1.3 + y) + 1) * 0.15;
+            c.drawImage(this.glowSprite(look.glow), px - 8, py - 8, CELL + 16, CELL + 16);
+            c.globalAlpha = 1;
           }
         }
       }

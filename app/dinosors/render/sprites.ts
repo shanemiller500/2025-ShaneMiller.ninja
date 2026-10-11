@@ -13,7 +13,6 @@ import { shade } from "./drawDino";
 const OUT = "rgba(35,28,22,0.5)";
 /** People get the storybook look: a dark ink outline round limbs, head + clothes. */
 const INK = "rgba(43,28,18,0.85)";
-const CHAR = "#3b3430";
 
 function mix(a: string, b: string, t: number) {
   const pa = parseInt(a.slice(1), 16);
@@ -22,17 +21,47 @@ function mix(a: string, b: string, t: number) {
   return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
 }
 
+/** Steps in a precomputed colour ramp (finer than the eye can tell on a plant). */
+const RAMP_STEPS = 32;
+const ramps = new Map<string, string[]>();
+/** mix(a, b, t) from a table: plants ask for their colours every frame, so no strings are built per draw. */
+function ramp(a: string, b: string, t: number) {
+  const key = a + b;
+  let r = ramps.get(key);
+  if (!r) {
+    r = Array.from({ length: RAMP_STEPS + 1 }, (_, i) => mix(a, b, i / RAMP_STEPS));
+    ramps.set(key, r);
+  }
+  return r[Math.round(Math.max(0, Math.min(1, t)) * RAMP_STEPS)];
+}
+
 const LEAF = ["#3f7a34", "#4b8a3a", "#5a9a42", "#356b2e"];
 const LEAF_LIGHT = ["#5a9a4a", "#68aa52", "#78ba5a", "#4c8a42"];
 
 /* ------------------------------- plants ------------------------------- */
 
+/**
+ * The zoomed-out plant: one blob or cone at (x, y), no transform. Stumps still
+ * go through drawPlant. Many hundreds of these are drawn when the whole map is in view.
+ */
+export function drawPlantLod(c: CanvasRenderingContext2D, p: Plant, x: number, y: number) {
+  const H = PLANT_H[p.kind] * (0.35 + p.size * 0.65);
+  c.fillStyle = ramp(LEAF[p.variant % 4], "#2f2a27", p.burnt);
+  c.beginPath();
+  if (p.kind === "conifer") {
+    c.moveTo(x - H * 0.25, y - H * 0.15);
+    c.lineTo(x, y - H);
+    c.lineTo(x + H * 0.25, y - H * 0.15);
+  } else c.arc(x, y - H * 0.6, H * 0.3 * (0.65 + 0.35 * p.food), 0, Math.PI * 2);
+  c.fill();
+}
+
 export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind: number, lod: boolean) {
   const H = PLANT_H[p.kind] * (0.35 + p.size * 0.65);
   const burnt = p.burnt;
-  const leaf = mix(LEAF[p.variant % 4], "#2f2a27", burnt);
-  const leafLight = mix(LEAF_LIGHT[p.variant % 4], "#3a3330", burnt);
-  const trunk = mix("#7a5534", "#2a2421", burnt);
+  const leaf = ramp(LEAF[p.variant % 4], "#2f2a27", burnt);
+  const leafLight = ramp(LEAF_LIGHT[p.variant % 4], "#3a3330", burnt);
+  const trunk = ramp("#7a5534", "#2a2421", burnt);
   const sway = Math.sin(t * 1.6 + p.x * 0.013 + p.variant) * (0.02 + wind * 0.06) + Math.sin(t * 28) * p.shake * 0.1;
   const full = 0.65 + 0.35 * p.food;
 
@@ -74,18 +103,7 @@ export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind
   }
 
   if (lod) {
-    c.fillStyle = leaf;
-    if (p.kind === "conifer") {
-      c.beginPath();
-      c.moveTo(-H * 0.25, -H * 0.15);
-      c.lineTo(0, -H);
-      c.lineTo(H * 0.25, -H * 0.15);
-      c.fill();
-    } else {
-      c.beginPath();
-      c.arc(0, -H * 0.6, H * 0.3 * full, 0, Math.PI * 2);
-      c.fill();
-    }
+    drawPlantLod(c, p, 0, 0);
     return;
   }
 
@@ -1745,152 +1763,6 @@ export function drawVolcano(c: CanvasRenderingContext2D, glow: number, lavaOn: b
 }
 
 /* ------------------------------- tribe structures ------------------------------- */
-
-/** One wall tile with its base at (0,0) = bottom-centre of the tile. */
-export function drawWallTile(c: CanvasRenderingContext2D, kind: "palisade" | "stone", built: number, hpFrac: number, tx: number, upgrade: boolean, t: number) {
-  const W = 32;
-  if (built < 1) {
-    // blueprint ghost + whatever has been raised so far
-    c.strokeStyle = "rgba(255,255,255,0.7)";
-    c.setLineDash([4, 3]);
-    c.lineWidth = 1.2;
-    c.strokeRect(-W / 2 + 2, -26, W - 4, 26);
-    c.setLineDash([]);
-  }
-  const h = (kind === "stone" ? 28 : 34) * Math.max(0, Math.min(1, built));
-  if (h <= 0.5) return;
-  if (kind === "palisade") {
-    for (let i = 0; i < 4; i++) {
-      // knocked-out logs when badly damaged
-      if (hpFrac < 0.45 && (tx * 3 + i) % 4 === 0) continue;
-      const x = -W / 2 + 4 + i * 8;
-      const lh = h * (0.88 + ((tx * 7 + i * 13) % 5) * 0.03);
-      const tilt = hpFrac < 0.45 ? ((i % 2) - 0.5) * 0.18 : 0;
-      c.save();
-      c.translate(x, 0);
-      c.rotate(tilt);
-      c.fillStyle = i % 2 ? "#8a5f38" : "#7a5230";
-      c.fillRect(-3.4, -lh, 6.8, lh);
-      c.beginPath();
-      c.moveTo(-3.4, -lh);
-      c.lineTo(0, -lh - 6);
-      c.lineTo(3.4, -lh);
-      c.closePath();
-      c.fill();
-      c.fillStyle = "rgba(255,230,190,0.25)";
-      c.fillRect(-3.4, -lh, 2, lh);
-      c.strokeStyle = "rgba(40,25,15,0.5)";
-      c.lineWidth = 0.8;
-      c.strokeRect(-3.4, -lh, 6.8, lh);
-      c.restore();
-    }
-    // lashing rope
-    c.strokeStyle = "#c9a56a";
-    c.lineWidth = 1.4;
-    c.beginPath();
-    c.moveTo(-W / 2, -h * 0.55);
-    c.lineTo(W / 2, -h * 0.55);
-    c.stroke();
-  } else {
-    const g = c.createLinearGradient(0, -h, 0, 0);
-    g.addColorStop(0, "#b3ada4");
-    g.addColorStop(1, "#7d776f");
-    c.fillStyle = g;
-    c.fillRect(-W / 2, -h, W, h);
-    c.strokeStyle = "rgba(60,55,50,0.55)";
-    c.lineWidth = 1;
-    for (let r = 0; r < 3; r++) {
-      const y = -h + (r + 1) * (h / 3);
-      c.beginPath();
-      c.moveTo(-W / 2, y);
-      c.lineTo(W / 2, y);
-      const off = r % 2 ? 0 : 8;
-      for (let x = -W / 2 + off; x < W / 2; x += 16) {
-        c.moveTo(x, y);
-        c.lineTo(x, y - h / 3);
-      }
-      c.stroke();
-    }
-    c.fillStyle = "#c8c2b8";
-    c.fillRect(-W / 2 - 1, -h - 4, W + 2, 5);
-    if (hpFrac < 0.5) {
-      c.strokeStyle = "rgba(30,25,20,0.7)";
-      c.lineWidth = 1.4;
-      c.beginPath();
-      c.moveTo(-6, -h);
-      c.lineTo(-2, -h * 0.6);
-      c.lineTo(-7, -h * 0.3);
-      c.stroke();
-    }
-  }
-  if (upgrade) {
-    c.fillStyle = `rgba(255,255,255,${0.5 + Math.sin(t * 4) * 0.3})`;
-    c.font = "10px sans-serif";
-    c.textAlign = "center";
-    c.fillText("🧱", 0, -h - 8);
-  }
-}
-
-export function drawTower(c: CanvasRenderingContext2D, stage: number, t: number) {
-  if (stage <= 0) {
-    c.strokeStyle = "rgba(255,255,255,0.7)";
-    c.setLineDash([4, 3]);
-    c.strokeRect(-20, -70, 40, 70);
-    c.setLineDash([]);
-    return;
-  }
-  const leg = (x0: number, x1: number) => {
-    c.beginPath();
-    c.moveTo(x0, 0);
-    c.lineTo(x1, -62);
-    c.stroke();
-  };
-  c.strokeStyle = "#6b4a2a";
-  c.lineWidth = 4;
-  leg(-20, -14);
-  leg(20, 14);
-  c.lineWidth = 3;
-  leg(-8, -10);
-  leg(8, 10);
-  c.strokeStyle = "#8a6238";
-  c.lineWidth = 1.6;
-  for (let y = -12; y > -60; y -= 14) {
-    c.beginPath();
-    c.moveTo(-18 + (-y / 62) * 4, y);
-    c.lineTo(18 - (-y / 62) * 4, y - 8);
-    c.stroke();
-  }
-  if (stage >= 2) {
-    c.fillStyle = "#8a5f38";
-    c.fillRect(-22, -66, 44, 7);
-    c.fillStyle = "#7a5230";
-    for (let i = 0; i < 6; i++) c.fillRect(-22 + i * 8, -80, 5, 14);
-  }
-  if (stage >= 3) {
-    c.fillStyle = "#5f8f3a";
-    c.beginPath();
-    c.moveTo(-28, -82);
-    c.lineTo(0, -104);
-    c.lineTo(28, -82);
-    c.closePath();
-    c.fill();
-    c.fillStyle = "#4b7a30";
-    c.fillRect(-28, -84, 56, 3);
-    // a little flag
-    c.strokeStyle = "#5a3d24";
-    c.lineWidth = 1.2;
-    c.beginPath();
-    c.moveTo(0, -104);
-    c.lineTo(0, -120);
-    c.stroke();
-    c.fillStyle = "#e2462d";
-    c.beginPath();
-    c.moveTo(0, -120);
-    c.lineTo(12, -116 + Math.sin(t * 5) * 1.5);
-    c.lineTo(0, -112);
-    c.fill();
-  }
-}
 
 export function drawFarm(c: CanvasRenderingContext2D, growth: number, planted: boolean, t: number, crop: "flower" | "wheat" | "barley" = "wheat") {
   const W = 72;

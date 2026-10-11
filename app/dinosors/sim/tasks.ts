@@ -1271,8 +1271,3 @@ export function douseThink(w: World, h: Human, done: () => void): boolean {
   return true;
 }
 
-/** Dino the player could be pointing at (for the hover hint). */
-export function describeDino(d: Dino) {
-  return sp(d.species).nick;
-}
-

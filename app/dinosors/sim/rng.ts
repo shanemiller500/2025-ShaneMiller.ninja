@@ -56,10 +56,4 @@ export function fbm(x: number, y: number, seed: number, octaves = 4) {
 }
 
 export const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
-export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-export const dist2 = (ax: number, ay: number, bx: number, by: number) => {
-  const dx = ax - bx;
-  const dy = ay - by;
-  return dx * dx + dy * dy;
-};
 export const pick = <T,>(rng: Rng, list: readonly T[]): T => list[Math.floor(rng() * list.length)];

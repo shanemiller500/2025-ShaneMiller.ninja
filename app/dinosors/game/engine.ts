@@ -9,6 +9,7 @@ import { AudioManager } from "../audio/audio";
 import { DeepView, type DeepInfo } from "./deepView";
 import { canSend, pickMiners, recallAll, resetMine, sendDown, setOrder, type OrderKind } from "../sim/miners";
 import { demolishDeep } from "../sim/deepBuild";
+import { canSendPack, packCap, recallPacks, sendPack } from "../sim/packs";
 import type { DeepKind } from "../data/mine";
 import { CIV_TECH, ENERGY_GEN, PYRAMID_STAGES, SHIELD_HOLD, type CivPath, type CivTechId } from "../data/civ";
 import { buildingCost } from "../data/colony";
@@ -34,7 +35,7 @@ import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genet
 import { World, type SaveData } from "../sim/world";
 import { Renderer, type Camera } from "../render/renderer";
 import { loadWorld, saveWorld } from "./save";
-import { newId, type Slot, type SlotKind } from "./slots";
+import { newId, putSlot, type Slot, type SlotKind } from "./slots";
 import { DEFAULT_TOOL, TOOL_BY_ID, applyTool, toolCursor, type ToolState } from "./tools";
 
 export type UIEvent =
@@ -168,6 +169,8 @@ export interface Snapshot {
   unlocked: SpeciesId[];
   seen: SpeciesId[];
   fps: number;
+  /** smoothed ms per frame: simulating + drawing */
+  perf: { sim: number; render: number };
   /** Neanderthal clans around the map */
   rivals: {
     clans: { id: number; name: string; color: string; size: number; children: number; food: number; style: string; campTier: number; x: number; y: number; captives: string[]; wars: string[]; pacts: string[] }[];
@@ -242,6 +245,26 @@ export interface CivInfo {
 }
 
 const HOME = { x: 66 * TILE, y: 46 * TILE, zoom: 0.75 };
+
+/** Same keys + same values (one level deep), for arrays and plain objects. */
+function shallowSame(a: readonly unknown[] | Record<string, unknown>, b: readonly unknown[] | Record<string, unknown>) {
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) if ((a as Record<string, unknown>)[k] !== (b as Record<string, unknown>)[k]) return false;
+  return true;
+}
+/** Frames closer together than this are skipped (caps drawing at ~72 fps on high-refresh screens). */
+const MIN_FRAME_MS = 13;
+/** Longest stretch of game time one frame may cover (slower devices still run in real time down to ~10 fps). */
+const MAX_FRAME_DT = 0.1;
+/** The sim never takes a single step longer than this (big steps make movement + collisions sloppy). */
+const MAX_SIM_STEP = 1 / 30;
+/** Seconds between autosaves (the local save + the "latest" saved-games slot share one serialization). */
+const AUTOSAVE_S = 30;
+/** Saves asked for within this many ms of each other reuse the same serialized world. */
+const SAVE_SHARE_MS = 2000;
+/** The "latest" slot's screenshot is refreshed at most this often (reading the canvas back is slow). */
+const THUMB_EVERY_MS = 5 * 60_000;
 const MIN_ZOOM = 0.22;
 const MAX_ZOOM = 2.4;
 
@@ -251,6 +274,8 @@ interface Ptr {
   sx: number;
   sy: number;
   t: number;
+  lastMoveAt: number;
+  pointerType: string;
   moved: boolean;
   /** dino under the finger at press time (hand tool) */
   grab: Dino | null;
@@ -361,7 +386,12 @@ export class Engine {
   private lastTap = { t: 0, x: 0, y: 0 };
   private bedT = 0;
   private saveT = 0;
+  /** the last serialized world, shared by saves that land close together */
+  private saveCache: { world: World; at: number; text: string } | null = null;
+  private latestThumb: { world: World | null; at: number; url: string | undefined } = { world: null, at: -Infinity, url: undefined };
   private fpsAcc = { n: 0, t: 0, fps: 60 };
+  /** smoothed ms per frame spent simulating / drawing (shown next to the fps) */
+  private perf = { sim: 0, render: 0 };
   private holdTimer = 0;
   private volcanoTaps = 0;
   private lastPaint = { x: -1e9, y: -1e9 };
@@ -397,10 +427,12 @@ export class Engine {
     this.last = performance.now();
     const loop = (now: number) => {
       if (!this.running) return;
-      const dt = Math.min(0.05, (now - this.last) / 1000);
+      this.raf = requestAnimationFrame(loop);
+      // 120/144 Hz screens: draw every other refresh (~60-72 fps), not every one
+      if (now - this.last < MIN_FRAME_MS) return;
+      const dt = Math.min(MAX_FRAME_DT, (now - this.last) / 1000);
       this.last = now;
       this.frame(dt);
-      this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
   }
@@ -452,7 +484,11 @@ export class Engine {
       this.carried.state = "carried";
       this.carried.stateT += dt;
     }
-    w.update(dt);
+    // a long frame is split into even sub-steps so the sim stays in real time without huge jumps
+    const t0 = performance.now();
+    const steps = Math.max(1, Math.ceil(dt / MAX_SIM_STEP - 1e-6));
+    for (let i = 0; i < steps; i++) w.update(dt / steps);
+    this.perf.sim = this.perf.sim * 0.9 + (performance.now() - t0) * 0.1;
     this.drainEvents();
 
     this.shake.t = Math.max(0, this.shake.t - dt);
@@ -489,7 +525,9 @@ export class Engine {
     } else if (ex.phase !== "impact") this.svCam = false;
     if (this.view === "deep") {
       this.deep.update(dt);
+      const r0 = performance.now();
       this.deep.render(w, dt, fade);
+      this.perf.render = this.perf.render * 0.9 + (performance.now() - r0) * 0.1;
       this.deepAudio(dt);
       this.tickSave(dt);
       return;
@@ -511,6 +549,7 @@ export class Engine {
       flashColor: this.flash.color,
     }, dt);
     if (fade > 0) this.deep.renderer.fade(fade);
+    this.perf.render = this.renderer.cost;
 
     // adaptive quality: fewer cosmetic particles if frames get heavy
     const cost = this.renderer.cost;
@@ -538,9 +577,11 @@ export class Engine {
 
   private tickSave(dt: number) {
     this.saveT += dt;
-    if (this.saveT > 20) {
+    if (this.saveT > AUTOSAVE_S) {
       this.saveT = 0;
+      // one serialization feeds both the local save and the "latest" saved-games slot
       this.save(true);
+      void putSlot(this.makeSlot("latest"));
     }
     this.fpsAcc.n++;
     this.fpsAcc.t += dt;
@@ -613,7 +654,7 @@ export class Engine {
       // pan inertia
       cam.x -= (this.vel.x * dt) / cam.zoom;
       cam.y -= (this.vel.y * dt) / cam.zoom;
-      const f = Math.pow(0.04, dt);
+      const f = Math.pow(0.01, dt);
       this.vel.x *= f;
       this.vel.y *= f;
     }
@@ -678,6 +719,7 @@ export class Engine {
     let best: Dino | null = null;
     let bestY = -Infinity;
     for (const d of this.world.dinos) {
+      if (d.under) continue;
       const L = sizeOf(d);
       const def = sp(d.species);
       const cy = d.y - d.z - L * (def.plan === "sauropod" ? 0.35 : def.move === "fly" && d.z > 4 ? 0 : 0.22);
@@ -732,7 +774,7 @@ export class Engine {
     this.canvas.setPointerCapture?.(e.pointerId);
     const { x: sx, y: sy } = this.local(e);
     if (this.view === "deep") {
-      this.deep.down(e.pointerId, sx, sy);
+      this.deep.down(e.pointerId, sx, sy, e.pointerType);
       return;
     }
     const wp = this.renderer.toWorld(this.cam, sx, sy);
@@ -740,11 +782,13 @@ export class Engine {
     if ((e.shiftKey && e.pointerType === "mouse" || this.groupSelectMode) && this.tool.id === "hand") {
       this.box = { x0: sx, y0: sy, x1: sx, y1: sy };
       this.canvas.setPointerCapture?.(e.pointerId);
-      this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: performance.now(), moved: false, grab: null });
+      const now = performance.now();
+      this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: now, lastMoveAt: now, pointerType: e.pointerType, moved: false, grab: null });
       return;
     }
     const grab = this.tool.id === "hand" && this.ptrs.size === 0 && !this.selection.length ? this.pickDino(wp.x, wp.y) : null;
-    this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: performance.now(), moved: false, grab });
+    const now = performance.now();
+    this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: now, lastMoveAt: now, pointerType: e.pointerType, moved: false, grab });
     this.vel.x = this.vel.y = 0;
     this.fly = null;
     if (this.ptrs.size === 2) {
@@ -784,8 +828,11 @@ export class Engine {
     }
     const dx = sx - p.x;
     const dy = sy - p.y;
+    const now = performance.now();
+    const moveDt = Math.max(1 / 240, Math.min(0.1, (now - p.lastMoveAt) / 1000));
     p.x = sx;
     p.y = sy;
+    p.lastMoveAt = now;
     if (Math.hypot(sx - p.sx, sy - p.sy) > 7) p.moved = true;
 
     if (this.pinch && this.ptrs.size >= 2) {
@@ -834,8 +881,13 @@ export class Engine {
     this.followId = 0;
     this.cam.x -= dx / this.cam.zoom;
     this.cam.y -= dy / this.cam.zoom;
-    this.vel.x = dx * 60 * 0.5 + this.vel.x * 0.5;
-    this.vel.y = dy * 60 * 0.5 + this.vel.y * 0.5;
+    if (e.pointerType === "mouse") this.vel.x = this.vel.y = 0;
+    else {
+      const vx = Math.max(-520, Math.min(520, dx / moveDt));
+      const vy = Math.max(-520, Math.min(520, dy / moveDt));
+      this.vel.x = vx * 0.25 + this.vel.x * 0.75;
+      this.vel.y = vy * 0.25 + this.vel.y * 0.75;
+    }
     this.clampCam();
   };
 
@@ -854,6 +906,9 @@ export class Engine {
     const p = this.ptrs.get(e.pointerId);
     this.ptrs.delete(e.pointerId);
     this.cancelHold();
+    if (p && (e.type === "pointercancel" || performance.now() - p.lastMoveAt > 100 || p.pointerType === "mouse")) {
+      this.vel.x = this.vel.y = 0;
+    }
     if (this.box) {
       const b = this.box;
       this.box = null;
@@ -1948,8 +2003,28 @@ export class Engine {
     if (d && name.trim()) d.name = name.trim().slice(0, 18);
   }
 
+  /**
+   * The world as save text. A copy made in the last `maxAgeMs` is reused, so a burst of
+   * saves (the tab hiding: local + latest slot + cloud) serializes the world only once.
+   */
+  saveText(maxAgeMs = 0) {
+    const now = performance.now();
+    const c = this.saveCache;
+    if (c && c.world === this.world && now - c.at <= maxAgeMs) return c.text;
+    const text = JSON.stringify(this.world.serialize());
+    this.saveCache = { world: this.world, at: now, text };
+    return text;
+  }
+
   save(auto = false) {
-    const ok = saveWorld(this.world);
+    let json: string;
+    try {
+      // a save the player asked for is always fresh
+      json = this.saveText(auto ? SAVE_SHARE_MS : 0);
+    } catch {
+      return false;
+    }
+    const ok = saveWorld(json);
     if (ok && !auto) this.emit({ type: "saved" });
     return ok;
   }
@@ -1989,16 +2064,25 @@ export class Engine {
       time: w.time,
       people: w.humans.filter((x) => !x.stranger).length,
       level: CAMP_LEVELS[w.tribe.level].name,
-      thumb: this.thumbnail(),
-      data: JSON.stringify(w.serialize()),
+      thumb: this.slotThumb(kind),
+      data: this.saveText(SAVE_SHARE_MS),
     };
+  }
+
+  /** The "latest" slot is rewritten every autosave: its screenshot only every few minutes. */
+  private slotThumb(kind: SlotKind) {
+    if (kind !== "latest") return this.thumbnail();
+    const now = performance.now();
+    const t = this.latestThumb;
+    if (t.world !== this.world || now - t.at >= THUMB_EVERY_MS || !t.url) this.latestThumb = { world: this.world, at: now, url: this.thumbnail() };
+    return this.latestThumb.url;
   }
 
   /** The world as a save string + a few headline numbers (for cloud saves). */
   exportSave() {
     const w = this.world;
     return {
-      data: JSON.stringify(w.serialize()),
+      data: this.saveText(SAVE_SHARE_MS),
       meta: {
         day: w.day,
         dinos: w.dinos.length,
@@ -2162,6 +2246,20 @@ export class Engine {
     return ok;
   }
 
+  /** Send the best free pack dinosaur down (trained, small enough for the tunnels). */
+  deepSendPack() {
+    const w = this.world;
+    const best = w.dinos.filter(canSendPack).sort((a, b) => packCap(b) - packCap(a))[0];
+    const why = best ? sendPack(w, best) : "No trained hauler small enough for the tunnels (stegos, ankylos, iguanodons, parasaurs, pachys + most trikes fit; the long-necks haul from the cave mouth).";
+    if (why) w.toast("🦕", why);
+    this.emit({ type: "select" });
+  }
+
+  deepRecallPacks() {
+    recallPacks(this.world);
+    this.emit({ type: "select" });
+  }
+
   deepRecall() {
     recallAll(this.world);
     this.world.toast("⬆️", "Everyone's heading back up the lift.");
@@ -2308,7 +2406,7 @@ export class Engine {
       pending: civ.choicePending,
       ripe: civ.ripe(w),
       current: civ.current ? { id: civ.current, rp: civ.rp, need: civ.rpOf(civ.current), paid: civ.paid, missing: civ.missing(w), cost: civ.costOf(civ.current) } : null,
-      done: civ.polygonAge && !civ.done.has("precisionStone") ? [...Array.from(civ.done), "precisionStone" as CivTechId] : Array.from(civ.done),
+      done: this.stable("civDone", civ.polygonAge && !civ.done.has("precisionStone") ? [...Array.from(civ.done), "precisionStone" as CivTechId] : Array.from(civ.done)),
       options: civ.options().map((id) => ({ id, cost: civ.costOf(id), rp: civ.rpOf(id), cross: civ.isCross(id) })),
       crossOpen: civ.crossOpen(),
       energy: civ.energy,
@@ -2439,6 +2537,16 @@ export class Engine {
     this.save(true);
   }
 
+  /** last snapshot's arrays/objects, handed out again while their contents are unchanged */
+  private kept = new Map<string, unknown>();
+  /** Reuse the previous value when nothing in it changed, so memoized UI (the toolbar, the sticker book) can skip re-rendering. */
+  private stable<T extends readonly unknown[] | Record<string, unknown>>(key: string, next: T): T {
+    const prev = this.kept.get(key) as T | undefined;
+    if (prev && shallowSame(prev, next)) return prev;
+    this.kept.set(key, next);
+    return next;
+  }
+
   snapshot(): Snapshot {
     const w = this.world;
     let selected: Snapshot["selected"] = null;
@@ -2523,16 +2631,17 @@ export class Engine {
       eggs: w.eggs.length,
       volcano: w.volcano.phase,
       camp: {
-        stock: { ...w.camp.stock },
-        learned: Array.from(w.camp.learned),
+        stock: this.stable("stock", { ...w.camp.stock }),
+        learned: this.stable("learned", Array.from(w.camp.learned)),
         goal: w.camp.goal,
         crafting: cr ? { tech: cr.tech, prog: Math.min(1, cr.t / cr.dur) } : null,
         shelters: w.shelters.map((s) => ({ stage: s.stage, have: s.have })),
       },
-      discoveries: Array.from(w.discoveries),
-      unlocked: Array.from(w.unlocked),
-      seen: Array.from(w.seen),
+      discoveries: this.stable("discoveries", Array.from(w.discoveries)),
+      unlocked: this.stable("unlocked", Array.from(w.unlocked)),
+      seen: this.stable("seen", Array.from(w.seen)),
       fps: this.fpsAcc.fps,
+      perf: { sim: Math.round(this.perf.sim * 10) / 10, render: Math.round(this.perf.render * 10) / 10 },
       tribe: this.tribeSnapshot(),
       rivals: {
         clans: w.rivals.clans.map((cl) => {

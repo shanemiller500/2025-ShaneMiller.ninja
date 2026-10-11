@@ -9,6 +9,8 @@ export class SpatialHash<E extends { x: number; y: number }> {
   private cols: number;
   private rows: number;
   private buckets: E[][];
+  /** buckets holding something (so clearing doesn't walk every empty one) */
+  private used: number[] = [];
 
   constructor(cell = 128) {
     this.cell = cell;
@@ -18,7 +20,8 @@ export class SpatialHash<E extends { x: number; y: number }> {
   }
 
   clear() {
-    for (const b of this.buckets) b.length = 0;
+    for (const k of this.used) this.buckets[k].length = 0;
+    this.used.length = 0;
   }
 
   private key(x: number, y: number) {
@@ -28,7 +31,10 @@ export class SpatialHash<E extends { x: number; y: number }> {
   }
 
   insert(e: E) {
-    this.buckets[this.key(e.x, e.y)].push(e);
+    const k = this.key(e.x, e.y);
+    const b = this.buckets[k];
+    if (!b.length) this.used.push(k);
+    b.push(e);
   }
 
   rebuild(list: readonly E[]) {

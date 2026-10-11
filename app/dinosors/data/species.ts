@@ -718,5 +718,3 @@ export const SPECIES: SpeciesDef[] = [
 export const SPECIES_BY_ID = Object.fromEntries(SPECIES.map((s) => [s.id, s])) as Record<SpeciesId, SpeciesDef>;
 
 export const sp = (id: SpeciesId) => SPECIES_BY_ID[id];
-
-export const STARTER_SPECIES = SPECIES.filter((s) => s.starter).map((s) => s.id);

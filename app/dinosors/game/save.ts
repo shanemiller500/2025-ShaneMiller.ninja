@@ -57,13 +57,8 @@ export function loadWorld(): World | null {
   }
 }
 
-export function saveWorld(w: World) {
-  let json: string;
-  try {
-    json = JSON.stringify(w.serialize());
-  } catch {
-    return false;
-  }
+/** Write a serialized world (see Engine.saveText) to the local save. */
+export function saveWorld(json: string) {
   try {
     if (safeSetItem(WORLD_KEY, json)) {
       localStorage.removeItem(IDB_MARK);
@@ -96,16 +91,6 @@ export function hasIdbWorld() {
 
 export async function loadIdbWorld(): Promise<string | null> {
   return idbGet();
-}
-
-export function clearWorld() {
-  try {
-    localStorage.removeItem(WORLD_KEY);
-    localStorage.removeItem(IDB_MARK);
-  } catch {
-    /* ignore */
-  }
-  void idbPut(null);
 }
 
 function openDb(): Promise<IDBDatabase | null> {

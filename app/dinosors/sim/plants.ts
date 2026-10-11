@@ -2,7 +2,6 @@
 /*  Plants: generated per biome, eaten, shaken, burnt, chopped and     */
 /*  regrown. Updated round-robin so 1500 plants cost almost nothing.   */
 /* ------------------------------------------------------------------ */
-import { FACTS } from "../data/facts";
 import { P } from "./particles";
 import { hash2 } from "./rng";
 import { LM } from "./terrain";
@@ -195,5 +194,3 @@ export function tallestNear(w: World, x: number, y: number, r: number) {
   });
   return best as Plant | null;
 }
-
-export const POOP_FACT = FACTS.poop;

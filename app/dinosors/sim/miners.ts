@@ -11,16 +11,17 @@
 /*  Their surface body waits at the cave mouth, hidden ("hide") and    */
 /*  skipped by the surface brain while `h.under` is set.              */
 /* ------------------------------------------------------------------ */
-import { DEEP_DEFS, FIND_AMOUNT, FLOODED, LANDMARKS, LIFT_X, M, MATERIALS, MINE_W } from "../data/mine";
+import { CAVE_IN, DEEP_DEFS, FIND_AMOUNT, FLOODED, LANDMARKS, LIFT_X, M, MATERIALS, MINE_W } from "../data/mine";
 import { cellsOf, finished, lit, type DeepBuilding } from "./deepBuild";
 import { HELMET_BY_ID } from "../data/colony";
 import { landmarkEvent, wakeCavern } from "./deepLife";
 import { go, say } from "./humans";
 import { knockOut } from "./injury";
-import { N, idx, inMine, toolsOf, type Mine } from "./mine";
+import { N, idx, inMine, lanternOf, toolsOf, type Mine } from "./mine";
 import type { Human, Resource } from "./types";
 import type { World } from "./world";
 import { canWork, workOf } from "./workDinos";
+import { loadPack, packBeside, recallPacks } from "./packs";
 
 export type OrderKind = "dig" | "support" | "blast" | "pump";
 
@@ -76,7 +77,9 @@ const FOSSIL_FINDS = ["dinosaur tooth", "fossilized fern", "prehistoric fish", "
 /** where people step off the lift at the top */
 export const LANDING = idx(LIFT_X + 1, 1);
 
-export const load = (m: Miner) => Object.values(m.carry).reduce((a, n) => a + (n ?? 0), 0);
+export const load = (m: { carry: Partial<Record<Resource, number>> }) => Object.values(m.carry).reduce((a, n) => a + (n ?? 0), 0);
+/** How much one miner carries before heading for the lift (baskets + miner's packs each add half). */
+export const carryCap = (w: World) => CARRY * (w.camp.learned.has("basket") ? 1.5 : 1) * (w.colony.kits.has("minerPack") ? 1.5 : 1);
 const cx = (i: number) => i % MINE_W;
 const cy = (i: number) => Math.floor(i / MINE_W);
 const cellOf = (m: Miner) => idx(Math.floor(m.x), Math.floor(m.y));
@@ -169,6 +172,15 @@ function surface(w: World, m: Miner, h: Human | undefined) {
 export function resetMine(w: World) {
   const mine = w.mine;
   for (const m of [...mine.crew]) surface(w, m, w.humans.find((h) => h.id === m.id));
+  for (const p of mine.packs) {
+    sendUp(w, p.carry, 0);
+    const d = w.dinoById(p.id);
+    if (d) {
+      d.under = false;
+      d.y = w.camp.caveY + 20;
+    }
+  }
+  mine.packs = [];
   for (const h of w.humans) {
     if (!h.under) continue;
     h.under = false;
@@ -178,13 +190,31 @@ export function resetMine(w: World) {
     h.think = 0;
   }
   mine.crew = [];
+  mine.healing.clear();
   const seed = (Math.floor(mine.rand() * 0x7fffffff) ^ Math.imul(mine.seed, 2654435761)) >>> 0;
   mine.reset(seed || 1);
+}
+
+/** Miners who went up hurt head back down once they're well again (unless everyone was called up). */
+function backToWork(w: World) {
+  const mine = w.mine;
+  for (const id of Array.from(mine.healing)) {
+    const h = w.humans.find((x) => x.id === id);
+    if (!h || h.child || h.stranger || h.under || mine.pending.has(id)) {
+      if (!h || h.child || h.stranger) mine.healing.delete(id);
+      continue;
+    }
+    if (mine.recall || h.hp < 0.8 || !canSend(h)) continue;
+    mine.healing.delete(id);
+    if (sendDown(w, h)) say(h, "Feeling better. Back to the Deep!");
+  }
 }
 
 export function recallAll(w: World) {
   const mine = w.mine;
   mine.pending.clear();
+  // called up on purpose: nobody heads back down by themselves
+  mine.healing.clear();
   for (const m of mine.crew) {
     m.job = null;
     m.path = [];
@@ -192,6 +222,7 @@ export function recallAll(w: World) {
     m.bubble = { text: "Heading up!", t: 2 };
   }
   mine.recall = true;
+  recallPacks(w);
 }
 
 /* ======================================================================= */
@@ -239,6 +270,8 @@ export function setOrder(w: World, x: number, y: number, kind: OrderKind | null)
 
 export function updateCrew(w: World, dt: number) {
   const mine = w.mine;
+  if (w.frame % 60 === 0) flushMineLoads(w);
+  if (w.frame % 90 === 0 && mine.healing.size) backToWork(w);
   // people still walking to the cave mouth
   if (mine.pending.size) {
     for (const [id, t] of Array.from(mine.pending)) {
@@ -287,7 +320,7 @@ export function updateCrew(w: World, dt: number) {
     // move along the path
     if (m.path.length && m.pi < m.path.length) {
       m.mode = m.job?.kind === "flee" ? "flee" : "walk";
-      step(w, m, dt, tools.lantern);
+      step(w, m, dt, lanternOf(tools).light);
       continue;
     }
     if (m.job && m.job.kind !== "flee" && m.job.kind !== "rest") {
@@ -300,7 +333,7 @@ export function updateCrew(w: World, dt: number) {
   }
 }
 
-function step(w: World, m: Miner, dt: number, lantern: boolean) {
+function step(w: World, m: Miner, dt: number, lightR: number) {
   const mine = w.mine;
   const to = m.path[m.pi];
   const tx = cx(to) + 0.5;
@@ -317,7 +350,7 @@ function step(w: World, m: Miner, dt: number, lantern: boolean) {
     m.y = ty;
     m.pi++;
     // lamps light up the rock around them as they go
-    mine.light(cx(to), cy(to), lantern ? 2 : 1);
+    mine.light(cx(to), cy(to), lightR);
     if (cx(to) === LIFT_X) mine.callLift(cy(to));
     // the way is blocked now (cave-in, flood)? think again
     if (m.pi < m.path.length && !mine.passable(cx(m.path[m.pi]), cy(m.path[m.pi]))) {
@@ -338,30 +371,57 @@ function step(w: World, m: Miner, dt: number, lantern: boolean) {
   }
 }
 
+/*
+ * Scratch space for search(), reused by every call (a miner can run several searches each
+ * time it thinks). Nothing survives between calls: `stamp` marks which cells this call has
+ * visited, so the buffers never need clearing and never carry state from one world to another.
+ */
+const prevBuf = new Int32Array(N);
+const stampBuf = new Uint32Array(N);
+const queueBuf = new Int32Array(N);
+let stampNow = 0;
+
 /** Breadth-first search from a miner; `pick` returns a job for a reachable standing cell. */
 function search(mine: Mine, from: number, pick: (stand: number) => MinerJob | null, maxNodes = 4000): { job: MinerJob; path: number[] } | null {
-  const prev = new Int32Array(N).fill(-1);
-  prev[from] = from;
-  const q = [from];
-  for (let h = 0; h < q.length && h < maxNodes; h++) {
-    const i = q[h];
+  if (++stampNow === 0xffffffff) {
+    stampBuf.fill(0);
+    stampNow = 1;
+  }
+  const S = stampNow;
+  stampBuf[from] = S;
+  prevBuf[from] = from;
+  queueBuf[0] = from;
+  let tail = 1;
+  for (let h = 0; h < tail && h < maxNodes; h++) {
+    const i = queueBuf[h];
     const job = pick(i);
     if (job) {
       const path: number[] = [];
-      for (let k = i; k !== from; k = prev[k]) path.push(k);
+      for (let k = i; k !== from; k = prevBuf[k]) path.push(k);
       return { job, path: path.reverse() };
     }
-    for (const j of NB(i)) {
-      if (prev[j] !== -1 || !mine.passable(cx(j), cy(j))) continue;
-      prev[j] = i;
-      q.push(j);
+    const x = i % MINE_W;
+    const y = (i - x) / MINE_W;
+    // left, right, up, down (the same order NB uses, so the paths found don't change)
+    for (let n = 0; n < 4; n++) {
+      const a = n === 0 ? x - 1 : n === 1 ? x + 1 : x;
+      const b = n === 2 ? y - 1 : n === 3 ? y + 1 : y;
+      if (a < 0 || a >= MINE_W || b < 0) continue;
+      const j = b * MINE_W + a;
+      if (j >= N || stampBuf[j] === S || !mine.passable(a, b)) continue;
+      stampBuf[j] = S;
+      prevBuf[j] = i;
+      queueBuf[tail++] = j;
     }
   }
   return null;
 }
 
-function claimed(w: World, me: Miner, cell: number) {
-  return w.mine.crew.some((o) => o !== me && o.job && o.job.cell === cell);
+/** Cells other miners are already working on (built once per think, not once per cell searched). */
+function takenCells(w: World, me: Miner) {
+  const out = new Set<number>();
+  for (const o of w.mine.crew) if (o !== me && o.job) out.add(o.job.cell);
+  return out;
 }
 
 function think(w: World, m: Miner, h: Human) {
@@ -378,7 +438,9 @@ function think(w: World, m: Miner, h: Human) {
     return;
   }
   const tools = toolsOf(w);
-  const full = load(m) >= CARRY * (w.camp.learned.has("basket") ? 1.5 : 1);
+  const taken = takenCells(w, m);
+  const claimed = (_w: World, _me: Miner, cell: number) => taken.has(cell);
+  const full = load(m) >= carryCap(w);
   // going home: everyone up, the hurt, or a full sack on the way out
   const mess = mine.builds.find((b) => b.kind === "mess" && finished(b));
   if (mess && !mine.recall && h.hp < 0.6 && !claimedHeal(w, m, mess)) {
@@ -387,12 +449,19 @@ function think(w: World, m: Miner, h: Human) {
     if (r) return plan(w, m, r, "Need a sit-down.");
   }
   if (mine.recall || h.hp < 0.3) {
+    // hurt (not called up): they'll be back once they've healed
+    if (!mine.recall) mine.healing.add(h.id);
     const out = search(mine, here, (s) => (s === LANDING ? { kind: "exit", cell: s, stand: s } : null));
     // walled in by a cave-in: the lift crew hauls them out by rope
     if (!out) return surface(w, m, h);
     return plan(w, m, out, "Up we go!");
   }
-  if (full) return plan(w, m, search(mine, here, (s) => (dock(mine, s) ? { kind: "haul", cell: s, stand: s } : null)), "Sack's full!");
+  if (full) return plan(w, m, search(mine, here, (s) => (unloadAt(w, s) ? { kind: "haul", cell: s, stand: s } : null)), "Sack's full!");
+  // half full with a pack dinosaur standing close by: top up its panniers instead of walking to the lift later
+  if (mine.packs.length && load(m) >= carryCap(w) / 2) {
+    const handy = search(mine, here, (s) => (packBeside(w, s) ? { kind: "haul", cell: s, stand: s } : null), 80);
+    if (handy) return plan(w, m, handy);
+  }
   if (m.target !== undefined) {
     const target = m.target;
     if (mine.loose.has(target)) {
@@ -426,7 +495,8 @@ function think(w: World, m: Miner, h: Human) {
   if (site) return plan(w, m, site, site.job.kind === "fetch" ? "Fetching supplies." : "Building!");
   // flooded tunnels get pumped out without being asked
   const flood = search(mine, here, (s) => {
-    for (const t of NB(s)) if (mine.cells[t] === M.Open && mine.water[t] > FLOODED && !claimed(w, m, t)) return { kind: "pump", cell: t, stand: s };
+    // only tunnels the tribe dug: water in a natural cavern is a reservoir, left for the pumps
+    for (const t of NB(s)) if (mine.cells[t] === M.Open && mine.baseAt(t) !== M.Open && mine.water[t] > FLOODED && !claimed(w, m, t)) return { kind: "pump", cell: t, stand: s };
     return null;
   }, 2500);
   if (flood) return plan(w, m, flood, "Bail it out!");
@@ -442,7 +512,7 @@ function think(w: World, m: Miner, h: Human) {
     }, 2500);
     if (ore) return plan(w, m, ore, "Ooh, shiny!");
   }
-  if (load(m) > 0) return plan(w, m, search(mine, here, (s) => (dock(mine, s) ? { kind: "haul", cell: s, stand: s } : null)));
+  if (load(m) > 0) return plan(w, m, search(mine, here, (s) => (unloadAt(w, s) ? { kind: "haul", cell: s, stand: s } : null)));
   // nothing to do: wait near the lift
   m.mode = "idle";
   if (Math.abs(cx(here) - LIFT_X) > 3 && mine.rand() < 0.3) plan(w, m, search(mine, here, (s) => (dock(mine, s) ? { kind: "rest", cell: s, stand: s } : null)));
@@ -460,6 +530,11 @@ function plan(w: World, m: Miner, r: { job: MinerJob; path: number[] } | null, l
   m.t = 0;
   if (line && w.mine.rand() < 0.5) m.bubble = { text: line, t: 1.6 };
   if (!m.path.length && r.job.kind === "rest") m.job = null;
+}
+
+/** Somewhere a miner can empty their sack: the lift (or a vault), or right beside a pack dinosaur. */
+function unloadAt(w: World, s: number) {
+  return dock(w.mine, s) || !!packBeside(w, s);
 }
 
 /** A cell right beside the lift shaft the lift can reach (or inside a finished vault). */
@@ -564,6 +639,19 @@ function work(w: World, m: Miner, h: Human, dt: number) {
       if (m.t < mine.digTime(cx(job.cell), cy(job.cell), tools) * (lit(mine, cx(job.cell), cy(job.cell)) ? 0.8 : 1) * (1 - skill)) return;
       const r = mine.dig(cx(job.cell), cy(job.cell), tools);
       if (r.ok) m.experience = (m.experience ?? 0) + 1;
+      if (r.ok && r.left) {
+        // chipped a rich deposit: keep at it until it's dug out or the sack is full
+        if (r.r && r.n) m.carry[r.r] = (m.carry[r.r] ?? 0) + r.n;
+        m.t = 0;
+        if (mine.rand() < 0.3) m.bubble = { text: r.left > 1 ? "Plenty more here!" : "Nearly got it all…", t: 1.4 };
+        mine.sfx.push({ s: "knock", cell: job.cell });
+        if (load(m) >= carryCap(w)) {
+          m.job = null;
+          m.mode = "idle";
+          m.thinkT = 0.15;
+        }
+        return;
+      }
       if (m.target === job.cell) m.target = undefined;
       mine.orders.delete(job.cell);
       m.job = null;
@@ -592,18 +680,20 @@ function work(w: World, m: Miner, h: Human, dt: number) {
       }
       if (r.event === "cavern") wakeCavern(w, job.cell);
       if (r.fossil) {
-        const name = FOSSIL_FINDS[Math.abs((job.cell * 2654435761 + mine.seed) | 0) % FOSSIL_FINDS.length];
+        const base = FOSSIL_FINDS[Math.abs((job.cell * 2654435761 + mine.seed) | 0) % FOSSIL_FINDS.length];
+        const name = r.damaged ? `cracked ${base}` : base;
         mine.discoveries.push({ kind: "fossil", name, detail: `Recovered by ${h.name} at ${cy(job.cell) * 6} ft. Stored with the settlement's bone collection.`, cell: job.cell });
-        m.bubble = { text: "A fossil!", t: 2.5 };
-        w.toast("🦴", `${h.name} uncovered a ${name} in the Deep!`);
+        m.bubble = { text: r.damaged ? "Oh no, it cracked!" : "A fossil!", t: 2.5 };
+        w.toast("🦴", `${h.name} uncovered a ${name} in the Deep!${r.damaged ? crackHint(w) : ""}`);
         w.discover("fossil");
-        m.carry.bone = (m.carry.bone ?? 0) + 2;
+        m.carry.bone = (m.carry.bone ?? 0) + (r.damaged ? 1 : tools.chisel ? 3 : 2);
       } else if (r.artifact) {
-        mine.discoveries.push({ kind: "artifact", name: r.artifact, detail: `Recovered by ${h.name} at ${cy(job.cell) * 6} ft. Its markings gave the settlement new research clues.`, cell: job.cell });
-        m.bubble = { text: "An artifact!", t: 3 };
-        w.toast("🏺", `${h.name} uncovered a ${r.artifact}!`);
+        const name = r.damaged ? `cracked ${r.artifact}` : r.artifact;
+        mine.discoveries.push({ kind: "artifact", name, detail: `Recovered by ${h.name} at ${cy(job.cell) * 6} ft. ${r.damaged ? "Broken on the way out, but some of its markings still helped research." : "Its markings gave the settlement new research clues."}`, cell: job.cell });
+        m.bubble = { text: r.damaged ? "Careful… it cracked." : "An artifact!", t: 3 };
+        w.toast("🏺", `${h.name} uncovered a ${name}!${r.damaged ? crackHint(w) : ""}`);
         w.discover("artifact");
-        w.civ.addRp(w, 8);
+        w.civ.addRp(w, r.damaged ? 4 : tools.chisel ? 10 : 8);
       } else if (r.r && (r.r === "gold" || r.r === "crystal" || r.r === "meteorite") && !w.flags.has(`deepFind-${r.r}`)) {
         w.flags.add(`deepFind-${r.r}`);
         w.toast(r.r === "gold" ? "🪙" : r.r === "crystal" ? "🔮" : "☄️", `${h.name} struck ${r.r} down in the Deep!`);
@@ -648,7 +738,14 @@ function work(w: World, m: Miner, h: Human, dt: number) {
       return;
     }
     case "haul": {
-      deposit(w, m);
+      const here = cellOf(m);
+      const pack = dock(mine, here) ? null : packBeside(w, here);
+      if (pack) {
+        // into the pack's panniers; anything that didn't fit, they'll take elsewhere
+        loadPack(w, pack, m.carry);
+        for (const r of Object.keys(m.carry) as Resource[]) if (!m.carry[r]) delete m.carry[r];
+        if (mine.rand() < 0.4) m.bubble = { text: "Here you go!", t: 1.4 };
+      } else if (dock(mine, here)) deposit(w, m);
       m.job = null;
       m.thinkT = 0.3;
       return;
@@ -740,13 +837,20 @@ function caveIn(w: World, cells: number[], at: number) {
   const set = new Set(cells);
   for (const m of [...mine.crew]) {
     if (!set.has(cellOf(m))) continue;
-    hurt(w, m, 0.45, "rock");
+    hurt(w, m, CAVE_IN.hurt, "rock");
     m.path = [];
     m.job = null;
   }
   // every cell that filled with rubble gets marked to clear (the one being dug too, or the tunnel is cut off)
   for (const c of cells) if (mine.cells[c] === M.Rubble) mine.orders.set(c, "dig");
   mine.sfx.push({ s: "rumble", cell: at });
+}
+
+/** The first time a find cracks, say how to stop it happening. */
+function crackHint(w: World) {
+  if (w.flags.has("crackHint")) return "";
+  w.flags.add("crackHint");
+  return " (It cracked: Fossil chisels from the Forge keep finds whole.)";
 }
 
 function eventToast(w: World, h: Human, e: string | undefined) {
@@ -773,8 +877,9 @@ function hurt(w: World, m: Miner, dmg: number, why: "rock" | "blast" | "heat" | 
   h.hp = Math.max(0, h.hp - dmg);
   if (dmg > 0.1) m.bubble = { text: why === "heat" ? "Too hot!" : why === "gas" ? "*cough*" : "Ow!", t: 1.6 };
   if (h.hp > 0) return;
-  // knocked out: the lift brings them up to be helped
+  // knocked out: the lift brings them up to be helped (and they come back once they're better)
   w.mine.crew.splice(w.mine.crew.indexOf(m), 1);
+  if (!w.mine.recall) w.mine.healing.add(h.id);
   deposit(w, m);
   h.under = false;
   h.x = w.camp.caveX;
@@ -810,20 +915,44 @@ function eat(w: World, m: Miner, h: Human, dt: number) {
 }
 
 /** Unload at the lift: up it goes to the camp stockpile. */
+/** Is there a trained dinosaur on auto duty to carry lifted ore away from the cave mouth? */
+const hasHauler = (w: World) => w.dinos.some((d) => !d.under && canWork(d) && workOf(d).auto);
+
+/**
+ * Ore waiting at the cave mouth for a hauler goes onto the stockpile by hand if there's no
+ * hauler any more (it died, was set to manual or lost its harness), so it can't sit there forever.
+ */
+export function flushMineLoads(w: World) {
+  let any = false;
+  for (const n of Object.values(w.mineLoads)) if ((n ?? 0) > 0) any = true;
+  if (!any || hasHauler(w)) return;
+  for (const [r, n] of Object.entries(w.mineLoads) as [Resource, number][]) if (n > 0) w.camp.stock[r] += n;
+  w.mineLoads = {};
+  if (!w.flags.has("loadsByHand")) {
+    w.flags.add("loadsByHand");
+    w.toast("📦", "No trained dinosaur to haul the ore, so the tribe carried it from the cave to the stockpile by hand.");
+  }
+}
+
 function deposit(w: World, m: Miner) {
+  sendUp(w, m.carry, Math.floor(m.y));
+  m.carry = {};
+}
+
+/** A load goes up the lift (from a miner or a pack dinosaur at row `y`). */
+export function sendUp(w: World, carry: Partial<Record<Resource, number>>, y: number) {
   const mine = w.mine;
   let n = 0;
-  const hauler = w.dinos.some((d) => canWork(d) && workOf(d).auto);
-  for (const [r, k] of Object.entries(m.carry) as [Resource, number][]) {
+  const hauler = hasHauler(w);
+  for (const [r, k] of Object.entries(carry) as [Resource, number][]) {
     if (!k) continue;
     if (hauler) w.mineLoads[r] = (w.mineLoads[r] ?? 0) + k;
     else w.camp.stock[r] += k;
     mine.hauled[r] = (mine.hauled[r] ?? 0) + k;
     n += k;
   }
-  m.carry = {};
   if (!n) return;
-  mine.crates.push({ y: Math.floor(m.y), t: 0 });
+  mine.crates.push({ y, t: 0 });
   mine.callLift(0);
   if (!w.flags.has("firstOre")) {
     w.flags.add("firstOre");

@@ -121,7 +121,7 @@ export default function DeepHud({ snap, engine }: { snap: Snapshot; engine: Engi
                   <div className={label}>Field discoveries</div>
                   <div className="mt-1 max-h-36 space-y-1 overflow-y-auto">
                     {d.discoveries.length ? d.discoveries.map((find, i) => <div key={`${find.cell}-${i}`} className="rounded-lg border border-amber-200/15 bg-amber-100/5 px-2 py-1.5">
-                      <div className="text-[11px] font-semibold text-amber-100">{find.kind === "fossil" ? "🦴" : find.kind === "nugget" ? "✦" : find.kind === "artifact" ? "🏺" : "◇"} {find.name}</div>
+                      <div className="text-[11px] font-semibold text-amber-100">{find.kind === "fossil" ? "🦴" : find.kind === "nugget" ? "✦" : find.kind === "artifact" ? "🏺" : find.kind === "feature" ? "🗺️" : "◇"} {find.name}</div>
                       <div className="text-[10px] leading-snug text-white/55">{find.detail}</div>
                     </div>) : <p className="text-[10.5px] text-white/45">Rare fossils and precious finds will be recorded here.</p>}
                   </div>
@@ -333,6 +333,27 @@ function CrewPanel({ snap, engine }: { snap: Snapshot; engine: Engine }) {
               <button type="button" disabled={!d.crew.length && !d.pending} onClick={() => engine.deepRecall()} className="rounded-xl bg-white/10 py-1.5 text-[11.5px] font-bold hover:bg-white/20 disabled:opacity-40">
                 Recall
               </button>
+            </div>
+            <div className="mt-2 rounded-xl bg-white/[0.04] p-2">
+              <div className="flex items-center justify-between text-[11px] font-bold text-amber-100">
+                <span>🦕 Pack dinos {d.packs.length}</span>
+                <span className="flex gap-1">
+                  <button type="button" disabled={!d.packsFree} onClick={() => engine.deepSendPack()} title="Send a trained hauler small enough for the tunnels" className="rounded-lg bg-amber-400/80 px-2 py-0.5 text-[11px] font-bold text-slate-950 hover:bg-amber-300 disabled:bg-white/10 disabled:text-white/40">
+                    +1
+                  </button>
+                  <button type="button" disabled={!d.packs.length} onClick={() => engine.deepRecallPacks()} className="rounded-lg bg-white/10 px-2 py-0.5 text-[11px] font-bold hover:bg-white/20 disabled:opacity-40">
+                    Up
+                  </button>
+                </span>
+              </div>
+              {d.packs.map((p) => (
+                <div key={p.id} className="mt-1 flex items-center gap-1.5 text-[10.5px] text-white/70">
+                  <span>{p.icon}</span>
+                  <span className="flex-1 truncate">{p.name} · {p.activity}</span>
+                  <span className="font-mono text-white/55">{p.load}/{p.cap}</span>
+                </div>
+              ))}
+              {!d.packs.length && <p className="mt-1 text-[10.5px] text-white/50">{d.packsFree ? "Trained haulers can carry for the crew in the tall tunnels." : "Train + harness a stego, ankylo, iguanodon, parasaur, pachy or trike to carry down here."}</p>}
             </div>
             <label className="mt-2 flex cursor-pointer items-center gap-2 text-[11px] text-white/75">
               <input type="checkbox" checked={d.autoMine} onChange={() => engine.deepToggleAuto()} className="accent-cyan-400" />
@@ -547,7 +568,8 @@ function CellCard({ snap, engine }: { snap: Snapshot; engine: Engine }) {
           c.state === "open" && <p className="text-white/65">Open tunnel.{c.support ? " A support beam holds the roof." : ""}</p>
         )}
         {c.state === "shaft" && <p className="text-white/65">The lift shaft.</p>}
-        {c.water > 0.05 && <p className="text-sky-200">🌊 Water {Math.round(c.water * 100)}%{c.water > 0.55 ? " — flooded" : ""}</p>}
+        {c.river && <p className="text-sky-200">🏞️ Underground river: too fast to wade, but a pump station beside it never runs dry.</p>}
+        {c.water > 0.05 && <p className="text-sky-200">🌊 Water {Math.round(c.water * 100)}%{c.pool ? " — underground pool (a reservoir: pump stations draw on it when camp needs water)" : c.water > 0.55 ? " — flooded" : ""}</p>}
         {c.gas && <p className="text-lime-200">☁️ Gas in the air — no flames here!</p>}
         {c.heat > 0 && <p className="text-orange-200">🔥 Hot: hurts anyone who stays</p>}
       </div>

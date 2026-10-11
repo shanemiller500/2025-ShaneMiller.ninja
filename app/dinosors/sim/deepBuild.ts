@@ -7,7 +7,7 @@
 /*  carries them over and builds it. Finished rooms are reinforced:   */
 /*  their cells never cave in and they hold up the roof around them.  */
 /* ------------------------------------------------------------------ */
-import { DEEP_DEFS, FLOODED, LAMP_REACH, LIFT_X, M, MATERIALS, MINE_W, PUMP_REACH, type DeepKind } from "../data/mine";
+import { DEEP_DEFS, FLOODED, LAMP_REACH, LIFT_X, M, MATERIALS, MINE_W, PUMP_REACH, RIVER_PUMP, type DeepKind } from "../data/mine";
 import { idx, inMine, toolsOf, type Mine } from "./mine";
 import type { Resource } from "./types";
 import type { World } from "./world";
@@ -93,6 +93,13 @@ export function lit(mine: Mine, x: number, y: number) {
   return mine.builds.some((b) => finished(b) && ((b.kind === "lamp" && Math.max(Math.abs(b.x - x), Math.abs(b.y - y)) <= LAMP_REACH) || (b.kind === "torch" && Math.max(Math.abs(b.x - x), Math.abs(b.y - y)) <= 3)));
 }
 
+/** Is there underground river within a pump station's reach? */
+function riverNear(mine: Mine, x: number, y: number) {
+  for (let dy = -PUMP_REACH; dy <= PUMP_REACH; dy++)
+    for (let dx = -PUMP_REACH; dx <= PUMP_REACH; dx++) if (inMine(x + dx, y + dy) && mine.river[idx(x + dx, y + dy)]) return true;
+  return false;
+}
+
 /** Farms grow, lamps keep the air clear. */
 export function updateDeepBuilds(w: World, dt: number) {
   const mine = w.mine;
@@ -109,7 +116,7 @@ export function updateDeepBuilds(w: World, dt: number) {
     } else if (b.kind === "mushroom") {
       // damp rock nearby = faster
       let wet = 0;
-      for (const i of cellsOf(b)) for (const j of [i - 1, i + 1, i - MINE_W, i + MINE_W]) if (j >= 0 && j < mine.water.length && mine.water[j] > 0.05) wet = 1;
+      for (const i of cellsOf(b)) for (const j of [i - 1, i + 1, i - MINE_W, i + MINE_W]) if (j >= 0 && j < mine.water.length && (mine.water[j] > 0.05 || mine.river[j])) wet = 1;
       const flooded = cellsOf(b).some((i) => mine.water[i] > 0.6);
       if (flooded) continue;
       b.grow += dt / (wet ? 35 : 60);
@@ -124,7 +131,19 @@ export function updateDeepBuilds(w: World, dt: number) {
         }
       }
     } else if (b.kind === "pump") {
-      // find the wettest cell in reach and pump it; the water goes up the pipe to the camp
+      // find the wettest cell in reach and pump it; the water goes up the pipe to the camp.
+      // Floods in dug tunnels always get pumped; a natural pool is only drawn on while the
+      // camp's water store has room (it's the reservoir).
+      const cap = 60 + mine.builds.filter((x) => x.kind === "pump" && finished(x)).length * 40;
+      const thirsty = w.camp.stock.water < cap;
+      // beside an underground river: a steady supply that never runs dry
+      if (thirsty && riverNear(mine, b.x, b.y + 1)) {
+        const got = dt * RIVER_PUMP;
+        w.camp.stock.water = Math.min(cap, w.camp.stock.water + got);
+        mine.pumped += got;
+        b.grow = (b.grow + dt * 3) % 1;
+        continue;
+      }
       let best = -1;
       let bw = 0.04;
       for (let dy = -PUMP_REACH; dy <= PUMP_REACH; dy++)
@@ -133,6 +152,7 @@ export function updateDeepBuilds(w: World, dt: number) {
           const y = b.y + 1 + dy;
           if (!inMine(x, y)) continue;
           const i = idx(x, y);
+          if (!thirsty && mine.baseAt(i) === M.Open) continue;
           if (mine.water[i] > bw) {
             bw = mine.water[i];
             best = i;
@@ -140,8 +160,7 @@ export function updateDeepBuilds(w: World, dt: number) {
         }
       if (best >= 0) {
         const got = mine.pump(best % MINE_W, Math.floor(best / MINE_W), dt * 0.9, toolsOf(w));
-        const cap = 60 + mine.builds.filter((x) => x.kind === "pump" && finished(x)).length * 40;
-        if (w.camp.stock.water < cap) w.camp.stock.water = Math.min(cap, w.camp.stock.water + got * 2);
+        if (thirsty) w.camp.stock.water = Math.min(cap, w.camp.stock.water + got * 2);
         mine.pumped += got * 2;
         b.grow = (b.grow + dt * 3) % 1;
         if (bw > FLOODED && !w.flags.has("pumpStation")) {

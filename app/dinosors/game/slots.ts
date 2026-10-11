@@ -124,8 +124,10 @@ async function pruneAutos() {
 
 /** The newest save of any kind (what "continue" loads). */
 export async function newestSlot(): Promise<Slot | null> {
-  const list = await listSlots();
-  return list[0] ? getSlot(list[0].id) : null;
+  const all = (await tx<Slot[]>("readonly", (s) => s.getAll())) ?? [];
+  let best: Slot | null = null;
+  for (const s of all) if (!best || s.savedAt > best.savedAt) best = s;
+  return best;
 }
 
 export function newId() {

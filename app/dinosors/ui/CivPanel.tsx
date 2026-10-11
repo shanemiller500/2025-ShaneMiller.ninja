@@ -492,86 +492,91 @@ export function CivChoice({ open, onClose, engine, fontClass }: { open: boolean;
   const paths = useMemo(() => ["traditional", "resonance"] as const, []);
   return (
     <Modal className="dl-modal" open={open} onClose={onClose} size="lg" accent="#59d0e6" labelledBy="civ-choice">
-      <div className={`max-h-[88dvh] overflow-y-auto bg-slate-950 p-5 text-white sm:p-6 ${fontClass}`}>
-        <h2 id="civ-choice" className="text-center text-2xl font-bold">💠 The chamber hums. Which way will your people grow?</h2>
-        <p className="mx-auto mt-1 max-w-xl text-center text-sm text-white/60">This choice shapes the rest of your world. Late in the game you can borrow a few ideas from the other path, at a price.</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {paths.map((k) => {
-            const info = PATH_INFO[k];
-            const pv = PREVIEW[k];
-            const on = pick === k || peek === k;
-            return (
-              <div
-                key={k}
-                onMouseEnter={() => setPeek(k)}
-                className={`flex flex-col rounded-3xl border p-4 transition ${on ? "border-white/40 bg-white/10" : "border-white/10 bg-white/5"}`}
-                style={{ boxShadow: on ? `0 0 40px -12px ${info.color}` : undefined }}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-4xl">{info.icon}</span>
-                  <div>
-                    <h3 className="text-lg font-bold" style={{ color: info.color }}>
-                      {info.name}
-                    </h3>
-                    <p className="text-[12px] text-white/60">{info.tag}</p>
+      {/* contents are only built while open (the exit animation keeps the last ones) */}
+      {open && (
+        <>
+          <div className={`max-h-[88dvh] overflow-y-auto bg-slate-950 p-5 text-white sm:p-6 ${fontClass}`}>
+            <h2 id="civ-choice" className="text-center text-2xl font-bold">💠 The chamber hums. Which way will your people grow?</h2>
+            <p className="mx-auto mt-1 max-w-xl text-center text-sm text-white/60">This choice shapes the rest of your world. Late in the game you can borrow a few ideas from the other path, at a price.</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {paths.map((k) => {
+                const info = PATH_INFO[k];
+                const pv = PREVIEW[k];
+                const on = pick === k || peek === k;
+                return (
+                  <div
+                    key={k}
+                    onMouseEnter={() => setPeek(k)}
+                    className={`flex flex-col rounded-3xl border p-4 transition ${on ? "border-white/40 bg-white/10" : "border-white/10 bg-white/5"}`}
+                    style={{ boxShadow: on ? `0 0 40px -12px ${info.color}` : undefined }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-4xl">{info.icon}</span>
+                      <div>
+                        <h3 className="text-lg font-bold" style={{ color: info.color }}>
+                          {info.name}
+                        </h3>
+                        <p className="text-[12px] text-white/60">{info.tag}</p>
+                      </div>
+                    </div>
+                    {/* a little preview of how the settlement will look */}
+                    <div className="mt-3 flex items-end justify-around rounded-2xl px-2 py-3" style={{ background: k === "resonance" ? "linear-gradient(180deg,#0b2533,#123b4a)" : "linear-gradient(180deg,#3a2414,#4b3420)" }}>
+                      {pv.scene.map((s, i) => (
+                        <motion.span key={s} className="text-2xl" animate={{ y: k === "resonance" && (s === "🪶" || s === "🔷") ? [0, -6, 0] : 0 }} transition={{ duration: 2, repeat: Infinity, delay: i * 0.2 }}>
+                          {s}
+                        </motion.span>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-[13px] leading-snug text-white/80">{info.feel}</p>
+                    <ul className="mt-2 space-y-0.5 text-[12.5px] text-white/75">
+                      {info.pros.map((p) => (
+                        <li key={p}>• {p}</li>
+                      ))}
+                    </ul>
+                    <details className="mt-2 text-[11.5px] text-white/60">
+                      <summary className="cursor-pointer font-semibold text-white/70">Research tree preview</summary>
+                      <ol className="mt-1 space-y-0.5">
+                        {pv.tree.map((id, i) => (
+                          <li key={id}>
+                            {i + 1}. {CIV_TECH[id].icon} {CIV_TECH[id].name}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                    <span className="flex-1" />
+                    {pick === k ? (
+                      <div className="mt-3 flex gap-2">
+                        <button type="button" onClick={() => setPick(null)} className="flex-1 rounded-2xl bg-white/10 py-2.5 text-sm font-bold hover:bg-white/20">
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            engine.chooseCivPath(k);
+                            closeRef.current();
+                          }}
+                          className="flex-[2] rounded-2xl py-2.5 text-sm font-bold text-slate-950 hover:brightness-110"
+                          style={{ background: info.color }}
+                        >
+                          Yes — {k === "resonance" ? "study it" : "keep the Old Ways"}!
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => setPick(k)} className="mt-3 rounded-2xl border py-2.5 text-sm font-bold transition hover:bg-white/10" style={{ borderColor: info.color, color: info.color }}>
+                        Choose this path
+                      </button>
+                    )}
                   </div>
-                </div>
-                {/* a little preview of how the settlement will look */}
-                <div className="mt-3 flex items-end justify-around rounded-2xl px-2 py-3" style={{ background: k === "resonance" ? "linear-gradient(180deg,#0b2533,#123b4a)" : "linear-gradient(180deg,#3a2414,#4b3420)" }}>
-                  {pv.scene.map((s, i) => (
-                    <motion.span key={s} className="text-2xl" animate={{ y: k === "resonance" && (s === "🪶" || s === "🔷") ? [0, -6, 0] : 0 }} transition={{ duration: 2, repeat: Infinity, delay: i * 0.2 }}>
-                      {s}
-                    </motion.span>
-                  ))}
-                </div>
-                <p className="mt-3 text-[13px] leading-snug text-white/80">{info.feel}</p>
-                <ul className="mt-2 space-y-0.5 text-[12.5px] text-white/75">
-                  {info.pros.map((p) => (
-                    <li key={p}>• {p}</li>
-                  ))}
-                </ul>
-                <details className="mt-2 text-[11.5px] text-white/60">
-                  <summary className="cursor-pointer font-semibold text-white/70">Research tree preview</summary>
-                  <ol className="mt-1 space-y-0.5">
-                    {pv.tree.map((id, i) => (
-                      <li key={id}>
-                        {i + 1}. {CIV_TECH[id].icon} {CIV_TECH[id].name}
-                      </li>
-                    ))}
-                  </ol>
-                </details>
-                <span className="flex-1" />
-                {pick === k ? (
-                  <div className="mt-3 flex gap-2">
-                    <button type="button" onClick={() => setPick(null)} className="flex-1 rounded-2xl bg-white/10 py-2.5 text-sm font-bold hover:bg-white/20">
-                      Back
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        engine.chooseCivPath(k);
-                        closeRef.current();
-                      }}
-                      className="flex-[2] rounded-2xl py-2.5 text-sm font-bold text-slate-950 hover:brightness-110"
-                      style={{ background: info.color }}
-                    >
-                      Yes — {k === "resonance" ? "study it" : "keep the Old Ways"}!
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => setPick(k)} className="mt-3 rounded-2xl border py-2.5 text-sm font-bold transition hover:bg-white/10" style={{ borderColor: info.color, color: info.color }}>
-                    Choose this path
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <p className="mt-3 text-center text-[11px] text-white/40">The Resonance is pure fantasy technology made up for this game. It isn&apos;t real science.</p>
-        <button type="button" onClick={onClose} className="mx-auto mt-2 block text-xs font-semibold text-white/50 hover:text-white">
-          Decide later
-        </button>
-      </div>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-center text-[11px] text-white/40">The Resonance is pure fantasy technology made up for this game. It isn&apos;t real science.</p>
+            <button type="button" onClick={onClose} className="mx-auto mt-2 block text-xs font-semibold text-white/50 hover:text-white">
+              Decide later
+            </button>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }

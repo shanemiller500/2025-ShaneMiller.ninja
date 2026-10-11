@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { BookOpen, FolderOpen, Info, Lightbulb, LogOut, Menu, RefreshCw, Save, Sparkles, Trophy, Volume2, VolumeX, Map as MapIcon, Pause, Play } from "lucide-react";
 import { DISCOVERIES } from "../data/facts";
@@ -314,7 +313,7 @@ function MenuPanel(p: Props & { close: () => void }) {
         <LogOut className="h-5 w-5 text-white/70" /> Leave to projects
       </button>
       <p className="px-3 pb-1 pt-1 text-[11px] text-white/45">
-        {p.snap.dinos} dinos · {p.snap.humans} cave people · {p.snap.fps} fps
+        {p.snap.dinos} dinos · {p.snap.humans} cave people · {p.snap.fps} fps · sim {p.snap.perf.sim}ms · draw {p.snap.perf.render}ms
       </p>
     </motion.div>
   );

@@ -11,7 +11,7 @@ import { shelterTiles, tileOf, TOWER_Z, WALK_Z } from "./nav";
 import { P } from "./particles";
 import { hash2 } from "./rng";
 import { LM, isWalkTile, isWaterTile } from "./terrain";
-import { MAP_H, MAP_W, T, TILE, type Building, type BuildingKind, type Dino, type Dragon, type Human, type NodeKind, type ResNode, type Resource, type Scorpion } from "./types";
+import { MAP_H, MAP_W, T, TILE, type Building, type BuildingKind, type Dino, type Human, type NodeKind, type ResNode, type Resource, type Scorpion } from "./types";
 import type { World } from "./world";
 
 export interface DropOff {
@@ -970,8 +970,4 @@ export function scorpionTarget(w: World, x: number, y: number, range: number): T
     }
   }
   return best;
-}
-
-export function dragonTarget(dr: Dragon): Target {
-  return { id: dr.id, x: dr.x, y: dr.y, z: dr.z, vx: dr.vx, vy: dr.vy, dragon: true };
 }

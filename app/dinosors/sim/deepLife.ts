@@ -8,7 +8,7 @@
 /*    breached. They hunt miners in the dark, hate lamplight, and the  */
 /*    crew fights back (better with weapons).                          */
 /* ------------------------------------------------------------------ */
-import { LANDMARKS, MILESTONES, MINE_W, TROG, type LandmarkKind } from "../data/mine";
+import { FEATURES, LANDMARKS, M, MATERIALS, MILESTONES, MINE_W, TROG, type LandmarkKind } from "../data/mine";
 import { finished, lit } from "./deepBuild";
 import { N, idx, type Mine } from "./mine";
 import { hurtMiner, type Miner } from "./miners";
@@ -40,6 +40,7 @@ const gift = (w: World, g: Partial<Record<Resource, number>>) => {
 export function updateDeepLife(w: World, dt: number) {
   const mine = w.mine;
   milestones(w);
+  features(w);
   village(w);
   if (mine.critters.length) critters(w, dt);
 }
@@ -56,6 +57,27 @@ function milestones(w: World) {
     w.discover(m.id);
     w.celebrate(m.name);
   }
+}
+
+/** A cave feature comes into view for the first time: announce it, sticker the first of its kind. */
+function features(w: World) {
+  const mine = w.mine;
+  if (mine.featureCheckV === mine.version) return;
+  mine.featureCheckV = mine.version;
+  mine.features.forEach((f, n) => {
+    if (mine.featuresFound.has(n) || !f.cells.some((i) => mine.seen[i] > 0)) return;
+    mine.featuresFound.add(n);
+    const def = FEATURES[f.kind];
+    // crystal walls + the things in a lost room show up as soon as it's found
+    if (f.kind === "crystalCave" || f.kind === "artifactRoom") for (const i of f.cells) if (MATERIALS[mine.cells[i] as M].solid) mine.scan(i);
+    if (!def.found) return;
+    const at = f.cells[Math.floor(f.cells.length / 2)];
+    mine.discoveries.push({ kind: "feature", name: def.name, detail: `${def.found} (${Math.floor(at / MINE_W) * 6} ft down)`, cell: at });
+    if (mine.discoveries.length > 30) mine.discoveries.splice(0, mine.discoveries.length - 30);
+    w.toast(def.icon, def.found);
+    if (def.sticker) w.discover(def.sticker);
+    mine.version++;
+  });
 }
 
 function village(w: World) {

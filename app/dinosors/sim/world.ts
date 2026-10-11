@@ -47,6 +47,7 @@ import { Civ } from "./civ";
 import { Extinction } from "./extinction";
 import { Mine } from "./mine";
 import { updateCrew } from "./miners";
+import { updatePacks } from "./packs";
 import { updateDeepBuilds } from "./deepBuild";
 import { updateDeepLife } from "./deepLife";
 import { Snow } from "./snow";
@@ -94,6 +95,38 @@ export interface Poi {
 }
 
 const MAX_DINOS = 110;
+
+/**
+ * id -> position over an entity list that the rest of the sim pushes to, splices and
+ * replaces freely. Every hit is checked against the list, and a miss falls back to a plain
+ * scan, so it can never hand back something stale; it just makes the usual lookup O(1).
+ */
+class IdIndex<T extends { id: number }> {
+  private list: T[] | null = null;
+  private len = -1;
+  private dirty = true;
+  private at = new Map<number, number>();
+
+  get(list: T[], id: number): T | null {
+    if (!id) return null;
+    if (this.dirty || list !== this.list || list.length !== this.len) {
+      this.at.clear();
+      for (let i = 0; i < list.length; i++) this.at.set(list[i].id, i);
+      this.list = list;
+      this.len = list.length;
+      this.dirty = false;
+    }
+    const k = this.at.get(id);
+    if (k !== undefined && list[k]?.id === id) return list[k];
+    for (let i = 0; i < list.length; i++)
+      if (list[i].id === id) {
+        // the list was rearranged since the index was built
+        this.dirty = true;
+        return list[i];
+      }
+    return null;
+  }
+}
 
 export class World {
   seed: number;
@@ -180,6 +213,8 @@ export class World {
   flags = new Set<string>();
 
   private byId = new Map<number, Creature>();
+  private itemIndex = new IdIndex<Item>();
+  private plantIndex = new IdIndex<Plant>();
 
   constructor(seed: number, populate = true) {
     this.seed = seed;
@@ -353,14 +388,10 @@ export class World {
     return this.byId.get(id) ?? null;
   }
   itemById(id: number) {
-    if (!id) return null;
-    for (const it of this.items) if (it.id === id) return it;
-    return null;
+    return this.itemIndex.get(this.items, id);
   }
   plantById(id: number) {
-    if (!id) return null;
-    for (const p of this.plants) if (p.id === id) return p;
-    return null;
+    return this.plantIndex.get(this.plants, id);
   }
 
   inView(x: number, y: number, margin = 0) {
@@ -644,7 +675,7 @@ export class World {
     for (const d of this.dinos) this.byId.set(d.id, d);
     for (const h of this.humans) this.byId.set(h.id, h);
     this.creatureHash.clear();
-    for (const d of this.dinos) if (d.state !== "carried") this.creatureHash.insert(d);
+    for (const d of this.dinos) if (d.state !== "carried" && !d.under) this.creatureHash.insert(d);
     for (const h of this.humans) if (h.state !== "hide") this.creatureHash.insert(h);
     if (this.plantsDirty) {
       this.plantHash.rebuild(this.plants);
@@ -652,7 +683,7 @@ export class World {
     }
     this.herdCenters.clear();
     for (const d of this.dinos) {
-      if (!d.herd || isBaby(d)) continue;
+      if (!d.herd || isBaby(d) || d.under) continue;
       const c = this.herdCenters.get(d.herd);
       if (c) {
         c.x += d.x;
@@ -668,7 +699,8 @@ export class World {
     // creatures: brains are throttled, bodies move every frame
     for (let i = this.dinos.length - 1; i >= 0; i--) {
       const d = this.dinos[i];
-      if (!d) continue;
+      // pack dinosaurs down the mine are moved by packs.ts, not the surface brain
+      if (!d || d.under) continue;
       d.think -= dt;
       if (d.think <= 0) thinkDino(this, d);
       moveDino(this, d, dt);
@@ -689,6 +721,7 @@ export class World {
     this.healLand(dt);
     this.mine.update(this, dt);
     updateCrew(this, dt);
+    updatePacks(this, dt);
     updateDeepBuilds(this, dt);
     updateDeepLife(this, dt);
     if (this.camp.crafting) {
@@ -918,6 +951,7 @@ export class World {
         warArmor: d.warArmor ?? 0,
         rider: d.rider,
         passengers: [...(d.passengers ?? [])],
+        under: d.under || undefined,
         work: d.work ? { ...d.work, skills: { ...d.work.skills }, targetX: r(d.work.targetX), targetY: r(d.work.targetY) } : undefined,
       })),
       humans: this.humans.map((h) => ({
@@ -1045,6 +1079,10 @@ export class World {
       if (h.under) h.state = "hide";
     }
     w.mine.crew = w.mine.crew.filter((m) => w.humans.some((h) => h.id === m.id && h.under));
+    // pack dinosaurs too: only the ones the mine knows about stay down
+    const packs = new Set(w.mine.packs.map((p) => p.id));
+    for (const d of w.dinos) if (d.under && !packs.has(d.id)) d.under = false;
+    w.mine.packs = w.mine.packs.filter((p) => w.dinos.some((d) => d.id === p.id && d.under));
     for (const f of data.campfires) w.campfires.push({ id: w.nextId(), ...f, cook: 0 });
     w.camp.stock = { ...w.camp.stock, ...data.camp.stock };
     w.tribe.load(w, data.tribe);

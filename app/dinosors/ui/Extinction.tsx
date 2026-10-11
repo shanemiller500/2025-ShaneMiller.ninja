@@ -21,55 +21,60 @@ export function ExtinctionConfirm({ open, onClose, snap, engine, fontClass, onTo
   const ext = snap.extinction;
   return (
     <Modal className="dl-modal" open={open} onClose={onClose} size="md" accent="#ef4444" labelledBy="ext-confirm">
-      <div className={`bg-slate-950 p-6 text-white ${fontClass}`}>
-        <div className="text-5xl">{sv ? "☄️🌋" : "☄️"}</div>
-        <h2 id="ext-confirm" className="mt-2 text-2xl font-bold">{sv ? "Set off the SUPERVOLCANO?" : "Call down the extinction asteroid?"}</h2>
-        {sv ? (
-          <p className="mt-2 text-sm text-white/70">
-            A meteor slams straight into the volcano and the whole mountain explodes. A wall of fire rolls across the entire map, stone melts into lava, the rivers boil away. <b className="text-rose-300">Every dinosaur, every person — even the miners deep underground — is incinerated. Nothing is spared.</b> What's left is a burning wasteland.
-          </p>
-        ) : (
-          <p className="mt-2 text-sm text-white/70">
-            The sky will change, the animals will panic, and then it hits. A shockwave rolls across the whole map: fires, eruptions, falling rock and ash. <b className="text-rose-300">Most dinosaurs and most of your people will die.</b> Buildings in its path are flattened.
-          </p>
-        )}
-        {!sv && <div className="mt-3 rounded-2xl bg-white/5 p-3 text-[13px]">
-          <p className="font-bold">Your chances</p>
-          <p className="mt-1">{ext.shelter ? "✅ A Deep shelter is built: people who reach it have a good chance." : "⬜ No Deep shelter."}</p>
-          <p>{ext.shield ? (ext.shieldReady ? "✅ The Resonance shield is charged." : "⚠️ The Resonance shield needs more stored energy to hold.") : "⬜ No Resonance shield."}</p>
-          <p className="mt-1 text-[11px] text-white/50">Even with them, survival isn&apos;t guaranteed.</p>
-        </div>}
-        <div className="mt-5 grid gap-2 sm:grid-cols-3">
-          <button type="button" onClick={onClose} className="rounded-2xl bg-white/10 px-3 py-3 text-sm font-bold hover:bg-white/20">
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={saving || saved}
-            onClick={async () => {
-              setSaving(true);
-              await putSlot(engine.makeSlot("manual", `Before the ${sv ? "supervolcano" : "asteroid"} · Day ${engine.world.day}`, "Ages"));
-              engine.save(true);
-              setSaving(false);
-              setSaved(true);
-              onToast("💾", "World saved in 📂 Saved games (group: Ages).");
-            }}
-            className="rounded-2xl bg-emerald-600 px-3 py-3 text-sm font-bold hover:bg-emerald-500 disabled:opacity-60"
-          >
-            {saved ? "Saved ✓" : saving ? "Saving…" : "Save World First"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              engine.triggerExtinction(cause);
-              onClose();
-            }}
-            className="rounded-2xl bg-rose-600 px-3 py-3 text-sm font-bold shadow-lg shadow-rose-900/40 hover:bg-rose-500"
-          >
-            {sv ? "Burn It All" : "Trigger Extinction"}
-          </button>
-        </div>
-      </div>
+      {/* contents are only built while open (the exit animation keeps the last ones) */}
+      {open && (
+        <>
+          <div className={`bg-slate-950 p-6 text-white ${fontClass}`}>
+            <div className="text-5xl">{sv ? "☄️🌋" : "☄️"}</div>
+            <h2 id="ext-confirm" className="mt-2 text-2xl font-bold">{sv ? "Set off the SUPERVOLCANO?" : "Call down the extinction asteroid?"}</h2>
+            {sv ? (
+              <p className="mt-2 text-sm text-white/70">
+                A meteor slams straight into the volcano and the whole mountain explodes. A wall of fire rolls across the entire map, stone melts into lava, the rivers boil away. <b className="text-rose-300">Every dinosaur, every person — even the miners deep underground — is incinerated. Nothing is spared.</b> What's left is a burning wasteland.
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-white/70">
+                The sky will change, the animals will panic, and then it hits. A shockwave rolls across the whole map: fires, eruptions, falling rock and ash. <b className="text-rose-300">Most dinosaurs and most of your people will die.</b> Buildings in its path are flattened.
+              </p>
+            )}
+            {!sv && <div className="mt-3 rounded-2xl bg-white/5 p-3 text-[13px]">
+              <p className="font-bold">Your chances</p>
+              <p className="mt-1">{ext.shelter ? "✅ A Deep shelter is built: people who reach it have a good chance." : "⬜ No Deep shelter."}</p>
+              <p>{ext.shield ? (ext.shieldReady ? "✅ The Resonance shield is charged." : "⚠️ The Resonance shield needs more stored energy to hold.") : "⬜ No Resonance shield."}</p>
+              <p className="mt-1 text-[11px] text-white/50">Even with them, survival isn&apos;t guaranteed.</p>
+            </div>}
+            <div className="mt-5 grid gap-2 sm:grid-cols-3">
+              <button type="button" onClick={onClose} className="rounded-2xl bg-white/10 px-3 py-3 text-sm font-bold hover:bg-white/20">
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving || saved}
+                onClick={async () => {
+                  setSaving(true);
+                  await putSlot(engine.makeSlot("manual", `Before the ${sv ? "supervolcano" : "asteroid"} · Day ${engine.world.day}`, "Ages"));
+                  engine.save(true);
+                  setSaving(false);
+                  setSaved(true);
+                  onToast("💾", "World saved in 📂 Saved games (group: Ages).");
+                }}
+                className="rounded-2xl bg-emerald-600 px-3 py-3 text-sm font-bold hover:bg-emerald-500 disabled:opacity-60"
+              >
+                {saved ? "Saved ✓" : saving ? "Saving…" : "Save World First"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  engine.triggerExtinction(cause);
+                  onClose();
+                }}
+                className="rounded-2xl bg-rose-600 px-3 py-3 text-sm font-bold shadow-lg shadow-rose-900/40 hover:bg-rose-500"
+              >
+                {sv ? "Burn It All" : "Trigger Extinction"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }
