@@ -235,6 +235,7 @@ export class Renderer {
     const y1 = v.y1 + pad * 2;
 
     this.terrainR.draw(c, v.x0, v.y0, v.x1, v.y1, z);
+    this.trailFx(c, v.x0, v.y0, v.x1, v.y1);
     this.groundFx(c, v.x0, v.y0, v.x1, v.y1, z);
     this.snowFx(c, v.x0, v.y0, v.x1, v.y1, z);
     this.flatStructures(c, x0, y0, x1, y1);
@@ -284,7 +285,7 @@ export class Renderer {
     const rv = w.rivals;
     for (let i = 0; i < rv.clans.length; i++) {
       const cl = rv.clans[i];
-      if (cl.x > x0 - 160 && cl.x < x1 + 160 && cl.y > y0 - 40 && cl.y < y1 + 100) list.push({ y: cl.y - 40, k: K_CLAN, i });
+      if (cl.x > x0 - 210 && cl.x < x1 + 210 && cl.y > y0 - 70 && cl.y < y1 + 110) list.push({ y: cl.y - 40, k: K_CLAN, i });
     }
     for (let i = 0; i < rv.brutes.length; i++) {
       const b = rv.brutes[i];
@@ -786,6 +787,7 @@ export class Renderer {
     }
     for (const b of civ.beams) drawBeam(c, b);
     for (const l of civ.lifts) drawLift(c, l);
+    this.stringLights(c, x0, y0, x1, y1);
     const ex = w.extinction;
     if (ex.stats?.shieldHeld && (ex.phase === "impact" || ex.phase === "aftermath")) {
       const sh = w.colony.buildings.find((b) => b.kind === "resShield" && b.built >= 1);
@@ -966,6 +968,58 @@ export class Renderer {
       c.stroke();
     }
     drawDino(c, def, L, dn.dir, pose);
+    if (dn.owner && (dn.warArmor ?? 0) > 0 && !isBaby(dn)) {
+      // Layered hide and bone plates leave a strong spiked outline even at game zoom.
+      const heavy = (dn.warArmor ?? 0) >= 2;
+      c.save();
+      c.scale(dn.dir, 1);
+      c.lineWidth = Math.max(1.5, L * 0.024);
+      for (let i = 0; i < 4; i++) {
+        const x = (i - 1.5) * L * 0.17;
+        const top = -L * (0.43 + (i === 1 || i === 2 ? 0.035 : 0));
+        c.fillStyle = heavy ? "#566b70" : "#76573d";
+        c.strokeStyle = heavy ? "#aab9b7" : "#bb9465";
+        c.beginPath();
+        c.moveTo(x - L * 0.095, top + L * 0.045);
+        c.lineTo(x - L * 0.065, top - L * 0.018);
+        c.lineTo(x + L * 0.067, top - L * 0.018);
+        c.lineTo(x + L * 0.1, top + L * 0.05);
+        c.closePath();
+        c.fill();
+        c.stroke();
+        // Ivory spines grow out of each plate, with a second row on strong armor.
+        c.fillStyle = "#f2e7c7";
+        c.strokeStyle = "#7b6b56";
+        c.beginPath();
+        c.moveTo(x - L * 0.035, top - L * 0.012);
+        c.quadraticCurveTo(x - L * 0.055, top - L * (heavy ? 0.22 : 0.17), x + L * 0.012, top - L * (heavy ? 0.27 : 0.2));
+        c.lineTo(x + L * 0.045, top - L * 0.012);
+        c.closePath();
+        c.fill();
+        c.stroke();
+        if (heavy) {
+          c.beginPath();
+          c.moveTo(x + L * 0.04, top);
+          c.lineTo(x + L * 0.09, top - L * 0.13);
+          c.lineTo(x + L * 0.09, top + L * 0.015);
+          c.closePath();
+          c.fill();
+        }
+      }
+      // Forward curved tusks turn a charge into a visible collision weapon.
+      c.fillStyle = "#f4ead0";
+      c.strokeStyle = "#76654d";
+      for (const y of [-0.28, -0.12]) {
+        c.beginPath();
+        c.moveTo(L * 0.32, L * y);
+        c.quadraticCurveTo(L * 0.56, L * (y + 0.11), L * 0.7, L * (y - 0.09));
+        c.quadraticCurveTo(L * 0.56, L * (y + 0.025), L * 0.33, L * (y + 0.07));
+        c.closePath();
+        c.fill();
+        c.stroke();
+      }
+      c.restore();
+    }
     if (dn.tier >= 2 || (dn.raider && dn.tier >= 1)) {
       c.font = `${Math.max(14, L * 0.22)}px sans-serif`;
       c.textAlign = "center";
@@ -1046,6 +1100,78 @@ export class Renderer {
   }
 
   /* ----------------------------- ground FX ----------------------------- */
+
+  private trailFx(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number) {
+    const detail = this.world.trails.detail;
+    const step = TILE / 4;
+    const stride = MAP_W * 4;
+    const height = MAP_H * 4;
+    const fx0 = Math.max(0, Math.floor(vx0 / step) - 1);
+    const fy0 = Math.max(0, Math.floor(vy0 / step) - 1);
+    const fx1 = Math.min(stride - 1, Math.ceil(vx1 / step) + 1);
+    const fy1 = Math.min(height - 1, Math.ceil(vy1 / step) + 1);
+    const active = (x: number, y: number) => x >= 0 && y >= 0 && x < stride && y < height && detail[y * stride + x] >= 5;
+    const directions = [[1, 0], [0, 1], [1, 1], [-1, 1]] as const;
+    const point = (x: number, y: number) => ({
+      x: (x + 0.5) * step + (hash2(x, y, 561) - 0.5) * 2.5,
+      y: (y + 0.5) * step + (hash2(y, x, 562) - 0.5) * 2.5,
+    });
+    c.save();
+    c.lineCap = "round";
+    c.lineJoin = "round";
+    c.beginPath();
+    for (let y = fy0; y <= fy1; y++) for (let x = fx0; x <= fx1; x++) {
+      if (!active(x, y)) continue;
+      const from = point(x, y);
+      // Join footsteps into thin continuous tracks. Diagonals only fill bends,
+      // so a busy area does not turn into a square mesh.
+      for (const [dx, dy] of directions) {
+        if (!active(x + dx, y + dy)) continue;
+        if (dx && dy && (active(x + dx, y) || active(x, y + dy))) continue;
+        const to = point(x + dx, y + dy);
+        c.moveTo(from.x, from.y);
+        c.lineTo(to.x, to.y);
+      }
+    }
+    c.strokeStyle = "rgba(112,76,43,0.27)";
+    c.lineWidth = 10;
+    c.stroke();
+    c.strokeStyle = "rgba(194,149,93,0.42)";
+    c.lineWidth = 6;
+    c.stroke();
+    c.restore();
+  }
+
+  private stringLights(c: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
+    const dark = Math.max(0, 1 - this.world.daylight);
+    for (const [a, b] of this.world.trails.builtLinks(this.world)) {
+      if (Math.max(a.x, b.x) < x0 || Math.min(a.x, b.x) > x1 || Math.max(a.y, b.y) < y0 || Math.min(a.y, b.y) > y1) continue;
+      const count = Math.max(2, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 28));
+      const point = (t: number) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t - 43 + Math.sin(Math.PI * t) * 11 });
+      c.save();
+      c.strokeStyle = "#55402a";
+      c.lineWidth = 2.2;
+      c.beginPath();
+      for (let i = 0; i <= 16; i++) {
+        const p = point(i / 16);
+        if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y);
+      }
+      c.stroke();
+      for (let i = 1; i < count; i++) {
+        const p = point(i / count);
+        c.strokeStyle = "#bba276";
+        c.lineWidth = 1.2;
+        c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x, p.y + 5); c.stroke();
+        if (dark > 0.1) {
+          c.fillStyle = `rgba(255,167,65,${dark * 0.2})`;
+          c.beginPath(); c.arc(p.x, p.y + 6, 9, 0, Math.PI * 2); c.fill();
+        }
+        c.fillStyle = "#f7cd74";
+        c.beginPath(); c.arc(p.x, p.y + 6, 3, 0, Math.PI * 2); c.fill();
+      }
+      c.restore();
+    }
+  }
 
   private groundFx(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number, z: number) {
     const w = this.world;
@@ -1612,6 +1738,14 @@ export class Renderer {
       lights.push([sx, sy, rr, a]);
     };
     for (const f of w.campfires) if (f.lit) add(f.x, f.y - 10, 240 + Math.sin(this.t * 9) * 8, 1);
+    for (const b of w.colony.buildings) if (b.kind === "boneTorch" && b.built >= 1 && b.hp > 0) add(b.x, b.y - 43, 135 + Math.sin(this.t * 11 + b.id) * 5, 0.9);
+    for (const [a, b] of w.trails.builtLinks(w)) {
+      const count = Math.max(2, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 28));
+      for (let i = 1; i < count; i++) {
+        const t = i / count;
+        add(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t - 37 + Math.sin(Math.PI * t) * 11, 80, 0.7);
+      }
+    }
     let n = 0;
     w.fire.active.forEach((i) => {
       if (n++ % 3) return;

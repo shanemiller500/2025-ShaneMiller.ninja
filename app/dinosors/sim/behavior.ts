@@ -8,14 +8,14 @@ import { FACTS } from "../data/facts";
 import { sp } from "../data/species";
 import { emote, isBaby, scaleOf, setState, sizeOf, walkable } from "./dinos";
 import { toss } from "./humans";
-import { actRaider, bite, thinkRaider } from "./tribe";
+import { actRaider, bite, hitDino, thinkRaider } from "./tribe";
 import { CAMP_LEVELS } from "../data/facts";
 import { eatCarcass, makeCarcass } from "./carcass";
 import { P } from "./particles";
 import { canReach, shakeFruit, TALL } from "./plants";
 import { pick } from "./rng";
 import { LM } from "./terrain";
-import { T, TILE, WORLD_H, WORLD_W, type Dino, type DinoState, type Human, type Item, type SpeciesDef } from "./types";
+import { T, TILE, WORLD_H, WORLD_W, type Brute, type Dino, type DinoState, type Human, type Item, type SpeciesDef } from "./types";
 import type { World } from "./world";
 
 /** States that run to completion; `think` leaves them alone. */
@@ -148,7 +148,11 @@ function awayFrom(w: World, d: Dino, fx: number, fy: number, dist = 360) {
 
 function wanderTarget(w: World, d: Dino, def: SpeciesDef) {
   // befriended dinos potter about near home (the pen, or just outside camp)
-  if (d.owner) return { x: d.homeX + (w.rng() - 0.5) * 180, y: d.homeY + (w.rng() - 0.5) * 120 };
+  if (d.owner) {
+    const home = battleHome(w, d);
+    const span = (d.warTraining ?? 0) >= 0.35 ? 50 : 180;
+    return { x: home.x + (w.rng() - 0.5) * span, y: home.y + (w.rng() - 0.5) * (span * 0.65) };
+  }
   const herd = d.herd ? w.herdCenters.get(d.herd) : undefined;
   if (herd && herd.n > 1 && dd(d, herd) > 160) return { x: herd.x + (w.rng() - 0.5) * 140, y: herd.y + (w.rng() - 0.5) * 100 };
   if (!d.migrant && Math.hypot(d.x - d.homeX, d.y - d.homeY) > 1300) return { x: d.homeX + (w.rng() - 0.5) * 300, y: d.homeY + (w.rng() - 0.5) * 300 };
@@ -165,6 +169,28 @@ function wanderTarget(w: World, d: Dino, def: SpeciesDef) {
     if (def.biomes.includes(w.terrain.tileAt(x, y))) return fallback;
   }
   return fallback ?? { x: d.x + (w.rng() - 0.5) * 100, y: d.y + (w.rng() - 0.5) * 100 };
+}
+
+/** A trained pet's place on the hay inside its nearest finished pen. */
+function battleHome(w: World, d: Dino) {
+  const fallback = { x: w.camp.x + 160, y: w.camp.y + 150, pen: false };
+  const pens = w.colony.buildings.filter((b) => b.kind === "pen" && b.built >= 1 && b.hp > 0);
+  const pen = pens.sort((a, b) => Math.hypot(a.x - d.homeX, a.y - d.homeY) - Math.hypot(b.x - d.homeX, b.y - d.homeY))[0];
+  if (!pen) {
+    d.homeX = fallback.x;
+    d.homeY = fallback.y;
+    return fallback;
+  }
+  d.homeX = pen.x;
+  d.homeY = pen.y;
+  const slots = [[-22, -35], [22, -35], [-10, -19], [10, -19]] as const;
+  for (let n = 0; n < slots.length; n++) {
+    const [sx, sy] = slots[(d.id + n) % slots.length];
+    const x = pen.x + sx;
+    const y = pen.y + sy;
+    if (walkable(w, d, x, y)) return { x, y, pen: true };
+  }
+  return { x: pen.x, y: pen.y - 27, pen: true };
 }
 
 /* ------------------------------------------------------------------ */
@@ -355,6 +381,13 @@ function thinkWalker(w: World, d: Dino, def: SpeciesDef) {
 
   // 6. sleep
   if (d.energy < 0.12 || (!awakeTime && d.energy < 0.85) || (def.nocturnal && !night && d.energy < 0.5)) {
+    if (d.owner && (d.warTraining ?? 0) >= 0.35) {
+      const home = battleHome(w, d);
+      if (home.pen && dd(d, home) > 16) {
+        setState(d, "wander", home.x, home.y);
+        return;
+      }
+    }
     if (d.state !== "sleep") emote(d, "💤", 2);
     setState(d, "sleep", d.x, d.y);
     return;
@@ -373,6 +406,18 @@ function thinkWalker(w: World, d: Dino, def: SpeciesDef) {
     }
   }
   if (d.state === "shelter" && (w.weather.storm > 0.5 || w.weather.snow > 0.7)) return;
+
+  // Between meals and battles, trained pets stay on watch at their pen.
+  if (d.owner && (d.warTraining ?? 0) >= 0.35) {
+    const home = battleHome(w, d);
+    if (dd(d, home) > (home.pen ? 48 : 90)) setState(d, "wander", home.x, home.y);
+    else if (d.state !== "idle" && d.state !== "wander") setState(d, "idle", d.x, d.y);
+    else if (d.state === "idle" && w.rng() < 0.3) {
+      const spot = wanderTarget(w, d, def);
+      setState(d, "wander", spot.x, spot.y);
+    }
+    return;
+  }
 
   // 8. eggs
   if (!baby && d.layT <= 0 && d.hunger < 0.5 && d.thirst < 0.5 && d.health > 0.7 && w.canLayEgg(d.species) && !d.migrant) {
@@ -452,6 +497,70 @@ function thinkWalker(w: World, d: Dino, def: SpeciesDef) {
 function startRoar(w: World, d: Dino) {
   setState(d, "roar", d.x, d.y);
   d.roarT = 45 + w.rng() * 60;
+}
+
+/** Trained friends defend the tribe nearby; a rider can bring one into a larger fight. */
+function warTarget(w: World, d: Dino, range: number): Dino | Brute | null {
+  let best: Dino | Brute | null = null;
+  let distance = range;
+  for (const foe of w.dinos) {
+    if (foe === d || foe.owner || foe.health <= 0 || foe.state === "carried" || foe.state === "faint") continue;
+    if (!foe.raider && !(sp(foe.species).diet === "carnivore" && (foe.state === "chase" || foe.state === "tussle") && Math.hypot(foe.x - w.camp.x, foe.y - w.camp.y) < 650)) continue;
+    const gap = dd(d, foe);
+    if (gap < distance) { best = foe; distance = gap; }
+  }
+  for (const foe of w.rivals.brutes) {
+    if (foe.hp <= 0 || foe.captive || !w.rivals.hostile(w, foe)) continue;
+    if (!foe.raid && !foe.war && Math.hypot(foe.x - w.camp.x, foe.y - w.camp.y) > 600 && !d.rider) continue;
+    const gap = dd(d, foe);
+    if (gap < distance) { best = foe; distance = gap; }
+  }
+  return best;
+}
+
+function actWarDino(w: World, d: Dino, dt: number) {
+  if (!d.owner || (d.warTraining ?? 0) < 0.35 || isBaby(d)) return;
+  d.spikeCd = Math.max(0, (d.spikeCd ?? 0) - dt);
+  if ((d.warArmor ?? 0) > 0 && (d.spikeCd ?? 0) <= 0 && Math.hypot(d.vx, d.vy) > 28) {
+    const reach = Math.max(22, sizeOf(d) * 0.38);
+    const foe = warTarget(w, d, reach);
+    if (foe && dd(d, foe) <= reach + (foe.kind === "dino" ? sizeOf(foe) * 0.22 : 12)) {
+      d.spikeCd = 0.7;
+      const force = (d.warArmor ?? 0) >= 2 ? 235 : 165;
+      if (foe.kind === "dino") hitDino(w, foe, force, d.x, d.y);
+      else w.rivals.hit(w, foe, force, d.x, d.y, false, "tusk");
+      w.particles.burst(P.Star, foe.x, foe.y, 5, 65, { z: 20, size: 6, max: 0.6 });
+      d.energy = Math.max(0, d.energy - 0.01);
+    }
+  }
+  d.warCd = Math.max(0, (d.warCd ?? 0) - dt);
+  if (d.warCd > 0) return;
+  const foe = warTarget(w, d, d.rider ? Math.max(32, sizeOf(d) * 0.6) : 260);
+  if (!foe) {
+    if (d.state === "war") setState(d, "idle", d.x, d.y);
+    return;
+  }
+  if (!d.rider) {
+    d.targetId = foe.id;
+    setState(d, "war", foe.x, foe.y);
+  }
+  const reach = Math.max(24, sizeOf(d) * 0.5) + (foe.kind === "dino" ? sizeOf(foe) * 0.25 : 10);
+  if (dd(d, foe) > reach || (d.warCd ?? 0) > 0) return;
+  d.warCd = 2.2;
+  d.energy = Math.max(0, d.energy - 0.025);
+  const training = d.warTraining ?? 0;
+  const force = (0.12 + training * 0.12 + sp(d.species).attack * 0.08) * Math.max(0.7, Math.min(1.6, sizeOf(d) / 80));
+  if (foe.kind === "dino") {
+    foe.health -= force * (1 - sp(foe.species).defense * 0.4);
+    foe.fear = Math.max(foe.fear, 0.6);
+    if (foe.health <= 0) setState(foe, "faint", foe.x, foe.y);
+    // Defending has a cost; grown armor makes pets last longer in a fight.
+    d.health -= Math.max(0.005, sp(foe.species).attack * 0.035) * (1 - (d.warArmor ?? 0) * 0.3);
+  } else {
+    w.rivals.hit(w, foe, force, d.x, d.y);
+    d.health -= 0.04 * (1 - (d.warArmor ?? 0) * 0.3);
+  }
+  w.sfx("bonk", foe.x, foe.y, 0.7);
 }
 
 export function startTussle(w: World, a: Dino, b: Dino | Human) {
@@ -751,7 +860,9 @@ function actWalker(w: World, d: Dino, def: SpeciesDef, dt: number) {
     case "sleep":
       if (w.rng() < dt * 0.5 && w.inView(d.x, d.y, 60)) w.particles.spawn(P.Note, d.x + d.dir * sizeOf(d) * 0.3, d.y, { z: sizeOf(d) * 0.35, vz: 14, vx: 6, size: 6 + sizeOf(d) / 25, max: 2, color: "z" });
       if (w.rng() < dt * 0.15) w.sfx("snore", d.x, d.y, 0.5, def.sound.pitch);
-      if (d.fear > 0.5 || (d.energy >= 1 && d.stateT > 10)) setState(d, "idle");
+      const penRest = d.owner && (d.warTraining ?? 0) >= 0.35 && w.daylight < 0.3
+        && w.colony.buildings.some((b) => b.kind === "pen" && b.built >= 1 && b.hp > 0 && Math.abs(d.x - b.x) < 48 && d.y < b.y && d.y > b.y - 65);
+      if (d.fear > 0.5 || (!penRest && d.energy >= 1 && d.stateT > 10)) setState(d, "idle");
       else if (!def.nocturnal && w.daylight > 0.5 && d.energy > 0.6 && d.stateT > 5) setState(d, "idle");
       break;
     case "roar":
@@ -1180,6 +1291,14 @@ export function thinkDino(w: World, d: Dino) {
     return;
   }
   if (d.rider) return;
+  if (d.owner && (d.warTraining ?? 0) >= 0.35 && !isBaby(d)) {
+    const foe = warTarget(w, d, 260);
+    if (foe) {
+      d.targetId = foe.id;
+      setState(d, "war", foe.x, foe.y);
+      return;
+    }
+  }
   if (def.move === "fly") thinkFlyer(w, d, def);
   else if (def.move === "swim") thinkSwimmer(w, d, def);
   else thinkWalker(w, d, def);
@@ -1209,6 +1328,7 @@ export function actDino(w: World, d: Dino, dt: number) {
     d.z = Math.max(0, d.z - dt * 60);
     return actFaint(w, d);
   }
+  actWarDino(w, d, dt);
   d.roarT -= dt;
   d.layT -= dt;
   if (d.state !== "carried" && d.state !== "sleep" && def.move === "walk") {

@@ -1,14 +1,18 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import type { Engine, Snapshot } from "../game/engine";
 
 /** Big, unmissable raid alert with the two things you want right now: look + rally. */
 export default function RaidBanner({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   const raid = snap.tribe.raid;
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => { if (!raid) setDismissed(false); }, [raid]);
   return (
     <AnimatePresence>
-      {raid && (
+      {raid && !dismissed && (
         <div className={`pointer-events-none absolute inset-x-0 z-30 flex justify-center px-2 ${snap.selection.length ? "bottom-[230px] sm:bottom-[200px]" : "bottom-[150px] sm:bottom-[150px]"}`}>
           <motion.div
             initial={{ y: 30, opacity: 0, scale: 0.9 }}
@@ -32,6 +36,7 @@ export default function RaidBanner({ snap, engine }: { snap: Snapshot; engine: E
             <button type="button" onClick={() => engine.rally()} className="rounded-2xl bg-white px-3 py-2 text-sm font-extrabold text-rose-700 hover:bg-rose-50 active:scale-95">
               {snap.rallied ? "🏳️ Stand down" : "📣 Rally!"}
             </button>
+            <button type="button" onClick={() => setDismissed(true)} aria-label="Dismiss raid alert" className="rounded-full p-1.5 text-white/80 hover:bg-white/20 hover:text-white"><X className="h-4 w-4" /></button>
           </motion.div>
         </div>
       )}

@@ -216,6 +216,9 @@ export class Nav {
   isGate(i: number) {
     return (this.flags[i] & F_GATE) !== 0;
   }
+  isBridge(i: number) {
+    return (this.flags[i] & F_BRIDGE) !== 0;
+  }
 
   /** Extra cost of stepping into tile i right now (live fire / lava). -1 = impassable. */
   private live(w: World, cls: NavClass, i: number) {

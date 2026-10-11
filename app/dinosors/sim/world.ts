@@ -909,6 +909,8 @@ export class World {
         gen: d.gen,
         tame: r(d.tame),
         owner: d.owner,
+        warTraining: r(d.warTraining ?? 0),
+        warArmor: d.warArmor ?? 0,
       })),
       humans: this.humans.map((h) => ({
         id: h.id,
@@ -947,12 +949,14 @@ export class World {
       mine: this.mine.serialize(),
       campfires: this.campfires.map((f) => ({ x: r(f.x), y: r(f.y), lit: f.lit, fuel: r(f.fuel) })),
       trails: this.trails.serialize(),
+      trailDetail: this.trails.serializeDetail(),
+      lightLinks: this.trails.lightLinks,
       camp: { stock: this.camp.stock, learned: Array.from(this.camp.learned), goal: this.camp.goal },
       edits: this.terrain.edits(),
       discoveries: Array.from(this.discoveries),
       unlocked: Array.from(this.unlocked),
       seen: Array.from(this.seen),
-      flags: Array.from(this.flags),
+      flags: Array.from(this.flags).filter((flag) => flag !== "rallyDinos"),
     };
   }
 
@@ -967,7 +971,6 @@ export class World {
     w.weather.kind = data.weather;
     w.weather.auto = data.weatherAuto ?? true;
     w.terrain.applyEdits(data.edits ?? []);
-    w.trails.load((data as { trails?: [number, number][] }).trails);
     w.fire.initFuel(w);
     w.snow.init(w);
     w.idCounter = Math.max(data.idCounter ?? 1, 1);
@@ -1061,6 +1064,24 @@ export class World {
     w.idCounter = maxId + 1;
     // homes saved by id: drop any that no longer exist
     for (const h of w.humans) if (h.home && !w.shelters.some((s) => s.id === h.home)) h.home = 0;
+    w.nav.sync(w);
+    // New saves keep the exact strings the player drew. Older saves infer
+    // their deliberate torch routes from placement order.
+    if (data.lightLinks) w.trails.loadLinks(w, data.lightLinks);
+    else {
+      const placedTorches: typeof w.colony.buildings = [];
+      for (const torch of w.colony.buildings) {
+        if (torch.kind !== "boneTorch" || torch.hp <= 0) continue;
+        let nearest: typeof torch | null = null;
+        let best = 220;
+        for (const previous of placedTorches) {
+          const distance = Math.hypot(previous.x - torch.x, previous.y - torch.y);
+          if (distance < best) { best = distance; nearest = previous; }
+        }
+        if (nearest) w.trails.connect(w, nearest.x, nearest.y, torch.x, torch.y);
+        placedTorches.push(torch);
+      }
+    }
     w.nav.sync(w);
     return w;
   }

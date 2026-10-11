@@ -38,6 +38,7 @@ export type TaskKind =
   | "hunt"
   | "heal"
   | "tame"
+  | "train"
   | "ride"
   | "dismount"
   | "guard"
@@ -212,6 +213,11 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
     const rider = people.find((p) => p.riding === d.id);
     if (rider) return { kind: "dismount", icon: "⬇️", label: `Hop off the ${def.nick}`, x: d.x, y: d.y, target: d.id };
     const hunt: Command = { kind: "hunt", icon: def.diet === "herbivore" ? "🏹" : "⚔️", label: `${def.diet === "herbivore" ? "Hunt" : "Fight"} the ${def.nick}`, x: d.x, y: d.y, target: d.id, weapons: kinds };
+    if (d.owner && L.has("taming") && (d.warTraining ?? 0) < 1) {
+      const ride: Command | undefined = RIDEABLE.has(d.species) && !isBaby(d)
+        ? { kind: "ride", icon: "🏇", label: `Ride ${d.name}`, x: d.x, y: d.y, target: d.id } : undefined;
+      return { kind: "train", icon: "🛡️", label: `Train ${d.name} for battle`, x: d.x, y: d.y, target: d.id, alts: ride ? [ride] : undefined };
+    }
     if (d.owner && RIDEABLE.has(d.species) && !isBaby(d)) {
       return { kind: "ride", icon: "🏇", label: `Ride ${d.name} the ${def.nick}`, x: d.x, y: d.y, target: d.id };
     }
@@ -540,6 +546,10 @@ function taskAlive(w: World, t: Task): boolean {
       const d = w.dinoById(t.target);
       return !!d && !d.owner && w.camp.learned.has("taming");
     }
+    case "train": {
+      const d = w.dinoById(t.target);
+      return !!d && d.owner && (d.warTraining ?? 0) < 1 && w.camp.learned.has("taming");
+    }
     case "ride":
       return !!w.dinoById(t.target);
     case "operate":
@@ -735,6 +745,19 @@ export function taskThink(w: World, h: Human): boolean {
         h.targetId = d.id;
         h.dir = d.x > h.x ? 1 : -1;
       } else go(h, "walk", d.x + (h.x < d.x ? -reach * 0.8 : reach * 0.8), d.y + 6);
+      return true;
+    }
+    case "train": {
+      const d = w.dinoById(t.target);
+      if (!d || !d.owner || (d.warTraining ?? 0) >= 1) {
+        personDone(w, h, t);
+        return false;
+      }
+      const reach = sizeOf(d) * 0.5 + 24;
+      if (near(h, d.x, d.y, reach)) {
+        go(h, "train", h.x, h.y);
+        h.targetId = d.id;
+      } else go(h, "walk", d.x - d.dir * reach * 0.7, d.y + 8);
       return true;
     }
     case "dismount":
@@ -987,66 +1010,63 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
   const camp = w.camp;
   const list = sites(w).filter((s) => !s.locked && allow(s));
   if (!list.length) return false;
-  let s = h.site ? list.find((x) => siteKey(x) === h.site) : undefined;
-  if (!s) {
-    let bs = Infinity;
-    for (const x of list) {
-      // repairs + things we're carrying stuff for come first, then the closest
-      const score = Math.hypot(x.sx - h.x, x.sy - h.y) - (x.repair ? 300 : 0) - (h.carry && x.need === h.carry ? 400 : 0) - (x.need === null ? 120 : 0) + Math.hypot(x.x - camp.x, x.y - camp.y) * 0.2;
-      if (score < bs) {
-        bs = score;
-        s = x;
+  // Repairs and deliverable upgrades count as work too. If one site is short
+  // of an unobtainable material, try the next site instead of idling.
+  const score = (x: Site) => Math.hypot(x.sx - h.x, x.sy - h.y) - (x.repair ? 300 : 0)
+    - (h.carry && x.need === h.carry ? 400 : 0) - (x.need === null ? 120 : 0)
+    + Math.hypot(x.x - camp.x, x.y - camp.y) * 0.2;
+  const preferred = h.site ? list.find((x) => siteKey(x) === h.site) : undefined;
+  list.sort((a, b) => (a === preferred ? -1 : b === preferred ? 1 : score(a) - score(b)));
+  for (const s of list) {
+    const top = siteOnTop(w, s);
+    const spot = standSpot(w, h, s, top);
+    if (s.need === null || s.repair) {
+      h.site = siteKey(s);
+      if (near(h, spot.x, spot.y, 18)) go(h, s.repair ? "repair" : "build", h.x, h.y);
+      else {
+        h.wantTop = top;
+        go(h, "walk", spot.x, spot.y);
       }
+      h.task = null;
+      return true;
     }
-  }
-  if (!s) return false;
-  h.site = siteKey(s);
-  const top = siteOnTop(w, s);
-  const spot = standSpot(w, h, s, top);
-  if (s.need === null || s.repair) {
-    if (near(h, spot.x, spot.y, 18)) go(h, s.repair ? "repair" : "build", h.x, h.y);
-    else {
-      h.wantTop = top;
-      go(h, "walk", spot.x, spot.y);
-    }
-    h.task = null;
-    return true;
-  }
-  if (h.carry === s.need && h.carryN > 0) {
-    h.wantTop = top;
-    go(h, "carry", spot.x, spot.y);
-    return true;
-  }
-  if (h.carry) {
-    const drop = w.colony.dropOff(w, h.x, h.y, h.carry);
-    go(h, "carry", drop.x, drop.y);
-    h.site = "";
-    return true;
-  }
-  if (camp.stock[s.need] > 0) {
-    if (near(h, camp.pileX, camp.pileY, 34)) {
-      const n = Math.min(camp.stock[s.need], carryCap(w, h));
-      camp.stock[s.need] -= n;
-      h.carry = s.need;
-      h.carryN = n;
+    if (h.carry === s.need && h.carryN > 0) {
+      h.site = siteKey(s);
       h.wantTop = top;
       go(h, "carry", spot.x, spot.y);
-    } else {
-      h.task = null;
-      go(h, "walk", camp.pileX - 10, camp.pileY + 10);
+      return true;
     }
+    if (h.carry) {
+      const drop = w.colony.dropOff(w, h.x, h.y, h.carry);
+      go(h, "carry", drop.x, drop.y);
+      h.site = "";
+      return true;
+    }
+    if (camp.stock[s.need] > 0) {
+      h.site = siteKey(s);
+      if (near(h, camp.pileX, camp.pileY, 34)) {
+        const n = Math.min(camp.stock[s.need], carryCap(w, h));
+        camp.stock[s.need] -= n;
+        h.carry = s.need;
+        h.carryN = n;
+        h.wantTop = top;
+        go(h, "carry", spot.x, spot.y);
+      } else {
+        h.task = null;
+        go(h, "walk", camp.pileX - 10, camp.pileY + 10);
+      }
+      return true;
+    }
+    const src = sourceFor(w, h, s.need) ?? sourceFor(w, h, s.need, s.x, s.y) ?? sourceFor(w, h, s.need, h.x, h.y);
+    if (!src) continue;
+    h.site = siteKey(s);
+    h.task = s.need;
+    h.targetId = src.id;
+    go(h, "walk", src.x, src.y);
     return true;
   }
-  // nothing in the stockpile: go and get some (near camp first, then around the site, then wherever we are)
-  const src = sourceFor(w, h, s.need) ?? sourceFor(w, h, s.need, s.x, s.y) ?? sourceFor(w, h, s.need, h.x, h.y);
-  if (!src) {
-    h.site = "";
-    return false;
-  }
-  h.task = s.need;
-  h.targetId = src.id;
-  go(h, "walk", src.x, src.y);
-  return true;
+  h.site = "";
+  return false;
 }
 
 /** Somewhere a builder can actually stand next to the site (blueprints in a wall line, corners…). */
@@ -1094,6 +1114,20 @@ export function buildAct(w: World, h: Human, dt: number): boolean {
 }
 
 /* ------------------------------ riding ------------------------------ */
+
+/** Assign the nearest available adults to trained, rideable battle pets. */
+export function rallyBattlePets(w: World): number[] {
+  const riders: number[] = [];
+  const people = w.humans.filter((h) => !h.child && !h.stranger && !h.captive && h.state !== "down" && !h.riding);
+  const pets = w.dinos.filter((d) => d.owner && !d.rider && !isBaby(d) && RIDEABLE.has(d.species) && (d.warTraining ?? 0) >= 1 && d.health > 0 && d.state !== "faint");
+  for (const d of pets) {
+    if (!people.length) break;
+    people.sort((a, b) => Math.hypot(a.x - d.x, a.y - d.y) - Math.hypot(b.x - d.x, b.y - d.y));
+    const h = people.shift()!;
+    if (issue(w, [h], { kind: "ride", icon: "🏇", label: `Ride ${d.name}`, x: d.x, y: d.y, target: d.id })) riders.push(h.id);
+  }
+  return riders;
+}
 
 export function mount(w: World, h: Human, d: Dino) {
   if (d.rider || h.riding || h.child) return;

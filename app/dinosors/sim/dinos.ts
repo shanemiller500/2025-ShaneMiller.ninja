@@ -72,6 +72,10 @@ export function makeDino(w: World, species: SpeciesId, x: number, y: number, o: 
     muddy: 0,
     tame: 0,
     owner: false,
+    warTraining: 0,
+    warArmor: 0,
+    warCd: 0,
+    spikeCd: 0,
     rider: 0,
     burn: 99,
     path: null,
@@ -142,6 +146,7 @@ function stateSpeedBase(d: Dino, def: SpeciesDef) {
   const baby = isBaby(d) ? 0.85 : 1;
   switch (d.state) {
     case "chase":
+    case "war":
     case "flee":
     case "defend":
     case "steal":
@@ -184,6 +189,7 @@ const MOVING = new Set<DinoState>([
   "chase",
   "flee",
   "defend",
+  "war",
   "stalk",
   "steal",
   "migrate",

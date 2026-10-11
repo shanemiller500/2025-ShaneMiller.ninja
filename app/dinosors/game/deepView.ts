@@ -99,6 +99,7 @@ export class DeepView {
   private pinch: { d: number; zoom: number } | null = null;
   private vel = { x: 0, y: 0 };
   private glide: { y: number; zoom: number } | null = null;
+  private wheelZoom: { target: number; x: number; y: number } | null = null;
   private keys = new Set<string>();
 
   constructor(canvas: HTMLCanvasElement) {
@@ -115,6 +116,7 @@ export class DeepView {
     const { w } = this.renderer.size;
     this.cam = { x: Math.max(LIFT_X * CELL + 4 * CELL, Math.min(MINE_W * CELL - 4 * CELL, w / 2 - 40)), y: -SKY_ROWS * CELL, zoom: 1.1 };
     this.glide = { y: Math.min(mine.liftY, 6) * CELL + 4 * CELL, zoom: 1 };
+    this.wheelZoom = null;
     this.sel = null;
     this.vel.x = this.vel.y = 0;
   }
@@ -137,13 +139,15 @@ export class DeepView {
   /** Jump the view to a depth (rows), e.g. from the depth gauge or the minimap. */
   focus(x: number | null, row: number) {
     this.glide = null;
+    this.wheelZoom = null;
     if (x !== null) this.cam.x = x * CELL + CELL / 2;
     this.cam.y = row * CELL + CELL / 2;
     this.vel.x = this.vel.y = 0;
     this.clamp();
   }
 
-  zoomBy(f: number, sx?: number, sy?: number) {
+  zoomBy(f: number, sx?: number, sy?: number, fromWheel = false) {
+    if (!fromWheel) this.wheelZoom = null;
     const { w, h } = this.renderer.size;
     const px = sx ?? w / 2;
     const py = sy ?? h / 2;
@@ -169,6 +173,18 @@ export class DeepView {
       const f = Math.pow(0.04, dt);
       this.vel.x *= f;
       this.vel.y *= f;
+    }
+    if (this.wheelZoom) {
+      const wheel = this.wheelZoom;
+      const { w } = this.renderer.size;
+      wheel.target = Math.max(Math.max(0.3, Math.min(1, w / (MINE_W * CELL + 260))), Math.min(2.6, wheel.target));
+      const blend = 1 - Math.exp(-dt * 14);
+      const next = this.cam.zoom * Math.exp(Math.log(wheel.target / this.cam.zoom) * blend);
+      this.zoomBy(next / this.cam.zoom, wheel.x, wheel.y, true);
+      if (Math.abs(Math.log(wheel.target / this.cam.zoom)) < 0.002) {
+        this.zoomBy(wheel.target / this.cam.zoom, wheel.x, wheel.y, true);
+        this.wheelZoom = null;
+      }
     }
     if (this.keys.size) {
       const s = (700 * dt) / this.cam.zoom;
@@ -256,6 +272,7 @@ export class DeepView {
   /* ------------------------------ input ------------------------------ */
 
   down(id: number, sx: number, sy: number) {
+    this.wheelZoom = null;
     this.ptrs.set(id, { x: sx, y: sy, sx, sy, t: performance.now(), moved: false });
     this.painted.clear();
     this.vel.x = this.vel.y = 0;
@@ -347,7 +364,11 @@ export class DeepView {
   }
 
   wheel(deltaY: number, sx: number, sy: number, fine: boolean) {
-    this.zoomBy(Math.exp(-deltaY * (fine ? 0.01 : 0.0015)), sx, sy);
+    const { w } = this.renderer.size;
+    const minZ = Math.max(0.3, Math.min(1, w / (MINE_W * CELL + 260)));
+    const base = this.wheelZoom?.target ?? this.cam.zoom;
+    this.wheelZoom = { target: Math.max(minZ, Math.min(2.6, base * Math.exp(-deltaY * (fine ? 0.01 : 0.0015)))), x: sx, y: sy };
+    this.glide = null;
   }
 
   key(k: string, down: boolean) {

@@ -45,8 +45,9 @@ export const BRUTE_WEAPONS: Record<BruteWeapon, { hit: number; wall: number; thr
 const BRUTE_TOUGH = 150;
 const REACH = 24;
 const SPEED = 40;
-export const MAX_CLANS = 4;
-const MAX_BRUTES = 7;
+export const MAX_CLANS = 6;
+const MAX_BRUTES = 14;
+const GROWN_AGE = 180;
 
 export const isFemale = (h: Human) => FEMALE_NAMES.has(h.name);
 
@@ -77,7 +78,7 @@ export class Rivals {
   started = false;
   private nextClan = 1;
   private relT = 90;
-  private arriveT = 500;
+  private arriveT = 300;
   private tickT = 0;
 
   /* ------------------------------ lookups ------------------------------ */
@@ -146,6 +147,9 @@ export class Rivals {
       war: 0,
       captive: 0,
       loot: 0,
+      age: GROWN_AGE,
+      forage: 0,
+      forageKind: "berries",
       bubble: null,
       ...o,
     };
@@ -157,14 +161,14 @@ export class Rivals {
   campSpot(w: World): { x: number; y: number } | null {
     const c = w.camp;
     const raptor = sp("raptor");
-    for (let k = 0; k < 80; k++) {
+    for (let k = 0; k < 160; k++) {
       const a = w.rng() * Math.PI * 2;
-      const r = 1500 + w.rng() * 1500;
+      const r = 1500 + w.rng() * 1700;
       const x = Math.max(260, Math.min(WORLD_W - 260, c.x + Math.cos(a) * r));
       const y = Math.max(260, Math.min(WORLD_H - 200, c.y + Math.sin(a) * r * 0.8));
       if (Math.hypot(x - c.x, y - c.y) < 1300) continue;
       if (Math.hypot(x - w.volcano.x, y - w.volcano.y) < 650) continue;
-      if (this.clans.some((o) => Math.hypot(o.x - x, o.y - y) < 900)) continue;
+      if (this.clans.some((o) => Math.hypot(o.x - x, o.y - y) < 700)) continue;
       const s = findSpawnSpot(w, raptor, x, y, 120);
       if (!s || !w.nav.passable("dino", s.x, s.y)) continue;
       if (w.tribe.enclosed(w, s.x, s.y)) continue;
@@ -174,7 +178,8 @@ export class Rivals {
   }
 
   /** A new clan settles nearby. */
-  spawnClan(w: World, n = 3 + Math.floor(w.rng() * 2), at?: { x: number; y: number }): Clan | null {
+  spawnClan(w: World, n = 4 + Math.floor(w.rng() * 2), at?: { x: number; y: number }): Clan | null {
+    if (this.clans.length >= MAX_CLANS) return null;
     const spot = at ?? this.campSpot(w);
     if (!spot) return null;
     const used = new Set(this.clans.map((c) => c.name));
@@ -185,9 +190,12 @@ export class Rivals {
       color: CLAN_COLORS[(this.nextClan - 2) % CLAN_COLORS.length],
       x: spot.x,
       y: spot.y,
-      food: 6,
+      food: 12,
       raidT: 600 + w.rng() * 360,
-      growT: 180 + w.rng() * 120,
+      growT: 110 + w.rng() * 80,
+      style: (["hide", "timber", "bone"] as const)[(this.nextClan - 2) % 3],
+      campTier: 0,
+      campWork: 0,
     };
     this.clans.push(clan);
     for (let i = 0; i < n; i++) this.addBrute(w, clan, spot.x + (w.rng() - 0.5) * 80, spot.y + 20 + (w.rng() - 0.5) * 40);
@@ -230,6 +238,7 @@ export class Rivals {
       w.toast("🎒", `Got back ${b.loot} ${kind} that ${b.name} stole!`, b.x, b.y);
       b.loot = 0;
     }
+    if (b.forage) w.addItem(b.forageKind ?? "berries", b.x, b.y, { amount: b.forage });
     w.particles.burst(P.Poof, b.x, b.y, 10, 60, { size: 12, max: 0.9, color: "rgba(200,190,170,0.9)" });
     w.addItem("bones", b.x, b.y);
     w.addItem("meat", b.x + 10, b.y + 4, { amount: 1 });
@@ -291,14 +300,14 @@ export class Rivals {
   startRaid(w: World, clan: Clan) {
     const t = w.tribe;
     if (t.raid || !clan) return false;
-    const own = this.members(clan.id).filter((b) => b.hp > 0.5 && !b.captive && !b.war);
+    const own = this.members(clan.id).filter((b) => (b.age ?? GROWN_AGE) >= GROWN_AGE && b.hp > 0.5 && !b.captive && !b.war);
     // someone always stays home to mind the camp (and any captives)
     const stay = own.length >= 4 ? 1 : 0;
     const party = own.slice(0, own.length - stay);
     let allies = 0;
     for (const o of this.clans) {
       if (o === clan || this.relation(o.id, clan.id) !== 1) continue;
-      const help = this.members(o.id).filter((b) => b.hp > 0.6 && !b.war && !b.captive).slice(0, 2);
+      const help = this.members(o.id).filter((b) => (b.age ?? GROWN_AGE) >= GROWN_AGE && b.hp > 0.6 && !b.war && !b.captive).slice(0, 2);
       party.push(...help);
       allies += help.length;
     }
@@ -326,7 +335,7 @@ export class Rivals {
 
   /** Send one Neanderthal to creep up and watch our camp from the edge. */
   sendSpy(w: World, clan: Clan) {
-    const b = this.members(clan.id).find((o) => o.hp > 0.6 && !o.raid && !o.war && !o.captive && !o.ambush && o.state !== "spy");
+    const b = this.members(clan.id).find((o) => (o.age ?? GROWN_AGE) >= GROWN_AGE && o.hp > 0.6 && !o.raid && !o.war && !o.captive && !o.ambush && o.state !== "spy");
     if (!b) return false;
     const c = w.camp;
     const a = Math.atan2(clan.y - c.y, clan.x - c.x) + (w.rng() - 0.5) * 0.8;
@@ -366,7 +375,7 @@ export class Rivals {
     const prey = w.humans.filter((h) => !h.child && !h.stranger && !h.captive && !h.under && h.level === 0 && Math.hypot(h.x - c.x, h.y - c.y) > CAMP_R(w) + 120 && Math.hypot(h.x - clan.x, h.y - clan.y) < 2200 && !w.tribe.enclosed(w, h.x, h.y));
     if (!prey.length) return false;
     const h = prey[Math.floor(w.rng() * prey.length)];
-    const party = this.members(clan.id).filter((o) => o.hp > 0.6 && !o.raid && !o.war && !o.captive && !o.ambush && o.state !== "spy").slice(0, 3);
+    const party = this.members(clan.id).filter((o) => (o.age ?? GROWN_AGE) >= GROWN_AGE && o.hp > 0.6 && !o.raid && !o.war && !o.captive && !o.ambush && o.state !== "spy").slice(0, clan.campTier ? 4 : 3);
     if (party.length < 2) return false;
     const a = w.rng() * Math.PI * 2;
     for (let i = 0; i < party.length; i++) {
@@ -434,7 +443,7 @@ export class Rivals {
       // the bigger band goes looking for a fight
       const [att, def] = na >= nb ? [a, b] : [b, a];
       this.warParty(w, att, def);
-    } else if (r === 1 && (Math.min(na, nb) <= 2 || roll < 0.18)) {
+    } else if (r === 1 && Math.min(na, nb) <= 1) {
       const [big, small] = na >= nb ? [a, b] : [b, a];
       this.merge(w, small, big);
     }
@@ -442,7 +451,7 @@ export class Rivals {
 
   /** Send warriors to beat up another clan. */
   warParty(w: World, att: Clan, def: Clan) {
-    const party = this.members(att.id).filter((b) => b.hp > 0.55 && !b.raid && !b.captive);
+    const party = this.members(att.id).filter((b) => (b.age ?? GROWN_AGE) >= GROWN_AGE && b.hp > 0.55 && !b.raid && !b.captive);
     if (party.length < 2) return false;
     for (const b of party.slice(0, Math.max(2, party.length - 1))) {
       b.war = def.id;
@@ -464,6 +473,7 @@ export class Rivals {
       h.y = into.y + 24;
     }
     into.food += from.food;
+    into.campWork = (into.campWork ?? 0) + (from.campWork ?? 0) * 0.5;
     w.toast("🤝", `The ${from.name} clan joined the ${into.name} clan: ${this.members(into.id).length} Neanderthals strong now!`, into.x, into.y);
     this.clanGone(w, from, true);
   }
@@ -479,6 +489,7 @@ export class Rivals {
     }
     if (!this.started && w.elapsed > 150 && w.humans.length) {
       this.started = true;
+      this.spawnClan(w);
       this.spawnClan(w);
       this.spawnClan(w);
     }
@@ -520,20 +531,34 @@ export class Rivals {
   private slowTick(w: World, dt: number) {
     const t = w.tribe;
     for (const clan of [...this.clans]) {
-      const n = this.members(clan.id).length;
+      const members = this.members(clan.id);
+      const n = members.length;
       if (!n) {
         this.clanGone(w, clan);
         continue;
       }
       clan.food = Math.max(0, clan.food - n * 0.004 * dt);
-      // a fed clan grows (captives help it grow faster)
+      for (const b of members) b.age = Math.min(GROWN_AGE, (b.age ?? GROWN_AGE) + (clan.food > 0 ? dt : dt * 0.4));
+      // Adults at home improve their own camp. A stocked camp can house more children.
+      const workers = members.filter((b) => (b.age ?? GROWN_AGE) >= GROWN_AGE && !b.raid && !b.war && !b.ambush && Math.hypot(b.x - clan.x, b.y - clan.y) < 180).length;
+      if (workers && clan.food >= 3 && (clan.campTier ?? 0) < 3) {
+        clan.campWork = (clan.campWork ?? 0) + workers * dt * 0.025;
+        if (clan.campWork >= 12 + (clan.campTier ?? 0) * 6) {
+          clan.campWork = 0;
+          clan.campTier = (clan.campTier ?? 0) + 1;
+          clan.food -= 2;
+          w.toast("🏕️", `The ${clan.name} clan expanded its ${clan.style ?? "hide"} camp.`, clan.x, clan.y);
+        }
+      }
+      // Children are born only if the clan can feed and house them.
       clan.growT -= dt * (1 + this.captives(w, clan.id).length * 0.5);
       if (clan.growT <= 0) {
-        clan.growT = 200 + w.rng() * 120;
-        if (clan.food >= 5 && n < MAX_BRUTES) {
-          clan.food -= 5;
-          const b = this.addBrute(w, clan, clan.x + (w.rng() - 0.5) * 40, clan.y + 20);
-          say(b, "Grr!");
+        clan.growT = 115 + w.rng() * 75;
+        if (clan.food >= 4 && n < Math.min(MAX_BRUTES, 6 + (clan.campTier ?? 0) * 3)) {
+          clan.food -= 3;
+          const b = this.addBrute(w, clan, clan.x + (w.rng() - 0.5) * 40, clan.y + 20, { age: 0 });
+          say(b, "Baby!", 2);
+          w.toast("👶", `A child was born to the ${clan.name} clan.`, clan.x, clan.y);
         }
       }
       // spies come to watch us; a clan that's learned how sets ambushes for our people out in the wild
@@ -544,7 +569,7 @@ export class Rivals {
           clan.spyT = 200 + w.rng() * 160;
           this.sendSpy(w, clan);
         }
-        if ((clan.smarts ?? 0) >= 1) {
+        if ((clan.smarts ?? 0) >= 1 || (clan.campTier ?? 0) >= 2) {
           clan.ambushT = (clan.ambushT ?? 120) - dt;
           if (clan.ambushT <= 0) {
             clan.ambushT = 180 + w.rng() * 160;
@@ -555,7 +580,7 @@ export class Rivals {
       // raids on us: hungry clans come sooner; nobody raids a calm world
       const ready = t.danger !== "calm" && w.elapsed > 480 && (w.camp.learned.has("spear") || t.level >= 1 || w.elapsed > 900);
       if (ready && !t.raid) {
-        clan.raidT -= dt * (t.danger === "wild" ? 1.7 : 1) * (clan.food < 2 ? 1.5 : 1);
+        clan.raidT -= dt * (t.danger === "wild" ? 1.7 : 1) * (clan.food < 2 ? 1.5 : 1) * (1 + (clan.campTier ?? 0) * 0.16);
         if (clan.raidT <= 0) {
           clan.raidT = 600 + w.rng() * 400;
           this.startRaid(w, clan);
@@ -582,10 +607,11 @@ export class Rivals {
     // new bands wander in now and then
     this.arriveT -= dt;
     if (this.arriveT <= 0) {
-      this.arriveT = 420 + w.rng() * 300;
-      if (this.clans.length < 3) {
-        const c = this.spawnClan(w, 3);
+      this.arriveT = 230 + w.rng() * 170;
+      if (this.clans.length < MAX_CLANS) {
+        const c = this.spawnClan(w);
         if (c) w.toast("🪓", `A new band of Neanderthals, the ${c.name} clan, has moved in nearby.`, c.x, c.y);
+        else this.arriveT = 60; // try another part of the map soon
       }
     }
   }
@@ -596,6 +622,11 @@ export class Rivals {
     b.think = 0.5 + w.rng() * 0.6;
     const clan = this.clan(b.clan);
     if (!clan) return;
+    if ((b.age ?? GROWN_AGE) < GROWN_AGE) {
+      if (Math.hypot(b.x - clan.x, b.y - clan.y) > 65) setB(b, "home", clan.x, clan.y + 20);
+      else if (b.state !== "idle" && b.state !== "sleep") setB(b, "idle", b.x, b.y);
+      return;
+    }
     if (b.captive) return; // carrying someone home: nothing else matters
     if (b.state === "bash" || b.state === "flee") return;
     const raid = w.tribe.raid && w.tribe.raid.by === "brute" && w.tribe.raid.ids.includes(b.id) ? w.tribe.raid : null;
@@ -605,7 +636,10 @@ export class Rivals {
       if (w.rng() < 0.15) say(b, pick(w.rng, ["UGH!", "Smash!", "Grr!"]), 1.5);
       return;
     }
-    if (b.loot && b.state !== "home") return this.goHome(w, b);
+    if (b.loot || b.forage) {
+      if (b.state !== "home") this.goHome(w, b);
+      return;
+    }
     if (b.hp < 0.25) return this.goHome(w, b, "flee");
     // a spy watching our camp: once they've seen enough, run home and tell the clan
     if (b.state === "spy") {
@@ -697,7 +731,14 @@ export class Rivals {
       return;
     }
     if (b.state === "sleep") setB(b, "idle", b.x, b.y);
-    if (clan.food < 8 && b.state !== "hunt" && w.rng() < 0.3) {
+    if (b.state === "forage" && (w.plants.some((p) => p.id === b.targetId && !p.stump && (p.fruit > 0 || p.food > 0.25)) || w.items.some((it) => it.id === b.targetId && it.amount > 0))) return;
+    if (clan.food < 12 + this.members(clan.id).length && b.state !== "hunt" && w.rng() < 0.45) {
+      const food = this.forageTarget(w, clan, b);
+      if (food && (w.rng() < 0.7 || !this.preyDino(w, clan))) {
+        b.targetId = food.id;
+        setB(b, "forage", food.x, food.y);
+        return;
+      }
       const prey = this.preyDino(w, clan);
       if (prey) {
         b.targetId = prey.id;
@@ -776,6 +817,20 @@ export class Rivals {
     return best;
   }
 
+  private forageTarget(w: World, clan: Clan, b: Brute): { id: number; x: number; y: number } | null {
+    let best: { id: number; x: number; y: number } | null = null;
+    let distance = 500;
+    const consider = (o: { id: number; x: number; y: number }) => {
+      if (Math.hypot(o.x - clan.x, o.y - clan.y) > 500) return;
+      if (this.brutes.some((other) => other !== b && other.state === "forage" && other.targetId === o.id)) return;
+      const d = Math.hypot(o.x - b.x, o.y - b.y);
+      if (d < distance && w.nav.passable("dino", o.x, o.y)) { distance = d; best = o; }
+    };
+    for (const it of w.items) if (!it.claimed && it.amount > 0 && ["berries", "fruit", "meat", "fish"].includes(it.kind)) consider(it);
+    for (const p of w.plants) if (!p.stump && p.burnt < 0.3 && ((p.kind === "fruit" && p.fruit > 0) || (p.kind === "bush" && p.food > 0.35))) consider(p);
+    return best;
+  }
+
   /* ------------------------------ bodies ------------------------------ */
 
   private actBrute(w: World, b: Brute, dt: number) {
@@ -797,6 +852,10 @@ export class Rivals {
           if (b.loot && clan) {
             clan.food += b.loot;
             b.loot = 0;
+          }
+          if (b.forage && clan) {
+            clan.food += b.forage;
+            b.forage = 0;
           }
           setB(b, "idle", b.x, b.y);
         }
@@ -866,12 +925,38 @@ export class Rivals {
           w.sfx("whoosh", b.x, b.y, 0.4, 0.7);
           hitDino(w, d, 40, b.x, b.y);
           if (d.health <= 0 && clan) {
-            clan.food += 4;
+            b.forage = 4;
+            b.forageKind = "meat";
             say(b, "MEAT!", 2);
-            setB(b, "idle", b.x, b.y);
+            this.goHome(w, b);
           }
         }
         if (b.stateT > 40) setB(b, "idle", b.x, b.y);
+        return;
+      }
+      case "forage": {
+        if (!clan) { setB(b, "idle", b.x, b.y); return; }
+        const item = w.items.find((it) => it.id === b.targetId && it.amount > 0 && !it.claimed);
+        const plant = w.plants.find((p) => p.id === b.targetId && !p.stump);
+        const target = item ?? plant;
+        if (!target || (plant && plant.fruit <= 0 && plant.food <= 0.25)) { setB(b, "idle", b.x, b.y); return; }
+        b.tx = target.x;
+        b.ty = target.y;
+        if (Math.hypot(b.x - target.x, b.y - target.y) > 24) moveBrute(w, b, dt, SPEED * 0.8);
+        else {
+          if (item) {
+            b.forage = Math.min(2, item.amount);
+            b.forageKind = item.kind as "berries" | "fruit" | "meat" | "fish";
+            item.amount -= b.forage;
+            if (item.amount <= 0) w.removeItem(item);
+          } else if (plant) {
+            if (plant.kind === "fruit" && plant.fruit > 0) { plant.fruit--; b.forage = 2; b.forageKind = "fruit"; }
+            else { plant.food = Math.max(0, plant.food - 0.35); b.forage = 1; b.forageKind = "berries"; }
+            plant.shake = 0.5;
+          }
+          say(b, "Food!", 1.3);
+          this.goHome(w, b);
+        }
         return;
       }
       case "fight": {
@@ -1071,8 +1156,9 @@ export class Rivals {
     return {
       started: this.started,
       next: this.nextClan,
-      clans: this.clans.map((c) => ({ id: c.id, name: c.name, color: c.color, x: r(c.x), y: r(c.y), food: Math.round(c.food * 10) / 10, raidT: r(c.raidT), growT: r(c.growT), smarts: c.smarts ?? 0, intel: c.intel ?? 0 })),
-      brutes: this.brutes.map((b) => ({ clan: b.clan, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon })),
+      arriveT: this.arriveT,
+      clans: this.clans.map((c) => ({ id: c.id, name: c.name, color: c.color, x: r(c.x), y: r(c.y), food: Math.round(c.food * 10) / 10, raidT: r(c.raidT), growT: r(c.growT), smarts: c.smarts ?? 0, intel: c.intel ?? 0, style: c.style, campTier: c.campTier ?? 0, campWork: c.campWork ?? 0 })),
+      brutes: this.brutes.map((b) => ({ clan: b.clan, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries" })),
       rel: Array.from(this.rel.entries()).filter(([, v]) => v !== 0),
     };
   }
@@ -1082,10 +1168,11 @@ export class Rivals {
     if (!d) return;
     this.started = !!d.started;
     this.nextClan = d.next ?? 1;
-    for (const c of d.clans ?? []) this.clans.push({ ...c });
+    this.arriveT = d.arriveT ?? 300;
+    for (const c of d.clans ?? []) this.clans.push({ ...c, style: c.style ?? (["hide", "timber", "bone"] as const)[(c.id - 1) % 3], campTier: c.campTier ?? 0, campWork: c.campWork ?? 0 });
     for (const b of d.brutes ?? []) {
       const clan = this.clan(b.clan);
-      if (clan) this.addBrute(w, clan, b.x, b.y, { name: b.name, hp: b.hp, weapon: b.weapon });
+      if (clan) this.addBrute(w, clan, b.x, b.y, { name: b.name, hp: b.hp, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries" });
     }
     for (const [k, v] of d.rel ?? []) this.rel.set(k, v);
     // anyone mid-carry when the game was saved ends up at the camp

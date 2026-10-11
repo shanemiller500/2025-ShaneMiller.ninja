@@ -10,7 +10,7 @@ import { sizeOf } from "./dinos";
 import { P } from "./particles";
 import { clamp, pick } from "./rng";
 import { LM, groundSpeed } from "./terrain";
-import { MAP_W, T, TILE, type Dino, type Dragon, type Human, type HumanState, type Plant, type Resource } from "./types";
+import { T, TILE, type Dino, type Dragon, type Human, type HumanState, type Plant, type Resource } from "./types";
 import type { World } from "./world";
 import { TALL } from "./plants";
 import { roleAct, roleThink } from "./tribe";
@@ -130,7 +130,11 @@ export function moveHuman(w: World, h: Human, dt: number) {
     h.pathI = 0;
     h.path = null;
     const goalTile = tileOf(h.tx, h.ty);
-    const easy = h.level === 0 && wantLevel === 0 && w.nav.ok(navClass(h), goalTile) && w.nav.lineClear(navClass(h), h.x, h.y, h.tx, h.ty);
+    const startTile = tileOf(h.x, h.y);
+    // A worn tile at either end alone should not funnel every errand onto one trail.
+    const markedRoute = Math.hypot(h.tx - h.x, h.ty - h.y) > TILE * 2
+      && w.trails.wear[startTile] >= 5 && w.trails.wear[goalTile] >= 5;
+    const easy = !markedRoute && h.level === 0 && wantLevel === 0 && w.nav.ok(navClass(h), goalTile) && w.nav.lineClear(navClass(h), h.x, h.y, h.tx, h.ty);
     if (!easy) {
       const path = w.nav.find(w, navClass(h), h.x, h.y, h.level, h.tx, h.ty, wantLevel);
       if (path === undefined) h.pathKey = 0; // out of budget: ask again next frame
@@ -156,6 +160,25 @@ export function moveHuman(w: World, h: Human, dt: number) {
       // goal is inside something solid (a tree, a wall to fix): stop at the end of the path
       wx = np.x;
       wy = np.y;
+    }
+  }
+  // Give walkers their own line along an open trail. Keep the tile centre at
+  // gates, bridges and other tight turns so the nav path remains reachable.
+  if (!h.level && !h.riding && h.path && h.pathI > 0 && h.pathI < h.path.length - 1 && wl === 0) {
+    const previous = nodePos(h.path[h.pathI - 1]);
+    const vx = wx - previous.x;
+    const vy = wy - previous.y;
+    const length = Math.hypot(vx, vy);
+    const lane = ((h.id * 3) % 5 - 2) * 6;
+    if (length > 1 && lane !== 0) {
+      const lx = wx - vy / length * lane;
+      const ly = wy + vx / length * lane;
+      const midX = (h.x + lx) * 0.5;
+      const midY = (h.y + ly) * 0.5;
+      if (walkOk(w, h, lx, ly) && walkOk(w, h, midX, midY)) {
+        wx = lx;
+        wy = ly;
+      }
     }
   }
   // goal inside something solid (a wall to fix, a doorway): close enough counts
@@ -200,12 +223,37 @@ export function moveHuman(w: World, h: Human, dt: number) {
       }
     }
   }
+  // A shared destination is common, but people need not stand inside one
+  // another on the way there. Choose a clear shoulder when someone is ahead.
+  if (!h.level && !mount && d > 24 && !w.nav.isGate(tileOf(h.x, h.y)) && !w.nav.isBridge(tileOf(h.x, h.y))) {
+    const nearby = w.humans.filter((other) => other !== h && !other.under && other.state !== "hide" && other.state !== "sleep" && other.state !== "down" && other.level === 0 && Math.hypot(other.x - h.x, other.y - h.y) < 38);
+    if (nearby.length) {
+      const preferred = h.id % 2 ? 1 : -1;
+      let bestAngle = a;
+      let bestScore = Infinity;
+      for (const off of [0, preferred * 0.45, -preferred * 0.45, preferred * 0.8, -preferred * 0.8]) {
+        const angle = a + off;
+        const px = h.x + Math.cos(angle) * 18;
+        const py = h.y + Math.sin(angle) * 18;
+        if (!walkOk(w, h, px, py) || w.nav.isGate(tileOf(px, py)) || w.nav.isBridge(tileOf(px, py))) continue;
+        let score = Math.abs(off) * 0.32 + (off && Math.sign(off) !== preferred ? 0.02 : 0);
+        for (const other of nearby) {
+          const gap = Math.hypot(px - (other.x + other.vx * 0.15), py - (other.y + other.vy * 0.15));
+          if (gap < 22) score += (22 - gap) / 9;
+        }
+        if (score < bestScore) {
+          bestScore = score;
+          bestAngle = angle;
+        }
+      }
+      a = bestAngle;
+    }
+  }
   const s = Math.min(speed, d / dt);
   h.vx = Math.cos(a) * s;
   h.vy = Math.sin(a) * s;
   const nx = h.x + h.vx * dt;
   const ny = h.y + h.vy * dt;
-  const fromTile = !h.level && !mount ? tileOf(h.x, h.y) : -1;
   // up on the walkway the path itself keeps us safe; on the ground, don't walk into walls
   const climbing = wl === 1 || h.level === 1;
   if (climbing || walkOk(w, h, nx, ny) || !walkOk(w, h, h.x, h.y)) {
@@ -223,10 +271,6 @@ export function moveHuman(w: World, h: Human, dt: number) {
   }
   if (wl === 1 && d < 18) h.level = 1;
   else if (wl === 0 && h.level === 1 && h.path && h.pathI < h.path.length && d < 18) h.level = 0;
-  if (fromTile >= 0 && !h.level && tileOf(h.x, h.y) !== fromTile) {
-    w.trails.mark(w, (fromTile % MAP_W) * TILE + TILE / 2, Math.floor(fromTile / MAP_W) * TILE + TILE / 2);
-    w.trails.mark(w, h.x, h.y);
-  }
   if (Math.abs(h.vx) > 3) h.dir = h.vx > 0 ? 1 : -1;
   h.anim += (s * dt) / 7;
   if (mount) {
@@ -277,7 +321,12 @@ function nearPlant(w: World, x: number, y: number, r: number, ok: (p: Plant) => 
 }
 
 /** Find somewhere to collect a resource: searched around the camp unless another centre is given. */
-export function sourceFor(w: World, h: Human, r: Resource, cx = w.camp.x, cy = w.camp.y): { x: number; y: number; id: number } | null {
+export function homeArea(w: World, h: Human): { x: number; y: number } {
+  const home = h.home ? w.shelters.find((s) => s.id === h.home && shelterDone(s)) : null;
+  return home ? { x: home.x, y: home.y } : { x: w.camp.x, y: w.camp.y };
+}
+
+export function sourceFor(w: World, h: Human, r: Resource, cx = homeArea(w, h).x, cy = homeArea(w, h).y): { x: number; y: number; id: number } | null {
   switch (r) {
     case "stick":
     case "wood": {
@@ -424,6 +473,7 @@ function think(w: World, h: Human) {
   const task = w.tasks.get(h.taskId);
   const fightTask = !!task && (task.kind === "hunt" || task.kind === "guard" || task.kind === "defend" || task.kind === "operate");
   const fighter = !!weapon && (role === "guard" || role === "hunter" || !!h.order || fightTask || h.state === "operate");
+  const battleRider = !!h.riding && role === "guard" && w.flags.has("rallyDinos");
 
   // raid or a dragon overhead! non-fighters (and kids) run home…
   const dragon = dragonNear(w, h);
@@ -441,7 +491,9 @@ function think(w: World, h: Human) {
   if ((tribe.raid || dragonAttack) && !safe && (!fighter || h.child) && !(task && task.kind === "douse")) {
     const shelter = shelterSpot(w, h);
     const bridge = !dragonAttack && !h.riding ? tribe.coveredBridge(w, h) : null;
-    const s = bridge && Math.hypot(h.x - bridge.x, h.y - bridge.y) < Math.hypot(h.x - shelter.x, h.y - shelter.y) + 80 ? bridge : shelter;
+    const refuge = !dragonAttack && !h.riding ? tribe.walledRefuge(w, h) : null;
+    const s = refuge && Math.hypot(h.x - refuge.x, h.y - refuge.y) < Math.hypot(h.x - shelter.x, h.y - shelter.y) + 250 ? refuge
+      : bridge && Math.hypot(h.x - bridge.x, h.y - bridge.y) < Math.hypot(h.x - shelter.x, h.y - shelter.y) + 80 ? bridge : shelter;
     const atBridge = s === bridge && Math.hypot(h.x - s.x, h.y - s.y) < 14;
     if (atBridge && !h.child && weapon && !weapon.melee) {
       const target = w.dinos.find((d) => d.raider && Math.hypot(d.x - h.x, d.y - h.y) < weapon.range)
@@ -452,11 +504,11 @@ function think(w: World, h: Human) {
         return;
       }
     }
-    if (h.state === "hide" && (atBridge || !w.colony.bridgeAt(Math.floor(h.x / TILE), Math.floor(h.y / TILE)))) return;
+    if (h.state === "hide" && Math.hypot(h.x - s.x, h.y - s.y) < 14) return;
     if (h.state === "operate") leaveScorpion(w, h);
     if (Math.hypot(h.x - s.x, h.y - s.y) < 14) go(h, "hide", h.x, h.y);
     else {
-      if (h.state !== "flee") say(h, s === bridge ? "To the covered bridge!" : pick(w.rng, dragon && !tribe.raid ? ["DRAGON!", "Get inside!", "Fire from the sky!"] : h.child ? ["Mama!", "Hide!", "Eek!"] : ["Raid!!", "Hide!", "To the cave!"]));
+      if (h.state !== "flee") say(h, s === refuge ? "Behind the walls!" : s === bridge ? "To the covered bridge!" : pick(w.rng, dragon && !tribe.raid ? ["DRAGON!", "Get inside!", "Fire from the sky!"] : h.child ? ["Mama!", "Hide!", "Eek!"] : ["Raid!!", "Hide!", "To the cave!"]));
       if (h.carry && h.carry !== "fish" && h.carry !== "water") {
         // drop what you're carrying and run
         h.carry = null;
@@ -470,7 +522,7 @@ function think(w: World, h: Human) {
 
   // a Neanderthal coming at me: fight back if armed, otherwise run for it
   const brute = h.child ? null : w.rivals.brutes.find((b) => b.state === "fight" && b.targetId === h.id && Math.hypot(b.x - h.x, b.y - h.y) < 160);
-  if (brute && h.level === 0 && h.state !== "aim" && h.state !== "hunt" && h.state !== "operate") {
+  if (brute && !battleRider && h.level === 0 && h.state !== "aim" && h.state !== "hunt" && h.state !== "operate") {
     if (weapon && h.hp > 0.35) {
       h.targetId = brute.id;
       go(h, "hunt", brute.x, brute.y);
@@ -493,17 +545,17 @@ function think(w: World, h: Human) {
   // 1. danger → fight (if armed + on duty) or run for the cave. Scorpion crews head for their Scorpion.
   const crewing = w.colony.scorpions.some((s) => s.crew === h.id);
   const threat = crewing ? null : dangerNear(w, h);
-  if (threat && fighter && Math.hypot(threat.x - h.x, threat.y - h.y) > 50) {
+  if (threat && fighter && !battleRider && Math.hypot(threat.x - h.x, threat.y - h.y) > 50) {
     h.targetId = threat.id;
     go(h, "aim", h.x, h.y);
     return;
   }
-  if (!crewing && dragon && fighter && weapon && !weapon.melee && dragon.z < 220) {
+  if (!crewing && dragon && fighter && !battleRider && weapon && !weapon.melee && dragon.z < 220) {
     h.targetId = dragon.id;
     go(h, "aim", h.x, h.y);
     return;
   }
-  if (threat) {
+  if (threat && !battleRider) {
     const def = sp(threat.species);
     const brave = !h.child && camp.learned.has("spear") && Math.hypot(h.x - camp.x, h.y - camp.y) < 220 && def.size < 110;
     const hunting = threat.targetId === h.id || ((threat.state === "chase" || threat.state === "stalk") && Math.hypot(threat.x - h.x, threat.y - h.y) < 140);
@@ -594,16 +646,18 @@ function think(w: World, h: Human) {
   }
 
   // busy with something that finishes on its own
-  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate") return;
+  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate") return;
   if (h.state === "hunt" || h.state === "aim" || h.state === "haul" || h.state === "cook" || h.state === "farm" || h.state === "repair") return;
   if (h.state === "carry" || h.state === "walk" || h.state === "explore") {
-    if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6) return;
+    if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6 && !(h.riding && w.flags.has("rallyDinos") && role === "guard" && !h.taskId)) return;
   }
 
   // 5. hungry → eat from the stockpile
   if (h.hunger > (task ? 0.85 : 0.6) && tribe.foodTotal(w) + (h.hunger > 0.9 ? camp.stock.meat : 0) > 0) {
-    if (Math.hypot(h.x - camp.pileX, h.y - camp.pileY) < 20) go(h, "eat", h.x, h.y);
-    else go(h, "walk", camp.pileX - 14, camp.pileY + 8);
+    const area = homeArea(w, h);
+    const meal = w.colony.dropOff(w, area.x, area.y, "cooked");
+    if (Math.hypot(h.x - meal.x, h.y - meal.y) < 20) go(h, "eat", h.x, h.y);
+    else go(h, "walk", meal.x, meal.y);
     return;
   }
 
@@ -633,7 +687,8 @@ function think(w: World, h: Human) {
   }
 
   // 4. evening by the fire (except whoever is on duty)
-  const fire = w.campfires.find((f) => f.lit);
+  const area = homeArea(w, h);
+  const fire = w.campfires.filter((f) => f.lit).sort((a, b) => Math.hypot(a.x - area.x, a.y - area.y) - Math.hypot(b.x - area.x, b.y - area.y))[0];
   const offDuty = role === "gatherer" || h.child;
   if (fire && offDuty && !h.order && (w.daylight < 0.45 || (h.child && w.rng() < 0.2))) {
     const a = (h.id * 2.4) % (Math.PI * 2);
@@ -647,7 +702,7 @@ function think(w: World, h: Human) {
   if (h.child) return childThink(w, h);
 
   // riders with nothing to do take their mount home to rest
-  if (h.riding && !h.taskId && role !== "gatherer" && role !== "builder" && role !== "hunter") {
+  if (h.riding && !h.taskId && role !== "gatherer" && role !== "builder" && role !== "hunter" && !(role === "guard" && w.flags.has("rallyDinos"))) {
     dismountHome(w, h);
     return;
   }
@@ -728,7 +783,8 @@ function think(w: World, h: Human) {
     go(h, "explore", lm.x * TILE + (w.rng() - 0.5) * 200, lm.y * TILE + 120 + (w.rng() - 0.5) * 100);
     return;
   }
-  go(h, "walk", camp.x + (w.rng() - 0.5) * 260, camp.y + (w.rng() - 0.5) * 140);
+  const leisureHome = homeArea(w, h);
+  go(h, "walk", leisureHome.x + (w.rng() - 0.5) * 260, leisureHome.y + (w.rng() - 0.5) * 140);
 }
 
 function arrive(w: World, h: Human) {
@@ -942,7 +998,8 @@ export function updateHuman(w: World, h: Human, dt: number) {
   // stand on the walkway / tower platform, otherwise on the ground
   if (h.state !== "celebrate") {
     const onTower = h.level === 1 && w.nav.isTower(tileOf(h.x, h.y));
-    const z = h.riding ? 16 : h.level === 1 ? (onTower ? TOWER_Z : WALK_Z) : 0;
+    const mount = h.riding ? w.dinoById(h.riding) : null;
+    const z = mount ? Math.max(18, sizeOf(mount) * 0.38) : h.level === 1 ? (onTower ? TOWER_Z : WALK_Z) : 0;
     h.z += (z - h.z) * Math.min(1, dt * 10);
   }
   if (h.riding) {
@@ -1103,6 +1160,29 @@ export function updateHuman(w: World, h: Human, dt: number) {
           go(h, "idle", h.x, h.y);
           h.think = 0;
         }
+      }
+      break;
+    }
+    case "train": {
+      const d = w.dinoById(h.targetId);
+      if (!d || !d.owner || Math.hypot(d.x - h.x, d.y - h.y) > sizeOf(d) * 0.5 + 36) {
+        go(h, "idle", h.x, h.y);
+        h.think = 0;
+        break;
+      }
+      d.vx = d.vy = 0;
+      if (d.state !== "idle") d.state = "idle";
+      d.warTraining = Math.min(1, (d.warTraining ?? 0) + dt / (w.civ.has("cavalry") ? 30 : 45));
+      const armor = d.warTraining >= 0.8 ? 2 : d.warTraining >= 0.35 ? 1 : 0;
+      if (armor > (d.warArmor ?? 0)) {
+        d.warArmor = armor;
+        w.toast("🛡️", `${d.name} grew ${armor === 2 ? "strong battle plates" : "protective plates"} from training!`, d.x, d.y);
+      }
+      if (w.rng() < dt * 0.8) w.particles.spawn(P.Heart, d.x, d.y, { z: sizeOf(d) * 0.5, vz: 12, size: 4, max: 1 });
+      if (d.warTraining >= 1) {
+        say(h, `${d.name} is ready for battle!`);
+        go(h, "idle", h.x, h.y);
+        h.think = 0;
       }
       break;
     }

@@ -33,6 +33,11 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
   // spies + ambushers crouch low in the grass, hard to spot
   const hiding = st === "lurk" || (st === "spy" && Math.hypot(b.vx, b.vy) < 2);
   c.save();
+  if ((b.age ?? 180) < 180) {
+    const scale = 0.45 + (b.age ?? 0) / 180 * 0.5;
+    c.scale(scale, scale);
+    shield = false;
+  }
   if (hiding) {
     c.globalAlpha = 0.6;
     c.scale(1, 0.8);
@@ -407,24 +412,27 @@ export function drawBruteMissile(c: CanvasRenderingContext2D, kind: "spear" | "r
 
 /** A Neanderthal camp: trampled dirt, hide lean-tos, a fire pit, bones and a skull pole. */
 export function drawClanCamp(c: CanvasRenderingContext2D, clan: Clan, t: number, night: boolean, size: number) {
+  const tier = clan.campTier ?? 0;
   // trampled ground
   c.fillStyle = "rgba(120,92,60,0.38)";
   c.beginPath();
-  c.ellipse(0, 6, 130, 62, 0, 0, Math.PI * 2);
+  c.ellipse(0, 6, 130 + tier * 20, 62 + tier * 8, 0, 0, Math.PI * 2);
   c.fill();
   c.fillStyle = "rgba(95,72,48,0.25)";
   c.beginPath();
   c.ellipse(-20, 14, 80, 36, 0.1, 0, Math.PI * 2);
   c.fill();
   // lean-tos (one per couple of members, at least two)
-  const huts = Math.max(2, Math.min(4, Math.ceil(size / 2)));
-  const spots: [number, number, number][] = [[-78, -18, 1], [70, -26, -1], [-20, -46, 1], [96, 24, -1]];
+  const huts = Math.max(2, Math.min(8, 2 + tier * 2, Math.ceil(size / 2) + tier));
+  const spots: [number, number, number][] = [[-78, -18, 1], [70, -26, -1], [-20, -46, 1], [96, 24, -1], [-112, 25, 1], [24, -61, -1], [143, -12, -1], [-145, -12, 1]];
   for (let i = 0; i < huts; i++) {
     const [x, y, f] = spots[i];
     c.save();
     c.translate(x, y);
     c.scale(f, 1);
-    leanTo(c, clan.color, i);
+    if (clan.style === "timber") timberHut(c, clan.color, i);
+    else if (clan.style === "bone") boneLodge(c, clan.color, i);
+    else leanTo(c, clan.color, i);
     c.restore();
   }
   // bone pile
@@ -450,6 +458,18 @@ export function drawClanCamp(c: CanvasRenderingContext2D, clan: Clan, t: number,
     c.restore();
   }
   c.restore();
+  // A raised rack makes the gathered food and the camp's growth visible.
+  if (tier > 0 || clan.food > 8) {
+    c.strokeStyle = "#38291b";
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(-112, 35); c.lineTo(-112, 13); c.lineTo(-72, 13); c.lineTo(-72, 35);
+    c.stroke();
+    for (let i = 0; i < Math.min(5, Math.ceil(clan.food / 4)); i++) {
+      c.fillStyle = i % 2 ? "#9e5c38" : "#a97745";
+      c.beginPath(); c.ellipse(-107 + i * 8, 15, 3.5, 5, 0, 0, Math.PI * 2); c.fill();
+    }
+  }
   // skull pole with the clan rag
   c.save();
   c.translate(44, -6);
@@ -524,6 +544,27 @@ export function drawClanCamp(c: CanvasRenderingContext2D, clan: Clan, t: number,
   drawFlame(c, -2, 0, 0.75, t + clan.id);
   drawFlame(c, 3, -1, 0.6, t * 1.3 + clan.id);
   c.restore();
+}
+
+function timberHut(c: CanvasRenderingContext2D, color: string, seed: number) {
+  c.fillStyle = "#5e422b";
+  c.fillRect(-23, -20, 44, 22);
+  c.strokeStyle = "#382719";
+  c.lineWidth = 2;
+  for (let y = -16; y < 3; y += 6) { c.beginPath(); c.moveTo(-23, y); c.lineTo(21, y); c.stroke(); }
+  c.fillStyle = seed % 2 ? "#775638" : "#886340";
+  c.beginPath(); c.moveTo(-30, -19); c.lineTo(0, -43); c.lineTo(27, -19); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = "#26190e"; c.fillRect(-6, -13, 13, 15);
+  c.fillStyle = color; c.fillRect(10, -30, 8, 5);
+}
+
+function boneLodge(c: CanvasRenderingContext2D, color: string, seed: number) {
+  c.fillStyle = seed % 2 ? "#78604b" : "#92745a";
+  c.beginPath(); c.moveTo(-26, 2); c.quadraticCurveTo(-20, -26, 0, -35); c.quadraticCurveTo(23, -25, 27, 2); c.closePath(); c.fill();
+  c.strokeStyle = "#e0d5b9"; c.lineWidth = 4;
+  c.beginPath(); c.moveTo(-24, 1); c.quadraticCurveTo(-19, -28, 0, -38); c.quadraticCurveTo(21, -27, 25, 1); c.stroke();
+  c.fillStyle = "#2b1c13"; c.beginPath(); c.ellipse(0, -5, 8, 10, 0, Math.PI, 0); c.fill();
+  c.fillStyle = color; c.beginPath(); c.arc(0, -32, 4, 0, Math.PI * 2); c.fill();
 }
 
 function leanTo(c: CanvasRenderingContext2D, color: string, seed: number) {

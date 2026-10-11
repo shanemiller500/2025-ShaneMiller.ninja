@@ -108,6 +108,26 @@ export class Population {
     const homes = w.shelters.filter((s) => shelterDone(s)).sort((a, b) => b.tier - a.tier);
     const free = new Map(homes.map((s) => [s.id, HOUSING[s.tier].cap + (w.civ.has("greatHalls") ? 2 : 0)]));
     const people = w.humans.filter((h) => !h.stranger);
+    // Once a distant settlement has homes, seed it with residents instead of
+    // leaving everyone assigned to the original ring around the cave.
+    if (homes.some((s) => Math.hypot(s.x - w.camp.x, s.y - w.camp.y) > 380) && people.length >= homes.length) {
+      const groups = new Map<number, Human[]>();
+      for (const h of people) groups.set(h.family || -h.id, [...(groups.get(h.family || -h.id) ?? []), h]);
+      for (const group of Array.from(groups.values())) {
+        for (const h of group) {
+          const familyHome = group.find((o) => o !== h && o.home && o.home === group[0].home && (free.get(o.home) ?? 0) > 0)?.home;
+          const chosen = familyHome ? homes.find((s) => s.id === familyHome) : homes.filter((s) => (free.get(s.id) ?? 0) > 0)
+            .sort((a, b) => {
+              const ca = HOUSING[a.tier].cap + (w.civ.has("greatHalls") ? 2 : 0);
+              const cb = HOUSING[b.tier].cap + (w.civ.has("greatHalls") ? 2 : 0);
+              return (ca - (free.get(a.id) ?? 0)) / ca - (cb - (free.get(b.id) ?? 0)) / cb || Number(b.id === h.home) - Number(a.id === h.home) || a.id - b.id;
+            })[0];
+          h.home = chosen?.id ?? 0;
+          if (chosen) free.set(chosen.id, (free.get(chosen.id) ?? 0) - 1);
+        }
+      }
+      return;
+    }
     // keep people where they are if there's still room
     for (const h of people) {
       const left = free.get(h.home);

@@ -15,6 +15,40 @@ import type { World } from "./world";
 
 export type SiteKind = "wall" | "tower" | "shelter" | "upgrade" | "building" | "scorpion";
 
+export type UpgradeKind = "all" | "homes" | "towers" | "scorpions" | "walls";
+
+/** Queue one available tier per structure; builders collect materials afterward. */
+export function queueUpgrades(w: World, kind: UpgradeKind = "all") {
+  const counts = { homes: 0, towers: 0, scorpions: 0, walls: 0 };
+  if (kind === "all" || kind === "homes") for (const s of w.shelters) {
+    if (!shelterDone(s) || s.up || !HOUSING[s.tier + 1] || (HOUSING[s.tier + 1].polygon && !w.civ.polygonAge)) continue;
+    s.up = true;
+    s.upHave = {};
+    counts.homes++;
+  }
+  if (kind === "all" || kind === "towers") for (const t of w.tribe.towers) {
+    if (w.tribe.upgradeTower(w, t)) counts.towers++;
+  }
+  if (kind === "all" || kind === "scorpions") for (const s of w.colony.scorpions) {
+    const next = SCORPION_TIERS[s.tier];
+    if (!next || s.up || s.built < 1 || (next.at === "blacksmith" && !w.colony.finished("blacksmith"))) continue;
+    s.up = true;
+    s.have = {};
+    counts.scorpions++;
+  }
+  if (kind === "all" || kind === "walls") for (const wall of w.tribe.walls) {
+    if (wall.built < 1 || wall.hp <= 0 || wall.upgrade) continue;
+    const next = wall.kind === "palisade" && w.camp.learned.has("stonewall") ? "stone" : wall.kind === "stone" && w.civ.polygonAge ? "polygon" : null;
+    if (!next) continue;
+    wall.upgrade = true;
+    wall.upTo = next;
+    wall.have = 0;
+    counts.walls++;
+  }
+  if (counts.walls) w.tribe.version++;
+  return counts;
+}
+
 export interface Site {
   kind: SiteKind;
   id: number;
@@ -109,7 +143,7 @@ export function sites(w: World): Site[] {
     const target = wallTarget(wl);
     const tech: TechId = target === "palisade" ? "palisade" : "stonewall";
     const { r, n } = wallNeed(wl);
-    const locked = target === "polygon" && !w.civ.has("precisionStone") ? "precisionStone" : L.has(tech) ? null : tech;
+    const locked = target === "polygon" ? (w.civ.polygonAge ? null : "precisionStone") : L.has(tech) ? null : tech;
     out.push({ kind: "wall", id: wl.id, x, y, sx: x, sy: y + 20, need: pending && wl.have < n ? r : null, repair: !pending, locked });
   }
   for (const t of w.tribe.towers) {

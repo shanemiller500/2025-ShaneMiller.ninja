@@ -7,8 +7,9 @@ import { CAMP_LEVELS, ROLES, SHELTER_STAGES, TECH, TECH_ORDER } from "../data/fa
 import { RES_INFO } from "../data/colony";
 import { GameIcon } from "./GameIcon";
 import { CRAFT_STEPS } from "../sim/camp";
+import { shelterDone } from "../sim/build";
 import type { Engine, Snapshot } from "../game/engine";
-import type { Danger, Role, TechId } from "../sim/types";
+import { TILE, type Danger, type Role, type TechId } from "../sim/types";
 
 /* ------------------------------------------------------------------ */
 /*  The tribe's HQ. Tabs:                                              */
@@ -49,6 +50,7 @@ export default function CampPanel({ snap, engine, onClose, tab: initial = "camp"
       transition={{ type: "spring", stiffness: 420, damping: 32 }}
       className="dl-glass dl-scroll pointer-events-auto absolute inset-x-2 bottom-[84px] z-20 max-h-[56vh] overflow-y-auto rounded-3xl p-4 shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-4 sm:top-24 sm:max-h-[calc(100vh-200px)] sm:w-[370px]"
     >
+      <div className="sticky -top-4 z-10 -mx-4 -mt-4 rounded-t-3xl border-b border-white/10 bg-[#392315]/95 px-4 pb-2 pt-4 backdrop-blur-xl">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute right-3 top-3 rounded-full p-1.5 text-white/60 hover:bg-white/10 hover:text-white">
         <X className="h-5 w-5" />
       </button>
@@ -79,6 +81,8 @@ export default function CampPanel({ snap, engine, onClose, tab: initial = "camp"
         ))}
       </div>
 
+      </div>
+
       {tab === "camp" && <CampTab snap={snap} engine={engine} />}
       {tab === "jobs" && <JobsTab snap={snap} engine={engine} />}
       {tab === "defend" && <DefendTab snap={snap} engine={engine} />}
@@ -99,8 +103,23 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   }, [cool]);
   const next = tribe.next;
   const food = (camp.stock.cooked ?? 0) + (camp.stock.fish ?? 0) + (camp.stock.crop ?? 0) + (camp.stock.berries ?? 0);
+  const w = engine.world;
+  const outlyingHomes = w.shelters.filter((s) => shelterDone(s) && Math.hypot(s.x - w.camp.x, s.y - w.camp.y) > 380);
+  const near = (x: number, y: number, s: { x: number; y: number }, r: number) => Math.hypot(x - s.x, y - s.y) < r;
+  const needFood = outlyingHomes.some((s) => !w.colony.buildings.some((b) => b.built >= 1 && b.kind === "foodStore" && near(b.x, b.y, s, 240)));
+  const needLight = outlyingHomes.some((s) => !w.campfires.some((f) => f.lit && near(f.x, f.y, s, 210)) && !w.colony.buildings.some((b) => b.built >= 1 && b.kind === "boneTorch" && near(b.x, b.y, s, 210)));
+  const needDefense = outlyingHomes.some((s) => !w.tribe.towers.some((t) => t.stage >= 3 && near(t.x, t.y, s, 240)) && !w.tribe.walls.some((wall) => wall.built >= 1 && near(wall.tx * TILE, wall.ty * TILE, s, 180)));
   return (
     <>
+      <div className="mt-3 rounded-2xl bg-white/5 p-2.5">
+        <button type="button" onClick={() => engine.upgradeAll()} className="w-full rounded-xl bg-amber-400 px-3 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">⬆️ Upgrade all available</button>
+        <p className="mt-1.5 text-[11px] leading-snug text-white/60">Queues every eligible home, tower, Scorpion and wall upgrade. Builders collect the materials; research unlocks later tiers.</p>
+      </div>
+      <div className="mt-2 rounded-2xl bg-emerald-500/10 p-2.5 text-[11px] leading-snug text-emerald-50/85">
+        <strong className="text-[12px]">Growing into new areas</strong>
+        <p className="mt-1">{outlyingHomes.length ? `${outlyingHomes.length} finished homes are away from the original camp. Families will settle there and look for work near their homes.` : "Finish homes in another area to let families settle there."}</p>
+        <p className="mt-1">{outlyingHomes.length ? [needFood && "Add a food store nearby for meals", needLight && "add a fire or bone torches for light", needDefense && "build walls or a tower for safety", "keep enough beds, water and stocked supplies"].filter(Boolean).join(" · ") : "Add food, water, a fire for warmth, torches for light, and walls or towers for safety."}</p>
+      </div>
       {next ? (
         <div className="mt-3 rounded-2xl bg-white/5 p-3">
           <div className="text-sm font-bold">
@@ -141,7 +160,7 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
         <>
           <div className="mt-3 flex items-center justify-between text-sm font-bold">
             <span>🪓 Neanderthal clans</span>
-            <span className="text-[11px] font-semibold text-white/55">big, strong, not clever</span>
+            <span className="text-[11px] font-semibold text-white/55">growing rival settlements</span>
           </div>
           <div className="mt-1.5 space-y-1.5">
             {snap.rivals.clans.map((cl) => (
@@ -149,8 +168,9 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
                 <span className="h-3 w-3 shrink-0 rounded-full border-2 border-black/40" style={{ background: cl.color }} />
                 <div className="min-w-0 flex-1">
                   <div className="font-bold">
-                    {cl.name} clan <span className="font-semibold text-white/60">· {cl.size} brute{cl.size === 1 ? "" : "s"}</span>
+                    {cl.name} clan <span className="font-semibold text-white/60">· {cl.size - cl.children} grown · {cl.children} young</span>
                   </div>
+                  <div className="text-white/65">{cl.style} camp · level {cl.campTier + 1} · {cl.food} food</div>
                   <div className="truncate text-white/65">
                     {cl.wars.length ? `⚔️ at war with ${cl.wars.join(", ")}` : cl.pacts.length ? `🤝 friends with ${cl.pacts.join(", ")}` : "Keeping to themselves"}
                   </div>
@@ -342,6 +362,7 @@ function DefendTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
           <span className="block text-[11px] font-medium text-white/60">{learned.has("stonewall") ? "2 stones per piece" : "Needs 🧱 Stone walls"}</span>
         </button>
       </div>
+      <button type="button" onClick={() => engine.upgradeAll("walls")} className="mt-2 w-full rounded-2xl bg-amber-400 px-3 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">⬆️ Upgrade all built walls</button>
       <button type="button" disabled={!learned.has("spear")} onClick={() => engine.planSpikes()} className="mt-2 flex w-full items-center gap-2 rounded-2xl bg-white/10 p-2.5 text-left text-[13px] font-bold transition hover:bg-white/20 active:scale-95 disabled:opacity-40">
         <GameIcon id="spikes" size={26} />
         <span>

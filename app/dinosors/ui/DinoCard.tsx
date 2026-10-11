@@ -55,7 +55,7 @@ export default function DinoCard({ info, engine, onClose, onCamp }: { info: Dino
       <button type="button" aria-label="Close" onClick={onClose} className="absolute right-3 top-3 rounded-full p-1.5 text-white/60 hover:bg-white/10 hover:text-white">
         <X className="h-5 w-5" />
       </button>
-      {info.kind === "dino" ? <DinoBody info={info} engine={engine} /> : <HumanBody info={info} engine={engine} onCamp={onCamp} />}
+      {info.kind === "dino" ? <DinoBody info={info} engine={engine} /> : <HumanBody info={info} engine={engine} onCamp={onCamp} onClose={onClose} />}
     </motion.aside>
   );
 }
@@ -136,6 +136,25 @@ function DinoBody({ info, engine }: { info: DinoInfo; engine: Engine }) {
         <Bar icon="❤️" label="Health" value={info.health} color="linear-gradient(90deg,#22c55e,#a3e635)" />
         <Bar icon="⚡" label="Energy" value={info.energy} color="linear-gradient(90deg,#eab308,#fde047)" />
         {info.baby && <Bar icon="📏" label="Growing" value={info.growth} color="linear-gradient(90deg,#a78bfa,#f0abfc)" />}
+        {info.owner && <Bar icon="🛡️" label="Training" value={info.warTraining} color="linear-gradient(90deg,#f59e0b,#fcd34d)" />}
+        {!info.owner && info.tamingKnown && def.diet === "herbivore" && <Bar icon="💚" label="Trust" value={info.tame} color="linear-gradient(90deg,#10b981,#86efac)" />}
+      </div>
+
+      <div className="mt-3 rounded-2xl bg-amber-300/10 p-3 text-xs text-amber-100">
+        {info.owner ? (
+          <>
+            <div className="font-bold">🐾 Tribe friend {info.warTraining >= 1 ? "· Battle ready" : ""}</div>
+            <div className="mt-1 text-white/70">{info.warArmor ? `${info.warArmor === 2 ? "Strong" : "Young"} grown armor · ` : ""}{info.rideable ? "An adult can ride this dino into battle." : "This dino can defend the camp on foot."}</div>
+            {info.warTraining < 1 && <button type="button" onClick={() => engine.trainSelectedDino()} className="mt-2 rounded-xl bg-amber-400 px-3 py-2 font-bold text-slate-900">Train for battle</button>}
+            {info.rideable && !info.baby && !info.ridden && <button type="button" onClick={() => engine.rideSelectedDino()} className="ml-2 mt-2 rounded-xl bg-white/15 px-3 py-2 font-bold text-white">Ride into battle</button>}
+          </>
+        ) : (
+          <>
+            <div className="font-bold">🐾 Befriend this dino</div>
+            <div className="mt-1 text-white/70">{info.tamingKnown ? "An adult can earn its trust, then train it to defend the tribe." : "Learn Taming at camp to befriend gentle dinosaurs."}</div>
+            {info.tamingKnown && def.diet === "herbivore" && <button type="button" onClick={() => engine.trainSelectedDino()} className="mt-2 rounded-xl bg-amber-400 px-3 py-2 font-bold text-slate-900">Send a person to befriend</button>}
+          </>
+        )}
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
@@ -198,7 +217,7 @@ function portraitFor(role: string, id: number) {
   return list[id % list.length];
 }
 
-function HumanBody({ info, engine, onCamp }: { info: HumanInfo; engine: Engine; onCamp: () => void }) {
+function HumanBody({ info, engine, onCamp, onClose }: { info: HumanInfo; engine: Engine; onCamp: () => void; onClose: () => void }) {
   const eff = info.role === "auto" ? info.autoRole : info.role;
   const effRole = ROLES.find((r) => r.id === eff);
   const cond = CONDITION_LABEL[info.condition];
@@ -263,7 +282,7 @@ function HumanBody({ info, engine, onCamp }: { info: HumanInfo; engine: Engine; 
                 key={r.id}
                 type="button"
                 title={r.tip}
-                onClick={() => engine.setRole(info.id, r.id)}
+                onClick={() => { engine.setRole(info.id, r.id); onClose(); }}
                 className={`flex flex-col items-center rounded-2xl py-1.5 transition active:scale-95 ${info.role === r.id ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}
               >
                 <span className="text-xl leading-none">{r.icon}</span>
@@ -273,7 +292,7 @@ function HumanBody({ info, engine, onCamp }: { info: HumanInfo; engine: Engine; 
           </div>
           <p className="mt-1.5 text-[11px] text-white/55">{ROLES.find((r) => r.id === info.role)?.tip}</p>
           {!info.child && info.condition !== "down" && (
-            <button type="button" onClick={() => engine.sendToDeep(info.id)} className="mt-3 w-full rounded-2xl bg-cyan-500/80 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-400 active:scale-95">
+            <button type="button" onClick={() => { if (engine.sendToDeep(info.id)) onClose(); }} className="mt-3 w-full rounded-2xl bg-cyan-500/80 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-400 active:scale-95">
               ⛏️ Send down the mine
             </button>
           )}

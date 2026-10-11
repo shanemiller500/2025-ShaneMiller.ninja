@@ -81,7 +81,7 @@ export class Colony {
   canPlace(w: World, kind: BuildingKind, x: number, y: number): string | null {
     const def = BUILDINGS[kind];
     const fp = this.footprint(kind, x, y);
-    const occupied = this.occupied(w);
+    const occupied = this.occupied(w, kind === "boneTorch");
     for (let dy = 0; dy < fp.h; dy++)
       for (let dx = 0; dx < fp.w; dx++) {
         const tx = fp.tx + dx;
@@ -105,12 +105,12 @@ export class Colony {
   }
 
   /** Tiles used by walls, towers, huts, buildings + ground Scorpions (bridge decks are free to build on). */
-  occupied(w: World) {
+  occupied(w: World, allowPath = false) {
     const s = new Set<number>();
     for (const wl of w.tribe.walls) s.add(wl.ty * MAP_W + wl.tx);
     for (const t of w.tribe.towers) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) s.add((t.ty + dy) * MAP_W + t.tx + dx);
     for (const b of this.buildings) {
-      if (b.kind === "bridge") continue;
+      if (b.kind === "bridge" || allowPath && b.kind === "path") continue;
       const d = BUILDINGS[b.kind];
       for (let dy = 0; dy < d.h; dy++) for (let dx = 0; dx < d.w; dx++) s.add((b.ty + dy) * MAP_W + b.tx + dx);
     }

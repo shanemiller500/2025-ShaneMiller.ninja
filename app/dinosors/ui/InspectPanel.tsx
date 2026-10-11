@@ -105,6 +105,7 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
                   Upgrade
                 </button>
               )}
+              <button type="button" onClick={() => engine.upgradeAll("homes")} className="mt-2 w-full rounded-xl bg-amber-400/90 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">Upgrade all homes</button>
             </div>
           )}
         </>
@@ -178,6 +179,7 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
                   {info.next.locked ? "Needs a Blacksmith" : "Upgrade"}
                 </button>
               )}
+              <button type="button" onClick={() => engine.upgradeAll("scorpions")} className="mt-2 w-full rounded-xl bg-amber-400/90 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">Upgrade all Scorpions</button>
             </div>
           )}
         </>
@@ -253,9 +255,12 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
             </div>
           )}
           {info.canUpgrade && (
-            <button type="button" onClick={() => engine.upgradeTower(info.id)} className="mt-2 w-full rounded-xl bg-white/10 py-2 text-sm font-bold transition hover:bg-white/20 active:scale-95">
-              🏰 Rebuild in stone (🪨 {info.upCost}) + 🎯 Scorpion
-            </button>
+            <div className="mt-2 space-y-2">
+              <button type="button" onClick={() => engine.upgradeTower(info.id)} className="w-full rounded-xl bg-white/10 py-2 text-sm font-bold transition hover:bg-white/20 active:scale-95">
+                🏰 Rebuild in stone (🪨 {info.upCost}) + 🎯 Scorpion
+              </button>
+              <button type="button" onClick={() => engine.upgradeAll("towers")} className="w-full rounded-xl bg-amber-400/90 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">Upgrade all towers</button>
+            </div>
           )}
           <p className="mt-2 text-[12px] text-white/70">{info.stone ? "Stone towers are much tougher and come with a 🎯 Scorpion on top (once it's invented)." : "Archers up here shoot further and better. Place a 🎯 Scorpion on top for dragons."} Pick people and tap the tower to send them up.</p>
         </>

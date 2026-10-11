@@ -38,9 +38,46 @@ import { tidyStorage } from "@/utils/storageJanitor";
 /*  snapshot a few times a second and listens for discrete events.     */
 /* ------------------------------------------------------------------ */
 export default function DinosorsClient({ fontClass }: { fontClass: string }) {
+  const uiRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
+  useEffect(() => {
+    const root = uiRef.current;
+    if (!root) return;
+    let frame = 0;
+    let scroller: HTMLElement | null = null;
+    let goal = 0;
+    let last = 0;
+    const stop = () => { if (frame) cancelAnimationFrame(frame); frame = 0; scroller = null; };
+    const animate = (now: number) => {
+      if (!scroller) return;
+      const dt = Math.min(0.05, last ? (now - last) / 1000 : 1 / 60);
+      last = now;
+      scroller.scrollTop += (goal - scroller.scrollTop) * (1 - Math.exp(-dt * 16));
+      if (Math.abs(goal - scroller.scrollTop) < 0.5) { scroller.scrollTop = goal; stop(); }
+      else frame = requestAnimationFrame(animate);
+    };
+    const wheel = (event: WheelEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      // Keep high resolution trackpad scrolling native; ease discrete mouse notches.
+      if (event.deltaMode === 0 && Math.abs(event.deltaY) < 40) return;
+      if (!(event.target instanceof Element)) return;
+      let element = event.target.closest<HTMLElement>(".dl-scroll");
+      while (element && element.scrollHeight <= element.clientHeight + 1) element = element.parentElement?.closest<HTMLElement>(".dl-scroll") ?? null;
+      if (!element || !root.contains(element)) return;
+      const max = element.scrollHeight - element.clientHeight;
+      const delta = event.deltaY * (event.deltaMode === 1 ? 28 : event.deltaMode === 2 ? element.clientHeight : 1);
+      if ((element.scrollTop <= 0 && delta < 0) || (element.scrollTop >= max - 1 && delta > 0)) return;
+      event.preventDefault();
+      if (scroller !== element) { stop(); scroller = element; goal = element.scrollTop; last = 0; }
+      goal = Math.max(0, Math.min(max, goal + delta));
+      if (!frame) frame = requestAnimationFrame(animate);
+    };
+    root.addEventListener("wheel", wheel, { passive: false });
+    root.addEventListener("pointerdown", stop);
+    return () => { stop(); root.removeEventListener("wheel", wheel); root.removeEventListener("pointerdown", stop); };
+  }, []);
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [tool, setToolState] = useState<ToolState>(DEFAULT_TOOL);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -224,7 +261,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const disc = sticker ? DISCOVERY_BY_ID[sticker] : null;
 
   return (
-    <div className={`fixed inset-0 z-40 select-none overflow-hidden bg-[#1f5f8a] text-white ${fontClass}`} style={{ touchAction: "none" }}>
+    <div ref={uiRef} className={`fixed inset-0 z-40 select-none overflow-hidden bg-[#1f5f8a] text-white ${fontClass}`} style={{ touchAction: "none" }}>
       <div ref={wrapRef} className="absolute inset-0">
         <canvas ref={canvasRef} className="block h-full w-full cursor-grab active:cursor-grabbing" aria-label="Dinosaur Land world. Drag to explore, tap to interact." />
       </div>

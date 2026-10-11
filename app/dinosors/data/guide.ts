@@ -67,7 +67,7 @@ export const TIPS: Tip[] = [
   { id: "jobs", art: "oona-face", who: "Oona", text: "Open Your tribe → 👥 Jobs to give people jobs. Leave them on ✨ Auto and they'll do what the tribe needs.", help: "tribe" },
   { id: "pickup", art: "dino-friend", who: "Ugg", text: "Hold your finger on a small dino to pick it up and carry it somewhere else!", help: "dinos" },
   { id: "eggs", art: "hatchling", who: "Oona", text: "🥚 Eggs hatch into babies. Babies grow up, have their own eggs… and slowly evolve!", help: "dinos" },
-  { id: "tame", art: "dino-friend", who: "Oona", text: "Learn Taming and your people can befriend gentle dinos — then ride the big ones!", help: "dinos" },
+  { id: "tame", art: "dino-friend", who: "Oona", text: "Learn Taming, tap a gentle dino and send an adult to befriend it. Train your new friend for battle: its armor grows as it learns. Ride a grown mount into the fight!", help: "dinos" },
   { id: "captive", art: "hunter", who: "Ugg", text: "The Neanderthals are holding one of us at their camp! Pick some armed people and send them there. Once the guards are gone, walk right up and bring her home.", when: (s) => s.rivals.clans.some((c) => c.captives.length > 0), urgent: true, help: "defend" },
   { id: "brutes", art: "hunter", who: "Ugg", text: "Neanderthal clans live out in the wild: big, strong, not clever. Keep walls up and guards armed. They only have clubs and rocks; our bows and Scorpions beat them.", when: (s) => s.rivals.clans.length > 0, help: "defend" },
   { id: "walls", art: "stonecutter", who: "Ugg", text: "Drag to draw walls. Add a 🚪 gate and 🪜 stairs so guards can shoot from the top.", help: "defend" },

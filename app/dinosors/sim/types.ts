@@ -160,6 +160,7 @@ export type DinoState =
   | "tussle"
   | "flee"
   | "defend"
+    | "war"
   | "follow"
   | "sleep"
   | "investigate"
@@ -254,6 +255,14 @@ export interface Dino {
   tame: number;
   /** befriended: lives near camp, can be ridden if its species allows */
   owner: boolean;
+    /** 0..1 progress from working with a trainer */
+    warTraining?: number;
+    /** fitted protection: 0 none, 1 hide and bone, 2 metal */
+    warArmor?: number;
+    /** seconds until this animal can strike again */
+    warCd?: number;
+    /** short pause between bone-tusk collision hits */
+    spikeCd?: number;
   /** id of the person riding it (0 = nobody) */
   rider: number;
   /** seconds since fire/lava last hurt it (charred bones if it dies hot) */
@@ -292,6 +301,7 @@ export type HumanState =
   | "heal"
   | "operate"
   | "tame"
+    | "train"
   | "ride"
   | "down"
   | "douse"
@@ -429,7 +439,7 @@ export interface Human {
 /** Basic weapons only: Neanderthals never invent bows, metal or energy weapons. */
 export type BruteWeapon = "club" | "axe" | "spear" | "rock";
 
-export type BruteState = "idle" | "wander" | "walk" | "sleep" | "fight" | "hunt" | "bash" | "carry" | "flee" | "home" | "loot" | "rally" | "spy" | "lurk";
+export type BruteState = "idle" | "wander" | "walk" | "sleep" | "fight" | "hunt" | "forage" | "bash" | "carry" | "flee" | "home" | "loot" | "rally" | "spy" | "lurk";
 
 /** A Neanderthal: bigger + stronger than our people, not as clever. CPU-run. */
 export interface Brute {
@@ -467,6 +477,11 @@ export interface Brute {
   captive: number;
   /** food grabbed from a stockpile */
   loot: number;
+  /** Age in game seconds; young clan members stay near home until grown. */
+  age?: number;
+  /** Food gathered from the wild and carried back to this clan. */
+  forage?: number;
+  forageKind?: "berries" | "fruit" | "meat" | "fish";
   /** what that loot was (food unless they raided our stores) */
   lootKind?: Resource;
   /** hiding in the grass waiting to jump on our people */
@@ -485,6 +500,12 @@ export interface Clan {
   /** seconds until they raid our camp */
   raidT: number;
   growT: number;
+  /** Stable architecture used for this clan's camp. */
+  style?: "hide" | "timber" | "bone";
+  /** 0-3; bigger camps house more people and field larger parties. */
+  campTier?: number;
+  /** Work contributed by adults at home toward the next camp expansion. */
+  campWork?: number;
   /** how cunning they've become from spying on us: 1 ambushes, 2 shields, 3 raid our stores + take kids */
   smarts?: number;
   /** spy reports brought home */

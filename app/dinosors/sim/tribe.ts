@@ -327,7 +327,11 @@ export class Tribe {
 
   /* ------------------------------ inside the walls ------------------------------ */
 
-  private enclosedCache: { v: number; inside: Uint8Array } | null = null;
+  private enclosedCache: { v: string; inside: Uint8Array } | null = null;
+
+  private enclosureKey(w: World) {
+    return `${w.terrain.version}|${this.version}|${w.colony.version}|${w.shelters.length}:${w.shelterVersion}`;
+  }
 
   /**
    * Is this spot sealed off by the walls? Flood from the edge of the map over
@@ -337,11 +341,12 @@ export class Tribe {
     const tx = Math.floor(x / TILE);
     const ty = Math.floor(y / TILE);
     if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
-    if (!this.enclosedCache || this.enclosedCache.v !== w.nav.version) {
+    const key = this.enclosureKey(w);
+    if (!this.enclosedCache || this.enclosedCache.v !== key) {
       const N = MAP_W * MAP_H;
       const blocked = (i: number) => {
         const wl = this.wallMap.get(i);
-        if (wl && wl.built >= 0.5 && wl.hp > 0) return true;
+        if (wl && wl.built >= 0.5 && wl.hp > 0 && !(wl.part === "gate" && wl.open)) return true;
         return !w.nav.passable("dino", (i % MAP_W) * TILE + TILE / 2, Math.floor(i / MAP_W) * TILE + TILE / 2) && !(wl && wl.part === "gate");
       };
       const out = new Uint8Array(N);
@@ -363,7 +368,7 @@ export class Tribe {
       // inside = not reachable from outside (and not a wall itself)
       const inside = new Uint8Array(N);
       for (let i = 0; i < N; i++) inside[i] = out[i] || this.wallMap.has(i) ? 0 : 1;
-      this.enclosedCache = { v: w.nav.version, inside };
+      this.enclosedCache = { v: key, inside };
     }
     return this.enclosedCache.inside[ty * MAP_W + tx] === 1;
   }
@@ -376,6 +381,42 @@ export class Tribe {
   /** Raids don't send people inside the walls running for cover when the auto-defenses are up. */
   safeInside(w: World, h: Human) {
     return this.autoDefense(w) > 0 && this.enclosed(w, h.x, h.y) && !w.dinos.some((d) => d.raider && this.enclosed(w, d.x, d.y));
+  }
+
+  private refugeCache: { version: string; spots: { x: number; y: number }[] } | null = null;
+
+  /** Finished wall enclosures can shelter people even when they have no home there. */
+  walledRefuge(w: World, h: Human): { x: number; y: number } | null {
+    if (!this.raid || !this.walls.some((wall) => wall.built >= 1 && wall.hp > 0)) return null;
+    const key = this.enclosureKey(w);
+    if (!this.refugeCache || this.refugeCache.version !== key) {
+      const spots: { x: number; y: number }[] = [];
+      const built = this.walls.filter((wall) => wall.built >= 1 && wall.hp > 0);
+      const x0 = Math.max(1, Math.min(...built.map((wall) => wall.tx)) - 12);
+      const x1 = Math.min(MAP_W - 2, Math.max(...built.map((wall) => wall.tx)) + 12);
+      const y0 = Math.max(1, Math.min(...built.map((wall) => wall.ty)) - 12);
+      const y1 = Math.min(MAP_H - 2, Math.max(...built.map((wall) => wall.ty)) + 12);
+      for (let ty = y0; ty <= y1; ty += 2) for (let tx = x0; tx <= x1; tx += 2) {
+        const i = ty * MAP_W + tx;
+        const x = tx * TILE + TILE / 2;
+        const y = ty * TILE + TILE / 2;
+        if (w.nav.ok("human", i) && this.enclosed(w, x, y)) spots.push({ x, y });
+      }
+      this.refugeCache = { version: key, spots };
+    }
+    const candidates = this.refugeCache.spots
+      .filter((spot) => !w.dinos.some((d) => d.raider && Math.hypot(d.x - spot.x, d.y - spot.y) < 190)
+        && !w.rivals.brutes.some((b) => w.rivals.hostile(w, b) && Math.hypot(b.x - spot.x, b.y - spot.y) < 190))
+      .map((spot) => ({ spot, score: Math.hypot(h.x - spot.x, h.y - spot.y) +
+        w.humans.filter((other) => other !== h && other.state === "hide" && Math.hypot(other.x - spot.x, other.y - spot.y) < 42).length * 110 +
+        (Math.abs(spot.x * 3 + spot.y * 7 + h.id * 79) % 83) }))
+      .sort((a, b) => a.score - b.score);
+    for (const { spot } of candidates.slice(0, 12)) {
+      if (Math.hypot(h.x - spot.x, h.y - spot.y) < 45 && this.enclosed(w, h.x, h.y)) return spot;
+      const route = w.nav.find(w, "human", h.x, h.y, h.level, spot.x, spot.y, 0);
+      if (route && route.length) return spot;
+    }
+    return null;
   }
 
   /** A bridge under fire from an occupied or powered weapon on a finished tower. */
@@ -471,7 +512,17 @@ export class Tribe {
     for (const h of w.humans) {
       if (h.child || h.stranger) continue;
       const r = this.roleOf(h);
-      if (r === "guard" || r === "hunter" || h.order || threat) w.colony.equip(w, h, r === "hunter" ? "bow" : undefined);
+      if (r === "guard" || r === "hunter" || h.order || threat) {
+        if (r === "guard" && h.riding && w.flags.has("rallyDinos")) {
+          if (!w.colony.equipKind(h, "bow") && !w.colony.equipKind(h, "spear")) {
+            const old = h.gear.weapon ? WEAPON_BY_ID[h.gear.weapon] : null;
+            if (old?.melee && (w.camp.learned.has("bow") || w.camp.learned.has("spear") || w.camp.learned.has("crossbow"))) {
+              w.colony.armory[old.id] = (w.colony.armory[old.id] ?? 0) + 1;
+              h.gear.weapon = null;
+            }
+          }
+        } else w.colony.equip(w, h, r === "hunter" ? "bow" : undefined);
+      }
     }
     // scorpions need crews when danger is near: the closest guards take them (powered ones don't)
     if (!w.colony.dronesPowered(w) && (threat || w.dinos.some((d) => this.hostile(w, d)) || w.rivals.threatNear(w, w.camp.x, w.camp.y, 900))) {
@@ -974,10 +1025,36 @@ export class Tribe {
         }
       }
     }
-    if (c.learned.has("stonewall") && this.raidsWon >= 3 && !f.has("planStone")) {
-      f.add("planStone");
-      for (const wl of this.walls) if (wl.kind === "palisade") wl.upgrade = true;
-      w.toast("🧱", "Time for stone! Builders will upgrade the walls.", c.x, c.y);
+    if (w.civ.polygonAge && !w.colony.buildings.some((b) => b.kind === "shapingYard")) {
+      for (const radius of [160, 210, 260]) {
+        let planned = false;
+        for (let i = 0; i < 16; i++) {
+          const a = i * Math.PI / 8;
+          const yard = w.colony.addBuilding(w, "shapingYard", c.x + Math.cos(a) * radius, c.y + 35 + Math.sin(a) * radius * 0.7);
+          if (!yard) continue;
+          w.toast("🔷", "A shaping yard is planned so builders can make polygon walls.", yard.x, yard.y);
+          planned = true;
+          break;
+        }
+        if (planned) break;
+      }
+    }
+    if (c.learned.has("stonewall") && !w.civ.polygonAge) {
+      let n = 0;
+      for (const wl of this.walls) {
+        if (wl.kind !== "palisade" || wl.upgrade || wl.built < 1 || wl.hp <= 0) continue;
+        wl.upgrade = true;
+        wl.upTo = "stone";
+        wl.have = 0;
+        n++;
+      }
+      if (n) {
+        this.version++;
+        if (!f.has("planStone")) {
+          f.add("planStone");
+          w.toast("🧱", "Builders will upgrade the wooden walls to stone.", c.x, c.y);
+        }
+      }
     }
   }
 
@@ -1029,7 +1106,13 @@ export class Tribe {
     const home = w.shelters.filter((s) => shelterDone(s) && !s.up && HOUSING[s.tier + 1] && (!HOUSING[s.tier + 1].polygon || w.civ.polygonAge)).sort((a, b) => a.tier - b.tier)[0];
     if (home && c.startUpgrade(w, home)) return;
     const tower = this.towers.find((t) => t.stage >= TOWER_STAGES.length && t.hp > 0 && !t.stone && !t.up);
-    if (tower && c.learned.has("stonewall")) this.upgradeTower(w, tower);
+    if (tower && c.learned.has("stonewall") && this.upgradeTower(w, tower)) return;
+    const wall = this.walls.find((wl) => wl.built >= 1 && wl.hp > 0 && wl.kind === "palisade" && !wl.upgrade);
+    if (wall && c.learned.has("stonewall")) {
+      wall.upgrade = true;
+      this.version++;
+      w.toast("🧱", "Auto planned a stone wall upgrade.", wall.tx * TILE + TILE / 2, wall.ty * TILE + TILE / 2);
+    }
   }
 
   update(w: World, dt: number) {
@@ -1308,6 +1391,35 @@ export function gobble(w: World, d: Dino, h: Human) {
 
 
 
+/** A rallied rider steers the mount into threats while firing from its back. */
+function mountedRallyThink(w: World, h: Human): boolean {
+  let target: Dino | Brute | null = null;
+  let distance = 900;
+  for (const d of w.dinos) {
+    if (!w.tribe.hostile(w, d)) continue;
+    const gap = Math.hypot(d.x - h.x, d.y - h.y);
+    if (gap < distance) { target = d; distance = gap; }
+  }
+  for (const b of w.rivals.brutes) {
+    if (!w.rivals.hostile(w, b)) continue;
+    const gap = Math.hypot(b.x - h.x, b.y - h.y);
+    if (gap < distance) { target = b; distance = gap; }
+  }
+  if (target) {
+    h.targetId = target.id;
+    // Keep the dino charging into tusk range. The rider's shot runs independently.
+    const offset = ((h.id % 3) - 1) * 12;
+    go(h, "walk", target.x + offset, target.y + offset);
+    return true;
+  }
+  h.targetId = 0;
+  const angle = (h.id * 2.4) % (Math.PI * 2);
+  const post = { x: w.camp.x + Math.cos(angle) * 110, y: w.camp.y + Math.sin(angle) * 75 + 28 };
+  if (Math.hypot(h.x - post.x, h.y - post.y) > 30) go(h, "walk", post.x, post.y);
+  else go(h, "guard", h.x, h.y);
+  return true;
+}
+
 /** Returns true if the job took over this think tick. */
 export function roleThink(w: World, h: Human): boolean {
   const tribe = w.tribe;
@@ -1357,6 +1469,7 @@ export function roleThink(w: World, h: Human): boolean {
 
   switch (role) {
     case "guard": {
+      if (h.riding && w.flags.has("rallyDinos")) return mountedRallyThink(w, h);
       if (!wp && !camp.learned.has("tools")) return false;
       const post = guardPost(w, h);
       return guardAt(w, h, post.x, post.y, wp, post.tower, !!post.top);
@@ -1467,6 +1580,16 @@ function guardPost(w: World, h: Human): { x: number; y: number; tower?: Tower; t
   if (sc) {
     const spot = w.colony.crewSpot(sc);
     return { x: spot.x, y: spot.y, top: spot.top };
+  }
+  const home = h.home ? w.shelters.find((s) => s.id === h.home && shelterDone(s)) : null;
+  if (home && !tribe.raid && Math.hypot(home.x - c.x, home.y - c.y) > 380) {
+    const localGuards = w.humans.filter((o) => !o.child && tribe.roleOf(o) === "guard" && o.home && w.shelters.some((s) => s.id === o.home && Math.hypot(s.x - home.x, s.y - home.y) < 220)).sort((a, b) => a.id - b.id);
+    const nearbyTowers = tribe.towers.filter((t) => t.stage >= TOWER_STAGES.length && Math.hypot(t.x - home.x, t.y - home.y) < 220)
+      .sort((a, b) => Math.hypot(a.x - home.x, a.y - home.y) - Math.hypot(b.x - home.x, b.y - home.y));
+    const tower = nearbyTowers[localGuards.indexOf(h)];
+    if (tower) return { x: tower.x, y: tower.y - 18, tower, top: true };
+    const angle = (h.id * 2.4) % (Math.PI * 2);
+    return { x: home.x + Math.cos(angle) * 75, y: home.y + Math.sin(angle) * 52 + 20 };
   }
   const guards = w.humans.filter((o) => !o.child && tribe.roleOf(o) === "guard" && !o.order && !w.colony.scorpions.some((s) => s.crew === o.id)).sort((a, b) => a.id - b.id);
   const idx = Math.max(0, guards.indexOf(h));
@@ -1633,6 +1756,12 @@ function haulSomething(w: World, h: Human) {
 export function roleAct(w: World, h: Human, dt: number): boolean {
   const tribe = w.tribe;
   h.cd = Math.max(0, h.cd - dt);
+  if (h.riding && w.flags.has("rallyDinos") && tribe.roleOf(h) === "guard" && h.cd <= 0) {
+    const target = w.dinoById(h.targetId) ?? w.rivals.byId(h.targetId);
+    const wp = tribe.weaponFor(w, h);
+    if (target && wp && !wp.melee && (target.kind === "dino" ? tribe.hostile(w, target) : w.rivals.hostile(w, target))
+      && Math.hypot(target.x - h.x, target.y - h.y) <= wp.range) tribe.shoot(w, h, target, wp, 0.05);
+  }
   switch (h.state) {
     case "hunt": {
       // stalking prey… or walking over to a carcass

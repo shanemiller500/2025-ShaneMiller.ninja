@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { useState } from "react";
 import { Plus, Users, Video, X } from "lucide-react";
 import { WEAPON_KINDS } from "../data/colony";
 import { CONDITION_LABEL } from "../sim/injury";
@@ -16,23 +17,24 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
   const sel = snap.selection;
   const cmd = snap.command;
   const kidsOnly = sel.length > 0 && sel.every((p) => p.child);
+  const [hidePickTip, setHidePickTip] = useState(false);
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-[78px] z-30 flex flex-col-reverse items-center gap-2 px-2 sm:bottom-[96px]">
       <AnimatePresence mode="popLayout">
-        {sel.length === 0 && toolOn ? null : sel.length === 0 ? (
-          <motion.button
+        {sel.length === 0 && (toolOn || hidePickTip) ? null : sel.length === 0 ? (
+          <motion.div
             key="pick"
-            type="button"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            onClick={() => engine.selectAll(true)}
-            title="Pick everyone who isn't busy (or tap a person, shift-drag a box)"
             className="dl-glass pointer-events-auto flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-white/85 shadow-lg transition hover:bg-white/15 active:scale-95"
           >
-            <Users className="h-4 w-4" /> Pick idle people
+            <button type="button" onClick={() => engine.selectAll(true)} title="Pick everyone who isn't busy (or tap a person, shift-drag a box)" className="flex items-center gap-2">
+              <Users className="h-4 w-4" /> Pick idle people
+            </button>
             <span className="hidden text-[11px] font-medium text-white/50 sm:inline">· or tap someone</span>
-          </motion.button>
+            <button type="button" onClick={() => setHidePickTip(true)} aria-label="Close pick people tip" className="ml-1 rounded-full p-0.5 text-white/60 hover:bg-white/15 hover:text-white"><X className="h-3.5 w-3.5" /></button>
+          </motion.div>
         ) : (
           <motion.div
             key="bar"

@@ -1079,6 +1079,52 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
   }
   const glow = night ? "rgba(255,190,90,0.95)" : "#2b1e14";
   switch (b.kind) {
+    case "boneTorch": {
+      c.fillStyle = "rgba(42,28,15,0.25)";
+      c.beginPath();
+      c.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = "#e8d8ad";
+      c.lineWidth = 4;
+      c.lineCap = "round";
+      c.beginPath();
+      c.moveTo(0, -2);
+      c.lineTo(0, -29);
+      c.stroke();
+      c.strokeStyle = "#947146";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(-6, -13);
+      c.lineTo(5, -17);
+      c.moveTo(-5, -20);
+      c.lineTo(5, -24);
+      c.stroke();
+      c.fillStyle = "#eee1bb";
+      c.beginPath();
+      c.ellipse(0, -32, 7, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#524332";
+      c.fillRect(-4, -33, 2, 2);
+      c.fillRect(2, -33, 2, 2);
+      c.fillStyle = "#4d3524";
+      c.beginPath();
+      c.ellipse(0, -39, 7, 3, 0, 0, Math.PI * 2);
+      c.fill();
+      const flicker = Math.sin(t * 12 + b.id) * 2;
+      c.fillStyle = night ? "#ffb447" : "#f6812e";
+      c.beginPath();
+      c.moveTo(-5, -40);
+      c.quadraticCurveTo(-8, -48, flicker, -58);
+      c.quadraticCurveTo(8, -48, 5, -40);
+      c.fill();
+      c.fillStyle = "#ffe08b";
+      c.beginPath();
+      c.moveTo(-2, -41);
+      c.quadraticCurveTo(-3, -47, flicker, -51);
+      c.quadraticCurveTo(3, -46, 2, -41);
+      c.fill();
+      break;
+    }
     case "storage": {
       // log crib with crates + sacks
       c.fillStyle = "#7a5230";

@@ -534,6 +534,22 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
       w.sfx("ignite", x, y, 0.7);
       return true;
     }
+    case "boneTorch": {
+      // Brush strokes run every few pixels; space the actual lights along the route.
+      const torches = w.colony.buildings.filter((b) => b.kind === "boneTorch" && b.hp > 0);
+      if (torches.some((b) => Math.hypot(b.x - x, b.y - y) < 96)) return false;
+      const b = w.colony.addBuilding(w, "boneTorch", x, y);
+      if (!b) {
+        if (!drag) hint(w, "🔥", w.colony.canPlace(w, "boneTorch", x, y) ?? "Choose open ground for a torch.");
+        return false;
+      }
+      const stroke = torches.find((torch) => torch.id === w.trails.lastTorch);
+      const nearest = drag && stroke ? stroke : torches.sort((a, other) => Math.hypot(a.x - b.x, a.y - b.y) - Math.hypot(other.x - b.x, other.y - b.y))[0];
+      if (nearest) w.trails.connect(w, nearest.x, nearest.y, b.x, b.y);
+      w.trails.lastTorch = b.id;
+      if (!drag) w.toast("🔥", "Bone torch planned. Drag to string warm lights along a path. No energy needed.", b.x, b.y);
+      return true;
+    }
     default: {
       const kind = opt as BuildingKind;
       const why = w.colony.canPlace(w, kind, x, y);
@@ -575,6 +591,7 @@ function erase(w: World, x: number, y: number, drag: boolean) {
   const b = w.colony.buildings.find((bd) => bd.kind !== "bridge" && hit(bd)) ?? (onDeck ? undefined : w.colony.buildings.find(hit));
   if (b) {
     w.colony.removeBuilding(b);
+    if (b.kind === "boneTorch") w.trails.disconnectTorch(w, b.x, b.y);
     w.particles.burst(P.Dust, b.x, b.y, 8, 40, { size: 9, max: 0.7, color: "rgba(160,130,90,0.6)" });
     w.sfx("pop", x, y, 0.4);
     return true;

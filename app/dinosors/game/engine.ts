@@ -22,12 +22,12 @@ import { TALL, shakeFruit } from "../sim/plants";
 import { LM, isWaterTile } from "../sim/terrain";
 import { TILE, WORLD_H, WORLD_W, type Brute, type Danger, type Dino, type DinoState, type Dragon, type Human, type Resource, type Role, type SpeciesId, type TechId, type WeaponKind, type WeatherKind } from "../sim/types";
 import { CAMP_LEVELS } from "../data/facts";
-import { BUILDINGS, FORGE_ITEMS, HOUSING, SCORPION_TIERS, WEAPON_BY_ID, type Cost } from "../data/colony";
-import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion, type Command } from "../sim/tasks";
+import { BUILDINGS, FORGE_ITEMS, HOUSING, RIDEABLE, SCORPION_TIERS, WEAPON_BY_ID, type Cost } from "../data/colony";
+import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion, rallyBattlePets, type Command } from "../sim/tasks";
 import { carcassStage, makeCarcass, STAGE_LABEL } from "../sim/carcass";
 import { OUTFIT_BY_ID, type ForgeCat } from "../data/colony";
 import { condition, type Condition } from "../sim/injury";
-import { STONE_TOWER_UP, shelterDone, stagesOf, towerMaxHp, wallMaxHp } from "../sim/build";
+import { STONE_TOWER_UP, queueUpgrades, shelterDone, stagesOf, towerMaxHp, wallMaxHp, type UpgradeKind } from "../sim/build";
 import { SAVE_VERSION } from "../sim/world";
 import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genetics";
 import { World, type SaveData } from "../sim/world";
@@ -66,6 +66,13 @@ export interface DinoInfo {
   gen: number;
   traits: { icon: string; name: string }[];
   genes: { size: number; speed: number; tough: number };
+  owner: boolean;
+  tame: number;
+  ridden: boolean;
+  warTraining: number;
+  warArmor: number;
+  rideable: boolean;
+  tamingKnown: boolean;
 }
 
 export interface HumanInfo {
@@ -161,7 +168,7 @@ export interface Snapshot {
   fps: number;
   /** Neanderthal clans around the map */
   rivals: {
-    clans: { id: number; name: string; color: string; size: number; x: number; y: number; captives: string[]; wars: string[]; pacts: string[] }[];
+    clans: { id: number; name: string; color: string; size: number; children: number; food: number; style: string; campTier: number; x: number; y: number; captives: string[]; wars: string[]; pacts: string[] }[];
   };
   tribe: {
     level: number;
@@ -342,6 +349,7 @@ export class Engine {
   private pinch: { d: number; zoom: number; cx: number; cy: number } | null = null;
   private vel = { x: 0, y: 0 };
   private fly: { x: number; y: number; zoom: number; t: number } | null = null;
+  private wheelZoom: { target: number; x: number; y: number } | null = null;
   private shake = { amt: 0, t: 0 };
   private flash = { a: 0, color: "#fff" };
   private hover: { x: number; y: number } | null = null;
@@ -605,6 +613,17 @@ export class Engine {
       this.vel.x *= f;
       this.vel.y *= f;
     }
+    if (this.wheelZoom) {
+      const wheel = this.wheelZoom;
+      wheel.target = Math.max(Math.max(MIN_ZOOM, Math.min(this.w / WORLD_W, this.h / WORLD_H) * 0.9), Math.min(MAX_ZOOM, wheel.target));
+      const blend = 1 - Math.exp(-dt * 14);
+      const next = this.cam.zoom * Math.exp(Math.log(wheel.target / this.cam.zoom) * blend);
+      this.zoomBy(next / this.cam.zoom, wheel.x, wheel.y, true);
+      if (Math.abs(Math.log(wheel.target / this.cam.zoom)) < 0.002) {
+        this.zoomBy(wheel.target / this.cam.zoom, wheel.x, wheel.y, true);
+        this.wheelZoom = null;
+      }
+    }
     this.clampCam();
   }
 
@@ -621,6 +640,7 @@ export class Engine {
 
   flyTo(x: number, y: number, zoom = this.cam.zoom) {
     this.followId = 0;
+    this.wheelZoom = null;
     this.fly = { x, y, zoom, t: 0 };
     this.vel.x = this.vel.y = 0;
   }
@@ -629,7 +649,8 @@ export class Engine {
     this.flyTo(HOME.x, HOME.y, HOME.zoom);
   }
 
-  zoomBy(f: number, sx = this.w / 2, sy = this.h / 2) {
+  zoomBy(f: number, sx = this.w / 2, sy = this.h / 2, fromWheel = false) {
+    if (!fromWheel) this.wheelZoom = null;
     const before = this.renderer.toWorld(this.cam, sx, sy);
     this.cam.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.cam.zoom * f));
     this.clampCam();
@@ -703,6 +724,7 @@ export class Engine {
 
   private onDown = (e: PointerEvent) => {
     this.audio.unlock();
+    this.wheelZoom = null;
     this.canvas.setPointerCapture?.(e.pointerId);
     const { x: sx, y: sy } = this.local(e);
     if (this.view === "deep") {
@@ -736,6 +758,7 @@ export class Engine {
     }
     // brush tools paint straight away
     if (TOOL_BY_ID[this.tool.id].brush && this.tool.id !== "hand") {
+      if (this.tool.id === "build" && this.tool.build === "boneTorch") this.world.trails.lastTorch = 0;
       this.lastPaint = { x: wp.x, y: wp.y };
       if (applyTool(this.world, this.tool, wp.x, wp.y, false)) this.audio.play("click", 0, 0, 0.3);
     }
@@ -870,12 +893,15 @@ export class Engine {
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
     const { x, y } = this.local(e);
-    const delta = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
+    const delta = Math.max(-240, Math.min(240, e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.h : 1)));
     if (this.view === "deep") {
       this.deep.wheel(delta, x, y, e.ctrlKey);
       return;
     }
-    this.zoomBy(Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.0015)), x, y);
+    const base = this.wheelZoom?.target ?? this.cam.zoom;
+    const minZ = Math.max(MIN_ZOOM, Math.min(this.w / WORLD_W, this.h / WORLD_H) * 0.9);
+    this.wheelZoom = { target: Math.max(minZ, Math.min(MAX_ZOOM, base * Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.0015)))), x, y };
+    this.fly = null;
   };
 
   private onKey = (e: KeyboardEvent) => {
@@ -1293,7 +1319,36 @@ export class Engine {
     w.particles.spawn(P.Ring, cmd.x, cmd.y, { size: 10, max: 0.8, color: "rgba(255,215,90,0.95)" });
     this.audio.play("pop", 0, 0, 0.5);
     if (!t) this.toastOnce(`no-${cmd.kind}`, "🤷", "Nobody picked can do that.");
+    else this.selectedId = 0;
     this.emit({ type: "select" });
+  }
+
+  /** Give a nearby adult the order to befriend or train the selected dinosaur. */
+  trainSelectedDino() {
+    const w = this.world;
+    const d = w.dinoById(this.selectedId);
+    if (!d) return;
+    if (!w.camp.learned.has("taming")) {
+      w.toast("🐾", "Learn Taming at camp first.", d.x, d.y);
+      return;
+    }
+    const people = this.selectionHumans().filter((h) => !h.child && !h.stranger && !h.under && h.state !== "down");
+    const trainer = people[0] ?? w.humans.filter((h) => !h.child && !h.stranger && !h.under && h.state !== "down" && !h.captive).sort((a, b) => Math.hypot(a.x - d.x, a.y - d.y) - Math.hypot(b.x - d.x, b.y - d.y))[0];
+    if (!trainer) {
+      w.toast("🐾", "An adult is needed to work with this dinosaur.", d.x, d.y);
+      return;
+    }
+    if (d.owner && (d.warTraining ?? 0) >= 1) return;
+    this.runCommand({ kind: d.owner ? "train" : "tame", icon: "🐾", label: d.owner ? `Train ${d.name} for battle` : `Befriend ${d.name}`, x: d.x, y: d.y, target: d.id }, [trainer], null);
+  }
+
+  rideSelectedDino() {
+    const w = this.world;
+    const d = w.dinoById(this.selectedId);
+    if (!d || !d.owner || !RIDEABLE.has(d.species) || isBaby(d) || d.rider) return;
+    const rider = this.selectionHumans().find((h) => !h.child && !h.riding && !h.under && h.state !== "down")
+      ?? w.humans.filter((h) => !h.child && !h.riding && !h.under && !h.stranger && h.state !== "down").sort((a, b) => Math.hypot(a.x - d.x, a.y - d.y) - Math.hypot(b.x - d.x, b.y - d.y))[0];
+    if (rider) this.runCommand({ kind: "ride", icon: "🏇", label: `Ride ${d.name}`, x: d.x, y: d.y, target: d.id }, [rider], null);
   }
 
   /** Swap the last order for one of its alternatives (the "instead…" chip). */
@@ -1419,6 +1474,16 @@ export class Engine {
     s.have = {};
     w.toast("🎯", `Builders will upgrade it to a ${next.name}.`, s.x, s.y);
     this.emit({ type: "inspect" });
+  }
+
+  /** Queue every available upgrade of the requested type for builders. */
+  upgradeAll(kind: UpgradeKind = "all") {
+    const w = this.world;
+    const counts = queueUpgrades(w, kind);
+    const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+    w.toast("⬆️", total ? `Planned ${total} upgrades: ${Object.entries(counts).filter(([, n]) => n).map(([name, n]) => `${n} ${name}`).join(", ")}. Builders will gather what they need.` : "Everything available is already upgraded or waiting on research or construction.");
+    this.emit({ type: "inspect" });
+    return total;
   }
 
   setGateAuto(id: number) {
@@ -1598,6 +1663,7 @@ export class Engine {
     const candidates = people.filter((h) => h.role !== role).sort((a, b) => priority(a) - priority(b) || a.id - b.id);
     for (const h of candidates.slice(0, need)) this.changeRole(h, role);
     this.rallyRoles = null;
+    this.world.flags.delete("rallyDinos");
     this.world.toast("👥", `${count} ${count === 1 ? "person" : "people"} assigned to ${role === "auto" ? "Auto" : role}.`);
     return count;
   }
@@ -1622,12 +1688,23 @@ export class Engine {
 
   /** jobs from before a rally, so "Stand down" can put everyone back */
   private rallyRoles: Map<number, Role> | null = null;
+  private rallyRiders = new Set<number>();
 
   /** Every grown-up grabs a weapon and defends the camp — tap again to stand down. */
   rally() {
     const w = this.world;
     if (this.rallyRoles) {
+      w.flags.delete("rallyDinos");
       for (const h of w.humans) {
+        if (this.rallyRiders.has(h.id)) {
+          if (h.riding) dismount(w, h);
+          const task = w.tasks.get(h.taskId);
+          if (task?.kind === "ride") {
+            task.people = task.people.filter((id) => id !== h.id);
+            h.taskId = 0;
+            if (!task.people.length) w.tasks.remove(task);
+          }
+        }
         const r = this.rallyRoles.get(h.id);
         if (r) {
           h.role = r;
@@ -1635,20 +1712,23 @@ export class Engine {
         }
       }
       this.rallyRoles = null;
+      this.rallyRiders.clear();
       w.toast("🏳️", "Stand down! Everyone goes back to their jobs.");
       return;
     }
     this.rallyRoles = new Map(w.humans.filter((h) => !h.child).map((h) => [h.id, h.role]));
     let n = 0;
     for (const h of w.humans) {
-      if (h.child) continue;
+      if (h.child || h.stranger || h.captive || h.state === "down") continue;
       h.role = "guard";
       h.order = null;
       h.think = 0;
       n++;
     }
+    w.flags.add("rallyDinos");
+    this.rallyRiders = new Set(rallyBattlePets(w));
     w.sfx("drums", w.camp.x, w.camp.y, 0.8);
-    w.toast("📣", n ? `RALLY! ${n} cave people grab their weapons!` : "Nobody's old enough to fight yet!");
+    w.toast("📣", n ? `RALLY! ${n} fighters advance with ${this.rallyRiders.size} battle dinos!` : "Nobody's old enough to fight yet!");
   }
 
   allAuto() {
@@ -1833,6 +1913,8 @@ export class Engine {
       this.lastCmd = null;
       this.carried = null;
       this.rallyRoles = null;
+      this.rallyRiders.clear();
+      w.flags.delete("rallyDinos");
       this.cam = { ...HOME };
       this.clampCam();
       this.save(true);
@@ -2269,6 +2351,13 @@ export class Engine {
         gen: c.gen,
         traits: traitsOf(c.genes),
         genes: { size: c.genes.size, speed: c.genes.speed, tough: c.genes.tough },
+        owner: c.owner,
+        tame: c.tame,
+        ridden: !!c.rider,
+        warTraining: c.warTraining ?? 0,
+        warArmor: c.warArmor ?? 0,
+        rideable: RIDEABLE.has(c.species),
+        tamingKnown: w.camp.learned.has("taming"),
       };
     } else if (c && c.kind === "human") {
       let activity = ACTIVITY[c.state] ?? "Busy";
@@ -2340,6 +2429,10 @@ export class Engine {
             name: cl.name,
             color: cl.color,
             size: w.rivals.members(cl.id).length,
+            children: w.rivals.members(cl.id).filter((b) => (b.age ?? 180) < 180).length,
+            food: Math.floor(cl.food),
+            style: cl.style ?? "hide",
+            campTier: cl.campTier ?? 0,
             x: cl.x,
             y: cl.y,
             captives: w.rivals.captives(w, cl.id).map((h) => h.name),
