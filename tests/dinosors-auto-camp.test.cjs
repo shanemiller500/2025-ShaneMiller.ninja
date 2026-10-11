@@ -13,7 +13,7 @@ const root = path.join(__dirname, '..', 'app', 'dinosors', 'sim');
 const { World } = require(path.join(root, 'world.ts'));
 const { addHuman, stockPriorities } = require(path.join(root, 'humans.ts'));
 
-test('Auto plans one useful project after the first day and remembers it across saves', () => {
+test('Auto plans useful projects (with a pause between them) after the first day and remembers it across saves', () => {
   const w = new World(7803, false);
   addHuman(w, w.camp.x, w.camp.y, false, { role: 'auto' });
   w.camp.learned.add('basket');
@@ -24,16 +24,16 @@ test('Auto plans one useful project after the first day and remembers it across 
   w.update(1 / 30);
   assert.equal(w.colony.buildings.filter((b) => b.kind === 'foodStore').length, 1);
   w.tribe.autoImprove(w);
-  assert.equal(w.colony.buildings.length, 1, 'no second plan on the same day');
+  assert.equal(w.colony.buildings.length, 1, 'no second plan straight away');
   const restored = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
   restored.colony.buildings[0].built = 1;
   restored.colony.version++;
   restored.tribe.autoImprove(restored);
-  assert.equal(restored.colony.buildings.length, 1, 'loading does not repeat the daily plan');
+  assert.equal(restored.colony.buildings.length, 1, 'loading does not repeat the plan');
   restored.camp.learned.add('axe');
-  restored.day = 3;
+  restored.elapsed += 80;
   restored.tribe.autoImprove(restored);
-  assert.equal(restored.colony.buildings.filter((b) => b.kind === 'storage').length, 1, 'next day adds another useful building');
+  assert.equal(restored.colony.buildings.filter((b) => b.kind === 'storage').length, 1, 'after a pause, another useful building');
 });
 
 test('Auto restocking prioritizes supplies that are low relative to the camp target', () => {

@@ -335,7 +335,9 @@ export type HumanState =
   | "smith"
   | "research"
   | "resonate"
-  | "captive";
+  | "captive"
+  /** lying back studying the night sky (see sky.ts) */
+  | "stargaze";
 
 export type Resource =
   | "stick"
@@ -447,6 +449,9 @@ export interface Human {
   /** shelter they live in (0 = the cave) */
   home: number;
   family: number;
+  /** the campfire (and seat round it) this person is heading to or sitting at */
+  fireId?: number;
+  seat?: number;
   /** construction site being worked on ("wall:12", "" = none) */
   site: string;
   /** wants to stand up on the wall walkway at its goal */

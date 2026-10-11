@@ -297,6 +297,7 @@ export const DISCOVERIES: Discovery[] = [
   { id: "diamond", icon: "💎", name: "Diamond!", hint: "Deep, deep down." },
   { id: "motherLode", icon: "⛓️", name: "The Mother Lode", hint: "A mountain of iron, somewhere below." },
   { id: "crystalCave", icon: "💠", name: "Crystal Cave", hint: "Some caves deep down glitter." },
+  { id: "skyWatcher", icon: "🌙", name: "Sky Watcher", hint: "Clear nights are for looking up." },
   { id: "lostRoom", icon: "🏛️", name: "The Lost Room", hint: "Not every hole down there is natural." },
   { id: "hiddenHoard", icon: "💰", name: "Hidden Hoard", hint: "Ping the rock. Some of it is hollow." },
   { id: "undergroundRiver", icon: "🏞️", name: "River Below", hint: "Water runs under your feet."  },

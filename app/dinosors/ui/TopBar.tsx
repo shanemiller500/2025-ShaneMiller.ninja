@@ -186,6 +186,23 @@ function TimePanel({ snap, engine }: Props) {
           </button>
         ))}
       </div>
+      <div className="mt-3 rounded-xl bg-white/5 px-3 py-2 text-xs text-white/75">
+        <div className="flex items-center justify-between font-semibold text-white/90">
+          <span>
+            {snap.sky.icon} Sky watching: {snap.sky.name}
+          </span>
+          {snap.sky.moon && <span title={snap.sky.moon.name}>{snap.sky.moon.icon}</span>}
+        </div>
+        {snap.sky.next !== null && (
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full rounded-full bg-indigo-300" style={{ width: `${Math.min(100, (snap.sky.knowledge / snap.sky.next) * 100)}%` }} />
+          </div>
+        )}
+        <p className="mt-1">
+          {snap.sky.watching ? "Someone is out watching the stars tonight." : "On clear nights someone lies back and studies the sky."}
+          {snap.sky.level >= 2 && ` Forecasts: ${snap.sky.hits} right, ${snap.sky.misses} wrong.`}
+        </p>
+      </div>
       <div className="mt-3 text-sm font-semibold">⏩ Clock speed</div>
       <div className="mt-1.5 grid grid-cols-4 gap-1.5">
         {[0, 1, 2, 4].map((s) => {

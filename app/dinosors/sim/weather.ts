@@ -75,12 +75,19 @@ export class Weather implements Params {
   rainbow = 0;
   /** seconds until auto weather change */
   timer = 90;
+  /** what the next automatic change will be (rolled a change early, so sky watchers can read it) */
+  upcoming: WeatherKind | null = null;
+  /** counts every change (sky forecasts are matched to the change they were about) */
+  changes = 0;
   auto = true;
   private boltT = 6;
   private wasRaining = false;
 
   set(w: World, kind: WeatherKind, manual = true) {
     this.kind = kind;
+    this.changes++;
+    // the player chose this: the next automatic change is rolled when it comes
+    if (manual) this.upcoming = null;
     this.timer = manual ? 120 + w.rng() * 60 : 70 + w.rng() * 110;
     if (kind === "storm") {
       w.alarm(w.camX, w.camY, 3000, 0.15, "🌩️");
@@ -147,7 +154,9 @@ export class Weather implements Params {
       this.timer -= dt;
       if (this.timer <= 0) {
         const opts = NEXT[this.kind];
-        this.set(w, opts[Math.floor(w.rng() * opts.length)], false);
+        this.set(w, this.upcoming ?? opts[Math.floor(w.rng() * opts.length)], false);
+        const after = NEXT[this.kind];
+        this.upcoming = after[Math.floor(w.rng() * after.length)];
       }
     }
   }

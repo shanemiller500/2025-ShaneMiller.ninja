@@ -9,6 +9,7 @@ import { AudioManager } from "../audio/audio";
 import { DeepView, type DeepInfo } from "./deepView";
 import { canSend, pickMiners, recallAll, resetMine, sendDown, setOrder, type OrderKind } from "../sim/miners";
 import { demolishDeep } from "../sim/deepBuild";
+import { SKY_LEVELS } from "../sim/sky";
 import { canSendPack, packCap, recallPacks, sendPack } from "../sim/packs";
 import type { DeepKind } from "../data/mine";
 import { CIV_TECH, ENERGY_GEN, PYRAMID_STAGES, SHIELD_HOLD, type CivPath, type CivTechId } from "../data/civ";
@@ -171,6 +172,10 @@ export interface Snapshot {
   fps: number;
   /** smoothed ms per frame: simulating + drawing */
   perf: { sim: number; render: number };
+  /** sky watching: how far it's got, tonight's moon (once learned), forecast record */
+  sky: { level: number; name: string; icon: string; knowledge: number; next: number | null; moon: { icon: string; name: string } | null; hits: number; misses: number; watching: boolean };
+  /** the settlement's neighbourhoods */
+  zones: { homes: number; residents: number; beds: number; fires: number; stores: number }[];
   /** Neanderthal clans around the map */
   rivals: {
     clans: { id: number; name: string; color: string; size: number; children: number; food: number; style: string; campTier: number; x: number; y: number; captives: string[]; wars: string[]; pacts: string[] }[];
@@ -340,6 +345,7 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
   research: "Researching",
   captive: "Held captive by Neanderthals!",
   resonate: "Working the stone + crystals",
+  stargaze: "Watching the stars",
 };
 
 export class Engine {
@@ -2642,6 +2648,12 @@ export class Engine {
       seen: this.stable("seen", Array.from(w.seen)),
       fps: this.fpsAcc.fps,
       perf: { sim: Math.round(this.perf.sim * 10) / 10, render: Math.round(this.perf.render * 10) / 10 },
+      sky: (() => {
+        const lv = w.sky.level();
+        const def = SKY_LEVELS[lv];
+        return { level: lv, name: def.name, icon: def.icon, knowledge: Math.floor(w.sky.knowledge), next: SKY_LEVELS[lv + 1]?.at ?? null, moon: lv >= 1 ? w.sky.moon(w) : null, hits: w.sky.hits, misses: w.sky.misses, watching: !!w.sky.watcher };
+      })(),
+      zones: w.tribe.zones.map((z) => ({ homes: z.homes.length, residents: z.residents, beds: z.beds, fires: z.fires, stores: z.stores })),
       tribe: this.tribeSnapshot(),
       rivals: {
         clans: w.rivals.clans.map((cl) => {

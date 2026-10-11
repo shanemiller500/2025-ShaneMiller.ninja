@@ -10,7 +10,7 @@ import { CAMP_LEVELS, FACTS } from "../data/facts";
 import { HOUSING, SCORPION_TIERS, WEAPON_BY_ID, type WeaponDef } from "../data/colony";
 import { sp } from "../data/species";
 import { addDino, emote, findSpawnSpot, isBaby, setState, sizeOf } from "./dinos";
-import { addHuman, go, moveHuman, say, sourceFor } from "./humans";
+import { addHuman, go, homeArea, moveHuman, say, sourceFor } from "./humans";
 import { P } from "./particles";
 import { pick } from "./rng";
 import { isWalkTile, isWaterTile } from "./terrain";
@@ -44,6 +44,10 @@ import {
   type WallPart,
 } from "./types";
 import type { World } from "./world";
+import { updateZones, type Zone } from "./zones";
+
+/** Seconds between the projects Auto plans by itself (it used to be one a day). */
+const IMPROVE_EVERY = 75;
 
 export { TOWER_STAGES, WALL_HP };
 
@@ -949,6 +953,11 @@ export class Tribe {
 
   private planT = 20;
   private improvementDay = 1;
+  /** elapsed time of the last project Auto planned */
+  private improvedAt = -Infinity;
+  /** the settlement's neighbourhoods (see zones.ts), refreshed every few seconds */
+  zones: Zone[] = [];
+  zoneT = 0;
   /** wall version the entrances were last checked at */
   private entranceV = -1;
 
@@ -1058,12 +1067,54 @@ export class Tribe {
     }
   }
 
-  /** After the first day, Auto workers plan one useful project per day. */
+  /**
+   * Auto workers plan the next useful project, in order of need: homes when full, food,
+   * a fire + a store for every neighbourhood that has none, storage, healing, then upgrades.
+   * One project at a time (at most one other build still open), and a pause between them.
+   */
+  /**
+   * A neighbourhood with homes but no campfire gets one (lit straight away, two sticks);
+   * one with no store gets a storage hut (or a gathering post before the axe), so the
+   * people living there gather, unload and sit by the fire near home.
+   */
+  private planZone(w: World) {
+    const c = w.camp;
+    for (const z of this.zones) {
+      if (z.id === 0 || z.homes.length < 1) continue;
+      if (!z.fires && c.learned.has("fire") && c.stock.stick >= 2) {
+        for (let k = 0; k < 8; k++) {
+          const a = k * (Math.PI / 4);
+          const x = z.x + Math.cos(a) * 60;
+          const y = z.y + 40 + Math.sin(a) * 30;
+          if (!w.nav.passable("human", x, y)) continue;
+          c.stock.stick -= 2;
+          w.campfires.push({ id: w.nextId(), x, y, lit: true, fuel: 1, cook: 0 });
+          z.fires++;
+          w.toast("🔥", "Auto lit a campfire for the homes out there, so they have their own gathering place.", x, y);
+          return true;
+        }
+      }
+      if (!z.stores) {
+        const kind: BuildingKind = c.learned.has("axe") ? "storage" : "post";
+        for (const r of [90, 130, 170]) for (let k = 0; k < 12; k++) {
+          const a = k * (Math.PI / 6);
+          const b = w.colony.addBuilding(w, kind, z.x + Math.cos(a) * r, z.y + 30 + Math.sin(a) * r * 0.7);
+          if (!b) continue;
+          z.stores++;
+          w.toast("📦", `Auto planned a ${kind === "storage" ? "storage hut" : "gathering post"} for the homes out there, so nobody walks all the way back to camp.`, b.x, b.y);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   private autoImprove(w: World) {
-    if (w.day < 2 || this.improvementDay >= w.day) return;
+    if (w.day < 2 || w.elapsed - this.improvedAt < IMPROVE_EVERY) return;
     if (!w.humans.some((h) => h.role === "auto" && !h.child && !h.under && !h.stranger)) return;
-    if (w.buildSites().some((site) => !site.repair && !site.locked)) return;
+    if (w.buildSites().filter((site) => !site.repair && !site.locked).length > 1) return;
     this.improvementDay = w.day;
+    this.improvedAt = w.elapsed;
     const c = w.camp;
     const adults = w.humans.filter((h) => !h.child && !h.stranger).length;
     if (c.learned.has("shelter") && adults >= this.capacity(w) * 0.8 && !c.activeShelter(w) && w.shelters.length < 30) {
@@ -1085,6 +1136,7 @@ export class Tribe {
         }
       }
     }
+    if (this.planZone(w)) return;
     const plan = (kind: BuildingKind) => {
       for (const radius of [140, 205, 270]) for (let i = 0; i < 16; i++) {
         const a = (i + w.day * 3) * Math.PI / 8;
@@ -1132,6 +1184,7 @@ export class Tribe {
       this.alarmT = 2;
       this.updateFireAlarm(w);
     }
+    updateZones(w, dt);
     this.planT -= dt;
     if (this.planT <= 0) {
       this.planT = 6;
@@ -1214,6 +1267,7 @@ export class Tribe {
       raidsWon: this.raidsWon,
       raidTimer: Math.round(this.raidTimer),
       improvementDay: this.improvementDay,
+      improvedAt: Number.isFinite(this.improvedAt) ? Math.round(this.improvedAt) : null,
     };
   }
 
@@ -1245,6 +1299,8 @@ export class Tribe {
     this.raidsWon = d.raidsWon;
     this.raidTimer = d.raidTimer;
     this.improvementDay = d.improvementDay ?? w.day;
+    // older saves only remember the day: treat the plan as made just now
+    this.improvedAt = typeof d.improvedAt === "number" ? d.improvedAt : d.improvementDay !== undefined ? w.elapsed : -Infinity;
   }
 }
 
@@ -1485,7 +1541,9 @@ export function roleThink(w: World, h: Human): boolean {
       return false;
     }
     case "cook": {
-      const fire = w.campfires.find((f) => f.lit);
+      // the lit fire nearest home, where people actually gather
+      const area = homeArea(w, h);
+      const fire = w.campfires.filter((f) => f.lit).sort((a, b) => Math.hypot(a.x - area.x, a.y - area.y) - Math.hypot(b.x - area.x, b.y - area.y))[0];
       if (!fire || (camp.stock.meat <= 0 && camp.stock.fish <= 0)) return false;
       if (Math.hypot(h.x - fire.x - 24, h.y - fire.y) < 10) {
         go(h, "cook", h.x, h.y);

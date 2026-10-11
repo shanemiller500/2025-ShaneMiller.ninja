@@ -10,7 +10,7 @@ import { sizeOf } from "./dinos";
 import { P } from "./particles";
 import { clamp, pick } from "./rng";
 import { LM, groundSpeed } from "./terrain";
-import { T, TILE, type Dino, type Dragon, type Human, type HumanState, type Plant, type Resource } from "./types";
+import { T, TILE, type Campfire, type Dino, type Dragon, type Human, type HumanState, type Plant, type Resource } from "./types";
 import type { World } from "./world";
 import { TALL } from "./plants";
 import { roleAct, roleThink } from "./tribe";
@@ -444,23 +444,75 @@ export function shelterSpot(w: World, h?: Human): { x: number; y: number } {
   return { x: w.camp.caveX, y: w.camp.caveY };
 }
 
-/** Somewhere warm: the nearest lit fire, or home if it has a hearth / is cosy. */
+/** Seats round one campfire (people beyond that pick another fire, or go home). */
+export const FIRE_SEATS = 8;
+/** How far people will walk to a fire for the evening (warming up, they'll go further). */
+const FIRE_REACH = 1400;
+
+/** Where seat n of a fire is. */
+const seatAt = (f: Campfire, n: number) => {
+  const a = (n / FIRE_SEATS) * Math.PI * 2 + 0.3;
+  return { x: f.x + Math.cos(a) * 34, y: f.y + Math.sin(a) * 18 };
+};
+
+/** Seats taken at a fire: people sitting there, or on their way to their seat. */
+function seatsTaken(w: World, f: Campfire, me: Human) {
+  const taken = new Set<number>();
+  for (const o of w.humans) {
+    if (o === me || o.fireId !== f.id || o.seat === undefined) continue;
+    const s = seatAt(f, o.seat);
+    if (o.state === "sitFire" || (o.state === "walk" && Math.hypot(o.tx - s.x, o.ty - s.y) < 4)) taken.add(o.seat);
+  }
+  return taken;
+}
+
+/**
+ * A lit campfire with a free seat for this person, picked sensibly: close to home (or to
+ * where they are, when they're cold), not already packed, where their family is sitting,
+ * and the ones that are crowded already count for less. Keeps a seat they already have.
+ */
+export function pickFire(w: World, h: Human, from: { x: number; y: number } = homeArea(w, h), reach = FIRE_REACH): { fire: Campfire; x: number; y: number } | null {
+  let best: { fire: Campfire; seat: number } | null = null;
+  let bestScore = Infinity;
+  for (const f of w.campfires) {
+    if (!f.lit) continue;
+    const d = Math.hypot(f.x - from.x, f.y - from.y);
+    if (d > reach) continue;
+    const taken = seatsTaken(w, f, h);
+    const mine = h.fireId === f.id && h.seat !== undefined && !taken.has(h.seat);
+    if (!mine && taken.size >= FIRE_SEATS) continue;
+    let family = 0;
+    if (h.family) for (const o of w.humans) if (o !== h && o.family === h.family && o.fireId === f.id && o.state === "sitFire") family++;
+    const score = d + taken.size * 45 - family * 120 - (mine ? 200 : 0);
+    if (score < bestScore) {
+      bestScore = score;
+      let seat = mine ? h.seat! : 0;
+      if (!mine) while (taken.has(seat)) seat++;
+      best = { fire: f, seat };
+    }
+  }
+  if (!best) return null;
+  h.fireId = best.fire.id;
+  h.seat = best.seat;
+  return { fire: best.fire, ...seatAt(best.fire, best.seat) };
+}
+
+/** Somewhere warm: a fire with room (nearest to where they are), or home if it has a hearth / is cosy. */
 function warmSpot(w: World, h: Human): { x: number; y: number; home: boolean } | null {
   const home = h.home ? w.shelters.find((s) => s.id === h.home && shelterDone(s)) : undefined;
   if (home && (HOUSING[home.tier].warmth >= 0.55 || w.weather.snow > 0.6)) return { x: home.x, y: home.y + 6, home: true };
-  let best: { x: number; y: number; home: boolean } | null = null;
-  let bd = 1400;
-  for (const f of w.campfires) {
-    if (!f.lit) continue;
-    const d = Math.hypot(f.x - h.x, f.y - h.y);
-    if (d < bd) {
-      bd = d;
-      const a = (h.id * 2.4) % (Math.PI * 2);
-      best = { x: f.x + Math.cos(a) * 34, y: f.y + Math.sin(a) * 18, home: false };
-    }
-  }
-  if (best) return best;
+  const fire = pickFire(w, h, h);
+  if (fire) return { x: fire.x, y: fire.y, home: false };
   return home ? { x: home.x, y: home.y + 6, home: true } : { x: w.camp.caveX, y: w.camp.caveY, home: true };
+}
+
+/**
+ * A material an open build site needs that the stockpile has none of: anyone with nothing
+ * better to do fetches it, so the builders (capped per site) aren't left waiting.
+ */
+function siteShortage(w: World): Resource | null {
+  for (const s of w.buildSites()) if (!s.locked && s.need && w.camp.stock[s.need] <= 0) return s.need;
+  return null;
 }
 
 function think(w: World, h: Human) {
@@ -649,7 +701,7 @@ function think(w: World, h: Human) {
   }
 
   // busy with something that finishes on its own
-  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate") return;
+  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze") return;
   if (h.state === "hunt" || h.state === "aim" || h.state === "haul" || h.state === "cook" || h.state === "farm" || h.state === "repair") return;
   if (h.state === "carry" || h.state === "walk" || h.state === "explore") {
     if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6 && !(h.riding && w.flags.has("rallyDinos") && role === "guard" && !h.taskId)) return;
@@ -689,17 +741,15 @@ function think(w: World, h: Human) {
     if (douseThink(w, h, () => undefined)) return;
   }
 
-  // 4. evening by the fire (except whoever is on duty)
-  const area = homeArea(w, h);
-  const fire = w.campfires.filter((f) => f.lit).sort((a, b) => Math.hypot(a.x - area.x, a.y - area.y) - Math.hypot(b.x - area.x, b.y - area.y))[0];
-  const offDuty = role === "gatherer" || h.child;
-  if (fire && offDuty && !h.order && (w.daylight < 0.45 || (h.child && w.rng() < 0.2))) {
-    const a = (h.id * 2.4) % (Math.PI * 2);
-    const sx = fire.x + Math.cos(a) * 34;
-    const sy = fire.y + Math.sin(a) * 18;
-    if (Math.hypot(h.x - sx, h.y - sy) < 6) go(h, "sitFire", sx, sy);
-    else go(h, "walk", sx, sy);
-    return;
+  // 4. evening by the fire: everyone off duty (guards keep watch; builders finish what's open first)
+  const offDuty = h.child || (role !== "guard" && !(role === "builder" && tribe.nextJob(w)));
+  if (offDuty && !h.order && (w.daylight < 0.45 || (h.child && w.rng() < 0.2))) {
+    const seat = pickFire(w, h);
+    if (seat) {
+      if (Math.hypot(h.x - seat.x, h.y - seat.y) < 6) go(h, "sitFire", seat.x, seat.y);
+      else go(h, "walk", seat.x, seat.y);
+      return;
+    }
   }
 
   if (h.child) return childThink(w, h);
@@ -749,8 +799,8 @@ function think(w: World, h: Human) {
   // a dinosaur body lying near camp: harvest it
   if (role === "gatherer" && autoButcher(w, h, 700)) return;
 
-  // Urgent plans first, then restock the lowest supplies evenly.
-  const urgent = camp.missing(w) ?? w.colony.missing(w) ?? w.civ.missing(w);
+  // Urgent plans first (including whatever a build site is stuck waiting for), then restock the lowest supplies evenly.
+  const urgent = camp.missing(w) ?? w.colony.missing(w) ?? w.civ.missing(w) ?? siteShortage(w);
   const needs = urgent ? [urgent, ...stockPriorities(w).filter((r) => r !== urgent)] : stockPriorities(w);
   for (const need of needs) {
     const src = sourceFor(w, h, need);

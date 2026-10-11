@@ -45,6 +45,7 @@ import { Nav } from "./nav";
 import { Colony } from "./colony";
 import { Civ } from "./civ";
 import { Extinction } from "./extinction";
+import { Sky } from "./sky";
 import { Mine } from "./mine";
 import { updateCrew } from "./miners";
 import { updatePacks } from "./packs";
@@ -175,6 +176,8 @@ export class World {
   population = new Population();
   civ = new Civ();
   extinction = new Extinction();
+  /** sky watching: knowledge, the moon, weather forecasts */
+  sky = new Sky();
   /** The Deep: the mine under the cave (its own grid + random numbers) */
   mine: Mine;
   /** Lifted ore waits on the surface until a trained dinosaur carries it. */
@@ -748,6 +751,7 @@ export class World {
         evolveWorld(this);
       }
     }
+    this.sky.update(this, dt);
     this.particles.update(dt);
 
     if (this.pois.length > 20) this.pois.splice(0, this.pois.length - 20);
@@ -980,6 +984,7 @@ export class World {
       items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
       eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent, genes: e.genes, gen: e.gen })),
       evo: this.evo,
+      sky: this.sky.serialize(),
       evoLeaps: this.evoLeaps,
       evoAuto: this.evoAuto,
       plants: this.plants.map((p) => [p.kind, r(p.x), r(p.y), r(p.size), r(p.food), r(p.burnt), p.fruit, p.stump ? 1 : 0] as const),
@@ -1088,6 +1093,7 @@ export class World {
     w.tribe.load(w, data.tribe);
     w.rivals.load(w, (data as { rivals?: ReturnType<Rivals["serialize"]> }).rivals);
     w.evo = data.evo ?? {};
+    w.sky.load(data.sky);
     w.evoLeaps = data.evoLeaps ?? 0;
     w.evoAuto = !!data.evoAuto;
     w.camp.learned = new Set(data.camp.learned);

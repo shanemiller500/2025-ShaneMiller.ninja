@@ -1042,10 +1042,32 @@ export function taskCarrying(w: World, h: Human) {
 const carryCap = (w: World, h: Human) => (w.camp.learned.has("basket") ? 6 : 3) * (h.riding ? 3 : 1);
 
 /** The builder brain: works through sites that pass `allow`. Returns false when there's nothing to do. */
+/**
+ * How many people one site can use at once: a wall piece has room for a couple, bigger
+ * jobs for more; fetching materials, a few carriers. Anyone over the cap moves on to the
+ * next site (or back to gathering), so a crowd doesn't pile onto one hut while others wait.
+ */
+export const CREW = { hammerWall: 2, hammer: 4, carry: 3 };
+
+export function crewCap(s: Site) {
+  if (s.need !== null && !s.repair) return CREW.carry;
+  return s.kind === "wall" ? CREW.hammerWall : CREW.hammer;
+}
+
+/** People on each site right now (everyone but `me`). */
+function crews(w: World, me: Human) {
+  const out = new Map<string, number>();
+  for (const o of w.humans) if (o !== me && o.site) out.set(o.site, (out.get(o.site) ?? 0) + 1);
+  return out;
+}
+
 export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boolean {
   const camp = w.camp;
-  const list = sites(w).filter((s) => !s.locked && allow(s));
+  const list = w.buildSites().filter((s) => !s.locked && allow(s));
   if (!list.length) return false;
+  const crew = crews(w, h);
+  // a site already full of people is someone else's job (unless it's the one I'm on)
+  const room = (s: Site) => siteKey(s) === h.site || (crew.get(siteKey(s)) ?? 0) < crewCap(s);
   // A construction task uses h.task as its temporary material request while
   // the builder walks to and gathers that source. Keep that trip intact.
   if (h.task && (h.state === "walk" || h.state === "gather") && list.some((s) => siteKey(s) === h.site && s.need === h.task)) return true;
@@ -1057,6 +1079,7 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
   const preferred = h.site ? list.find((x) => siteKey(x) === h.site) : undefined;
   list.sort((a, b) => (a === preferred ? -1 : b === preferred ? 1 : score(a) - score(b)));
   for (const s of list) {
+    if (!room(s)) continue;
     const top = siteOnTop(w, s);
     const spot = standSpot(w, h, s, top);
     if (s.need === null || s.repair) {
@@ -1083,7 +1106,9 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
     }
     if (camp.stock[s.need] > 0) {
       h.site = siteKey(s);
-      if (near(h, camp.pileX, camp.pileY, 34)) {
+      // the stock is the tribe's, so any store that keeps this kind of thing will do: the nearest one
+      const store = w.colony.dropOff(w, h.x, h.y, s.need);
+      if (near(h, store.x, store.y, 34)) {
         const n = Math.min(camp.stock[s.need], carryCap(w, h));
         camp.stock[s.need] -= n;
         h.carry = s.need;
@@ -1092,7 +1117,7 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
         go(h, "carry", spot.x, spot.y);
       } else {
         h.task = null;
-        go(h, "walk", camp.pileX - 10, camp.pileY + 10);
+        go(h, "walk", store.x, store.y);
       }
       return true;
     }

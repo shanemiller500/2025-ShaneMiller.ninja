@@ -682,7 +682,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   }
 
   // head
-  const headY = -H * 0.52 + (st === "lookUp" ? -H * 0.02 : 0);
+  const headY = -H * 0.52 + (st === "lookUp" || st === "stargaze" ? -H * 0.02 : 0);
   c.fillStyle = h.skin;
   c.beginPath();
   c.arc(0, headY, H * 0.15, 0, Math.PI * 2);
@@ -782,7 +782,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   }
   if (st !== "sleep") {
     // big friendly cartoon eye + a round nose + a grin
-    const ey = headY + (st === "lookUp" ? -H * 0.05 : -H * 0.01);
+    const ey = headY + (st === "lookUp" || st === "stargaze" ? -H * 0.05 : -H * 0.01);
     c.fillStyle = "#fffaf0";
     c.beginPath();
     c.ellipse(H * 0.075, ey, H * 0.042, H * 0.05, 0, 0, Math.PI * 2);
