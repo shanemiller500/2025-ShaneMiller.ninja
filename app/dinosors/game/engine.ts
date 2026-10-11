@@ -27,7 +27,8 @@ import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion
 import { carcassStage, makeCarcass, STAGE_LABEL } from "../sim/carcass";
 import { OUTFIT_BY_ID, type ForgeCat } from "../data/colony";
 import { condition, type Condition } from "../sim/injury";
-import { STONE_TOWER_UP, queueUpgrades, shelterDone, stagesOf, towerMaxHp, wallMaxHp, type UpgradeKind } from "../sim/build";
+import { STONE_TOWER_UP, queueUpgrades, shelterDone, stagesOf, towerMaxHp, wallMaxHp, sites, siteKey, type UpgradeKind } from "../sim/build";
+import { commandCollect, commandDeliver, commandTravel, eligible, workOf, type WorkSkill } from "../sim/workDinos";
 import { SAVE_VERSION } from "../sim/world";
 import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genetics";
 import { World, type SaveData } from "../sim/world";
@@ -71,6 +72,7 @@ export interface DinoInfo {
   ridden: boolean;
   warTraining: number;
   warArmor: number;
+  work: Dino["work"];
   rideable: boolean;
   tamingKnown: boolean;
 }
@@ -1065,6 +1067,32 @@ export class Engine {
       return;
     }
 
+    const selectedWorkDino = w.dinoById(this.selectedId);
+    const tappedPassenger = selectedWorkDino ? this.pickHuman(x, y) : null;
+    if (selectedWorkDino?.owner && selectedWorkDino.work && selectedWorkDino.work.skills && !this.selection.length && (!this.pickDino(x, y) || tappedPassenger)) {
+      const work = workOf(selectedWorkDino);
+      const site = sites(w).find((s) => Math.hypot(s.x - x, s.y - y) < 56 && !s.locked);
+      const mine = Math.hypot(w.camp.caveX - x, w.camp.caveY - y) < 75;
+      const store = w.colony.buildings.find((b) => ["storage", "foodStore"].includes(b.kind) && b.built >= 1 && Math.hypot(b.x - x, b.y - y) < 64);
+      const atPile = Math.hypot(w.camp.pileX - x, w.camp.pileY - y) < 75;
+      let ordered = false;
+      const passenger = tappedPassenger;
+      const seatAvailable = !selectedWorkDino.rider || ((selectedWorkDino.species === "apato" || selectedWorkDino.species === "brachio") && (selectedWorkDino.passengers?.length ?? 0) < 2);
+      if (passenger && seatAvailable && !passenger.riding && !passenger.child && (work.skills.riding ?? 0) >= 0.35) {
+        const task = issue(w, [passenger], { kind: "ride", icon: "🏇", label: `Ride ${selectedWorkDino.name}`, x: selectedWorkDino.x, y: selectedWorkDino.y, target: selectedWorkDino.id });
+        if (task) { work.boardUntil = w.elapsed + 30; ordered = true; }
+      } else if (work.cargoN && (site || store || atPile)) ordered = commandDeliver(w, selectedWorkDino, site ? siteKey(site) : "", site?.sx ?? store?.x ?? w.camp.pileX, site?.sy ?? store?.y ?? w.camp.pileY);
+      else if (!work.cargoN && (mine || store || atPile)) {
+        const stock = mine ? w.mineLoads : w.camp.stock;
+        const res = work.cargo && (stock[work.cargo] ?? 0) > 0 ? work.cargo : (Object.entries(stock).find(([, n]) => (n ?? 0) > 0)?.[0] as Resource | undefined);
+        if (res) ordered = commandCollect(w, selectedWorkDino, mine ? "mine" : "stock", res, mine ? w.camp.caveX : store?.x ?? w.camp.pileX, mine ? w.camp.caveY : store?.y ?? w.camp.pileY);
+      } else if ((work.skills.riding ?? 0) >= 0.35 && selectedWorkDino.rider) {
+        const rider = w.humans.find((h) => h.id === selectedWorkDino.rider);
+        if (rider) { go(rider, "walk", x, y); work.job = "travel"; work.targetX = x; work.targetY = y; work.manual = true; ordered = true; }
+      } else if ((work.skills.riding ?? 0) >= 0.35) ordered = commandTravel(w, selectedWorkDino, x, y);
+      if (ordered) { w.toast("🦕", `${selectedWorkDino.name}: ${work.job === "collect" ? "collect cargo" : work.job === "deliver" ? "deliver cargo" : "travel"}.`, x, y); this.emit({ type: "select" }); return; }
+    }
+
     // people selected: the tap is an order (unless you tapped another person to pick them)
     if (this.selection.length) {
       const people = this.selectionHumans();
@@ -1324,6 +1352,50 @@ export class Engine {
   }
 
   /** Give a nearby adult the order to befriend or train the selected dinosaur. */
+  startWorkTraining(dinoId: number, skill: WorkSkill, trainerId: number) {
+    const w = this.world;
+    const d = w.dinoById(dinoId);
+    const h = w.humans.find((person) => person.id === trainerId);
+    if (!d || !h || !d.owner || !eligible(d, skill) || !w.camp.learned.has("taming") || h.child || h.under || h.stranger || h.state === "down") return false;
+    const work = workOf(d);
+    work.focus = skill; work.trainer = h.id; work.practice = 0;
+    const task = issue(w, [h], { kind: "trainWork", icon: "🦕", label: `Train ${d.name} for ${skill}`, x: d.x, y: d.y, target: d.id });
+    if (!task) { work.focus = null; work.trainer = 0; return false; }
+    d.think = 0;
+    this.emit({ type: "select" });
+    return true;
+  }
+
+  equipWorkHarness(dinoId: number) {
+    const d = this.world.dinoById(dinoId);
+    if (!d || !d.owner || !d.work || Math.max(d.work.skills.hauler ?? 0, d.work.skills.heavy ?? 0, d.work.skills.runner ?? 0) < 0.35) return false;
+    const stock = this.world.camp.stock;
+    const next = d.work.harness + 1;
+    if (next > 2 || stock.hide < (next === 1 ? 2 : 3) || stock.wood < (next === 1 ? 2 : 4)) return false;
+    stock.hide -= next === 1 ? 2 : 3; stock.wood -= next === 1 ? 2 : 4;
+    d.work.harness = next;
+    this.world.toast("🧰", `${d.name} has ${next === 1 ? "a pack harness" : "a reinforced cargo rig"}!`, d.x, d.y);
+    this.emit({ type: "select" });
+    return true;
+  }
+
+  setDinoAutoWork(dinoId: number, on: boolean) {
+    const d = this.world.dinoById(dinoId);
+    if (!d?.owner) return;
+    const work = workOf(d);
+    work.auto = on;
+    if (!on && !work.manual && !work.cargoN) work.job = null;
+    d.think = 0;
+    this.emit({ type: "select" });
+  }
+
+  chooseDinoCargo(dinoId: number, resource: Resource) {
+    const d = this.world.dinoById(dinoId);
+    if (!d?.owner || !d.work || d.work.cargoN) return;
+    d.work.cargo = resource;
+    this.emit({ type: "select" });
+  }
+
   trainSelectedDino() {
     const w = this.world;
     const d = w.dinoById(this.selectedId);
@@ -2356,6 +2428,7 @@ export class Engine {
         ridden: !!c.rider,
         warTraining: c.warTraining ?? 0,
         warArmor: c.warArmor ?? 0,
+        work: c.work ? { ...c.work, skills: { ...c.work.skills } } : undefined,
         rideable: RIDEABLE.has(c.species),
         tamingKnown: w.camp.learned.has("taming"),
       };

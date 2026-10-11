@@ -140,6 +140,46 @@ function pillarLeg(k: Ctx2, hx: number, hy: number, legH: number, phase: number,
   k.c.beginPath();
   k.c.ellipse(footX + thick * 0.1, -lift - thick * 0.1, thick * 0.55, thick * 0.22, 0, 0, Math.PI * 2);
   k.c.fill();
+  // Separate toes and short pale claws make the foot read as a heavy planted limb.
+  k.c.strokeStyle = shade(k.def.look.body, -0.48);
+  k.c.lineWidth = Math.max(0.8, thick * 0.07);
+  for (const toe of [-0.25, 0.05, 0.32]) {
+    k.c.beginPath();
+    k.c.moveTo(footX + thick * toe, -lift - thick * 0.08);
+    k.c.lineTo(footX + thick * (toe + 0.12), -lift - thick * 0.015);
+    k.c.stroke();
+  }
+  k.c.fillStyle = "#e5d9b9";
+  for (const toe of [-0.25, 0.05, 0.32]) {
+    k.c.beginPath();
+    k.c.moveTo(footX + thick * (toe + 0.11), -lift - thick * 0.02);
+    k.c.lineTo(footX + thick * (toe + 0.22), -lift + thick * 0.015);
+    k.c.lineTo(footX + thick * (toe + 0.1), -lift + thick * 0.01);
+    k.c.closePath(); k.c.fill();
+  }
+}
+
+function skinTexture(k: Ctx2) {
+  if (k.L < 48 || k.def.move !== "walk") return;
+  const { c, L, def, p } = k;
+  const sauropod = def.plan === "sauropod";
+  c.save();
+  c.beginPath();
+  c.ellipse(0, -L * (sauropod ? 0.41 : 0.36), L * (sauropod ? 0.39 : 0.31), L * (sauropod ? 0.18 : 0.15), 0, 0, Math.PI * 2);
+  c.clip();
+  c.globalAlpha = 0.26;
+  c.strokeStyle = shade(def.look.body, -0.43);
+  c.lineWidth = Math.max(0.7, L * 0.007);
+  const rows = L > 95 ? 5 : 4;
+  for (let row = 0; row < rows; row++) for (let col = -5; col <= 5; col++) {
+    const x = (col + (row % 2) * 0.45) * L * 0.07;
+    const y = -L * (sauropod ? 0.49 : 0.44) + row * L * 0.047;
+    const sway = Math.sin(p.t * 2.4) * L * 0.002;
+    c.beginPath();
+    c.arc(x, y + sway, L * 0.018, 0.2, Math.PI - 0.2);
+    c.stroke();
+  }
+  c.restore();
 }
 
 function eye(k: Ctx2, x: number, y: number, r: number, angry: boolean) {
@@ -1150,5 +1190,6 @@ export function drawDino(c: CanvasRenderingContext2D, def: SpeciesDef, L: number
   const breathe = 1 + Math.sin(p.t * 2.4) * 0.012;
   c.scale(1, breathe);
   PAINTERS[def.plan](k);
+  skinTexture(k);
   c.restore();
 }

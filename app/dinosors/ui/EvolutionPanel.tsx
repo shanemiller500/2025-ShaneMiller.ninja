@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import { SPECIES_BY_ID } from "../data/species";
 import { MUTATIONS } from "../sim/genetics";
 import type { Engine, Snapshot } from "../game/engine";
 import Portrait from "./Portrait";
+import { useClickAway } from "./useClickAway";
 
 /* ------------------------------------------------------------------ */
 /*  Evolution: how every species has changed since the world began,   */
@@ -34,6 +35,8 @@ function Gene({ icon, label, v }: { icon: string; label: string; v: number }) {
 }
 
 export default function EvolutionPanel({ snap, engine, onClose }: { snap: Snapshot; engine: Engine; onClose: () => void }) {
+  const panelRef = useRef<HTMLElement>(null);
+  useClickAway(true, panelRef, onClose);
   const evo = snap.evolution;
   const [cool, setCool] = useState(0);
   useEffect(() => {
@@ -45,6 +48,7 @@ export default function EvolutionPanel({ snap, engine, onClose }: { snap: Snapsh
   const extinct = evo.species.filter((s) => s.n === 0 && snap.seen.includes(s.id));
   return (
     <motion.aside
+      ref={panelRef}
       initial={{ opacity: 0, x: 24, scale: 0.97 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 420, damping: 32 }}

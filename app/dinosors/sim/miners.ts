@@ -20,6 +20,7 @@ import { knockOut } from "./injury";
 import { N, idx, inMine, toolsOf, type Mine } from "./mine";
 import type { Human, Resource } from "./types";
 import type { World } from "./world";
+import { canWork, workOf } from "./workDinos";
 
 export type OrderKind = "dig" | "support" | "blast" | "pump";
 
@@ -812,9 +813,11 @@ function eat(w: World, m: Miner, h: Human, dt: number) {
 function deposit(w: World, m: Miner) {
   const mine = w.mine;
   let n = 0;
+  const hauler = w.dinos.some((d) => canWork(d) && workOf(d).auto);
   for (const [r, k] of Object.entries(m.carry) as [Resource, number][]) {
     if (!k) continue;
-    w.camp.stock[r] += k;
+    if (hauler) w.mineLoads[r] = (w.mineLoads[r] ?? 0) + k;
+    else w.camp.stock[r] += k;
     mine.hauled[r] = (mine.hauled[r] ?? 0) + k;
     n += k;
   }
@@ -824,7 +827,7 @@ function deposit(w: World, m: Miner) {
   mine.callLift(0);
   if (!w.flags.has("firstOre")) {
     w.flags.add("firstOre");
-    w.toast("🛗", "The first load came up the lift! Ore from the Deep goes straight onto the camp stockpile.");
+    w.toast("🛗", hauler ? "The first load came up the lift! A trained dinosaur can collect it outside the cave." : "The first load came up the lift! Ore from the Deep goes straight onto the camp stockpile.");
   }
 }
 

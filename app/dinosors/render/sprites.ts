@@ -328,7 +328,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   const moving = st === "walk" || st === "carry" || st === "flee" || st === "explore" || st === "hunt" || st === "haul";
   const sw = moving ? Math.sin(h.anim * 2.2) : 0;
   const sit = st === "sitFire" || st === "craft" || (st === "captive" && h.z <= 0);
-  const bend = st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" || st === "heal" ? 0.2 : st === "haul" ? -0.25 : st === "hunt" ? 0.25 : st === "tame" ? 0.15 : 0;
+  const bend = st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" || st === "heal" ? 0.2 : st === "haul" || st === "loadDino" ? -0.25 : st === "hunt" ? 0.25 : st === "tame" || st === "train" ? 0.15 : 0;
   const hipY = sit ? -H * 0.22 : -H * 0.42;
 
   // legs
@@ -420,7 +420,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.lineTo(H * 0.32, shY + H * 0.04);
     c.moveTo(H * 0.1, shY);
     c.lineTo(H * 0.42, shY + H * 0.02);
-  } else if (st === "haul") {
+  } else if (st === "haul" || st === "loadDino") {
     // leaning forward, pulling a rope behind
     c.moveTo(-H * 0.1, shY);
     c.lineTo(-H * 0.36, shY + H * 0.22);
@@ -1892,7 +1892,7 @@ export function drawTower(c: CanvasRenderingContext2D, stage: number, t: number)
   }
 }
 
-export function drawFarm(c: CanvasRenderingContext2D, growth: number, planted: boolean, t: number) {
+export function drawFarm(c: CanvasRenderingContext2D, growth: number, planted: boolean, t: number, crop: "flower" | "wheat" | "barley" = "wheat") {
   const W = 72;
   const H = 40;
   c.fillStyle = "#7a5a3a";
@@ -1916,16 +1916,16 @@ export function drawFarm(c: CanvasRenderingContext2D, growth: number, planted: b
       const g = growth;
       const hgt = 3 + g * 14;
       const sway = Math.sin(t * 2 + i + r) * g * 1.5;
-      c.strokeStyle = g < 0.8 ? "#6aa83a" : "#a7a33a";
+      c.strokeStyle = crop === "barley" ? (g < 0.8 ? "#789747" : "#c1b66b") : g < 0.8 ? "#6aa83a" : "#a7a33a";
       c.lineWidth = 1.4;
       c.beginPath();
       c.moveTo(x, y);
       c.lineTo(x + sway, y - hgt);
       c.stroke();
       if (g >= 0.7) {
-        c.fillStyle = g >= 1 ? "#f2c94c" : "#c9b14a";
+        c.fillStyle = crop === "flower" ? ["#f48fb1", "#fff176", "#ce93d8", "#ffab91"][(i + r) % 4] : crop === "barley" ? (g >= 1 ? "#d6c987" : "#bdb06f") : g >= 1 ? "#f2c94c" : "#c9b14a";
         c.beginPath();
-        c.ellipse(x + sway, y - hgt - 2, 1.8, 3.6, 0, 0, Math.PI * 2);
+        c.ellipse(x + sway, y - hgt - 2, crop === "flower" ? 2.8 : 1.8, crop === "flower" ? 2.8 : 3.6, 0, 0, Math.PI * 2);
         c.fill();
       }
     }

@@ -1427,6 +1427,24 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
       }
       break;
     }
+    case "mill": {
+      c.fillStyle = "#8b6842";
+      c.fillRect(-W / 2 + 4, -30, W - 8, 30);
+      c.fillStyle = "#c3a16b";
+      c.beginPath(); c.moveTo(-W / 2, -29); c.lineTo(0, -49); c.lineTo(W / 2, -29); c.closePath(); c.fill();
+      c.strokeStyle = "#ead9a8"; c.lineWidth = 3;
+      c.beginPath(); c.arc(0, -20, 12, 0, Math.PI * 2); c.stroke();
+      c.beginPath(); c.moveTo(-9, -29); c.lineTo(9, -11); c.moveTo(9, -29); c.lineTo(-9, -11); c.stroke();
+      break;
+    }
+    case "bakery": {
+      c.fillStyle = "#94714d"; c.fillRect(-W / 2 + 3, -30, W - 6, 30);
+      c.fillStyle = "#c9a675"; c.beginPath(); c.moveTo(-W / 2, -29); c.lineTo(0, -50); c.lineTo(W / 2, -29); c.closePath(); c.fill();
+      c.fillStyle = "#554039"; c.beginPath(); c.arc(0, -12, 10, Math.PI, 0); c.lineTo(10, 0); c.lineTo(-10, 0); c.fill();
+      c.fillStyle = "#f3a34a"; c.beginPath(); c.arc(0, -11, 6 + Math.sin(t * 7) * 1.2, Math.PI, 0); c.fill();
+      c.fillStyle = "#d99a50"; c.beginPath(); c.ellipse(W / 3, -5, 7, 3, 0, 0, Math.PI * 2); c.fill();
+      break;
+    }
   }
 }
 
@@ -1545,10 +1563,15 @@ export function drawNode(c: CanvasRenderingContext2D, n: ResNode, t: number) {
   switch (n.kind) {
     case "stone":
     case "iron":
+    case "coal":
+    case "silver":
     case "gold":
+    case "diamond":
     case "flint":
     case "obsidian": {
-      const base = n.kind === "obsidian" ? "#2e2738" : n.kind === "flint" ? "#7c8a99" : "#8a837a";
+      const base = def.color;
+      const angular = n.kind === "flint" || n.kind === "obsidian" || n.kind === "diamond";
+      const small = n.kind === "gold" || n.kind === "diamond";
       const rocks: [number, number, number][] = [
         [-10, -2, 11],
         [8, -1, 9],
@@ -1556,29 +1579,32 @@ export function drawNode(c: CanvasRenderingContext2D, n: ResNode, t: number) {
         [12, -9, 6],
       ];
       for (const [x, y, r] of rocks) {
-        const rr = r * k;
-        c.fillStyle = shade(base, -0.15);
+        const rr = r * k * (small ? 0.76 : 1);
+        c.fillStyle = shade(base, -0.28);
         c.beginPath();
-        c.ellipse(x, y, rr, rr * 0.75, 0, 0, Math.PI * 2);
+        if (angular) {
+          c.moveTo(x - rr, y + rr * 0.35);
+          c.lineTo(x - rr * 0.45, y - rr * 0.68);
+          c.lineTo(x + rr * 0.35, y - rr * 0.85);
+          c.lineTo(x + rr, y + rr * 0.2);
+          c.lineTo(x + rr * 0.2, y + rr * 0.55);
+          c.closePath();
+        } else c.ellipse(x, y, rr, rr * 0.68, -0.15, 0, Math.PI * 2);
         c.fill();
-        c.fillStyle = base;
+        c.fillStyle = shade(base, 0.18);
         c.beginPath();
-        c.ellipse(x - rr * 0.2, y - rr * 0.25, rr * 0.8, rr * 0.55, 0, 0, Math.PI * 2);
+        if (angular) {
+          c.moveTo(x - rr * 0.65, y - rr * 0.08);
+          c.lineTo(x - rr * 0.4, y - rr * 0.53);
+          c.lineTo(x + rr * 0.3, y - rr * 0.68);
+          c.lineTo(x + rr * 0.05, y - rr * 0.08);
+          c.closePath();
+        } else c.ellipse(x - rr * 0.18, y - rr * 0.2, rr * 0.65, rr * 0.38, -0.2, 0, Math.PI * 2);
         c.fill();
-        if (n.kind !== "stone") {
-          // veins / glints
-          c.strokeStyle = def.color;
-          c.lineWidth = n.kind === "gold" ? 2 : 1.6;
-          c.beginPath();
-          c.moveTo(x - rr * 0.5, y - rr * 0.1);
-          c.lineTo(x, y - rr * 0.4 + (v % 2) * 2);
-          c.lineTo(x + rr * 0.4, y - rr * 0.2);
-          c.stroke();
-        }
       }
-      if (n.kind === "gold" || n.kind === "obsidian") {
+      if (n.kind === "gold" || n.kind === "obsidian" || n.kind === "silver" || n.kind === "diamond") {
         const a = (Math.sin(t * 3 + v) + 1) / 2;
-        c.fillStyle = n.kind === "gold" ? `rgba(255,240,170,${0.5 + a * 0.5})` : `rgba(200,170,255,${0.4 + a * 0.4})`;
+        c.fillStyle = n.kind === "gold" ? `rgba(255,240,170,${0.5 + a * 0.5})` : n.kind === "diamond" ? `rgba(205,255,255,${0.5 + a * 0.5})` : n.kind === "silver" ? `rgba(240,250,255,${0.4 + a * 0.5})` : `rgba(200,170,255,${0.4 + a * 0.4})`;
         c.font = "10px serif";
         c.textAlign = "center";
         c.fillText("✦", 6, -18);

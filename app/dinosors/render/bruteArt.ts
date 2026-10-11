@@ -288,6 +288,15 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
 /** In the hand, pointing "down" the arm (+y). */
 function drawBruteWeapon(c: CanvasRenderingContext2D, kind: Brute["weapon"]) {
   c.lineCap = "round";
+  if (kind === "sling") {
+    c.strokeStyle = INK;
+    c.lineWidth = 2.3;
+    c.beginPath(); c.moveTo(-4, -3); c.lineTo(-1, 8); c.lineTo(4, -3); c.stroke();
+    c.strokeStyle = "#7a5230"; c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(-4, -3); c.lineTo(0, 3); c.lineTo(4, -3); c.stroke();
+    c.fillStyle = "#827b70"; c.beginPath(); c.arc(0, 4, 2.3, 0, Math.PI * 2); c.fill();
+    return;
+  }
   if (kind === "rock") {
     c.fillStyle = INK;
     c.beginPath();
@@ -375,14 +384,14 @@ function drawBruteWeapon(c: CanvasRenderingContext2D, kind: Brute["weapon"]) {
 }
 
 /** A thrown spear / rock in flight (origin = its ground spot; z lifts it). */
-export function drawBruteMissile(c: CanvasRenderingContext2D, kind: "spear" | "rock", z: number, ang: number) {
+export function drawBruteMissile(c: CanvasRenderingContext2D, kind: "spear" | "rock" | "sling", z: number, ang: number) {
   c.fillStyle = "rgba(0,0,0,0.2)";
   c.beginPath();
   c.ellipse(0, 0, 4, 1.6, 0, 0, Math.PI * 2);
   c.fill();
   c.save();
   c.translate(0, -z);
-  if (kind === "rock") {
+  if (kind === "rock" || kind === "sling") {
     c.fillStyle = INK;
     c.beginPath();
     c.arc(0, 0, 4.4, 0, Math.PI * 2);

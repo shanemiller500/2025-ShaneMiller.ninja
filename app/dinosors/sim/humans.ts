@@ -16,7 +16,7 @@ import { TALL } from "./plants";
 import { roleAct, roleThink } from "./tribe";
 import { goalKey, nodePos, tileOf, TOWER_Z, WALK_Z, type NavClass } from "./nav";
 import { shelterDone, stagesOf } from "./build";
-import { buildAct, buildThink, deliverToSite, douseThink, joinTask, leaveScorpion, taskCarrying, taskThink } from "./tasks";
+import { buildAct, buildThink, deliverToSite, dismount, douseThink, joinTask, leaveScorpion, taskCarrying, taskThink } from "./tasks";
 import { healTick, hurtHuman, recover } from "./injury";
 import { autoButcher } from "./tasks";
 import { cutCarcass, cutTime, hasYield } from "./carcass";
@@ -107,11 +107,14 @@ export function go(h: Human, s: HumanState, x: number, y: number) {
 
 const replanAt = new WeakMap<Human, number>();
 
-const navClass = (h: Human): NavClass => (h.riding ? "rider" : "human");
+const navClass = (w: World, h: Human): NavClass => {
+  const mount = h.riding ? w.dinoById(h.riding) : null;
+  return mount && (sizeOf(mount) >= 110 || ((mount.species === "apato" || mount.species === "brachio") && mount.growth >= 0.5)) ? "hugeDino" : mount ? "rider" : "human";
+};
 
 /** Can this person step here (ground level)? Also avoids hot ground. */
 function walkOk(w: World, h: Human, x: number, y: number) {
-  if (!w.nav.passable(navClass(h), x, y)) return false;
+  if (!w.nav.passable(navClass(w, h), x, y)) return false;
   const i = tileOf(x, y);
   return w.lava.heat[i] < 0.1 && w.fire.heat[i] < 0.2;
 }
@@ -134,9 +137,9 @@ export function moveHuman(w: World, h: Human, dt: number) {
     // A worn tile at either end alone should not funnel every errand onto one trail.
     const markedRoute = Math.hypot(h.tx - h.x, h.ty - h.y) > TILE * 2
       && w.trails.wear[startTile] >= 5 && w.trails.wear[goalTile] >= 5;
-    const easy = !markedRoute && h.level === 0 && wantLevel === 0 && w.nav.ok(navClass(h), goalTile) && w.nav.lineClear(navClass(h), h.x, h.y, h.tx, h.ty);
+    const easy = !markedRoute && h.level === 0 && wantLevel === 0 && w.nav.ok(navClass(w, h), goalTile) && w.nav.lineClear(navClass(w, h), h.x, h.y, h.tx, h.ty);
     if (!easy) {
-      const path = w.nav.find(w, navClass(h), h.x, h.y, h.level, h.tx, h.ty, wantLevel);
+      const path = w.nav.find(w, navClass(w, h), h.x, h.y, h.level, h.tx, h.ty, wantLevel);
       if (path === undefined) h.pathKey = 0; // out of budget: ask again next frame
       else h.path = path;
     }
@@ -156,7 +159,7 @@ export function moveHuman(w: World, h: Human, dt: number) {
     } else if (final && np.level === 1) {
       wx = np.x;
       wy = np.y;
-    } else if (final && !w.nav.ok(navClass(h), tileOf(h.tx, h.ty))) {
+    } else if (final && !w.nav.ok(navClass(w, h), tileOf(h.tx, h.ty))) {
       // goal is inside something solid (a tree, a wall to fix): stop at the end of the path
       wx = np.x;
       wy = np.y;
@@ -182,7 +185,7 @@ export function moveHuman(w: World, h: Human, dt: number) {
     }
   }
   // goal inside something solid (a wall to fix, a doorway): close enough counts
-  if ((!h.path || h.pathI >= h.path.length - 1) && wantLevel === 0 && !w.nav.ok(navClass(h), tileOf(h.tx, h.ty)) && Math.hypot(h.tx - h.x, h.ty - h.y) < 30) {
+  if ((!h.path || h.pathI >= h.path.length - 1) && wantLevel === 0 && !w.nav.ok(navClass(w, h), tileOf(h.tx, h.ty)) && Math.hypot(h.tx - h.x, h.ty - h.y) < 30) {
     h.vx = h.vy = 0;
     return true;
   }
@@ -326,24 +329,24 @@ export function homeArea(w: World, h: Human): { x: number; y: number } {
   return home ? { x: home.x, y: home.y } : { x: w.camp.x, y: w.camp.y };
 }
 
-export function sourceFor(w: World, h: Human, r: Resource, cx = homeArea(w, h).x, cy = homeArea(w, h).y): { x: number; y: number; id: number } | null {
+export function sourceFor(w: World, h: Human, r: Resource, cx = homeArea(w, h).x, cy = homeArea(w, h).y, maxDistance = 900): { x: number; y: number; id: number } | null {
   switch (r) {
     case "stick":
     case "wood": {
-      const p = nearPlant(w, cx, cy, 900, (p) => TALL.has(p.kind) && !p.stump && p.burnt < 0.5 && (r === "stick" || p.size > 0.6));
+      const p = nearPlant(w, cx, cy, maxDistance, (p) => TALL.has(p.kind) && !p.stump && p.burnt < 0.5 && (r === "stick" || p.size > 0.6));
       return p ? { x: p.x + (p.x > cx ? -16 : 16), y: p.y + 6, id: p.id } : null;
     }
     case "leaves":
     case "berries": {
-      const p = nearPlant(w, cx, cy, 900, (p) => (p.kind === "bush" || p.kind === "fern" || p.kind === "cycad") && p.food > 0.3 && !p.stump);
+      const p = nearPlant(w, cx, cy, maxDistance, (p) => (p.kind === "bush" || p.kind === "fern" || p.kind === "cycad") && p.food > 0.3 && !p.stump);
       return p ? { x: p.x + 14, y: p.y + 4, id: p.id } : null;
     }
     case "stone": {
-      const b = w.props.find((p) => p.kind === "boulder" && Math.hypot(p.x - cx, p.y - cy) < 900);
+      const b = w.props.find((p) => p.kind === "boulder" && Math.hypot(p.x - cx, p.y - cy) < maxDistance);
       if (b) return { x: b.x + 18, y: b.y + 6, id: b.id };
-      const n = nearestNode(w, cx, cy, "stone", 1100);
+      const n = nearestNode(w, cx, cy, "stone", maxDistance);
       if (n) return n;
-      const t = w.terrain.findTile(cx, cy - 40, 700, (t) => t === T.Rock || t === T.Basalt, w.rng, 80);
+      const t = w.terrain.findTile(cx, cy - 40, maxDistance, (t) => t === T.Rock || t === T.Basalt, w.rng, 80);
       return t ? { ...t, id: 0 } : null;
     }
     case "water": {
@@ -356,7 +359,7 @@ export function sourceFor(w: World, h: Human, r: Resource, cx = homeArea(w, h).x
     case "tooth": {
       // the nearest dinosaur body that still has some
       let best: { x: number; y: number; id: number } | null = null;
-      let bd = 1800;
+      let bd = maxDistance;
       for (const it of w.items) {
         if (!it.carcass || !hasYield(it, r) || (it.claimed && w.dinoById(it.claimed))) continue;
         const d = Math.hypot(it.x - cx, it.y - cy);
@@ -380,9 +383,9 @@ export function sourceFor(w: World, h: Human, r: Resource, cx = homeArea(w, h).x
     case "magnetite":
     case "crystal":
     case "meteorite":
-      return nearestNode(w, cx, cy, r, 2600);
+      return nearestNode(w, cx, cy, r, maxDistance);
     case "grass": {
-      const t = w.terrain.findTile(cx, cy, 500, (t) => t === T.Grass, w.rng, 60);
+      const t = w.terrain.findTile(cx, cy, maxDistance, (t) => t === T.Grass, w.rng, 60);
       return t ? { ...t, id: 0 } : null;
     }
     case "fish": {
@@ -702,7 +705,7 @@ function think(w: World, h: Human) {
   if (h.child) return childThink(w, h);
 
   // riders with nothing to do take their mount home to rest
-  if (h.riding && !h.taskId && role !== "gatherer" && role !== "builder" && role !== "hunter" && !(role === "guard" && w.flags.has("rallyDinos"))) {
+  if (h.riding && !h.taskId && role !== "gatherer" && role !== "builder" && role !== "hunter" && !(role === "guard" && w.flags.has("rallyDinos")) && (w.dinoById(h.riding)?.work?.boardUntil ?? 0) < w.elapsed) {
     dismountHome(w, h);
     return;
   }
@@ -942,6 +945,15 @@ function finishGather(w: World, h: Human) {
 }
 
 export function updateHuman(w: World, h: Human, dt: number) {
+  const passengerMount = h.riding ? w.dinoById(h.riding) : null;
+  if (passengerMount && h.id !== passengerMount.rider && passengerMount.passengers?.includes(h.id)) {
+    const seat = passengerMount.passengers.indexOf(h.id);
+    h.x = passengerMount.x + (seat === 0 ? -15 : 15) * passengerMount.dir;
+    h.y = passengerMount.y - 2;
+    h.z = Math.max(18, sizeOf(passengerMount) * 0.38);
+    h.anim += dt * Math.max(0.2, Math.hypot(passengerMount.vx, passengerMount.vy) / 30);
+    return;
+  }
   h.stateT += dt;
   h.hunger = clamp(h.hunger + dt * 0.0025, 0, 1);
   h.energy = clamp(h.energy + (h.state === "sleep" ? dt * 0.03 : -dt * 0.002), 0, 1);
@@ -1007,6 +1019,16 @@ export function updateHuman(w: World, h: Human, dt: number) {
     if (m) {
       m.x = h.x;
       m.y = h.y;
+      if (m.work?.job === "travel" && m.work.manual && Math.hypot(h.x - m.work.targetX, h.y - m.work.targetY) < 18) {
+        m.work.job = null;
+        m.work.manual = false;
+        for (const id of [...(m.passengers ?? [])]) {
+          const passenger = w.humans.find((other) => other.id === id);
+          if (passenger) { dismount(w, passenger); go(passenger, "idle", passenger.x, passenger.y); }
+        }
+        dismount(w, h);
+        go(h, "idle", h.x, h.y);
+      }
     }
   }
 
@@ -1172,6 +1194,27 @@ export function updateHuman(w: World, h: Human, dt: number) {
       }
       d.vx = d.vy = 0;
       if (d.state !== "idle") d.state = "idle";
+      const work = d.work;
+      if (work?.trainer === h.id && work.focus) {
+        const skill = work.focus;
+        const snack = (["crop", "berries"] as Resource[]).find((r) => w.camp.stock[r] > 0);
+        work.practice += dt;
+        if (work.practice >= 10) {
+          work.practice = 0;
+          if (snack) w.camp.stock[snack]--;
+          d.tame = Math.min(1, d.tame + (snack ? 0.06 : 0.025));
+          say(h, snack ? `Good, ${d.name}!` : `Practice, ${d.name}!`);
+        }
+        work.skills[skill] = Math.min(1, (work.skills[skill] ?? 0) + dt / (snack ? 90 : 135));
+        if (w.rng() < dt * 0.5) w.particles.spawn(P.Heart, d.x, d.y, { z: sizeOf(d) * 0.5, vz: 12, size: 4, max: 1 });
+        if (work.skills[skill] >= 1) {
+          work.focus = null; work.trainer = 0;
+          say(h, `${d.name} learned ${skill}!`);
+          w.toast("🦕", `${d.name} is trained for ${skill}.`, d.x, d.y);
+          go(h, "idle", h.x, h.y); h.think = 0;
+        }
+        break;
+      }
       d.warTraining = Math.min(1, (d.warTraining ?? 0) + dt / (w.civ.has("cavalry") ? 30 : 45));
       const armor = d.warTraining >= 0.8 ? 2 : d.warTraining >= 0.35 ? 1 : 0;
       if (armor > (d.warArmor ?? 0)) {
@@ -1297,8 +1340,11 @@ function dismountHome(w: World, h: Human) {
   const pen = w.colony.buildings.find((b) => b.kind === "pen" && b.built >= 1);
   const spot = pen ? { x: pen.x, y: pen.y } : { x: w.camp.x + 160, y: w.camp.y + 150 };
   if (Math.hypot(h.x - spot.x, h.y - spot.y) < 30) {
-    h.riding = 0;
-    d.rider = 0;
+    for (const id of [...(d.passengers ?? [])]) {
+      const passenger = w.humans.find((other) => other.id === id);
+      if (passenger) { dismount(w, passenger); go(passenger, "idle", passenger.x, passenger.y); }
+    }
+    dismount(w, h);
     d.state = "idle";
     d.homeX = spot.x;
     d.homeY = spot.y;

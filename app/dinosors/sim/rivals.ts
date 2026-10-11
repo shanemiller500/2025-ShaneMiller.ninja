@@ -39,6 +39,7 @@ export const BRUTE_WEAPONS: Record<BruteWeapon, { hit: number; wall: number; thr
   axe: { hit: 0.4, wall: 22, throw: 0, range: 0 },
   spear: { hit: 0.3, wall: 10, throw: 0.2, range: 150 },
   rock: { hit: 0.24, wall: 12, throw: 0.16, range: 125 },
+  sling: { hit: 0.28, wall: 12, throw: 0.26, range: 260 },
 };
 
 /** Tough: our hits are divided by this (a person is ~1; a raptor raider ~2). */
@@ -63,7 +64,8 @@ interface Missile {
   dur: number;
   target: number;
   dmg: number;
-  kind: "spear" | "rock";
+  kind: "spear" | "rock" | "sling";
+  targetKind?: "scorpion";
 }
 
 const relKey = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
@@ -130,7 +132,7 @@ export class Rivals {
       vy: 0,
       dir: w.rng() < 0.5 ? 1 : -1,
       hp: 1,
-      weapon: r < 0.45 ? "club" : r < 0.7 ? "axe" : r < 0.9 ? "spear" : "rock",
+      weapon: (clan.smarts ?? 0) >= 4 && r < 0.6 ? "sling" : r < 0.45 ? "club" : r < 0.7 ? "axe" : r < 0.9 ? "spear" : "rock",
       state: "idle",
       stateT: 0,
       think: w.rng() * 2,
@@ -209,7 +211,7 @@ export class Rivals {
     // cunning clans carry hide shields: they soak up a lot of an energy lance, some of an arrow
     const clan = this.clan(b.clan);
     if (!byBrute && clan && (clan.smarts ?? 0) >= 2 && b.state !== "carry") {
-      const block = proj === "beam" || proj === "lance" ? 0.55 : proj ? 0.25 : 0.1;
+      const block = proj === "scorpion" && (clan.smarts ?? 0) >= 4 ? 0.72 : proj === "beam" || proj === "lance" ? 0.55 : proj ? 0.25 : 0.1;
       dmg *= 1 - block;
       if (block > 0.3 && w.rng() < 0.4) w.particles.burst(P.Spark, b.x + b.dir * 8, b.y, 6, 60, { z: 20, size: 2, max: 0.4, color: "#c9f7ff" });
     }
@@ -218,6 +220,7 @@ export class Rivals {
     w.sfx("thunk", b.x, b.y, 0.7, 0.8);
     if (b.hp <= 0) return this.kill(w, b);
     if (w.rng() < 0.4) say(b, pick(w.rng, ["RAAGH!", "Grrr!", "Ugh!", "Hurt!"]), 1.4);
+    if (!byBrute && proj === "scorpion" && (clan?.smarts ?? 0) >= 4) this.counterFire(w, b, clan!);
     // turn on whoever did it
     if (!byBrute && !b.captive && b.hp > 0.3 && b.state !== "fight") {
       const h = nearestHuman(w, fx, fy, 260, false);
@@ -357,7 +360,7 @@ export class Rivals {
   /** A spy made it back: the clan learns from what it saw. */
   learn(w: World, clan: Clan) {
     clan.intel = (clan.intel ?? 0) + 1;
-    const next = clan.intel >= 5 ? 3 : clan.intel >= 3 ? 2 : clan.intel >= 1 ? 1 : 0;
+    const next = clan.intel >= 7 ? 4 : clan.intel >= 5 ? 3 : clan.intel >= 3 ? 2 : clan.intel >= 1 ? 1 : 0;
     if (next <= (clan.smarts ?? 0)) return;
     clan.smarts = next;
     const what = [
@@ -365,8 +368,25 @@ export class Rivals {
       "learned to set ambushes for anyone working far from camp",
       "made hide shields — our energy lances and arrows hurt them much less now",
       "worked out where we keep our stores: they'll raid them for wood + stone, and snatch children too",
+      "built stone shields that turn Scorpion bolts aside and learned to answer with long-range slings",
     ][next];
+    if (next >= 4) for (const b of this.members(clan.id)) if (b.weapon === "rock" || b.weapon === "club") b.weapon = "sling";
     w.toast("🧠", `The ${clan.name} clan has been watching us and ${what}!`, clan.x, clan.y);
+  }
+
+  /** Once a clan has learned sling warfare, a Scorpion hit draws a counter-shot. */
+  private counterFire(w: World, b: Brute, clan: Clan) {
+    const sc = w.colony.scorpions.filter((s) => s.built >= 1 && s.hp > 0 && Math.hypot(s.x - b.x, s.y - b.y) < 620).sort((a, z) => Math.hypot(a.x - b.x, a.y - b.y) - Math.hypot(z.x - b.x, z.y - b.y))[0];
+    if (!sc || b.cd > 0 || b.state === "carry" || b.hp <= 0) return;
+    b.weapon = "sling";
+    b.cd = 4.5 + w.rng() * 2;
+    b.dir = sc.x > b.x ? 1 : -1;
+    const dist = Math.hypot(sc.x - b.x, sc.y - b.y);
+    const flight = Math.max(0.3, dist / 310);
+    const tx = sc.x + (w.rng() - 0.5) * 22;
+    const ty = sc.y + (w.rng() - 0.5) * 16;
+    this.missiles.push({ x: b.x, y: b.y, z: 24, vx: (tx - b.x) / flight, vy: (ty - b.y) / flight, vz: (14 - 24) / flight + 0.5 * 260 * flight, t: 0, dur: flight, target: sc.id, targetKind: "scorpion", dmg: 46, kind: "sling" });
+    w.sfx("whoosh", b.x, b.y, 0.45, 1.2);
   }
 
   /** Hide 2-3 warriors in the grass next to one of ours working out in the wild. */
@@ -1105,7 +1125,7 @@ export class Rivals {
     const ty = h.y + (w.rng() - 0.5) * miss * 0.6;
     const sz = 26;
     const tz = h.z + 12;
-    this.missiles.push({ x: b.x, y: b.y, z: sz, vx: (tx - b.x) / flight, vy: (ty - b.y) / flight, vz: (tz - sz) / flight + 0.5 * 260 * flight, t: 0, dur: flight, target: h.id, dmg: wp.throw, kind: b.weapon === "spear" ? "spear" : "rock" });
+    this.missiles.push({ x: b.x, y: b.y, z: sz, vx: (tx - b.x) / flight, vy: (ty - b.y) / flight, vz: (tz - sz) / flight + 0.5 * 260 * flight, t: 0, dur: flight, target: h.id, dmg: wp.throw, kind: b.weapon === "spear" ? "spear" : b.weapon === "sling" ? "sling" : "rock" });
     w.sfx("whoosh", b.x, b.y, 0.5, 0.6);
   }
 
@@ -1117,6 +1137,15 @@ export class Rivals {
       m.z += m.vz * dt;
       m.vz -= 260 * dt;
       if (m.t >= m.dur) {
+        if (m.targetKind === "scorpion") {
+          const sc = w.colony.scorpions.find((o) => o.id === m.target && o.built >= 1 && o.hp > 0);
+          if (sc && Math.hypot(sc.x - m.x, sc.y - m.y) < 38) {
+            sc.hp = Math.max(0, sc.hp - m.dmg);
+            w.particles.burst(P.Rock, sc.x, sc.y - 12, 5, 38, { z: 20, size: 3, max: 0.5, color: "#baa77f" });
+            w.sfx("thunk", sc.x, sc.y, 0.45, 0.8);
+          } else w.particles.burst(P.Dust, m.x, m.y, 3, 20, { size: 3, max: 0.4, color: "rgba(160,140,110,0.6)" });
+          continue;
+        }
         const h = w.humans.find((o) => o.id === m.target);
         if (h && !h.captive && Math.hypot(h.x - m.x, h.y - m.y) < 16) hurtHuman(w, h, m.dmg, m.x - m.vx * 0.1, m.y - m.vy * 0.1, m.kind === "rock" ? "rock" : "club");
         else w.particles.burst(P.Dust, m.x, m.y, 3, 20, { size: 3, max: 0.4, color: "rgba(160,140,110,0.6)" });

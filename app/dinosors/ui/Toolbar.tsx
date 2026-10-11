@@ -1,14 +1,15 @@
 "use client";
 
 import { type CivPath, type CivTechId } from "../data/civ";
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { SPECIES } from "../data/species";
 import { RES_INFO } from "../data/colony";
-import { BUILD_BY_ID, BUILD_DEFS, bestBuild, buildCost, buildVisible, DISASTER_OPTS, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type BuildDef, type BuildOpt, type Opt, type ToolId, type ToolState } from "../game/tools";
+import { BUILD_BY_ID, BUILD_DEFS, bestBuild, buildCost, buildVisible, DISASTER_OPTS, FARM_CROP_OPTS, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type BuildDef, type BuildOpt, type Opt, type ToolId, type ToolState } from "../game/tools";
 import type { Resource, SpeciesId, TechId } from "../sim/types";
 import Portrait from "./Portrait";
 import { GameIcon } from "./GameIcon";
+import { useClickAway } from "./useClickAway";
 
 /* ------------------------------------------------------------------ */
 /*  The toy box: big chunky tool buttons along the bottom. Tools with  */
@@ -17,16 +18,11 @@ import { GameIcon } from "./GameIcon";
 
 const HAS_OPTIONS = new Set<ToolId>(["dino", "egg", "food", "plant", "land", "weather", "disaster", "people", "build"]);
 
-export default function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none" }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath }) {
+export default function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none", trainOpen = false, onTrain }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void }) {
   const [open, setOpen] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<ToolId | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(null);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  useClickAway(!!open, toolbarRef, () => setOpen(null));
 
   const iconFor = (id: ToolId) => {
     switch (id) {
@@ -83,7 +79,7 @@ export default function Toolbar({ tool, setTool, unlocked, learned = [], stock =
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center px-2 sm:bottom-4">
-      <div className="pointer-events-auto relative max-w-full">
+      <div ref={toolbarRef} className="pointer-events-auto relative max-w-full">
         <AnimatePresence>
           {open && (
             <div key={open} className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 flex w-[calc(100vw-16px)] -translate-x-1/2 justify-center">
@@ -104,9 +100,14 @@ export default function Toolbar({ tool, setTool, unlocked, learned = [], stock =
               )}
               {open === "food" && <Options opts={FOOD_OPTS} value={tool.food} onPick={(v) => pick("food", v)} />}
               {open === "plant" && <Options opts={PLANT_OPTS} value={tool.plant} onPick={(v) => pick("plant", v)} />}
-              {open === "land" && <Options opts={LAND_OPTS} value={tool.land} onPick={(v) => pick("land", v)} />}
+              {open === "land" && <div className="dl-scroll max-h-[min(54vh,470px)] space-y-2 overflow-y-auto pr-1">
+                <p className="px-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/75">Paint terrain</p>
+                <Options opts={LAND_OPTS.slice(0, 4)} value={tool.land} onPick={(v) => pick("land", v)} />
+                <p className="px-1 pt-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/75">Place surface materials</p>
+                <Options opts={LAND_OPTS.slice(4)} value={tool.land} onPick={(v) => pick("land", v)} />
+              </div>}
               {open === "people" && <Options opts={PEOPLE_OPTS} value={tool.people} onPick={(v) => pick("people", v)} />}
-              {open === "build" && <BuildMenu value={tool.build} learned={learned} civDone={civDone} civPath={civPath} stock={stock} onPick={(v) => pick("build", v, false)} />}
+              {open === "build" && <BuildMenu value={tool.build} farmCrop={tool.farmCrop} onFarmCrop={(v) => setTool({ farmCrop: v })} learned={learned} civDone={civDone} civPath={civPath} stock={stock} onPick={(v) => pick("build", v)} />}
               {open === "weather" && <Options opts={WEATHER_OPTS} value={tool.weather} onPick={(v) => pick("weather", v)} />}
               {open === "disaster" && <Options opts={DISASTER_OPTS} value={tool.disaster} onPick={(v) => pick("disaster", v)} />}
               <p className="mt-2 px-1 text-center text-xs font-medium text-white/70">
@@ -119,10 +120,10 @@ export default function Toolbar({ tool, setTool, unlocked, learned = [], stock =
         </AnimatePresence>
 
         <div className="dl-glass dl-scroll flex max-w-[calc(100vw-16px)] gap-1 overflow-x-auto rounded-[28px] p-1.5 shadow-2xl">
-          {TOOLS.map((t) => {
+          {[...TOOLS].sort((a, b) => (["hand", "build", "people", "dino", "food", "egg", "plant", "land", "fire", "weather", "disaster", "erase"].indexOf(a.id) - ["hand", "build", "people", "dino", "food", "egg", "plant", "land", "fire", "weather", "disaster", "erase"].indexOf(b.id))).map((t) => {
             const active = tool.id === t.id || open === t.id;
             return (
-              <div key={t.id} className="relative shrink-0">
+              <div key={t.id} className="relative shrink-0" style={{ order: t.id === "hand" ? 0 : t.id === "build" ? 2 : 3 }}>
                 <button
                   type="button"
                   onClick={() => press(t.id)}
@@ -131,16 +132,20 @@ export default function Toolbar({ tool, setTool, unlocked, learned = [], stock =
                   aria-label={t.label}
                   aria-pressed={active}
                   title={active && t.id !== "hand" ? `${t.label} is on — tap to turn off` : t.label}
-                  className={`group flex h-14 w-14 flex-col items-center justify-center rounded-[22px] transition duration-150 active:scale-90 sm:h-16 sm:w-16 ${
+                  className={`group flex h-16 w-14 flex-col items-center justify-center rounded-[22px] transition duration-150 active:scale-90 sm:h-16 sm:w-16 ${
                     active ? "dl-btn bg-gradient-to-b from-amber-300 to-amber-500 text-[#3a2414]" : "hover:-translate-y-1 hover:bg-white/15"
                   }`}
                 >
                   <span className={`text-[26px] leading-none transition group-hover:scale-110 sm:text-[30px] ${active ? "drop-shadow" : ""}`}>{iconFor(t.id)}</span>
-                  <span className={`mt-0.5 hidden text-[10px] font-semibold sm:block ${active ? "text-[#3a2414]/80" : "text-[#fde9c4]/85"}`}>{tool.id === t.id && t.id !== "hand" ? "ON ✕" : t.label}</span>
+                  <span className={`mt-0.5 text-[9px] font-semibold sm:text-[10px] ${active ? "text-[#3a2414]/80" : "text-[#fde9c4]/85"}`}>{tool.id === t.id && t.id !== "hand" ? "ON ✕" : t.label}</span>
                 </button>
               </div>
             );
           })}
+          <button type="button" onClick={() => { setOpen(null); setTool({ id: "hand" }); onTrain?.(); }} aria-label="Train dinosaurs" aria-pressed={trainOpen} title="Train dinosaurs and manage hauling" className={`order-1 group flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-[22px] transition active:scale-90 sm:h-16 sm:w-16 ${trainOpen ? "dl-btn bg-gradient-to-b from-amber-300 to-amber-500 text-[#3a2414]" : "hover:-translate-y-1 hover:bg-white/15"}`}>
+            <span className="text-[26px] leading-none group-hover:scale-110 sm:text-[30px]">🦕</span>
+            <span className="mt-0.5 text-[10px] font-bold">Train</span>
+          </button>
         </div>
         <AnimatePresence>
           {tip && !open && (
@@ -165,7 +170,7 @@ const CATS: { id: BuildDef["cat"]; icon: string; label: string }[] = [
 ];
 
 /** Icon grid of what the tribe can build right now, by category, with costs. Future eras stay hidden until they're learned. */
-function BuildMenu({ value, learned, civDone, stock, onPick }: { value: BuildOpt; learned: TechId[]; civDone: CivTechId[]; civPath: CivPath; stock: Record<string, number>; onPick: (v: BuildOpt) => void }) {
+function BuildMenu({ value, farmCrop, onFarmCrop, learned, civDone, stock, onPick }: { value: BuildOpt; farmCrop: ToolState["farmCrop"]; onFarmCrop: (v: ToolState["farmCrop"]) => void; learned: TechId[]; civDone: CivTechId[]; civPath: CivPath; stock: Record<string, number>; onPick: (v: BuildOpt) => void }) {
   const has = new Set(learned);
   const civ = new Set(civDone);
   const knows = (t: TechId) => has.has(t);
@@ -186,6 +191,7 @@ function BuildMenu({ value, learned, civDone, stock, onPick }: { value: BuildOpt
           </button>
         ))}
       </div>
+      {best === "farm" && <div className="mb-2 rounded-2xl bg-white/5 p-2"><p className="mb-1 text-center text-[11px] font-bold uppercase tracking-wide text-amber-100/75">Choose field seed</p><Options opts={FARM_CROP_OPTS} value={farmCrop} onPick={onFarmCrop} /></div>}
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
         {BUILD_DEFS.filter((b) => b.cat === cat && visible(b)).map((b) => {
           const cost = buildCost(b, knows);
@@ -237,10 +243,10 @@ function Options<V extends string>({ opts, value, onPick }: { opts: Opt<V>[]; va
           key={o.value}
           type="button"
           onClick={() => onPick(o.value)}
-          className={`flex h-[72px] w-[72px] flex-col items-center justify-center rounded-2xl transition active:scale-90 ${o.value === value ? "dl-btn bg-amber-400/90 text-[#3a2414]" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"}`}
+          className={`flex h-[72px] w-[clamp(62px,18vw,72px)] min-w-0 flex-col items-center justify-center rounded-2xl px-1 transition active:scale-90 ${o.value === value ? "dl-btn bg-amber-400/90 text-[#3a2414]" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"}`}
         >
           <span className="text-3xl leading-none">{o.icon}</span>
-          <span className="mt-1 text-[11px] font-semibold text-white/85">{o.label}</span>
+          <span className="mt-1 text-center text-[10px] font-semibold leading-tight text-white/85 sm:text-[11px]">{o.label}</span>
         </button>
       ))}
     </div>

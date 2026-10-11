@@ -89,6 +89,7 @@ const K_DRAGON = 18;
 const K_BRUTE = 19;
 const K_CLAN = 20;
 const K_BMISSILE = 21;
+const K_MINE_LOAD = 22;
 
 interface Drop {
   x: number;
@@ -314,6 +315,7 @@ export class Renderer {
     }
     for (let i = 0; i < w.campfires.length; i++) list.push({ y: w.campfires[i].y, k: K_CAMPFIRE, i });
     if (w.camp.pileX > x0 && w.camp.pileX < x1 && w.camp.pileY > y0 && w.camp.pileY < y1) list.push({ y: w.camp.pileY, k: K_PILE, i: 0 });
+    if (Object.values(w.mineLoads).some((n) => (n ?? 0) > 0) && w.camp.caveX > x0 - 100 && w.camp.caveX < x1 + 100 && w.camp.caveY > y0 - 80 && w.camp.caveY < y1 + 80) list.push({ y: w.camp.caveY + 36, k: K_MINE_LOAD, i: 0 });
     const vo = w.volcano;
     if (vo.x + 450 > x0 && vo.x - 450 < x1 && vo.y - 400 < y1 && vo.y + 200 > y0) list.push({ y: vo.y + 150, k: K_VOLCANO, i: 0 });
     for (let i = 0; i < this.peaks.length; i++) {
@@ -393,7 +395,7 @@ export class Renderer {
       if (f.x < x0 - 60 || f.x > x1 + 60 || f.y < y0 - 40 || f.y > y1 + 40) continue;
       c.save();
       c.translate(f.x, f.y);
-      drawFarm(c, f.growth, f.planted, this.t);
+      drawFarm(c, f.growth, f.planted, this.t, f.crop ?? "wheat");
       c.restore();
     }
 
@@ -645,6 +647,24 @@ export class Renderer {
           drawStockpile(c, w.camp.stock);
           c.restore();
           break;
+        case K_MINE_LOAD: {
+          c.save();
+          c.translate(w.camp.caveX + 36, w.camp.caveY + 32);
+          const loads = Object.entries(w.mineLoads).filter(([, n]) => (n ?? 0) > 0).slice(0, 4);
+          for (let i = 0; i < loads.length; i++) {
+            const [r] = loads[i];
+            const x = i * 16 - 20;
+            const y = (i % 2) * 6;
+            c.fillStyle = "rgba(18,20,15,0.24)"; c.beginPath(); c.ellipse(x, y + 2, 11, 4, 0, 0, Math.PI * 2); c.fill();
+            c.fillStyle = "#785337"; c.strokeStyle = "#d6b986"; c.lineWidth = 1.5;
+            c.beginPath(); c.roundRect(x - 9, y - 13, 18, 14, 2); c.fill(); c.stroke();
+            c.strokeStyle = "#4b3328"; c.beginPath(); c.moveTo(x, y - 12); c.lineTo(x, y); c.stroke();
+            c.fillStyle = r === "gold" ? "#f4ca57" : r === "silver" ? "#d9e2ea" : r === "copper" ? "#b77559" : "#9ea7a5";
+            c.beginPath(); c.arc(x, y - 7, 3, 0, Math.PI * 2); c.fill();
+          }
+          c.restore();
+          break;
+        }
         case K_VOLCANO:
           c.save();
           c.translate(vo.x, vo.y);
@@ -968,6 +988,41 @@ export class Renderer {
       c.stroke();
     }
     drawDino(c, def, L, dn.dir, pose);
+    if (dn.work?.harness && !isBaby(dn)) {
+      const work = dn.work;
+      c.save();
+      c.scale(dn.dir, 1);
+      const sway = dn.state === "work" ? Math.sin(dn.anim * 5) * L * 0.012 : Math.sin(this.t * 1.7 + dn.id) * L * 0.006;
+      const y = -L * 0.40 + sway;
+      // Curved hide saddle, stitched edging and the two load-bearing straps.
+      c.fillStyle = "#674733";
+      c.strokeStyle = "#c8a879";
+      c.lineWidth = Math.max(1.2, L * 0.015);
+      c.beginPath(); c.moveTo(-L * 0.34, y + L * 0.05); c.quadraticCurveTo(0, y - L * 0.15, L * 0.32, y + L * 0.05); c.lineTo(L * 0.24, y + L * 0.13); c.quadraticCurveTo(0, y - L * 0.025, -L * 0.25, y + L * 0.13); c.closePath(); c.fill(); c.stroke();
+      c.strokeStyle = "#3d281d"; c.lineWidth = Math.max(2, L * 0.033);
+      for (const x of [-0.22, 0.22]) { c.beginPath(); c.moveTo(L * x, y - L * 0.025); c.quadraticCurveTo(L * (x + 0.06), y + L * 0.31, L * x, y + L * 0.48); c.stroke(); }
+      c.strokeStyle = "#d8c293"; c.lineWidth = Math.max(1, L * 0.009);
+      for (const x of [-0.22, 0.22]) { c.beginPath(); c.moveTo(L * x, y - L * 0.025); c.quadraticCurveTo(L * (x + 0.06), y + L * 0.31, L * x, y + L * 0.48); c.stroke(); }
+      if (work.harness > 1) { c.strokeStyle = "#859798"; c.lineWidth = Math.max(2, L * 0.025); c.beginPath(); c.moveTo(-L * 0.31, y + L * 0.035); c.lineTo(L * 0.31, y + L * 0.035); c.stroke(); }
+      if (work.cargo && work.cargoN > 0) {
+        const stone = ["stone", "shaped", "clay", "obsidian"].includes(work.cargo);
+        const metal = ["iron", "gold", "silver", "copper", "magnetite"].includes(work.cargo);
+        const wood = ["wood", "stick"].includes(work.cargo);
+        const color = stone ? "#a4a6a0" : metal ? work.cargo === "gold" ? "#e8c45d" : work.cargo === "silver" ? "#cdd8de" : "#9d6950" : wood ? "#ad7646" : "#b8a17c";
+        const stacks = Math.min(4, Math.max(1, Math.ceil(work.cargoN / Math.max(1, 60))));
+        for (let i = 0; i < stacks; i++) {
+          const x = (i - (stacks - 1) / 2) * L * 0.14;
+          const cy = y - L * (0.035 + (i % 2) * 0.06);
+          c.fillStyle = color; c.strokeStyle = "#473b31"; c.lineWidth = Math.max(1, L * 0.012);
+          c.beginPath();
+          if (wood) c.roundRect(x - L * 0.09, cy - L * 0.06, L * 0.18, L * 0.095, L * 0.025);
+          else c.roundRect(x - L * 0.072, cy - L * 0.085, L * 0.145, L * 0.13, L * 0.022);
+          c.fill(); c.stroke();
+          c.strokeStyle = "#dec99e"; c.beginPath(); c.moveTo(x, cy - L * 0.08); c.lineTo(x, cy + L * 0.04); c.stroke();
+        }
+      }
+      c.restore();
+    }
     if (dn.owner && (dn.warArmor ?? 0) > 0 && !isBaby(dn)) {
       // Layered hide and bone plates leave a strong spiked outline even at game zoom.
       const heavy = (dn.warArmor ?? 0) >= 2;

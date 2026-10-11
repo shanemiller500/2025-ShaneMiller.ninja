@@ -10,6 +10,7 @@ import type { Engine, Snapshot } from "../game/engine";
 import type { ExperimentResult } from "../sim/civ";
 import type { Resource } from "../sim/types";
 import { GameIcon } from "./GameIcon";
+import { useClickAway } from "./useClickAway";
 
 /* ------------------------------------------------------------------ */
 /*  Civilization HQ. Before the choice: where the humming chamber is.  */
@@ -37,6 +38,8 @@ function Costs({ cost, stock, paid = false }: { cost: Cost; stock: Record<string
 }
 
 export default function CivPanel({ snap, engine, onClose, onChoose, onExtinction }: { snap: Snapshot; engine: Engine; onClose: () => void; onChoose: () => void; onExtinction: () => void }) {
+  const panelRef = useRef<HTMLElement>(null);
+  useClickAway(true, panelRef, onClose);
   const civ = snap.civ;
   const [tab, setTab] = useState<Tab>("research");
   const res = civ.path === "resonance";
@@ -47,6 +50,7 @@ export default function CivPanel({ snap, engine, onClose, onChoose, onExtinction
   const info = civ.path !== "none" ? PATH_INFO[civ.path] : null;
   return (
     <motion.aside
+      ref={panelRef}
       initial={{ opacity: 0, x: 24, scale: 0.97 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 420, damping: 32 }}

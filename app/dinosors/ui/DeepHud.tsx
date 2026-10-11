@@ -6,6 +6,7 @@ import { ArrowUpToLine, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Radar
 import { MINE_H, MINE_W } from "../data/mine";
 import type { Engine, Snapshot } from "../game/engine";
 import { GameIcon } from "./GameIcon";
+import { useClickAway } from "./useClickAway";
 
 /* ------------------------------------------------------------------ */
 /*  The Deep HUD: a survey-console look (dark glass, cyan accents,     */
@@ -22,6 +23,8 @@ export default function DeepHud({ snap, engine }: { snap: Snapshot; engine: Engi
   const d = snap.deep;
   // the survey panel starts open on big screens, tucked away on phones
   const [panel, setPanel] = useState(() => typeof window === "undefined" || window.innerWidth >= 640);
+  const surveyRef = useRef<HTMLDivElement>(null);
+  useClickAway(panel, surveyRef, () => setPanel(false), false);
   if (!d) return null;
   return (
     <div className="pointer-events-none absolute inset-0 z-20 text-white">
@@ -35,7 +38,7 @@ export default function DeepHud({ snap, engine }: { snap: Snapshot; engine: Engi
       <CrewPanel snap={snap} engine={engine} />
 
       {/* right column */}
-      <div className="absolute right-2 top-20 flex max-h-[calc(100%-200px)] flex-col items-end gap-2 sm:right-4 sm:top-24">
+      <div ref={surveyRef} className="absolute right-2 top-20 flex max-h-[calc(100%-200px)] flex-col items-end gap-2 sm:right-4 sm:top-24">
         <button type="button" onClick={() => setPanel((p) => !p)} className={`${glass} flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold text-cyan-100`}>
           <Radar className="h-3.5 w-3.5" /> Survey {panel ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </button>
@@ -216,6 +219,8 @@ export default function DeepHud({ snap, engine }: { snap: Snapshot; engine: Engi
 /** Start the mine over (two taps so it never happens by accident). */
 function ResetMine({ engine }: { engine: Engine }) {
   const [sure, setSure] = useState(false);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  useClickAway(sure, confirmRef, () => setSure(false), false);
   useEffect(() => {
     if (!sure) return;
     const id = window.setTimeout(() => setSure(false), 5000);
@@ -223,6 +228,7 @@ function ResetMine({ engine }: { engine: Engine }) {
   }, [sure]);
   return (
     <button
+      ref={confirmRef}
       type="button"
       onClick={() => {
         if (!sure) return setSure(true);
@@ -280,8 +286,10 @@ function ModeBar({ snap, engine }: { snap: Snapshot; engine: Engine }) {
 function CrewPanel({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   const d = snap.deep!;
   const [open, setOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 640);
+  const crewRef = useRef<HTMLDivElement>(null);
+  useClickAway(open, crewRef, () => setOpen(false), false);
   return (
-    <div className="absolute left-16 top-36 w-[230px] sm:left-20 sm:top-28">
+    <div ref={crewRef} className="absolute left-16 top-36 w-[230px] sm:left-20 sm:top-28">
       <button type="button" onClick={() => setOpen((o) => !o)} className={`${glass} flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-bold text-cyan-100`}>
         <span>⛏️ Crew {d.crew.length}{d.pending ? ` (+${d.pending} on the way)` : ""}</span>
         {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}

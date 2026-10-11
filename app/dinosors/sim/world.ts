@@ -33,6 +33,7 @@ import {
   type ItemKind,
   type Plant,
   type Prop,
+  type Resource,
   type Shelter,
   type SpeciesId,
 } from "./types";
@@ -51,12 +52,13 @@ import { updateDeepLife } from "./deepLife";
 import { Snow } from "./snow";
 import { Dragons } from "./dragons";
 import { Rivals } from "./rivals";
-import { TaskBoard } from "./tasks";
+import { TaskBoard, issue } from "./tasks";
 import { Population } from "./population";
 import { Trails } from "./trails";
 import { sites, type Site } from "./build";
 import { HOUSING } from "../data/colony";
 import { hurtHuman } from "./injury";
+import { actWorkDino } from "./workDinos";
 import { updateCarcass } from "./carcass";
 import type { Carcass } from "./types";
 import type { Gear, ShelterPlan } from "./types";
@@ -142,6 +144,8 @@ export class World {
   extinction = new Extinction();
   /** The Deep: the mine under the cave (its own grid + random numbers) */
   mine: Mine;
+  /** Lifted ore waits on the surface until a trained dinosaur carries it. */
+  mineLoads: Partial<Record<Resource, number>> = {};
   /** bumps when huts appear / change footprint (nav) */
   shelterVersion = 0;
   /** frames simulated (for staggering occasional checks) */
@@ -669,6 +673,7 @@ export class World {
       if (d.think <= 0) thinkDino(this, d);
       moveDino(this, d, dt);
       if (this.dinos[i] === d) actDino(this, d, dt);
+      if (this.dinos[i] === d) actWorkDino(this, d, dt);
     }
     for (const h of this.humans) if (!h.under) updateHuman(this, h, dt);
     this.camp.update(this, dt);
@@ -911,6 +916,9 @@ export class World {
         owner: d.owner,
         warTraining: r(d.warTraining ?? 0),
         warArmor: d.warArmor ?? 0,
+        rider: d.rider,
+        passengers: [...(d.passengers ?? [])],
+        work: d.work ? { ...d.work, skills: { ...d.work.skills }, targetX: r(d.work.targetX), targetY: r(d.work.targetY) } : undefined,
       })),
       humans: this.humans.map((h) => ({
         id: h.id,
@@ -922,6 +930,7 @@ export class World {
         skin: h.skin,
         fur: h.fur,
         role: h.role,
+        riding: h.riding,
         age: Math.round(h.age),
         hp: r(Math.max(0.05, h.hp)),
         warmth: r(h.warmth),
@@ -947,6 +956,7 @@ export class World {
       civ: this.civ.serialize(),
       extinction: this.extinction.serialize(),
       mine: this.mine.serialize(),
+      mineLoads: { ...this.mineLoads },
       campfires: this.campfires.map((f) => ({ x: r(f.x), y: r(f.y), lit: f.lit, fuel: r(f.fuel) })),
       trails: this.trails.serialize(),
       trailDetail: this.trails.serializeDetail(),
@@ -986,6 +996,7 @@ export class World {
         skin: h.skin,
         fur: h.fur,
         role: h.role ?? "auto",
+        riding: h.riding ?? 0,
         age: h.age ?? (h.child ? 0 : 400),
         hp: h.hp ?? 1,
         warmth: h.warmth ?? 1,
@@ -1026,6 +1037,7 @@ export class World {
     w.civ.load(data.civ);
     w.extinction.load(data.extinction);
     w.mine.load(data.mine);
+    w.mineLoads = { ...(data.mineLoads ?? {}) };
     // people down the mine stay down (anyone the mine lost track of comes back up)
     const crew = new Set(w.mine.crew.map((m) => m.id));
     for (const h of w.humans) {
@@ -1065,6 +1077,44 @@ export class World {
     // homes saved by id: drop any that no longer exist
     for (const h of w.humans) if (h.home && !w.shelters.some((s) => s.id === h.home)) h.home = 0;
     w.nav.sync(w);
+    // TaskBoard orders are transient, so reconnect an active trainer and rider
+    // to the saved animal assignment after their entities are restored.
+    for (const d of w.dinos) {
+      const training = d.work;
+      if (training) training.helper = 0;
+      if (training?.focus && (training.skills[training.focus] ?? 0) < 1) {
+        const trainer = w.humans.find((h) => h.id === training.trainer && !h.under && !h.child);
+        if (trainer) issue(w, [trainer], { kind: "trainWork", icon: "🦕", label: `Train ${d.name} for ${training.focus}`, x: d.x, y: d.y, target: d.id });
+        else { training.focus = null; training.trainer = 0; }
+      }
+      if (d.rider) {
+        const rider = w.humans.find((h) => h.id === d.rider && h.riding === d.id);
+        if (rider) {
+          d.state = "ridden";
+          rider.x = d.x; rider.y = d.y;
+          if (training?.job === "travel") { rider.state = "walk"; rider.tx = training.targetX; rider.ty = training.targetY; }
+        } else d.rider = 0;
+      }
+      d.passengers = (d.passengers ?? []).filter((id) => {
+        const h = w.humans.find((person) => person.id === id && person.riding === d.id);
+        if (!h) return false;
+        h.x = d.x + (d.passengers?.indexOf(id) ?? 0) * 12 - 6;
+        h.y = d.y;
+        return true;
+      });
+      if (!d.rider && d.passengers.length) {
+        d.rider = d.passengers.shift()!;
+        const rider = w.humans.find((h) => h.id === d.rider)!;
+        rider.x = d.x;
+        rider.y = d.y;
+        d.state = "ridden";
+        if (training?.job === "travel") {
+          rider.state = "walk";
+          rider.tx = training.targetX;
+          rider.ty = training.targetY;
+        }
+      }
+    }
     // New saves keep the exact strings the player drew. Older saves infer
     // their deliberate torch routes from placement order.
     if (data.lightLinks) w.trails.loadLinks(w, data.lightLinks);

@@ -8,6 +8,7 @@ import { DISCOVERIES } from "../data/facts";
 import { Engine, type Snapshot } from "../game/engine";
 import { WEATHER_LABEL } from "../sim/weather";
 import { WORLD_H, WORLD_W } from "../sim/types";
+import { useClickAway } from "./useClickAway";
 
 export type TopPanel = null | "time" | "places" | "menu";
 
@@ -51,10 +52,14 @@ const btn = "dl-glass flex h-12 w-12 items-center justify-center rounded-2xl sha
 
 export default function TopBar(p: Props) {
   const { snap, panel, setPanel } = p;
+  const barRef = useRef<HTMLDivElement>(null);
+  useClickAway(!!panel, barRef, () => setPanel(null));
   const toggle = (k: TopPanel) => setPanel(panel === k ? null : k);
   return (
     <>
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-2 sm:p-4">
+      <div ref={barRef} onPointerDownCapture={(e) => {
+        if (panel && e.target instanceof Element && !e.target.closest("[data-dl-top-panel], [data-dl-top-trigger]")) setPanel(null);
+      }} className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-2 sm:p-4">
         <div className="pointer-events-auto relative flex items-center gap-2">
           <SkyDial snap={snap} onClick={() => toggle("time")} />
           <AnimatePresence>{panel === "time" && <TimePanel {...p} />}</AnimatePresence>
@@ -86,7 +91,7 @@ export default function TopBar(p: Props) {
             <span className="text-2xl leading-none">{snap.tribe.levelIcon}</span>
             {snap.tribe.raid && <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-ping rounded-full bg-rose-500" />}
           </button>
-          <button type="button" className={btn} title="Places" aria-label="Places" onClick={() => toggle("places")}>
+          <button type="button" data-dl-top-trigger className={btn} title="Places" aria-label="Places" onClick={() => toggle("places")}>
             <MapIcon className="h-6 w-6" />
           </button>
           <button type="button" className={`${btn} relative`} title="Sticker book" aria-label="Sticker book" onClick={p.onStickers}>
@@ -98,7 +103,7 @@ export default function TopBar(p: Props) {
           <button type="button" className={btn} title={p.muted ? "Sound on" : "Mute"} aria-label={p.muted ? "Sound on" : "Mute"} onClick={p.onMute}>
             {p.muted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
           </button>
-          <button type="button" className={btn} title="Menu" aria-label="Menu" onClick={() => toggle("menu")}>
+          <button type="button" data-dl-top-trigger className={btn} title="Menu" aria-label="Menu" onClick={() => toggle("menu")}>
             <Menu className="h-6 w-6" />
           </button>
           <AnimatePresence>
@@ -123,7 +128,7 @@ function SkyDial({ snap, onClick }: { snap: Snapshot; onClick: () => void }) {
   const bottom = d > 0.5 ? "#bfe6ff" : d > 0.1 ? "#ffd29a" : "#28306b";
   const w = WEATHER_LABEL[snap.weather];
   return (
-    <button type="button" onClick={onClick} className="dl-glass flex items-center gap-2 rounded-[22px] p-1.5 pr-3 shadow-lg transition hover:-translate-y-0.5 active:scale-95" aria-label="Time and weather">
+    <button type="button" data-dl-top-trigger onClick={onClick} className="dl-glass flex items-center gap-2 rounded-[22px] p-1.5 pr-3 shadow-lg transition hover:-translate-y-0.5 active:scale-95" aria-label="Time and weather">
       <span className="relative block h-12 w-12 overflow-hidden rounded-[16px] sm:h-14 sm:w-14" style={{ background: `linear-gradient(${top}, ${bottom})` }}>
         {d < 0.3 &&
           [12, 30, 70, 84, 50, 22].map((sx, i) => (
@@ -155,7 +160,7 @@ const pop = {
 
 function TimePanel({ snap, engine }: Props) {
   return (
-    <motion.div {...pop} className="dl-glass absolute left-0 top-[calc(100%+8px)] w-72 rounded-3xl p-4 shadow-2xl">
+    <motion.div {...pop} data-dl-top-panel className="dl-glass absolute left-0 top-[calc(100%+8px)] w-72 rounded-3xl p-4 shadow-2xl">
       <div className="flex items-center justify-between text-sm font-semibold">
         <span>🌅 Time of day</span>
         <span className="text-white/70">{fmtTime(snap.time)}</span>
@@ -235,7 +240,7 @@ function PlacesPanel({ engine, close, onCamp }: { engine: Engine; close: () => v
     return () => cancelAnimationFrame(raf);
   }, [engine, W, H]);
   return (
-    <motion.div {...pop} className="dl-glass absolute right-0 top-[calc(100%+8px)] w-[312px] rounded-3xl p-3 shadow-2xl">
+    <motion.div {...pop} data-dl-top-panel className="dl-glass absolute right-0 top-[calc(100%+8px)] w-[312px] rounded-3xl p-3 shadow-2xl">
       <canvas
         ref={ref}
         style={{ width: W, height: H }}
@@ -271,7 +276,7 @@ function PlacesPanel({ engine, close, onCamp }: { engine: Engine; close: () => v
 function MenuPanel(p: Props & { close: () => void }) {
   const item = "flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-[15px] font-semibold transition hover:bg-white/15 active:scale-[0.98]";
   return (
-    <motion.div {...pop} className="dl-glass absolute right-0 top-[calc(100%+8px)] w-60 rounded-3xl p-2 shadow-2xl">
+    <motion.div {...pop} data-dl-top-panel className="dl-glass absolute right-0 top-[calc(100%+8px)] w-60 rounded-3xl p-2 shadow-2xl">
       <button type="button" className={item} onClick={() => { p.onSave(); p.close(); }}>
         <Save className="h-5 w-5 text-emerald-300" /> Save now
       </button>

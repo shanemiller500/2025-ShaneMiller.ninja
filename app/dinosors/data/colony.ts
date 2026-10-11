@@ -19,6 +19,7 @@ export const RES_INFO: Record<Resource, { icon: string; name: string }> = {
   meat: { icon: "🥩", name: "Raw meat" },
   cooked: { icon: "🍗", name: "Roast" },
   crop: { icon: "🌽", name: "Crops" },
+  flour: { icon: "🌾", name: "Flour" },
   water: { icon: "💧", name: "Water" },
   clay: { icon: "🏺", name: "Clay" },
   iron: { icon: "⛓️", name: "Iron" },
@@ -86,6 +87,8 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   barricade: { kind: "barricade", icon: "✖️", name: "Bone barricade", tip: "A low crossed-bone barrier. Blocks the way like a short wall and pricks anything that shoves it.", cost: { bone: 4, wood: 1 }, w: 1, h: 1, solid: true, tech: "palisade", work: 4, hp: 170 },
   totem: { kind: "totem", icon: "💀", name: "Bone totem", tip: "A tall skull totem. Wild predators think twice about coming near (raiders don't care).", cost: { bone: 3, tooth: 1, stick: 2 }, w: 1, h: 1, solid: true, work: 4, hp: 150 },
   refinery: { kind: "refinery", icon: "🏭", name: "Refinery", tip: "Smelts raw gold, silver and copper from the mine into bars (burns coal first, or a log per bar). Raw ore and stacks of bars pile up outside it.", cost: { stone: 6, clay: 4, iron: 2 }, w: 3, h: 2, solid: true, tech: "smelting", work: 10, hp: 520 },
+  mill: { kind: "mill", icon: "🌀", name: "Grain mill", tip: "Grinds harvested wheat and barley into flour. Flour can be baked into filling food.", cost: { wood: 5, stone: 3, stick: 2 }, w: 2, h: 2, solid: true, tech: "farming", work: 7, hp: 320 },
+  bakery: { kind: "bakery", icon: "🍞", name: "Bakery", tip: "Bakes flour into hearty bread. Each batch turns 2 flour into 5 cooked food.", cost: { stone: 4, clay: 3, wood: 3 }, w: 2, h: 2, solid: true, tech: "farming", work: 8, hp: 360 },
   shelterDeep: { kind: "shelterDeep", icon: "🕳️", name: "Deep shelter", tip: "A bunker dug deep and roofed with stone. When the sky falls, the people inside have a chance.", cost: { stone: 14, wood: 8 }, w: 3, h: 2, solid: true, civ: "deepShelter", work: 18, hp: 1200 },
   resTable: { kind: "resTable", icon: "🔔", name: "Resonance table", tip: "Researchers study here (twice as fast). Tap it to run tuning experiments.", cost: { stone: 4, wood: 2 }, w: 2, h: 1, solid: true, civ: "resonance", work: 5, hp: 260 },
   chamber: { kind: "chamber", icon: "🔮", name: "Crystal chamber", tip: "A small stone room around a tuned crystal: makes and stores a little energy.", cost: { stone: 6, quartz: 2, crystal: 1 }, w: 2, h: 2, solid: true, civ: "quartzTuning", work: 9, hp: 420 },
@@ -366,21 +369,24 @@ export const SCORPION_TIERS: ScorpionTier[] = [
 /* ------------------------------ deposits ------------------------------ */
 
 export const NODES: Record<NodeKind, { icon: string; name: string; gives: Resource | null; per: number; amount: [number, number]; hidden: boolean; color: string; needs?: TechId }> = {
-  stone: { icon: "🪨", name: "Stone quarry", gives: "stone", per: 2, amount: [14, 22], hidden: false, color: "#9b958b" },
-  clay: { icon: "🟫", name: "Clay bank", gives: "clay", per: 2, amount: [10, 16], hidden: false, color: "#b6764f" },
-  flint: { icon: "🔷", name: "Flint", gives: "flint", per: 2, amount: [8, 14], hidden: false, color: "#5f7d99" },
-  iron: { icon: "⛓️", name: "Iron ore", gives: "iron", per: 1, amount: [10, 16], hidden: true, color: "#9a5a46", needs: "tools" },
-  gold: { icon: "🪙", name: "Gold", gives: "gold", per: 1, amount: [4, 7], hidden: true, color: "#f2c94c", needs: "tools" },
-  obsidian: { icon: "🔮", name: "Obsidian", gives: "obsidian", per: 1, amount: [5, 9], hidden: true, color: "#2b2238", needs: "tools" },
-  salt: { icon: "🧂", name: "Salt flat", gives: "salt", per: 2, amount: [8, 12], hidden: true, color: "#efeae0" },
-  tar: { icon: "🛢️", name: "Tar seep", gives: "tar", per: 1, amount: [8, 12], hidden: false, color: "#1d1a17" },
-  artifact: { icon: "🏺", name: "Strange mound", gives: null, per: 1, amount: [1, 1], hidden: true, color: "#c2a26d" },
-  fossil: { icon: "🦴", name: "Bone bed", gives: null, per: 1, amount: [2, 3], hidden: true, color: "#e8dcc0" },
-  copper: { icon: "🟠", name: "Copper vein", gives: "copper", per: 1, amount: [10, 16], hidden: false, color: "#c8743f", needs: "tools" },
-  quartz: { icon: "💠", name: "Quartz outcrop", gives: "quartz", per: 1, amount: [8, 12], hidden: true, color: "#dff1f7", needs: "tools" },
-  magnetite: { icon: "🧲", name: "Magnetite", gives: "magnetite", per: 1, amount: [6, 10], hidden: true, color: "#3d414b", needs: "tools" },
-  crystal: { icon: "🔮", name: "Crystal geode", gives: "crystal", per: 1, amount: [4, 7], hidden: true, color: "#8fe3ff", needs: "tools" },
-  meteorite: { icon: "☄️", name: "Meteor fragment", gives: "meteorite", per: 1, amount: [2, 4], hidden: false, color: "#5d4d70", needs: "tools" },
+  stone: { icon: "🪨", name: "Loose stone", gives: "stone", per: 2, amount: [14, 22], hidden: false, color: "#9b958b" },
+  clay: { icon: "🟫", name: "Clay lumps", gives: "clay", per: 2, amount: [10, 16], hidden: false, color: "#b6764f" },
+  flint: { icon: "🔷", name: "Flint shards", gives: "flint", per: 2, amount: [8, 14], hidden: false, color: "#5f7d99" },
+  iron: { icon: "⛓️", name: "Iron ore chunks", gives: "iron", per: 1, amount: [10, 16], hidden: true, color: "#9a5a46", needs: "tools" },
+  coal: { icon: "⚫", name: "Coal chunks", gives: "coal", per: 2, amount: [10, 18], hidden: true, color: "#34343b", needs: "tools" },
+  silver: { icon: "🥈", name: "Silver ore chunks", gives: "silver", per: 1, amount: [6, 11], hidden: true, color: "#c9d4dc", needs: "tools" },
+  gold: { icon: "🪙", name: "Gold nuggets", gives: "gold", per: 1, amount: [4, 7], hidden: true, color: "#f2c94c", needs: "tools" },
+  obsidian: { icon: "🔮", name: "Obsidian shards", gives: "obsidian", per: 1, amount: [5, 9], hidden: true, color: "#2b2238", needs: "tools" },
+  salt: { icon: "🧂", name: "Salt crystals", gives: "salt", per: 2, amount: [8, 12], hidden: true, color: "#efeae0" },
+  tar: { icon: "🛢️", name: "Tar pool", gives: "tar", per: 1, amount: [8, 12], hidden: false, color: "#1d1a17" },
+  artifact: { icon: "🏺", name: "Relic fragments", gives: null, per: 1, amount: [1, 1], hidden: true, color: "#c2a26d" },
+  fossil: { icon: "🦴", name: "Fossil bones", gives: null, per: 1, amount: [2, 3], hidden: true, color: "#e8dcc0" },
+  copper: { icon: "🟠", name: "Copper ore chunks", gives: "copper", per: 1, amount: [10, 16], hidden: false, color: "#c8743f", needs: "tools" },
+  quartz: { icon: "💠", name: "Quartz pieces", gives: "quartz", per: 1, amount: [8, 12], hidden: true, color: "#dff1f7", needs: "tools" },
+  magnetite: { icon: "🧲", name: "Magnetite stones", gives: "magnetite", per: 1, amount: [6, 10], hidden: true, color: "#3d414b", needs: "tools" },
+  crystal: { icon: "🔮", name: "Crystal shards", gives: "crystal", per: 1, amount: [4, 7], hidden: true, color: "#8fe3ff", needs: "tools" },
+  diamond: { icon: "💎", name: "Raw diamonds", gives: "diamond", per: 1, amount: [3, 5], hidden: true, color: "#b7f4ef", needs: "tools" },
+  meteorite: { icon: "☄️", name: "Meteor fragments", gives: "meteorite", per: 1, amount: [2, 4], hidden: false, color: "#5d4d70", needs: "tools" },
 };
 
 /** Deposits the civilization paths care about (older saves get them scattered on load). */
@@ -398,6 +404,6 @@ export const ARTIFACTS = [
 ];
 
 /** Species gentle enough (and big enough) to ride. */
-export const RIDEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo"]);
+export const RIDEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo", "apato", "brachio"]);
 /** Herbivores the tribe can befriend at all. */
-export const TAMEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo", "pachy", "apato"]);
+export const TAMEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo", "pachy", "apato", "brachio"]);

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useClickAway } from "./useClickAway";
 
 export interface Toast {
   id: number;
@@ -27,6 +28,8 @@ export default function Toasts({ toasts, onDismiss, onGo }: { toasts: Toast[]; o
 
 function ToastPill({ t, onDismiss, onGo }: { t: Toast; onDismiss: (id: number) => void; onGo: (x: number, y: number) => void }) {
   const [open, setOpen] = useState(false);
+  const pillRef = useRef<HTMLDivElement>(null);
+  useClickAway(open, pillRef, () => setOpen(false), false);
   const dismiss = useRef(onDismiss);
   dismiss.current = onDismiss;
   useEffect(() => {
@@ -36,6 +39,7 @@ function ToastPill({ t, onDismiss, onGo }: { t: Toast; onDismiss: (id: number) =
   const where = t.x !== undefined && t.y !== undefined && t.x >= 0;
   return (
     <motion.div
+      ref={pillRef}
       layout
       initial={{ y: -20, opacity: 0, scale: 0.9 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}

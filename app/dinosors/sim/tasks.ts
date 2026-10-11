@@ -39,6 +39,8 @@ export type TaskKind =
   | "heal"
   | "tame"
   | "train"
+  | "trainWork"
+  | "handleDino"
   | "ride"
   | "dismount"
   | "guard"
@@ -546,6 +548,14 @@ function taskAlive(w: World, t: Task): boolean {
       const d = w.dinoById(t.target);
       return !!d && !d.owner && w.camp.learned.has("taming");
     }
+    case "trainWork": {
+      const d = w.dinoById(t.target);
+      return !!d && d.owner && !!d.work?.focus && (d.work.skills[d.work.focus] ?? 0) < 1;
+    }
+    case "handleDino": {
+      const d = w.dinoById(t.target);
+      return !!d && d.owner && (d.work?.job === "collect" || d.work?.job === "deliver");
+    }
     case "train": {
       const d = w.dinoById(t.target);
       return !!d && d.owner && (d.warTraining ?? 0) < 1 && w.camp.learned.has("taming");
@@ -614,12 +624,12 @@ export function taskThink(w: World, h: Human): boolean {
       // nothing to do this moment (no materials found yet, a busy stretch): stay on the job and look
       // again shortly; only after a long wait go help elsewhere
       t.stall = (t.stall ?? 0) + 1;
-      if (t.stall > 12) {
+      if (t.stall > 120) {
         say(h, "Can't find materials…");
         personDone(w, h, t);
         return false;
       }
-      say(h, "Looking for materials…");
+      if (t.stall === 1 || t.stall % 12 === 0) say(h, "Looking for materials…");
       h.think = 2.5;
       return true;
     }
@@ -745,6 +755,32 @@ export function taskThink(w: World, h: Human): boolean {
         h.targetId = d.id;
         h.dir = d.x > h.x ? 1 : -1;
       } else go(h, "walk", d.x + (h.x < d.x ? -reach * 0.8 : reach * 0.8), d.y + 6);
+      return true;
+    }
+    case "handleDino": {
+      const d = w.dinoById(t.target);
+      if (!d || d.work?.helper !== h.id || (d.work.job !== "collect" && d.work.job !== "deliver")) {
+        personDone(w, h, t);
+        return false;
+      }
+      const reach = sizeOf(d) * 0.45 + 24;
+      if (near(h, d.x, d.y, reach)) {
+        go(h, "loadDino", h.x, h.y);
+        h.targetId = d.id;
+      } else go(h, "walk", d.x - d.dir * reach * 0.7, d.y + 8);
+      return true;
+    }
+    case "trainWork": {
+      const d = w.dinoById(t.target);
+      if (!d || !d.owner || d.work?.trainer !== h.id || !d.work.focus || (d.work.skills[d.work.focus] ?? 0) >= 1) {
+        personDone(w, h, t);
+        return false;
+      }
+      const reach = sizeOf(d) * 0.5 + 24;
+      if (near(h, d.x, d.y, reach)) {
+        go(h, "train", h.x, h.y);
+        h.targetId = d.id;
+      } else go(h, "walk", d.x - d.dir * reach * 0.7, d.y + 8);
       return true;
     }
     case "train": {
@@ -1010,6 +1046,9 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
   const camp = w.camp;
   const list = sites(w).filter((s) => !s.locked && allow(s));
   if (!list.length) return false;
+  // A construction task uses h.task as its temporary material request while
+  // the builder walks to and gathers that source. Keep that trip intact.
+  if (h.task && (h.state === "walk" || h.state === "gather") && list.some((s) => siteKey(s) === h.site && s.need === h.task)) return true;
   // Repairs and deliverable upgrades count as work too. If one site is short
   // of an unobtainable material, try the next site instead of idling.
   const score = (x: Site) => Math.hypot(x.sx - h.x, x.sy - h.y) - (x.repair ? 300 : 0)
@@ -1057,7 +1096,11 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
       }
       return true;
     }
-    const src = sourceFor(w, h, s.need) ?? sourceFor(w, h, s.need, s.x, s.y) ?? sourceFor(w, h, s.need, h.x, h.y);
+    // Assigned builders search well beyond the ordinary gather radius so
+    // remote settlement sites can still bring their materials in.
+    const src = sourceFor(w, h, s.need, undefined, undefined, 3000)
+      ?? sourceFor(w, h, s.need, s.x, s.y, 3000)
+      ?? sourceFor(w, h, s.need, h.x, h.y, 3000);
     if (!src) continue;
     h.site = siteKey(s);
     h.task = s.need;
@@ -1130,9 +1173,12 @@ export function rallyBattlePets(w: World): number[] {
 }
 
 export function mount(w: World, h: Human, d: Dino) {
-  if (d.rider || h.riding || h.child) return;
+  const giant = d.species === "apato" || d.species === "brachio";
+  const extra = d.passengers ??= [];
+  if (h.riding || h.child || (d.rider && (!giant || (d.work?.skills.riding ?? 0) < 0.35 || extra.length >= 2))) return;
   h.riding = d.id;
-  d.rider = h.id;
+  if (d.rider) extra.push(h.id);
+  else d.rider = h.id;
   setState(d, "ridden", d.x, d.y);
   h.x = d.x;
   h.y = d.y;
@@ -1150,8 +1196,10 @@ export function dismount(w: World, h: Human) {
   const d = h.riding ? w.dinoById(h.riding) : null;
   h.riding = 0;
   if (d) {
-    d.rider = 0;
-    setState(d, "idle", d.x, d.y);
+    if (d.rider === h.id) {
+      d.rider = d.passengers?.shift() ?? 0;
+    } else d.passengers = (d.passengers ?? []).filter((id) => id !== h.id);
+    if (!d.rider) setState(d, "idle", d.x, d.y);
     d.think = 1;
     h.x = d.x + (d.dir > 0 ? -1 : 1) * (sizeOf(d) * 0.3 + 8);
     h.y = d.y + 8;

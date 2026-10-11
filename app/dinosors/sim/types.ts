@@ -161,6 +161,7 @@ export type DinoState =
   | "flee"
   | "defend"
     | "war"
+  | "work"
   | "follow"
   | "sleep"
   | "investigate"
@@ -265,6 +266,28 @@ export interface Dino {
     spikeCd?: number;
   /** id of the person riding it (0 = nobody) */
   rider: number;
+  /** Extra passengers on a trained sauropod. */
+  passengers?: number[];
+  /** Settlement work training and the load physically carried on this animal. */
+  work?: {
+    skills: Partial<Record<"hauler" | "riding" | "heavy" | "runner", number>>;
+    focus: "hauler" | "riding" | "heavy" | "runner" | null;
+    trainer: number;
+    practice: number;
+    harness: number;
+    auto: boolean;
+    cargo: Resource | null;
+    cargoN: number;
+    job: "collect" | "deliver" | "travel" | null;
+    source: "stock" | "mine" | null;
+    site: string;
+    targetX: number;
+    targetY: number;
+    manual: boolean;
+    loadT: number;
+    helper?: number;
+    boardUntil?: number;
+  };
   /** seconds since fire/lava last hurt it (charred bones if it dies hot) */
   burn: number;
   /** nav path (tile indices) + the goal it was planned for */
@@ -294,6 +317,7 @@ export type HumanState =
   | "hunt"
   | "aim"
   | "haul"
+  | "loadDino"
   | "cook"
   | "farm"
   | "guard"
@@ -322,6 +346,7 @@ export type Resource =
   | "meat"
   | "cooked"
   | "crop"
+  | "flour"
   | "water"
   | "clay"
   | "iron"
@@ -437,7 +462,7 @@ export interface Human {
 /* ------------------------------ Neanderthals ------------------------------ */
 
 /** Basic weapons only: Neanderthals never invent bows, metal or energy weapons. */
-export type BruteWeapon = "club" | "axe" | "spear" | "rock";
+export type BruteWeapon = "club" | "axe" | "spear" | "rock" | "sling";
 
 export type BruteState = "idle" | "wander" | "walk" | "sleep" | "fight" | "hunt" | "forage" | "bash" | "carry" | "flee" | "home" | "loot" | "rally" | "spy" | "lurk";
 
@@ -700,6 +725,7 @@ export interface Farm {
   /** 0 = bare, 0..1 growing, 1 = ripe */
   growth: number;
   planted: boolean;
+  crop?: "flower" | "wheat" | "barley";
 }
 
 export interface Tower {
@@ -719,7 +745,7 @@ export interface Tower {
   up?: boolean;
 }
 
-export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "well" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "boneTorch" | "tannery" | "spikes" | "barricade" | "totem"
+export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "well" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "boneTorch" | "tannery" | "spikes" | "barricade" | "totem" | "mill" | "bakery"
   // the Old Ways' last-resort project
   | "shelterDeep"
   | "refinery"
@@ -783,7 +809,7 @@ export interface Scorpion {
   drone?: boolean;
 }
 
-export type NodeKind = "stone" | "clay" | "iron" | "gold" | "obsidian" | "flint" | "salt" | "tar" | "artifact" | "fossil" | "copper" | "quartz" | "magnetite" | "crystal" | "meteorite";
+export type NodeKind = "stone" | "clay" | "iron" | "coal" | "silver" | "gold" | "obsidian" | "flint" | "salt" | "tar" | "artifact" | "fossil" | "copper" | "quartz" | "magnetite" | "crystal" | "diamond" | "meteorite";
 
 /** A resource deposit. Rare ones stay hidden until someone walks by. */
 export interface ResNode {

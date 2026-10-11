@@ -596,65 +596,62 @@ export function drawCivNode(c: CanvasRenderingContext2D, n: ResNode, t: number) 
     case "copper": {
       const rocks: [number, number, number][] = [[-9, -3, 10], [8, -2, 8], [0, -10, 9]];
       for (const [x, y, r] of rocks) {
-        c.fillStyle = "#6f6157";
+        c.fillStyle = "#8f4e30";
         c.beginPath();
         c.ellipse(x, y, r * k, r * 0.75 * k, 0, 0, Math.PI * 2);
         c.fill();
-        c.strokeStyle = (x + v) % 2 ? "#4fa38a" : COPPER;
-        c.lineWidth = 2;
+        c.fillStyle = (x + v) % 2 ? "#7db09b" : COPPER;
         c.beginPath();
-        c.moveTo(x - r * 0.5 * k, y);
-        c.lineTo(x + r * 0.4 * k, y - r * 0.3 * k);
-        c.stroke();
+        c.ellipse(x - 2 * k, y - 2 * k, r * 0.62 * k, r * 0.34 * k, -0.3, 0, Math.PI * 2);
+        c.fill();
       }
       break;
     }
     case "quartz":
-      for (const [x, h] of [[-8, 14], [0, 20], [7, 12], [12, 9]] as [number, number][]) crystal(c, x, -1, h * k, 0.15, "#e9f6fa");
+      for (const [x, h] of [[-11, 9], [-2, 11], [7, 8], [13, 6]] as [number, number][]) crystal(c, x, -1, h * k, 0.15, "#e9f6fa");
       break;
     case "magnetite": {
-      c.fillStyle = "#3d414b";
-      c.beginPath();
-      c.moveTo(-14 * k, 0);
-      c.lineTo(-10 * k, -12 * k);
-      c.lineTo(2, -16 * k);
-      c.lineTo(13 * k, -8 * k);
-      c.lineTo(14 * k, 0);
-      c.closePath();
-      c.fill();
-      c.fillStyle = "#6b7280";
-      c.fillRect(-6, -10 * k, 5, 2);
-      // little iron filings standing up
+      for (const [x, y, r] of [[-10, -2, 8], [3, -5, 10], [12, -1, 6]] as [number, number, number][]) {
+        c.fillStyle = "#30343d";
+        c.beginPath();
+        c.moveTo((x - r) * k, y * k);
+        c.lineTo((x - r * 0.45) * k, (y - r) * k);
+        c.lineTo((x + r * 0.4) * k, (y - r * 0.8) * k);
+        c.lineTo((x + r) * k, y * k);
+        c.closePath();
+        c.fill();
+        c.fillStyle = "#727985";
+        c.fillRect((x - 2) * k, (y - r * 0.75) * k, 3 * k, 1.5 * k);
+      }
       c.strokeStyle = "#20232a";
       c.lineWidth = 0.8;
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 3; i++) {
         const a = -2.4 + i * 0.4 + Math.sin(t + i) * 0.05;
         c.beginPath();
-        c.moveTo(Math.cos(a) * 16, -6 + Math.sin(a) * 10);
-        c.lineTo(Math.cos(a) * 20, -6 + Math.sin(a) * 13);
+        c.moveTo(Math.cos(a) * 14, -6 + Math.sin(a) * 8);
+        c.lineTo(Math.cos(a) * 18, -6 + Math.sin(a) * 11);
         c.stroke();
       }
       break;
     }
     case "crystal": {
-      c.fillStyle = "#5d5a66";
-      c.beginPath();
-      c.ellipse(0, -4, 17 * k, 10 * k, 0, Math.PI, 0);
-      c.fill();
       const pulse = (Math.sin(t * 1.8 + v) + 1) / 2;
-      crystal(c, -5, -2, 16 * k, 0.35 + pulse * 0.4);
-      crystal(c, 5, -2, 12 * k, 0.3 + pulse * 0.3, "#c7b8ff");
+      crystal(c, -9, -2, 9 * k, 0.35 + pulse * 0.4);
+      crystal(c, 1, -3, 11 * k, 0.3 + pulse * 0.3, "#c7b8ff");
+      crystal(c, 11, -1, 7 * k, 0.3 + pulse * 0.25);
       break;
     }
     case "meteorite": {
-      c.fillStyle = "#3c3141";
-      c.beginPath();
-      c.ellipse(0, -6, 13 * k, 9 * k, 0.3, 0, Math.PI * 2);
-      c.fill();
-      c.fillStyle = "#5d4d70";
-      c.beginPath();
-      c.ellipse(-3, -9, 7 * k, 4 * k, 0.3, 0, Math.PI * 2);
-      c.fill();
+      for (const [x, y, r] of [[-8, -3, 8], [5, -5, 9], [11, -1, 5]] as [number, number, number][]) {
+        c.fillStyle = "#3c3141";
+        c.beginPath();
+        c.ellipse(x * k, y * k, r * k, r * 0.7 * k, 0.3, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = "#665475";
+        c.beginPath();
+        c.ellipse((x - 2) * k, (y - 2) * k, r * 0.5 * k, r * 0.22 * k, 0.3, 0, Math.PI * 2);
+        c.fill();
+      }
       const a = (Math.sin(t * 3 + v) + 1) / 2;
       c.fillStyle = `rgba(255,140,90,${0.3 + a * 0.4})`;
       c.beginPath();

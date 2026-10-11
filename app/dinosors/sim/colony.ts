@@ -20,7 +20,7 @@ export interface DropOff {
   kind: "pile" | BuildingKind;
 }
 
-const FOOD = new Set<Resource>(["cooked", "fish", "crop", "berries", "meat"]);
+const FOOD = new Set<Resource>(["cooked", "fish", "crop", "flour", "berries", "meat"]);
 
 /** Mostly stone: fire barely scorches it. */
 const STONEWORK = new Set<BuildingKind>(["pyramid", "obelisk", "stoneCircle", "shelterDeep", "chamber", "shapingYard", "beamTower", "energyTower", "pylon", "resShield"]);
@@ -546,6 +546,7 @@ export class Colony {
   /* ----------------------------- refinery ----------------------------- */
 
   private refineT = 0;
+  private foodProcessT = 0;
 
   /** Refineries smelt raw metal into bars: 2 ore + a log → 1 bar, every few seconds. */
   private refine(w: World, dt: number) {
@@ -571,6 +572,32 @@ export class Colony {
     if (!w.flags.has(`firstBar-${bar}`)) {
       w.flags.add(`firstBar-${bar}`);
       w.toast(RES_INFO[bar].icon, `The refinery poured its first ${RES_INFO[bar].name.toLowerCase().replace(/s$/, "")}!`, r.x, r.y);
+    }
+  }
+
+  /** Mills and bakeries turn harvested grain into food without consuming a worker each tick. */
+  private processFood(w: World, dt: number) {
+    const mills = this.buildings.filter((b) => b.kind === "mill" && b.built >= 1);
+    const bakeries = this.buildings.filter((b) => b.kind === "bakery" && b.built >= 1);
+    if (!mills.length && !bakeries.length) return;
+    this.foodProcessT -= dt * Math.max(1, mills.length + bakeries.length);
+    if (this.foodProcessT > 0) return;
+    this.foodProcessT = 8;
+    const stock = w.camp.stock;
+    if (mills.length && stock.crop >= 2) {
+      stock.crop -= 2;
+      stock.flour += 2;
+      w.particles.burst(P.Crumb, mills[0].x, mills[0].y - 22, 5, 32, { z: 12, size: 3, max: 0.7, color: "#ead8a1" });
+      w.sfx("clack", mills[0].x, mills[0].y, 0.3);
+    }
+    if (bakeries.length && stock.flour >= 2) {
+      stock.flour -= 2;
+      stock.cooked += 5;
+      w.particles.burst(P.Spark, bakeries[0].x, bakeries[0].y - 20, 5, 28, { z: 12, size: 3, max: 0.7, color: "#f3b45f" });
+      if (!w.flags.has("firstBread")) {
+        w.flags.add("firstBread");
+        w.toast("🍞", "The bakery made its first bread! +5 cooked food.", bakeries[0].x, bakeries[0].y);
+      }
     }
   }
 
@@ -704,6 +731,7 @@ export class Colony {
     }
     this.updateBoneDefenses(w, dt);
     this.refine(w, dt);
+    this.processFood(w, dt);
     // traps bite whatever steps on them
     for (const b of this.buildings) {
       if (b.kind !== "trap" || b.built < 1) continue;

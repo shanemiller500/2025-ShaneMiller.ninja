@@ -14,6 +14,7 @@ import DinoCard from "./ui/DinoCard";
 import StickerBook from "./ui/StickerBook";
 import Toasts, { type Toast } from "./ui/Toasts";
 import Toolbar from "./ui/Toolbar";
+import TrainPanel from "./ui/TrainPanel";
 import TopBar, { type TopPanel } from "./ui/TopBar";
 import ViewControls from "./ui/ViewControls";
 import RaidBanner from "./ui/RaidBanner";
@@ -83,6 +84,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [panel, setPanel] = useState<TopPanel>(null);
   const [campOpen, setCampOpen] = useState(false);
+  const [trainOpen, setTrainOpen] = useState(false);
   const [evoOpen, setEvoOpen] = useState(false);
   const [stickersOpen, setStickersOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -232,6 +234,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
     if (!e) return;
     e.audio.unlock();
     e.setTool(t);
+    if (t.id && t.id !== "hand") setTrainOpen(false);
     setToolState({ ...e.tool });
   }, []);
 
@@ -263,7 +266,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   return (
     <div ref={uiRef} className={`fixed inset-0 z-40 select-none overflow-hidden bg-[#1f5f8a] text-white ${fontClass}`} style={{ touchAction: "none" }}>
       <div ref={wrapRef} className="absolute inset-0">
-        <canvas ref={canvasRef} className="block h-full w-full cursor-grab active:cursor-grabbing" aria-label="Dinosaur Land world. Drag to explore, tap to interact." />
+        <canvas ref={canvasRef} data-dl-world-canvas className="block h-full w-full cursor-grab active:cursor-grabbing" aria-label="Dinosaur Land world. Drag to explore, tap to interact." />
       </div>
 
       {engine && snap && (
@@ -315,12 +318,20 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           ) : (
             <>
               <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} />
-              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} />
+              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={() => {
+                if (!trainOpen) {
+                  setCampOpen(false);
+                  setEvoOpen(false);
+                  setCivOpen(false);
+                }
+                setTrainOpen((open) => !open);
+              }} />
+              {trainOpen && <TrainPanel engine={engine} onClose={() => setTrainOpen(false)} />}
               <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
               {snap.inspect && !snap.selected && <InspectPanel info={snap.inspect} snap={snap} engine={engine} />}
             </>
           )}
-          {snap.view === "surface" && snap.selected && (
+          {snap.view === "surface" && snap.selected && !trainOpen && (
             <DinoCard
               info={snap.selected}
               engine={engine}
@@ -341,7 +352,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           <ExtinctionBanner snap={snap} />
           {(() => {
             // tips + bubbles stay out of the way while anything else is open
-            const busy = campOpen || civOpen || evoOpen || savesOpen || stickersOpen || aboutOpen || help.open || extOpen || choiceOpen || !!confirm || !!snap.selected || snap.extinction.phase !== "idle" && snap.extinction.phase !== "ruins";
+            const busy = trainOpen || campOpen || civOpen || evoOpen || savesOpen || stickersOpen || aboutOpen || help.open || extOpen || choiceOpen || !!confirm || !!snap.selected || snap.extinction.phase !== "idle" && snap.extinction.phase !== "ruins";
             return (
               <>
                 <TipCoach snap={snap} enabled={settings.tips} busy={busy} onOff={() => updateSettings({ tips: false })} onHelp={(section) => setHelp({ open: true, section })} />
@@ -462,7 +473,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
         .dark .dl-modal { background: #2b1d12 !important }
         .dl-modal.dl-modal-paper, .dark .dl-modal.dl-modal-paper { background: #f6e4bd !important }
         .dl-scroll::-webkit-scrollbar { display: none }
-        .dl-scroll { scrollbar-width: none }
+        .dl-scroll { scrollbar-width: none; touch-action: pan-x pan-y; overscroll-behavior: contain }
       `}</style>
     </div>
   );

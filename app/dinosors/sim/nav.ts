@@ -21,7 +21,7 @@ import type { World } from "./world";
 
 export const NT = MAP_W * MAP_H;
 /** "bigDino": a ground dino too big for bridges (anything bigger than a chicken) */
-export type NavClass = "human" | "dino" | "bigDino" | "rider";
+export type NavClass = "human" | "dino" | "bigDino" | "hugeDino" | "rider";
 
 const F_TERRAIN = 1; // deep water, mountain, cliff
 const F_SOLID = 2; // walls, buildings, huts: nobody walks through
@@ -198,9 +198,20 @@ export class Nav {
     if (f & (F_TERRAIN | F_SOLID)) return false;
     if (cls === "human") return !(f & F_TAR);
     if (f & (F_STAIRS | F_TOWER)) return false;
-    if (cls === "bigDino" && f & F_BRIDGE) return false;
+    if ((cls === "bigDino" || cls === "hugeDino" || cls === "rider") && f & F_BRIDGE) return false;
     if ((f & F_GATE) && !(f & F_OPEN)) return false;
-    if (cls === "rider" && f & F_TAR) return false;
+    if ((cls === "rider" || cls === "hugeDino") && f & F_TAR) return false;
+    if (cls === "hugeDino") {
+      const x = i % MAP_W;
+      const y = Math.floor(i / MAP_W);
+      if (x <= 0 || y <= 0 || x >= MAP_W - 1 || y >= MAP_H - 1) return false;
+      // A sauropod and its cargo need a full three-tile-wide clearance.
+      for (const offset of [-MAP_W - 1, -MAP_W, -MAP_W + 1, -1, 1, MAP_W - 1, MAP_W, MAP_W + 1]) {
+        const around = this.flags[i + offset];
+        if (around & (F_TERRAIN | F_SOLID | F_STAIRS | F_TOWER | F_BRIDGE | F_TAR)) return false;
+        if ((around & F_GATE) && !(around & F_OPEN)) return false;
+      }
+    }
     return true;
   }
 

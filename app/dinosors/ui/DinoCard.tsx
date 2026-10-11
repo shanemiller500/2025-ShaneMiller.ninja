@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Pencil, Trash2, Utensils, Video, X } from "lucide-react";
 import { sp } from "../data/species";
@@ -11,6 +11,7 @@ import { ROLES } from "../data/facts";
 import { WEAPON_KINDS } from "../data/colony";
 import { CONDITION_LABEL } from "../sim/injury";
 import { GameIcon } from "./GameIcon";
+import { useClickAway } from "./useClickAway";
 
 /* ------------------------------------------------------------------ */
 /*  Tap a dino → this little card. Live stats, a mood, kid-sized       */
@@ -44,8 +45,11 @@ function weightLike(kg: number) {
 const fmtKg = (kg: number) => (kg >= 1000 ? `${Math.round(kg / 100) / 10} t` : `${kg} kg`);
 
 export default function DinoCard({ info, engine, onClose, onCamp }: { info: DinoInfo | HumanInfo; engine: Engine; onClose: () => void; onCamp: () => void }) {
+  const cardRef = useRef<HTMLElement>(null);
+  useClickAway(true, cardRef, onClose);
   return (
     <motion.aside
+      ref={cardRef}
       key={info.id}
       initial={{ opacity: 0, x: 24, scale: 0.97 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -137,8 +141,11 @@ function DinoBody({ info, engine }: { info: DinoInfo; engine: Engine }) {
         <Bar icon="⚡" label="Energy" value={info.energy} color="linear-gradient(90deg,#eab308,#fde047)" />
         {info.baby && <Bar icon="📏" label="Growing" value={info.growth} color="linear-gradient(90deg,#a78bfa,#f0abfc)" />}
         {info.owner && <Bar icon="🛡️" label="Training" value={info.warTraining} color="linear-gradient(90deg,#f59e0b,#fcd34d)" />}
+        {info.work && <Bar icon="🦕" label="Work" value={Math.max(0, ...Object.values(info.work.skills))} color="linear-gradient(90deg,#f59e0b,#a3e635)" />}
         {!info.owner && info.tamingKnown && def.diet === "herbivore" && <Bar icon="💚" label="Trust" value={info.tame} color="linear-gradient(90deg,#10b981,#86efac)" />}
       </div>
+
+      {info.work && <div className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-xs text-amber-100">🧰 {info.work.harness ? `Harness ${info.work.harness}` : "No harness"} · {info.work.cargoN ? `${info.work.cargoN} ${info.work.cargo} aboard` : "Empty"} · {info.work.auto ? "Auto work on" : "Auto work off"}</div>}
 
       <div className="mt-3 rounded-2xl bg-amber-300/10 p-3 text-xs text-amber-100">
         {info.owner ? (

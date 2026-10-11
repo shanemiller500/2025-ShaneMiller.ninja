@@ -884,12 +884,12 @@ export class Tribe {
 
   /* ------------------------------ farms ------------------------------ */
 
-  addFarm(w: World, x: number, y: number) {
+  addFarm(w: World, x: number, y: number, crop: Farm["crop"] = "wheat") {
     const t = w.terrain.tileAt(x, y);
     if (!isWalkTile(t) || isWaterTile(t) || t === T.Tar || t === T.Rock || t === T.Basalt) return null;
     if (w.colony.occupied(w).has(Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE))) return null;
     if (this.farms.some((f) => Math.hypot(f.x - x, f.y - y) < 70)) return null;
-    const f: Farm = { id: w.nextId(), x, y, growth: 0, planted: false };
+    const f: Farm = { id: w.nextId(), x, y, growth: 0, planted: false, crop };
     this.farms.push(f);
     return f;
   }
@@ -1206,7 +1206,7 @@ export class Tribe {
   serialize() {
     return {
       walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0)] as const),
-      farms: this.farms.map((f) => [Math.round(f.x), Math.round(f.y), Math.round(f.growth * 100) / 100, f.planted ? 1 : 0] as const),
+      farms: this.farms.map((f) => [Math.round(f.x), Math.round(f.y), Math.round(f.growth * 100) / 100, f.planted ? 1 : 0, f.crop ?? "wheat"] as const),
       towers: this.towers.map((t) => [Math.round(t.x), Math.round(t.y), t.stage, Math.max(0, t.have), t.tx, t.ty, Math.round(t.hp), (t.stone ? 1 : 0) | (t.up ? 2 : 0)] as const),
       level: this.level,
       danger: this.danger,
@@ -1230,7 +1230,7 @@ export class Tribe {
       this.walls.push(wl);
       this.wallMap.set(ty * MAP_W + tx, wl);
     }
-    for (const [x, y, growth, planted] of d.farms) this.farms.push({ id: w.nextId(), x, y, growth, planted: !!planted });
+    for (const [x, y, growth, planted, crop] of d.farms) this.farms.push({ id: w.nextId(), x, y, growth, planted: !!planted, crop: crop ?? "wheat" });
     for (const row of d.towers) {
       const [x, y, stage, have] = row;
       // older saves stored towers by position only: snap them onto the tile grid
@@ -1897,8 +1897,10 @@ export function roleAct(w: World, h: Human, dt: number): boolean {
         } else if (f.planted && f.growth >= 1) {
           f.planted = false;
           f.growth = 0;
-          w.camp.stock.crop += 4;
-          say(h, "Harvest! +4");
+          const crop = f.crop ?? "wheat";
+          if (crop === "flower") w.camp.stock.berries += 2;
+          else w.camp.stock.crop += 4;
+          say(h, crop === "flower" ? "Flowers! +berries" : `${crop === "barley" ? "Barley" : "Wheat"}! +4`);
           w.discover("harvest", f.x, f.y);
         }
         go(h, "idle", h.x, h.y);

@@ -18,7 +18,7 @@ export const isBaby = (d: Dino) => d.growth < 0.5;
 
 /** Bridges only hold chicken-sized dinos (compys, little hatchlings). */
 const BRIDGE_MAX_SIZE = 34;
-const navClassOf = (d: Dino): NavClass => (sizeOf(d) <= BRIDGE_MAX_SIZE ? "dino" : "bigDino");
+const navClassOf = (d: Dino): NavClass => (sizeOf(d) <= BRIDGE_MAX_SIZE ? "dino" : (d.species === "apato" || d.species === "brachio") && !isBaby(d) || sizeOf(d) >= 110 ? "hugeDino" : "bigDino");
 
 export function makeDino(w: World, species: SpeciesId, x: number, y: number, o: Partial<Dino> = {}): Dino {
   const def = sp(species);
@@ -77,6 +77,7 @@ export function makeDino(w: World, species: SpeciesId, x: number, y: number, o: 
     warCd: 0,
     spikeCd: 0,
     rider: 0,
+    passengers: [],
     burn: 99,
     path: null,
     pathI: 0,
@@ -160,6 +161,7 @@ function stateSpeedBase(d: Dino, def: SpeciesDef) {
     case "stalk":
       return def.speed * 0.8;
     case "wander":
+    case "work":
     case "investigate":
     case "seekFood":
     case "seekWater":
@@ -179,6 +181,7 @@ function stateSpeedBase(d: Dino, def: SpeciesDef) {
 }
 
 const MOVING = new Set<DinoState>([
+  "work",
   "wander",
   "investigate",
   "seekFood",

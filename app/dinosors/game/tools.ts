@@ -4,19 +4,19 @@
 /* ------------------------------------------------------------------ */
 import { TECH } from "../data/facts";
 import { CIV_TECH, LIFT, type CivTechId } from "../data/civ";
-import { BUILDINGS, HOUSING, SCORPION_TIERS, TENT_STAGES, type Cost } from "../data/colony";
+import { BUILDINGS, HOUSING, NODES, SCORPION_TIERS, TENT_STAGES, type Cost } from "../data/colony";
 import { SHELTER_STAGES } from "../data/facts";
 import { sp } from "../data/species";
 import { addHuman } from "../sim/humans";
 import { P } from "../sim/particles";
 import { makePlant } from "../sim/plants";
 import { isWaterTile, isWalkTile } from "../sim/terrain";
-import { MAP_W, MAX_PEOPLE, T, TILE, type BuildingKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
+import { MAP_W, MAX_PEOPLE, T, TILE, type BuildingKind, type NodeKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
 import type { World } from "../sim/world";
 
 export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire" | "weather" | "disaster" | "people" | "build" | "erase";
 export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
-export type LandOpt = "water" | "rock" | "mud" | "grass";
+export type LandOpt = "water" | "rock" | "mud" | "grass" | NodeKind;
 export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon" | "supervolcano";
 export type PeopleOpt = "adult" | "child";
 export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "bonegate" | "levitate" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | "cleanMud" | BuildingKind;
@@ -32,6 +32,7 @@ export interface ToolState {
   disaster: DisasterOpt;
   people: PeopleOpt;
   build: BuildOpt;
+  farmCrop: "flower" | "wheat" | "barley";
 }
 
 export const DEFAULT_TOOL: ToolState = {
@@ -45,6 +46,7 @@ export const DEFAULT_TOOL: ToolState = {
   disaster: "lightning",
   people: "adult",
   build: "wall",
+  farmCrop: "wheat",
 };
 
 export interface Opt<V extends string> {
@@ -69,11 +71,17 @@ export const PLANT_OPTS: Opt<PlantKind>[] = [
   { value: "cycad", icon: "🪴", label: "Cycad" },
   { value: "reeds", icon: "🌾", label: "Reeds" },
 ];
+export const FARM_CROP_OPTS: Opt<NonNullable<ToolState["farmCrop"]>>[] = [
+  { value: "flower", icon: "🌼", label: "Flowers" },
+  { value: "wheat", icon: "🌾", label: "Wheat" },
+  { value: "barley", icon: "🌿", label: "Barley" },
+];
 export const LAND_OPTS: Opt<LandOpt>[] = [
   { value: "water", icon: "💧", label: "Water" },
-  { value: "rock", icon: "🪨", label: "Rock" },
+  { value: "rock", icon: "🪨", label: "Rock ground" },
   { value: "mud", icon: "🟤", label: "Mud" },
   { value: "grass", icon: "🟩", label: "Grass" },
+  ...(["stone", "clay", "flint", "salt", "tar", "coal", "copper", "iron", "silver", "gold", "quartz", "magnetite", "crystal", "diamond", "obsidian", "meteorite", "fossil", "artifact"] satisfies NodeKind[]).map((kind) => ({ value: kind, icon: NODES[kind].icon, label: NODES[kind].name })),
 ];
 export const WEATHER_OPTS: Opt<WeatherKind>[] = [
   { value: "clear", icon: "☀️", label: "Sun" },
@@ -134,6 +142,8 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("barricade", "defense", true),
   bld("totem", "defense"),
   { value: "farm", icon: "🌾", label: "Farm", cat: "work", cost: {}, tech: "farming", tip: "Farmers plant grass seed and harvest crops." },
+  bld("mill", "work"),
+  bld("bakery", "work"),
   bld("storage", "work"),
   bld("foodStore", "work"),
   bld("waterStore", "work"),
@@ -214,7 +224,7 @@ export const TOOLS: ToolDef[] = [
   { id: "egg", icon: "🥚", label: "Eggs", tip: "Place an egg and watch it hatch" },
   { id: "food", icon: "🍖", label: "Food", tip: "Drop food for hungry dinos" },
   { id: "plant", icon: "🌳", label: "Plants", tip: "Grow trees and bushes", brush: true },
-  { id: "land", icon: "🏞️", label: "Land", tip: "Paint water, rocks, mud or grass", brush: true },
+  { id: "land", icon: "🏞️", label: "Land", tip: "Paint terrain or place loose surface materials to mine", brush: true },
   { id: "fire", icon: "🔥", label: "Fire", tip: "Light a fire (careful!)", brush: true },
   { id: "weather", icon: "🌦️", label: "Weather", tip: "Change the weather" },
   { id: "disaster", icon: "💥", label: "Boom", tip: "Lightning, meteors, volcano, quakes" },
@@ -239,7 +249,7 @@ export function toolCursor(t: ToolState): { icon: string; radius: number } | nul
     case "plant":
       return { icon: PLANT_OPTS.find((o) => o.value === t.plant)!.icon, radius: 18 };
     case "land":
-      return { icon: LAND_OPTS.find((o) => o.value === t.land)!.icon, radius: TILE * 1.6 };
+      return { icon: LAND_OPTS.find((o) => o.value === t.land)!.icon, radius: t.land in NODES ? 24 : TILE * 1.6 };
     case "fire":
       return { icon: "🔥", radius: 22 };
     case "weather":
@@ -344,6 +354,25 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
       return true;
     }
     case "land": {
+      if (tool.land in NODES) {
+        if (drag) return false;
+        const kind = tool.land as NodeKind;
+        if (!isWalkTile(tile) || isWaterTile(tile) || tile === T.Tar || tile === T.Cave || tile === T.Volcano) {
+          hint(w, NODES[kind].icon, "Deposits need safe, dry ground.");
+          return false;
+        }
+        if (w.colony.nodes.some((n) => Math.hypot(n.x - x, n.y - y) < 54) || w.colony.buildings.some((b) => Math.hypot(b.x - x, b.y - y) < 40)) {
+          hint(w, NODES[kind].icon, "Leave some room between deposits and buildings.");
+          return false;
+        }
+        const def = NODES[kind];
+        const amount = Math.round(def.amount[0] + w.rng() * (def.amount[1] - def.amount[0]));
+        w.colony.nodes.push({ id: w.nextId(), kind, x, y, amount, max: amount, found: true, variant: Math.floor(w.rng() * 4) });
+        w.particles.burst(P.Rock, x, y, 5, 36, { vz: 45, g: 180, size: 3, max: 0.7, color: def.color });
+        w.sfx("thud", x, y, 0.5);
+        w.toast(def.icon, `${def.name} placed. Send a miner to dig it.`, x, y);
+        return true;
+      }
       const r = 1.6;
       let n = 0;
       if (tool.land === "water") {
@@ -516,8 +545,8 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
       return true;
     }
     case "farm": {
-      const f = w.tribe.addFarm(w, x, y);
-      if (f) w.toast("🌾", "New field! Farmers plant it with grass seeds.");
+      const f = w.tribe.addFarm(w, x, y, tool.farmCrop);
+      if (f) w.toast(f.crop === "flower" ? "🌼" : "🌾", `New ${f.crop ?? "wheat"} field! Farmers plant it with grass seeds.`);
       else hint(w, "🌾", "Fields need open soil (and a little space).");
       return !!f;
     }

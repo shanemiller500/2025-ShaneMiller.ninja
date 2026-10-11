@@ -17,6 +17,7 @@ import { pick } from "./rng";
 import { LM } from "./terrain";
 import { T, TILE, WORLD_H, WORLD_W, type Brute, type Dino, type DinoState, type Human, type Item, type SpeciesDef } from "./types";
 import type { World } from "./world";
+import { thinkWorkDino } from "./workDinos";
 
 /** States that run to completion; `think` leaves them alone. */
 const LOCKED = new Set<DinoState>([
@@ -1299,6 +1300,7 @@ export function thinkDino(w: World, d: Dino) {
       return;
     }
   }
+  if (thinkWorkDino(w, d)) return;
   if (def.move === "fly") thinkFlyer(w, d, def);
   else if (def.move === "swim") thinkSwimmer(w, d, def);
   else thinkWalker(w, d, def);

@@ -1,11 +1,13 @@
 "use client";
 
+import { useRef } from "react";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import { RES_INFO, type Cost } from "../data/colony";
 import type { Engine, InspectInfo, Snapshot } from "../game/engine";
 import type { Resource } from "../sim/types";
 import { GameIcon } from "./GameIcon";
+import { useClickAway } from "./useClickAway";
 
 /* ------------------------------------------------------------------ */
 /*  Tap a home, building, Scorpion, gate or tower → this card.         */
@@ -41,9 +43,12 @@ function Bar({ value, color }: { value: number; color: string }) {
 }
 
 export default function InspectPanel({ info, snap, engine }: { info: InspectInfo; snap: Snapshot; engine: Engine }) {
+  const panelRef = useRef<HTMLElement>(null);
+  useClickAway(true, panelRef, () => engine.closeInspect());
   const stock = snap.camp.stock;
   return (
     <motion.aside
+      ref={panelRef}
       key={`${info.kind}-${info.id}`}
       initial={{ opacity: 0, x: 24, scale: 0.97 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}

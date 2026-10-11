@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import { CAMP_LEVELS, ROLES, SHELTER_STAGES, TECH, TECH_ORDER } from "../data/facts";
@@ -10,6 +10,7 @@ import { CRAFT_STEPS } from "../sim/camp";
 import { shelterDone } from "../sim/build";
 import type { Engine, Snapshot } from "../game/engine";
 import { TILE, type Danger, type Role, type TechId } from "../sim/types";
+import { useClickAway } from "./useClickAway";
 
 /* ------------------------------------------------------------------ */
 /*  The tribe's HQ. Tabs:                                              */
@@ -40,11 +41,14 @@ function amountLabel(value: number): string {
 }
 
 export default function CampPanel({ snap, engine, onClose, tab: initial = "camp" }: { snap: Snapshot; engine: Engine; onClose: () => void; tab?: Tab }) {
+  const panelRef = useRef<HTMLElement>(null);
+  useClickAway(true, panelRef, onClose);
   const [tab, setTab] = useState<Tab>(initial);
   useEffect(() => setTab(initial), [initial]);
   const tribe = snap.tribe;
   return (
     <motion.aside
+      ref={panelRef}
       initial={{ opacity: 0, x: -24, scale: 0.97 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 420, damping: 32 }}
