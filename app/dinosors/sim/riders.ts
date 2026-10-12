@@ -20,9 +20,10 @@
 import { TAMEABLE } from "../data/colony";
 import { sp } from "../data/species";
 import { isBaby, setState, sizeOf } from "./dinos";
-import { go, say } from "./humans";
+import { go, say, sourceFor } from "./humans";
 import { pick } from "./rng";
-import { mount } from "./tasks";
+import { dismount, issue, mount } from "./tasks";
+import { sites } from "./build";
 import type { Dino, Human, Resource } from "./types";
 import { eligible, workOf, type WorkSkill } from "./workDinos";
 import { dragonTrainerThink, dragonWork } from "./dragonKeep";
@@ -279,6 +280,90 @@ export function riderDefend(w: World, h: Human, danger: { x: number; y: number; 
   return true;
 }
 
+/* ------------------------------ player orders: call the rider, ride somewhere ------------------------------ */
+
+/** Where this person's work is right now (for "ride to work"). */
+export function jobSpot(w: World, h: Human): { x: number; y: number; label: string } {
+  const t = w.tasks.get(h.taskId);
+  if (t) return { x: t.x, y: t.y, label: t.label };
+  const role = w.tribe.roleOf(h);
+  const near = <T extends { x: number; y: number }>(list: T[]) => list.sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))[0];
+  switch (role) {
+    case "builder": {
+      const s = near(sites(w).filter((x) => !x.locked));
+      if (s) return { x: s.sx, y: s.sy, label: "the building site" };
+      break;
+    }
+    case "farmer": {
+      const f = near([...w.tribe.farms]);
+      if (f) return { x: f.x, y: f.y + 26, label: "the fields" };
+      break;
+    }
+    case "miner":
+      return { x: w.camp.caveX + 20, y: w.camp.caveY + 30, label: "the mine" };
+    case "smith": {
+      const s = w.colony.station(w);
+      return { x: s.x, y: s.y + 10, label: "the forge" };
+    }
+    case "cook": {
+      const f = near(w.campfires.filter((x) => x.lit));
+      if (f) return { x: f.x + 20, y: f.y + 16, label: "the cooking fire" };
+      break;
+    }
+    case "guard": {
+      const tw = near(w.tribe.towers.filter((x) => x.hp > 0));
+      if (tw) return { x: tw.x, y: tw.y + 30, label: "the watchtower" };
+      break;
+    }
+    case "trainer": {
+      const st = w.colony.buildings.find((b) => b.kind === "stable" || b.kind === "pen");
+      if (st) return { x: st.x, y: st.y + 30, label: "the animal pens" };
+      break;
+    }
+    case "gatherer":
+    case "hunter": {
+      // the nearest thing the stores are short of
+      const need = w.colony.missing(w) ?? (w.camp.stock.wood < 20 ? "wood" : w.camp.stock.stone < 20 ? "stone" : "berries");
+      const src = sourceFor(w, h, need);
+      if (src) return { x: src.x, y: src.y + 20, label: `the ${need}` };
+      break;
+    }
+  }
+  return { x: w.camp.pileX + 30, y: w.camp.pileY + 30, label: "camp" };
+}
+
+/** Call a dinosaur's bonded rider over to climb on. Returns why not (or null). */
+export function callRider(w: World, d: Dino): string | null {
+  const h = riderOf(w, d);
+  if (!h) return `${d.name} has no rider yet.`;
+  if (h.riding === d.id) return null;
+  if (h.state === "down" || h.under) return `${h.name} can't come right now.`;
+  if (h.riding) dismount(w, h);
+  const work = workOf(d);
+  work.boardUntil = w.elapsed + 120;
+  // the dinosaur waits where it is
+  if (!d.rider && d.state !== "war") setState(d, "idle", d.x, d.y);
+  d.think = 4;
+  const t = issue(w, [h], { kind: "ride", icon: "🏇", label: `Ride ${d.name}`, x: d.x, y: d.y, target: d.id });
+  if (!t) return `${h.name} can't come right now.`;
+  say(h, `Coming, ${d.name}!`);
+  return null;
+}
+
+/** Send the rider team somewhere (calling the rider first if they're on foot). */
+export function rideTeamTo(w: World, d: Dino, where: "job" | "camp" | { x: number; y: number }): string | null {
+  const h = riderOf(w, d);
+  if (!h) return `${d.name} has no rider yet.`;
+  const spot = where === "job" ? jobSpot(w, h) : where === "camp" ? { x: w.camp.pileX + 30, y: w.camp.pileY + 30, label: "camp" } : { ...where, label: "there" };
+  const work = workOf(d);
+  work.rideTo = spot;
+  // stay mounted for a good while after arriving (riders carry three times as much)
+  work.boardUntil = w.elapsed + 600;
+  if (h.riding !== d.id) return callRider(w, d);
+  h.think = 0;
+  return null;
+}
+
 /** A rider's own business: care for the partner, scouting trips, and riding to work. */
 export function riderThink(w: World, h: Human): boolean {
   const d = partnerOf(w, h);
@@ -287,6 +372,24 @@ export function riderThink(w: World, h: Human): boolean {
     return false;
   }
   const work = workOf(d);
+  // the player sent them somewhere: get on, ride there, then back to the day's work (still mounted)
+  if (work.rideTo) {
+    const to = work.rideTo;
+    if (h.riding !== d.id) {
+      if (!d.rider && near(h, d, 40)) mount(w, h, d);
+      else if (d.rider) work.rideTo = null;
+      else go(h, "walk", d.x - d.dir * 10, d.y + 6);
+      return true;
+    }
+    if (Math.hypot(h.x - to.x, h.y - to.y) < 34) {
+      work.rideTo = null;
+      work.boardUntil = Math.max(work.boardUntil ?? 0, w.elapsed + 240);
+      say(h, to.label === "camp" ? "Home!" : "Here we are!");
+      return false;
+    }
+    if (h.state !== "walk" || Math.hypot(h.tx - to.x, h.ty - to.y) > 4) go(h, "walk", to.x, to.y);
+    return true;
+  }
   // a hungry partner gets fed first
   if (d.hunger > 0.65 && !h.riding && FOODS.some((r) => w.camp.stock[r] > 0)) return feed(w, h, d);
   if (isFlyer(d)) return flyerRiderThink(w, h, d);

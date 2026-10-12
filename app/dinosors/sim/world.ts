@@ -1002,6 +1002,7 @@ export class World {
         ...(h.captive ? { captive: h.captive } : {}),
         ...(h.partner ? { partner: h.partner } : {}),
         ...(h.dragon ? { dragon: h.dragon } : {}),
+        ...(h.sonic ? { sonic: true } : {}),
       })),
       tribe: this.tribe.serialize(),
       shifts: this.shifts.serialize(),
@@ -1078,6 +1079,7 @@ export class World {
         ...((h as { captive?: number }).captive ? { captive: (h as { captive?: number }).captive, state: "captive" as const } : {}),
         ...((h as { partner?: number }).partner ? { partner: (h as { partner?: number }).partner } : {}),
         ...((h as { dragon?: number }).dragon ? { dragon: (h as { dragon?: number }).dragon } : {}),
+        ...((h as { sonic?: boolean }).sonic ? { sonic: true } : {}),
       });
       hu.id = h.id;
     }

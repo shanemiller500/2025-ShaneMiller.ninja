@@ -9,6 +9,7 @@ import { SHELTER_STAGES } from "../data/facts";
 import { sp } from "../data/species";
 import { addHuman } from "../sim/humans";
 import { P } from "../sim/particles";
+import { leaveScorpion } from "../sim/tasks";
 import { makePlant } from "../sim/plants";
 import { isWaterTile, isWalkTile } from "../sim/terrain";
 import { MAP_W, MAX_PEOPLE, T, TILE, type BuildingKind, type NodeKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
@@ -159,6 +160,7 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("stable", "work"),
   bld("tack", "work"),
   bld("perch", "work"),
+  bld("fireStation", "work"),
   bld("hatchery", "work"),
   bld("roost", "work"),
   bld("feedPit", "work"),
@@ -607,6 +609,8 @@ function erase(w: World, x: number, y: number, drag: boolean) {
   const R = 28;
   const wl = w.tribe.wallAt(Math.floor(x / TILE), Math.floor(y / TILE));
   if (wl) {
+    w.tribe.noteErased("wall", wl.tx * TILE + TILE / 2, wl.ty * TILE + TILE / 2);
+    for (const h of w.humans) if (h.level === 1 && Math.floor(h.x / TILE) === wl.tx && Math.floor(h.y / TILE) === wl.ty) h.level = 0;
     w.tribe.removeWall(wl);
     w.particles.burst(P.Dust, x, y, 5, 30, { size: 8, max: 0.6, color: "rgba(160,130,90,0.6)" });
     w.sfx("pop", x, y, 0.4);
@@ -615,11 +619,27 @@ function erase(w: World, x: number, y: number, drag: boolean) {
   const tower = w.tribe.towers.find((t) => Math.hypot(t.x - x, t.y - 30 - y) < 40);
   if (tower && !drag) {
     w.tribe.towers.splice(w.tribe.towers.indexOf(tower), 1);
+    w.tribe.noteErased("tower", tower.x, tower.y);
+    // its Scorpion comes down with it; anyone up top is back on the ground
+    for (const s of [...w.colony.scorpions]) if (s.mount === "tower" && Math.hypot(s.x - tower.x, s.y - tower.y) < 50) {
+      for (const h of w.humans) if (h.id === s.crew) leaveScorpion(w, h);
+      w.colony.scorpions.splice(w.colony.scorpions.indexOf(s), 1);
+    }
+    for (const h of w.humans) if (h.level === 1 && Math.hypot(h.x - tower.x, h.y - tower.y) < 50) {
+      h.level = 0;
+      h.wantTop = false;
+      h.think = 0;
+    }
     w.tribe.version++;
+    w.colony.version++;
+    w.particles.burst(P.Dust, tower.x, tower.y - 20, 14, 60, { size: 12, max: 0.9, color: "rgba(160,130,90,0.6)" });
+    w.sfx("pop", x, y, 0.5);
     return true;
   }
   const sc = w.colony.scorpions.find((s) => Math.hypot(s.x - x, s.y - 8 - y) < 22);
   if (sc && !drag) {
+    w.tribe.noteErased("scorpion", sc.x, sc.y);
+    for (const h of w.humans) if (h.id === sc.crew) leaveScorpion(w, h);
     w.colony.scorpions.splice(w.colony.scorpions.indexOf(sc), 1);
     w.colony.version++;
     return true;
@@ -629,6 +649,7 @@ function erase(w: World, x: number, y: number, drag: boolean) {
   const onDeck = w.colony.bridgeAt(Math.floor(x / TILE), Math.floor(y / TILE)) && (w.shelters.some((s) => Math.hypot(s.x - x, s.y - 16 - y) < 40) || w.campfires.some((f) => Math.hypot(f.x - x, f.y - y) < R));
   const b = w.colony.buildings.find((bd) => bd.kind !== "bridge" && hit(bd)) ?? (onDeck ? undefined : w.colony.buildings.find(hit));
   if (b) {
+    w.tribe.noteErased(b.kind, b.x, b.y);
     w.colony.removeBuilding(b);
     if (b.kind === "boneTorch") w.trails.disconnectTorch(w, b.x, b.y);
     w.particles.burst(P.Dust, b.x, b.y, 8, 40, { size: 9, max: 0.7, color: "rgba(160,130,90,0.6)" });
@@ -637,6 +658,7 @@ function erase(w: World, x: number, y: number, drag: boolean) {
   }
   const farm = w.tribe.farms.find((f) => Math.hypot(f.x - x, (f.y - y) * 1.6) < 40);
   if (farm && !drag) {
+    w.tribe.noteErased("farm", farm.x, farm.y);
     w.tribe.farms.splice(w.tribe.farms.indexOf(farm), 1);
     return true;
   }
@@ -676,6 +698,7 @@ function erase(w: World, x: number, y: number, drag: boolean) {
   }
   const shelter = w.shelters.find((s) => Math.hypot(s.x - x, s.y - 16 - y) < 40);
   if (shelter && !drag) {
+    w.tribe.noteErased("shelter", shelter.x, shelter.y);
     w.shelters.splice(w.shelters.indexOf(shelter), 1);
     w.shelterVersion++;
     for (const h of w.humans) if (h.home === shelter.id) h.home = 0;

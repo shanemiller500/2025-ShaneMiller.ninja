@@ -8,6 +8,7 @@
 import { hasVault } from "./deepBuild";
 import { CAMP_LEVELS, FACTS } from "../data/facts";
 import { BUILDINGS, HOUSING, OUTFITS, OUTFIT_BY_ID, SCORPION_TIERS, WEAPON_BY_ID, type WeaponDef } from "../data/colony";
+import { sonicDispatch } from "./sonic";
 import { trainerThink, trainerWork } from "./riders";
 import { SHADE, shadeNear } from "./shade";
 import { sp } from "../data/species";
@@ -113,6 +114,7 @@ export class Tribe {
 
   addWall(w: World, tx: number, ty: number, kind: WallKind, part: WallPart = "wall") {
     if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1) return null;
+    if (!this.wallAt(tx, ty) && this.vetoed("wall", tx * TILE + TILE / 2, ty * TILE + TILE / 2)) return null;
     if (!w.colony.footing(w, tx, ty)) return null;
     const ex = this.wallAt(tx, ty);
     if (ex) {
@@ -908,6 +910,7 @@ export class Tribe {
   /* ------------------------------ farms ------------------------------ */
 
   addFarm(w: World, x: number, y: number, crop: Farm["crop"] = "wheat") {
+    if (this.vetoed("farm", x, y)) return null;
     const t = w.terrain.tileAt(x, y);
     if (!isWalkTile(t) || isWaterTile(t) || t === T.Tar || t === T.Rock || t === T.Basalt) return null;
     if (w.colony.occupied(w).has(Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE))) return null;
@@ -943,6 +946,7 @@ export class Tribe {
 
   /** Towers stand on a 2x2 tile footprint so walls can butt right up against them. */
   addTower(w: World, x: number, y: number) {
+    if (this.vetoed("tower", x, y)) return null;
     const spot = this.towerSpot(w, x, y);
     if (!spot) return null;
     const { tx, ty } = spot;
@@ -980,6 +984,42 @@ export class Tribe {
   /** wall version the entrances were last checked at */
   private entranceV = -1;
 
+  /**
+   * Things the player erased: Auto never plans the same kind of thing back near them
+   * (buildings anywhere around that part of camp, towers/walls/homes/farms/Scorpions on that spot).
+   * The player can still build them by hand.
+   */
+  erased: { kind: string; x: number; y: number }[] = [];
+  /** true while Auto's planners are running (so the player's own building is never blocked) */
+  planning = false;
+
+  /** The player erased this: remember it so Auto leaves the spot alone. */
+  noteErased(kind: string, x: number, y: number) {
+    if (this.erased.some((e) => e.kind === kind && Math.hypot(e.x - x, e.y - y) < 20)) return;
+    this.erased.push({ kind, x: Math.round(x), y: Math.round(y) });
+    if (this.erased.length > 300) this.erased.shift();
+  }
+
+  /** Would Auto be putting back something the player erased? */
+  vetoed(kind: string, x: number, y: number) {
+    if (!this.planning || !this.erased.length) return false;
+    const r = kind === "wall" ? TILE * 2 : kind === "tower" ? 600 : kind === "shelter" || kind === "farm" ? 90 : kind === "scorpion" ? 120 : 650;
+    return this.erased.some((e) => e.kind === kind && Math.hypot(e.x - x, e.y - y) < r);
+  }
+
+  /** A spot for Auto's next home: the usual one, or (if the player cleared it) the next free one round camp. */
+  private freeHomeSpot(w: World, x: number, y: number, n: number, radius: number) {
+    if (!this.vetoed("shelter", x, y)) return { x, y };
+    const c = w.camp;
+    for (let k = 1; k < 12; k++) {
+      const a = -0.4 + (n + k) * 0.9;
+      const px = c.x + Math.cos(a) * radius * (1 + Math.floor(k / 6) * 0.4);
+      const py = c.y + 50 + Math.sin(a) * radius * 0.6 * (1 + Math.floor(k / 6) * 0.4);
+      if (!this.vetoed("shelter", px, py)) return { x: px, y: py };
+    }
+    return null;
+  }
+
   /** What an un-bossed tribe decides to build next (each plan happens once; kids can erase/redo). */
   private autoPlan(w: World) {
     const c = w.camp;
@@ -990,8 +1030,9 @@ export class Tribe {
       const a = -0.4 + n * 0.9;
       const R = CAMP_LEVELS[this.level].radius * 0.5;
       const spot = homeSpot(w);
-      c.addShelter(w, spot?.x ?? c.x + Math.cos(a) * R, spot?.y ?? c.y + 50 + Math.sin(a) * R * 0.6);
-      w.toast("🛖", spot?.founded ? "The camp is full: the tribe is starting a new neighbourhood out in the land!" : "The tribe planned a new hut so the camp can grow!", spot?.x, spot?.y);
+      const at = this.freeHomeSpot(w, spot?.x ?? c.x + Math.cos(a) * R, spot?.y ?? c.y + 50 + Math.sin(a) * R * 0.6, n, R);
+      if (at) c.addShelter(w, at.x, at.y);
+      if (at) w.toast("🛖", spot?.founded ? "The camp is full: the tribe is starting a new neighbourhood out in the land!" : "The tribe planned a new hut so the camp can grow!", spot?.x, spot?.y);
     }
     if (c.learned.has("farming") && !f.has("planFarms")) {
       const a = this.addFarm(w, c.x - 120, c.y + 150);
@@ -1176,6 +1217,25 @@ export class Tribe {
     return false;
   }
 
+  /** Sonic firefighting: a fire station near camp, then emitters for its rack (three in all). */
+  private planSonic(w: World) {
+    const c = w.camp;
+    if (!c.learned.has("sonicFire")) return false;
+    if (!w.colony.buildings.some((b) => b.kind === "fireStation")) {
+      const b = this.placeNear(w, "fireStation", c.x, c.y + 40, [170, 220, 270]);
+      if (b) {
+        w.toast("🚒", "Auto planned a sonic fire station. It'll store the ultrasonic fire emitters and send a crew to every fire.", b.x, b.y);
+        return true;
+      }
+      return false;
+    }
+    if (w.colony.finished("fireStation")) {
+      const have = (w.colony.armory.sonicEmitter ?? 0) + w.humans.filter((h) => h.sonic).length + w.colony.queue.filter((q) => q === "sonicEmitter").length;
+      if (have < 3) w.colony.queue.push("sonicEmitter");
+    }
+    return false;
+  }
+
   /** Dragon keeping: an incubation shelter once there's an egg, then a roost, feeding area + training area. */
   private planDragons(w: World) {
     const c = w.camp;
@@ -1266,7 +1326,9 @@ export class Tribe {
       const a = -0.4 + n * 0.9;
       const radius = CAMP_LEVELS[this.level].radius * 0.5;
       const spot = homeSpot(w);
-      c.addShelter(w, spot?.x ?? c.x + Math.cos(a) * radius, spot?.y ?? c.y + 50 + Math.sin(a) * radius * 0.6);
+      const at = this.freeHomeSpot(w, spot?.x ?? c.x + Math.cos(a) * radius, spot?.y ?? c.y + 50 + Math.sin(a) * radius * 0.6, n, radius);
+      if (!at) return;
+      c.addShelter(w, at.x, at.y);
       w.toast("🛖", spot?.founded ? "Auto started a new neighbourhood out in the land: a first home, then a fire and a store." : "Auto planned another home for the growing camp.", spot?.x, spot?.y);
       return;
     }
@@ -1286,6 +1348,7 @@ export class Tribe {
     if (this.planShade(w, adults)) return;
     if (this.planAnimals(w)) return;
     if (this.planDragons(w)) return;
+    if (this.planSonic(w)) return;
     const plan = (kind: BuildingKind) => {
       for (const radius of [140, 205, 270]) for (let i = 0; i < 16; i++) {
         const a = (i + w.day * 3) * Math.PI / 8;
@@ -1332,13 +1395,19 @@ export class Tribe {
     if (this.alarmT <= 0) {
       this.alarmT = 2;
       this.updateFireAlarm(w);
+      sonicDispatch(w);
     }
     updateZones(w, dt);
     this.planT -= dt;
     if (this.planT <= 0) {
       this.planT = 6;
-      this.autoPlan(w);
-      this.autoImprove(w);
+      this.planning = true;
+      try {
+        this.autoPlan(w);
+        this.autoImprove(w);
+      } finally {
+        this.planning = false;
+      }
     }
     const seasonal = season(w).farms * w.almanac.farmsMul();
     for (const f of this.farms) if (f.planted && f.growth < 1) f.growth = Math.min(1, f.growth + (dt / 80) * (1 + w.weather.rain * 1.5) * (w.weather.temp > 0.85 ? 0.5 : 1) * (w.civ.has("cropRotation") ? 2 : 1) * seasonal);
@@ -1418,6 +1487,7 @@ export class Tribe {
       raidTimer: Math.round(this.raidTimer),
       improvementDay: this.improvementDay,
       improvedAt: Number.isFinite(this.improvedAt) ? Math.round(this.improvedAt) : null,
+      erased: this.erased,
     };
   }
 
@@ -1445,6 +1515,7 @@ export class Tribe {
     }
     this.level = d.level;
     this.danger = d.danger;
+    this.erased = (d as { erased?: { kind: string; x: number; y: number }[] }).erased?.map((e) => ({ ...e })) ?? [];
     this.evolution = d.evolution;
     this.raidsWon = d.raidsWon;
     this.raidTimer = d.raidTimer;

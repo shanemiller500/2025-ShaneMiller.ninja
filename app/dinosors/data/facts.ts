@@ -154,6 +154,14 @@ export const TECH: Record<
     what: "The tribe learns to beat out flames and pass water along a bucket line. Without it they can only run!",
     fact: "Firefighters still use fire breaks: clearing a strip of land so the fire has nothing to burn.",
   },
+  sonicFire: {
+    icon: "🔊",
+    name: "Sonic firefighting",
+    needs: { copper: 3, stone: 4, hide: 2 },
+    after: ["firefighting", "smelting"],
+    what: "Copper horns that sing so high nobody can hear them: ultrasonic vibration shakes flames apart from a safe distance. Build a sonic fire station; it stores the emitters and sends a crew to every fire.",
+    fact: "Real scientists have put out small flames with loud low sound waves: the waves push the air (and its oxygen) away from the fuel.",
+  },
   scorpion: {
     icon: "🏹",
     name: "Scorpion",
@@ -164,7 +172,7 @@ export const TECH: Record<
   },
 };
 
-export const TECH_ORDER: TechId[] = ["tools", "fire", "axe", "spear", "basket", "firefighting", "fishing", "shelter", "farming", "medicine", "taming", "palisade", "bow", "tower", "crossbow", "stonewall", "scorpion", "smelting"];
+export const TECH_ORDER: TechId[] = ["tools", "fire", "axe", "spear", "basket", "firefighting", "fishing", "shelter", "farming", "medicine", "taming", "palisade", "bow", "tower", "crossbow", "stonewall", "scorpion", "smelting", "sonicFire"];
 
 /** Each shelter stage: what has to be carried in, and what it looks like. */
 export const SHELTER_STAGES: { label: string; need: "wood" | "stick" | "leaves" | "stone"; n: number }[] = [
@@ -278,6 +286,7 @@ export const DISCOVERIES: Discovery[] = [
   { id: "dragonGrown", icon: "🐲", name: "All Grown Up", hint: "Raise a dragon to adulthood." },
   { id: "dragonRider", icon: "🐉", name: "Dragon Rider", hint: "A dragon chooses its rider." },
   { id: "dragonFire", icon: "🔥", name: "Breath of Fire", hint: "Command a dragon's fire." },
+  { id: "sonicFire", icon: "🚒", name: "Sound Over Flame", hint: "Send the sonic fire crew to a fire." },
   { id: "megaEruption", icon: "☄️", name: "MEGA ERUPTION", hint: "What if something from space hit the volcano?" },
   { id: "snow", icon: "❄️", name: "Snow Day", hint: "It gets cold up in the peaks." },
   { id: "healer", icon: "🩹", name: "Patched Up", hint: "Look after the hurt." },

@@ -24,6 +24,7 @@ import { pick } from "./rng";
 import { isWaterTile } from "./terrain";
 import { tileOf } from "./nav";
 import { MAP_W, T, TILE, type Brute, type Dino, type Dragon, type DragonEgg, type DragonNest, type Human, type Item, type Plant, type Resource, type WeaponKind } from "./types";
+import { sonicDouse, sonicReady } from "./sonic";
 import { eggHuntThink, trackThink } from "./dragonNests";
 import type { World } from "./world";
 
@@ -381,7 +382,7 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
   }
   if (tile === T.Tar) return { kind: "mine", icon: "🛢️", label: "Scoop tar (carefully!)", x, y, target: 0, res: "tar" };
   if (tile === T.Rock || tile === T.Basalt) return { kind: "mine", icon: "🪨", label: "Quarry stone", x, y, target: 0, res: "stone" };
-  if (w.fire.at(tx, ty) > 0.1) return L.has("firefighting") ? { kind: "douse", icon: "🪣", label: "Put out the fire!", x, y, target: 0 } : { kind: "move", icon: "🔒", label: "Invent 🪣 Fire fighting to put fires out", x, y, target: 0 };
+  if (w.fire.at(tx, ty) > 0.1) return L.has("firefighting") || L.has("sonicFire") ? { kind: "douse", icon: sonicReady(w) ? "🔊" : "🪣", label: sonicReady(w) ? "Blast the fire out with sonic emitters!" : "Put out the fire!", x, y, target: 0 } : { kind: "move", icon: "🔒", label: "Invent 🪣 Fire fighting to put fires out", x, y, target: 0 };
   if (tile === T.Grass) {
     const move: Command = armed ? { kind: "guard", icon: "🛡️", label: "Stand guard here", x, y, target: 0 } : { kind: "move", icon: "👣", label: "Go here", x, y, target: 0 };
     return { ...move, alts: [{ kind: "forage", icon: "🌾", label: "Cut grass", x, y, target: 0, res: "grass" }] };
@@ -1292,6 +1293,8 @@ export function fireNear(w: World, x: number, y: number, r: number): { x: number
 
 /** Get water (store or river), run to the nearest flames, throw it. */
 export function douseThink(w: World, h: Human, done: () => void): boolean {
+  // with a sonic fire station + emitters, the crew shakes fires out from a distance
+  if (sonicDouse(w, h, done)) return true;
   const c = w.camp;
   const fire = fireNear(w, h.x, h.y, 900) ?? fireNear(w, c.x, c.y, 900);
   const skins = w.colony.kits.has("waterSkins");

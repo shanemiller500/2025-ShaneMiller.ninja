@@ -83,6 +83,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   hatchery: { kind: "hatchery", icon: "🥚", name: "Incubation shelter", tip: "A warm stone shelter for dragon eggs. Keep it fuelled (a trainer stokes it with wood, sticks or coal) and an egg inside stays warm, rain or snow.", cost: { stone: 6, clay: 3, wood: 3 }, w: 2, h: 2, solid: true, tech: "taming", work: 8, hp: 400 },
   dragonYard: { kind: "dragonYard", icon: "🎯", name: "Dragon training area", tip: "A big fenced practice ground. Dragon lessons here go 40% faster.", cost: { wood: 8, stick: 6 }, w: 4, h: 3, solid: false, tech: "taming", work: 8, hp: 260 },
   feedPit: { kind: "feedPit", icon: "🍖", name: "Dragon feeding area", tip: "A stone trough where dragons eat from the meat + fish stores. Food here fills them up 30% more.", cost: { stone: 5, wood: 3 }, w: 2, h: 1, solid: false, tech: "taming", work: 5, hp: 220 },
+  fireStation: { kind: "fireStation", icon: "🚒", name: "Sonic fire station", tip: "Stores the ultrasonic fire emitters (smiths make them here) and rings the alarm: when fire breaks out near camp or the station, a crew grabs emitters and shakes the flames out from a safe distance. Emitters go back on the rack afterwards.", cost: { stone: 8, wood: 6, copper: 2 }, w: 3, h: 2, solid: true, tech: "sonicFire", work: 9, hp: 520 },
   tack: { kind: "tack", icon: "🧰", name: "Tack + harness station", tip: "Saddles, harnesses + cargo frames. Trainers train 25% faster with it, and rider teams carry more.", cost: { wood: 3, hide: 3, bone: 2 }, w: 2, h: 1, solid: true, tech: "taming", work: 5, hp: 180 },
   healer: { kind: "healer", icon: "🌿", name: "Healing hut", tip: "Hurt people rest here and heal twice as fast.", cost: { wood: 4, leaves: 6 }, w: 2, h: 2, solid: true, tech: "medicine", work: 6, hp: 280 },
   pen: { kind: "pen", icon: "🐾", name: "Animal pen", tip: "Battle-trained pets rest inside at night and stay close between fights. They still leave to eat, drink, defend and carry riders.", cost: { stick: 8, wood: 2 }, w: 3, h: 2, solid: false, tech: "taming", work: 5, hp: 200 },
@@ -352,12 +353,18 @@ export interface ForgeItem {
   tip?: string;
 }
 
+/** Fire gear, made + stored at the sonic fire station. */
+export const FIRE_GEAR = [
+  { id: "sonicEmitter", name: "Ultrasonic fire emitter", icon: "🔊", cost: { copper: 2, bone: 2, hide: 1 } as Cost, at: "fireStation", tech: "sonicFire" as TechId, tip: "A tuned copper horn on a hide strap. Its ultrasonic vibration shakes fire out from 150 steps away, no water needed. Stored at the fire station." },
+];
+
 /** Anything a smith / tanner can make. */
 export const FORGE_ITEMS: ForgeItem[] = [
   ...WEAPONS.map((w) => ({ id: w.id, name: w.name, icon: w.icon, tier: w.tier, cost: w.cost, at: w.at as string, tech: w.tech, civ: w.civ, cat: "weapons" as ForgeCat })),
   ...SHIELDS.map((s) => ({ id: s.id, name: s.name, icon: "🛡️", tier: s.tier, cost: s.cost, at: s.at as string, tech: undefined, cat: "shields" as ForgeCat })),
   ...OUTFITS.map((o) => ({ id: o.id, name: o.name, icon: o.icon, tier: 1, cost: o.cost, at: o.at as string, tech: undefined, civ: o.civ, cat: "gear" as ForgeCat, tip: o.tip })),
   ...HELMETS.map((h) => ({ id: h.id, name: h.name, icon: h.icon, tier: 2, cost: h.cost, at: h.at as string, tech: undefined, civ: h.civ, cat: "gear" as ForgeCat, tip: h.tip })),
+  ...FIRE_GEAR.map((g) => ({ id: g.id, name: g.name, icon: g.icon, tier: 2, cost: g.cost, at: g.at, tech: g.tech, cat: "gear" as ForgeCat, tip: g.tip })),
   ...KITS.map((k) => ({ id: k.id, name: k.name, icon: k.icon, tier: 1, cost: k.cost, at: k.at as string, tech: undefined, civ: k.civ, cat: "kits" as ForgeCat, tip: k.tip })),
 ];
 

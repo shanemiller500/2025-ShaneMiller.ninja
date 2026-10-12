@@ -41,6 +41,7 @@ export const CRAFT_STEPS: Record<TechId, string[]> = {
   medicine: ["Pick healing leaves", "Crush them into paste", "Wrap the wound", "All better!"],
   taming: ["Find a gentle giant", "Offer some berries", "Move slowly…", "Friends!"],
   smelting: ["Build a clay furnace", "Pile in ore + charcoal", "Pump the bellows!", "Glowing metal!"],
+  sonicFire: ["Hammer a copper horn", "Tune it higher… higher…", "The flame shivers!", "Silent fire-shaker!"],
   scorpion: ["Carve a huge bow", "Twist the torsion ropes", "Fit the slider", "THWACK!"],
   firefighting: ["Weave grass beaters", "Dig a fire break", "Pass the water along!", "Fire's out!"],
 };

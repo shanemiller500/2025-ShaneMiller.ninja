@@ -279,6 +279,8 @@ export interface Dino {
     partner?: number;
     /** a scouting flight / ride under way: where to, and when it was set off */
     mission?: { x: number; y: number; kind: "scout" | "warn"; home: boolean } | null;
+    /** the player sent the rider team somewhere: ride there (then carry on with the day's work) */
+    rideTo?: { x: number; y: number; label: string } | null;
     /** when (world elapsed seconds) the team's next scouting trip is due */
     missionAt?: number;
     trainer: number;
@@ -348,7 +350,9 @@ export type HumanState =
   /** sitting in the shade / under a covered rest area (see shade.ts) */
   | "relax"
   /** feeding, calming or drilling a tamed dragon, or tending a dragon egg (see dragonKeep.ts) */
-  | "dragonCare";
+  | "dragonCare"
+  /** blasting a fire with an ultrasonic emitter (see sonic.ts) */
+  | "sonic";
 
 export type Resource =
   | "stick"
@@ -478,6 +482,10 @@ export interface Human {
   aloft?: number;
   /** carrying a dragon egg (its id) */
   egg?: number;
+  /** carrying an ultrasonic fire emitter from the fire station */
+  sonic?: boolean;
+  /** where the emitter is pointed */
+  aim?: { x: number; y: number };
   seat?: number;
   /** construction site being worked on ("wall:12", "" = none) */
   site: string;
@@ -721,7 +729,9 @@ export type TechId =
   | "taming"
   | "smelting"
   | "scorpion"
-  | "firefighting";
+  | "firefighting"
+  /** ultrasonic fire emitters + the sonic fire station (see sonic.ts) */
+  | "sonicFire";
 
 export type WallKind = "palisade" | "stone" | "polygon";
 /** wall pieces: plain wall, a gate, or stairs up to the walkway */
@@ -786,6 +796,8 @@ export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" |
   | "stable" | "perch" | "tack"
   // dragon keeping (see dragonKeep.ts)
   | "roost" | "hatchery" | "dragonYard" | "feedPit"
+  // sonic firefighting (see sonic.ts)
+  | "fireStation"
   // the Old Ways' last-resort project
   | "shelterDeep"
   | "refinery"

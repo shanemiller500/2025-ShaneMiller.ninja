@@ -145,6 +145,35 @@ function DinoBody({ info, engine }: { info: DinoInfo; engine: Engine }) {
         {!info.owner && info.tamingKnown && def.diet === "herbivore" && <Bar icon="💚" label="Trust" value={info.tame} color="linear-gradient(90deg,#10b981,#86efac)" />}
       </div>
 
+      {info.owner && (info.rider || info.needsRider) && (
+        <div className="mt-2 rounded-2xl bg-sky-400/15 p-3 text-xs text-sky-50">
+          {info.rider ? (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="font-bold">🏇 Rider: {info.rider.name}</span>
+                <span className="text-white/70">{info.rider.mounted ? "Riding" : "On foot"}</span>
+              </div>
+              {info.rideAim && <div className="mt-1.5 rounded-lg bg-amber-400/25 px-2 py-1 font-bold">Tap the map where they should ride…</div>}
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                {!info.rider.mounted
+                  ? <button type="button" onClick={() => engine.callDinoRider(info.id)} className="min-h-10 rounded-xl bg-sky-400 px-2 font-black text-[#0f2a3a] active:scale-95">📣 Call {info.rider.name}</button>
+                  : <button type="button" onClick={() => engine.dismountDinoRider(info.id)} className="min-h-10 rounded-xl bg-white/15 px-2 font-bold active:scale-95">⬇️ Hop off</button>}
+                <button type="button" onClick={() => engine.rideDinoTo(info.id, "job")} className="min-h-10 rounded-xl bg-white/15 px-2 font-bold active:scale-95" title={`Ride to ${info.rider.job}`}>🛠️ Ride to work</button>
+                <button type="button" onClick={() => engine.rideDinoTo(info.id, "camp")} className="min-h-10 rounded-xl bg-white/15 px-2 font-bold active:scale-95">🏕️ Ride to camp</button>
+                <button type="button" onClick={() => engine.rideDinoTo(info.id, "spot")} className={`min-h-10 rounded-xl px-2 font-bold active:scale-95 ${info.rideAim ? "bg-amber-400 text-slate-900" : "bg-white/15"}`}>📍 Ride to a spot</button>
+              </div>
+              <div className="mt-1.5 text-white/60">Work: {info.rider.job}. Riders carry three times as much while mounted.</div>
+            </>
+          ) : (
+            <>
+              <div className="font-bold">🏇 Ready for a rider</div>
+              <div className="mt-1 text-white/70">Trained to carry a rider, but nobody is bonded to it yet.</div>
+              <button type="button" onClick={() => engine.autoBondRider(info.id)} className="mt-2 min-h-10 rounded-xl bg-sky-400 px-3 font-black text-[#0f2a3a] active:scale-95">Choose a rider</button>
+            </>
+          )}
+        </div>
+      )}
+
       {info.work && <div className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-xs text-amber-100">🧰 {info.work.harness ? `Harness ${info.work.harness}` : "No harness"} · {info.work.cargoN ? `${info.work.cargoN} ${info.work.cargo} aboard` : "Empty"} · {info.work.auto ? "Auto work on" : "Auto work off"}</div>}
 
       <div className="mt-3 rounded-2xl bg-amber-300/10 p-3 text-xs text-amber-100">

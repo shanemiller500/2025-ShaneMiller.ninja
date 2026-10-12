@@ -120,6 +120,7 @@ export class Colony {
   }
 
   addBuilding(w: World, kind: BuildingKind, x: number, y: number): Building | null {
+    if (w.tribe.vetoed(kind, x, y)) return null;
     if (this.canPlace(w, kind, x, y)) return null;
     const def = BUILDINGS[kind];
     const fp = this.footprint(kind, x, y);
@@ -238,6 +239,7 @@ export class Colony {
   }
 
   addScorpion(w: World, x: number, y: number): Scorpion | string {
+    if (w.tribe.vetoed("scorpion", x, y)) return "Removed here earlier.";
     const spot = this.scorpionSpot(w, x, y);
     if (spot.why) return spot.why;
     const { tx, ty, mount } = spot;
@@ -424,6 +426,7 @@ export class Colony {
     if (it.at === "workshop") return this.finished("workshop") || this.finished("blacksmith");
     if (it.at === "blacksmith") return this.finished("blacksmith");
     if (it.at === "tannery") return this.finished("tannery");
+    if (it.at === "fireStation") return this.finished("fireStation");
     return true;
   }
 
@@ -451,7 +454,7 @@ export class Colony {
   station(w: World): { x: number; y: number } {
     const id = this.current(w);
     const at = FORGE_ITEMS.find((f) => f.id === id)?.at;
-    const b = this.buildings.find((x) => x.built >= 1 && (at === "blacksmith" ? x.kind === "blacksmith" : at === "tannery" ? x.kind === "tannery" : x.kind === "workshop" || x.kind === "blacksmith"));
+    const b = this.buildings.find((x) => x.built >= 1 && (at === "blacksmith" ? x.kind === "blacksmith" : at === "tannery" ? x.kind === "tannery" : at === "fireStation" ? x.kind === "fireStation" : x.kind === "workshop" || x.kind === "blacksmith"));
     if (b && at !== "camp") return this.door(b);
     return { x: w.camp.craftX + 12, y: w.camp.craftY };
   }

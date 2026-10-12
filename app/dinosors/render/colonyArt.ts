@@ -24,6 +24,8 @@ export interface WallLook {
   /** gate swing 0 (shut) … 1 (open) */
   swing: number;
   t: number;
+  /** bone gates in a row: this tile draws one grand gate for all n of them */
+  run?: { n: number; vertical: boolean };
 }
 
 const WALL_H = { palisade: 30, stone: 26, polygon: 30 } as const;
@@ -211,7 +213,16 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
   }
   if (wl.part === "gate" && wl.bone) {
     c.save();
-    if (S) {
+    const run = look.run;
+    if (run && !run.vertical) {
+      // several gate tiles side by side: one grand gate spanning them all
+      c.translate(((run.n - 1) * T) / 2, cy + tw / 2);
+      c.scale(0.62 + run.n * 0.55, 1 + (run.n - 1) * 0.22);
+    } else if (run) {
+      // a north-south run: one bigger monument astride the walkway, centred on the run
+      c.translate(0, cy + 6 - ((run.n - 1) * T) / 2);
+      c.scale(0.72 * (1 + (run.n - 1) * 0.35), 0.72 * (1 + (run.n - 1) * 0.35));
+    } else if (S) {
       // in a north-south run: a smaller monument astride the walkway
       c.translate(0, cy + 6);
       c.scale(0.72, 0.72);
@@ -1443,6 +1454,37 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
       c.fillStyle = "#554039"; c.beginPath(); c.arc(0, -12, 10, Math.PI, 0); c.lineTo(10, 0); c.lineTo(-10, 0); c.fill();
       c.fillStyle = "#f3a34a"; c.beginPath(); c.arc(0, -11, 6 + Math.sin(t * 7) * 1.2, Math.PI, 0); c.fill();
       c.fillStyle = "#d99a50"; c.beginPath(); c.ellipse(W / 3, -5, 7, 3, 0, 0, Math.PI * 2); c.fill();
+      break;
+    }
+    case "fireStation": {
+      // a red-roofed stone hall: big doors, a rack of copper emitter horns, an alarm dish on top
+      c.fillStyle = "#8d8478";
+      c.fillRect(-W / 2 + 3, -40, W - 6, 40);
+      c.strokeStyle = "rgba(60,50,40,0.35)"; c.lineWidth = 1;
+      for (let y = -32; y < 0; y += 8) { c.beginPath(); c.moveTo(-W / 2 + 3, y); c.lineTo(W / 2 - 3, y); c.stroke(); }
+      c.fillStyle = "#b8352b";
+      c.beginPath(); c.moveTo(-W / 2 - 4, -38); c.lineTo(-W / 2 + 10, -58); c.lineTo(W / 2 - 10, -58); c.lineTo(W / 2 + 4, -38); c.closePath(); c.fill();
+      c.fillStyle = "#e9d9b5"; c.fillRect(-W / 2 - 2, -40, W + 4, 3);
+      // the big doors
+      c.fillStyle = "#4a3020"; c.fillRect(-W / 4 - 14, -30, 28, 30);
+      c.strokeStyle = "#2b1c12"; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(-W / 4, -30); c.lineTo(-W / 4, 0); c.stroke();
+      // emitter rack: copper horns
+      for (let i = 0; i < 3; i++) {
+        const x = W / 8 + i * 13;
+        c.fillStyle = "#c27a3a";
+        c.beginPath(); c.moveTo(x - 2, -10); c.lineTo(x + 2, -10); c.lineTo(x + 5, -26); c.lineTo(x - 5, -26); c.closePath(); c.fill();
+        c.fillStyle = "#8be0ff"; c.fillRect(x - 1.5, -12, 3, 3);
+      }
+      // the alarm dish + its ripples
+      c.strokeStyle = "#5e3f24"; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(0, -58); c.lineTo(0, -70); c.stroke();
+      c.fillStyle = "#c27a3a";
+      c.beginPath(); c.ellipse(0, -72, 9, 4, 0, 0, Math.PI * 2); c.fill();
+      const k = (t * 0.9) % 1;
+      c.strokeStyle = `rgba(140,230,255,${0.55 * (1 - k)})`; c.lineWidth = 1.5;
+      c.beginPath(); c.ellipse(0, -74, 9 + k * 16, 4 + k * 7, 0, Math.PI, 0); c.stroke();
+      if (night) { c.fillStyle = "rgba(255,190,90,0.8)"; c.fillRect(W / 4 + 2, -34, 6, 6); }
       break;
     }
     case "roost": {

@@ -197,3 +197,34 @@ test('heavy riders carry more; a flying team scouts deposits from the air', () =
   assert.equal(hidden.found, true, 'spotted from the air');
   assert.equal(workOf(p).mission.home, true, 'heading home');
 });
+
+test('call the rider over from the dino card, then ride to work / a spot', () => {
+  const w = world(4408);
+  w.camp.learned.add('taming');
+  w.timePaused = true;
+  const h = addHuman(w, w.camp.x + 160, w.camp.y + 60, false, { role: 'farmer' });
+  const d = addDino(w, 'trike', w.camp.x - 60, w.camp.y + 80, { owner: true, tame: 1 });
+  w.byId.set(d.id, d);
+  workOf(d).skills.riding = 1;
+  assert.equal(riders.bond(w, d, h), null);
+  h.state = 'idle';
+  assert.equal(riders.callRider(w, d), null);
+  let up = -1;
+  for (let i = 0; i < 30 * 30; i++) { w.update(1 / 30); if (h.riding === d.id) { up = i; break; } }
+  assert.ok(up >= 0, 'the rider walked over and climbed on');
+  // ride to a spot
+  const spot = { x: w.camp.x + 500, y: w.camp.y + 220 };
+  assert.equal(riders.rideTeamTo(w, d, spot), null);
+  let there = -1;
+  for (let i = 0; i < 30 * 40; i++) { w.update(1 / 30); if (Math.hypot(h.x - spot.x, h.y - spot.y) < 40) { there = i; break; } }
+  assert.ok(there >= 0, 'rode there');
+  assert.equal(h.riding, d.id, 'still mounted');
+  // "work" is wherever their job is
+  const job = riders.jobSpot(w, h);
+  assert.ok(job.label);
+  assert.equal(riders.rideTeamTo(w, d, 'job'), null);
+  assert.ok(workOf(d).rideTo, 'on the way to work');
+  // a dino with no rider says so
+  const lone = addDino(w, 'para', w.camp.x, w.camp.y + 200, { owner: true, tame: 1 });
+  assert.match(riders.callRider(w, lone), /no rider/);
+});

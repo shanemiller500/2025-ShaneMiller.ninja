@@ -32,7 +32,7 @@ import { OUTFIT_BY_ID, type ForgeCat } from "../data/colony";
 import { condition, type Condition } from "../sim/injury";
 import { STONE_TOWER_UP, queueUpgrades, shelterDone, stagesOf, towerMaxHp, wallMaxHp, sites, siteKey, type UpgradeKind } from "../sim/build";
 import { commandCollect, commandDeliver, commandTravel, eligible, workOf, type WorkSkill } from "../sim/workDinos";
-import { bond, unbond } from "../sim/riders";
+import { bond, callRider, chooseRider, jobSpot, rideTeamTo, riderOf, riderReady, unbond } from "../sim/riders";
 import { DRAGON_COMMANDS, type DragonCmdKind } from "../data/dragons";
 import { bondDragon, commandDragon, dismountDragon, unbondDragon } from "../sim/dragonKeep";
 import { revealNest } from "../sim/dragonNests";
@@ -83,6 +83,12 @@ export interface DinoInfo {
   work: Dino["work"];
   rideable: boolean;
   tamingKnown: boolean;
+  /** its bonded rider (a Dino Rider team) */
+  rider: { id: number; name: string; mounted: boolean; job: string } | null;
+  /** trained enough to take a rider, but nobody's bonded yet */
+  needsRider: boolean;
+  /** waiting for the player to tap where the team should ride */
+  rideAim: boolean;
 }
 
 export interface HumanInfo {
@@ -361,6 +367,8 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
   resonate: "Working the stone + crystals",
   stargaze: "Watching the stars",
   relax: "Resting in the shade",
+  sonic: "Blasting the fire with ultrasound",
+  dragonCare: "Caring for a dragon",
 };
 
 export class Engine {
@@ -1145,6 +1153,7 @@ export class Engine {
     else if (k === "h") this.goHome();
     else if (k === "escape") {
       this.dragonAim = null;
+      this.rideAim = 0;
       this.selectedEgg = 0;
       this.orderFor = 0;
       this.groupSelectMode = false;
@@ -1281,6 +1290,17 @@ export class Engine {
     }
     if (this.dragonAim) {
       this.aimTap(x, y);
+      return;
+    }
+    if (this.rideAim) {
+      const d = w.dinoById(this.rideAim);
+      this.rideAim = 0;
+      if (d) {
+        const why = rideTeamTo(w, d, { x, y });
+        if (why) w.toast("🏇", why, d.x, d.y);
+        else w.particles.spawn(P.Ring, x, y, { size: 8, max: 0.8, color: "rgba(255,215,90,0.9)" });
+      }
+      this.emit({ type: "select" });
       return;
     }
     if (this.tool.id !== "hand") {
@@ -1650,6 +1670,65 @@ export class Engine {
     d.think = 0;
     this.emit({ type: "select" });
     return true;
+  }
+
+  /** a rider team waiting for the player to tap where to ride (dino id) */
+  rideAim = 0;
+
+  /** Call a dinosaur's bonded rider over to climb on. */
+  callDinoRider(dinoId: number) {
+    const w = this.world;
+    const d = w.dinoById(dinoId);
+    if (!d) return;
+    const why = callRider(w, d);
+    if (why) w.toast("🏇", why, d.x, d.y);
+    else {
+      const h = riderOf(w, d);
+      if (h && h.riding !== d.id) w.toast("🏇", `${h.name} is on the way to ride ${d.name}.`, d.x, d.y);
+    }
+    this.emit({ type: "select" });
+  }
+
+  /** Send a rider team to the rider's job, back to camp, or (tap next) somewhere on the map. */
+  rideDinoTo(dinoId: number, where: "job" | "camp" | "spot") {
+    const w = this.world;
+    const d = w.dinoById(dinoId);
+    if (!d) return;
+    if (where === "spot") {
+      this.rideAim = d.id;
+      w.toast("🏇", `Tap where ${d.name} and their rider should ride.`);
+      this.emit({ type: "select" });
+      return;
+    }
+    const h = riderOf(w, d);
+    const label = h ? (where === "job" ? jobSpot(w, h).label : "camp") : "";
+    const why = rideTeamTo(w, d, where);
+    w.toast("🏇", why ?? `${h?.name} rides ${d.name} to ${label}.`, d.x, d.y);
+    this.emit({ type: "select" });
+  }
+
+  /** The rider hops off. */
+  dismountDinoRider(dinoId: number) {
+    const w = this.world;
+    const d = w.dinoById(dinoId);
+    const h = d ? riderOf(w, d) : null;
+    if (!d || !h || h.riding !== d.id) return;
+    workOf(d).rideTo = null;
+    workOf(d).boardUntil = 0;
+    dismount(w, h);
+    this.emit({ type: "select" });
+  }
+
+  /** Bond the best free grown-up to a trained dinosaur. */
+  autoBondRider(dinoId: number) {
+    const w = this.world;
+    const d = w.dinoById(dinoId);
+    if (!d) return;
+    const h = chooseRider(w, d);
+    if (!h) return w.toast("🏇", "Nobody is free to become a rider right now.");
+    const why = bond(w, d, h);
+    if (why) w.toast("🏇", why, d.x, d.y);
+    this.emit({ type: "select" });
   }
 
   /** Pair a grown-up with a riding-trained dinosaur as a Dino Rider team (null = done, else why not). */
@@ -2806,6 +2885,12 @@ export class Engine {
         work: c.work ? { ...c.work, skills: { ...c.work.skills } } : undefined,
         rideable: RIDEABLE.has(c.species),
         tamingKnown: w.camp.learned.has("taming"),
+        rider: (() => {
+          const r = c.owner ? riderOf(w, c) : null;
+          return r ? { id: r.id, name: r.name, mounted: r.riding === c.id, job: jobSpot(w, r).label } : null;
+        })(),
+        needsRider: c.owner && riderReady(c) && !riderOf(w, c),
+        rideAim: this.rideAim === c.id,
       };
     } else if (c && c.kind === "human") {
       let activity = ACTIVITY[c.state] ?? "Busy";

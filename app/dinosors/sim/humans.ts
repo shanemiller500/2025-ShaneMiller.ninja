@@ -15,6 +15,7 @@ import type { World } from "./world";
 import { season } from "./seasons";
 import { goRelax, relaxTick, sitIfAtShade } from "./shade";
 import { aloftTick, dragonCareTick, dragonRiderDefend, dragonRiderThink } from "./dragonKeep";
+import { returnEmitter, sonicTick } from "./sonic";
 import { partnerOf, riderCanFight, riderDefend, riderThink, riderType, trainBoost } from "./riders";
 import { TALL } from "./plants";
 import { roleAct, roleThink } from "./tribe";
@@ -339,7 +340,8 @@ function localDanger(w: World, h: Human): LocalDanger | null {
   const tx = Math.floor(h.x / TILE), ty = Math.floor(h.y / TILE);
   // the bucket brigade fights fires instead of fleeing them (unless they're standing in one); lava is never safe
   const role = w.tribe.roleOf(h);
-  const firefighter = !sensitive && w.camp.learned.has("firefighting") && w.tribe.fireAlarm && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook");
+  // (someone holding an ultrasonic emitter works from a distance: flames only matter right on top of them)
+  const firefighter = !sensitive && (!!h.sonic || (w.camp.learned.has("firefighting") && w.tribe.fireAlarm && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook")));
   for (let y = ty - 5; y <= ty + 5; y++) for (let x = tx - 5; x <= tx + 5; x++) {
     if (w.lava.heatAt(x, y) > 0.14) offer((x + 0.5) * TILE, (y + 0.5) * TILE, sensitive ? 210 : 165, "fire");
     else if (w.fire.at(x, y) > 0.24) offer((x + 0.5) * TILE, (y + 0.5) * TILE, firefighter ? 40 : sensitive ? 210 : 165, "fire");
@@ -816,7 +818,7 @@ function think(w: World, h: Human) {
   }
 
   // busy with something that finishes on its own
-  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze" || h.state === "relax" || h.state === "dragonCare") return;
+  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze" || h.state === "relax" || h.state === "dragonCare" || h.state === "sonic") return;
   if (h.state === "hunt" || h.state === "aim" || h.state === "haul" || h.state === "cook" || h.state === "farm" || h.state === "repair") return;
   if (h.state === "carry" || h.state === "walk" || h.state === "explore") {
     if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6 && !(h.riding && w.flags.has("rallyDinos") && role === "guard" && !h.taskId)) return;
@@ -906,6 +908,9 @@ function think(w: World, h: Human) {
     const hot = w.weather.temp > 0.8 && w.time > 11 && w.time < 15;
     if ((h.energy < 0.4 || (hot && w.rng() < 0.3) || w.rng() < 0.03) && goRelax(w, h, { reach: 450, from: h })) return;
   }
+
+  // fire's out: the emitter goes back on the fire station's rack
+  if (h.sonic && !h.taskId && returnEmitter(w, h)) return;
 
   // 5b. the job they've been given (or picked up automatically)
   if (roleThink(w, h)) return;
@@ -1372,6 +1377,9 @@ export function updateHuman(w: World, h: Human, dt: number) {
       break;
     case "dragonCare":
       dragonCareTick(w, h, dt);
+      break;
+    case "sonic":
+      sonicTick(w, h, dt);
       break;
     case "sleep":
       if (w.rng() < dt * 0.3 && w.inView(h.x, h.y, 50)) w.particles.spawn(P.Note, h.x, h.y, { z: 16, vz: 12, vx: 6, size: 8, max: 1.6, color: "z" });

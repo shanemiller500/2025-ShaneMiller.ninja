@@ -11,7 +11,7 @@ import { P, type Particle } from "../sim/particles";
 import { PLANT_H, TALL } from "../sim/plants";
 import { hash2, valueNoise } from "../sim/rng";
 import { CHUNKS_X, CHUNK_TILES, isWaterTile } from "../sim/terrain";
-import { MAP_H, MAP_W, T, TILE, WORLD_H, WORLD_W, type Dino, type Dragon, type Human, type Plant, type SpeciesDef } from "../sim/types";
+import { MAP_H, MAP_W, T, TILE, WORLD_H, WORLD_W, type Building, type Dino, type Dragon, type Human, type Plant, type SpeciesDef } from "../sim/types";
 
 /** shade() returns rgb(); species looks want #hex */
 function toHex(rgb: string) {
@@ -27,6 +27,7 @@ import { ROLES } from "../data/facts";
 import { BUILDINGS, HOUSING } from "../data/colony";
 import { drawBar, drawBones, drawBuilding, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
 import { drawDragon, drawDragonEgg, drawNest } from "./dragonArt";
+import { clusters, drawField, drawPaddock } from "./mergedArt";
 import { dragonStats } from "../sim/dragonKeep";
 import { shelterDone, stagesOf, towerMaxHp, wallMaxHp } from "../sim/build";
 import { BUILD_BY_ID } from "../game/tools";
@@ -421,8 +422,20 @@ export class Renderer {
     }
     c.globalAlpha = 1;
 
-    // farm fields
-    for (const f of w.tribe.farms) {
+    // farm fields (plots next to each other are one big field)
+    const farms = w.tribe.farms;
+    for (const g of clusters(farms, (a, b) => Math.abs(a.x - b.x) < 100 && Math.abs(a.y - b.y) < 62)) {
+      if (g.length > 1) {
+        const fs = g.map((i) => farms[i]);
+        const fx0 = Math.min(...fs.map((f) => f.x)) - 38;
+        const fx1 = Math.max(...fs.map((f) => f.x)) + 38;
+        const fy0 = Math.min(...fs.map((f) => f.y)) - 22;
+        const fy1 = Math.max(...fs.map((f) => f.y)) + 22;
+        if (fx0 > x1 + 20 || fx1 < x0 - 20 || fy0 > y1 + 20 || fy1 < y0 - 20) continue;
+        drawField(c, fx0, fy0, fx1, fy1, fs, this.t);
+        continue;
+      }
+      const f = farms[g[0]];
       if (f.x < x0 - 60 || f.x > x1 + 60 || f.y < y0 - 40 || f.y > y1 + 40) continue;
       c.save();
       c.translate(f.x, f.y);
@@ -705,6 +718,24 @@ export class Renderer {
         }
         case K_WALL: {
           const wl = tribe.walls[it.i];
+          // bone gates side by side are one grand gate, drawn from the west (or south) end
+          let run: { n: number; vertical: boolean } | undefined;
+          if (wl.part === "gate" && wl.bone && wl.built >= 1) {
+            const bg = (dx: number, dy: number) => {
+              const o = tribe.wallAt(wl.tx + dx, wl.ty + dy);
+              return !!o && o.part === "gate" && !!o.bone && o.built >= 1;
+            };
+            if (bg(-1, 0)) break;
+            let e = 0;
+            while (bg(e + 1, 0)) e++;
+            if (e > 0) run = { n: e + 1, vertical: false };
+            else {
+              if (bg(0, 1)) break;
+              let nn = 0;
+              while (bg(0, -nn - 1)) nn++;
+              if (nn > 0) run = { n: nn + 1, vertical: true };
+            }
+          }
           c.save();
           c.translate(wl.tx * TILE + TILE / 2, wl.ty * TILE + TILE);
           const linked = (dx: number, dy: number) => {
@@ -718,7 +749,7 @@ export class Renderer {
           let sw = this.swing.get(wl.id) ?? (wl.open ? 1 : 0);
           sw += ((wl.open ? 1 : 0) - sw) * Math.min(1, dt * 4);
           this.swing.set(wl.id, sw);
-          drawWall(c, wl, { mask, hpFrac: wl.built >= 1 ? wl.hp / wallMaxHp(wl) : 1, swing: sw, t: this.t });
+          drawWall(c, wl, { mask, hpFrac: wl.built >= 1 ? wl.hp / wallMaxHp(wl) : 1, swing: sw, t: this.t, run });
           if (ov.inspect?.kind === "gate" && ov.inspect.id === wl.id) this.inspectRing(c, 0, -10, 22);
           c.restore();
           break;
@@ -907,6 +938,7 @@ export class Renderer {
         c.fillText("💫", Math.cos(a) * 6, -10 + Math.sin(a) * 2);
       }
       c.restore();
+    if (h.sonic) this.drawEmitter(c, h);
     if (h.egg) {
       // a dragon egg in their arms
       const egg = w.dragons.eggs.find((e) => e.id === h.egg);
@@ -917,6 +949,45 @@ export class Renderer {
         c.restore();
       }
     }
+  }
+
+  /** An ultrasonic fire emitter in someone's hands, and its waves when it's blasting. */
+  private drawEmitter(c: CanvasRenderingContext2D, h: Human) {
+    const hx = h.x + h.dir * 9;
+    const hy = h.y - h.z - 15;
+    const aim = h.state === "sonic" ? h.aim : undefined;
+    const ang = aim ? Math.atan2(aim.y - hy, aim.x - hx) : h.dir > 0 ? 0 : Math.PI;
+    c.save();
+    c.translate(hx, hy);
+    c.rotate(ang);
+    // a copper horn with a crystal at the throat
+    c.fillStyle = "#c27a3a";
+    c.beginPath(); c.moveTo(-4, -2); c.lineTo(4, -2.5); c.lineTo(10, -6); c.lineTo(10, 6); c.lineTo(4, 2.5); c.lineTo(-4, 2); c.closePath(); c.fill();
+    c.strokeStyle = "#7d4a22"; c.lineWidth = 1;
+    c.stroke();
+    c.fillStyle = aim ? "#c9f6ff" : "#8be0ff";
+    c.fillRect(-3, -1.5, 3, 3);
+    c.restore();
+    if (!aim) return;
+    // the waves: arcs racing from the horn to the flames
+    const len = Math.hypot(aim.x - hx, aim.y - hy);
+    c.save();
+    c.translate(hx, hy);
+    c.rotate(ang);
+    c.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 6; i++) {
+      const k = (this.t * 1.8 + i / 6) % 1;
+      const x = 10 + k * (len - 10);
+      const r = 6 + k * 26;
+      c.strokeStyle = `rgba(140,230,255,${0.7 * (1 - k)})`;
+      c.lineWidth = 2 - k;
+      c.beginPath();
+      c.arc(x - r, 0, r, -0.5, 0.5);
+      c.stroke();
+    }
+    c.fillStyle = "rgba(140,230,255,0.07)";
+    c.beginPath(); c.moveTo(10, -5); c.lineTo(len, -30); c.lineTo(len, 30); c.lineTo(10, 5); c.closePath(); c.fill();
+    c.restore();
   }
 
   hidden(h: Human) {
@@ -2409,8 +2480,33 @@ export class Renderer {
     const w = this.world;
     const night = 1 - w.daylight;
     const bridges = new Set(w.colony.buildings.filter((b) => b.kind === "bridge").map((b) => b.ty * MAP_W + b.tx));
+    // pens that touch are one big paddock
+    const pens = w.colony.buildings.filter((b) => b.kind === "pen" && b.built >= 1);
+    const merged = new Set<Building>();
+    if (pens.length > 1) {
+      const pw = BUILDINGS.pen.w;
+      const ph = BUILDINGS.pen.h;
+      const touch = (a: Building, b: Building) => a.tx <= b.tx + pw && b.tx <= a.tx + pw && a.ty <= b.ty + ph && b.ty <= a.ty + ph;
+      for (const g of clusters(pens, touch)) {
+        if (g.length < 2) continue;
+        const ps = g.map((i) => pens[i]);
+        for (const p of ps) merged.add(p);
+        const tx0 = Math.min(...ps.map((p) => p.tx));
+        const ty0 = Math.min(...ps.map((p) => p.ty));
+        const tx1 = Math.max(...ps.map((p) => p.tx + pw));
+        const ty1 = Math.max(...ps.map((p) => p.ty + ph));
+        const px = tx0 * TILE;
+        const py = ty0 * TILE - TILE / 2;
+        if (px > x1 + 40 || (tx1 * TILE) < x0 - 40 || py > y1 + 40 || ty1 * TILE < y0 - 60) continue;
+        c.save();
+        c.translate(px, py);
+        drawPaddock(c, (tx1 - tx0) * TILE, (ty1 - ty0) * TILE, ps.length, this.t, tx0 * 7 + ty0 * 13);
+        c.restore();
+      }
+    }
     for (const b of w.colony.buildings) {
       if (b.kind !== "path" && b.kind !== "bridge" && b.kind !== "pen" && b.kind !== "trap") continue;
+      if (merged.has(b)) continue;
       if (b.x < x0 - 80 || b.x > x1 + 80 || b.y < y0 - 60 || b.y > y1 + 60) continue;
       const def = BUILDINGS[b.kind];
       let bridgeMask = 0;
