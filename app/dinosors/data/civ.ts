@@ -150,8 +150,14 @@ export const pyramidAwake = (b: Pick<Building, "kind" | "stage" | "built" | "hp"
 export const pyramidCased = (b: Pick<Building, "kind" | "stage" | "built">) => b.kind === "pyramid" && (b.stage ?? 0) >= 6 && b.built >= 1;
 
 /** Energy (per second) made / stored by finished Resonance buildings. */
-export const ENERGY_GEN: Partial<Record<string, number>> = { chamber: 0.35, energyTower: 0.8, obelisk: 0.5, stoneCircle: 0.7, pyramid: 2.5 };
-export const ENERGY_STORE: Partial<Record<string, number>> = { chamber: 40, energyTower: 80, pyramid: 200 };
+export const ENERGY_GEN: Partial<Record<string, number>> = { chamber: 0.35, energyTower: 0.8, obelisk: 0.5, stoneCircle: 0.7, pyramid: 10 };
+export const ENERGY_STORE: Partial<Record<string, number>> = { chamber: 40, energyTower: 80, pyramid: 600 };
+/** The great pyramid is the grid's powerhouse: awake it makes 10/s; the limestone casing adds 14/s more (24/s) + more storage. */
+export const PYRAMID_CASED_GEN = 14;
+export const PYRAMID_CASED_STORE = 400;
+
+/** What a building adds to the grid each second (the pyramid counts its casing). */
+export const buildingGen = (b: Pick<Building, "kind" | "stage" | "built">) => (ENERGY_GEN[b.kind] ?? 0) + (pyramidCased(b) ? PYRAMID_CASED_GEN : 0);
 /** Constant drain while they work. */
 export const ENERGY_USE: Partial<Record<string, number>> = { condenser: 0.25, pylon: 0.12, resShield: 0.6 };
 

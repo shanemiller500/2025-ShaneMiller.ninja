@@ -13,6 +13,10 @@ const T = TILE;
 const STONE = "#b9b1a2";
 const STONE_D = "#8f8879";
 const STONE_L = "#d8d1c3";
+/** white limestone (the pyramid from its main structure on) */
+const LIME = "#f2eee4";
+const LIME_L = "#fdfbf6";
+const LIME_D = "#d9d3c4";
 const COPPER = "#c8743f";
 const CRYSTAL = "#8fe3ff";
 
@@ -443,12 +447,14 @@ function drawPyramid(c: CanvasRenderingContext2D, b: Building, W: number, L: Civ
   // the stepped body: each level a little narrower
   const steps = 9;
   const lh = (H - foundH) / steps;
+  // from the main structure on it's built of bright white limestone blocks
+  const white = stage >= 2;
   for (let i = 0; i < Math.floor(levels); i++) {
     const wHalf = half * (1 - (i + 1) / (steps + 1.5));
     const y = -foundH - i * lh;
     // left (lit) and right (shaded) faces
-    polyBlocks(c, -wHalf, y - lh, 0, y, 600 + i * 17, i % 2 ? STONE : STONE_L);
-    polyBlocks(c, 0, y - lh, wHalf, y, 700 + i * 17, STONE_D);
+    polyBlocks(c, -wHalf, y - lh, 0, y, 600 + i * 17, white ? (i % 2 ? LIME : LIME_L) : i % 2 ? STONE : STONE_L);
+    polyBlocks(c, 0, y - lh, wHalf, y, 700 + i * 17, white ? LIME_D : STONE_D);
   }
   // Smooth dressed limestone is fitted upward over the old stepped courses.
   if (stage >= 6) {

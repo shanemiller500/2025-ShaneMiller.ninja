@@ -7,7 +7,7 @@
 /*  overload. All of the Resonance is fantasy tech for the game.       */
 /* ------------------------------------------------------------------ */
 import { BUILDINGS, CIV_NODES, buildingCost, type Cost } from "../data/colony";
-import { BEAM, CIV_ORDER, CIV_TECH, CROSS_AFTER, CROSS_MULT, ENERGY_GEN, ENERGY_STORE, ENERGY_USE, EXPERIMENT_MATS, FREQ_MAX, FREQ_MIN, LIFT, PATH_INFO, PYRAMID_STAGES, pyramidAwake, pyramidCased, type CivPath, type CivTechId } from "../data/civ";
+import { BEAM, buildingGen, PYRAMID_CASED_STORE, CIV_ORDER, CIV_TECH, CROSS_AFTER, CROSS_MULT, ENERGY_GEN, ENERGY_STORE, ENERGY_USE, EXPERIMENT_MATS, FREQ_MAX, FREQ_MIN, LIFT, PATH_INFO, PYRAMID_STAGES, pyramidAwake, pyramidCased, type CivPath, type CivTechId } from "../data/civ";
 import { sp } from "../data/species";
 import { STONE_MUL } from "./build";
 import { scorpionTarget } from "./colony";
@@ -305,8 +305,8 @@ export class Civ {
     const store = this.has("energyStorage") ? 2 : 1;
     for (const b of w.colony.buildings) {
       if (b.built < 1 && !pyramidAwake(b)) continue;
-      gen += (ENERGY_GEN[b.kind] ?? 0) + (pyramidCased(b) ? 1.5 : 0);
-      cap += (ENERGY_STORE[b.kind] ?? 0) * (b.kind === "energyTower" ? store : 1) + (pyramidCased(b) ? 160 : 0);
+      gen += buildingGen(b);
+      cap += (ENERGY_STORE[b.kind] ?? 0) * (b.kind === "energyTower" ? store : 1) + (pyramidCased(b) ? PYRAMID_CASED_STORE : 0);
       use += ENERGY_USE[b.kind] ?? 0;
     }
     if (this.resonance && this.chamberX) gen += 0.25;

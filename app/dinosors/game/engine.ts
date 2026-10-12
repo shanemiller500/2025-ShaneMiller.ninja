@@ -13,7 +13,7 @@ import { SKY_LEVELS } from "../sim/sky";
 import { SEASON_DAYS, seasonAt } from "../sim/seasons";
 import { canSendPack, packCap, recallPacks, sendPack } from "../sim/packs";
 import type { DeepKind } from "../data/mine";
-import { CIV_TECH, ENERGY_GEN, PYRAMID_STAGES, SHIELD_HOLD, type CivPath, type CivTechId } from "../data/civ";
+import { CIV_TECH, ENERGY_GEN, PYRAMID_STAGES, buildingGen, SHIELD_HOLD, type CivPath, type CivTechId } from "../data/civ";
 import { buildingCost } from "../data/colony";
 import { go, say } from "../sim/humans";
 import type { ExperimentResult } from "../sim/civ";
@@ -2700,7 +2700,7 @@ export class Engine {
       const d = BUILDINGS[b.kind];
       const g = grid.get(b.kind) ?? { kind: b.kind, icon: d.icon, name: d.name, n: 0, gen: 0 };
       g.n++;
-      g.gen += ENERGY_GEN[b.kind] ?? 0;
+      g.gen += buildingGen(b);
       grid.set(b.kind, g);
     }
     const notes: Record<string, number> = {};
@@ -3078,7 +3078,7 @@ export class Engine {
         if (!b) return null;
         const d = BUILDINGS[b.kind];
           const stage = b.kind === "pyramid" ? { n: (b.stage ?? 0) + (b.built >= 1 ? 1 : 0), of: PYRAMID_STAGES.length, name: PYRAMID_STAGES[Math.min(b.stage ?? 0, PYRAMID_STAGES.length - 1)].name, next: PYRAMID_STAGES[(b.stage ?? 0) + 1]?.name ?? null } : undefined;
-        const gen = ENERGY_GEN[b.kind];
+        const gen = buildingGen(b);
         const note = b.built < 1 && d.civ && !w.civ.has(d.civ) ? `🔒 Needs research: ${CIV_TECH[d.civ].icon} ${CIV_TECH[d.civ].name}` : gen && b.built >= 1 ? `⚡ Makes ${gen.toFixed(1)} energy/s${w.weather.storm > 0.3 ? " (storm boost!)" : ""}` : b.kind === "beamTower" && b.built >= 1 ? ((b.cd ?? 0) > 0 ? `Recharging… ${(b.cd ?? 0).toFixed(1)}s` : "Charged and watching") : undefined;
         return { kind: "building", id: b.id, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage, note };
       }
