@@ -8,6 +8,7 @@ import type { Engine, InspectInfo, Snapshot } from "../game/engine";
 import type { Resource } from "../sim/types";
 import { GameIcon } from "./GameIcon";
 import { useClickAway } from "./useClickAway";
+import { UpgradeAllButton } from "./UpgradeAllButton";
 
 /* ------------------------------------------------------------------ */
 /*  Tap a home, building, Scorpion, gate or tower → this card.         */
@@ -110,7 +111,7 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
                   Upgrade
                 </button>
               )}
-              <button type="button" onClick={() => engine.upgradeAll("homes")} className="mt-2 w-full rounded-xl bg-amber-400/90 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">Upgrade all homes</button>
+              <UpgradeAllButton engine={engine} kind="homes" label="Upgrade all homes" className="mt-2 w-full" />
             </div>
           )}
         </>
@@ -184,7 +185,7 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
                   {info.next.locked ? "Needs a Blacksmith" : "Upgrade"}
                 </button>
               )}
-              <button type="button" onClick={() => engine.upgradeAll("scorpions")} className="mt-2 w-full rounded-xl bg-amber-400/90 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">Upgrade all Scorpions</button>
+              <UpgradeAllButton engine={engine} kind="scorpions" label="Upgrade all Scorpions" className="mt-2 w-full" />
             </div>
           )}
         </>
@@ -264,7 +265,7 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
               <button type="button" onClick={() => engine.upgradeTower(info.id)} className="w-full rounded-xl bg-white/10 py-2 text-sm font-bold transition hover:bg-white/20 active:scale-95">
                 🏰 Rebuild in stone (🪨 {info.upCost}) + 🎯 Scorpion
               </button>
-              <button type="button" onClick={() => engine.upgradeAll("towers")} className="w-full rounded-xl bg-amber-400/90 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">Upgrade all towers</button>
+              <UpgradeAllButton engine={engine} kind="towers" label="Upgrade all towers" className="w-full" />
             </div>
           )}
           <p className="mt-2 text-[12px] text-white/70">{info.stone ? "Stone towers are much tougher and come with a 🎯 Scorpion on top (once it's invented)." : "Archers up here shoot further and better. Place a 🎯 Scorpion on top for dragons."} Pick people and tap the tower to send them up.</p>

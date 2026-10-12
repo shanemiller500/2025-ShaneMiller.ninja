@@ -1067,7 +1067,8 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
   if (!list.length) return false;
   const crew = crews(w, h);
   // a site already full of people is someone else's job (unless it's the one I'm on)
-  const room = (s: Site) => siteKey(s) === h.site || (crew.get(siteKey(s)) ?? 0) < crewCap(s);
+  // (a crew the player sent always gets onto its own job, however busy the site is)
+  const room = (s: Site) => siteKey(s) === h.site || !!h.taskId || (crew.get(siteKey(s)) ?? 0) < crewCap(s);
   // A construction task uses h.task as its temporary material request while
   // the builder walks to and gathers that source. Keep that trip intact.
   if (h.task && (h.state === "walk" || h.state === "gather") && list.some((s) => siteKey(s) === h.site && s.need === h.task)) return true;
@@ -1077,7 +1078,12 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
     - (h.carry && x.need === h.carry ? 400 : 0) - (x.need === null ? 120 : 0)
     + Math.hypot(x.x - camp.x, x.y - camp.y) * 0.2;
   const preferred = h.site ? list.find((x) => siteKey(x) === h.site) : undefined;
-  list.sort((a, b) => (a === preferred ? -1 : b === preferred ? 1 : score(a) - score(b)));
+  const autoDefenseFirst = h.role === "auto" && !h.order && !h.taskId;
+  const defenseRank = (s: Site) => s.kind === "wall" || s.kind === "tower" ? 0 : 1;
+  list.sort((a, b) => {
+    if (autoDefenseFirst && defenseRank(a) !== defenseRank(b)) return defenseRank(a) - defenseRank(b);
+    return a === preferred ? -1 : b === preferred ? 1 : score(a) - score(b);
+  });
   for (const s of list) {
     if (!room(s)) continue;
     const top = siteOnTop(w, s);

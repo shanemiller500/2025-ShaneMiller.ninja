@@ -15,6 +15,16 @@ export class Trails {
   readonly lightLinks: [number, number, number, number][] = [];
   lastTorch = 0;
   version = 0;
+  /**
+   * Worn ground: every crossing by a person adds a little, and it all fades slowly.
+   * Busy routes show as faint footpaths and are a bit easier to walk. Separate from the
+   * torch routes above (those are the real roads the player lays out).
+   */
+  readonly worn = new Uint8Array(MAP_W * MAP_H);
+  /** bumps when a footpath appears or fades away (the walking grid reads it) */
+  wornVersion = 0;
+  private fadeT = 0;
+  static readonly footpath = 40;
 
   at(x: number, y: number) {
     const tx = Math.floor(x / TILE);
@@ -32,6 +42,47 @@ export class Trails {
     const before = this.wear[i];
     this.wear[i] = Math.min(20, before + amount);
     if (before < Trails.visible && this.wear[i] >= Trails.visible) this.version++;
+  }
+
+  /** Someone stepped onto this tile. */
+  step(w: World, x: number, y: number) {
+    const tx = Math.floor(x / TILE);
+    const ty = Math.floor(y / TILE);
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return;
+    const i = ty * MAP_W + tx;
+    const t = w.terrain.tiles[i] as T;
+    if (!isWalkTile(t) || t === T.Tar || t === T.Cave || t === T.Shallow || t === T.River) return;
+    const before = this.worn[i];
+    if (before >= 250) return;
+    this.worn[i] = before + 2;
+    if (before < Trails.footpath && this.worn[i] >= Trails.footpath) this.wornVersion++;
+  }
+
+  /** Footpaths nobody uses grass over again (a little every so often). */
+  fade(dt: number) {
+    this.fadeT += dt;
+    if (this.fadeT < 20) return;
+    this.fadeT = 0;
+    let changed = false;
+    for (let i = 0; i < this.worn.length; i++) {
+      const v = this.worn[i];
+      if (!v) continue;
+      this.worn[i] = v - 1;
+      if (v === Trails.footpath) changed = true;
+    }
+    if (changed) this.wornVersion++;
+  }
+
+  serializeWorn(): [number, number][] {
+    const out: [number, number][] = [];
+    for (let i = 0; i < this.worn.length; i++) if (this.worn[i] >= 8) out.push([i, this.worn[i]]);
+    return out;
+  }
+
+  loadWorn(entries: [number, number][] = []) {
+    this.worn.fill(0);
+    for (const [i, n] of entries) if (i >= 0 && i < this.worn.length) this.worn[i] = Math.max(0, Math.min(250, n));
+    this.wornVersion++;
   }
 
   /** Record the line actually walked, at quarter-tile resolution. */

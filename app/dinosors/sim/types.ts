@@ -438,6 +438,10 @@ export interface Human {
   /** player task this person is working on (0 = none) */
   taskId: number;
   taskStep: number;
+  /** Local emergency state; ordinary work remains assigned while sheltering. */
+  dangerUntil?: number;
+  refuge?: { x: number; y: number };
+  interrupted?: { state: HumanState; x: number; y: number; tx: number; ty: number };
   /** nav path: node ids (tile + level * tiles) */
   path: number[] | null;
   pathI: number;

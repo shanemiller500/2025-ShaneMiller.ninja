@@ -10,8 +10,9 @@ import { sizeOf } from "./dinos";
 import { P } from "./particles";
 import { clamp, pick } from "./rng";
 import { LM, groundSpeed } from "./terrain";
-import { T, TILE, type Campfire, type Dino, type Dragon, type Human, type HumanState, type Plant, type Resource } from "./types";
+import { T, TILE, WORLD_H, WORLD_W, type Campfire, type Dino, type Dragon, type Human, type HumanState, type Plant, type Resource } from "./types";
 import type { World } from "./world";
+import { season } from "./seasons";
 import { TALL } from "./plants";
 import { roleAct, roleThink } from "./tribe";
 import { goalKey, nodePos, tileOf, TOWER_Z, WALK_Z, type NavClass } from "./nav";
@@ -192,13 +193,13 @@ export function moveHuman(w: World, h: Human, dt: number) {
   const dx = wx - h.x;
   const dy = wy - h.y;
   const d = Math.hypot(dx, dy);
-  const base = h.child ? 30 : 36;
-  const fast = h.state === "flee" || h.state === "hunt" || (w.tribe.raid !== null && h.state === "walk");
+  const base = h.child ? 28 : 34;
+  const fast = h.state === "flee" || h.state === "hunt";
   const snow = w.snow.at(h.x, h.y);
   // a sprinting person can't outrun a hungry predator for long, and hurt people limp
   // rain + snow slow people down, unless their hide clothes keep them dry + warm
   const wet = w.weather.rain * 0.28 * (1 - rainGuard(h));
-  let speed = (fast ? base * (h.state === "flee" ? 1.9 : 1.6) : base) * (h.level ? 0.9 : groundSpeed(w.terrain.tileAt(h.x, h.y))) * (1 - snow * 0.3 * (1 - coatWarmth(h) * 0.6)) * (1 - wet) * (0.55 + 0.45 * Math.min(1, h.hp * 1.4));
+  let speed = (fast ? (h.child ? 30 : 36) * (h.state === "flee" ? 1.9 : 1.6) : base) * (h.level ? 0.9 : groundSpeed(w.terrain.tileAt(h.x, h.y))) * (1 - snow * 0.3 * (1 - coatWarmth(h) * 0.6)) * (1 - wet) * (0.55 + 0.45 * Math.min(1, h.hp * 1.4));
   if (mount) speed = sp(mount.species).run * 0.8 * mount.genes.speed * (h.state === "haul" ? 0.7 : 1) * (1 - snow * 0.25);
   if (w.nav.cost[tileOf(h.x, h.y)] < 0.9 && !h.level) speed *= 1.25; // paved path
   if (d < 3) {
@@ -292,14 +293,15 @@ function dangerNear(w: World, h: Human): Dino | null {
   let best = Infinity;
   // up on the wall, ground dinos can't reach us (unless the wall gets smashed)
   if (h.level === 1) return null;
-  w.creatureHash.each(h.x, h.y, 230, (e, d2) => {
+  const reach = h.child || h.hp < 0.45 ? 320 : 230;
+  w.creatureHash.each(h.x, h.y, reach, (e, d2) => {
     if (e.kind !== "dino") return;
     const def = sp(e.species);
     if (def.move === "swim" || (def.move === "fly" && e.z > 10)) return;
     if (e.owner || e.state === "ridden") return;
     if (e.state === "sleep" || e.state === "carried" || e.state === "knocked") return;
     const scary = (def.diet !== "herbivore" && sizeOf(e) > 30) || (sizeOf(e) > 70 && (e.state === "flee" || e.state === "defend" || e.state === "annoyed"));
-    const r = def.diet !== "herbivore" ? 230 : 120;
+    const r = (def.diet !== "herbivore" ? 230 : 120) + (reach - 230) + (e.raider ? 90 : 0);
     // stuck in tar, or on the other side of a wall: can't get us
     if (e.state === "stuck" || (scary && d2 < r * r && w.nav.wallBetween(e.x, e.y, h.x, h.y))) return;
     if (scary && d2 < r * r && d2 < best) {
@@ -308,6 +310,76 @@ function dangerNear(w: World, h: Human): Dino | null {
     }
   });
   return worst;
+}
+
+type LocalDanger = { x: number; y: number; kind: "raid" | "dragon" | "predator" | "fire" | "volcano" };
+
+/** Called on each person's throttled think tick, using the creature grid and nearby tiles. */
+function localDanger(w: World, h: Human): LocalDanger | null {
+  const sensitive = h.child || h.hp < 0.45;
+  let best: LocalDanger | null = null;
+  let distance = Infinity;
+  const offer = (x: number, y: number, r: number, kind: LocalDanger["kind"]) => {
+    const d = Math.hypot(x - h.x, y - h.y);
+    if (d < r && d / r < distance) { distance = d / r; best = { x, y, kind }; }
+  };
+  w.creatureHash.each(h.x, h.y, sensitive ? 460 : 380, (e) => {
+    if (e.kind !== "dino" || e.owner || e.state === "sleep" || e.state === "knocked" || e.state === "carried" || e.state === "stuck") return;
+    const def = sp(e.species);
+    if (e.raider) offer(e.x, e.y, sensitive ? 460 : 380, "raid");
+    else if (def.diet !== "herbivore" && sizeOf(e) > 30 && def.move !== "swim" && !(def.move === "fly" && e.z > 10)) {
+      if (!w.nav.wallBetween(e.x, e.y, h.x, h.y)) offer(e.x, e.y, sensitive ? 320 : 230, "predator");
+    }
+  });
+  for (const b of w.rivals.brutes) if (w.rivals.hostile(w, b) && b.hp > 0 && b.state !== "flee" && b.state !== "home") offer(b.x, b.y, sensitive ? 440 : 340, "raid");
+  for (const dr of w.dragons.list) if (dr.state !== "leave" && dr.state !== "flee" && dr.z < 250) offer(dr.x, dr.y, sensitive ? 680 : 560, "dragon");
+  const tx = Math.floor(h.x / TILE), ty = Math.floor(h.y / TILE);
+  // the bucket brigade fights fires instead of fleeing them (unless they're standing in one); lava is never safe
+  const role = w.tribe.roleOf(h);
+  const firefighter = !sensitive && w.camp.learned.has("firefighting") && w.tribe.fireAlarm && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook");
+  for (let y = ty - 5; y <= ty + 5; y++) for (let x = tx - 5; x <= tx + 5; x++) {
+    if (w.lava.heatAt(x, y) > 0.14) offer((x + 0.5) * TILE, (y + 0.5) * TILE, sensitive ? 210 : 165, "fire");
+    else if (w.fire.at(x, y) > 0.24) offer((x + 0.5) * TILE, (y + 0.5) * TILE, firefighter ? 40 : sensitive ? 210 : 165, "fire");
+  }
+  if (w.volcano.phase !== "idle" && w.volcano.phase !== "rumble") offer(w.volcano.x, w.volcano.y, w.volcano.megaOn ? 1800 : 850, "volcano");
+  return best;
+}
+
+function emergencySpot(w: World, h: Human, danger: LocalDanger): { x: number; y: number } {
+  const candidates: { x: number; y: number; protection: number; capacity: number }[] = [];
+  for (const s of w.shelters) if (shelterDone(s) && s.hp > 0.2) candidates.push({ x: s.x, y: s.y + 6, protection: 110 + s.tier * 35, capacity: HOUSING[s.tier].cap });
+  if (Math.hypot(h.x - w.camp.caveX, h.y - w.camp.caveY) < 650) candidates.push({ x: w.camp.caveX, y: w.camp.caveY, protection: 140, capacity: 12 });
+  if (danger.kind !== "dragon" && danger.kind !== "fire" && danger.kind !== "volcano") {
+    const wall = w.tribe.walledRefuge(w, h);
+    if (wall) candidates.push({ ...wall, protection: 170, capacity: 8 });
+    const bridge = w.tribe.coveredBridge(w, h);
+    if (bridge) candidates.push({ ...bridge, protection: 100, capacity: 3 });
+  }
+  let best: { x: number; y: number } | null = null;
+  let score = Infinity;
+  for (const c of candidates) {
+    const travel = Math.hypot(c.x - h.x, c.y - h.y);
+    if (travel > 760) continue;
+    const fromThreat = Math.hypot(c.x - danger.x, c.y - danger.y);
+    if (fromThreat < (danger.kind === "dragon" ? 180 : danger.kind === "fire" ? 115 : 90)) continue;
+    const tile = tileOf(c.x, c.y);
+    if (w.fire.heat[tile] > 0.12 || w.lava.heat[tile] > 0.08) continue;
+    const occupied = w.humans.filter((o) => o !== h && (o.state === "hide" || o.state === "flee") && Math.hypot(o.tx - c.x, o.ty - c.y) < 35).length;
+    if (occupied >= c.capacity) continue;
+    const kind = navClass(w, h);
+    const route = w.nav.lineClear(kind, h.x, h.y, c.x, c.y) || !!w.nav.find(w, kind, h.x, h.y, h.level, c.x, c.y, 0)?.length;
+    if (!route) continue;
+    const midpoint = tileOf((h.x + c.x) / 2, (h.y + c.y) / 2);
+    const routeHeat = w.fire.heat[midpoint] + w.lava.heat[midpoint];
+    if (routeHeat > 0.18) continue;
+    const toward = Math.max(0, Math.hypot(h.x - danger.x, h.y - danger.y) - fromThreat);
+    const value = travel + toward * 1.5 + occupied * 35 + routeHeat * 500 - c.protection;
+    if (value < score) { score = value; best = c; }
+  }
+  if (best) return best;
+  const a = Math.atan2(h.y - danger.y, h.x - danger.x);
+  const escape = danger.kind === "volcano" ? 520 : 220;
+  return { x: clamp(h.x + Math.cos(a) * escape, TILE, WORLD_W - TILE), y: clamp(h.y + Math.sin(a) * escape, TILE, WORLD_H - TILE) };
 }
 
 /** A dragon swooping low nearby. */
@@ -421,7 +493,8 @@ export function stockPriorities(w: World): Resource[] {
   const target = Math.max(6, Math.ceil(adults * 0.6));
   const goals: [Resource, number][] = [
     ["stick", target], ["stone", target], ["grass", target], ["leaves", target],
-    ["berries", target * 2], ["fish", target * 2],
+    // food targets rise in autumn (stocking up for winter)
+    ["berries", Math.round(target * 2 * season(w).stockpile)], ["fish", Math.round(target * 2 * season(w).stockpile)],
   ];
   if (w.camp.learned.has("axe")) goals.push(["wood", target]);
   if (w.colony.finished("waterStore")) goals.push(["water", target * 2]);
@@ -520,7 +593,6 @@ function think(w: World, h: Human) {
   h.think = 0.4 + w.rng() * 0.5;
   if (h.state === "tossed" || h.state === "lookUp" || h.state === "celebrate" || h.state === "down") return;
   if (h.state === "craft" && camp.crafting?.by === h.id) return;
-  if (h.stranger) return strangerThink(w, h);
 
   const tribe = w.tribe;
   const role = tribe.roleOf(h);
@@ -530,11 +602,10 @@ function think(w: World, h: Human) {
   const fighter = !!weapon && (role === "guard" || role === "hunter" || !!h.order || fightTask || h.state === "operate");
   const battleRider = !!h.riding && role === "guard" && w.flags.has("rallyDinos");
 
-  // raid or a dragon overhead! non-fighters (and kids) run home…
+  // Each civilian responds to danger around their own position, not an event elsewhere.
+  const nearby = localDanger(w, h);
   const dragon = dragonNear(w, h);
-  const dragonAttack = !!dragon && (dragon.state === "strafe" || dragon.state === "circle" || dragon.state === "hunt");
-  // …unless it's a raid, they're inside the walls and the automatic defenses have it covered
-  const safe = !!tribe.raid && !dragonAttack && tribe.safeInside(w, h);
+  const safe = nearby?.kind === "raid" && tribe.safeInside(w, h);
   if (safe && !w.flags.has("safeInside")) {
     w.flags.add("safeInside");
     w.toast("🛡️", "Raid! But the walls are shut and the auto-defenses are up — everyone inside keeps working.", h.x, h.y);
@@ -543,37 +614,38 @@ function think(w: World, h: Human) {
     go(h, "idle", h.x, h.y);
     say(h, "We're safe in here!");
   }
-  if ((tribe.raid || dragonAttack) && !safe && (!fighter || h.child) && !(task && task.kind === "douse")) {
-    const shelter = shelterSpot(w, h);
-    const bridge = !dragonAttack && !h.riding ? tribe.coveredBridge(w, h) : null;
-    const refuge = !dragonAttack && !h.riding ? tribe.walledRefuge(w, h) : null;
-    const s = refuge && Math.hypot(h.x - refuge.x, h.y - refuge.y) < Math.hypot(h.x - shelter.x, h.y - shelter.y) + 250 ? refuge
-      : bridge && Math.hypot(h.x - bridge.x, h.y - bridge.y) < Math.hypot(h.x - shelter.x, h.y - shelter.y) + 80 ? bridge : shelter;
-    const atBridge = s === bridge && Math.hypot(h.x - s.x, h.y - s.y) < 14;
-    if (atBridge && !h.child && weapon && !weapon.melee) {
-      const target = w.dinos.find((d) => d.raider && Math.hypot(d.x - h.x, d.y - h.y) < weapon.range)
-        ?? w.rivals.brutes.find((b) => w.rivals.hostile(w, b) && Math.hypot(b.x - h.x, b.y - h.y) < weapon.range);
-      if (target) {
-        h.targetId = target.id;
-        go(h, "aim", h.x, h.y);
-        return;
-      }
-    }
+  const civilian = h.child || h.hp < 0.45 || !fighter;
+  if (nearby && !safe && civilian && !(task && task.kind === "douse")) {
+    h.dangerUntil = w.elapsed + 3;
+    if (!h.interrupted && h.state !== "flee" && h.state !== "hide") h.interrupted = { state: h.state, x: h.x, y: h.y, tx: h.tx, ty: h.ty };
+    const keepDistance = nearby.kind === "volcano" ? (w.volcano.megaOn ? 1800 : 850) : nearby.kind === "fire" ? 115 : 110;
+    const s = h.refuge && Math.hypot(h.refuge.x - nearby.x, h.refuge.y - nearby.y) > keepDistance
+      && w.fire.heat[tileOf(h.refuge.x, h.refuge.y)] < 0.12 ? h.refuge : emergencySpot(w, h, nearby);
+    h.refuge = s;
     if (h.state === "hide" && Math.hypot(h.x - s.x, h.y - s.y) < 14) return;
     if (h.state === "operate") leaveScorpion(w, h);
     if (Math.hypot(h.x - s.x, h.y - s.y) < 14) go(h, "hide", h.x, h.y);
     else {
-      if (h.state !== "flee") say(h, s === refuge ? "Behind the walls!" : s === bridge ? "To the covered bridge!" : pick(w.rng, dragon && !tribe.raid ? ["DRAGON!", "Get inside!", "Fire from the sky!"] : h.child ? ["Mama!", "Hide!", "Eek!"] : ["Raid!!", "Hide!", "To the cave!"]));
-      if (h.carry && h.carry !== "fish" && h.carry !== "water") {
-        // drop what you're carrying and run
-        h.carry = null;
-        h.carryN = 0;
-      }
+      if (h.state !== "flee") say(h, nearby.kind === "dragon" ? "Dragon!" : nearby.kind === "fire" || nearby.kind === "volcano" ? "Fire!" : "Get to safety!");
       h.wantTop = false;
       go(h, "flee", s.x, s.y);
     }
     return;
   }
+  if (h.dangerUntil && w.elapsed < h.dangerUntil && (h.state === "hide" || h.state === "flee")) return;
+  if (h.dangerUntil && w.elapsed >= h.dangerUntil) {
+    h.dangerUntil = 0;
+    h.refuge = undefined;
+    const old = h.interrupted;
+    h.interrupted = undefined;
+    if (old && (h.state === "hide" || h.state === "flee")) {
+      if (old.state === "walk" || old.state === "carry" || old.state === "explore") go(h, old.state, old.tx, old.ty);
+      else if (old.state === "gather" || old.state === "fish" || old.state === "build" || old.state === "farm") go(h, "walk", old.x, old.y);
+      else go(h, "idle", h.x, h.y);
+      return;
+    }
+  }
+  if (h.stranger) return strangerThink(w, h);
 
   // a Neanderthal coming at me: fight back if armed, otherwise run for it
   const brute = h.child ? null : w.rivals.brutes.find((b) => b.state === "fight" && b.targetId === h.id && Math.hypot(b.x - h.x, b.y - h.y) < 160);
@@ -636,7 +708,7 @@ function think(w: World, h: Human) {
       }
     }
     // riders just gallop away
-    const s = h.riding ? { x: camp.x, y: camp.y + 40 } : shelterSpot(w, h);
+    const s = emergencySpot(w, h, { x: threat.x, y: threat.y, kind: "predator" });
     go(h, "flee", s.x, s.y);
     return;
     }
@@ -693,7 +765,7 @@ function think(w: World, h: Human) {
     else return;
   }
   if (h.state === "flee" || h.state === "hide" || h.state === "rest") {
-    go(h, "walk", camp.x + (w.rng() - 0.5) * 120, camp.y + (w.rng() - 0.5) * 60);
+    go(h, "idle", h.x, h.y);
     if (w.tribe.wonCheer > 0 && w.rng() < 0.5) {
       go(h, "celebrate", h.x, h.y);
       say(h, pick(w.rng, ["We made it!", "Hooray!", "Phew!"]));
@@ -723,7 +795,7 @@ function think(w: World, h: Human) {
   // 7. a friend is knocked out nearby → help them up
   if (!h.child && !h.taskId) {
     const hurt = w.humans.find((o) => o !== h && o.state === "down" && Math.hypot(o.x - h.x, o.y - h.y) < 500 && !w.humans.some((q) => q !== h && q.state === "heal" && q.targetId === o.id));
-    if (hurt && !tribe.raid) {
+    if (hurt && !nearby) {
       if (Math.hypot(h.x - hurt.x - 14, h.y - hurt.y) < 12) {
         go(h, "heal", h.x, h.y);
         h.targetId = hurt.id;
@@ -737,7 +809,7 @@ function think(w: World, h: Human) {
   }
 
   // 8. fire near camp → bucket brigade
-  if (!h.child && !h.taskId && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook") && w.tribe.fireAlarm && camp.learned.has("firefighting")) {
+  if (!h.child && !h.taskId && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook") && w.tribe.fireAlarm && Math.hypot(h.x - w.tribe.fireAlarm.x, h.y - w.tribe.fireAlarm.y) < 520 && camp.learned.has("firefighting")) {
     if (douseThink(w, h, () => undefined)) return;
   }
 
@@ -770,11 +842,19 @@ function think(w: World, h: Human) {
     return;
   }
 
+  // still holding a load that no job wants any more (the order ended, Auto changed their role):
+  // put it away first, or a new guard would stand watch with a bag of bones forever
+  if (h.carry && h.carryN > 0 && !h.site && !h.taskId && h.state !== "carry") {
+    const drop = w.colony.dropOff(w, h.x, h.y, h.carry);
+    go(h, "carry", drop.x, drop.y);
+    return;
+  }
+
   // 5b. the job they've been given (or picked up automatically)
   if (roleThink(w, h)) return;
 
   // Once their assigned work runs out, adults help finish new builds and upgrades.
-  if (role !== "builder" && !h.order && !h.taskId && !tribe.raid && buildThink(w, h, () => true)) return;
+  if (role !== "builder" && !h.order && !h.taskId && buildThink(w, h, () => true)) return;
 
   // build the shelter stage if the materials are in
   const site = camp.activeShelter(w);
@@ -994,6 +1074,47 @@ function finishGather(w: World, h: Human) {
   go(h, "carry", drop.x + (w.rng() - 0.5) * 16, drop.y);
 }
 
+const STORIES = {
+  sky: ["…and the stars wheel round the cold one that never moves.", "When the moon is fat, the river runs high. Remember that.", "A fire fell from the sky once, and the ground shook for days…"],
+  old: ["Long ago, the first fire was stolen from the mountain…", "Grandmother tamed a three-horn, you know. Bare-handed!", "Never camp where the tar smells sweet. Never."],
+  hunt: ["So I said to the big-tooth: not today!", "Track the herd at dawn, the big ones sleep late.", "The best spear is the one you didn't throw."],
+};
+
+/**
+ * Evenings at the fire. The adult who's been sitting longest tells stories now and then:
+ * star tales teach the sky watchers a little, old tales feed research, and children at the
+ * fire learn from it all (they grow up faster than kids left on their own).
+ */
+function fireTime(w: World, h: Human, dt: number) {
+  if (!h.fireId) {
+    if (w.rng() < dt * 0.05) say(h, pick(w.rng, ["Warm…", "Mmm.", "Stars!"]));
+    return;
+  }
+  let teller: Human | null = null;
+  for (const o of w.humans) if (o.fireId === h.fireId && o.state === "sitFire" && !o.child && (!teller || o.stateT > teller.stateT)) teller = o;
+  if (h.child) {
+    // a grown-up at the fire: listening + learning
+    if (teller) h.age += dt * 0.6;
+    if (w.rng() < dt * 0.03) say(h, pick(w.rng, ["And then what?", "Again!", "Ooh…"]));
+    return;
+  }
+  if (teller !== h) {
+    if (w.rng() < dt * 0.03) say(h, pick(w.rng, ["Ha!", "Mmm.", "Tell the one about the volcano!"]));
+    return;
+  }
+  // the storyteller: a tale every 20 s or so, if anyone's listening
+  if (w.rng() > dt / 20) return;
+  if (!w.humans.some((o) => o !== h && o.fireId === h.fireId && o.state === "sitFire")) return;
+  const kind = pick(w.rng, ["sky", "old", "hunt"] as const);
+  say(h, pick(w.rng, STORIES[kind]), 4);
+  if (kind === "sky") w.sky.knowledge += 2;
+  else if (kind === "old" && w.civ.current) w.civ.addRp(w, 0.5);
+  if (!w.flags.has("storyTime")) {
+    w.flags.add("storyTime");
+    w.toast("📖", "Story time by the fire! Children who listen grow up faster, and old tales help the sky watchers + research.", h.x, h.y);
+  }
+}
+
 export function updateHuman(w: World, h: Human, dt: number) {
   const passengerMount = h.riding ? w.dinoById(h.riding) : null;
   if (passengerMount && h.id !== passengerMount.rider && passengerMount.passengers?.includes(h.id)) {
@@ -1045,7 +1166,7 @@ export function updateHuman(w: World, h: Human, dt: number) {
       w.particles.burst(P.Dust, h.x, h.y, 6, 40, { size: 6, max: 0.8, color: "rgba(170,150,110,0.6)" });
       w.particles.spawn(P.Star, h.x, h.y, { z: 22, size: 6, max: 1.8 });
       say(h, "Ow ow ow!");
-      const s = shelterSpot(w);
+      const s = emergencySpot(w, h, { x: h.x - Math.sign(h.vx || 1) * 100, y: h.y, kind: "predator" });
       go(h, "flee", s.x, s.y);
     }
     return;
@@ -1181,7 +1302,7 @@ export function updateHuman(w: World, h: Human, dt: number) {
       if (h.stateT > 3) go(h, "idle", h.x, h.y);
       break;
     case "sitFire":
-      if (w.rng() < dt * 0.05) say(h, pick(w.rng, ["Warm…", "Mmm.", "Story time!", "Stars!"]));
+      fireTime(w, h, dt);
       break;
     case "sleep":
       if (w.rng() < dt * 0.3 && w.inView(h.x, h.y, 50)) w.particles.spawn(P.Note, h.x, h.y, { z: 16, vz: 12, vx: 6, size: 8, max: 1.6, color: "z" });
@@ -1369,11 +1490,6 @@ function strangerThink(w: World, h: Human) {
   const dist = Math.hypot(h.x - c.x, h.y - c.y);
   if (dist < 300) {
     w.population.arrived(w, h);
-    return;
-  }
-  const scared = !!w.tribe.raid || w.dragons.list.some((d) => d.state === "strafe");
-  if (scared) {
-    go(h, "idle", h.x, h.y);
     return;
   }
   const a = Math.atan2(c.y - h.y, c.x - h.x);

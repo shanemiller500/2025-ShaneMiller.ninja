@@ -17,6 +17,7 @@ import { pick } from "./rng";
 import { LM } from "./terrain";
 import { T, TILE, WORLD_H, WORLD_W, type Brute, type Dino, type DinoState, type Human, type Item, type SpeciesDef } from "./types";
 import type { World } from "./world";
+import { season } from "./seasons";
 import { thinkWorkDino } from "./workDinos";
 
 /** States that run to completion; `think` leaves them alone. */
@@ -1332,7 +1333,8 @@ export function actDino(w: World, d: Dino, dt: number) {
   }
   actWarDino(w, d, dt);
   d.roarT -= dt;
-  d.layT -= dt;
+  // nesting season: spring brings dinosaurs into laying condition fast, winter hardly at all
+  d.layT -= dt * season(w).eggs;
   if (d.state !== "carried" && d.state !== "sleep" && def.move === "walk") {
     d.poopT -= dt;
     if (d.poopT <= 0) {

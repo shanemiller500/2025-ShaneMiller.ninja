@@ -15,7 +15,7 @@ import { P, Particles } from "./particles";
 import { burnPlantsAt, generatePlants, makePlant, plantFuelNear, tallestNear, updatePlants, PLANT_H } from "./plants";
 import { makeRng, type Rng } from "./rng";
 import { SpatialHash } from "./spatial";
-import { LM, Terrain, VEG_TILES, cliffY, isWaterTile } from "./terrain";
+import { LM, TERRAIN_GEN, Terrain, VEG_TILES, cliffY, isWaterTile } from "./terrain";
 import {
   MAP_W,
   T,
@@ -46,6 +46,7 @@ import { Colony } from "./colony";
 import { Civ } from "./civ";
 import { Extinction } from "./extinction";
 import { Sky } from "./sky";
+import { Almanac } from "./almanac";
 import { Mine } from "./mine";
 import { updateCrew } from "./miners";
 import { updatePacks } from "./packs";
@@ -178,6 +179,8 @@ export class World {
   extinction = new Extinction();
   /** sky watching: knowledge, the moon, weather forecasts */
   sky = new Sky();
+  /** the big seasonal events, planned a season ahead (droughts, cold snaps, meteor showers…) */
+  almanac = new Almanac();
   /** The Deep: the mine under the cave (its own grid + random numbers) */
   mine: Mine;
   /** Lifted ore waits on the surface until a trained dinosaur carries it. */
@@ -219,10 +222,11 @@ export class World {
   private itemIndex = new IdIndex<Item>();
   private plantIndex = new IdIndex<Plant>();
 
-  constructor(seed: number, populate = true) {
+  /** a saved world keeps the map generation it was made with (new worlds get the latest) */
+  constructor(seed: number, populate = true, terrainGen = TERRAIN_GEN) {
     this.seed = seed;
     this.rng = makeRng(seed);
-    this.terrain = new Terrain(seed);
+    this.terrain = new Terrain(seed, terrainGen);
     this.camp = new Camp(seed);
     this.mine = new Mine(seed);
     this.fire.initFuel(this);
@@ -710,7 +714,14 @@ export class World {
       if (this.dinos[i] === d) actDino(this, d, dt);
       if (this.dinos[i] === d) actWorkDino(this, d, dt);
     }
-    for (const h of this.humans) if (!h.under) updateHuman(this, h, dt);
+    for (const h of this.humans) {
+      if (h.under) continue;
+      const tile = Math.floor(h.x / TILE) + Math.floor(h.y / TILE) * MAP_W;
+      updateHuman(this, h, dt);
+      // feet wear footpaths where people walk a lot
+      if (h.level === 0 && !h.riding && Math.floor(h.x / TILE) + Math.floor(h.y / TILE) * MAP_W !== tile) this.trails.step(this, h.x, h.y);
+    }
+    this.trails.fade(dt);
     this.camp.update(this, dt);
     this.tribe.update(this, dt);
     this.colony.update(this, dt);
@@ -752,6 +763,7 @@ export class World {
       }
     }
     this.sky.update(this, dt);
+    this.almanac.update(this, dt);
     this.particles.update(dt);
 
     if (this.pois.length > 20) this.pois.splice(0, this.pois.length - 20);
@@ -984,7 +996,10 @@ export class World {
       items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
       eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent, genes: e.genes, gen: e.gen })),
       evo: this.evo,
+      terrainGen: this.terrain.gen,
       sky: this.sky.serialize(),
+      worn: this.trails.serializeWorn(),
+      almanac: this.almanac.serialize(),
       evoLeaps: this.evoLeaps,
       evoAuto: this.evoAuto,
       plants: this.plants.map((p) => [p.kind, r(p.x), r(p.y), r(p.size), r(p.food), r(p.burnt), p.fruit, p.stump ? 1 : 0] as const),
@@ -1010,7 +1025,8 @@ export class World {
   }
 
   static deserialize(data: SaveData): World {
-    const w = new World(data.seed, false);
+    // worlds saved before map generations were recorded are generation 1
+    const w = new World(data.seed, false, (data as { terrainGen?: number }).terrainGen ?? 1);
     w.savedAt = data.savedAt ?? 0;
     w.elapsed = data.elapsed ?? 0;
     w.time = data.time;
@@ -1094,6 +1110,8 @@ export class World {
     w.rivals.load(w, (data as { rivals?: ReturnType<Rivals["serialize"]> }).rivals);
     w.evo = data.evo ?? {};
     w.sky.load(data.sky);
+    w.trails.loadWorn(data.worn);
+    w.almanac.load(data.almanac, w);
     w.evoLeaps = data.evoLeaps ?? 0;
     w.evoAuto = !!data.evoAuto;
     w.camp.learned = new Set(data.camp.learned);

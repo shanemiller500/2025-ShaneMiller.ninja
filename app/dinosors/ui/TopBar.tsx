@@ -142,7 +142,7 @@ function SkyDial({ snap, onClick }: { snap: Snapshot; onClick: () => void }) {
       <span className="text-left leading-tight">
         <span className="block text-sm font-bold sm:text-base">{fmtTime(h)}</span>
         <span className="block text-[11px] font-medium text-white/70 sm:text-xs">
-          Day {snap.day} · {w.label}
+          {snap.season.icon} Day {snap.day} · {w.label}
           {snap.paused ? " · ⏸" : ""}
         </span>
       </span>
@@ -186,7 +186,13 @@ function TimePanel({ snap, engine }: Props) {
           </button>
         ))}
       </div>
-      <div className="mt-3 rounded-xl bg-white/5 px-3 py-2 text-xs text-white/75">
+      <div className="mt-3 flex items-center justify-between rounded-xl bg-white/5 px-3 py-2 text-xs font-semibold text-white/90">
+        <span>
+          {snap.season.icon} {snap.season.name}, day {snap.season.dayOf} of {snap.season.days}
+        </span>
+        <span className="text-white/55">Year {snap.season.year}</span>
+      </div>
+      <div className="mt-2 rounded-xl bg-white/5 px-3 py-2 text-xs text-white/75">
         <div className="flex items-center justify-between font-semibold text-white/90">
           <span>
             {snap.sky.icon} Sky watching: {snap.sky.name}
@@ -202,6 +208,16 @@ function TimePanel({ snap, engine }: Props) {
           {snap.sky.watching ? "Someone is out watching the stars tonight." : "On clear nights someone lies back and studies the sky."}
           {snap.sky.level >= 2 && ` Forecasts: ${snap.sky.hits} right, ${snap.sky.misses} wrong.`}
         </p>
+        {snap.sky.forecasts.length > 0 && (
+          <div className="mt-1.5 space-y-0.5 border-t border-white/10 pt-1.5">
+            <div className="font-semibold text-white/90">🔭 Coming up (the watchers' guess)</div>
+            {snap.sky.forecasts.slice(0, 4).map((f, i) => (
+              <div key={i}>
+                {f.icon} {f.text}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div className="mt-3 text-sm font-semibold">⏩ Clock speed</div>
       <div className="mt-1.5 grid grid-cols-4 gap-1.5">

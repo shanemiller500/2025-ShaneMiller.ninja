@@ -11,6 +11,7 @@ import { shelterDone } from "../sim/build";
 import type { Engine, Snapshot } from "../game/engine";
 import { TILE, type Danger, type Role, type TechId } from "../sim/types";
 import { useClickAway } from "./useClickAway";
+import { UpgradeAllButton } from "./UpgradeAllButton";
 
 /* ------------------------------------------------------------------ */
 /*  The tribe's HQ. Tabs:                                              */
@@ -116,7 +117,7 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   return (
     <>
       <div className="mt-3 rounded-2xl bg-white/5 p-2.5">
-        <button type="button" onClick={() => engine.upgradeAll()} className="w-full rounded-xl bg-amber-400 px-3 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">⬆️ Upgrade all available</button>
+        <UpgradeAllButton engine={engine} label="Upgrade all available" className="w-full" />
         <p className="mt-1.5 text-[11px] leading-snug text-white/60">Queues every eligible home, tower, Scorpion and wall upgrade. Builders collect the materials; research unlocks later tiers.</p>
       </div>
       <div className="mt-2 rounded-2xl bg-emerald-500/10 p-2.5 text-[11px] leading-snug text-emerald-50/85">
@@ -366,7 +367,7 @@ function DefendTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
           <span className="block text-[11px] font-medium text-white/60">{learned.has("stonewall") ? "2 stones per piece" : "Needs 🧱 Stone walls"}</span>
         </button>
       </div>
-      <button type="button" onClick={() => engine.upgradeAll("walls")} className="mt-2 w-full rounded-2xl bg-amber-400 px-3 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">⬆️ Upgrade all built walls</button>
+      <UpgradeAllButton engine={engine} kind="walls" label="Upgrade all built walls" className="mt-2 w-full !rounded-2xl" />
       <button type="button" disabled={!learned.has("spear")} onClick={() => engine.planSpikes()} className="mt-2 flex w-full items-center gap-2 rounded-2xl bg-white/10 p-2.5 text-left text-[13px] font-bold transition hover:bg-white/20 active:scale-95 disabled:opacity-40">
         <GameIcon id="spikes" size={26} />
         <span>

@@ -7,6 +7,7 @@ import { setState, spawnGroup } from "./dinos";
 import { LM } from "./terrain";
 import { TILE, WORLD_H, WORLD_W, type SpeciesId } from "./types";
 import type { World } from "./world";
+import { season, type SeasonId } from "./seasons";
 
 type EventId = "migration" | "hatch" | "storm" | "fish" | "rumble" | "star" | "trex" | "flock" | "stampede" | "glint" | "stalker" | "snowstorm";
 
@@ -25,6 +26,16 @@ const WEIGHTS: [EventId, number, number][] = [
   ["stalker", 1, 260],
   ["snowstorm", 0.6, 600],
 ];
+
+/** How likely each little event is in each season (1 when not listed). */
+const SEASONAL: Partial<Record<EventId, Partial<Record<SeasonId, number>>>> = {
+  migration: { spring: 2, autumn: 2, winter: 0.3 },
+  hatch: { spring: 2.5, summer: 1.2, autumn: 0.5, winter: 0.1 },
+  snowstorm: { spring: 0.2, summer: 0, autumn: 0.6, winter: 3 },
+  storm: { spring: 1.5, summer: 1.3, winter: 0.4 },
+  fish: { spring: 1.5, winter: 0.5 },
+  flock: { spring: 1.5, autumn: 1.5, winter: 0.4 },
+};
 
 export interface ShootingStar {
   t: number;
@@ -49,10 +60,12 @@ export class RandomEvents {
     if (this.timer > 0) return;
     this.timer = 55 + w.rng() * 65;
     const now = w.elapsed;
-    const options = WEIGHTS.filter(([id, , cd]) => now - (this.last.get(id) ?? -1e9) > cd && this.allowed(w, id));
-    const total = options.reduce((s, [, wt]) => s + wt, 0);
+    const s = season(w).id;
+    const options = WEIGHTS.filter(([id, , cd]) => now - (this.last.get(id) ?? -1e9) > cd && this.allowed(w, id)).map(([id, wt, cd]) => [id, wt * (SEASONAL[id]?.[s] ?? 1), cd] as const);
+    const total = options.reduce((sum, [, wt]) => sum + wt, 0);
     let r = w.rng() * total;
     for (const [id, wt] of options) {
+      if (wt <= 0) continue;
       r -= wt;
       if (r <= 0) {
         this.last.set(id, now);

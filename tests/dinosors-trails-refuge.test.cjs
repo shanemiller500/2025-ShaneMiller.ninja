@@ -80,6 +80,9 @@ test('nonfighters head for reachable walled refuge during a raid', () => {
   w.nav.budget = 24000;
   const h = addHuman(w, (x0 - 2) * TILE + 16, (y0 + 4) * TILE + 16, false, { role: 'gatherer' });
   w.tribe.raid = { phase: 'warn', t: 0, ids: [], fromX: w.camp.x + 900, fromY: w.camp.y, breached: false, label: 'Raid' };
+  const { addDino } = require(path.join(root, 'sim', 'dinos.ts'));
+  const raider = addDino(w, 'raptor', h.x - 120, h.y, { raider: true });
+  w.creatureHash.insert(raider);
   const refuge = w.tribe.walledRefuge(w, h);
   assert.ok(refuge, 'the walled area is reachable through its gate');
   assert.ok(w.tribe.enclosed(w, refuge.x, refuge.y));

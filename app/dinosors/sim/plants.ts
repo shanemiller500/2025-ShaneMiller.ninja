@@ -7,6 +7,7 @@ import { hash2 } from "./rng";
 import { LM } from "./terrain";
 import { MAP_H, MAP_W, T, TILE, type Plant, type PlantKind } from "./types";
 import type { World } from "./world";
+import { season } from "./seasons";
 
 export const TALL = new Set<PlantKind>(["conifer", "palm", "broadleaf", "fruit"]);
 
@@ -115,7 +116,8 @@ export function updatePlants(w: World, dt: number) {
   // ~1/40th of plants per frame, scaled dt
   const batch = Math.max(1, Math.ceil(n / 40));
   const step = dt * 40;
-  const grow = 1 + w.weather.rain * 2.5;
+  // rain helps; the season + droughts / spring rains set the pace
+  const grow = (1 + w.weather.rain * 2.5) * season(w).plants * w.almanac.plantsMul();
   for (let k = 0; k < batch; k++) {
     const cursor = ((cursors.get(w) ?? 0) + 1) % n;
     cursors.set(w, cursor);

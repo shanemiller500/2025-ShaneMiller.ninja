@@ -311,6 +311,8 @@ test('select a person, click a tree: they chop it, bring logs home, then go back
 
 test('ordered builders fetch materials, build a wall stretch, then the job ends', () => {
   const w = tribeWorld(31, ['tools', 'axe', 'palisade']);
+  // just the ordered stretch: Auto's own camp ring would compete for the sticks
+  w.tribe.planT = Infinity;
   const c = w.camp;
   const ty = Math.floor((c.y + 220) / TILE);
   const pieces = [];
@@ -822,6 +824,8 @@ const SETTLED = ['tools', 'fire', 'axe', 'spear', 'basket', 'palisade', 'stonewa
 /** A settled tribe that has already opened the chamber (and picked a path). */
 function civWorld(seed, pathId) {
   const w = tribeWorld(seed, SETTLED);
+  // these tests are about civilization research, not Auto's own plans (which would ring the camp in walls)
+  w.tribe.planT = Infinity;
   w.civ.update(w, 2.1);
   w.civ.investigate(w);
   if (pathId) w.civ.choose(w, pathId);
@@ -2271,6 +2275,8 @@ test('the Bone gate tool fills a gap in a wall or swaps an old gate', () => {
 
 test('researching polygon stonework auto-upgrades every wall to polygon', () => {
   const w = civWorld(508, 'resonance');
+  // this one is about Auto's own plans: let the planner run
+  w.tribe.planT = 0;
   const ty = Math.floor(w.camp.y / TILE) + 8;
   const tx0 = Math.floor(w.camp.x / TILE) - 2;
   const done = [];

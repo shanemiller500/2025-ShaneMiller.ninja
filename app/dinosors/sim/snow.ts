@@ -4,7 +4,7 @@
 /*  peaks. Updated a strip of rows at a time so it costs ~nothing.     */
 /*  Deep snow slows walkers (via nav cost + ground speed) and chills.  */
 /* ------------------------------------------------------------------ */
-import { FROST_RIDGE, mountY } from "./terrain";
+import { FROST_RIDGE } from "./terrain";
 import { MAP_H, MAP_W, T, TILE } from "./types";
 import type { World } from "./world";
 
@@ -42,7 +42,7 @@ export class Snow {
         const i = y * MAP_W + x;
         const t = tiles[i] as T;
         const high = t === T.Mountain || t === T.Rock;
-        const peak = (high && y < mountY(x, w.seed) - 1) || (high && distToRidge(x, y) < 4.5);
+        const peak = (high && y < w.terrain.mountLine(x) - 1) || (high && distToRidge(x, y) < 4.5);
         this.cap[i] = peak ? 1 : 0;
         this.depth[i] = peak ? 0.85 : 0;
       }

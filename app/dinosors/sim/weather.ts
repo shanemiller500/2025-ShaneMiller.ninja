@@ -5,6 +5,7 @@
 import { FACTS } from "../data/facts";
 import type { WeatherKind } from "./types";
 import type { World } from "./world";
+import { season } from "./seasons";
 
 interface Params {
   cloud: number;
@@ -57,6 +58,21 @@ const NEXT: Record<WeatherKind, WeatherKind[]> = {
   blizzard: ["snow", "cloudy"],
 };
 
+/** What comes after `kind`, weighted by the season (winter snow, summer heat, spring rain…). */
+export function nextWeather(w: World, kind: WeatherKind): WeatherKind {
+  const s = season(w);
+  const opts = Array.from(new Set([...NEXT[kind], ...(s.extra[kind] ?? [])]));
+  const weights = opts.map((k) => s.weather[k] ?? 1);
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return opts[0];
+  let r = w.rng() * total;
+  for (let i = 0; i < opts.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return opts[i];
+  }
+  return opts[opts.length - 1];
+}
+
 export class Weather implements Params {
   kind: WeatherKind = "clear";
   cloud = 0.1;
@@ -79,13 +95,16 @@ export class Weather implements Params {
   upcoming: WeatherKind | null = null;
   /** counts every change (sky forecasts are matched to the change they were about) */
   changes = 0;
+  /** the last change was made by a world event (a drought, a cold snap), not the weather's own drift */
+  forced = false;
   auto = true;
   private boltT = 6;
   private wasRaining = false;
 
-  set(w: World, kind: WeatherKind, manual = true) {
+  set(w: World, kind: WeatherKind, manual = true, forced = false) {
     this.kind = kind;
     this.changes++;
+    this.forced = forced;
     // the player chose this: the next automatic change is rolled when it comes
     if (manual) this.upcoming = null;
     this.timer = manual ? 120 + w.rng() * 60 : 70 + w.rng() * 110;
@@ -115,7 +134,9 @@ export class Weather implements Params {
     this.rain += (p.rain - this.rain) * k;
     this.wind += (p.wind - this.wind) * k;
     this.fog += (p.fog - this.fog) * k;
-    this.temp += (p.temp - this.temp) * k * 0.5;
+    // the season shifts how warm any weather feels (a clear winter day is still cold)
+    const goal = Math.max(0, Math.min(1, p.temp + season(w).temp));
+    this.temp += (goal - this.temp) * k * 0.5;
     this.storm += (p.storm - this.storm) * k;
     this.snow += (p.snow - this.snow) * k;
     this.windAngle += (Math.sin(w.elapsed * 0.05) * 0.4 - 0) * dt * 0.05;
@@ -153,10 +174,8 @@ export class Weather implements Params {
     if (this.auto) {
       this.timer -= dt;
       if (this.timer <= 0) {
-        const opts = NEXT[this.kind];
-        this.set(w, this.upcoming ?? opts[Math.floor(w.rng() * opts.length)], false);
-        const after = NEXT[this.kind];
-        this.upcoming = after[Math.floor(w.rng() * after.length)];
+        this.set(w, this.upcoming ?? nextWeather(w, this.kind), false);
+        this.upcoming = nextWeather(w, this.kind);
       }
     }
   }

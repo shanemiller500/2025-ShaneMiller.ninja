@@ -12,6 +12,7 @@ import { DAY_SECONDS } from "./world";
 import { go, say } from "./humans";
 import { pick } from "./rng";
 import type { Human, WeatherKind } from "./types";
+import { season } from "./seasons";
 import type { World } from "./world";
 
 export const SKY_LEVELS: { at: number; name: string; icon: string; text: string }[] = [
@@ -19,6 +20,8 @@ export const SKY_LEVELS: { at: number; name: string; icon: string; text: string 
   { at: 60, name: "Moon counting", icon: "🌙", text: "The sky watchers have learned the moon's faces. Tonight's moon now shows on the clock." },
   { at: 200, name: "Weather sense", icon: "🌥️", text: "The sky watchers have started to feel rough weather coming. They'll warn the tribe (they aren't always right)." },
   { at: 450, name: "Sky lore", icon: "✨", text: "Sky lore! The watchers can now name the weather that's coming and roughly when, well ahead of time." },
+  { at: 800, name: "Season reckoning", icon: "📅", text: "Season reckoning! The watchers can tell when the next season is coming, and see droughts and long rains days ahead." },
+  { at: 1300, name: "Sky & fire signs", icon: "🌠", text: "The watchers read the deepest signs now: meteor showers and the fire mountain's moods, days before they come." },
 ];
 
 /** Sky knowledge gained per second of stargazing. */
@@ -41,7 +44,7 @@ export class Sky {
   /** the weather change a warning was given for (Weather.changes), so each gets one */
   warnedFor = -1;
   /** what the warning said was coming (null = nothing / "rough") */
-  warnedKind: WeatherKind | "rough" | null = null;
+  warnedKind: WeatherKind | "rough" | "same" | null = null;
   hits = 0;
   misses = 0;
   private checkedFor = -1;
@@ -108,17 +111,24 @@ export class Sky {
     const sense = SENSE[this.level() >= 3 ? 3 : 2];
     if (wt.timer > sense.lead) return;
     this.warnedFor = wt.changes;
+    // more of the same isn't news (and isn't scored)
+    if (wt.upcoming === wt.kind) {
+      this.warnedKind = "same";
+      return;
+    }
     const rough = ROUGH.has(wt.upcoming);
     const right = w.rng() < sense.right;
+    // wrong guesses are still sensible ones: weather that can happen this season
+    const plausible = Array.from(ROUGH).filter((k) => k !== wt.upcoming && k !== wt.kind && (season(w).weather[k] ?? 1) > 0);
     // calm ahead: usually silence, now and then a false alarm
     if (!rough) {
-      if (!right && w.rng() < 0.4) this.announce(w, pick(w.rng, ["storm", "heavyRain"] as WeatherKind[]), wt.timer);
+      if (!right && plausible.length && w.rng() < 0.4) this.announce(w, pick(w.rng, plausible), wt.timer);
       else this.warnedKind = null;
       return;
     }
     // rough ahead: a wrong guess names the wrong thing (or misses it altogether)
     if (right) this.announce(w, wt.upcoming, wt.timer);
-    else if (w.rng() < 0.5) this.announce(w, pick(w.rng, Array.from(ROUGH).filter((k) => k !== wt.upcoming)), wt.timer);
+    else if (plausible.length && w.rng() < 0.5) this.announce(w, pick(w.rng, plausible), wt.timer);
     else this.warnedKind = null;
   }
 
@@ -139,7 +149,8 @@ export class Sky {
     if (this.checkedFor === wt.changes) return;
     const prev = this.checkedFor;
     this.checkedFor = wt.changes;
-    if (prev < 0 || this.warnedFor !== wt.changes - 1) return;
+    // only the weather's own changes count (not ones forced by a world event), and not skipped ones
+    if (prev < 0 || this.warnedFor !== wt.changes - 1 || wt.forced || this.warnedKind === "same") return;
     const rough = ROUGH.has(wt.kind);
     const said = this.warnedKind;
     if (said === null) {

@@ -173,6 +173,8 @@ export class Rivals {
       if (this.clans.some((o) => Math.hypot(o.x - x, o.y - y) < 700)) continue;
       const s = findSpawnSpot(w, raptor, x, y, 120);
       if (!s || !w.nav.passable("dino", s.x, s.y)) continue;
+      // finding firm ground can nudge the spot: it still has to be well away from us
+      if (Math.hypot(s.x - c.x, s.y - c.y) < 1300) continue;
       if (w.tribe.enclosed(w, s.x, s.y)) continue;
       return s;
     }

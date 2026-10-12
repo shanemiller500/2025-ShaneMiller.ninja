@@ -8,6 +8,7 @@
 /* ------------------------------------------------------------------ */
 import { HOUSING } from "../data/colony";
 import { shelterDone } from "./build";
+import { T, WORLD_H, WORLD_W } from "./types";
 import type { World } from "./world";
 
 export interface Zone {
@@ -87,4 +88,83 @@ export function updateZones(w: World, dt: number) {
   if (t.zoneT > 0 && t.zones.length) return;
   t.zoneT = EVERY;
   t.zones = buildZones(w);
+}
+
+/* ------------------------------ growing new neighbourhoods ------------------------------ */
+
+/** Homes round the cave before Auto starts building out in the neighbourhoods. */
+export const MAIN_HOMES = 8;
+/** Homes a neighbourhood holds before Auto founds another. */
+export const ZONE_HOMES = 6;
+/** How far out a new neighbourhood goes (px from the cave camp). */
+const FOUND_RANGE: [number, number] = [650, 1000];
+
+const BAD_GROUND = new Set<T>([T.Deep, T.Shallow, T.River, T.Swamp, T.Mud, T.Tar, T.Basalt, T.Volcano, T.Mountain, T.Cliff, T.Cave, T.Nest]);
+
+/** A clear spot for a home: walkable, dry, firm ground, not on top of another home or building. */
+function homeFits(w: World, x: number, y: number) {
+  if (x < 80 || y < 80 || x > WORLD_W - 80 || y > WORLD_H - 120) return false;
+  const t = w.terrain.tileAt(x, y);
+  if (BAD_GROUND.has(t) || !w.nav.passable("human", x, y)) return false;
+  if (w.shelters.some((s) => Math.hypot(s.x - x, s.y - y) < 60)) return false;
+  if (w.colony.buildings.some((b) => Math.hypot(b.x - x, b.y - y) < 55)) return false;
+  return !w.tribe.farms.some((f) => Math.hypot(f.x - x, f.y - y) < 60);
+}
+
+function spotNear(w: World, x: number, y: number, r0: number, r1: number) {
+  for (let r = r0; r <= r1; r += 25)
+    for (let k = 0; k < 12; k++) {
+      const a = k * (Math.PI / 6) + r * 0.01;
+      const px = x + Math.cos(a) * r;
+      const py = y + Math.sin(a) * r * 0.7;
+      if (homeFits(w, px, py)) return { x: px, y: py };
+    }
+  return null;
+}
+
+/** Somewhere good for a new neighbourhood: water + trees close by, away from the volcano, swamps and rival camps. */
+function foundingSpot(w: World) {
+  const c = w.camp;
+  let best: { x: number; y: number } | null = null;
+  let bestScore = -Infinity;
+  for (let r = FOUND_RANGE[0]; r <= FOUND_RANGE[1]; r += 115)
+    for (let k = 0; k < 20; k++) {
+      const a = (k / 20) * Math.PI * 2;
+      const x = c.x + Math.cos(a) * r;
+      const y = c.y + Math.sin(a) * r * 0.75;
+      if (!homeFits(w, x, y)) continue;
+      if (Math.hypot(x - w.volcano.x, y - w.volcano.y) < 1300) continue;
+      if (w.rivals.clans.some((cl) => Math.hypot(cl.x - x, cl.y - y) < 900)) continue;
+      if (w.tribe.zones.some((z) => Math.hypot(z.x - x, z.y - y) < 450)) continue;
+      let score = 0;
+      const water = w.terrain.nearestDrink(x, y, 500);
+      if (water) score += 3 - Math.hypot(water.x - x, water.y - y) / 250;
+      let trees = 0;
+      w.plantHash.each(x, y, 260, (p) => {
+        if (!p.stump) trees++;
+      });
+      score += Math.min(8, trees) * 0.3;
+      score -= r / 600;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x, y };
+      }
+    }
+  return best;
+}
+
+/**
+ * Where Auto should put the next home: round the cave until it's full, then in a
+ * neighbourhood with room, then a new neighbourhood (null = the old ring round the cave).
+ */
+export function homeSpot(w: World): { x: number; y: number; founded: boolean } | null {
+  const zones = w.tribe.zones.length ? w.tribe.zones : buildZones(w);
+  if (zones[0].homes.length < MAIN_HOMES) return null;
+  const open = zones.filter((z) => z.id > 0 && z.homes.length < ZONE_HOMES).sort((a, b) => a.homes.length - b.homes.length);
+  for (const z of open) {
+    const p = spotNear(w, z.x, z.y, 70, 170);
+    if (p) return { ...p, founded: false };
+  }
+  const f = foundingSpot(w);
+  return f ? { ...f, founded: true } : null;
 }

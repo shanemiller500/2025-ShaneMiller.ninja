@@ -10,6 +10,7 @@ import { DeepView, type DeepInfo } from "./deepView";
 import { canSend, pickMiners, recallAll, resetMine, sendDown, setOrder, type OrderKind } from "../sim/miners";
 import { demolishDeep } from "../sim/deepBuild";
 import { SKY_LEVELS } from "../sim/sky";
+import { SEASON_DAYS, seasonAt } from "../sim/seasons";
 import { canSendPack, packCap, recallPacks, sendPack } from "../sim/packs";
 import type { DeepKind } from "../data/mine";
 import { CIV_TECH, ENERGY_GEN, PYRAMID_STAGES, SHIELD_HOLD, type CivPath, type CivTechId } from "../data/civ";
@@ -173,7 +174,9 @@ export interface Snapshot {
   /** smoothed ms per frame: simulating + drawing */
   perf: { sim: number; render: number };
   /** sky watching: how far it's got, tonight's moon (once learned), forecast record */
-  sky: { level: number; name: string; icon: string; knowledge: number; next: number | null; moon: { icon: string; name: string } | null; hits: number; misses: number; watching: boolean };
+  sky: { level: number; name: string; icon: string; knowledge: number; next: number | null; moon: { icon: string; name: string } | null; hits: number; misses: number; watching: boolean; forecasts: { icon: string; text: string }[] };
+  /** the season (a year is four of them) */
+  season: { name: string; icon: string; dayOf: number; days: number; year: number };
   /** the settlement's neighbourhoods */
   zones: { homes: number; residents: number; beds: number; fires: number; stores: number }[];
   /** Neanderthal clans around the map */
@@ -2651,7 +2654,11 @@ export class Engine {
       sky: (() => {
         const lv = w.sky.level();
         const def = SKY_LEVELS[lv];
-        return { level: lv, name: def.name, icon: def.icon, knowledge: Math.floor(w.sky.knowledge), next: SKY_LEVELS[lv + 1]?.at ?? null, moon: lv >= 1 ? w.sky.moon(w) : null, hits: w.sky.hits, misses: w.sky.misses, watching: !!w.sky.watcher };
+        return { level: lv, name: def.name, icon: def.icon, knowledge: Math.floor(w.sky.knowledge), next: SKY_LEVELS[lv + 1]?.at ?? null, moon: lv >= 1 ? w.sky.moon(w) : null, hits: w.sky.hits, misses: w.sky.misses, watching: !!w.sky.watcher, forecasts: w.almanac.forecasts(w).map((f) => ({ icon: f.icon, text: f.text })) };
+      })(),
+      season: (() => {
+        const s = seasonAt(w.day);
+        return { name: s.def.name, icon: s.def.icon, dayOf: s.dayOf, days: SEASON_DAYS, year: s.year };
       })(),
       zones: w.tribe.zones.map((z) => ({ homes: z.homes.length, residents: z.residents, beds: z.beds, fires: z.fires, stores: z.stores })),
       tribe: this.tribeSnapshot(),

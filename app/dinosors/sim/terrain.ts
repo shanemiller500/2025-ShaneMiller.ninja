@@ -91,6 +91,27 @@ export const coastY = (x: number, seed: number) => 98 + (fbm(x / 10, 0.5, seed +
 export const mountY = (x: number, seed: number) => 9 + (fbm(x / 8, 3.3, seed + 5) - 0.5) * 9;
 export const cliffY = (x: number, seed: number) => 30 + (fbm(x / 9, 5.1, seed + 9) - 0.5) * 2.4;
 
+/**
+ * Map generations. Saved worlds remember theirs (the ground is saved as changes from what
+ * was generated), so a newer generator only ever shapes brand-new worlds.
+ *   1  the original map
+ *   2  the northern range bulges south across the middle into big snowy peaks, cut by
+ *      two valley passes (it always leaves the plateau, the cave + the waterfall clear)
+ */
+export const TERRAIN_GEN = 2;
+/** where the two passes cut through the bigger range (map columns) */
+const PASSES = [63, 97];
+
+/** How far south (extra rows) the northern range reaches at column x, in a generation-2 map. */
+function rangeBulge(x: number, seed: number) {
+  if (x <= 48 || x >= 112) return 0;
+  const envelope = Math.sin((Math.PI * (x - 48)) / 64);
+  let rows = envelope * (4 + fbm(x / 6, 7.7, seed + 21) * 5);
+  for (const p of PASSES) rows *= 1 - Math.exp(-(((x - p) / 2.6) ** 2));
+  // the plateau below always keeps at least six rows (the waterfall, the cave, the secret cave)
+  return Math.max(0, Math.min(rows, cliffY(x, seed) - 6 - mountY(x, seed)));
+}
+
 export class Terrain {
   seed: number;
   tiles = new Uint8Array(MAP_W * MAP_H);
@@ -105,8 +126,12 @@ export class Terrain {
   private waterBuckets: number[][] = [];
   private waterDirty = true;
 
-  constructor(seed: number) {
+  /** which map generator shaped this world (see TERRAIN_GEN) */
+  readonly gen: number;
+
+  constructor(seed: number, gen = 1) {
     this.seed = seed;
+    this.gen = gen;
     this.generate();
     this.base.set(this.tiles);
   }
@@ -123,7 +148,7 @@ export class Terrain {
         let h = 0.6 - (y / MAP_H) * 0.5 + (n - 0.5) * 0.12;
 
         const cy = coastY(x, s);
-        const my = mountY(x, s);
+        const my = this.mountLine(x);
         const vd = Math.hypot(x - LM.volcano.x, (y - LM.volcano.y) * 1.15);
         const vRad = 13 + (n - 0.5) * 4;
 
@@ -232,6 +257,11 @@ export class Terrain {
         if (this.tiles[i] === T.Cliff) this.tiles[i] = T.Rock;
       }
     }
+  }
+
+  /** Where the northern mountains end, going south (in rows) at column x. */
+  mountLine(x: number) {
+    return mountY(x, this.seed) + (this.gen >= 2 ? rangeBulge(x, this.seed) : 0);
   }
 
   inBounds(tx: number, ty: number) {

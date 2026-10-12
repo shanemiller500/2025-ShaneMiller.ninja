@@ -17,6 +17,32 @@ export type SiteKind = "wall" | "tower" | "shelter" | "upgrade" | "building" | "
 
 export type UpgradeKind = "all" | "homes" | "towers" | "scorpions" | "walls";
 
+/** UI state for bulk upgrades; the same eligibility rules as queueUpgrades. */
+export function upgradeStatus(w: World, kind: UpgradeKind = "all") {
+  let available = 0;
+  let queued = 0;
+  if (kind === "all" || kind === "homes") for (const s of w.shelters) {
+    if (s.up) queued++;
+    else if (shelterDone(s) && HOUSING[s.tier + 1] && (!HOUSING[s.tier + 1].polygon || w.civ.polygonAge)) available++;
+  }
+  if (kind === "all" || kind === "towers") for (const t of w.tribe.towers) {
+    if (t.up) queued++;
+    else if (!t.stone && t.stage >= TOWER_STAGES.length && w.camp.learned.has("stonewall")) available++;
+  }
+  if (kind === "all" || kind === "scorpions") for (const s of w.colony.scorpions) {
+    if (s.up) queued++;
+    else {
+      const next = SCORPION_TIERS[s.tier];
+      if (s.built >= 1 && next && (next.at !== "blacksmith" || w.colony.finished("blacksmith"))) available++;
+    }
+  }
+  if (kind === "all" || kind === "walls") for (const wall of w.tribe.walls) {
+    if (wall.upgrade) queued++;
+    else if (wall.built >= 1 && wall.hp > 0 && (wall.kind === "palisade" && w.camp.learned.has("stonewall") || wall.kind === "stone" && w.civ.polygonAge)) available++;
+  }
+  return { available, queued };
+}
+
 /** Queue one available tier per structure; builders collect materials afterward. */
 export function queueUpgrades(w: World, kind: UpgradeKind = "all") {
   const counts = { homes: 0, towers: 0, scorpions: 0, walls: 0 };

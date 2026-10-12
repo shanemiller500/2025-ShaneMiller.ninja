@@ -44,7 +44,8 @@ import {
   type WallPart,
 } from "./types";
 import type { World } from "./world";
-import { updateZones, type Zone } from "./zones";
+import { homeSpot, updateZones, type Zone } from "./zones";
+import { season } from "./seasons";
 
 /** Seconds between the projects Auto plans by itself (it used to be one a day). */
 const IMPROVE_EVERY = 75;
@@ -391,7 +392,7 @@ export class Tribe {
 
   /** Finished wall enclosures can shelter people even when they have no home there. */
   walledRefuge(w: World, h: Human): { x: number; y: number } | null {
-    if (!this.raid || !this.walls.some((wall) => wall.built >= 1 && wall.hp > 0)) return null;
+    if (!this.walls.some((wall) => wall.built >= 1 && wall.hp > 0)) return null;
     const key = this.enclosureKey(w);
     if (!this.refugeCache || this.refugeCache.version !== key) {
       const spots: { x: number; y: number }[] = [];
@@ -477,19 +478,24 @@ export class Tribe {
     const threat = this.raid || w.dragons.list.some((d) => d.state !== "leave" && d.state !== "flee");
     // powered Scorpions defend by themselves: plenty of them = nobody has to stand guard
     const drones = w.colony.drones(w);
-    if (threat) {
-      quota.push(["guard", !armed || drones >= 4 ? 0 : Math.max(1, autos.length - drones * 2)]);
-    } else {
-      if (armed && drones < 4) quota.push(["guard", Math.max(drones ? 0 : 1, Math.round(adults * 0.18) - drones)]);
-      // more blueprints → more builders (up to about half the grown-ups)
-      const pending = w.buildSites().filter((s) => !s.locked).length + (c.activeShelter(w) ? 2 : 0);
-      if (pending) quota.push(["builder", Math.min(Math.max(1, Math.floor(adults * 0.55)), Math.max(1, Math.round(adults * 0.28), Math.ceil(pending / 6)))]);
-      if (armed && c.stock.meat + c.stock.cooked < adults * 1.5) quota.push(["hunter", adults >= 6 ? 2 : 1]);
-      if (c.learned.has("fire") && (c.stock.meat > 0 || c.stock.fish > 3)) quota.push(["cook", 1]);
-      if (this.farms.length) quota.push(["farmer", Math.min(2, this.farms.length)]);
-      if (w.colony.current(w)) quota.push(["smith", 1]);
-      quota.push(...w.civ.quotas(w, adults));
+    // Put more Auto workers on construction while the settlement has exposed defenses.
+    const sites = w.buildSites().filter((s) => !s.locked);
+    const defenses = sites.filter((s) => s.kind === "wall" || s.kind === "tower").length;
+    const pending = sites.length + (c.activeShelter(w) ? 2 : 0);
+    const guardGoal = armed && drones < 4 ? Math.max(drones ? 0 : 1, Math.round(adults * 0.18) - drones) : 0;
+    const guards = Math.min(guardGoal, defenses ? Math.max(0, autos.length - 1) : autos.length);
+    if (guards) quota.push(["guard", guards]);
+    if (pending) {
+      const target = defenses ? Math.max(Math.round(adults * 0.42), Math.ceil(defenses / 4)) : Math.max(Math.round(adults * 0.28), Math.ceil(pending / 6));
+      const foodReserve = defenses && autos.length >= 5 ? Math.ceil(autos.length * 0.2) : 0;
+      const builders = Math.min(Math.max(1, Math.floor(adults * (defenses ? 0.6 : 0.55))), Math.max(1, target), defenses ? Math.max(1, autos.length - guards - foodReserve) : autos.length);
+      if (builders) quota.push(["builder", builders]);
     }
+    if (armed && c.stock.meat + c.stock.cooked < adults * 1.5) quota.push(["hunter", adults >= 6 ? 2 : 1]);
+    if (c.learned.has("fire") && (c.stock.meat > 0 || c.stock.fish > 3)) quota.push(["cook", 1]);
+    if (this.farms.length) quota.push(["farmer", Math.min(2, this.farms.length)]);
+    if (w.colony.current(w)) quota.push(["smith", 1]);
+    quota.push(...w.civ.quotas(w, adults));
     const free: Human[] = [];
     const counts = new Map<Role, number>();
     for (const h of autos) {
@@ -516,7 +522,7 @@ export class Tribe {
     for (const h of w.humans) {
       if (h.child || h.stranger) continue;
       const r = this.roleOf(h);
-      if (r === "guard" || r === "hunter" || h.order || threat) {
+      if (r === "guard" || r === "hunter" || h.order) {
         if (r === "guard" && h.riding && w.flags.has("rallyDinos")) {
           if (!w.colony.equipKind(h, "bow") && !w.colony.equipKind(h, "spear")) {
             const old = h.gear.weapon ? WEAPON_BY_ID[h.gear.weapon] : null;
@@ -532,6 +538,9 @@ export class Tribe {
     if (!w.colony.dronesPowered(w) && (threat || w.dinos.some((d) => this.hostile(w, d)) || w.rivals.threatNear(w, w.camp.x, w.camp.y, 900))) {
       for (const s of w.colony.scorpions) {
         if (s.built < 1 || s.crew) continue;
+        if (!w.dinos.some((d) => this.hostile(w, d) && Math.hypot(d.x - s.x, d.y - s.y) < 700)
+          && !w.rivals.threatNear(w, s.x, s.y, 700)
+          && !w.dragons.list.some((d) => d.state !== "leave" && Math.hypot(d.x - s.x, d.y - s.y) < 850)) continue;
         let best: Human | null = null;
         let bd = 1600;
         for (const h of w.humans) {
@@ -970,8 +979,9 @@ export class Tribe {
       const n = w.shelters.length;
       const a = -0.4 + n * 0.9;
       const R = CAMP_LEVELS[this.level].radius * 0.5;
-      c.addShelter(w, c.x + Math.cos(a) * R, c.y + 50 + Math.sin(a) * R * 0.6);
-      w.toast("🛖", "The tribe planned a new hut so the camp can grow!");
+      const spot = homeSpot(w);
+      c.addShelter(w, spot?.x ?? c.x + Math.cos(a) * R, spot?.y ?? c.y + 50 + Math.sin(a) * R * 0.6);
+      w.toast("🛖", spot?.founded ? "The camp is full: the tribe is starting a new neighbourhood out in the land!" : "The tribe planned a new hut so the camp can grow!", spot?.x, spot?.y);
     }
     if (c.learned.has("farming") && !f.has("planFarms")) {
       const a = this.addFarm(w, c.x - 120, c.y + 150);
@@ -981,13 +991,21 @@ export class Tribe {
         w.toast("🌾", "Farm fields planned! Farmers will plant crops.", c.x, c.y + 150);
       }
     }
-    if (c.learned.has("palisade") && this.raidsWon + (this.raid ? 1 : 0) >= 1 && !f.has("planRing")) {
-      f.add("planRing");
+    if (c.learned.has("palisade") && (!f.has("planRing") || !this.walls.length)) {
       const n = this.planRing(w, "palisade");
-      if (n) w.toast("🪵", "After that raid, the tribe planned a palisade wall around the camp!", c.x, c.y);
+      if (n) {
+        f.add("planRing");
+        w.toast("🪵", "The tribe planned a protective palisade around the camp.", c.x, c.y);
+      }
     }
-    if (c.learned.has("tower") && !f.has("planTower")) {
-      if (this.addTower(w, c.x + 150, c.y + 130)) f.add("planTower");
+    if (c.learned.has("tower") && this.towers.filter((t) => Math.hypot(t.x - c.x, t.y - c.y) < 420).length < 2) {
+      // Two spaced watchtowers cover the approaches; older saves with one tower get a second.
+      const spots = [[150, 130], [-150, 130], [190, 35], [-190, 35], [0, 185]];
+      for (const [dx, dy] of spots) {
+        const x = c.x + dx, y = c.y + dy;
+        if (this.towers.some((t) => Math.hypot(t.x - x, t.y - y) < 150)) continue;
+        if (this.addTower(w, x, y)) { f.add("planTower"); break; }
+      }
     }
     if (c.learned.has("scorpion") && !f.has("planScorpion")) {
       const tower = this.towers.find((t) => t.stage >= TOWER_STAGES.length);
@@ -1121,8 +1139,9 @@ export class Tribe {
       const n = w.shelters.length;
       const a = -0.4 + n * 0.9;
       const radius = CAMP_LEVELS[this.level].radius * 0.5;
-      c.addShelter(w, c.x + Math.cos(a) * radius, c.y + 50 + Math.sin(a) * radius * 0.6);
-      w.toast("🛖", "Auto planned another home for the growing camp.");
+      const spot = homeSpot(w);
+      c.addShelter(w, spot?.x ?? c.x + Math.cos(a) * radius, spot?.y ?? c.y + 50 + Math.sin(a) * radius * 0.6);
+      w.toast("🛖", spot?.founded ? "Auto started a new neighbourhood out in the land: a first home, then a fire and a store." : "Auto planned another home for the growing camp.", spot?.x, spot?.y);
       return;
     }
     if (c.learned.has("farming") && this.foodTotal(w) < adults * 2 && this.farms.length < Math.min(8, Math.ceil(adults / 8))) {
@@ -1191,7 +1210,8 @@ export class Tribe {
       this.autoPlan(w);
       this.autoImprove(w);
     }
-    for (const f of this.farms) if (f.planted && f.growth < 1) f.growth = Math.min(1, f.growth + (dt / 80) * (1 + w.weather.rain * 1.5) * (w.weather.temp > 0.85 ? 0.5 : 1) * (w.civ.has("cropRotation") ? 2 : 1));
+    const seasonal = season(w).farms * w.almanac.farmsMul();
+    for (const f of this.farms) if (f.planted && f.growth < 1) f.growth = Math.min(1, f.growth + (dt / 80) * (1 + w.weather.rain * 1.5) * (w.weather.temp > 0.85 ? 0.5 : 1) * (w.civ.has("cropRotation") ? 2 : 1) * seasonal);
     // crops near lava/fire get scorched
     for (const f of this.farms) {
       const tx = Math.floor(f.x / TILE);
@@ -1608,7 +1628,7 @@ export function roleThink(w: World, h: Human): boolean {
  */
 function escort(w: World, h: Human, wp: Weapon): boolean {
   h.escort = 0;
-  if (!w.flags.has("packs") || w.tribe.raid || !w.rivals.clans.length) return false;
+  if (!w.flags.has("packs") || !w.rivals.clans.length) return false;
   const c = w.camp;
   const R = CAMP_LEVELS[w.tribe.level].radius + 60;
   let best: Human | null = null;
@@ -1640,7 +1660,7 @@ function guardPost(w: World, h: Human): { x: number; y: number; tower?: Tower; t
     return { x: spot.x, y: spot.y, top: spot.top };
   }
   const home = h.home ? w.shelters.find((s) => s.id === h.home && shelterDone(s)) : null;
-  if (home && !tribe.raid && Math.hypot(home.x - c.x, home.y - c.y) > 380) {
+  if (home && Math.hypot(home.x - c.x, home.y - c.y) > 380) {
     const localGuards = w.humans.filter((o) => !o.child && tribe.roleOf(o) === "guard" && o.home && w.shelters.some((s) => s.id === o.home && Math.hypot(s.x - home.x, s.y - home.y) < 220)).sort((a, b) => a.id - b.id);
     const nearbyTowers = tribe.towers.filter((t) => t.stage >= TOWER_STAGES.length && Math.hypot(t.x - home.x, t.y - home.y) < 220)
       .sort((a, b) => Math.hypot(a.x - home.x, a.y - home.y) - Math.hypot(b.x - home.x, b.y - home.y));

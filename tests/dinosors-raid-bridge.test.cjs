@@ -1,4 +1,4 @@
-﻿const { test } = require('node:test');
+const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -34,16 +34,21 @@ test('an armed tower covers a bridge during raids, and cover loss sends people t
   w.nav.sync(w);
   assert.deepEqual(w.tribe.coveredBridge(w, person), bridge);
   person.think = 0; updateHuman(w, person, 1 / 30);
+  assert.notEqual(person.state, 'flee', 'a distant warning does not stop local work');
+  const raider = addDino(w, 'raptor', bridge.x + 110, bridge.y, { raider: true });
+  w.byId.set(raider.id, raider);
+  w.creatureHash.insert(raider);
+  person.think = 0; updateHuman(w, person, 1 / 30);
   assert.equal(person.state, 'flee');
   assert.deepEqual({ x: person.tx, y: person.ty }, bridge);
   person.x = bridge.x; person.y = bridge.y; person.think = 0;
-  const raider = addDino(w, 'raptor', bridge.x + 110, bridge.y, { raider: true });
-  w.byId.set(raider.id, raider);
   updateHuman(w, person, 1 / 30);
-  assert.equal(person.state, 'aim'); assert.equal(person.targetId, raider.id);
+  assert.equal(person.state, 'hide', 'civilians stay under cover');
   scorpion.crew = 0; crew.level = 0;
   assert.equal(w.tribe.coveredBridge(w, person), null);
-  person.state = 'hide'; person.think = 0; updateHuman(w, person, 1 / 30);
+  person.refuge = undefined;
+  person.think = 0; updateHuman(w, person, 1 / 30);
+  assert.equal(person.state, 'flee');
   assert.deepEqual({ x: person.tx, y: person.ty }, shelterSpot(w, person));
 });
 
