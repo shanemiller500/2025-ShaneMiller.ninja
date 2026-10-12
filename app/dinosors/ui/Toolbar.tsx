@@ -20,7 +20,7 @@ const HAS_OPTIONS = new Set<ToolId>(["dino", "egg", "food", "plant", "land", "we
 export default memo(Toolbar);
 
 /** The toy box: memoized, so it only re-renders when the tool, unlocks, techs or stock actually change. */
-function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none", trainOpen = false, onTrain }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void }) {
+function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none", trainOpen = false, onTrain, shiftOpen = false, onShifts }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void; shiftOpen?: boolean; onShifts?: () => void }) {
   const [open, setOpen] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<ToolId | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -147,6 +147,10 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
           <button type="button" onClick={() => { setOpen(null); setTool({ id: "hand" }); onTrain?.(); }} aria-label="Train dinosaurs" aria-pressed={trainOpen} title="Train dinosaurs and manage hauling" className={`order-1 group flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-[22px] transition active:scale-90 sm:h-16 sm:w-16 ${trainOpen ? "dl-btn bg-gradient-to-b from-amber-300 to-amber-500 text-[#3a2414]" : "hover:-translate-y-1 hover:bg-white/15"}`}>
             <span className="text-[26px] leading-none group-hover:scale-110 sm:text-[30px]">🦕</span>
             <span className="mt-0.5 text-[10px] font-bold">Train</span>
+          </button>
+          <button type="button" onClick={() => { setOpen(null); setTool({ id: "hand" }); onShifts?.(); }} aria-label="Shifts" aria-pressed={shiftOpen} title="Day and night shifts" className={`order-1 group flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-[22px] transition active:scale-90 sm:h-16 sm:w-16 ${shiftOpen ? "dl-btn bg-gradient-to-b from-indigo-300 to-cyan-400 text-slate-900" : "hover:-translate-y-1 hover:bg-white/15"}`}>
+            <span className="text-[26px] leading-none group-hover:scale-110 sm:text-[30px]">🌗</span>
+            <span className="mt-0.5 text-[10px] font-bold">Shifts</span>
           </button>
         </div>
         <AnimatePresence>

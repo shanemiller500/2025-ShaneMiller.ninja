@@ -7,7 +7,9 @@
 /* ------------------------------------------------------------------ */
 import { hasVault } from "./deepBuild";
 import { CAMP_LEVELS, FACTS } from "../data/facts";
-import { HOUSING, SCORPION_TIERS, WEAPON_BY_ID, type WeaponDef } from "../data/colony";
+import { BUILDINGS, HOUSING, OUTFITS, OUTFIT_BY_ID, SCORPION_TIERS, WEAPON_BY_ID, type WeaponDef } from "../data/colony";
+import { trainerThink, trainerWork } from "./riders";
+import { SHADE, shadeNear } from "./shade";
 import { sp } from "../data/species";
 import { addDino, emote, findSpawnSpot, isBaby, setState, sizeOf } from "./dinos";
 import { addHuman, go, homeArea, moveHuman, say, sourceFor } from "./humans";
@@ -321,7 +323,10 @@ export class Tribe {
 
   weaponFor(w: World, h: Human): Weapon | null {
     if (h.child || h.stranger) return null;
-    if (h.gear.weapon && WEAPON_BY_ID[h.gear.weapon]) return WEAPON_BY_ID[h.gear.weapon];
+    if (h.gear.weapon && WEAPON_BY_ID[h.gear.weapon]) {
+      const equipped = WEAPON_BY_ID[h.gear.weapon];
+      if (equipped.proj !== "beam" || (w.civ.energy >= 1 && (equipped.id !== "nightSidearm" || w.shifts.pyramid(w)))) return equipped;
+    }
     // everyone can make the basic version of what the tribe has invented
     const l = w.camp.learned;
     if (l.has("crossbow")) return WEAPON_BY_ID[LEGACY.crossbow];
@@ -475,7 +480,7 @@ export class Tribe {
     const adults = this.adults(w).filter((h) => !h.under).length;
     const armed = c.learned.has("spear");
     const quota: [Role, number][] = [];
-    const threat = this.raid || w.dragons.list.some((d) => d.state !== "leave" && d.state !== "flee");
+    const threat = this.raid || w.dragons.menacing(w);
     // powered Scorpions defend by themselves: plenty of them = nobody has to stand guard
     const drones = w.colony.drones(w);
     // Put more Auto workers on construction while the settlement has exposed defenses.
@@ -494,6 +499,8 @@ export class Tribe {
     if (armed && c.stock.meat + c.stock.cooked < adults * 1.5) quota.push(["hunter", adults >= 6 ? 2 : 1]);
     if (c.learned.has("fire") && (c.stock.meat > 0 || c.stock.fish > 3)) quota.push(["cook", 1]);
     if (this.farms.length) quota.push(["farmer", Math.min(2, this.farms.length)]);
+    const trainers = adults >= 4 ? trainerWork(w) : 0;
+    if (trainers) quota.push(["trainer", trainers]);
     if (w.colony.current(w)) quota.push(["smith", 1]);
     quota.push(...w.civ.quotas(w, adults));
     const free: Human[] = [];
@@ -619,6 +626,7 @@ export class Tribe {
 
   /** Throw / shoot at a dino or a dragon. */
   shoot(w: World, h: Human, d: Dino | Dragon | Brute, wp: Weapon, bonus = 0) {
+    if (wp.proj === "beam" && !w.civ.spend(wp.id === "nightSidearm" ? 1.5 : 2)) return;
     h.dir = d.x > h.x ? 1 : -1;
     h.cd = wp.cd * (0.85 + w.rng() * 0.3);
     if (wp.melee) {
@@ -688,10 +696,12 @@ export class Tribe {
         } else if (!d && !dr && w.rivals.byId(p.target) && Math.hypot(w.rivals.byId(p.target)!.x - p.x, w.rivals.byId(p.target)!.y - p.y) < (p.kind === "scorpion" ? 30 : 20)) {
           const b = w.rivals.byId(p.target)!;
           w.rivals.hit(w, b, p.dmg, p.x - p.vx * 0.1, p.y - p.vy * 0.1, false, p.kind);
+          if (p.kind === "beam") w.particles.burst(P.Spark, b.x, b.y, 8, 75, { z: 18, vz: 45, g: 120, size: 1.6, max: 0.45, color: "#b9f8ff" });
           if (p.kind === "scorpion") w.particles.spawn(P.Ring, b.x, b.y, { z: 18, size: 12, max: 0.5, color: p.glow ? "rgba(150,240,255,0.95)" : "rgba(255,230,180,0.9)" });
         } else if (dr && Math.hypot(dr.x - p.x, dr.y - p.y) < 70) {
           // arrows mostly bounce off dragon scales; Scorpion bolts punch through
           w.dragons.hit(w, dr, p.dmg * (p.big ?? 0.5));
+          if (p.kind === "beam") w.particles.burst(P.Spark, dr.x, dr.y, 10, 100, { z: dr.z * 0.5, vz: 60, g: 120, size: 2, max: 0.5, color: "#b9f8ff" });
         } else {
           w.particles.burst(P.Dust, p.x, p.y, 3, 20, { size: 3, max: 0.4, color: "rgba(160,140,110,0.6)" });
         }
@@ -1095,6 +1105,122 @@ export class Tribe {
    * one with no store gets a storage hut (or a gathering post before the axe), so the
    * people living there gather, unload and sit by the fire near home.
    */
+  /**
+   * Winter gear: in autumn + winter (or whenever it snows) the forge queue gets the best
+   * winter outfit the camp can make, one at a time, until every grown-up has one.
+   * dress() then pulls it on whenever the weather calls for it.
+   */
+  private planWinterGear(w: World) {
+    const c = w.colony;
+    const cold = season(w).id === "autumn" || season(w).id === "winter" || w.weather.snow > 0.2;
+    if (!cold || !c.finished("tannery")) return;
+    const winterIds = OUTFITS.filter((o) => o.winter).map((o) => o.id);
+    if (c.queue.some((id) => winterIds.includes(id))) return;
+    const warm = (id?: string | null) => (id ? (OUTFIT_BY_ID[id]?.winter ?? 0) : 0);
+    const cold_ = w.humans.filter((h) => !h.child && !h.stranger && !h.under && !warm(h.gear.outfit)).length;
+    const spare = winterIds.reduce((n, id) => n + (c.armory[id] ?? 0), 0);
+    if (cold_ <= spare) return;
+    // the best tier the camp can make and afford; else the best it can make at all (gatherers fetch the rest)
+    const makeable = OUTFITS.filter((o) => o.winter && c.canCraft(w, o.id)).sort((a, b) => b.winter! - a.winter!);
+    const pickO = makeable.find((o) => c.affordable(w, o.cost)) ?? makeable[makeable.length - 1];
+    if (!pickO) return;
+    c.queue.push(pickO.id);
+    if (!this.winterToast || w.day - this.winterToast > 6) {
+      this.winterToast = w.day;
+      w.toast(pickO.icon, `Auto started making ${pickO.name.toLowerCase()} for the cold months.`);
+    }
+  }
+
+  /** day of the last "making winter gear" toast (so it doesn't nag) */
+  private winterToast = 0;
+
+  /** Put a building down in a ring round (x, y). */
+  private placeNear(w: World, kind: BuildingKind, x: number, y: number, radii: number[]) {
+    for (const r of radii) for (let k = 0; k < 12; k++) {
+      const a = (k + w.day) * (Math.PI / 6);
+      const px = x + Math.cos(a) * r;
+      const py = y + Math.sin(a) * r * 0.7;
+      if (!w.nav.passable("human", px, py)) continue;
+      const b = w.colony.addBuilding(w, kind, px, py);
+      if (b) return b;
+    }
+    return null;
+  }
+
+  /**
+   * Shade + seating, spread out: a seating ring by the main fire, then one shade structure
+   * per neighbourhood (an awning early on, a covered rest area once there's an axe and a crowd).
+   */
+  private planShade(w: World, adults: number) {
+    const c = w.camp;
+    if (adults < 5 || w.colony.buildings.some((b) => SHADE[b.kind] && b.built < 1)) return false;
+    const fire = w.campfires.find((f) => f.lit && Math.hypot(f.x - c.x, f.y - c.y) < 260);
+    if (fire && c.learned.has("axe") && adults >= 8 && !w.colony.buildings.some((b) => b.kind === "seatRing" && Math.hypot(b.x - fire.x, b.y - fire.y) < 170)) {
+      const b = this.placeNear(w, "seatRing", fire.x, fire.y, [70, 100, 130]);
+      if (b) {
+        w.toast("🪵", "Auto planned a seating ring by the fire, so the evening crowd has somewhere to sit.", b.x, b.y);
+        return true;
+      }
+    }
+    for (const z of this.zones) {
+      if (z.homes.length < (z.id === 0 ? 3 : 2)) continue;
+      const want = z.id === 0 ? (adults >= 20 ? 3 : 2) : 1;
+      if (shadeNear(w, z.x, z.y, 260) >= want) continue;
+      const kind: BuildingKind = c.learned.has("axe") && adults >= 12 ? "pavilion" : "canopy";
+      if (kind === "canopy" && c.stock.hide < 2) continue;
+      const b = this.placeNear(w, kind, z.x, z.y + 20, [90, 130, 170]);
+      if (!b) continue;
+      w.toast(BUILDINGS[kind].icon, `Auto planned ${kind === "pavilion" ? "a covered rest area" : "a hide awning"} so people have shade to rest in.`, b.x, b.y);
+      return true;
+    }
+    return false;
+  }
+
+  /** Dragon keeping: an incubation shelter once there's an egg, then a roost, feeding area + training area. */
+  private planDragons(w: World) {
+    const c = w.camp;
+    if (!c.learned.has("taming")) return false;
+    const ds = w.dragons;
+    const eggs = ds.eggs.some((e) => e.at === "camp" || e.at === "carried");
+    const has = (k: BuildingKind) => w.colony.buildings.some((b) => b.kind === k);
+    const want: [BuildingKind, boolean, string][] = [
+      ["hatchery", eggs || ds.owned.length > 0, "an incubation shelter to keep the dragon egg warm"],
+      ["feedPit", ds.owned.length > 0, "a dragon feeding area"],
+      ["roost", ds.owned.some((d) => (d.growth ?? 0) >= 0.2), "a dragon roost (a big one: dragons need room)"],
+      ["dragonYard", ds.owned.some((d) => (d.growth ?? 0) >= 0.2), "a dragon training area"],
+    ];
+    for (const [kind, need, label] of want) {
+      if (!need || has(kind)) continue;
+      const fire = w.campfires.find((f) => f.lit && Math.hypot(f.x - c.x, f.y - c.y) < 300);
+      const b = kind === "hatchery" && fire ? this.placeNear(w, kind, fire.x, fire.y, [90, 130, 170]) : this.placeNear(w, kind, c.x, c.y + 60, kind === "roost" || kind === "dragonYard" ? [300, 360, 420, 480] : [200, 250, 300]);
+      if (!b) continue;
+      w.toast(BUILDINGS[kind].icon, `Auto planned ${label}.`, b.x, b.y);
+      return true;
+    }
+    return false;
+  }
+
+  /** Stable, tack station and flyer perch, once there are trained dinosaurs to keep. */
+  private planAnimals(w: World) {
+    const c = w.camp;
+    if (!c.learned.has("taming")) return false;
+    const owned = w.dinos.filter((d) => d.owner && !isBaby(d) && !d.under);
+    const has = (k: BuildingKind) => w.colony.buildings.some((b) => b.kind === k);
+    const want: [BuildingKind, boolean, string][] = [
+      ["tack", owned.length >= 2, "a tack + harness station for the trained dinosaurs"],
+      ["stable", owned.some((d) => d.work?.partner || (d.work && Object.values(d.work.skills).some((v) => (v ?? 0) >= 1))), "a stable for the riding dinosaurs"],
+      ["perch", owned.some((d) => sp(d.species).move === "fly"), "a perch for the flyers"],
+    ];
+    for (const [kind, need, label] of want) {
+      if (!need || has(kind)) continue;
+      const b = this.placeNear(w, kind, c.x, c.y + 40, [180, 230, 280]);
+      if (!b) continue;
+      w.toast(BUILDINGS[kind].icon, `Auto planned ${label}.`, b.x, b.y);
+      return true;
+    }
+    return false;
+  }
+
   private planZone(w: World) {
     const c = w.camp;
     for (const z of this.zones) {
@@ -1156,6 +1282,10 @@ export class Tribe {
       }
     }
     if (this.planZone(w)) return;
+    this.planWinterGear(w);
+    if (this.planShade(w, adults)) return;
+    if (this.planAnimals(w)) return;
+    if (this.planDragons(w)) return;
     const plan = (kind: BuildingKind) => {
       for (const radius of [140, 205, 270]) for (let i = 0; i < 16; i++) {
         const a = (i + w.day * 3) * Math.PI / 8;
@@ -1604,6 +1734,8 @@ export function roleThink(w: World, h: Human): boolean {
     case "technician":
     case "miner":
       return w.civ.roleThink(w, h, role);
+    case "trainer":
+      return trainerThink(w, h);
     case "smith": {
       const item = w.colony.current(w);
       if (!item) return false;

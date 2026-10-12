@@ -317,10 +317,16 @@ export function updateCrew(w: World, dt: number) {
     if (!mine.crew.includes(m)) continue;
     eat(w, m, h, dt);
     if (!mine.crew.includes(m)) continue;
+    if (w.shifts.mode === "split" && h.shift && !w.shifts.active(w, h) && !m.job && !m.path.length) {
+      m.mode = "idle";
+      h.energy = Math.min(1, h.energy + dt * 0.03);
+      continue;
+    }
+    h.energy = Math.max(0.08, h.energy - dt * 0.002);
     // move along the path
     if (m.path.length && m.pi < m.path.length) {
       m.mode = m.job?.kind === "flee" ? "flee" : "walk";
-      step(w, m, dt, lanternOf(tools).light);
+      step(w, m, dt, w.shifts.poweredOutfit(w, h) ? Math.max(7, lanternOf(tools).light) : lanternOf(tools).light);
       continue;
     }
     if (m.job && m.job.kind !== "flee" && m.job.kind !== "rest") {
@@ -598,7 +604,10 @@ function nearestPassable(mine: Mine, from: number): number | null {
 function work(w: World, m: Miner, h: Human, dt: number) {
   const mine = w.mine;
   const job = m.job!;
-  const tools = toolsOf(w);
+  // The lit suit feeds the same lantern path used by digging, ore spotting and
+  // the mine light map. When the grid is off, ordinary mine gear applies.
+  const baseTools = toolsOf(w);
+  const tools = w.shifts.poweredOutfit(w, h) ? { ...baseTools, lantern: true, crystalLantern: true } : baseTools;
   m.face = cx(job.cell) > Math.floor(m.x) ? 1 : cx(job.cell) < Math.floor(m.x) ? -1 : m.face;
   m.t += dt;
   switch (job.kind) {

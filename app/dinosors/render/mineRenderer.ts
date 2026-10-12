@@ -41,6 +41,8 @@ export interface DeepCam {
 /** What the renderer needs to draw one miner. */
 export interface CrewLook {
   id: number;
+  powered?: boolean;
+  nightGear?: boolean;
   x: number;
   y: number;
   face: 1 | -1;
@@ -699,7 +701,10 @@ export class MineRenderer {
       stamp(b.x, b.y, R, (d) => 1 - d / R);
     }
     const R = ov.lanternR ?? (ov.lantern ? 5 : 2);
-    for (const m of ov.crew) stamp(m.x - 0.5, m.y - 0.5, R, (d) => 1 - d / R);
+    for (const m of ov.crew) {
+      const reach = m.powered ? Math.max(R, 7) : R;
+      stamp(m.x - 0.5, m.y - 0.5, reach, (d) => 1 - d / reach);
+    }
     for (let y = ay; y <= by; y++)
       for (let x = ax; x <= bx; x++) {
         const i = idx(x, y);
@@ -1491,8 +1496,8 @@ export class MineRenderer {
     const lx = px + f * 4;
     const ly = feet - 21;
     const cone = c.createRadialGradient(lx, ly, 2, lx + f * 40, ly + 6, 70);
-    cone.addColorStop(0, "rgba(255,236,190,0.35)");
-    cone.addColorStop(1, "rgba(255,236,190,0)");
+    cone.addColorStop(0, m.powered ? "rgba(125,235,255,0.3)" : "rgba(255,236,190,0.35)");
+    cone.addColorStop(1, m.powered ? "rgba(125,235,255,0)" : "rgba(255,236,190,0)");
     c.fillStyle = cone;
     c.beginPath();
     c.moveTo(lx, ly);
@@ -1501,8 +1506,8 @@ export class MineRenderer {
     c.closePath();
     c.fill();
     const glow = c.createRadialGradient(px, feet - 12, 0, px, feet - 12, 34);
-    glow.addColorStop(0, "rgba(255,230,180,0.25)");
-    glow.addColorStop(1, "rgba(255,230,180,0)");
+    glow.addColorStop(0, m.powered ? "rgba(125,235,255,0.26)" : "rgba(255,230,180,0.25)");
+    glow.addColorStop(1, m.powered ? "rgba(125,235,255,0)" : "rgba(255,230,180,0)");
     c.fillStyle = glow;
     c.fillRect(px - 34, feet - 46, 68, 68);
     c.restore();
@@ -1528,6 +1533,13 @@ export class MineRenderer {
     c.beginPath();
     c.roundRect(px - 4.5, feet - 17, 9, 10, 3);
     c.fill();
+    if (m.nightGear) {
+      c.fillStyle = m.powered ? "#9ceff5" : "#647c88";
+      c.fillRect(px - 1, feet - 15, 2, 3);
+      c.fillRect(px - 5, feet - 17, 3, 1.5); c.fillRect(px + 2, feet - 17, 3, 1.5);
+      c.fillStyle = "#ad875a"; c.fillRect(px - 5, feet - 10, 10, 1.5);
+      c.fillStyle = "#101e2d"; c.fillRect(px - 5, feet - 4, 4, 3); c.fillRect(px + 1, feet - 4, 4, 3);
+    }
     // head
     c.fillStyle = m.skin;
     c.beginPath();
@@ -1536,12 +1548,12 @@ export class MineRenderer {
     c.fillStyle = m.hair;
     c.fillRect(px - 4 - (f > 0 ? 0 : -5), feet - 22, 3, 4);
     // hard hat + lamp
-    c.fillStyle = "#f2b33d";
+    c.fillStyle = m.nightGear ? "#334b5b" : "#f2b33d";
     c.beginPath();
     c.ellipse(px, feet - 24, 5.5, 3.2, 0, Math.PI, 0);
     c.fill();
     c.fillRect(px - 6, feet - 24.5, 12, 1.6);
-    c.fillStyle = "#fffbe0";
+    c.fillStyle = m.powered ? "#b9f8ff" : "#fffbe0";
     c.beginPath();
     c.arc(px + f * 4.5, feet - 25, 1.6, 0, Math.PI * 2);
     c.fill();

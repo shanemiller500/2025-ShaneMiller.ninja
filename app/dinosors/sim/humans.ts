@@ -13,6 +13,9 @@ import { LM, groundSpeed } from "./terrain";
 import { T, TILE, WORLD_H, WORLD_W, type Campfire, type Dino, type Dragon, type Human, type HumanState, type Plant, type Resource } from "./types";
 import type { World } from "./world";
 import { season } from "./seasons";
+import { goRelax, relaxTick, sitIfAtShade } from "./shade";
+import { aloftTick, dragonCareTick, dragonRiderDefend, dragonRiderThink } from "./dragonKeep";
+import { partnerOf, riderCanFight, riderDefend, riderThink, riderType, trainBoost } from "./riders";
 import { TALL } from "./plants";
 import { roleAct, roleThink } from "./tribe";
 import { goalKey, nodePos, tileOf, TOWER_Z, WALK_Z, type NavClass } from "./nav";
@@ -199,7 +202,7 @@ export function moveHuman(w: World, h: Human, dt: number) {
   // a sprinting person can't outrun a hungry predator for long, and hurt people limp
   // rain + snow slow people down, unless their hide clothes keep them dry + warm
   const wet = w.weather.rain * 0.28 * (1 - rainGuard(h));
-  let speed = (fast ? (h.child ? 30 : 36) * (h.state === "flee" ? 1.9 : 1.6) : base) * (h.level ? 0.9 : groundSpeed(w.terrain.tileAt(h.x, h.y))) * (1 - snow * 0.3 * (1 - coatWarmth(h) * 0.6)) * (1 - wet) * (0.55 + 0.45 * Math.min(1, h.hp * 1.4));
+  let speed = (fast ? (h.child ? 30 : 36) * (h.state === "flee" ? 1.9 : 1.6) : base) * (h.level ? 0.9 : groundSpeed(w.terrain.tileAt(h.x, h.y))) * (1 - snow * 0.3 * (1 - coatWarmth(h) * 0.6)) * (1 - wet) * (0.55 + 0.45 * Math.min(1, h.hp * 1.4)) * (h.egg ? 0.72 : 1);
   if (mount) speed = sp(mount.species).run * 0.8 * mount.genes.speed * (h.state === "haul" ? 0.7 : 1) * (1 - snow * 0.25);
   if (w.nav.cost[tileOf(h.x, h.y)] < 0.9 && !h.level) speed *= 1.25; // paved path
   if (d < 3) {
@@ -588,18 +591,24 @@ function siteShortage(w: World): Resource | null {
   return null;
 }
 
+/** Riding a heavy partner (a big work mount): carries four times as much. */
+export function heavyRider(w: World, h: Human) {
+  const d = h.riding && h.partner === h.riding ? partnerOf(w, h) : null;
+  return !!d && riderType(d) === "heavy";
+}
+
 function think(w: World, h: Human) {
   const camp = w.camp;
   h.think = 0.4 + w.rng() * 0.5;
   if (h.state === "tossed" || h.state === "lookUp" || h.state === "celebrate" || h.state === "down") return;
-  if (h.state === "craft" && camp.crafting?.by === h.id) return;
+  if (h.state === "craft" && camp.crafting?.by === h.id && (w.shifts.active(w, h) || h.stateT < 3)) return;
 
   const tribe = w.tribe;
   const role = tribe.roleOf(h);
   const weapon = tribe.weaponFor(w, h);
   const task = w.tasks.get(h.taskId);
   const fightTask = !!task && (task.kind === "hunt" || task.kind === "guard" || task.kind === "defend" || task.kind === "operate");
-  const fighter = !!weapon && (role === "guard" || role === "hunter" || !!h.order || fightTask || h.state === "operate");
+  const fighter = !!weapon && (role === "guard" || role === "hunter" || !!h.order || fightTask || h.state === "operate" || (h.shift === "night" && h.gear.weapon === "nightSidearm"));
   const battleRider = !!h.riding && role === "guard" && w.flags.has("rallyDinos");
 
   // Each civilian responds to danger around their own position, not an event elsewhere.
@@ -614,6 +623,10 @@ function think(w: World, h: Human) {
     go(h, "idle", h.x, h.y);
     say(h, "We're safe in here!");
   }
+  // a Dragon Rider whose dragon is war-trained: they take to the air together and face it
+  if (nearby && !safe && !task && h.dragon && dragonRiderDefend(w, h, nearby)) return;
+  // a Dino Rider whose partner can fight rides at local danger instead of running from it
+  if (nearby && !safe && !task && h.partner && riderCanFight(w, h) && riderDefend(w, h, nearby)) return;
   const civilian = h.child || h.hp < 0.45 || !fighter;
   if (nearby && !safe && civilian && !(task && task.kind === "douse")) {
     h.dangerUntil = w.elapsed + 3;
@@ -665,7 +678,7 @@ function think(w: World, h: Human) {
   // a scorpion crew stays put while there's anything to shoot
   if (h.state === "operate") {
     if (task?.kind === "operate") return;
-    if (tribe.raid || w.dragons.list.length || h.stateT < 30) return;
+    if (tribe.raid || w.dragons.menacing(w) || h.stateT < 30) return;
     leaveScorpion(w, h);
   }
 
@@ -738,15 +751,45 @@ function think(w: World, h: Human) {
   }
   if (h.state === "rest" && h.hp < 0.8 && !task) return;
 
+  // Shift change: an ongoing action finishes its current beat; its task stays on
+  // the board for the incoming crew. Workers peel off at different clock times.
+  const scheduled = w.shifts.mode === "split" && !!h.shift && !h.child;
+  const shiftOff = scheduled && !w.shifts.active(w, h);
+  const finishing = ["gather", "fish", "build", "farm", "repair", "carry", "haul", "craft", "smith", "research", "resonate", "train", "tame", "cook", "walk", "explore"].includes(h.state) && (h.stateT < 3 || (!!h.carry && h.state === "carry"));
+  const eveningMeal = h.shift === "day" && w.time >= 18 && w.time < 19.2 && h.energy > 0.32;
+  if (shiftOff && !finishing && !h.order && !fightTask && task?.kind !== "douse" && h.state !== "operate") {
+    if (task?.open) {
+      task.people = task.people.filter((id) => id !== h.id);
+      h.taskId = 0;
+      h.taskStep = 0;
+      h.site = "";
+    }
+    if (h.shift === "night" && h.energy > 0.88 && w.time >= 10 && w.time < 17.5 && goRelax(w, h, { covered: true, reach: 500, from: h })) return;
+    if (eveningMeal && h.state !== "sleep") {
+      const seat = pickFire(w, h);
+      if (seat) { if (Math.hypot(h.x - seat.x, h.y - seat.y) < 6) go(h, "sitFire", seat.x, seat.y); else go(h, "walk", seat.x, seat.y); return; }
+    }
+    if (h.state !== "sleep") {
+      if (h.riding) dismountHome(w, h);
+      const s = shelterSpot(w, h);
+      if (Math.hypot(h.x - s.x, h.y - s.y) < 14) go(h, "sleep", h.x, h.y);
+      else go(h, "walk", s.x, s.y);
+    }
+    return;
+  }
+
   // 4. storms + night → shelter / cave (player tasks keep going until dark)
   const night = w.daylight < 0.25;
   const onWatch = (role === "guard" || h.state === "operate") && !h.child && h.energy > 0.15;
-  const busy = !!task && !night;
+  const busy = !!task && (!night || (scheduled && h.shift === "night"));
   // rainproof hides keep people out working in the wet; furs keep them going in the snow
   const guard = rainGuard(h);
   const tooWet = (w.weather.rain > 0.55 && guard < 0.6) || (w.weather.storm > 0.5 && guard < 0.85) || w.weather.storm > 0.95;
   const tooCold = w.weather.snow > 0.85 && coatWarmth(h) < 0.6;
-  if (!onWatch && !busy && (tooWet || tooCold || (night && h.energy < 0.6))) {
+  // caught in the rain by day: a covered rest area close by is as good as home
+  if (!onWatch && !busy && tooWet && !tooCold && !night && h.state !== "relax" && goRelax(w, h, { covered: true, reach: 350, from: h })) return;
+  if (h.state === "relax" && tooWet) return;
+  if (!onWatch && !busy && (tooWet || tooCold || (night && !scheduled && h.energy < 0.6))) {
     if (h.state === "hide" || h.state === "sleep") return;
     if (h.riding) dismountHome(w, h);
     const s = shelterSpot(w, h);
@@ -761,7 +804,7 @@ function think(w: World, h: Human) {
   }
   if (h.state === "hide" && h.stateT < 4) return;
   if (h.state === "sleep") {
-    if (!night || h.energy > 0.95) go(h, "idle", h.x, h.y + 20);
+    if ((scheduled && !shiftOff) || (!scheduled && (!night || h.energy > 0.95))) go(h, "idle", h.x, h.y + 20);
     else return;
   }
   if (h.state === "flee" || h.state === "hide" || h.state === "rest") {
@@ -773,7 +816,7 @@ function think(w: World, h: Human) {
   }
 
   // busy with something that finishes on its own
-  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze") return;
+  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze" || h.state === "relax" || h.state === "dragonCare") return;
   if (h.state === "hunt" || h.state === "aim" || h.state === "haul" || h.state === "cook" || h.state === "farm" || h.state === "repair") return;
   if (h.state === "carry" || h.state === "walk" || h.state === "explore") {
     if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6 && !(h.riding && w.flags.has("rallyDinos") && role === "guard" && !h.taskId)) return;
@@ -813,6 +856,12 @@ function think(w: World, h: Human) {
     if (douseThink(w, h, () => undefined)) return;
   }
 
+  // a Dragon Rider climbs on when their dragon is called out
+  if (!h.child && h.dragon && !h.taskId && dragonRiderThink(w, h)) return;
+
+  // a Dino Rider looks after their partner, scouts, and rides to work
+  if (!h.child && h.partner && !h.taskId && riderThink(w, h)) return;
+
   // 4. evening by the fire: everyone off duty (guards keep watch; builders finish what's open first)
   const offDuty = h.child || (role !== "guard" && !(role === "builder" && tribe.nextJob(w)));
   if (offDuty && !h.order && (w.daylight < 0.45 || (h.child && w.rng() < 0.2))) {
@@ -822,6 +871,8 @@ function think(w: World, h: Human) {
       else go(h, "walk", seat.x, seat.y);
       return;
     }
+    // every fire full: the seating ring beside one
+    if (goRelax(w, h, { nearFire: true })) return;
   }
 
   if (h.child) return childThink(w, h);
@@ -848,6 +899,12 @@ function think(w: World, h: Human) {
     const drop = w.colony.dropOff(w, h.x, h.y, h.carry);
     go(h, "carry", drop.x, drop.y);
     return;
+  }
+
+  // a break in the shade between jobs: when tired, in the midday heat, or now and then
+  if (!h.order && !h.taskId && !h.carry && !h.riding && role !== "guard" && w.daylight > 0.45 && !w.tribe.raid) {
+    const hot = w.weather.temp > 0.8 && w.time > 11 && w.time < 15;
+    if ((h.energy < 0.4 || (hot && w.rng() < 0.3) || w.rng() < 0.03) && goRelax(w, h, { reach: 450, from: h })) return;
   }
 
   // 5b. the job they've been given (or picked up automatically)
@@ -892,7 +949,8 @@ function think(w: World, h: Human) {
     }
   }
 
-  // 8. leisure: chat, explore, wander
+  // 8. leisure: a seat in the shade (most of all on hot days), chat, explore, wander
+  if (w.daylight > 0.45 && (w.weather.temp > 0.75 || w.rng() < 0.45) && goRelax(w, h)) return;
   const r = w.rng();
   if (r < 0.2) {
     const friend = w.humans.find((o) => o !== h && Math.hypot(o.x - h.x, o.y - h.y) < 80 && (o.state === "idle" || o.state === "talk"));
@@ -964,6 +1022,7 @@ function arrive(w: World, h: Human) {
       return;
     }
     if (h.task === null) {
+      if (!h.taskId && sitIfAtShade(w, h)) return;
       go(h, "idle", h.x, h.y);
       return;
     }
@@ -979,7 +1038,7 @@ function arrive(w: World, h: Human) {
 function finishGather(w: World, h: Human) {
   const r = h.task as Resource;
   const basket = w.camp.learned.has("basket");
-  const ride = h.riding ? 3 : 1;
+  const ride = h.riding ? (heavyRider(w, h) ? 4 : 3) : 1;
   // deposits: ore, clay, flint, artifacts…
   const node = h.targetId > 0 ? w.colony.nodeById(h.targetId) : null;
   if (node && Math.hypot(node.x - h.x, node.y - h.y) < 60) {
@@ -1121,8 +1180,12 @@ export function updateHuman(w: World, h: Human, dt: number) {
     const seat = passengerMount.passengers.indexOf(h.id);
     h.x = passengerMount.x + (seat === 0 ? -15 : 15) * passengerMount.dir;
     h.y = passengerMount.y - 2;
-    h.z = Math.max(18, sizeOf(passengerMount) * 0.38);
+    h.z = Math.max(18, sizeOf(passengerMount) * 0.38) + (sp(passengerMount.species).move === "fly" ? passengerMount.z : 0);
     h.anim += dt * Math.max(0.2, Math.hypot(passengerMount.vx, passengerMount.vy) / 30);
+    return;
+  }
+  if (h.aloft) {
+    aloftTick(w, h, dt);
     return;
   }
   h.stateT += dt;
@@ -1304,6 +1367,12 @@ export function updateHuman(w: World, h: Human, dt: number) {
     case "sitFire":
       fireTime(w, h, dt);
       break;
+    case "relax":
+      relaxTick(w, h, dt);
+      break;
+    case "dragonCare":
+      dragonCareTick(w, h, dt);
+      break;
     case "sleep":
       if (w.rng() < dt * 0.3 && w.inView(h.x, h.y, 50)) w.particles.spawn(P.Note, h.x, h.y, { z: 16, vz: 12, vx: 6, size: 8, max: 1.6, color: "z" });
       break;
@@ -1376,17 +1445,19 @@ export function updateHuman(w: World, h: Human, dt: number) {
           d.tame = Math.min(1, d.tame + (snack ? 0.06 : 0.025));
           say(h, snack ? `Good, ${d.name}!` : `Practice, ${d.name}!`);
         }
-        work.skills[skill] = Math.min(1, (work.skills[skill] ?? 0) + dt / (snack ? 90 : 135));
+        work.skills[skill] = Math.min(1, (work.skills[skill] ?? 0) + (dt * trainBoost(w, h, d)) / (snack ? 90 : 135));
         if (w.rng() < dt * 0.5) w.particles.spawn(P.Heart, d.x, d.y, { z: sizeOf(d) * 0.5, vz: 12, size: 4, max: 1 });
         if (work.skills[skill] >= 1) {
           work.focus = null; work.trainer = 0;
+          // every fully trained dinosaur can at least stand up for its people
+          d.warTraining = Math.max(d.warTraining ?? 0, 0.35);
           say(h, `${d.name} learned ${skill}!`);
           w.toast("🦕", `${d.name} is trained for ${skill}.`, d.x, d.y);
           go(h, "idle", h.x, h.y); h.think = 0;
         }
         break;
       }
-      d.warTraining = Math.min(1, (d.warTraining ?? 0) + dt / (w.civ.has("cavalry") ? 30 : 45));
+      d.warTraining = Math.min(1, (d.warTraining ?? 0) + (dt * trainBoost(w, h, d)) / (w.civ.has("cavalry") ? 30 : 45));
       const armor = d.warTraining >= 0.8 ? 2 : d.warTraining >= 0.35 ? 1 : 0;
       if (armor > (d.warArmor ?? 0)) {
         d.warArmor = armor;
@@ -1449,7 +1520,8 @@ function updateWarmth(w: World, h: Human, dt: number) {
   } else if (h.state === "hide" || h.state === "sleep") warm = Math.max(warm, 0.5);
   if (h.riding) warm = Math.max(warm, 0.2);
   h.warmth = clamp(h.warmth + dt * (warm * 0.05 - chill * 0.012 * (1 - warm) + (chill < 0.05 ? 0.02 : 0)), 0, 1);
-  if (h.warmth < 0.06 && w.rng() < dt * 0.2 && h.hp > 0.25) hurtHuman(w, h, 0.03, h.x, h.y, "cold");
+  // frostbite: good winter gear keeps most of it off
+  if (h.warmth < 0.06 && w.rng() < dt * 0.2 && h.hp > 0.25) hurtHuman(w, h, 0.03 * (1 - coatWarmth(h) * 0.7), h.x, h.y, "cold");
 }
 
 /** Kids: stay near camp, carry little things, tag along with grown-ups, play. Never fight. */

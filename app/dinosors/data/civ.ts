@@ -5,7 +5,7 @@
 /*  crystals, shaped stone and floating blocks. None of the Resonance  */
 /*  is real-world science; it's a game mechanic.                       */
 /* ------------------------------------------------------------------ */
-import type { Resource } from "../sim/types";
+import type { Building, Resource } from "../sim/types";
 import type { Cost } from "./colony";
 
 export type CivPath = "none" | "traditional" | "resonance";
@@ -33,7 +33,12 @@ export type CivTechId =
   | "energyStorage"
   | "energyWeapons"
   | "defensiveEnergy"
-  | "advancedArch";
+  | "advancedArch"
+  | "nightWork"
+  | "nightClothing"
+  | "energyLitClothing"
+  | "nightDefenseGear"
+  | "advancedNightOps";
 
 export interface CivTechDef {
   id: CivTechId;
@@ -78,11 +83,16 @@ export const CIV_TECH: Record<CivTechId, CivTechDef> = {
   energyWeapons: T({ id: "energyWeapons", path: "resonance", icon: "⚡", name: "Energy weapons", what: "Beam towers + resonance lances. Beams can set dry grass on fire!", rp: 95, cost: { crystal: 2, copper: 3, meteorite: 1 }, after: ["energyStorage"] }),
   defensiveEnergy: T({ id: "defensiveEnergy", path: "resonance", icon: "🛡️", name: "Defensive energy", what: "Pylons: nearby pylons link into humming barriers that push dinosaurs back.", rp: 85, cost: { magnetite: 2, copper: 2 }, after: ["energyStorage"] }),
   advancedArch: T({ id: "advancedArch", path: "resonance", icon: "🌀", name: "Advanced resonance architecture", what: "The Resonance shield: a dome that might survive the end of the world.", rp: 130, cost: { crystal: 3, meteorite: 2, shaped: 6 }, after: ["monumental", "defensiveEnergy"] }),
+  nightWork: T({ id: "nightWork", path: "resonance", icon: "🌙", name: "Night Work", what: "Night crews learn safe handoffs and work routes.", rp: 35, cost: { hide: 2, wood: 2 }, after: ["resonance"] }),
+  nightClothing: T({ id: "nightClothing", path: "resonance", icon: "🧥", name: "Night Clothing", what: "Forge dark hide night gear with stronger boots and weather protection.", rp: 45, cost: { hide: 4, copper: 1 }, after: ["nightWork", "copperRes"] }),
+  energyLitClothing: T({ id: "energyLitClothing", path: "resonance", icon: "💡", name: "Energy-Lit Clothing", what: "A completed pyramid can power soft moving lights in night outfits.", rp: 65, cost: { copper: 2, quartz: 2, crystal: 1 }, after: ["nightClothing", "energyStorage"] }),
+  nightDefenseGear: T({ id: "nightDefenseGear", path: "resonance", icon: "⚡", name: "Night Defense Gear", what: "Forge guarded night armor and resonance sidearms for local defense.", rp: 90, cost: { hide: 3, copper: 3, crystal: 2 }, after: ["energyLitClothing", "energyWeapons"] }),
+  advancedNightOps: T({ id: "advancedNightOps", path: "resonance", icon: "🔹", name: "Advanced Night Operations", what: "Night crews use tuned tools more effectively and energy towers store more charge.", rp: 110, cost: { quartz: 3, crystal: 3, shaped: 2 }, after: ["nightDefenseGear", "monumental"] }),
 };
 
 export const CIV_ORDER: Record<Exclude<CivPath, "none">, CivTechId[]> = {
   traditional: ["masonry", "cropRotation", "ironForge", "herbalism", "granary", "huntingHorns", "siegecraft", "cavalry", "greatHalls", "deepShelter"],
-  resonance: ["resonance", "copperRes", "quartzTuning", "precisionStone", "waterAir", "energyStorage", "levitation", "monumental", "energyWeapons", "defensiveEnergy", "advancedArch"],
+  resonance: ["resonance", "nightWork", "nightClothing", "copperRes", "quartzTuning", "precisionStone", "waterAir", "energyStorage", "energyLitClothing", "levitation", "monumental", "energyWeapons", "nightDefenseGear", "defensiveEnergy", "advancedNightOps", "advancedArch"],
 };
 
 /** Techs the tribe must have done in its own path before it may look over the fence. */
@@ -132,7 +142,12 @@ export const PYRAMID_STAGES: { name: string; cost: Cost; work: number; energy?: 
   { name: "Inner chamber", cost: { shaped: 6, crystal: 2, copper: 2 }, work: 12 },
   { name: "Capstone", cost: { shaped: 4, gold: 1, quartz: 2 }, work: 10 },
   { name: "Activation", cost: { crystal: 2 }, work: 6, energy: 60 },
+  { name: "Limestone casing", cost: { limestone: 24, shaped: 4 }, work: 20 },
 ];
+
+/** Activation is stage six; the seventh stage adds casing around a live core. */
+export const pyramidAwake = (b: Pick<Building, "kind" | "stage" | "built" | "hp">) => b.kind === "pyramid" && b.hp > 0 && ((b.stage ?? 0) >= 6 || ((b.stage ?? 0) === 5 && b.built >= 1));
+export const pyramidCased = (b: Pick<Building, "kind" | "stage" | "built">) => b.kind === "pyramid" && (b.stage ?? 0) >= 6 && b.built >= 1;
 
 /** Energy (per second) made / stored by finished Resonance buildings. */
 export const ENERGY_GEN: Partial<Record<string, number>> = { chamber: 0.35, energyTower: 0.8, obelisk: 0.5, stoneCircle: 0.7, pyramid: 2.5 };

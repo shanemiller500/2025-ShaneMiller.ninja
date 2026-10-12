@@ -11,6 +11,7 @@ import { addDino, findSpawnSpot, isBaby, moveDino, setState, sizeOf, spawnGroup 
 import { RandomEvents } from "./events";
 import { FireSystem } from "./fire";
 import { addHuman, say, setHumanState, updateHuman } from "./humans";
+import { Shifts } from "./shifts";
 import { P, Particles } from "./particles";
 import { burnPlantsAt, generatePlants, makePlant, plantFuelNear, tallestNear, updatePlants, PLANT_H } from "./plants";
 import { makeRng, type Rng } from "./rng";
@@ -165,6 +166,7 @@ export class World {
   weather = new Weather();
   camp: Camp;
   tribe = new Tribe();
+  shifts = new Shifts();
   randomEvents = new RandomEvents();
   nav = new Nav();
   trails = new Trails();
@@ -243,6 +245,11 @@ export class World {
 
   nextId() {
     return this.idCounter++;
+  }
+
+  /** Make sure new ids stay above n (things loaded with saved ids). */
+  reserveIds(n: number) {
+    this.idCounter = Math.max(this.idCounter, n + 1);
   }
 
   /* ---------------------------- setup ---------------------------- */
@@ -724,6 +731,7 @@ export class World {
     this.trails.fade(dt);
     this.camp.update(this, dt);
     this.tribe.update(this, dt);
+    this.shifts.update(this, dt);
     this.colony.update(this, dt);
     this.dragons.update(this, dt);
     this.rivals.update(this, dt);
@@ -980,6 +988,8 @@ export class World {
         skin: h.skin,
         fur: h.fur,
         role: h.role,
+        shift: h.shift,
+        shiftManual: h.shiftManual,
         riding: h.riding,
         age: Math.round(h.age),
         hp: r(Math.max(0.05, h.hp)),
@@ -990,9 +1000,13 @@ export class World {
         stranger: h.stranger,
         ...(h.under ? { under: true } : {}),
         ...(h.captive ? { captive: h.captive } : {}),
+        ...(h.partner ? { partner: h.partner } : {}),
+        ...(h.dragon ? { dragon: h.dragon } : {}),
       })),
       tribe: this.tribe.serialize(),
+      shifts: this.shifts.serialize(),
       rivals: this.rivals.serialize(),
+      dragons: this.dragons.serialize(),
       items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
       eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent, genes: e.genes, gen: e.gen })),
       evo: this.evo,
@@ -1051,6 +1065,8 @@ export class World {
         skin: h.skin,
         fur: h.fur,
         role: h.role ?? "auto",
+        shift: h.shift,
+        shiftManual: h.shiftManual,
         riding: h.riding ?? 0,
         age: h.age ?? (h.child ? 0 : 400),
         hp: h.hp ?? 1,
@@ -1060,6 +1076,8 @@ export class World {
         family: h.family ?? 0,
         stranger: !!h.stranger,
         ...((h as { captive?: number }).captive ? { captive: (h as { captive?: number }).captive, state: "captive" as const } : {}),
+        ...((h as { partner?: number }).partner ? { partner: (h as { partner?: number }).partner } : {}),
+        ...((h as { dragon?: number }).dragon ? { dragon: (h as { dragon?: number }).dragon } : {}),
       });
       hu.id = h.id;
     }
@@ -1090,6 +1108,7 @@ export class World {
     w.colony.load(w, data.colony);
     w.population.load(data.population);
     w.civ.load(data.civ);
+    w.shifts.load((data as SaveData & { shifts?: { mode?: "all" | "split"; auto?: boolean } }).shifts);
     w.extinction.load(data.extinction);
     w.mine.load(data.mine);
     w.mineLoads = { ...(data.mineLoads ?? {}) };
@@ -1108,6 +1127,7 @@ export class World {
     w.camp.stock = { ...w.camp.stock, ...data.camp.stock };
     w.tribe.load(w, data.tribe);
     w.rivals.load(w, (data as { rivals?: ReturnType<Rivals["serialize"]> }).rivals);
+    w.dragons.load(w, (data as { dragons?: ReturnType<Dragons["serialize"]> }).dragons);
     w.evo = data.evo ?? {};
     w.sky.load(data.sky);
     w.trails.loadWorn(data.worn);

@@ -3,10 +3,12 @@
 /*                                                                     */
 /*   • latest  – overwritten every 30 s + whenever you leave the page; */
 /*               the game always reopens the newest save there is.     */
-/*   • auto    – a snapshot every 5 minutes of play (newest 12 kept),  */
+/*   • auto    – a snapshot every 5 minutes of play.                    */
 /*               so you can go back to an earlier point in time.       */
 /*   • manual  – "Save as…": named by you, put in groups, renamed,     */
-/*               deleted. Never pruned.                                */
+/*               deleted.                                              */
+/*   • total   – 10 slots maximum, including latest; oldest archives  */
+/*               are removed first.                                    */
 /*                                                                     */
 /*  Everything is best-effort: if IndexedDB is unavailable the game    */
 /*  still runs on its localStorage save.                               */
@@ -36,7 +38,7 @@ export interface Slot extends SlotMeta {
 const DB = "dinosors-slots";
 const STORE = "slots";
 export const LATEST_ID = "latest";
-const KEEP_AUTOS = 12;
+export const MAX_SLOTS = 10;
 
 let dbp: Promise<IDBDatabase | null> | null = null;
 
@@ -85,6 +87,8 @@ const strip = (s: Slot): SlotMeta => {
 
 /** Every saved game, newest first (without the heavy world data). */
 export async function listSlots(): Promise<SlotMeta[]> {
+  // Bring older libraries that already exceed the cap into line on first open.
+  await trimSlots();
   const all = (await tx<Slot[]>("readonly", (s) => s.getAll())) ?? [];
   return all.map(strip).sort((a, b) => b.savedAt - a.savedAt);
 }
@@ -94,8 +98,24 @@ export async function getSlot(id: string): Promise<Slot | null> {
 }
 
 export async function putSlot(slot: Slot) {
-  await tx("readwrite", (s) => s.put(slot));
-  if (slot.kind === "auto") await pruneAutos();
+  const d = await db();
+  if (!d) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const t = d.transaction(STORE, "readwrite");
+      const s = t.objectStore(STORE);
+      const read = s.getAll();
+      read.onsuccess = () => {
+        for (const id of oldestToRemove(read.result as Slot[], slot)) s.delete(id);
+        s.put(slot);
+      };
+      t.oncomplete = () => resolve();
+      t.onerror = () => resolve();
+      t.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
 }
 
 export async function deleteSlot(id: string) {
@@ -108,7 +128,7 @@ export async function updateSlot(id: string, patch: Partial<Pick<SlotMeta, "name
   await tx("readwrite", (st) => st.put({ ...s, ...patch }));
 }
 
-/** Turn an autosave (or the latest save) into a named save that's never pruned. */
+/** Copy an autosave or the latest save into a named slot. */
 export async function keepSlot(id: string, name: string, group: string) {
   const s = await getSlot(id);
   if (!s) return null;
@@ -117,9 +137,36 @@ export async function keepSlot(id: string, name: string, group: string) {
   return copy;
 }
 
-async function pruneAutos() {
-  const autos = (await listSlots()).filter((s) => s.kind === "auto");
-  for (const s of autos.slice(KEEP_AUTOS)) await deleteSlot(s.id);
+/** Keep the new save and the latest slot; discard oldest other saves first. */
+export function oldestToRemove(existing: SlotMeta[], incoming?: SlotMeta): string[] {
+  const entries = incoming ? [...existing.filter((s) => s.id !== incoming.id), incoming] : existing;
+  const excess = Math.max(0, entries.length - MAX_SLOTS);
+  if (!excess) return [];
+  return entries
+    .filter((s) => s.id !== LATEST_ID && s.id !== incoming?.id)
+    .sort((a, b) => a.savedAt - b.savedAt || a.id.localeCompare(b.id))
+    .slice(0, excess)
+    .map((s) => s.id);
+}
+
+async function trimSlots() {
+  const d = await db();
+  if (!d) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const t = d.transaction(STORE, "readwrite");
+      const s = t.objectStore(STORE);
+      const read = s.getAll();
+      read.onsuccess = () => {
+        for (const id of oldestToRemove(read.result as Slot[])) s.delete(id);
+      };
+      t.oncomplete = () => resolve();
+      t.onerror = () => resolve();
+      t.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
 }
 
 /** The newest save of any kind (what "continue" loads). */

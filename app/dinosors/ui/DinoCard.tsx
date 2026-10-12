@@ -251,6 +251,10 @@ function HumanBody({ info, engine, onCamp, onClose }: { info: HumanInfo; engine:
         <Bar icon={info.warmth < 0.3 ? "🥶" : "🔥"} label={info.warmth < 0.3 ? "Freezing" : "Warmth"} value={info.warmth} color="linear-gradient(90deg,#38bdf8,#fb923c)" />
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5 text-[12px] font-semibold">
+        <span className="rounded-full bg-indigo-400/20 px-2.5 py-1">🌗 {info.shift === "all" ? "All Day" : info.shift === "day" ? "Day Shift" : "Night Shift"}</span>
+        {info.shift === "night" && <span className={`rounded-full px-2.5 py-1 ${info.shiftPowered ? "bg-cyan-400/25 text-cyan-100" : "bg-white/10 text-white/65"}`}>⚡ {info.shiftPowered ? "Suit powered" : "Suit unpowered"}</span>}
+        {info.nightEquipment && <span className="rounded-full bg-cyan-400/15 px-2.5 py-1">{info.nightEquipment}</span>}
+        {info.partner && <span className="rounded-full bg-emerald-500/20 px-2.5 py-1">🦕 Rider partner: {info.partner}</span>}
         <span className="rounded-full bg-white/10 px-2.5 py-1">{info.home}</span>
         {info.weapon && (
           <span className="rounded-full bg-white/10 px-2.5 py-1">
@@ -277,6 +281,7 @@ function HumanBody({ info, engine, onCamp, onClose }: { info: HumanInfo; engine:
           ))}
         </div>
       )}
+      {info.nightSidearmAvailable && <button type="button" onClick={() => engine.equipNightSidearm(info.id)} className="mt-2 rounded-xl bg-cyan-400/20 px-3 py-2 text-xs font-bold text-cyan-100 hover:bg-cyan-400/30">⚡ Equip night energy sidearm</button>}
       <p className="mt-2 rounded-2xl bg-amber-300/10 p-2 text-[12px] leading-snug text-amber-50/90">👆 {info.name} is picked: tap a tree, rock, water, a dino, a wall, a hurt friend… they'll work out what to do.</p>
       {info.child ? (
         <p className="mt-3 rounded-2xl bg-white/5 p-2.5 text-sm text-white/80">🧒 Kids carry little things, follow grown-ups to learn, and hide when danger comes. They never fight.</p>

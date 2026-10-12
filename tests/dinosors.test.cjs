@@ -1006,7 +1006,7 @@ test('the pyramid rises stage by stage, lift pads float blocks onto it, and it n
   finish(w, 'levPad', w.camp.x + 140, w.camp.y + 260);
   const pyr = w.colony.addBuilding(w, 'pyramid', w.camp.x + 420, w.camp.y + 320);
   assert.ok(pyr, 'pyramid placed');
-  Object.assign(w.camp.stock, { stone: 80, shaped: 60, crystal: 10, copper: 10, gold: 3, quartz: 6 });
+  Object.assign(w.camp.stock, { stone: 80, limestone: 30, shaped: 60, crystal: 10, copper: 10, gold: 3, quartz: 6 });
   pyr.stage = 1;
   pyr.built = 0.4;
   w.civ.update(w, 1.1);
@@ -1019,17 +1019,23 @@ test('the pyramid rises stage by stage, lift pads float blocks onto it, and it n
   run(w, 900, () => {
     seen.add(pyr.stage ?? 0);
     w.civ.energy = 0;
-    if ((pyr.stage ?? 0) === PYRAMID_STAGES.length - 1 && pyr.built >= 0.99) return true;
+    if ((pyr.stage ?? 0) === 5 && pyr.built >= 0.99) return true;
   });
   assert.ok(seen.size >= 4, `went through stages (${[...seen]})`);
-  assert.equal(pyr.stage, PYRAMID_STAGES.length - 1, 'reached activation');
+  assert.equal(pyr.stage, 5, 'reached activation');
   assert.ok(pyr.built < 1, 'waiting for a charge');
   run(w, 30, () => {
     w.civ.cap = 400;
     w.civ.energy = 200;
-    return pyr.built >= 1;
+    return pyr.stage === 6;
   });
-  assert.ok(pyr.built >= 1, 'woke up with energy');
+  assert.equal(pyr.stage, 6, 'woke up with energy and opened the casing stage');
+  w.civ.update(w, 1.1);
+  const beforeCasing = w.civ.gen;
+  run(w, 350, () => pyr.built >= 1);
+  assert.ok(pyr.built >= 1, 'builders completed the limestone casing');
+  w.civ.update(w, 1.1);
+  assert.ok(w.civ.gen > beforeCasing, 'casing increases energy generation');
   assert.ok(w.discoveries.has('pyramid'));
   assert.equal(clone(w).colony.buildings.find((b) => b.kind === 'pyramid').stage, PYRAMID_STAGES.length - 1, 'stage saved');
 });
@@ -2465,4 +2471,20 @@ test('resetting the mine re-rolls rock + minerals but keeps rooms, lift, stock a
   assert.equal(w2.mine.seed, m.seed, 'the new mine saves');
   assert.equal(Array.from(w2.mine.ore).join(''), Array.from(m.ore).join(''), 'same minerals after load');
   assert.equal(w2.mine.builds.length, 1);
+});
+
+test('older activated pyramids open the casing stage and gain limestone on load', () => {
+  const w = civWorld(551, 'resonance');
+  const pyr = w.colony.addBuilding(w, 'pyramid', w.camp.x + 420, w.camp.y + 320);
+  assert.ok(pyr);
+  pyr.stage = 5;
+  pyr.built = 1;
+  const save = JSON.parse(JSON.stringify(w.serialize()));
+  delete save.colony.limestoneNodes;
+  const restored = World.deserialize(save);
+  const b = restored.colony.buildings.find((x) => x.kind === 'pyramid');
+  assert.equal(b.stage, 6);
+  assert.equal(b.built, 0.4);
+  assert.ok(restored.shifts.pyramid(restored), 'activated core stays powered');
+  assert.ok(restored.colony.nodes.some((n) => n.kind === 'limestone'), 'older land gains limestone');
 });

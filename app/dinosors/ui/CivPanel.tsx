@@ -449,7 +449,7 @@ function Projects({ snap, engine, onExtinction }: { snap: Snapshot; engine: Engi
         ) : (
           <p className="text-xs text-white/60">{civ.path === "resonance" ? "Learn Monumental construction to raise a Pyramid, Stone circles and more." : "Your great works are your walls, halls and fields."}</p>
         )}
-        {civ.path === "resonance" && !pyramid && civ.done.includes("monumental") && <p className="mt-1.5 text-[11.5px] text-cyan-200">🔺 Place the Pyramid from Build → Wonders. It goes up in 6 stages and needs {PYRAMID_STAGES[5].energy} energy to activate.</p>}
+        {civ.path === "resonance" && !pyramid && civ.done.includes("monumental") && <p className="mt-1.5 text-[11.5px] text-cyan-200">🔺 Place the Pyramid from Build → Wonders. Stage 6 needs {PYRAMID_STAGES[5].energy} energy to activate; stage 7 adds a limestone casing.</p>}
         {civ.megaliths > 0 && <p className="mt-1.5 text-[11.5px] text-white/60">🪨 {civ.megaliths} megalith{civ.megaliths === 1 ? "" : "s"} floated into place.</p>}
       </div>
 

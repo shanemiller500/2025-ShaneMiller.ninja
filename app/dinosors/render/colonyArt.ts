@@ -5,7 +5,7 @@
 /*  at every zoom. Each function draws with (0,0) at the object's base */
 /*  centre unless noted.                                               */
 /* ------------------------------------------------------------------ */
-import type { Building, Dragon, ResNode, Scorpion, Shelter, Wall } from "../sim/types";
+import type { Building, ResNode, Scorpion, Shelter, Wall } from "../sim/types";
 import { HOUSING, NODES } from "../data/colony";
 import { shade } from "./drawDino";
 import { drawCivNode, polyBlocks } from "./civArt";
@@ -1445,6 +1445,162 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
       c.fillStyle = "#d99a50"; c.beginPath(); c.ellipse(W / 3, -5, 7, 3, 0, 0, Math.PI * 2); c.fill();
       break;
     }
+    case "roost": {
+      // a great timber frame on a stone base, a straw bed under it
+      c.fillStyle = "#77706a";
+      c.beginPath(); c.ellipse(0, -6, W / 2, 20, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#d8bd62";
+      c.beginPath(); c.ellipse(0, -8, W / 2 - 18, 13, 0, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = "#c9a646"; c.lineWidth = 1;
+      for (let i = 0; i < 10; i++) { c.beginPath(); c.moveTo(-W / 2 + 24 + i * ((W - 48) / 9), -14); c.lineTo(-W / 2 + 28 + i * ((W - 48) / 9), -3); c.stroke(); }
+      c.strokeStyle = "#5e3f24"; c.lineWidth = 5; c.lineCap = "round";
+      for (const x of [-W / 2 + 8, W / 2 - 8]) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, -78); c.stroke(); }
+      c.lineWidth = 6;
+      c.beginPath(); c.moveTo(-W / 2 + 2, -74); c.lineTo(W / 2 - 2, -74); c.stroke();
+      c.lineWidth = 3;
+      c.beginPath(); c.moveTo(-W / 2 + 8, -50); c.lineTo(-W / 2 + 30, -74); c.moveTo(W / 2 - 8, -50); c.lineTo(W / 2 - 30, -74); c.stroke();
+      // hide banners
+      c.fillStyle = "#9b3b2a";
+      for (const x of [-W / 4, W / 4]) { c.beginPath(); c.moveTo(x - 7, -72); c.lineTo(x + 7, -72); c.lineTo(x + 7, -56 + Math.sin(t * 2 + x) * 1.5); c.lineTo(x, -60); c.lineTo(x - 7, -56); c.closePath(); c.fill(); }
+      c.lineCap = "butt";
+      break;
+    }
+    case "hatchery": {
+      // a squat stone dome with a glowing hearth mouth
+      c.fillStyle = "#8d8478";
+      c.beginPath(); c.ellipse(0, -18, W / 2 - 2, 26, 0, Math.PI, 0); c.lineTo(W / 2 - 2, 0); c.lineTo(-W / 2 + 2, 0); c.closePath(); c.fill();
+      c.strokeStyle = "rgba(60,50,40,0.45)"; c.lineWidth = 1;
+      for (let i = 0; i < 4; i++) { c.beginPath(); c.ellipse(0, -18, W / 2 - 2 - i * 2, 26 - i * 6, 0, Math.PI, 0); c.stroke(); }
+      c.fillStyle = "#3a2a1e";
+      c.beginPath(); c.arc(0, 0, 11, Math.PI, 0); c.fill();
+      c.fillStyle = night ? "rgba(255,170,70,0.95)" : "rgba(255,150,60,0.75)";
+      c.beginPath(); c.arc(0, -1, 7 + Math.sin(t * 6) * 1, Math.PI, 0); c.fill();
+      c.fillStyle = "rgba(120,120,120,0.35)";
+      c.beginPath(); c.arc(4, -46 - ((t * 10) % 12), 4 + ((t * 10) % 12) * 0.4, 0, Math.PI * 2); c.fill();
+      break;
+    }
+    case "dragonYard": {
+      // a big fenced practice ground with a post + a target ring
+      c.fillStyle = "rgba(170,140,90,0.3)";
+      c.fillRect(-W / 2 + 4, -h * T + 8, W - 8, h * T - 10);
+      c.strokeStyle = "#7a5230"; c.lineWidth = 2;
+      c.strokeRect(-W / 2 + 4, -h * T + 8, W - 8, h * T - 10);
+      c.lineWidth = 3;
+      for (let x = -W / 2 + 4; x <= W / 2 - 4; x += 20) { c.beginPath(); c.moveTo(x, 2); c.lineTo(x, -10); c.stroke(); }
+      c.strokeStyle = "#5e3f24"; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(W / 4, -20); c.lineTo(W / 4, -60); c.stroke();
+      c.strokeStyle = "#c0392b"; c.lineWidth = 3;
+      c.beginPath(); c.arc(W / 4, -60, 9, 0, Math.PI * 2); c.stroke();
+      c.strokeStyle = "#f1e3c6";
+      c.beginPath(); c.arc(W / 4, -60, 4, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = "rgba(40,30,20,0.35)";
+      c.beginPath(); c.ellipse(-W / 5, -h * T / 2, 18, 7, 0, 0, Math.PI * 2); c.fill();
+      break;
+    }
+    case "feedPit": {
+      // a stone trough with meat in it
+      c.fillStyle = "#7f786f";
+      c.beginPath(); c.roundRect(-W / 2 + 4, -16, W - 8, 16, 5); c.fill();
+      c.fillStyle = "#4b4540";
+      c.beginPath(); c.roundRect(-W / 2 + 8, -14, W - 16, 8, 3); c.fill();
+      c.fillStyle = "#b5523a";
+      for (const x of [-12, 0, 12]) { c.beginPath(); c.ellipse(x, -12, 5, 3, 0.3, 0, Math.PI * 2); c.fill(); }
+      c.fillStyle = "#efe6cf";
+      c.fillRect(4, -15, 8, 2);
+      break;
+    }
+    case "canopy": {
+      // a hide awning on four poles, with two log stools under it
+      c.fillStyle = "rgba(0,0,0,0.18)";
+      c.beginPath(); c.ellipse(0, 2, 22, 7, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#8a6238";
+      c.beginPath(); c.ellipse(-9, -2, 5, 3, 0, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.ellipse(9, -2, 5, 3, 0, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = "#5e3f24"; c.lineWidth = 2;
+      for (const x of [-17, 17]) { c.beginPath(); c.moveTo(x, 2); c.lineTo(x, -30); c.stroke(); }
+      c.fillStyle = "#c79a64";
+      c.beginPath();
+      c.moveTo(-22, -28); c.quadraticCurveTo(0, -38 + Math.sin(t * 1.6) * 1.2, 22, -28);
+      c.lineTo(20, -24); c.quadraticCurveTo(0, -31, -20, -24); c.closePath(); c.fill();
+      c.strokeStyle = "#a07848"; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(-8, -33); c.lineTo(-7, -27); c.moveTo(8, -33); c.lineTo(7, -27); c.stroke();
+      break;
+    }
+    case "seatRing": {
+      // log seats in a ring (people sit round the middle)
+      c.fillStyle = "rgba(120,96,60,0.25)";
+      c.beginPath(); c.ellipse(0, -T + 4, W / 2 - 4, (W / 2 - 4) * 0.45, 0, 0, Math.PI * 2); c.fill();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + 0.2;
+        const x = Math.cos(a) * (W / 2 - 8);
+        const y = -T + 4 + Math.sin(a) * (W / 2 - 8) * 0.45;
+        c.save(); c.translate(x, y); c.rotate(a + Math.PI / 2);
+        c.fillStyle = "#7a5230"; c.fillRect(-9, -3, 18, 6);
+        c.fillStyle = "#c69a62"; c.beginPath(); c.ellipse(9, 0, 2, 3, 0, 0, Math.PI * 2); c.fill();
+        c.restore();
+      }
+      break;
+    }
+    case "pavilion": {
+      // a big open wooden shelter: posts, a leaf-thatched roof, benches underneath
+      c.fillStyle = "rgba(0,0,0,0.2)";
+      c.beginPath(); c.ellipse(0, -4, W / 2, 12, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#8a6238";
+      c.fillRect(-W / 2 + 10, -8, W / 2 - 16, 4);
+      c.fillRect(6, -8, W / 2 - 16, 4);
+      c.strokeStyle = "#5e3f24"; c.lineWidth = 3;
+      for (const x of [-W / 2 + 5, -W / 6, W / 6, W / 2 - 5]) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, -34); c.stroke(); }
+      c.fillStyle = "#6f8a3c";
+      c.beginPath(); c.moveTo(-W / 2 - 4, -32); c.lineTo(0, -54); c.lineTo(W / 2 + 4, -32); c.closePath(); c.fill();
+      c.fillStyle = "#5a7530";
+      for (let i = 0; i < 7; i++) {
+        c.beginPath();
+        c.ellipse(-W / 2 + 6 + i * ((W - 12) / 6), -33, 7, 3, 0.2, 0, Math.PI * 2);
+        c.fill();
+      }
+      break;
+    }
+    case "stable": {
+      // a long timber stable with a hay rack and an open front
+      c.fillStyle = "#7a5634"; c.fillRect(-W / 2 + 3, -36, W - 6, 36);
+      c.fillStyle = "#3b2a1a"; c.fillRect(-W / 2 + 10, -28, W - 20, 28);
+      c.fillStyle = "#a27845";
+      c.beginPath(); c.moveTo(-W / 2 - 2, -34); c.lineTo(-W / 2 + 14, -50); c.lineTo(W / 2 - 14, -50); c.lineTo(W / 2 + 2, -34); c.closePath(); c.fill();
+      c.strokeStyle = "#5e3f24"; c.lineWidth = 2;
+      for (let x = -W / 2 + 20; x < W / 2 - 12; x += 22) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, -28); c.stroke(); }
+      c.fillStyle = "#d8bd62";
+      c.beginPath(); c.ellipse(-W / 2 + 22, -4, 10, 5, 0, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.ellipse(W / 2 - 20, -4, 9, 4, 0, 0, Math.PI * 2); c.fill();
+      if (night) { c.fillStyle = "rgba(255,190,90,0.6)"; c.fillRect(-3, -26, 6, 6); }
+      break;
+    }
+    case "perch": {
+      // a tall pole with a crossbar perch and a little nest of leaves
+      c.strokeStyle = "#5e3f24"; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(0, 0); c.lineTo(0, -58); c.stroke();
+      c.beginPath(); c.moveTo(-14, -2); c.lineTo(0, -20); c.lineTo(14, -2); c.stroke();
+      c.lineWidth = 2.5;
+      c.beginPath(); c.moveTo(-16, -56); c.lineTo(16, -56); c.stroke();
+      c.fillStyle = "#6f8a3c";
+      c.beginPath(); c.ellipse(10, -60, 7, 3.5, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#3a7bd5";
+      c.beginPath(); c.moveTo(0, -58); c.lineTo(-11, -64 + Math.sin(t * 4) * 1.5); c.lineTo(0, -68); c.fill();
+      break;
+    }
+    case "tack": {
+      // a rack of saddles + harness straps
+      c.fillStyle = "#6b4a2c"; c.fillRect(-W / 2 + 4, -26, W - 8, 4);
+      c.strokeStyle = "#5e3f24"; c.lineWidth = 3;
+      for (const x of [-W / 2 + 6, W / 2 - 6]) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, -30); c.stroke(); }
+      for (const [x, col] of [[-W / 4, "#9b5a32"], [W / 4, "#7d4a2a"]] as [number, string][]) {
+        c.fillStyle = col;
+        c.beginPath(); c.moveTo(x - 10, -22); c.quadraticCurveTo(x, -10, x + 10, -22); c.lineTo(x + 8, -12); c.quadraticCurveTo(x, -4, x - 8, -12); c.closePath(); c.fill();
+        c.fillStyle = "#d9b45a"; c.fillRect(x - 1.5, -12, 3, 3);
+      }
+      c.strokeStyle = "#3b2a1a"; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(0, -22); c.quadraticCurveTo(3, -10, 0, -4); c.stroke();
+      break;
+    }
   }
 }
 
@@ -1562,6 +1718,7 @@ export function drawNode(c: CanvasRenderingContext2D, n: ResNode, t: number) {
   const v = n.variant;
   switch (n.kind) {
     case "stone":
+    case "limestone":
     case "iron":
     case "coal":
     case "silver":
@@ -1681,155 +1838,6 @@ export function drawNode(c: CanvasRenderingContext2D, n: ResNode, t: number) {
       }
       break;
     }
-  }
-}
-
-/* ------------------------------ dragons ------------------------------ */
-
-const DRAGON_LOOKS = [
-  { body: "#b7342b", belly: "#f2b45a", wing: "#7e1f1a", horn: "#efe1c3" },
-  { body: "#2f6d4f", belly: "#c9d77a", wing: "#1e4636", horn: "#efe1c3" },
-  { body: "#3b3f73", belly: "#a7b4ff", wing: "#262a52", horn: "#f3e7c9" },
-];
-
-/** A dragon seen from a 3/4 view; origin at the body (already raised by z). */
-export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
-  const L = DRAGON_LOOKS[dr.hue % DRAGON_LOOKS.length];
-  const flying = dr.z > 6;
-  const flap = flying ? Math.sin(dr.anim * 1.6) : 0.15;
-  c.save();
-  c.scale(dr.dir, 1);
-  if (dr.hit > 0) c.filter = `brightness(${1 + dr.hit * 0.8})`;
-  // far wing
-  const wing = (side: number) => {
-    const lift = (flying ? flap * 34 : -10) * side;
-    c.fillStyle = side < 0 ? shade(L.wing, -0.2) : L.wing;
-    c.beginPath();
-    c.moveTo(-6, -22);
-    c.quadraticCurveTo(-30, -60 - lift, -66, -48 - lift * 1.2);
-    c.lineTo(-58, -36 - lift * 0.6);
-    c.lineTo(-44, -38 - lift * 0.5);
-    c.lineTo(-40, -26 - lift * 0.3);
-    c.lineTo(-26, -28 - lift * 0.2);
-    c.quadraticCurveTo(-14, -18, -6, -16);
-    c.closePath();
-    c.fill();
-    c.strokeStyle = "rgba(20,10,10,0.35)";
-    c.lineWidth = 1.2;
-    c.beginPath();
-    c.moveTo(-6, -22);
-    c.lineTo(-58, -36 - lift * 0.6);
-    c.moveTo(-6, -22);
-    c.lineTo(-40, -26 - lift * 0.3);
-    c.stroke();
-  };
-  c.save();
-  c.translate(8, -6);
-  c.scale(0.85, 0.9);
-  wing(-1);
-  c.restore();
-  // tail
-  c.strokeStyle = L.body;
-  c.lineWidth = 9;
-  c.lineCap = "round";
-  c.beginPath();
-  c.moveTo(-18, -16);
-  c.quadraticCurveTo(-48, -10 + Math.sin(t * 3) * 6, -72, -20 + Math.sin(t * 3 + 1) * 10);
-  c.stroke();
-  c.fillStyle = L.wing;
-  c.beginPath();
-  c.moveTo(-72, -20 + Math.sin(t * 3 + 1) * 10);
-  c.lineTo(-84, -28 + Math.sin(t * 3 + 1) * 10);
-  c.lineTo(-80, -12 + Math.sin(t * 3 + 1) * 10);
-  c.closePath();
-  c.fill();
-  // legs (tucked when flying)
-  c.strokeStyle = shade(L.body, -0.2);
-  c.lineWidth = 5;
-  for (const x of [-10, 10]) {
-    c.beginPath();
-    c.moveTo(x, -12);
-    c.lineTo(x + (flying ? -6 : 2), flying ? -4 : 2);
-    c.stroke();
-  }
-  // body
-  const g = c.createLinearGradient(0, -36, 0, -4);
-  g.addColorStop(0, shade(L.body, 0.1));
-  g.addColorStop(1, shade(L.body, -0.15));
-  c.fillStyle = g;
-  c.beginPath();
-  c.ellipse(0, -18, 28, 14, -0.08, 0, Math.PI * 2);
-  c.fill();
-  c.fillStyle = L.belly;
-  c.beginPath();
-  c.ellipse(4, -11, 20, 6, -0.05, 0, Math.PI * 2);
-  c.fill();
-  // back spikes
-  c.fillStyle = L.horn;
-  for (let i = 0; i < 5; i++) {
-    c.beginPath();
-    c.moveTo(-16 + i * 8, -30 + Math.abs(i - 2) * 1.5);
-    c.lineTo(-13 + i * 8, -38 + Math.abs(i - 2) * 1.5);
-    c.lineTo(-10 + i * 8, -30 + Math.abs(i - 2) * 1.5);
-    c.fill();
-  }
-  // neck + head
-  const nod = flying ? Math.sin(t * 2) * 3 : Math.sin(t * 4) * 2;
-  c.strokeStyle = L.body;
-  c.lineWidth = 10;
-  c.beginPath();
-  c.moveTo(20, -22);
-  c.quadraticCurveTo(34, -36 + nod, 40, -40 + nod);
-  c.stroke();
-  c.fillStyle = L.body;
-  c.beginPath();
-  c.ellipse(46, -42 + nod, 12, 7, 0.15, 0, Math.PI * 2);
-  c.fill();
-  c.beginPath();
-  c.ellipse(56, -39 + nod, 9, 4.5, 0.2, 0, Math.PI * 2);
-  c.fill();
-  // jaw open while breathing fire
-  if (dr.breath > 0.05) {
-    c.fillStyle = "#5a1410";
-    c.beginPath();
-    c.moveTo(48, -38 + nod);
-    c.lineTo(64, -32 + nod + dr.breath * 6);
-    c.lineTo(50, -34 + nod);
-    c.closePath();
-    c.fill();
-  }
-  // horns + eye
-  c.fillStyle = L.horn;
-  c.beginPath();
-  c.moveTo(40, -46 + nod);
-  c.lineTo(30, -58 + nod);
-  c.lineTo(44, -48 + nod);
-  c.fill();
-  c.fillStyle = "#ffe066";
-  c.beginPath();
-  c.arc(49, -44 + nod, 2.2, 0, Math.PI * 2);
-  c.fill();
-  c.fillStyle = "#111";
-  c.fillRect(48.6, -45.5 + nod, 1, 3);
-  // near wing on top
-  wing(1);
-  c.restore();
-  c.filter = "none";
-  // fire breath cone
-  if (dr.breath > 0.05) {
-    const dx = dr.dir;
-    c.save();
-    c.globalCompositeOperation = "lighter";
-    for (let i = 0; i < 6; i++) {
-      const k = i / 6;
-      const r = 6 + k * 22;
-      const fl = Math.sin(t * 30 + i) * 3;
-      c.fillStyle = `rgba(255,${200 - k * 120},${60 - k * 40},${(1 - k) * 0.7 * dr.breath})`;
-      c.beginPath();
-      c.arc(dx * (64 + k * 80), -34 + k * (dr.z * 0.6) + fl, r, 0, Math.PI * 2);
-      c.fill();
-    }
-    c.restore();
   }
 }
 

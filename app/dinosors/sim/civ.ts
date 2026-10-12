@@ -7,7 +7,7 @@
 /*  overload. All of the Resonance is fantasy tech for the game.       */
 /* ------------------------------------------------------------------ */
 import { BUILDINGS, CIV_NODES, buildingCost, type Cost } from "../data/colony";
-import { BEAM, CIV_ORDER, CIV_TECH, CROSS_AFTER, CROSS_MULT, ENERGY_GEN, ENERGY_STORE, ENERGY_USE, EXPERIMENT_MATS, FREQ_MAX, FREQ_MIN, LIFT, PATH_INFO, PYRAMID_STAGES, type CivPath, type CivTechId } from "../data/civ";
+import { BEAM, CIV_ORDER, CIV_TECH, CROSS_AFTER, CROSS_MULT, ENERGY_GEN, ENERGY_STORE, ENERGY_USE, EXPERIMENT_MATS, FREQ_MAX, FREQ_MIN, LIFT, PATH_INFO, PYRAMID_STAGES, pyramidAwake, pyramidCased, type CivPath, type CivTechId } from "../data/civ";
 import { sp } from "../data/species";
 import { STONE_MUL } from "./build";
 import { scorpionTarget } from "./colony";
@@ -195,7 +195,7 @@ export class Civ {
     w.toast(def.icon, `${def.name} learned! ${def.what}`, w.camp.x, w.camp.y);
     if (this.done.size === 1) w.discover(this.resonance ? "civResonance" : "civTraditional");
     if (id === "levitation") w.discover("levitation");
-    if (id === "monumental") w.toast("🔺", "Monumental construction: the Pyramid can be built (Build menu → Wonders). It goes up in 6 stages.");
+    if (id === "monumental") w.toast("🔺", "Monumental construction: the Pyramid can be built (Build menu → Wonders). It goes up in 7 stages, ending with limestone casing.");
     this.autoPick(w);
   }
 
@@ -304,20 +304,21 @@ export class Civ {
     let use = 0;
     const store = this.has("energyStorage") ? 2 : 1;
     for (const b of w.colony.buildings) {
-      if (b.built < 1) continue;
-      gen += ENERGY_GEN[b.kind] ?? 0;
-      cap += (ENERGY_STORE[b.kind] ?? 0) * (b.kind === "energyTower" ? store : 1);
+      if (b.built < 1 && !pyramidAwake(b)) continue;
+      gen += (ENERGY_GEN[b.kind] ?? 0) + (pyramidCased(b) ? 1.5 : 0);
+      cap += (ENERGY_STORE[b.kind] ?? 0) * (b.kind === "energyTower" ? store : 1) + (pyramidCased(b) ? 160 : 0);
       use += ENERGY_USE[b.kind] ?? 0;
     }
     if (this.resonance && this.chamberX) gen += 0.25;
     if (this.tuned.has("quartz")) gen *= 1.15;
     if (this.tuned.has("crystal")) cap *= 1.25;
+    if (this.has("advancedNightOps")) cap += w.colony.buildings.filter(pyramidAwake).length * 120;
     // technicians keep the hum clean
     const techs = w.humans.filter((h) => h.state === "resonate" && w.tribe.roleOf(h) === "technician").length;
     gen *= 1 + Math.min(2, techs) * 0.1;
     this.gen = gen;
     this.cap = cap;
-    this.use = use;
+    this.use = use + w.shifts.draw;
   }
 
   /** Pay energy for something. */
@@ -795,10 +796,13 @@ export class Civ {
       case "miner": {
         let best = null as (typeof w.colony.nodes)[number] | null;
         let bd = 3000;
-        const wanted = this.missing(w);
+        const casingNeedsLimestone = w.colony.buildings.some((b) => b.kind === "pyramid" && (b.stage ?? 0) === 6 && b.built < 1 && (b.have.limestone ?? 0) + w.camp.stock.limestone < 24);
+        const wanted = casingNeedsLimestone ? "limestone" : this.missing(w);
         for (const n of w.colony.nodes) {
-          if (!n.found || n.amount <= 0 || !(CIV_NODES.includes(n.kind) || n.kind === "iron" || n.kind === "stone")) continue;
+          if (!n.found || n.amount <= 0 || !(CIV_NODES.includes(n.kind) || n.kind === "iron" || n.kind === "stone" || n.kind === "limestone")) continue;
+          if (casingNeedsLimestone && n.kind !== "limestone") continue;
           if (n.kind === "stone" && w.camp.stock.stone > 30) continue;
+          if (n.kind === "limestone" && !casingNeedsLimestone) continue;
           const d = Math.hypot(n.x - w.camp.x, n.y - w.camp.y) * (wanted && n.kind === wanted ? 0.3 : CIV_NODES.includes(n.kind) ? 0.7 : 1);
           if (d < bd) {
             bd = d;
@@ -882,6 +886,7 @@ export class Civ {
     if (w.colony.buildings.filter((b) => b.built >= 1 && ENERGY_KINDS.has(b.kind)).length >= 3) q.push(["technician", 1]);
     const want = this.missing(w);
     if (want && CIV_NODES.includes(want as never) && w.colony.nodes.some((n) => n.found && n.kind === want)) q.push(["miner", 1]);
+    if (w.colony.buildings.some((b) => b.kind === "pyramid" && (b.stage ?? 0) === 6 && b.built < 1 && (b.have.limestone ?? 0) + w.camp.stock.limestone < 24) && w.colony.nodes.some((n) => n.kind === "limestone" && n.found && n.amount > 0)) q.push(["miner", 1]);
     return q;
   }
 

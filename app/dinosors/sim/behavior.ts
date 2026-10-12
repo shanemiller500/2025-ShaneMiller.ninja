@@ -19,6 +19,7 @@ import { T, TILE, WORLD_H, WORLD_W, type Brute, type Dino, type DinoState, type 
 import type { World } from "./world";
 import { season } from "./seasons";
 import { thinkWorkDino } from "./workDinos";
+import { partnerThink } from "./riders";
 
 /** States that run to completion; `think` leaves them alone. */
 const LOCKED = new Set<DinoState>([
@@ -1301,6 +1302,8 @@ export function thinkDino(w: World, d: Dino) {
       return;
     }
   }
+  // a Dino Rider team's partner: stays with its rider, sleeps at the stable, flies missions
+  if (d.owner && d.work?.partner && partnerThink(w, d)) return;
   if (thinkWorkDino(w, d)) return;
   if (def.move === "fly") thinkFlyer(w, d, def);
   else if (def.move === "swim") thinkSwimmer(w, d, def);

@@ -6,7 +6,7 @@ import { tileOf } from "./nav";
 import { TILE, type Dino, type Resource } from "./types";
 import type { World } from "./world";
 
-export type WorkSkill = "hauler" | "riding" | "heavy" | "runner";
+export type WorkSkill = "hauler" | "riding" | "heavy" | "runner" | "scout" | "flyer";
 type Work = NonNullable<Dino["work"]>;
 
 export function workOf(d: Dino): Work {
@@ -15,6 +15,11 @@ export function workOf(d: Dino): Work {
 
 export function eligible(d: Dino, skill: WorkSkill) {
   const def = sp(d.species);
+  // flyers: only the big pteranodon can carry a rider (small ones would just be messengers)
+  if (skill === "flyer") return d.species === "ptera" && !isBaby(d);
+  if (def.move === "fly") return false;
+  // scouts: quick, mid-sized walkers that cover ground
+  if (skill === "scout") return def.diet === "herbivore" && def.move === "walk" && !isBaby(d) && sizeOf(d) >= 40 && sizeOf(d) <= 100 && def.speed >= 16;
   if (def.diet !== "herbivore" || def.move !== "walk" || isBaby(d) || def.aggression >= 0.45) return false;
   const size = sizeOf(d);
   if (skill === "riding") return size >= 50 && def.fear < 0.8 && d.species !== "pachy";
@@ -31,9 +36,17 @@ export function capacity(d: Dino) {
   return Math.floor(((d.species === "apato" || d.species === "brachio") ? 230 : size >= 95 ? 115 : 55) * (0.7 + level * 0.6) * (work.harness > 1 ? 1.3 : 1));
 }
 
+/** Wild → Friendly → Trained → War-Trained → Expert (a finished skill + full battle training). */
 export function trainingStage(d: Dino) {
-  const level = Math.max(0, ...Object.values(workOf(d).skills));
-  return level >= 1 ? "Expert" : level >= 0.7 ? "Experienced" : level >= 0.35 ? "Trained" : d.owner ? "Friendly" : "Wild";
+  if (!d.owner) return "Wild";
+  const level = Math.max(0, ...Object.values(workOf(d).skills).map((v) => v ?? 0));
+  const war = d.warTraining ?? 0;
+  if (level >= 1 && war >= 1) return "Expert";
+  // a flyer's war work is spotting raids, not fighting: a fully trained scout flyer is an expert
+  if ((workOf(d).skills.flyer ?? 0) >= 1) return "Expert";
+  if (war >= 1) return "War-Trained";
+  if (level >= 0.35) return "Trained";
+  return "Friendly";
 }
 
 export function canWork(d: Dino) {

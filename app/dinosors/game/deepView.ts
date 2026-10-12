@@ -239,7 +239,7 @@ export class DeepView {
       if (job && (m.mode === "dig") && (job.kind === "dig" || job.kind === "ore")) progress = Math.min(1, m.t / Math.max(0.1, mine.digTime(job.cell % MINE_W, Math.floor(job.cell / MINE_W), tools)));
       else if (job && m.mode === "build") progress = Math.min(1, m.t / 2.5);
       else if (job && m.mode === "plant") progress = Math.min(1, m.t / 1.5);
-      out.push({ id: m.id, x: m.x, y: m.y, face: m.face, mode: m.mode, anim: m.anim, load: load(m), skin: h.skin, hair: h.hair, fur: h.fur, hp: h.hp, bubble: m.bubble?.text ?? null, progress, jobCell: job && progress > 0 ? job.cell : null });
+      out.push({ id: m.id, powered: world.shifts.poweredOutfit(world, h), nightGear: h.gear.outfit?.startsWith("night"), x: m.x, y: m.y, face: m.face, mode: m.mode, anim: m.anim, load: load(m), skin: h.skin, hair: h.hair, fur: h.gear.outfit?.startsWith("night") ? "#253847" : h.fur, hp: h.hp, bubble: m.bubble?.text ?? null, progress, jobCell: job && progress > 0 ? job.cell : null });
     }
     return out;
   }

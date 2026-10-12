@@ -320,6 +320,8 @@ export interface OutfitLook {
   color: string;
   trim: string;
   hood: boolean;
+  /** winter gear tier (1–4): fur-topped boots, a fur collar, plated shoulders from tier 3 */
+  winter?: number;
 }
 
 /**
@@ -329,7 +331,7 @@ export interface OutfitLook {
  */
 export type GarbLevel = 0 | 1 | 2 | 3;
 
-export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean, shield = 0, tier = 1, outfit: OutfitLook | null = null, wet = 0, helmet: HelmetLook | null = null, garb: GarbLevel = 0) {
+export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean, shield = 0, tier = 1, outfit: OutfitLook | null = null, wet = 0, helmet: HelmetLook | null = null, garb: GarbLevel = 0, powered = false) {
   const H = h.child ? 20 : 29;
   const st = h.state;
   c.save();
@@ -345,7 +347,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.scale(h.dir, 1);
   const moving = st === "walk" || st === "carry" || st === "flee" || st === "explore" || st === "hunt" || st === "haul";
   const sw = moving ? Math.sin(h.anim * 2.2) : 0;
-  const sit = st === "sitFire" || st === "craft" || (st === "captive" && h.z <= 0);
+  const sit = st === "sitFire" || st === "craft" || (st === "captive" && h.z <= 0) || !!h.aloft;
   const bend = st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" || st === "heal" ? 0.2 : st === "haul" || st === "loadDino" ? -0.25 : st === "hunt" ? 0.25 : st === "tame" || st === "train" ? 0.15 : 0;
   const hipY = sit ? -H * 0.22 : -H * 0.42;
 
@@ -389,6 +391,22 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.stroke();
     c.lineCap = "round";
   }
+  if (outfit?.winter) {
+    // winter boots: tall hide boots with a fur cuff (iron-ringed for the elite gear)
+    for (const [fx] of feet) {
+      c.fillStyle = outfit.winter >= 4 ? "#4a4f57" : "#5a3e26";
+      c.beginPath();
+      c.roundRect(fx - H * 0.07, -H * 0.17, H * 0.14, H * 0.17, H * 0.03);
+      c.fill();
+      c.beginPath();
+      c.ellipse(fx + H * 0.03, -H * 0.01, H * 0.1, H * 0.035, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = outfit.trim;
+      c.beginPath();
+      c.ellipse(fx, -H * 0.17, H * 0.085, H * 0.035, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
 
   c.save();
   c.translate(0, hipY);
@@ -421,6 +439,20 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.fill();
   if (garb > 0) drawGarb(c, H, garb, h.child);
   if (outfit) drawOutfit(c, H, outfit, t, wet, st === "walk" || st === "carry" || st === "flee");
+  if (outfit?.id.startsWith("night")) {
+    // Night suits remain recognizable with the grid down: plated shoulders,
+    // belt pockets and a copper chest socket. The socket glows only on power.
+    c.fillStyle = "#172536";
+    c.fillRect(-H * 0.22, -H * 0.4, H * 0.13, H * 0.09);
+    c.fillRect(H * 0.09, -H * 0.4, H * 0.13, H * 0.09);
+    c.fillStyle = "#9b7951";
+    c.fillRect(-H * 0.21, -H * 0.06, H * 0.42, H * 0.045);
+    c.fillRect(-H * 0.17, -H * 0.02, H * 0.1, H * 0.1);
+    c.fillStyle = powered ? "#a9faff" : "#547987";
+    c.beginPath(); c.arc(0, -H * 0.25, H * 0.055, 0, Math.PI * 2); c.fill();
+    c.fillRect(-H * 0.19, -H * 0.39, H * 0.08, H * 0.025);
+    c.fillRect(H * 0.11, -H * 0.39, H * 0.08, H * 0.025);
+  }
 
   // arms
   c.strokeStyle = h.skin;
@@ -1000,7 +1032,7 @@ function drawOutfit(c: CanvasRenderingContext2D, H: number, o: OutfitLook, t: nu
     return;
   }
   // cloaks + furs: hang from the shoulders down the back
-  const len = o.id === "furs" ? 0.5 : 0.55;
+  const len = o.winter ? 0.5 : 0.55;
   c.fillStyle = o.color;
   c.beginPath();
   c.moveTo(-H * 0.18, -H * 0.42);
@@ -1021,7 +1053,16 @@ function drawOutfit(c: CanvasRenderingContext2D, H: number, o: OutfitLook, t: nu
     c.lineTo(-H * 0.22 + i * H * 0.085 - sway, H * len - H * 0.45);
     c.fill();
   }
-  if (o.id === "furs") {
+  if (o.winter) {
+    if (o.winter >= 3) {
+      // reinforced: bone (or iron) plates on the shoulders
+      c.fillStyle = o.winter >= 4 ? "#9aa3ad" : "#e9e0c8";
+      for (const x of [-0.14, 0.1]) {
+        c.beginPath();
+        c.ellipse(H * x, -H * 0.36, H * 0.08, H * 0.045, x < 0 ? -0.3 : 0.3, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
     // fluffy collar + cuffs
     c.fillStyle = o.trim;
     for (let i = 0; i < 5; i++) {

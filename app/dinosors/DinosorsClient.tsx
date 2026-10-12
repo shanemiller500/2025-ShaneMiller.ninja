@@ -10,11 +10,13 @@ import { DEFAULT_SETTINGS, hasIdbWorld, loadIdbWorld, loadSettings, saveSettings
 import { DEFAULT_TOOL, type ToolState } from "./game/tools";
 import AboutPanel from "./ui/AboutPanel";
 import CampPanel from "./ui/CampPanel";
+import ShiftsPanel from "./ui/ShiftsPanel";
 import DinoCard from "./ui/DinoCard";
 import StickerBook from "./ui/StickerBook";
 import Toasts, { type Toast } from "./ui/Toasts";
 import Toolbar from "./ui/Toolbar";
 import TrainPanel from "./ui/TrainPanel";
+import DragonPanel from "./ui/DragonPanel";
 import TopBar, { type TopPanel } from "./ui/TopBar";
 import ViewControls from "./ui/ViewControls";
 import RaidBanner from "./ui/RaidBanner";
@@ -84,6 +86,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [panel, setPanel] = useState<TopPanel>(null);
   const [campOpen, setCampOpen] = useState(false);
+  const [shiftsOpen, setShiftsOpen] = useState(false);
   const [trainOpen, setTrainOpen] = useState(false);
   const [evoOpen, setEvoOpen] = useState(false);
   const [stickersOpen, setStickersOpen] = useState(false);
@@ -335,10 +338,11 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           ) : (
             <>
               <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} />
-              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} />
+              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} shiftOpen={shiftsOpen} onShifts={() => setShiftsOpen((o) => !o)} />
               {trainOpen && <TrainPanel engine={engine} onClose={() => setTrainOpen(false)} />}
               <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
-              {snap.inspect && !snap.selected && <InspectPanel info={snap.inspect} snap={snap} engine={engine} />}
+              {snap.inspect && !snap.selected && !engine.selectedDragon() && !engine.selectedEgg && <InspectPanel info={snap.inspect} snap={snap} engine={engine} />}
+              {!trainOpen && (engine.selectedDragon() || engine.selectedEgg) ? <DragonPanel engine={engine} snap={snap} /> : null}
             </>
           )}
           {snap.view === "surface" && snap.selected && !trainOpen && (
@@ -354,6 +358,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             />
           )}
           {campOpen && <CampPanel snap={snap} engine={engine} onClose={() => setCampOpen(false)} />}
+          {shiftsOpen && <ShiftsPanel snap={snap} engine={engine} onClose={() => setShiftsOpen(false)} onResearch={() => { setShiftsOpen(false); setCivOpen(true); }} />}
           <RaidBanner snap={snap} engine={engine} />
           {evoOpen && <EvolutionPanel snap={snap} engine={engine} onClose={() => setEvoOpen(false)} />}
           {civOpen && <CivPanel snap={snap} engine={engine} onClose={() => setCivOpen(false)} onChoose={() => setChoiceOpen(true)} onExtinction={() => setExtOpen(true)} />}
@@ -362,7 +367,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           <ExtinctionBanner snap={snap} />
           {(() => {
             // tips + bubbles stay out of the way while anything else is open
-            const busy = trainOpen || campOpen || civOpen || evoOpen || savesOpen || stickersOpen || aboutOpen || help.open || extOpen || choiceOpen || !!confirm || !!snap.selected || snap.extinction.phase !== "idle" && snap.extinction.phase !== "ruins";
+            const busy = trainOpen || campOpen || shiftsOpen || civOpen || evoOpen || savesOpen || stickersOpen || aboutOpen || help.open || extOpen || choiceOpen || !!confirm || !!snap.selected || !!engine.selectedDragon() || !!engine.selectedEgg || snap.extinction.phase !== "idle" && snap.extinction.phase !== "ruins";
             return (
               <>
                 <TipCoach snap={snap} enabled={settings.tips} busy={busy} onOff={() => updateSettings({ tips: false })} onHelp={(section) => setHelp({ open: true, section })} />

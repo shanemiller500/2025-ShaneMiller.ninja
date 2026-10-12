@@ -324,6 +324,7 @@ export class Colony {
     place("artifact", 5, (t) => walk(t) && t !== T.Nest);
     place("fossil", 3, (t) => walk(t) && (t === T.Sand || t === T.Rock || t === T.Dirt || t === T.Grass));
     this.generateCivNodes(w, salt + 40);
+    place("limestone", 5, (t, tx, ty) => walk(t) && (t === T.Rock || nextTo(tx, ty, (o) => o === T.Cliff || o === T.Rock)));
   }
 
   /** Copper, quartz, magnetite, crystal + an old meteor strike. */
@@ -507,7 +508,8 @@ export class Colony {
     const wantWarm = 0.4 + Math.max(0, 0.45 - wt.temp) * 2 + wt.snow * 1.5;
     const score = (id: string | null | undefined) => {
       const o = id ? OUTFIT_BY_ID[id] : null;
-      return o ? o.rain * wantRain + o.warmth * wantWarm + o.armor * (h.child ? 0 : 2) : 0;
+      return o ? o.rain * wantRain + o.warmth * wantWarm + o.armor * (h.child ? 0 : 2)
+        + (id?.startsWith("night") ? (w.shifts.mode === "split" && h.shift === "night" ? 5 : -8) : 0) : 0;
     };
     const cur = h.gear.outfit ?? null;
     let best = cur;
@@ -660,6 +662,7 @@ export class Colony {
     for (const [id, n] of Object.entries(this.armory)) {
       const wp = WEAPON_BY_ID[id];
       if (!wp || n <= 0) continue;
+      if (id === "nightSidearm" && (w.shifts.mode !== "split" || h.shift !== "night")) continue;
       const score = wp.dmg * (prefer && wp.kind === prefer ? 1.6 : 1);
       const bestScore = best ? best.dmg * (prefer && best.kind === prefer ? 1.6 : 1) : -1;
       if (score > bestScore) best = wp;
@@ -897,6 +900,7 @@ export class Colony {
       kits: Array.from(this.kits),
       known: Array.from(this.known),
       civNodes: 1,
+      limestoneNodes: 1,
     };
   }
 
@@ -908,7 +912,8 @@ export class Colony {
     for (const b of d.buildings ?? []) {
       const def = BUILDINGS[b.kind];
       if (!def) continue;
-      this.buildings.push({ id: w.nextId(), kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: b.built, have: b.have ?? {}, hp: b.hp ?? def.hp, ...((b as { stage?: number }).stage ? { stage: (b as { stage?: number }).stage } : {}) });
+      const oldFinishedPyramid = b.kind === "pyramid" && (b as { stage?: number }).stage === 5 && b.built >= 1 && !(d as { limestoneNodes?: number }).limestoneNodes;
+      this.buildings.push({ id: w.nextId(), kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: oldFinishedPyramid ? 0.4 : b.built, have: oldFinishedPyramid ? {} : b.have ?? {}, hp: b.hp ?? def.hp, ...((b as { stage?: number }).stage ? { stage: oldFinishedPyramid ? 6 : (b as { stage?: number }).stage } : {}) });
     }
     for (const s of d.scorpions ?? []) this.scorpions.push({ id: w.nextId(), ...s, aim: Math.PI / 2, reload: 0, crew: 0, kick: 0 });
     for (const [kind, x, y, amount, max, found] of d.nodes ?? []) {
@@ -922,6 +927,20 @@ export class Colony {
     this.primed = this.known.size > 0;
     // saves from before the civilization update get the new deposits scattered in
     if (!(d as { civNodes?: number }).civNodes) this.generateCivNodes(w);
+    if (!(d as { limestoneNodes?: number }).limestoneNodes) {
+      let placed = 0;
+      for (let i = 0; i < 3000 && placed < 5; i++) {
+        const tx = 2 + Math.floor(hash2(i, 183, w.seed) * (MAP_W - 4));
+        const ty = 2 + Math.floor(hash2(i, 397, w.seed) * (MAP_H - 4));
+        const t = w.terrain.tiles[ty * MAP_W + tx] as T;
+        if (t !== T.Rock && t !== T.Grass && t !== T.Dirt) continue;
+        const x = tx * TILE + TILE / 2, y = ty * TILE + TILE / 2;
+        if (this.nodes.some((n) => Math.hypot(n.x - x, n.y - y) < 110) || Math.hypot(w.camp.x - x, w.camp.y - y) < 240) continue;
+        const amount = 17 + Math.floor(hash2(tx, ty, w.seed) * 7);
+        this.nodes.push({ id: w.nextId(), kind: "limestone", x, y, amount, max: amount, found: true, variant: i % 4 });
+        placed++;
+      }
+    }
     this.version++;
   }
 }

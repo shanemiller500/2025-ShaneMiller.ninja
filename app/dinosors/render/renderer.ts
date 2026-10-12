@@ -11,7 +11,7 @@ import { P, type Particle } from "../sim/particles";
 import { PLANT_H, TALL } from "../sim/plants";
 import { hash2, valueNoise } from "../sim/rng";
 import { CHUNKS_X, CHUNK_TILES, isWaterTile } from "../sim/terrain";
-import { MAP_H, MAP_W, T, TILE, WORLD_H, WORLD_W, type Dino, type Human, type Plant, type SpeciesDef } from "../sim/types";
+import { MAP_H, MAP_W, T, TILE, WORLD_H, WORLD_W, type Dino, type Dragon, type Human, type Plant, type SpeciesDef } from "../sim/types";
 
 /** shade() returns rgb(); species looks want #hex */
 function toHex(rgb: string) {
@@ -25,7 +25,9 @@ import { lookKey } from "../sim/genetics";
 import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawPlantLod, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
 import { ROLES } from "../data/facts";
 import { BUILDINGS, HOUSING } from "../data/colony";
-import { drawBar, drawBones, drawBuilding, drawDragon, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
+import { drawBar, drawBones, drawBuilding, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
+import { drawDragon, drawDragonEgg, drawNest } from "./dragonArt";
+import { dragonStats } from "../sim/dragonKeep";
 import { shelterDone, stagesOf, towerMaxHp, wallMaxHp } from "../sim/build";
 import { BUILD_BY_ID } from "../game/tools";
 import { TOWER_Z } from "../sim/nav";
@@ -39,7 +41,7 @@ import { TerrainRenderer } from "./terrainRenderer";
 import { drawEruptionColumn, drawGhost, drawPyroclastic } from "./civArt";
 import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
 import { EXT_TIMES } from "../sim/extinction";
-import { LIFT } from "../data/civ";
+import { LIFT, pyramidAwake, pyramidCased } from "../data/civ";
 
 export interface Camera {
   x: number;
@@ -69,6 +71,8 @@ export interface Overlay {
 type Drawable = { y: number; k: number; i: number };
 const K_PLANT = 0;
 const K_DINO = 1;
+/** sort key offset for ridden flyers (and their riders): after everything on the ground */
+const SKY_Y = 1e6;
 const K_HUMAN = 2;
 const K_ITEM = 3;
 const K_EGG = 4;
@@ -90,6 +94,8 @@ const K_BRUTE = 19;
 const K_CLAN = 20;
 const K_BMISSILE = 21;
 const K_MINE_LOAD = 22;
+const K_NEST = 23;
+const K_DEGG = 24;
 
 interface Drop {
   x: number;
@@ -259,16 +265,21 @@ export class Renderer {
     for (let i = 0; i < this.visPlants.length; i++) list.push({ y: this.visPlants[i].y, k: K_PLANT, i });
     for (let i = 0; i < w.dinos.length; i++) {
       const dn = w.dinos[i];
-      if (dn.under || (sp(dn.species).move === "fly" && dn.z > 6)) continue;
+      // an airborne flyer is drawn in the sky pass, unless it carries a rider: then it goes last
+      // in this pass, with its rider straight after it (so the rider sits on top)
+      const aloft = sp(dn.species).move === "fly" && dn.z > 6;
+      if (dn.under || (aloft && !dn.rider && !dn.passengers?.length)) continue;
       if (dn.x < x0 || dn.x > x1 || dn.y < y0 || dn.y > y1 + 150) continue;
-      list.push({ y: dn.y, k: K_DINO, i });
+      list.push({ y: aloft ? SKY_Y + dn.y : dn.y, k: K_DINO, i });
     }
     for (let i = 0; i < w.humans.length; i++) {
       const h = w.humans[i];
       if (h.x < x0 || h.x > x1 || h.y < y0 || h.y > y1) continue;
-      if (this.hidden(h)) continue;
+      if (this.hidden(h) || h.aloft) continue;
       // up on a wall / tower: draw after the structure underneath; riders after their mount
-      list.push({ y: h.level === 1 ? h.y + 44 : h.riding ? h.y + 0.5 : h.y, k: K_HUMAN, i });
+      const mount = h.riding ? w.dinoById(h.riding) : null;
+      const sky = !!mount && sp(mount.species).move === "fly" && mount.z > 6;
+      list.push({ y: h.level === 1 ? h.y + 44 : sky ? SKY_Y + mount!.y + 0.5 : h.riding ? h.y + 0.5 : h.y, k: K_HUMAN, i });
     }
     const col = w.colony;
     for (let i = 0; i < col.buildings.length; i++) {
@@ -284,9 +295,18 @@ export class Renderer {
       const n = col.nodes[i];
       if (n.found && n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1) list.push({ y: n.y, k: K_NODE, i });
     }
-    for (let i = 0; i < w.dragons.list.length; i++) {
-      const dr = w.dragons.list[i];
+    this.drs = w.dragons.all();
+    for (let i = 0; i < this.drs.length; i++) {
+      const dr = this.drs[i];
       if (dr.z <= 6 && dr.x > x0 - 100 && dr.x < x1 + 100 && dr.y > y0 && dr.y < y1 + 100) list.push({ y: dr.y, k: K_DRAGON, i });
+    }
+    for (let i = 0; i < w.dragons.nests.length; i++) {
+      const n = w.dragons.nests[i];
+      if (n.x > x0 - 60 && n.x < x1 + 60 && n.y > y0 && n.y < y1 + 40) list.push({ y: n.y - 6, k: K_NEST, i });
+    }
+    for (let i = 0; i < w.dragons.eggs.length; i++) {
+      const e = w.dragons.eggs[i];
+      if ((e.at === "ground" || e.at === "camp") && e.x > x0 && e.x < x1 && e.y > y0 && e.y < y1 + 20) list.push({ y: e.y, k: K_DEGG, i });
     }
     // Neanderthals, their camps and anything they've thrown
     const rv = w.rivals;
@@ -385,10 +405,10 @@ export class Renderer {
       } else continue;
       c.drawImage(this.shadowSprite, sx - r + sunX * (r / 40), sy - r * 0.35, r * 2, r * 0.7);
     }
-    for (const dr of w.dragons.list) {
+    for (const dr of w.dragons.all()) {
       if (dr.x < x0 - 200 || dr.x > x1 + 200 || dr.y < y0 || dr.y > y1 + 200) continue;
       c.globalAlpha = shadowA * (dr.z > 6 ? 0.45 : 0.8);
-      const r = 70 - Math.min(30, dr.z * 0.08);
+      const r = (70 - Math.min(30, dr.z * 0.08)) * dragonStats(dr).scale;
       c.drawImage(this.shadowSprite, dr.x - r + dr.z * 0.25, dr.y - r * 0.3, r * 2, r * 0.6);
     }
     // flyer shadows on the ground
@@ -456,41 +476,9 @@ export class Renderer {
         case K_DINO:
           this.drawDinoAt(c, w.dinos[it.i], ov);
           break;
-        case K_HUMAN: {
-          const h = w.humans[it.i];
-          const picked = ov.selection.includes(h.id);
-          if (picked || h.id === ov.followId) {
-            c.save();
-            c.strokeStyle = picked ? "rgba(255,214,80,0.95)" : "rgba(255,255,255,0.8)";
-            c.lineWidth = 2;
-            c.setLineDash([5, 4]);
-            c.lineDashOffset = -this.t * 16;
-            c.beginPath();
-            c.ellipse(h.x, h.y - h.z + 1, 12, 5, 0, 0, Math.PI * 2);
-            c.stroke();
-            c.setLineDash([]);
-            c.restore();
-          }
-          c.save();
-          c.translate(h.x, h.y - h.z);
-          if (h.stranger) c.globalAlpha = 0.85;
-          const role = tribe.roleOf(h);
-          const wp = !h.child ? tribe.weaponFor(w, h) : null;
-          const look: WeaponLook = wp ? (wp.proj === "beam" ? "lance" : wp.kind === "bow" ? (wp.tier >= 3 ? "crossbow" : "bow") : wp.kind) : weapon;
-          const helmDef = h.gear.helmet ? HELMET_BY_ID[h.gear.helmet] : null;
-          const coat = h.gear.outfit ? OUTFIT_BY_ID[h.gear.outfit] : null;
-          // everyday clothes get better as the tribe learns
-          const garb: GarbLevel = w.civ.polygonAge ? 3 : w.camp.learned.has("smelting") ? 2 : w.camp.learned.has("palisade") ? 1 : 0;
-          drawHuman(c, h, this.t, look, role === "guard" || role === "hunter" || !!h.order || h.taskId > 0 || tribe.raid !== null, h.gear.shield, wp?.tier ?? 1, coat, w.weather.rain, helmDef ? { color: helmDef.color, trim: helmDef.trim, glow: helmDef.glow } : null, garb);
-          if (h.state === "down") {
-            const a = this.t * 3;
-            c.font = "9px sans-serif";
-            c.textAlign = "center";
-            c.fillText("💫", Math.cos(a) * 6, -10 + Math.sin(a) * 2);
-          }
-          c.restore();
+        case K_HUMAN:
+          this.drawPerson(c, w.humans[it.i], ov, weapon);
           break;
-        }
         case K_BUILDING: {
           const b = col.buildings[it.i];
           const def = BUILDINGS[b.kind];
@@ -574,11 +562,22 @@ export class Renderer {
           c.restore();
           break;
         }
-        case K_DRAGON: {
-          const dr = w.dragons.list[it.i];
+        case K_DRAGON:
+          this.drawDragonAt(c, this.drs[it.i], ov, weapon);
+          break;
+        case K_NEST: {
+          const n = w.dragons.nests[it.i];
           c.save();
-          c.translate(dr.x, dr.y - dr.z);
-          drawDragon(c, dr, this.t);
+          c.translate(n.x, n.y);
+          drawNest(c, n, w.dragons.eggs.filter((e) => e.at === "nest" && e.nest === n.id), this.t);
+          c.restore();
+          break;
+        }
+        case K_DEGG: {
+          const e = w.dragons.eggs[it.i];
+          c.save();
+          c.translate(e.x, e.y);
+          drawDragonEgg(c, e, this.t);
           c.restore();
           break;
         }
@@ -750,15 +749,12 @@ export class Renderer {
 
     // flyers above everything else on the ground
     const flyers: Dino[] = [];
-    for (const dn of w.dinos) if (sp(dn.species).move === "fly" && dn.z > 6 && dn.x > x0 && dn.x < x1 && dn.y - dn.z > y0 - 200 && dn.y - dn.z < y1) flyers.push(dn);
+    for (const dn of w.dinos) if (sp(dn.species).move === "fly" && dn.z > 6 && !dn.rider && !dn.passengers?.length && dn.x > x0 && dn.x < x1 && dn.y - dn.z > y0 - 200 && dn.y - dn.z < y1) flyers.push(dn);
     flyers.sort((a, b) => a.y - b.y);
     for (const dn of flyers) this.drawDinoAt(c, dn, ov);
-    for (const dr of w.dragons.list) {
+    for (const dr of w.dragons.all()) {
       if (dr.z <= 6 || dr.x < x0 - 200 || dr.x > x1 + 200 || dr.y - dr.z > y1 || dr.y - dr.z < y0 - 260) continue;
-      c.save();
-      c.translate(dr.x, dr.y - dr.z);
-      drawDragon(c, dr, this.t);
-      c.restore();
+      this.drawDragonAt(c, dr, ov, weapon);
     }
 
     // carcass ropes + flying arrows / bolts / spears
@@ -876,6 +872,53 @@ export class Renderer {
     this.cost = this.cost * 0.92 + (performance.now() - t0) * 0.08;
   }
 
+  /** One person (also used for riders on a dragon's back). */
+  private drawPerson(c: CanvasRenderingContext2D, h: Human, ov: Overlay, weapon: WeaponLook) {
+    const w = this.world;
+    const tribe = w.tribe;
+      const picked = ov.selection.includes(h.id);
+      if (picked || h.id === ov.followId) {
+        c.save();
+        c.strokeStyle = picked ? "rgba(255,214,80,0.95)" : "rgba(255,255,255,0.8)";
+        c.lineWidth = 2;
+        c.setLineDash([5, 4]);
+        c.lineDashOffset = -this.t * 16;
+        c.beginPath();
+        c.ellipse(h.x, h.y - h.z + 1, 12, 5, 0, 0, Math.PI * 2);
+        c.stroke();
+        c.setLineDash([]);
+        c.restore();
+      }
+      c.save();
+      c.translate(h.x, h.y - h.z);
+      if (h.stranger) c.globalAlpha = 0.85;
+      const role = tribe.roleOf(h);
+      const wp = !h.child ? tribe.weaponFor(w, h) : null;
+      const look: WeaponLook = wp ? (wp.proj === "beam" ? "lance" : wp.kind === "bow" ? (wp.tier >= 3 ? "crossbow" : "bow") : wp.kind) : weapon;
+      const helmDef = h.gear.helmet ? HELMET_BY_ID[h.gear.helmet] : null;
+      const coat = h.gear.outfit ? OUTFIT_BY_ID[h.gear.outfit] : null;
+      // everyday clothes get better as the tribe learns
+      const garb: GarbLevel = w.civ.polygonAge ? 3 : w.camp.learned.has("smelting") ? 2 : w.camp.learned.has("palisade") ? 1 : 0;
+      drawHuman(c, h, this.t, look, role === "guard" || role === "hunter" || !!h.order || h.taskId > 0 || tribe.raid !== null, h.gear.shield, wp?.tier ?? 1, coat, w.weather.rain, helmDef ? { color: helmDef.color, trim: helmDef.trim, glow: helmDef.glow } : null, garb, w.shifts.poweredOutfit(w, h));
+      if (h.state === "down") {
+        const a = this.t * 3;
+        c.font = "9px sans-serif";
+        c.textAlign = "center";
+        c.fillText("💫", Math.cos(a) * 6, -10 + Math.sin(a) * 2);
+      }
+      c.restore();
+    if (h.egg) {
+      // a dragon egg in their arms
+      const egg = w.dragons.eggs.find((e) => e.id === h.egg);
+      if (egg) {
+        c.save();
+        c.translate(h.x + h.dir * 6, h.y - h.z - 6);
+        drawDragonEgg(c, egg, this.t, 0.95);
+        c.restore();
+      }
+    }
+  }
+
   hidden(h: Human) {
     if (h.state !== "hide" && h.state !== "sleep" && h.state !== "rest") return false;
     const w = this.world;
@@ -985,6 +1028,31 @@ export class Renderer {
     return def;
   }
 
+  /** dragons visible this frame (wild + ours), indexed by the depth sort */
+  private drs: Dragon[] = [];
+
+  /** A dragon (selection ring, the dragon, then whoever is riding it). */
+  private drawDragonAt(c: CanvasRenderingContext2D, dr: Dragon, ov: Overlay, weapon: WeaponLook) {
+    if (dr.id === ov.selectedId || dr.id === ov.followId) {
+      const s = dragonStats(dr).scale;
+      c.save();
+      c.strokeStyle = dr.id === ov.followId ? "rgba(255,215,90,0.95)" : "rgba(160,255,190,0.95)";
+      c.lineWidth = 2.5;
+      c.setLineDash([7, 5]);
+      c.lineDashOffset = -this.t * 20;
+      c.beginPath();
+      c.ellipse(dr.x, dr.y + 2, 46 * s, 16 * s, 0, 0, Math.PI * 2);
+      c.stroke();
+      c.restore();
+    }
+    c.save();
+    c.translate(dr.x, dr.y - dr.z);
+    drawDragon(c, dr, this.t);
+    c.restore();
+    const h = dr.rider ? this.world.humans.find((x) => x.id === dr.rider && x.aloft === dr.id) : null;
+    if (h) this.drawPerson(c, h, ov, weapon);
+  }
+
   private drawDinoAt(c: CanvasRenderingContext2D, dn: Dino, ov: Overlay) {
     const def = this.lookFor(dn);
     const L = sizeOf(dn);
@@ -1025,6 +1093,25 @@ export class Renderer {
       c.stroke();
     }
     drawDino(c, def, L, dn.dir, pose);
+    if (dn.work?.partner && !isBaby(dn)) {
+      // a Dino Rider team: a riding blanket + the team pennant on a pole at the back of the saddle
+      const fly = def.move === "fly";
+      const y = fly ? -L * 0.12 : -L * 0.42;
+      c.save();
+      c.scale(dn.dir, 1);
+      c.fillStyle = "#3a6fb0";
+      c.strokeStyle = "#e7d9b0";
+      c.lineWidth = Math.max(1, L * 0.012);
+      c.beginPath(); c.ellipse(0, y + L * 0.03, L * (fly ? 0.1 : 0.17), L * 0.045, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      const px = -L * (fly ? 0.1 : 0.2);
+      const top = y - L * (fly ? 0.18 : 0.26) - 6;
+      c.strokeStyle = "#5e3f24"; c.lineWidth = Math.max(1.2, L * 0.012);
+      c.beginPath(); c.moveTo(px, y); c.lineTo(px, top); c.stroke();
+      c.fillStyle = "#e0b43a";
+      const flap = Math.sin(this.t * 6 + dn.id) * 1.5;
+      c.beginPath(); c.moveTo(px, top); c.lineTo(px - 10 - L * 0.04, top + 3 + flap); c.lineTo(px, top + 7); c.closePath(); c.fill();
+      c.restore();
+    }
     if (dn.work?.harness && !isBaby(dn)) {
       const work = dn.work;
       c.save();
@@ -1848,14 +1935,14 @@ export class Renderer {
     L.fillStyle = `rgb(${mr},${mg},${mb})`;
     L.fillRect(0, 0, lw, lh);
     L.globalCompositeOperation = "lighter";
-    const lights: [number, number, number, number][] = [];
+    const lights: [number, number, number, number, boolean?][] = [];
     const z = cam.zoom;
-    const add = (wx: number, wy: number, rad: number, a: number) => {
+    const add = (wx: number, wy: number, rad: number, a: number, cool = false) => {
       const sx = ((wx - cam.x) * z + this.w / 2) / 2;
       const sy = ((wy - cam.y) * z + this.h / 2) / 2;
       const rr = (rad * z) / 2;
       if (sx + rr < 0 || sy + rr < 0 || sx - rr > lw || sy - rr > lh) return;
-      lights.push([sx, sy, rr, a]);
+      lights.push([sx, sy, rr, a, cool]);
     };
     for (const f of w.campfires) if (f.lit) add(f.x, f.y - 10, 240 + Math.sin(this.t * 9) * 8, 1);
     for (const b of w.colony.buildings) if (b.kind === "boneTorch" && b.built >= 1 && b.hp > 0) add(b.x, b.y - 43, 135 + Math.sin(this.t * 11 + b.id) * 5, 0.9);
@@ -1880,15 +1967,17 @@ export class Renderer {
     for (const s of w.shelters) if (s.stage >= 2) add(s.x, s.y - 8, HOUSING[s.tier]?.hearth && shelterDone(s) ? 120 : 80, HOUSING[s.tier]?.hearth && shelterDone(s) ? 0.85 : 0.6);
     for (const b of w.colony.buildings) if (b.kind === "blacksmith" && b.built >= 1) add(b.x - 10, b.y - 12, 110, 0.75);
     // crystals light up the night (brighter in storms)
-    if (w.civ.energy > 1) for (const b of w.colony.buildings) if (b.built >= 1 && (b.kind === "energyTower" || b.kind === "chamber" || b.kind === "beamTower" || b.kind === "obelisk" || b.kind === "pyramid" || b.kind === "resShield")) add(b.x, b.y - (b.kind === "pyramid" ? 120 : 50), b.kind === "pyramid" ? 260 : 90, 0.55 + w.weather.storm * 0.3);
+    if (w.civ.energy > 1) for (const b of w.colony.buildings) if ((b.built >= 1 || pyramidAwake(b)) && (b.kind === "energyTower" || b.kind === "chamber" || b.kind === "beamTower" || b.kind === "obelisk" || b.kind === "pyramid" || b.kind === "resShield")) add(b.x, b.y - (b.kind === "pyramid" ? 120 : 50), b.kind === "pyramid" ? (pyramidCased(b) ? 340 : 260) : 90, 0.55 + w.weather.storm * 0.3);
+    for (const h of w.humans) if (!h.under && h.state !== "sleep" && h.state !== "hide" && w.shifts.poweredOutfit(w, h)) add(h.x, h.y - h.z - 14, 135, 0.58, true);
     if (w.civ.chamberX && w.civ.path !== "traditional") add(w.civ.chamberX, w.civ.chamberY - 14, 70, 0.6);
     for (const b of w.civ.beams) add(b.x1, b.y1, 160, 1 - b.t / 0.35);
-    for (const dr of w.dragons.list) if (dr.breath > 0.1) add(dr.x + dr.dir * 80, dr.y - dr.z * 0.5, 260, dr.breath);
+    for (const dr of w.dragons.all()) if (dr.breath > 0.1) add(dr.burst && dr.aimX !== undefined ? dr.aimX : dr.x + dr.dir * 80, dr.burst && dr.aimY !== undefined ? dr.aimY : dr.y - dr.z * 0.5, 260, dr.breath);
+    for (const e of w.dragons.eggs) if (e.at === "camp" && e.heat > 0.55) add(e.x, e.y - 8, 40, 0.4);
     for (const m of w.meteors) add(m.x + (1 - m.t / m.dur) * 900, m.y - (1 - m.t / m.dur) * 1300, 300, 1);
     for (const b of w.bolts) add(b.x, b.y, 900, 1 - b.t / 0.6);
-    for (const [sx, sy, rr, a] of lights) {
+    for (const [sx, sy, rr, a, cool] of lights) {
       L.globalAlpha = a;
-      L.drawImage(this.warmLight, sx - rr, sy - rr, rr * 2, rr * 2);
+      L.drawImage(cool ? this.glowSprite : this.warmLight, sx - rr, sy - rr, rr * 2, rr * 2);
     }
     L.globalAlpha = 1;
     L.globalCompositeOperation = "source-over";
@@ -1906,9 +1995,9 @@ export class Renderer {
     c.globalCompositeOperation = "source-over";
     // warm additive glow around fire sources
     c.globalCompositeOperation = "lighter";
-    for (const [sx, sy, rr, a] of lights) {
+    for (const [sx, sy, rr, a, cool] of lights) {
       c.globalAlpha = a * dark * 0.55;
-      c.drawImage(this.warmSprite, sx * 2 - rr * 1.2, sy * 2 - rr * 1.2, rr * 2.4, rr * 2.4);
+      c.drawImage(cool ? this.glowSprite : this.warmSprite, sx * 2 - rr * 1.2, sy * 2 - rr * 1.2, rr * 2.4, rr * 2.4);
     }
     c.globalCompositeOperation = "source-over";
     c.globalAlpha = 1;
@@ -2118,19 +2207,30 @@ export class Renderer {
       }
     }
     // dragons: a big health bar
-    for (const dr of w.dragons.list) {
+    for (const dr of w.dragons.all()) {
       if (dr.x < x0 - 200 || dr.x > x1 + 200) continue;
-      drawBar(c, dr.x, dr.y - dr.z - 80, 80, dr.hp / dr.maxHp, dr.hp < dr.maxHp * 0.35 ? "#fbbf24" : "#ef4444");
+      const top = dr.y - dr.z - 80 * dragonStats(dr).scale;
+      if (dr.owner) {
+        // ours: a name tag, and a green bar only when hurt
+        if (dr.hp < dr.maxHp * 0.98) drawBar(c, dr.x, top, 60, dr.hp / dr.maxHp, "#4ade80");
+        c.font = `700 ${10 * inv}px ui-rounded, system-ui, sans-serif`;
+        c.textAlign = "center";
+        c.fillStyle = "rgba(190,255,200,0.92)";
+        c.fillText(`🐉 ${dr.name}`, dr.x, top - 6);
+        continue;
+      }
+      if (dr.state === "perch" && dr.hp >= dr.maxHp * 0.98) continue;
+      drawBar(c, dr.x, top, 80, dr.hp / dr.maxHp, dr.hp < dr.maxHp * 0.35 ? "#fbbf24" : "#ef4444");
       c.font = `700 ${11 * inv}px ui-rounded, system-ui, sans-serif`;
       c.textAlign = "center";
       c.fillStyle = "rgba(255,255,255,0.9)";
-      c.fillText(dr.name, dr.x, dr.y - dr.z - 86);
+      c.fillText(dr.name, dr.x, top - 6);
     }
     // Scorpions: crew + reload ring
     for (const s of w.colony.scorpions) {
       if (s.built < 1 || s.x < x0 || s.x > x1 || s.y < y0 || s.y > y1) continue;
       const lift = s.mount === "tower" ? TOWER_Z : s.mount === "wall" ? 26 : 0;
-      if (!s.crew && (w.tribe.raid || w.dragons.list.length)) this.bubbleIcon(c, s.x, s.y - lift - 42, "❔", inv * 0.8, 0.9);
+      if (!s.crew && (w.tribe.raid || w.dragons.menacing(w))) this.bubbleIcon(c, s.x, s.y - lift - 42, "❔", inv * 0.8, 0.9);
       if (ov.inspect?.kind === "scorpion" && ov.inspect.id === s.id) this.inspectRing(c, s.x, s.y - lift, 26);
     }
     // inspected home / building

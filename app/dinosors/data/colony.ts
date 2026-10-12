@@ -11,6 +11,7 @@ export type Cost = Partial<Record<Resource, number>>;
 export const RES_INFO: Record<Resource, { icon: string; name: string }> = {
   stick: { icon: "🪵", name: "Sticks" },
   stone: { icon: "🪨", name: "Stone" },
+  limestone: { icon: "⬜", name: "Limestone" },
   grass: { icon: "🌾", name: "Grass" },
   leaves: { icon: "🍃", name: "Leaves" },
   wood: { icon: "🪓", name: "Logs" },
@@ -73,6 +74,16 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   foodStore: { kind: "foodStore", icon: "🍱", name: "Food store", tip: "Keeps food safe: raiders steal far less.", cost: { wood: 4, leaves: 4 }, w: 2, h: 1, solid: true, tech: "basket", work: 5, hp: 260 },
   waterStore: { kind: "waterStore", icon: "🏺", name: "Water store", tip: "Clay jars of water for fighting fires and greener fields.", cost: { clay: 4, wood: 2 }, w: 1, h: 1, solid: true, tech: "fire", work: 4, hp: 220 },
   well: { kind: "well", icon: "🪣", name: "Freshwater well", tip: "Build on shallow fresh water. A finished well keeps the camp supplied with water.", cost: { stone: 3, stick: 3 }, w: 1, h: 1, solid: false, work: 4, hp: 240 },
+  canopy: { kind: "canopy", icon: "⛱️", name: "Hide awning", tip: "A hide shade on poles with seats under it. People rest + chat here in their free time and shelter from rain and hot sun.", cost: { stick: 3, hide: 2 }, w: 1, h: 1, solid: false, work: 3, hp: 90 },
+  seatRing: { kind: "seatRing", icon: "🪵", name: "Seating ring", tip: "A ring of log seats. Put it near a campfire: more people can gather in the evening, and it's a lovely spot to rest by day.", cost: { wood: 3 }, w: 2, h: 2, solid: false, tech: "axe", work: 3, hp: 120 },
+  pavilion: { kind: "pavilion", icon: "🛖", name: "Covered rest area", tip: "A big wooden shade shelter with benches. Keeps the rain off; people rest, heal and talk here (it's where neighbourhoods meet).", cost: { wood: 5, stick: 4, leaves: 4 }, w: 3, h: 2, solid: false, tech: "axe", work: 6, hp: 220 },
+  stable: { kind: "stable", icon: "🐴", name: "Stable", tip: "Bonded riding dinosaurs sleep here and recover faster; their riders feed them here. Trainers train 20% faster near it.", cost: { wood: 6, stick: 4, grass: 4 }, w: 3, h: 2, solid: false, tech: "taming", work: 7, hp: 260 },
+  perch: { kind: "perch", icon: "🪶", name: "Flyer perch", tip: "A tall perch for trained flyers: their home between scouting flights.", cost: { wood: 4, stick: 3 }, w: 1, h: 1, solid: false, tech: "taming", work: 4, hp: 140 },
+  roost: { kind: "roost", icon: "🐉", name: "Dragon roost", tip: "A huge timber-and-stone roost for grown dragons: they sleep here, heal and get their strength back 50% faster. Needs a lot of room.", cost: { wood: 10, stone: 8, hide: 4 }, w: 4, h: 3, solid: false, tech: "taming", work: 12, hp: 600 },
+  hatchery: { kind: "hatchery", icon: "🥚", name: "Incubation shelter", tip: "A warm stone shelter for dragon eggs. Keep it fuelled (a trainer stokes it with wood, sticks or coal) and an egg inside stays warm, rain or snow.", cost: { stone: 6, clay: 3, wood: 3 }, w: 2, h: 2, solid: true, tech: "taming", work: 8, hp: 400 },
+  dragonYard: { kind: "dragonYard", icon: "🎯", name: "Dragon training area", tip: "A big fenced practice ground. Dragon lessons here go 40% faster.", cost: { wood: 8, stick: 6 }, w: 4, h: 3, solid: false, tech: "taming", work: 8, hp: 260 },
+  feedPit: { kind: "feedPit", icon: "🍖", name: "Dragon feeding area", tip: "A stone trough where dragons eat from the meat + fish stores. Food here fills them up 30% more.", cost: { stone: 5, wood: 3 }, w: 2, h: 1, solid: false, tech: "taming", work: 5, hp: 220 },
+  tack: { kind: "tack", icon: "🧰", name: "Tack + harness station", tip: "Saddles, harnesses + cargo frames. Trainers train 25% faster with it, and rider teams carry more.", cost: { wood: 3, hide: 3, bone: 2 }, w: 2, h: 1, solid: true, tech: "taming", work: 5, hp: 180 },
   healer: { kind: "healer", icon: "🌿", name: "Healing hut", tip: "Hurt people rest here and heal twice as fast.", cost: { wood: 4, leaves: 6 }, w: 2, h: 2, solid: true, tech: "medicine", work: 6, hp: 280 },
   pen: { kind: "pen", icon: "🐾", name: "Animal pen", tip: "Battle-trained pets rest inside at night and stay close between fights. They still leave to eat, drink, defend and carry riders.", cost: { stick: 8, wood: 2 }, w: 3, h: 2, solid: false, tech: "taming", work: 5, hp: 200 },
   post: { kind: "post", icon: "🚩", name: "Gathering post", tip: "A far-away drop-off for wood, stone and ore.", cost: { stick: 4 }, w: 1, h: 1, solid: false, work: 2, hp: 120 },
@@ -98,7 +109,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   levPad: { kind: "levPad", icon: "🪶", name: "Lift pad", tip: "Floats shaped blocks to monuments within range (much faster building) and lets you place megaliths with the Levitate tool.", cost: { shaped: 2, magnetite: 2, copper: 1 }, w: 2, h: 2, solid: false, civ: "levitation", work: 8, hp: 400 },
   beamTower: { kind: "beamTower", icon: "🔆", name: "Beam tower", tip: "Fires a crystal beam at attackers and dragons (uses energy, needs to cool down). Beams can light dry grass!", cost: { shaped: 2, crystal: 1, copper: 2 }, w: 1, h: 1, solid: true, civ: "energyWeapons", work: 10, hp: 520 },
   pylon: { kind: "pylon", icon: "🔹", name: "Pylon", tip: "Pylons near each other link into a humming barrier that pushes dinosaurs back. Uses energy.", cost: { copper: 1, magnetite: 1, stone: 2 }, w: 1, h: 1, solid: true, civ: "defensiveEnergy", work: 5, hp: 320 },
-  pyramid: { kind: "pyramid", icon: "🔺", name: "Pyramid", tip: "A huge project in 6 stages: foundation, lower courses, main structure, inner chamber, capstone, activation. Then it powers everything.", cost: PYRAMID_STAGES[0].cost, w: 5, h: 4, solid: true, civ: "monumental", work: PYRAMID_STAGES[0].work, hp: 4000 },
+  pyramid: { kind: "pyramid", icon: "🔺", name: "Pyramid", tip: "Seven stages. Activate the core, then clad the pyramid in smooth limestone for more power, storage and a brighter beam.", cost: PYRAMID_STAGES[0].cost, w: 5, h: 4, solid: true, civ: "monumental", work: PYRAMID_STAGES[0].work, hp: 4000 },
   resShield: { kind: "resShield", icon: "🌀", name: "Resonance shield", tip: "Raises a dome of energy over the camp. With enough stored energy it might hold when the sky falls.", cost: { crystal: 3, meteorite: 2, shaped: 4, copper: 4 }, w: 2, h: 2, solid: true, civ: "advancedArch", work: 16, hp: 900 },
 };
 
@@ -192,6 +203,7 @@ export const WEAPONS: WeaponDef[] = [
   { id: "bow3", kind: "bow", tier: 3, name: "Heavy bow", icon: "🎯", melee: false, proj: "bolt", range: 340, dmg: 46, cd: 2, speed: 820, prey: 150, cost: { wood: 2, iron: 1, tar: 1 }, at: "blacksmith" },
   // fantasy tech: a crystal-tipped staff that throws a bolt of light
   { id: "lance", kind: "spear", tier: 3, name: "Resonance lance", icon: "🔆", melee: false, proj: "beam", range: 300, dmg: 58, cd: 1.9, speed: 1500, prey: 140, cost: { copper: 2, crystal: 1, wood: 1 }, at: "workshop", civ: "precisionStone" },
+  { id: "nightSidearm", kind: "bow", tier: 3, name: "Night energy sidearm", icon: "⚡", melee: false, proj: "beam", range: 230, dmg: 42, cd: 2.3, speed: 1350, prey: 105, cost: { copper: 3, crystal: 2, quartz: 1 }, at: "workshop", civ: "nightDefenseGear" },
 ];
 
 export const WEAPON_BY_ID: Record<string, WeaponDef> = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
@@ -225,6 +237,7 @@ export const SHIELD_BY_ID: Record<string, ShieldDef> = Object.fromEntries(SHIELD
 
 export interface OutfitDef {
   id: string;
+  civ?: CivTechId;
   name: string;
   icon: string;
   /** 0..1 how much rain + wet it keeps off */
@@ -240,13 +253,22 @@ export interface OutfitDef {
   color: string;
   trim: string;
   hood: boolean;
+  /** winter gear tier (1 basic hide … 4 elite): drawn with fur trim, boots + mitts */
+  winter?: number;
 }
 
 export const OUTFITS: OutfitDef[] = [
   { id: "cloak", name: "Hide cloak", icon: "🧥", rain: 0.35, warmth: 0.35, armor: 0, cost: { hide: 2 }, at: "tannery", tip: "A warm hide cloak. Keeps off some rain and chill.", color: "#9b6b43", trim: "#6b4527", hood: false },
   { id: "raincloak", name: "Rainproof cloak", icon: "🌧️", rain: 0.92, warmth: 0.3, armor: 0, cost: { hide: 3, tar: 1 }, at: "tannery", tip: "Tar-sealed hide with a hood. Workers keep going in rain and storms.", color: "#4f5a3c", trim: "#2c321f", hood: true },
   { id: "tunic", name: "Hide tunic", icon: "🦺", rain: 0.2, warmth: 0.25, armor: 0.12, cost: { hide: 2, bone: 1 }, at: "tannery", tip: "Thick hide with bone toggles: light armour against bites.", color: "#7d5233", trim: "#e9dcc0", hood: false },
-  { id: "furs", name: "Insulated furs", icon: "🧣", rain: 0.45, warmth: 0.88, armor: 0.06, cost: { hide: 4, grass: 2 }, at: "tannery", tip: "Double hide stuffed with grass. For snow, blizzards and mountain trips.", color: "#a88a68", trim: "#f4efe6", hood: true },
+  // winter gear: basic hide gear → fur winter gear → reinforced → elite cold-weather gear
+  { id: "hideGear", name: "Basic hide gear", icon: "🧤", rain: 0.3, warmth: 0.6, armor: 0.04, cost: { hide: 3, grass: 1 }, at: "tannery", tip: "Hood, boots + mitts of hide. Fewer cold days lost, a little faster through snow.", color: "#8a6240", trim: "#d9c7a5", hood: true, winter: 1 },
+  { id: "furs", name: "Fur winter gear", icon: "🧣", rain: 0.45, warmth: 0.88, armor: 0.06, cost: { hide: 4, grass: 2 }, at: "tannery", tip: "Double hide stuffed with grass, fur-lined. Keeps people working through snow, blizzards and mountain trips.", color: "#a88a68", trim: "#f4efe6", hood: true, winter: 2 },
+  { id: "winterMail", name: "Reinforced winter gear", icon: "🥾", rain: 0.55, warmth: 0.93, armor: 0.15, cost: { hide: 4, bone: 3, grass: 2 }, at: "tannery", tip: "Fur gear with bone-plated boots + shoulders: warm and tough. Guards can hold the walls in a blizzard.", color: "#7a6a58", trim: "#efe7da", hood: true, winter: 3 },
+  { id: "eliteWinter", name: "Elite cold-weather gear", icon: "🏔️", rain: 0.75, warmth: 1, armor: 0.25, cost: { hide: 5, iron: 2, copperBar: 1 }, at: "blacksmith", tip: "Iron-ringed fur armour with sealed boots. Nothing slows them in the snow; cold barely touches them.", color: "#5f6670", trim: "#f6f2ea", hood: true, winter: 4 },
+  { id: "nightHide", civ: "nightClothing", name: "Night hide gear", icon: "🌙", rain: 0.7, warmth: 0.7, armor: 0.12, cost: { hide: 3, copper: 1 }, at: "tannery", tip: "Dark hide, covered shoulders, utility belt and strong boots for night work.", color: "#253044", trim: "#82a3b5", hood: true },
+  { id: "nightLit", civ: "energyLitClothing", name: "Resonance night suit", icon: "💠", rain: 0.9, warmth: 0.85, armor: 0.2, cost: { hide: 3, copper: 2, quartz: 1, crystal: 1 }, at: "workshop", tip: "Fantasy pyramid-powered chest and shoulder lights. Falls back to dark hide when the grid is off.", color: "#202d3c", trim: "#62dce6", hood: true },
+  { id: "nightArmor", civ: "nightDefenseGear", name: "Night defense suit", icon: "🛡️", rain: 0.95, warmth: 0.9, armor: 0.32, cost: { hide: 4, copper: 2, crystal: 1, shaped: 1 }, at: "workshop", tip: "Reinforced boots, shoulder plates and powered trim for night guards.", color: "#1c2733", trim: "#9ceef2", hood: true },
 ];
 
 export const OUTFIT_BY_ID: Record<string, OutfitDef> = Object.fromEntries(OUTFITS.map((o) => [o.id, o]));
@@ -334,7 +356,7 @@ export interface ForgeItem {
 export const FORGE_ITEMS: ForgeItem[] = [
   ...WEAPONS.map((w) => ({ id: w.id, name: w.name, icon: w.icon, tier: w.tier, cost: w.cost, at: w.at as string, tech: w.tech, civ: w.civ, cat: "weapons" as ForgeCat })),
   ...SHIELDS.map((s) => ({ id: s.id, name: s.name, icon: "🛡️", tier: s.tier, cost: s.cost, at: s.at as string, tech: undefined, cat: "shields" as ForgeCat })),
-  ...OUTFITS.map((o) => ({ id: o.id, name: o.name, icon: o.icon, tier: 1, cost: o.cost, at: o.at as string, tech: undefined, cat: "gear" as ForgeCat, tip: o.tip })),
+  ...OUTFITS.map((o) => ({ id: o.id, name: o.name, icon: o.icon, tier: 1, cost: o.cost, at: o.at as string, tech: undefined, civ: o.civ, cat: "gear" as ForgeCat, tip: o.tip })),
   ...HELMETS.map((h) => ({ id: h.id, name: h.name, icon: h.icon, tier: 2, cost: h.cost, at: h.at as string, tech: undefined, civ: h.civ, cat: "gear" as ForgeCat, tip: h.tip })),
   ...KITS.map((k) => ({ id: k.id, name: k.name, icon: k.icon, tier: 1, cost: k.cost, at: k.at as string, tech: undefined, civ: k.civ, cat: "kits" as ForgeCat, tip: k.tip })),
 ];
@@ -375,6 +397,7 @@ export const SCORPION_TIERS: ScorpionTier[] = [
 
 export const NODES: Record<NodeKind, { icon: string; name: string; gives: Resource | null; per: number; amount: [number, number]; hidden: boolean; color: string; needs?: TechId }> = {
   stone: { icon: "🪨", name: "Loose stone", gives: "stone", per: 2, amount: [14, 22], hidden: false, color: "#9b958b" },
+  limestone: { icon: "⬜", name: "Limestone outcrop", gives: "limestone", per: 2, amount: [14, 22], hidden: false, color: "#e0d8bd", needs: "tools" },
   clay: { icon: "🟫", name: "Clay lumps", gives: "clay", per: 2, amount: [10, 16], hidden: false, color: "#b6764f" },
   flint: { icon: "🔷", name: "Flint shards", gives: "flint", per: 2, amount: [8, 14], hidden: false, color: "#5f7d99" },
   iron: { icon: "⛓️", name: "Iron ore chunks", gives: "iron", per: 1, amount: [10, 16], hidden: true, color: "#9a5a46", needs: "tools" },
@@ -411,4 +434,4 @@ export const ARTIFACTS = [
 /** Species gentle enough (and big enough) to ride. */
 export const RIDEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo", "apato", "brachio"]);
 /** Herbivores the tribe can befriend at all. */
-export const TAMEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo", "pachy", "apato", "brachio"]);
+export const TAMEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo", "pachy", "apato", "brachio", "ptera"]);

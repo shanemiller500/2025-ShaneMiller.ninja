@@ -46,7 +46,7 @@ export class Population {
     this.timer = 300 + w.rng() * 260;
     const residents = w.humans.filter((h) => !h.stranger).length;
     const strangers = w.humans.length - residents;
-    const safe = !w.tribe.raid && !w.dragons.list.length && w.daylight > 0.4;
+    const safe = !w.tribe.raid && !w.dragons.menacing(w) && w.daylight > 0.4;
     const fed = w.tribe.foodTotal(w) >= 3;
     if (!safe || !fed || strangers > 0 || residents >= Math.min(MAX_PEOPLE, this.capacity(w) + 2) || residents < 2) return;
     this.spawnWanderers(w);

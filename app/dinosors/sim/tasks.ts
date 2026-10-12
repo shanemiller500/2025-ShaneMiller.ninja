@@ -15,7 +15,7 @@ import { NODES, RIDEABLE, TAMEABLE, WEAPON_BY_ID } from "../data/colony";
 import { sp } from "../data/species";
 import { deliver, siteByKey, siteKey, siteOnTop, sites, wallMaxHp, wallStretch, work, type Site } from "./build";
 import { isBaby, setState, emote, sizeOf } from "./dinos";
-import { go, say, sourceFor } from "./humans";
+import { go, heavyRider, say, sourceFor } from "./humans";
 import { condition } from "./injury";
 import { carcassStage, cutTime, harvesters, hasYield, STAGE_LABEL } from "./carcass";
 import { RES_INFO } from "../data/colony";
@@ -23,7 +23,8 @@ import { TALL } from "./plants";
 import { pick } from "./rng";
 import { isWaterTile } from "./terrain";
 import { tileOf } from "./nav";
-import { MAP_W, T, TILE, type Brute, type Dino, type Dragon, type Human, type Item, type Plant, type Resource, type WeaponKind } from "./types";
+import { MAP_W, T, TILE, type Brute, type Dino, type Dragon, type DragonEgg, type DragonNest, type Human, type Item, type Plant, type Resource, type WeaponKind } from "./types";
+import { eggHuntThink, trackThink } from "./dragonNests";
 import type { World } from "./world";
 
 export type TaskKind =
@@ -54,7 +55,11 @@ export type TaskKind =
   | "smith"
   | "douse"
   | "butcher"
-  | "raid";
+  | "raid"
+  /** follow a wild dragon's trail to its nest */
+  | "trackDragon"
+  /** sneak to a dragon nest, take an egg, bring it home */
+  | "eggHunt";
 
 export interface Task {
   id: number;
@@ -172,6 +177,10 @@ export interface Picked {
   dino: Dino | null;
   human: Human | null;
   dragon: Dragon | null;
+  /** a dragon nest (found ones only) */
+  nest?: DragonNest | null;
+  /** a dragon egg lying on the ground */
+  egg?: DragonEgg | null;
   brute?: Brute | null;
 }
 
@@ -205,9 +214,22 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
     if (!armed) return { kind: "move", icon: "😬", label: "Nobody has a weapon to fight a Neanderthal!", x: b.x, y: b.y, target: 0 };
     return { kind: "hunt", icon: "🪓", label: `Fight ${b.name} the Neanderthal`, x: b.x, y: b.y, target: b.id, weapons: kinds };
   }
+  if (picked.egg && adults.length) {
+    const e = picked.egg;
+    return { kind: "eggHunt", icon: "🥚", label: "Pick up the dragon egg and bring it home", x: e.x, y: e.y, target: e.nest };
+  }
+  if (picked.nest && adults.length) {
+    const n = picked.nest;
+    const eggs = w.dragons.eggs.filter((e) => e.at === "nest" && e.nest === n.id).length;
+    const steal: Command = { kind: "eggHunt", icon: "🥚", label: eggs ? `Steal a dragon egg (${eggs} in the nest)${armed ? "" : " (nobody's armed!)"}` : "Raid the nest for treasure (no eggs)", x: n.x, y: n.y, target: n.id };
+    return { ...steal, alts: [{ kind: "move", icon: "👣", label: "Go and look at the nest", x: n.x + 60, y: n.y + 60, target: 0 }] };
+  }
   if (picked.dragon) {
     const d = picked.dragon;
-    return { kind: "hunt", icon: "🐉", label: `Attack ${d.name}!`, x: d.x, y: d.y, target: d.id, weapons: kinds.filter((k) => k === "bow" || k === "spear") };
+    const attack: Command = { kind: "hunt", icon: "🐉", label: `Attack ${d.name}!`, x: d.x, y: d.y, target: d.id, weapons: kinds.filter((k) => k === "bow" || k === "spear") };
+    const nest = d.nest ? w.dragons.nests.find((n) => n.id === d.nest) : null;
+    if (nest && !nest.found && adults.length) return { kind: "trackDragon", icon: "🐾", label: `Track ${d.name} to its nest`, x: d.x, y: d.y, target: d.id, alts: armed ? [attack] : undefined };
+    return attack;
   }
   if (picked.dino) {
     const d = picked.dino;
@@ -562,6 +584,9 @@ function taskAlive(w: World, t: Task): boolean {
     }
     case "ride":
       return !!w.dinoById(t.target);
+    case "trackDragon":
+    case "eggHunt":
+      return t.people.length > 0;
     case "operate":
       return w.colony.scorpions.some((s) => s.id === t.target && s.built >= 1);
     case "haul":
@@ -724,6 +749,10 @@ export function taskThink(w: World, h: Human): boolean {
       } else go(h, "walk", p.x + 14, p.y);
       return true;
     }
+    case "eggHunt":
+      return eggHuntThink(w, h, t, () => personDone(w, h, t));
+    case "trackDragon":
+      return trackThink(w, h, t, () => personDone(w, h, t));
     case "tame":
     case "ride": {
       const d = w.dinoById(t.target);
@@ -1039,7 +1068,7 @@ export function taskCarrying(w: World, h: Human) {
 /* ------------------------------ building ------------------------------ */
 
 /** Builders haul bundles: more with baskets, lots more on a dino. */
-const carryCap = (w: World, h: Human) => (w.camp.learned.has("basket") ? 6 : 3) * (h.riding ? 3 : 1);
+const carryCap = (w: World, h: Human) => (w.camp.learned.has("basket") ? 6 : 3) * (h.riding ? (heavyRider(w, h) ? 4 : 3) : 1);
 
 /** The builder brain: works through sites that pass `allow`. Returns false when there's nothing to do. */
 /**

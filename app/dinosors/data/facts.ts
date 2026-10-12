@@ -195,6 +195,7 @@ export const ROLES: { id: import("../sim/types").Role; icon: string; name: strin
   { id: "miner", icon: "⛏️", name: "Miner", tip: "Digs copper, quartz, magnetite, crystal + ore" },
   { id: "shaper", icon: "🔷", name: "Stone shaper", tip: "Cuts raw stone into polygon blocks at the Shaping yard" },
   { id: "technician", icon: "⚡", name: "Technician", tip: "Tends energy buildings: fixes overloads, keeps the hum clean" },
+  { id: "trainer", icon: "🐾", name: "Animal trainer", tip: "Befriends, feeds, trains + harnesses dinosaurs, and pairs trained ones with riders" },
 ];
 
 export const FACTS = {
@@ -271,6 +272,12 @@ export const DISCOVERIES: Discovery[] = [
   { id: "scorpion", icon: "🎯", name: "Bullseye", hint: "A giant crossbow on the wall." },
   { id: "dragon", icon: "🐉", name: "Here Be Dragons", hint: "Something huge circles the sky." },
   { id: "dragonSlayer", icon: "🛡️", name: "Dragon Defenders", hint: "Drive a dragon away." },
+  { id: "dragonNest", icon: "🪺", name: "Dragon's Hoard", hint: "Follow a dragon home." },
+  { id: "dragonEgg", icon: "🥚", name: "Egg Thief", hint: "Bring a dragon egg home. Carefully." },
+  { id: "dragonHatch", icon: "🐣", name: "Here Be Hatchlings", hint: "Keep an egg warm long enough." },
+  { id: "dragonGrown", icon: "🐲", name: "All Grown Up", hint: "Raise a dragon to adulthood." },
+  { id: "dragonRider", icon: "🐉", name: "Dragon Rider", hint: "A dragon chooses its rider." },
+  { id: "dragonFire", icon: "🔥", name: "Breath of Fire", hint: "Command a dragon's fire." },
   { id: "megaEruption", icon: "☄️", name: "MEGA ERUPTION", hint: "What if something from space hit the volcano?" },
   { id: "snow", icon: "❄️", name: "Snow Day", hint: "It gets cold up in the peaks." },
   { id: "healer", icon: "🩹", name: "Patched Up", hint: "Look after the hurt." },
@@ -286,7 +293,7 @@ export const DISCOVERIES: Discovery[] = [
   { id: "condenser", icon: "💧", name: "Water From Air", hint: "Squeeze water out of the fog." },
   { id: "levitation", icon: "🪶", name: "Lighter Than Air", hint: "Make stone float." },
   { id: "beam", icon: "🔆", name: "Beam!", hint: "A tower that shoots light." },
-  { id: "pyramid", icon: "🔺", name: "The Great Pyramid", hint: "Six stages, one capstone, a lot of energy." },
+  { id: "pyramid", icon: "🔺", name: "The Great Pyramid", hint: "Seven stages: activate the core, then add a smooth limestone casing." },
   { id: "omen", icon: "🌘", name: "The Last Sunset", hint: "Only you can call it down." },
   { id: "supervolcano", icon: "🌋", name: "The World Burns", hint: "What if something hit the volcano… really hard?" },
   { id: "deep30", icon: "🪨", name: "Through the Topsoil", hint: "Dig down to the bedrock." },
@@ -298,6 +305,8 @@ export const DISCOVERIES: Discovery[] = [
   { id: "motherLode", icon: "⛓️", name: "The Mother Lode", hint: "A mountain of iron, somewhere below." },
   { id: "crystalCave", icon: "💠", name: "Crystal Cave", hint: "Some caves deep down glitter." },
   { id: "skyWatcher", icon: "🌙", name: "Sky Watcher", hint: "Clear nights are for looking up." },
+  { id: "riderBond", icon: "🏇", name: "Dino Rider", hint: "A trained dinosaur needs a partner." },
+  { id: "skyRider", icon: "🪽", name: "Sky Rider", hint: "Some riders take to the air." },
   { id: "lostRoom", icon: "🏛️", name: "The Lost Room", hint: "Not every hole down there is natural." },
   { id: "hiddenHoard", icon: "💰", name: "Hidden Hoard", hint: "Ping the rock. Some of it is hollow." },
   { id: "undergroundRiver", icon: "🏞️", name: "River Below", hint: "Water runs under your feet."  },

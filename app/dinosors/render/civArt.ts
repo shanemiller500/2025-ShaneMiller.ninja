@@ -7,6 +7,7 @@
 import type { Beam, Lift } from "../sim/civ";
 import { TILE, type Building, type BuildingKind, type Prop, type ResNode } from "../sim/types";
 import { shade } from "./drawDino";
+import { pyramidAwake, pyramidCased } from "../data/civ";
 
 const T = TILE;
 const STONE = "#b9b1a2";
@@ -422,7 +423,8 @@ export function drawCivBuilding(c: CanvasRenderingContext2D, b: Building, wt: nu
 function drawPyramid(c: CanvasRenderingContext2D, b: Building, W: number, L: CivLook) {
   const stage = b.stage ?? 0;
   const k = stage === 0 ? Math.max(0, Math.min(1, b.built)) : Math.max(0, Math.min(1, (b.built - 0.4) / 0.6));
-  const done = stage >= 5 && b.built >= 1;
+  const done = pyramidAwake(b);
+  const cased = pyramidCased(b);
   const H = 150;
   const half = W / 2 - 2;
   // footprint marked out while it's still a building site
@@ -447,6 +449,35 @@ function drawPyramid(c: CanvasRenderingContext2D, b: Building, W: number, L: Civ
     // left (lit) and right (shaded) faces
     polyBlocks(c, -wHalf, y - lh, 0, y, 600 + i * 17, i % 2 ? STONE : STONE_L);
     polyBlocks(c, 0, y - lh, wHalf, y, 700 + i * 17, STONE_D);
+  }
+  // Smooth dressed limestone is fitted upward over the old stepped courses.
+  if (stage >= 6) {
+    const rise = 7 * lh;
+    c.save();
+    c.beginPath();
+    c.rect(-half - 2, -foundH - rise * k, half * 2 + 4, rise * k + 1);
+    c.clip();
+    c.fillStyle = "#eee7d2";
+    c.beginPath();
+    c.moveTo(-half * 0.94, -foundH);
+    c.lineTo(0, -foundH - rise);
+    c.lineTo(0, -foundH);
+    c.closePath();
+    c.fill();
+    c.fillStyle = "#c9bea5";
+    c.beginPath();
+    c.moveTo(0, -foundH - rise);
+    c.lineTo(half * 0.94, -foundH);
+    c.lineTo(0, -foundH);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = "rgba(255,250,225,0.8)";
+    c.lineWidth = 1.8;
+    c.beginPath();
+    c.moveTo(-half * 0.94, -foundH);
+    c.lineTo(0, -foundH - rise);
+    c.stroke();
+    c.restore();
   }
   // inner chamber: a doorway + glow
   if (stage >= 3) {
@@ -479,17 +510,22 @@ function drawPyramid(c: CanvasRenderingContext2D, b: Building, W: number, L: Civ
       crystal(c, 0, top - 22, 18, on * (L.power ? 1 : 0.5));
       if (done) {
         const r = (L.t * 0.5) % 1;
-        c.strokeStyle = `rgba(150,235,255,${(1 - r) * 0.6})`;
+        c.strokeStyle = `rgba(150,235,255,${(1 - r) * (cased ? 0.85 : 0.6)})`;
         c.lineWidth = 2;
         c.beginPath();
         c.ellipse(0, top - 30, 20 + r * 140, 6 + r * 40, 0, 0, Math.PI * 2);
         c.stroke();
-        // beam of light into the sky
+        // The dressed casing focuses a visible daylight beam and a stronger night beam.
+        const strength = L.power ? (cased ? (L.night ? 0.9 : 0.6) : (L.night ? 0.45 : 0.2)) : 0.08;
         const g = c.createLinearGradient(0, top - 40, 0, top - 340);
-        g.addColorStop(0, "rgba(170,240,255,0.5)");
+        g.addColorStop(0, `rgba(190,245,255,${strength})`);
         g.addColorStop(1, "rgba(170,240,255,0)");
         c.fillStyle = g;
-        c.fillRect(-3, top - 340, 6, 300);
+        c.fillRect(cased ? -6 : -3, top - 340, cased ? 12 : 6, 300);
+        if (cased && L.power) {
+          c.fillStyle = `rgba(235,255,255,${L.night ? 0.8 : 0.55})`;
+          c.fillRect(-1.5, top - 285, 3, 240);
+        }
       }
     }
   }

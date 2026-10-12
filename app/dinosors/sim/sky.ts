@@ -72,7 +72,7 @@ export class Sky {
   /** Pick tonight's stargazer and let them learn. */
   private watch(w: World, dt: number) {
     const wt = w.weather;
-    const clear = w.daylight < 0.3 && wt.cloud < 0.55 && wt.rain < 0.2 && wt.fog < 0.4 && !w.tribe.raid && !w.dragons.list.length;
+    const clear = w.daylight < 0.3 && wt.cloud < 0.55 && wt.rain < 0.2 && wt.fog < 0.4 && !w.tribe.raid && !w.dragons.menacing(w);
     const cur = this.watcher ? w.humans.find((h) => h.id === this.watcher) : undefined;
     if (cur && cur.state !== "stargaze") this.watcher = 0;
     if (!clear) {

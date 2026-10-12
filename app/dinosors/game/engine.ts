@@ -32,6 +32,11 @@ import { OUTFIT_BY_ID, type ForgeCat } from "../data/colony";
 import { condition, type Condition } from "../sim/injury";
 import { STONE_TOWER_UP, queueUpgrades, shelterDone, stagesOf, towerMaxHp, wallMaxHp, sites, siteKey, type UpgradeKind } from "../sim/build";
 import { commandCollect, commandDeliver, commandTravel, eligible, workOf, type WorkSkill } from "../sim/workDinos";
+import { bond, unbond } from "../sim/riders";
+import { DRAGON_COMMANDS, type DragonCmdKind } from "../data/dragons";
+import { bondDragon, commandDragon, dismountDragon, unbondDragon } from "../sim/dragonKeep";
+import { revealNest } from "../sim/dragonNests";
+import type { DragonEgg, DragonNest } from "../sim/types";
 import { SAVE_VERSION } from "../sim/world";
 import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genetics";
 import { World, type SaveData } from "../sim/world";
@@ -100,6 +105,11 @@ export interface HumanInfo {
   /** weapon kinds this person could swap to from the armory */
   canEquip: WeaponKind[];
   outfit: { id: string; name: string; icon: string; rain: number; warmth: number } | null;
+  shift: "all" | "day" | "night";
+  shiftPowered: boolean;
+  nightEquipment: string | null;
+  nightSidearmAvailable: boolean;
+  partner: string | null;
 }
 
 export interface PersonRow {
@@ -147,6 +157,7 @@ export type InspectInfo =
   | { kind: "carcass"; id: number; name: string; stage: string; left: { r: string; n: number; max: number }[]; working: number; burnt: boolean; fresh: number };
 
 export interface Snapshot {
+  shifts: { mode: "all" | "split"; auto: boolean; day: number; night: number; draw: number; required: number; powered: number; pyramid: boolean; people: { id: number; name: string; job: string; shift: "day" | "night"; manual: boolean; outfit: string | null; powered: boolean }[] };
   time: number;
   day: number;
   daylight: number;
@@ -289,7 +300,7 @@ interface Ptr {
   grab: Dino | null;
 }
 
-export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️", researcher: "📜", shaper: "🔷", technician: "⚡", miner: "⛏️" };
+export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️", researcher: "📜", shaper: "🔷", technician: "⚡", miner: "⛏️", trainer: "🐾" };
 export function moodOf(d: Dino): { icon: string; label: string } {
   const s = d.state;
   if (s === "sleep") return { icon: "💤", label: "Sleepy" };
@@ -349,6 +360,7 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
   captive: "Held captive by Neanderthals!",
   resonate: "Working the stone + crystals",
   stargaze: "Watching the stars",
+  relax: "Resting in the shade",
 };
 
 export class Engine {
@@ -644,12 +656,12 @@ export class Engine {
   private updateCamera(dt: number) {
     const cam = this.cam;
     if (this.followId) {
-      const d = this.world.dinoById(this.followId) ?? this.world.humans.find((h) => h.id === this.followId) ?? null;
+      const d = this.world.dinoById(this.followId) ?? this.world.humans.find((h) => h.id === this.followId) ?? this.world.dragons.anyById(this.followId) ?? null;
       if (!d) this.followId = 0;
       else {
         const k = Math.min(1, dt * 3);
         cam.x += (d.x - cam.x) * k;
-        cam.y += (d.y - d.z - (d.kind === "dino" ? sizeOf(d) * 0.3 : 14) - cam.y) * k;
+        cam.y += (d.y - d.z - (d.kind === "dino" ? sizeOf(d) * 0.3 : d.kind === "dragon" ? 30 : 14) - cam.y) * k;
       }
     } else if (this.fly) {
       const f = this.fly;
@@ -757,8 +769,144 @@ export class Engine {
   }
 
   private pickDragon(x: number, y: number): Dragon | null {
+    for (const dr of this.world.dragons.owned) if (Math.hypot(dr.x - x, dr.y - dr.z - 20 - y) < 30 + 50 * (0.38 + 0.62 * (dr.growth ?? 0))) return dr;
     for (const dr of this.world.dragons.list) if (Math.hypot(dr.x - x, dr.y - dr.z - 20 - y) < 90) return dr;
     return null;
+  }
+
+  private pickNest(x: number, y: number): DragonNest | null {
+    return this.world.dragons.nests.find((n) => Math.abs(n.x - x) < 52 && Math.abs(n.y - y) < 26) ?? null;
+  }
+
+  private pickDragonEgg(x: number, y: number): DragonEgg | null {
+    return this.world.dragons.eggs.find((e) => (e.at === "ground" || e.at === "camp") && Math.hypot(e.x - x, e.y - 8 - y) < 16) ?? null;
+  }
+
+  /* ----------------------------- dragons ----------------------------- */
+
+  /** a dragon order waiting for the player to tap where/what */
+  dragonAim: { id: number; kind: DragonCmdKind; pts: { x: number; y: number }[] } | null = null;
+  /** the egg being looked at */
+  selectedEgg = 0;
+
+  selectedDragon() {
+    return this.world.dragons.owned.find((d) => d.id === this.selectedId) ?? null;
+  }
+
+  /** A command button: orders that need a spot / target wait for the next tap. */
+  dragonCommand(kind: DragonCmdKind) {
+    const dr = this.selectedDragon();
+    if (!dr) return;
+    const def = DRAGON_COMMANDS.find((c) => c.id === kind)!;
+    if (def.aim) {
+      const old = dr.cmd ?? null;
+      const pre = commandDragon(this.world, dr, kind, { x: dr.x, y: dr.y, pts: kind === "route" ? [{ x: 0, y: 0 }, { x: 1, y: 1 }] : undefined });
+      // only check it *could* obey (keep doing what it was doing); the real order comes with the tap
+      dr.cmd = old;
+      if (pre) {
+        this.world.toast("🐉", pre, dr.x, dr.y);
+        return;
+      }
+      this.dragonAim = { id: dr.id, kind, pts: [] };
+      this.world.toast(def.icon, kind === "route" ? "Tap up to 5 waypoints, then press Fly route." : kind === "attack" ? `Tap the creature ${dr.name} should attack.` : `Tap where ${dr.name} should ${def.name.toLowerCase()}.`);
+    } else {
+      const why = commandDragon(this.world, dr, kind);
+      if (why) this.world.toast("🐉", why, dr.x, dr.y);
+    }
+    this.emit({ type: "select" });
+  }
+
+  /** Route mode: fly the waypoints tapped so far. */
+  finishRoute() {
+    const aim = this.dragonAim;
+    const dr = aim ? this.world.dragons.owned.find((d) => d.id === aim.id) : null;
+    this.dragonAim = null;
+    if (!dr || !aim) return;
+    const why = commandDragon(this.world, dr, "route", { pts: aim.pts });
+    if (why) this.world.toast("🐉", why, dr.x, dr.y);
+    this.emit({ type: "select" });
+  }
+
+  cancelDragonAim() {
+    this.dragonAim = null;
+    this.emit({ type: "select" });
+  }
+
+  /** The tap that completes an aimed dragon order. */
+  private aimTap(x: number, y: number) {
+    const w = this.world;
+    const aim = this.dragonAim!;
+    const dr = w.dragons.owned.find((d) => d.id === aim.id);
+    if (!dr) {
+      this.dragonAim = null;
+      return;
+    }
+    if (aim.kind === "route") {
+      aim.pts.push({ x, y });
+      w.particles.spawn(P.Ring, x, y, { size: 8, max: 0.8, color: "rgba(160,255,190,0.9)" });
+      if (aim.pts.length >= 5) this.finishRoute();
+      this.emit({ type: "select" });
+      return;
+    }
+    let target: number | undefined;
+    if (aim.kind === "attack") {
+      const d = this.pickDino(x, y);
+      const foe = (d && !d.owner ? d : null) ?? this.pickBrute(x, y) ?? w.dragons.list.find((o) => Math.hypot(o.x - x, o.y - o.z - 20 - y) < 90) ?? null;
+      if (!foe) {
+        w.toast("🐉", "Tap a wild creature, a raider or a Neanderthal to attack.");
+        return;
+      }
+      target = foe.id;
+    }
+    this.dragonAim = null;
+    const why = commandDragon(w, dr, aim.kind, { x, y, target });
+    if (why) w.toast("🐉", why, dr.x, dr.y);
+    else {
+      w.particles.spawn(P.Ring, x, y, { size: 10, max: 0.9, color: aim.kind === "fire" ? "rgba(255,140,60,0.95)" : "rgba(160,255,190,0.9)" });
+      this.audio.play("pop", 0, 0, 0.5);
+    }
+    this.emit({ type: "select" });
+  }
+
+  setDragonAuto(id: number, on: boolean) {
+    const dr = this.world.dragons.owned.find((d) => d.id === id);
+    if (!dr) return;
+    dr.auto = on;
+    if (on && dr.cmd && !dr.cmd.auto) dr.cmd = null;
+    this.emit({ type: "select" });
+  }
+
+  bondDragonRider(dragonId: number, humanId: number) {
+    const w = this.world;
+    const dr = w.dragons.owned.find((d) => d.id === dragonId);
+    const h = w.humans.find((x) => x.id === humanId);
+    if (!dr || !h) return;
+    const why = bondDragon(w, dr, h);
+    if (why) w.toast("🐉", why, dr.x, dr.y);
+    this.emit({ type: "select" });
+  }
+
+  unbondDragonRider(dragonId: number) {
+    const dr = this.world.dragons.owned.find((d) => d.id === dragonId);
+    if (!dr) return;
+    unbondDragon(this.world, dr);
+    this.emit({ type: "select" });
+  }
+
+  /** The rider hops off (on the ground) / the dragon lands first. */
+  dragonDismount(dragonId: number) {
+    const w = this.world;
+    const dr = w.dragons.owned.find((d) => d.id === dragonId);
+    const h = dr?.rider ? w.humans.find((x) => x.id === dr.rider) : null;
+    if (!dr || !h) return;
+    if (dr.z > 6) commandDragon(w, dr, "land");
+    else dismountDragon(w, h);
+    this.emit({ type: "select" });
+  }
+
+  selectEgg(id: number) {
+    this.selectedEgg = id;
+    this.emit({ type: "select" });
   }
 
   private pickHuman(x: number, y: number): Human | null {
@@ -996,6 +1144,8 @@ export class Engine {
     else if (k === "-" || k === "_") this.zoomBy(1 / 1.2);
     else if (k === "h") this.goHome();
     else if (k === "escape") {
+      this.dragonAim = null;
+      this.selectedEgg = 0;
       this.orderFor = 0;
       this.groupSelectMode = false;
       this.tool = { ...this.tool, id: "hand" };
@@ -1129,6 +1279,10 @@ export class Engine {
       this.emit({ type: "select" });
       return;
     }
+    if (this.dragonAim) {
+      this.aimTap(x, y);
+      return;
+    }
     if (this.tool.id !== "hand") {
       const ok = applyTool(w, this.tool, x, y, false);
       if (ok) this.audio.play("click", 0, 0, 0.3);
@@ -1164,7 +1318,9 @@ export class Engine {
     // people selected: the tap is an order (unless you tapped another person to pick them)
     if (this.selection.length) {
       const people = this.selectionHumans();
-      const picked = { dino: this.pickDino(x, y), human: this.pickHuman(x, y), dragon: this.pickDragon(x, y), brute: this.pickBrute(x, y) };
+      const tappedDragon = this.pickDragon(x, y);
+      const nest = this.pickNest(x, y);
+      const picked = { dino: this.pickDino(x, y), human: this.pickHuman(x, y), dragon: tappedDragon?.owner ? null : tappedDragon, brute: this.pickBrute(x, y), nest: nest?.found ? nest : null, egg: this.pickDragonEgg(x, y)?.at === "ground" ? this.pickDragonEgg(x, y) : null };
       if (picked.human && !people.includes(picked.human) && !picked.human.captive && (this.addMode || condition(picked.human) === "healthy")) {
         if (this.addMode) this.toggleSelect(picked.human.id);
         else this.selectPeople([picked.human.id]);
@@ -1187,8 +1343,34 @@ export class Engine {
       return;
     }
     const dr = this.pickDragon(x, y);
+    if (dr?.owner) {
+      if (dbl) this.follow(dr.id);
+      this.selectedEgg = 0;
+      this.select(dr.id);
+      this.emit({ type: "select" });
+      return;
+    }
     if (dr) {
-      this.toastOnce("dragonTap", "🐉", `${dr.name} the dragon! Select people with bows (or crew a Scorpion) and tap it to fight back.`);
+      const nest = dr.nest ? w.dragons.nests.find((n) => n.id === dr.nest) : null;
+      this.toastOnce(nest ? "dragonTapHome" : "dragonTap", "🐉", nest
+        ? `${dr.name} the ${dr.breed ? dr.breed + " " : ""}dragon lives around here.${nest.found ? " Its nest is known." : " Select people and tap it to track it to its nest."} Fight it with bows + Scorpions.`
+        : `${dr.name} the dragon! Select people with bows (or crew a Scorpion) and tap it to fight back.`);
+      return;
+    }
+    const egg = this.pickDragonEgg(x, y);
+    if (egg) {
+      this.select(0);
+      this.selectEgg(egg.id);
+      return;
+    }
+    const nest = this.pickNest(x, y);
+    if (nest) {
+      if (!nest.found) revealNest(w, nest, "You");
+      else {
+        const eggs = w.dragons.eggs.filter((e) => e.at === "nest" && e.nest === nest.id).length;
+        const home = w.dragons.list.find((d) => d.id === nest.parent);
+        w.toast("🪺", `A ${nest.breed} dragon's nest: ${eggs} egg${eggs === 1 ? "" : "s"}${home ? `, and ${home.name} is ${home.state === "perch" ? "at home!" : "out"}` : ", and nobody home"}. Select people (bring weapons) and tap it to steal an egg.`, nest.x, nest.y);
+      }
       return;
     }
     const d = this.pickDino(x, y);
@@ -1468,6 +1650,26 @@ export class Engine {
     d.think = 0;
     this.emit({ type: "select" });
     return true;
+  }
+
+  /** Pair a grown-up with a riding-trained dinosaur as a Dino Rider team (null = done, else why not). */
+  bondRider(dinoId: number, humanId: number): string | null {
+    const w = this.world;
+    const d = w.dinoById(dinoId);
+    const h = w.humans.find((person) => person.id === humanId);
+    if (!d || !h) return "Nobody to pair.";
+    const why = bond(w, d, h);
+    if (why) w.toast("🐾", why, d.x, d.y);
+    this.emit({ type: "select" });
+    return why;
+  }
+
+  /** Break up a rider team: the dinosaur goes back to ordinary work. */
+  unbondRider(dinoId: number) {
+    const d = this.world.dinoById(dinoId);
+    if (!d) return;
+    unbond(this.world, d);
+    this.emit({ type: "select" });
   }
 
   equipWorkHarness(dinoId: number) {
@@ -1826,6 +2028,22 @@ export class Engine {
     this.changeRole(h, role);
     h.bubble = { text: role === "auto" ? "I'll help wherever!" : `I'm a ${role}!`, t: 2 };
     this.audio.play("pop", 0, 0, 0.4);
+  }
+
+  setShiftMode(mode: "all" | "split") { this.world.shifts.setMode(this.world, mode); }
+  setShiftAuto(auto: boolean) { this.world.shifts.auto = auto; if (auto) this.world.shifts.balance(this.world); }
+  assignShift(id: number, shift: "day" | "night") {
+    const h = this.world.humans.find((p) => p.id === id);
+    if (h) this.world.shifts.assign(this.world, h, shift);
+  }
+  equipNightSidearm(id: number) {
+    const w = this.world;
+    const h = w.humans.find((p) => p.id === id);
+    if (!h || h.child || h.shift !== "night" || !w.civ.has("nightDefenseGear") || (w.colony.armory.nightSidearm ?? 0) < 1) return;
+    const old = h.gear.weapon;
+    w.colony.armory.nightSidearm--;
+    if (old) w.colony.armory[old] = (w.colony.armory[old] ?? 0) + 1;
+    h.gear.weapon = "nightSidearm";
   }
 
   /** Set the exact number of available surface adults manually assigned to a duty. */
@@ -2622,10 +2840,19 @@ export class Engine {
         riding: mount ? `${mount.name} the ${sp(mount.species).nick}` : null,
         canEquip: Array.from(kinds),
         outfit: c.gear.outfit && OUTFIT_BY_ID[c.gear.outfit] ? { id: c.gear.outfit, name: OUTFIT_BY_ID[c.gear.outfit].name, icon: OUTFIT_BY_ID[c.gear.outfit].icon, rain: OUTFIT_BY_ID[c.gear.outfit].rain, warmth: OUTFIT_BY_ID[c.gear.outfit].warmth } : null,
+        shift: w.shifts.mode === "all" ? "all" : c.shift ?? "day",
+        shiftPowered: w.shifts.poweredOutfit(w, c),
+        nightEquipment: c.gear.weapon === "nightSidearm" ? "Night energy sidearm" : c.gear.outfit?.startsWith("night") ? "Night work gear" : null,
+        nightSidearmAvailable: c.shift === "night" && w.civ.has("nightDefenseGear") && (w.colony.armory.nightSidearm ?? 0) > 0 && c.gear.weapon !== "nightSidearm",
+        partner: c.partner ? w.dinoById(c.partner)?.name ?? null : null,
       };
     }
     const cr = w.camp.crafting;
     return {
+      shifts: (() => {
+        const people = w.shifts.workers(w).map((h) => ({ id: h.id, name: h.name, job: w.tribe.roleOf(h), shift: h.shift ?? "day" as const, manual: !!h.shiftManual, outfit: h.gear.outfit ?? null, powered: w.shifts.poweredOutfit(w, h) }));
+        return { mode: w.shifts.mode, auto: w.shifts.auto, day: w.shifts.mode === "all" ? people.length : people.filter((p) => p.shift === "day").length, night: w.shifts.mode === "all" ? 0 : people.filter((p) => p.shift === "night").length, draw: w.shifts.draw, required: w.shifts.mode === "split" ? people.filter((p) => p.shift === "night" && (p.outfit === "nightLit" || p.outfit === "nightArmor")).length * (w.civ.has("advancedNightOps") ? 0.055 : 0.035) : 0, powered: w.shifts.powered.size, pyramid: w.shifts.pyramid(w), people };
+      })(),
       time: w.time,
       day: w.day,
       daylight: w.daylight,
@@ -2826,7 +3053,7 @@ export class Engine {
       items: FORGE_ITEMS.map((f) => {
         const done = f.cat === "kits" && c.kits.has(f.id);
         const can = c.canCraft(w, f.id);
-        const why = done ? "Done ✓" : can ? null : f.tech && !w.camp.learned.has(f.tech) ? `Invent ${f.tech}` : f.at === "blacksmith" ? "Needs a Blacksmith" : f.at === "workshop" ? "Needs a Workshop" : f.at === "tannery" ? "Needs a Hide rack" : null;
+        const why = done ? "Done ✓" : can ? null : f.tech && !w.camp.learned.has(f.tech) ? `Invent ${f.tech}` : f.civ && !w.civ.has(f.civ) ? `Research ${CIV_TECH[f.civ].name}` : f.at === "blacksmith" ? "Needs a Blacksmith" : f.at === "workshop" ? "Needs a Workshop" : f.at === "tannery" ? "Needs a Hide rack" : null;
         return { id: f.id, name: f.name, icon: f.icon, tier: f.tier, cost: f.cost, at: f.at, can, why, cat: f.cat, tip: f.tip, fresh: c.fresh.has(f.id), done };
       }),
       hasTannery: c.finished("tannery"),

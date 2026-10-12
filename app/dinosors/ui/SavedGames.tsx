@@ -73,9 +73,9 @@ export default function SavedGames({ open, onClose, engine, fontClass, onToast }
 
   const load = async (s: SlotMeta) => {
     setBusy(true);
-    // keep the game you're leaving, just in case
-    await putSlot(engine.makeSlot("auto", `Before loading “${s.name}”`));
     const full = await getSlot(s.id);
+    // Read the selected slot before the safety snapshot can evict an old one.
+    if (full) await putSlot(engine.makeSlot("auto", `Before loading “${s.name}”`));
     const ok = !!full && engine.importSave(full.data);
     if (ok) await putSlot(engine.makeSlot("latest"));
     setBusy(false);
@@ -96,7 +96,7 @@ export default function SavedGames({ open, onClose, engine, fontClass, onToast }
   const move = async (s: SlotMeta, g: string) => {
     const target = g.trim();
     if (!target) return;
-    // autosaves get kept (copied) when filed into a group so they're never pruned
+    // Autosaves are copied into the chosen group.
     if (s.kind === "auto") await keepSlot(s.id, s.name, target);
     else await updateSlot(s.id, { group: target });
     setMoving(null);
@@ -130,7 +130,7 @@ export default function SavedGames({ open, onClose, engine, fontClass, onToast }
                 <h2 id="dl-saves" className="text-2xl font-bold leading-tight">
                   Saved games
                 </h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Your game saves itself every 30 seconds and whenever you leave. It always opens where you left off.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Your game saves itself every 30 seconds and whenever you leave. Up to 10 saves are kept; the oldest is removed as new saves arrive.</p>
               </div>
             </div>
 
@@ -240,7 +240,7 @@ export default function SavedGames({ open, onClose, engine, fontClass, onToast }
                               <Play className="h-3.5 w-3.5" /> Load
                             </button>
                             {s.kind === "auto" && (
-                              <button type="button" title="Keep this one (copy it into My saves)" onClick={() => void move(s, "My saves")} className="rounded-xl p-1.5 text-slate-500 transition hover:bg-amber-100 hover:text-amber-600 dark:hover:bg-white/10">
+                              <button type="button" title="Copy into My saves" onClick={() => void move(s, "My saves")} className="rounded-xl p-1.5 text-slate-500 transition hover:bg-amber-100 hover:text-amber-600 dark:hover:bg-white/10">
                                 <Star className="h-4 w-4" />
                               </button>
                             )}

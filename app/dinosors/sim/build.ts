@@ -471,20 +471,8 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
       const span = b.kind === "pyramid" && (b.stage ?? 0) > 0 ? 0.6 : 1;
       b.built = Math.min(1, b.built + (dt * fast * span) / buildingWork(b));
       if (before < 0.4 && b.built >= 0.4) w.colony.version++;
-      if (b.built >= 1 && b.kind === "pyramid" && (b.stage ?? 0) < PYRAMID_STAGES.length - 1) {
-        const st = PYRAMID_STAGES[(b.stage ?? 0) + 1];
-        b.stage = (b.stage ?? 0) + 1;
-        b.built = 0.4;
-        b.have = {};
-        w.colony.version++;
-        w.sfx("build", b.x, b.y, 1);
-        w.shake(3, 0.4);
-        w.toast("🔺", `Pyramid: ${PYRAMID_STAGES[b.stage - 1].name} done! Next: ${st.name}.`, b.x, b.y);
-        return "done";
-      }
-      if (b.built >= 1 && b.kind === "pyramid") {
-        // activation needs a charge from the grid
-        const need = PYRAMID_STAGES[PYRAMID_STAGES.length - 1].energy ?? 0;
+      if (b.built >= 1 && b.kind === "pyramid" && (b.stage ?? 0) === 5) {
+        const need = PYRAMID_STAGES[5].energy ?? 0;
         if (!w.civ.spend(need)) {
           b.built = 0.99;
           if (!w.flags.has("pyramidCharge")) {
@@ -496,6 +484,17 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
         w.flash(0.5, "#c8f4ff");
         w.discover("pyramid", b.x, b.y);
         w.celebrate("THE PYRAMID WAKES!");
+      }
+      if (b.built >= 1 && b.kind === "pyramid" && (b.stage ?? 0) < PYRAMID_STAGES.length - 1) {
+        const st = PYRAMID_STAGES[(b.stage ?? 0) + 1];
+        b.stage = (b.stage ?? 0) + 1;
+        b.built = 0.4;
+        b.have = {};
+        w.colony.version++;
+        w.sfx("build", b.x, b.y, 1);
+        w.shake(3, 0.4);
+        w.toast("🔺", `Pyramid: ${PYRAMID_STAGES[b.stage - 1].name} done! Next: ${st.name}.`, b.x, b.y);
+        return "done";
       }
       if (b.built >= 1) {
         b.hp = def.hp;

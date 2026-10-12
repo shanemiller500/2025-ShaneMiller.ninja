@@ -4,6 +4,7 @@
 /* ------------------------------------------------------------------ */
 
 import type { Genes } from "./genetics";
+import type { DragonBreed, DragonCmdKind, DragonSkill } from "../data/dragons";
 
 export const TILE = 32;
 /** The most people a tribe can grow to. */
@@ -272,8 +273,14 @@ export interface Dino {
   passengers?: number[];
   /** Settlement work training and the load physically carried on this animal. */
   work?: {
-    skills: Partial<Record<"hauler" | "riding" | "heavy" | "runner", number>>;
-    focus: "hauler" | "riding" | "heavy" | "runner" | null;
+    skills: Partial<Record<"hauler" | "riding" | "heavy" | "runner" | "scout" | "flyer", number>>;
+    focus: "hauler" | "riding" | "heavy" | "runner" | "scout" | "flyer" | null;
+    /** the person bonded to this dinosaur as its rider (a Dino Rider team, see riders.ts) */
+    partner?: number;
+    /** a scouting flight / ride under way: where to, and when it was set off */
+    mission?: { x: number; y: number; kind: "scout" | "warn"; home: boolean } | null;
+    /** when (world elapsed seconds) the team's next scouting trip is due */
+    missionAt?: number;
     trainer: number;
     practice: number;
     harness: number;
@@ -337,11 +344,16 @@ export type HumanState =
   | "resonate"
   | "captive"
   /** lying back studying the night sky (see sky.ts) */
-  | "stargaze";
+  | "stargaze"
+  /** sitting in the shade / under a covered rest area (see shade.ts) */
+  | "relax"
+  /** feeding, calming or drilling a tamed dragon, or tending a dragon egg (see dragonKeep.ts) */
+  | "dragonCare";
 
 export type Resource =
   | "stick"
   | "stone"
+  | "limestone"
   | "grass"
   | "leaves"
   | "wood"
@@ -376,7 +388,7 @@ export type Resource =
   | "copperBar";
 
 /** What a cave person does. "auto" lets the tribe decide. */
-export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner";
+export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner" | "trainer";
 
 export type HumanOrder = { kind: "hunt"; id: number } | { kind: "guard"; x: number; y: number; top?: boolean } | null;
 
@@ -423,6 +435,9 @@ export interface Human {
   hunger: number;
   fear: number;
   role: Role;
+  /** Work schedule; manual assignments survive Auto Balance. */
+  shift?: "day" | "night";
+  shiftManual?: boolean;
   /** the job the tribe picked when role is "auto" */
   autoRole: Role;
   order: HumanOrder;
@@ -453,8 +468,16 @@ export interface Human {
   /** shelter they live in (0 = the cave) */
   home: number;
   family: number;
-  /** the campfire (and seat round it) this person is heading to or sitting at */
+  /** the campfire or shade structure (and seat at it) this person is heading to or sitting at */
   fireId?: number;
+  /** the dinosaur this person is bonded to as its rider (a Dino Rider team) */
+  partner?: number;
+  /** the tamed dragon this person is bonded to (a Dragon Rider) */
+  dragon?: number;
+  /** riding a dragon right now (its id): position follows it, the sim leaves them be */
+  aloft?: number;
+  /** carrying a dragon egg (its id) */
+  egg?: number;
   seat?: number;
   /** construction site being worked on ("wall:12", "" = none) */
   site: string;
@@ -757,6 +780,12 @@ export interface Tower {
 }
 
 export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" | "waterStore" | "well" | "healer" | "pen" | "post" | "trap" | "bridge" | "path" | "boneTorch" | "tannery" | "spikes" | "barricade" | "totem" | "mill" | "bakery"
+  // shade + seating (see shade.ts)
+  | "canopy" | "seatRing" | "pavilion"
+  // animal keeping (see riders.ts)
+  | "stable" | "perch" | "tack"
+  // dragon keeping (see dragonKeep.ts)
+  | "roost" | "hatchery" | "dragonYard" | "feedPit"
   // the Old Ways' last-resort project
   | "shelterDeep"
   | "refinery"
@@ -820,7 +849,7 @@ export interface Scorpion {
   drone?: boolean;
 }
 
-export type NodeKind = "stone" | "clay" | "iron" | "coal" | "silver" | "gold" | "obsidian" | "flint" | "salt" | "tar" | "artifact" | "fossil" | "copper" | "quartz" | "magnetite" | "crystal" | "diamond" | "meteorite";
+export type NodeKind = "stone" | "limestone" | "clay" | "iron" | "coal" | "silver" | "gold" | "obsidian" | "flint" | "salt" | "tar" | "artifact" | "fossil" | "copper" | "quartz" | "magnetite" | "crystal" | "diamond" | "meteorite";
 
 /** A resource deposit. Rare ones stay hidden until someone walks by. */
 export interface ResNode {
@@ -834,7 +863,69 @@ export interface ResNode {
   variant: number;
 }
 
-export type DragonState = "arrive" | "circle" | "hunt" | "strafe" | "land" | "eat" | "flee" | "leave";
+export type DragonState = "arrive" | "circle" | "hunt" | "strafe" | "land" | "eat" | "flee" | "leave"
+  // wild dragons that live here: at the nest, flying home, driving off intruders, chasing an egg thief
+  | "perch" | "home" | "defend" | "chase"
+  // tamed dragons (see dragonKeep.ts)
+  | "idle" | "sleep" | "play" | "walk" | "fly" | "hover";
+
+/** A player order for a tamed dragon. */
+export interface DragonCmd {
+  kind: DragonCmdKind;
+  x: number;
+  y: number;
+  /** creature to attack */
+  target?: number;
+  /** route waypoints */
+  pts?: { x: number; y: number }[];
+  /** current waypoint / step */
+  i?: number;
+  /** seconds since it was given */
+  t: number;
+  /** set by Auto mode (a player order replaces it) */
+  auto?: boolean;
+}
+
+/** A dragon nest high in the mountains or on a volcanic ridge. */
+export interface DragonNest {
+  id: number;
+  x: number;
+  y: number;
+  breed: DragonBreed;
+  /** "peak" | "cliff" | "volcanic" | "cave" | "plateau" (just flavour + art) */
+  site: string;
+  found: boolean;
+  /** the wild dragon that lives here (0 = none right now) */
+  parent: number;
+  /** treasure lying in the nest */
+  loot: Partial<Record<Resource, number>>;
+  /** seconds until the parent lays again */
+  layT: number;
+  /** seconds until a new parent moves in (after one is driven off) */
+  emptyT: number;
+}
+
+/** A dragon egg: in a nest, carried, on the ground, or incubating at camp. */
+export interface DragonEgg {
+  id: number;
+  breed: DragonBreed;
+  x: number;
+  y: number;
+  at: "nest" | "carried" | "ground" | "camp";
+  nest: number;
+  /** human carrying it */
+  carrier: number;
+  /** 0..1 how warm it is */
+  heat: number;
+  /** 0..1 incubation */
+  progress: number;
+  /** 0..1 (0 = the egg is lost) */
+  health: number;
+  /** a rare golden-flecked egg: the hatchling learns faster */
+  rare: boolean;
+  /** >0 while hatching (the crack animation), seconds */
+  hatchT: number;
+}
 
 export interface Dragon {
   id: number;
@@ -864,6 +955,52 @@ export interface Dragon {
   passes: number;
   /** hit flash timer */
   hit: number;
+  breed?: DragonBreed;
+  /** a wild dragon that lives at this nest: it goes home instead of leaving */
+  nest?: number;
+  /** one of ours (tamed dragons live in Dragons.owned, never in the wild list) */
+  owner?: boolean;
+  /** seconds since hatching */
+  age?: number;
+  /** 0..1 grown (wild ones are 1) */
+  growth?: number;
+  skills?: Partial<Record<DragonSkill, number>>;
+  /** the lesson its trainer is teaching */
+  lesson?: DragonSkill | null;
+  trainer?: number;
+  /** bonded Dragon Rider (human id) */
+  partner?: number;
+  /** whoever is on its back right now */
+  rider?: number;
+  /** 0..1: drains flying + breathing fire, comes back resting */
+  stamina?: number;
+  /** 0..1 rest (sleep restores it) */
+  energy?: number;
+  /** 0..1 */
+  hunger?: number;
+  /** seconds before it can breathe fire again */
+  fireCd?: number;
+  /** seconds of fire left in the current burst */
+  burst?: number;
+  aimX?: number;
+  aimY?: number;
+  cmd?: DragonCmd | null;
+  /** Auto mode: rest, patrol, defend on its own when there are no orders */
+  auto?: boolean;
+  /** the roost building it calls home */
+  roost?: number;
+  /** cargo on its back */
+  carrying?: { r: Resource; n: number } | null;
+  /** banking into turns (radians, for the art) */
+  bank?: number;
+  /** a human it is after (nest intruder / egg thief) */
+  foe?: number;
+  /** golden-flecked (from a rare egg) */
+  rare?: boolean;
+  /** seconds until Auto sends it out on patrol again */
+  restT?: number;
+  /** seconds of play / a short hop (the art bounces it) */
+  hop?: number;
 }
 
 export type ProjectileKind = "spear" | "arrow" | "bolt" | "scorpion" | "beam";
