@@ -10,6 +10,7 @@ import { sp } from "../data/species";
 import { addHuman } from "../sim/humans";
 import { P } from "../sim/particles";
 import { leaveScorpion } from "../sim/tasks";
+import { ringFire } from "../sim/shade";
 import { makePlant } from "../sim/plants";
 import { isWaterTile, isWalkTile } from "../sim/terrain";
 import { MAP_W, MAX_PEOPLE, T, TILE, type BuildingKind, type NodeKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
@@ -593,6 +594,13 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
     }
     default: {
       const kind = opt as BuildingKind;
+      if (kind === "seatRing") {
+        const f = ringFire(w, x, y);
+        if (f) {
+          x = f.x;
+          y = f.y + TILE / 2;
+        }
+      }
       const why = w.colony.canPlace(w, kind, x, y);
       if (why) {
         if (!drag) hint(w, BUILDINGS[kind].icon, why);

@@ -16,7 +16,8 @@ export interface Toast {
 /** Little pill messages at the top. Facts hide behind a 💡 so they never become homework. */
 export default function Toasts({ toasts, onDismiss, onGo }: { toasts: Toast[]; onDismiss: (id: number) => void; onGo: (x: number, y: number) => void }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-20 z-30 flex flex-col items-center gap-2 px-3 sm:top-4">
+    // phones: no alert pills over the game (the screen is too small for them)
+    <div className="pointer-events-none absolute inset-x-0 top-20 z-30 hidden flex-col items-center gap-2 px-3 sm:top-4 sm:flex">
       <AnimatePresence initial={false}>
         {toasts.map((t) => (
           <ToastPill key={t.id} t={t} onDismiss={onDismiss} onGo={onGo} />

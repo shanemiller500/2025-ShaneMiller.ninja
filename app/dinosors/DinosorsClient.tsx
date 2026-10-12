@@ -489,6 +489,8 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
         .dl-modal.dl-modal-paper, .dark .dl-modal.dl-modal-paper { background: #f6e4bd !important }
         .dl-scroll::-webkit-scrollbar { display: none }
         .dl-scroll { scrollbar-width: none; touch-action: pan-x pan-y; overscroll-behavior: contain }
+        .dl-noscroll::-webkit-scrollbar { display: none }
+        .dl-noscroll { scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch }
       `}</style>
     </div>
   );

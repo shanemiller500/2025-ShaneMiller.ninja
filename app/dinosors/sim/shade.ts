@@ -8,8 +8,45 @@
 /* ------------------------------------------------------------------ */
 import { go, homeArea, say } from "./humans";
 import { pick } from "./rng";
-import type { Building, BuildingKind, Human } from "./types";
+import { TILE, type Building, type BuildingKind, type Human } from "./types";
 import type { World } from "./world";
+
+/** Seating ring: how far the logs sit from the fire in the middle. */
+export const RING_R = 62;
+/** A seating ring this close to a campfire is built round it. */
+const RING_SNAP = 150;
+
+/** Where a shade structure's seats are centred: a seating ring sits round its campfire. */
+export function shadeCentre(w: World, b: Building) {
+  if (b.kind === "seatRing") {
+    let best: { x: number; y: number } | null = null;
+    let bd = RING_SNAP;
+    for (const f of w.campfires) {
+      const d = Math.hypot(f.x - b.x, f.y - b.y);
+      if (d < bd) {
+        bd = d;
+        best = { x: f.x, y: f.y };
+      }
+    }
+    if (best) return best;
+    return { x: b.x, y: b.y - TILE / 2 };
+  }
+  return { x: b.x, y: b.y };
+}
+
+/** The campfire a seating ring should go round (for placing one). */
+export function ringFire(w: World, x: number, y: number) {
+  let best: { x: number; y: number } | null = null;
+  let bd = 120;
+  for (const f of w.campfires) {
+    const d = Math.hypot(f.x - x, f.y - y);
+    if (d < bd) {
+      bd = d;
+      best = f;
+    }
+  }
+  return best;
+}
 
 export interface ShadeDef {
   /** seats under / around it */
@@ -22,7 +59,7 @@ export interface ShadeDef {
 
 export const SHADE: Partial<Record<BuildingKind, ShadeDef>> = {
   canopy: { seats: 4, covered: true, r: 18 },
-  seatRing: { seats: 8, covered: false, r: 34 },
+  seatRing: { seats: 10, covered: false, r: RING_R },
   pavilion: { seats: 8, covered: true, r: 30 },
 };
 
@@ -31,17 +68,19 @@ const REACH = 900;
 
 export const isShade = (b: Building) => !!SHADE[b.kind] && b.built >= 1 && b.hp > 0;
 
-const seatAt = (b: Building, n: number) => {
+const seatAt = (w: World, b: Building, n: number) => {
   const def = SHADE[b.kind]!;
   const a = (n / def.seats) * Math.PI * 2 + 0.4;
-  return { x: b.x + Math.cos(a) * def.r, y: b.y + 4 + Math.sin(a) * def.r * 0.45 };
+  const c = shadeCentre(w, b);
+  // a seating ring's logs sit round the fire (squashed for the view); others under their roof
+  return b.kind === "seatRing" ? { x: c.x + Math.cos(a) * def.r, y: c.y + Math.sin(a) * def.r * 0.55 + 2 } : { x: c.x + Math.cos(a) * def.r, y: c.y + 4 + Math.sin(a) * def.r * 0.45 };
 };
 
 function taken(w: World, b: Building, me: Human) {
   const out = new Set<number>();
   for (const o of w.humans) {
     if (o === me || o.fireId !== b.id || o.seat === undefined) continue;
-    const s = seatAt(b, o.seat);
+    const s = seatAt(w, b, o.seat);
     if (o.state === "relax" || (o.state === "walk" && Math.hypot(o.tx - s.x, o.ty - s.y) < 4)) out.add(o.seat);
   }
   return out;
@@ -76,7 +115,7 @@ export function pickShade(w: World, h: Human, o: { covered?: boolean; nearFire?:
   if (!best) return null;
   h.fireId = best.b.id;
   h.seat = best.seat;
-  return { b: best.b, ...seatAt(best.b, best.seat) };
+  return { b: best.b, ...seatAt(w, best.b, best.seat) };
 }
 
 /** Walk to a shade seat and sit (true if there was one). */
@@ -93,7 +132,7 @@ export function sitIfAtShade(w: World, h: Human) {
   if (h.seat === undefined || !h.fireId) return false;
   const b = w.colony.buildings.find((x) => x.id === h.fireId);
   if (!b || !isShade(b)) return false;
-  const s = seatAt(b, h.seat);
+  const s = seatAt(w, b, h.seat);
   if (Math.hypot(h.x - s.x, h.y - s.y) > 8) return false;
   go(h, "relax", s.x, s.y);
   return true;

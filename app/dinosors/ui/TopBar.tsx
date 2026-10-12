@@ -63,7 +63,10 @@ export default function TopBar(p: Props) {
           <SkyDial snap={snap} onClick={() => toggle("time")} />
           <AnimatePresence>{panel === "time" && <TimePanel {...p} />}</AnimatePresence>
         </div>
-        <div className="pointer-events-auto relative flex items-center gap-1.5 sm:gap-2">
+        <div className="pointer-events-auto relative flex min-w-0 flex-1 justify-end">
+          {/* phones: the buttons scroll sideways (panels sit outside the strip so they aren't clipped) */}
+          <div className="dl-noscroll flex min-w-0 items-center gap-1.5 overflow-x-auto pb-1 pl-1 pr-1.5 pt-1.5 sm:gap-2 sm:overflow-visible sm:p-0">
+          <span aria-hidden className="ml-auto" />
           {p.cloudStatus !== "off" && (
             <button type="button" className={`${btn} relative`} title={p.cloudStatus === "signedIn" ? "Cloud save: on" : "Save to the cloud"} aria-label="Cloud save" onClick={p.onCloud}>
               <span className="text-2xl leading-none">☁️</span>
@@ -105,6 +108,7 @@ export default function TopBar(p: Props) {
           <button type="button" data-dl-top-trigger className={btn} title="Menu" aria-label="Menu" onClick={() => toggle("menu")}>
             <Menu className="h-6 w-6" />
           </button>
+          </div>
           <AnimatePresence>
             {panel === "places" && <PlacesPanel engine={p.engine} close={() => setPanel(null)} onCamp={p.onCamp} />}
             {panel === "menu" && <MenuPanel {...p} close={() => setPanel(null)} />}

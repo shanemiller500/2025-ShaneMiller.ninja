@@ -1197,7 +1197,7 @@ export class Tribe {
     if (adults < 5 || w.colony.buildings.some((b) => SHADE[b.kind] && b.built < 1)) return false;
     const fire = w.campfires.find((f) => f.lit && Math.hypot(f.x - c.x, f.y - c.y) < 260);
     if (fire && c.learned.has("axe") && adults >= 8 && !w.colony.buildings.some((b) => b.kind === "seatRing" && Math.hypot(b.x - fire.x, b.y - fire.y) < 170)) {
-      const b = this.placeNear(w, "seatRing", fire.x, fire.y, [70, 100, 130]);
+      const b = w.colony.addBuilding(w, "seatRing", fire.x, fire.y + TILE / 2) ?? this.placeNear(w, "seatRing", fire.x, fire.y, [24, 48]);
       if (b) {
         w.toast("🪵", "Auto planned a seating ring by the fire, so the evening crowd has somewhere to sit.", b.x, b.y);
         return true;

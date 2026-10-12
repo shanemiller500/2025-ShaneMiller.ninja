@@ -27,7 +27,8 @@ import { ROLES } from "../data/facts";
 import { BUILDINGS, HOUSING } from "../data/colony";
 import { drawBar, drawBones, drawBuilding, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
 import { drawDragon, drawDragonEgg, drawNest } from "./dragonArt";
-import { clusters, drawField, drawPaddock } from "./mergedArt";
+import { clusters, drawField, drawPaddock, drawSeatRing } from "./mergedArt";
+import { RING_R, SHADE, shadeCentre } from "../sim/shade";
 import { dragonStats } from "../sim/dragonKeep";
 import { shelterDone, stagesOf, towerMaxHp, wallMaxHp } from "../sim/build";
 import { BUILD_BY_ID } from "../game/tools";
@@ -285,7 +286,7 @@ export class Renderer {
     const col = w.colony;
     for (let i = 0; i < col.buildings.length; i++) {
       const b = col.buildings[i];
-      if (b.kind === "path" || b.kind === "bridge" || b.kind === "pen" || b.kind === "trap") continue;
+      if (b.kind === "path" || b.kind === "bridge" || b.kind === "pen" || b.kind === "trap" || (b.kind === "seatRing" && b.built >= 1)) continue;
       if (b.x > x0 - 80 && b.x < x1 + 80 && b.y > y0 && b.y < y1 + 80) list.push({ y: b.y - 1, k: K_BUILDING, i });
     }
     for (let i = 0; i < col.scorpions.length; i++) {
@@ -2505,6 +2506,16 @@ export class Renderer {
       }
     }
     for (const b of w.colony.buildings) {
+      if (b.kind === "seatRing" && b.built >= 1) {
+        // log seats round the campfire, flat under the fire + the people sitting on them
+        const ctr = shadeCentre(w, b);
+        if (ctr.x < x0 - 120 || ctr.x > x1 + 120 || ctr.y < y0 - 80 || ctr.y > y1 + 80) continue;
+        c.save();
+        c.translate(ctr.x, ctr.y);
+        drawSeatRing(c, RING_R, SHADE.seatRing!.seats, b.id);
+        c.restore();
+        continue;
+      }
       if (b.kind !== "path" && b.kind !== "bridge" && b.kind !== "pen" && b.kind !== "trap") continue;
       if (merged.has(b)) continue;
       if (b.x < x0 - 80 || b.x > x1 + 80 || b.y < y0 - 60 || b.y > y1 + 60) continue;

@@ -175,6 +175,76 @@ export function drawPaddock(c: CanvasRenderingContext2D, W: number, H: number, n
   c.stroke();
 }
 
+/* ------------------------------ seating ring ------------------------------ */
+
+/**
+ * Big log seats in a ring round a campfire (origin: the fire). Each log lies along the ring
+ * (so everyone faces the fire), on a trodden clearing; the view squashes the circle.
+ */
+export function drawSeatRing(c: CanvasRenderingContext2D, R: number, n: number, seed: number) {
+  const sq = 0.55;
+  // trodden clearing
+  c.fillStyle = "rgba(122,94,58,0.3)";
+  c.beginPath();
+  c.ellipse(0, 2, R + 24, (R + 24) * sq, 0, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = "rgba(150,118,74,0.22)";
+  c.beginPath();
+  c.ellipse(0, 2, R - 16, (R - 16) * sq, 0, 0, Math.PI * 2);
+  c.fill();
+  // back logs first, front logs last
+  const logs = Array.from({ length: n }, (_, i) => (i / n) * Math.PI * 2 + 0.4).sort((a, b) => Math.sin(a) - Math.sin(b));
+  for (const a of logs) {
+    const x = Math.cos(a) * R;
+    const y = Math.sin(a) * R * sq + 2;
+    const rot = Math.atan2(Math.cos(a) * sq, -Math.sin(a));
+    const len = 34 + hash(seed + a) * 6;
+    const th = 11;
+    c.save();
+    c.translate(x, y);
+    // shadow
+    c.fillStyle = "rgba(30,20,10,0.25)";
+    c.beginPath();
+    c.ellipse(1, th * 0.45, len * 0.55, th * 0.45, rot, 0, Math.PI * 2);
+    c.fill();
+    c.rotate(rot);
+    // the log: a rounded body, bark lines, a cut end with growth rings
+    const g = c.createLinearGradient(0, -th / 2, 0, th / 2);
+    g.addColorStop(0, "#9a6b3f");
+    g.addColorStop(0.5, "#7a5230");
+    g.addColorStop(1, "#5a3a20");
+    c.fillStyle = g;
+    c.beginPath();
+    c.roundRect(-len / 2, -th / 2 - 2, len, th, th / 2);
+    c.fill();
+    c.strokeStyle = "rgba(50,30,15,0.45)";
+    c.lineWidth = 1;
+    for (let k = -2; k <= 2; k++) {
+      c.beginPath();
+      c.moveTo(k * 6 - 3, -th / 2 + 1);
+      c.lineTo(k * 6 + 2, th / 2 - 4);
+      c.stroke();
+    }
+    for (const end of [-1, 1]) {
+      c.fillStyle = "#d9b07a";
+      c.beginPath();
+      c.ellipse((end * len) / 2, -2, 3.2, th / 2, 0, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = "#a07848";
+      c.lineWidth = 0.8;
+      c.beginPath();
+      c.ellipse((end * len) / 2, -2, 1.6, th / 4, 0, 0, Math.PI * 2);
+      c.stroke();
+    }
+    // a worn, lighter seat on top
+    c.fillStyle = "rgba(255,230,190,0.18)";
+    c.beginPath();
+    c.roundRect(-len / 2 + 5, -th / 2 - 1, len - 10, 3, 1.5);
+    c.fill();
+    c.restore();
+  }
+}
+
 /* ------------------------------ the big field ------------------------------ */
 
 /**
