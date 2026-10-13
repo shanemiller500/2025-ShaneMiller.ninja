@@ -9,7 +9,9 @@ import { hasVault } from "./deepBuild";
 import { CAMP_LEVELS, FACTS } from "../data/facts";
 import { BUILDINGS, HOUSING, OUTFITS, OUTFIT_BY_ID, SCORPION_TIERS, WEAPON_BY_ID, type WeaponDef } from "../data/colony";
 import { sonicDispatch } from "./sonic";
-import { trainerThink, trainerWork } from "./riders";
+import { moveAnimalBuildingsOut } from "./dinoBounds";
+import { slayerDamage, slayerDrillThink } from "./dragonRaid";
+import { saddleVolley, trainerThink, trainerWork } from "./riders";
 import { SHADE, shadeNear } from "./shade";
 import { sp } from "../data/species";
 import { addDino, emote, findSpawnSpot, isBaby, setState, sizeOf } from "./dinos";
@@ -385,6 +387,48 @@ export class Tribe {
     return this.enclosedCache.inside[ty * MAP_W + tx] === 1;
   }
 
+  private walledCache: { v: string; inside: Uint8Array } | null = null;
+
+  /**
+   * Inside the settlement's walls, for the "no grown dinosaurs inside" rule: like enclosed(), but
+   * every gate counts as shut (open or not) and walls still going up count once they're a quarter
+   * built, so an open gate doesn't let the whole camp count as "outside".
+   */
+  walledIn(w: World, x: number, y: number) {
+    const tx = Math.floor(x / TILE);
+    const ty = Math.floor(y / TILE);
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H || !this.walls.length) return false;
+    const key = this.enclosureKey(w);
+    if (!this.walledCache || this.walledCache.v !== key) {
+      const N = MAP_W * MAP_H;
+      const blocked = (i: number) => {
+        const wl = this.wallMap.get(i);
+        if (wl && (wl.part === "gate" || (wl.built >= 0.25 && wl.hp > 0))) return true;
+        return !w.nav.passable("dino", (i % MAP_W) * TILE + TILE / 2, Math.floor(i / MAP_W) * TILE + TILE / 2) && !wl;
+      };
+      const out = new Uint8Array(N);
+      const q: number[] = [];
+      for (let x2 = 0; x2 < MAP_W; x2++) for (const y2 of [0, MAP_H - 1]) q.push(y2 * MAP_W + x2);
+      for (let y2 = 0; y2 < MAP_H; y2++) for (const x2 of [0, MAP_W - 1]) q.push(y2 * MAP_W + x2);
+      for (const i of q) out[i] = 1;
+      while (q.length) {
+        const i = q.pop()!;
+        if (blocked(i)) continue;
+        const cx = i % MAP_W;
+        for (const j of [i - 1, i + 1, i - MAP_W, i + MAP_W]) {
+          if (j < 0 || j >= N || out[j]) continue;
+          if (Math.abs((j % MAP_W) - cx) > 1) continue;
+          out[j] = 1;
+          q.push(j);
+        }
+      }
+      const inside = new Uint8Array(N);
+      for (let i = 0; i < N; i++) inside[i] = out[i] || this.wallMap.has(i) ? 0 : 1;
+      this.walledCache = { v: key, inside };
+    }
+    return this.walledCache.inside[ty * MAP_W + tx] === 1;
+  }
+
   /** Automatic weapons that defend the walls with nobody manning them. */
   autoDefense(w: World) {
     return w.colony.drones(w) + w.colony.buildings.filter((b) => b.kind === "beamTower" && b.built >= 1).length;
@@ -637,7 +681,7 @@ export class Tribe {
       const mul = w.civ.dmgMul(w, h, wp.tier, wp.proj);
       if (d.kind === "dino") hitDino(w, d, wp.dmg * mul, h.x, h.y);
       else if (d.kind === "brute") w.rivals.hit(w, d, wp.dmg * mul, h.x, h.y, false, "melee");
-      else w.dragons.hit(w, d, wp.dmg * 0.5 * mul);
+      else w.dragons.hit(w, d, wp.dmg * 0.5 * mul * slayerDamage(h));
       return;
     }
     const dist = Math.hypot(d.x - h.x, d.y - h.y);
@@ -660,7 +704,7 @@ export class Tribe {
       dur: flight,
       kind: wp.proj ?? "spear",
       target: d.id,
-      dmg: wp.dmg * w.civ.dmgMul(w, h, wp.tier, wp.proj),
+      dmg: wp.dmg * w.civ.dmgMul(w, h, wp.tier, wp.proj) * (d.kind === "dragon" ? slayerDamage(h) : 1),
       hit: false,
     });
     w.sfx(wp.kind === "spear" ? "whoosh" : "twang", h.x, h.y, 0.5);
@@ -1024,6 +1068,8 @@ export class Tribe {
   private autoPlan(w: World) {
     const c = w.camp;
     const f = w.flags;
+    // animal pens, stables + perches belong outside the walls
+    moveAnimalBuildingsOut(w);
     // full camp → another hut
     if (c.learned.has("shelter") && w.humans.length >= this.capacity(w) && !c.activeShelter(w) && w.shelters.length < 30) {
       const n = w.shelters.length;
@@ -1745,6 +1791,18 @@ export function roleThink(w: World, h: Human): boolean {
   if (h.order?.kind === "guard") return guardAt(w, h, h.order.x, h.order.y, wp, undefined, !!h.order.top);
 
   switch (role) {
+    case "dragonSlayer": {
+      // a wild dragon troubling the camp: go after it; otherwise drill
+      const dr = w.dragons.list.find((d) => d.state !== "leave" && d.state !== "flee" && d.state !== "perch" && Math.hypot(d.x - w.camp.x, d.y - w.camp.y) < 900);
+      if (dr && wp) {
+        h.order = { kind: "hunt", id: dr.id };
+        return false;
+      }
+      return slayerDrillThink(w, h);
+    }
+    case "eggRunner":
+      // between raids runners fetch + carry like gatherers (they're quick)
+      return false;
     case "guard": {
       if (h.riding && w.flags.has("rallyDinos")) return mountedRallyThink(w, h);
       if (!wp && !camp.learned.has("tools")) return false;
@@ -2037,6 +2095,7 @@ function haulSomething(w: World, h: Human) {
 export function roleAct(w: World, h: Human, dt: number): boolean {
   const tribe = w.tribe;
   h.cd = Math.max(0, h.cd - dt);
+  if (h.riding && h.cd <= 0) saddleVolley(w, h);
   if (h.riding && w.flags.has("rallyDinos") && tribe.roleOf(h) === "guard" && h.cd <= 0) {
     const target = w.dinoById(h.targetId) ?? w.rivals.byId(h.targetId);
     const wp = tribe.weaponFor(w, h);

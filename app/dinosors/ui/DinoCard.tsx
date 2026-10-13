@@ -174,6 +174,12 @@ function DinoBody({ info, engine }: { info: DinoInfo; engine: Engine }) {
         </div>
       )}
 
+      {info.owner && info.canClear && (
+        <button type="button" onClick={() => engine.clearLandWith(info.id)} className={`mt-2 w-full min-h-10 rounded-xl px-3 text-xs font-bold active:scale-95 ${info.clearing ? "bg-lime-400 text-slate-900" : "bg-lime-500/20 text-lime-100 hover:bg-lime-500/30"}`}>
+          🌳 {info.clearing ? "Clearing land… (tap the trees)" : "Clear land: push over trees + shrubs"}
+        </button>
+      )}
+
       {info.work && <div className="mt-2 rounded-xl bg-white/10 px-3 py-2 text-xs text-amber-100">🧰 {info.work.harness ? `Harness ${info.work.harness}` : "No harness"} · {info.work.cargoN ? `${info.work.cargoN} ${info.work.cargo} aboard` : "Empty"} · {info.work.auto ? "Auto work on" : "Auto work off"}</div>}
 
       <div className="mt-3 rounded-2xl bg-amber-300/10 p-3 text-xs text-amber-100">

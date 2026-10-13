@@ -263,6 +263,8 @@ export interface Dino {
     warTraining?: number;
     /** fitted protection: 0 none, 1 hide and bone, 2 metal */
     warArmor?: number;
+  /** hurrying (running) to meet its rider */
+  hurry?: boolean;
     /** seconds until this animal can strike again */
     warCd?: number;
     /** short pause between bone-tusk collision hits */
@@ -289,7 +291,10 @@ export interface Dino {
     auto: boolean;
     cargo: Resource | null;
     cargoN: number;
-    job: "collect" | "deliver" | "travel" | null;
+    job: "collect" | "deliver" | "travel" | "clear" | null;
+    /** land clearing: the middle of the patch being cleared */
+    clearX?: number;
+    clearY?: number;
     source: "stock" | "mine" | null;
     site: string;
     targetX: number;
@@ -352,7 +357,11 @@ export type HumanState =
   /** feeding, calming or drilling a tamed dragon, or tending a dragon egg (see dragonKeep.ts) */
   | "dragonCare"
   /** blasting a fire with an ultrasonic emitter (see sonic.ts) */
-  | "sonic";
+  | "sonic"
+  /** a dragon slayer drilling (see dragonRaid.ts) */
+  | "drill"
+  /** heaving a building up / setting it down (see moving.ts) */
+  | "lift";
 
 export type Resource =
   | "stick"
@@ -392,7 +401,7 @@ export type Resource =
   | "copperBar";
 
 /** What a cave person does. "auto" lets the tribe decide. */
-export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner" | "trainer";
+export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner" | "trainer" | "dragonSlayer" | "eggRunner";
 
 export type HumanOrder = { kind: "hunt"; id: number } | { kind: "guard"; x: number; y: number; top?: boolean } | null;
 
@@ -482,6 +491,10 @@ export interface Human {
   aloft?: number;
   /** carrying a dragon egg (its id) */
   egg?: number;
+  /** a second egg (egg runners in their kit carry two) */
+  egg2?: number;
+  /** 0..1 dragon-slaying drill (hits dragons harder, rolls away from fire) */
+  slayer?: number;
   /** carrying an ultrasonic fire emitter from the fire station */
   sonic?: boolean;
   /** where the emitter is pointed */
@@ -671,6 +684,8 @@ export type ShelterPlan = "tent" | "hut";
 
 export interface Shelter {
   id: number;
+  /** being carried by a crew: where it's drawn meanwhile (see moving.ts) */
+  lift?: { x: number; y: number; z: number };
   x: number;
   y: number;
   /** construction stage (see stagesOf); == stages.length when finished */
@@ -731,7 +746,9 @@ export type TechId =
   | "scorpion"
   | "firefighting"
   /** ultrasonic fire emitters + the sonic fire station (see sonic.ts) */
-  | "sonicFire";
+  | "sonicFire"
+  /** dragon slayers, egg runners + dragon raids (see dragonRaid.ts) */
+  | "dragonHunting";
 
 export type WallKind = "palisade" | "stone" | "polygon";
 /** wall pieces: plain wall, a gate, or stairs up to the walkway */
@@ -818,6 +835,8 @@ export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" |
 export interface Building {
   id: number;
   kind: BuildingKind;
+  /** being carried by a crew: where it's drawn meanwhile (see moving.ts) */
+  lift?: { x: number; y: number; z: number };
   /** footprint top-left tile */
   tx: number;
   ty: number;

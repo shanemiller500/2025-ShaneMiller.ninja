@@ -25,6 +25,7 @@ import { pick } from "./rng";
 import { hitDino } from "./tribe";
 import { MAP_H, MAP_W, TILE, type Brute, type BruteState, type BruteWeapon, type Clan, type Human, type ItemKind, type Resource, type Wall } from "./types";
 import type { World } from "./world";
+import { boneSpikes } from "./behavior";
 
 const WORLD_W = MAP_W * TILE;
 const WORLD_H = MAP_H * TILE;
@@ -946,6 +947,12 @@ export class Rivals {
           b.stateT = 0;
           w.sfx("whoosh", b.x, b.y, 0.4, 0.7);
           hitDino(w, d, 40, b.x, b.y);
+          // clubbing a war dino in grown bone armour: the spikes bite back
+          if (d.owner && (d.warArmor ?? 0) > 0) {
+            boneSpikes(w, b.x, b.y);
+            this.hit(w, b, 60 + (d.warArmor ?? 0) * 50, d.x, d.y, false, "tusk");
+            if (b.hp <= 0) return;
+          }
           if (d.health <= 0 && clan) {
             b.forage = 4;
             b.forageKind = "meat";
@@ -1062,7 +1069,14 @@ export class Rivals {
   /** Club a man (and finish him if he's down); grab a woman and run. */
   private strike(w: World, b: Brute, h: Human) {
     const wp = BRUTE_WEAPONS[b.weapon];
-    if (b.raid && (isFemale(h) || h.child) && !b.captive && h.level === 0) {
+    // a rider up on a war dino: no grabbing them, and its bone spikes gore whoever reaches up
+    const mount = h.riding ? w.dinoById(h.riding) : null;
+    if (mount && mount.owner && (mount.warArmor ?? 0) > 0) {
+      boneSpikes(w, b.x, b.y);
+      this.hit(w, b, 50 + (mount.warArmor ?? 0) * 45, mount.x, mount.y, false, "tusk");
+      if (b.hp <= 0) return;
+    }
+    if (b.raid && (isFemale(h) || h.child) && !b.captive && h.level === 0 && !h.riding) {
       this.grab(w, b, h);
       return;
     }

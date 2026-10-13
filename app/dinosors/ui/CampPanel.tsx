@@ -277,6 +277,12 @@ function JobsTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
         >
           {snap.rallied ? "🏳️ Stand down" : "📣 Rally! Everyone fight"}
         </button>
+        {snap.camp.learned.includes("dragonHunting") && (
+          <button type="button" onClick={() => engine.launchDragonRaid()} title="Every Dragon slayer + Egg runner (or the people you've selected) raids the best known dragon nest"
+            className="mt-1.5 w-full rounded-2xl bg-gradient-to-r from-red-700 to-amber-600 py-2.5 text-sm font-bold transition hover:brightness-110 active:scale-95">
+            🐉 Dragon raid! ⚔️ {counts.get("dragonSlayer") ?? 0} slayers · 🥚 {counts.get("eggRunner") ?? 0} runners
+          </button>
+        )}
       </div>
       <div className="mt-2 rounded-2xl bg-white/5 p-2.5">
         <div className="flex items-center justify-between gap-2">

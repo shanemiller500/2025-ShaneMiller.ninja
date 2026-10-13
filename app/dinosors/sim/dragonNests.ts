@@ -304,7 +304,7 @@ function eggTick(w: World, egg: DragonEgg, dt: number) {
       return;
     case "carried": {
       const h = w.humans.find((x) => x.id === egg.carrier);
-      if (!h || h.egg !== egg.id || h.state === "down" || h.captive || h.under) {
+      if (!h || (h.egg !== egg.id && h.egg2 !== egg.id) || h.state === "down" || h.captive || h.under) {
         dropEgg(w, egg, h ?? null);
         return;
       }
@@ -353,7 +353,8 @@ function eggTick(w: World, egg: DragonEgg, dt: number) {
 }
 
 export function dropEgg(w: World, egg: DragonEgg, h: Human | null) {
-  if (h && h.egg === egg.id) h.egg = undefined;
+  if (h && h.egg === egg.id) h.egg = h.egg2;
+  if (h && (h.egg === egg.id || h.egg2 === egg.id)) h.egg2 = undefined;
   egg.at = "ground";
   egg.carrier = 0;
   w.toast("🥚", `${h ? h.name : "Someone"} dropped the dragon egg!`, egg.x, egg.y);
@@ -439,7 +440,11 @@ export function settleEgg(w: World, egg: DragonEgg, h: Human | null) {
   egg.carrier = 0;
   egg.x = spot.x;
   egg.y = spot.y;
-  if (h) h.egg = undefined;
+  if (h) {
+    if (h.egg === egg.id) h.egg = h.egg2;
+    h.egg2 = undefined;
+    if (h.egg === egg.id) h.egg = undefined;
+  }
   const warm = eggWarmth(w, egg.x, egg.y);
   w.toast("🥚", `A ${BREEDS[egg.breed].name.toLowerCase()} egg is home! It's warmed by ${warm.src}. ${warm.heat < 0.6 ? "It needs more heat: build an incubation shelter (with fuel) or keep a fire lit beside it." : "Keep it warm until it hatches."}`, egg.x, egg.y);
   if (!w.flags.has("firstDragonEgg")) {

@@ -11,6 +11,7 @@ import { P } from "./particles";
 import { pick } from "./rng";
 import type { Human } from "./types";
 import type { World } from "./world";
+import { burnGuard, rollsClear } from "./dragonRaid";
 
 export type Condition = "healthy" | "injured" | "badly" | "down";
 
@@ -41,7 +42,24 @@ export function hurtHuman(w: World, h: Human, dmg: number, fx: number, fy: numbe
   const helm = h.gear.helmet ? HELMET_BY_ID[h.gear.helmet] : null;
   if (helm && cause !== "cold") dmg *= 1 - helm.armor;
   if (h.child) dmg *= 0.8;
+  if (cause === "burn") {
+    if (rollsClear(w, h)) {
+      if (w.rng() < 0.3) h.bubble = { text: "Rolled clear!", t: 1.2 };
+      return false;
+    }
+    dmg *= burnGuard(h);
+  }
   if (h.state === "down") return false;
+  // up on a war-trained dinosaur: hard to reach, and the saddle + bone armour take a lot of it
+  const mount = h.riding ? w.dinoById(h.riding) : null;
+  if (mount && mount.owner && (mount.warTraining ?? 0) >= 0.35 && cause !== "cold") {
+    if (w.rng() < 0.3 + (mount.warArmor ?? 0) * 0.1) {
+      w.particles.spawn(P.Star, h.x, h.y, { z: 22 + h.z, size: 4, max: 0.5, color: "#ffffff" });
+      if (w.rng() < 0.4) h.bubble = { text: pick(w.rng, ["Missed me!", "Ha!", "Too slow!"]), t: 1.2 };
+      return false;
+    }
+    dmg *= 0.5 - (mount.warArmor ?? 0) * 0.08;
+  }
   h.hp = Math.max(0, h.hp - dmg);
   h.fear = 1;
   if (cause !== "cold") {

@@ -36,6 +36,9 @@ import { bond, callRider, chooseRider, jobSpot, rideTeamTo, riderOf, riderReady,
 import { DRAGON_COMMANDS, type DragonCmdKind } from "../data/dragons";
 import { bondDragon, commandDragon, dismountDragon, unbondDragon } from "../sim/dragonKeep";
 import { revealNest } from "../sim/dragonNests";
+import { launchRaid, raidTarget } from "../sim/dragonRaid";
+import { canClear, commandClear } from "../sim/clearing";
+import { canMove, startMove, type MoveRef } from "../sim/moving";
 import type { DragonEgg, DragonNest } from "../sim/types";
 import { SAVE_VERSION } from "../sim/world";
 import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genetics";
@@ -89,6 +92,10 @@ export interface DinoInfo {
   needsRider: boolean;
   /** waiting for the player to tap where the team should ride */
   rideAim: boolean;
+  /** big / trained enough to push trees over */
+  canClear: boolean;
+  /** clearing land now (or waiting for the tap) */
+  clearing: boolean;
 }
 
 export interface HumanInfo {
@@ -306,7 +313,7 @@ interface Ptr {
   grab: Dino | null;
 }
 
-export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️", researcher: "📜", shaper: "🔷", technician: "⚡", miner: "⛏️", trainer: "🐾" };
+export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️", researcher: "📜", shaper: "🔷", technician: "⚡", miner: "⛏️", trainer: "🐾", dragonSlayer: "⚔️", eggRunner: "🥚" };
 export function moodOf(d: Dino): { icon: string; label: string } {
   const s = d.state;
   if (s === "sleep") return { icon: "💤", label: "Sleepy" };
@@ -368,6 +375,8 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
   stargaze: "Watching the stars",
   relax: "Resting in the shade",
   sonic: "Blasting the fire with ultrasound",
+  lift: "Carrying a building",
+  drill: "Dragon-slaying drill",
   dragonCare: "Caring for a dragon",
 };
 
@@ -571,6 +580,7 @@ export class Engine {
       marker: this.marker,
       inspect: this.inspectRef,
       buildPreview: this.tool.id === "build" && this.hover ? { x: this.hover.x, y: this.hover.y, build: this.tool.build } : null,
+      movePreview: this.moveAim && this.hover ? { x: this.hover.x, y: this.hover.y, ref: this.moveAim } : null,
       hover: cursor && this.hover ? { ...this.hover, ...cursor } : null,
       shakeX: (Math.random() - 0.5) * sk * 2,
       shakeY: (Math.random() - 0.5) * sk * 2,
@@ -1154,6 +1164,8 @@ export class Engine {
     else if (k === "escape") {
       this.dragonAim = null;
       this.rideAim = 0;
+      this.clearAim = 0;
+      this.moveAim = null;
       this.selectedEgg = 0;
       this.orderFor = 0;
       this.groupSelectMode = false;
@@ -1292,6 +1304,31 @@ export class Engine {
       this.aimTap(x, y);
       return;
     }
+    if (this.moveAim) {
+      const ref = this.moveAim;
+      const people = this.selectionHumans();
+      const why = startMove(w, ref, x, y, people.length ? people : undefined);
+      if (why) w.toast("🚚", why, x, y);
+      else {
+        this.moveAim = null;
+        this.inspectRef = null;
+        w.particles.spawn(P.Ring, x, y, { size: 22, max: 1, color: "rgba(255,215,90,0.95)" });
+        this.audio.play("pop", 0, 0, 0.5);
+      }
+      this.emit({ type: "select" });
+      return;
+    }
+    if (this.clearAim) {
+      const d = w.dinoById(this.clearAim);
+      this.clearAim = 0;
+      if (d) {
+        const why = commandClear(w, d, x, y);
+        if (why) w.toast("🌳", why, x, y);
+        else w.particles.spawn(P.Ring, x, y, { size: 20, max: 0.9, color: "rgba(140,220,120,0.9)" });
+      }
+      this.emit({ type: "select" });
+      return;
+    }
     if (this.rideAim) {
       const d = w.dinoById(this.rideAim);
       this.rideAim = 0;
@@ -1311,6 +1348,23 @@ export class Engine {
 
     const selectedWorkDino = w.dinoById(this.selectedId);
     const tappedPassenger = selectedWorkDino ? this.pickHuman(x, y) : null;
+    // a big work dino selected + trees/shrubs tapped: clear the land there
+    if (selectedWorkDino?.owner && !this.selection.length && !tappedPassenger && !this.pickDino(x, y) && canClear(selectedWorkDino) && !sites(w).some((s) => Math.hypot(s.x - x, s.y - y) < 56)) {
+      let plant = false;
+      w.plantHash.each(x, y, 26, () => {
+        plant = true;
+        return true;
+      });
+      if (plant) {
+        const why = commandClear(w, selectedWorkDino, x, y);
+        if (!why) {
+          w.toast("🌳", `${selectedWorkDino.name}: clear the land here.`, x, y);
+          w.particles.spawn(P.Ring, x, y, { size: 20, max: 0.9, color: "rgba(140,220,120,0.9)" });
+          this.emit({ type: "select" });
+          return;
+        }
+      }
+    }
     if (selectedWorkDino?.owner && selectedWorkDino.work && selectedWorkDino.work.skills && !this.selection.length && (!this.pickDino(x, y) || tappedPassenger)) {
       const work = workOf(selectedWorkDino);
       const site = sites(w).find((s) => Math.hypot(s.x - x, s.y - y) < 56 && !s.locked);
@@ -1672,8 +1726,50 @@ export class Engine {
     return true;
   }
 
+  /** Send every dragon slayer + egg runner on a raid at the best known nest (or the selected people). */
+  launchDragonRaid() {
+    const w = this.world;
+    const nest = raidTarget(w);
+    if (!nest) return w.toast("🪺", "No known dragon nest yet. Track a wild dragon home, or send scouts out to find one.");
+    const picked = this.selectionHumans();
+    const band = picked.length >= 2 ? picked : w.humans.filter((h) => !h.child && !h.stranger && !h.under && (w.tribe.roleOf(h) === "dragonSlayer" || w.tribe.roleOf(h) === "eggRunner"));
+    if (band.length < 2) return w.toast("⚔️", "A raid needs at least a few people: make some Dragon slayers + Egg runners in Your tribe → Assign a duty, or select a group.");
+    if (!launchRaid(w, band, nest)) w.toast("⚔️", "Nobody could set out.");
+    this.emit({ type: "select" });
+  }
+
   /** a rider team waiting for the player to tap where to ride (dino id) */
   rideAim = 0;
+  /** a dino waiting for the player to tap where to clear the land */
+  clearAim = 0;
+  /** a building / home waiting for the player to tap where it should go */
+  moveAim: MoveRef | null = null;
+
+  /** Move: the next tap picks the new spot (a crew carries it there). */
+  startMoveSelected() {
+    const ref = this.inspectRef;
+    if (!ref || (ref.kind !== "building" && ref.kind !== "shelter")) return;
+    const why = canMove(this.world, { kind: ref.kind, id: ref.id });
+    if (why) return this.world.toast("🚚", why);
+    this.moveAim = { kind: ref.kind, id: ref.id };
+    this.world.toast("🚚", "Tap where it should go.");
+    this.emit({ type: "select" });
+  }
+
+  cancelMove() {
+    this.moveAim = null;
+    this.emit({ type: "select" });
+  }
+
+  /** Clear land: the next tap picks the patch of trees + shrubs. */
+  clearLandWith(dinoId: number) {
+    const d = this.world.dinoById(dinoId);
+    if (!d) return;
+    if (!canClear(d)) return this.world.toast("🌳", `${d.name} isn't big or trained enough to push trees over.`);
+    this.clearAim = d.id;
+    this.world.toast("🌳", `Tap the trees + shrubs ${d.name} should clear.`);
+    this.emit({ type: "select" });
+  }
 
   /** Call a dinosaur's bonded rider over to climb on. */
   callDinoRider(dinoId: number) {
@@ -2890,6 +2986,8 @@ export class Engine {
           return r ? { id: r.id, name: r.name, mounted: r.riding === c.id, job: jobSpot(w, r).label } : null;
         })(),
         needsRider: c.owner && riderReady(c) && !riderOf(w, c),
+        canClear: canClear(c),
+        clearing: c.work?.job === "clear" || this.clearAim === c.id,
         rideAim: this.rideAim === c.id,
       };
     } else if (c && c.kind === "human") {

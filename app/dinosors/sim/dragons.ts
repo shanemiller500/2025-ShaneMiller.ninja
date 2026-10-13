@@ -430,7 +430,7 @@ export class Dragons {
           dr.z = 0;
           this.go(dr, "perch");
           // an egg gone from the nest: furious, it goes looking for whoever has it
-          const thief = w.humans.find((h) => h.egg && this.eggs.find((e) => e.id === h.egg)?.nest === nest.id && Math.hypot(h.x - nest.x, h.y - nest.y) < 1800);
+          const thief = w.humans.find((h) => (h.egg || h.egg2) && this.eggs.find((e) => (e.id === h.egg || e.id === h.egg2))?.nest === nest.id && Math.hypot(h.x - nest.x, h.y - nest.y) < 1800);
           if (thief) {
             dr.foe = thief.id;
             this.go(dr, "chase");
@@ -450,7 +450,15 @@ export class Dragons {
       }
       case "chase": {
         const h = w.humans.find((x) => x.id === dr.foe);
-        const egg = this.eggs.find((e) => e.nest === nest.id && (e.at === "carried" || e.at === "ground") && (e.at === "ground" || e.carrier === dr.foe));
+        let egg = this.eggs.find((e) => e.nest === nest.id && (e.at === "carried" || e.at === "ground") && (e.at === "ground" || e.carrier === dr.foe));
+        // its first thief got clean away: go after another one with an egg
+        if (!egg) {
+          const other = this.eggs.find((e) => e.nest === nest.id && e.at === "carried");
+          if (other) {
+            egg = other;
+            dr.foe = other.carrier;
+          }
+        }
         if (egg && egg.at === "ground") {
           // the egg was dropped: swoop down and take it home
           if (this.fly(dr, egg.x, egg.y, 320, dt, 20) < 40) {

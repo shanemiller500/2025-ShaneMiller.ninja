@@ -19,7 +19,8 @@ import { T, TILE, WORLD_H, WORLD_W, type Brute, type Dino, type DinoState, type 
 import type { World } from "./world";
 import { season } from "./seasons";
 import { thinkWorkDino } from "./workDinos";
-import { partnerThink } from "./riders";
+import { meetRider, partnerThink } from "./riders";
+import { leaveWalls, outsideSpot } from "./dinoBounds";
 
 /** States that run to completion; `think` leaves them alone. */
 const LOCKED = new Set<DinoState>([
@@ -176,7 +177,8 @@ function wanderTarget(w: World, d: Dino, def: SpeciesDef) {
 
 /** A trained pet's place on the hay inside its nearest finished pen. */
 function battleHome(w: World, d: Dino) {
-  const fallback = { x: w.camp.x + 160, y: w.camp.y + 150, pen: false };
+  const out = outsideSpot(w, w.camp.x + 160, w.camp.y + 150);
+  const fallback = { x: out.x, y: out.y, pen: false };
   const pens = w.colony.buildings.filter((b) => b.kind === "pen" && b.built >= 1 && b.hp > 0);
   const pen = pens.sort((a, b) => Math.hypot(a.x - d.homeX, a.y - d.homeY) - Math.hypot(b.x - d.homeX, b.y - d.homeY))[0];
   if (!pen) {
@@ -503,7 +505,7 @@ function startRoar(w: World, d: Dino) {
 }
 
 /** Trained friends defend the tribe nearby; a rider can bring one into a larger fight. */
-function warTarget(w: World, d: Dino, range: number): Dino | Brute | null {
+export function warTarget(w: World, d: Dino, range: number): Dino | Brute | null {
   let best: Dino | Brute | null = null;
   let distance = range;
   for (const foe of w.dinos) {
@@ -521,14 +523,23 @@ function warTarget(w: World, d: Dino, range: number): Dino | Brute | null {
   return best;
 }
 
+/** A burst of bone splinters where a war dino's spikes strike. */
+export function boneSpikes(w: World, x: number, y: number) {
+  w.particles.burst(P.Crumb, x, y, 6, 70, { z: 16, vz: 60, g: 220, size: 2.5, max: 0.6, color: "#efe6cf" });
+  w.sfx("thunk", x, y, 0.6, 0.8);
+}
+
 function actWarDino(w: World, d: Dino, dt: number) {
   if (!d.owner || (d.warTraining ?? 0) < 0.35 || isBaby(d)) return;
   d.spikeCd = Math.max(0, (d.spikeCd ?? 0) - dt);
-  if ((d.warArmor ?? 0) > 0 && (d.spikeCd ?? 0) <= 0 && Math.hypot(d.vx, d.vy) > 28) {
-    const reach = Math.max(22, sizeOf(d) * 0.38);
+  // grown bone armour: spikes gore whatever it charges into, and whatever stands close enough to hit it
+  if ((d.warArmor ?? 0) > 0 && (d.spikeCd ?? 0) <= 0) {
+    const moving = Math.hypot(d.vx, d.vy) > 28;
+    const reach = Math.max(22, sizeOf(d) * (moving ? 0.38 : 0.3));
     const foe = warTarget(w, d, reach);
     if (foe && dd(d, foe) <= reach + (foe.kind === "dino" ? sizeOf(foe) * 0.22 : 12)) {
-      d.spikeCd = 0.7;
+      d.spikeCd = moving ? 0.7 : 1.1;
+      boneSpikes(w, foe.x, foe.y);
       const force = (d.warArmor ?? 0) >= 2 ? 235 : 165;
       if (foe.kind === "dino") hitDino(w, foe, force, d.x, d.y);
       else w.rivals.hit(w, foe, force, d.x, d.y, false, "tusk");
@@ -1299,6 +1310,16 @@ export function thinkDino(w: World, d: Dino) {
     if (foe) {
       d.targetId = foe.id;
       setState(d, "war", foe.x, foe.y);
+      return;
+    }
+  }
+  // its person is coming for it (a rally, a call): run to meet them
+  if (d.owner && meetRider(w, d)) return;
+  // no grown dinosaur inside the walls: walk back out
+  if (!d.rider) {
+    const out = leaveWalls(w, d);
+    if (out) {
+      setState(d, "wander", out.x, out.y);
       return;
     }
   }

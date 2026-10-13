@@ -55,6 +55,8 @@ import { updateDeepBuilds } from "./deepBuild";
 import { updateDeepLife } from "./deepLife";
 import { Snow } from "./snow";
 import { Dragons } from "./dragons";
+import { regrowTick } from "./clearing";
+import { moveTick } from "./moving";
 import { Rivals } from "./rivals";
 import { TaskBoard, issue } from "./tasks";
 import { Population } from "./population";
@@ -149,6 +151,9 @@ export class World {
   humans: Human[] = [];
   items: Item[] = [];
   eggs: Egg[] = [];
+  /** trampled tiles waiting to grow back into grass (see clearing.ts) */
+  cleared: { i: number; at: number }[] = [];
+  private regrowT = 0;
   plants: Plant[] = [];
   props: Prop[] = [];
   shelters: Shelter[] = [];
@@ -734,6 +739,12 @@ export class World {
     this.shifts.update(this, dt);
     this.colony.update(this, dt);
     this.dragons.update(this, dt);
+    moveTick(this, dt);
+    this.regrowT -= dt;
+    if (this.regrowT <= 0) {
+      this.regrowT = 2;
+      regrowTick(this);
+    }
     this.rivals.update(this, dt);
     this.population.update(this, dt);
     this.civ.update(this, dt);
@@ -1009,6 +1020,7 @@ export class World {
       rivals: this.rivals.serialize(),
       dragons: this.dragons.serialize(),
       items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
+      cleared: this.cleared.map((c) => [c.i, Math.round(c.at)] as const),
       eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent, genes: e.genes, gen: e.gen })),
       evo: this.evo,
       terrainGen: this.terrain.gen,
@@ -1089,6 +1101,7 @@ export class World {
       w.addItem(i.kind, i.x, i.y, { amount: i.amount, t: i.t, species: i.species, ...(carcass ? { carcass: { ...carcass, max: { ...carcass.max } } } : {}) });
     }
     for (const e of data.eggs) w.eggs.push({ id: w.nextId(), ...e });
+    w.cleared = ((data as { cleared?: (readonly [number, number])[] }).cleared ?? []).map(([i, at]) => ({ i, at }));
     for (const [kind, x, y, size, food, burnt, fruit, stump] of data.plants) {
       const p = makePlant(w, kind, x, y, size);
       p.food = food;

@@ -18,6 +18,8 @@
 /*  mount/passenger code, war-dino behaviour, deposit discovery.       */
 /* ------------------------------------------------------------------ */
 import { TAMEABLE } from "../data/colony";
+import { WEAPON_BY_ID } from "../data/colony";
+import { warTarget } from "./behavior";
 import { sp } from "../data/species";
 import { isBaby, setState, sizeOf } from "./dinos";
 import { go, say, sourceFor } from "./humans";
@@ -278,6 +280,59 @@ export function riderDefend(w: World, h: Human, danger: { x: number; y: number; 
     w.toast("⚔️", `${h.name} rides ${d.name} into the fight! Rider teams answer danger instead of running from it.`, h.x, h.y);
   }
   return true;
+}
+
+/* ------------------------------ meeting the rider ------------------------------ */
+
+/**
+ * Someone is on their way to ride this dinosaur (a rally, a call from its card): it runs to meet
+ * them instead of waiting. Returns true while it's doing that.
+ */
+export function meetRider(w: World, d: Dino): boolean {
+  if (d.rider || isBaby(d) || d.health <= 0) {
+    d.hurry = false;
+    return false;
+  }
+  const h = w.humans.find((x) => {
+    const t = x.taskId ? w.tasks.get(x.taskId) : null;
+    return t?.kind === "ride" && t.target === d.id && x.state !== "down";
+  });
+  if (!h) {
+    d.hurry = false;
+    return false;
+  }
+  if (Math.hypot(h.x - d.x, h.y - d.y) < sizeOf(d) * 0.5 + 22) {
+    // met up: on they get, right away
+    d.hurry = false;
+    mount(w, h, d);
+    if (h.riding === d.id) {
+      go(h, "idle", h.x, h.y);
+      h.think = 0;
+    } else setState(d, "idle", d.x, d.y);
+    return true;
+  }
+  d.hurry = true;
+  setState(d, "wander", h.x + (d.x < h.x ? -10 : 10), h.y + 4);
+  d.think = 0.4;
+  return true;
+}
+
+/* ------------------------------ fighting from the saddle ------------------------------ */
+
+/**
+ * A rider on a war-trained dinosaur shoots at anything hostile in range (arrows if the tribe has
+ * bows, else thrown spears), a little more accurately from up there.
+ */
+export function saddleVolley(w: World, h: Human) {
+  const d = h.riding ? w.dinoById(h.riding) : null;
+  if (!d || !d.owner || (d.warTraining ?? 0) < 0.35 || h.child) return;
+  const wp = w.tribe.weaponFor(w, h);
+  const ranged = wp && !wp.melee ? wp : w.camp.learned.has("bow") ? WEAPON_BY_ID.bow1 : w.camp.learned.has("spear") ? WEAPON_BY_ID.spear1 : null;
+  if (!ranged) return;
+  const foe = warTarget(w, d, Math.min(300, ranged.range ?? 260));
+  if (!foe) return;
+  w.tribe.shoot(w, h, foe, ranged, 0.15);
+  if (w.rng() < 0.15) say(h, pick(w.rng, ["From the saddle!", "Take that!", "Got one!"]));
 }
 
 /* ------------------------------ player orders: call the rider, ride somewhere ------------------------------ */

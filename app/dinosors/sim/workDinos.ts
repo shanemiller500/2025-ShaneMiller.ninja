@@ -1,5 +1,6 @@
 import { sp } from "../data/species";
 import { deliver, siteByKey, siteKey, sites } from "./build";
+import { clearTick } from "./clearing";
 import { issue } from "./tasks";
 import { isBaby, setState, sizeOf } from "./dinos";
 import { tileOf } from "./nav";
@@ -147,6 +148,10 @@ export function thinkWorkDino(w: World, d: Dino) {
 
 export function actWorkDino(w: World, d: Dino, dt: number) {
   const work = d.work;
+  if (work?.job === "clear") {
+    if (d.state === "work" || d.state === "idle") clearTick(w, d, dt);
+    return;
+  }
   if (!work?.job || d.state !== "work") return;
   if (Math.hypot(d.x - work.targetX, d.y - work.targetY) > Math.max(22, sizeOf(d) * 0.28)) { work.loadT = 0; return; }
   d.vx *= 0.5; d.vy *= 0.5;

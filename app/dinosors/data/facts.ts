@@ -154,6 +154,14 @@ export const TECH: Record<
     what: "The tribe learns to beat out flames and pass water along a bucket line. Without it they can only run!",
     fact: "Firefighters still use fire breaks: clearing a strip of land so the fire has nothing to burn.",
   },
+  dragonHunting: {
+    icon: "🐉",
+    name: "Dragon hunting",
+    needs: { bone: 6, hide: 4, wood: 4 },
+    after: ["bow", "taming"],
+    what: "Train dragon slayers and egg runners, make fire-proofed slayer armour and runner's kits, and send war bands to raid dragon nests for their eggs.",
+    fact: "Dragons are make-believe, but people really did hunt huge, dangerous animals together: some threw spears while others drove the animal into a trap.",
+  },
   sonicFire: {
     icon: "🔊",
     name: "Sonic firefighting",
@@ -172,7 +180,7 @@ export const TECH: Record<
   },
 };
 
-export const TECH_ORDER: TechId[] = ["tools", "fire", "axe", "spear", "basket", "firefighting", "fishing", "shelter", "farming", "medicine", "taming", "palisade", "bow", "tower", "crossbow", "stonewall", "scorpion", "smelting", "sonicFire"];
+export const TECH_ORDER: TechId[] = ["tools", "fire", "axe", "spear", "basket", "firefighting", "fishing", "shelter", "farming", "medicine", "taming", "palisade", "bow", "tower", "crossbow", "stonewall", "scorpion", "smelting", "sonicFire", "dragonHunting"];
 
 /** Each shelter stage: what has to be carried in, and what it looks like. */
 export const SHELTER_STAGES: { label: string; need: "wood" | "stick" | "leaves" | "stone"; n: number }[] = [
@@ -204,6 +212,8 @@ export const ROLES: { id: import("../sim/types").Role; icon: string; name: strin
   { id: "shaper", icon: "🔷", name: "Stone shaper", tip: "Cuts raw stone into polygon blocks at the Shaping yard" },
   { id: "technician", icon: "⚡", name: "Technician", tip: "Tends energy buildings: fixes overloads, keeps the hum clean" },
   { id: "trainer", icon: "🐾", name: "Animal trainer", tip: "Befriends, feeds, trains + harnesses dinosaurs, and pairs trained ones with riders" },
+  { id: "dragonSlayer", icon: "⚔️", name: "Dragon slayer", tip: "Drills to fight dragons (hits them harder, shrugs off fire) and leads dragon raids. Needs 🐉 Dragon hunting" },
+  { id: "eggRunner", icon: "🥚", name: "Egg runner", tip: "Fast on their feet: in a dragon raid they grab the eggs (two each with a runner's kit) and run them home. Needs 🐉 Dragon hunting" },
 ];
 
 export const FACTS = {
@@ -287,6 +297,7 @@ export const DISCOVERIES: Discovery[] = [
   { id: "dragonRider", icon: "🐉", name: "Dragon Rider", hint: "A dragon chooses its rider." },
   { id: "dragonFire", icon: "🔥", name: "Breath of Fire", hint: "Command a dragon's fire." },
   { id: "sonicFire", icon: "🚒", name: "Sound Over Flame", hint: "Send the sonic fire crew to a fire." },
+  { id: "dragonRaid", icon: "⚔️", name: "War Band", hint: "Send a band of slayers + runners at a dragon nest." },
   { id: "megaEruption", icon: "☄️", name: "MEGA ERUPTION", hint: "What if something from space hit the volcano?" },
   { id: "snow", icon: "❄️", name: "Snow Day", hint: "It gets cold up in the peaks." },
   { id: "healer", icon: "🩹", name: "Patched Up", hint: "Look after the hurt." },

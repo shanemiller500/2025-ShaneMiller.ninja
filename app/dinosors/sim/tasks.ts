@@ -25,6 +25,8 @@ import { isWaterTile } from "./terrain";
 import { tileOf } from "./nav";
 import { MAP_W, T, TILE, type Brute, type Dino, type Dragon, type DragonEgg, type DragonNest, type Human, type Item, type Plant, type Resource, type WeaponKind } from "./types";
 import { sonicDouse, sonicReady } from "./sonic";
+import { raidThink } from "./dragonRaid";
+import { moveThink } from "./moving";
 import { eggHuntThink, trackThink } from "./dragonNests";
 import type { World } from "./world";
 
@@ -60,7 +62,11 @@ export type TaskKind =
   /** follow a wild dragon's trail to its nest */
   | "trackDragon"
   /** sneak to a dragon nest, take an egg, bring it home */
-  | "eggHunt";
+  | "eggHunt"
+  /** a war band: fighters hold the parent dragon off while runners steal the eggs (see dragonRaid.ts) */
+  | "dragonRaid"
+  /** a crew picks a building up and carries it somewhere new (see moving.ts) */
+  | "moveBuilding";
 
 export interface Task {
   id: number;
@@ -223,7 +229,13 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
     const n = picked.nest;
     const eggs = w.dragons.eggs.filter((e) => e.at === "nest" && e.nest === n.id).length;
     const steal: Command = { kind: "eggHunt", icon: "🥚", label: eggs ? `Steal a dragon egg (${eggs} in the nest)${armed ? "" : " (nobody's armed!)"}` : "Raid the nest for treasure (no eggs)", x: n.x, y: n.y, target: n.id };
-    return { ...steal, alts: [{ kind: "move", icon: "👣", label: "Go and look at the nest", x: n.x + 60, y: n.y + 60, target: 0 }] };
+    const look: Command = { kind: "move", icon: "👣", label: "Go and look at the nest", x: n.x + 60, y: n.y + 60, target: 0 };
+    // a proper war band: fighters hold the dragon, runners grab the eggs
+    if (adults.length >= 3 && eggs) {
+      const runners = Math.max(1, Math.min(3, Math.round(adults.length * 0.25)));
+      return { kind: "dragonRaid", icon: "🐉", label: `Dragon raid! ${adults.length - runners} fight, ${runners} grab eggs`, x: n.x, y: n.y, target: n.id, alts: [steal, look] };
+    }
+    return { ...steal, alts: [look] };
   }
   if (picked.dragon) {
     const d = picked.dragon;
@@ -587,6 +599,8 @@ function taskAlive(w: World, t: Task): boolean {
       return !!w.dinoById(t.target);
     case "trackDragon":
     case "eggHunt":
+    case "dragonRaid":
+    case "moveBuilding":
       return t.people.length > 0;
     case "operate":
       return w.colony.scorpions.some((s) => s.id === t.target && s.built >= 1);
@@ -752,6 +766,10 @@ export function taskThink(w: World, h: Human): boolean {
     }
     case "eggHunt":
       return eggHuntThink(w, h, t, () => personDone(w, h, t));
+    case "dragonRaid":
+      return raidThink(w, h, t, () => personDone(w, h, t));
+    case "moveBuilding":
+      return moveThink(w, h, t, () => personDone(w, h, t));
     case "trackDragon":
       return trackThink(w, h, t, () => personDone(w, h, t));
     case "tame":
@@ -1226,8 +1244,10 @@ export function rallyBattlePets(w: World): number[] {
   const pets = w.dinos.filter((d) => d.owner && !d.rider && !isBaby(d) && RIDEABLE.has(d.species) && (d.warTraining ?? 0) >= 1 && d.health > 0 && d.state !== "faint");
   for (const d of pets) {
     if (!people.length) break;
-    people.sort((a, b) => Math.hypot(a.x - d.x, a.y - d.y) - Math.hypot(b.x - d.x, b.y - d.y));
-    const h = people.shift()!;
+    // its bonded rider goes to it; otherwise whoever is closest
+    const own = d.work?.partner ? people.findIndex((p) => p.id === d.work!.partner) : -1;
+    if (own < 0) people.sort((a, b) => Math.hypot(a.x - d.x, a.y - d.y) - Math.hypot(b.x - d.x, b.y - d.y));
+    const h = own >= 0 ? people.splice(own, 1)[0] : people.shift()!;
     if (issue(w, [h], { kind: "ride", icon: "🏇", label: `Ride ${d.name}`, x: d.x, y: d.y, target: d.id })) riders.push(h.id);
   }
   return riders;

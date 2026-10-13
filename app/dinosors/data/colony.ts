@@ -239,6 +239,8 @@ export const SHIELD_BY_ID: Record<string, ShieldDef> = Object.fromEntries(SHIELD
 export interface OutfitDef {
   id: string;
   civ?: CivTechId;
+  /** a camp invention it needs */
+  tech?: TechId;
   name: string;
   icon: string;
   /** 0..1 how much rain + wet it keeps off */
@@ -262,6 +264,9 @@ export const OUTFITS: OutfitDef[] = [
   { id: "cloak", name: "Hide cloak", icon: "🧥", rain: 0.35, warmth: 0.35, armor: 0, cost: { hide: 2 }, at: "tannery", tip: "A warm hide cloak. Keeps off some rain and chill.", color: "#9b6b43", trim: "#6b4527", hood: false },
   { id: "raincloak", name: "Rainproof cloak", icon: "🌧️", rain: 0.92, warmth: 0.3, armor: 0, cost: { hide: 3, tar: 1 }, at: "tannery", tip: "Tar-sealed hide with a hood. Workers keep going in rain and storms.", color: "#4f5a3c", trim: "#2c321f", hood: true },
   { id: "tunic", name: "Hide tunic", icon: "🦺", rain: 0.2, warmth: 0.25, armor: 0.12, cost: { hide: 2, bone: 1 }, at: "tannery", tip: "Thick hide with bone toggles: light armour against bites.", color: "#7d5233", trim: "#e9dcc0", hood: false },
+  // dragon raiders (see dragonRaid.ts)
+  { id: "dragonMail", name: "Dragon-slayer armour", icon: "🛡️", rain: 0.5, warmth: 0.55, armor: 0.3, cost: { hide: 4, bone: 4, clay: 2 }, at: "tannery", tech: "dragonHunting", tip: "Clay-baked scale armour with bone spikes: dragon fire does less than half the harm. Dragon slayers pull it on.", color: "#8e2f24", trim: "#e8c45d", hood: true },
+  { id: "runnerKit", name: "Egg runner's kit", icon: "🎒", rain: 0.3, warmth: 0.3, armor: 0.05, cost: { hide: 3, grass: 3 }, at: "tannery", tech: "dragonHunting", tip: "Light leathers and a padded two-egg satchel: runners carry two dragon eggs and outrun everyone.", color: "#3f7a4a", trim: "#e9d9a6", hood: false },
   // winter gear: basic hide gear → fur winter gear → reinforced → elite cold-weather gear
   { id: "hideGear", name: "Basic hide gear", icon: "🧤", rain: 0.3, warmth: 0.6, armor: 0.04, cost: { hide: 3, grass: 1 }, at: "tannery", tip: "Hood, boots + mitts of hide. Fewer cold days lost, a little faster through snow.", color: "#8a6240", trim: "#d9c7a5", hood: true, winter: 1 },
   { id: "furs", name: "Fur winter gear", icon: "🧣", rain: 0.45, warmth: 0.88, armor: 0.06, cost: { hide: 4, grass: 2 }, at: "tannery", tip: "Double hide stuffed with grass, fur-lined. Keeps people working through snow, blizzards and mountain trips.", color: "#a88a68", trim: "#f4efe6", hood: true, winter: 2 },
@@ -362,7 +367,7 @@ export const FIRE_GEAR = [
 export const FORGE_ITEMS: ForgeItem[] = [
   ...WEAPONS.map((w) => ({ id: w.id, name: w.name, icon: w.icon, tier: w.tier, cost: w.cost, at: w.at as string, tech: w.tech, civ: w.civ, cat: "weapons" as ForgeCat })),
   ...SHIELDS.map((s) => ({ id: s.id, name: s.name, icon: "🛡️", tier: s.tier, cost: s.cost, at: s.at as string, tech: undefined, cat: "shields" as ForgeCat })),
-  ...OUTFITS.map((o) => ({ id: o.id, name: o.name, icon: o.icon, tier: 1, cost: o.cost, at: o.at as string, tech: undefined, civ: o.civ, cat: "gear" as ForgeCat, tip: o.tip })),
+  ...OUTFITS.map((o) => ({ id: o.id, name: o.name, icon: o.icon, tier: 1, cost: o.cost, at: o.at as string, tech: o.tech, civ: o.civ, cat: "gear" as ForgeCat, tip: o.tip })),
   ...HELMETS.map((h) => ({ id: h.id, name: h.name, icon: h.icon, tier: 2, cost: h.cost, at: h.at as string, tech: undefined, civ: h.civ, cat: "gear" as ForgeCat, tip: h.tip })),
   ...FIRE_GEAR.map((g) => ({ id: g.id, name: g.name, icon: g.icon, tier: 2, cost: g.cost, at: g.at, tech: g.tech, cat: "gear" as ForgeCat, tip: g.tip })),
   ...KITS.map((k) => ({ id: k.id, name: k.name, icon: k.icon, tier: 1, cost: k.cost, at: k.at as string, tech: undefined, civ: k.civ, cat: "kits" as ForgeCat, tip: k.tip })),

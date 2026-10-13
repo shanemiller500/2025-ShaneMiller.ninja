@@ -13,6 +13,7 @@ import { hash2 } from "./rng";
 import { LM, isWalkTile, isWaterTile } from "./terrain";
 import { MAP_H, MAP_W, T, TILE, type Building, type BuildingKind, type Dino, type Human, type NodeKind, type ResNode, type Resource, type Scorpion } from "./types";
 import type { World } from "./world";
+import { ANIMAL_KINDS, insideWalls } from "./dinoBounds";
 
 export interface DropOff {
   x: number;
@@ -79,6 +80,7 @@ export class Colony {
   }
 
   canPlace(w: World, kind: BuildingKind, x: number, y: number): string | null {
+    if (ANIMAL_KINDS.has(kind) && insideWalls(w, x, y)) return "Animals live outside the walls: put it outside the gates.";
     const def = BUILDINGS[kind];
     const fp = this.footprint(kind, x, y);
     const occupied = this.occupied(w, kind === "boneTorch");
@@ -110,11 +112,11 @@ export class Colony {
     for (const wl of w.tribe.walls) s.add(wl.ty * MAP_W + wl.tx);
     for (const t of w.tribe.towers) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) s.add((t.ty + dy) * MAP_W + t.tx + dx);
     for (const b of this.buildings) {
-      if (b.kind === "bridge" || allowPath && b.kind === "path") continue;
+      if (b.kind === "bridge" || allowPath && b.kind === "path" || b.lift) continue;
       const d = BUILDINGS[b.kind];
       for (let dy = 0; dy < d.h; dy++) for (let dx = 0; dx < d.w; dx++) s.add((b.ty + dy) * MAP_W + b.tx + dx);
     }
-    for (const sh of w.shelters) for (const i of shelterTiles(sh.x, sh.y)) s.add(i);
+    for (const sh of w.shelters) if (!sh.lift) for (const i of shelterTiles(sh.x, sh.y)) s.add(i);
     for (const sc of this.scorpions) if (sc.mount === "ground") s.add(sc.ty * MAP_W + sc.tx);
     return s;
   }
@@ -506,6 +508,24 @@ export class Colony {
    * rainproof cloak, snow → furs, otherwise the warmest/toughest).
    */
   dress(w: World, h: Human) {
+    // dragon slayers + egg runners wear their raid gear whenever the armory has it
+    const role = w.tribe.roleOf(h);
+    const special = role === "dragonSlayer" ? "dragonMail" : role === "eggRunner" ? "runnerKit" : null;
+    if (special && !h.child) {
+      if (h.gear.outfit === special) return;
+      if ((this.armory[special] ?? 0) > 0) {
+        this.armory[special]--;
+        if (h.gear.outfit) this.armory[h.gear.outfit] = (this.armory[h.gear.outfit] ?? 0) + 1;
+        h.gear.outfit = special;
+        h.bubble = { text: special === "dragonMail" ? "Dragon-proof!" : "Ready to run!", t: 1.8 };
+        return;
+      }
+    }
+    if (!special && (h.gear.outfit === "dragonMail" || h.gear.outfit === "runnerKit")) {
+      // off duty: the raid gear goes back on the rack
+      this.armory[h.gear.outfit] = (this.armory[h.gear.outfit] ?? 0) + 1;
+      h.gear.outfit = null;
+    }
     const wt = w.weather;
     const wantRain = 0.4 + wt.rain * 1.5 + wt.storm;
     const wantWarm = 0.4 + Math.max(0, 0.45 - wt.temp) * 2 + wt.snow * 1.5;

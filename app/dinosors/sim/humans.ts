@@ -16,6 +16,8 @@ import { season } from "./seasons";
 import { goRelax, relaxTick, sitIfAtShade } from "./shade";
 import { aloftTick, dragonCareTick, dragonRiderDefend, dragonRiderThink } from "./dragonKeep";
 import { returnEmitter, sonicTick } from "./sonic";
+import { drillTick, eggSpeed } from "./dragonRaid";
+import { insideWalls, outsideSpot } from "./dinoBounds";
 import { partnerOf, riderCanFight, riderDefend, riderThink, riderType, trainBoost } from "./riders";
 import { TALL } from "./plants";
 import { roleAct, roleThink } from "./tribe";
@@ -198,13 +200,21 @@ export function moveHuman(w: World, h: Human, dt: number) {
   const dy = wy - h.y;
   const d = Math.hypot(dx, dy);
   const base = h.child ? 28 : 34;
-  const fast = h.state === "flee" || h.state === "hunt";
+  // running: fleeing, hunting, or hurrying to a dinosaur (a rally, a call)
+  const rideTask = h.taskId ? w.tasks.get(h.taskId) : null;
+  const fast = h.state === "flee" || h.state === "hunt" || (rideTask?.kind === "ride" && !h.riding);
   const snow = w.snow.at(h.x, h.y);
   // a sprinting person can't outrun a hungry predator for long, and hurt people limp
   // rain + snow slow people down, unless their hide clothes keep them dry + warm
   const wet = w.weather.rain * 0.28 * (1 - rainGuard(h));
-  let speed = (fast ? (h.child ? 30 : 36) * (h.state === "flee" ? 1.9 : 1.6) : base) * (h.level ? 0.9 : groundSpeed(w.terrain.tileAt(h.x, h.y))) * (1 - snow * 0.3 * (1 - coatWarmth(h) * 0.6)) * (1 - wet) * (0.55 + 0.45 * Math.min(1, h.hp * 1.4)) * (h.egg ? 0.72 : 1);
-  if (mount) speed = sp(mount.species).run * 0.8 * mount.genes.speed * (h.state === "haul" ? 0.7 : 1) * (1 - snow * 0.25);
+  let speed = (fast ? (h.child ? 30 : 36) * (h.state === "flee" ? 1.9 : 1.6) : base) * (h.level ? 0.9 : groundSpeed(w.terrain.tileAt(h.x, h.y))) * (1 - snow * 0.3 * (1 - coatWarmth(h) * 0.6)) * (1 - wet) * (0.55 + 0.45 * Math.min(1, h.hp * 1.4)) * eggSpeed(w, h);
+  if (mount) {
+    // mounted: an easy walk about camp, a flat-out run into battle, a rally or anywhere the player sends them
+    const k = rideTask?.kind;
+    const running = fast || !!h.order || !!w.tribe.raid || w.flags.has("rallyDinos") || k === "hunt" || k === "guard" || k === "defend" || k === "dragonRaid" || !!mount.work?.rideTo || mount.state === "war";
+    const def = sp(mount.species);
+    speed = (running ? def.run * 1.08 : Math.max(def.speed * 1.3, def.run * 0.5)) * mount.genes.speed * (h.state === "haul" ? 0.7 : 1) * (1 - snow * 0.25);
+  }
   if (w.nav.cost[tileOf(h.x, h.y)] < 0.9 && !h.level) speed *= 1.25; // paved path
   if (d < 3) {
     if (h.path && h.pathI < h.path.length) {
@@ -341,7 +351,8 @@ function localDanger(w: World, h: Human): LocalDanger | null {
   // the bucket brigade fights fires instead of fleeing them (unless they're standing in one); lava is never safe
   const role = w.tribe.roleOf(h);
   // (someone holding an ultrasonic emitter works from a distance: flames only matter right on top of them)
-  const firefighter = !sensitive && (!!h.sonic || (w.camp.learned.has("firefighting") && w.tribe.fireAlarm && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook")));
+  // (a dragon raid doesn't stop for burning grass either)
+  const firefighter = !sensitive && (!!h.sonic || w.tasks.get(h.taskId)?.kind === "dragonRaid" || (w.camp.learned.has("firefighting") && w.tribe.fireAlarm && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook")));
   for (let y = ty - 5; y <= ty + 5; y++) for (let x = tx - 5; x <= tx + 5; x++) {
     if (w.lava.heatAt(x, y) > 0.14) offer((x + 0.5) * TILE, (y + 0.5) * TILE, sensitive ? 210 : 165, "fire");
     else if (w.fire.at(x, y) > 0.24) offer((x + 0.5) * TILE, (y + 0.5) * TILE, firefighter ? 40 : sensitive ? 210 : 165, "fire");
@@ -630,7 +641,7 @@ function think(w: World, h: Human) {
   // a Dino Rider whose partner can fight rides at local danger instead of running from it
   if (nearby && !safe && !task && h.partner && riderCanFight(w, h) && riderDefend(w, h, nearby)) return;
   const civilian = h.child || h.hp < 0.45 || !fighter;
-  if (nearby && !safe && civilian && !(task && task.kind === "douse")) {
+  if (nearby && !safe && civilian && !(task && (task.kind === "douse" || (task.kind === "dragonRaid" && nearby.kind === "dragon")))) {
     h.dangerUntil = w.elapsed + 3;
     if (!h.interrupted && h.state !== "flee" && h.state !== "hide") h.interrupted = { state: h.state, x: h.x, y: h.y, tx: h.tx, ty: h.ty };
     const keepDistance = nearby.kind === "volcano" ? (w.volcano.megaOn ? 1800 : 850) : nearby.kind === "fire" ? 115 : 110;
@@ -693,9 +704,19 @@ function think(w: World, h: Human) {
     return;
   }
   if (!crewing && dragon && fighter && !battleRider && weapon && !weapon.melee && dragon.z < 220) {
-    h.targetId = dragon.id;
-    go(h, "aim", h.x, h.y);
-    return;
+    const dist = Math.hypot(dragon.x - h.x, dragon.y - h.y);
+    const chasing = task?.kind === "dragonRaid" || (h.order?.kind === "hunt" && h.order.id === dragon.id);
+    if (dist <= weapon.range) {
+      h.targetId = dragon.id;
+      go(h, "aim", h.x, h.y);
+      return;
+    }
+    // out of bow range: a raider (or someone sent after it) closes in; everyone else carries on
+    if (chasing) {
+      h.targetId = dragon.id;
+      go(h, "hunt", dragon.x, dragon.y);
+      return;
+    }
   }
   if (threat && !battleRider) {
     const def = sp(threat.species);
@@ -818,7 +839,7 @@ function think(w: World, h: Human) {
   }
 
   // busy with something that finishes on its own
-  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze" || h.state === "relax" || h.state === "dragonCare" || h.state === "sonic") return;
+  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze" || h.state === "relax" || h.state === "dragonCare" || h.state === "sonic" || h.state === "drill" || h.state === "lift") return;
   if (h.state === "hunt" || h.state === "aim" || h.state === "haul" || h.state === "cook" || h.state === "farm" || h.state === "repair") return;
   if (h.state === "carry" || h.state === "walk" || h.state === "explore") {
     if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6 && !(h.riding && w.flags.has("rallyDinos") && role === "guard" && !h.taskId)) return;
@@ -1193,6 +1214,15 @@ export function updateHuman(w: World, h: Human, dt: number) {
     aloftTick(w, h, dt);
     return;
   }
+  if (h.riding && passengerMount && passengerMount.owner && h.level === 0 && insideWalls(w, h.x, h.y)) {
+    // animals stay outside the walls: the rider hops off at the gate
+    const d = passengerMount;
+    dismount(w, h);
+    say(h, `Wait out here, ${d.name}!`);
+    const out = outsideSpot(w, d.x, d.y);
+    d.x = out.x;
+    d.y = out.y;
+  }
   h.stateT += dt;
   h.hunger = clamp(h.hunger + dt * 0.0025, 0, 1);
   h.energy = clamp(h.energy + (h.state === "sleep" ? dt * 0.03 : -dt * 0.002), 0, 1);
@@ -1380,6 +1410,14 @@ export function updateHuman(w: World, h: Human, dt: number) {
       break;
     case "sonic":
       sonicTick(w, h, dt);
+      break;
+    case "drill":
+      drillTick(w, h, dt);
+      break;
+    case "lift":
+      // heaving a building up (moving.ts moves the crew + the building)
+      h.vx = h.vy = 0;
+      h.anim += dt * 3;
       break;
     case "sleep":
       if (w.rng() < dt * 0.3 && w.inView(h.x, h.y, 50)) w.particles.spawn(P.Note, h.x, h.y, { z: 16, vz: 12, vx: 6, size: 8, max: 1.6, color: "z" });

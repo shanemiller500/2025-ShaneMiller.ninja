@@ -459,7 +459,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.lineWidth = H * 0.09;
   c.beginPath();
   const shY = -H * 0.36;
-  if (st === "celebrate" || st === "lookUp" || st === "tossed" || st === "douse") {
+  if (st === "celebrate" || st === "lookUp" || st === "tossed" || st === "douse" || st === "lift") {
     c.moveTo(-H * 0.12, shY);
     c.lineTo(-H * 0.22, shY - H * 0.32);
     c.moveTo(H * 0.12, shY);
@@ -1000,6 +1000,76 @@ function drawGarb(c: CanvasRenderingContext2D, H: number, garb: GarbLevel, child
 /** Cloaks, tunics + furs drawn over the body (torso space, origin at the hip). */
 function drawOutfit(c: CanvasRenderingContext2D, H: number, o: OutfitLook, t: number, wet: number, moving: boolean) {
   const sway = moving ? Math.sin(t * 9) * H * 0.03 : 0;
+  if (o.id === "dragonMail") {
+    // dragon-slayer armour: overlapping red clay-baked scales, a gold-trimmed belt, bone spikes on the shoulders
+    c.fillStyle = o.color;
+    c.beginPath();
+    c.moveTo(-H * 0.19, -H * 0.42);
+    c.lineTo(H * 0.19, -H * 0.42);
+    c.lineTo(H * 0.21, H * 0.06);
+    c.lineTo(-H * 0.21, H * 0.06);
+    c.closePath();
+    c.fill();
+    c.fillStyle = "rgba(0,0,0,0.18)";
+    for (let r = 0; r < 4; r++) for (let i = 0; i < 4; i++) {
+      c.beginPath();
+      c.arc(-H * 0.14 + i * H * 0.095 + (r % 2) * H * 0.045, -H * 0.34 + r * H * 0.1, H * 0.045, 0, Math.PI);
+      c.fill();
+    }
+    c.fillStyle = o.trim;
+    c.fillRect(-H * 0.21, -H * 0.02, H * 0.42, H * 0.05);
+    c.fillStyle = "#efe6cf";
+    for (const s of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(s * H * 0.12, -H * 0.42);
+      c.lineTo(s * H * 0.3, -H * 0.56);
+      c.lineTo(s * H * 0.2, -H * 0.36);
+      c.closePath();
+      c.fill();
+    }
+    // a short scale cape flaps behind
+    c.fillStyle = "#5e1d16";
+    c.beginPath();
+    c.moveTo(-H * 0.18, -H * 0.4);
+    c.quadraticCurveTo(-H * 0.34 - sway, -H * 0.1, -H * 0.28 - sway, H * 0.08);
+    c.lineTo(-H * 0.16, H * 0.02);
+    c.closePath();
+    c.fill();
+    return;
+  }
+  if (o.id === "runnerKit") {
+    // light green leathers, a cross strap and a big padded egg satchel on the hip
+    c.fillStyle = o.color;
+    c.beginPath();
+    c.moveTo(-H * 0.15, -H * 0.4);
+    c.lineTo(H * 0.15, -H * 0.4);
+    c.lineTo(H * 0.17, H * 0.02);
+    c.lineTo(-H * 0.17, H * 0.02);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = "#5e3f24";
+    c.lineWidth = H * 0.05;
+    c.beginPath();
+    c.moveTo(H * 0.12, -H * 0.4);
+    c.lineTo(-H * 0.14, -H * 0.02);
+    c.stroke();
+    c.fillStyle = "#8a6238";
+    c.beginPath();
+    c.ellipse(-H * 0.2 - sway * 0.5, -H * 0.02, H * 0.13, H * 0.1, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = o.trim;
+    c.beginPath();
+    c.ellipse(-H * 0.2 - sway * 0.5, -H * 0.05, H * 0.1, H * 0.04, 0, 0, Math.PI * 2);
+    c.fill();
+    // speed stripes on the leggings
+    c.strokeStyle = "rgba(255,255,255,0.5)";
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(-H * 0.1, -H * 0.3);
+    c.lineTo(H * 0.08, -H * 0.24);
+    c.stroke();
+    return;
+  }
   if (o.id === "tunic") {
     c.fillStyle = o.color;
     c.beginPath();

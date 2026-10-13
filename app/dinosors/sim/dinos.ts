@@ -11,6 +11,7 @@ import { groundSpeed, isSwimTile, isWalkTile } from "./terrain";
 import { T, TILE, WORLD_H, WORLD_W, type Dino, type DinoState, type SpeciesDef, type SpeciesId } from "./types";
 import { goalKey, nodePos, tileOf, type NavClass } from "./nav";
 import type { World } from "./world";
+import { blockedForDino } from "./dinoBounds";
 
 export const scaleOf = (d: Dino) => 0.42 + 0.58 * d.growth;
 export const sizeOf = (d: Dino) => sp(d.species).size * scaleOf(d) * (1 + d.tier * 0.14) * d.genes.size;
@@ -145,6 +146,8 @@ function stateSpeed(d: Dino, def: SpeciesDef) {
 function stateSpeedBase(d: Dino, def: SpeciesDef) {
   const tired = d.energy < 0.15 ? 0.6 : 1;
   const baby = isBaby(d) ? 0.85 : 1;
+  // running to meet its rider
+  if (d.hurry) return def.run * tired * baby;
   switch (d.state) {
     case "chase":
     case "war":
@@ -215,6 +218,8 @@ export function walkable(w: World, d: Dino, x: number, y: number) {
   if (!w.nav.ok(navClassOf(d), i) && t !== T.Tar) return false;
   if (w.lava.heat[i] > 0.15) return false;
   if (d.state !== "flee" && w.fire.heat[i] > 0.2) return false;
+  // the tribe's own animals stay outside the walls
+  if (blockedForDino(w, d, x, y)) return false;
   if (t === T.Tar && d.state !== "flee") return false;
   return true;
 }

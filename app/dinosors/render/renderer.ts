@@ -29,6 +29,8 @@ import { drawBar, drawBones, drawBuilding, drawHome, drawNode, drawScaffold, dra
 import { drawDragon, drawDragonEgg, drawNest } from "./dragonArt";
 import { clusters, drawField, drawPaddock, drawSeatRing } from "./mergedArt";
 import { RING_R, SHADE, shadeCentre } from "../sim/shade";
+import { moveSpotOk, type MoveRef } from "../sim/moving";
+import { shelterTiles } from "../sim/nav";
 import { dragonStats } from "../sim/dragonKeep";
 import { shelterDone, stagesOf, towerMaxHp, wallMaxHp } from "../sim/build";
 import { BUILD_BY_ID } from "../game/tools";
@@ -63,6 +65,8 @@ export interface Overlay {
   marker: { x: number; y: number; t: number; icon: string } | null;
   inspect: { kind: string; id: number } | null;
   buildPreview: { x: number; y: number; build: string } | null;
+  /** choosing where a building / home is carried to (see moving.ts) */
+  movePreview?: { x: number; y: number; ref: MoveRef } | null;
   hover: { x: number; y: number; icon: string; radius: number } | null;
   shakeX: number;
   shakeY: number;
@@ -287,7 +291,8 @@ export class Renderer {
     for (let i = 0; i < col.buildings.length; i++) {
       const b = col.buildings[i];
       if (b.kind === "path" || b.kind === "bridge" || b.kind === "pen" || b.kind === "trap" || (b.kind === "seatRing" && b.built >= 1)) continue;
-      if (b.x > x0 - 80 && b.x < x1 + 80 && b.y > y0 && b.y < y1 + 80) list.push({ y: b.y - 1, k: K_BUILDING, i });
+      const by = b.lift ? b.lift.y + 4 : b.y;
+      if ((b.lift?.x ?? b.x) > x0 - 80 && (b.lift?.x ?? b.x) < x1 + 80 && by > y0 && by < y1 + 80) list.push({ y: by - 1, k: K_BUILDING, i });
     }
     for (let i = 0; i < col.scorpions.length; i++) {
       const s = col.scorpions[i];
@@ -339,7 +344,9 @@ export class Renderer {
     }
     for (let i = 0; i < w.shelters.length; i++) {
       const s = w.shelters[i];
-      if (s.x > x0 && s.x < x1 && s.y > y0 && s.y < y1 + 60) list.push({ y: s.y, k: K_SHELTER, i });
+      const sx = s.lift?.x ?? s.x;
+      const sy = s.lift ? s.lift.y + 4 : s.y;
+      if (sx > x0 && sx < x1 && sy > y0 && sy < y1 + 60) list.push({ y: sy, k: K_SHELTER, i });
     }
     for (let i = 0; i < w.campfires.length; i++) {
       const f = w.campfires[i];
@@ -496,8 +503,9 @@ export class Renderer {
         case K_BUILDING: {
           const b = col.buildings[it.i];
           const def = BUILDINGS[b.kind];
+          if (b.lift) this.liftShadow(c, b.lift, def.w * TILE * 0.5);
           c.save();
-          c.translate(b.x, b.y);
+          c.translate(b.lift?.x ?? b.x, (b.lift?.y ?? b.y) - (b.lift?.z ?? 0));
           if (b.kind === "spikes") drawSpikes(c, Math.atan2(b.y - (w.camp.y + 30), b.x - w.camp.x), b.built, b.hp / def.hp, b.tx * 7 + b.ty);
           else if (b.kind === "barricade") drawBarricade(c, b.built, b.hp / def.hp);
           else if (b.kind === "totem") drawTotem(c, b.built, this.t);
@@ -631,8 +639,9 @@ export class Renderer {
         }
         case K_SHELTER: {
           const s = w.shelters[it.i];
+          if (s.lift) this.liftShadow(c, s.lift, 34);
           c.save();
-          c.translate(s.x, s.y);
+          c.translate(s.lift?.x ?? s.x, (s.lift?.y ?? s.y) - (s.lift?.z ?? 0));
           const done = shelterDone(s);
           const inside = done ? this.restingIn(s.id) : 0;
           if (!drawHome(c, s, done, night > 0.5, this.t, inside)) {
@@ -940,15 +949,14 @@ export class Renderer {
       }
       c.restore();
     if (h.sonic) this.drawEmitter(c, h);
-    if (h.egg) {
-      // a dragon egg in their arms
-      const egg = w.dragons.eggs.find((e) => e.id === h.egg);
-      if (egg) {
-        c.save();
-        c.translate(h.x + h.dir * 6, h.y - h.z - 6);
-        drawDragonEgg(c, egg, this.t, 0.95);
-        c.restore();
-      }
+    // dragon eggs in their arms (a runner can carry two)
+    for (const [k, id] of [[0, h.egg], [1, h.egg2]] as const) {
+      const egg = id ? w.dragons.eggs.find((e) => e.id === id) : null;
+      if (!egg) continue;
+      c.save();
+      c.translate(h.x + h.dir * (6 + k * 7), h.y - h.z - 6 - k * 3);
+      drawDragonEgg(c, egg, this.t, 0.9);
+      c.restore();
     }
   }
 
@@ -1098,6 +1106,14 @@ export class Renderer {
     const def = { ...base, look, shape };
     this.looks.set(key, def);
     return def;
+  }
+
+  /** The shadow on the ground under something a crew is carrying. */
+  private liftShadow(c: CanvasRenderingContext2D, lift: { x: number; y: number; z: number }, r: number) {
+    c.fillStyle = `rgba(20,14,8,${0.18 + lift.z * 0.006})`;
+    c.beginPath();
+    c.ellipse(lift.x, lift.y + 2, r * (1 - lift.z * 0.004), r * 0.3, 0, 0, Math.PI * 2);
+    c.fill();
   }
 
   /** dragons visible this frame (wild + ours), indexed by the depth sort */
@@ -2326,6 +2342,7 @@ export class Renderer {
     }
     // build ghost: footprint in green (ok) or red (blocked)
     if (ov.buildPreview) this.buildGhost(c, ov.buildPreview, inv);
+    if (ov.movePreview) this.moveGhost(c, ov.movePreview, inv);
     if (ov.hoverItem) this.inspectRing(c, ov.hoverItem.x, ov.hoverItem.y, ov.hoverItem.radius);
     // what a click would do right here
     if (ov.hint) {
@@ -2451,6 +2468,39 @@ export class Renderer {
     }
   }
 
+  /** Where a carried building / home would go: its footprint in green (fits) or red (doesn't), with the reason. */
+  private moveGhost(c: CanvasRenderingContext2D, p: { x: number; y: number; ref: MoveRef }, inv: number) {
+    const w = this.world;
+    const why = moveSpotOk(w, p.ref, p.x, p.y);
+    const ok = !why;
+    const tiles: [number, number][] = [];
+    if (p.ref.kind === "building") {
+      const b = w.colony.buildings.find((x) => x.id === p.ref.id);
+      if (!b) return;
+      const fp = w.colony.footprint(b.kind, p.x, p.y);
+      for (let dy = 0; dy < fp.h; dy++) for (let dx = 0; dx < fp.w; dx++) tiles.push([fp.tx + dx, fp.ty + dy]);
+    } else for (const i of shelterTiles(p.x, p.y)) tiles.push([i % MAP_W, Math.floor(i / MAP_W)]);
+    if (!tiles.length) return;
+    c.fillStyle = ok ? "rgba(74,222,128,0.22)" : "rgba(248,113,113,0.25)";
+    c.strokeStyle = ok ? "rgba(74,222,128,0.9)" : "rgba(248,113,113,0.95)";
+    c.lineWidth = 2 * inv;
+    const xs = tiles.map((t) => t[0]);
+    const ys = tiles.map((t) => t[1]);
+    const tx0 = Math.min(...xs);
+    const ty0 = Math.min(...ys);
+    const tw = Math.max(...xs) - tx0 + 1;
+    const th = Math.max(...ys) - ty0 + 1;
+    c.fillRect(tx0 * TILE, ty0 * TILE, tw * TILE, th * TILE);
+    c.setLineDash([6 * inv, 4 * inv]);
+    c.lineDashOffset = -this.t * 18 * inv;
+    c.strokeRect(tx0 * TILE, ty0 * TILE, tw * TILE, th * TILE);
+    c.setLineDash([]);
+    c.font = `700 ${12 * inv}px ui-rounded, system-ui, sans-serif`;
+    c.textAlign = "center";
+    c.fillStyle = ok ? "#bbf7d0" : "#fecaca";
+    c.fillText(ok ? "🚚 Carry it here" : why ?? "", (tx0 + tw / 2) * TILE, ty0 * TILE - 10 * inv);
+  }
+
   /** Snow lying on the ground (per tile, soft edges). */
   private snowFx(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number, z: number) {
     const w = this.world;
@@ -2538,7 +2588,7 @@ export class Renderer {
         }
       }
       c.save();
-      c.translate(b.x, b.y + (b.kind === "pen" ? 0 : TILE / 2));
+      c.translate(b.lift?.x ?? b.x, (b.lift?.y ?? b.y) - (b.lift?.z ?? 0) + (b.kind === "pen" ? 0 : TILE / 2));
       drawBuilding(c, b, def.w, def.h, night > 0.5, this.t, bridgeMask);
       c.restore();
     }

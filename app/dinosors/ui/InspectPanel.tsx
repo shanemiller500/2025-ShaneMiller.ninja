@@ -116,6 +116,13 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
           )}
         </>
       )}
+      {(info.kind === "building" || info.kind === "shelter") && (
+        <button type="button" onClick={() => (engine.moveAim ? engine.cancelMove() : engine.startMoveSelected())}
+          className={`absolute right-12 top-3 z-10 rounded-xl px-2.5 py-1.5 text-xs font-bold transition active:scale-95 ${engine.moveAim ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}
+          title="Pick it up and carry it somewhere else">
+          {engine.moveAim ? "✕ Cancel move" : "🚚 Move"}
+        </button>
+      )}
       {info.kind === "building" && (
         <>
           <div className="flex items-center gap-3 pr-8">
