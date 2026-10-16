@@ -114,5 +114,37 @@ service cloud.firestore {
         allow delete: if false;
       }
     }
+
+    /* ---------------- Atlas document library ---------------- */
+    // Public index of the PDFs/images/datasets behind the /atlas maps.
+    // Anyone can read; only the atlas admin can write (keep the field list
+    // in sync with GEO_DOC_FIELDS in utils/geo/library.ts). The seed script
+    // uses firebase-admin, which bypasses these rules.
+    function isAtlasAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['shanemiller500@gmail.com'];
+    }
+    function validGeoDoc() {
+      return request.resource.data.keys().hasOnly(['title', 'kind', 'source', 'sourceUrl', 'license', 'year', 'authors', 'summary', 'projects', 'tags', 'region', 'bbox', 'storagePath', 'sha256', 'bytes', 'contentType', 'textStatus', 'pages', 'terms', 'addedBy', 'createdAt', 'updatedAt'])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 300
+        && request.resource.data.projects is list
+        && request.resource.data.tags is list
+        && (!('terms' in request.resource.data) || (request.resource.data.terms is list && request.resource.data.terms.size() <= 1500))
+        && request.resource.data.summary is string
+        && request.resource.data.summary.size() <= 5000;
+    }
+    match /geoDocs/{docId} {
+      allow read: if true;
+      allow create, update: if isAtlasAdmin() && validGeoDoc();
+      allow delete: if isAtlasAdmin();
+
+      match /chunks/{chunkId} {
+        allow read: if true;
+        allow write: if isAtlasAdmin();
+      }
+    }
   }
 }

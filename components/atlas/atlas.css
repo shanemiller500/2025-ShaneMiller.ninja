@@ -1,0 +1,106 @@
+/* Atlas map chrome — MapLibre's controls + hover tip, matched to the site's look. */
+
+.atlas-frame {
+  background-color: #e2e8f0;
+}
+.dark .atlas-frame {
+  background-color: #050816;
+}
+.atlas-frame:fullscreen {
+  border-radius: 0;
+}
+
+.atlas-tip .maplibregl-popup-content {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font: 600 12px/1.35 var(--font-inter), system-ui, sans-serif;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 24px -8px rgba(15, 23, 42, 0.35);
+  pointer-events: none;
+}
+.atlas-tip .maplibregl-popup-tip {
+  display: none;
+}
+.dark .atlas-tip .maplibregl-popup-content {
+  color: #f1f5f9;
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.atlas-frame .maplibregl-ctrl-group {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px -8px rgba(15, 23, 42, 0.35);
+}
+.dark .atlas-frame .maplibregl-ctrl-group {
+  background: #1d1d20;
+}
+.dark .atlas-frame .maplibregl-ctrl-group button + button {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+.dark .atlas-frame .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+.dark .atlas-frame .maplibregl-ctrl-attrib {
+  background: rgba(15, 23, 42, 0.7);
+  color: #cbd5e1;
+}
+.dark .atlas-frame .maplibregl-ctrl-attrib a {
+  color: #e2e8f0;
+}
+.dark .atlas-frame .maplibregl-ctrl-scale {
+  background: rgba(15, 23, 42, 0.6);
+  color: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+/* Replay scrubber: an invisible native range input over the custom track (keeps keyboard + a11y). */
+.atlas-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+.atlas-range::-webkit-slider-runnable-track {
+  height: 24px;
+  background: transparent;
+}
+.atlas-range::-moz-range-track {
+  height: 24px;
+  background: transparent;
+}
+.atlas-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 16px;
+  width: 16px;
+  margin-top: 4px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid #6366f1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.35);
+}
+.atlas-range::-moz-range-thumb {
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid #6366f1;
+}
+.atlas-range:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid rgba(99, 102, 241, 0.6);
+  outline-offset: 2px;
+}
+
+/* Deep-space backdrop behind the globe: a few layers of tiny stars. */
+.atlas-space {
+  background-color: #02040b;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(1px 1px at 72% 12%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1.5px 1.5px at 38% 74%, rgba(186, 230, 253, 0.6), transparent 60%),
+    radial-gradient(1px 1px at 86% 64%, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(1px 1px at 22% 88%, rgba(255, 255, 255, 0.45), transparent 60%),
+    radial-gradient(1px 1px at 58% 40%, rgba(255, 255, 255, 0.35), transparent 60%),
+    radial-gradient(1.2px 1.2px at 94% 30%, rgba(165, 243, 252, 0.5), transparent 60%),
+    radial-gradient(ellipse at 50% 120%, rgba(30, 64, 175, 0.25), transparent 60%);
+  background-size: 420px 420px, 380px 380px, 520px 520px, 460px 460px, 340px 340px, 300px 300px, 560px 560px, 100% 100%;
+}

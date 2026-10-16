@@ -1,0 +1,224 @@
+[
+  {
+    "url": "https://pubs.usgs.gov/fs/2014/3018/pdf/fs2014-3018.pdf",
+    "title": "The 1964 Great Alaska Earthquake and Tsunamis — A Modern Perspective and Enduring Legacies",
+    "source": "USGS",
+    "license": "public domain",
+    "year": 2014,
+    "summary": "USGS Fact Sheet 2014–3018. How the M9.2 Good Friday earthquake — the largest in U.S. history — reshaped the coast, caused deadly local and Pacific-wide tsunamis, and helped prove that subduction zones make the world's greatest earthquakes.",
+    "projects": [
+      "earth-alive",
+      "disaster-atlas"
+    ],
+    "tags": [
+      "story:alaska-1964",
+      "1964",
+      "alaska",
+      "subduction",
+      "tsunami",
+      "megathrust",
+      "fact sheet"
+    ],
+    "region": "Alaska",
+    "bbox": [
+      -158,
+      55,
+      -140,
+      64
+    ]
+  },
+  {
+    "url": "https://pubs.usgs.gov/fs/2000/fs036-00/fs036-00.pdf",
+    "title": "Mount St. Helens — From the 1980 Eruption to 2000",
+    "source": "USGS",
+    "license": "public domain",
+    "year": 2000,
+    "summary": "USGS Fact Sheet 036-00. The spring 1980 awakening, the May 18 landslide and lateral blast, the lahars, and the two decades of dome-building that followed.",
+    "projects": [
+      "earth-alive",
+      "disaster-atlas"
+    ],
+    "tags": [
+      "story:st-helens-1980",
+      "1980",
+      "mount st. helens",
+      "eruption",
+      "landslide",
+      "lahar",
+      "fact sheet"
+    ],
+    "region": "Washington",
+    "bbox": [
+      -122.5,
+      46,
+      -121.9,
+      46.4
+    ]
+  },
+  {
+    "url": "https://pubs.usgs.gov/pp/pp1707/pp1707.pdf",
+    "title": "The Orphan Tsunami of 1700 — Japanese Clues to a Parent Earthquake in North America",
+    "source": "USGS",
+    "license": "public domain",
+    "year": 2015,
+    "authors": [
+      "Brian F. Atwater",
+      "Satoko Musumi-Rokkaku",
+      "Kenji Satake",
+      "Yoshinobu Tsuji",
+      "Kazue Ueda",
+      "David K. Yamaguchi"
+    ],
+    "summary": "USGS Professional Paper 1707, second edition (2015, with University of Washington Press; first edition 2005). How Japanese records of a tsunami with no felt earthquake, ghost forests and tree rings pinned the last great Cascadia earthquake to January 26, 1700.",
+    "projects": [
+      "earth-alive",
+      "disaster-atlas"
+    ],
+    "tags": [
+      "story:cascadia-1700",
+      "1700",
+      "cascadia",
+      "tsunami",
+      "subduction",
+      "japan",
+      "professional paper"
+    ],
+    "region": "Pacific Northwest",
+    "bbox": [
+      -128,
+      40,
+      -119,
+      50
+    ]
+  },
+  {
+    "url": "https://pubs.usgs.gov/pp/1990/1515/pp1515.pdf",
+    "title": "The San Andreas Fault System, California",
+    "source": "USGS",
+    "license": "public domain",
+    "year": 1990,
+    "authors": [
+      "Robert E. Wallace (editor)"
+    ],
+    "summary": "USGS Professional Paper 1515. The classic book-length account of the San Andreas fault system: its geology, history, earthquakes and the plate motion behind it.",
+    "projects": [
+      "earth-alive",
+      "strange-earth"
+    ],
+    "tags": [
+      "story:bay-area",
+      "1906",
+      "san andreas",
+      "transform fault",
+      "california",
+      "professional paper"
+    ],
+    "region": "California",
+    "bbox": [
+      -124.5,
+      32,
+      -114,
+      41
+    ]
+  },
+  {
+    "url": "https://pubs.usgs.gov/fs/2008/3019/fs2008-3019.pdf",
+    "title": "The Hayward Fault — Is It Due for a Repeat of the Powerful 1868 Earthquake?",
+    "source": "USGS",
+    "license": "public domain",
+    "year": 2008,
+    "summary": "USGS Fact Sheet 2008–3019. The M6.8 1868 Hayward earthquake, the fault's ~140-year rhythm of large quakes, and what a repeat would mean for the San Francisco Bay region.",
+    "projects": [
+      "earth-alive"
+    ],
+    "tags": [
+      "story:bay-area",
+      "1868",
+      "hayward fault",
+      "san francisco bay",
+      "fact sheet"
+    ],
+    "region": "San Francisco Bay Area",
+    "bbox": [
+      -122.5,
+      37.3,
+      -121.7,
+      38.1
+    ]
+  },
+  {
+    "url": "https://pubs.usgs.gov/fs/2009/3071/pdf/FS09-3071.pdf",
+    "title": "Earthquake Hazard in the New Madrid Seismic Zone Remains a Concern",
+    "source": "USGS",
+    "license": "public domain",
+    "year": 2009,
+    "summary": "USGS Fact Sheet 2009–3071. Why scientists expect future large earthquakes in the central Mississippi Valley, from the 1811–12 sequence to the prehistoric sand blows that record older ones.",
+    "projects": [
+      "earth-alive"
+    ],
+    "tags": [
+      "story:new-madrid",
+      "1811",
+      "1812",
+      "new madrid",
+      "intraplate",
+      "sand blows",
+      "fact sheet"
+    ],
+    "region": "Central United States",
+    "bbox": [
+      -91,
+      35,
+      -88.5,
+      37.5
+    ]
+  },
+  {
+    "url": "https://pubs.usgs.gov/fs/2005/3024/fs2005-3024.pdf",
+    "title": "Steam Explosions, Earthquakes, and Volcanic Eruptions — What's in Yellowstone's Future?",
+    "source": "USGS",
+    "license": "public domain",
+    "year": 2005,
+    "summary": "USGS Fact Sheet 2005–3024. Yellowstone's three caldera-forming eruptions, its earthquakes and hydrothermal explosions — and why the smaller hazards are the likelier ones.",
+    "projects": [
+      "earth-alive",
+      "strange-earth"
+    ],
+    "tags": [
+      "story:yellowstone",
+      "yellowstone",
+      "caldera",
+      "supervolcano",
+      "hydrothermal",
+      "fact sheet"
+    ],
+    "region": "Wyoming",
+    "bbox": [
+      -111.2,
+      44.1,
+      -109.8,
+      45.1
+    ]
+  },
+  {
+    "url": "https://pubs.usgs.gov/fs/2010/3036/pdf/FS10-3036.pdf",
+    "title": "PAGER — Rapid Assessment of an Earthquake's Impact",
+    "source": "USGS",
+    "license": "public domain",
+    "year": 2010,
+    "summary": "USGS Fact Sheet 2010–3036. How USGS estimates fatalities and economic losses within minutes of a large earthquake — the green-to-red alert shown on Earth Alive's quake cards.",
+    "projects": [
+      "earth-alive",
+      "disaster-atlas"
+    ],
+    "tags": [
+      "story:tohoku-2011",
+      "pager",
+      "alerts",
+      "impact",
+      "fact sheet"
+    ],
+    "region": null,
+    "bbox": null
+  }
+]

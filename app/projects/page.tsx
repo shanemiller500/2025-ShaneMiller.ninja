@@ -21,6 +21,7 @@ import CharlesIcon from "@/public/images/charles-icon.svg";
 import DinosorsIcon from "@/public/images/dinosors-icon.svg";
 import MarvelIcon from "@/public/images/marvel-icon.svg";
 import FightWorldIcon from "@/public/images/fight-world-icon.svg";
+import AtlasIcon from "@/public/images/atlas-icon.svg";
 
 /* ------------------------------------------------------------------ */
 /*  ProjectsPage Component                                             */
@@ -211,6 +212,15 @@ export default function ProjectsPage() {
     openSource: false,
   },
   */
+  {
+    id: 20,
+    icon: AtlasIcon,
+    slug: "/atlas",
+    title: "Atlas",
+    excerpt:
+      "Interactive maps from public GIS data. First up, Earth Alive: every live earthquake, plate boundaries, U.S. faults and volcanoes with USGS alert levels.",
+    badge: "USGS + MapLibre",
+  },
   {
     id: 17,
     icon: WorldIcon,

@@ -4,5 +4,8 @@
                           "database":  "shanemiller",
                           "rules":  "utils/firebase/firestore.rules"
                       }
-                  ]
+                  ],
+    "storage":  {
+                    "rules":  "utils/firebase/storage.rules"
+                }
 }

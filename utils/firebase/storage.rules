@@ -1,0 +1,30 @@
+rules_version = '2';
+
+// Cloud Storage for the site.
+// geo-library/*: the atlas document library — anyone can read, only the
+// atlas admin (verified email) can add or remove files.
+// Everything else is closed.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAtlasAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['shanemiller500@gmail.com'];
+    }
+
+    match /geo-library/{file} {
+      allow read: if true;
+      allow create: if isAtlasAdmin()
+        && request.resource.size < 300 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|image/.*|text/.*|application/json|application/geo\\+json|application/zip');
+      // files are content-addressed (sha256 names): never overwritten, only removed
+      allow update: if false;
+      allow delete: if isAtlasAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

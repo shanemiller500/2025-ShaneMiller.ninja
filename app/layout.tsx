@@ -27,6 +27,9 @@ declare global {
 
 const GA_TRACKING_ID = process.env.NEXT_PUBLIC_GA_ID;
 
+/** Pages that own the whole viewport (no sidebar, header or footer). */
+const FULL_BLEED = ["/day-out", "/dinosors", "/atlas/earth-alive"];
+
 const inter = localFont({
   src: "../public/fonts/Inter-latin.woff2",
   weight: "100 900",
@@ -118,7 +121,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Theme>
           <ConsoleGreeting />
 
-          {pathname === "/day-out" || pathname === "/dinosors" ? <main>{children}</main> : <>
+          {FULL_BLEED.includes(pathname) ? <main>{children}</main> : <>
           <div className="max-w-7xl mx-auto">
             <div className="min-h-screen flex">
               {/* Desktop sidebar */}
