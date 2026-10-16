@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { esriExport, loadImage } from "./groundData";
 
 /* ------------------------------------------------------------------ */
 /*  <DepthView> — a block of crust you can orbit: imagery on top,      */
@@ -45,19 +46,6 @@ interface DepthViewProps {
 }
 
 const SIZE = 100; // the longer horizontal side, in scene units
-
-/** Esri World Imagery export of one lng/lat box (equirectangular, CORS-enabled, keyless). */
-const esriExport = (w: number, s: number, e: number, n: number, width: number, height: number) =>
-  `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${w},${s},${e},${n}&bboxSR=4326&imageSR=4326&size=${width},${height}&format=jpg&f=image`;
-
-const loadImage = (src: string) =>
-  new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
 
 /**
  * Satellite texture for a bbox. Esri returns black east of 180°, so a box that

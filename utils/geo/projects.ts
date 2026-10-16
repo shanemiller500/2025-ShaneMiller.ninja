@@ -52,9 +52,9 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "underground-usa",
     title: "Underground USA",
-    tagline: "Karst country, public caves and mapped passages — flip between the surface and below it.",
-    status: "planned",
-    sources: ["USGS Karst", "NPS"],
+    tagline: "X-ray the country: the karst rock that hollows into caves, every cave you can visit, and 3D dives through Mammoth, Carlsbad, Wind and Jewel.",
+    status: "live",
+    sources: ["USGS karst map", "Wikidata", "USGS 3DEP"],
     glow: "from-slate-500/30 via-indigo-400/20 to-sky-300/10",
   },
   {

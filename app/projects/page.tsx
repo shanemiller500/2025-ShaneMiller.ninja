@@ -218,7 +218,7 @@ export default function ProjectsPage() {
     slug: "/atlas",
     title: "Atlas",
     excerpt:
-      "Interactive maps from public GIS data. First up, Earth Alive: every live earthquake, plate boundaries, U.S. faults and volcanoes with USGS alert levels.",
+      "Interactive maps from public GIS data: Earth Alive (live quakes, plates and erupting volcanoes) and Underground USA (caves, karst and 3D cave dives).",
     badge: "USGS + MapLibre",
   },
   {

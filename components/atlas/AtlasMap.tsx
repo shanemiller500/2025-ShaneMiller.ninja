@@ -190,7 +190,8 @@ export function AtlasMap({
       if (readyRef.current) for (const d of defs) if (vis[d.id] && d.animate) d.animate(map, now);
       anim = requestAnimationFrame(tick);
     };
-    if (layers.some((l) => l.animate)) anim = requestAnimationFrame(tick);
+    // pulses and glows are decoration: skip them for people who asked for less motion
+    if (layers.some((l) => l.animate) && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) anim = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(raf);

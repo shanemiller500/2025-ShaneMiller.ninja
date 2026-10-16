@@ -9,7 +9,7 @@ const CARTO_DARK = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.
 
 const SATELLITE: StyleSpecification = {
   version: 8,
-  glyphs: "https://basemaps.cartocdn.com/fonts/{fontstack}/{range}.pbf",
+  glyphs: "https://tiles.basemaps.cartocdn.com/fonts/{fontstack}/{range}.pbf",
   sources: {
     imagery: {
       type: "raster",
