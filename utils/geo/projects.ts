@@ -36,17 +36,17 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "strange-earth",
     title: "Strange Earth",
-    tagline: "Impact craters, natural arches, ancient lakebeds and other geological oddities.",
-    status: "planned",
-    sources: ["USGS", "Macrostrat"],
+    tagline: "Every confirmed impact crater at true size, 850+ U.S. oddities, a lens-swipe investigator back to 1880s survey maps, Ice Age lakes you can refill in 3D — and flyovers of ten real mysteries.",
+    status: "live",
+    sources: ["Earth Impact Database", "Macrostrat", "USGS topo archive", "USGS 3DEP"],
     glow: "from-violet-500/30 via-fuchsia-400/20 to-pink-300/10",
   },
   {
     slug: "hidden-earth",
     title: "Hidden Earth",
-    tagline: "LiDAR terrain under the trees: old roads, earthworks and landforms you can't see from the air.",
-    status: "planned",
-    sources: ["USGS 3DEP", "Historical topo maps"],
+    tagline: "The ground the way lidar sees it — trees stripped away: ancient mounds, hidden faults, old landslides and Civil War trenches, with a satellite-vs-lidar peel.",
+    status: "live",
+    sources: ["USGS 3DEP lidar", "NPS", "USGS"],
     glow: "from-emerald-500/30 via-teal-400/20 to-cyan-300/10",
   },
   {

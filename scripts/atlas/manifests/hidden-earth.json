@@ -1,0 +1,51 @@
+[
+  {
+    "url": "https://pubs.usgs.gov/fs/2016/3022/fs20163022.pdf",
+    "title": "3D Elevation Program — Virtual USA in 3D",
+    "source": "USGS",
+    "sourceUrl": "https://doi.org/10.3133/fs20163022",
+    "license": "public domain",
+    "year": 2016,
+    "summary": "USGS Fact Sheet 2016–3022. How airborne lidar fires hundreds of thousands of laser pulses a second, bounces them off trees, buildings and the ground beneath the trees, and turns the echoes into a 3D map of the country.",
+    "projects": [
+      "hidden-earth"
+    ],
+    "tags": [
+      "story:seeing-through-trees",
+      "lidar",
+      "3dep",
+      "elevation",
+      "fact sheet"
+    ],
+    "region": "United States"
+  },
+  {
+    "url": "https://pubs.usgs.gov/fs/2003/fs017-03/fs017-03.pdf",
+    "title": "USGS Earthquake Hazards Program (Fact Sheet 017-03)",
+    "source": "USGS",
+    "sourceUrl": "https://pubs.usgs.gov/fs/2003/fs017-03/",
+    "license": "public domain",
+    "year": 2003,
+    "summary": "USGS Fact Sheet 017-03. Includes how lidar, used in heavily forested regions like the Pacific Northwest, revealed previously unknown faults in the Seattle and Puget Sound area — such as the Toe Jam Hill fault, marked by a conspicuous east–west topographic trend.",
+    "projects": [
+      "hidden-earth",
+      "earth-alive"
+    ],
+    "tags": [
+      "story:seeing-through-trees",
+      "story:ground-that-moves",
+      "lidar",
+      "fault",
+      "seattle fault",
+      "toe jam hill",
+      "fact sheet"
+    ],
+    "region": "Washington",
+    "bbox": [
+      -123.2,
+      46.9,
+      -121.8,
+      48.3
+    ]
+  }
+]

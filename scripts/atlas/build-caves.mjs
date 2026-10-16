@@ -41,7 +41,7 @@ WHERE {
 GROUP BY ?c ?cLabel ?cDescription ?coord ?article`;
 
 const res = await fetch(`https://query.wikidata.org/sparql?query=${encodeURIComponent(QUERY)}`, {
-  headers: { Accept: "application/sparql-results+json", "User-Agent": "shanemiller.ninja atlas (shanemiller500@gmail.com)" },
+  headers: { Accept: "application/sparql-results+json", "User-Agent": "shanemiller.ninja atlas (+https://shanemiller.ninja)" },
 });
 if (!res.ok) throw new Error(`Wikidata: HTTP ${res.status}`);
 const rows = (await res.json()).results.bindings;

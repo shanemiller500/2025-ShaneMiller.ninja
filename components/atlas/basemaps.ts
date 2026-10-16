@@ -68,10 +68,11 @@ export function applyTerrain(map: MlMap, mode: TerrainMode, dark: boolean) {
 
   if (mode === "3d") {
     map.setTerrain({ source: DEM_SOURCE, exaggeration: 1.3 });
-    if (map.getPitch() < 30) map.easeTo({ pitch: 55, duration: 900 });
+    // tilt for the 3D view — unless a flight is already taking the camera somewhere
+    if (map.getPitch() < 30 && !map.isMoving()) map.easeTo({ pitch: 55, duration: 900 });
   } else if (map.getTerrain()) {
     // only flatten the camera when leaving 3D — a story may have tilted it on purpose
     map.setTerrain(null);
-    if (map.getPitch() > 0) map.easeTo({ pitch: 0, duration: 600 });
+    if (map.getPitch() > 0 && !map.isMoving()) map.easeTo({ pitch: 0, duration: 600 });
   }
 }

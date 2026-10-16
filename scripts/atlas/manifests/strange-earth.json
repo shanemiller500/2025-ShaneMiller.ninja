@@ -1,0 +1,15 @@
+[
+  {
+    "url": "https://pubs.usgs.gov/fs/2004/3044/pdf/2PTufasFS.pdf",
+    "title": "The Tufas of Pyramid Lake, Nevada",
+    "source": "USGS",
+    "sourceUrl": "https://pubs.usgs.gov/fs/2004/3044/",
+    "license": "public domain",
+    "year": 2004,
+    "summary": "USGS Fact Sheet 2004-3044. How Ice Age Lake Lahontan rose to its highstand about 15,000 years ago — 22,800 km² and 281 m deep — and how its tufa towers grew where lake-bottom springs met carbonate-rich water.",
+    "projects": ["strange-earth"],
+    "tags": ["story:lake-lahontan", "lahontan", "pyramid lake", "pluvial lake", "tufa", "ice age", "fact sheet"],
+    "region": "Nevada",
+    "bbox": [-120.5, 38.5, -117, 42]
+  }
+]

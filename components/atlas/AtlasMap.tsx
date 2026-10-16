@@ -4,7 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import maplibregl, { type GeoJSONSource, type Map as MlMap, type MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./atlas.css";
-import { applyTerrain, basemapStyle, firstLabelLayer } from "./basemaps";
+import { DEM_SOURCE, applyTerrain, basemapStyle, firstLabelLayer } from "./basemaps";
 import type { AtlasLayer, AtlasTime, AtlasView, Basemap, Picked, TerrainMode } from "./types";
 
 /* ------------------------------------------------------------------ */
@@ -35,6 +35,10 @@ export interface AtlasMapProps {
   onView?: (v: AtlasView) => void;
   /** Glowing atmosphere around the globe (best on a dark, space-like frame) */
   atmosphere?: boolean;
+  /** Slowly circle the camera (degrees per second) once any flight has landed; 0/undefined = still */
+  orbit?: number;
+  /** The person grabbed the map while orbiting — the page should drop `orbit` */
+  onOrbitStop?: () => void;
   /** Show MapLibre's zoom/compass/fullscreen buttons (default true) */
   controls?: boolean;
   className?: string;
@@ -56,6 +60,8 @@ export function AtlasMap({
   time = null,
   onView,
   atmosphere = false,
+  orbit = 0,
+  onOrbitStop,
   controls = true,
   className = "",
   children,
@@ -67,10 +73,12 @@ export function AtlasMap({
   /** style-layer ids each AtlasLayer installed */
   const ownedRef = useRef<Record<string, string[]>>({});
   const lastSelRef = useRef<{ source: string; id: string | number } | null>(null);
+  /** true while the orbit camera is turning — its per-frame moves aren't reported as views */
+  const orbitingRef = useRef(false);
 
   // latest props for the imperative handlers
-  const live = useRef({ layers, visible, data, terrain, dark, selected, onPick, time, onView });
-  live.current = { layers, visible, data, terrain, dark, selected, onPick, time, onView };
+  const live = useRef({ layers, visible, data, terrain, dark, selected, onPick, time, onView, onOrbitStop });
+  live.current = { layers, visible, data, terrain, dark, selected, onPick, time, onView, onOrbitStop };
 
   /* ── create the map once ─────────────────────────────────────────── */
   useEffect(() => {
@@ -84,6 +92,8 @@ export function AtlasMap({
       maxPitch: 75,
     });
     mapRef.current = map;
+    // dev-only handle for headless checks
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __atlasMap?: MlMap }).__atlasMap = map;
     if (controls) {
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
       if (frameRef.current) map.addControl(new maplibregl.FullscreenControl({ container: frameRef.current }), "top-right");
@@ -154,11 +164,30 @@ export function AtlasMap({
     map.on("click", onClick);
 
     const reportView = () => {
+      if (orbitingRef.current) return;
       const b = map.getBounds();
       const c = map.getCenter();
       live.current.onView?.({ bounds: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], zoom: map.getZoom(), center: [c.lng, c.lat] });
     };
     map.on("moveend", reportView);
+
+    /* 3D terrain: keep the camera's centre on the real ground. Flights computed before the
+       elevation tiles arrive aim at sea level, which lands the view kilometres off target. */
+    let groundTimer: ReturnType<typeof setTimeout> | undefined;
+    // throttled, not debounced: an orbiting camera fires moveend every frame
+    const groundCenter = () => {
+      if (groundTimer) return;
+      groundTimer = setTimeout(() => {
+        groundTimer = undefined;
+        if (!map.getTerrain() || map.isMoving()) return;
+        const e = map.queryTerrainElevation(map.getCenter());
+        if (e != null && Math.abs(e - map.getCenterElevation()) > 25) map.setCenterElevation(e);
+      }, 250);
+    };
+    map.on("moveend", groundCenter);
+    map.on("sourcedata", (e) => {
+      if (e.sourceId === DEM_SOURCE && e.tile) groundCenter();
+    });
     map.once("load", reportView);
 
     /* hover: pointer cursor + a one-line label */
@@ -196,6 +225,7 @@ export function AtlasMap({
     return () => {
       cancelAnimationFrame(raf);
       cancelAnimationFrame(anim);
+      clearTimeout(groundTimer);
       identifyCtl?.abort();
       tip.remove();
       map.remove();
@@ -267,6 +297,8 @@ export function AtlasMap({
     if (!map || styleKey === firstStyle.current) return;
     firstStyle.current = styleKey;
     readyRef.current = false;
+    // drop 3D terrain first: rendering a frame with terrain pointing at the outgoing style's DEM crashes MapLibre
+    if (map.getTerrain()) map.setTerrain(null);
     // diff:false guarantees a full reload + style.load, which re-installs our layers
     map.setStyle(basemapStyle(basemap, dark), { diff: false });
   }, [styleKey, basemap, dark]);
@@ -313,6 +345,45 @@ export function AtlasMap({
       essential: true,
     });
   }, [flyTo]);
+
+  /* ── orbit camera (flyovers) ─────────────────────────────────────── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !orbit || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0;
+    let last = 0;
+    let stopped = false;
+    const step = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      // a new flight (next anomaly) takes over the camera; resume once it lands
+      if (!map.isEasing()) map.setBearing(map.getBearing() + orbit * dt);
+      raf = requestAnimationFrame(step);
+    };
+    const start = () => {
+      if (stopped) return;
+      orbitingRef.current = true;
+      last = performance.now();
+      raf = requestAnimationFrame(step);
+    };
+    // let a flight that's under way land first
+    if (map.isMoving()) map.once("moveend", start);
+    else start();
+    // grabbing the map hands the camera back
+    const canvas = map.getCanvasContainer();
+    const grab = () => live.current.onOrbitStop?.();
+    canvas.addEventListener("pointerdown", grab);
+    canvas.addEventListener("wheel", grab, { passive: true });
+    return () => {
+      stopped = true;
+      map.off("moveend", start);
+      cancelAnimationFrame(raf);
+      canvas.removeEventListener("pointerdown", grab);
+      canvas.removeEventListener("wheel", grab);
+      orbitingRef.current = false;
+      map.fire("moveend");
+    };
+  }, [orbit]);
 
   return (
     // `relative` unless the page positions the frame itself (Tailwind emits .relative after .absolute, so both would collapse it)
