@@ -28,9 +28,9 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "disaster-atlas",
     title: "Disaster Atlas",
-    tagline: "Wildfires, hurricanes, floods and tornadoes — replayed against buildings and people.",
-    status: "planned",
-    sources: ["NOAA", "NIFC", "FEMA"],
+    tagline: "Live: NWS warnings, active wildfires and satellite fire detections, hurricanes with their cones, today's tornado reports and flooding rivers — over FEMA's county risk index.",
+    status: "live",
+    sources: ["NOAA / NWS", "NIFC", "NASA FIRMS", "FEMA"],
     glow: "from-orange-500/30 via-red-400/20 to-rose-300/10",
   },
   {

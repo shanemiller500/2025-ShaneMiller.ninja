@@ -7,6 +7,7 @@
 import type { ExpressionSpecification, Map as MlMap } from "maplibre-gl";
 import type { AtlasLayer } from "@/components/atlas/types";
 import { ALERT_GROUPS, FLOOD_LEVELS, REPORT_KINDS, RISK_RATINGS } from "@/utils/geo/hazards";
+import { CAT_COLORS, EF_COLORS } from "./history";
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const FONT = ["Montserrat Medium", "Open Sans Bold", "Noto Sans Regular"];
@@ -269,4 +270,188 @@ export const placeLayer: AtlasLayer = {
   },
 };
 
-export const DISASTER_LAYERS: AtlasLayer[] = [riskLayer, alertsLayer, firesLayer, hotspotsLayer, stormsLayer, reportsLayer, gaugesLayer, placeLayer];
+/* ── history ─────────────────────────────────────────────────────── */
+
+const catColor = ["match", ["get", "cat"], ...CAT_COLORS.flatMap((c, i) => [i, c]), "#60a5fa"] as unknown as ExpressionSpecification;
+
+export const histHurricanesLayer: AtlasLayer = {
+  id: "hist-hurricanes",
+  label: "Hurricane tracks",
+  group: "History",
+  description: "Best tracks from NOAA's HURDAT2 database: every Atlantic storm since 1851 and eastern-Pacific storm since 1949, coloured by strength at each 6-hourly fix. Dots mark landfalls.",
+  legend: ["Tropical storm / depression", "Category 1", "Category 2", "Category 3", "Category 4", "Category 5"].map((label, i) => ({ color: CAT_COLORS[i], label, shape: "line" as const })),
+  citation: { label: "NOAA NHC HURDAT2 best-track database", href: "https://www.nhc.noaa.gov/data/#hurdat", license: "public domain" },
+  clickable: ["hist-hu-line", "hist-hu-label-dot"],
+  install(map) {
+    for (const id of ["hist-hu", "hist-hu-labels", "hist-hu-landfalls"]) map.addSource(id, { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "hist-hu-glow",
+      type: "line",
+      source: "hist-hu",
+      filter: [">=", ["get", "cat"], 3],
+      layout: { "line-cap": "round" },
+      paint: { "line-color": catColor, "line-width": 8, "line-blur": 6, "line-opacity": 0.35 },
+    });
+    map.addLayer({
+      id: "hist-hu-line",
+      type: "line",
+      source: "hist-hu",
+      layout: { "line-cap": "round" },
+      paint: {
+        "line-color": catColor,
+        "line-width": ["interpolate", ["linear"], ["get", "cat"], 0, 1.2, 5, 3.6],
+        "line-opacity": ["case", ["boolean", ["feature-state", "dim"], false], 0.15, 0.9],
+      },
+    });
+    map.addLayer({ id: "hist-hu-landfall", type: "circle", source: "hist-hu-landfalls", paint: { "circle-radius": 3.5, "circle-color": "#020617", "circle-stroke-color": catColor, "circle-stroke-width": 1.8 } });
+    map.addLayer({ id: "hist-hu-label-dot", type: "circle", source: "hist-hu-labels", paint: { "circle-radius": 4, "circle-color": catColor, "circle-stroke-color": "#020617", "circle-stroke-width": 1 } });
+    map.addLayer({
+      id: "hist-hu-label",
+      type: "symbol",
+      source: "hist-hu-labels",
+      minzoom: 3,
+      layout: { "text-field": ["get", "title"], "text-font": FONT, "text-size": 10.5, "text-offset": [0, 1], "text-anchor": "top", "text-optional": true },
+      paint: { "text-color": "#f8fafc", "text-halo-color": "#020617", "text-halo-width": 1.4 },
+    });
+    return ["hist-hu-glow", "hist-hu-line", "hist-hu-landfall", "hist-hu-label-dot", "hist-hu-label"];
+  },
+  hoverLabel: (f) => (f.properties?.title ? String(f.properties.title) : f.properties?.kt != null ? `${Math.round(Number(f.properties.kt) * 1.15078)} mph` : null),
+};
+
+const efColor = ["match", ["get", "mag"], ...EF_COLORS.flatMap((c, i) => [i, c]), "#94a3b8"] as unknown as ExpressionSpecification;
+
+export const histTornadoesLayer: AtlasLayer = {
+  id: "hist-tornadoes",
+  label: "Tornado paths",
+  group: "History",
+  description: "Every U.S. tornado since 1950 from NOAA's Storm Prediction Center, drawn from where it touched down to where it lifted. Colour = (E)F rating. Tornadoes rated before 2007 use the original Fujita scale.",
+  legend: ["(E)F0", "(E)F1", "(E)F2", "(E)F3", "(E)F4", "(E)F5"].map((label, i) => ({ color: EF_COLORS[i], label, shape: "line" as const })),
+  citation: { label: "NOAA SPC Severe Weather Database", href: "https://www.spc.noaa.gov/wcm/", license: "public domain" },
+  selectSource: "hist-tor",
+  clickable: ["hist-tor-line", "hist-tor-dot"],
+  install(map) {
+    map.addSource("hist-tor", { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "hist-tor-glow",
+      type: "line",
+      source: "hist-tor",
+      filter: ["all", ["==", ["geometry-type"], "LineString"], [">=", ["get", "mag"], 4]],
+      layout: { "line-cap": "round" },
+      paint: { "line-color": efColor, "line-width": 9, "line-blur": 6, "line-opacity": 0.4 },
+    });
+    map.addLayer({
+      id: "hist-tor-line",
+      type: "line",
+      source: "hist-tor",
+      filter: ["==", ["geometry-type"], "LineString"],
+      layout: { "line-cap": "round" },
+      paint: {
+        "line-color": efColor,
+        // zoom must be outermost; selection + rating go inside each stop
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          3,
+          ["case", ["boolean", ["feature-state", "selected"], false], 4, ["interpolate", ["linear"], ["get", "mag"], 0, 0.8, 5, 2.6]],
+          9,
+          ["case", ["boolean", ["feature-state", "selected"], false], 9, ["interpolate", ["linear"], ["get", "mag"], 0, 2, 5, 7]],
+        ],
+        "line-opacity": 0.9,
+      },
+    });
+    map.addLayer({
+      id: "hist-tor-dot",
+      type: "circle",
+      source: "hist-tor",
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 1.6, 9, 4], "circle-color": efColor, "circle-opacity": 0.85 },
+    });
+    return ["hist-tor-glow", "hist-tor-line", "hist-tor-dot"];
+  },
+};
+
+export const histFiresLayer: AtlasLayer = {
+  id: "hist-fires",
+  label: "Past fire perimeters",
+  group: "History",
+  description: "Final mapped perimeters of past wildfires and prescribed burns from the interagency fire-perimeter history (NIFC), for the year chosen.",
+  legend: [{ color: "#f97316", label: "Burned area" }],
+  citation: { label: "NIFC Interagency Fire Perimeter History", href: "https://data-nifc.opendata.arcgis.com/", license: "public domain" },
+  selectSource: "hist-fires",
+  clickable: ["hist-fires-fill"],
+  install(map, { labelLayerId }) {
+    map.addSource("hist-fires", { type: "geojson", data: EMPTY, promoteId: "id" });
+    map.addLayer({ id: "hist-fires-fill", type: "fill", source: "hist-fires", paint: { "fill-color": "#ea580c", "fill-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 0.7, 0.45] } }, labelLayerId);
+    map.addLayer({ id: "hist-fires-line", type: "line", source: "hist-fires", paint: { "line-color": "#fdba74", "line-width": 0.8 } }, labelLayerId);
+    map.addLayer({
+      id: "hist-fires-label",
+      type: "symbol",
+      source: "hist-fires",
+      minzoom: 6,
+      filter: [">", ["get", "acres"], 20000],
+      layout: { "text-field": ["get", "name"], "text-font": FONT, "text-size": 11 },
+      paint: { "text-color": "#fed7aa", "text-halo-color": "#020617", "text-halo-width": 1.4 },
+    });
+    return ["hist-fires-fill", "hist-fires-line", "hist-fires-label"];
+  },
+  hoverLabel: (f) => `${f.properties?.name} · ${Number(f.properties?.acres).toLocaleString()} acres`,
+};
+
+export const DECL_STOPS: [number, string][] = [
+  [0, "#0f172a"],
+  [5, "#1e3a8a"],
+  [10, "#0e7490"],
+  [20, "#ca8a04"],
+  [30, "#ea580c"],
+  [45, "#dc2626"],
+];
+
+export const declarationsLayer: AtlasLayer = {
+  id: "declarations",
+  label: "FEMA disaster declarations",
+  group: "History",
+  description: "How many federal disaster and emergency declarations have included each county since 1953 (OpenFEMA). Filter by type of incident.",
+  legend: DECL_STOPS.slice(1).map(([n, c]) => ({ color: c, label: `${n}+` })),
+  citation: { label: "OpenFEMA Disaster Declarations Summaries", href: "https://www.fema.gov/openfema-data-page/disaster-declarations-summaries-v2", license: "public domain" },
+  selectSource: "declarations",
+  clickable: ["decl-fill"],
+  install(map, { labelLayerId }) {
+    map.addSource("declarations", { type: "geojson", data: EMPTY, promoteId: "id", tolerance: 0.6 });
+    map.addLayer(
+      {
+        id: "decl-fill",
+        type: "fill",
+        source: "declarations",
+        paint: {
+          // no county-level record (Connecticut's new planning regions) → neutral grey
+          "fill-color": ["case", ["==", ["get", "n"], null], "#475569", ["interpolate", ["linear"], ["get", "n"], ...DECL_STOPS.flat()]] as unknown as ExpressionSpecification,
+          "fill-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 0.9, 0.65],
+        },
+      },
+      labelLayerId
+    );
+    map.addLayer({ id: "decl-line", type: "line", source: "declarations", minzoom: 4.5, paint: { "line-color": "#020617", "line-width": 0.4, "line-opacity": 0.6 } }, labelLayerId);
+    return ["decl-fill", "decl-line"];
+  },
+  hoverLabel: (f) => `${f.properties?.name}, ${f.properties?.state} · ${f.properties?.n == null ? "no county-level records" : `${f.properties.n} declarations`}`,
+};
+
+/** Live layers, then history layers — the page shows one set at a time. */
+export const LIVE_LAYER_IDS = ["risk", "alerts", "fires", "hotspots", "storms", "reports", "gauges", "place"];
+export const HISTORY_LAYER_IDS = ["hist-hurricanes", "hist-tornadoes", "hist-fires", "declarations"];
+
+export const DISASTER_LAYERS: AtlasLayer[] = [
+  riskLayer,
+  declarationsLayer,
+  alertsLayer,
+  firesLayer,
+  histFiresLayer,
+  hotspotsLayer,
+  stormsLayer,
+  histHurricanesLayer,
+  histTornadoesLayer,
+  reportsLayer,
+  gaugesLayer,
+  placeLayer,
+];

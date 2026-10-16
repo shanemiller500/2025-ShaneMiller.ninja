@@ -185,6 +185,8 @@ export function parseSpcCsv(csv: string, kind: ReportKind, day: "today" | "yeste
     const cells = line.split(",");
     if (cells.length < 7) continue;
     const [time, mag, location, county, state, lat, lon] = cells;
+    // an empty cell is Number("") = 0 — that would put the report at 0°, 0°
+    if (!lat?.trim() || !lon?.trim()) continue;
     const la = Number(lat);
     const lo = Number(lon);
     if (!Number.isFinite(la) || !Number.isFinite(lo)) continue;
@@ -204,15 +206,11 @@ export function parseSpcCsv(csv: string, kind: ReportKind, day: "today" | "yeste
   return out;
 }
 
+/** Today's + yesterday's reports (proxied through /api/atlas/spc). */
 export async function fetchStormReports(signal?: AbortSignal): Promise<GeoJSON.FeatureCollection> {
-  const jobs = (["today", "yesterday"] as const).flatMap((day) =>
-    REPORT_KINDS.map(async (k) => {
-      const res = await fetch(`https://www.spc.noaa.gov/climo/reports/${day}_${k.file}.csv`, { signal });
-      return res.ok ? parseSpcCsv(await res.text(), k.key, day) : [];
-    })
-  );
-  const parts = await Promise.all(jobs);
-  return { type: "FeatureCollection", features: parts.flat() };
+  const res = await fetch("/api/atlas/spc", { signal });
+  if (!res.ok) throw new Error(`storm reports: HTTP ${res.status}`);
+  return res.json();
 }
 
 /* ── rivers in flood ─────────────────────────────────────────────── */
