@@ -115,3 +115,52 @@ test('FIRMS: column-wise detections rebuild into the same GeoJSON the layer read
   assert.equal(p.when, '2026-10-16T03:45Z');
   assert.equal(p.day, true);
 });
+
+/* ── Phase 2: every ocean's cyclones, European bathymetry ────────── */
+
+test('world cyclone tracks: IBTrACS basins only, JTWC winds, famous storms right', () => {
+  const { storms } = readJson('hurricanes-world.json');
+  assert.ok(storms.length > 3000);
+  const basins = new Set(['WP', 'NI', 'SI', 'SP', 'SA']);
+  for (const s of storms) {
+    assert.ok(basins.has(s.basin), s.basin);
+    assert.ok(s.maxWind > 0, `${s.id} has a measured wind`);
+    assert.ok(s.pts.length >= 2);
+    for (const p of s.pts) assert.ok(Math.abs(p[2]) <= 1800 && Math.abs(p[1]) <= 900, `${s.id} point ${p}`);
+  }
+  const find = (name, year) => storms.find((s) => s.name === name && s.year === year);
+  // JTWC 1-minute peaks
+  assert.equal(find('Haiyan', 2013).maxWind, 170);
+  assert.equal(find('Haiyan', 2013).cat, 5);
+  assert.equal(find('Tip', 1979).maxWind, 165);
+  assert.equal(find('Nargis', 2008).basin, 'NI');
+});
+
+test('basin picker groups every basin; storm links go to NHC or IBTrACS', () => {
+  const h = load('app/atlas/disaster-atlas/history.ts');
+  const groups = Object.fromEntries(['AL', 'SA', 'EP', 'CP', 'WP', 'NI', 'SI', 'SP'].map((b) => [b, h.basinGroup(b)]));
+  assert.equal(JSON.stringify(groups), JSON.stringify({ AL: 'AL', SA: 'AL', EP: 'EP', CP: 'EP', WP: 'WP', NI: 'IO', SI: 'IO', SP: 'SP' }));
+  const storm = (basin) => ({ id: '2013306N07162', basin, year: 2013 });
+  assert.match(h.stormSourceLink(storm('WP')).href, /^https:\/\/ncics\.org\/ibtracs\//);
+  assert.match(h.stormSourceLink(storm('AL')).href, /^https:\/\/www\.nhc\.noaa\.gov\//);
+  const all = h.filterStorms([{ ...storm('WP'), cat: 5 }, { ...storm('AL'), cat: 1 }], { year: 2013, minCat: 0, basin: 'all' });
+  assert.equal(all.length, 2);
+});
+
+test('EMODnet: only European seas go to it', () => {
+  const { inEmodnet } = load('components/atlas/nceiDem.ts');
+  assert.equal(inEmodnet([-0.26, 50.58]), true); // English Channel
+  assert.equal(inEmodnet([-8.55, 51.41]), true); // Lusitania
+  assert.equal(inEmodnet([-49.95, 41.73]), false); // Titanic
+  assert.equal(inEmodnet([-75.41, 35.0]), false); // Monitor
+});
+
+test('dive bathymetry: EMODnet is used only where it agrees with NOAA', () => {
+  const src = fs.readFileSync('components/atlas/SeafloorDive.tsx', 'utf8');
+  const fn = src.match(/export function depthsAgree[\s\S]*?\n}/)[0].replace('export ', '').replace(/: number/g, '');
+  const depthsAgree = new Function(`${fn}; return depthsAgree;`)();
+  assert.equal(depthsAgree(64.4, 60.2), true); // English Channel: agree
+  assert.equal(depthsAgree(17.9, 40), false); // Scapa Flow: EMODnet is off
+  assert.equal(depthsAgree(3, 6), true); // shallow: within 5 m
+  assert.equal(depthsAgree(NaN, 10), false);
+});

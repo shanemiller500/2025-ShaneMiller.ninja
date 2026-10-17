@@ -5,7 +5,8 @@
 /* ------------------------------------------------------------------ */
 import type { Map as MlMap } from "maplibre-gl";
 import type { AtlasLayer } from "@/components/atlas/types";
-import { COVERAGE_TILES, LIDAR_MIN_ZOOM, LIDAR_VIEWS, lidarTiles, type LidarView } from "@/utils/geo/lidar";
+import { COVERAGE_TILES, DEP_BOUNDS, LIDAR_MIN_ZOOM, LIDAR_VIEWS, lidarTiles, type LidarView } from "@/utils/geo/lidar";
+import { addEuLidar } from "@/utils/geo/euLidar";
 import { SITES, SITE_KINDS } from "./sites";
 
 const FONT = ["Montserrat Medium", "Open Sans Bold", "Noto Sans Regular"];
@@ -51,7 +52,7 @@ const viewLayer = (view: LidarView): AtlasLayer => ({
   citation: DEP_CITATION,
   install(map, { labelLayerId }) {
     const src = `lidar-${view.key}`;
-    map.addSource(src, { type: "raster", tiles: [lidarTiles(view)], tileSize: 256, minzoom: LIDAR_MIN_ZOOM, maxzoom: 19, attribution: "Lidar: USGS 3DEP" });
+    map.addSource(src, { type: "raster", tiles: [lidarTiles(view)], tileSize: 256, minzoom: LIDAR_MIN_ZOOM, maxzoom: 19, bounds: DEP_BOUNDS, attribution: "Lidar: USGS 3DEP" });
     map.addLayer(
       {
         id: `${src}-raster`,
@@ -62,7 +63,9 @@ const viewLayer = (view: LidarView): AtlasLayer => ({
       },
       labelLayerId
     );
-    return [`${src}-raster`];
+    // England and the Netherlands: their national lidar (a hillshade in every view)
+    const eu = addEuLidar(map, src, labelLayerId, { "raster-opacity": ["interpolate", ["linear"], ["zoom"], LIDAR_MIN_ZOOM, 0, LIDAR_MIN_ZOOM + 0.6, 1] });
+    return [`${src}-raster`, ...eu];
   },
   // a click on the lidar (zoomed in) opens the ground readout for that spot
   async identify(map, lngLat) {

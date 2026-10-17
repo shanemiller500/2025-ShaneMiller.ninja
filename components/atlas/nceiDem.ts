@@ -57,7 +57,8 @@ export function readFloatTiff(buf: ArrayBuffer): DemGrid {
     const rows = one(278, height)!;
     tags.get(273)!.forEach((off, i) => put(off, 0, i * rows, width, rows, width));
   }
-  for (let i = 0; i < data.length; i++) if (data[i] <= NO_DATA + 1 || !Number.isFinite(data[i])) data[i] = NaN;
+  // no-data: our -99999, or a float sentinel like 3.4e38 (AHN) — nothing on Earth is 20 km up or down
+  for (let i = 0; i < data.length; i++) if (data[i] <= NO_DATA + 1 || !Number.isFinite(data[i]) || Math.abs(data[i]) > 20_000) data[i] = NaN;
   return { width, height, data };
 }
 

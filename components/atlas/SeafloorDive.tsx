@@ -168,6 +168,12 @@ float causticPattern(vec2 uv, float t) {
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
+/** Two depth models agree if they're within 5 m or 20% of each other. */
+export function depthsAgree(a: number, b: number) {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return Math.abs(a - b) <= Math.max(5, 0.2 * Math.max(Math.abs(a), Math.abs(b)));
+}
+
 export function SeafloorDive({ center, depth, playing, restart = 0, onTelemetry, onError, className = "" }: SeafloorDiveProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const live = useRef({ playing, onTelemetry, onError });
@@ -237,29 +243,31 @@ export function SeafloorDive({ center, depth, playing, restart = 0, onTelemetry,
       const dLat = halfM / 110_574;
       const bbox: BBox = [lng - dLng, lat - dLat, lng + dLng, lat + dLat];
 
-      /* bathymetry: NOAA's best, else Terrarium (ocean depths only to z10) */
+      /* bathymetry: NOAA's mosaic (EMODnet in European seas where the two agree), else Terrarium */
       const N = small ? 224 : 384;
+      // European seas: EMODnet's finer grid — but only where it agrees with NOAA's mosaic
+      // under the wreck (it reads ~18 m over Scapa Flow's König, which lies 16–41 m down)
+      const [ncei, emod] = await Promise.all([
+        loadNceiDem(bbox, N, ctl.signal).catch(() => null),
+        inEmodnet(center) ? loadEmodnetDem(bbox, ctl.signal).catch(() => null) : Promise.resolve(null),
+      ]);
+      if (disposed) return;
+      const depthAtCentre = (g: DemGrid) => -sampleGrid(g, (g.width - 1) / 2, (g.height - 1) / 2);
       let grid: DemGrid;
-      try {
-        // European seas: EMODnet's DTM beats the global mosaic (GEBCO there)
-        if (!inEmodnet(center)) throw new Error("outside EMODnet");
-        grid = await loadEmodnetDem(bbox, ctl.signal);
+      if (emod && (!ncei || depthsAgree(depthAtCentre(emod), depthAtCentre(ncei)))) {
+        grid = emod;
         state.source = "emodnet";
-      } catch {
-        if (disposed) return;
-        try {
-          grid = await loadNceiDem(bbox, N, ctl.signal);
-          state.source = "ncei";
-        } catch (e) {
-        if (disposed) return;
+      } else if (ncei) {
+        grid = ncei;
+        state.source = "ncei";
+      } else {
+        // Terrarium carries ocean depths only up to zoom 10
         state.source = "terrarium";
         const elev = await loadElevation(bbox, zoomForBBox(bbox, 16, 10));
         const data = new Float32Array(N * N);
         for (let r = 0; r < N; r++)
           for (let c = 0; c < N; c++) data[r * N + c] = elev(lng - dLng + (c / (N - 1)) * 2 * dLng, lat + dLat - (r / (N - 1)) * 2 * dLat);
         grid = { width: N, height: N, data };
-        void e;
-        }
       }
       if (disposed) return;
       const heightAt = (c: number, r: number) => {

@@ -6,7 +6,7 @@
 import type { ExpressionSpecification, Map as MlMap } from "maplibre-gl";
 import type { AtlasLayer } from "@/components/atlas/types";
 import { reliefLayer } from "@/components/atlas/reliefLayer";
-import { IMPACT_AGE_STOPS, LANDFORM_CLASSES, MACROSTRAT_TILES, STRANGE_CATS, formatAge, geologyAt } from "@/utils/geo/strange";
+import { GA_ATTRIBUTION, GA_BOUNDS, GA_GEOLOGY_TILES, IMPACT_AGE_STOPS, LANDFORM_CLASSES, MACROSTRAT_TILES, STRANGE_CATS, formatAge, geologyAt } from "@/utils/geo/strange";
 import { ANOMALIES, VERDICTS } from "./featured";
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -18,12 +18,14 @@ export const geologyLayer: AtlasLayer = {
   id: "geology",
   label: "Bedrock geology",
   group: "Ground",
-  description: "The rock at (or just under) the surface, coloured by age the way geologic maps are. Click anywhere to ask what's under that spot. Worldwide, most detailed in North America.",
-  citation: { label: "Macrostrat (University of Wisconsin–Madison)", href: "https://macrostrat.org/", license: "CC-BY 4.0" },
+  description: "The rock at (or just under) the surface, coloured by age the way geologic maps are. Click anywhere to ask what's under that spot. Worldwide, most detailed in North America; in Australia, Geoscience Australia's 1:1 million map draws on top.",
+  citation: { label: "Macrostrat (University of Wisconsin–Madison) · Geoscience Australia 1:1M", href: "https://macrostrat.org/", license: "CC-BY 4.0" },
   install(map, { labelLayerId }) {
     map.addSource("geology", { type: "raster", tiles: [MACROSTRAT_TILES], tileSize: 512, maxzoom: 15, attribution: "Geology: Macrostrat (CC-BY 4.0)" });
     map.addLayer({ id: "geology-raster", type: "raster", source: "geology", paint: { "raster-opacity": 0.62, "raster-saturation": -0.1, "raster-fade-duration": 200 } }, labelLayerId);
-    return ["geology-raster"];
+    map.addSource("geology-au", { type: "raster", tiles: [GA_GEOLOGY_TILES], tileSize: 256, bounds: GA_BOUNDS, maxzoom: 13, attribution: GA_ATTRIBUTION });
+    map.addLayer({ id: "geology-au-raster", type: "raster", source: "geology-au", paint: { "raster-opacity": 0.62, "raster-saturation": -0.1, "raster-fade-duration": 200 } }, labelLayerId);
+    return ["geology-raster", "geology-au-raster"];
   },
   async identify(_map, [lng, lat], signal) {
     const unit = await geologyAt(lng, lat, signal);
@@ -263,7 +265,7 @@ export const impactsLayer: AtlasLayer = {
   },
 };
 
-/* ── the ten featured anomalies ──────────────────────────────────── */
+/* ── the featured anomalies ──────────────────────────────────────── */
 
 export const ANOMALY_FC: GeoJSON.FeatureCollection<GeoJSON.Point> = {
   type: "FeatureCollection",
@@ -282,7 +284,7 @@ export const anomaliesLayer: AtlasLayer = {
   label: "Featured anomalies",
   group: "Impacts",
   defaultOn: true,
-  description: "Ten places worth a closer look, each with sourced facts and a 3D flyover.",
+  description: "Places worth a closer look — in the U.S. and beyond — each with sourced facts and a 3D flyover.",
   citation: { label: "", href: "" },
   selectSource: "anomalies",
   clickable: ["anomalies-core"],

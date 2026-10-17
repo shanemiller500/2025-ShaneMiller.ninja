@@ -146,3 +146,12 @@ export function kmBetween(a: [number, number], b: [number, number]) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos((a[1] * Math.PI) / 180) * Math.cos((b[1] * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
+
+/* ── Australia: Geoscience Australia's 1:1M surface geology (CC BY 4.0) ── */
+
+/** Geology polygons coloured by age, on top of Macrostrat inside Australia. */
+export const GA_GEOLOGY_TILES =
+  "https://services.ga.gov.au/gis/services/GA_Surface_Geology/MapServer/WMSServer?service=WMS&version=1.3.0&request=GetMap&layers=AUS_GA_1M_GUPoly_Age&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true";
+export const GA_BOUNDS: [number, number, number, number] = [112, -44, 154, -9];
+export const GA_ATTRIBUTION = "Geology (Australia): © Commonwealth of Australia (Geoscience Australia), CC BY 4.0";
+export const GA_CITATION = { label: "Geoscience Australia — Surface Geology of Australia 1:1M", href: "https://ecat.ga.gov.au/geonetwork/srv/eng/catalog.search#/metadata/74619", license: "CC BY 4.0" };

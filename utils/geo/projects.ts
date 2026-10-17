@@ -36,7 +36,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "strange-earth",
     title: "Strange Earth",
-    tagline: "Every confirmed impact crater at true size, 850+ U.S. oddities, a lens-swipe investigator back to 1880s survey maps, Ice Age lakes you can refill in 3D — and flyovers of ten real mysteries.",
+    tagline: "Every confirmed impact crater at true size, 850+ U.S. oddities, a lens-swipe investigator back to 1880s survey maps, Ice Age lakes you can refill in 3D — and flyovers of real mysteries from Arizona to the Sahara.",
     status: "live",
     sources: ["Earth Impact Database", "Macrostrat", "USGS topo archive", "USGS 3DEP"],
     glow: "from-violet-500/30 via-fuchsia-400/20 to-pink-300/10",

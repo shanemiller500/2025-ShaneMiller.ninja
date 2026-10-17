@@ -4,9 +4,10 @@
 /* ------------------------------------------------------------------ */
 import type { StyleSpecification } from "maplibre-gl";
 import type { Citation } from "./types";
-import { MACROSTRAT_TILES } from "@/utils/geo/strange";
+import { GA_ATTRIBUTION, GA_BOUNDS, GA_GEOLOGY_TILES, MACROSTRAT_TILES } from "@/utils/geo/strange";
 import { topoTiles } from "@/utils/geo/topo";
-import { LIDAR_MIN_ZOOM, lidarTiles, type LidarView } from "@/utils/geo/lidar";
+import { DEP_BOUNDS, LIDAR_MIN_ZOOM, lidarTiles, type LidarView } from "@/utils/geo/lidar";
+import { EU_LIDAR } from "@/utils/geo/euLidar";
 
 export interface LensSource {
   id: string;
@@ -19,6 +20,8 @@ export interface LensSource {
   layerMaxzoom?: number;
   paint?: Record<string, number>;
   attribution?: string;
+  /** [w, s, e, n] — only request tiles inside (national lidar abroad) */
+  bounds?: [number, number, number, number];
 }
 
 export interface Lens {
@@ -51,14 +54,18 @@ export const SATELLITE_LENS: Lens = {
   citation: { label: "Esri World Imagery", href: "https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" },
 };
 
+/** England's and the Netherlands' national lidar, layered on top where they exist. */
+const EU_LENS_SOURCES: LensSource[] = EU_LIDAR.map((s) => ({ id: `eu-${s.id}`, tiles: s.tiles, minzoom: s.minzoom, maxzoom: s.maxzoom, layerMinzoom: s.minzoom, bounds: s.bounds, attribution: s.attribution }));
+
 export const LIDAR_LENS: Lens = {
   id: "lidar",
   label: "Bare earth",
-  blurb: "Lidar strips away trees and buildings: just the shape of the ground (1 m detail from zoom 11 where flown).",
+  blurb: "Lidar strips away trees and buildings: just the shape of the ground (1 m detail from zoom 11 where flown — the U.S., England and the Netherlands).",
   accent: "#a3e635",
   sources: [
     { id: "relief", tiles: RELIEF_TILES, maxzoom: 16, layerMaxzoom: 11.5, attribution: "Relief: USGS The National Map" },
-    { id: "lidar", tiles: LIDAR_TILES, minzoom: 11, layerMinzoom: 11, attribution: "Lidar: USGS 3DEP" },
+    { id: "lidar", tiles: LIDAR_TILES, minzoom: 11, layerMinzoom: 11, bounds: DEP_BOUNDS, attribution: "Lidar: USGS 3DEP" },
+    ...EU_LENS_SOURCES,
   ],
   citation: { label: "USGS 3D Elevation Program (3DEP)", href: "https://www.usgs.gov/3d-elevation-program", license: "public domain" },
 };
@@ -71,8 +78,10 @@ export const GEOLOGY_LENS: Lens = {
   sources: [
     { id: "relief", tiles: RELIEF_TILES, maxzoom: 16, attribution: "Relief: USGS The National Map" },
     { id: "geology", tiles: MACROSTRAT_TILES, tileSize: 512, maxzoom: 15, paint: { "raster-opacity": 0.72 }, attribution: "Geology: Macrostrat (CC-BY 4.0)" },
+    // Australia: Geoscience Australia's 1:1M map, on top
+    { id: "geology-au", tiles: GA_GEOLOGY_TILES, maxzoom: 13, bounds: GA_BOUNDS, paint: { "raster-opacity": 0.72 }, attribution: GA_ATTRIBUTION },
   ],
-  citation: { label: "Macrostrat (University of Wisconsin–Madison)", href: "https://macrostrat.org/", license: "CC-BY 4.0" },
+  citation: { label: "Macrostrat (University of Wisconsin–Madison) · Geoscience Australia", href: "https://macrostrat.org/", license: "CC-BY 4.0" },
 };
 
 /** The historical topo lens; pass raster ids to show one edition, none for the newest. */
@@ -96,7 +105,7 @@ export function lensStyle(lens: Lens): StyleSpecification {
     sources: Object.fromEntries(
       lens.sources.map((s) => [
         s.id,
-        { type: "raster" as const, tiles: [s.tiles], tileSize: s.tileSize ?? 256, ...(s.minzoom != null ? { minzoom: s.minzoom } : {}), maxzoom: s.maxzoom ?? 18, ...(s.attribution ? { attribution: s.attribution } : {}) },
+        { type: "raster" as const, tiles: [s.tiles], tileSize: s.tileSize ?? 256, ...(s.minzoom != null ? { minzoom: s.minzoom } : {}), maxzoom: s.maxzoom ?? 18, ...(s.bounds ? { bounds: s.bounds } : {}), ...(s.attribution ? { attribution: s.attribution } : {}) },
       ])
     ),
     layers: [
@@ -122,7 +131,9 @@ export function lidarViewLens(view: LidarView): Lens {
     accent: "#a3e635",
     sources: [
       { id: "relief", tiles: RELIEF_TILES, maxzoom: 16, layerMaxzoom: LIDAR_MIN_ZOOM + 0.5, attribution: "Relief: USGS The National Map" },
-      { id: "lidar", tiles: lidarTiles(view), minzoom: LIDAR_MIN_ZOOM, layerMinzoom: LIDAR_MIN_ZOOM, paint: view.paint, attribution: "Lidar: USGS 3DEP" },
+      { id: "lidar", tiles: lidarTiles(view), minzoom: LIDAR_MIN_ZOOM, layerMinzoom: LIDAR_MIN_ZOOM, paint: view.paint, bounds: DEP_BOUNDS, attribution: "Lidar: USGS 3DEP" },
+      // abroad there's one view: a multidirectional hillshade
+      ...EU_LENS_SOURCES,
     ],
     citation: LIDAR_LENS.citation,
   };

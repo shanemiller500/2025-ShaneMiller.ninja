@@ -2,9 +2,13 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import maplibregl, { type Map as MlMap, type RasterTileSource } from "maplibre-gl";
+import { registerEuLidar } from "@/utils/geo/euLidar";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./atlas.css";
 import { lensStyle, type Lens } from "./lenses";
+
+// national lidar outside the U.S. needs its tile protocol before any map asks for tiles
+registerEuLidar(maplibregl);
 
 /* ------------------------------------------------------------------ */
 /*  <CompareView> — one place seen through several lenses at once.     */

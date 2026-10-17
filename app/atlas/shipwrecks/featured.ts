@@ -1,5 +1,7 @@
 /* ------------------------------------------------------------------ */
-/*  Featured shipwrecks. Every fact carries the NOAA / NPS page it     */
+/*  Featured shipwrecks. Every fact carries the official page it came  */
+/*  from (NOAA / NPS; abroad Historic Environment Scotland, Ireland's  */
+/*  INFOMAR seabed survey).                                            */
 /*  came from (checked October 2026). Positions from Wikipedia; two    */
 /*  wrecks have no published position and are marked approximate.     */
 /* ------------------------------------------------------------------ */
@@ -43,6 +45,8 @@ const S = {
   titanic: { label: "NOAA", url: "https://www.noaa.gov/office-of-general-counsel/gc-international-section/rms-titanic-history-and-significance" },
   independence: { label: "NOAA", url: "https://sanctuaries.noaa.gov/news/press/2015/independence-survey.html" },
   rio: { label: "NOAA", url: "https://sanctuaries.noaa.gov/shipwrecks/city-of-rio-de-janeiro" },
+  scapa: { label: "Historic Environment Scotland", url: "https://portal.historicenvironment.scot/designation/SM9298" },
+  lusitania: { label: "INFOMAR (Ireland)", url: "https://infomar.ie/node/460" },
 } satisfies Record<string, Source>;
 
 export const FEATURED_WRECKS: FeaturedWreck[] = [
@@ -190,6 +194,41 @@ export const FEATURED_WRECKS: FeaturedWreck[] = [
     facts: [
       { text: "In fog on February 22, 1901, she struck rocks at Fort Point and sank within minutes; 128 of the 210 aboard were lost.", source: S.rio },
       { text: "NOAA located and mapped the wreck in 2014, about 287 feet down.", source: S.rio },
+    ],
+  },
+  {
+    id: "scapa-flow",
+    name: "German High Seas Fleet, Scapa Flow",
+    where: "Scapa Flow, Orkney, Scotland",
+    lost: "June 21, 1919",
+    tagline: "A whole navy, sunk by its own crews.",
+    accent: "#cbd5e1",
+    center: [-3.153, 58.8866],
+    depthM: 41, // König lies 16–41 m down
+    zoom: 12,
+    wiki: "Scuttling_of_the_German_fleet_at_Scapa_Flow",
+    facts: [
+      { text: "Interned at Scapa Flow after the 1918 Armistice, the German High Seas Fleet was scuttled by its own crews on 21 June 1919, during the peace talks; only a few ships were beached by the British guard.", source: S.scapa },
+      { text: "Salvors licensed by the British government raised or removed most of the fleet — but not the battleships König, Kronprinz Wilhelm and Markgraf.", source: S.scapa },
+      { text: "König lies 16 m to 41 m down, Kronprinz Wilhelm 14–40 m and Markgraf 23–46 m; the three were scheduled as a monument on 23 May 2001.", source: S.scapa },
+    ],
+  },
+  {
+    id: "lusitania",
+    name: "RMS Lusitania",
+    where: "Off the Old Head of Kinsale, Ireland",
+    lost: "May 7, 1915",
+    tagline: "The liner whose sinking turned opinion against the U-boat war.",
+    accent: "#fda4af",
+    center: [-8.548, 51.415],
+    depthM: 93,
+    approximate: true,
+    zoom: 9,
+    wiki: "RMS_Lusitania",
+    facts: [
+      { text: "Torpedoed by U-20 on 7 May 1915 near the end of a transatlantic voyage, she sank within 18 minutes. Of the 1,960 people on board, 1,193 were lost (other sources give 1,198).", source: S.lusitania },
+      { text: "The wreck lies in 93 m of water, 11.5 nautical miles off the Old Head of Kinsale.", source: S.lusitania },
+      { text: "Ireland placed an Underwater Heritage Order on the wreck in 1995; its seabed survey has mapped it with the state's Underwater Archaeology Unit since 2002. It is slowly collapsing, but the bow still stands proud of the seabed.", source: S.lusitania },
     ],
   },
 ];

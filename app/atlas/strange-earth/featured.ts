@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------------ */
-/*  Strange Earth's ten featured anomalies. Every fact carries the     */
-/*  page it came from (NPS, USGS, state surveys) — check the source    */
+/*  Strange Earth's featured anomalies. Every fact carries the page it */
+/*  came from (NPS, USGS, state surveys; abroad UNESCO and NASA) — check the source */
 /*  before adding or changing one; several "well-known" claims about  */
 /*  these places turned out to be wrong or unsupported.                */
 /* ------------------------------------------------------------------ */
@@ -58,6 +58,9 @@ const S = {
   dnrMima: { label: "WA DNR", url: "https://dnr.wa.gov/natural-areas/natural-area-preserves/mima-mounds-natural-area-preserve" },
   dnrMimaPanel: { label: "WA DNR", url: "https://dnr.wa.gov/sites/default/files/2025-03/amp_mima_mounds_mistery.pdf" },
   blmBonneville: { label: "BLM", url: "https://www.blm.gov/visit/bonneville-salt-flats" },
+  unescoVredefort: { label: "UNESCO", url: "https://whc.unesco.org/en/list/1162/" },
+  unescoCauseway: { label: "UNESCO", url: "https://whc.unesco.org/en/list/369/" },
+  nasaRichat: { label: "NASA Earth Observatory", url: "https://science.nasa.gov/earth/earth-observatory/eyeing-the-richat-structure/" },
 } satisfies Record<string, Source>;
 
 export const ANOMALIES: Anomaly[] = [
@@ -227,6 +230,58 @@ export const ANOMALIES: Anomaly[] = [
     facts: [
       { text: "A remnant of Lake Bonneville, which covered over a third of Utah between about 32,000 and 10,000 years ago.", source: S.blmBonneville },
       { text: "The salt crust is almost 5 feet thick in places near the center, thinning to under an inch at the edges.", source: S.blmBonneville },
+    ],
+  },
+  /* ── beyond the U.S. (lidar and old topo maps are U.S.-only; satellite and geology work anywhere) ── */
+  {
+    id: "vredefort",
+    look: "Satellite + geology: the crater itself is long eroded — follow the curving ridges of the Vredefort Dome, the rings left around its uplifted centre.",
+    name: "Vredefort Dome",
+    where: "Free State & North West, South Africa",
+    tagline: "The oldest and largest known impact structure on Earth.",
+    verdict: "solved",
+    accent: "#fca5a5",
+    center: [27.5, -27.0],
+    fly: { zoom: 9, pitch: 50, bearing: 0 },
+    wiki: "Vredefort_impact_structure",
+    facts: [
+      { text: "Formed about 2,023 million years ago, the oldest and largest known meteorite impact structure on Earth — the site of the world's greatest known single release of energy.", source: S.unescoVredefort },
+      { text: "Erosion has cut so deep that it exposes a full geological profile below the crater floor — the only place on Earth that does.", source: S.unescoVredefort },
+      { text: "It lies about 120 km south-west of Johannesburg and became a World Heritage Site in 2005.", source: S.unescoVredefort },
+    ],
+  },
+  {
+    id: "richat",
+    look: "Satellite: the bull's-eye of rings is obvious from orbit. Geology shows why — circular ridges of tougher rock eroding more slowly than the softer rings between.",
+    name: "Richat Structure",
+    where: "Adrar Plateau, Mauritania",
+    tagline: "The “Eye of the Sahara” — once taken for an impact crater.",
+    verdict: "solved",
+    accent: "#fdba74",
+    center: [-11.4, 21.124],
+    fly: { zoom: 9.2, pitch: 45, bearing: 0 },
+    wiki: "Richat_Structure",
+    facts: [
+      { text: "A 40-kilometre-wide formation of concentric ridges on the Adrar Plateau in northern Mauritania.", source: S.nasaRichat },
+      { text: "First thought to be an impact crater, it is actually a deeply eroded geologic dome, pushed up by an igneous intrusion underground.", source: S.nasaRichat },
+      { text: "Rock types eroded at different rates, leaving circular ridges known as cuestas. Gemini IV astronauts Ed White and James McDivitt photographed it from orbit.", source: S.nasaRichat },
+    ],
+  },
+  {
+    id: "giants-causeway",
+    look: "Satellite: zoom to the shore to see the pavement of columns stepping into the sea; geology shows the Antrim plateau's lava flows behind it.",
+    name: "Giant's Causeway",
+    where: "County Antrim, Northern Ireland",
+    tagline: "Some 40,000 basalt columns, cooled from lava 60 million years ago.",
+    verdict: "solved",
+    accent: "#94a3b8",
+    center: [-6.5116, 55.2408],
+    fly: { zoom: 15.5, pitch: 60, bearing: 330 },
+    wiki: "Giant's_Causeway",
+    facts: [
+      { text: "Some 40,000 large, regularly shaped polygonal columns of basalt form a pavement into the sea.", source: S.unescoCauseway },
+      { text: "The columns formed around 60 million years ago, making the coast a classic locality for the study of basaltic volcanism.", source: S.unescoCauseway },
+      { text: "Legends of giants striding over the sea to Scotland grew up around it; it became a World Heritage Site in 1986.", source: S.unescoCauseway },
     ],
   },
 ];

@@ -30,13 +30,50 @@ export const xrayLayer: AtlasLayer = {
   },
 };
 
+/* ── karst worldwide (BGR WHYMAP WOKAM) ──────────────────────────── */
+
+/** WOKAM's own classes and colours (MapServer layer "Karstifiable rocks"). */
+export const WOKAM_CLASSES = [
+  { label: "Carbonate rock (continuous)", color: "#0073e6" },
+  { label: "Carbonate rock (patchy)", color: "#80e6ff" },
+  { label: "Evaporite rock — gypsum, salt (continuous)", color: "#ff3399" },
+  { label: "Evaporite rock (patchy)", color: "#ffcc00" },
+  { label: "Mixed carbonate & evaporite", color: "#40cc26" },
+];
+
+export const worldKarstLayer: AtlasLayer = {
+  id: "world-karst",
+  label: "Karst rock worldwide",
+  group: "Underground",
+  defaultOn: true,
+  badge: "Worldwide",
+  description:
+    "The World Karst Aquifer Map: rock that can dissolve into caves and karst aquifers, across the whole planet (mapped at 1:40 million, so outlines are broad). Karst groundwater supplies cities from Vienna and Rome to San Antonio and Damascus. In the lower 48 the detailed USGS karst map draws on top.",
+  legend: WOKAM_CLASSES,
+  citation: { label: "Datenquelle: WHYMAP WOKAM, (C) BGR Berlin, IAH Reading, KIT Karlsruhe, UNESCO Paris 2017", href: "https://www.whymap.org/whymap/EN/Maps_Data/Wokam/wokam_node_en.html", license: "free with attribution (BGR terms)" },
+  install(map, { labelLayerId }) {
+    map.addSource("world-karst", {
+      type: "raster",
+      tiles: ["https://services.bgr.de/wms/grundwasser/whymap_wokam/?service=WMS&version=1.3.0&request=GetMap&layers=0&styles=&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true"],
+      tileSize: 256,
+      maxzoom: 9,
+      attribution: "Karst: WHYMAP WOKAM © BGR, IAH, KIT, UNESCO 2017",
+    });
+    map.addLayer(
+      { id: "world-karst-raster", type: "raster", source: "world-karst", paint: { "raster-opacity": ["interpolate", ["linear"], ["zoom"], 2, 0.42, 8, 0.25], "raster-fade-duration": 200 } },
+      labelLayerId
+    );
+    return ["world-karst-raster"];
+  },
+};
+
 /* ── karst ───────────────────────────────────────────────────────── */
 
 const karstColor = ["match", ["get", "cls"], ...KARST_CLASSES.flatMap((c) => [c.key, c.color]), "#22d3ee"] as unknown as ExpressionSpecification;
 
 export const karstLayer: AtlasLayer = {
   id: "karst",
-  label: "Karst rock",
+  label: "Karst rock (U.S. detail)",
   group: "Underground",
   defaultOn: true,
   description: "Rock that dissolves (karst) or hollows out (pseudokarst). Bright = at the surface, dim = buried under other sediment. Zoom past 8 for full-detail outlines; click for the rock unit. Lower 48 only — no public karst map exists for Alaska, Hawaii or Puerto Rico.",
@@ -311,4 +348,4 @@ export const sinkholesLayer: AtlasLayer = {
   },
 };
 
-export const UNDERGROUND_LAYERS: AtlasLayer[] = [xrayLayer, reliefLayer, aquifersLayer, karstLayer, sinkholesLayer, cavesLayer];
+export const UNDERGROUND_LAYERS: AtlasLayer[] = [xrayLayer, reliefLayer, worldKarstLayer, aquifersLayer, karstLayer, sinkholesLayer, cavesLayer];

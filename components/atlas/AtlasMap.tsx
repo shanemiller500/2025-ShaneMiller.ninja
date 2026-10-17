@@ -4,10 +4,14 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import maplibregl, { type GeoJSONSource, type Map as MlMap, type MapMouseEvent } from "maplibre-gl";
+import { registerEuLidar } from "@/utils/geo/euLidar";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./atlas.css";
 import { DEM_SOURCE, applyTerrain, basemapStyle, firstLabelLayer } from "./basemaps";
 import type { AtlasLayer, AtlasTime, AtlasView, Basemap, Picked, TerrainMode } from "./types";
+
+// national lidar outside the U.S. needs its tile protocol before any map asks for tiles
+registerEuLidar(maplibregl);
 
 /* ------------------------------------------------------------------ */
 /*  <AtlasMap> — the one MapLibre wrapper every atlas project uses.    */

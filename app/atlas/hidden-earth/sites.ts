@@ -60,6 +60,7 @@ const S = {
   npsEffigyBuilders: { label: "NPS", url: "https://www.nps.gov/efmo/learn/historyculture/effigy-moundbuilders.htm" },
   npsPetersburg: { label: "NPS", url: "https://www.nps.gov/pete/learn/news/presskit.htm" },
   eosBays: { label: "Eos (AGU)", url: "https://eos.org/articles/four-planetary-landscapes-that-scientists-cant-explain" },
+  ehMaiden: { label: "English Heritage", url: "https://www.english-heritage.org.uk/visit/places/maiden-castle/history/" },
 } satisfies Record<string, Source>;
 
 export const SITES: HiddenSite[] = [
@@ -273,6 +274,25 @@ export const SITES: HiddenSite[] = [
     facts: [
       { text: "Shallow oval depressions from 180 m to about 20 km long — all aligned northwest to southeast — from New Jersey to Florida, with a large cluster in the Carolinas.", source: S.eosBays },
       { text: "No one has a solid explanation for how they formed; scientists are split between impacts and wind- or water-driven erosion.", source: S.eosBays },
+    ],
+  },
+  /* ── beyond the U.S.: England's Environment Agency lidar ── */
+  {
+    id: "maiden-castle",
+    cloudHalf: 500,
+    name: "Maiden Castle",
+    where: "Dorset, England",
+    kind: "earthwork",
+    tagline: "Iron Age ramparts the size of 50 football pitches.",
+    center: [-2.4702, 50.6948],
+    zoom: 15,
+    view: "multi",
+    look: "The ramparts: up to four rings of banks and ditches wrapped around the hilltop, with the maze of the gateways at each end. The old field boundaries below barely register by comparison.",
+    wiki: "Maiden_Castle,_Dorset",
+    facts: [
+      { text: "One of the largest hillforts in Britain, covering an area bigger than 50 football pitches.", source: S.ehMaiden },
+      { text: "Work on the defences began about 2,400 years ago and continued for 300 years; once extended, the inner rampart alone ran 2 km (1¼ miles).", source: S.ehMaiden },
+      { text: "Mortimer and Tessa Wheeler excavated here in 1934–7. Burials Wheeler took for a Roman assault are now thought to have been laid out by the hillfort's own people — almost certainly not after a battle.", source: S.ehMaiden },
     ],
   },
 ];

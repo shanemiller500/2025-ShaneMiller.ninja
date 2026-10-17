@@ -32,19 +32,22 @@ function load(file) {
 /* Hidden Earth: sourced sites, sane cameras, valid lidar tiles and styles. */
 const { SITES, SITE_KINDS } = load('app/atlas/hidden-earth/sites.ts');
 const lidar = load('utils/geo/lidar.ts');
+const euLidar = load('utils/geo/euLidar.ts');
 const styleSpec = require('@maplibre/maplibre-gl-style-spec');
 
-test('sites: unique, in the U.S., every fact sourced', () => {
+test('sites: unique, where lidar exists (U.S., England, Netherlands), every fact sourced', () => {
   assert.ok(SITES.length >= 10);
   assert.equal(new Set(SITES.map((s) => s.id)).size, SITES.length);
   for (const s of SITES) {
     const [lng, lat] = s.center;
-    assert.ok(lng > -125 && lng < -66 && lat > 24 && lat < 50, `${s.name} at ${lng},${lat}`);
+    const us = lng > -125 && lng < -66 && lat > 24 && lat < 50;
+    const eu = euLidar.EU_LIDAR.some((e) => lng >= e.bounds[0] && lng <= e.bounds[2] && lat >= e.bounds[1] && lat <= e.bounds[3]);
+    assert.ok(us || eu, `${s.name} at ${lng},${lat}`);
     assert.ok(SITE_KINDS[s.kind], `${s.name} kind`);
     assert.ok(lidar.LIDAR_VIEWS.some((v) => v.key === s.view), `${s.name} view`);
     assert.ok(s.zoom >= lidar.LIDAR_MIN_ZOOM && s.zoom <= 17, `${s.name} zoom ${s.zoom}`);
     assert.ok(s.facts.length >= 2, `${s.name} facts`);
-    for (const f of s.facts) assert.match(f.source.url, /^https:\/\/[^ ]+\.(gov|edu|org)\//, `${s.name}: source ${f.source.url}`);
+    for (const f of s.facts) assert.match(f.source.url, /^https:\/\/[^ ]+\.(gov|edu|org|org\.uk)\//, `${s.name}: source ${f.source.url}`);
     assert.ok(s.look.length > 20, `${s.name} look-for hint`);
   }
 });
@@ -111,4 +114,36 @@ test('stories: sourced, and every action points at something real', () => {
       }
     }
   }
+});
+
+/* ── national lidar abroad (England, Netherlands) ────────────────── */
+
+test('EU lidar: shading is mid-grey on the flat, lit on north-west slopes, transparent on no-data', () => {
+  const W = 6;
+  const flat = new Float32Array(W * W).fill(10);
+  const px = (img, x, y, w) => Array.from(img.slice((y * w + x) * 4, (y * w + x) * 4 + 4));
+  const f = euLidar.shadeHeights(flat, W, W, 1, 3);
+  assert.equal(px(f, 1, 1, W - 2)[0], Math.round(255 * Math.SQRT1_2)); // sin 45° ≈ 180
+  // a slope rising to the east faces west: lit by the north-west lights
+  const ramp = new Float32Array(W * W).map((_, i) => i % W); // rises to the east, so it faces west
+  const west = euLidar.shadeHeights(ramp, W, W, 1, 1);
+  const east = euLidar.shadeHeights(ramp.map((v) => -v), W, W, 1, 1);
+  assert.ok(px(west, 1, 1, W - 2)[0] > px(east, 1, 1, W - 2)[0], 'west-facing brighter than east-facing');
+  // no-data → transparent
+  const holes = flat.slice();
+  holes[2 * W + 2] = NaN;
+  assert.equal(px(euLidar.shadeHeights(holes, W, W, 1), 1, 1, W - 2)[3], 0);
+});
+
+test('EU lidar: small holes fill, big gaps stay empty; tiles are in Web Mercator', () => {
+  const W = 10;
+  const h = new Float32Array(W * W).fill(5);
+  h[55] = NaN; // a lone tree crown
+  for (let y = 0; y < W; y++) for (let x = 0; x < 3; x++) h[y * W + x] = NaN; // a canal
+  euLidar.fillHoles(h, W, W, 1);
+  assert.equal(h[55], 5);
+  assert.ok(Number.isNaN(h[0]), 'a wide gap is not invented in one pass');
+  const b = euLidar.tileBounds3857(0, 0, 0, 0);
+  assert.ok(Math.abs(b.minx + 20037508.34) < 1 && Math.abs(b.maxy - 20037508.34) < 1);
+  for (const s of euLidar.EU_LIDAR) assert.ok(s.bounds[0] < s.bounds[2] && s.bounds[1] < s.bounds[3] && s.attribution && s.citation.license);
 });

@@ -251,7 +251,7 @@ export const featuredLayer: AtlasLayer = {
   label: "Featured wrecks",
   group: "Wrecks",
   defaultOn: true,
-  description: "Nine wrecks with their stories, from the Monitor to the Titanic.",
+  description: "Eleven wrecks with their stories, from the Monitor and the Titanic to the Lusitania and the scuttled fleet of Scapa Flow.",
   citation: { label: "", href: "" },
   selectSource: "featured",
   clickable: ["featured-core"],

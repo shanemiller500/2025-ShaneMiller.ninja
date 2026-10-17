@@ -80,7 +80,7 @@ interface Graveyard {
 /* ------------------------------------------------------------------ */
 /*  Shipwrecks — charted wrecks worldwide (NOAA in U.S. waters, the    */
 /*  UK Hydrographic Office everywhere else), 30,000 named wrecks, the  */
-/*  National Marine Sanctuaries, and nine wrecks with their stories.   */
+/*  National Marine Sanctuaries, and eleven wrecks with their stories. */
 /* ------------------------------------------------------------------ */
 
 type Panel = "find" | "layers" | null;

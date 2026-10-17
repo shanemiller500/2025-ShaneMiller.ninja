@@ -47,5 +47,8 @@ export function lidarTiles(view: LidarView, size = 256): string {
 /** Where 1 m lidar elevation exists (3DEP DEM product index, layer "1 meter"). */
 export const COVERAGE_TILES = `${DEP_INDEX}/export?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png32&transparent=true&layers=show:1&f=image`;
 
+/** Where 3DEP has data (U.S. states and territories): outside it the service returns opaque blank tiles. */
+export const DEP_BOUNDS: [number, number, number, number] = [-180, 13, -64, 72];
+
 /** Zoom from which the lidar views are worth drawing (below, the national relief tiles stand in). */
 export const LIDAR_MIN_ZOOM = 10;

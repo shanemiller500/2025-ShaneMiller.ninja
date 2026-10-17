@@ -74,11 +74,11 @@ test('sanctuaries: all 18 boundaries', () => {
   assert.ok(fc.features.some((f) => f.properties.code === 'TBNMS'), 'Thunder Bay NMS');
 });
 
-test('featured wrecks: unique, every fact from a NOAA / NPS page', () => {
+test('featured wrecks: unique, every fact from an official page (NOAA / NPS, or a national heritage body abroad)', () => {
   assert.equal(new Set(FEATURED_WRECKS.map((w) => w.id)).size, FEATURED_WRECKS.length);
   for (const w of FEATURED_WRECKS) {
     assert.ok(w.facts.length >= 2, `${w.name} facts`);
-    for (const f of w.facts) assert.match(f.source.url, /^https:\/\/([a-z0-9-]+\.)*(noaa|nps)\.gov\//, `${w.name}: ${f.source.url}`);
+    for (const f of w.facts) assert.match(f.source.url, /^https:\/\/([a-z0-9-]+\.)*((noaa|nps)\.gov|historicenvironment\.scot|infomar\.ie)\//, `${w.name}: ${f.source.url}`);
     const [lng, lat] = w.center;
     assert.ok(Math.abs(lat) <= 90 && Math.abs(lng) <= 180);
   }
@@ -121,7 +121,7 @@ test('dive depths: every published depth is the one its fact states', () => {
   const ft = (m) => Math.round(m * 3.28084);
   for (const w of FEATURED_WRECKS.filter((x) => x.depthM)) {
     const text = w.facts.map((f) => f.text).join(' ').replace(/,/g, '');
-    const mentions = [String(w.depthM), String(ft(w.depthM))].some((n) => text.includes(n)) || [240, 18, 2600, 287, 12500].some((n) => text.includes(String(n)) && Math.abs(n / 3.28084 - w.depthM) / w.depthM < 0.05);
+    const mentions = [String(w.depthM), String(ft(w.depthM))].some((n) => text.includes(n)) || [240, 18, 2600, 287, 12500, 41, 93].some((n) => text.includes(String(n)) && Math.abs(n / 3.28084 - w.depthM) / w.depthM < 0.05);
     assert.ok(mentions, `${w.name}: ${w.depthM} m isn't backed by a fact`);
   }
 });

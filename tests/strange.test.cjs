@@ -84,9 +84,9 @@ test('landforms: all four GNIS classes, named and located', () => {
   for (const c of strange.LANDFORM_CLASSES) assert.ok(n[c.key] > 50, `${c.key}: ${n[c.key]}`);
 });
 
-test('featured anomalies: ten, unique, every fact sourced from a real page', () => {
-  assert.equal(ANOMALIES.length, 10);
-  assert.equal(new Set(ANOMALIES.map((a) => a.id)).size, 10);
+test('featured anomalies: unique, every fact sourced from a real page', () => {
+  assert.ok(ANOMALIES.length >= 13);
+  assert.equal(new Set(ANOMALIES.map((a) => a.id)).size, ANOMALIES.length);
   for (const a of ANOMALIES) {
     assert.ok(VERDICTS[a.verdict], `${a.name} verdict`);
     assert.ok(a.facts.length >= 2, `${a.name} needs at least two facts`);
@@ -96,7 +96,7 @@ test('featured anomalies: ten, unique, every fact sourced from a real page', () 
 });
 
 test('featured impact anomalies sit on their database crater', () => {
-  for (const [id, name] of [['meteor-crater', 'Meteor'], ['chesapeake', 'Chesapeake'], ['upheaval-dome', 'Upheaval']]) {
+  for (const [id, name] of [['meteor-crater', 'Meteor'], ['chesapeake', 'Chesapeake'], ['upheaval-dome', 'Upheaval'], ['vredefort', 'Vredefort']]) {
     const a = ANOMALIES.find((x) => x.id === id);
     const c = impacts.find((f) => f.properties.name.includes(name));
     const km = strange.kmBetween(a.center, c.geometry.coordinates);
@@ -137,7 +137,8 @@ test('every lens turns into a valid raster style', () => {
     assert.equal(st.layers.length, lens.sources.length + 1, `${lens.id}: background + one layer per source`);
     for (const s of lens.sources) {
       assert.equal(st.sources[s.id].type, 'raster');
-      assert.match(st.sources[s.id].tiles[0], /^https:\/\//);
+      // https, or the AHN shading protocol the map components register (utils/geo/euLidar.ts)
+      assert.match(st.sources[s.id].tiles[0], /^(https|ahn-hs):\/\//);
     }
     assert.ok(lens.citation.label && lens.citation.href.startsWith('https://'), `${lens.id} cites its source`);
   }
