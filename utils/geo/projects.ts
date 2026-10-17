@@ -20,7 +20,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "earth-alive",
     title: "Earth Alive",
-    tagline: "A full-screen live globe: earthquakes, plates, faults and erupting volcanoes — plus a time machine back to 1900, 3D slabs and guided stories.",
+    tagline: "A full-screen live globe: earthquakes, plates, active faults worldwide and erupting volcanoes — plus a time machine back to 1900, 3D slabs and guided stories.",
     status: "live",
     sources: ["USGS", "Smithsonian GVP", "PB2002"],
     glow: "from-rose-500/30 via-orange-400/20 to-amber-300/10",
@@ -28,7 +28,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "disaster-atlas",
     title: "Disaster Atlas",
-    tagline: "Live: NWS warnings, active wildfires and satellite fire detections, hurricanes with their cones, today's tornado reports and flooding rivers — over FEMA's county risk index.",
+    tagline: "Live: disasters worldwide and fire detections across the planet, plus NWS warnings, U.S. wildfires, hurricanes with their cones, today's tornado reports and flooding rivers — over FEMA's county risk index.",
     status: "live",
     sources: ["NOAA / NWS", "NIFC", "NASA FIRMS", "FEMA"],
     glow: "from-orange-500/30 via-red-400/20 to-rose-300/10",
@@ -52,7 +52,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "underground-usa",
     title: "Underground USA",
-    tagline: "X-ray the country: the karst rock that hollows into caves, every cave you can visit, and 3D dives through Mammoth, Carlsbad, Wind and Jewel.",
+    tagline: "X-ray the country: the karst rock that hollows into caves, 14,000 caves worldwide (every one you can visit pinned exactly), and 3D dives through Mammoth, Carlsbad, Wind and Jewel.",
     status: "live",
     sources: ["USGS karst map", "Wikidata", "USGS 3DEP"],
     glow: "from-slate-500/30 via-indigo-400/20 to-sky-300/10",
@@ -92,7 +92,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "shipwrecks",
     title: "Shipwrecks",
-    tagline: "Every wreck on NOAA's nautical charts, 30,000 named wrecks worldwide, the sanctuaries that protect them — and the stories of the Titanic, Monitor, Arizona and Edmund Fitzgerald.",
+    tagline: "80,000 charted wrecks worldwide, 30,000 named ones, two world wars of sinkings day by day, the sanctuaries that protect them — and dives to the Titanic, Monitor and more.",
     status: "live",
     sources: ["NOAA charts", "NOAA Sanctuaries", "Wikidata"],
     glow: "from-cyan-500/30 via-sky-400/20 to-blue-300/10",

@@ -6,7 +6,7 @@ import type { AreaGeometry } from "@/utils/geo/impact";
 import { DrawerLink, FactGrid, FeatureDrawer } from "@/components/atlas/FeatureDrawer";
 import type { Picked } from "@/components/atlas/types";
 import { CAT_COLORS, EF_COLORS, FIPS_ALIASES, ktToMph, tornadoAt, type CountyDeclarations, type HurdatStorm, type TornadoCols } from "./history";
-import { FLOOD_LEVELS, NRI_URL, REPORT_KINDS, RISK_RATINGS, alertGroup, compass, countyAt, money, riskColor, type CountyRisk, type Storm } from "@/utils/geo/hazards";
+import { FLOOD_LEVELS, NRI_URL, REPORT_KINDS, RISK_RATINGS, WORLD_ALERT_LEVELS, alertGroup, worldEventType, compass, countyAt, money, riskColor, type CountyRisk, type Storm } from "@/utils/geo/hazards";
 
 /* ------------------------------------------------------------------ */
 /*  Drawers for the Disaster Atlas: a warning, a fire, a hotspot, a    */
@@ -90,16 +90,26 @@ function PlaceDrawer({ picked, onClose }: { picked: Picked; onClose: () => void 
       onClose={onClose}
       eyebrow="What's at risk here"
       accent={riskColor(county?.risk ?? null)}
-      title={county ? `${county.name}, ${county.state}` : county === null ? "Outside the U.S. risk index" : "Looking up the county…"}
+      title={county ? `${county.name}, ${county.state}` : county === null ? "Outside the U.S." : "Looking up the county…"}
       subtitle={`${picked.lngLat[1].toFixed(3)}°, ${picked.lngLat[0].toFixed(3)}°`}
     >
       <div className="space-y-4">
         {county === undefined && <p className="animate-pulse font-mono text-[11px] uppercase tracking-wider text-orange-200/70">Reading FEMA&apos;s National Risk Index…</p>}
         {county && <CountyRiskPanel c={county} />}
-        {county === null && <p className="text-[13px] text-slate-400">FEMA&apos;s National Risk Index covers U.S. counties only.</p>}
+        {county === null && (
+          <p className="text-[13px] leading-relaxed text-slate-400">
+            The county-by-county risk scores here are FEMA&apos;s and cover the U.S. only. Anywhere on Earth, the coloured dots show disasters happening now (from GDACS) and the yellow specks are satellite fire detections — click one for details.
+          </p>
+        )}
         <div className="space-y-2">
-          <DrawerLink href={forecastLink(picked.lngLat)}>NWS forecast &amp; active alerts for this spot</DrawerLink>
-          <DrawerLink href="https://hazards.fema.gov/nri/map">FEMA National Risk Index map</DrawerLink>
+          {county === null ? (
+            <DrawerLink href="https://www.gdacs.org/">GDACS — disasters worldwide</DrawerLink>
+          ) : (
+            <>
+              <DrawerLink href={forecastLink(picked.lngLat)}>NWS forecast &amp; active alerts for this spot</DrawerLink>
+              <DrawerLink href="https://hazards.fema.gov/nri/map">FEMA National Risk Index map</DrawerLink>
+            </>
+          )}
         </div>
       </div>
     </FeatureDrawer>
@@ -303,6 +313,32 @@ export function DisasterDetails({
           {area && <ImpactPanel geometry={area} accent="#f97316" framing="Inside the mapped fire perimeter" caveat="Buildings already lost may still appear: the footprint map isn't updated during a fire." />}
           <DrawerLink href={`https://inciweb.wildfire.gov/`}>InciWeb — official incident updates</DrawerLink>
           <DrawerLink href={forecastLink(picked.lngLat)}>Fire weather &amp; alerts here (NWS)</DrawerLink>
+        </div>
+      </FeatureDrawer>
+    );
+  }
+
+  if (picked.layer === "world") {
+    const t = worldEventType(String(p.type));
+    const level = WORLD_ALERT_LEVELS.find((l) => l.key === p.level);
+    const fmt = (v: unknown) => (v ? new Date(`${String(v)}Z`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : null);
+    return (
+      <FeatureDrawer open onClose={onClose} eyebrow={`${t.label} · worldwide`} accent={level?.color ?? t.color} title={String(p.name ?? t.label)} subtitle={p.country ? String(p.country) : undefined}>
+        <div className="space-y-4">
+          <FactGrid
+            facts={[
+              ["Alert", level?.label ?? String(p.level ?? "")],
+              ["Strength", p.severity ? String(p.severity) : null],
+              ["Since", fmt(p.from)],
+              ["Last update", fmt(p.to)],
+              ["Reported by", p.source ? String(p.source) : null],
+            ]}
+          />
+          <p className="text-[12px] leading-snug text-slate-400">
+            GDACS — run by the United Nations and the European Commission — rates each event by the harm to people it is likely to cause, combining its size with how many people live in its path and how vulnerable they are.
+          </p>
+          {p.report ? <DrawerLink href={String(p.report)}>GDACS event report</DrawerLink> : null}
+          <DrawerLink href="https://www.gdacs.org/">GDACS — Global Disaster Alert and Coordination System</DrawerLink>
         </div>
       </FeatureDrawer>
     );

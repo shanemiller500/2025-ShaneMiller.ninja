@@ -316,3 +316,79 @@ export function countyAt(fc: GeoJSON.FeatureCollection, [x, y]: [number, number]
   }
   return null;
 }
+
+/* ── fire detections worldwide (column-wise from /api/atlas/firms) ── */
+
+export interface HotspotCols {
+  lng: number[];
+  lat: number[];
+  frp: number[];
+  conf: string[];
+  /** minutes since 1970 (UTC) */
+  t: number[];
+  day: number[];
+}
+
+export function hotspotFeatures(c: HotspotCols): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = new Array(c.lng.length);
+  for (let i = 0; i < c.lng.length; i++)
+    features[i] = {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [c.lng[i], c.lat[i]] },
+      properties: { frp: c.frp[i], conf: c.conf[i] === "h" ? "high" : "nominal", when: new Date(c.t[i] * 60_000).toISOString().slice(0, 16) + "Z", day: c.day[i] === 1 },
+    };
+  return { type: "FeatureCollection", features };
+}
+
+export async function fetchHotspots(signal?: AbortSignal): Promise<GeoJSON.FeatureCollection> {
+  const res = await fetch("/api/atlas/firms", { signal });
+  const j = (await res.json()) as { cols: HotspotCols | null; error?: string };
+  if (!res.ok || !j.cols) throw new Error(j.error ?? `FIRMS ${res.status}`);
+  return hotspotFeatures(j.cols);
+}
+
+/* ── disasters worldwide (GDACS via /api/atlas/gdacs) ────────────── */
+
+export type WorldEventType = "EQ" | "TC" | "FL" | "VO" | "DR" | "WF";
+
+export const WORLD_EVENT_TYPES: { key: WorldEventType; label: string; color: string }[] = [
+  { key: "TC", label: "Tropical cyclone", color: "#d946ef" },
+  { key: "EQ", label: "Earthquake", color: "#f59e0b" },
+  { key: "FL", label: "Flood", color: "#3b82f6" },
+  { key: "WF", label: "Wildfire", color: "#ef4444" },
+  { key: "VO", label: "Volcano", color: "#f97316" },
+  { key: "DR", label: "Drought", color: "#a16207" },
+];
+/** GDACS alert levels: the expected humanitarian impact, not just the size of the event. */
+export const WORLD_ALERT_LEVELS: { key: string; label: string; color: string }[] = [
+  { key: "Red", label: "Red alert — severe impact likely", color: "#ef4444" },
+  { key: "Orange", label: "Orange alert — moderate impact", color: "#f97316" },
+  { key: "Green", label: "Green — little impact expected", color: "#4ade80" },
+];
+export const worldEventType = (k: string) => WORLD_EVENT_TYPES.find((t) => t.key === k) ?? WORLD_EVENT_TYPES[1];
+
+export async function fetchWorldEvents(signal?: AbortSignal): Promise<GeoJSON.FeatureCollection> {
+  const res = await fetch("/api/atlas/gdacs", { signal });
+  const j = (await res.json()) as GeoJSON.FeatureCollection & { error?: string };
+  if (!res.ok) throw new Error(j.error ?? `GDACS ${res.status}`);
+  return j;
+}
+
+/**
+ * The world layer without what the U.S. feeds already show better: storms NHC is tracking
+ * (matched by name) and U.S. wildfires / floods (WFIGS perimeters, NWS warnings, river gauges).
+ */
+export function worldEventsShown(fc: GeoJSON.FeatureCollection | null, nhcNames: string[]): GeoJSON.FeatureCollection | null {
+  if (!fc) return null;
+  const nhc = new Set(nhcNames.map((n) => n.toUpperCase()));
+  return {
+    type: "FeatureCollection",
+    features: fc.features.filter((f) => {
+      const p = f.properties ?? {};
+      const us = p.iso3 === "USA" || p.country === "United States";
+      if ((p.type === "WF" || p.type === "FL") && us) return false;
+      if (p.type === "TC" && nhc.has(String(p.short ?? "").replace(/-\d+$/, "").toUpperCase())) return false;
+      return true;
+    }),
+  };
+}

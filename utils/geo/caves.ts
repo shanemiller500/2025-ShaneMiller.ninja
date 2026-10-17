@@ -41,3 +41,51 @@ export const CAVE_KINDS: { key: CaveKind; label: string; color: string }[] = [
 export const caveKind = (k: string) => CAVE_KINDS.find((c) => c.key === k) ?? CAVE_KINDS[2];
 
 export type CaveFilter = "tours" | "all";
+
+/** caves.json is column-wise (14k caves worldwide); this turns it back into GeoJSON. */
+export interface CaveColumns {
+  id: string[];
+  name: string[];
+  desc: string[];
+  kind: CaveKind[];
+  tour: number[];
+  gen: number[];
+  state: (string | null)[];
+  areas: string[];
+  len: (number | null)[];
+  depth: (number | null)[];
+  image: (string | null)[];
+  wiki: (string | null)[];
+  lng: number[];
+  lat: number[];
+}
+
+const commonsThumb = (file: string) => `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=800`;
+const wikiUrl = (title: string) => `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}`;
+
+export function caveCollection(json: { cols: CaveColumns } | CaveCollection): CaveCollection {
+  if ("features" in json) return json;
+  const c = json.cols;
+  return {
+    type: "FeatureCollection",
+    features: c.id.map((id, i) => ({
+      type: "Feature",
+      id,
+      geometry: { type: "Point", coordinates: [c.lng[i], c.lat[i]] },
+      properties: {
+        id,
+        name: c.name[i],
+        desc: c.desc[i],
+        kind: c.kind[i],
+        tour: !!c.tour[i],
+        generalized: !!c.gen[i],
+        state: c.state[i],
+        areas: c.areas[i] ? c.areas[i].split("|") : [],
+        lengthKm: c.len[i],
+        depthM: c.depth[i],
+        image: c.image[i] ? commonsThumb(c.image[i]!) : null,
+        wiki: c.wiki[i] ? wikiUrl(c.wiki[i]!) : null,
+      },
+    })),
+  };
+}

@@ -41,6 +41,9 @@ import {
   ALERT_GROUPS,
   FLOOD_LEVELS,
   fetchAlerts,
+  fetchHotspots,
+  fetchWorldEvents,
+  worldEventsShown,
   fetchFirePerimeters,
   fetchFloodGauges,
   fetchStormReports,
@@ -82,6 +85,7 @@ interface Live {
   alerts: FC | null;
   fires: FC | null;
   hotspots: FC | null;
+  world: FC | null;
   storms: Storm[] | null;
   reports: FC | null;
   gauges: FC | null;
@@ -93,6 +97,7 @@ function useLiveHazards() {
     alerts: null,
     fires: null,
     hotspots: null,
+    world: null,
     storms: null,
     reports: null,
     gauges: null,
@@ -105,14 +110,8 @@ function useLiveHazards() {
     const jobs: [keyof Live, string, () => Promise<unknown>][] = [
       ["alerts", "NWS warnings", () => fetchAlerts(ctl.signal)],
       ["fires", "fire perimeters", () => fetchFirePerimeters(ctl.signal)],
-      [
-        "hotspots",
-        "satellite fire detections",
-        () =>
-          fetch("/api/atlas/firms", { signal: ctl.signal }).then((r) =>
-            r.json(),
-          ),
-      ],
+      ["hotspots", "satellite fire detections", () => fetchHotspots(ctl.signal)],
+      ["world", "disasters worldwide (GDACS)", () => fetchWorldEvents(ctl.signal)],
       ["storms", "hurricanes", () => fetchStorms(ctl.signal)],
       ["reports", "storm reports", () => fetchStormReports(ctl.signal)],
       ["gauges", "river gauges", () => fetchFloodGauges(ctl.signal)],
@@ -250,6 +249,10 @@ export default function DisasterApp() {
       ),
     };
   }, [live.storms]);
+  const worldData = useMemo(
+    () => worldEventsShown(live.world, (live.storms ?? []).map((st) => st.name)),
+    [live.world, live.storms],
+  );
   // live layers in live mode; just the chosen archive layer in history mode
   const shownVisible = useMemo<Record<string, boolean>>(() => {
     if (mode === "live")
@@ -268,6 +271,7 @@ export default function DisasterApp() {
       alerts: alertData,
       fires: fireData,
       hotspots: live.hotspots ?? undefined,
+      world: worldData ?? undefined,
       reports: live.reports ?? undefined,
       gauges: live.gauges ?? undefined,
       risk: nri ?? EMPTY,
@@ -277,6 +281,7 @@ export default function DisasterApp() {
       alertData,
       fireData,
       live.hotspots,
+      worldData,
       live.reports,
       live.gauges,
       nri,
@@ -286,6 +291,8 @@ export default function DisasterApp() {
   );
 
   /* ── headline numbers ──────────────────────────────────────────── */
+  const worldCyclones = (worldData?.features ?? []).filter((f) => f.properties?.type === "TC");
+  const worldSerious = (worldData?.features ?? []).filter((f) => f.properties?.level === "Red" || f.properties?.level === "Orange");
   const warnings = (live.alerts?.features ?? []).filter(
     (f) => !f.properties?.watch,
   );
@@ -677,9 +684,12 @@ export default function DisasterApp() {
           />
           <HudStat
             label="Tropical systems"
-            value={live.storms ? live.storms.length : "—"}
+            value={live.storms || worldData ? (live.storms?.length ?? 0) + worldCyclones.length : "—"}
             tone="text-fuchsia-300"
-            onClick={() => live.storms?.[0] && go(live.storms[0].center, 4.5)}
+            onClick={() => {
+              if (live.storms?.[0]) go(live.storms[0].center, 4.5);
+              else if (worldCyclones[0]) go((worldCyclones[0].geometry as GeoJSON.Point).coordinates as [number, number], 4.5);
+            }}
           />
           <HudStat
             label="Storm reports today"
@@ -690,6 +700,12 @@ export default function DisasterApp() {
             label="Rivers flooding"
             value={live.gauges ? flooding.length : "—"}
             tone="text-emerald-300"
+          />
+          <HudStat
+            label="World alerts · orange/red"
+            value={worldData ? worldSerious.length : "—"}
+            tone="text-amber-300"
+            onClick={() => go([20, 15], 1.6)}
           />
         </HudPanel>
       )}

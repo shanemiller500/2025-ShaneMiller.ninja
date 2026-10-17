@@ -23,6 +23,8 @@ export interface FeaturedWreck {
   /** [lng, lat] */
   center: [number, number];
   approximate?: boolean;
+  /** published depth of the wreck (m) — only where a fact below gives it */
+  depthM?: number;
   zoom: number;
   wiki: string;
   facts: Fact[];
@@ -52,6 +54,7 @@ export const FEATURED_WRECKS: FeaturedWreck[] = [
     tagline: "The most famous shipwreck in the world, two and a half miles down.",
     accent: "#e2e8f0",
     center: [-49.9469, 41.7325],
+    depthM: 3800,
     zoom: 6,
     wiki: "Titanic",
     facts: [
@@ -68,6 +71,7 @@ export const FEATURED_WRECKS: FeaturedWreck[] = [
     tagline: "The Civil War ironclad that became the first national marine sanctuary.",
     accent: "#94a3b8",
     center: [-75.4064, 35.0017],
+    depthM: 73, // "about 240 feet"
     zoom: 9,
     wiki: "USS_Monitor",
     facts: [
@@ -145,6 +149,7 @@ export const FEATURED_WRECKS: FeaturedWreck[] = [
     tagline: "A Spanish treasure-fleet wreck you can snorkel.",
     accent: "#fbbf24",
     center: [-80.6794, 24.8633],
+    depthM: 5.5, // "18 feet of water"
     zoom: 13,
     wiki: "San_Pedro_Underwater_Archaeological_Preserve_State_Park",
     facts: [
@@ -161,6 +166,7 @@ export const FEATURED_WRECKS: FeaturedWreck[] = [
     tagline: "A WWII aircraft carrier that became an atomic-test target.",
     accent: "#d946ef",
     center: [-122.98, 37.53],
+    depthM: 792, // "about 2,600 feet"
     approximate: true,
     zoom: 9,
     wiki: "USS_Independence_(CVL-22)",
@@ -177,6 +183,7 @@ export const FEATURED_WRECKS: FeaturedWreck[] = [
     tagline: "“The Titanic of the Golden Gate.”",
     accent: "#fb7185",
     center: [-122.481, 37.811],
+    depthM: 87, // "about 287 feet"
     approximate: true,
     zoom: 12,
     wiki: "SS_City_of_Rio_de_Janeiro",

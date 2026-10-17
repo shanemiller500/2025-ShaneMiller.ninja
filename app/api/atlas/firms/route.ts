@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 
 /* ------------------------------------------------------------------ */
-/*  Satellite fire detections, last 24 h (NASA FIRMS, VIIRS on         */
-/*  NOAA-20), lower 48 + Hawaii, slimmed to GeoJSON points.            */
+/*  Satellite fire detections, last 24 h, worldwide (NASA FIRMS,       */
+/*  VIIRS on NOAA-20). ~100k a day, so they go out column-wise and     */
+/*  the page rebuilds GeoJSON (utils/geo/hazards.ts → hotspotFeatures).*/
+/*  Low-confidence pixels are left out.                                */
 /*                                                                     */
 /*  GET /api/atlas/firms                                               */
 /*                                                                     */
@@ -13,38 +15,38 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const CSV = "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_USA_contiguous_and_Hawaii_24h.csv";
+const CSV = "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv";
 const REVALIDATE = 900;
 
 export async function GET() {
   try {
-    const res = await fetch(CSV, { next: { revalidate: REVALIDATE }, signal: AbortSignal.timeout(30_000) });
+    // ~10 MB: too big for Next's data cache, so the CDN caches our slim answer instead
+    const res = await fetch(CSV, { cache: "no-store", signal: AbortSignal.timeout(45_000) });
     if (!res.ok) throw new Error(`FIRMS: HTTP ${res.status}`);
     const [header, ...rows] = (await res.text()).trim().split("\n");
     const col = Object.fromEntries(header.split(",").map((h, i) => [h.trim(), i]));
-    const features: GeoJSON.Feature[] = [];
+    const cols = { lng: [] as number[], lat: [] as number[], frp: [] as number[], conf: [] as string[], t: [] as number[], day: [] as number[] };
     for (const row of rows) {
       const c = row.split(",");
+      const conf = (c[col.confidence] ?? "").trim();
+      if (conf === "low" || conf === "l") continue;
       const lat = Number(c[col.latitude]);
       const lng = Number(c[col.longitude]);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-      const t = (c[col.acq_time] ?? "").padStart(4, "0");
-      features.push({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [Math.round(lng * 1e3) / 1e3, Math.round(lat * 1e3) / 1e3] },
-        properties: {
-          frp: Math.round(Number(c[col.frp]) * 10) / 10 || 0,
-          conf: c[col.confidence] ?? "",
-          when: `${c[col.acq_date]}T${t.slice(0, 2)}:${t.slice(2)}Z`,
-          day: c[col.daynight]?.trim() === "D",
-        },
-      });
+      const hhmm = (c[col.acq_time] ?? "").padStart(4, "0");
+      const t = Date.parse(`${c[col.acq_date]}T${hhmm.slice(0, 2)}:${hhmm.slice(2)}:00Z`);
+      cols.lng.push(Math.round(lng * 1e3) / 1e3);
+      cols.lat.push(Math.round(lat * 1e3) / 1e3);
+      cols.frp.push(Math.round(Number(c[col.frp]) * 10) / 10 || 0);
+      cols.conf.push(conf === "high" || conf === "h" ? "h" : "n");
+      cols.t.push(Number.isFinite(t) ? Math.round(t / 60_000) : 0);
+      cols.day.push(c[col.daynight]?.trim() === "D" ? 1 : 0);
     }
     return NextResponse.json(
-      { type: "FeatureCollection", source: "NASA FIRMS · VIIRS NOAA-20 · last 24 h", features },
+      { source: "NASA FIRMS · VIIRS NOAA-20 · last 24 h · worldwide (nominal + high confidence)", cols },
       { headers: { "Cache-Control": `public, s-maxage=${REVALIDATE}, stale-while-revalidate=3600` } }
     );
   } catch (e) {
-    return NextResponse.json({ type: "FeatureCollection", features: [], error: (e as Error).message }, { status: 502 });
+    return NextResponse.json({ cols: null, error: (e as Error).message }, { status: 502 });
   }
 }

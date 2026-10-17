@@ -25,6 +25,30 @@ const asList = (v: unknown): string[] => {
 };
 
 export function UndergroundDetails({ picked, onClose, onDive }: { picked: Picked | null; onClose: () => void; onDive: (cave: CaveProps) => void }) {
+  // a cave entrance from OpenStreetMap
+  if (picked?.layer === "caves" && picked.props.osm != null) {
+    const p = picked.props as Record<string, unknown>;
+    const [lng, lat] = picked.lngLat;
+    const show = String(p.show) === "true";
+    return (
+      <FeatureDrawer open onClose={onClose} eyebrow="Cave entrance · OpenStreetMap" accent={show ? "#22d3ee" : "#e2e8f0"} title={p.name ? String(p.name) : "Cave entrance"} subtitle={`${Math.abs(lat).toFixed(4)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lng).toFixed(4)}°${lng >= 0 ? "E" : "W"}`}>
+        <div className="space-y-4">
+          <FactGrid
+            facts={[
+              ["Elevation", p.ele != null && p.ele !== "" ? `${Math.round(Number(p.ele))} m` : null],
+              ["Access", p.access ? String(p.access) : "not tagged"],
+              ["Fee", p.fee ? String(p.fee) : null],
+            ]}
+          />
+          <p className="text-[12px] leading-snug text-slate-400">
+            Mapped by OpenStreetMap volunteers. Many caves are on private land, closed to protect bats or simply dangerous — only enter with permission, a guide or a caving club.
+          </p>
+          {p.wikidata ? <DrawerLink href={`https://www.wikidata.org/wiki/${String(p.wikidata)}`}>Wikidata</DrawerLink> : null}
+          <DrawerLink href={`https://www.openstreetmap.org/node/${String(p.osm)}`}>OpenStreetMap (© contributors, ODbL)</DrawerLink>
+        </div>
+      </FeatureDrawer>
+    );
+  }
   if (picked?.layer === "caves") {
     const p = picked.props as unknown as CaveProps;
     const cave: CaveProps = { ...p, areas: asList(p.areas), tour: String(p.tour) === "true" || p.tour === true, generalized: String(p.generalized) === "true" || p.generalized === true };
@@ -73,7 +97,7 @@ export function UndergroundDetails({ picked, onClose, onDive }: { picked: Picked
 
           <FactGrid
             facts={[
-              ["State", cave.state],
+              ["Where", cave.state],
               ["Mapped length", cave.lengthKm ? `${cave.lengthKm.toLocaleString()} km` : null],
               ["Depth", cave.depthM ? `${cave.depthM} m` : null],
               ["Protected area", cave.areas[0] ?? null],

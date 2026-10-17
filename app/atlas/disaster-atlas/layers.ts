@@ -6,7 +6,7 @@
 /* ------------------------------------------------------------------ */
 import type { ExpressionSpecification, Map as MlMap } from "maplibre-gl";
 import type { AtlasLayer } from "@/components/atlas/types";
-import { ALERT_GROUPS, FLOOD_LEVELS, REPORT_KINDS, RISK_RATINGS } from "@/utils/geo/hazards";
+import { ALERT_GROUPS, FLOOD_LEVELS, REPORT_KINDS, RISK_RATINGS, WORLD_ALERT_LEVELS, WORLD_EVENT_TYPES } from "@/utils/geo/hazards";
 import { CAT_COLORS, EF_COLORS } from "./history";
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -110,7 +110,8 @@ export const hotspotsLayer: AtlasLayer = {
   label: "Satellite fire detections",
   group: "Fire",
   defaultOn: true,
-  description: "Hot pixels seen by the VIIRS sensor on NOAA-20 in the last 24 hours (~375 m each). Usually fire — but a gas flare or a hot factory roof can trigger one too. Size = fire radiative power.",
+  badge: "Worldwide",
+  description: "Hot pixels seen anywhere on Earth by the VIIRS sensor on NOAA-20 in the last 24 hours (~375 m each; low-confidence pixels left out). Usually fire — but a gas flare or a hot factory roof can trigger one too. Size = fire radiative power.",
   legend: [{ color: "#fde047", label: "Hot pixel (last 24 h)" }],
   citation: { label: "NASA FIRMS (VIIRS NOAA-20)", href: "https://firms.modaps.eosdis.nasa.gov/", license: "public domain" },
   clickable: ["hotspots-dot"],
@@ -438,8 +439,58 @@ export const declarationsLayer: AtlasLayer = {
 };
 
 /** Live layers, then history layers — the page shows one set at a time. */
-export const LIVE_LAYER_IDS = ["risk", "alerts", "fires", "hotspots", "storms", "reports", "gauges", "place"];
+export const LIVE_LAYER_IDS = ["risk", "alerts", "fires", "hotspots", "storms", "reports", "gauges", "world", "place"];
 export const HISTORY_LAYER_IDS = ["hist-hurricanes", "hist-tornadoes", "hist-fires", "declarations"];
+
+/* ── disasters worldwide (GDACS) ─────────────────────────────────── */
+
+const worldTypeColor = ["match", ["get", "type"], ...WORLD_EVENT_TYPES.flatMap((t) => [t.key, t.color]), "#94a3b8"] as unknown as ExpressionSpecification;
+const worldLevelColor = ["match", ["get", "level"], ...WORLD_ALERT_LEVELS.flatMap((l) => [l.key, l.color]), "#4ade80"] as unknown as ExpressionSpecification;
+const worldLevelRank = ["match", ["get", "level"], "Red", 3, "Orange", 2, 1] as unknown as ExpressionSpecification;
+
+export const worldLayer: AtlasLayer = {
+  id: "world",
+  label: "Disasters worldwide",
+  group: "World",
+  defaultOn: true,
+  badge: "Worldwide",
+  description: "Earthquakes, tropical cyclones, floods, volcanoes, droughts and wildfires happening now anywhere on Earth, from GDACS (UN + European Commission). The ring shows GDACS's alert — how much harm to people it expects, not just how big the event is. In the U.S. the detailed NWS, NHC and wildfire layers take over.",
+  legend: [...WORLD_EVENT_TYPES.map((t) => ({ color: t.color, label: t.label })), ...WORLD_ALERT_LEVELS.map((l) => ({ color: l.color, label: `Ring: ${l.label}`, shape: "ring" as const }))],
+  citation: { label: "GDACS — Global Disaster Alert and Coordination System", href: "https://www.gdacs.org/", license: "free to reuse with attribution" },
+  clickable: ["world-dot"],
+  install(map, { dark }) {
+    map.addSource("world", { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "world-halo",
+      type: "circle",
+      source: "world",
+      filter: ["!=", ["get", "level"], "Green"],
+      paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, ["*", 7, worldLevelRank], 6, ["*", 12, worldLevelRank]], "circle-color": worldLevelColor, "circle-blur": 1, "circle-opacity": 0.45 },
+    });
+    map.addLayer({
+      id: "world-dot",
+      type: "circle",
+      source: "world",
+      layout: { "circle-sort-key": worldLevelRank },
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, ["+", 3, worldLevelRank], 6, ["+", 5, ["*", 2, worldLevelRank]]],
+        "circle-color": worldTypeColor,
+        "circle-stroke-color": worldLevelColor,
+        "circle-stroke-width": ["case", ["==", ["get", "level"], "Green"], 1.2, 2.6],
+      },
+    });
+    map.addLayer({
+      id: "world-label",
+      type: "symbol",
+      source: "world",
+      filter: ["any", ["!=", ["get", "level"], "Green"], ["==", ["get", "type"], "TC"]],
+      layout: { "text-field": ["coalesce", ["get", "short"], ["get", "name"]], "text-font": ["Montserrat Medium", "Open Sans Bold", "Noto Sans Regular"], "text-size": 10.5, "text-offset": [0, 1.3], "text-anchor": "top", "text-optional": true },
+      paint: { "text-color": dark ? "#f1f5f9" : "#0f172a", "text-halo-color": dark ? "#020617" : "#ffffff", "text-halo-width": 1.4 },
+    });
+    return ["world-halo", "world-dot", "world-label"];
+  },
+  hoverLabel: (f) => `${String(f.properties?.name ?? "")}${f.properties?.country ? ` · ${f.properties.country}` : ""} · ${String(f.properties?.level ?? "")} alert`,
+};
 
 export const DISASTER_LAYERS: AtlasLayer[] = [
   riskLayer,
@@ -453,5 +504,6 @@ export const DISASTER_LAYERS: AtlasLayer[] = [
   histTornadoesLayer,
   reportsLayer,
   gaugesLayer,
+  worldLayer,
   placeLayer,
 ];

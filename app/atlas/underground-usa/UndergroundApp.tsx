@@ -14,7 +14,8 @@ import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass, useAtl
 import type { CaveSpec } from "@/components/atlas/caveGen";
 import type { StoryAction } from "@/components/atlas/story";
 import type { Basemap, Picked, TerrainMode } from "@/components/atlas/types";
-import { CAVES_URL, type CaveCollection, type CaveFilter, type CaveProps } from "@/utils/geo/caves";
+import { useOsmCaves } from "@/utils/geo/useOsmCaves";
+import { CAVES_URL, caveCollection, type CaveCollection, type CaveFilter, type CaveProps } from "@/utils/geo/caves";
 import { KARST_CLASSES, KARST_SERVICE, KARST_URL, type KarstStats } from "@/utils/geo/karst";
 import { useViewportFeatures } from "@/utils/geo/useViewportFeatures";
 import type { AtlasView } from "@/components/atlas/types";
@@ -31,6 +32,9 @@ import { UNDERGROUND_STORIES, type UndergroundAction } from "./stories";
 
 type Mode = "map" | "dive" | "stories";
 type Panel = "caves" | "layers" | null;
+
+/** How many caves the list renders at once (14k worldwide — search narrows it). */
+const LIST_MAX = 200;
 
 /** Zoom that fits the lower 48 across most of the screen. */
 const fitZoom = () => Math.min(4.6, Math.max(2.4, Math.log2((window.innerWidth * 0.9 * 360) / (512 * 58)) + 0.3));
@@ -70,7 +74,7 @@ export default function UndergroundApp() {
       fetch(KARST_URL, { signal: ctl.signal }).then((r) => r.json()),
     ])
       .then(([c, k]) => {
-        setCaves(c);
+        setCaves(caveCollection(c));
         setKarst(k);
       })
       .catch((e) => !ctl.signal.aborted && setLoadError((e as Error).message));
@@ -84,6 +88,7 @@ export default function UndergroundApp() {
   /* ── live detail for the area on screen ─────────────────────────── */
   const [view, setView] = useState<AtlasView | null>(null);
   const karstDetail = useViewportFeatures({ sources: KARST_DETAIL_SOURCES, view, minZoom: 8, enabled: visible.karst, maxFeatures: 6000 });
+  const osmCaves = useOsmCaves(view, visible.caves);
   const kySinks = useViewportFeatures({ sources: KY_SINK_SOURCES, view, minZoom: 12, extent: KY_BBOX, enabled: visible.sinkholes, maxFeatures: 14000 });
   const [flSinks, setFlSinks] = useState<GeoJSON.FeatureCollection | null>(null);
   useEffect(() => {
@@ -105,8 +110,8 @@ export default function UndergroundApp() {
   );
 
   const data = useMemo(
-    () => ({ caves: caveData, karst: karst ?? undefined, "karst-detail": karstDetailData ?? EMPTY_FC, "sinks-fl": flSinks ?? undefined, "sinks-ky": kySinks.data ?? EMPTY_FC }),
-    [caveData, karst, karstDetailData, flSinks, kySinks.data]
+    () => ({ caves: caveData, "osm-caves": osmCaves ?? EMPTY_FC, karst: karst ?? undefined, "karst-detail": karstDetailData ?? EMPTY_FC, "sinks-fl": flSinks ?? undefined, "sinks-ky": kySinks.data ?? EMPTY_FC }),
+    [caveData, osmCaves, karst, karstDetailData, flSinks, kySinks.data]
   );
   const shownVisible = useMemo<Record<string, boolean>>(() => ({ ...visible, xray, relief: visible.relief || xray }), [visible, xray]);
   const tours = useMemo(() => (caves?.features ?? []).filter((f) => f.properties.tour), [caves]);
@@ -637,7 +642,7 @@ function CaveList({ caves, onPick, onDive, onLocate }: { caves: { props: CavePro
       </div>
       {locating === "denied" && <p className="text-[11px] text-amber-200">Location isn&apos;t available — the list stays alphabetical.</p>}
       <ul className="space-y-0.5">
-        {rows.map(({ props: c, d }) => {
+        {rows.slice(0, LIST_MAX).map(({ props: c, d }) => {
           const f = featuredById(c.id);
           return (
             <li key={c.id} className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-white/[0.05]">
@@ -663,6 +668,11 @@ function CaveList({ caves, onPick, onDive, onLocate }: { caves: { props: CavePro
           );
         })}
         {!rows.length && <li className="py-6 text-center text-xs text-slate-500">No caves match.</li>}
+        {rows.length > LIST_MAX && (
+          <li className="px-2 py-3 text-center text-[11px] text-slate-500">
+            Showing {LIST_MAX} of {rows.length.toLocaleString()} — search by name or country, or use Near me.
+          </li>
+        )}
       </ul>
     </div>
   );

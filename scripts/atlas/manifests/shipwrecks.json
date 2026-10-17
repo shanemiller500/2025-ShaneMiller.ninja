@@ -1,0 +1,28 @@
+[
+  {
+    "url": "https://espis.boem.gov/final%20reports/BOEM_2021-076.pdf",
+    "title": "Battle of the Atlantic: A Catalog of Shipwrecks off North Carolina's Coast from the Second World War (OCS Study BOEM 2021-076)",
+    "source": "BOEM & NOAA Office of National Marine Sanctuaries",
+    "sourceUrl": "https://espis.boem.gov/",
+    "license": "public domain",
+    "year": 2021,
+    "summary": "BOEM and NOAA's catalog of the WWII wrecks off North Carolina — merchant ships, Allied warships and four U-boats — with the history of both world wars' U-boat campaigns, Operation Drumbeat, convoy KS-520, and an estimate of 91 vessels and about 1,657 lives lost off the state between January and August 1942.",
+    "projects": ["shipwrecks"],
+    "tags": ["story:hatteras-1942", "story:uboat-ww1", "shipwreck", "battle of the atlantic", "u-boat", "world war ii", "world war i", "north carolina", "cape hatteras", "convoy", "archaeology"],
+    "region": "North Carolina",
+    "bbox": [-77.5, 33.5, -74.5, 36.8]
+  },
+  {
+    "url": "https://monitor.noaa.gov/management/final_mp.pdf",
+    "title": "Monitor National Marine Sanctuary Final Management Plan and Environmental Assessment",
+    "source": "NOAA Office of National Marine Sanctuaries",
+    "sourceUrl": "https://monitor.noaa.gov/management/2013-plan.html",
+    "license": "public domain",
+    "year": 2013,
+    "summary": "NOAA's plan for the nation's first national marine sanctuary: the history of the USS Monitor from the Battle of Hampton Roads to her loss off Cape Hatteras in 1862, the 1973 discovery, the 1998–2002 recovery of her turret and engine, and how the wreck is protected and studied.",
+    "projects": ["shipwrecks"],
+    "tags": ["story:monitor", "shipwreck", "uss monitor", "ironclad", "civil war", "national marine sanctuary", "cape hatteras", "archaeology"],
+    "region": "North Carolina",
+    "bbox": [-75.6, 34.9, -75.2, 35.1]
+  }
+]

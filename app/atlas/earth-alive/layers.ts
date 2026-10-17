@@ -152,19 +152,46 @@ export const platesLayer: AtlasLayer = {
   },
 };
 
-/* ── U.S. Quaternary faults (server-rendered tiles) ──────────────── */
+/* ── Active faults: GEM worldwide + USGS Quaternary faults (U.S.) ── */
 
 const FAULTS_MIN_ZOOM = 3.5;
+/** GEM fault kinds (see scripts/atlas/build-gem-faults.mjs). */
+export const WORLD_FAULT_KINDS = [
+  { key: "reverse", label: "Thrust / reverse", color: "#f43f5e" },
+  { key: "normal", label: "Normal", color: "#38bdf8" },
+  { key: "strike-slip", label: "Strike-slip", color: "#fbbf24" },
+  { key: "unknown", label: "Not specified", color: "#cbd5e1" },
+];
 
 export const faultsLayer: AtlasLayer = {
   id: "faults",
   label: "Active faults",
   group: "Tectonics",
-  badge: "U.S. only",
-  description: "Faults that have moved in the last 1.6 million years. Zoom into the U.S. to see them; click one for its USGS report.",
-  legend: FAULT_AGES.map((a) => ({ color: a.color, label: a.label, shape: "line" as const })),
-  citation: { label: "USGS Quaternary Fault and Fold Database", href: "https://www.usgs.gov/programs/earthquake-hazards/faults", license: "public domain" },
+  badge: "Worldwide",
+  description: "Active faults worldwide from the GEM Global Active Faults Database, coloured by how they move. Inside the U.S., USGS's more detailed Quaternary faults take over as you zoom in, coloured by when they last moved; click one for its report.",
+  legend: [
+    ...WORLD_FAULT_KINDS.slice(0, 3).map((k) => ({ color: k.color, label: k.label, shape: "line" as const })),
+    ...FAULT_AGES.map((a) => ({ color: a.color, label: `U.S.: ${a.label}`, shape: "line" as const })),
+  ],
+  citation: { label: "GEM Global Active Faults (Styron & Pagani 2020) · USGS Quaternary Fault and Fold Database", href: "https://github.com/GEMScienceTools/gem-global-active-faults", license: "CC BY-SA 4.0 · public domain" },
+  clickable: ["faults-world-line"],
   install(map, { labelLayerId }) {
+    map.addSource("faults-world", { type: "geojson", data: "/atlas/faults-world.json", attribution: "Faults: GEM (CC BY-SA 4.0), USGS" });
+    map.addLayer(
+      {
+        id: "faults-world-line",
+        type: "line",
+        source: "faults-world",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["match", ["get", "kind"], ...WORLD_FAULT_KINDS.flatMap((k) => [k.key, k.color]), "#cbd5e1"] as unknown as ExpressionSpecification,
+          // faster-slipping faults draw a little heavier
+          "line-width": ["interpolate", ["linear"], ["zoom"], 1, ["case", [">=", ["coalesce", ["get", "rate"], 0], 5], 1.3, 0.7], 8, ["case", [">=", ["coalesce", ["get", "rate"], 0], 5], 3, 1.8]],
+          "line-opacity": 0.8,
+        },
+      },
+      labelLayerId
+    );
     map.addSource("faults", {
       type: "raster",
       tiles: [arcgisExportTiles(QFAULTS_SERVICE, [QFAULTS_LAYER])],
@@ -173,8 +200,9 @@ export const faultsLayer: AtlasLayer = {
       attribution: "Faults: USGS",
     });
     map.addLayer({ id: "faults-raster", type: "raster", source: "faults", minzoom: FAULTS_MIN_ZOOM, paint: { "raster-opacity": 0.9 } }, labelLayerId);
-    return ["faults-raster"];
+    return ["faults-world-line", "faults-raster"];
   },
+  hoverLabel: (f) => (f.source === "faults-world" ? `${f.properties?.name ?? "Active fault"} · ${WORLD_FAULT_KINDS.find((k) => k.key === f.properties?.kind)?.label ?? ""}` : null),
   async identify(map, [lng, lat], signal) {
     if (map.getZoom() < FAULTS_MIN_ZOOM) return null;
     const b = map.getBounds();

@@ -5,6 +5,7 @@
 import type { ExpressionSpecification, Map as MlMap } from "maplibre-gl";
 import type { AtlasLayer } from "@/components/atlas/types";
 import { WRECK_CATS } from "@/utils/geo/wrecks";
+import { CAUSES, fmtDay } from "@/utils/geo/sinkings";
 import { FEATURED_WRECKS } from "./featured";
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -74,19 +75,82 @@ export const sanctuariesLayer: AtlasLayer = {
   hoverLabel: (f) => String(f.properties?.name ?? ""),
 };
 
+/* ── wreck density ("graveyards") ────────────────────────────────── */
+
+export const densityLayer: AtlasLayer = {
+  id: "density",
+  label: "Wreck density",
+  group: "Wrecks",
+  description: "Where charted wrecks crowd together. The hottest spots are busy harbors, where every sunken barge and hulk gets charted — so this shows where wrecks are recorded, as much as where ships were lost.",
+  legend: [
+    { color: "#1e3a8a", label: "A few wrecks" },
+    { color: "#f43f5e", label: "Many wrecks" },
+    { color: "#fde68a", label: "A graveyard" },
+  ],
+  citation: { label: "Counted from NOAA charted wrecks", href: "https://nauticalcharts.noaa.gov/", license: "public domain" },
+  install(map, { labelLayerId }) {
+    map.addSource("density", { type: "geojson", data: EMPTY });
+    map.addLayer(
+      {
+        id: "density-heat",
+        type: "heatmap",
+        source: "density",
+        maxzoom: 11,
+        paint: {
+          "heatmap-weight": ["case", ["==", ["get", "cat"], "danger"], 1.2, 1],
+          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 2, 0.6, 9, 2.2],
+          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 2, 6, 6, 14, 10, 26],
+          "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], 0, "rgba(0,0,0,0)", 0.15, "#1e3a8a", 0.4, "#7c3aed", 0.65, "#f43f5e", 0.9, "#fde68a"],
+          "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.85, 11, 0],
+        },
+      },
+      labelLayerId
+    );
+    return ["density-heat"];
+  },
+};
+
+/* ── wreck areas (charted as areas, not points) ──────────────────── */
+
+export const areasLayer: AtlasLayer = {
+  id: "areas",
+  label: "Wreck fields",
+  group: "Wrecks",
+  defaultOn: true,
+  badge: "U.S. waters",
+  description: "Wrecks NOAA charts as areas rather than points — scattered remains, and fields of hulks like the burnt WWI steamships of Mallows Bay.",
+  legend: [
+    { color: "#fb923c", label: "Wreck area" },
+    { color: "#a3e635", label: "Field of hulks" },
+  ],
+  citation: { label: "NOAA Office of Coast Survey — Electronic Navigational Charts", href: "https://nauticalcharts.noaa.gov/", license: "public domain" },
+  clickable: ["areas-fill"],
+  install(map, { labelLayerId }) {
+    map.addSource("areas", { type: "geojson", data: "/atlas/wreck-areas.json" });
+    const color = ["match", ["get", "kind"], "hulks", "#a3e635", "#fb923c"] as unknown as ExpressionSpecification;
+    map.addLayer({ id: "areas-fill", type: "fill", source: "areas", minzoom: 8, paint: { "fill-color": color, "fill-opacity": 0.22 } }, labelLayerId);
+    map.addLayer({ id: "areas-line", type: "line", source: "areas", minzoom: 8, paint: { "line-color": color, "line-width": 1.4, "line-dasharray": [2, 1.5] } }, labelLayerId);
+    return ["areas-fill", "areas-line"];
+  },
+  hoverLabel: (f) => {
+    const p = f.properties as { name?: string; kind?: string; note?: string };
+    return p.name ?? (p.kind === "hulks" ? `Field of hulks${p.note ? ` · ${p.note}` : ""}` : "Wreck area");
+  },
+};
+
 /* ── NOAA charted wrecks ─────────────────────────────────────────── */
 
 const catColor = ["match", ["coalesce", ["get", "cat"], "none"], ...WRECK_CATS.flatMap((c) => [c.key, c.color]), "#94a3b8"] as unknown as ExpressionSpecification;
 
 export const noaaWrecksLayer: AtlasLayer = {
   id: "noaa",
-  label: "Charted wrecks (NOAA)",
+  label: "Charted wrecks",
   group: "Wrecks",
   defaultOn: true,
-  badge: "U.S. waters",
-  description: "Every wreck on NOAA's nautical charts — over 12,000, from rotting barges to sunken warships. Most are unnamed: charts record hazards, not history. Zoom in for the depth over each wreck.",
+  badge: "Worldwide",
+  description: "Wrecks on the nautical charts — NOAA's 12,000 in U.S. waters and the UK Hydrographic Office's 67,000 around the world, from rotting barges to sunken warships. Charts record hazards, not history, so many are unnamed. Zoom in for the depth over each wreck.",
   legend: WRECK_CATS.map((c) => ({ color: c.color, label: c.label })),
-  citation: { label: "NOAA Office of Coast Survey — Electronic Navigational Charts", href: "https://nauticalcharts.noaa.gov/", license: "public domain" },
+  citation: { label: "NOAA Office of Coast Survey (U.S.) · UK Hydrographic Office via EMODnet (worldwide)", href: "https://emodnet.ec.europa.eu/en/human-activities", license: "public domain · Open Government Licence v3.0" },
   clickable: ["noaa-dot"],
   install(map, { dark }) {
     map.addSource("noaa", { type: "geojson", data: EMPTY });
@@ -225,4 +289,65 @@ export const featuredLayer: AtlasLayer = {
   },
 };
 
-export const WRECK_LAYERS: AtlasLayer[] = [seafloorLayer, sanctuariesLayer, noaaWrecksLayer, namedWrecksLayer, featuredLayer];
+/* ── sinkings through time (world wars) ──────────────────────────── */
+
+const causeColor = ["match", ["get", "cause"], ...CAUSES.flatMap((c) => [c.key, c.color]), "#64748b"] as unknown as ExpressionSpecification;
+
+export const sinkingsLayer: AtlasLayer = {
+  id: "sinkings",
+  label: "Sinkings through time",
+  group: "Wrecks",
+  description: "Ships lost in the two world wars, day by day, wherever Wikipedia's monthly shipwreck lists give a position.",
+  legend: CAUSES.map((c) => ({ color: c.color, label: c.label })),
+  citation: { label: "Wikipedia — monthly “List of shipwrecks” articles", href: "https://en.wikipedia.org/wiki/Lists_of_shipwrecks", license: "CC BY-SA 4.0" },
+  clickable: ["sinkings-dot"],
+  install(map) {
+    map.addSource("sinkings", { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "sinkings-flash",
+      type: "circle",
+      source: "sinkings",
+      filter: ["==", ["get", "t"], -1],
+      paint: { "circle-radius": 14, "circle-color": causeColor, "circle-blur": 0.8, "circle-opacity": 0.5 },
+    });
+    map.addLayer({
+      id: "sinkings-dot",
+      type: "circle",
+      source: "sinkings",
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, ["case", [">=", ["coalesce", ["get", "lost"], 0], 500], 4.5, 2.4], 8, ["case", [">=", ["coalesce", ["get", "lost"], 0], 500], 9, 5]],
+        "circle-color": causeColor,
+        "circle-opacity": 0.85,
+        "circle-stroke-color": "#020617",
+        "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 0, 8, 1],
+      },
+    });
+    return ["sinkings-flash", "sinkings-dot"];
+  },
+  hoverLabel: (f) => {
+    const p = f.properties as { ship: string; t: number; lost?: number | null };
+    return `${p.ship} · ${fmtDay(p.t)}${p.lost ? ` · ${p.lost.toLocaleString()} lost` : ""}`;
+  },
+  applyTime(map, time) {
+    if (!map.getLayer("sinkings-dot")) return;
+    if (!time) {
+      map.setFilter("sinkings-dot", null);
+      map.setFilter("sinkings-flash", ["==", ["get", "t"], -1]);
+      map.setPaintProperty("sinkings-dot", "circle-opacity", 0.85);
+      return;
+    }
+    const { cursor, trail, flash } = time;
+    const age = ["-", cursor, ["get", "t"]] as unknown as ExpressionSpecification;
+    // nothing from the future; fresh losses bright, older ones settle to a faint record
+    map.setFilter("sinkings-dot", ["<=", ["get", "t"], cursor]);
+    map.setPaintProperty("sinkings-dot", "circle-opacity", ["interpolate", ["linear"], age, 0, 0.95, trail, 0.3]);
+    // a ring that swells and fades as each ship goes down
+    map.setFilter("sinkings-flash", ["all", ["<=", ["get", "t"], cursor], [">", ["get", "t"], cursor - flash]]);
+    map.setPaintProperty("sinkings-flash", "circle-radius", ["interpolate", ["linear"], age, 0, 5, flash, 22]);
+    map.setPaintProperty("sinkings-flash", "circle-opacity", ["interpolate", ["linear"], age, 0, 0.7, flash, 0]);
+  },
+};
+
+export const WRECK_LAYERS: AtlasLayer[] = [seafloorLayer, sanctuariesLayer, densityLayer, areasLayer, noaaWrecksLayer, namedWrecksLayer, sinkingsLayer, featuredLayer];
+/** Layers the map-mode layer panel offers (the replay has its own controls). */
+export const MAP_PANEL_LAYERS = WRECK_LAYERS.filter((l) => l.id !== "sinkings");

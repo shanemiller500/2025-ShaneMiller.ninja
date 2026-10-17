@@ -5,6 +5,7 @@ import { AlertTriangle, History, Waves } from "lucide-react";
 import { DrawerLink, FactGrid, FeatureDrawer } from "@/components/atlas/FeatureDrawer";
 import type { Picked } from "@/components/atlas/types";
 import type { FaultInfo } from "@/utils/geo/faults";
+import { WORLD_FAULT_KINDS } from "./layers";
 import { BOUNDARY_CLASS_BLURB, BOUNDARY_CLASS_LABEL, boundaryColor, plateName, type BoundaryClass } from "@/utils/geo/plates";
 import { depthColor, mmiRoman, PAGER_TONE, type QuakeAnchor, type QuakeDetail } from "@/utils/geo/quakes";
 import { CODE_STYLE, eruptionYear, type VolcanoDetail } from "@/utils/geo/volcanoes";
@@ -78,6 +79,29 @@ export function EarthDetails({
         subtitle={[p.type, p.country].filter(Boolean).join(" · ")}
       >
         <VolcanoBody detail={volcano.data} loading={volcano.loading} error={volcano.error} />
+      </FeatureDrawer>
+    );
+  }
+
+  // a fault from the GEM worldwide database
+  if (kind === "faults" && p.cat != null) {
+    const k = WORLD_FAULT_KINDS.find((x) => x.key === p.kind);
+    const rate = p.rate == null || p.rate === "" ? null : Number(p.rate);
+    return (
+      <FeatureDrawer open onClose={onClose} eyebrow="Active fault" accent={k?.color ?? "#f97316"} title={p.name ? String(p.name) : "Unnamed fault"} subtitle={k?.label}>
+        <div className="space-y-4">
+          <FactGrid
+            facts={[
+              ["Movement", p.slip ? String(p.slip).replace(/_/g, " ") : k?.label ?? null],
+              ["Slip rate", rate != null ? `${rate} mm/yr` : "not estimated"],
+              ["Mapped by", String(p.cat)],
+            ]}
+          />
+          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            Thrust faults push rock together, normal faults pull it apart, strike-slip faults slide past each other. Slip rate is the long-term average — how fast the two sides creep apart over thousands of years, not a forecast.
+          </p>
+          <DrawerLink href="https://github.com/GEMScienceTools/gem-global-active-faults">GEM Global Active Faults Database (CC BY-SA 4.0)</DrawerLink>
+        </div>
       </FeatureDrawer>
     );
   }

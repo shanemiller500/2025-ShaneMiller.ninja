@@ -133,13 +133,40 @@ export const cavesLayer: AtlasLayer = {
   label: "Caves",
   group: "Underground",
   defaultOn: true,
-  description: "Show caves and park caves you can visit are pinned exactly. Wild, closed and archaeological caves are shown only to the nearest ~10 km, to protect them.",
-  legend: CAVE_KINDS.slice(0, 4).map((k) => ({ color: k.color, label: k.label, shape: k.key === "wild" || k.key === "heritage" ? ("ring" as const) : ("dot" as const) })),
-  citation: { label: "Wikidata", href: "https://www.wikidata.org/", license: "CC0" },
+  badge: "Worldwide",
+  description: "About 14,000 caves worldwide. Show caves and park caves you can visit are pinned exactly; wild, closed and archaeological caves are shown only to the nearest ~10 km, to protect them. Zoom in close for cave entrances mapped in OpenStreetMap (closed or private ones are left out).",
+  legend: [
+    ...CAVE_KINDS.slice(0, 4).map((k) => ({ color: k.color, label: k.label, shape: k.key === "wild" || k.key === "heritage" ? ("ring" as const) : ("dot" as const) })),
+    { color: "#e2e8f0", label: "Cave entrance (OpenStreetMap, zoom in)" },
+  ],
+  citation: { label: "Wikidata · OpenStreetMap contributors", href: "https://www.openstreetmap.org/copyright", license: "CC0 · ODbL" },
   selectSource: "caves",
-  clickable: ["caves-core", "caves-ring"],
+  clickable: ["caves-core", "caves-ring", "osm-caves-dot"],
   install(map, { dark }) {
     map.addSource("caves", { type: "geojson", data: EMPTY, promoteId: "id" });
+    // OpenStreetMap entrances, loaded only for the view once zoomed in
+    map.addSource("osm-caves", { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "osm-caves-dot",
+      type: "circle",
+      source: "osm-caves",
+      minzoom: 10.5,
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 3.5, 15, 6],
+        "circle-color": ["case", ["boolean", ["get", "show"], false], "#22d3ee", "#e2e8f0"],
+        "circle-stroke-color": dark ? "#020617" : "#334155",
+        "circle-stroke-width": 1.2,
+      },
+    });
+    map.addLayer({
+      id: "osm-caves-label",
+      type: "symbol",
+      source: "osm-caves",
+      minzoom: 12,
+      filter: ["has", "name"],
+      layout: { "text-field": ["get", "name"], "text-font": ["Montserrat Medium", "Open Sans Bold", "Noto Sans Regular"], "text-size": 10.5, "text-offset": [0, 1], "text-anchor": "top", "text-optional": true },
+      paint: { "text-color": dark ? "#e2e8f0" : "#0f172a", "text-halo-color": dark ? "#020617" : "#ffffff", "text-halo-width": 1.3 },
+    });
     // breathing halo under every toured cave
     map.addLayer({
       id: "caves-halo",
@@ -196,9 +223,10 @@ export const cavesLayer: AtlasLayer = {
       },
       paint: { "text-color": "#cffafe", "text-halo-color": "#020617", "text-halo-width": 1.4 },
     });
-    return ["caves-halo", "caves-ring", "caves-core", "caves-label"];
+    return ["osm-caves-dot", "osm-caves-label", "caves-halo", "caves-ring", "caves-core", "caves-label"];
   },
   hoverLabel: (f) => {
+    if (f.source === "osm-caves") return `${f.properties?.name ?? "Cave entrance"} · OpenStreetMap`;
     const p = f.properties as { name: string; generalized: boolean; state: string | null };
     return `${p.name}${p.state ? ` · ${p.state}` : ""}${p.generalized ? " · location generalized" : ""}`;
   },

@@ -113,9 +113,14 @@ for (const f of FEATURED) {
 
 /* ── data guarantees ─────────────────────────────────────────────── */
 
+const { caveCollection } = load('utils/geo/caves.ts');
+const cavesFc = () => caveCollection(JSON.parse(fs.readFileSync('public/atlas/caves.json', 'utf8')));
+
 test('caves.json: protected caves are never exact; visitable caves are complete', () => {
-  const fc = JSON.parse(fs.readFileSync('public/atlas/caves.json', 'utf8'));
-  assert.ok(fc.features.length > 250);
+  const fc = cavesFc();
+  // worldwide since Oct 2026: ~14k, of which a few hundred are in the U.S.
+  assert.ok(fc.features.length > 10000, `${fc.features.length} caves`);
+  let us = 0;
   for (const f of fc.features) {
     const p = f.properties;
     const [lng, lat] = f.geometry.coordinates;
@@ -125,14 +130,16 @@ test('caves.json: protected caves are never exact; visitable caves are complete'
       assert.ok(Math.abs(lng * 10 - Math.round(lng * 10)) < 1e-6 && Math.abs(lat * 10 - Math.round(lat * 10)) < 1e-6, `${p.name} not snapped: ${lng},${lat}`);
     } else {
       assert.equal(p.tour, true, `${p.name} exact but not visitable`);
-      assert.ok(p.state, `${p.name} has no state`);
+      assert.ok(p.state, `${p.name} has no state / country`);
     }
-    // inside the U.S. and its territories (Alaska, Hawaii, Puerto Rico, Guam / N. Marianas, Samoa)
-    const states = lng > -180 && lng < -64 && lat > 17 && lat < 72;
-    const pacific = lng > 144 && lng < 146.5 && lat > 13 && lat < 21;
-    const samoa = lng > -171.5 && lng < -168 && lat > -15 && lat < -10;
-    assert.ok(states || pacific || samoa, `${p.name} outside the U.S.: ${lng},${lat}`);
+    assert.ok(Math.abs(lng) <= 180 && Math.abs(lat) <= 90, `${p.name}: ${lng},${lat}`);
+    if (lng > -125 && lng < -66 && lat > 24 && lat < 50) us++;
   }
+  assert.ok(us > 250, `${us} caves in the lower 48`);
+  // famous show caves abroad are exact; wild ones stay generalized
+  const byName = (n) => fc.features.find((f) => f.properties.name === n);
+  for (const n of ['Jenolan Caves', 'Postojna Cave', 'Waitomo Glowworm Caves', 'Eisriesenwelt']) assert.equal(byName(n)?.properties.generalized, false, n);
+  assert.equal(byName('Krubera Cave')?.properties.generalized, true, 'Krubera is a wild cave');
 });
 
 test('karst.json: known classes and a sane share of the lower 48', () => {
@@ -146,7 +153,7 @@ test('karst.json: known classes and a sane share of the lower 48', () => {
 /* ── content integrity ───────────────────────────────────────────── */
 
 test('every featured fact has an https source; every featured cave exists in caves.json', () => {
-  const ids = new Set(JSON.parse(fs.readFileSync('public/atlas/caves.json', 'utf8')).features.map((f) => f.properties.id));
+  const ids = new Set(cavesFc().features.map((f) => f.properties.id));
   for (const f of FEATURED) {
     assert.ok(ids.has(f.id), `${f.name} (${f.id}) missing from caves.json`);
     assert.ok(f.facts.length > 0);

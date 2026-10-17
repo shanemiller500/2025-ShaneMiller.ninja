@@ -1,5 +1,7 @@
 /* ------------------------------------------------------------------ */
-/*  Bake the cave layer for Underground USA from Wikidata (CC0).       */
+/*  Bake the cave layer for Underground from Wikidata (CC0): U.S.      */
+/*  caves with their state, then the rest of the world's with their    */
+/*  country (a lighter query — walking states worldwide times out).    */
 /*                                                                     */
 /*  node scripts/atlas/build-caves.mjs          → public/atlas/caves.json */
 /*  node scripts/atlas/build-caves.mjs --report    summary only        */
@@ -40,11 +42,41 @@ WHERE {
 }
 GROUP BY ?c ?cLabel ?cDescription ?coord ?article`;
 
-const res = await fetch(`https://query.wikidata.org/sparql?query=${encodeURIComponent(QUERY)}`, {
-  headers: { Accept: "application/sparql-results+json", "User-Agent": "shanemiller.ninja atlas (+https://shanemiller.ninja)" },
-});
-if (!res.ok) throw new Error(`Wikidata: HTTP ${res.status}`);
-const rows = (await res.json()).results.bindings;
+const WORLD_QUERY = `
+SELECT ?c ?cLabel ?cDescription ?coord ?article
+  (GROUP_CONCAT(DISTINCT ?typeLabel; separator="|") AS ?types)
+  (SAMPLE(?lenM) AS ?len) (SAMPLE(?depthM) AS ?depth) (SAMPLE(?img) AS ?image)
+  (SAMPLE(?countryLabel) AS ?state)
+WHERE {
+  ?c wdt:P31/wdt:P279* wd:Q35509;
+     wdt:P625 ?coord;
+     wdt:P31 ?type.
+  FILTER NOT EXISTS { ?c wdt:P17 wd:Q30. }
+  ?type rdfs:label ?typeLabel. FILTER(LANG(?typeLabel) = "en")
+  OPTIONAL { ?c wdt:P17 ?country. ?country rdfs:label ?countryLabel. FILTER(LANG(?countryLabel) = "en") }
+  OPTIONAL { ?c p:P2043/psn:P2043/wikibase:quantityAmount ?lenM. }
+  OPTIONAL { ?c p:P4511/psn:P4511/wikibase:quantityAmount ?depthM. }
+  OPTIONAL { ?c wdt:P18 ?img. }
+  OPTIONAL { ?article schema:about ?c; schema:isPartOf <https://en.wikipedia.org/>. }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en,fr,de,es,it,sl". }
+}
+GROUP BY ?c ?cLabel ?cDescription ?coord ?article`;
+
+async function sparql(query) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const res = await fetch(`https://query.wikidata.org/sparql?query=${encodeURIComponent(query)}`, {
+      headers: { Accept: "application/sparql-results+json", "User-Agent": "shanemiller.ninja atlas (+https://shanemiller.ninja)" },
+    });
+    if (res.ok) return (await res.json()).results.bindings;
+    await new Promise((r) => setTimeout(r, 5000 * attempt));
+  }
+  throw new Error("Wikidata query failed");
+}
+const usRows = await sparql(QUERY);
+const worldRows = await sparql(WORLD_QUERY);
+for (const r of worldRows) r.areas = { value: "" };
+const rows = [...usRows, ...worldRows];
+console.log(`Wikidata rows: ${usRows.length} U.S., ${worldRows.length} rest of world`);
 
 /* ── classify ─────────────────────────────────────────────────────── */
 
@@ -77,7 +109,15 @@ const STATE_FILL = {
 const GRID = 0.1; // ≈ 10 km
 const snap = (v) => Math.round(Math.round(v / GRID) * GRID * 10) / 10;
 /** Publicly toured caves that Wikidata doesn't tag as show caves (NPS runs daily tours). */
-const PUBLIC_EXTRA = new Set(["Q2666855" /* Mammoth Cave, Kentucky */]);
+const PUBLIC_EXTRA = new Set([
+  "Q2666855", // Mammoth Cave, Kentucky
+  // toured show caves abroad that Wikidata types only as "cave"
+  "Q1670250", // Jenolan Caves, Australia
+  "Q21167636", // Grutas de Cacahuamilpa, Mexico (national park, guided tours)
+  "Q23286", // Dachstein Giant Ice Cave, Austria
+  "Q687629", // Batu Caves, Malaysia (temple caves, open to visitors)
+  "Q136470583", // Dan-yr-Ogof, Wales (National Showcaves Centre)
+]);
 const commonsThumb = (fileUrl) => {
   // http://commons.wikimedia.org/wiki/Special:FilePath/Name.jpg → sized thumbnail via the same endpoint
   const name = decodeURIComponent(fileUrl.split("/Special:FilePath/")[1] ?? "");
@@ -140,7 +180,32 @@ if (REPORT) {
   for (const f of features.filter((f) => want.test(f.properties.name))) console.log(`  ${f.id.padEnd(10)} ${f.properties.name} | ${f.properties.kind} | ${f.geometry.coordinates} | ${f.properties.state}`);
 } else {
   await mkdir(path.dirname(OUT), { recursive: true });
-  const body = JSON.stringify({ type: "FeatureCollection", generated: new Date().toISOString(), features });
+  // compact, column-wise (14k caves): utils/geo/caves.ts → caveCollection() expands it
+  const P = features.map((f) => f.properties);
+  const FILE = "https://commons.wikimedia.org/wiki/Special:FilePath/";
+  const WIKI = "https://en.wikipedia.org/wiki/";
+  const body = JSON.stringify({
+    v: 2,
+    generated: new Date().toISOString(),
+    source: "Wikidata (CC0)",
+    cols: {
+      id: P.map((p) => p.id),
+      name: P.map((p) => p.name),
+      desc: P.map((p) => p.desc || ""),
+      kind: P.map((p) => p.kind),
+      tour: P.map((p) => (p.tour ? 1 : 0)),
+      gen: P.map((p) => (p.generalized ? 1 : 0)),
+      state: P.map((p) => p.state),
+      areas: P.map((p) => (p.areas.length ? p.areas.join("|") : "")),
+      len: P.map((p) => p.lengthKm),
+      depth: P.map((p) => p.depthM),
+      // Commons file name / Wikipedia title only — the URLs are rebuilt on load
+      image: P.map((p) => (p.image ? decodeURIComponent(p.image.slice(FILE.length).replace(/\?width=\d+$/, "")) : null)),
+      wiki: P.map((p) => (p.wiki ? decodeURIComponent(p.wiki.slice(WIKI.length)) : null)),
+      lng: features.map((f) => f.geometry.coordinates[0]),
+      lat: features.map((f) => f.geometry.coordinates[1]),
+    },
+  });
   await writeFile(OUT, body);
   console.log(`caves.json: ${features.length} caves (${features.filter((f) => !f.properties.generalized).length} exact), ${(body.length / 1024).toFixed(0)} KB`);
 }
