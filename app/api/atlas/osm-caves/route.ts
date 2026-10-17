@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { overpass } from "@/utils/geo/overpass";
 
 /* ------------------------------------------------------------------ */
 /*  Cave entrances mapped in OpenStreetMap (ODbL) for one small box.   */
@@ -11,8 +12,6 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
-const OVERPASS = "https://overpass-api.de/api/interpreter";
-const UA = "shanemiller.ninja atlas (+https://shanemiller.ninja)";
 const REVALIDATE = 86_400;
 const MAX_SPAN = 1;
 
@@ -24,21 +23,13 @@ export async function GET(req: NextRequest) {
   }
   const q = `[out:json][timeout:25];node["natural"="cave_entrance"]["access"!~"^(no|private)$"](${s},${w},${n},${e});out 2000;`;
   try {
-    const res = await fetch(OVERPASS, {
-      method: "POST",
-      headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" },
-      body: `data=${encodeURIComponent(q)}`,
-      next: { revalidate: REVALIDATE },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) throw new Error(`Overpass: HTTP ${res.status}`);
-    const j = (await res.json()) as { elements: { id: number; lat: number; lon: number; tags?: Record<string, string> }[] };
-    const features: GeoJSON.Feature[] = j.elements.map((el) => {
+    const elements = await overpass(q, REVALIDATE);
+    const features: GeoJSON.Feature[] = elements.filter((el) => el.lat != null && el.lon != null).map((el) => {
       const t = el.tags ?? {};
       return {
         type: "Feature",
         id: el.id,
-        geometry: { type: "Point", coordinates: [el.lon, el.lat] },
+        geometry: { type: "Point", coordinates: [el.lon!, el.lat!] },
         properties: {
           osm: el.id,
           name: t.name ?? t["name:en"] ?? null,

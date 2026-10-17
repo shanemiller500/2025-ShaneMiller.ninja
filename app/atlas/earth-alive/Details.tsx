@@ -3,6 +3,7 @@
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { AlertTriangle, History, Waves } from "lucide-react";
 import { DrawerLink, FactGrid, FeatureDrawer } from "@/components/atlas/FeatureDrawer";
+import { AtlasDetailImage } from "@/components/atlas/AtlasDetailImage";
 import type { Picked } from "@/components/atlas/types";
 import type { FaultInfo } from "@/utils/geo/faults";
 import { WORLD_FAULT_KINDS } from "./layers";
@@ -216,11 +217,13 @@ function QuakeBody({ base, detail, loading, error }: { base: Record<string, unkn
       )}
 
       {detail?.shakemap && (
-        <figure className="space-y-1.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={detail.shakemap.image} alt="USGS ShakeMap intensity" loading="lazy" className="w-full rounded-xl border border-slate-200 dark:border-white/10" />
-          <figcaption className="text-[11px] text-slate-400">ShakeMap — estimated shaking intensity around the epicentre.</figcaption>
-        </figure>
+        <AtlasDetailImage
+          key={detail.shakemap.image}
+          src={detail.shakemap.image}
+          alt="USGS ShakeMap intensity"
+          caption="ShakeMap — estimated shaking intensity around the epicentre."
+          className="w-full rounded-xl border border-slate-200 dark:border-white/10"
+        />
       )}
 
       <div className="space-y-2">
@@ -249,11 +252,13 @@ function VolcanoBody({ detail, loading, error }: { detail: VolcanoDetail | null;
         </span>
       )}
       {detail.photo && (
-        <figure className="space-y-1">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={detail.photo.url} alt={detail.photo.caption || detail.name} loading="lazy" className="max-h-52 w-full rounded-xl object-cover" />
-          {detail.photo.credit && <figcaption className="line-clamp-2 text-[10px] text-slate-400">{detail.photo.credit}</figcaption>}
-        </figure>
+        <AtlasDetailImage
+          key={detail.photo.url}
+          src={detail.photo.url}
+          alt={`Photo of ${detail.name}`}
+          credit={detail.photo.credit}
+          className="max-h-52 w-full rounded-xl object-cover"
+        />
       )}
       <FactGrid
         facts={[

@@ -49,29 +49,24 @@ export default function AtlasPage() {
       <section className="space-y-3">
         <h2 className="flex items-center gap-3 text-sm font-semibold text-slate-900 dark:text-white"><span className="font-mono text-[11px] text-indigo-500 dark:text-indigo-300">01</span> Live maps<span aria-hidden className="h-px flex-1 bg-slate-200/80 dark:bg-white/10" /></h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {live.map((p) => {
+          {live.map((p, index) => {
             const Icon = projectIcons[p.slug]?.icon ?? Compass;
-            const iconColor = projectIcons[p.slug]?.color ?? "text-indigo-600 dark:text-indigo-300";
             return <Link
               key={p.slug}
               href={`/atlas/${p.slug}`}
-              className="atlas-card group relative isolate flex min-h-[234px] flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 p-5 backdrop-blur-sm dark:border-white/[0.08] dark:bg-white/[0.03]"
+              className="group flex min-h-[206px] flex-col rounded-2xl border border-slate-200/80 bg-white/85 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-slate-300 hover:shadow-[0_12px_26px_-18px_rgba(15,23,42,0.28)] motion-safe:hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:border-white/[0.09] dark:bg-white/[0.035] dark:hover:border-white/20 dark:hover:shadow-[0_12px_28px_-18px_rgba(0,0,0,0.5)]"
             >
-              <div aria-hidden className={`absolute -right-10 -top-16 -z-10 h-44 w-44 rounded-full bg-gradient-to-br blur-2xl ${p.glow}`} />
-              <div className="flex items-start justify-between gap-3">
-                <span className={`atlas-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-white to-slate-100 ring-1 ring-slate-200/80 dark:from-white/[0.08] dark:to-white/[0.02] dark:ring-white/10 ${iconColor}`}>
-                  <Icon aria-hidden className="h-5 w-5" strokeWidth={1.8} />
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-3 text-slate-400 dark:text-slate-500">
+                  <span className="font-mono text-[11px] tracking-wider">{String(index + 1).padStart(2, "0")}</span>
+                  <span aria-hidden className="h-px w-5 bg-slate-200 dark:bg-white/10" />
+                  <Icon aria-hidden className="h-[17px] w-[17px] text-slate-500 transition-colors group-hover:text-indigo-600 dark:text-slate-400 dark:group-hover:text-indigo-300" strokeWidth={1.7} />
                 </span>
-                <ArrowUpRight className="atlas-card-arrow h-4 w-4 text-slate-400 dark:text-slate-500" />
+                <ArrowUpRight aria-hidden className="h-4 w-4 text-slate-400 transition-[color,transform] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-indigo-600 dark:text-slate-500 dark:group-hover:text-indigo-300" />
               </div>
-              <div className="mt-3">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/60 bg-emerald-50/80 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse" /> Live
-                </span>
-              </div>
-              <h3 className="mt-2.5 font-aspekta text-2xl font-[650] text-slate-900 dark:text-white">{p.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{p.tagline}</p>
-              <p className="mt-auto pt-4 font-mono text-[10px] uppercase tracking-wider text-slate-400">{p.sources.join(" · ")}</p>
+              <h3 className="mt-6 font-aspekta text-[22px] font-[650] leading-tight tracking-tight text-slate-900 dark:text-white">{p.title}</h3>
+              <p className="mt-2 line-clamp-2 text-[13.5px] leading-[1.55] text-slate-600 dark:text-slate-400">{p.tagline}</p>
+              <p className="mt-auto truncate border-t border-slate-100 pt-4 font-mono text-[10px] uppercase tracking-wide text-slate-400 dark:border-white/[0.07] dark:text-slate-500">{p.sources.join(" · ")}</p>
             </Link>
           })}
         </div>
@@ -84,7 +79,7 @@ export default function AtlasPage() {
         <span className="atlas-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-white to-slate-100 text-indigo-600 ring-1 ring-slate-200/80 dark:from-white/[0.08] dark:to-white/[0.02] dark:text-indigo-300 dark:ring-white/10"><BookOpen aria-hidden className="h-5 w-5" strokeWidth={1.8} /></span>
         <span className="min-w-0 flex-1">
           <span className="block font-semibold text-slate-900 dark:text-white">The library</span>
-          <span className="block text-sm text-slate-500 dark:text-slate-400">The USGS papers behind the maps — hosted here, searchable down to the text inside them.</span>
+          <span className="block text-sm text-slate-500 dark:text-slate-400">Explore the research and reports behind the maps.</span>
         </span>
         <ArrowUpRight className="atlas-card-arrow h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
       </Link>

@@ -20,7 +20,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "earth-alive",
     title: "Earth Alive",
-    tagline: "A full-screen live globe: earthquakes, plates, active faults worldwide and erupting volcanoes — plus a time machine back to 1900, 3D slabs and guided stories.",
+    tagline: "Earthquakes, volcanoes, faults, and a century of seismic history on one globe.",
     status: "live",
     sources: ["USGS", "Smithsonian GVP", "PB2002"],
     glow: "from-rose-500/30 via-orange-400/20 to-amber-300/10",
@@ -28,7 +28,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "disaster-atlas",
     title: "Disaster Atlas",
-    tagline: "Live: disasters worldwide and fire detections across the planet, plus NWS warnings, U.S. wildfires, hurricanes with their cones, today's tornado reports and flooding rivers — over FEMA's county risk index.",
+    tagline: "Live storms, fires, warnings, and flood conditions across the United States and beyond.",
     status: "live",
     sources: ["NOAA / NWS", "NIFC", "NASA FIRMS", "FEMA"],
     glow: "from-orange-500/30 via-red-400/20 to-rose-300/10",
@@ -36,7 +36,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "strange-earth",
     title: "Strange Earth",
-    tagline: "Every confirmed impact crater at true size, 850+ U.S. oddities, a lens-swipe investigator back to 1880s survey maps, Ice Age lakes you can refill in 3D — and flyovers of real mysteries from Arizona to the Sahara.",
+    tagline: "Impact craters, unusual places, historic maps, and landscapes shaped by deep time.",
     status: "live",
     sources: ["Earth Impact Database", "Macrostrat", "USGS topo archive", "USGS 3DEP"],
     glow: "from-violet-500/30 via-fuchsia-400/20 to-pink-300/10",
@@ -44,7 +44,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "hidden-earth",
     title: "Hidden Earth",
-    tagline: "The ground the way lidar sees it — trees stripped away: ancient mounds, hidden faults, old landslides and Civil War trenches, with a satellite-vs-lidar peel.",
+    tagline: "See beneath the tree canopy with lidar, from ancient earthworks to hidden faults.",
     status: "live",
     sources: ["USGS 3DEP lidar", "NPS", "USGS"],
     glow: "from-emerald-500/30 via-teal-400/20 to-cyan-300/10",
@@ -52,7 +52,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "underground-usa",
     title: "Underground USA",
-    tagline: "X-ray the country: the karst rock that hollows into caves, 14,000 caves worldwide (every one you can visit pinned exactly), and 3D dives through Mammoth, Carlsbad, Wind and Jewel.",
+    tagline: "Explore karst landscapes, mapped caves, and 3D views below the surface.",
     status: "live",
     sources: ["USGS karst map", "Wikidata", "USGS 3DEP"],
     glow: "from-slate-500/30 via-indigo-400/20 to-sky-300/10",
@@ -60,9 +60,9 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "fossil-atlas",
     title: "Prehistoric USA",
-    tagline: "Fossil finds, ancient coastlines and how America looked millions of years ago.",
-    status: "planned",
-    sources: ["Paleobiology Database", "Macrostrat"],
+    tagline: "62,000 U.S. fossil sites by geologic period, dinosaur country, and the parks that protect famous fossil beds.",
+    status: "live",
+    sources: ["Paleobiology Database", "Macrostrat", "National Park Service"],
     glow: "from-lime-500/30 via-green-400/20 to-emerald-300/10",
   },
   {
@@ -76,9 +76,9 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "ghost-towns",
     title: "Ghost Towns",
-    tagline: "Abandoned towns, drowned communities and forgotten settlements, rising and fading over time.",
-    status: "planned",
-    sources: ["USGS GNIS", "Historical topo maps"],
+    tagline: "Vanished settlements, historic ghost towns, and communities lost beneath reservoirs.",
+    status: "live",
+    sources: ["USGS GNIS", "Wikidata", "Wikipedia"],
     glow: "from-stone-500/30 via-zinc-400/20 to-neutral-300/10",
   },
   {
@@ -92,7 +92,7 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "shipwrecks",
     title: "Shipwrecks",
-    tagline: "80,000 charted wrecks worldwide, 30,000 named ones, two world wars of sinkings day by day, the sanctuaries that protect them — and dives to the Titanic, Monitor and more.",
+    tagline: "Charted wrecks, maritime history, protected sanctuaries, and notable ships.",
     status: "live",
     sources: ["NOAA charts", "NOAA Sanctuaries", "Wikidata"],
     glow: "from-cyan-500/30 via-sky-400/20 to-blue-300/10",

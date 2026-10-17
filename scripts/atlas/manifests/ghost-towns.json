@@ -1,0 +1,39 @@
+[
+  {
+    "url": "https://npgallery.nps.gov/NRHP/GetAsset/NHLS/66000426_text",
+    "title": "Bannack Historic District — National Register of Historic Places / National Historic Landmark nomination",
+    "source": "National Park Service",
+    "sourceUrl": "https://npgallery.nps.gov/AssetDetail/NRIS/66000426",
+    "license": "public domain",
+    "summary": "The landmark nomination for Bannack, Montana: the July 28, 1862 gold strike on Grasshopper Creek, the first territorial capital, the vigilantes and Henry Plummer, the first electric gold dredge in North America (1895), and the town's decline.",
+    "projects": ["ghost-towns"],
+    "tags": ["story:boom-and-bust", "ghost town", "bannack", "montana", "gold rush", "mining", "national historic landmark"],
+    "region": "Montana",
+    "bbox": [-113.05, 45.13, -112.94, 45.19]
+  },
+  {
+    "url": "https://www.nps.gov/subjects/nationalhistoriclandmarks/upload/Bodie_update_NPSAB_ExecSumm_2025_06-09.pdf",
+    "title": "Bodie Historic District (Updated Documentation) — National Historic Landmark executive summary",
+    "source": "National Park Service",
+    "sourceUrl": "https://www.nps.gov/subjects/nationalhistoriclandmarks/index.htm",
+    "license": "public domain",
+    "year": 2025,
+    "summary": "The National Park Service's 2025 update to the Bodie landmark: significance as an exemplar of Western mining's boom-and-bust cycles and of the ghost town in American culture, 1859–1962, and California State Parks' policy of arrested decay.",
+    "projects": ["ghost-towns"],
+    "tags": ["story:boom-and-bust", "ghost town", "bodie", "california", "gold rush", "mining", "arrested decay", "national historic landmark"],
+    "region": "California",
+    "bbox": [-119.06, 38.18, -118.96, 38.25]
+  },
+  {
+    "url": "https://www.nps.gov/wrst/planyourvisit/upload/Kennecott-Unigrid-Brochure-508.pdf",
+    "title": "Kennecott Mines National Historic Landmark — park brochure",
+    "source": "National Park Service",
+    "sourceUrl": "https://www.nps.gov/wrst/",
+    "license": "public domain",
+    "summary": "The Wrangell-St. Elias brochure for Kennecott: Ahtna copper, the 1900 discovery, the Alaska Syndicate and the Copper River and Northwestern Railway, life in the mill and mine camps, the 1925 peak and the 1938 closure.",
+    "projects": ["ghost-towns"],
+    "tags": ["story:kennecott", "ghost town", "kennecott", "alaska", "copper", "mining", "company town", "national historic landmark"],
+    "region": "Alaska",
+    "bbox": [-143.0, 61.4, -142.8, 61.6]
+  }
+]

@@ -2,16 +2,14 @@
 
 import { useDeferredValue, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, FileText, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, BookOpen, Search, X } from "lucide-react";
 import { ATLAS_PROJECTS } from "@/utils/geo/projects";
 import { searchTerm } from "@/utils/geo/library";
 import { useLibrary } from "@/utils/geo/useLibrary";
 import "@/components/atlas/atlas-hub.css";
 
 /* ------------------------------------------------------------------ */
-/*  /atlas/library — the documents behind the maps. Search hits the    */
-/*  Firestore index (`terms` array-contains the first word); extra     */
-/*  words narrow the results here.                                     */
+/*  /atlas/library — public reading list for the Atlas projects.       */
 /* ------------------------------------------------------------------ */
 
 export default function LibraryClient() {
@@ -36,17 +34,18 @@ export default function LibraryClient() {
         </Link>
         <h1 className="mt-4 font-aspekta text-4xl font-[650] tracking-tight text-slate-900 dark:text-white md:text-5xl">Library</h1>
         <p className="mt-3 text-[15px] leading-relaxed text-slate-500 dark:text-slate-400">
-          The papers behind the maps — public-domain USGS fact sheets and professional papers, hosted here and searchable down to the text inside them.
+          Explore the research and reports behind the maps.
         </p>
       </header>
 
       <div className="space-y-3">
         <label className="relative block max-w-xl">
+          <span className="sr-only">Search papers</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search the text — tsunami, subduction, 1906, caldera…"
+            placeholder="Search papers…"
             className="w-full rounded-2xl border border-slate-200 bg-white/80 py-3 pl-10 pr-10 text-sm text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] outline-none backdrop-blur-sm transition-[border-color,box-shadow] duration-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100"
           />
           {query && (
@@ -73,50 +72,40 @@ export default function LibraryClient() {
         </div>
       </div>
 
-      {error && (
-        <p className="rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-          The library index couldn&apos;t be read — {error} If you just set the atlas up, the Firestore rules for <code>geoDocs</code> still need deploying.
-        </p>
-      )}
-      {loading && !docs && <p className="font-mono text-xs uppercase tracking-wider text-slate-400">Opening the stacks…</p>}
+      {error && <p className="rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">The library is unavailable right now. Please try again later.</p>}
+      {loading && !docs && <p className="font-mono text-xs uppercase tracking-wider text-slate-400">Loading papers…</p>}
 
+      {docs && <p className="font-mono text-[11px] uppercase tracking-wider text-slate-400">{shown.length} {shown.length === 1 ? "paper" : "papers"}</p>}
       <ul className="grid gap-3 md:grid-cols-2">
         {shown.map((d) => (
-          <li key={d.id} className="flex flex-col rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur-sm dark:border-white/[0.08] dark:bg-white/[0.03]">
+          <li key={d.id} className="flex flex-col rounded-2xl border border-slate-200/70 bg-white/85 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_12px_28px_rgba(35,45,90,0.08)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:hover:border-indigo-400/25">
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500 dark:text-indigo-300">
-                <FileText className="h-[18px] w-[18px]" />
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500 ring-1 ring-indigo-500/10 dark:text-indigo-300">
+                <BookOpen className="h-[18px] w-[18px]" />
               </span>
-              <div className="min-w-0">
-                <h2 className="text-[15px] font-semibold leading-snug text-slate-900 dark:text-white">{d.title}</h2>
-                <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-slate-400">
-                  {[d.source, d.year, d.pages ? `${d.pages} pages` : null, d.bytes ? `${(d.bytes / 1048576).toFixed(1)} MB` : null, d.license].filter(Boolean).join(" · ")}
+              <div className="min-w-0 flex-1">
+                <h2 className="line-clamp-2 text-[15px] font-semibold leading-snug text-slate-900 dark:text-white">{d.title}</h2>
+                <p className="mt-1 flex min-w-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+                  <span className="truncate">{d.source}</span>
+                  {d.year && <span className="shrink-0">· {d.year}</span>}
                 </p>
               </div>
             </div>
-            {d.authors.length > 0 && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{d.authors.join(", ")}</p>}
-            {d.summary && <p className="mt-2 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">{d.summary}</p>}
-            <div className="mt-3 flex flex-wrap gap-1">
-              {d.projects.map((p) => (
+            {d.summary && <p className="mt-3 line-clamp-2 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">{d.summary}</p>}
+            <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-4">
+              {d.projects.slice(0, 2).map((p) => (
                 <span key={p} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">
                   {projectTitle(p)}
                 </span>
               ))}
-            </div>
-            <div className="mt-auto flex gap-2 pt-4">
-              {d.fileUrl && (
-                <a href={d.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-600">
-                  <FileText className="h-3.5 w-3.5" /> Open PDF
-                </a>
-              )}
               {d.sourceUrl && (
                 <a
                   href={d.sourceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 dark:border-white/10 dark:text-slate-300 dark:hover:text-white"
+                  className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-indigo-600 transition-colors hover:text-indigo-700 dark:text-indigo-300 dark:hover:text-indigo-200"
                 >
-                  <ExternalLink className="h-3.5 w-3.5" /> Original
+                  View source <ArrowUpRight className="h-3.5 w-3.5" />
                 </a>
               )}
             </div>

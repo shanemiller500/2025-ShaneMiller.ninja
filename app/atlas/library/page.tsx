@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import LibraryClient from "./LibraryClient";
 
 export const metadata: Metadata = {
-  title: "Atlas library | USGS papers behind the maps",
-  description: "Searchable public-domain USGS fact sheets and professional papers behind the Atlas map projects, hosted alongside the maps.",
+  title: "Atlas library | Research behind the maps",
+  description: "Explore the research and reports behind the Atlas maps.",
 };
 
 export default function AtlasLibraryPage() {
