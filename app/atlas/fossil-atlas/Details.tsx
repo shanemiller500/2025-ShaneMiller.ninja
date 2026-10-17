@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bone, Filter, Loader2 } from "lucide-react";
+import { Bone, Filter, Loader2, Orbit } from "lucide-react";
 import { DrawerLink, FactGrid, FeatureDrawer } from "@/components/atlas/FeatureDrawer";
 import type { Picked } from "@/components/atlas/types";
 import { useWikiPhoto } from "@/components/atlas/useWikiPhoto";
@@ -18,7 +18,8 @@ import {
   type TaxonGroup,
 } from "@/utils/geo/fossils";
 import { kmBetween, type GeoUnit } from "@/utils/geo/strange";
-import { parkById } from "./featured";
+import { fmtMa, fmtPaleoLat, type PaleoSlice } from "@/utils/geo/paleo";
+import { parkById, type FossilPark } from "./featured";
 import { BONE } from "./layers";
 
 /* ------------------------------------------------------------------ */
@@ -65,7 +66,7 @@ function TaxaList({ groups }: { groups: TaxonGroup[] }) {
   );
 }
 
-function Collection({ picked, data, onClose, onFormation }: { picked: Picked; data: FossilsFile | null; onClose: () => void; onFormation?: (fm: number) => void }) {
+function Collection({ picked, data, then, onClose, onFormation }: { picked: Picked; data: FossilsFile | null; then?: PaleoSlice | null; onClose: () => void; onFormation?: (fm: number) => void }) {
   const id = Number(picked.props.id);
   const i = Number(picked.props.i);
   const c = data?.cols;
@@ -90,6 +91,7 @@ function Collection({ picked, data, onClose, onFormation }: { picked: Picked; da
   }, [id]);
 
   const formation = details?.formation ?? (fm >= 0 ? data!.formations[fm] : null);
+  const today: [number, number] = ok ? [c!.lng[i], c!.lat[i]] : picked.lngLat;
   const loading = !details && !failed;
   return (
     <FeatureDrawer
@@ -98,7 +100,7 @@ function Collection({ picked, data, onClose, onFormation }: { picked: Picked; da
       eyebrow={`Fossil site · ${period?.label ?? "Unknown period"}`}
       accent={period?.color ?? "#a3e635"}
       title={details?.name || `Collection ${id}`}
-      subtitle={[details?.county ? (/county|parish|borough$/i.test(details.county) ? details.county : `${details.county} County`) : null, details?.state ?? (ok && c!.st[i] >= 0 ? data!.states[c!.st[i]] : null)].filter(Boolean).join(", ") || where(picked.lngLat)}
+      subtitle={[details?.county ? (/county|parish|borough$/i.test(details.county) ? details.county : `${details.county} County`) : null, details?.state ?? (ok && c!.st[i] >= 0 ? data!.states[c!.st[i]] : null)].filter(Boolean).join(", ") || where(today)}
     >
       <div className="space-y-4">
         {(flag & FLAG_DINO || flag & FLAG_MAMMAL) > 0 && (
@@ -118,9 +120,15 @@ function Collection({ picked, data, onClose, onFormation }: { picked: Picked; da
             ["Formation", formation],
             ["Rock", details?.lithology ?? null],
             ["Finds recorded", ok ? c!.n[i].toLocaleString() : null],
-            ["Position", where(picked.lngLat)],
+            ["Position today", where(today)],
+            ...(then ? ([[`Latitude ${then.age ? fmtMa(then.age) : "then"}`, fmtPaleoLat(picked.lngLat[1])]] as [string, string][]) : []),
           ]}
         />
+        {then && then.age > 0 && (
+          <p className="text-[11.5px] leading-snug text-slate-400">
+            Shown where this spot sat {fmtMa(then.age)}, during the {then.label}, by the PALEOMAP plate model. Its rocks span {ok ? fmtAge(c!.max[i], c!.min[i]).replace(/ ago$/, "") : "this time"}.
+          </p>
+        )}
         {fm >= 0 && onFormation && (
           <button type="button" onClick={() => onFormation(fm)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-lime-300/40 bg-lime-400/10 px-3 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-lime-400/20">
             <Filter className="h-4 w-4" /> Every site in this formation ({data!.formations[fm]})
@@ -144,7 +152,7 @@ function Collection({ picked, data, onClose, onFormation }: { picked: Picked; da
   );
 }
 
-function Park({ id, data, onClose }: { id: string; data: FossilsFile | null; onClose: () => void }) {
+function Park({ id, data, onClose, onFly }: { id: string; data: FossilsFile | null; onClose: () => void; onFly?: (p: FossilPark) => void }) {
   const p = parkById(id)!;
   const photo = useWikiPhoto(p.wiki);
   // PBDB sites within 15 km
@@ -182,6 +190,11 @@ function Park({ id, data, onClose }: { id: string; data: FossilsFile | null; onC
           </p>
         )}
         {p.approximate && <p className="text-[11.5px] leading-snug text-amber-200/90">The footprint sites aren&apos;t published, so the marker is the park itself.</p>}
+        {onFly && (
+          <button type="button" onClick={() => onFly(p)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-lime-300/40 bg-lime-400/10 px-3 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-lime-400/20">
+            <Orbit className="h-4 w-4" /> Fly over in 3D
+          </button>
+        )}
         <p className="text-[11.5px] leading-snug text-slate-500">Taking fossils from a national park is illegal — look, photograph, and leave them.</p>
         <div className="space-y-2">
           <DrawerLink href={p.site.url}>{p.site.label}</DrawerLink>
@@ -213,10 +226,10 @@ function Rock({ picked, onClose }: { picked: Picked; onClose: () => void }) {
   );
 }
 
-export function FossilDetailsDrawer({ picked, data, onClose, onFormation }: { picked: Picked | null; data: FossilsFile | null; onClose: () => void; onFormation?: (fm: number) => void }) {
+export function FossilDetailsDrawer({ picked, data, then, onClose, onFormation, onFly }: { picked: Picked | null; data: FossilsFile | null; then?: PaleoSlice | null; onClose: () => void; onFormation?: (fm: number) => void; onFly?: (p: FossilPark) => void }) {
   if (!picked) return <FeatureDrawer open={false} onClose={onClose} />;
-  if (picked.layer === "parks" && parkById(String(picked.props.id))) return <Park key={String(picked.props.id)} id={String(picked.props.id)} data={data} onClose={onClose} />;
-  if (picked.layer === "fossils") return <Collection key={String(picked.props.id)} picked={picked} data={data} onClose={onClose} onFormation={onFormation} />;
+  if (picked.layer === "parks" && parkById(String(picked.props.id))) return <Park key={String(picked.props.id)} id={String(picked.props.id)} data={data} onClose={onClose} onFly={onFly} />;
+  if (picked.layer === "fossils") return <Collection key={String(picked.props.id)} picked={picked} data={data} then={then} onClose={onClose} onFormation={onFormation} />;
   if (picked.layer === "geology") return <Rock picked={picked} onClose={onClose} />;
   return <FeatureDrawer open={false} onClose={onClose} />;
 }

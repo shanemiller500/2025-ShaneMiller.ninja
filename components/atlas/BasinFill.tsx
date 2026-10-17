@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { onSinglePointerDrag } from "./orbitGuard";
 import { loadElevation, loadImageryColors } from "./groundData";
 import { buildBasin, geometryBBox, padBBox, zoomForBBox, type Basin, type LakeGeometry } from "./basinGrid";
 
@@ -48,7 +49,8 @@ export function BasinFill({ geometry, level, onReady, className = "" }: BasinFil
     controls.maxPolarAngle = Math.PI * 0.47;
     controls.autoRotate = !reduce;
     controls.autoRotateSpeed = 0.35;
-    renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate = false), { once: true });
+    // zooming keeps it turning; dragging to look around stops it
+    const stopGuard = onSinglePointerDrag(renderer.domElement, () => (controls.autoRotate = false));
 
     scene.add(new THREE.HemisphereLight(0xdbeafe, 0x1e1b4b, 0.9));
     const sun = new THREE.DirectionalLight(0xfff4e0, 1.6);
@@ -206,6 +208,7 @@ export function BasinFill({ geometry, level, onReady, className = "" }: BasinFil
       disposed = true;
       cancelAnimationFrame(raf);
       ro.disconnect();
+      stopGuard();
       controls.dispose();
       for (const d of disposables) d.dispose();
       renderer.dispose();

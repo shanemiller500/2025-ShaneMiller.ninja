@@ -1,6 +1,7 @@
 /* ------------------------------------------------------------------ */
-/*  Prehistoric USA map layers. Draw order: bedrock geology →          */
-/*  fossil collections → featured parks.                               */
+/*  Prehistoric USA map layers. Draw order: the ancient Earth (time    */
+/*  machine) → bedrock geology → today's U.S. outline moved back in    */
+/*  time → fossil collections → featured parks.                        */
 /* ------------------------------------------------------------------ */
 import type { ExpressionSpecification as Expr, Map as MlMap } from "maplibre-gl";
 import type { AtlasLayer } from "@/components/atlas/types";
@@ -16,6 +17,55 @@ const SIZE = (lo: number, hi: number) => ["interpolate", ["linear"], ["sqrt", ["
 const IS_DINO = ["==", ["%", ["get", "flag"], 2], FLAG_DINO] as Expr;
 /** Bone white: the ring on dinosaur sites. */
 export const BONE = "#fef3c7";
+
+/* ── time machine: Earth as it was (PALEOMAP PaleoDEMs) ──────────── */
+
+/** Deep-ocean colour of the ancient maps — also fills the poles the Mercator image can't reach. */
+export const ANCIENT_OCEAN = "#0e2448";
+const BLANK_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+/** The ancient maps are Web Mercator images of the whole world. */
+const WORLD: [[number, number], [number, number], [number, number], [number, number]] = [
+  [-180, 85.0511287798066],
+  [180, 85.0511287798066],
+  [180, -85.0511287798066],
+  [-180, -85.0511287798066],
+];
+
+export const ancientLayer: AtlasLayer = {
+  id: "ancient",
+  label: "Ancient Earth",
+  group: "Time machine",
+  description: "Land, shallow seas and deep ocean as they were at the chosen time — reconstructions by Christopher Scotese's PALEOMAP Project, best estimates that grow less certain the further back you go.",
+  legend: [
+    { color: "#68bac4", label: "Shallow sea" },
+    { color: "#16406a", label: "Deep ocean" },
+    { color: "#749a5c", label: "Lowland" },
+    { color: "#a0825c", label: "Mountains" },
+  ],
+  citation: { label: "PaleoDEMs — C. R. Scotese & N. M. Wright (2018), PALEOMAP Project", href: "https://doi.org/10.5281/zenodo.5460860", license: "CC BY 4.0" },
+  install(map) {
+    // drawn over the modern basemap: an opaque ocean, then the ancient map
+    map.addLayer({ id: "ancient-ocean", type: "background", paint: { "background-color": ANCIENT_OCEAN } });
+    map.addSource("ancient", { type: "image", url: BLANK_PNG, coordinates: WORLD });
+    map.addLayer({ id: "ancient-map", type: "raster", source: "ancient", paint: { "raster-fade-duration": 0, "raster-resampling": "linear" } });
+    return ["ancient-ocean", "ancient-map"];
+  },
+};
+
+export const usThenLayer: AtlasLayer = {
+  id: "usthen",
+  label: "Today's U.S.",
+  group: "Time machine",
+  description: "Where the land that is now the United States sat at the chosen time, moved back with the same plate model as the fossils. Pieces vanish where that crust didn't exist yet.",
+  legend: [{ color: "#ffffff", label: "Today's U.S. outline", shape: "line" }],
+  citation: { label: "GPlates Web Service (EarthByte) · PALEOMAP model · Natural Earth", href: "https://gws.gplates.org/" },
+  install(map) {
+    map.addSource("usthen", { type: "geojson", data: EMPTY });
+    map.addLayer({ id: "usthen-halo", type: "line", source: "usthen", paint: { "line-color": "#020617", "line-width": 3.2, "line-opacity": 0.45 } });
+    map.addLayer({ id: "usthen-line", type: "line", source: "usthen", paint: { "line-color": "#ffffff", "line-width": 1.4, "line-dasharray": [3, 2], "line-opacity": 0.9 } });
+    return ["usthen-halo", "usthen-line"];
+  },
+};
 
 /* ── bedrock geology (Macrostrat), click for the rock under a spot ── */
 
@@ -118,4 +168,7 @@ export const parksLayer: AtlasLayer = {
   },
 };
 
-export const FOSSIL_LAYERS: AtlasLayer[] = [geologyLayer, fossilsLayer, parksLayer];
+export const FOSSIL_LAYERS: AtlasLayer[] = [ancientLayer, geologyLayer, usThenLayer, fossilsLayer, parksLayer];
+/** Layers that only make sense in the time machine, and ones that only make sense today. */
+export const TIME_ONLY = ["ancient", "usthen"];
+export const TODAY_ONLY = ["geology", "parks"];

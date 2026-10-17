@@ -3,11 +3,12 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import maplibregl, { type GeoJSONSource, type Map as MlMap, type MapMouseEvent } from "maplibre-gl";
+import maplibregl, { type GeoJSONSource, type ImageSource, type Map as MlMap, type MapMouseEvent } from "maplibre-gl";
 import { registerEuLidar } from "@/utils/geo/euLidar";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./atlas.css";
 import { DEM_SOURCE, applyTerrain, basemapStyle, firstLabelLayer } from "./basemaps";
+import { onSinglePointerDrag } from "./orbitGuard";
 import type { AtlasLayer, AtlasTime, AtlasView, Basemap, Picked, TerrainMode } from "./types";
 
 // national lidar outside the U.S. needs its tile protocol before any map asks for tiles
@@ -22,11 +23,16 @@ registerEuLidar(maplibregl);
 /*  Browser-only: load the page that uses it with next/dynamic.        */
 /* ------------------------------------------------------------------ */
 
+/** New image for an image source (e.g. a time slice), keyed by source id in the data prop. */
+export interface AtlasImageData {
+  url: string;
+}
+
 export interface AtlasMapProps {
   layers: AtlasLayer[];
   visible: Record<string, boolean>;
-  /** GeoJSON keyed by source id — pushed into the matching source whenever it changes */
-  data?: Record<string, GeoJSON.GeoJSON | undefined>;
+  /** GeoJSON keyed by source id — pushed into the matching source whenever it changes. An image source takes { url } instead. */
+  data?: Record<string, GeoJSON.GeoJSON | AtlasImageData | undefined>;
   basemap: Basemap;
   terrain: TerrainMode;
   dark: boolean;
@@ -264,10 +270,14 @@ export function AtlasMap({
     syncSelection(map);
   }
 
-  function pushData(map: MlMap, d?: Record<string, GeoJSON.GeoJSON | undefined>) {
+  function pushData(map: MlMap, d?: Record<string, GeoJSON.GeoJSON | AtlasImageData | undefined>) {
     for (const [sourceId, geo] of Object.entries(d ?? {})) {
-      const src = map.getSource(sourceId) as GeoJSONSource | undefined;
-      if (geo && src && "setData" in src) src.setData(geo);
+      const src = map.getSource(sourceId) as GeoJSONSource | ImageSource | undefined;
+      if (!geo || !src) continue;
+      if ("url" in geo && "updateImage" in src) {
+        // skip a no-op swap: updateImage always refetches
+        if ((src as ImageSource & { url?: string }).url !== geo.url) src.updateImage({ url: geo.url });
+      } else if (!("url" in geo) && "setData" in src) src.setData(geo);
     }
   }
 
@@ -361,11 +371,13 @@ export function AtlasMap({
     let raf = 0;
     let last = 0;
     let stopped = false;
+    // fingers / mouse buttons down on the map: moving the camera ourselves would cancel their gesture
+    const pointers = new Set<number>();
     const step = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
-      // a new flight (next anomaly) takes over the camera; resume once it lands
-      if (!map.isEasing()) map.setBearing(map.getBearing() + orbit * dt);
+      // a new flight (next anomaly), a zoom under way or a hand on the map has the camera this frame; keep turning after
+      if (!map.isEasing() && !map.isZooming() && !pointers.size) map.setBearing(map.getBearing() + orbit * dt);
       raf = requestAnimationFrame(step);
     };
     const start = () => {
@@ -377,17 +389,23 @@ export function AtlasMap({
     // let a flight that's under way land first
     if (map.isMoving()) map.once("moveend", start);
     else start();
-    // grabbing the map hands the camera back
+    // Dragging with one finger or the mouse (pan, turn, tilt) hands the camera back.
+    // Zooming — wheel, pinch, double-tap, the +/− buttons — keeps the orbit going.
     const canvas = map.getCanvasContainer();
-    const grab = () => live.current.onOrbitStop?.();
-    canvas.addEventListener("pointerdown", grab);
-    canvas.addEventListener("wheel", grab, { passive: true });
+    const down = (e: PointerEvent) => pointers.add(e.pointerId);
+    const up = (e: PointerEvent) => pointers.delete(e.pointerId);
+    canvas.addEventListener("pointerdown", down);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    const stopGuard = onSinglePointerDrag(canvas, () => live.current.onOrbitStop?.());
     return () => {
       stopped = true;
       map.off("moveend", start);
       cancelAnimationFrame(raf);
-      canvas.removeEventListener("pointerdown", grab);
-      canvas.removeEventListener("wheel", grab);
+      canvas.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      stopGuard();
       orbitingRef.current = false;
       map.fire("moveend");
     };

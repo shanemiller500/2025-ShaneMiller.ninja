@@ -61,7 +61,7 @@ export function Cloud({ site, ept, onPick, onExit }: { site: HiddenSite; ept: Ep
 
   return (
     <div className="absolute inset-0 z-20 bg-[#020604]">
-      {cloud && <PointCloudView cloud={cloud} color={color} strip={strip} exaggeration={exag} autoRotate={spin} className="absolute inset-0" />}
+      {cloud && <PointCloudView cloud={cloud} color={color} strip={strip} exaggeration={exag} autoRotate={spin} onAutoRotateStop={() => setSpin(false)} className="absolute inset-0" />}
 
       {!cloud && !error && candidates.length > 0 && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">

@@ -1,0 +1,30 @@
+[
+  {
+    "url": "https://www.npshistory.com/publications/dino/nrr-2006-008.pdf",
+    "title": "Dinosaur National Monument — Geologic Resource Evaluation Report (NRR-2006/008)",
+    "source": "National Park Service",
+    "sourceUrl": "https://www.nps.gov/subjects/geology/geologic-resources-inventory-products.htm",
+    "license": "public domain",
+    "year": 2006,
+    "authors": ["J. Graham"],
+    "summary": "The NPS Geologic Resources Division's evaluation of Dinosaur National Monument: Earl Douglass's 1909 discovery of articulated Apatosaurus tail vertebrae, the 1915 proclamation, how Morrison Formation rivers log-jammed and buried the quarry's dinosaurs, and the Cretaceous Western Interior Seaway that laid down the Mancos Shale.",
+    "projects": ["fossil-atlas"],
+    "tags": ["story:dinosaur-quarry", "story:inland-sea", "dinosaur national monument", "carnegie quarry", "morrison formation", "jurassic", "apatosaurus", "western interior seaway", "mancos shale", "utah", "colorado", "geology"],
+    "region": "Utah / Colorado",
+    "bbox": [-109.5, 40.2, -108.2, 40.9]
+  },
+  {
+    "url": "https://www.npshistory.com/series/occasional_papers/3/op3.pdf",
+    "title": "The Geologic History of Fossil Butte National Monument and Fossil Basin (NPS Occasional Paper 3)",
+    "source": "National Park Service",
+    "sourceUrl": "https://www.nps.gov/fobu/",
+    "license": "public domain",
+    "year": 1975,
+    "authors": ["Paul O. McGrew", "Michael Casilliano"],
+    "summary": "National Park Service Occasional Paper 3: the Eocene Green River Lake System (Lakes Gosiute and Uinta and the smallest, Fossil Lake), its subtropical shores and animals, the varved shales that preserved mass deaths of fish, and the history of discovery from Leidy's 1856 fish and the Union Pacific's 'Petrified Fish Cut'.",
+    "projects": ["fossil-atlas"],
+    "tags": ["story:fossil-lake", "fossil butte", "fossil lake", "green river formation", "eocene", "fossil fish", "knightia", "wyoming", "geology"],
+    "region": "Wyoming",
+    "bbox": [-110.9, 41.7, -110.6, 42.0]
+  }
+]

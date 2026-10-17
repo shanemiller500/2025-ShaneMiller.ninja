@@ -157,3 +157,153 @@ test('Prehistoric USA layers produce a valid MapLibre style', () => {
     assert.deepEqual(errors, []);
   }
 });
+
+
+/* ── Phase 2: the time machine ─────────────────────────────────────── */
+
+const pa = load('utils/geo/paleo.ts');
+const paleoIndex = JSON.parse(fs.readFileSync('public/atlas/paleo/index.json', 'utf8'));
+const sliceFile = (s) => JSON.parse(fs.readFileSync(`public/atlas/paleo/${s.file}.json`, 'utf8'));
+
+test('paleo index: 109 PaleoDEM slices from today to 540 Ma, contiguous windows, every file present', () => {
+  const sl = paleoIndex.slices;
+  assert.ok(sl.length >= 100, `${sl.length} slices`);
+  assert.equal(sl[0].age, 0);
+  assert.equal(sl[sl.length - 1].age, 540);
+  for (let k = 0; k < sl.length; k++) {
+    const s = sl[k];
+    assert.ok(s.label && s.label.length > 2, `label for ${s.age}`);
+    assert.ok(s.lo < s.hi && s.lo <= s.age && s.age <= s.hi, `${s.age} window`);
+    if (k) {
+      assert.ok(s.age > sl[k - 1].age);
+      assert.equal(s.lo, sl[k - 1].hi, `gap before ${s.age}`);
+    }
+    for (const ext of ['webp', 'json']) assert.ok(fs.existsSync(`public/atlas/paleo/${s.file}.${ext}`), `${s.file}.${ext}`);
+  }
+  const ninety = sl.find((s) => s.age === 90);
+  assert.equal(ninety.label, 'Mid-Cretaceous');
+  assert.equal(ninety.stage, 'Turonian');
+  assert.equal(sl[0].label, 'Today');
+  assert.match(paleoIndex.source, /Scotese/);
+});
+
+test('paleo slices: sites belong to their time; today they sit where they are found', () => {
+  const c = data.cols;
+  for (const s of paleoIndex.slices.filter((_, k) => k % 6 === 0)) {
+    const d = sliceFile(s);
+    assert.equal(d.age, s.age);
+    assert.equal(d.i.length, d.lng.length);
+    assert.equal(d.i.length, d.lat.length);
+    for (let k = 0; k < d.i.length; k++) {
+      const i = d.i[k];
+      assert.ok(c.min[i] <= s.hi && c.max[i] >= s.lo, `collection ${c.id[i]} (${c.max[i]}–${c.min[i]} Ma) in the ${s.age} Ma slice`);
+      assert.ok(Math.abs(d.lng[k]) <= 180 && Math.abs(d.lat[k]) <= 90);
+    }
+  }
+  const now = sliceFile(paleoIndex.slices[0]);
+  assert.ok(now.i.length > 1000, `${now.i.length} sites today`);
+  for (let k = 0; k < now.i.length; k += 50) {
+    const i = now.i[k];
+    assert.ok(Math.abs(now.lng[k] - c.lng[i]) < 0.02 && Math.abs(now.lat[k] - c.lat[i]) < 0.02, `site ${c.id[i]} moved at 0 Ma`);
+  }
+  // the Cretaceous has the most sites of any period; the 90 Ma slice should be well stocked
+  assert.ok(sliceFile(paleoIndex.slices.find((s) => s.age === 90)).i.length > 1000);
+});
+
+test('paleo positions are plausible: North America drifts south toward the equator going back', () => {
+  const lat = (age) => {
+    const d = sliceFile(paleoIndex.slices.find((s) => s.age === age));
+    const center = pa.outlineCenter(d);
+    assert.ok(center, `outline at ${age} Ma`);
+    return center[1];
+  };
+  const now = lat(0);
+  assert.ok(now > 30 && now < 50, `today ${now}`);
+  // Late Pennsylvanian: the lower 48 straddled the equator (Pangaea)
+  assert.ok(Math.abs(lat(300)) < 15, `300 Ma ${lat(300)}`);
+  assert.ok(lat(150) < now, '150 Ma further south than today');
+  // and the outline stays one coherent shape
+  const d90 = sliceFile(paleoIndex.slices.find((s) => s.age === 90));
+  const main = [...d90.us].sort((a, b) => b.length - a.length)[0];
+  for (let k = 1; k < main.length; k++) assert.ok(Math.hypot(main[k][0] - main[k - 1][0], main[k][1] - main[k - 1][1]) < 8, 'outline jump');
+});
+
+test('paleo helpers: nearest slice, labels, filters', () => {
+  const sl = paleoIndex.slices;
+  assert.equal(pa.nearestSlice(sl, 91).age, 90);
+  assert.equal(pa.nearestSlice(sl, 1000).age, 540);
+  assert.equal(pa.nearestSlice(sl, -3).age, 0);
+  assert.equal(pa.fmtMa(0), 'Today');
+  assert.equal(pa.fmtMa(90), '90 million years ago');
+  assert.equal(pa.fmtMa(385.2), '385.2 million years ago');
+  assert.equal(pa.fmtPaleoLat(12.34), '12.3°N');
+  assert.equal(pa.fmtPaleoLat(-4), '4.0°S');
+  assert.equal(pa.fmtPaleoLat(0.2), 'on the equator');
+  const d = sliceFile(sl.find((s) => s.age === 150));
+  const all = pa.paleoFeatures(data, d);
+  assert.equal(all.features.length, d.i.length);
+  const dinos = pa.paleoFeatures(data, d, { flag: fo.FLAG_DINO });
+  assert.ok(dinos.features.length > 50 && dinos.features.every((f) => f.properties.flag & 1), `${dinos.features.length} Jurassic dinosaur sites`);
+  assert.equal(JSON.stringify(pa.outlineFeatures(d).features[0].geometry.coordinates), JSON.stringify(d.us));
+});
+
+test('time-machine moments land on real slices with matching periods', () => {
+  const { MOMENTS } = load('app/atlas/fossil-atlas/moments.ts');
+  const byAge = new Map(paleoIndex.slices.map((s) => [s.age, s]));
+  for (const m of MOMENTS) assert.ok(byAge.has(m.age), `${m.label} at ${m.age} Ma has no map`);
+  const expect = { 500: /Cambrian/, 300: /Pennsylvanian/, 250: /Permian/, 150: /Jurassic/, 90: /Cretaceous/, 65: /Cretaceous/, 50: /Eocene/ };
+  for (const [age, re] of Object.entries(expect)) {
+    assert.match(byAge.get(Number(age)).label, re, `${age} Ma map is ${byAge.get(Number(age)).label}`);
+    const m = MOMENTS.find((x) => x.age === Number(age));
+    // captions sit after the map's own label, so they must not repeat it
+    assert.ok(!m.caption.includes(byAge.get(Number(age)).label), `${m.label} caption repeats the period`);
+  }
+});
+
+/* ── Phase 3: stories, library, flyovers ───────────────────────────── */
+
+test('stories: every action points at something real', () => {
+  const { FOSSIL_STORIES } = load('app/atlas/fossil-atlas/stories.ts');
+  const ages = new Set(paleoIndex.slices.map((s) => s.age));
+  const parks = new Set(FOSSIL_PARKS.map((p) => p.id));
+  const fmCount = new Map();
+  data.cols.fm.forEach((f) => fmCount.set(f, (fmCount.get(f) ?? 0) + 1));
+  assert.ok(FOSSIL_STORIES.length >= 4);
+  assert.equal(new Set(FOSSIL_STORIES.map((s) => s.id)).size, FOSSIL_STORIES.length);
+  for (const st of FOSSIL_STORIES) {
+    assert.ok(st.chapters.length >= 3, `${st.id} chapters`);
+    assert.ok(st.docs.length >= 2, `${st.id} sources`);
+    for (const d of st.docs) assert.match(d.url, /^https:\/\//);
+    for (const ch of st.chapters) {
+      const [lng, lat] = ch.camera.center;
+      assert.ok(Math.abs(lng) <= 180 && Math.abs(lat) <= 90 && ch.camera.zoom > 1, `${st.id}: ${ch.title} camera`);
+      assert.ok(ch.body.every((p) => p.length > 20), `${st.id}: ${ch.title} body`);
+      for (const a of ch.actions ?? []) {
+        if (a.kind === 'time') assert.ok(ages.has(Number(a.value)), `${st.id}: no map at ${a.value} Ma`);
+        else if (a.kind === 'park' || a.kind === 'fly') assert.ok(parks.has(a.value), `${st.id}: park ${a.value}`);
+        else if (a.kind === 'formation') {
+          const fm = data.formations.indexOf(a.value);
+          assert.ok(fm >= 0 && fmCount.get(fm) >= 100, `${st.id}: formation ${a.value} has ${fmCount.get(fm) ?? 0} sites`);
+        } else assert.equal(a.kind, 'today');
+      }
+    }
+  }
+  // the 2006 NPS report and today's NPS page disagree on the day in August 1909; the story doesn't pick one
+  const quarry = FOSSIL_STORIES.find((s) => s.id === 'dinosaur-quarry');
+  assert.ok(!/August 1[79]\b/.test(JSON.stringify(quarry)));
+  assert.ok(/August 1909/.test(JSON.stringify(quarry)));
+});
+
+test('library manifest: public-domain NPS files tagged to real stories', () => {
+  const { FOSSIL_STORIES } = load('app/atlas/fossil-atlas/stories.ts');
+  const manifest = JSON.parse(fs.readFileSync('scripts/atlas/manifests/fossil-atlas.json', 'utf8'));
+  const ids = new Set(FOSSIL_STORIES.map((s) => s.id));
+  const docUrls = new Set(FOSSIL_STORIES.flatMap((s) => s.docs.map((d) => d.url)));
+  for (const e of manifest) {
+    assert.equal(e.license, 'public domain');
+    assert.deepEqual([...e.projects], ['fossil-atlas']);
+    assert.match(e.url, /\.pdf$/);
+    assert.ok(docUrls.has(e.url), `${e.title} is cited by a story`);
+    for (const t of e.tags.filter((t) => t.startsWith('story:'))) assert.ok(ids.has(t.slice(6)), t);
+  }
+});

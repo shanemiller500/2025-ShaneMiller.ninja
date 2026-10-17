@@ -90,6 +90,14 @@
   outline-offset: 2px;
 }
 
+/* accent variant (Prehistoric USA time machine) */
+.atlas-range-lime::-webkit-slider-thumb {
+  border-color: #a3e635;
+}
+.atlas-range-lime::-moz-range-thumb {
+  border-color: #a3e635;
+}
+
 /* Deep-space backdrop behind the globe: a few layers of tiny stars. */
 .atlas-space {
   background-color: #02040b;

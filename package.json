@@ -82,6 +82,7 @@
     "@types/three": "^0.173.0",
     "autoprefixer": "^10.4.16",
     "firebase-admin": "^14.5.0",
+    "h5wasm": "^0.7.8",
     "mapshaper": "^0.7.87",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",

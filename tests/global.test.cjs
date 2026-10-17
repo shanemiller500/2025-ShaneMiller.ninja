@@ -164,3 +164,43 @@ test('dive bathymetry: EMODnet is used only where it agrees with NOAA', () => {
   assert.equal(depthsAgree(3, 6), true); // shallow: within 5 m
   assert.equal(depthsAgree(NaN, 10), false);
 });
+
+/* Orbiting 3D views keep turning while the person zooms; only a one-pointer drag stops them. */
+test('orbit guard: a one-pointer drag stops the orbit; taps and two-finger pinches do not', () => {
+  const { onSinglePointerDrag } = load('components/atlas/orbitGuard.ts');
+  const el = new EventTarget();
+  let stops = 0;
+  const cleanup = onSinglePointerDrag(el, () => stops++);
+  const fire = (type, id, x, y) => {
+    const e = new Event(type);
+    Object.assign(e, { pointerId: id, clientX: x, clientY: y });
+    el.dispatchEvent(e);
+  };
+  // a tap (tiny wobble) is not a drag
+  fire('pointerdown', 1, 100, 100);
+  fire('pointermove', 1, 102, 101);
+  fire('pointerup', 1, 102, 101);
+  assert.equal(stops, 0);
+  // a two-finger pinch: both fingers move apart
+  fire('pointerdown', 1, 100, 100);
+  fire('pointerdown', 2, 200, 100);
+  fire('pointermove', 1, 60, 100);
+  fire('pointermove', 2, 240, 100);
+  fire('pointerup', 1, 60, 100);
+  fire('pointerup', 2, 240, 100);
+  assert.equal(stops, 0);
+  // a one-finger / mouse drag stops it — once per gesture
+  fire('pointerdown', 3, 100, 100);
+  fire('pointermove', 3, 130, 100);
+  fire('pointermove', 3, 160, 100);
+  fire('pointerup', 3, 160, 100);
+  assert.equal(stops, 1);
+  // a later drag (after pressing play again) stops it again
+  fire('pointerdown', 4, 100, 100);
+  fire('pointermove', 4, 100, 140);
+  assert.equal(stops, 2);
+  cleanup();
+  fire('pointerdown', 5, 0, 0);
+  fire('pointermove', 5, 50, 50);
+  assert.equal(stops, 2, 'no events after cleanup');
+});

@@ -60,9 +60,9 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "fossil-atlas",
     title: "Prehistoric USA",
-    tagline: "62,000 U.S. fossil sites by geologic period, dinosaur country, and the parks that protect famous fossil beds.",
+    tagline: "62,000 U.S. fossil sites, dinosaur country, and a time machine back 540 million years to the seas and continents they lived in.",
     status: "live",
-    sources: ["Paleobiology Database", "Macrostrat", "National Park Service"],
+    sources: ["Paleobiology Database", "PALEOMAP", "GPlates", "National Park Service"],
     glow: "from-lime-500/30 via-green-400/20 to-emerald-300/10",
   },
   {

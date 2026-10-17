@@ -2,25 +2,34 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, Bone, Check, Layers, Link2, ListOrdered, LocateFixed, Search, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Bone, Check, ChevronRight, Hourglass, Layers, Link2, ListOrdered, LocateFixed, Map as MapIcon, Pause, Play, Search, X } from "lucide-react";
+import { StoryPlayer } from "@/components/atlas/StoryPlayer";
+import type { StoryAction } from "@/components/atlas/story";
+import { useLibrary } from "@/utils/geo/useLibrary";
 import { AtlasMap } from "@/components/atlas/AtlasMap";
 import { LayerPanel } from "@/components/atlas/LayerPanel";
 import { SourceCitation } from "@/components/atlas/SourceCitation";
 import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass, useAtlasTheme } from "@/components/atlas/Hud";
-import type { Basemap, Picked, TerrainMode } from "@/components/atlas/types";
+import type { AtlasView, Basemap, Picked, TerrainMode } from "@/components/atlas/types";
 import { FLAG_DINO, FLAG_MAMMAL, FOSSILS_URL, PERIODS, extentOf, fossilFeatures, inState, periodEnd, type FossilsFile } from "@/utils/geo/fossils";
 import { formatAge } from "@/utils/geo/strange";
+import { fmtMa, outlineCenter, outlineFeatures, paleoFeatures, paleoImageUrl } from "@/utils/geo/paleo";
 import { FOSSIL_PARKS, parkById, type FossilPark } from "./featured";
-import { BONE, FOSSIL_LAYERS } from "./layers";
+import { BONE, FOSSIL_LAYERS, TIME_ONLY, TODAY_ONLY } from "./layers";
 import { FossilDetailsDrawer } from "./Details";
+import { TimeBar, useTimeMachine } from "./TimeMachine";
+import { FOSSIL_STORIES, fossilStoryById, type FossilAction } from "./stories";
 
 /* ------------------------------------------------------------------ */
 /*  Prehistoric USA — every U.S. fossil site in the Paleobiology       */
 /*  Database, by geologic period, with the dinosaur sites marked and   */
-/*  the national parks that protect famous fossil beds.                */
+/*  the national parks that protect famous fossil beds — and a time    */
+/*  machine back to Earth as it was when they were alive.              */
 /* ------------------------------------------------------------------ */
 
 type Show = "all" | "dinos" | "mammals";
+type Mode = "today" | "time" | "stories";
+const ORBIT_SPEED = 5; // degrees per second
 type Panel = "find" | "layers" | null;
 type FlyTo = { center: [number, number]; zoom?: number; pitch?: number; bearing?: number; nonce: number };
 const SHOW_FLAG: Record<Show, number | undefined> = { all: undefined, dinos: FLAG_DINO, mammals: FLAG_MAMMAL };
@@ -42,6 +51,121 @@ export default function FossilApp() {
   const [period, setPeriod] = useState<number | null>(null);
   const [formation, setFormation] = useState<number | null>(null);
 
+  /* ── modes: today's map · the time machine ─────────────────────── */
+  const [mode, setMode] = useState<Mode>(() => {
+    const q = new URLSearchParams(window.location.search);
+    return q.has("story") ? "stories" : q.has("t") ? "time" : "today";
+  });
+  /* a story chapter can open the time machine too */
+  const [storyAge, setStoryAge] = useState<number | null>(null);
+  const [startAge] = useState(() => {
+    const t = new URLSearchParams(window.location.search).get("t");
+    return t != null && Number.isFinite(Number(t)) ? Number(t) : null;
+  });
+  const timeOn = mode === "time" || (mode === "stories" && storyAge != null);
+  const machine = useTimeMachine(timeOn, startAge);
+  const [follow, setFollow] = useState(true);
+  const [view, setView] = useState<AtlasView | null>(null);
+  const zoomRef = useRef(3);
+  zoomRef.current = view?.zoom ?? zoomRef.current;
+  // ancient Earth on: its layers in, today's geology and parks out (and back as they were after)
+  const todaySaved = useRef<Record<string, boolean> | null>(null);
+  useEffect(() => {
+    if (timeOn) {
+      setPeriod(null);
+      setVisible((v) => {
+        todaySaved.current = Object.fromEntries(TODAY_ONLY.map((id) => [id, v[id]]));
+        return { ...v, ...Object.fromEntries(TIME_ONLY.map((id) => [id, true])), ...Object.fromEntries(TODAY_ONLY.map((id) => [id, false])) };
+      });
+    } else {
+      setVisible((v) => ({ ...v, ...Object.fromEntries(TIME_ONLY.map((id) => [id, false])), ...(todaySaved.current ?? Object.fromEntries(TODAY_ONLY.map((id) => [id, !!FOSSIL_LAYERS.find((l) => l.id === id)?.defaultOn]))) }));
+    }
+  }, [timeOn]);
+  const switchMode = (m: Mode) => {
+    if (m === mode) return;
+    const leavingTime = mode === "time";
+    setMode(m);
+    setStoryAge(null);
+    setPickedState(null);
+    setPanel(null);
+    if (leavingTime && m === "today") go([-104, 40], 3.4);
+  };
+  // keep today's U.S. in view as it drifts
+  const paleo = machine.data;
+  useEffect(() => {
+    if (!timeOn || !follow || !paleo) return;
+    const c = outlineCenter(paleo);
+    if (c) setFlyTo({ center: c, zoom: Math.min(Math.max(zoomRef.current, 2.2), 4.2), nonce: Date.now() });
+  }, [paleo, timeOn, follow]);
+
+  /* ── stories ───────────────────────────────────────────────────── */
+  const [storyId, setStoryId] = useState<string | null>(() => {
+    const id = new URLSearchParams(window.location.search).get("story");
+    return id && fossilStoryById(id) ? id : null;
+  });
+  const [chapter, setChapter] = useState(() => Math.max(0, Number(new URLSearchParams(window.location.search).get("ch") ?? 0) || 0));
+  const story = storyId ? fossilStoryById(storyId) ?? null : null;
+  const library = useLibrary(mode === "stories" ? { project: "fossil-atlas" } : null);
+  // each chapter flies to its camera, on today's map
+  useEffect(() => {
+    if (mode !== "stories" || !story) return;
+    const i = Math.min(chapter, story.chapters.length - 1);
+    setPickedState(null);
+    setStoryAge(null);
+    setFlyTo({ ...story.chapters[i].camera, nonce: Date.now() });
+    // run when the chapter changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, storyId, chapter]);
+  // an open story reads best over satellite; the previous map comes back after
+  const beforeStory = useRef<Basemap | null>(null);
+  useEffect(() => {
+    const reading = mode === "stories" && !!storyId;
+    if (reading && beforeStory.current == null) {
+      beforeStory.current = basemap;
+      setBasemap("satellite");
+    } else if (!reading && beforeStory.current != null) {
+      setBasemap(beforeStory.current);
+      beforeStory.current = null;
+    }
+    // only when a story opens or closes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, storyId]);
+  const openStory = (id: string | null) => {
+    setStoryId(id);
+    setChapter(0);
+    setStoryAge(null);
+  };
+
+  /* ── 3D flyover of a fossil park ───────────────────────────────── */
+  const [fly, setFly] = useState<FossilPark | null>(null);
+  const [orbiting, setOrbiting] = useState(true);
+  const beforeFly = useRef<{ basemap: Basemap; terrain: TerrainMode } | null>(null);
+  const startFly = useCallback(
+    (p: FossilPark) => {
+      if (!beforeFly.current) beforeFly.current = { basemap, terrain };
+      setFly(p);
+      setStoryAge(null);
+      if (mode === "time") setMode("today");
+      setPickedState(null);
+      setPanel(null);
+      setBasemap("satellite");
+      setTerrain("3d");
+      setOrbiting(true);
+      setFlyTo({ center: p.center, zoom: Math.min(p.zoom, 15) - 0.5, pitch: 62, bearing: 20, nonce: Date.now() });
+    },
+    [basemap, terrain, mode]
+  );
+  const endFly = useCallback(() => {
+    const b = beforeFly.current;
+    beforeFly.current = null;
+    setFly(null);
+    if (b) {
+      setBasemap(b.basemap);
+      setTerrain(b.terrain);
+    }
+  }, []);
+  const flyIndex = fly ? FOSSIL_PARKS.findIndex((p) => p.id === fly.id) : -1;
+
   useEffect(() => {
     const ctl = new AbortController();
     fetch(FOSSILS_URL, { signal: ctl.signal })
@@ -53,7 +177,18 @@ export default function FossilApp() {
 
   const flag = SHOW_FLAG[show];
   const fossils = useMemo(() => (data ? fossilFeatures(data, { periods: period != null ? new Set([period]) : undefined, formation, flag }) : undefined), [data, period, formation, flag]);
-  const mapData = useMemo(() => ({ fossils }), [fossils]);
+  const paleoFossils = useMemo(() => (timeOn && data && paleo ? paleoFeatures(data, paleo, { formation, flag }) : undefined), [timeOn, data, paleo, formation, flag]);
+  const mapData = useMemo(
+    () =>
+      timeOn
+        ? {
+            fossils: paleoFossils ?? { type: "FeatureCollection" as const, features: [] },
+            usthen: paleo ? outlineFeatures(paleo) : undefined,
+            ancient: machine.slice ? { url: paleoImageUrl(machine.slice.file) } : undefined,
+          }
+        : { fossils },
+    [timeOn, fossils, paleoFossils, paleo, machine.slice]
+  );
 
   /* how many sites each period chip would show under the other filters */
   const perCounts = useMemo(() => {
@@ -114,7 +249,31 @@ export default function FossilApp() {
     if (ext) go(ext.center, Math.min(ext.zoom, 7));
   };
 
-  /* ── share links: ?park · ?coll · ?fm · ?period · ?show ─────────── */
+  const runStoryAction = (a: StoryAction<FossilAction>) => {
+    const v = String(a.value ?? "");
+    if (a.kind === "time") {
+      setPickedState(null);
+      setFollow(true);
+      setStoryAge(Number(v));
+      machine.setAge(Number(v));
+    } else if (a.kind === "today") {
+      setStoryAge(null);
+      if (story) setFlyTo({ ...story.chapters[Math.min(chapter, story.chapters.length - 1)].camera, nonce: Date.now() });
+    } else if (a.kind === "park") {
+      const p = parkById(v);
+      setStoryAge(null);
+      if (p) pickPark(p);
+    } else if (a.kind === "fly") {
+      const p = parkById(v);
+      if (p) startFly(p);
+    } else if (a.kind === "formation" && data) {
+      const fm = data.formations.indexOf(v);
+      setStoryAge(null);
+      if (fm >= 0) showFormation(fm);
+    }
+  };
+
+  /* ── share links: ?park · ?coll · ?fm · ?period · ?show · ?t · ?story ── */
   const urlRead = useRef(false);
   useEffect(() => {
     if (urlRead.current || !data) return;
@@ -149,9 +308,13 @@ export default function FossilApp() {
     if (formation != null) q.set("fm", data.formations[formation]);
     if (period != null) q.set("period", PERIODS[period].key);
     if (show !== "all") q.set("show", show);
+    if (mode === "stories" && storyId) {
+      q.set("story", storyId);
+      if (chapter) q.set("ch", String(chapter));
+    } else if (timeOn) q.set("t", String(machine.age));
     const qs = q.toString();
     window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
-  }, [picked, formation, period, show, data]);
+  }, [picked, formation, period, show, data, timeOn, machine.age, mode, storyId, chapter]);
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
     try {
@@ -180,9 +343,12 @@ export default function FossilApp() {
         onPick={setPicked}
         flyTo={flyTo}
         initialView={initialView}
+        onView={setView}
+        orbit={fly && orbiting ? ORBIT_SPEED : 0}
+        onOrbitStop={() => setOrbiting(false)}
         className="atlas-space absolute inset-0"
       >
-        <FossilDetailsDrawer picked={picked} data={data} onClose={() => setPickedState(null)} onFormation={showFormation} />
+        <FossilDetailsDrawer picked={picked} data={data} then={timeOn && machine.slice ? machine.slice : null} onClose={() => setPickedState(null)} onFormation={timeOn ? undefined : showFormation} onFly={startFly} />
       </AtlasMap>
 
       {/* ── top-left ─────────────────────────────────────────────── */}
@@ -205,6 +371,30 @@ export default function FossilApp() {
             <span className="hidden sm:inline">{copied ? "Copied" : "Share"}</span>
           </button>
         </div>
+        {!fly && (
+          <HudSwitch
+            id="pf-mode"
+            ariaLabel="Mode"
+            value={mode}
+            onChange={switchMode}
+            className="pointer-events-auto"
+            options={[
+              { key: "today", label: <><MapIcon className="h-3.5 w-3.5" />Today</>, title: "Where fossils are found today" },
+              { key: "time", label: <><Hourglass className="h-3.5 w-3.5" />Time machine</>, title: "Earth as it was, with the fossils where they lived" },
+              { key: "stories", label: <><BookOpen className="h-3.5 w-3.5" />Stories</>, title: "Guided stories from the rock record" },
+            ]}
+          />
+        )}
+        {mode === "stories" && storyAge != null && machine.slice && (
+          <span className={`${hudGlass} pointer-events-auto inline-flex items-center gap-2 px-3 py-1.5 text-[12px] text-white`}>
+            <Hourglass className="h-3.5 w-3.5 text-lime-300" />
+            <span className="font-mono font-semibold">{fmtMa(machine.slice.age)}</span>
+            <span className="text-slate-400">· {machine.slice.label}</span>
+            <button type="button" onClick={() => runStoryAction({ label: "", kind: "today" })} aria-label="Back to today's map" className="rounded-md p-0.5 text-slate-400 hover:bg-white/10 hover:text-white">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        )}
         <HudSwitch
           id="pf-show"
           ariaLabel="Which fossil sites"
@@ -231,10 +421,54 @@ export default function FossilApp() {
       </div>
 
       {/* ── right rail ───────────────────────────────────────────── */}
+      {mode !== "stories" && !fly && (
       <div className="absolute right-3 top-[168px] z-30 flex flex-col gap-2">
-        <HudIconButton icon={ListOrdered} label="Find a park, formation or state" active={panel === "find"} onClick={() => togglePanel("find")} badge={FOSSIL_PARKS.length} />
+        {!timeOn && <HudIconButton icon={ListOrdered} label="Find a park, formation or state" active={panel === "find"} onClick={() => togglePanel("find")} badge={FOSSIL_PARKS.length} />}
         <HudIconButton icon={Layers} label="Layers" active={panel === "layers"} onClick={() => togglePanel("layers")} />
       </div>
+      )}
+
+      {mode === "stories" && !fly && (
+        <StoryPlayer
+          stories={FOSSIL_STORIES}
+          storyId={storyId}
+          chapter={chapter}
+          onStory={openStory}
+          onChapter={(i) => setChapter(Math.max(0, i))}
+          onAction={runStoryAction}
+          library={library.docs}
+          className="absolute inset-x-3 bottom-3 z-30 max-h-[48vh] sm:inset-x-auto sm:left-4 sm:w-[400px] sm:max-h-[min(560px,62vh)]"
+        />
+      )}
+
+      {fly && (
+        <div className="absolute inset-x-3 bottom-3 z-30 flex justify-center">
+          <HudPanel className="flex max-w-full items-center gap-2 px-3 py-2">
+            <div className="mr-1 min-w-0">
+              <HudLabel className="!text-lime-200/80">Flyover</HudLabel>
+              <p className="truncate font-mono text-[13px] font-semibold uppercase tracking-[0.12em] text-white">{fly.name}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOrbiting((o) => !o)}
+              aria-pressed={orbiting}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 font-mono text-[11px] uppercase tracking-wider ${orbiting ? "border-lime-300/40 bg-lime-400/15 text-lime-100" : "border-white/10 text-slate-300"}`}
+            >
+              {orbiting ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />} Orbit
+            </button>
+            <button
+              type="button"
+              onClick={() => startFly(FOSSIL_PARKS[(flyIndex + 1) % FOSSIL_PARKS.length])}
+              className="inline-flex h-9 items-center gap-1 rounded-xl border border-white/10 px-3 font-mono text-[11px] uppercase tracking-wider text-slate-300 hover:text-white"
+            >
+              Next <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" onClick={endFly} aria-label="End the flyover" className="inline-flex h-9 items-center gap-1 rounded-xl border border-white/10 px-3 font-mono text-[11px] uppercase tracking-wider text-slate-300 hover:text-white">
+              <X className="h-3.5 w-3.5" /> Exit
+            </button>
+          </HudPanel>
+        </div>
+      )}
       {panel && (
         <SidePanel title={panel === "find" ? "Find" : "Layers"} onClose={() => setPanel(null)}>
           {panel === "find" && <FindPanel data={data} onPark={pickPark} onFormation={showFormation} onState={showState} onCollection={(i) => pickCollection(i, 10)} onGo={go} />}
@@ -248,7 +482,18 @@ export default function FossilApp() {
       )}
 
       {/* ── bottom: geologic periods + status ────────────────────── */}
+      {mode !== "stories" && !fly && (
       <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex flex-col items-start gap-2 sm:left-4 sm:right-auto sm:max-w-[min(860px,calc(100%-6rem))]">
+        {timeOn ? (
+          <div className="pointer-events-auto flex w-full flex-col items-start gap-2 sm:w-[640px]">
+            <label className={`${hudGlass} inline-flex cursor-pointer items-center gap-2 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-300`}>
+              <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="accent-lime-400" />
+              Follow the U.S. as it drifts
+            </label>
+            <TimeBar machine={machine} shown={paleoFossils ? paleoFossils.features.length : null} />
+          </div>
+        ) : (
+          <>
         <PeriodStrip counts={perCounts} value={period} onChange={setPeriod} />
         <HudPanel className="pointer-events-auto flex max-w-full items-center gap-5 overflow-x-auto px-4 py-2.5">
           <HudStat label="Sites shown" value={data ? shown.toLocaleString() : "—"} tone="text-lime-300" />
@@ -257,7 +502,10 @@ export default function FossilApp() {
           <HudStat label="Mammals" value={data ? mammalCount.toLocaleString() : "—"} tone="text-rose-300" onClick={() => setShow("mammals")} />
           <HudStat label="Parks" value={FOSSIL_PARKS.length} tone="text-white" onClick={() => togglePanel("find")} />
         </HudPanel>
+          </>
+        )}
       </div>
+      )}
     </div>
   );
 }

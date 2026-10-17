@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { onSinglePointerDrag } from "./orbitGuard";
 import type { PointCloud } from "@/utils/geo/ept";
 
 /* ------------------------------------------------------------------ */
@@ -20,6 +21,8 @@ export interface PointCloudViewProps {
   strip: boolean;
   exaggeration: number;
   autoRotate: boolean;
+  /** The person dragged the view — the page should turn autoRotate off (zooming doesn't count) */
+  onAutoRotateStop?: () => void;
   className?: string;
 }
 
@@ -87,10 +90,10 @@ const fragmentShader = /* glsl */ `
     gl_FragColor = vec4(vColor, vAlpha);
   }`;
 
-export function PointCloudView({ cloud, color, strip, exaggeration, autoRotate, className = "" }: PointCloudViewProps) {
+export function PointCloudView({ cloud, color, strip, exaggeration, autoRotate, onAutoRotateStop, className = "" }: PointCloudViewProps) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const live = useRef({ color, strip, exaggeration, autoRotate });
-  live.current = { color, strip, exaggeration, autoRotate };
+  const live = useRef({ color, strip, exaggeration, autoRotate, onAutoRotateStop });
+  live.current = { color, strip, exaggeration, autoRotate, onAutoRotateStop };
 
   useEffect(() => {
     const el = mountRef.current;
@@ -152,7 +155,11 @@ export function PointCloudView({ cloud, color, strip, exaggeration, autoRotate, 
     controls.autoRotateSpeed = 0.6;
     camera.position.set(s * 0.55, s * 0.9, s * 1.35);
     controls.target.set(0, cloud.zRange[1] * 0.3, 0);
-    renderer.domElement.addEventListener("pointerdown", () => (live.current.autoRotate = false));
+    // zooming keeps it turning; dragging to look around stops it
+    const stopGuard = onSinglePointerDrag(renderer.domElement, () => {
+      live.current.autoRotate = false;
+      live.current.onAutoRotateStop?.();
+    });
 
     const resize = () => {
       renderer.setSize(el.clientWidth, el.clientHeight, false);
@@ -186,6 +193,7 @@ export function PointCloudView({ cloud, color, strip, exaggeration, autoRotate, 
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      stopGuard();
       controls.dispose();
       geo.dispose();
       mat.dispose();
