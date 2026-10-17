@@ -10,7 +10,7 @@ import { LayerPanel } from "@/components/atlas/LayerPanel";
 import { SourceCitation } from "@/components/atlas/SourceCitation";
 import { StoryPlayer } from "@/components/atlas/StoryPlayer";
 import { CaveScope, type CaveTelemetry, type CaveView } from "@/components/atlas/CaveScope";
-import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass } from "@/components/atlas/Hud";
+import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass, useAtlasTheme } from "@/components/atlas/Hud";
 import type { CaveSpec } from "@/components/atlas/caveGen";
 import type { StoryAction } from "@/components/atlas/story";
 import type { Basemap, Picked, TerrainMode } from "@/components/atlas/types";
@@ -45,6 +45,7 @@ const KY_SINK_SOURCES = [{ url: "https://services3.arcgis.com/ghsX9CKghMvyYjBU/a
 const KY_BBOX: [number, number, number, number] = [-89.6, 36.4, -81.9, 39.2];
 
 export default function UndergroundApp() {
+  const dark = useAtlasTheme();
   const [mode, setMode] = useState<Mode>("map");
   const [xray, setXray] = useState(false);
   const [caves, setCaves] = useState<CaveCollection | null>(null);
@@ -314,14 +315,14 @@ export default function UndergroundApp() {
   const share = karst?.stats?.share;
 
   return (
-    <div className="dark fixed inset-0 overflow-hidden bg-[#02040b] text-slate-100">
+    <div className={`atlas-map-page fixed inset-0 overflow-hidden ${dark ? "dark bg-[#02040b] text-slate-100" : "bg-slate-50 text-slate-900"}`}>
       <AtlasMap
         layers={UNDERGROUND_LAYERS}
         visible={shownVisible}
         data={data}
         basemap={basemap}
         terrain={terrain}
-        dark
+        dark={dark}
         atmosphere
         selected={picked}
         onPick={setPicked}

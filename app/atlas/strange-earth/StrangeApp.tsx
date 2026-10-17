@@ -6,7 +6,7 @@ import { ArrowLeft, Check, ChevronLeft, ChevronRight, Layers, Link2, ListOrdered
 import { AtlasMap } from "@/components/atlas/AtlasMap";
 import { LayerPanel } from "@/components/atlas/LayerPanel";
 import { SourceCitation } from "@/components/atlas/SourceCitation";
-import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass } from "@/components/atlas/Hud";
+import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass, useAtlasTheme } from "@/components/atlas/Hud";
 import type { AtlasView, Basemap, Picked, TerrainMode } from "@/components/atlas/types";
 import { IMPACTS_URL, LANDFORMS_URL, STRANGE_CATS, STRANGE_URL, formatAge, kmBetween, ringRadius0, strangeCat, type ImpactProps, type StrangeCat, type StrangeProps } from "@/utils/geo/strange";
 import { ANOMALIES, VERDICTS, anomalyById, type Anomaly } from "./featured";
@@ -40,6 +40,7 @@ const TOUR_STOP_MS = 24000;
 const fitZoom = () => Math.min(3.2, Math.max(1.4, Math.log2((Math.min(window.innerWidth, window.innerHeight * 1.4) * 360) / (512 * 150))));
 
 export default function StrangeApp() {
+  const dark = useAtlasTheme();
   const [mode, setMode] = useState<Mode>("map");
   const [places, setPlaces] = useState<Fc<StrangeProps> | null>(null);
   const [impacts, setImpacts] = useState<Fc<ImpactProps> | null>(null);
@@ -399,7 +400,7 @@ export default function StrangeApp() {
   const landformsHidden = visible.landforms && (view?.zoom ?? 0) < 4.5;
 
   return (
-    <div className="dark fixed inset-0 overflow-hidden bg-[#03020a] text-slate-100">
+    <div className={`atlas-map-page fixed inset-0 overflow-hidden ${dark ? "dark bg-[#03020a] text-slate-100" : "bg-slate-50 text-slate-900"}`}>
       <style>{`@keyframes tourBar { from { transform: scaleX(0) } to { transform: scaleX(1) } } @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }`}</style>
       <AtlasMap
         layers={STRANGE_LAYERS}
@@ -407,7 +408,7 @@ export default function StrangeApp() {
         data={data}
         basemap={basemap}
         terrain={terrain}
-        dark
+        dark={dark}
         atmosphere
         selected={picked}
         onPick={mode === "fly" ? undefined : setPicked}

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import maplibregl, { type GeoJSONSource, type Map as MlMap, type MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./atlas.css";
@@ -66,6 +68,7 @@ export function AtlasMap({
   className = "",
   children,
 }: AtlasMapProps) {
+  const { setTheme } = useTheme();
   const frameRef = useRef<HTMLDivElement>(null);
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
@@ -109,10 +112,11 @@ export function AtlasMap({
       }
       if (atmosphere) {
         try {
+          const night = live.current.dark;
           map.setSky({
-            "sky-color": "#0b1a3a",
-            "horizon-color": "#1d4ed8",
-            "fog-color": "#0b1a3a",
+            "sky-color": night ? "#0b1a3a" : "#e9f1fb",
+            "horizon-color": night ? "#1d4ed8" : "#b9d5f5",
+            "fog-color": night ? "#0b1a3a" : "#e6edfb",
             "sky-horizon-blend": 0.6,
             "horizon-fog-blend": 0.8,
             "fog-ground-blend": 0.95,
@@ -391,6 +395,15 @@ export function AtlasMap({
       {/* maplibre's own CSS makes the container position:relative, so size it in-flow */}
       <div ref={mapDivRef} className="h-full w-full" />
       {children}
+      <button
+        type="button"
+        onClick={() => setTheme(dark ? "light" : "dark")}
+        aria-label={dark ? "Switch map to light mode" : "Switch map to dark mode"}
+        title={dark ? "Light mode" : "Dark mode"}
+        className="atlas-theme-button absolute right-3 top-[126px] z-40 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-white/90 text-slate-600 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.35)] backdrop-blur-xl transition-colors hover:border-indigo-300 hover:text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:border-white/10 dark:bg-slate-950/65 dark:text-slate-200 dark:hover:border-cyan-300/40 dark:hover:text-cyan-200"
+      >
+        {dark ? <Sun aria-hidden className="h-[18px] w-[18px]" /> : <Moon aria-hidden className="h-[18px] w-[18px]" />}
+      </button>
     </div>
   );
 }

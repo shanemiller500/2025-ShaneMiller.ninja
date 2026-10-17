@@ -77,6 +77,7 @@ export function useHistory(active: boolean) {
   const [error, setError] = useState<string | null>(null);
   const year = years[hazard] ?? 2020;
   const setYear = (y: number) => setYears((cur) => ({ ...cur, [hazard]: y }));
+  const setYearFor = (hz: HistoryHazard, y: number) => setYears((cur) => ({ ...cur, [hz]: y }));
 
   /* load whichever archive the chosen hazard needs, once */
   useEffect(() => {
@@ -258,6 +259,7 @@ export function useHistory(active: boolean) {
     setHazard,
     year,
     setYear,
+    setYearFor,
     allYears,
     setAllYears,
     minCat,

@@ -1,0 +1,115 @@
+[
+  {
+    "url": "https://www.weather.gov/media/publications/assessments/Joplin_tornado.pdf",
+    "title": "Joplin, Missouri, Tornado — May 22, 2011 (Service Assessment)",
+    "source": "NOAA National Weather Service",
+    "sourceUrl": "https://www.weather.gov/publications/assessments",
+    "license": "public domain",
+    "year": 2011,
+    "summary": "NWS Central Region Service Assessment of the EF-5 tornado that killed 158 people in Joplin: the warnings, the timeline, and why most residents waited for more confirmation before taking cover.",
+    "projects": [
+      "disaster-atlas"
+    ],
+    "tags": [
+      "story:joplin-2011",
+      "tornado",
+      "joplin",
+      "missouri",
+      "ef5",
+      "warnings",
+      "service assessment"
+    ],
+    "region": "Missouri",
+    "bbox": [
+      -94.7,
+      36.9,
+      -94.1,
+      37.2
+    ]
+  },
+  {
+    "url": "https://www.nhc.noaa.gov/data/tcr/AL122005_Katrina.pdf",
+    "title": "Tropical Cyclone Report: Hurricane Katrina (updated)",
+    "source": "NOAA National Hurricane Center",
+    "sourceUrl": "https://www.nhc.noaa.gov/data/tcr/",
+    "license": "public domain",
+    "year": 2005,
+    "summary": "NHC's report on Hurricane Katrina: track, intensity, storm surge, the New Orleans levee failures, and the revised toll of nearly 1,400 direct and indirect deaths.",
+    "projects": [
+      "disaster-atlas"
+    ],
+    "tags": [
+      "story:katrina-2005",
+      "hurricane",
+      "katrina",
+      "new orleans",
+      "storm surge",
+      "tropical cyclone report"
+    ],
+    "region": "Gulf Coast",
+    "bbox": [
+      -92,
+      28.5,
+      -87,
+      31.5
+    ]
+  },
+  {
+    "url": "https://www.nhc.noaa.gov/data/tcr/AL092017_Harvey.pdf",
+    "title": "Tropical Cyclone Report: Hurricane Harvey",
+    "source": "NOAA National Hurricane Center",
+    "sourceUrl": "https://www.nhc.noaa.gov/data/tcr/",
+    "license": "public domain",
+    "year": 2018,
+    "summary": "NHC's report on Hurricane Harvey: the Category 4 landfall near Rockport and the most significant tropical cyclone rainfall event in U.S. history, peaking at 60.58 inches near Nederland, Texas.",
+    "projects": [
+      "disaster-atlas"
+    ],
+    "tags": [
+      "story:harvey-2017",
+      "hurricane",
+      "harvey",
+      "texas",
+      "houston",
+      "rainfall",
+      "flooding",
+      "tropical cyclone report"
+    ],
+    "region": "Texas",
+    "bbox": [
+      -98,
+      27.5,
+      -93.5,
+      31
+    ]
+  },
+  {
+    "url": "https://nvlpubs.nist.gov/nistpubs/TechnicalNotes/NIST.TN.2252.pdf",
+    "title": "A Case Study of the Camp Fire — Notification, Evacuation, Traffic, and Temporary Refuge Areas (NETTRA) (NIST TN 2252)",
+    "source": "NIST",
+    "sourceUrl": "https://doi.org/10.6028/NIST.TN.2252",
+    "license": "public domain",
+    "year": 2023,
+    "summary": "NIST case study of how people were warned, evacuated, moved through traffic and sheltered in temporary refuge areas during the 2018 Camp Fire in Concow, Paradise and Magalia — a fire that covered 153,336 acres, destroyed 18,804 structures and killed 85 civilians.",
+    "projects": [
+      "disaster-atlas"
+    ],
+    "tags": [
+      "story:camp-fire-2018",
+      "wildfire",
+      "camp fire",
+      "paradise",
+      "california",
+      "evacuation",
+      "wui",
+      "nist"
+    ],
+    "region": "California",
+    "bbox": [
+      -121.9,
+      39.6,
+      -121.3,
+      40
+    ]
+  }
+]

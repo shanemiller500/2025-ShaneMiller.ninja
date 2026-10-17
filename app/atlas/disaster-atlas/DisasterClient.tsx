@@ -8,8 +8,8 @@ import { trackEvent } from "@/utils/mixpanel";
 const DisasterApp = dynamic(() => import("./DisasterApp"), {
   ssr: false,
   loading: () => (
-    <div className="fixed inset-0 flex items-center justify-center bg-[#0a0403]">
-      <p className="animate-pulse font-mono text-xs uppercase tracking-[0.3em] text-orange-200/70">Pulling live hazard feeds…</p>
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-50 dark:bg-[#0a0403]">
+      <p className="animate-pulse font-mono text-xs uppercase tracking-[0.3em] text-orange-700 dark:text-orange-200/70">Pulling live hazard feeds…</p>
     </div>
   ),
 });

@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -11,6 +12,7 @@ import Link from "next/link";
 import {
   Activity,
   ArrowLeft,
+  BookOpen,
   Flame,
   History as HistoryIcon,
   Layers,
@@ -32,6 +34,7 @@ import {
   HudStat,
   HudSwitch,
   hudGlass,
+  useAtlasTheme,
 } from "@/components/atlas/Hud";
 import type { Basemap, Picked, TerrainMode } from "@/components/atlas/types";
 import {
@@ -46,7 +49,12 @@ import {
   type Storm,
 } from "@/utils/geo/hazards";
 import { DISASTER_LAYERS, HISTORY_LAYER_IDS } from "./layers";
+import { pathPolygon, type AreaGeometry } from "@/utils/geo/impact";
 import { HistoryBar, useHistory } from "./HistoryBar";
+import { StoryPlayer } from "@/components/atlas/StoryPlayer";
+import type { StoryAction } from "@/components/atlas/story";
+import { DISASTER_STORIES, type DisasterAction } from "./stories";
+import { NOTABLE } from "./history";
 import { DisasterDetails, loadNri } from "./Details";
 
 /* ------------------------------------------------------------------ */
@@ -143,9 +151,11 @@ const HAZARD_LAYER: Record<string, string> = {
 };
 
 export default function DisasterApp() {
+  const dark = useAtlasTheme();
   const { live, failed, updated, refresh } = useLiveHazards();
-  const [mode, setMode] = useState<"live" | "history">("live");
-  const hist = useHistory(mode === "history");
+  const [mode, setMode] = useState<"live" | "history" | "stories">("live");
+  // stories draw on the same archives as history mode
+  const hist = useHistory(mode !== "live");
   const [visible, setVisible] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(DISASTER_LAYERS.map((l) => [l.id, !!l.defaultOn])),
   );
@@ -294,24 +304,126 @@ export default function DisasterApp() {
     (f) => f.properties?.status !== "action",
   );
 
+  /** Full geometry for the impact counts (map hits are clipped to tiles, so look it up in the data). */
+  const geometryFor = useCallback(
+    (p: Picked): AreaGeometry | null => {
+      const poly = (f?: GeoJSON.Feature) => (f && (f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon") ? (f.geometry as AreaGeometry) : null);
+      const byId = (fc: FC | null | undefined, id: unknown) => fc?.features.find((f) => String(f.properties?.id) === String(id));
+      if (p.layer === "fires") return poly(byId(live.fires, p.props.id));
+      if (p.layer === "alerts") return poly(byId(live.alerts, p.props.id));
+      if (p.layer === "hist-fires") return poly(byId(hist.data["hist-fires"], p.props.id));
+      if (p.layer === "storms") return poly(live.storms?.find((st) => st.id === p.props.storm)?.cone[0]);
+      if (p.layer === "hist-tornadoes") {
+        const c = hist.archives.tornadoes;
+        const i = Number(p.props.i ?? p.id);
+        if (!c || !Number.isFinite(i) || c.yr[i] === undefined) return null;
+        return pathPolygon([c.slon[i], c.slat[i]], c.elat[i] ? [c.elon[i], c.elat[i]] : null, c.wid[i]);
+      }
+      return null;
+    },
+    [live.fires, live.alerts, live.storms, hist.data, hist.archives.tornadoes]
+  );
+
   const citations = DISASTER_LAYERS.filter(
     (l) => shownVisible[l.id] && l.citation.label,
   ).map((l) => l.citation);
-  const switchMode = (m: "live" | "history") => {
+  const switchMode = (m: "live" | "history" | "stories") => {
     setMode(m);
     setPickedState(null);
     setPanel(null);
   };
 
+  /* ── stories ───────────────────────────────────────────────────── */
+  const [storyId, setStoryId] = useState<string | null>(null);
+  const [chapter, setChapter] = useState(0);
+  const story = DISASTER_STORIES.find((st) => st.id === storyId) ?? null;
+  // each chapter sets the archive map up, then flies to its camera
+  useEffect(() => {
+    if (mode !== "stories" || !story) return;
+    const i = Math.min(chapter, story.chapters.length - 1);
+    const setup = story.setup[i];
+    if (setup) {
+      hist.setHazard(setup.hazard);
+      hist.setAllYears(false);
+      hist.setMinCat(0);
+      hist.setMinMag(0);
+      hist.setMinAcres(1000);
+      hist.setYearFor(setup.hazard, setup.year);
+    }
+    setPickedState(null);
+    setFlyTo({ ...story.chapters[i].camera, nonce: Date.now() });
+    // run when the chapter changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, storyId, chapter]);
+  /* share links: ?story=<id>&ch=<n> · ?mode=history */
+  const urlRead = useRef(false);
+  useEffect(() => {
+    if (urlRead.current) return;
+    urlRead.current = true;
+    const q = new URLSearchParams(window.location.search);
+    const st = q.get("story");
+    if (st && DISASTER_STORIES.some((x) => x.id === st)) {
+      setStoryId(st);
+      setChapter(Math.max(0, Number(q.get("ch")) || 0));
+      setMode("stories");
+    } else if (q.get("mode") === "history") setMode("history");
+  }, []);
+  useEffect(() => {
+    if (!urlRead.current) return;
+    const q = new URLSearchParams();
+    if (mode === "stories" && storyId) {
+      q.set("story", storyId);
+      if (chapter) q.set("ch", String(chapter));
+    } else if (mode !== "live") q.set("mode", mode);
+    const qs = q.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [mode, storyId, chapter]);
+  const openStory = (id: string | null) => {
+    setStoryId(id);
+    setChapter(0);
+    setPickedState(null);
+  };
+  // a fire to open once that year's perimeters arrive
+  const [pendingFire, setPendingFire] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pendingFire) return;
+    const f = hist.data["hist-fires"].features.find((x) => String(x.properties?.name ?? "").toUpperCase() === pendingFire);
+    if (!f) return;
+    setPendingFire(null);
+    const ring = (f.geometry.type === "Polygon" ? f.geometry.coordinates[0] : f.geometry.type === "MultiPolygon" ? f.geometry.coordinates.flatMap((pp) => pp[0]) : []) as number[][];
+    const at: [number, number] = ring.length ? [ring.reduce((a, c) => a + c[0], 0) / ring.length, ring.reduce((a, c) => a + c[1], 0) / ring.length] : [0, 0];
+    setPicked({ layer: "hist-fires", id: f.properties?.id, props: (f.properties ?? {}) as Record<string, unknown>, lngLat: at });
+  }, [pendingFire, hist.data, setPicked]);
+  const runStoryAction = (a: StoryAction<DisasterAction>) => {
+    const v = String(a.value ?? "");
+    if (a.kind === "hurricane") {
+      const st = hist.archives.storms?.find((x) => x.id === v);
+      if (!st) return;
+      const peak = st.pts.reduce((m, q) => (q[3] > m[3] ? q : m), st.pts[0]);
+      setPicked({ layer: "hist-hurricanes", props: { id: st.id }, lngLat: [peak[2] / 10, peak[1] / 10] });
+    } else if (a.kind === "tornado") {
+      const n = NOTABLE.tornadoes.find((x) => x.label === v);
+      const c = hist.archives.tornadoes;
+      if (!n || !c) return;
+      // several tornadoes can share a day, state and rating: take the deadliest
+      let best = -1;
+      for (let i = 0; i < c.yr.length; i++) if (c.yr[i] === n.year && c.md[i] === n.md && c.st[i] === n.st && c.mag[i] === n.mag && (best < 0 || c.fat[i] > c.fat[best])) best = i;
+      if (best >= 0) setPicked({ layer: "hist-tornadoes", id: best, props: { i: best }, lngLat: [c.slon[best], c.slat[best]] });
+    } else if (a.kind === "fire") {
+      const [, name] = v.split(":");
+      setPendingFire(name.toUpperCase());
+    }
+  };
+
   return (
-    <div className="dark fixed inset-0 overflow-hidden bg-[#0a0403] text-slate-100">
+    <div className={`atlas-map-page fixed inset-0 overflow-hidden ${dark ? "dark bg-[#0a0403] text-slate-100" : "bg-slate-50 text-slate-900"}`}>
       <AtlasMap
         layers={DISASTER_LAYERS}
         visible={shownVisible}
         data={data}
         basemap={basemap}
         terrain={terrain}
-        dark
+        dark={dark}
         atmosphere
         selected={picked}
         onPick={setPicked}
@@ -323,6 +435,7 @@ export default function DisasterApp() {
           picked={picked}
           storms={live.storms ?? []}
           history={hist.archives}
+          geometryFor={geometryFor}
           onClose={() => setPickedState(null)}
         />
       </AtlasMap>
@@ -397,6 +510,16 @@ export default function DisasterApp() {
               ),
               title:
                 "Hurricanes since 1851, tornadoes since 1950, past fires and FEMA declarations",
+            },
+            {
+              key: "stories",
+              label: (
+                <>
+                  <BookOpen className="h-3.5 w-3.5" />
+                  Stories
+                </>
+              ),
+              title: "Joplin, Katrina, Harvey and the Camp Fire — from the federal reports",
             },
           ]}
         />
@@ -519,6 +642,17 @@ export default function DisasterApp() {
         </SidePanel>
       )}
 
+      {mode === "stories" && (
+        <StoryPlayer
+          stories={DISASTER_STORIES}
+          storyId={storyId}
+          chapter={chapter}
+          onStory={openStory}
+          onChapter={(i) => setChapter(Math.max(0, i))}
+          onAction={runStoryAction}
+          className="absolute inset-x-3 bottom-3 z-30 max-h-[48vh] sm:inset-x-auto sm:left-4 sm:w-[400px] sm:max-h-[min(560px,62vh)]"
+        />
+      )}
       {mode === "history" && (
         <HistoryBar h={hist} onPick={setPicked} onGo={go} />
       )}

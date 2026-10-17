@@ -6,6 +6,7 @@ import { ArrowLeft, ExternalLink, FileText, Search, X } from "lucide-react";
 import { ATLAS_PROJECTS } from "@/utils/geo/projects";
 import { searchTerm } from "@/utils/geo/library";
 import { useLibrary } from "@/utils/geo/useLibrary";
+import "@/components/atlas/atlas-hub.css";
 
 /* ------------------------------------------------------------------ */
 /*  /atlas/library — the documents behind the maps. Search hits the    */
@@ -28,9 +29,9 @@ export default function LibraryClient() {
   const usedProjects = ATLAS_PROJECTS.filter((p) => p.status === "live" || (docs ?? []).some((d) => d.projects.includes(p.slug)));
 
   return (
-    <div className="space-y-8 pb-16 pt-8 sm:pt-12">
+    <div className="atlas-page space-y-8 pb-16 pt-10 sm:pt-14">
       <header className="max-w-2xl">
-        <Link href="/atlas" className="inline-flex items-center gap-1.5 font-mono text-xs text-indigo-500 hover:text-indigo-600 dark:text-indigo-300">
+        <Link href="/atlas" className="atlas-eyebrow inline-flex items-center gap-1.5 font-mono text-xs text-indigo-500 transition-colors hover:text-indigo-600 dark:text-indigo-300">
           <ArrowLeft className="h-3.5 w-3.5" /> ~/atlas
         </Link>
         <h1 className="mt-4 font-aspekta text-4xl font-[650] tracking-tight text-slate-900 dark:text-white md:text-5xl">Library</h1>
@@ -46,7 +47,7 @@ export default function LibraryClient() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search the text — tsunami, subduction, 1906, caldera…"
-            className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-10 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100"
+            className="w-full rounded-2xl border border-slate-200 bg-white/80 py-3 pl-10 pr-10 text-sm text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.04)] outline-none backdrop-blur-sm transition-[border-color,box-shadow] duration-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100"
           />
           {query && (
             <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-700">
@@ -81,7 +82,7 @@ export default function LibraryClient() {
 
       <ul className="grid gap-3 md:grid-cols-2">
         {shown.map((d) => (
-          <li key={d.id} className="flex flex-col rounded-2xl border border-slate-200/70 bg-white p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
+          <li key={d.id} className="flex flex-col rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur-sm dark:border-white/[0.08] dark:bg-white/[0.03]">
             <div className="flex items-start gap-3">
               <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500 dark:text-indigo-300">
                 <FileText className="h-[18px] w-[18px]" />

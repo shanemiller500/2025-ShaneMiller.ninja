@@ -143,3 +143,43 @@ test('FEMA declarations: every county but Connecticut matches (renamed ones via 
   const hurricanes = hist.declarationFeatures(nri, decl, 'Hurricane');
   assert.ok(hurricanes.features.find((f) => f.properties.id === '22071').properties.n >= 10, 'Orleans Parish hurricane declarations');
 });
+
+/* ── Phase 3: impact geometry + stories ──────────────────────────── */
+const impact = load('utils/geo/impact.ts');
+
+test('impact geometry: path corridors, areas and ring thinning', () => {
+  // a 10 km east–west path, 1,000 yd wide, at 35°N → about 10 × 0.914 km
+  const lat = 35;
+  const dLng = 10 / (111.32 * Math.cos((lat * Math.PI) / 180));
+  const poly = impact.pathPolygon([-97, lat], [-97 + dLng, lat], 1000);
+  const a = impact.areaKm2(poly);
+  assert.ok(Math.abs(a - 9.144) < 0.15, `corridor area ${a}`);
+  // no end point → a small circle, never empty
+  assert.ok(impact.areaKm2(impact.pathPolygon([-97, lat], null, 0)) > 0);
+  // thinning keeps rings closed and short
+  const ring = Array.from({ length: 5001 }, (_, i) => [Math.cos((i / 5000) * 2 * Math.PI), Math.sin((i / 5000) * 2 * Math.PI)]);
+  const thin = impact.thinRing(ring, 600);
+  assert.ok(thin.length <= 602);
+  assert.deepEqual(Array.from(thin[0]), Array.from(thin[thin.length - 1]));
+  const esri = impact.toEsriPolygon({ type: 'MultiPolygon', coordinates: [[ring], [ring]] });
+  assert.equal(esri.rings.length, 2);
+  assert.equal(esri.spatialReference.wkid, 4326);
+});
+
+test('disaster stories: sourced, one setup per chapter, every action resolves', () => {
+  const { DISASTER_STORIES } = load('app/atlas/disaster-atlas/stories.ts');
+  for (const st of DISASTER_STORIES) {
+    assert.equal(st.setup.length, st.chapters.length, `${st.id}: setup per chapter`);
+    assert.ok(st.docs.every((d) => /^https:\/\/([a-z0-9-]+\.)*(noaa|nist|weather)\.gov\//.test(d.url)), `${st.id} docs are federal reports`);
+    for (const ch of st.chapters) {
+      for (const a of ch.actions ?? []) {
+        if (a.kind === 'hurricane') assert.ok(hurdat.some((x) => x.id === a.value), `hurricane ${a.value}`);
+        if (a.kind === 'tornado') assert.ok(hist.NOTABLE.tornadoes.some((x) => x.label === a.value), `tornado ${a.value}`);
+        if (a.kind === 'fire') assert.match(String(a.value), /^\d{4}:[A-Z]+$/);
+      }
+    }
+  }
+  // the Katrina toll uses the revised NHC figure, not the early "over 1,800"
+  const k = DISASTER_STORIES.find((x) => x.id === 'katrina-2005');
+  assert.ok(k.chapters.some((c) => c.body.some((b) => b.includes('nearly 1,400'))));
+});

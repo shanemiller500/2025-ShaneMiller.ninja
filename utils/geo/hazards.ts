@@ -84,7 +84,9 @@ export async function fetchAlerts(signal?: AbortSignal): Promise<GeoJSON.Feature
     for (const f of j.features) {
       const p = f.properties as Record<string, unknown>;
       const product = String(p.prod_type ?? "");
+      f.id = features.length;
       f.properties = {
+        id: features.length,
         product,
         group: ALERT_PRODUCTS[product] ?? "wind",
         watch: /Watch$/.test(product),

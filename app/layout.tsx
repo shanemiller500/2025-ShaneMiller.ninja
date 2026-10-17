@@ -28,7 +28,7 @@ declare global {
 const GA_TRACKING_ID = process.env.NEXT_PUBLIC_GA_ID;
 
 /** Pages that own the whole viewport (no sidebar, header or footer). */
-const FULL_BLEED = ["/day-out", "/dinosors", "/atlas/earth-alive", "/atlas/underground-usa", "/atlas/strange-earth", "/atlas/hidden-earth", "/atlas/disaster-atlas"];
+const FULL_BLEED = ["/day-out", "/dinosors", "/atlas/earth-alive", "/atlas/underground-usa", "/atlas/strange-earth", "/atlas/hidden-earth", "/atlas/disaster-atlas", "/atlas/shipwrecks"];
 
 const inter = localFont({
   src: "../public/fonts/Inter-latin.woff2",

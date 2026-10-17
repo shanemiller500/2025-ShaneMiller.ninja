@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ImpactPanel } from "@/components/atlas/ImpactPanel";
+import type { AreaGeometry } from "@/utils/geo/impact";
 import { DrawerLink, FactGrid, FeatureDrawer } from "@/components/atlas/FeatureDrawer";
 import type { Picked } from "@/components/atlas/types";
 import { CAT_COLORS, EF_COLORS, FIPS_ALIASES, ktToMph, tornadoAt, type CountyDeclarations, type HurdatStorm, type TornadoCols } from "./history";
@@ -112,7 +114,22 @@ export interface HistoryLookups {
 
 const SCALE = ["Tropical storm / depression", "Category 1", "Category 2", "Category 3", "Category 4", "Category 5"];
 
-export function DisasterDetails({ picked, storms, history, onClose }: { picked: Picked | null; storms: Storm[]; history?: HistoryLookups; onClose: () => void }) {
+export function DisasterDetails({
+  picked,
+  storms,
+  history,
+  geometryFor,
+  onClose,
+}: {
+  picked: Picked | null;
+  storms: Storm[];
+  history?: HistoryLookups;
+  /** the full area of a picked fire / warning / cone / tornado path, for the impact counts */
+  geometryFor?: (p: Picked) => AreaGeometry | null;
+  onClose: () => void;
+}) {
+  // memoised so the impact query runs once per pick
+  const area = useMemo(() => (picked && geometryFor ? geometryFor(picked) : null), [picked, geometryFor]);
   if (!picked) return <FeatureDrawer open={false} onClose={onClose} />;
   const p = picked.props as Record<string, unknown>;
 
@@ -163,6 +180,14 @@ export function DisasterDetails({ picked, storms, history, onClose }: { picked: 
           <p className="text-[11px] leading-snug text-slate-500">
             {t.year < 2007 ? "Rated on the original Fujita scale (EF replaced it in 2007). " : ""}The map draws a straight line from touchdown to lift-off; real paths curve.
           </p>
+          {area && (
+            <ImpactPanel
+              geometry={area}
+              accent={EF_COLORS[t.mag] ?? "#f97316"}
+              framing={`Standing in this path today (${t.wid ? `${t.wid.toLocaleString()} yd wide` : "width not recorded"})`}
+              caveat="The record keeps only where the tornado touched down and lifted, so this straight corridor can miss where the track curved — treat it as a rough guide."
+            />
+          )}
           <DrawerLink href="https://www.spc.noaa.gov/wcm/">NOAA SPC Severe Weather Database</DrawerLink>
         </div>
       </FeatureDrawer>
@@ -174,6 +199,7 @@ export function DisasterDetails({ picked, storms, history, onClose }: { picked: 
       <FeatureDrawer open onClose={onClose} eyebrow={`Wildfire · ${p.year}`} accent="#ea580c" title={String(p.name)} subtitle={p.agency ? `Mapped by ${p.agency}` : undefined}>
         <div className="space-y-4">
           <FactGrid facts={[["Burned area", `${Number(p.acres).toLocaleString()} acres`], ["Square miles", (Number(p.acres) / 640).toLocaleString(undefined, { maximumFractionDigits: 0 })]]} />
+          {area && <ImpactPanel geometry={area} accent="#ea580c" framing="Inside this burn scar today — buildings standing now, not what burned" />}
           <DrawerLink href="https://data-nifc.opendata.arcgis.com/">NIFC fire perimeter history</DrawerLink>
         </div>
       </FeatureDrawer>
@@ -247,6 +273,7 @@ export function DisasterDetails({ picked, storms, history, onClose }: { picked: 
               : "A warning means the hazard is happening or about to — act now."}{" "}
             Always follow your local National Weather Service office and emergency officials.
           </p>
+          {area && <ImpactPanel geometry={area} accent={g.color} framing={`Inside this ${p.watch === true || p.watch === "true" ? "watch" : "warning"} area right now`} />}
           <DrawerLink href={forecastLink(picked.lngLat)}>Full alert text &amp; forecast for this spot</DrawerLink>
         </div>
       </FeatureDrawer>
@@ -273,6 +300,7 @@ export function DisasterDetails({ picked, storms, history, onClose }: { picked: 
               <div className="h-full bg-gradient-to-r from-orange-500 to-emerald-400" style={{ width: `${Math.max(2, contained)}%` }} />
             </div>
           )}
+          {area && <ImpactPanel geometry={area} accent="#f97316" framing="Inside the mapped fire perimeter" caveat="Buildings already lost may still appear: the footprint map isn't updated during a fire." />}
           <DrawerLink href={`https://inciweb.wildfire.gov/`}>InciWeb — official incident updates</DrawerLink>
           <DrawerLink href={forecastLink(picked.lngLat)}>Fire weather &amp; alerts here (NWS)</DrawerLink>
         </div>
@@ -316,6 +344,7 @@ export function DisasterDetails({ picked, storms, history, onClose }: { picked: 
           <p className="text-[12px] leading-snug text-slate-400">
             The white cone shows where the storm&apos;s <em>centre</em> will probably track — not how big the storm is. Dangerous wind, surge and rain often reach far outside it.
           </p>
+          {area && <ImpactPanel geometry={area} accent="#d946ef" framing="Inside the forecast cone (U.S. land only)" caveat="People outside the cone can be hit too — the cone is about the centre's track, not the storm's reach." />}
           {s.advisory && <DrawerLink href={s.advisory.url}>NHC public advisory #{s.advisory.number}</DrawerLink>}
           <DrawerLink href="https://www.nhc.noaa.gov/aboutcone.shtml">About the cone of uncertainty (NHC)</DrawerLink>
         </div>

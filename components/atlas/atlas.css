@@ -104,3 +104,56 @@
     radial-gradient(ellipse at 50% 120%, rgba(30, 64, 175, 0.25), transparent 60%);
   background-size: 420px 420px, 380px 380px, 520px 520px, 460px 460px, 340px 340px, 300px 300px, 560px 560px, 100% 100%;
 }
+
+/* The globe keeps its starfield at night and shares the hub's soft grid and aurora by day. */
+.atlas-map-page:not(.dark) .atlas-space {
+  background-color: #f7f9fc;
+  background-image:
+    radial-gradient(ellipse 48% 42% at 31% 8%, rgba(110, 231, 183, 0.18), transparent 78%),
+    radial-gradient(ellipse 48% 45% at 55% 12%, rgba(165, 180, 252, 0.2), transparent 78%),
+    radial-gradient(ellipse 42% 40% at 77% 9%, rgba(253, 164, 175, 0.15), transparent 78%),
+    linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+}
+
+/* Older map panels contain fixed dark-mode text classes. Keep them readable on light glass. */
+.atlas-map-page:not(.dark) :is(.text-white, .text-slate-100, .text-slate-200) {
+  color: #0f172a;
+}
+.atlas-map-page:not(.dark) .text-slate-300,
+.atlas-map-page:not(.dark) :is([class^="text-slate-300/"], [class*=" text-slate-300/"]) {
+  color: #475569;
+}
+.atlas-map-page:not(.dark) .text-slate-400,
+.atlas-map-page:not(.dark) :is([class^="text-slate-400/"], [class*=" text-slate-400/"]) {
+  color: #64748b;
+}
+.atlas-map-page:not(.dark) :is([class^="text-cyan-"], [class*=" text-cyan-"]) {
+  color: #0e7490;
+}
+.atlas-map-page:not(.dark) :is([class^="text-sky-"], [class*=" text-sky-"]) {
+  color: #0369a1;
+}
+.atlas-map-page:not(.dark) :is([class^="text-fuchsia-"], [class*=" text-fuchsia-"]) {
+  color: #a21caf;
+}
+.atlas-map-page:not(.dark) :is([class^="text-lime-"], [class*=" text-lime-"]) {
+  color: #4d7c0f;
+}
+.atlas-map-page:not(.dark) :is([class^="text-orange-"], [class*=" text-orange-"]) {
+  color: #c2410c;
+}
+.atlas-map-page:not(.dark) :is([class^="text-rose-"], [class*=" text-rose-"]) {
+  color: #be123c;
+}
+.atlas-map-page:not(.dark) :is([class^="text-emerald-"], [class*=" text-emerald-"]) {
+  color: #047857;
+}
+.atlas-map-page:not(.dark) :is([class^="text-amber-"], [class*=" text-amber-"]) {
+  color: #b45309;
+}
+
+.atlas-map-page:not(.dark) .atlas-hud :is(input, select) {
+  color: #0f172a;
+}

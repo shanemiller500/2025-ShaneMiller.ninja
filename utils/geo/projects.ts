@@ -92,9 +92,9 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "shipwrecks",
     title: "Shipwrecks",
-    tagline: "Documented wrecks across the Great Lakes and coasts, with bathymetry.",
-    status: "planned",
-    sources: ["NOAA wrecks", "NOAA bathymetry"],
+    tagline: "Every wreck on NOAA's nautical charts, 30,000 named wrecks worldwide, the sanctuaries that protect them — and the stories of the Titanic, Monitor, Arizona and Edmund Fitzgerald.",
+    status: "live",
+    sources: ["NOAA charts", "NOAA Sanctuaries", "Wikidata"],
     glow: "from-cyan-500/30 via-sky-400/20 to-blue-300/10",
   },
   {

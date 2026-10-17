@@ -12,7 +12,7 @@ import { AtlasMap } from "@/components/atlas/AtlasMap";
 import { LayerPanel } from "@/components/atlas/LayerPanel";
 import { SourceCitation } from "@/components/atlas/SourceCitation";
 import { TimeSlider } from "@/components/atlas/TimeSlider";
-import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass } from "@/components/atlas/Hud";
+import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass, useAtlasTheme } from "@/components/atlas/Hud";
 import { timeBins, useTimeline } from "@/components/atlas/useTimeline";
 import type { AtlasTime, AtlasView, Basemap, Picked, TerrainMode } from "@/components/atlas/types";
 import {
@@ -81,6 +81,7 @@ const fillZoom = () => {
 const timeFormat = (span: number) => (t: number) => format(t, span > 3 * 365 * DAY ? "MMM yyyy" : span > 60 * DAY ? "MMM d, yyyy" : "MMM d, HH:mm");
 
 export default function EarthAliveApp() {
+  const dark = useAtlasTheme();
   const [mode, setMode] = useState<Mode>("live");
   const [win, setWin] = useState<QuakeWindow>("day");
   const [min, setMin] = useState<QuakeMin>("all");
@@ -287,14 +288,14 @@ export default function EarthAliveApp() {
   const error = mode === "live" ? quakes.error : mode === "replay" ? history.error : null;
 
   return (
-    <div className="dark fixed inset-0 overflow-hidden bg-[#02040b] text-slate-100">
+    <div className={`atlas-map-page fixed inset-0 overflow-hidden ${dark ? "dark bg-[#02040b] text-slate-100" : "bg-slate-50 text-slate-900"}`}>
       <AtlasMap
         layers={EARTH_ALIVE_LAYERS}
         visible={visible}
         data={data}
         basemap={basemap}
         terrain={terrain}
-        dark
+        dark={dark}
         atmosphere
         selected={picked}
         onPick={setPicked}
@@ -310,7 +311,7 @@ export default function EarthAliveApp() {
             data={depth.data}
             loading={depth.loading}
             error={depth.error}
-            dark
+            dark={dark}
             selectedId={picked?.layer === "quakes" ? String(picked.id) : null}
             onPick={(q) => setPicked(q ? { layer: "quakes", id: q.properties.id, props: q.properties as unknown as Record<string, unknown>, lngLat: q.geometry.coordinates as [number, number] } : null)}
           />

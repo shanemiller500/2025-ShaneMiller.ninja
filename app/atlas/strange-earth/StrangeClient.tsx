@@ -8,8 +8,8 @@ import { trackEvent } from "@/utils/mixpanel";
 const StrangeApp = dynamic(() => import("./StrangeApp"), {
   ssr: false,
   loading: () => (
-    <div className="fixed inset-0 flex items-center justify-center bg-[#03020a]">
-      <p className="animate-pulse font-mono text-xs uppercase tracking-[0.3em] text-fuchsia-200/70">Searching for anomalies…</p>
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-50 dark:bg-[#03020a]">
+      <p className="animate-pulse font-mono text-xs uppercase tracking-[0.3em] text-fuchsia-700 dark:text-fuchsia-200/70">Searching for anomalies…</p>
     </div>
   ),
 });

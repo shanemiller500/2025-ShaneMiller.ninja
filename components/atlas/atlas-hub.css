@@ -1,0 +1,167 @@
+.atlas-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.atlas-page::before {
+  position: absolute;
+  z-index: -2;
+  top: -4rem;
+  left: 50%;
+  width: min(46rem, 100%);
+  height: 18rem;
+  content: "";
+  pointer-events: none;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background: linear-gradient(90deg, rgba(110, 231, 183, 0.25), rgba(165, 180, 252, 0.25), rgba(253, 164, 175, 0.25));
+  filter: blur(64px);
+}
+
+.atlas-page::after {
+  position: absolute;
+  z-index: -1;
+  top: -3.5rem;
+  right: 0;
+  left: 0;
+  height: 520px;
+  content: "";
+  pointer-events: none;
+  color: rgba(203, 213, 225, 0.7);
+  background-image:
+    linear-gradient(currentColor 1px, transparent 1px),
+    linear-gradient(90deg, currentColor 1px, transparent 1px);
+  background-size: 36px 36px;
+  -webkit-mask-image: radial-gradient(ellipse at top, black 25%, transparent 72%);
+  mask-image: radial-gradient(ellipse at top, black 25%, transparent 72%);
+}
+
+.dark .atlas-page::before {
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.1), rgba(99, 102, 241, 0.15), rgba(244, 63, 94, 0.1));
+}
+
+.dark .atlas-page::after {
+  color: rgba(255, 255, 255, 0.07);
+}
+
+.atlas-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.atlas-eyebrow::before {
+  width: 1.5rem;
+  height: 1px;
+  content: "";
+  background: currentColor;
+  opacity: 0.65;
+}
+
+.atlas-card {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 28px -25px rgba(15, 23, 42, 0.3), inset 0 1px rgba(255, 255, 255, 0.8);
+  transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 280ms ease,
+    box-shadow 280ms ease,
+    background-color 280ms ease;
+}
+
+.atlas-card::after {
+  position: absolute;
+  top: 0;
+  right: 18%;
+  left: 18%;
+  height: 1px;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.4), transparent);
+  opacity: 0;
+  transition: opacity 280ms ease;
+}
+
+.atlas-card:hover::after,
+.atlas-card:focus-visible::after {
+  opacity: 1;
+}
+
+.atlas-icon {
+  box-shadow: 0 3px 10px -7px rgba(15, 23, 42, 0.3), inset 0 1px rgba(255, 255, 255, 0.9);
+  transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 280ms ease;
+}
+
+.atlas-card:hover .atlas-icon,
+.atlas-card:focus-visible .atlas-icon {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -10px rgba(99, 102, 241, 0.45), inset 0 1px rgba(255, 255, 255, 0.9);
+}
+
+.atlas-card:hover,
+.atlas-card:focus-visible {
+  transform: translateY(-3px);
+  border-color: rgba(99, 102, 241, 0.38);
+  box-shadow: 0 17px 38px -24px rgba(79, 70, 229, 0.34), 0 6px 14px -9px rgba(30, 41, 59, 0.16), inset 0 1px rgba(255, 255, 255, 0.9);
+}
+
+.dark .atlas-card {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16), 0 14px 32px -24px rgba(0, 0, 0, 0.5), inset 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.dark .atlas-card:hover,
+.dark .atlas-card:focus-visible {
+  border-color: rgba(129, 140, 248, 0.4);
+  background-color: rgba(255, 255, 255, 0.055);
+  box-shadow: 0 18px 38px -22px rgba(0, 0, 0, 0.55);
+}
+
+.atlas-card:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 3px;
+}
+
+.atlas-card-arrow {
+  transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1), color 280ms ease;
+}
+
+.atlas-card:hover .atlas-card-arrow,
+.atlas-card:focus-visible .atlas-card-arrow {
+  transform: translate(2px, -2px);
+  color: #6366f1;
+}
+
+.dark .atlas-card:hover .atlas-card-arrow,
+.dark .atlas-card:focus-visible .atlas-card-arrow {
+  color: #a5b4fc;
+}
+
+.atlas-draft {
+  transition: background-color 280ms ease, border-color 280ms ease;
+}
+
+.atlas-draft:hover {
+  border-color: rgba(148, 163, 184, 0.5);
+  background-color: rgba(255, 255, 255, 0.65);
+}
+
+.dark .atlas-draft:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-card,
+  .atlas-card::after,
+  .atlas-card-arrow,
+  .atlas-icon,
+  .atlas-draft {
+    transition: none;
+  }
+
+  .atlas-card:hover,
+  .atlas-card:focus-visible,
+  .atlas-card:hover .atlas-icon,
+  .atlas-card:focus-visible .atlas-icon,
+  .atlas-card:hover .atlas-card-arrow,
+  .atlas-card:focus-visible .atlas-card-arrow {
+    transform: none;
+  }
+}

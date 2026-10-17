@@ -6,7 +6,7 @@ import { ArrowLeft, BookOpen, Box, Check, Crosshair, Layers, Layers2, Link2, Lis
 import { AtlasMap } from "@/components/atlas/AtlasMap";
 import { LayerPanel } from "@/components/atlas/LayerPanel";
 import { SourceCitation } from "@/components/atlas/SourceCitation";
-import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass } from "@/components/atlas/Hud";
+import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass, useAtlasTheme } from "@/components/atlas/Hud";
 import type { CompareCamera } from "@/components/atlas/CompareView";
 import type { AtlasView, Basemap, Picked, TerrainMode } from "@/components/atlas/types";
 import { LIDAR_MIN_ZOOM, LIDAR_VIEWS, lidarView, type LidarViewKey } from "@/utils/geo/lidar";
@@ -34,6 +34,7 @@ type Panel = "sites" | "layers" | null;
 const fitZoom = () => Math.min(4.6, Math.max(2.4, Math.log2((window.innerWidth * 0.9 * 360) / (512 * 58)) + 0.3));
 
 export default function HiddenApp() {
+  const dark = useAtlasTheme();
   const [mode, setMode] = useState<Mode>("map");
   const [view, setView] = useState<LidarViewKey>("multi");
   const [extra, setExtra] = useState<Record<string, boolean>>({ coverage: false, sites: true, "national-relief": true });
@@ -229,13 +230,13 @@ export default function HiddenApp() {
   const citations = [...LIDAR_VIEW_LAYERS.slice(0, 1), ...panelLayers].filter((l) => l.citation.label && (l.id.startsWith("lidar-") || visible[l.id])).map((l) => l.citation);
 
   return (
-    <div className="dark fixed inset-0 overflow-hidden bg-[#020604] text-slate-100">
+    <div className={`atlas-map-page fixed inset-0 overflow-hidden ${dark ? "dark bg-[#020604] text-slate-100" : "bg-slate-50 text-slate-900"}`}>
       <AtlasMap
         layers={HIDDEN_LAYERS}
         visible={visible}
         basemap={basemap}
         terrain={terrain}
-        dark
+        dark={dark}
         atmosphere
         selected={picked}
         onPick={setPicked}

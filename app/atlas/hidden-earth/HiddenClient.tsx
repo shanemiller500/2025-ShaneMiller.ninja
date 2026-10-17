@@ -8,8 +8,8 @@ import { trackEvent } from "@/utils/mixpanel";
 const HiddenApp = dynamic(() => import("./HiddenApp"), {
   ssr: false,
   loading: () => (
-    <div className="fixed inset-0 flex items-center justify-center bg-[#020604]">
-      <p className="animate-pulse font-mono text-xs uppercase tracking-[0.3em] text-lime-200/70">Stripping away the trees…</p>
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-50 dark:bg-[#020604]">
+      <p className="animate-pulse font-mono text-xs uppercase tracking-[0.3em] text-lime-700 dark:text-lime-200/70">Stripping away the trees…</p>
     </div>
   ),
 });
