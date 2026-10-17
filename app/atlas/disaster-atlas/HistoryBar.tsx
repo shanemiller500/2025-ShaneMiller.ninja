@@ -8,7 +8,10 @@ import {
   HISTORY_RANGES,
   NOTABLE,
   declarationFeatures,
+  BASIN_OPTIONS,
+  basinGroup,
   filterStorms,
+  type BasinFilter,
   hurricaneFeatures,
   ktToMph,
   landfallFeatures,
@@ -63,7 +66,7 @@ export function useHistory(active: boolean) {
   const [minCat, setMinCat] = useState(0);
   const [minMag, setMinMag] = useState(0);
   const [minAcres, setMinAcres] = useState(5000);
-  const [basin, setBasin] = useState<"AL" | "EP" | "both">("AL");
+  const [basin, setBasin] = useState<BasinFilter>("all");
   const [declType, setDeclType] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [archives, setArchives] = useState<HistoryArchives>({
@@ -299,7 +302,7 @@ export function HistoryBar({
     if (!s) return;
     h.setAllYears(false);
     h.setMinCat(0);
-    h.setBasin(s.basin === "AL" ? "AL" : "EP");
+    h.setBasin(basinGroup(s.basin));
     h.setYear(s.year);
     const peak = s.pts.reduce((a, p) => (p[3] > a[3] ? p : a), s.pts[0]);
     onPick({
@@ -363,12 +366,8 @@ export function HistoryBar({
             <Select
               label="Basin"
               value={h.basin}
-              onChange={(v) => h.setBasin(v as "AL" | "EP" | "both")}
-              options={[
-                ["AL", "Atlantic"],
-                ["EP", "E. Pacific"],
-                ["both", "Both"],
-              ]}
+              onChange={(v) => h.setBasin(v as BasinFilter)}
+              options={BASIN_OPTIONS}
             />
             <Select
               label="At least"

@@ -4,9 +4,9 @@ import type { CaveProps } from "@/utils/geo/caves";
 /* ------------------------------------------------------------------ */
 /*  Featured caves: real places (Wikidata ids, coordinates from the    */
 /*  baked cave layer), facts checked against the National Park         */
-/*  Service, state parks and USGS — every fact carries its source —    */
-/*  and the style of their illustrative 3D reconstruction.             */
-/*  Fact-checked October 2026.                                         */
+/*  Service, state parks, USGS and (abroad) UNESCO's World Heritage    */
+/*  listings — every fact carries its source — and the style of their */
+/*  illustrative 3D reconstruction. Fact-checked October 2026.         */
 /* ------------------------------------------------------------------ */
 
 export interface Source {
@@ -68,6 +68,10 @@ const S = {
   ticaNature: { label: "NPS · Timpanogos Cave nature", url: "https://www.nps.gov/tica/learn/nature/index.htm" },
   orcaTimeline: { label: "NPS · Oregon Caves timeline", url: "https://www.nps.gov/orca/learn/historyculture/timeline.htm" },
   orcaAtlas: { label: "NPS Geodiversity Atlas · Oregon Caves", url: "https://www.nps.gov/articles/nps-geodiversity-atlas-oregon-caves-national-monument-preserve-oregon.htm" },
+  // abroad — UNESCO World Heritage Centre listings
+  unescoSkocjan: { label: "UNESCO · Škocjan Caves", url: "https://whc.unesco.org/en/list/390/" },
+  unescoPhongNha: { label: "UNESCO · Phong Nha-Ke Bang and Hin Nam No", url: "https://whc.unesco.org/en/list/951/" },
+  unescoAggtelek: { label: "UNESCO · Caves of Aggtelek Karst and Slovak Karst", url: "https://whc.unesco.org/en/list/725/" },
 } satisfies Record<string, Source>;
 
 export const SOURCES = S;
@@ -221,6 +225,56 @@ export const FEATURED: FeaturedCave[] = [
     styleNote: "Marble chambers and winding passages.",
     dive: { style: "chamber", depth: 30, formations: 0.7, palette: "marble", scale: 0.6 },
     accent: "#c4b5fd",
+  },
+  {
+    id: "Q500376",
+    name: "Škocjan Caves",
+    where: "Slovenia · Kras Plateau",
+    center: [13.9947, 45.665],
+    tagline: "A river canyon underground — in the place that gave “karst” its name.",
+    facts: [
+      { text: "The Reka River vanishes into the limestone and runs through one of the world's largest known underground river canyons — roughly two kilometres long, up to about 150 metres high and in places more than 120 metres wide.", source: S.unescoSkocjan },
+      { text: "Its Martel Chamber exceeds two million cubic metres in volume.", source: S.unescoSkocjan },
+      { text: "The word “karst” comes from the name of this plateau; karst research began in this part of Slovenia, the “Classical Karst”.", source: S.unescoSkocjan },
+      { text: "A UNESCO World Heritage Site since 1986.", source: S.unescoSkocjan },
+    ],
+    site: { label: "UNESCO World Heritage listing", url: "https://whc.unesco.org/en/list/390/" },
+    styleNote: "A vast, tall river canyon with a torrent on its floor and great decorated halls above.",
+    dive: { style: "trunk", depth: 140, river: true, formations: 0.35, palette: "limestone", scale: 1.3 },
+    accent: "#2dd4bf",
+  },
+  {
+    id: "Q44889",
+    name: "Son Doong Cave",
+    where: "Vietnam · Phong Nha-Ke Bang National Park",
+    center: [106.2875, 17.4569],
+    tagline: "The world's largest documented cave passage.",
+    facts: [
+      { text: "Son Doong contains the world's largest documented cave passage in terms of diameter and continuity.", source: S.unescoPhongNha },
+      { text: "Its karst has been forming since the Palaeozoic, about 400 million years ago — the oldest large-scale karst area in Asia.", source: S.unescoPhongNha },
+      { text: "Over 220 km of caves and underground rivers have been documented in the World Heritage property, which straddles the Viet Nam–Laos border.", source: S.unescoPhongNha },
+      { text: "Phong Nha-Ke Bang was inscribed as a World Heritage Site in 2003.", source: S.unescoPhongNha },
+    ],
+    site: { label: "UNESCO World Heritage listing", url: "https://whc.unesco.org/en/list/951/" },
+    styleNote: "One enormous trunk passage with a river, giant formations and a forest under collapsed skylights.",
+    dive: { style: "trunk", depth: 150, river: true, formations: 0.3, palette: "limestone", scale: 1.5 },
+    accent: "#4ade80",
+  },
+  {
+    id: "Q631356",
+    name: "Baradla Cave",
+    where: "Hungary–Slovakia border · Aggtelek Karst",
+    center: [20.4953, 48.4718],
+    tagline: "A stream cave that crosses a national border.",
+    facts: [
+      { text: "Baradla-Domica is a cross-border cave system richly decorated with stalagmites and stalactites — an important active stream cave in the temperate zone, and a Ramsar wetland site.", source: S.unescoAggtelek },
+      { text: "It is the most significant system among the Caves of Aggtelek Karst and Slovak Karst: 712 caves were recorded at inscription, and more than 1,000 are known today.", source: S.unescoAggtelek },
+      { text: "Inscribed as a World Heritage Site in 1995.", source: S.unescoAggtelek },
+    ],
+    site: { label: "UNESCO World Heritage listing", url: "https://whc.unesco.org/en/list/725/" },
+    styleNote: "A long, winding stream passage thick with stalagmites and stalactites.",
+    dive: { style: "trunk", depth: 45, river: true, formations: 0.9, palette: "limestone", scale: 0.8 },
+    accent: "#fbbf24",
   },
 ];
 

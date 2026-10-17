@@ -109,3 +109,25 @@ export function sampleGrid(g: DemGrid, col: number, row: number) {
   add(x1, y1, fx * fy);
   return wsum ? sum / wsum : NaN;
 }
+
+/* ── EMODnet Bathymetry (European seas, ~115 m, free with attribution) ── */
+
+export const EMODNET_WCS = "https://ows.emodnet-bathymetry.eu/wcs";
+export const EMODNET_INFO = "https://emodnet.ec.europa.eu/en/bathymetry";
+/** The DTM's extent: European seas from the Atlantic margin to the Black Sea and the Arctic. */
+const EMODNET_EXTENT: BBox = [-36, 15, 43, 90];
+
+export const inEmodnet = ([lng, lat]: [number, number]) => lng >= EMODNET_EXTENT[0] && lng <= EMODNET_EXTENT[2] && lat >= EMODNET_EXTENT[1] && lat <= EMODNET_EXTENT[3];
+
+/** EMODnet's mean-depth DTM over a box, at its native ~1/16′ grid (WCS 2.0.1, float GeoTIFF). */
+export async function loadEmodnetDem([w, s, e, n]: BBox, signal?: AbortSignal): Promise<DemGrid> {
+  const q = `service=WCS&version=2.0.1&request=GetCoverage&coverageId=emodnet__mean&subset=Lat(${s},${n})&subset=Long(${w},${e})&format=image/tiff`;
+  const res = await fetch(`${EMODNET_WCS}?${q}`, { signal });
+  if (!res.ok) throw new Error(`EMODnet ${res.status}`);
+  const grid = readFloatTiff(await res.arrayBuffer());
+  let valid = 0;
+  for (let i = 0; i < grid.data.length; i++) if (!Number.isNaN(grid.data[i])) valid++;
+  // land is no-data in a sea-only DTM; mostly-land boxes go to the global mosaic instead
+  if (grid.width < 4 || valid < grid.data.length * 0.5) throw new Error("EMODnet has little data here");
+  return grid;
+}

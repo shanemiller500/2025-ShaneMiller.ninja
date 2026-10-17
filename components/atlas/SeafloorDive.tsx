@@ -5,19 +5,19 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { loadElevation } from "./groundData";
 import { zoomForBBox, type BBox } from "./basinGrid";
-import { loadNceiDem, sampleGrid, type DemGrid } from "./nceiDem";
+import { inEmodnet, loadEmodnetDem, loadNceiDem, sampleGrid, type DemGrid } from "./nceiDem";
 
 /* ------------------------------------------------------------------ */
 /*  <SeafloorDive> — sink from the surface down to a wreck. The        */
-/*  seafloor is real bathymetry: NOAA NCEI's DEM mosaic (coastal DEMs  */
-/*  as fine as ~3 m along U.S. shores, GEBCO offshore), falling back   */
-/*  to AWS Terrarium. Heights are exaggerated at most 6× so relief     */
+/*  seafloor is real bathymetry: EMODnet in European seas (~115 m),    */
+/*  else NOAA NCEI's DEM mosaic (coastal DEMs as fine as ~3 m along    */
+/*  U.S. shores, GEBCO offshore), falling back to AWS Terrarium. Heights are exaggerated at most 6× so relief     */
 /*  reads without turning a flat sand bottom into mountains. The wreck */
 /*  is a sonar-style marker at its position — we know where wrecks    */
 /*  are, not their shape.                                              */
 /* ------------------------------------------------------------------ */
 
-export type SeafloorSource = "ncei" | "terrarium";
+export type SeafloorSource = "emodnet" | "ncei" | "terrarium";
 
 export interface DiveTelemetry {
   /** current depth below the surface, metres (real, not exaggerated) */
@@ -241,8 +241,16 @@ export function SeafloorDive({ center, depth, playing, restart = 0, onTelemetry,
       const N = small ? 224 : 384;
       let grid: DemGrid;
       try {
-        grid = await loadNceiDem(bbox, N, ctl.signal);
-      } catch (e) {
+        // European seas: EMODnet's DTM beats the global mosaic (GEBCO there)
+        if (!inEmodnet(center)) throw new Error("outside EMODnet");
+        grid = await loadEmodnetDem(bbox, ctl.signal);
+        state.source = "emodnet";
+      } catch {
+        if (disposed) return;
+        try {
+          grid = await loadNceiDem(bbox, N, ctl.signal);
+          state.source = "ncei";
+        } catch (e) {
         if (disposed) return;
         state.source = "terrarium";
         const elev = await loadElevation(bbox, zoomForBBox(bbox, 16, 10));
@@ -251,6 +259,7 @@ export function SeafloorDive({ center, depth, playing, restart = 0, onTelemetry,
           for (let c = 0; c < N; c++) data[r * N + c] = elev(lng - dLng + (c / (N - 1)) * 2 * dLng, lat + dLat - (r / (N - 1)) * 2 * dLat);
         grid = { width: N, height: N, data };
         void e;
+        }
       }
       if (disposed) return;
       const heightAt = (c: number, r: number) => {

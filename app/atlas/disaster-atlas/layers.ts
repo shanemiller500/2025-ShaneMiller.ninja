@@ -277,11 +277,12 @@ const catColor = ["match", ["get", "cat"], ...CAT_COLORS.flatMap((c, i) => [i, c
 
 export const histHurricanesLayer: AtlasLayer = {
   id: "hist-hurricanes",
-  label: "Hurricane tracks",
+  label: "Hurricane & typhoon tracks",
   group: "History",
-  description: "Best tracks from NOAA's HURDAT2 database: every Atlantic storm since 1851 and eastern-Pacific storm since 1949, coloured by strength at each 6-hourly fix. Dots mark landfalls.",
+  badge: "Worldwide",
+  description: "Best tracks for every ocean, coloured by strength at each 6-hourly fix; dots mark landfalls. Atlantic (since 1851) and eastern Pacific (since 1949) from NOAA's HURDAT2; typhoons and the Indian Ocean and South Pacific from IBTrACS, using the Joint Typhoon Warning Center's 1-minute winds so categories compare — storms with no 1-minute wind on record (mostly before the 1950s) are left out.",
   legend: ["Tropical storm / depression", "Category 1", "Category 2", "Category 3", "Category 4", "Category 5"].map((label, i) => ({ color: CAT_COLORS[i], label, shape: "line" as const })),
-  citation: { label: "NOAA NHC HURDAT2 best-track database", href: "https://www.nhc.noaa.gov/data/#hurdat", license: "public domain" },
+  citation: { label: "NOAA NHC HURDAT2 · NOAA NCEI IBTrACS v04r01", href: "https://www.ncei.noaa.gov/products/international-best-track-archive", license: "public domain" },
   clickable: ["hist-hu-line", "hist-hu-label-dot"],
   install(map) {
     for (const id of ["hist-hu", "hist-hu-labels", "hist-hu-landfalls"]) map.addSource(id, { type: "geojson", data: EMPTY });

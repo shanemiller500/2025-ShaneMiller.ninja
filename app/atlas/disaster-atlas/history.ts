@@ -25,7 +25,8 @@ export interface HurdatStorm {
   id: string;
   name: string | null;
   year: number;
-  basin: "AL" | "EP" | "CP";
+  /** HURDAT2: AL / EP / CP · IBTrACS: WP / NI / SI / SP / SA */
+  basin: "AL" | "EP" | "CP" | "WP" | "NI" | "SI" | "SP" | "SA";
   start: number;
   maxWind: number;
   minPres: number | null;
@@ -35,7 +36,44 @@ export interface HurdatStorm {
   /** [hours since start, lat×10, lon×10, wind kt, landfall 0/1] */
   pts: [number, number, number, number, number][];
 }
-export const loadHurricanes = () => once<{ storms: HurdatStorm[] }>("/atlas/hurricanes.json").then((j) => j.storms);
+/** NHC's HURDAT2 (Atlantic + eastern Pacific) and IBTrACS for every other ocean, as one list. */
+export const loadHurricanes = () =>
+  Promise.all([once<{ storms: HurdatStorm[] }>("/atlas/hurricanes.json"), once<{ storms: HurdatStorm[] }>("/atlas/hurricanes-world.json").catch(() => ({ storms: [] }))]).then(([a, b]) =>
+    [...a.storms, ...b.storms].sort((x, y) => x.start - y.start)
+  );
+
+/** Ocean groups for the basin picker. */
+export type BasinFilter = "all" | "AL" | "EP" | "WP" | "IO" | "SP";
+export const BASIN_OPTIONS: [BasinFilter, string][] = [
+  ["all", "All oceans"],
+  ["AL", "Atlantic"],
+  ["EP", "E. Pacific"],
+  ["WP", "W. Pacific (typhoons)"],
+  ["IO", "Indian Ocean"],
+  ["SP", "South Pacific"],
+];
+export function basinGroup(b: HurdatStorm["basin"]): Exclude<BasinFilter, "all"> {
+  if (b === "AL" || b === "SA") return "AL";
+  if (b === "EP" || b === "CP") return "EP";
+  if (b === "NI" || b === "SI") return "IO";
+  return b;
+}
+export const BASIN_NAMES: Record<HurdatStorm["basin"], string> = {
+  AL: "Atlantic",
+  EP: "Eastern Pacific",
+  CP: "Central Pacific",
+  WP: "Western Pacific",
+  NI: "North Indian Ocean",
+  SI: "South Indian Ocean",
+  SP: "South Pacific",
+  SA: "South Atlantic",
+};
+/** Where a storm's official record lives: NHC for its basins, IBTrACS otherwise. */
+export function stormSourceLink(st: HurdatStorm): { href: string; label: string } {
+  if (st.basin === "AL" || st.basin === "EP" || st.basin === "CP")
+    return { href: `https://www.nhc.noaa.gov/data/tcr/index.php?season=${st.year}&basin=${st.basin === "AL" ? "atl" : "epac"}`, label: `NHC storm reports for ${st.year}` };
+  return { href: `https://ncics.org/ibtracs/index.php?name=v04r01-${st.id}`, label: "IBTrACS track & agency data" };
+}
 
 export interface TornadoCols {
   yr: number[];
@@ -73,11 +111,11 @@ export interface HurricaneFilter {
   year: number | "all";
   /** minimum peak category (0 = every storm) */
   minCat: number;
-  basin: "AL" | "EP" | "both";
+  basin: BasinFilter;
 }
 
 export function filterStorms(storms: HurdatStorm[], f: HurricaneFilter) {
-  return storms.filter((s) => (f.year === "all" || s.year === f.year) && s.cat >= f.minCat && (f.basin === "both" || (f.basin === "AL" ? s.basin === "AL" : s.basin !== "AL")));
+  return storms.filter((s) => (f.year === "all" || s.year === f.year) && s.cat >= f.minCat && (f.basin === "all" || basinGroup(s.basin) === f.basin));
 }
 
 /** One line segment per 6-hourly step, coloured by the wind at its start. */

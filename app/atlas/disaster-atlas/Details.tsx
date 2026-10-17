@@ -5,7 +5,7 @@ import { ImpactPanel } from "@/components/atlas/ImpactPanel";
 import type { AreaGeometry } from "@/utils/geo/impact";
 import { DrawerLink, FactGrid, FeatureDrawer } from "@/components/atlas/FeatureDrawer";
 import type { Picked } from "@/components/atlas/types";
-import { CAT_COLORS, EF_COLORS, FIPS_ALIASES, ktToMph, tornadoAt, type CountyDeclarations, type HurdatStorm, type TornadoCols } from "./history";
+import { BASIN_NAMES, CAT_COLORS, EF_COLORS, FIPS_ALIASES, ktToMph, stormSourceLink, tornadoAt, type CountyDeclarations, type HurdatStorm, type TornadoCols } from "./history";
 import { FLOOD_LEVELS, NRI_URL, REPORT_KINDS, RISK_RATINGS, WORLD_ALERT_LEVELS, alertGroup, worldEventType, compass, countyAt, money, riskColor, type CountyRisk, type Storm } from "@/utils/geo/hazards";
 
 /* ------------------------------------------------------------------ */
@@ -149,7 +149,7 @@ export function DisasterDetails({
     const end = st.start + st.pts[st.pts.length - 1][0] * 3_600_000;
     const day = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
     return (
-      <FeatureDrawer open onClose={onClose} eyebrow={`${st.basin === "AL" ? "Atlantic" : "Eastern Pacific"} · ${st.year}`} accent={CAT_COLORS[st.cat]} title={st.name ? `${st.cat ? "Hurricane" : "Storm"} ${st.name}` : `Unnamed storm of ${st.year}`} subtitle={`${day(st.start)} – ${day(end)}`}>
+      <FeatureDrawer open onClose={onClose} eyebrow={`${BASIN_NAMES[st.basin] ?? st.basin} · ${st.year}`} accent={CAT_COLORS[st.cat]} title={st.name ? `${st.cat ? "Hurricane" : "Storm"} ${st.name}` : `Unnamed storm of ${st.year}`} subtitle={`${day(st.start)} – ${day(end)}`}>
         <div className="space-y-4">
           <FactGrid
             facts={[
@@ -164,7 +164,7 @@ export function DisasterDetails({
           <p className="text-[11px] leading-snug text-slate-500">
             NOAA&apos;s best-track (HURDAT2) values: re-analysed after the season, so they can differ from what was reported at the time. Early records (before aircraft and satellites) are less certain.
           </p>
-          <DrawerLink href={`https://www.nhc.noaa.gov/data/tcr/index.php?season=${st.year}&basin=${st.basin === "AL" ? "atl" : "epac"}`}>NHC storm reports for {st.year}</DrawerLink>
+          <DrawerLink href={stormSourceLink(st).href}>{stormSourceLink(st).label}</DrawerLink>
         </div>
       </FeatureDrawer>
     );

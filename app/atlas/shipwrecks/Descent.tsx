@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Pause, Play, RotateCcw, X } from "lucide-react";
 import { SeafloorDive, type DiveTelemetry } from "@/components/atlas/SeafloorDive";
-import { NCEI_DEM_INFO } from "@/components/atlas/nceiDem";
+import { EMODNET_INFO, NCEI_DEM_INFO } from "@/components/atlas/nceiDem";
 import { HudLabel, HudPanel, hudGlass } from "@/components/atlas/Hud";
 import { metresToFeet } from "@/utils/geo/wrecks";
 
@@ -98,7 +98,15 @@ export function Descent({ target, onExit }: { target: DiveTarget; onExit: () => 
           )}
         </dl>
         <p className="mt-2 text-[10.5px] leading-snug text-slate-400">
-          {tele?.source === "terrarium" ? (
+          {tele?.source === "emodnet" ? (
+            <>
+              Seafloor:{" "}
+              <a href={EMODNET_INFO} target="_blank" rel="noopener noreferrer" className="text-cyan-300/80 hover:text-cyan-200">
+                EMODnet Bathymetry
+              </a>{" "}
+              — the European seas&apos; shared depth model (~115 m grid).
+            </>
+          ) : tele?.source === "terrarium" ? (
             <>Seafloor: AWS Terrarium bathymetry (SRTM15+, ETOPO, NOAA coastal relief) — NOAA&apos;s mosaic didn&apos;t answer, so this is coarser.</>
           ) : (
             <>
