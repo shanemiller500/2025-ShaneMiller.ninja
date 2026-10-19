@@ -128,3 +128,42 @@ test('fatal crash map uses 2024 FARS and rejects broad views', async () => {
   assert.equal(result.body.features[0].properties.date, '2024-01-02');
   assert.equal(result.body.features[0].properties.fatalities, 1);
 });
+test('clicked property details distinguish sale price and assessment', () => {
+  const { PARCEL_SOURCES } = load('app/land-intelligence/parcel-sources.ts');
+  const { normalizeParcelDetail } = load('app/land-intelligence/parcel-detail.ts');
+  const co = normalizeParcelDetail(PARCEL_SOURCES[0], { parcel_id: '42', owner: 'Example Owner', saleDate: '2024-04-01', salePrice: '$425,000', apprValTot: '$510,000', asedValTot: '$36,000' });
+  assert.equal(co.owners[0], 'Example Owner');
+  assert.equal(co.sales[0].price, 425000);
+  assert.equal(co.assessedTotal, 510000);
+  assert.equal(co.taxableValue, 36000);
+  const fl = normalizeParcelDetail(PARCEL_SOURCES[3], { OWN_NAME: 'Example LLC', SALE_PRC1: 350000, SALE_YR1: 2021, SALE_MO1: '04', SALE_PRC2: 0, SALE_YR2: 0, JV: 500000, ACT_YR_BLT: 1998 });
+  assert.equal(fl.sales.length, 1);
+  assert.equal(fl.sales[0].date, '2021-04');
+  assert.equal(fl.estimatedMarketValue, 500000);
+  assert.equal(fl.yearBuilt, 1998);
+  const wi = normalizeParcelDetail(PARCEL_SOURCES[5], { OWNERNME1: 'Example Owner', CNTASSDVALUE: 310000, NETPRPTA: 4200 });
+  assert.equal(wi.assessedTotal, 310000);
+  assert.equal(wi.annualPropertyTax, 4200);
+  assert.equal(wi.sales.length, 0);
+});
+
+test('parcel detail route validates keys and queries only the selected record', async () => {
+  let calls = 0;
+  const { GET } = load('app/api/land-intelligence/parcel-detail/route.ts', async (url, options) => {
+    calls++;
+    assert.match(url, /Colorado_Public_Parcels/);
+    const params = new URLSearchParams(options.body);
+    assert.equal(params.get('objectIds'), '8');
+    assert.equal(params.get('returnGeometry'), 'false');
+    assert.match(params.get('outFields'), /salePrice/);
+    return { ok: true, text: async () => JSON.stringify({ features: [{ attributes: { OBJECTID: 8, parcel_id: 'CO-8', owner: 'Example Owner', salePrice: '400000' } }] }) };
+  });
+  const request = (key) => ({ nextUrl: new URL(`http://local.test/?key=${encodeURIComponent(key)}`) });
+  assert.equal((await GET(request('co:8 OR 1=1'))).status, 400);
+  assert.equal(calls, 0);
+  const result = await GET(request('co:8'));
+  assert.equal(result.body.detail.parcel.id, 'CO-8');
+  assert.equal(result.body.detail.owners[0], 'Example Owner');
+  assert.equal(result.body.detail.sales[0].price, 400000);
+  assert.equal(calls, 1);
+});

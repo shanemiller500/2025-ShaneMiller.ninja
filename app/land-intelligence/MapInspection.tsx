@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import type { ParcelRecord } from "./parcel-sources";
+import type { ParcelDetail } from "./parcel-detail";
 import type { FatalCrash } from "./crash";
 
 type SoilSelection = { kind: "soil"; point: [number, number]; properties: Record<string, string | number | null> };
@@ -11,8 +12,10 @@ type CrashSelection = { kind: "crash"; point: [number, number]; properties: Fata
 type OverlaySelection = { kind: "overlay"; results: { id: string; label: string; url: string; status: string; features: Record<string, unknown>[] }[] };
 type SoilComponent = { name: string; percentage: number | null; hydric: string; drainage: string; classification: string; slopePercent: number | null };
 
-export function MapInspection({ inspection, loading, components, error, onClose, onInspectOther, onInspectSoil }: {
-  inspection: SoilSelection | ParcelSelection | CrashSelection | OverlaySelection | null; loading: boolean; components: SoilComponent[] | null; error: string; onClose: () => void; onInspectOther: (point: [number, number]) => void; onInspectSoil: (point: [number, number]) => boolean;
+export function MapInspection({ inspection, loading, components, error, propertyDetail, propertyLoading, propertyError, onClose, onInspectOther, onInspectSoil }: {
+  inspection: SoilSelection | ParcelSelection | CrashSelection | OverlaySelection | null; loading: boolean; components: SoilComponent[] | null; error: string;
+  propertyDetail: ParcelDetail | null; propertyLoading: boolean; propertyError: string;
+  onClose: () => void; onInspectOther: (point: [number, number]) => void; onInspectSoil: (point: [number, number]) => boolean;
 }) {
   const [soilUnavailable, setSoilUnavailable] = useState(false);
   const parcelKey = inspection?.kind === "parcel" ? inspection.properties.parcelKey : null;
@@ -31,11 +34,11 @@ export function MapInspection({ inspection, loading, components, error, onClose,
       <a href="https://websoilsurvey.nrcs.usda.gov/" target="_blank" rel="noopener noreferrer" className="inline-block text-[11px] text-cyan-300 underline">Validate in USDA Web Soil Survey ↗</a>
     </div>}
     {inspection?.kind === "parcel" && <div className="mt-3 space-y-3">
-      <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><div className="font-mono text-[10px] uppercase tracking-wider text-cyan-200">{inspection.properties.state} · {inspection.properties.county || "County not supplied"}</div><dl className="mt-2 space-y-1.5">{[["Parcel ID", inspection.properties.id], ["Reported use", inspection.properties.landUse], ["Zoning", inspection.properties.zoning], ["Area", inspection.properties.acres == null ? "" : `${inspection.properties.acres.toLocaleString()} acres`], ["Owner type", inspection.properties.ownerType], ["Reported land value", inspection.properties.landValue == null ? "" : `$${inspection.properties.landValue.toLocaleString()}`], ["Data received", inspection.properties.received]].filter(([, value]) => value !== "").map(([label, value]) => <div key={String(label)} className="grid grid-cols-[105px_1fr] gap-2 text-[11px]"><dt className="text-slate-400">{label}</dt><dd className="break-words text-slate-100">{value}</dd></div>)}</dl></div>
-      <p className="text-[10px] leading-relaxed text-slate-400">Fields vary by county. Missing zoning, area or value means this source did not provide it; boundaries are for screening and need county verification.</p>
+      <PropertyFacts summary={inspection.properties} detail={propertyDetail} loading={propertyLoading} error={propertyError} />
       <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setSoilUnavailable(!onInspectSoil(inspection.point))} className="rounded-lg border border-white/20 px-2.5 py-1.5 text-[11px] text-cyan-200 hover:bg-white/10">Inspect soil here</button><button type="button" onClick={() => onInspectOther(inspection.point)} className="rounded-lg border border-white/20 px-2.5 py-1.5 text-[11px] text-cyan-200 hover:bg-white/10">Other layers here</button></div>
       {soilUnavailable && <p className="text-[11px] text-amber-200">No soil polygon is visible at this parcel. Turn on the soil layer or zoom in and try again.</p>}
-      {inspection.properties.recordUrl && <a href={inspection.properties.recordUrl} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-cyan-300 underline">County parcel record ↗</a>}
+      {(propertyDetail?.parcel.recordUrl || inspection.properties.recordUrl) && <a href={propertyDetail?.parcel.recordUrl || inspection.properties.recordUrl} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-cyan-300 underline">County parcel record ↗</a>}
+      {inspection.properties.state === "Colorado" && inspection.properties.county.toLowerCase() === "boulder" && <a href="https://bouldercounty.gov/departments/assessor/" target="_blank" rel="noopener noreferrer" className="block text-[11px] text-cyan-300 underline">Boulder County property search ↗</a>}
       <a href={inspection.properties.sourceUrl} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-cyan-300 underline">{inspection.properties.source} ↗</a>
     </div>}
     {inspection?.kind === "crash" && <div className="mt-3 space-y-3 text-[11px] text-slate-200">
@@ -45,4 +48,36 @@ export function MapInspection({ inspection, loading, components, error, onClose,
     </div>}
     {inspection?.kind === "overlay" && <div className="mt-3 space-y-2">{inspection.results.flatMap((result) => result.features.map((feature, index) => <section key={`${result.id}-${index}`} className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><h3 className="font-semibold text-white">{result.label}</h3><dl className="mt-1.5 space-y-1 text-[11px]">{Object.entries(feature).map(([key, value]) => <div key={key} className="grid grid-cols-[110px_1fr] gap-2"><dt className="text-slate-400">{key.replaceAll("_", " ")}</dt><dd className="break-words text-slate-100">{String(value)}</dd></div>)}</dl><a href={result.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-[10px] text-cyan-300 underline">Source service ↗</a></section>))}{!inspection.results.some((result) => result.features.length) && <p className="text-slate-300">No mapped feature returned at this click. Turn on layers or click a visible feature; a blank result does not establish absence.</p>}{inspection.results.some((result) => result.status === "unavailable") && <p className="text-amber-200">Some source services did not respond.</p>}</div>}
   </aside>;
+}
+
+const money = (amount: number | null) => amount == null ? "Not in this feed" : `$${amount.toLocaleString()}`;
+const fact = (value: string | number | null | undefined) => value == null || value === "" ? "Not in this feed" : String(value);
+
+function FactRows({ rows }: { rows: [string, string][] }) {
+  return <dl className="mt-2 space-y-2">{rows.map(([label, value]) => <div key={label} className="grid grid-cols-[112px_1fr] gap-2 text-[11px] leading-snug"><dt className="text-slate-400">{label}</dt><dd className={`break-words ${value === "Not in this feed" ? "text-slate-500" : "text-slate-100"}`}>{value}</dd></div>)}</dl>;
+}
+
+function PropertyFacts({ summary, detail, loading, error }: { summary: ParcelRecord; detail: ParcelDetail | null; loading: boolean; error: string }) {
+  const parcel = detail?.parcel ?? summary;
+  const panel = "rounded-xl border border-white/10 bg-white/[0.04] p-3";
+  return <>
+    <section className={panel}>
+      <h3 className="font-mono text-[10px] uppercase tracking-wider text-cyan-200">{parcel.state} · {parcel.county || "County not supplied"}</h3>
+      <FactRows rows={[["Parcel ID", fact(parcel.id)], ["Site address", fact(parcel.address)], ["Land use", fact(parcel.landUse)], ["Zoning", fact(parcel.zoning)], ["Mapped area", parcel.acres == null ? "Not in this feed" : `${parcel.acres.toLocaleString()} acres`], ["Owner type", fact(parcel.ownerType)], ["Data received", fact(parcel.received)]]} />
+    </section>
+    {loading && <p role="status" className="text-[11px] text-cyan-200">Loading public ownership, sales and values…</p>}
+    {error && <p role="alert" className="text-[11px] text-amber-200">{error}</p>}
+    {!loading && <>
+      <section className={panel}><h3 className="text-xs font-semibold text-white">Ownership</h3><FactRows rows={[["Reported owner", detail?.owners.length ? detail.owners.join(" · ") : "Not in this feed"]]} /><p className="mt-2 text-[10px] text-slate-400">Owner is a public parcel record entry. Verify current title with the county recorder.</p></section>
+      <section className={panel}><h3 className="text-xs font-semibold text-white">Reported sale history</h3>
+        {detail?.sales.length ? <div className="mt-2 space-y-2">{detail.sales.map((item, index) => <div key={`${item.date}-${index}`} className="border-l-2 border-cyan-400/50 pl-2 text-[11px]"><div className="font-medium text-white">{item.price == null ? "Price not provided" : money(item.price)}</div><div className="text-slate-300">{item.date || "Date not provided"}</div>{item.reference && <div className="text-slate-400">Recorder reference: {item.reference}</div>}</div>)}</div> : <p className="mt-2 text-[11px] text-slate-400">No sale transactions supplied by this statewide feed.</p>}
+        <p className="mt-2 text-[10px] leading-relaxed text-slate-400">These are the source&apos;s reported sale entries, not a complete deed history. A recorded price may reflect a non-market transfer. Check the county recorder for earlier deeds and actual consideration.</p>
+      </section>
+      <section className={panel}><h3 className="text-xs font-semibold text-white">Public values and taxes{detail?.valueYear ? ` · ${detail.valueYear}` : ""}</h3>
+        <FactRows rows={[[detail?.valueLabels.total || "Assessed total", money(detail?.assessedTotal ?? null)], [detail?.valueLabels.land || "Land value", money(detail?.assessedLand ?? parcel.landValue)], [detail?.valueLabels.improvements || "Improvements", money(detail?.assessedImprovements ?? null)], ["Taxable value", money(detail?.taxableValue ?? null)], ["Est. fair market", money(detail?.estimatedMarketValue ?? null)], ["Annual property tax", money(detail?.annualPropertyTax ?? null)]]} />
+        <p className="mt-2 text-[10px] leading-relaxed text-slate-400">Assessed, taxable and estimated values are source labels. They are not the sale price or a current listing price.</p>
+      </section>
+      <section className={panel}><h3 className="text-xs font-semibold text-white">Building and legal facts</h3><FactRows rows={[["Year built", fact(detail?.yearBuilt)], ["Living area", detail?.livingAreaSqft ? `${detail.livingAreaSqft.toLocaleString()} sq ft` : "Not in this feed"], ["Buildings", fact(detail?.buildingCount)], ["Deeded area", detail?.deedAcres ? `${detail.deedAcres.toLocaleString()} acres` : "Not in this feed"], ["Legal description", fact(detail?.legalDescription)]]} /><p className="mt-2 text-[10px] leading-relaxed text-slate-400">Bedrooms, bathrooms, listing status, liens and a complete sale chain are not supplied here. County assessor and recorder records may have more detail.</p></section>
+    </>}
+  </>;
 }

@@ -13,7 +13,8 @@ import { LAND_LAYERS, LAND_OVERLAYS } from "./layers";
 import { MapInspection } from "./MapInspection";
 import { MapKey } from "./MapKey";
 import { focusGeoJSON, type FocusScope } from "./report-focus";
-import type { ParcelRecord } from "./parcel-sources";
+import { PARCEL_SOURCES, type ParcelRecord } from "./parcel-sources";
+import type { ParcelDetail } from "./parcel-detail";
 import type { FatalCrash } from "./crash";
 import { downloadReport } from "./export-report";
 import { EvidenceSummary, TerrainCard } from "./SiteAnalysis";
@@ -62,6 +63,8 @@ export default function LandApp() {
   const dark = useAtlasTheme();
   const { setTheme } = useTheme();
   const [map, setMap] = useState<MlMap | null>(null);
+  const [showCoverageNotice, setShowCoverageNotice] = useState(false);
+  const coverageNoticeSeen = useRef(false);
   const keyboardVertex = useRef<number | null>(null);
   const identifyController = useRef<AbortController | null>(null);
   const refreshReport = useRef(false);
@@ -97,12 +100,42 @@ export default function LandApp() {
   const [focusScope, setFocusScope] = useState<FocusScope>("inside");
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [inspectionLoading, setInspectionLoading] = useState(false);
+  const [propertyDetailResult, setPropertyDetailResult] = useState<{ key: string; detail: ParcelDetail } | null>(null);
+  const [propertyLoading, setPropertyLoading] = useState(false);
+  const [propertyError, setPropertyError] = useState("");
   const [soilComponents, setSoilComponents] = useState<SoilComponent[] | null>(null);
   const [soilDetailError, setSoilDetailError] = useState("");
 
   const focusData = useMemo(() => shape && complete && reportFocus ? focusGeoJSON(shape, selectedParcel, focusScope) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, [shape, complete, reportFocus, selectedParcel, focusScope]);
   const data = useMemo(() => ({ "study-shape-source": shape ? shapeGeoJSON(shape) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, "report-focus-source": focusData, "land-soils-source": soilData, "land-parcels-source": parcelData, "land-parcels-selected-source": { type: "FeatureCollection", features: selectedParcel ? [selectedParcel] : [] } as GeoJSON.FeatureCollection, "land-crashes-source": crashData }), [shape, soilData, parcelData, selectedParcel, crashData, focusData]);
   const onMapReady = useCallback((instance: MlMap) => setMap(instance), []);
+
+  useEffect(() => {
+    if (!map) return;
+    const showOnZoomOut = () => {
+      if (map.getZoom() <= 5.5 && !coverageNoticeSeen.current) {
+        coverageNoticeSeen.current = true;
+        setShowCoverageNotice(true);
+      }
+    };
+    map.on("zoomend", showOnZoomOut);
+    return () => { map.off("zoomend", showOnZoomOut); };
+  }, [map]);
+
+  const propertyKey = inspection?.kind === "parcel" ? inspection.properties.parcelKey : null;
+  useEffect(() => {
+    setPropertyDetailResult(null);
+    setPropertyError("");
+    if (!propertyKey) { setPropertyLoading(false); return; }
+    const controller = new AbortController();
+    setPropertyLoading(true);
+    fetch(`/api/land-intelligence/parcel-detail?key=${encodeURIComponent(propertyKey)}`, { signal: controller.signal })
+      .then(async (response) => { const json = await response.json(); if (!response.ok) throw new Error(json.error || "Property record unavailable."); return json.detail as ParcelDetail; })
+      .then((detail) => { if (!controller.signal.aborted) setPropertyDetailResult({ key: propertyKey, detail }); })
+      .catch((error) => { if (!controller.signal.aborted) setPropertyError(error.message); })
+      .finally(() => { if (!controller.signal.aborted) setPropertyLoading(false); });
+    return () => controller.abort();
+  }, [propertyKey]);
 
   useEffect(() => {
     if (!map) return;
@@ -384,7 +417,7 @@ export default function LandApp() {
       ? `${shape.points[0][1].toFixed(5)}, ${shape.points[0][0].toFixed(5)}` : null;
 
   return <div className={`li-app fixed inset-0 overflow-hidden ${dark ? "dark bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
-    <AtlasMap layers={[...LAND_LAYERS, DRAW_LAYER, FOCUS_LAYER]} visible={visibleLayers} data={data} basemap={basemap} terrain="flat" dark={dark} initialView={{ center: [-98, 38], zoom: 2.4 }} atmosphere onMapReady={onMapReady} flyTo={flyTo} emptyCursor={mode === "browse" ? "grab" : "crosshair"} controls={false} className="absolute inset-0 h-full w-full" />
+    <AtlasMap layers={[...LAND_LAYERS, DRAW_LAYER, FOCUS_LAYER]} visible={visibleLayers} data={data} basemap={basemap} terrain="flat" dark={dark} initialView={{ center: [-105.5, 39.1], zoom: 6.5 }} atmosphere onMapReady={onMapReady} flyTo={flyTo} emptyCursor={mode === "browse" ? "grab" : "crosshair"} controls={false} className="absolute inset-0 h-full w-full" />
     <div className="li-map-wash pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/45 via-transparent to-slate-950/30" />
 
     <header className="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2 sm:inset-x-5 sm:top-5">
@@ -402,6 +435,14 @@ export default function LandApp() {
         {(results.length > 0 || searchError) && <div className="absolute left-0 right-0 top-[calc(100%+6px)] overflow-hidden rounded-xl border border-white/15 li-panel bg-slate-950 p-1 shadow-2xl">{results.map((result) => <button type="button" key={result.label} onClick={() => chooseResult(result)} className="block w-full rounded-lg px-3 py-2 text-left text-xs text-slate-100 hover:bg-white/10">{result.label}</button>)}{searchError && <p className="px-3 py-2 text-xs text-amber-200">{searchError}</p>}</div>}
       </form>
     </header>
+
+    {showCoverageNotice && <aside role="dialog" aria-label="Connected parcel states" className="pointer-events-auto absolute left-1/2 top-[116px] z-30 w-[min(390px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-white/15 li-panel bg-slate-950/95 p-4 text-xs shadow-2xl backdrop-blur-xl sm:top-24">
+      <div className="flex items-start justify-between gap-3"><div><div className="font-mono text-[9px] uppercase tracking-[0.18em] text-cyan-300">Parcel coverage</div><h2 className="mt-1 text-sm font-semibold text-white">Explore connected states</h2></div><button type="button" onClick={() => setShowCoverageNotice(false)} aria-label="Close parcel coverage notice" className="rounded-lg p-1 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button></div>
+      <p className="mt-2 leading-relaxed text-slate-300">Parcel boundaries and available public property facts are connected in these states. Zoom to level 14 to see individual parcels.</p>
+      <div className="mt-3 flex flex-wrap gap-1.5">{PARCEL_SOURCES.map((source) => <span key={source.id} className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[11px] text-cyan-100">{source.state}</span>)}</div>
+      <p className="mt-3 text-[10px] leading-relaxed text-slate-400">Property fields vary by county. Other map layers may cover places beyond these parcel states.</p>
+      <button type="button" onClick={() => { setShowCoverageNotice(false); setFlyTo({ center: [-105.5, 39.1], zoom: 6.5, nonce: Date.now() }); }} className="mt-3 rounded-lg bg-cyan-400 px-3 py-1.5 text-[11px] font-semibold text-slate-950 hover:bg-cyan-300">Back to Colorado</button>
+    </aside>}
 
     <div className="pointer-events-auto absolute left-3 right-3 top-[145px] z-10 flex flex-wrap items-start gap-2 sm:left-5 sm:right-auto sm:top-28 sm:flex-col">
       <div className="flex rounded-2xl border border-white/15 li-panel bg-slate-950/90 p-1.5 shadow-2xl backdrop-blur-xl sm:block">
@@ -424,7 +465,7 @@ export default function LandApp() {
     </div>
 
     <MapKey soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} />
-    <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} onInspectOther={inspectOtherAt} onInspectSoil={inspectSoilAt} onClose={() => { identifyController.current?.abort(); setInspection(null); setInspectionLoading(false); }} />
+    <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} onInspectOther={inspectOtherAt} onInspectSoil={inspectSoilAt} onClose={() => { identifyController.current?.abort(); setInspection(null); setInspectionLoading(false); }} />
 
     <div className={`pointer-events-none absolute bottom-3 left-3 right-3 z-10 flex-col items-start gap-2 sm:bottom-5 sm:left-5 sm:right-auto ${shape && complete && showReport ? "hidden md:flex" : "flex"}`}>
       <div className="pointer-events-auto max-w-[340px] rounded-2xl border border-white/15 li-panel bg-slate-950/90 px-4 py-3 text-xs shadow-2xl backdrop-blur-xl">
