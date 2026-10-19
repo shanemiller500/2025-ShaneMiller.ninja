@@ -106,7 +106,7 @@ test('helpers: lifespan text and distances', () => {
 /* ── Phase 2: then & now, OpenStreetMap abandoned places ─────────── */
 
 test('then & now: the initial view box is centred on the town and sized to the screen', () => {
-  const src = fs.readFileSync('app/atlas/ghost-towns/ThenNow.tsx', 'utf8');
+  const src = fs.readFileSync('components/atlas/ThenNow.tsx', 'utf8');
   const fn = src.match(/export function viewBounds[\s\S]*?\n}/)[0].replace('export ', '').replace(/: \[number, number\]/g, '').replace(/: number/g, '').replace(/\): \[number, number, number, number\]/, ')');
   const viewBounds = new Function(`${fn}; return viewBounds;`)();
   const [w, s, e, n] = viewBounds([-72.3667, 42.3167], 13.5, 1440, 900);

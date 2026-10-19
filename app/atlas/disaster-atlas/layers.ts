@@ -493,6 +493,56 @@ export const worldLayer: AtlasLayer = {
   hoverLabel: (f) => `${String(f.properties?.name ?? "")}${f.properties?.country ? ` · ${f.properties.country}` : ""} · ${String(f.properties?.level ?? "")} alert`,
 };
 
+/* ── giant icebergs (U.S. National Ice Center via NASA EONET) ───── */
+
+export const icebergsLayer: AtlasLayer = {
+  id: "icebergs",
+  label: "Giant icebergs",
+  group: "World",
+  defaultOn: true,
+  badge: "Antarctica",
+  description: "Every Antarctic iceberg big enough for the U.S. National Ice Center to name and track — where each one is now, sized by its area, and the path it has drifted since it was first fixed.",
+  legend: [
+    { color: "#bae6fd", label: "Iceberg (latest position)" },
+    { color: "#7dd3fc", label: "Drift track", shape: "line" },
+  ],
+  citation: { label: "U.S. National Ice Center via NASA EONET", href: "https://eonet.gsfc.nasa.gov/", license: "public domain" },
+  clickable: ["icebergs-dot"],
+  install(map, { dark }) {
+    map.addSource("icebergs", { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "icebergs-track",
+      type: "line",
+      source: "icebergs",
+      filter: ["==", ["geometry-type"], "LineString"],
+      paint: { "line-color": "#7dd3fc", "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.8, 6, 2], "line-opacity": 0.7, "line-dasharray": [2, 1.5] },
+    });
+    map.addLayer({
+      id: "icebergs-dot",
+      type: "circle",
+      source: "icebergs",
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: {
+        // area → radius (a 100 km² berg ~5 px, a 2,500 km² one ~13 px at zoom 2)
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, ["interpolate", ["linear"], ["sqrt", ["coalesce", ["get", "km2"], 100]], 5, 3, 50, 11], 6, ["interpolate", ["linear"], ["sqrt", ["coalesce", ["get", "km2"], 100]], 5, 6, 50, 22]],
+        "circle-color": "#e0f2fe",
+        "circle-stroke-color": dark ? "#0369a1" : "#0c4a6e",
+        "circle-stroke-width": 1.5,
+      },
+    });
+    map.addLayer({
+      id: "icebergs-label",
+      type: "symbol",
+      source: "icebergs",
+      filter: ["==", ["geometry-type"], "Point"],
+      layout: { "text-field": ["get", "name"], "text-font": ["Montserrat Medium", "Open Sans Bold", "Noto Sans Regular"], "text-size": 10, "text-offset": [0, 1.2], "text-anchor": "top", "text-optional": true },
+      paint: { "text-color": dark ? "#e0f2fe" : "#0c4a6e", "text-halo-color": dark ? "#020617" : "#ffffff", "text-halo-width": 1.4 },
+    });
+    return ["icebergs-track", "icebergs-dot", "icebergs-label"];
+  },
+  hoverLabel: (f) => `Iceberg ${String(f.properties?.name ?? "")}${f.properties?.km2 ? ` · ${Number(f.properties.km2).toLocaleString()} km²` : ""} · ${String(f.properties?.last ?? "")}`,
+};
+
 export const DISASTER_LAYERS: AtlasLayer[] = [
   riskLayer,
   declarationsLayer,
@@ -506,5 +556,6 @@ export const DISASTER_LAYERS: AtlasLayer[] = [
   reportsLayer,
   gaugesLayer,
   worldLayer,
+  icebergsLayer,
   placeLayer,
 ];

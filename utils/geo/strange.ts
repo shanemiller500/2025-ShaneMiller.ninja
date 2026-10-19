@@ -30,6 +30,8 @@ export interface StrangeProps {
   desc: string;
   cat: StrangeCat;
   state: string | null;
+  /** country (Wikidata) — places outside the U.S. have no state */
+  country?: string | null;
   image: string | null;
   wiki: string | null;
 }

@@ -52,6 +52,9 @@ import {
   NAMED_WRECKS_URL,
   NOAA_WRECKS_URL,
   WORLD_WRECKS_URL,
+  AU_WRECKS_URL,
+  auWreckFeatures,
+  type AuWrecks,
   WRECK_CATS,
   chartedWreckFeatures,
   namedWreckFeatures,
@@ -91,6 +94,7 @@ export default function ShipwrecksApp() {
   const [noaa, setNoaa] = useState<FC | null>(null);
   const [named, setNamed] = useState<NamedWreckCols | null>(null);
   const [world, setWorld] = useState<WorldWreckCols | null>(null);
+  const [au, setAu] = useState<AuWrecks | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cats, setCats] = useState<Set<string>>(
     () => new Set([...WRECK_CATS.map((c) => c.key), "none"]),
@@ -129,6 +133,10 @@ export default function ShipwrecksApp() {
     fetch(WORLD_WRECKS_URL, { signal: ctl.signal })
       .then((r) => r.json())
       .then((j: { cols: WorldWreckCols }) => setWorld(j.cols))
+      .catch(() => undefined);
+    fetch(AU_WRECKS_URL, { signal: ctl.signal })
+      .then((r) => r.json())
+      .then((j: AuWrecks) => setAu(j))
       .catch(() => undefined);
     return () => ctl.abort();
   }, []);
@@ -187,9 +195,10 @@ export default function ShipwrecksApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [era]);
 
+  const auData = useMemo(() => (au ? auWreckFeatures(au) : undefined), [au]);
   const data = useMemo(
-    () => ({ noaa: noaaData, named: namedData, density: noaaData, sinkings: sinkData }),
-    [noaaData, namedData, sinkData],
+    () => ({ noaa: noaaData, named: namedData, density: noaaData, sinkings: sinkData, australia: auData }),
+    [noaaData, namedData, sinkData, auData],
   );
 
   /* graveyards: the densest clusters of charted wrecks */

@@ -17,7 +17,7 @@ const projectIcons: Record<string, { icon: LucideIcon; color: string }> = {
   "disaster-atlas": { icon: CloudLightning, color: "text-rose-600 dark:text-rose-300" },
   "strange-earth": { icon: Radar, color: "text-violet-600 dark:text-violet-300" },
   "hidden-earth": { icon: Compass, color: "text-emerald-600 dark:text-emerald-300" },
-  "underground-usa": { icon: Mountain, color: "text-indigo-600 dark:text-indigo-300" },
+  underground: { icon: Mountain, color: "text-indigo-600 dark:text-indigo-300" },
   shipwrecks: { icon: Anchor, color: "text-sky-600 dark:text-sky-300" },
   "fossil-atlas": { icon: Globe2, color: "text-lime-700 dark:text-lime-300" },
   "lost-mines": { icon: Pickaxe, color: "text-amber-700 dark:text-amber-300" },

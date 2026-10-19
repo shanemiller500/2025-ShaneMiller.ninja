@@ -4,7 +4,7 @@
 /* ------------------------------------------------------------------ */
 import type { Map as MlMap } from "maplibre-gl";
 import type { AtlasLayer } from "@/components/atlas/types";
-import { lifespan } from "@/utils/geo/ghost";
+import { GHOST_KINDS, lifespan } from "@/utils/geo/ghost";
 import { FEATURED_TOWNS } from "./featured";
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -111,12 +111,15 @@ export const drownedLayer: AtlasLayer = {
 
 export const ghostLayer: AtlasLayer = {
   id: "ghost",
-  label: "Ghost towns",
+  label: "Ghost towns & abandoned villages",
   group: "Places",
   defaultOn: true,
   badge: "Worldwide",
-  description: "Over 3,000 places Wikidata records as ghost towns — mostly in the U.S., but also Kolmanskop in Namibia, Craco in Italy and Humberstone in Chile. Click one for its photo and story.",
-  legend: [{ color: GHOST_COLORS.ghost, label: "Ghost town" }],
+  description: "8,500 places Wikidata records as ghost towns, abandoned villages or deserted medieval villages — from Bodie to Kolmanskop in Namibia, Craco in Italy, Spain's empty hill villages and England's lost medieval villages. Click one for its photo and story.",
+  legend: [
+    { color: GHOST_COLORS.ghost, label: "Ghost town" },
+    { color: GHOST_COLORS.ghost, label: "Abandoned or deserted village (smaller)", shape: "ring" },
+  ],
   citation: { label: "Wikidata", href: "https://www.wikidata.org/wiki/Q74047", license: "CC0" },
   clickable: ["ghost-dot"],
   install(map, { dark }) {
@@ -133,10 +136,11 @@ export const ghostLayer: AtlasLayer = {
       type: "circle",
       source: "ghost",
       paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 2, 8, 4.5, 13, 7],
-        "circle-color": GHOST_COLORS.ghost,
-        "circle-stroke-color": dark ? "#0c0a09" : "#ffffff",
-        "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 0.5, 9, 1.4],
+        // ghost towns are filled dots; abandoned and deserted villages smaller amber rings
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, ["case", ["==", ["get", "kind"], 0], 2, 1.4], 8, ["case", ["==", ["get", "kind"], 0], 4.5, 3.2], 13, ["case", ["==", ["get", "kind"], 0], 7, 5.5]],
+        "circle-color": ["case", ["==", ["get", "kind"], 0], GHOST_COLORS.ghost, dark ? "#0c0a09" : "#ffffff"],
+        "circle-stroke-color": ["case", ["==", ["get", "kind"], 0], dark ? "#0c0a09" : "#ffffff", GHOST_COLORS.ghost],
+        "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, ["case", ["==", ["get", "kind"], 0], 0.5, 1.4], 9, 1.4],
       },
     });
     map.addLayer({
@@ -150,9 +154,9 @@ export const ghostLayer: AtlasLayer = {
     return ["ghost-glow", "ghost-dot", "ghost-label"];
   },
   hoverLabel: (f) => {
-    const p = f.properties as { name: string; founded?: number | null; abandoned?: number | null };
+    const p = f.properties as { name: string; founded?: number | null; abandoned?: number | null; kind?: number };
     const life = lifespan(p.founded ?? null, p.abandoned ?? null);
-    return `${p.name}${life ? ` · ${life}` : ""}`;
+    return `${p.name} · ${(GHOST_KINDS[p.kind ?? 0] ?? GHOST_KINDS[0]).toLowerCase()}${life ? ` · ${life}` : ""}`;
   },
 };
 

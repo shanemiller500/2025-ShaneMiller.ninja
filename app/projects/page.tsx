@@ -218,8 +218,16 @@ export default function ProjectsPage() {
     slug: "/atlas",
     title: "Atlas",
     excerpt:
-      "Interactive maps from public GIS data: Earth Alive (live quakes, plates and erupting volcanoes) and Underground USA (caves, karst and 3D cave dives).",
+      "Interactive maps from public GIS data: Earth Alive (live quakes, plates and erupting volcanoes) and Underground World (caves, karst and 3D cave dives).",
     badge: "USGS + MapLibre",
+  },
+  {
+    id: 21,
+    icon: AtlasIcon,
+    slug: "/land-intelligence",
+    title: "Land Intelligence",
+    excerpt: "Draw a site or route on a globe for sourced terrain, soil, flood, wetland and nearby facility screening, plus Colorado parcel and highway context.",
+    badge: "U.S. GIS + MapLibre",
   },
   {
     id: 17,

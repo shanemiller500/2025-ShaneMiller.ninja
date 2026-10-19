@@ -1,15 +1,15 @@
 /* ------------------------------------------------------------------ */
-/*  Bake the Prehistoric USA time machine:                             */
+/*  Bake the Prehistoric Earth time machine:                             */
 /*                                                                     */
 /*  1. public/atlas/paleo/<age>.webp — Earth's land and seas at each   */
 /*     of the 109 PALEOMAP PaleoDEMs (Scotese & Wright 2018, CC BY     */
 /*     4.0, 6-arc-minute grids, 540 Ma → today), drawn as a Web        */
 /*     Mercator image with depth/elevation colours and hillshade.      */
-/*  2. public/atlas/paleo/<age>.json — the fossil sites from that      */
-/*     time at their ancient positions, and the outline of today's     */
-/*     United States moved back with them. Positions come from the     */
-/*     GPlates Web Service using the same PALEOMAP plate model, so     */
-/*     dots, outline and map line up.                                  */
+/*  2. public/atlas/paleo/<age>.json — the world's fossil sites from   */
+/*     that time at their ancient positions (grouped by spot), and     */
+/*     today's coastlines moved back with them. Positions come from    */
+/*     the GPlates Web Service using the same PALEOMAP plate model, so */
+/*     dots, coastlines and map line up.                               */
 /*  3. public/atlas/paleo/index.json — the list of time slices.        */
 /*                                                                     */
 /*  PALEODEM_DIR=<folder of the 6-min .nc files>                       */
@@ -30,6 +30,8 @@ const GWS = "https://gws.gplates.org/reconstruct/reconstruct_points/";
 const MODEL = "PALEOMAP";
 const UA = { "User-Agent": "shanemiller.ninja atlas (+https://shanemiller.ninja)" };
 const NE_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson";
+const NE_COAST_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_coastline.geojson";
+const FOSSIL_DIR = path.join(ROOT, "public/atlas/fossils");
 /** Output image size (Web Mercator, ±85.0511°). */
 const SIZE = Number(process.env.PALEO_SIZE ?? 2048);
 const MAX_LAT = 85.0511287798066;
@@ -271,6 +273,40 @@ async function usRings() {
   return rings;
 }
 
+/** Today's coastlines (Natural Earth 1:110m, public domain) as lines thinned to ~every 0.6°, small islands dropped. */
+async function worldCoast() {
+  const ne = await (await fetch(NE_COAST_URL, { headers: UA })).json();
+  const lines = [];
+  for (const feat of ne.features) {
+    const parts = feat.geometry.type === "LineString" ? [feat.geometry.coordinates] : feat.geometry.coordinates;
+    for (const line of parts) {
+      let len = 0;
+      for (let k = 1; k < line.length; k++) len += Math.hypot(line[k][0] - line[k - 1][0], line[k][1] - line[k - 1][1]);
+      if (len < 2) continue;
+      const thin = [line[0]];
+      for (const p of line.slice(1, -1)) {
+        const q = thin[thin.length - 1];
+        if (Math.hypot(p[0] - q[0], p[1] - q[1]) >= 0.6) thin.push(p);
+      }
+      thin.push(line[line.length - 1]);
+      lines.push(thin.map(([x, y]) => [Math.round(x * 100) / 100, Math.round(y * 100) / 100]));
+    }
+  }
+  return lines;
+}
+
+/** Every fossil site, from the world tiles: [tile index, row, lng, lat, max, min, per, flag, finds]. */
+async function fossilRows() {
+  const ix = JSON.parse(await readFile(path.join(FOSSIL_DIR, "index.json"), "utf8"));
+  const tiles = Object.keys(ix.tiles).sort();
+  const rows = [];
+  for (const [t, key] of tiles.entries()) {
+    const { cols: c } = JSON.parse(await readFile(path.join(FOSSIL_DIR, "t", `${key}.json`), "utf8"));
+    for (let i = 0; i < c.id.length; i++) rows.push([t, i, c.lng[i], c.lat[i], c.max[i], c.min[i], c.per[i], c.flag[i], c.n[i]]);
+  }
+  return { tiles, rows };
+}
+
 /**
  * Break rings into line pieces where GPlates has no position (null), and where two
  * neighbouring points have moved far apart — they sit on different plates (accreted
@@ -347,39 +383,61 @@ if (process.argv.includes("--test")) {
     console.log(`\nimages: ${slices.length}, ${(total / 1024 / 1024).toFixed(1)} MB`);
   }
 
+  let coastBase = null;
+  let fossilTiles = null;
   if (both || process.argv.includes("--points")) {
-    const fossils = JSON.parse(await readFile(path.join(ROOT, "public/atlas/fossils.json"), "utf8"));
-    const c = fossils.cols;
-    const rings = await cached("us-rings.json", usRings);
-    const ringPts = rings.flat();
-    let pairs = 0;
+    const { tiles, rows } = await fossilRows();
+    fossilTiles = tiles;
+    const coast = await cached("coast-110m.json", worldCoast);
+    coastBase = coast;
+    const coastPts = coast.flat();
+    let groups = 0;
+    let sites = 0;
     let dropped = 0;
     for (const s of slices) {
       const w = windows.find((x) => x.age === s.age);
-      const rows = membersOf(c, w);
-      // one request per distinct position (many collections share a spot)
-      const keyOf = (i) => `${c.lng[i].toFixed(2)},${c.lat[i].toFixed(2)}`;
-      const uniq = new Map();
-      for (const i of rows) if (!uniq.has(keyOf(i))) uniq.set(keyOf(i), uniq.size);
-      const pts = [...uniq.keys()].map((k) => k.split(",").map(Number));
-      const paleo = await cached(`f-${s.age}.json`, () => reconstruct(pts, s.age));
-      const outline = await cached(`us-${s.age}.json`, () => reconstruct(ringPts, s.age));
-      const out = { age: s.age, i: [], lng: [], lat: [] };
-      for (const i of rows) {
-        const p = paleo[uniq.get(keyOf(i))];
+      /* sites alive in this slice's window, grouped by spot (0.01°): one GPlates position per spot */
+      const spots = new Map();
+      for (const r of rows) {
+        const [t, i, lng, lat, max, min, per, flag, finds] = r;
+        if (!(min <= w.hi && max >= w.lo)) continue;
+        const key = `${lng.toFixed(2)},${lat.toFixed(2)}`;
+        let g = spots.get(key);
+        if (!g) spots.set(key, (g = { lng: Number(lng.toFixed(2)), lat: Number(lat.toFixed(2)), n: 0, finds: 0, flag: 0, per: new Map(), rep: null, repFinds: -1 }));
+        g.n++;
+        g.finds += finds;
+        g.flag |= flag;
+        g.per.set(per, (g.per.get(per) ?? 0) + 1);
+        // the spot opens its richest collection
+        if (finds > g.repFinds) [g.rep, g.repFinds] = [[t, i], finds];
+      }
+      const list = [...spots.values()];
+      const paleo = await cached(`fw-${s.age}.json`, () => reconstruct(list.map((g) => [g.lng, g.lat]), s.age));
+      const coastThen = await cached(`coast-${s.age}.json`, () => reconstruct(coastPts, s.age));
+      const out = { lng: [], lat: [], n: [], finds: [], per: [], flag: [], t: [], i: [] };
+      list.forEach((g, k) => {
+        const p = paleo[k];
         if (!p || Math.abs(p[0]) > 180) {
-          dropped++;
-          continue;
+          dropped += g.n;
+          return;
         }
-        out.i.push(i);
         out.lng.push(Math.round(p[0] * 100) / 100);
         out.lat.push(Math.round(p[1] * 100) / 100);
-      }
-      pairs += out.i.length;
-      await writeFile(path.join(OUT, `${fileAge(s.age)}.json`), JSON.stringify({ ...out, us: outlinePieces(rings, outline) }));
-      process.stdout.write(`\r${s.age} Ma: ${out.i.length} sites   `);
+        out.n.push(g.n);
+        out.finds.push(g.finds);
+        out.per.push([...g.per.entries()].sort((a, b) => b[1] - a[1])[0][0]);
+        out.flag.push(g.flag);
+        out.t.push(g.rep[0]);
+        out.i.push(g.rep[1]);
+        sites += g.n;
+      });
+      groups += out.n.length;
+      // coastlines aligned with today's (null where that crust didn't exist yet), so the app can follow a place through time
+      const coastOut = coastThen.map((c) => (c && Math.abs(c[0]) <= 180 ? [Math.round(c[0] * 100) / 100, Math.round(c[1] * 100) / 100] : null));
+      await writeFile(path.join(OUT, `${fileAge(s.age)}.json`), JSON.stringify({ age: s.age, sites: out, coast: coastOut }));
+      process.stdout.write(`\r${s.age} Ma: ${out.n.length} spots, ${out.n.reduce((a, b) => a + b, 0)} sites   `);
     }
-    console.log(`\nfossil positions: ${pairs} (${dropped} without a position that far back)`);
+    console.log(`\nfossil spots: ${groups} (${sites} site-slices; ${dropped} without a position that far back)`);
   }
 
   await writeFile(
@@ -389,6 +447,9 @@ if (process.argv.includes("--test")) {
       source: "PaleoDEMs: C. R. Scotese & N. M. Wright (2018), PALEOMAP Project, CC BY 4.0 · positions: GPlates Web Service, PALEOMAP model",
       model: MODEL,
       size: SIZE,
+      // which fossil tile each spot's collection lives in, and today's coastlines (lines → their lengths, then flat points)
+      ...(fossilTiles ? { tiles: fossilTiles } : {}),
+      ...(coastBase ? { coast: { lens: coastBase.map((l) => l.length), base: coastBase.flat(2) } } : {}),
       slices: slices.map((s) => ({ age: s.age, label: s.label, stage: s.stage ?? null, strat: s.strat ?? s.age, file: fileAge(s.age), ...(({ lo, hi }) => ({ lo, hi }))(windows.find((x) => x.age === s.age)) })),
     })
   );

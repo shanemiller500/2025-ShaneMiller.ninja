@@ -117,6 +117,45 @@ export function chartedWreckFeatures(noaa: GeoJSON.FeatureCollection | null, wor
   return { type: "FeatureCollection", features };
 }
 
+/* ── Australia & New Zealand (Australasian Underwater Cultural Heritage Database, CC BY 3.0 AU) ── */
+
+export const AU_WRECKS_URL = "/atlas/wrecks-au.json";
+export const auchdUrl = (id: number) => `https://www.environment.gov.au/shipwreck/public/wreck/wreck.do?key=${id}`;
+
+export interface AuWrecks {
+  dict: { type: string[]; rig: string[]; region: string[]; state: string[] };
+  cols: { id: number[]; name: string[]; lng: number[]; lat: number[]; kind: number[]; sure: number[]; year: (number | null)[]; built: (number | null)[]; tons: (number | null)[]; type: number[]; rig: number[]; where: string[]; region: number[]; state: number[]; plane: string[] };
+}
+
+/** Points with the dictionary columns decoded — `kind` 0 = ship, 1 = aircraft; `sure` 1 = the wreck site has been found. */
+export function auWreckFeatures(au: AuWrecks): GeoJSON.FeatureCollection<GeoJSON.Point> {
+  const { cols: c, dict } = au;
+  const at = (list: string[], i: number) => (i >= 0 ? list[i] : null);
+  return {
+    type: "FeatureCollection",
+    features: c.id.map((id, i) => ({
+      type: "Feature",
+      id,
+      geometry: { type: "Point", coordinates: [c.lng[i], c.lat[i]] },
+      properties: {
+        id,
+        name: c.name[i],
+        kind: c.kind[i],
+        sure: c.sure[i],
+        year: c.year[i],
+        built: c.built[i],
+        tons: c.tons[i],
+        type: at(dict.type, c.type[i]),
+        rig: at(dict.rig, c.rig[i]),
+        where: c.where[i] || null,
+        region: at(dict.region, c.region[i]),
+        state: at(dict.state, c.state[i]),
+        plane: c.plane[i] || null,
+      },
+    })),
+  };
+}
+
 export interface UkhoWreck {
   name: string | null;
   type: string | null;

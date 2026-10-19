@@ -183,3 +183,36 @@ test('disaster stories: sourced, one setup per chapter, every action resolves', 
   const k = DISASTER_STORIES.find((x) => x.id === 'katrina-2005');
   assert.ok(k.chapters.some((c) => c.body.some((b) => b.includes('nearly 1,400'))));
 });
+
+
+/* Giant icebergs (U.S. National Ice Center via NASA EONET) */
+test('icebergs: latest fix as a point, drift track as lines, areas in km², antimeridian handled', () => {
+  const events = [
+    {
+      id: 'EONET_1',
+      title: 'Iceberg A23A',
+      sources: [{ id: 'NATICE', url: 'https://usicecenter.gov/pub/Iceberg_Tabular.csv' }],
+      geometry: [
+        { date: '2026-09-01T00:00:00Z', type: 'Point', coordinates: [178.5, -70.1], magnitudeValue: 1000, magnitudeUnit: 'NM^2' },
+        { date: '2026-08-01T00:00:00Z', type: 'Point', coordinates: [176.0, -70.5], magnitudeValue: 1000, magnitudeUnit: 'NM^2' },
+        { date: '2026-10-01T00:00:00Z', type: 'Point', coordinates: [-179.5, -69.8], magnitudeValue: 1000, magnitudeUnit: 'NM^2' },
+      ],
+    },
+    { id: 'EONET_2', title: 'Iceberg B52', sources: [], geometry: [{ date: '2026-10-09T00:00:00Z', type: 'Point', coordinates: [-60, -65], magnitudeValue: null, magnitudeUnit: null }] },
+  ];
+  const fc = hz.icebergFeatures(events);
+  const points = fc.features.filter((f) => f.geometry.type === 'Point');
+  const lines = fc.features.filter((f) => f.geometry.type === 'LineString');
+  assert.equal(points.length, 2);
+  const a = points.find((f) => f.properties.name === 'A23A');
+  // the latest fix, whatever order EONET lists them in
+  assert.equal(JSON.stringify(a.geometry.coordinates), JSON.stringify([-179.5, -69.8]));
+  assert.equal(a.properties.last, '2026-10-01');
+  assert.equal(a.properties.first, '2026-08-01');
+  assert.equal(a.properties.fixes, 3);
+  assert.equal(a.properties.km2, Math.round(1000 * 3.4299));
+  assert.equal(points.find((f) => f.properties.name === 'B52').properties.km2, null);
+  // the track crosses 180° between the 2nd and 3rd fix: two pieces would need ≥2 points each, so one line survives
+  for (const l of lines) for (let k = 1; k < l.geometry.coordinates.length; k++) assert.ok(Math.abs(l.geometry.coordinates[k][0] - l.geometry.coordinates[k - 1][0]) < 180);
+  assert.equal(JSON.stringify(hz.splitTrack([[170, 0], [175, 0], [-178, 0], [-170, 0]])), JSON.stringify([[[170, 0], [175, 0]], [[-178, 0], [-170, 0]]]));
+});

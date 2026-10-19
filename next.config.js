@@ -17,6 +17,11 @@ const nextConfig = {
     return config
   },
 
+  // renamed atlas maps keep their old links
+  async redirects() {
+    return [{ source: "/atlas/underground-usa", destination: "/atlas/underground", permanent: true }];
+  },
+
   // Optional: hide Next.js build spinner messages in the console
   devIndicators: {
     buildActivity: false

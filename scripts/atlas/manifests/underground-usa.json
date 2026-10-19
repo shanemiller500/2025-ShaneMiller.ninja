@@ -1,0 +1,15 @@
+[
+  {
+    "url": "https://pubs.usgs.gov/of/2014/1156/pdf/of2014-1156.pdf",
+    "title": "Karst in the United States: A Digital Map Compilation and Database (OFR 2014-1156)",
+    "source": "U.S. Geological Survey",
+    "sourceUrl": "https://doi.org/10.3133/ofr20141156",
+    "license": "public domain",
+    "year": 2014,
+    "authors": ["David J. Weary", "Daniel H. Doctor"],
+    "summary": "The USGS national karst map behind Underground USA: areas underlain by soluble rocks (carbonates and evaporites) classified by climate, induration and exposure, plus volcanic, sediment and permafrost pseudokarst. All 50 States contain rocks with potential for karst, and about 18 percent of their area is underlain by soluble rocks with karst or the potential for it.",
+    "projects": ["underground-usa"],
+    "tags": ["story:hollow-country", "story:mammoth", "karst", "caves", "sinkholes", "pseudokarst", "lava tubes", "carbonate rocks", "evaporites", "geologic map", "united states"],
+    "region": "United States"
+  }
+]

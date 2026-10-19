@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/*  Bake the karst layer for Underground USA.                          */
+/*  Bake the karst layer for Underground World.                          */
 /*                                                                     */
 /*  Source: USGS Open-File Report 2014-1156, "Karst in the United      */
 /*  States: A Digital Map Compilation and Database" (Weary & Doctor),  */

@@ -6,7 +6,8 @@ import type { DiveTarget } from "./Descent";
 import { DrawerLink, FactGrid, FeatureDrawer } from "@/components/atlas/FeatureDrawer";
 import type { Picked } from "@/components/atlas/types";
 import { useWikiPhoto } from "@/components/atlas/useWikiPhoto";
-import { WATER_LEVEL, metresToFeet, ukhoWreck, wreckCat, wreckDetails, type UkhoWreck, type WreckDetails } from "@/utils/geo/wrecks";
+import { AU_PLANE, AU_SHIP } from "./layers";
+import { WATER_LEVEL, auchdUrl, metresToFeet, ukhoWreck, wreckCat, wreckDetails, type UkhoWreck, type WreckDetails } from "@/utils/geo/wrecks";
 import { causeOf, fmtDay, sourceUrl } from "@/utils/geo/sinkings";
 import { featuredById } from "./featured";
 
@@ -218,6 +219,45 @@ export function WreckDetailsDrawer({ picked, onClose, onDive }: { picked: Picked
             />
           )}
           <DrawerLink href="https://nauticalcharts.noaa.gov/enconline/enconline.html">NOAA ENC Online chart viewer</DrawerLink>
+        </div>
+      </FeatureDrawer>
+    );
+  }
+
+  if (picked.layer === "australia") {
+    const plane = Number(p.kind) === 1;
+    const sure = Number(p.sure) === 1;
+    const [lng, lat] = picked.lngLat;
+    const name = String(p.name);
+    const spot = `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lng).toFixed(2)}°${lng >= 0 ? "E" : "W"}`;
+    return (
+      <FeatureDrawer
+        open
+        onClose={onClose}
+        eyebrow={plane ? "Sunken aircraft" : "Historic shipwreck"}
+        accent={plane ? AU_PLANE : AU_SHIP}
+        title={name}
+        subtitle={[p.where, p.state].filter(Boolean).join(" · ") || undefined}
+      >
+        <div className="space-y-4">
+          <FactGrid
+            facts={[
+              ["Lost", p.year ? String(p.year) : "year not recorded"],
+              [plane ? "Aircraft" : "Vessel", [p.type, p.plane].filter(Boolean).join(" · ") || null],
+              ["Rig", p.rig ? String(p.rig) : null],
+              ["Built", p.built ? String(p.built) : null],
+              ["Gross tonnage", p.tons ? Number(p.tons).toLocaleString() : null],
+              ["Region", p.region ? String(p.region) : null],
+              ["Site status", sure ? "Located" : "Not marked as located"],
+            ]}
+          />
+          <p className="text-[11px] leading-snug text-slate-500">
+            {sure
+              ? "The database marks this wreck site as located. Historic wrecks in Australian waters are protected by law — look, but don't touch or take."
+              : `The database doesn't mark this site as located, so this point (${spot}) is usually where the ${plane ? "aircraft" : "ship"} was recorded lost and may be some way from the wreck. The full record has more.`}
+          </p>
+          {onDive && sure && <DiveButton accent={plane ? AU_PLANE : AU_SHIP} onClick={() => onDive({ name, center: picked.lngLat, depth: null, depthSource: null })} />}
+          <DrawerLink href={auchdUrl(Number(p.id))}>Australasian Underwater Cultural Heritage Database record</DrawerLink>
         </div>
       </FeatureDrawer>
     );

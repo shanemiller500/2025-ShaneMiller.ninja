@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, Bone, Check, ChevronRight, Hourglass, Layers, Link2, ListOrdered, LocateFixed, Map as MapIcon, Pause, Play, Search, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Bone, Check, ChevronRight, Hourglass, Layers, Link2, ListOrdered, Loader2, LocateFixed, Map as MapIcon, Pause, Play, Search, X } from "lucide-react";
 import { StoryPlayer } from "@/components/atlas/StoryPlayer";
 import type { StoryAction } from "@/components/atlas/story";
 import { useLibrary } from "@/utils/geo/useLibrary";
@@ -11,9 +11,32 @@ import { LayerPanel } from "@/components/atlas/LayerPanel";
 import { SourceCitation } from "@/components/atlas/SourceCitation";
 import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass, useAtlasTheme } from "@/components/atlas/Hud";
 import type { AtlasView, Basemap, Picked, TerrainMode } from "@/components/atlas/types";
-import { FLAG_DINO, FLAG_MAMMAL, FOSSILS_URL, PERIODS, extentOf, fossilFeatures, inState, periodEnd, type FossilsFile } from "@/utils/geo/fossils";
-import { formatAge } from "@/utils/geo/strange";
-import { fmtMa, outlineCenter, outlineFeatures, paleoFeatures, paleoImageUrl } from "@/utils/geo/paleo";
+import {
+  FLAG_DINO,
+  FLAG_MAMMAL,
+  FOSSILS_FORMATIONS_URL,
+  FOSSILS_INDEX_URL,
+  FOSSILS_SUMMARY_URL,
+  PERIODS,
+  SITES_MIN_ZOOM,
+  fitBbox,
+  fossilTileUrl,
+  periodCounts,
+  periodEnd,
+  searchFormations,
+  summaryFeatures,
+  tileFeatures,
+  tilesAround,
+  tilesFor,
+  word,
+  type FormationIndex,
+  type FossilIndex,
+  type FossilSummary,
+  type FossilTile,
+} from "@/utils/geo/fossils";
+import { useTileSet } from "@/utils/geo/useTileSet";
+import { formatAge, kmBetween } from "@/utils/geo/strange";
+import { coastFeatures, coastPointIn, fmtMa, nearestCoastPoint, paleoFeatures, paleoImageUrl, sitesIn, type PaleoSliceData } from "@/utils/geo/paleo";
 import { FOSSIL_PARKS, parkById, type FossilPark } from "./featured";
 import { BONE, FOSSIL_LAYERS, TIME_ONLY, TODAY_ONLY } from "./layers";
 import { FossilDetailsDrawer } from "./Details";
@@ -21,9 +44,9 @@ import { TimeBar, useTimeMachine } from "./TimeMachine";
 import { FOSSIL_STORIES, fossilStoryById, type FossilAction } from "./stories";
 
 /* ------------------------------------------------------------------ */
-/*  Prehistoric USA — every U.S. fossil site in the Paleobiology       */
-/*  Database, by geologic period, with the dinosaur sites marked and   */
-/*  the national parks that protect famous fossil beds — and a time    */
+/*  Prehistoric Earth — every fossil site in the world in the          */
+/*  Paleobiology Database, by geologic period, with the dinosaur sites */
+/*  marked and the parks that protect famous fossil beds — and a time  */
 /*  machine back to Earth as it was when they were alive.              */
 /* ------------------------------------------------------------------ */
 
@@ -33,10 +56,14 @@ const ORBIT_SPEED = 5; // degrees per second
 type Panel = "find" | "layers" | null;
 type FlyTo = { center: [number, number]; zoom?: number; pitch?: number; bearing?: number; nonce: number };
 const SHOW_FLAG: Record<Show, number | undefined> = { all: undefined, dinos: FLAG_DINO, mammals: FLAG_MAMMAL };
+/** A formation can sit in many tiles; load at most this many. */
+const FORMATION_TILES_MAX = 80;
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 export default function FossilApp() {
   const dark = useAtlasTheme();
-  const [data, setData] = useState<FossilsFile | null>(null);
+  const [index, setIndex] = useState<FossilIndex | null>(null);
+  const [summary, setSummary] = useState<FossilSummary | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [visible, setVisible] = useState<Record<string, boolean>>(() => Object.fromEntries(FOSSIL_LAYERS.map((l) => [l.id, !!l.defaultOn])));
   const [basemap, setBasemap] = useState<Basemap>("map");
@@ -44,12 +71,12 @@ export default function FossilApp() {
   const [picked, setPickedState] = useState<Picked | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [flyTo, setFlyTo] = useState<FlyTo | null>(null);
-  const [initialView] = useState(() => ({ center: [-104, 40] as [number, number], zoom: Math.min(3.6, Math.max(2, Math.log2(window.innerWidth / 260))) }));
+  const [initialView] = useState(() => ({ center: [-30, 30] as [number, number], zoom: Math.min(2.4, Math.max(1.4, Math.log2(window.innerWidth / 420))) }));
 
-  /* filters: what to show, one period, one rock formation */
+  /* filters: what to show, one period, one rock formation (by name) */
   const [show, setShow] = useState<Show>("all");
   const [period, setPeriod] = useState<number | null>(null);
-  const [formation, setFormation] = useState<number | null>(null);
+  const [formation, setFormation] = useState<string | null>(null);
 
   /* ── modes: today's map · the time machine ─────────────────────── */
   const [mode, setMode] = useState<Mode>(() => {
@@ -66,9 +93,9 @@ export default function FossilApp() {
   const machine = useTimeMachine(timeOn, startAge);
   const [follow, setFollow] = useState(true);
   const [view, setView] = useState<AtlasView | null>(null);
-  const zoomRef = useRef(3);
-  zoomRef.current = view?.zoom ?? zoomRef.current;
-  // ancient Earth on: its layers in, today's geology and parks out (and back as they were after)
+  const viewRef = useRef<AtlasView | null>(null);
+  viewRef.current = view ?? viewRef.current;
+  // ancient Earth on: its layers in, today's geology, parks and summary out (and back as they were after)
   const todaySaved = useRef<Record<string, boolean> | null>(null);
   useEffect(() => {
     if (timeOn) {
@@ -83,19 +110,27 @@ export default function FossilApp() {
   }, [timeOn]);
   const switchMode = (m: Mode) => {
     if (m === mode) return;
-    const leavingTime = mode === "time";
     setMode(m);
     setStoryAge(null);
     setPickedState(null);
     setPanel(null);
-    if (leavingTime && m === "today") go([-104, 40], 3.4);
   };
-  // keep today's U.S. in view as it drifts
-  const paleo = machine.data;
+
+  /* keep the land you're looking at in view as it drifts: the coastline point nearest the middle of the screen, in the next slice */
+  const paleo = machine.data as PaleoSliceData | null;
+  const prevSlice = useRef<PaleoSliceData | null>(null);
   useEffect(() => {
-    if (!timeOn || !follow || !paleo) return;
-    const c = outlineCenter(paleo);
-    if (c) setFlyTo({ center: c, zoom: Math.min(Math.max(zoomRef.current, 2.2), 4.2), nonce: Date.now() });
+    if (!timeOn || !paleo) return;
+    const prev = prevSlice.current;
+    prevSlice.current = paleo;
+    const v = viewRef.current;
+    if (!follow || !prev || !v || prev === paleo) return;
+    const k = nearestCoastPoint(prev.coast, v.center);
+    const then = k >= 0 ? coastPointIn(paleo.coast, k) : null;
+    if (!then) return;
+    // move the view by as much as that coastline point moved
+    const from = prev.coast[k] ?? v.center;
+    setFlyTo({ center: [v.center[0] + (then[0] - from[0]), Math.max(-80, Math.min(80, v.center[1] + (then[1] - from[1])))], zoom: v.zoom, nonce: Date.now() });
   }, [paleo, timeOn, follow]);
 
   /* ── stories ───────────────────────────────────────────────────── */
@@ -166,47 +201,74 @@ export default function FossilApp() {
   }, []);
   const flyIndex = fly ? FOSSIL_PARKS.findIndex((p) => p.id === fly.id) : -1;
 
+  /* ── data: index + summary up front, tiles for the view, formations on demand ── */
   useEffect(() => {
     const ctl = new AbortController();
-    fetch(FOSSILS_URL, { signal: ctl.signal })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(setData)
+    const get = (u: string) => fetch(u, { signal: ctl.signal }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${u}: HTTP ${r.status}`))));
+    Promise.all([get(FOSSILS_INDEX_URL), get(FOSSILS_SUMMARY_URL)])
+      .then(([ix, sm]: [FossilIndex, FossilSummary]) => {
+        setIndex(ix);
+        setSummary(sm);
+      })
       .catch((e) => !ctl.signal.aborted && setLoadError((e as Error).message));
     return () => ctl.abort();
   }, []);
+  const [formations, setFormations] = useState<FormationIndex | null>(null);
+  const formationsLoading = useRef<Promise<FormationIndex> | null>(null);
+  const loadFormations = useCallback(() => {
+    if (!formationsLoading.current)
+      formationsLoading.current = fetch(FOSSILS_FORMATIONS_URL)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then((fi: FormationIndex) => {
+          setFormations(fi);
+          return fi;
+        });
+    return formationsLoading.current;
+  }, []);
+  /** extra tiles: a formation's, "near me", a share link's */
+  const [need, setNeed] = useState<string[]>([]);
+  const zoom = view?.zoom ?? initialView.zoom;
+  const zoomedIn = zoom >= SITES_MIN_ZOOM;
+  const viewTiles = useMemo(() => (index && view && zoomedIn && !timeOn ? tilesFor(view.bounds, index) : []), [index, view, zoomedIn, timeOn]);
+  const wanted = useMemo(() => Array.from(new Set([...viewTiles, ...need])), [viewTiles, need]);
+  const loaded = useTileSet<FossilTile>(wanted, fossilTileUrl);
 
   const flag = SHOW_FLAG[show];
-  const fossils = useMemo(() => (data ? fossilFeatures(data, { periods: period != null ? new Set([period]) : undefined, formation, flag }) : undefined), [data, period, formation, flag]);
-  const paleoFossils = useMemo(() => (timeOn && data && paleo ? paleoFeatures(data, paleo, { formation, flag }) : undefined), [timeOn, data, paleo, formation, flag]);
+  // zoomed in or a formation: every site; zoomed out: the summary
+  const sites = useMemo(() => (formation || zoomedIn ? tileFeatures(loaded.tiles, { period, flag, formation }) : EMPTY_FC), [loaded.tiles, period, flag, formation, zoomedIn]);
+  const cells = useMemo(() => (summary && !formation && !zoomedIn ? summaryFeatures(summary, { period, flag }) : EMPTY_FC), [summary, period, flag, formation, zoomedIn]);
+  const paleoSpots = useMemo(() => (timeOn && paleo && machine.index ? paleoFeatures(paleo, machine.index.tiles, { flag }) : null), [timeOn, paleo, machine.index, flag]);
   const mapData = useMemo(
     () =>
       timeOn
         ? {
-            fossils: paleoFossils ?? { type: "FeatureCollection" as const, features: [] },
-            usthen: paleo ? outlineFeatures(paleo) : undefined,
+            fossils: paleoSpots ?? EMPTY_FC,
+            cells: EMPTY_FC,
+            coastthen: paleo && machine.index ? coastFeatures(machine.index.coast, paleo.coast) : undefined,
             ancient: machine.slice ? { url: paleoImageUrl(machine.slice.file) } : undefined,
           }
-        : { fossils },
-    [timeOn, fossils, paleoFossils, paleo, machine.slice]
+        : { fossils: sites, cells },
+    [timeOn, paleoSpots, paleo, machine.index, machine.slice, sites, cells]
   );
 
   /* how many sites each period chip would show under the other filters */
   const perCounts = useMemo(() => {
-    const out = PERIODS.map(() => 0);
-    if (!data) return out;
-    const c = data.cols;
-    for (let i = 0; i < c.id.length; i++) {
-      if (formation != null && c.fm[i] !== formation) continue;
-      if (flag && !(c.flag[i] & flag)) continue;
-      out[c.per[i]]++;
+    if (formation) {
+      const out = PERIODS.map(() => 0);
+      for (const f of tileFeatures(loaded.tiles, { flag, formation }).features) out[Number(f.properties?.per)]++;
+      return out;
     }
-    return out;
-  }, [data, formation, flag]);
-  const dinoCount = useMemo(() => (data ? data.cols.flag.filter((f) => f & FLAG_DINO).length : 0), [data]);
-  const mammalCount = useMemo(() => (data ? data.cols.flag.filter((f) => f & FLAG_MAMMAL).length : 0), [data]);
-  const findCount = useMemo(() => (data ? data.cols.n.reduce((a, b) => a + b, 0) : 0), [data]);
+    return summary ? periodCounts(summary, flag) : PERIODS.map(() => 0);
+  }, [summary, flag, formation, loaded.tiles]);
+  const shown = formation || zoomedIn ? sites.features.length : cells.features.reduce((a, f) => a + Number(f.properties?.n ?? 0), 0);
 
   const setPicked = useCallback((p: Picked | null) => {
+    // a zoomed-out cell: zoom in on it
+    if (p?.layer === "cells") {
+      setFlyTo({ center: p.lngLat, zoom: SITES_MIN_ZOOM + 1.2, pitch: 0, bearing: 0, nonce: Date.now() });
+      return;
+    }
+    if (p?.layer === "fossils" && p.props.tile) setNeed((cur) => (cur.includes(String(p.props.tile)) ? cur : [...cur, String(p.props.tile)]));
     setPickedState(p);
     if (p) setPanel(null);
   }, []);
@@ -214,39 +276,33 @@ export default function FossilApp() {
     setPanel((cur) => (cur === p ? null : p));
     setPickedState(null);
   };
-  const go = (center: [number, number], zoom: number) => setFlyTo({ center, zoom, pitch: 0, bearing: 0, nonce: Date.now() });
+  const go = (center: [number, number], z: number) => setFlyTo({ center, zoom: z, pitch: 0, bearing: 0, nonce: Date.now() });
 
   const pickPark = (p: FossilPark) => {
+    if (index) setNeed(tilesAround(p.center, index));
     setPicked({ layer: "parks", id: p.id, props: { id: p.id, name: p.name }, lngLat: p.center });
     go(p.center, p.zoom);
   };
-  const pickCollection = (i: number, zoom = 11) => {
-    if (!data) return;
-    const c = data.cols;
-    const at: [number, number] = [c.lng[i], c.lat[i]];
-    setPicked({ layer: "fossils", id: c.id[i], props: { i, id: c.id[i], per: c.per[i], flag: c.flag[i] }, lngLat: at });
-    go(at, zoom);
+  /** Open one site (its tile may not be loaded yet — the drawer fills in when it is). */
+  const pickSite = (tile: string, i: number, at: [number, number], z = 11) => {
+    setNeed((cur) => (cur.includes(tile) ? cur : [...cur, tile]));
+    setPicked({ layer: "fossils", props: { tile, i }, lngLat: at });
+    go(at, z);
   };
   /** Filter to one formation and frame every site in it. */
-  const showFormation = (fm: number) => {
-    if (!data) return;
-    setFormation(fm);
+  const showFormation = async (name: string) => {
+    const fi = formations ?? (await loadFormations().catch(() => null));
+    if (!fi) return;
+    const k = fi.name.indexOf(name);
+    if (k < 0) return;
+    setFormation(name);
     setPeriod(null);
     setShow("all");
     setPickedState(null);
     setPanel(null);
-    const rows: number[] = [];
-    data.cols.fm.forEach((f, i) => f === fm && rows.push(i));
-    const ext = extentOf(data.cols, rows);
-    if (ext) go(ext.center, ext.zoom);
-  };
-  const showState = (state: string) => {
-    if (!data) return;
-    const rows: number[] = [];
-    for (let i = 0; i < data.cols.id.length; i++) if (inState(data, i, state)) rows.push(i);
-    const ext = extentOf(data.cols, rows);
-    setPanel(null);
-    if (ext) go(ext.center, Math.min(ext.zoom, 7));
+    setNeed(fi.t[k].slice(0, FORMATION_TILES_MAX).map((t) => fi.tiles[t]));
+    const ext = fitBbox(fi.bbox[k]);
+    go(ext.center, ext.zoom);
   };
 
   const runStoryAction = (a: StoryAction<FossilAction>) => {
@@ -266,46 +322,57 @@ export default function FossilApp() {
     } else if (a.kind === "fly") {
       const p = parkById(v);
       if (p) startFly(p);
-    } else if (a.kind === "formation" && data) {
-      const fm = data.formations.indexOf(v);
+    } else if (a.kind === "formation") {
       setStoryAge(null);
-      if (fm >= 0) showFormation(fm);
+      void showFormation(v);
     }
   };
 
-  /* ── share links: ?park · ?coll · ?fm · ?period · ?show · ?t · ?story ── */
+  /* ── share links: ?park · ?coll=<id>&tile=<key> · ?fm · ?period · ?show · ?t · ?story ── */
   const urlRead = useRef(false);
+  const pendingColl = useRef<{ id: number; tile: string } | null>(null);
   useEffect(() => {
-    if (urlRead.current || !data) return;
+    if (urlRead.current || !index) return;
     urlRead.current = true;
     const q = new URLSearchParams(window.location.search);
     const s = q.get("show");
     if (s === "dinos" || s === "mammals") setShow(s);
     const per = PERIODS.findIndex((p) => p.key === q.get("period"));
     if (per >= 0) setPeriod(per);
-    const fm = q.get("fm") ? data.formations.indexOf(q.get("fm")!) : -1;
-    if (fm >= 0) {
-      setFormation(fm);
-      const rows: number[] = [];
-      data.cols.fm.forEach((f, i) => f === fm && rows.push(i));
-      const ext = extentOf(data.cols, rows);
-      if (ext) go(ext.center, ext.zoom);
-    }
+    if (q.get("fm")) void showFormation(q.get("fm")!);
     const park = q.get("park") ? parkById(q.get("park")!) : undefined;
     if (park) pickPark(park);
-    else if (q.get("coll")) {
-      const i = data.cols.id.indexOf(Number(q.get("coll")));
-      if (i >= 0) pickCollection(i);
+    else if (q.get("coll") && q.get("tile") && index.tiles[q.get("tile")!]) {
+      pendingColl.current = { id: Number(q.get("coll")), tile: q.get("tile")! };
+      setNeed((cur) => [...cur, q.get("tile")!]);
     }
-    // once the data has loaded
+    // once the index has loaded
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  }, [index]);
   useEffect(() => {
-    if (!urlRead.current || !data) return;
+    const p = pendingColl.current;
+    if (!p) return;
+    const t = loaded.tiles.find((x) => x.key === p.tile)?.tile;
+    if (!t) return;
+    pendingColl.current = null;
+    const i = t.cols.id.indexOf(p.id);
+    if (i >= 0) pickSite(p.tile, i, [t.cols.lng[i], t.cols.lat[i]]);
+    // when the tile arrives
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded.tiles]);
+  useEffect(() => {
+    if (!urlRead.current) return;
     const q = new URLSearchParams();
     if (picked?.layer === "parks") q.set("park", String(picked.id));
-    else if (picked?.layer === "fossils") q.set("coll", String(picked.props.id));
-    if (formation != null) q.set("fm", data.formations[formation]);
+    else if (picked?.layer === "fossils") {
+      const t = loaded.tiles.find((x) => x.key === picked.props.tile)?.tile;
+      const id = t?.cols.id[Number(picked.props.i)];
+      if (id != null) {
+        q.set("coll", String(id));
+        q.set("tile", String(picked.props.tile));
+      }
+    }
+    if (formation) q.set("fm", formation);
     if (period != null) q.set("period", PERIODS[period].key);
     if (show !== "all") q.set("show", show);
     if (mode === "stories" && storyId) {
@@ -314,7 +381,9 @@ export default function FossilApp() {
     } else if (timeOn) q.set("t", String(machine.age));
     const qs = q.toString();
     window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
-  }, [picked, formation, period, show, data, timeOn, machine.age, mode, storyId, chapter]);
+    // the tiles only matter for the picked site's id
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked, formation, period, show, timeOn, machine.age, mode, storyId, chapter]);
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
     try {
@@ -327,7 +396,7 @@ export default function FossilApp() {
   };
 
   const citations = FOSSIL_LAYERS.filter((l) => visible[l.id] && l.citation.label).map((l) => l.citation);
-  const shown = fossils?.features.length ?? 0;
+  const counts = index?.counts;
 
   return (
     <div className={`atlas-map-page fixed inset-0 overflow-hidden ${dark ? "dark bg-[#0b0f0a] text-stone-100" : "bg-stone-50 text-stone-900"}`}>
@@ -348,7 +417,7 @@ export default function FossilApp() {
         onOrbitStop={() => setOrbiting(false)}
         className="atlas-space absolute inset-0"
       >
-        <FossilDetailsDrawer picked={picked} data={data} then={timeOn && machine.slice ? machine.slice : null} onClose={() => setPickedState(null)} onFormation={timeOn ? undefined : showFormation} onFly={startFly} />
+        <FossilDetailsDrawer picked={picked} tiles={loaded.tiles} then={timeOn && machine.slice ? machine.slice : null} onClose={() => setPickedState(null)} onFormation={timeOn ? undefined : (name) => void showFormation(name)} onFly={startFly} />
       </AtlasMap>
 
       {/* ── top-left ─────────────────────────────────────────────── */}
@@ -359,7 +428,7 @@ export default function FossilApp() {
           </Link>
           <div className={`${hudGlass} flex items-center gap-2.5 px-3 py-2`}>
             <Bone className="h-3.5 w-3.5 text-lime-300" />
-            <span className="font-mono text-[12px] font-semibold uppercase tracking-[0.3em] text-white">Prehistoric USA</span>
+            <span className="font-mono text-[12px] font-semibold uppercase tracking-[0.3em] text-white">Prehistoric Earth</span>
           </div>
           <button
             type="button"
@@ -407,14 +476,30 @@ export default function FossilApp() {
             { key: "mammals", label: "Mammals", title: "Only sites with mammal fossils" },
           ]}
         />
-        {formation != null && data && (
+        {formation && !timeOn && (
           <span className={`${hudGlass} pointer-events-auto inline-flex items-center gap-2 px-3 py-1.5 text-[12px] text-white`}>
             <span className="font-mono text-[10px] uppercase tracking-wider text-lime-200/80">Formation</span>
-            {data.formations[formation]}
-            <span className="font-mono text-[11px] text-slate-400">· {shown.toLocaleString()} sites</span>
-            <button type="button" onClick={() => setFormation(null)} aria-label="Show every formation" className="rounded-md p-0.5 text-slate-400 hover:bg-white/10 hover:text-white">
+            {formation}
+            <span className="font-mono text-[11px] text-slate-400">· {loaded.loading ? "…" : `${shown.toLocaleString()} sites`}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setFormation(null);
+                setNeed([]);
+              }}
+              aria-label="Show every formation"
+              className="rounded-md p-0.5 text-slate-400 hover:bg-white/10 hover:text-white"
+            >
               <X className="h-3.5 w-3.5" />
             </button>
+          </span>
+        )}
+        {!timeOn && !formation && !zoomedIn && mode === "today" && (
+          <span className={`${hudGlass} pointer-events-auto px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-lime-100/80`}>Zoom in (or click a dot) to see every site</span>
+        )}
+        {loaded.loading && zoomedIn && !timeOn && (
+          <span className={`${hudGlass} pointer-events-auto inline-flex items-center gap-2 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-lime-100/80`}>
+            <Loader2 className="h-3 w-3 animate-spin" /> Loading fossil sites…
           </span>
         )}
         {loadError && <p className={`${hudGlass} pointer-events-auto px-3 py-2 text-xs text-rose-300`}>Couldn&apos;t load the fossil data ({loadError}).</p>}
@@ -422,10 +507,10 @@ export default function FossilApp() {
 
       {/* ── right rail ───────────────────────────────────────────── */}
       {mode !== "stories" && !fly && (
-      <div className="absolute right-3 top-[168px] z-30 flex flex-col gap-2">
-        {!timeOn && <HudIconButton icon={ListOrdered} label="Find a park, formation or state" active={panel === "find"} onClick={() => togglePanel("find")} badge={FOSSIL_PARKS.length} />}
-        <HudIconButton icon={Layers} label="Layers" active={panel === "layers"} onClick={() => togglePanel("layers")} />
-      </div>
+        <div className="absolute right-3 top-[168px] z-30 flex flex-col gap-2">
+          {!timeOn && <HudIconButton icon={ListOrdered} label="Find a park or formation" active={panel === "find"} onClick={() => togglePanel("find")} badge={FOSSIL_PARKS.length} />}
+          <HudIconButton icon={Layers} label="Layers" active={panel === "layers"} onClick={() => togglePanel("layers")} />
+        </div>
       )}
 
       {mode === "stories" && !fly && (
@@ -471,7 +556,21 @@ export default function FossilApp() {
       )}
       {panel && (
         <SidePanel title={panel === "find" ? "Find" : "Layers"} onClose={() => setPanel(null)}>
-          {panel === "find" && <FindPanel data={data} onPark={pickPark} onFormation={showFormation} onState={showState} onCollection={(i) => pickCollection(i, 10)} onGo={go} />}
+          {panel === "find" && (
+            <FindPanel
+              index={index}
+              formations={formations}
+              loadFormations={loadFormations}
+              tiles={loaded.tiles}
+              onPark={pickPark}
+              onFormation={(name) => void showFormation(name)}
+              onSite={pickSite}
+              onNear={(at) => {
+                if (index) setNeed(tilesAround(at, index));
+                go(at, 8);
+              }}
+            />
+          )}
           {panel === "layers" && (
             <div className="space-y-4">
               <LayerPanel id="pf" layers={FOSSIL_LAYERS} visible={visible} onToggle={(id) => setVisible((v) => ({ ...v, [id]: !v[id] }))} basemap={basemap} onBasemap={setBasemap} terrain={terrain} onTerrain={setTerrain} />
@@ -483,28 +582,28 @@ export default function FossilApp() {
 
       {/* ── bottom: geologic periods + status ────────────────────── */}
       {mode !== "stories" && !fly && (
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex flex-col items-start gap-2 sm:left-4 sm:right-auto sm:max-w-[min(860px,calc(100%-6rem))]">
-        {timeOn ? (
-          <div className="pointer-events-auto flex w-full flex-col items-start gap-2 sm:w-[640px]">
-            <label className={`${hudGlass} inline-flex cursor-pointer items-center gap-2 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-300`}>
-              <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="accent-lime-400" />
-              Follow the U.S. as it drifts
-            </label>
-            <TimeBar machine={machine} shown={paleoFossils ? paleoFossils.features.length : null} />
-          </div>
-        ) : (
-          <>
-        <PeriodStrip counts={perCounts} value={period} onChange={setPeriod} />
-        <HudPanel className="pointer-events-auto flex max-w-full items-center gap-5 overflow-x-auto px-4 py-2.5">
-          <HudStat label="Sites shown" value={data ? shown.toLocaleString() : "—"} tone="text-lime-300" />
-          <HudStat label="Finds" value={data ? findCount.toLocaleString() : "—"} tone="text-stone-300" />
-          <HudStat label="Dinosaurs" value={data ? dinoCount.toLocaleString() : "—"} tone="text-amber-100" onClick={() => setShow("dinos")} />
-          <HudStat label="Mammals" value={data ? mammalCount.toLocaleString() : "—"} tone="text-rose-300" onClick={() => setShow("mammals")} />
-          <HudStat label="Parks" value={FOSSIL_PARKS.length} tone="text-white" onClick={() => togglePanel("find")} />
-        </HudPanel>
-          </>
-        )}
-      </div>
+        <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex flex-col items-start gap-2 sm:left-4 sm:right-auto sm:max-w-[min(860px,calc(100%-6rem))]">
+          {timeOn ? (
+            <div className="pointer-events-auto flex w-full flex-col items-start gap-2 sm:w-[640px]">
+              <label className={`${hudGlass} inline-flex cursor-pointer items-center gap-2 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-300`}>
+                <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="accent-lime-400" />
+                Follow the land you&apos;re looking at
+              </label>
+              <TimeBar machine={machine} shown={paleoSpots ? sitesIn(paleoSpots) : null} />
+            </div>
+          ) : (
+            <>
+              <PeriodStrip counts={perCounts} value={period} onChange={setPeriod} />
+              <HudPanel className="pointer-events-auto flex max-w-full items-center gap-5 overflow-x-auto px-4 py-2.5">
+                <HudStat label="Sites shown" value={summary ? shown.toLocaleString() : "—"} tone="text-lime-300" />
+                <HudStat label="Finds" value={counts ? counts.finds.toLocaleString() : "—"} tone="text-stone-300" />
+                <HudStat label="Dinosaurs" value={counts ? counts.dino.toLocaleString() : "—"} tone="text-amber-100" onClick={() => setShow("dinos")} />
+                <HudStat label="Mammals" value={counts ? counts.mammal.toLocaleString() : "—"} tone="text-rose-300" onClick={() => setShow("mammals")} />
+                <HudStat label="Countries" value={counts ? counts.countries.toLocaleString() : "—"} tone="text-white" />
+              </HudPanel>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
@@ -571,64 +670,51 @@ function SidePanel({ title, onClose, children }: { title: string; onClose: () =>
 }
 
 const LIST_MAX = 40;
-const kmApprox = (a: [number, number], lng: number, lat: number) => {
-  const x = (lng - a[0]) * Math.cos((a[1] * Math.PI) / 180);
-  return Math.hypot(x, lat - a[1]) * 111.2;
-};
 
 function FindPanel({
-  data,
+  index,
+  formations,
+  loadFormations,
+  tiles,
   onPark,
   onFormation,
-  onState,
-  onCollection,
-  onGo,
+  onSite,
+  onNear,
 }: {
-  data: FossilsFile | null;
+  index: FossilIndex | null;
+  formations: FormationIndex | null;
+  loadFormations: () => Promise<FormationIndex>;
+  tiles: { key: string; tile: FossilTile }[];
   onPark: (p: FossilPark) => void;
-  onFormation: (fm: number) => void;
-  onState: (s: string) => void;
-  onCollection: (i: number) => void;
-  onGo: (c: [number, number], z: number) => void;
+  onFormation: (name: string) => void;
+  onSite: (tile: string, i: number, at: [number, number], zoom?: number) => void;
+  onNear: (at: [number, number]) => void;
 }) {
   const [q, setQ] = useState("");
   const [me, setMe] = useState<[number, number] | null>(null);
   const [locating, setLocating] = useState<"idle" | "busy" | "denied">("idle");
   const needle = q.trim().toLowerCase();
-
-  /* site counts per formation and per state, for ranking and labels */
-  const fmCounts = useMemo(() => {
-    const out = new Map<number, number>();
-    data?.cols.fm.forEach((f) => f >= 0 && out.set(f, (out.get(f) ?? 0) + 1));
-    return out;
-  }, [data]);
-  const stateCounts = useMemo(() => {
-    const out = new Map<string, number>();
-    if (data) for (const s of data.cols.st) if (s >= 0) for (const name of data.states[s].split(", ")) out.set(name, (out.get(name) ?? 0) + 1);
-    return out;
-  }, [data]);
+  // the formation index (≈1 MB) loads the first time someone searches
+  useEffect(() => {
+    if (needle.length >= 2 && !formations) void loadFormations().catch(() => {});
+  }, [needle, formations, loadFormations]);
 
   const parks = needle.length < 2 ? FOSSIL_PARKS : FOSSIL_PARKS.filter((p) => `${p.name} ${p.where} ${p.age}`.toLowerCase().includes(needle));
-  const formations = useMemo(() => {
-    if (!data || needle.length < 2) return [];
-    const hits: { fm: number; name: string; n: number }[] = [];
-    data.formations.forEach((name, fm) => name.toLowerCase().includes(needle) && hits.push({ fm, name, n: fmCounts.get(fm) ?? 0 }));
-    return hits.sort((a, b) => b.n - a.n).slice(0, 12);
-  }, [data, needle, fmCounts]);
-  const states = useMemo(
-    () => (needle.length < 2 ? [] : Array.from(stateCounts.entries()).filter(([s]) => s.toLowerCase().includes(needle)).sort((a, b) => b[1] - a[1]).slice(0, 6)),
-    [needle, stateCounts]
-  );
+  const fmHits = useMemo(() => (formations && needle.length >= 2 ? searchFormations(formations, needle) : []), [formations, needle]);
   const nearest = useMemo(() => {
-    if (!me || !data) return [];
-    const c = data.cols;
-    const out: { i: number; d: number }[] = [];
-    for (let i = 0; i < c.id.length; i++) {
-      const d = kmApprox(me, c.lng[i], c.lat[i]);
-      if (d < 150) out.push({ i, d });
+    if (!me || !index) return [];
+    const mine = new Set(tilesAround(me, index));
+    const out: { tile: string; i: number; d: number; t: FossilTile }[] = [];
+    for (const { key, tile } of tiles) {
+      if (!mine.has(key)) continue;
+      const c = tile.cols;
+      for (let i = 0; i < c.id.length; i++) {
+        const d = kmBetween(me, [c.lng[i], c.lat[i]]);
+        if (d < 150) out.push({ tile: key, i, d, t: tile });
+      }
     }
     return out.sort((a, b) => a.d - b.d).slice(0, LIST_MAX);
-  }, [me, data]);
+  }, [me, tiles, index]);
 
   const nearMe = () => {
     if (!navigator.geolocation) return setLocating("denied");
@@ -639,7 +725,7 @@ function FindPanel({
         setMe(at);
         setQ("");
         setLocating("idle");
-        onGo(at, 8);
+        onNear(at);
       },
       () => setLocating("denied"),
       { maximumAge: 600_000, timeout: 10_000 }
@@ -658,32 +744,32 @@ function FindPanel({
               setQ(e.target.value);
               setMe(null);
             }}
-            placeholder="A park, formation or state…"
+            placeholder="A park or rock formation…"
             className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-8 pr-3 text-[13px] text-slate-100 outline-none placeholder:text-slate-500 focus:border-lime-300/40"
           />
         </label>
         <button type="button" onClick={nearMe} title="Fossil sites near me" className={`inline-flex items-center gap-1 rounded-xl border px-2.5 font-mono text-[10px] uppercase tracking-wider ${me ? "border-lime-300/50 text-lime-200" : "border-white/10 text-slate-300 hover:text-white"}`}>
-          <LocateFixed className="h-3.5 w-3.5" /> Near me
+          {locating === "busy" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LocateFixed className="h-3.5 w-3.5" />} Near me
         </button>
       </div>
-      {locating === "denied" && <p className="text-[11px] text-slate-500">Location isn&apos;t available — search by state instead.</p>}
+      {locating === "denied" && <p className="text-[11px] text-slate-500">Location isn&apos;t available — zoom the map to your area instead.</p>}
 
-      {me && data ? (
+      {me ? (
         <>
           <HudLabel>Nearest fossil sites</HudLabel>
-          {!nearest.length && <p className="py-4 text-center text-xs text-slate-500">No recorded fossil sites within 150 km.</p>}
+          {!nearest.length && <p className="py-4 text-center text-xs text-slate-500">{tiles.length ? "No recorded fossil sites within 150 km." : "Loading…"}</p>}
           <ul className="space-y-0.5">
-            {nearest.map(({ i, d }) => {
-              const per = PERIODS[data.cols.per[i]];
-              const fm = data.cols.fm[i];
+            {nearest.map(({ tile, i, d, t }) => {
+              const per = PERIODS[t.cols.per[i]];
+              const fm = word(t, "fm", i);
               return (
-                <li key={data.cols.id[i]}>
-                  <button type="button" onClick={() => onCollection(i)} className={row}>
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: per.color, boxShadow: data.cols.flag[i] & FLAG_DINO ? `0 0 0 2px ${BONE}` : undefined }} />
+                <li key={`${tile}-${i}`}>
+                  <button type="button" onClick={() => onSite(tile, i, [t.cols.lng[i], t.cols.lat[i]], 10)} className={row}>
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: per.color, boxShadow: t.cols.flag[i] & FLAG_DINO ? `0 0 0 2px ${BONE}` : undefined }} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] text-slate-100">{fm >= 0 ? data.formations[fm] : `${per.label} site`}</span>
+                      <span className="block truncate text-[13px] text-slate-100">{fm || `${per.label} site`}</span>
                       <span className="block truncate font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                        {per.label} · {data.cols.n[i]} finds
+                        {per.label} · {t.cols.n[i]} finds
                       </span>
                     </span>
                     <span className="shrink-0 font-mono text-[11px] text-lime-200">{d < 10 ? d.toFixed(1) : Math.round(d)} km</span>
@@ -711,32 +797,26 @@ function FindPanel({
               </li>
             ))}
           </ul>
-          {!!formations.length && <HudLabel>Rock formations</HudLabel>}
+          {needle.length >= 2 && !formations && (
+            <p className="flex items-center gap-2 text-[11px] text-slate-500">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading 19,000 rock formations…
+            </p>
+          )}
+          {!!fmHits.length && formations && <HudLabel>Rock formations</HudLabel>}
           <ul className="space-y-0.5">
-            {formations.map((f) => (
-              <li key={f.fm}>
-                <button type="button" onClick={() => onFormation(f.fm)} className={row}>
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-lime-300/70" />
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-slate-100">{f.name}</span>
-                  <span className="shrink-0 font-mono text-[11px] text-slate-400">{f.n.toLocaleString()} sites</span>
-                </button>
-              </li>
-            ))}
+            {formations &&
+              fmHits.map((k) => (
+                <li key={k}>
+                  <button type="button" onClick={() => onFormation(formations.name[k])} className={row}>
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: PERIODS[formations.per[k]]?.color ?? "#a3e635" }} />
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-slate-100">{formations.name[k]}</span>
+                    <span className="shrink-0 font-mono text-[11px] text-slate-400">{formations.n[k].toLocaleString()} sites</span>
+                  </button>
+                </li>
+              ))}
           </ul>
-          {!!states.length && <HudLabel>States</HudLabel>}
-          <ul className="space-y-0.5">
-            {states.map(([s, n]) => (
-              <li key={s}>
-                <button type="button" onClick={() => onState(s)} className={row}>
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm border border-slate-400" />
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-slate-100">{s}</span>
-                  <span className="shrink-0 font-mono text-[11px] text-slate-400">{n.toLocaleString()} sites</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          {needle.length >= 2 && !parks.length && !formations.length && !states.length && <p className="py-6 text-center text-xs text-slate-500">Nothing matches — try a formation like “Morrison” or “Hell Creek”.</p>}
-          {needle.length < 2 && <p className="text-[11px] leading-snug text-slate-500">Try a rock formation — “Morrison” for Jurassic giants, “Hell Creek” for T. rex and Triceratops country… or your state.</p>}
+          {needle.length >= 2 && formations && !parks.length && !fmHits.length && <p className="py-6 text-center text-xs text-slate-500">Nothing matches — try a formation like “Morrison”, “Hell Creek” or “Solnhofen”.</p>}
+          {needle.length < 2 && <p className="text-[11px] leading-snug text-slate-500">Try a rock formation — “Morrison” for Jurassic giants, “Hell Creek” for T. rex and Triceratops country, “Yixian” for feathered dinosaurs… or use Near me.</p>}
         </>
       )}
     </div>

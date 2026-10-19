@@ -318,6 +318,28 @@ export function DisasterDetails({
     );
   }
 
+  if (picked.layer === "icebergs") {
+    const fmt = (v: unknown) => (v ? new Date(`${String(v)}T00:00:00Z`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }) : null);
+    const km2 = p.km2 != null ? Number(p.km2) : null;
+    return (
+      <FeatureDrawer open onClose={onClose} eyebrow="Giant iceberg · Antarctica" accent="#7dd3fc" title={`Iceberg ${String(p.name)}`} subtitle={`${Math.abs(picked.lngLat[1]).toFixed(1)}°S ${Math.abs(picked.lngLat[0]).toFixed(1)}°${picked.lngLat[0] >= 0 ? "E" : "W"}`}>
+        <div className="space-y-4">
+          <FactGrid
+            facts={[
+              ["Area", km2 != null ? `${km2.toLocaleString()} km² (${Math.round(km2 * 0.3861).toLocaleString()} sq mi)` : null],
+              ["Last position", fmt(p.last)],
+              ["Tracked since", fmt(p.first)],
+              ["Position fixes", p.fixes ? String(p.fixes) : null],
+            ]}
+          />
+          <p className="text-[12px] leading-snug text-slate-400">The U.S. National Ice Center names and tracks Antarctic icebergs large enough to follow by satellite. The dashed line is the path between its recorded positions.</p>
+          {p.source ? <DrawerLink href={String(p.source)}>U.S. National Ice Center iceberg list</DrawerLink> : null}
+          <DrawerLink href="https://eonet.gsfc.nasa.gov/">NASA EONET — Earth Observatory Natural Event Tracker</DrawerLink>
+        </div>
+      </FeatureDrawer>
+    );
+  }
+
   if (picked.layer === "world") {
     const t = worldEventType(String(p.type));
     const level = WORLD_ALERT_LEVELS.find((l) => l.key === p.level);

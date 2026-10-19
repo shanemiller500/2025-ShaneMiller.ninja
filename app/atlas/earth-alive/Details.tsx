@@ -11,6 +11,7 @@ import { BOUNDARY_CLASS_BLURB, BOUNDARY_CLASS_LABEL, boundaryColor, plateName, t
 import { depthColor, mmiRoman, PAGER_TONE, type QuakeAnchor, type QuakeDetail } from "@/utils/geo/quakes";
 import { CODE_STYLE, eruptionYear, type VolcanoDetail } from "@/utils/geo/volcanoes";
 import { useDetail } from "./useEarthData";
+import { DEATH_COLORS, deathRank, deathsText, fmtNceiDate, nceiQuakeUrl, nceiTsunamiUrl, type NceiQuakes, type NceiTsunamis } from "@/utils/geo/ncei";
 
 /* ------------------------------------------------------------------ */
 /*  The drawer for whatever was picked on the Earth Alive map.         */
@@ -20,10 +21,13 @@ export function EarthDetails({
   picked,
   onClose,
   onReplaySequence,
+  ncei,
 }: {
   picked: Picked | null;
   onClose: () => void;
   onReplaySequence?: (anchor: QuakeAnchor) => void;
+  /** NOAA's history tables, once loaded. */
+  ncei?: { quakes?: NceiQuakes; tsunamis?: NceiTsunamis };
 }) {
   const kind = picked?.layer;
   const p = picked?.props ?? {};
@@ -131,6 +135,76 @@ export function EarthDetails({
             {f.reportUrl && <DrawerLink href={f.reportUrl}>USGS fault report</DrawerLink>}
             {f.pdfUrl && <DrawerLink href={f.pdfUrl}>Archived report (PDF)</DrawerLink>}
           </div>
+        </div>
+      </FeatureDrawer>
+    );
+  }
+
+  if (kind === "history" && ncei?.quakes) {
+    const q = ncei.quakes;
+    const c = q.cols;
+    const i = Number(p.i);
+    const deaths = deathsText(c.deaths[i], c.deathsAmt[i], q.amount);
+    return (
+      <FeatureDrawer
+        open
+        onClose={onClose}
+        eyebrow="Earthquake in history"
+        accent={DEATH_COLORS[deathRank(c.deaths[i], c.deathsAmt[i])]}
+        title={`${c.mag[i] != null ? `M ${c.mag[i]} — ` : ""}${c.place[i]}`}
+        subtitle={fmtNceiDate(c.date[i])}
+      >
+        <div className="space-y-4">
+          <FactGrid
+            facts={[
+              ["Magnitude", c.mag[i] != null ? String(c.mag[i]) : "not measured"],
+              ["Depth", c.depth[i] != null ? `${c.depth[i]} km` : null],
+              ["Deaths", deaths ?? "not recorded"],
+              ["Country", c.country[i] || null],
+              ["Tsunami", c.tsunami[i] != null ? "Yes" : null],
+            ]}
+          />
+          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            From NOAA&rsquo;s Significant Earthquake Database. Deaths include the tsunami, fires and landslides the quake set off. For old events the magnitude is estimated from written accounts of damage, and positions can be tens of kilometres out.
+          </p>
+          <div className="space-y-2">
+            <DrawerLink href={nceiQuakeUrl(c.id[i])}>NOAA event record</DrawerLink>
+            {c.tsunami[i] != null && <DrawerLink href={nceiTsunamiUrl(c.tsunami[i]!)}>The tsunami it caused</DrawerLink>}
+          </div>
+        </div>
+      </FeatureDrawer>
+    );
+  }
+
+  if (kind === "tsunamis" && ncei?.tsunamis) {
+    const t = ncei.tsunamis;
+    const c = t.cols;
+    const i = Number(p.i);
+    const deaths = deathsText(c.deaths[i], c.deathsAmt[i], t.amount);
+    return (
+      <FeatureDrawer
+        open
+        onClose={onClose}
+        eyebrow="Tsunami"
+        accent={DEATH_COLORS[deathRank(c.deaths[i], c.deathsAmt[i])]}
+        title={c.place[i] || "Tsunami"}
+        subtitle={`${fmtNceiDate(c.date[i])} · ${c.validity[i] >= 4 ? "definite" : "probable"} tsunami`}
+      >
+        <div className="space-y-4">
+          <FactGrid
+            facts={[
+              ["Highest wave", c.height[i] != null ? `${c.height[i]} m` : "not recorded"],
+              ["Cause", t.causes[c.cause[i]] ?? null],
+              ["Quake magnitude", c.mag[i] != null ? String(c.mag[i]) : null],
+              ["Deaths", deaths ?? "not recorded"],
+              ["Places it reached", c.runups[i] ? c.runups[i].toLocaleString("en-US") : null],
+              ["Country", c.country[i] || null],
+            ]}
+          />
+          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            The ring sits where the tsunami started. &ldquo;Highest wave&rdquo; is the greatest water height measured or reported anywhere it came ashore. NOAA&rsquo;s record links every place it reached.
+          </p>
+          <DrawerLink href={nceiTsunamiUrl(c.id[i])}>NOAA event record &amp; run-ups</DrawerLink>
         </div>
       </FeatureDrawer>
     );

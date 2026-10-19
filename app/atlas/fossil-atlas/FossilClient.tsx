@@ -16,7 +16,7 @@ const FossilApp = dynamic(() => import("./FossilApp"), {
 
 export default function FossilClient() {
   useEffect(() => {
-    trackEvent("Prehistoric USA Viewed", { page: "Prehistoric USA" });
+    trackEvent("Prehistoric Earth Viewed", { page: "Prehistoric Earth" });
   }, []);
   return <FossilApp />;
 }

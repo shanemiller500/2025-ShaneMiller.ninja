@@ -43,6 +43,7 @@ import {
   fetchAlerts,
   fetchHotspots,
   fetchWorldEvents,
+  fetchIcebergs,
   worldEventsShown,
   fetchFirePerimeters,
   fetchFloodGauges,
@@ -86,6 +87,7 @@ interface Live {
   fires: FC | null;
   hotspots: FC | null;
   world: FC | null;
+  icebergs: FC | null;
   storms: Storm[] | null;
   reports: FC | null;
   gauges: FC | null;
@@ -98,6 +100,7 @@ function useLiveHazards() {
     fires: null,
     hotspots: null,
     world: null,
+    icebergs: null,
     storms: null,
     reports: null,
     gauges: null,
@@ -112,6 +115,7 @@ function useLiveHazards() {
       ["fires", "fire perimeters", () => fetchFirePerimeters(ctl.signal)],
       ["hotspots", "satellite fire detections", () => fetchHotspots(ctl.signal)],
       ["world", "disasters worldwide (GDACS)", () => fetchWorldEvents(ctl.signal)],
+      ["icebergs", "giant icebergs (NASA EONET)", () => fetchIcebergs(ctl.signal)],
       ["storms", "hurricanes", () => fetchStorms(ctl.signal)],
       ["reports", "storm reports", () => fetchStormReports(ctl.signal)],
       ["gauges", "river gauges", () => fetchFloodGauges(ctl.signal)],
@@ -272,6 +276,7 @@ export default function DisasterApp() {
       fires: fireData,
       hotspots: live.hotspots ?? undefined,
       world: worldData ?? undefined,
+      icebergs: live.icebergs ?? undefined,
       reports: live.reports ?? undefined,
       gauges: live.gauges ?? undefined,
       risk: nri ?? EMPTY,
@@ -282,6 +287,7 @@ export default function DisasterApp() {
       fireData,
       live.hotspots,
       worldData,
+      live.icebergs,
       live.reports,
       live.gauges,
       nri,

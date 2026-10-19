@@ -1,11 +1,12 @@
 /* ------------------------------------------------------------------ */
-/*  Prehistoric USA map layers. Draw order: the ancient Earth (time    */
-/*  machine) → bedrock geology → today's U.S. outline moved back in    */
-/*  time → fossil collections → featured parks.                        */
+/*  Prehistoric Earth map layers. Draw order: the ancient Earth (time  */
+/*  machine) → bedrock geology → today's coastlines moved back in time */
+/*  → fossil sites (a 1° summary zoomed out, every site zoomed in) →   */
+/*  featured parks.                                                    */
 /* ------------------------------------------------------------------ */
 import type { ExpressionSpecification as Expr, Map as MlMap } from "maplibre-gl";
 import type { AtlasLayer } from "@/components/atlas/types";
-import { FLAG_DINO, PERIODS, fmtAge } from "@/utils/geo/fossils";
+import { FLAG_DINO, PERIODS, SITES_MIN_ZOOM, fmtAge } from "@/utils/geo/fossils";
 import { MACROSTRAT_TILES, geologyAt } from "@/utils/geo/strange";
 import { FOSSIL_PARKS } from "./featured";
 
@@ -52,18 +53,18 @@ export const ancientLayer: AtlasLayer = {
   },
 };
 
-export const usThenLayer: AtlasLayer = {
-  id: "usthen",
-  label: "Today's U.S.",
+export const coastThenLayer: AtlasLayer = {
+  id: "coastthen",
+  label: "Today's coastlines",
   group: "Time machine",
-  description: "Where the land that is now the United States sat at the chosen time, moved back with the same plate model as the fossils. Pieces vanish where that crust didn't exist yet.",
-  legend: [{ color: "#ffffff", label: "Today's U.S. outline", shape: "line" }],
+  description: "Where today's coastlines sat at the chosen time, moved back with the same plate model as the fossils — so you can find your own country on the ancient map. Pieces vanish where that crust didn't exist yet.",
+  legend: [{ color: "#ffffff", label: "Today's coastline", shape: "line" }],
   citation: { label: "GPlates Web Service (EarthByte) · PALEOMAP model · Natural Earth", href: "https://gws.gplates.org/" },
   install(map) {
-    map.addSource("usthen", { type: "geojson", data: EMPTY });
-    map.addLayer({ id: "usthen-halo", type: "line", source: "usthen", paint: { "line-color": "#020617", "line-width": 3.2, "line-opacity": 0.45 } });
-    map.addLayer({ id: "usthen-line", type: "line", source: "usthen", paint: { "line-color": "#ffffff", "line-width": 1.4, "line-dasharray": [3, 2], "line-opacity": 0.9 } });
-    return ["usthen-halo", "usthen-line"];
+    map.addSource("coastthen", { type: "geojson", data: EMPTY });
+    map.addLayer({ id: "coastthen-halo", type: "line", source: "coastthen", paint: { "line-color": "#020617", "line-width": 3, "line-opacity": 0.4 } });
+    map.addLayer({ id: "coastthen-line", type: "line", source: "coastthen", paint: { "line-color": "#ffffff", "line-width": 1.2, "line-dasharray": [3, 2], "line-opacity": 0.85 } });
+    return ["coastthen-halo", "coastthen-line"];
   },
 };
 
@@ -86,6 +87,41 @@ export const geologyLayer: AtlasLayer = {
   },
 };
 
+/* ── zoomed out: fossil sites per 1° cell ───────────────────────── */
+
+export const cellsLayer: AtlasLayer = {
+  id: "cells",
+  label: "Fossil country",
+  group: "Fossils",
+  defaultOn: true,
+  description: "Zoomed out, every 1° of the world that holds recorded fossil sites, sized by how many and coloured by their main period. Zoom in (or click) to see each site.",
+  legend: PERIODS.map((p) => ({ color: p.color, label: p.label })),
+  citation: { label: "The Paleobiology Database", href: "https://paleobiodb.org/", license: "CC BY 4.0" },
+  clickable: ["cells-dot"],
+  install(map, { dark }) {
+    map.addSource("cells", { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "cells-dot",
+      type: "circle",
+      source: "cells",
+      maxzoom: SITES_MIN_ZOOM,
+      layout: { "circle-sort-key": ["get", "n"] },
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, ["interpolate", ["linear"], ["sqrt", ["get", "n"]], 1, 1.3, 40, 8], 5.5, ["interpolate", ["linear"], ["sqrt", ["get", "n"]], 1, 2.6, 40, 16]],
+        "circle-color": PERIOD_COLOR,
+        "circle-opacity": 0.78,
+        "circle-stroke-color": dark ? "#0b0f0a" : "#ffffff",
+        "circle-stroke-width": 0.5,
+      },
+    });
+    return ["cells-dot"];
+  },
+  hoverLabel: (f) => {
+    const p = f.properties as { n: number; per: number };
+    return `${p.n.toLocaleString()} fossil site${p.n === 1 ? "" : "s"} · mostly ${PERIODS[p.per]?.label ?? ""}`;
+  },
+};
+
 /* ── fossil collections (PBDB) ───────────────────────────────────── */
 
 export const fossilsLayer: AtlasLayer = {
@@ -93,8 +129,8 @@ export const fossilsLayer: AtlasLayer = {
   label: "Fossil sites",
   group: "Fossils",
   defaultOn: true,
-  badge: "U.S.",
-  description: "Every U.S. fossil collection in the Paleobiology Database — a quarry, outcrop or bed where scientists recorded what they found. Coloured by geologic period; bigger dots hold more finds. Dinosaur sites get a bone-white ring.",
+  badge: "World",
+  description: "Every fossil collection in the Paleobiology Database — 278,000 quarries, outcrops and beds in 240+ countries and territories where scientists recorded what they found. Coloured by geologic period; bigger dots hold more finds. Dinosaur sites get a bone-white ring.",
   legend: [...PERIODS.map((p) => ({ color: p.color, label: p.label })), { color: BONE, label: "Has dinosaur fossils", shape: "ring" as const }],
   citation: { label: "The Paleobiology Database", href: "https://paleobiodb.org/", license: "CC BY 4.0" },
   clickable: ["fossils-dot"],
@@ -168,7 +204,7 @@ export const parksLayer: AtlasLayer = {
   },
 };
 
-export const FOSSIL_LAYERS: AtlasLayer[] = [ancientLayer, geologyLayer, usThenLayer, fossilsLayer, parksLayer];
+export const FOSSIL_LAYERS: AtlasLayer[] = [ancientLayer, geologyLayer, coastThenLayer, cellsLayer, fossilsLayer, parksLayer];
 /** Layers that only make sense in the time machine, and ones that only make sense today. */
-export const TIME_ONLY = ["ancient", "usthen"];
-export const TODAY_ONLY = ["geology", "parks"];
+export const TIME_ONLY = ["ancient", "coastthen"];
+export const TODAY_ONLY = ["geology", "parks", "cells"];

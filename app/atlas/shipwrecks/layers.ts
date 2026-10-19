@@ -190,6 +190,57 @@ export const noaaWrecksLayer: AtlasLayer = {
   },
 };
 
+/* ── Australia & New Zealand (AUCHD) ─────────────────────────────── */
+
+export const AU_SHIP = "#fbbf24";
+export const AU_PLANE = "#c084fc";
+
+export const auWrecksLayer: AtlasLayer = {
+  id: "australia",
+  label: "Historic wrecks — Australia & NZ",
+  group: "Wrecks",
+  defaultOn: true,
+  badge: "Australia · NZ",
+  description: "About 7,200 historic shipwrecks and 250 sunken aircraft from the Australasian Underwater Cultural Heritage Database, back to the Dutch East India Company wrecks of the 1600s. Only about 500 are marked in the database as located, inspected or surveyed (solid dots). The rest (rings) are mostly the recorded place of loss, and can be well away from the wreck itself — the database even leaves some famous found wrecks unmarked.",
+  legend: [
+    { color: AU_SHIP, label: "Shipwreck — site located" },
+    { color: AU_SHIP, label: "Shipwreck — position not confirmed", shape: "ring" },
+    { color: AU_PLANE, label: "Aircraft" },
+  ],
+  citation: { label: "Australasian Underwater Cultural Heritage Database — © Commonwealth of Australia (DCCEEW)", href: "https://www.dcceew.gov.au/parks-heritage/heritage/underwater-heritage/auchd", license: "CC BY 3.0 AU" },
+  clickable: ["australia-dot"],
+  install(map, { dark }) {
+    const color = ["match", ["get", "kind"], 1, AU_PLANE, AU_SHIP] as unknown as ExpressionSpecification;
+    map.addSource("australia", { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "australia-dot",
+      type: "circle",
+      source: "australia",
+      layout: { "circle-sort-key": ["get", "sure"] },
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, ["match", ["get", "sure"], 1, 1.8, 1.4], 9, ["match", ["get", "sure"], 1, 4.5, 3.5], 14, 7],
+        "circle-color": ["case", ["==", ["get", "sure"], 1], color, "rgba(0,0,0,0)"],
+        "circle-stroke-color": ["case", ["==", ["get", "sure"], 1], "#020617", color],
+        "circle-stroke-width": ["case", ["==", ["get", "sure"], 1], 0.6, 1.1],
+        "circle-opacity": 0.9,
+      },
+    });
+    map.addLayer({
+      id: "australia-label",
+      type: "symbol",
+      source: "australia",
+      minzoom: 9,
+      layout: { "text-field": ["get", "name"], "text-font": FONT, "text-size": 10.5, "text-offset": [0, 1], "text-anchor": "top", "text-max-width": 9, "text-optional": true },
+      paint: { "text-color": dark ? "#fef3c7" : "#0f172a", "text-halo-color": dark ? "#020617" : "#ffffff", "text-halo-width": dark ? 1.3 : 1.8 },
+    });
+    return ["australia-dot", "australia-label"];
+  },
+  hoverLabel: (f) => {
+    const p = f.properties as { name: string; year?: number | null; kind: number };
+    return `${p.name}${p.kind === 1 ? " (aircraft)" : ""}${p.year ? ` · lost ${p.year}` : ""}`;
+  },
+};
+
 /* ── named wrecks worldwide (Wikidata) ───────────────────────────── */
 
 export const namedWrecksLayer: AtlasLayer = {
@@ -348,6 +399,6 @@ export const sinkingsLayer: AtlasLayer = {
   },
 };
 
-export const WRECK_LAYERS: AtlasLayer[] = [seafloorLayer, sanctuariesLayer, densityLayer, areasLayer, noaaWrecksLayer, namedWrecksLayer, sinkingsLayer, featuredLayer];
+export const WRECK_LAYERS: AtlasLayer[] = [seafloorLayer, sanctuariesLayer, densityLayer, areasLayer, noaaWrecksLayer, auWrecksLayer, namedWrecksLayer, sinkingsLayer, featuredLayer];
 /** Layers the map-mode layer panel offers (the replay has its own controls). */
 export const MAP_PANEL_LAYERS = WRECK_LAYERS.filter((l) => l.id !== "sinkings");

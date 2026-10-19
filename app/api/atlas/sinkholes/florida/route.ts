@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 /* ------------------------------------------------------------------ */
 /*  Florida Geological Survey subsidence incident reports (FDEP),      */
-/*  slimmed to GeoJSON for the Underground USA map.                    */
+/*  slimmed to GeoJSON for the Underground World map.                  */
 /*                                                                     */
 /*  GET /api/atlas/sinkholes/florida                                   */
 /*                                                                     */

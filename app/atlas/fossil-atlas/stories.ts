@@ -1,7 +1,7 @@
 import type { AtlasStory, StoryDoc } from "@/components/atlas/story";
 
 /* ------------------------------------------------------------------ */
-/*  Prehistoric USA stories, told from official records: the NPS       */
+/*  Prehistoric Earth stories, told from official records: the NPS       */
 /*  Dinosaur National Monument Geologic Resource Evaluation (2006),    */
 /*  NPS Occasional Paper 3 on Fossil Butte (McGrew & Casilliano),      */
 /*  NPS park pages, and the USGS White Sands footprint fact sheet.     */

@@ -13,8 +13,9 @@ import {
   collectionTaxa,
   fmtAge,
   pbdbCollectionUrl,
+  word,
   type CollectionDetails,
-  type FossilsFile,
+  type LoadedTile,
   type TaxonGroup,
 } from "@/utils/geo/fossils";
 import { kmBetween, type GeoUnit } from "@/utils/geo/strange";
@@ -23,7 +24,7 @@ import { parkById, type FossilPark } from "./featured";
 import { BONE } from "./layers";
 
 /* ------------------------------------------------------------------ */
-/*  Drawers for Prehistoric USA: a fossil collection (name, rock and   */
+/*  Drawers for Prehistoric Earth: a fossil collection (name, rock and */
 /*  what was found, live from PBDB), a featured park, or the bedrock   */
 /*  under a clicked spot (Macrostrat).                                 */
 /* ------------------------------------------------------------------ */
@@ -66,15 +67,18 @@ function TaxaList({ groups }: { groups: TaxonGroup[] }) {
   );
 }
 
-function Collection({ picked, data, then, onClose, onFormation }: { picked: Picked; data: FossilsFile | null; then?: PaleoSlice | null; onClose: () => void; onFormation?: (fm: number) => void }) {
-  const id = Number(picked.props.id);
+function Collection({ picked, tiles, then, onClose, onFormation }: { picked: Picked; tiles: LoadedTile[]; then?: PaleoSlice | null; onClose: () => void; onFormation?: (name: string) => void }) {
   const i = Number(picked.props.i);
-  const c = data?.cols;
-  const ok = !!c && c.id[i] === id;
+  const tile = tiles.find((x) => x.key === picked.props.tile)?.tile ?? null;
+  const c = tile?.cols;
+  const ok = !!c && c.id[i] != null;
+  const id = ok ? c!.id[i] : Number(picked.props.id);
   const per = ok ? c!.per[i] : Number(picked.props.per);
   const period = PERIODS[per];
   const flag = ok ? c!.flag[i] : Number(picked.props.flag) || 0;
-  const fm = ok ? c!.fm[i] : -1;
+  const fmName = ok ? word(tile!, "fm", i) : "";
+  /** sites grouped at this spot in the time machine */
+  const spot = Number(picked.props.n) > 1 && then ? Number(picked.props.n) : 0;
   const [details, setDetails] = useState<CollectionDetails | null>(null);
   const [taxa, setTaxa] = useState<TaxonGroup[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -90,7 +94,7 @@ function Collection({ picked, data, then, onClose, onFormation }: { picked: Pick
     return () => ctl.abort();
   }, [id]);
 
-  const formation = details?.formation ?? (fm >= 0 ? data!.formations[fm] : null);
+  const formation = details?.formation ?? (fmName || null);
   const today: [number, number] = ok ? [c!.lng[i], c!.lat[i]] : picked.lngLat;
   const loading = !details && !failed;
   return (
@@ -100,7 +104,15 @@ function Collection({ picked, data, then, onClose, onFormation }: { picked: Pick
       eyebrow={`Fossil site · ${period?.label ?? "Unknown period"}`}
       accent={period?.color ?? "#a3e635"}
       title={details?.name || `Collection ${id}`}
-      subtitle={[details?.county ? (/county|parish|borough$/i.test(details.county) ? details.county : `${details.county} County`) : null, details?.state ?? (ok && c!.st[i] >= 0 ? data!.states[c!.st[i]] : null)].filter(Boolean).join(", ") || where(today)}
+      subtitle={
+        [
+          details?.county ? (ok && word(tile!, "cc", i) === "United States" && !/county|parish|borough$/i.test(details.county) ? `${details.county} County` : details.county) : null,
+          details?.state ?? (ok ? word(tile!, "st", i) || null : null),
+          ok && word(tile!, "cc", i) && word(tile!, "cc", i) !== "United States" ? word(tile!, "cc", i) : null,
+        ]
+          .filter(Boolean)
+          .join(", ") || where(today)
+      }
     >
       <div className="space-y-4">
         {(flag & FLAG_DINO || flag & FLAG_MAMMAL) > 0 && (
@@ -127,11 +139,12 @@ function Collection({ picked, data, then, onClose, onFormation }: { picked: Pick
         {then && then.age > 0 && (
           <p className="text-[11.5px] leading-snug text-slate-400">
             Shown where this spot sat {fmtMa(then.age)}, during the {then.label}, by the PALEOMAP plate model. Its rocks span {ok ? fmtAge(c!.max[i], c!.min[i]).replace(/ ago$/, "") : "this time"}.
+            {spot ? <> {spot.toLocaleString()} fossil sites from this time share this spot — this is the one with the most finds.</> : null}
           </p>
         )}
-        {fm >= 0 && onFormation && (
-          <button type="button" onClick={() => onFormation(fm)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-lime-300/40 bg-lime-400/10 px-3 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-lime-400/20">
-            <Filter className="h-4 w-4" /> Every site in this formation ({data!.formations[fm]})
+        {fmName && onFormation && (
+          <button type="button" onClick={() => onFormation(fmName)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-lime-300/40 bg-lime-400/10 px-3 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-lime-400/20">
+            <Filter className="h-4 w-4" /> Every site in this formation ({fmName})
           </button>
         )}
         <div>
@@ -152,17 +165,19 @@ function Collection({ picked, data, then, onClose, onFormation }: { picked: Pick
   );
 }
 
-function Park({ id, data, onClose, onFly }: { id: string; data: FossilsFile | null; onClose: () => void; onFly?: (p: FossilPark) => void }) {
+function Park({ id, tiles, onClose, onFly }: { id: string; tiles: LoadedTile[]; onClose: () => void; onFly?: (p: FossilPark) => void }) {
   const p = parkById(id)!;
   const photo = useWikiPhoto(p.wiki);
-  // PBDB sites within 15 km
+  // PBDB sites within 15 km, from whichever loaded tiles cover the park
   const near = useMemo(() => {
-    if (!data) return null;
-    const c = data.cols;
+    if (!tiles.length) return null;
     let n = 0;
-    for (let i = 0; i < c.id.length; i++) if (Math.abs(c.lat[i] - p.center[1]) < 0.2 && kmBetween(p.center, [c.lng[i], c.lat[i]]) <= 15) n++;
+    for (const { tile } of tiles) {
+      const c = tile.cols;
+      for (let i = 0; i < c.id.length; i++) if (Math.abs(c.lat[i] - p.center[1]) < 0.2 && kmBetween(p.center, [c.lng[i], c.lat[i]]) <= 15) n++;
+    }
     return n;
-  }, [data, p.center]);
+  }, [tiles, p.center]);
   return (
     <FeatureDrawer open onClose={onClose} eyebrow={p.age} accent={p.accent} title={p.name} subtitle={p.where}>
       <div className="space-y-4">
@@ -226,10 +241,10 @@ function Rock({ picked, onClose }: { picked: Picked; onClose: () => void }) {
   );
 }
 
-export function FossilDetailsDrawer({ picked, data, then, onClose, onFormation, onFly }: { picked: Picked | null; data: FossilsFile | null; then?: PaleoSlice | null; onClose: () => void; onFormation?: (fm: number) => void; onFly?: (p: FossilPark) => void }) {
+export function FossilDetailsDrawer({ picked, tiles, then, onClose, onFormation, onFly }: { picked: Picked | null; tiles: LoadedTile[]; then?: PaleoSlice | null; onClose: () => void; onFormation?: (name: string) => void; onFly?: (p: FossilPark) => void }) {
   if (!picked) return <FeatureDrawer open={false} onClose={onClose} />;
-  if (picked.layer === "parks" && parkById(String(picked.props.id))) return <Park key={String(picked.props.id)} id={String(picked.props.id)} data={data} onClose={onClose} onFly={onFly} />;
-  if (picked.layer === "fossils") return <Collection key={String(picked.props.id)} picked={picked} data={data} then={then} onClose={onClose} onFormation={onFormation} />;
+  if (picked.layer === "parks" && parkById(String(picked.props.id))) return <Park key={String(picked.props.id)} id={String(picked.props.id)} tiles={tiles} onClose={onClose} onFly={onFly} />;
+  if (picked.layer === "fossils") return <Collection key={`${String(picked.props.tile)}-${String(picked.props.i)}`} picked={picked} tiles={tiles} then={then} onClose={onClose} onFormation={onFormation} />;
   if (picked.layer === "geology") return <Rock picked={picked} onClose={onClose} />;
   return <FeatureDrawer open={false} onClose={onClose} />;
 }

@@ -2,11 +2,11 @@
 
 import { History, MapPinOff, Orbit } from "lucide-react";
 import type { FeaturedTown } from "./featured";
-import type { ThenNowPlace } from "./ThenNow";
+import type { ThenNowPlace } from "@/components/atlas/ThenNow";
 import { DrawerLink, FactGrid, FeatureDrawer } from "@/components/atlas/FeatureDrawer";
 import type { Picked } from "@/components/atlas/types";
 import { useWikiPhoto } from "@/components/atlas/useWikiPhoto";
-import { commonsThumb, gnisUrl, kmBetween, lifespan, wikiUrl, type DrownedTown, type GhostCols } from "@/utils/geo/ghost";
+import { commonsThumb, ghostKind, gnisUrl, kmBetween, lifespan, wikiUrl, type DrownedTown, type GhostCols } from "@/utils/geo/ghost";
 import { featuredById } from "./featured";
 import { GHOST_COLORS } from "./layers";
 
@@ -78,7 +78,7 @@ function GhostTown({ picked, cols, drowned, onClose, onThenNow }: { picked: Pick
   // the same town may also be on the drowned list
   const under = drowned?.find((d) => d.name === name && kmBetween([d.lng, d.lat], picked.lngLat) < 5)?.reservoir ?? null;
   return (
-    <FeatureDrawer open onClose={onClose} eyebrow="Ghost town" accent={GHOST_COLORS.ghost} title={name} subtitle={ok ? cols!.desc[i] || cols!.country[i] || undefined : undefined}>
+    <FeatureDrawer open onClose={onClose} eyebrow={ok ? ghostKind(cols!, i) : "Ghost town"} accent={GHOST_COLORS.ghost} title={name} subtitle={ok ? cols!.desc[i] || cols!.country[i] || undefined : undefined}>
       <div className="space-y-4">
         {image && (
           // eslint-disable-next-line @next/next/no-img-element

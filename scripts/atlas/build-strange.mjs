@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------ */
 /*  Bake the data for Strange Earth.                                   */
 /*                                                                     */
-/*  1. public/atlas/strange.json  — notable U.S. landforms from        */
+/*  1. public/atlas/strange.json  — notable landforms worldwide from  */
 /*     Wikidata (CC0): arches, rock formations, lava fields, dry       */
 /*     lakebeds, geysers, dunes, erratics… with photos + descriptions. */
 /*  2. public/atlas/impacts.json  — the ~190 CONFIRMED impact          */
@@ -63,14 +63,18 @@ const CLASSES = [
   ["Q631305", "rock"], // rock formation
 ];
 
-// one class per query — all of them at once hits Wikidata's 60 s limit
+// one class per query — all of them at once hits Wikidata's 60 s limit.
+// Worldwide; outside the U.S. only notable places (a photo or an English Wikipedia article) —
+// "rock formation" alone has 27,000+ items, most of them minor crags.
 const placeQuery = (q) => `
-SELECT ?i ?iLabel ?iDescription ?coord ?cls ?img ?article ?stateLabel WHERE {
+SELECT ?i ?iLabel ?iDescription ?coord ?cls ?img ?article ?stateLabel ?countryLabel WHERE {
   VALUES ?cls { wd:${q} }
-  ?i wdt:P31/wdt:P279* ?cls; wdt:P17 wd:Q30; wdt:P625 ?coord.
+  ?i wdt:P31/wdt:P279* ?cls; wdt:P625 ?coord.
+  OPTIONAL { ?i wdt:P17 ?country. }
   OPTIONAL { ?i wdt:P18 ?img. }
   OPTIONAL { ?article schema:about ?i; schema:isPartOf <https://en.wikipedia.org/>. }
   OPTIONAL { ?i wdt:P131+ ?state. ?state wdt:P31 wd:Q35657. }
+  FILTER(?country = wd:Q30 || BOUND(?img) || BOUND(?article))
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }`;
 
@@ -104,6 +108,7 @@ for (const r of rows) {
       desc: r.iDescription?.value ?? "",
       cat: Object.fromEntries(CLASSES)[cls],
       state: r.stateLabel?.value ?? prev?.properties.state ?? null,
+      country: r.countryLabel?.value ?? prev?.properties.country ?? null,
       image: r.img ? thumb(r.img.value) : prev?.properties.image ?? null,
       wiki: r.article?.value ?? null,
     },

@@ -347,6 +347,61 @@ export async function fetchHotspots(signal?: AbortSignal): Promise<GeoJSON.Featu
   return hotspotFeatures(j.cols);
 }
 
+/* ── giant icebergs (U.S. National Ice Center via NASA EONET) ───── */
+
+const EONET_ICE = "https://eonet.gsfc.nasa.gov/api/v3/events?category=seaLakeIce&status=open&limit=200";
+/** 1 square nautical mile in km². */
+export const NM2_KM2 = 3.4299;
+
+interface EonetEvent {
+  id: string;
+  title: string;
+  sources: { id: string; url: string }[];
+  geometry: { date: string; type: string; coordinates: number[]; magnitudeValue?: number | null; magnitudeUnit?: string | null }[];
+}
+
+/** Break a track where it crosses the antimeridian, so the line doesn't wrap the globe. */
+export function splitTrack(points: [number, number][]): [number, number][][] {
+  const out: [number, number][][] = [];
+  let cur: [number, number][] = [];
+  for (const p of points) {
+    if (cur.length && Math.abs(p[0] - cur[cur.length - 1][0]) > 180) {
+      if (cur.length > 1) out.push(cur);
+      cur = [];
+    }
+    cur.push(p);
+  }
+  if (cur.length > 1) out.push(cur);
+  return out;
+}
+
+/** EONET iceberg events → the latest fix of each (a point) and its drift track (lines). */
+export function icebergFeatures(events: EonetEvent[]): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const e of events) {
+    const fixes = e.geometry.filter((g) => g.type === "Point" && g.coordinates.length >= 2).sort((a, b) => a.date.localeCompare(b.date));
+    if (!fixes.length) continue;
+    const last = fixes[fixes.length - 1];
+    const nm2 = typeof last.magnitudeValue === "number" && /NM\^?2/i.test(last.magnitudeUnit ?? "") ? last.magnitudeValue : null;
+    const name = e.title.replace(/^Iceberg\s+/i, "");
+    features.push({
+      type: "Feature",
+      id: e.id,
+      geometry: { type: "Point", coordinates: [last.coordinates[0], last.coordinates[1]] },
+      properties: { id: e.id, name, km2: nm2 != null ? Math.round(nm2 * NM2_KM2) : null, last: last.date.slice(0, 10), first: fixes[0].date.slice(0, 10), fixes: fixes.length, source: e.sources[0]?.url ?? null },
+    });
+    for (const part of splitTrack(fixes.map((g) => [g.coordinates[0], g.coordinates[1]] as [number, number])))
+      features.push({ type: "Feature", geometry: { type: "LineString", coordinates: part }, properties: { name, track: true } });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+export async function fetchIcebergs(signal?: AbortSignal): Promise<GeoJSON.FeatureCollection> {
+  const res = await fetch(EONET_ICE, { signal });
+  if (!res.ok) throw new Error(`EONET ${res.status}`);
+  return icebergFeatures(((await res.json()) as { events: EonetEvent[] }).events);
+}
+
 /* ── disasters worldwide (GDACS via /api/atlas/gdacs) ────────────── */
 
 export type WorldEventType = "EQ" | "TC" | "FL" | "VO" | "DR" | "WF";

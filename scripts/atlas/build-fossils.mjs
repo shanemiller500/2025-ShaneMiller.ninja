@@ -1,18 +1,33 @@
 /* ------------------------------------------------------------------ */
-/*  Bake public/atlas/fossils.json — every fossil collection in the    */
-/*  United States in the Paleobiology Database (CC BY 4.0): position,  */
-/*  age range, geologic period, formation, state, number of finds,     */
-/*  and whether it holds dinosaurs or mammals. Column-wise, with       */
-/*  formation and state names in lookup tables; each collection's      */
-/*  name and taxa load live from PBDB when it's clicked.               */
+/*  Bake public/atlas/fossils/ — every fossil collection in the world  */
+/*  in the Paleobiology Database (CC BY 4.0, ~278,000): position, age  */
+/*  range, geologic period, formation, country and state or province,  */
+/*  number of finds, and whether it holds dinosaurs or mammals.        */
 /*                                                                     */
-/*  node scripts/atlas/build-fossils.mjs                               */
+/*    t/<x>_<y>.json    every site in a 2° tile, column-wise           */
+/*    summary.json      1° cells: sites per period (all / dinosaurs /  */
+/*                      mammals) for the zoomed-out map                */
+/*    formations.json   each formation's size, extent and tiles        */
+/*    index.json        periods, tiles, totals                         */
+/*                                                                     */
+/*  Each collection's name and taxa load live from PBDB when clicked.  */
+/*  node scripts/atlas/build-fossils.mjs [--test]                      */
+/*  (downloads cached in FOSSILS_CACHE, default: os tmp)               */
 /* ------------------------------------------------------------------ */
-import { writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../public/atlas/fossils.json");
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const OUT_DIR = path.join(ROOT, "public/atlas/fossils");
+/** The U.S.-only file this replaced. */
+const OLD_OUT = path.join(ROOT, "public/atlas/fossils.json");
+const CACHE = process.env.FOSSILS_CACHE ?? path.join(os.tmpdir(), "fossils-cache");
+export const TILE_DEG = 2;
+export const CELL_DEG = 1;
+export const tileKey = (lng, lat) => `${Math.floor(lng / TILE_DEG)}_${Math.floor(lat / TILE_DEG)}`;
 const API = "https://paleobiodb.org/data1.2";
 const UA = { "User-Agent": "shanemiller.ninja atlas (+https://shanemiller.ninja)" };
 
@@ -82,60 +97,142 @@ if (process.argv.includes("--test")) {
     console.log(got === b ? "ok  " : "FAIL", JSON.stringify(a), "→", JSON.stringify(got));
   }
 } else if (!process.argv.includes("--no-fetch")) {
-  console.log("fetching U.S. collections…");
-  const all = (await json(`${API}/colls/list.json?cc=US&show=loc,strat&limit=all`)).records;
-  const idsWith = async (base) => new Set((await json(`${API}/colls/list.json?cc=US&base_name=${base}&limit=all`)).records.map((r) => r.oid));
-  const dinos = await idsWith("Dinosauria");
-  const mammals = await idsWith("Mammalia");
+  /* ── the whole world, cached so re-runs don't refetch 85 MB ─────── */
+  await mkdir(CACHE, { recursive: true });
+  const cached = async (name, url) => {
+    const f = path.join(CACHE, name);
+    if (existsSync(f)) return JSON.parse(await readFile(f, "utf8"));
+    console.log(`fetching ${url}…`);
+    const j = await json(url);
+    await writeFile(f, JSON.stringify(j));
+    return j;
+  };
+  const all = (await cached("colls.json", `${API}/colls/list.json?all_records&show=loc,strat&limit=all`)).records;
+  const dinos = new Set((await cached("Dinosauria.json", `${API}/colls/list.json?base_name=Dinosauria&limit=all`)).records.map((r) => r.oid));
+  const mammals = new Set((await cached("Mammalia.json", `${API}/colls/list.json?base_name=Mammalia&limit=all`)).records.map((r) => r.oid));
   console.log(`collections ${all.length}, with dinosaurs ${dinos.size}, with mammals ${mammals.size}`);
 
-  const formations = [];
-  const fIndex = new Map();
-  const states = [];
-  const sIndex = new Map();
-  const idx = (v, list, map) => {
-    if (!v) return -1;
-    if (!map.has(v)) {
-      map.set(v, list.length);
-      list.push(v);
+  const regionName = new Intl.DisplayNames(["en"], { type: "region" });
+  const country = (cc) => {
+    if (!cc || !/^[A-Z]{2}$/.test(cc)) return "";
+    try {
+      return regionName.of(cc) ?? cc;
+    } catch {
+      return cc;
     }
-    return map.get(v);
   };
-  const cols = { id: [], lng: [], lat: [], n: [], max: [], min: [], per: [], fm: [], st: [], flag: [] };
-  let outside = 0;
+
+  const tiles = new Map();
+  const tile = (key) => {
+    if (!tiles.has(key)) tiles.set(key, { dict: [], at: new Map(), cols: { id: [], lng: [], lat: [], n: [], max: [], min: [], per: [], fm: [], cc: [], st: [], flag: [] } });
+    return tiles.get(key);
+  };
+  const word = (t, s) => {
+    if (!s) return -1;
+    if (!t.at.has(s)) {
+      t.at.set(s, t.dict.length);
+      t.dict.push(s);
+    }
+    return t.at.get(s);
+  };
+  const cells = new Map();
+  const formations = new Map();
+  const countries = new Set();
+  let finds = 0;
+  let dropped = 0;
   for (const r of all) {
     const lng = Number(r.lng);
     const lat = Number(r.lat);
     const max = Number(r.eag);
     const min = Number(r.lag);
-    if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(max) || !Number.isFinite(min)) continue;
-    // a handful of records are tagged U.S. but sit abroad (a flipped sign, a mislabelled country): leave them out rather than guess
-    const inUS = ((lng >= -180 && lng <= -64) || lng >= 144) && lat >= 13 && lat <= 72;
-    if (!inUS) {
-      outside++;
+    if (![lng, lat, max, min].every(Number.isFinite) || Math.abs(lng) > 180 || Math.abs(lat) > 90 || (lng === 0 && lat === 0)) {
+      dropped++;
       continue;
     }
-    cols.id.push(Number(String(r.oid).replace(/^col:/, "")));
-    cols.lng.push(Math.round(lng * 1000) / 1000);
-    cols.lat.push(Math.round(lat * 1000) / 1000);
-    cols.n.push(Number(r.noc) || 0);
-    cols.max.push(Math.round(max * 10) / 10);
-    cols.min.push(Math.round(min * 10) / 10);
-    cols.per.push(periodIndex(max, min));
-    cols.fm.push(idx(r.sfm, formations, fIndex));
-    cols.st.push(idx(normState(r.stp), states, sIndex));
-    cols.flag.push((dinos.has(r.oid) ? 1 : 0) | (mammals.has(r.oid) ? 2 : 0));
+    // round first, so the stored position and its tile always agree
+    const [x, y] = [Math.round(lng * 1000) / 1000, Math.round(lat * 1000) / 1000];
+    const key = tileKey(x, y);
+    const t = tile(key);
+    const per = periodIndex(max, min);
+    const flag = (dinos.has(r.oid) ? 1 : 0) | (mammals.has(r.oid) ? 2 : 0);
+    const c = t.cols;
+    c.id.push(Number(String(r.oid).replace(/^col:/, "")));
+    c.lng.push(x);
+    c.lat.push(y);
+    c.n.push(Number(r.noc) || 0);
+    c.max.push(Math.round(max * 10) / 10);
+    c.min.push(Math.round(min * 10) / 10);
+    c.per.push(per);
+    const fmName = (r.sfm ?? "").replace(/^"|"$/g, "").trim();
+    c.fm.push(word(t, fmName));
+    const nation = country(r.cc2);
+    if (nation) countries.add(nation);
+    c.cc.push(word(t, nation));
+    // U.S. states are free text in PBDB: clean them; elsewhere keep the province as entered
+    c.st.push(word(t, r.cc2 === "US" ? normState(r.stp) : (r.stp ?? "").trim()));
+    c.flag.push(flag);
+    finds += Number(r.noc) || 0;
+
+    /* the zoomed-out summary: per 1° cell, sites per period — all, with dinosaurs, with mammals */
+    const ck = `${Math.floor(x / CELL_DEG)}_${Math.floor(y / CELL_DEG)}`;
+    if (!cells.has(ck)) cells.set(ck, { x: Math.floor(x / CELL_DEG), y: Math.floor(y / CELL_DEG), n: PERIODS.map(() => 0), d: PERIODS.map(() => 0), m: PERIODS.map(() => 0) });
+    const cell = cells.get(ck);
+    cell.n[per]++;
+    if (flag & 1) cell.d[per]++;
+    if (flag & 2) cell.m[per]++;
+
+    /* formations: where they are, for "every site in this formation" */
+    if (fmName) {
+      if (!formations.has(fmName)) formations.set(fmName, { n: 0, per: PERIODS.map(() => 0), tiles: new Set(), w: 180, s: 90, e: -180, nn: -90 });
+      const f = formations.get(fmName);
+      f.n++;
+      f.per[per]++;
+      f.tiles.add(key);
+      f.w = Math.min(f.w, x);
+      f.e = Math.max(f.e, x);
+      f.s = Math.min(f.s, y);
+      f.nn = Math.max(f.nn, y);
+    }
   }
-  const body = JSON.stringify({
-    generated: new Date().toISOString(),
-    source: "The Paleobiology Database (paleobiodb.org), CC BY 4.0",
-    periods: PERIODS,
-    formations,
-    states,
-    cols,
-  });
-  await writeFile(OUT, body);
-  const byPer = {};
-  for (const p of cols.per) byPer[PERIODS[p].label] = (byPer[PERIODS[p].label] ?? 0) + 1;
-  console.log(`fossils.json: ${cols.id.length} collections (${outside} outside the U.S. dropped), ${formations.length} formations, ${(body.length / 1024 / 1024).toFixed(1)} MB`, byPer);
+
+  /* write */
+  await rm(OUT_DIR, { recursive: true, force: true });
+  await mkdir(path.join(OUT_DIR, "t"), { recursive: true });
+  const tileKeys = [...tiles.keys()].sort();
+  const tileIdx = new Map(tileKeys.map((k, i) => [k, i]));
+  let bytes = 0;
+  for (const k of tileKeys) {
+    const { dict, cols } = tiles.get(k);
+    const body = JSON.stringify({ dict, cols });
+    bytes += body.length;
+    await writeFile(path.join(OUT_DIR, "t", `${k}.json`), body);
+  }
+  const cl = [...cells.values()];
+  // sparse rows: [period, all, dinosaurs, mammals] for each period present
+  const summary = { cell: CELL_DEG, x: cl.map((c) => c.x), y: cl.map((c) => c.y), rows: cl.map((c) => PERIODS.flatMap((_, p) => (c.n[p] ? [[p, c.n[p], c.d[p], c.m[p]]] : []))) };
+  const fl = [...formations.entries()].sort((a, b) => b[1].n - a[1].n);
+  const formationsOut = {
+    tiles: tileKeys,
+    name: fl.map(([n]) => n),
+    n: fl.map(([, f]) => f.n),
+    per: fl.map(([, f]) => f.per.indexOf(Math.max(...f.per))),
+    bbox: fl.map(([, f]) => [f.w, f.s, f.e, f.nn]),
+    t: fl.map(([, f]) => [...f.tiles].map((k) => tileIdx.get(k))),
+  };
+  const counts = {
+    sites: tileKeys.reduce((a, k) => a + tiles.get(k).cols.id.length, 0),
+    finds,
+    dino: tileKeys.reduce((a, k) => a + tiles.get(k).cols.flag.filter((f) => f & 1).length, 0),
+    mammal: tileKeys.reduce((a, k) => a + tiles.get(k).cols.flag.filter((f) => f & 2).length, 0),
+    countries: countries.size,
+    formations: fl.length,
+  };
+  await writeFile(
+    path.join(OUT_DIR, "index.json"),
+    JSON.stringify({ generated: new Date().toISOString(), source: "The Paleobiology Database (paleobiodb.org), CC BY 4.0", periods: PERIODS, tile: TILE_DEG, tiles: Object.fromEntries(tileKeys.map((k) => [k, tiles.get(k).cols.id.length])), counts })
+  );
+  await writeFile(path.join(OUT_DIR, "summary.json"), JSON.stringify(summary));
+  await writeFile(path.join(OUT_DIR, "formations.json"), JSON.stringify(formationsOut));
+  await rm(OLD_OUT, { force: true });
+  console.log(`fossils: ${counts.sites} sites in ${counts.countries} countries (${dropped} without a position or age dropped) · ${tileKeys.length} tiles ${(bytes / 1048576).toFixed(1)} MB · ${cl.length} summary cells · ${fl.length} formations`, counts);
 }

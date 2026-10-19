@@ -8,6 +8,11 @@
 /*    Viewer only), so tiles come through an `ahn-hs://` protocol that */
 /*    fetches raw heights and shades them here, multidirectionally     */
 /*    like the 3DEP view.                                              */
+/*  · France — IGN LiDAR HD bare-earth hillshade (WMS, Etalab 2.0).    */
+/*    The national lidar programme is still being flown: where it      */
+/*    hasn't reached yet the tiles are empty.                         */
+/*  · Switzerland — swisstopo swissALTI3D hillshade (WMTS, OGD).       */
+/*  · Norway — Kartverket national DTM hillshade (WMS, CC BY 4.0).     */
 /*                                                                     */
 /*  Spain's open DTM was checked and left out: it is published in      */
 /*  whole metres, which shades into visible terraces on flat ground.   */
@@ -30,6 +35,8 @@ export interface EuLidarSource {
 
 const EA_WMS = "https://environment.data.gov.uk/spatialdata/lidar-composite-digital-terrain-model-dtm-1m/wms";
 const AHN_WCS = "https://service.pdok.nl/rws/ahn/wcs/v1_0";
+const IGN_WMS = "https://data.geopf.fr/wms-r";
+const NO_WMS = "https://wms.geonorge.no/skwms1/wms.hoyde-dtm-nhm-25833";
 export const AHN_PROTOCOL = "ahn-hs";
 
 export const EU_LIDAR: EuLidarSource[] = [
@@ -52,6 +59,36 @@ export const EU_LIDAR: EuLidarSource[] = [
     maxzoom: 18,
     attribution: "Lidar: AHN / Rijkswaterstaat (CC0)",
     citation: { label: "AHN — Actueel Hoogtebestand Nederland (PDOK)", href: "https://www.ahn.nl/", license: "CC0" },
+  },
+  {
+    id: "ign",
+    label: "France — IGN LiDAR HD (where flown so far)",
+    tiles: `${IGN_WMS}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=true`,
+    bounds: [-5.2, 41.3, 9.6, 51.1],
+    minzoom: 10,
+    maxzoom: 18,
+    attribution: "Lidar: IGN LiDAR HD (Etalab 2.0)",
+    citation: { label: "IGN — LiDAR HD bare-earth model (Géoplateforme)", href: "https://geoservices.ign.fr/lidarhd", license: "Licence Ouverte / Etalab 2.0" },
+  },
+  {
+    id: "swisstopo",
+    label: "Switzerland — swisstopo swissALTI3D",
+    tiles: "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissalti3d-reliefschattierung/default/current/3857/{z}/{x}/{y}.png",
+    bounds: [5.9, 45.8, 10.5, 47.85],
+    minzoom: 10,
+    maxzoom: 18,
+    attribution: "Lidar: © swisstopo",
+    citation: { label: "swisstopo — swissALTI3D hillshade", href: "https://www.swisstopo.admin.ch/en/height-model-swissalti3d", license: "swisstopo open government data (attribution)" },
+  },
+  {
+    id: "kartverket",
+    label: "Norway — Kartverket national lidar DTM",
+    tiles: `${NO_WMS}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=NHM_DTM_25833&STYLES=skyggerelieff&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=true`,
+    bounds: [4.0, 57.9, 31.2, 71.3],
+    minzoom: 10,
+    maxzoom: 18,
+    attribution: "Lidar: Kartverket (CC BY 4.0)",
+    citation: { label: "Kartverket — Nasjonal detaljert høydemodell (DTM)", href: "https://hoydedata.no/", license: "CC BY 4.0" },
   },
 ];
 

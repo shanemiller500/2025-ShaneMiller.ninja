@@ -86,7 +86,7 @@ test('world faults: no plate boundaries or U.S. duplicates, known kinds, light f
 test('Earth Alive + Underground layers (now with global faults / OSM caves) produce valid styles', () => {
   const { EARTH_ALIVE_LAYERS } = load('app/atlas/earth-alive/layers.ts');
   assert.deepEqual(styleErrors(EARTH_ALIVE_LAYERS), []);
-  const { cavesLayer } = load('app/atlas/underground-usa/layers.ts');
+  const { cavesLayer } = load('app/atlas/underground/layers.ts');
   assert.deepEqual(styleErrors([cavesLayer]), []);
 });
 

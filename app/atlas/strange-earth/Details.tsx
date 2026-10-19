@@ -199,7 +199,7 @@ function Drawers({ picked, onClose, onFly, onRefill }: { picked: Picked | null; 
   if (place) {
     const cat = strangeCat(place.cat);
     return (
-      <FeatureDrawer open onClose={onClose} eyebrow={cat.label} accent={cat.color} title={place.name} subtitle={place.state ?? undefined}>
+      <FeatureDrawer open onClose={onClose} eyebrow={cat.label} accent={cat.color} title={place.name} subtitle={(place.country && place.country !== "United States of America" && place.country !== "United States" ? place.country : place.state) ?? undefined}>
         <div className="space-y-4">
           <Photo src={place.image} alt={place.name} />
           {place.desc && <p className="text-[13px] leading-relaxed text-slate-300">{place.desc.charAt(0).toUpperCase() + place.desc.slice(1)}</p>}

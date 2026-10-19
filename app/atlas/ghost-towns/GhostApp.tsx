@@ -28,7 +28,7 @@ import {
 import { FEATURED_TOWNS, featuredById, type FeaturedTown } from "./featured";
 import { GHOST_COLORS, GHOST_LAYERS, OSM_MIN_ZOOM } from "./layers";
 import { GhostDetailsDrawer } from "./Details";
-import { ThenNow, type ThenNowPlace } from "./ThenNow";
+import { ThenNow, type ThenNowPlace } from "@/components/atlas/ThenNow";
 import { GHOST_STORIES, ghostStoryById, type GhostAction } from "./stories";
 
 type Mode = "map" | "stories";
@@ -491,7 +491,7 @@ function FindTown({ rows, onGo }: { rows: Row[]; onGo: (c: [number, number], z: 
               setQ(e.target.value);
               setMe(null);
             }}
-            placeholder="Search 14,000 vanished places…"
+            placeholder="Search 19,000 vanished places…"
             className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-8 pr-3 text-[13px] text-slate-100 outline-none placeholder:text-slate-500 focus:border-amber-300/40"
           />
         </label>

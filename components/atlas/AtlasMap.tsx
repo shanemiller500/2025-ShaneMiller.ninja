@@ -38,6 +38,10 @@ export interface AtlasMapProps {
   dark: boolean;
   selected?: Picked | null;
   onPick?: (p: Picked | null) => void;
+  /** Access to the shared map for project-specific tools such as drawing. */
+  onMapReady?: (map: MlMap) => void;
+  /** Cursor used when no selectable map feature is under the pointer. */
+  emptyCursor?: string;
   initialView?: { center: [number, number]; zoom: number };
   /** Bump `nonce` to fly somewhere (e.g. from a list click) */
   flyTo?: { center: [number, number]; zoom?: number; pitch?: number; bearing?: number; nonce: number } | null;
@@ -67,6 +71,8 @@ export function AtlasMap({
   dark,
   selected,
   onPick,
+  onMapReady,
+  emptyCursor,
   initialView = { center: [-110, 30], zoom: 1.6 },
   flyTo,
   time = null,
@@ -90,8 +96,8 @@ export function AtlasMap({
   const orbitingRef = useRef(false);
 
   // latest props for the imperative handlers
-  const live = useRef({ layers, visible, data, terrain, dark, selected, onPick, time, onView, onOrbitStop });
-  live.current = { layers, visible, data, terrain, dark, selected, onPick, time, onView, onOrbitStop };
+  const live = useRef({ layers, visible, data, terrain, dark, selected, onPick, time, onView, onOrbitStop, emptyCursor });
+  live.current = { layers, visible, data, terrain, dark, selected, onPick, time, onView, onOrbitStop, emptyCursor };
 
   /* ── create the map once ─────────────────────────────────────────── */
   useEffect(() => {
@@ -105,6 +111,7 @@ export function AtlasMap({
       maxPitch: 75,
     });
     mapRef.current = map;
+    onMapReady?.(map);
     // dev-only handle for headless checks
     if (process.env.NODE_ENV !== "production") (window as unknown as { __atlasMap?: MlMap }).__atlasMap = map;
     if (controls) {
@@ -215,7 +222,7 @@ export function AtlasMap({
         const hit = ids.length ? map.queryRenderedFeatures(e.point, { layers: ids })[0] : undefined;
         const owner = hit && defs.find((d) => d.clickable?.includes(hit.layer.id));
         const label = hit && owner?.hoverLabel?.(hit);
-        map.getCanvas().style.cursor = hit ? "pointer" : "";
+        map.getCanvas().style.cursor = hit ? "pointer" : live.current.emptyCursor ?? "";
         if (label) tip.setLngLat(e.lngLat).setText(label).addTo(map);
         else tip.remove();
       });

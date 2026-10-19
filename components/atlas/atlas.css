@@ -98,6 +98,13 @@
   border-color: #a3e635;
 }
 
+.atlas-range-amber::-webkit-slider-thumb {
+  border-color: #fbbf24;
+}
+.atlas-range-amber::-moz-range-thumb {
+  border-color: #fbbf24;
+}
+
 /* Deep-space backdrop behind the globe: a few layers of tiny stars. */
 .atlas-space {
   background-color: #02040b;

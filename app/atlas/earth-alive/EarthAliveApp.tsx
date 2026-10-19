@@ -30,6 +30,7 @@ import {
 } from "@/utils/geo/quakes";
 import { VOLCANO_FILTERS, volcanoMatches, type VolcanoFilter } from "@/utils/geo/volcanoes";
 import { EARTH_ALIVE_LAYERS } from "./layers";
+import { NCEI_QUAKES_URL, NCEI_TSUNAMIS_URL, nceiQuakeFeatures, nceiTsunamiFeatures, type NceiQuakes, type NceiTsunamis } from "@/utils/geo/ncei";
 import { useQuakeQuery, useQuakes, useVolcanoes, type QuakeQuery } from "./useEarthData";
 import { QuakeList } from "./QuakeList";
 import { EarthDetails } from "./Details";
@@ -201,10 +202,22 @@ export default function EarthAliveApp() {
     () => (volcanoes.data ? { ...volcanoes.data, features: volcanoes.data.features.filter((f) => volcanoMatches(f.properties, volcanoFilter)) } : undefined),
     [volcanoes.data, volcanoFilter]
   );
+  /* NOAA's history tables load the first time their layer is switched on */
+  const [ncei, setNcei] = useState<{ quakes?: NceiQuakes; tsunamis?: NceiTsunamis }>({});
+  useEffect(() => {
+    const want = ([["quakes", "history", NCEI_QUAKES_URL], ["tsunamis", "tsunamis", NCEI_TSUNAMIS_URL]] as const).filter(([k, layer]) => visible[layer] && !ncei[k]);
+    for (const [k, , url] of want)
+      fetch(url)
+        .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+        .then((j) => setNcei((n) => ({ ...n, [k]: j })))
+        .catch(() => {});
+  }, [visible, ncei]);
+  const nceiQuakeFc = useMemo(() => (ncei.quakes ? nceiQuakeFeatures(ncei.quakes) : undefined), [ncei.quakes]);
+  const nceiTsunamiFc = useMemo(() => (ncei.tsunamis ? nceiTsunamiFeatures(ncei.tsunamis) : undefined), [ncei.tsunamis]);
   const replayFc = useMemo(() => (history.data ? { type: "FeatureCollection" as const, features: history.data.features } : undefined), [history.data]);
   const data = useMemo(
-    () => ({ quakes: mode === "replay" ? replayFc : quakes.mapData, volcanoes: volcanoData }),
-    [mode, replayFc, quakes.mapData, volcanoData]
+    () => ({ quakes: mode === "replay" ? replayFc : quakes.mapData, volcanoes: volcanoData, history: nceiQuakeFc, tsunamis: nceiTsunamiFc }),
+    [mode, replayFc, quakes.mapData, volcanoData, nceiQuakeFc, nceiTsunamiFc]
   );
   const deferredCursor = useDeferredValue(timeline.cursor);
   const list: QuakeFeature[] = useMemo(() => {
@@ -316,7 +329,7 @@ export default function EarthAliveApp() {
             onPick={(q) => setPicked(q ? { layer: "quakes", id: q.properties.id, props: q.properties as unknown as Record<string, unknown>, lngLat: q.geometry.coordinates as [number, number] } : null)}
           />
         )}
-        <EarthDetails picked={picked} onClose={() => setPickedState(null)} onReplaySequence={startSequence} />
+        <EarthDetails picked={picked} onClose={() => setPickedState(null)} onReplaySequence={startSequence} ncei={ncei} />
       </AtlasMap>
 
       {/* ── top-left: back, title, mode + filters ───────────────── */}

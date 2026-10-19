@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/*  Bake the carbonate aquifers layer for Underground USA.             */
+/*  Bake the carbonate aquifers layer for Underground World.             */
 /*                                                                     */
 /*  Source: USGS Principal Aquifers of the United States (via Esri's   */
 /*  Living Atlas "USA Aquifers" feature layer). Keeps the karst-prone  */

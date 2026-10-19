@@ -63,7 +63,7 @@ const viewLayer = (view: LidarView): AtlasLayer => ({
       },
       labelLayerId
     );
-    // England and the Netherlands: their national lidar (a hillshade in every view)
+    // national lidar abroad — England, the Netherlands, France, Switzerland, Norway (a hillshade in every view)
     const eu = addEuLidar(map, src, labelLayerId, { "raster-opacity": ["interpolate", ["linear"], ["zoom"], LIDAR_MIN_ZOOM, 0, LIDAR_MIN_ZOOM + 0.6, 1] });
     return [`${src}-raster`, ...eu];
   },

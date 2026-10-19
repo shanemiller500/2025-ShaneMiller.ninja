@@ -1,6 +1,7 @@
 /* ------------------------------------------------------------------ */
 /*  Earth Alive's map layers, declared for <AtlasMap>.                 */
-/*  Draw order = array order: plates → faults → volcanoes → quakes.    */
+/*  Draw order = array order: plates → faults → history → tsunamis →   */
+/*  volcanoes → quakes.                                                */
 /* ------------------------------------------------------------------ */
 import type { ExpressionSpecification, Map as MlMap } from "maplibre-gl";
 import type { AtlasLayer } from "@/components/atlas/types";
@@ -9,6 +10,7 @@ import { FAULT_AGES, QFAULTS_LAYER, QFAULTS_SERVICE, faultFromIdentify } from "@
 import { BOUNDARY_CLASS_LABEL, BOUNDARY_KINDS, PLATES_URL, plateName, type BoundaryClass } from "@/utils/geo/plates";
 import { DEPTH_STOPS } from "@/utils/geo/quakes";
 import { CODE_STYLE } from "@/utils/geo/volcanoes";
+import { DEATH_COLORS, DEATH_LABELS } from "@/utils/geo/ncei";
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
@@ -314,4 +316,73 @@ export const volcanoesLayer: AtlasLayer = {
   },
 };
 
-export const EARTH_ALIVE_LAYERS: AtlasLayer[] = [platesLayer, faultsLayer, volcanoesLayer, quakesLayer];
+/* ── history: NOAA's significant earthquakes and tsunamis ────────── */
+
+const RANK_COLOR = ["match", ["get", "rank"], ...DEATH_COLORS.flatMap((c, i) => [i, c]), DEATH_COLORS[0]] as unknown as ExpressionSpecification;
+
+export const historyQuakesLayer: AtlasLayer = {
+  id: "history",
+  label: "Deadly & great earthquakes in history",
+  group: "History",
+  badge: "2150 BC → today",
+  description: "NOAA's Significant Earthquake Database: about 6,600 earthquakes worldwide since 2150 BC that did about $1 million or more damage, killed 10 or more people, reached magnitude 7.5, shook at intensity X or set off a tsunami. Sized by magnitude, coloured by deaths.",
+  legend: DEATH_COLORS.map((color, i) => ({ color, label: DEATH_LABELS[i] })),
+  citation: { label: "NOAA NCEI — Significant Earthquake Database", href: "https://www.ncei.noaa.gov/products/natural-hazards/tsunamis-earthquakes-volcanoes/earthquakes", license: "public domain" },
+  clickable: ["history-dot"],
+  install(map) {
+    map.addSource("history", { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "history-dot",
+      type: "circle",
+      source: "history",
+      layout: { "circle-sort-key": ["get", "rank"] },
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, ["interpolate", ["linear"], ["get", "mag"], 0, 2, 6, 2.5, 8, 5.5, 9.5, 9], 6, ["interpolate", ["linear"], ["get", "mag"], 0, 4, 6, 5, 8, 11, 9.5, 18]],
+        "circle-color": RANK_COLOR,
+        "circle-opacity": 0.78,
+        "circle-stroke-color": "#0f172a",
+        "circle-stroke-width": 0.6,
+      },
+    });
+    return ["history-dot"];
+  },
+  hoverLabel: (f) => {
+    const p = f.properties as { mag: number; year: number; place: string };
+    return `${p.mag ? `M${p.mag} · ` : ""}${p.year < 0 ? `${-p.year} BC` : p.year} · ${p.place}`;
+  },
+};
+
+export const tsunamisLayer: AtlasLayer = {
+  id: "tsunamis",
+  label: "Tsunamis in history",
+  group: "History",
+  badge: "2000 BC → today",
+  description: "NOAA's Global Historical Tsunami Database — the 1,580 events it rates definite or probable (doubtful ones left out), placed at their source. The ring grows with the highest wave recorded; colour shows deaths.",
+  legend: [...DEATH_COLORS.map((color, i) => ({ color, label: DEATH_LABELS[i], shape: "ring" as const }))],
+  citation: { label: "NOAA NCEI — Global Historical Tsunami Database", href: "https://www.ncei.noaa.gov/products/natural-hazards/tsunamis-earthquakes-volcanoes/tsunamis", license: "public domain" },
+  clickable: ["tsunamis-ring"],
+  install(map) {
+    map.addSource("tsunamis", { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "tsunamis-ring",
+      type: "circle",
+      source: "tsunamis",
+      layout: { "circle-sort-key": ["get", "rank"] },
+      paint: {
+        // 1 m → small, 10 m → medium, 30 m+ → big
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, ["interpolate", ["linear"], ["sqrt", ["get", "height"]], 0, 3, 3, 6, 6, 11], 6, ["interpolate", ["linear"], ["sqrt", ["get", "height"]], 0, 6, 3, 12, 6, 22]],
+        "circle-color": "rgba(0,0,0,0)",
+        "circle-stroke-color": RANK_COLOR,
+        "circle-stroke-width": 2,
+        "circle-stroke-opacity": 0.85,
+      },
+    });
+    return ["tsunamis-ring"];
+  },
+  hoverLabel: (f) => {
+    const p = f.properties as { height: number; date: string; place: string };
+    return `Tsunami · ${p.date.split("-")[0].replace(/^-(\d+)$/, "$1 BC")} · ${p.place}${p.height ? ` · ${p.height} m` : ""}`;
+  },
+};
+
+export const EARTH_ALIVE_LAYERS: AtlasLayer[] = [platesLayer, faultsLayer, historyQuakesLayer, tsunamisLayer, volcanoesLayer, quakesLayer];

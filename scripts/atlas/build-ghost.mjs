@@ -31,7 +31,10 @@ async function json(url, init = {}) {
   throw new Error(`failed: ${url.slice(0, 120)}`);
 }
 
+const WIKIDATA_ONLY = process.argv.includes("--wikidata");
+
 /* ── 1. GNIS historical populated places ─────────────────────────── */
+if (!WIKIDATA_ONLY) {
 
 const GNIS = "https://carto.nationalmap.gov/arcgis/rest/services/geonames/MapServer/12/query";
 const gnis = { id: [], name: [], state: [], county: [], lng: [], lat: [] };
@@ -66,14 +69,21 @@ for (let offset = 0; ; offset += 2000) {
 }
 console.log(`\nGNIS historical populated places: ${gnis.id.length}`);
 await writeFile(path.join(DIR, "ghost-gnis.json"), JSON.stringify({ generated: new Date().toISOString(), source: "USGS GNIS — historical populated places", cols: gnis }));
+}
 
-/* ── 2. Wikidata ghost towns (worldwide) ─────────────────────────── */
+/* ── 2. Wikidata ghost towns, abandoned and deserted villages (worldwide) ── */
 
-const SPARQL = `
+/** What Wikidata calls it — the most specific first when an item is more than one (a deserted medieval village is also an abandoned village). */
+export const KINDS = [
+  ["Q74047", "ghost town"],
+  ["Q21751582", "deserted medieval village"],
+  ["Q350895", "abandoned village"],
+];
+const SPARQL = (cls) => `
 SELECT ?c ?cLabel ?cDescription ?coord ?article ?countryLabel
   (SAMPLE(?img) AS ?image) (MIN(YEAR(?inc)) AS ?founded) (MIN(YEAR(?end)) AS ?abandoned)
 WHERE {
-  ?c wdt:P31/wdt:P279* wd:Q74047; wdt:P625 ?coord.
+  ?c wdt:P31/wdt:P279* wd:${cls}; wdt:P625 ?coord.
   OPTIONAL { ?c wdt:P17 ?country. }
   OPTIONAL { ?c wdt:P18 ?img. }
   OPTIONAL { ?c wdt:P571 ?inc. }
@@ -82,7 +92,14 @@ WHERE {
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 GROUP BY ?c ?cLabel ?cDescription ?coord ?article ?countryLabel`;
-const rows = (await json(`https://query.wikidata.org/sparql?query=${encodeURIComponent(SPARQL)}`, { headers: { Accept: "application/sparql-results+json" } })).results.bindings;
+// one class per query (all three at once risks Wikidata's 60 s limit)
+const rows = [];
+for (const [k, [cls]] of KINDS.entries()) {
+  const got = (await json(`https://query.wikidata.org/sparql?query=${encodeURIComponent(SPARQL(cls))}`, { headers: { Accept: "application/sparql-results+json" } })).results.bindings;
+  for (const r of got) r.kind = k;
+  rows.push(...got);
+  await sleep(800);
+}
 const seen = new Map();
 for (const r of rows) {
   const id = r.c.value.split("/").pop();
@@ -101,12 +118,14 @@ for (const r of rows) {
     wiki: r.article ? decodeURIComponent(r.article.value.split("/wiki/")[1] ?? "") || null : null,
     founded: r.founded ? Number(r.founded.value) : null,
     abandoned: r.abandoned ? Number(r.abandoned.value) : null,
+    kind: r.kind,
   });
 }
 const towns = [...seen.values()];
-const cols = Object.fromEntries(["id", "name", "desc", "country", "lng", "lat", "image", "wiki", "founded", "abandoned"].map((k) => [k, towns.map((t) => t[k])]));
-console.log(`Wikidata ghost towns: ${towns.length} (U.S. ${towns.filter((t) => t.country === "United States").length}, with article ${towns.filter((t) => t.wiki).length})`);
-await writeFile(path.join(DIR, "ghost-towns.json"), JSON.stringify({ generated: new Date().toISOString(), source: "Wikidata (CC0)", cols }));
+const cols = Object.fromEntries(["id", "name", "desc", "country", "lng", "lat", "image", "wiki", "founded", "abandoned", "kind"].map((k) => [k, towns.map((t) => t[k])]));
+console.log(`Wikidata: ${towns.length} (U.S. ${towns.filter((t) => t.country === "United States").length}, with article ${towns.filter((t) => t.wiki).length})`, KINDS.map(([, label], k) => `${label} ${towns.filter((t) => t.kind === k).length}`).join(" · "));
+await writeFile(path.join(DIR, "ghost-towns.json"), JSON.stringify({ generated: new Date().toISOString(), source: "Wikidata (CC0)", kinds: KINDS.map(([, label]) => label), cols }));
+if (WIKIDATA_ONLY) process.exit(0);
 
 /* ── 3. drowned towns ────────────────────────────────────────────── */
 

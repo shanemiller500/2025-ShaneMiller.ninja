@@ -30,8 +30,8 @@ function load(file) {
 }
 
 const { generateCave, PK } = load('components/atlas/caveGen.ts');
-const { FEATURED, diveSpecFor } = load('app/atlas/underground-usa/featured.ts');
-const { UNDERGROUND_STORIES } = load('app/atlas/underground-usa/stories.ts');
+const { FEATURED, diveSpecFor } = load('app/atlas/underground/featured.ts');
+const { UNDERGROUND_STORIES } = load('app/atlas/underground/stories.ts');
 
 /* ── generator ───────────────────────────────────────────────────── */
 

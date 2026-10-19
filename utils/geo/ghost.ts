@@ -31,6 +31,8 @@ export interface GhostCols {
   wiki: (string | null)[];
   founded: (number | null)[];
   abandoned: (number | null)[];
+  /** index into GHOST_KINDS (what Wikidata calls the place) */
+  kind?: number[];
 }
 
 export interface DrownedTown {
@@ -62,6 +64,10 @@ export function gnisFeatures(c: GnisCols): GeoJSON.FeatureCollection<GeoJSON.Poi
   };
 }
 
+/** What Wikidata calls each place, in the order the bake numbers them. */
+export const GHOST_KINDS = ["Ghost town", "Deserted medieval village", "Abandoned village"] as const;
+export const ghostKind = (c: GhostCols, i: number) => GHOST_KINDS[c.kind?.[i] ?? 0] ?? GHOST_KINDS[0];
+
 export function ghostFeatures(c: GhostCols): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: "FeatureCollection",
@@ -69,7 +75,7 @@ export function ghostFeatures(c: GhostCols): GeoJSON.FeatureCollection<GeoJSON.P
       type: "Feature",
       id: i,
       geometry: { type: "Point", coordinates: [c.lng[i], c.lat[i]] },
-      properties: { i, id, name: c.name[i], country: c.country[i], founded: c.founded[i], abandoned: c.abandoned[i] },
+      properties: { i, id, name: c.name[i], country: c.country[i], founded: c.founded[i], abandoned: c.abandoned[i], kind: c.kind?.[i] ?? 0 },
     })),
   };
 }

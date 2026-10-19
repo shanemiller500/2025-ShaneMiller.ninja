@@ -63,15 +63,20 @@ test('impacts: known craters carry the right numbers (ka tables converted to Ma)
   assert.ok(!impacts.some((f) => /Wilkes Land/i.test(f.properties.name)), 'Wilkes Land is not confirmed');
 });
 
-test('places: every category is known and every point is in the U.S.', () => {
+test('places: worldwide, every category known, every U.S. one kept, abroad only notable ones', () => {
   const cats = new Set(strange.STRANGE_CATS.map((c) => c.key));
-  assert.ok(places.length > 500);
+  assert.ok(places.length > 3000, `${places.length} places`);
+  const us = places.filter((f) => f.properties.country === 'United States');
+  assert.ok(us.length > 800, `${us.length} in the U.S.`);
+  assert.ok(new Set(places.map((f) => f.properties.country)).size > 40, 'many countries');
   for (const { properties: p, geometry: g } of places) {
     assert.ok(cats.has(p.cat), `${p.name}: unknown category ${p.cat}`);
     const [lng, lat] = g.coordinates;
-    // lower 48, Alaska, Hawaii, territories in the Pacific and Caribbean
-    assert.ok((lng < -64 && lng > -180 && lat > 13 && lat < 72) || (lng > 140 && lat > 12 && lat < 22), `${p.name} at ${lng},${lat}`);
+    assert.ok(Math.abs(lng) <= 180 && Math.abs(lat) <= 90, `${p.name} at ${lng},${lat}`);
+    // outside the U.S. the query keeps only places with a photo or an English Wikipedia article
+    if (p.country !== 'United States') assert.ok(p.image || p.wiki, `${p.name} (${p.country}) is not notable`);
   }
+  for (const name of ['Strokkur', 'Giant\'s Causeway', 'Uluru']) assert.ok(places.some((f) => f.properties.name === name), name);
 });
 
 test('landforms: all four GNIS classes, named and located', () => {

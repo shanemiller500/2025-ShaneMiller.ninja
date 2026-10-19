@@ -54,13 +54,13 @@ export const SATELLITE_LENS: Lens = {
   citation: { label: "Esri World Imagery", href: "https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" },
 };
 
-/** England's and the Netherlands' national lidar, layered on top where they exist. */
+/** National lidar outside the U.S. (England, Netherlands, France, Switzerland, Norway), layered on top where it exists. */
 const EU_LENS_SOURCES: LensSource[] = EU_LIDAR.map((s) => ({ id: `eu-${s.id}`, tiles: s.tiles, minzoom: s.minzoom, maxzoom: s.maxzoom, layerMinzoom: s.minzoom, bounds: s.bounds, attribution: s.attribution }));
 
 export const LIDAR_LENS: Lens = {
   id: "lidar",
   label: "Bare earth",
-  blurb: "Lidar strips away trees and buildings: just the shape of the ground (1 m detail from zoom 11 where flown — the U.S., England and the Netherlands).",
+  blurb: "Lidar strips away trees and buildings: just the shape of the ground (1 m detail from zoom 11 where flown — the U.S., England, the Netherlands, France, Switzerland and Norway).",
   accent: "#a3e635",
   sources: [
     { id: "relief", tiles: RELIEF_TILES, maxzoom: 16, layerMaxzoom: 11.5, attribution: "Relief: USGS The National Map" },
