@@ -11,6 +11,8 @@ import {
 import Link from "next/link";
 import {
   Activity,
+  Loader2,
+  LocateFixed,
   ArrowLeft,
   BookOpen,
   Flame,
@@ -25,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { AtlasMap } from "@/components/atlas/AtlasMap";
+import { useNearMe } from "@/components/atlas/useNearMe";
 import { LayerPanel } from "@/components/atlas/LayerPanel";
 import { SourceCitation } from "@/components/atlas/SourceCitation";
 import {
@@ -53,6 +56,7 @@ import {
   type Storm,
 } from "@/utils/geo/hazards";
 import { DISASTER_LAYERS, HISTORY_LAYER_IDS } from "./layers";
+import { NearList } from "./NearList";
 import { pathPolygon, type AreaGeometry } from "@/utils/geo/impact";
 import { HistoryBar, useHistory } from "./HistoryBar";
 import { StoryPlayer } from "@/components/atlas/StoryPlayer";
@@ -68,7 +72,7 @@ import { DisasterDetails, loadNri } from "./Details";
 /*  risk index. Everything refreshes every five minutes.               */
 /* ------------------------------------------------------------------ */
 
-type Panel = "now" | "layers" | null;
+type Panel = "now" | "layers" | "near" | null;
 type FC = GeoJSON.FeatureCollection;
 
 const REFRESH_MS = 5 * 60_000;
@@ -196,6 +200,11 @@ export default function DisasterApp() {
     setPickedState(p);
     if (p) setPanel(null);
   }, []);
+  const { me, locating, locate } = useNearMe((at) => {
+    setPickedState(null);
+    setPanel("near");
+    setFlyTo({ center: at, zoom: 6, pitch: 0, bearing: 0, nonce: Date.now() });
+  });
   const togglePanel = (p: Exclude<Panel, null>) => {
     setPanel((cur) => (cur === p ? null : p));
     setPickedState(null);
@@ -601,13 +610,34 @@ export default function DisasterApp() {
             active={panel === "layers"}
             onClick={() => togglePanel("layers")}
           />
+          <HudIconButton
+            icon={locating === "busy" ? Loader2 : LocateFixed}
+            label={locating === "denied" ? "Near me — location isn't available" : "Near me"}
+            active={panel === "near"}
+            onClick={() => (me ? togglePanel("near") : locate())}
+          />
         </div>
       )}
       {panel && mode === "live" && (
         <SidePanel
-          title={panel === "now" ? "Happening now" : "Layers"}
+          title={panel === "now" ? "Happening now" : panel === "near" ? "Near you" : "Layers"}
           onClose={() => setPanel(null)}
         >
+          {panel === "near" && me && (
+            <NearList
+              me={me}
+              storms={live.storms ?? []}
+              world={worldData?.features ?? []}
+              icebergs={live.icebergs?.features ?? []}
+              fires={activeFires}
+              flooding={flooding}
+              reports={todayReports}
+              warnings={warnings}
+              centreOf={centreOf}
+              onGo={go}
+              onPick={setPicked}
+            />
+          )}
           {panel === "now" && (
             <NowList
               storms={live.storms ?? []}

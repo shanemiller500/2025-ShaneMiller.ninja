@@ -72,7 +72,7 @@ test('featured towns: unique, every fact from an official page, on a real place'
   assert.equal(new Set(FEATURED_TOWNS.map((t) => t.id)).size, FEATURED_TOWNS.length);
   for (const t of FEATURED_TOWNS) {
     assert.ok(t.facts.length >= 2, t.name);
-    for (const f of t.facts) assert.match(f.source.url, /^https:\/\/([a-z0-9-]+\.)*(nps\.gov|blm\.gov|parks\.ca\.gov|fwp\.mt\.gov|digitalcommonwealth\.org)\//, `${t.name}: ${f.source.url}`);
+    for (const f of t.facts) assert.match(f.source.url, /^https:\/\/([a-z0-9-]+\.)*(nps\.gov|blm\.gov|parks\.ca\.gov|fwp\.mt\.gov|digitalcommonwealth\.org|whc\.unesco\.org|www\.english-heritage\.org\.uk)\//, `${t.name}: ${f.source.url}`);
     assert.ok(t.zoom >= 8 && t.zoom <= 16);
   }
   // featured positions agree with the Wikidata ghost-town points (within 3 km)

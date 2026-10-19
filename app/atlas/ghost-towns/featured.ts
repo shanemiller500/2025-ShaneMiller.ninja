@@ -14,7 +14,7 @@ export interface Fact {
   source: Source;
 }
 
-export type FeaturedKind = "boom" | "drowned";
+export type FeaturedKind = "boom" | "drowned" | "deserted";
 
 export interface FeaturedTown {
   id: string;
@@ -41,6 +41,8 @@ const S = {
   bannack: { label: "Montana State Parks", url: "https://fwp.mt.gov/stateparks/bannack/" },
   garnet: { label: "BLM", url: "https://www.blm.gov/press-release/garnet-day-celebrates-mining-heritage-montanas-most-intact-ghost-town" },
   quabbin: { label: "Massachusetts Archives", url: "https://www.digitalcommonwealth.org/collections/commonwealth:76537133j" },
+  humberstone: { label: "UNESCO", url: "https://whc.unesco.org/en/list/1178/" },
+  wharram: { label: "English Heritage", url: "https://www.english-heritage.org.uk/visit/places/wharram-percy-deserted-medieval-village/history/" },
 } satisfies Record<string, Source>;
 
 export const FEATURED_TOWNS: FeaturedTown[] = [
@@ -149,6 +151,42 @@ export const FEATURED_TOWNS: FeaturedTown[] = [
       { text: "Even the dead were moved: about 7,500 burials in 34 cemeteries in the watershed had to be dealt with under the Acts of 1927, chapter 321.", source: S.quabbin },
     ],
     site: { label: "Massachusetts Archives — Quabbin records", url: "https://www.digitalcommonwealth.org/collections/commonwealth:76537133j" },
+  },
+  {
+    id: "humberstone",
+    name: "Humberstone & Santa Laura",
+    where: "Tarapacá, Chile",
+    kind: "boom",
+    era: "saltpeter boom from 1880",
+    tagline: "Company towns of the nitrate boom in one of Earth's driest deserts.",
+    accent: "#fdba74",
+    center: [-69.7944, -20.2083],
+    zoom: 15,
+    wiki: "Humberstone_and_Santa_Laura_Saltpeter_Works",
+    facts: [
+      { text: "Workers from Chile, Peru and Bolivia lived in company towns at over 200 saltpeter works, forging their own 'pampino' culture.", source: S.humberstone },
+      { text: "For over 60 years from 1880 they processed the world's largest saltpeter deposit, making the sodium nitrate fertilizer that transformed farming in the Americas and Europe.", source: S.humberstone },
+      { text: "The works sit in the remote Pampas, one of the driest deserts on Earth. Inscribed 2005.", source: S.humberstone },
+    ],
+    site: { label: "UNESCO World Heritage listing", url: "https://whc.unesco.org/en/list/1178/" },
+  },
+  {
+    id: "wharram-percy",
+    name: "Wharram Percy",
+    where: "North Yorkshire, England",
+    kind: "deserted",
+    era: "deserted by the early 1500s",
+    tagline: "A medieval village emptied for sheep.",
+    accent: "#a3e635",
+    center: [-0.6897, 54.0675],
+    zoom: 16,
+    wiki: "Wharram_Percy",
+    facts: [
+      { text: "People lived here for about 600 years; the village was probably founded in the 9th or 10th century.", source: S.wharram },
+      { text: "It was nearly empty by the early 16th century, and by 1527 the land had been turned over to sheep pasture.", source: S.wharram },
+      { text: "The ruined church of St Martin is the last standing medieval building; about 40 peasant houses and two manor houses survive as foundations. Archaeologists dug here every summer from the 1950s to 1990.", source: S.wharram },
+    ],
+    site: { label: "Wharram Percy (English Heritage)", url: "https://www.english-heritage.org.uk/visit/places/wharram-percy-deserted-medieval-village/" },
   },
 ];
 

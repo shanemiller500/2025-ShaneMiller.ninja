@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Bone, Check, ChevronRight, Hourglass, Layers, Link2, ListOrdered, Loader2, LocateFixed, Map as MapIcon, Pause, Play, Search, X } from "lucide-react";
 import { StoryPlayer } from "@/components/atlas/StoryPlayer";
+import { useNearMe } from "@/components/atlas/useNearMe";
 import type { StoryAction } from "@/components/atlas/story";
 import { useLibrary } from "@/utils/geo/useLibrary";
 import { AtlasMap } from "@/components/atlas/AtlasMap";
@@ -691,8 +692,10 @@ function FindPanel({
   onNear: (at: [number, number]) => void;
 }) {
   const [q, setQ] = useState("");
-  const [me, setMe] = useState<[number, number] | null>(null);
-  const [locating, setLocating] = useState<"idle" | "busy" | "denied">("idle");
+  const { me, setMe, locating, locate: nearMe } = useNearMe((at) => {
+    setQ("");
+    onNear(at);
+  });
   const needle = q.trim().toLowerCase();
   // the formation index (≈1 MB) loads the first time someone searches
   useEffect(() => {
@@ -716,21 +719,6 @@ function FindPanel({
     return out.sort((a, b) => a.d - b.d).slice(0, LIST_MAX);
   }, [me, tiles, index]);
 
-  const nearMe = () => {
-    if (!navigator.geolocation) return setLocating("denied");
-    setLocating("busy");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const at: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        setMe(at);
-        setQ("");
-        setLocating("idle");
-        onNear(at);
-      },
-      () => setLocating("denied"),
-      { maximumAge: 600_000, timeout: 10_000 }
-    );
-  };
 
   const row = "flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left hover:bg-white/[0.05]";
   return (

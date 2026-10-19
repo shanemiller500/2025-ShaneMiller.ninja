@@ -204,3 +204,179 @@ test('orbit guard: a one-pointer drag stops the orbit; taps and two-finger pinch
   fire('pointermove', 5, 50, 50);
   assert.equal(stops, 2, 'no events after cleanup');
 });
+
+/* Phase 2 "more global": NOAA history, Australian wrecks, world featured places. */
+
+test('NOAA history: parallel columns, famous events right, quake ↔ tsunami links resolve', () => {
+  const q = readJson('ncei-quakes.json');
+  const t = readJson('ncei-tsunamis.json');
+  const nq = q.cols.id.length;
+  const nt = t.cols.id.length;
+  assert.ok(nq > 6000 && nt > 1400, `${nq} quakes, ${nt} tsunamis`);
+  for (const k of Object.keys(q.cols)) assert.equal(q.cols[k].length, nq, k);
+  for (const k of Object.keys(t.cols)) assert.equal(t.cols[k].length, nt, k);
+  assert.ok(t.cols.validity.every((v) => v >= 3), 'doubtful tsunamis left out');
+  const sumatra = q.cols.id.indexOf(5823);
+  assert.equal(q.cols.date[sumatra], '2004-12-26');
+  assert.equal(q.cols.mag[sumatra], 9.1);
+  assert.equal(q.cols.deaths[sumatra], 227899);
+  const ti = t.cols.id.indexOf(q.cols.tsunami[sumatra]);
+  assert.ok(ti >= 0 && t.cols.height[ti] > 30, 'Sumatra quake links to its tsunami');
+  const lisbon = q.cols.id.indexOf(1339);
+  assert.equal(q.cols.date[lisbon], '1755-11-01');
+  const lituya = t.cols.id.indexOf(1880);
+  assert.equal(t.cols.height[lituya], 524.6);
+  assert.equal(t.causes[t.cols.cause[lituya]], 'Earthquake and landslide');
+});
+
+test('NOAA history helpers: dates, death text and rank, features carry the row index', () => {
+  const n = load('utils/geo/ncei.ts');
+  assert.equal(n.fmtNceiDate('2004-12-26'), '26 Dec 2004');
+  assert.equal(n.fmtNceiDate('1755-11'), 'Nov 1755');
+  assert.equal(n.fmtNceiDate('-2150'), '2150 BC');
+  const amount = ['None', 'Few (1–50)', 'Some (51–100)', 'Many (101–1,000)', 'Very many (over 1,000)'];
+  assert.equal(n.deathsText(227899, 4, amount), '227,899');
+  assert.equal(n.deathsText(null, 3, amount), 'Many (101–1,000)');
+  assert.equal(n.deathsText(null, null, amount), null);
+  assert.equal(n.deathRank(227899, 4), 4);
+  assert.equal(n.deathRank(60, null), 2);
+  assert.equal(n.deathRank(null, 3), 3);
+  assert.equal(n.deathRank(0, 0), 0);
+  const q = readJson('ncei-quakes.json');
+  const fc = n.nceiQuakeFeatures(q);
+  assert.equal(fc.features.length, q.cols.id.length);
+  const f = fc.features[q.cols.id.indexOf(1339)];
+  assert.equal(f.properties.year, 1755);
+  assert.equal(q.cols.id[f.properties.i], 1339);
+  const bc = fc.features.find((x) => x.properties.year < 0);
+  assert.ok(bc, 'BC years parse as negative');
+  const ts = n.nceiTsunamiFeatures(readJson('ncei-tsunamis.json'));
+  assert.ok(ts.features.every((x) => x.properties.height >= 0));
+});
+
+test('Australian wrecks: columns, dictionaries, Batavia where the WA Museum puts it', () => {
+  const au = readJson('wrecks-au.json');
+  const c = au.cols;
+  const n = c.id.length;
+  assert.ok(n > 7000, `${n} records`);
+  for (const k of Object.keys(c)) assert.equal(c[k].length, n, k);
+  for (const k of ['type', 'rig', 'region', 'state']) assert.ok(c[k].every((v) => v === -1 || (v >= 0 && v < au.dict[k].length)), k);
+  assert.ok(c.kind.every((k) => k === 0 || k === 1));
+  const located = c.sure.filter(Boolean).length;
+  assert.ok(located > 300 && located < 1000, `${located} located`);
+  const i = c.id.indexOf(3726);
+  assert.equal(c.name[i], 'Batavia');
+  assert.equal(c.year[i], 1629);
+  assert.ok(Math.abs(c.lng[i] - 113.7919) < 0.01 && Math.abs(c.lat[i] + 28.4916) < 0.01);
+  const wr = load('utils/geo/wrecks.ts');
+  const fc = wr.auWreckFeatures(au);
+  const b = fc.features.find((f) => f.properties.id === 3726);
+  assert.equal(b.properties.state, 'Western Australia');
+  assert.match(wr.auchdUrl(3726), /wreck\.do\?key=3726$/);
+});
+
+test('Phase 2 layers produce valid styles and are registered', () => {
+  const ea = load('app/atlas/earth-alive/layers.ts');
+  assert.deepEqual(styleErrors([ea.historyQuakesLayer, ea.tsunamisLayer]), []);
+  assert.ok(['history', 'tsunamis'].every((id) => ea.EARTH_ALIVE_LAYERS.some((l) => l.id === id && !l.defaultOn)));
+  const sw = load('app/atlas/shipwrecks/layers.ts');
+  assert.deepEqual(styleErrors([sw.auWrecksLayer]), []);
+  assert.ok(sw.WRECK_LAYERS.includes(sw.auWrecksLayer));
+});
+
+test('world featured places: sourced facts, sane positions, unique ids, caves in the cave list', () => {
+  const sets = {
+    fossils: load('app/atlas/fossil-atlas/featured.ts').FOSSIL_PARKS,
+    mines: load('app/atlas/lost-mines/featured.ts').MINE_SITES,
+    ghost: load('app/atlas/ghost-towns/featured.ts').FEATURED_TOWNS,
+    caves: load('app/atlas/underground/featured.ts').FEATURED,
+    strange: load('app/atlas/strange-earth/featured.ts').ANOMALIES,
+    wrecks: load('app/atlas/shipwrecks/featured.ts').FEATURED_WRECKS,
+  };
+  const want = {
+    fossils: ['messel', 'chengjiang', 'ischigualasto', 'dinosaur-provincial', 'jurassic-coast', 'burgess'],
+    mines: ['potosi', 'falun', 'wieliczka', 'cornwall', 'rammelsberg', 'sewell'],
+    ghost: ['humberstone', 'wharram-percy'],
+    caves: ['Q555991'],
+    strange: ['uluru', 'cappadocia', 'danxia'],
+    wrecks: ['vasa', 'mary-rose', 'batavia'],
+  };
+  const caveIds = new Set(JSON.stringify(readJson('caves.json')).match(/Q\d+/g));
+  for (const [k, list] of Object.entries(sets)) {
+    const ids = list.map((x) => x.id);
+    assert.equal(new Set(ids).size, ids.length, `${k}: duplicate ids`);
+    for (const id of want[k]) assert.ok(ids.includes(id), `${k}: ${id}`);
+    for (const x of list) {
+      assert.ok(Math.abs(x.center[0]) <= 180 && Math.abs(x.center[1]) <= 90, `${x.id} center`);
+      assert.ok(x.facts.length >= 2, `${x.id} facts`);
+      for (const f of x.facts) assert.match(f.source.url, /^https:\/\//, `${x.id} source`);
+    }
+  }
+  assert.ok(caveIds.has('Q555991'), 'Sarawak Chamber is in caves.json');
+  // world mines stay off the U.S. gold-rush timeline (1790–2000)
+  for (const id of want.mines) assert.equal(sets.mines.find((s) => s.id === id).year, null);
+});
+
+test('Then & Now is offered only where USGS historical topo maps exist', () => {
+  const { hasUsgsTopo } = load('utils/geo/topo.ts');
+  for (const p of [[-119.0119, 38.2122], [-147.7, 64.8], [-155.5, 19.6], [-66.1, 18.4]]) assert.ok(hasUsgsTopo(p), String(p));
+  for (const p of [[20.0557, 49.9831], [-0.6897, 54.0675], [-70.3825, -34.085], [131.0361, -25.345]]) assert.ok(!hasUsgsTopo(p), String(p));
+});
+
+/* Phase 3 "more global": near me everywhere, region-aware start, world copy. */
+
+test('near: distances, nearest-first with a radius, point in (multi)polygon', () => {
+  const nr = load('utils/geo/near.ts');
+  assert.ok(Math.abs(nr.kmBetween([-0.1276, 51.5072], [2.3522, 48.8566]) - 344) < 5, 'London → Paris');
+  assert.ok(Math.abs(nr.kmBetween([151.21, -33.87], [174.76, -36.85]) - 2156) < 25, 'Sydney → Auckland');
+  assert.equal(nr.fmtKm(3.44), '3.4 km');
+  assert.equal(nr.fmtKm(1840.2), '1,840 km');
+  const pts = [[0, 0], [1, 0], [5, 0], [0.2, 0.1], [40, 40]].map((p, i) => ({ i, p }));
+  const n = nr.nearest(pts, [0, 0], (x) => x.p, 3);
+  assert.equal(JSON.stringify(n.map((x) => x.item.i)), '[0,3,1]');
+  assert.equal(JSON.stringify(nr.nearest(pts, [0, 0], (x) => x.p, 10, 200).map((x) => x.item.i)), '[0,3,1]', 'radius drops the far ones');
+  // works across the whole globe, many items
+  const many = Array.from({ length: 5000 }, (_, i) => [((i * 37) % 360) - 180, ((i * 13) % 170) - 85]);
+  const near = nr.nearest(many, [10, 10], (p) => p, 5);
+  const brute = many.map((p) => nr.kmBetween([10, 10], p)).sort((a, b) => a - b).slice(0, 5);
+  assert.equal(JSON.stringify(near.map((x) => Math.round(x.km))), JSON.stringify(brute.map(Math.round)));
+  const square = { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]], [[4, 4], [6, 4], [6, 6], [4, 6], [4, 4]]] };
+  assert.ok(nr.pointInFeature([1, 1], square));
+  assert.ok(!nr.pointInFeature([5, 5], square), 'holes are outside');
+  assert.ok(!nr.pointInFeature([11, 1], square));
+  assert.ok(nr.pointInFeature([21, 1], { type: 'MultiPolygon', coordinates: [square.coordinates, [[[20, 0], [22, 0], [22, 2], [20, 2], [20, 0]]]] }));
+  assert.ok(!nr.pointInFeature([1, 1], { type: 'Point', coordinates: [1, 1] }));
+  // the old per-app helpers are the shared one
+  assert.equal(load('utils/geo/ghost.ts').kmBetween, nr.kmBetween);
+  assert.equal(load('utils/geo/strange.ts').kmBetween, nr.kmBetween);
+});
+
+test('home view: the viewer region from the time zone, the caller fallback otherwise', () => {
+  const hv = load('utils/geo/homeView.ts');
+  const r = (tz) => hv.regionForZone(tz)?.key ?? null;
+  assert.equal(r('America/Denver'), 'northAmerica');
+  assert.equal(r('America/Sao_Paulo'), 'southAmerica');
+  assert.equal(r('America/Argentina/Buenos_Aires'), 'southAmerica');
+  assert.equal(r('Europe/London'), 'europe');
+  assert.equal(r('Europe/Istanbul'), 'middleEast');
+  assert.equal(r('Africa/Lagos'), 'africa');
+  assert.equal(r('Asia/Kolkata'), 'southAsia');
+  assert.equal(r('Asia/Tokyo'), 'eastAsia');
+  assert.equal(r('Asia/Jakarta'), 'southeastAsia');
+  assert.equal(r('Australia/Perth'), 'australia');
+  assert.equal(r('Pacific/Auckland'), 'newZealand');
+  assert.equal(r('Pacific/Honolulu'), 'hawaii');
+  assert.equal(r('Etc/UTC'), null);
+  assert.equal(r(''), null);
+  for (const g of Object.values(hv.REGIONS)) assert.ok(Math.abs(g.center[0]) <= 180 && Math.abs(g.center[1]) <= 90, g.key);
+  const c = hv.homeCenter([-1, -1]);
+  assert.ok(Array.isArray(c) && c.length === 2);
+});
+
+test('hub: every live map says how far its data reaches', () => {
+  const { ATLAS_PROJECTS } = load('utils/geo/projects.ts');
+  for (const p of ATLAS_PROJECTS.filter((x) => x.status === 'live')) {
+    assert.ok(p.coverage, `${p.slug} coverage`);
+    assert.ok(!/every earthquake on earth/i.test(p.tagline), `${p.slug} overclaims`);
+  }
+});

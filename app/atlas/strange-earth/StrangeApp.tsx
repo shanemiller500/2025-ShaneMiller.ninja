@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Layers, Link2, ListOrdered, LocateFixed, Map as MapIcon, Mountain, Orbit, Pause, Play, ScanSearch, Search, Sparkles, X, BookOpen } from "lucide-react";
 import { AtlasMap } from "@/components/atlas/AtlasMap";
+import { useNearMe } from "@/components/atlas/useNearMe";
+import { homeCenter } from "@/utils/geo/homeView";
 import { LayerPanel } from "@/components/atlas/LayerPanel";
 import { SourceCitation } from "@/components/atlas/SourceCitation";
 import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass, useAtlasTheme } from "@/components/atlas/Hud";
@@ -55,7 +57,7 @@ export default function StrangeApp() {
   const [picked, setPickedState] = useState<Picked | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [flyTo, setFlyTo] = useState<{ center: [number, number]; zoom?: number; pitch?: number; bearing?: number; nonce: number } | null>(null);
-  const [initialView] = useState(() => ({ center: [-98, 32] as [number, number], zoom: fitZoom() }));
+  const [initialView] = useState(() => ({ center: homeCenter([-98, 32]), zoom: fitZoom() }));
   const [view, setView] = useState<AtlasView | null>(null);
 
   /* ── data ──────────────────────────────────────────────────────── */
@@ -706,23 +708,9 @@ function ExploreList({
 }) {
   const [tab, setTab] = useState<ExploreTab>("featured");
   const [q, setQ] = useState("");
-  const [me, setMe] = useState<[number, number] | null>(null);
-  const [locating, setLocating] = useState<"idle" | "busy" | "denied">("idle");
-  const locate = () => {
-    if (!navigator.geolocation) return setLocating("denied");
-    setLocating("busy");
-    // used once for sorting; never stored or sent anywhere
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const at: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        setMe(at);
-        setLocating("idle");
-        onLocate(at);
-      },
-      () => setLocating("denied"),
-      { maximumAge: 600_000, timeout: 10_000 }
-    );
-  };
+  const { me, setMe, locating, locate: locate } = useNearMe((at) => {
+    onLocate(at);
+  });
   const needle = q.trim().toLowerCase();
   const dist = (at: [number, number]) => (me ? kmBetween(me, at) : null);
   const fmtKm = (d: number | null) => (d == null ? "" : ` · ${d < 10 ? d.toFixed(1) : Math.round(d).toLocaleString()} km`);

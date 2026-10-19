@@ -104,7 +104,7 @@ export function UndergroundDetails({ picked, onClose, onDive }: { picked: Picked
             ]}
           />
 
-          {cave.tour && (
+          {(cave.tour || featured) && (
             <button
               type="button"
               onClick={() => onDive(cave)}
@@ -115,7 +115,7 @@ export function UndergroundDetails({ picked, onClose, onDive }: { picked: Picked
           )}
           {cave.generalized && (
             <p className="text-[11px] leading-relaxed text-slate-400">
-              Wild and closed caves are fragile and federally protected; the atlas only shows roughly where they are, never the entrance.
+              Wild and closed caves are fragile and often protected by law; the atlas only shows roughly where they are, never the entrance.
             </p>
           )}
 

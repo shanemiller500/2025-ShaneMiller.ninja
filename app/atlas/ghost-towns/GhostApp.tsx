@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Check, ChevronRight, Ghost, Layers, Link2, ListOrdered, LocateFixed, Map as MapIcon, Pause, Play, Search, X } from "lucide-react";
 import { StoryPlayer } from "@/components/atlas/StoryPlayer";
+import { useNearMe } from "@/components/atlas/useNearMe";
+import { homeCenter } from "@/utils/geo/homeView";
 import type { StoryAction } from "@/components/atlas/story";
 import { useLibrary } from "@/utils/geo/useLibrary";
 import { AtlasMap } from "@/components/atlas/AtlasMap";
@@ -65,7 +67,7 @@ export default function GhostApp() {
   const [picked, setPickedState] = useState<Picked | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [flyTo, setFlyTo] = useState<FlyTo | null>(null);
-  const [initialView] = useState(() => ({ center: [-104, 40] as [number, number], zoom: Math.min(3.6, Math.max(2, Math.log2(window.innerWidth / 260))) }));
+  const [initialView] = useState(() => ({ center: homeCenter([-104, 40]), zoom: Math.min(3.6, Math.max(2, Math.log2(window.innerWidth / 260))) }));
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -294,7 +296,7 @@ export default function GhostApp() {
   };
 
   const citations = GHOST_LAYERS.filter((l) => visible[l.id] && l.citation.label).map((l) => l.citation);
-  const usGhost = ghost ? ghost.country.filter((c) => c === "United States").length : 0;
+  const ghostCountries = useMemo(() => (ghost ? new Set(ghost.country.filter(Boolean)).size : 0), [ghost]);
 
   return (
     <div className={`atlas-map-page fixed inset-0 overflow-hidden ${dark ? "dark bg-[#0c0a09] text-stone-100" : "bg-stone-50 text-stone-900"}`}>
@@ -420,10 +422,10 @@ export default function GhostApp() {
       {/* ── status strip ─────────────────────────────────────────── */}
       {mode === "map" && !fly && (
       <HudPanel className="absolute bottom-3 left-3 z-20 flex max-w-[calc(100%-1.5rem)] items-center gap-5 overflow-x-auto px-4 py-2.5 sm:left-4">
+        <HudStat label="Ghost towns · world" value={ghost ? ghost.id.length.toLocaleString() : "—"} tone="text-amber-300" onClick={() => togglePanel("find")} />
+        <HudStat label="Countries" value={ghost ? ghostCountries.toLocaleString() : "—"} tone="text-amber-200" />
         <HudStat label="Vanished places (U.S.)" value={gnis ? gnis.id.length.toLocaleString() : "—"} tone="text-stone-300" />
-        <HudStat label="Ghost towns" value={ghost ? ghost.id.length.toLocaleString() : "—"} tone="text-amber-300" onClick={() => togglePanel("find")} />
-        <HudStat label="In the U.S." value={ghost ? usGhost.toLocaleString() : "—"} tone="text-amber-200" />
-        <HudStat label="Drowned towns" value={drowned ? drowned.length : "—"} tone="text-sky-300" onClick={() => go([-82, 39], 4.2)} />
+        <HudStat label="Drowned towns (U.S.)" value={drowned ? drowned.length : "—"} tone="text-sky-300" onClick={() => go([-82, 39], 4.2)} />
         <HudStat label="Featured" value={FEATURED_TOWNS.length} tone="text-white" onClick={() => togglePanel("find")} />
       </HudPanel>
       )}
@@ -451,8 +453,9 @@ const LIST_MAX = 80;
 
 function FindTown({ rows, onGo }: { rows: Row[]; onGo: (c: [number, number], z: number) => void }) {
   const [q, setQ] = useState("");
-  const [me, setMe] = useState<[number, number] | null>(null);
-  const [locating, setLocating] = useState<"idle" | "busy" | "denied">("idle");
+  const { me, setMe, locating, locate: nearMe } = useNearMe((at) => {
+    onGo(at, 8);
+  });
   const needle = q.trim().toLowerCase();
   const list = useMemo(() => {
     if (me) return rows.map((r) => ({ r, d: kmBetween(me, r.at) })).sort((a, b) => a.d - b.d).slice(0, LIST_MAX);
@@ -466,20 +469,6 @@ function FindTown({ rows, onGo }: { rows: Row[]; onGo: (c: [number, number], z: 
       }
     return hits;
   }, [rows, needle, me]);
-  const nearMe = () => {
-    if (!navigator.geolocation) return setLocating("denied");
-    setLocating("busy");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const at: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        setMe(at);
-        setLocating("idle");
-        onGo(at, 8);
-      },
-      () => setLocating("denied"),
-      { maximumAge: 600_000, timeout: 10_000 }
-    );
-  };
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-2">
@@ -499,7 +488,7 @@ function FindTown({ rows, onGo }: { rows: Row[]; onGo: (c: [number, number], z: 
           <LocateFixed className="h-3.5 w-3.5" /> Near me
         </button>
       </div>
-      {locating === "denied" && <p className="text-[11px] text-slate-500">Location isn&apos;t available — search by name or state instead.</p>}
+      {locating === "denied" && <p className="text-[11px] text-slate-500">Location isn&apos;t available — search by name, state or country instead.</p>}
       {!needle && !me && <HudLabel>Featured towns</HudLabel>}
       <ul className="space-y-0.5">
         {list.map(({ r, d }) => (

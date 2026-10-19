@@ -69,3 +69,12 @@ export async function elevationAt(lng: number, lat: number, signal?: AbortSignal
   // the service answers -1000000 where it has no data
   return Number.isFinite(v) && v > -1000 ? v : null;
 }
+
+/** Rough boxes where USGS historical topo maps exist (lower 48, Alaska, Hawaii, Puerto Rico & USVI) — anywhere else Then & Now would come up empty. */
+const USGS_TOPO_BOXES: [number, number, number, number][] = [
+  [-125, 24.4, -66.9, 49.5],
+  [-170, 51, -129.9, 71.5],
+  [-161, 18.8, -154.7, 22.4],
+  [-67.3, 17.6, -64.5, 18.6],
+];
+export const hasUsgsTopo = ([lng, lat]: [number, number]) => USGS_TOPO_BOXES.some(([w, s, e, n]) => lng >= w && lng <= e && lat >= s && lat <= n);

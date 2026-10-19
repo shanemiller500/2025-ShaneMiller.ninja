@@ -195,14 +195,7 @@ export function parseUsminGml(xml: string, layer: "points" | "polygons"): GeoJSO
   return out;
 }
 
-/** Straight-line km between two [lng, lat] points. */
-export function kmBetween(a: [number, number], b: [number, number]) {
-  const R = 6371;
-  const dLat = ((b[1] - a[1]) * Math.PI) / 180;
-  const dLng = ((b[0] - a[0]) * Math.PI) / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos((a[1] * Math.PI) / 180) * Math.cos((b[1] * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
+export { kmBetween } from "./near";
 
 /* ── search (server-side, over the baked names index) ─────────────── */
 
@@ -256,16 +249,48 @@ export function splitState(query: string): { name: string; state: string | null 
   return { name: q, state: null };
 }
 
-/** Best matches for a name: exact, then starts-with, then a word starting with it, then anywhere. Producing mines first within each. A trailing state narrows it. */
+const US_STATES = new Set(Object.values(STATE_ABBR));
+const COUNTRY_ALIAS: Record<string, string> = { usa: "united states", us: "united states", america: "united states", uk: "united kingdom", britain: "united kingdom" };
+/** The country an index place belongs to: "Perak, Malaysia" → "Malaysia", "Nevada" → "United States". */
+export const countryOf = (place: string) => {
+  const at = place.lastIndexOf(", ");
+  return at >= 0 ? place.slice(at + 2) : US_STATES.has(place) ? "United States" : place;
+};
+
+/** "san luis bolivia" → { name: "san luis", places: [every index place in Bolivia] }; null when the query doesn't end in a country. */
+export function splitCountry(query: string, places: string[]): { name: string; places: number[] } | null {
+  const words = fold(query).split(" ");
+  for (const n of [3, 2, 1]) {
+    if (words.length <= n) continue;
+    const tail = words.slice(-n).join(" ");
+    const want = COUNTRY_ALIAS[tail] ?? tail;
+    const hits = places.flatMap((p, k) => (fold(countryOf(p)) === want ? [k] : []));
+    if (hits.length) return { name: words.slice(0, -n).join(" "), places: hits };
+  }
+  return null;
+}
+
+/** Best matches for a name: exact, then starts-with, then a word starting with it, then anywhere. Producing mines first within each. A trailing state or country narrows it. */
 export function searchNames(ix: NamesIndex, query: string, limit = 40, folded?: string[]): MineHit[] {
-  const { name: q, state } = splitState(query);
+  const byState = splitState(query);
+  let q = byState.name;
+  let allowed: Set<number> | null = null;
+  if (byState.state) {
+    const stateNo = ix.states.indexOf(byState.state);
+    if (stateNo < 0) return [];
+    allowed = new Set([stateNo]);
+  } else {
+    const byCountry = splitCountry(query, ix.states);
+    if (byCountry) {
+      q = byCountry.name;
+      allowed = new Set(byCountry.places);
+    }
+  }
   if (q.length < 2) return [];
-  const stateNo = state ? ix.states.indexOf(state) : -1;
-  if (state && stateNo < 0) return [];
   const names = folded ?? ix.name.map(fold);
   const buckets: number[][] = [[], [], [], []];
   for (let k = 0; k < names.length; k++) {
-    if (stateNo >= 0 && ix.state[k] !== stateNo) continue;
+    if (allowed && !allowed.has(ix.state[k])) continue;
     const n = names[k];
     const at = n.indexOf(q);
     if (at < 0) continue;

@@ -10,6 +10,8 @@ export interface AtlasProject {
   title: string;
   tagline: string;
   status: AtlasStatus;
+  /** How far the data reaches, said plainly on the hub card */
+  coverage?: string;
   /** Main data sources (planned ones are the intended sources) */
   sources: string[];
   /** Tailwind gradient for the card glow */
@@ -20,33 +22,37 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "earth-alive",
     title: "Earth Alive",
-    tagline: "Earthquakes, volcanoes, faults, and a century of seismic history on one globe.",
+    tagline: "Earthquakes worldwide as USGS reports them, live — with the world's volcanoes and faults, and 4,000 years of great quakes and tsunamis.",
     status: "live",
-    sources: ["USGS", "Smithsonian GVP", "PB2002"],
+    coverage: "Worldwide",
+    sources: ["USGS", "Smithsonian GVP", "NOAA NCEI", "GEM faults", "PB2002"],
     glow: "from-rose-500/30 via-orange-400/20 to-amber-300/10",
   },
   {
     slug: "disaster-atlas",
     title: "Disaster Atlas",
-    tagline: "Live storms, fires, warnings, and flood conditions across the United States and beyond.",
+    tagline: "Cyclones, satellite fire detections and disaster alerts worldwide, with U.S. warnings, wildfires, tornadoes and floods in depth.",
     status: "live",
-    sources: ["NOAA / NWS", "NIFC", "NASA FIRMS", "FEMA"],
+    coverage: "World feeds · U.S. detail",
+    sources: ["GDACS", "NASA FIRMS", "IBTrACS", "NOAA / NWS", "NIFC", "FEMA"],
     glow: "from-orange-500/30 via-red-400/20 to-rose-300/10",
   },
   {
     slug: "strange-earth",
     title: "Strange Earth",
-    tagline: "Impact craters, unusual places, historic maps, and landscapes shaped by deep time.",
+    tagline: "Every confirmed impact crater, 4,000 strange places in 120 countries, and the bedrock under any spot on Earth.",
     status: "live",
-    sources: ["Earth Impact Database", "Macrostrat", "USGS topo archive", "USGS 3DEP"],
+    coverage: "Worldwide",
+    sources: ["Earth Impact Database", "Wikidata", "Macrostrat", "Geoscience Australia", "UNESCO"],
     glow: "from-violet-500/30 via-fuchsia-400/20 to-pink-300/10",
   },
   {
     slug: "hidden-earth",
     title: "Hidden Earth",
-    tagline: "See beneath the tree canopy with lidar, from ancient earthworks to hidden faults.",
+    tagline: "See beneath the tree canopy with lidar, from ancient earthworks to hidden faults — across the U.S. and much of Europe.",
     status: "live",
-    sources: ["USGS 3DEP lidar", "NPS", "USGS"],
+    coverage: "U.S. & Europe",
+    sources: ["USGS 3DEP lidar", "Environment Agency", "AHN", "IGN", "swisstopo", "Kartverket"],
     glow: "from-emerald-500/30 via-teal-400/20 to-cyan-300/10",
   },
   {
@@ -54,7 +60,8 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
     title: "Underground World",
     tagline: "Caves and karst on every continent — 13,000+ mapped caves, the world karst map, and 3D dives below the surface.",
     status: "live",
-    sources: ["WHYMAP WOKAM", "USGS karst map", "Wikidata", "OpenStreetMap"],
+    coverage: "Worldwide",
+    sources: ["WHYMAP WOKAM", "Wikidata", "OpenStreetMap", "UNESCO", "USGS karst map"],
     glow: "from-slate-500/30 via-indigo-400/20 to-sky-300/10",
   },
   {
@@ -62,23 +69,26 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
     title: "Prehistoric Earth",
     tagline: "278,000 fossil sites on every continent, dinosaur country, and a time machine back 540 million years to the seas and continents they lived in.",
     status: "live",
-    sources: ["Paleobiology Database", "PALEOMAP", "GPlates", "National Park Service"],
+    coverage: "Worldwide",
+    sources: ["Paleobiology Database", "PALEOMAP", "GPlates", "UNESCO", "National Park Service"],
     glow: "from-lime-500/30 via-green-400/20 to-emerald-300/10",
   },
   {
     slug: "lost-mines",
     title: "Lost Mines",
-    tagline: "304,000 mines in 165 countries, the shafts and adits on the old U.S. topo maps, and the gold rushes that started it all.",
+    tagline: "304,000 mines in 165 countries, from Potosí's silver mountain to the gold rushes — plus the shafts and adits on the old U.S. topo maps.",
     status: "live",
-    sources: ["USGS MRDS", "USMIN", "MSHA"],
+    coverage: "Worldwide · U.S. detail",
+    sources: ["USGS MRDS", "UNESCO", "USMIN", "MSHA"],
     glow: "from-yellow-500/30 via-amber-400/20 to-orange-300/10",
   },
   {
     slug: "ghost-towns",
     title: "Ghost Towns",
-    tagline: "Vanished settlements, historic ghost towns, and communities lost beneath reservoirs.",
+    tagline: "8,500 ghost towns and abandoned villages in 99 countries, 10,700 vanished U.S. places, and towns lost beneath reservoirs.",
     status: "live",
-    sources: ["USGS GNIS", "Wikidata", "Wikipedia"],
+    coverage: "Worldwide · U.S. detail",
+    sources: ["Wikidata", "OpenStreetMap", "USGS GNIS", "UNESCO", "English Heritage"],
     glow: "from-stone-500/30 via-zinc-400/20 to-neutral-300/10",
   },
   {
@@ -92,9 +102,10 @@ export const ATLAS_PROJECTS: AtlasProject[] = [
   {
     slug: "shipwrecks",
     title: "Shipwrecks",
-    tagline: "Charted wrecks, maritime history, protected sanctuaries, and notable ships.",
+    tagline: "79,000 charted wrecks worldwide, 7,400 historic wrecks around Australia and New Zealand, and 30,000 named ships — Titanic to the Batavia.",
     status: "live",
-    sources: ["NOAA charts", "NOAA Sanctuaries", "Wikidata"],
+    coverage: "Worldwide",
+    sources: ["NOAA charts", "UK Hydrographic Office", "Australasian UCH Database", "Wikidata"],
     glow: "from-cyan-500/30 via-sky-400/20 to-blue-300/10",
   },
   {

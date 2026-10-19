@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PARCEL_DETAIL_FIELDS, normalizeParcelDetail } from "@/app/land-intelligence/parcel-detail";
 import { PARCEL_SOURCES } from "@/app/land-intelligence/parcel-sources";
+import { loadBoulderProperty } from "@/app/land-intelligence/boulder-property";
 
 export async function GET(request: NextRequest) {
   const key = request.nextUrl.searchParams.get("key") ?? "";
@@ -22,7 +23,9 @@ export async function GET(request: NextRequest) {
     if (json.error) throw new Error(json.error.message || "Source rejected parcel detail request");
     const attributes = json.features?.[0]?.attributes;
     if (!attributes || typeof attributes !== "object") return NextResponse.json({ error: "This parcel record was not found in the public source." }, { status: 404 });
-    return NextResponse.json({ detail: normalizeParcelDetail(source, attributes) }, { headers: { "Cache-Control": "public, s-maxage=300" } });
+    const detail = normalizeParcelDetail(source, attributes);
+    if (source.id === "co" && detail.parcel.county.toLowerCase() === "boulder") detail.boulder = await loadBoulderProperty(detail.parcel.id);
+    return NextResponse.json({ detail }, { headers: { "Cache-Control": "public, s-maxage=300" } });
   } catch {
     return NextResponse.json({ error: "The public property record could not be loaded. Try the source link below." }, { status: 503 });
   }

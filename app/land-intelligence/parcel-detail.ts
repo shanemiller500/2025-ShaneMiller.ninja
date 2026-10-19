@@ -1,8 +1,10 @@
 import { normalizeParcel, type ParcelRecord, type ParcelSource } from "./parcel-sources";
+import type { BoulderLookup } from "./boulder-property";
 
 export type ParcelSale = { date: string; price: number | null; reference: string };
 export type ParcelDetail = {
   parcel: ParcelRecord;
+  boulder?: BoulderLookup;
   owners: string[];
   sales: ParcelSale[];
   assessedTotal: number | null;
@@ -22,7 +24,7 @@ export type ParcelDetail = {
 
 // Keep the map response small. Fetch these public attributes only for a clicked parcel.
 export const PARCEL_DETAIL_FIELDS: Record<ParcelSource["id"], string> = {
-  co: "OBJECTID,parcel_id,countyName,situsAdd,sitAddCty,landAcres,zoningCode,zoningDesc,landUseDsc,dateReceived,URL,owner,owner2,saleDate,salePrice,apprValTot,asedValTot,legalDesc,landSqft",
+  co: "OBJECTID,parcel_id,countyName,situsAdd,sitAddCty,landAcres,zoningCode,zoningDesc,landUseDsc,dateReceived,URL,owner,owner2,account,saleDate,salePrice,apprValTot,asedValTot,legalDesc,landSqft",
   ut: "OBJECTID,PARCEL_ID,PARCEL_ADD,PARCEL_CITY,OWN_TYPE,ParcelsCur,County,CoParcel_URL,RECORDER",
   wa: "OBJECTID,PARCEL_ID_NR,ORIG_PARCEL_ID,SITUS_ADDRESS,SITUS_CITY_NM,COUNTY_NM,FIPS_NR,LANDUSE_CD,VALUE_LAND,VALUE_BLDG,DATA_LINK",
   fl: "OBJECTID,PARCEL_ID,ALT_KEY,CO_NO,PHY_ADDR1,PHY_CITY,DOR_UC,LND_SQFOOT,LND_VAL,ASMNT_YR,OWN_NAME,JV,AV_SD,AV_NSD,TV_SD,TV_NSD,ACT_YR_BLT,EFF_YR_BLT,TOT_LVG_AR,NO_BULDNG,S_LEGAL,SALE_PRC1,SALE_YR1,SALE_MO1,OR_BOOK1,OR_PAGE1,CLERK_NO1,SALE_PRC2,SALE_YR2,SALE_MO2,OR_BOOK2,OR_PAGE2,CLERK_NO2",

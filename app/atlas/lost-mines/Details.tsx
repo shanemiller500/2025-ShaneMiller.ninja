@@ -2,6 +2,7 @@
 
 import { AlertTriangle, History, Orbit } from "lucide-react";
 import type { ThenNowPlace } from "@/components/atlas/ThenNow";
+import { hasUsgsTopo } from "@/utils/geo/topo";
 import { DrawerLink, FactGrid, FeatureDrawer } from "@/components/atlas/FeatureDrawer";
 import type { Picked } from "@/components/atlas/types";
 import { useWikiPhoto } from "@/components/atlas/useWikiPhoto";
@@ -87,7 +88,7 @@ function Site({ id, onClose, onThenNow, onFly }: { id: string; onClose: () => vo
             </li>
           ))}
         </ul>
-        {onThenNow && <ThenNowButton onClick={() => onThenNow({ name: s.name, center: s.center, zoom: Math.min(s.zoom, 14.5) })} />}
+        {onThenNow && hasUsgsTopo(s.center) && <ThenNowButton onClick={() => onThenNow({ name: s.name, center: s.center, zoom: Math.min(s.zoom, 14.5) })} />}
         {onFly && (
           <button type="button" onClick={() => onFly(s)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 px-3 py-2 text-[13px] font-semibold text-slate-100 transition-colors hover:bg-white/10">
             <Orbit className="h-4 w-4" /> Fly over in 3D
@@ -132,7 +133,7 @@ function Mrds({ tile, i, index, picked, onClose, onThenNow }: { tile: MineTile; 
             {tile.msha.date[k] ? <> since {tile.msha.date[k]}</> : null}.
           </p>
         )}
-        {onThenNow && <ThenNowButton onClick={() => onThenNow({ name: m.name[i] || "This mine", center: at, zoom: 15 })} />}
+        {onThenNow && hasUsgsTopo(at) && <ThenNowButton onClick={() => onThenNow({ name: m.name[i] || "This mine", center: at, zoom: 15 })} />}
         <Safety />
         <DrawerLink href={mrdsUrl(m.id[i])}>USGS MRDS record #{m.id[i]}</DrawerLink>
         <p className="text-[10.5px] text-slate-500">Data: USGS Mineral Resources Data System (public domain). Positions and details are as reported, some long ago.</p>
@@ -167,7 +168,7 @@ function Msha({ tile, i, index, onClose, onThenNow }: { tile: MineTile; i: numbe
             <span className="font-semibold text-white">{(index.mrdsStatus[tile.mrds.st[k]] ?? "").toLowerCase()}</span> — <a className="underline decoration-dotted hover:text-white" href={mrdsUrl(tile.mrds.id[k])} target="_blank" rel="noopener noreferrer">its record</a>.
           </p>
         )}
-        {onThenNow && <ThenNowButton onClick={() => onThenNow({ name: h.name[i] || "This mine", center: at, zoom: 15 })} />}
+        {onThenNow && hasUsgsTopo(at) && <ThenNowButton onClick={() => onThenNow({ name: h.name[i] || "This mine", center: at, zoom: 15 })} />}
         <Safety />
         <DrawerLink href={MSHA_MDRS_URL}>MSHA Mine Data Retrieval System — look up ID {h.id[i]}</DrawerLink>
       </div>
@@ -193,7 +194,7 @@ function Usmin({ picked, onClose, onThenNow }: { picked: Picked; onClose: () => 
             ["Position", where(picked.lngLat)],
           ]}
         />
-        {onThenNow && <ThenNowButton onClick={() => onThenNow({ name: p.name || p.type, center: picked.lngLat, zoom: 15.5 })} />}
+        {onThenNow && hasUsgsTopo(picked.lngLat) && <ThenNowButton onClick={() => onThenNow({ name: p.name || p.type, center: picked.lngLat, zoom: 15.5 })} />}
         <Safety />
         {p.url && <DrawerLink href={p.url}>USGS USMIN record</DrawerLink>}
       </div>

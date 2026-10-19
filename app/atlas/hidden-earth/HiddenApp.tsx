@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Box, Check, Crosshair, Layers, Layers2, Link2, ListOrdered, LocateFixed, Map as MapIcon, ScanEye, X } from "lucide-react";
 import { AtlasMap } from "@/components/atlas/AtlasMap";
+import { useNearMe } from "@/components/atlas/useNearMe";
 import { LayerPanel } from "@/components/atlas/LayerPanel";
 import { SourceCitation } from "@/components/atlas/SourceCitation";
 import { HudIconButton, HudLabel, HudPanel, HudStat, HudSwitch, hudGlass, useAtlasTheme } from "@/components/atlas/Hud";
@@ -402,23 +403,9 @@ function SiteList({
   hasCloud: (id: string) => boolean;
   onLocate: (at: [number, number]) => void;
 }) {
-  const [me, setMe] = useState<[number, number] | null>(null);
-  const [locating, setLocating] = useState<"idle" | "busy" | "denied">("idle");
-  const locate = () => {
-    if (!navigator.geolocation) return setLocating("denied");
-    setLocating("busy");
-    // used once for sorting; never stored or sent anywhere
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const at: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        setMe(at);
-        setLocating("idle");
-        onLocate(at);
-      },
-      () => setLocating("denied"),
-      { maximumAge: 600_000, timeout: 10_000 }
-    );
-  };
+  const { me, setMe, locating, locate: locate } = useNearMe((at) => {
+    onLocate(at);
+  });
   const rows = SITES.map((s) => ({ s, d: me ? kmBetween(me, s.center) : null })).sort((a, b) => (a.d != null && b.d != null ? a.d - b.d : 0));
   return (
     <div className="flex flex-col gap-2">

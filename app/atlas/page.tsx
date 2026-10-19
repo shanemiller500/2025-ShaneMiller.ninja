@@ -6,7 +6,7 @@ import "@/components/atlas/atlas-hub.css";
 
 export const metadata: Metadata = {
   title: "Atlas | Interactive maps from public GIS data",
-  description: "Interactive maps built on free USGS, NOAA, Smithsonian and other public geographic data — starting with Earth Alive.",
+  description: "Interactive maps of the whole planet built on free public data — USGS, NOAA, the Smithsonian, UNESCO, the Paleobiology Database and national agencies around the world.",
 };
 
 /* ------------------------------------------------------------------ */
@@ -41,8 +41,9 @@ export default function AtlasPage() {
         </div>
         <h1 className="mt-4 font-aspekta text-4xl font-[650] tracking-tight text-slate-900 dark:text-white md:text-5xl">Atlas</h1>
         <p className="mt-3 text-[15px] leading-relaxed text-slate-500 dark:text-slate-400">
-          Interactive maps built on free public geographic data — USGS, NOAA, the Smithsonian and more — stitched together into experiences that
-          don&apos;t exist in one place anywhere else. Every layer says where it came from.
+          Interactive maps of the whole planet, built on free public data — USGS, NOAA, the Smithsonian, UNESCO and national agencies from Europe to
+          Australia — stitched together into experiences that don&apos;t exist in one place anywhere else. Each card says how far its data reaches, and every
+          layer says where it came from.
         </p>
       </header>
 
@@ -65,6 +66,11 @@ export default function AtlasPage() {
                 <ArrowUpRight aria-hidden className="h-4 w-4 text-slate-400 transition-[color,transform] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-indigo-600 dark:text-slate-500 dark:group-hover:text-indigo-300" />
               </div>
               <h3 className="mt-6 font-aspekta text-[22px] font-[650] leading-tight tracking-tight text-slate-900 dark:text-white">{p.title}</h3>
+              {p.coverage && (
+                <span className="mt-1.5 inline-flex w-fit items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <Globe2 aria-hidden className="h-3 w-3" strokeWidth={1.8} /> {p.coverage}
+                </span>
+              )}
               <p className="mt-2 line-clamp-2 text-[13.5px] leading-[1.55] text-slate-600 dark:text-slate-400">{p.tagline}</p>
               <p className="mt-auto truncate border-t border-slate-100 pt-4 font-mono text-[10px] uppercase tracking-wide text-slate-400 dark:border-white/[0.07] dark:text-slate-500">{p.sources.join(" · ")}</p>
             </Link>

@@ -135,11 +135,13 @@ test('featured sites: official sources, a recorded mine nearby, safety note sour
   assert.ok(MINE_SITES.length >= 7);
   assert.equal(new Set(MINE_SITES.map((s) => s.id)).size, MINE_SITES.length);
   assert.match(SAFETY.source.url, /^https:\/\/www\.nps\.gov\//);
-  const official = /^https:\/\/(www\.nps\.gov|historicsites\.nc\.gov|gastateparks\.org|www\.parks\.ca\.gov|danr\.sd\.gov|sanfordlab\.org|mrdata\.usgs\.gov)\//;
+  const official = /^https:\/\/(www\.nps\.gov|historicsites\.nc\.gov|gastateparks\.org|www\.parks\.ca\.gov|danr\.sd\.gov|sanfordlab\.org|mrdata\.usgs\.gov|whc\.unesco\.org)\//;
   for (const s of MINE_SITES) {
     assert.ok(s.facts.length >= 2, `${s.name} facts`);
     for (const f of s.facts) assert.match(f.source.url, official, `${s.name}: ${f.text.slice(0, 40)}`);
     if (s.id === 'klondike') continue; // the gold fields are in Canada; Skagway is the gateway
+    // MRDS has no record of the Wieliczka salt mine, and the Cornish World Heritage Site is a landscape across two counties
+    if (s.id === 'wieliczka' || s.id === 'cornwall') continue;
     const t = tile(keyOf(s.center[0], s.center[1]));
     let best = Infinity;
     for (const src of ['mrds', 'msha']) for (let i = 0; i < t[src].lng.length; i++) best = Math.min(best, mn.kmBetween(s.center, [t[src].lng[i], t[src].lat[i]]));
@@ -272,4 +274,19 @@ test('library manifest: public-domain NPS file tagged to a real story and cited 
     assert.ok(cited.has(e.url), `${e.title} is cited by a story`);
     for (const t of e.tags.filter((t) => t.startsWith('story:'))) assert.ok(ids.has(t.slice(6)), t);
   }
+});
+
+test('search: a trailing country narrows too (world MRDS), and U.S. aliases work', () => {
+  const folded = mn.foldNames(names);
+  assert.equal(mn.countryOf('Perak, Malaysia'), 'Malaysia');
+  assert.equal(mn.countryOf('Nevada'), 'United States');
+  for (const [q, country] of [['falun sweden', 'Sweden'], ['rammelsberg germany', 'Germany']]) {
+    const hits = mn.searchNames(names, q, 10, folded);
+    assert.ok(hits.length, q);
+    assert.ok(hits.every((h) => mn.countryOf(h.state) === country), `${q}: ${hits.map((h) => h.state).join(', ')}`);
+  }
+  const usa = mn.searchNames(names, 'homestake usa', 40, folded);
+  assert.ok(usa.length && usa.every((h) => mn.countryOf(h.state) === 'United States'));
+  // a country that isn't in the index is just part of the name
+  assert.equal(mn.splitCountry('gold hill', names.states), null);
 });

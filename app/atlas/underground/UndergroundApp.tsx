@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Box, Check, Layers, Link2, ListOrdered, LocateFixed, Map as MapIcon, Pause, Play, Radar, ScanLine, Search, Sun, Volume2, VolumeX, X } from "lucide-react";
 import { startCaveAudio, type CaveAudio } from "@/components/atlas/caveAudio";
+import { useNearMe } from "@/components/atlas/useNearMe";
+import { homeCenter } from "@/utils/geo/homeView";
+import { kmBetween } from "@/utils/geo/near";
 import { DrillTransition } from "./DrillTransition";
 import { AtlasMap } from "@/components/atlas/AtlasMap";
 import { LayerPanel } from "@/components/atlas/LayerPanel";
@@ -65,7 +68,7 @@ export default function UndergroundApp() {
   const [picked, setPickedState] = useState<Picked | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [flyTo, setFlyTo] = useState<{ center: [number, number]; zoom?: number; pitch?: number; bearing?: number; nonce: number } | null>(null);
-  const [initialView] = useState(() => ({ center: [-96.5, 38.6] as [number, number], zoom: fitZoom() }));
+  const [initialView] = useState(() => ({ center: homeCenter([-96.5, 38.6]), zoom: fitZoom() }));
 
   /* ── data ──────────────────────────────────────────────────────── */
   useEffect(() => {
@@ -560,9 +563,9 @@ export default function UndergroundApp() {
       {/* ── status strip ─────────────────────────────────────────── */}
       {mode === "map" && (
         <HudPanel className="absolute bottom-3 left-3 z-20 flex max-w-[calc(100%-1.5rem)] items-center gap-5 overflow-x-auto px-4 py-2.5 sm:left-4">
-          <HudStat label="Karst · lower 48" value={share != null ? `${share}%` : "—"} tone="text-cyan-300" />
+          <HudStat label="Caves mapped · world" value={caves ? caves.features.length.toLocaleString() : "—"} tone="text-indigo-300" />
           <HudStat label="Visitable caves" value={caves ? tours.length : "—"} tone="text-white" />
-          <HudStat label="Caves mapped" value={caves ? caves.features.length : "—"} tone="text-indigo-300" />
+          <HudStat label="Karst · U.S. lower 48" value={share != null ? `${share}%` : "—"} tone="text-cyan-300" />
           <HudStat label="Featured dives" value={FEATURED.length} tone="text-fuchsia-300" onClick={() => changeMode("dive")} />
         </HudPanel>
       )}
@@ -588,36 +591,15 @@ function SidePanel({ title, onClose, children }: { title: string; onClose: () =>
 
 function CaveList({ caves, onPick, onDive, onLocate }: { caves: { props: CaveProps; at: [number, number] }[]; onPick: (id: string) => void; onDive: (c: CaveProps) => void; onLocate: (at: [number, number]) => void }) {
   const [q, setQ] = useState("");
-  const [me, setMe] = useState<[number, number] | null>(null);
-  const [locating, setLocating] = useState<"idle" | "busy" | "denied">("idle");
+  const { me, setMe, locating, locate: locate } = useNearMe((at) => {
+    onLocate(at);
+  });
   // straight-line distance in km (haversine)
-  const km = (a: [number, number], b: [number, number]) => {
-    const R = 6371;
-    const dLat = ((b[1] - a[1]) * Math.PI) / 180;
-    const dLng = ((b[0] - a[0]) * Math.PI) / 180;
-    const h = Math.sin(dLat / 2) ** 2 + Math.cos((a[1] * Math.PI) / 180) * Math.cos((b[1] * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-    return 2 * R * Math.asin(Math.sqrt(h));
-  };
-  const locate = () => {
-    if (!navigator.geolocation) return setLocating("denied");
-    setLocating("busy");
-    // used once for sorting; never stored or sent anywhere
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const at: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        setMe(at);
-        setLocating("idle");
-        onLocate(at);
-      },
-      () => setLocating("denied"),
-      { maximumAge: 600_000, timeout: 10_000 }
-    );
-  };
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const list = caves
       .filter((c) => !needle || `${c.props.name} ${c.props.state ?? ""}`.toLowerCase().includes(needle))
-      .map((c) => ({ ...c, d: me ? km(me, c.at) : null }));
+      .map((c) => ({ ...c, d: me ? kmBetween(me, c.at) : null }));
     // nearest first once located; otherwise featured first, then alphabetical
     return list.sort((a, b) =>
       a.d != null && b.d != null ? a.d - b.d : Number(!!featuredById(b.props.id)) - Number(!!featuredById(a.props.id)) || a.props.name.localeCompare(b.props.name)
@@ -631,7 +613,7 @@ function CaveList({ caves, onPick, onDive, onLocate }: { caves: { props: CavePro
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search caves or states…"
+            placeholder="Search caves, states or countries…"
             className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-8 pr-3 text-[13px] text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-300/40"
           />
         </label>

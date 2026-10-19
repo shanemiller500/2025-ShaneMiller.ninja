@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Check, ChevronRight, Clock, Layers, Link2, ListOrdered, Loader2, LocateFixed, Map as MapIcon, Pause, Pickaxe, Play, Search, X } from "lucide-react";
 import { StoryPlayer } from "@/components/atlas/StoryPlayer";
+import { useNearMe } from "@/components/atlas/useNearMe";
+import { homeCenter } from "@/utils/geo/homeView";
+import { hasUsgsTopo } from "@/utils/geo/topo";
 import type { StoryAction } from "@/components/atlas/story";
 import { useLibrary } from "@/utils/geo/useLibrary";
 import { ThenNow, type ThenNowPlace } from "@/components/atlas/ThenNow";
@@ -45,7 +48,7 @@ export default function MinesApp() {
   const [panel, setPanel] = useState<Panel>(null);
   const [flyTo, setFlyTo] = useState<FlyTo | null>(null);
   const [view, setView] = useState<AtlasView | null>(null);
-  const [initialView] = useState(() => ({ center: [-104, 40] as [number, number], zoom: Math.min(3.6, Math.max(2, Math.log2(window.innerWidth / 260))) }));
+  const [initialView] = useState(() => ({ center: homeCenter([-104, 40]), zoom: Math.min(3.6, Math.max(2, Math.log2(window.innerWidth / 260))) }));
 
   /* filters: commodity groups, and whether to show never-mined prospects */
   const [groupsOn, setGroupsOn] = useState<Set<number>>(ALL_ON);
@@ -191,7 +194,9 @@ export default function MinesApp() {
   /* tiles for the view (+ any a share link or "near me" needs) */
   const [need, setNeed] = useState<string[]>([]);
   const mines = useMineTiles(index, view, MINES_MIN_ZOOM, need);
-  const usmin = useOsmBoxes("/api/atlas/usmin", view, !!visible.usmin, USMIN_MIN_ZOOM, 0.25);
+  // USMIN digitised the old USGS topo maps, so it only exists where they do
+  const inUsTopo = !view || hasUsgsTopo(view.center);
+  const usmin = useOsmBoxes("/api/atlas/usmin", view, !!visible.usmin && inUsTopo, USMIN_MIN_ZOOM, 0.25);
 
   const data = useMemo(
     () => ({
@@ -344,9 +349,9 @@ export default function MinesApp() {
       ? "Zoom in to see every mine"
       : mines.loading
         ? "Loading mines…"
-        : visible.usmin && zoom < USMIN_MIN_ZOOM
+        : visible.usmin && inUsTopo && zoom < USMIN_MIN_ZOOM
           ? "Zoom in further for shafts & adits from the old topo maps"
-          : visible.usmin && usmin.loading
+          : visible.usmin && inUsTopo && usmin.loading
             ? "Loading the old topo map symbols…"
             : null;
 
@@ -497,9 +502,10 @@ export default function MinesApp() {
       ) : (
       <HudPanel className="absolute bottom-3 left-3 z-20 flex max-w-[calc(100%-1.5rem)] items-center gap-5 overflow-x-auto px-4 py-2.5 sm:left-4">
         <HudStat label="USGS records" value={index ? index.counts.mrds.toLocaleString() : "—"} tone="text-amber-300" />
-        <HudStat label="MSHA mines" value={index ? index.counts.msha.toLocaleString() : "—"} tone="text-stone-300" />
+        <HudStat label="Countries" value={index?.counts.countries ? index.counts.countries.toLocaleString() : "—"} tone="text-amber-200" />
+        <HudStat label="MSHA mines (U.S.)" value={index ? index.counts.msha.toLocaleString() : "—"} tone="text-stone-300" />
         <HudStat label="On screen" value={zoom >= MINES_MIN_ZOOM ? shown.toLocaleString() : "—"} tone="text-white" />
-        <HudStat label="Topo symbols" value={visible.usmin && usmin.data ? usmin.data.features.length.toLocaleString() : "—"} tone="text-orange-300" />
+        <HudStat label="U.S. topo symbols" value={visible.usmin && usmin.data ? usmin.data.features.length.toLocaleString() : "—"} tone="text-orange-300" />
         <HudStat label="Featured" value={MINE_SITES.length} tone="text-white" onClick={() => togglePanel("find")} />
       </HudPanel>
       )}
@@ -574,8 +580,15 @@ function FindPanel({
   onNeed: (keys: string[]) => void;
   onGo: (c: [number, number], z: number) => void;
 }) {
-  const [me, setMe] = useState<[number, number] | null>(null);
-  const [locating, setLocating] = useState<"idle" | "busy" | "denied">("idle");
+  const { me, setMe, locating, locate: nearMe } = useNearMe((at) => {
+    // the tile around you and its neighbours
+    const x = Math.floor(at[0] / TILE_DEG);
+    const y = Math.floor(at[1] / TILE_DEG);
+    const keys: string[] = [];
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) keys.push(`${x + dx}_${y + dy}`);
+    onNeed(keys);
+    onGo(at, 9);
+  });
   /* name search runs on the server (the index is too big for phones) */
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<MineHit[] | null>(null);
@@ -600,26 +613,6 @@ function FindPanel({
       ctl.abort();
     };
   }, [q]);
-  const nearMe = () => {
-    if (!navigator.geolocation) return setLocating("denied");
-    setLocating("busy");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const at: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        setMe(at);
-        setLocating("idle");
-        // the tile around you and its neighbours
-        const x = Math.floor(at[0] / TILE_DEG);
-        const y = Math.floor(at[1] / TILE_DEG);
-        const keys: string[] = [];
-        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) keys.push(`${x + dx}_${y + dy}`);
-        onNeed(keys);
-        onGo(at, 9);
-      },
-      () => setLocating("denied"),
-      { maximumAge: 600_000, timeout: 10_000 }
-    );
-  };
   const nearest = useMemo(() => {
     if (!me) return [];
     const out: { src: "mrds" | "msha"; key: string; i: number; name: string; g: number; d: number }[] = [];
@@ -646,7 +639,7 @@ function FindPanel({
             setQ(e.target.value);
             setMe(null);
           }}
-          placeholder="A mine's name — add a state: “homestake sd”"
+          placeholder="A mine's name — add a state or country: “homestake sd”, “falun sweden”"
           className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-8 pr-8 text-[13px] text-slate-100 outline-none placeholder:text-slate-500 focus:border-amber-300/40"
         />
         {searching && <Loader2 className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-slate-400" />}

@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const ts = require('typescript');
 function load(file, fetchMock) {
   const abs = path.resolve(file), exports = {};
-  const requireLocal = (name) => name === 'next/server'
+  const requireLocal = (name) => name.startsWith('node:') ? require(name) : name === 'next/server'
     ? { NextResponse: { json: (body, options = {}) => ({ body, status: options.status ?? 200 }) } }
     : load(name.startsWith('@/') ? name.slice(2) + '.ts' : path.resolve(path.dirname(abs), name) + '.ts', fetchMock);
   const { outputText } = ts.transpileModule(fs.readFileSync(abs, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });

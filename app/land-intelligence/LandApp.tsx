@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import maplibregl, { type Map as MlMap } from "maplibre-gl";
-import { Activity, ArrowLeft, Building2, CarFront, Check, ChevronDown, CircleHelp, Crosshair, Download, Droplets, Eraser, Layers3, MapPin, Minus, Moon, Mountain, Pencil, Plus, RotateCcw, Route, Search, Satellite, Sprout, Sun, Undo2, Users, Waves, X } from "lucide-react";
+import { Activity, ArrowLeft, Building2, CarFront, Check, ChevronDown, CircleHelp, Crosshair, Download, Droplets, Eraser, Globe2, Layers3, MapPin, Minus, Moon, Mountain, Pencil, Plus, RotateCcw, Route, Search, Satellite, Sprout, Sun, Undo2, Users, Waves, X } from "lucide-react";
 import { AtlasMap } from "@/components/atlas/AtlasMap";
 import { useAtlasTheme } from "@/components/atlas/Hud";
 import type { AtlasLayer, Basemap } from "@/components/atlas/types";
@@ -437,11 +437,11 @@ export default function LandApp() {
     </header>
 
     {showCoverageNotice && <aside role="dialog" aria-label="Connected parcel states" className="pointer-events-auto absolute left-1/2 top-[116px] z-30 w-[min(390px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-white/15 li-panel bg-slate-950/95 p-4 text-xs shadow-2xl backdrop-blur-xl sm:top-24">
-      <div className="flex items-start justify-between gap-3"><div><div className="font-mono text-[9px] uppercase tracking-[0.18em] text-cyan-300">Parcel coverage</div><h2 className="mt-1 text-sm font-semibold text-white">Explore connected states</h2></div><button type="button" onClick={() => setShowCoverageNotice(false)} aria-label="Close parcel coverage notice" className="rounded-lg p-1 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button></div>
+      <div className="flex items-start justify-between gap-3"><div className="flex items-center gap-2.5"><div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-2 text-cyan-200"><Globe2 className="h-5 w-5" /></div><div><div className="font-mono text-[9px] uppercase tracking-[0.18em] text-cyan-300">Parcel coverage</div><h2 className="mt-1 text-sm font-semibold text-white">Explore connected states</h2></div></div><button type="button" onClick={() => setShowCoverageNotice(false)} aria-label="Close parcel coverage notice" className="rounded-lg p-1 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button></div>
       <p className="mt-2 leading-relaxed text-slate-300">Parcel boundaries and available public property facts are connected in these states. Zoom to level 14 to see individual parcels.</p>
-      <div className="mt-3 flex flex-wrap gap-1.5">{PARCEL_SOURCES.map((source) => <span key={source.id} className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[11px] text-cyan-100">{source.state}</span>)}</div>
+      <div className="mt-3 flex flex-wrap gap-1.5">{PARCEL_SOURCES.map((source) => <span key={source.id} className="inline-flex items-center gap-1 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[11px] text-cyan-100"><MapPin className="h-3 w-3" />{source.state}</span>)}</div>
       <p className="mt-3 text-[10px] leading-relaxed text-slate-400">Property fields vary by county. Other map layers may cover places beyond these parcel states.</p>
-      <button type="button" onClick={() => { setShowCoverageNotice(false); setFlyTo({ center: [-105.5, 39.1], zoom: 6.5, nonce: Date.now() }); }} className="mt-3 rounded-lg bg-cyan-400 px-3 py-1.5 text-[11px] font-semibold text-slate-950 hover:bg-cyan-300">Back to Colorado</button>
+      <button type="button" onClick={() => { setShowCoverageNotice(false); setFlyTo({ center: [-105.5, 39.1], zoom: 6.5, nonce: Date.now() }); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-cyan-400 px-3 py-1.5 text-[11px] font-semibold text-slate-950 hover:bg-cyan-300"><MapPin className="h-3.5 w-3.5" />Back to Colorado</button>
     </aside>}
 
     <div className="pointer-events-auto absolute left-3 right-3 top-[145px] z-10 flex flex-wrap items-start gap-2 sm:left-5 sm:right-auto sm:top-28 sm:flex-col">

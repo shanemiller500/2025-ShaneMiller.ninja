@@ -140,14 +140,7 @@ export async function geologyAt(lng: number, lat: number, signal?: AbortSignal):
 
 /* ── shared helpers ──────────────────────────────────────────────── */
 
-/** Straight-line km between two [lng, lat] points. */
-export function kmBetween(a: [number, number], b: [number, number]) {
-  const R = 6371;
-  const dLat = ((b[1] - a[1]) * Math.PI) / 180;
-  const dLng = ((b[0] - a[0]) * Math.PI) / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos((a[1] * Math.PI) / 180) * Math.cos((b[1] * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
+export { kmBetween } from "./near";
 
 /* ── Australia: Geoscience Australia's 1:1M surface geology (CC BY 4.0) ── */
 

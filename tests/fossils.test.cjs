@@ -160,10 +160,10 @@ test('tileFeatures filters by period, formation and dinosaur flag; tilesFor find
   assert.equal(JSON.stringify(fo.tilesAround([-109.3, 40.44], ix).sort()), JSON.stringify(['-55_19', '-55_20', '-55_21', '-56_19', '-56_20', '-56_21', '-54_19', '-54_20', '-54_21'].filter((k) => ix.tiles[k]).sort()));
 });
 
-test('fossil parks: every fact sourced from nps.gov, each park among recorded fossil sites', () => {
+test('fossil parks: every fact from NPS or UNESCO, each park among recorded fossil sites', () => {
   assert.ok(FOSSIL_PARKS.length >= 6);
   for (const p of FOSSIL_PARKS) {
-    for (const f of p.facts) assert.match(f.source.url, /^https:\/\/www\.nps\.gov\//);
+    for (const f of p.facts) assert.match(f.source.url, /^https:\/\/(www\.nps\.gov|whc\.unesco\.org)\//);
     let best = Infinity;
     for (const key of fo.tilesAround(p.center, ix)) {
       const c = tile(key).cols;

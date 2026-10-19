@@ -100,9 +100,4 @@ export function lifespan(founded: number | null, abandoned: number | null): stri
   return null;
 }
 
-/** Great-circle distance in km. */
-export function kmBetween([a, b]: [number, number], [c, d]: [number, number]) {
-  const r = Math.PI / 180;
-  const h = Math.sin(((d - b) * r) / 2) ** 2 + Math.cos(b * r) * Math.cos(d * r) * Math.sin(((c - a) * r) / 2) ** 2;
-  return 2 * 6371 * Math.asin(Math.sqrt(h));
-}
+export { kmBetween } from "./near";

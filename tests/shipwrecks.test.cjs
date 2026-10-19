@@ -78,7 +78,7 @@ test('featured wrecks: unique, every fact from an official page (NOAA / NPS, or 
   assert.equal(new Set(FEATURED_WRECKS.map((w) => w.id)).size, FEATURED_WRECKS.length);
   for (const w of FEATURED_WRECKS) {
     assert.ok(w.facts.length >= 2, `${w.name} facts`);
-    for (const f of w.facts) assert.match(f.source.url, /^https:\/\/([a-z0-9-]+\.)*((noaa|nps)\.gov|historicenvironment\.scot|infomar\.ie)\//, `${w.name}: ${f.source.url}`);
+    for (const f of w.facts) assert.match(f.source.url, /^https:\/\/([a-z0-9-]+\.)*((noaa|nps)\.gov|historicenvironment\.scot|infomar\.ie|vasamuseet\.se|maryrose\.org|museum\.wa\.gov\.au)\//, `${w.name}: ${f.source.url}`);
     const [lng, lat] = w.center;
     assert.ok(Math.abs(lat) <= 90 && Math.abs(lng) <= 180);
   }
@@ -107,14 +107,17 @@ test('wreck areas: wreck fields plus hulk fields — Mallows Bay included', () =
   assert.ok(mallows, 'the Mallows Bay "Burnt hulks" field');
 });
 
-test('graveyards: densest first, named, inside U.S. waters', () => {
+test('graveyards: densest first, named, worldwide (NOAA + UKHO charts)', () => {
   const { graveyards } = readJson('graveyards.json');
   assert.ok(graveyards.length >= 10);
   for (let i = 1; i < graveyards.length; i++) assert.ok(graveyards[i - 1].wrecks >= graveyards[i].wrecks, 'sorted');
   for (const g of graveyards) {
     assert.ok(g.name && g.wrecks > 0 && g.dangerous <= g.wrecks);
-    assert.ok(g.center[0] > -180 && g.center[0] < -60);
+    assert.ok(Math.abs(g.center[0]) <= 180 && Math.abs(g.center[1]) <= 90);
   }
+  // both sides of the Atlantic: New York Harbor and the English Channel
+  assert.ok(graveyards.some((g) => g.country === 'US'));
+  assert.ok(graveyards.some((g) => g.country === 'GB' || g.country === 'FR'));
 });
 
 test('dive depths: every published depth is the one its fact states', () => {

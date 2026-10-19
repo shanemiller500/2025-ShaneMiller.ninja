@@ -3,12 +3,13 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { format, formatDistanceToNowStrict } from "date-fns";
-import { ArrowLeft, BookOpen, Box, History, Layers, ListOrdered, Radio, RefreshCw, Star, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Box, History, Layers, ListOrdered, Loader2, LocateFixed, Radio, RefreshCw, Star, X } from "lucide-react";
 import { StoryPlayer } from "@/components/atlas/StoryPlayer";
 import type { StoryAction } from "@/components/atlas/story";
 import { useLibrary } from "@/utils/geo/useLibrary";
 import { EARTH_STORIES, type EarthStoryAction } from "./stories";
 import { AtlasMap } from "@/components/atlas/AtlasMap";
+import { useNearMe } from "@/components/atlas/useNearMe";
 import { LayerPanel } from "@/components/atlas/LayerPanel";
 import { SourceCitation } from "@/components/atlas/SourceCitation";
 import { TimeSlider } from "@/components/atlas/TimeSlider";
@@ -34,6 +35,7 @@ import { NCEI_QUAKES_URL, NCEI_TSUNAMIS_URL, nceiQuakeFeatures, nceiTsunamiFeatu
 import { useQuakeQuery, useQuakes, useVolcanoes, type QuakeQuery } from "./useEarthData";
 import { QuakeList } from "./QuakeList";
 import { EarthDetails } from "./Details";
+import { NearPanel } from "./NearPanel";
 import { DepthRegionBar, DepthScene } from "./DepthPanel";
 import { DEPTH_REGIONS, type DepthRegion } from "./regions";
 
@@ -45,7 +47,7 @@ import { DEPTH_REGIONS, type DepthRegion } from "./regions";
 /* ------------------------------------------------------------------ */
 
 type Mode = "live" | "replay" | "depth" | "stories";
-type Panel = "quakes" | "layers" | "famous" | null;
+type Panel = "quakes" | "layers" | "famous" | "near" | null;
 type Replay = { kind: "preset"; key: ReplayPresetKey; query: QuakeQuery } | { kind: "sequence"; anchor: QuakeAnchor & { name?: string }; query: QuakeQuery };
 
 const DAY = 86_400_000;
@@ -111,6 +113,12 @@ export default function EarthAliveApp() {
     setPanel((cur) => (cur === p ? null : p));
     setPickedState(null);
   };
+  /* near me: what's around you, anywhere on Earth */
+  const { me, locating, locate } = useNearMe((at) => {
+    setPickedState(null);
+    setPanel("near");
+    setFlyTo({ center: at, zoom: 5, nonce: Date.now() });
+  });
 
   // re-render the "updated 20s ago" label
   const [, setTick] = useState(0);
@@ -205,13 +213,13 @@ export default function EarthAliveApp() {
   /* NOAA's history tables load the first time their layer is switched on */
   const [ncei, setNcei] = useState<{ quakes?: NceiQuakes; tsunamis?: NceiTsunamis }>({});
   useEffect(() => {
-    const want = ([["quakes", "history", NCEI_QUAKES_URL], ["tsunamis", "tsunamis", NCEI_TSUNAMIS_URL]] as const).filter(([k, layer]) => visible[layer] && !ncei[k]);
+    const want = ([["quakes", "history", NCEI_QUAKES_URL], ["tsunamis", "tsunamis", NCEI_TSUNAMIS_URL]] as const).filter(([k, layer]) => (visible[layer] || panel === "near") && !ncei[k]);
     for (const [k, , url] of want)
       fetch(url)
         .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
         .then((j) => setNcei((n) => ({ ...n, [k]: j })))
         .catch(() => {});
-  }, [visible, ncei]);
+  }, [visible, ncei, panel]);
   const nceiQuakeFc = useMemo(() => (ncei.quakes ? nceiQuakeFeatures(ncei.quakes) : undefined), [ncei.quakes]);
   const nceiTsunamiFc = useMemo(() => (ncei.tsunamis ? nceiTsunamiFeatures(ncei.tsunamis) : undefined), [ncei.tsunamis]);
   const replayFc = useMemo(() => (history.data ? { type: "FeatureCollection" as const, features: history.data.features } : undefined), [history.data]);
@@ -437,13 +445,19 @@ export default function EarthAliveApp() {
         <div className="absolute right-3 top-[168px] z-30 flex flex-col gap-2">
           <HudIconButton icon={ListOrdered} label="Earthquake list" active={panel === "quakes"} onClick={() => togglePanel("quakes")} />
           <HudIconButton icon={Layers} label="Layers & filters" active={panel === "layers"} onClick={() => togglePanel("layers")} />
+          <HudIconButton
+            icon={locating === "busy" ? Loader2 : LocateFixed}
+            label={locating === "denied" ? "Near me — location isn't available" : "Near me"}
+            active={panel === "near"}
+            onClick={() => (me ? togglePanel("near") : locate())}
+          />
         </div>
       )}
 
       {/* ── side panel ───────────────────────────────────────────── */}
       {panel && (
         <SidePanel
-          title={panel === "quakes" ? (mode === "replay" ? "Replayed so far" : "Earthquakes") : panel === "layers" ? "Layers" : "Famous earthquakes"}
+          title={panel === "quakes" ? (mode === "replay" ? "Replayed so far" : "Earthquakes") : panel === "layers" ? "Layers" : panel === "near" ? "Near you" : "Famous earthquakes"}
           onClose={() => setPanel(null)}
         >
           {panel === "quakes" && <QuakeList quakes={list} selectedId={picked?.layer === "quakes" ? picked.id : undefined} onSelect={selectQuake} />}
@@ -473,6 +487,35 @@ export default function EarthAliveApp() {
               />
               <SourceCitation citations={citations} />
             </div>
+          )}
+          {panel === "near" && me && (
+            <NearPanel
+              me={me}
+              quakes={(quakes.mapData?.features ?? []) as QuakeFeature[]}
+              volcanoes={volcanoes.data?.features ?? []}
+              ncei={ncei}
+              onQuake={selectQuake}
+              onVolcano={(v) => {
+                const at = v.geometry.coordinates as [number, number];
+                setVisible((x) => ({ ...x, volcanoes: true }));
+                setPicked({ layer: "volcanoes", id: v.properties.vnum, props: v.properties as unknown as Record<string, unknown>, lngLat: at });
+                setFlyTo({ center: at, zoom: 8, nonce: Date.now() });
+              }}
+              onHistory={(i) => {
+                const c = ncei.quakes!.cols;
+                const at: [number, number] = [c.lng[i], c.lat[i]];
+                setVisible((x) => ({ ...x, history: true }));
+                setPicked({ layer: "history", id: c.id[i], props: { i }, lngLat: at });
+                setFlyTo({ center: at, zoom: 6, nonce: Date.now() });
+              }}
+              onTsunami={(i) => {
+                const c = ncei.tsunamis!.cols;
+                const at: [number, number] = [c.lng[i], c.lat[i]];
+                setVisible((x) => ({ ...x, tsunamis: true }));
+                setPicked({ layer: "tsunamis", id: c.id[i], props: { i }, lngLat: at });
+                setFlyTo({ center: at, zoom: 5, nonce: Date.now() });
+              }}
+            />
           )}
           {panel === "famous" && (
             <ul className="space-y-1">

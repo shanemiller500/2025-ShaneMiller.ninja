@@ -18,6 +18,8 @@ import {
   Layers,
   Link2,
   ListOrdered,
+  Loader2,
+  LocateFixed,
   Map as MapIcon,
   Search,
   X,
@@ -28,6 +30,9 @@ import { SourceCitation } from "@/components/atlas/SourceCitation";
 import { StoryPlayer } from "@/components/atlas/StoryPlayer";
 import type { StoryAction } from "@/components/atlas/story";
 import { useTimeline } from "@/components/atlas/useTimeline";
+import { useNearMe } from "@/components/atlas/useNearMe";
+import { homeCenter } from "@/utils/geo/homeView";
+import { fmtKm, nearest } from "@/utils/geo/near";
 import {
   HudIconButton,
   HudLabel,
@@ -114,7 +119,7 @@ export default function ShipwrecksApp() {
     nonce: number;
   } | null>(null);
   const [initialView] = useState(() => ({
-    center: [-70, 38] as [number, number],
+    center: homeCenter([-70, 38]),
     zoom: Math.min(3.2, Math.max(1.6, Math.log2(window.innerWidth / 300))),
   }));
 
@@ -251,6 +256,11 @@ export default function ShipwrecksApp() {
       lngLat: at,
     });
     setFlyTo({ center: at, zoom: 11, pitch: 0, bearing: 0, nonce: Date.now() });
+  };
+  const pickFeature = (layer: string, f: GeoJSON.Feature) => {
+    const at = (f.geometry as GeoJSON.Point).coordinates as [number, number];
+    setPicked({ layer, id: (f.id ?? f.properties?.id ?? 0) as string | number, props: f.properties ?? {}, lngLat: at });
+    setFlyTo({ center: at, zoom: 12, pitch: 0, bearing: 0, nonce: Date.now() });
   };
   const pickSinking = (i: number) => {
     const f = sinkData?.features.find((x) => x.id === i);
@@ -573,6 +583,10 @@ export default function ShipwrecksApp() {
               {panel === "find" && (
                 <FindWreck
                   named={named}
+                  charted={noaaData}
+                  australia={auData}
+                  onFeature={pickFeature}
+                  onLocate={(at) => setFlyTo({ center: at, zoom: 8, pitch: 0, bearing: 0, nonce: Date.now() })}
                   graveyards={graveyards}
                   onFeatured={pickFeatured}
                   onNamed={pickNamed}
@@ -626,7 +640,12 @@ export default function ShipwrecksApp() {
               tone="text-white"
               onClick={() => togglePanel("find")}
             />
-            <HudStat label="Sanctuaries" value="18" tone="text-teal-300" />
+            <HudStat
+              label="Historic · Aus & NZ"
+              value={au ? au.cols.id.length.toLocaleString() : "—"}
+              tone="text-amber-300"
+            />
+            <HudStat label="U.S. sanctuaries" value="18" tone="text-teal-300" />
             <HudStat
               label="Featured"
               value={FEATURED_WRECKS.length}
@@ -686,21 +705,55 @@ function SidePanel({
   );
 }
 
+type NearRow = { key: string; name: string; sub: string; at: [number, number]; pick: () => void };
+
 function FindWreck({
   named,
+  charted,
+  australia,
   graveyards,
   onFeatured,
   onNamed,
+  onFeature,
   onGraveyard,
+  onLocate,
 }: {
   named: NamedWreckCols | null;
+  charted: GeoJSON.FeatureCollection | undefined;
+  australia: GeoJSON.FeatureCollection | undefined;
   graveyards: Graveyard[];
   onFeatured: (w: FeaturedWreck) => void;
   onNamed: (i: number) => void;
+  onFeature: (layer: string, f: GeoJSON.Feature) => void;
   onGraveyard: (g: Graveyard) => void;
+  onLocate: (at: [number, number]) => void;
 }) {
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
+  const { me, setMe, locating, locate } = useNearMe((at) => {
+    setQ("");
+    onLocate(at);
+  });
+  // every wreck we have, from every source, nearest first
+  const near = useMemo(() => {
+    if (!me) return [];
+    const rows: NearRow[] = [];
+    for (const w of FEATURED_WRECKS) rows.push({ key: `f-${w.id}`, name: w.name, sub: `featured · ${w.lost}`, at: w.center, pick: () => onFeatured(w) });
+    for (const ft of charted?.features ?? []) {
+      const p = ft.properties ?? {};
+      const cat = WRECK_CATS.find((c) => c.key === p.cat)?.label ?? "Charted wreck";
+      rows.push({ key: `c-${p.src}-${p.id ?? ft.id}`, name: p.name ? String(p.name) : cat, sub: `${p.src === "ukho" ? "UK Hydrographic Office" : "NOAA"} chart${p.depth == null ? "" : p.depth < 0 ? ` · dries ${-p.depth} m` : ` · ${p.depth} m deep`}`, at: (ft.geometry as GeoJSON.Point).coordinates as [number, number], pick: () => onFeature("noaa", ft) });
+    }
+    for (const ft of australia?.features ?? []) {
+      const p = ft.properties ?? {};
+      rows.push({ key: `a-${p.id}`, name: String(p.name), sub: `${p.kind === 1 ? "aircraft" : "historic wreck"}${p.year ? ` · lost ${p.year}` : ""}`, at: (ft.geometry as GeoJSON.Point).coordinates as [number, number], pick: () => onFeature("australia", ft) });
+    }
+    // a named wreck that is also featured shows once, as the featured one
+    const featuredNames = new Set(FEATURED_WRECKS.map((w) => w.name.toLowerCase()));
+    if (named) for (let i = 0; i < named.name.length; i++) if (!featuredNames.has(named.name[i].toLowerCase())) rows.push({ key: `n-${i}`, name: named.name[i], sub: `named wreck${named.year[i] ? ` · lost ${named.year[i]}` : ""}`, at: [named.lng[i], named.lat[i]], pick: () => onNamed(i) });
+    return nearest(rows, me, (r) => r.at, 40);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me, charted, australia, named]);
   const hits = useMemo(() => {
     if (!named || needle.length < 2) return [];
     const out: number[] = [];
@@ -719,7 +772,34 @@ function FindWreck({
           className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-2 pl-8 pr-3 text-[13px] text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-300/40"
         />
       </label>
-      {needle.length >= 2 ? (
+      <button
+        type="button"
+        onClick={me ? () => setMe(null) : locate}
+        disabled={locating === "busy"}
+        title="Wrecks nearest you, from every source (asks for your location; it isn't stored)"
+        className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2 font-mono text-[10px] uppercase tracking-wider ${me ? "border-sky-300/50 text-sky-100" : "border-white/10 text-slate-300 hover:text-white"}`}
+      >
+        {locating === "busy" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LocateFixed className="h-3.5 w-3.5" />}
+        {me ? "Nearest wrecks · clear" : "Wrecks near me"}
+      </button>
+      {locating === "denied" && <p className="text-[11px] text-slate-500">Location isn&apos;t available — search by name or pan the map instead.</p>}
+      {me && needle.length < 2 ? (
+        <ul className="space-y-0.5">
+          {near.map(({ item: r, km }) => (
+            <li key={r.key}>
+              <button type="button" onClick={r.pick} className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left hover:bg-white/[0.05]">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-sky-300" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] text-slate-100">{r.name}</span>
+                  <span className="block truncate font-mono text-[10px] uppercase tracking-wider text-slate-500">{r.sub}</span>
+                </span>
+                <span className="shrink-0 font-mono text-[11px] text-sky-200">{fmtKm(km)}</span>
+              </button>
+            </li>
+          ))}
+          {!near.length && <li className="py-6 text-center text-xs text-slate-500">Still loading the wrecks — try again in a moment.</li>}
+        </ul>
+      ) : needle.length >= 2 ? (
         <ul className="space-y-0.5">
           {hits.map((i) => (
             <li key={i}>
@@ -776,7 +856,7 @@ function FindWreck({
           ))}
           {graveyards.length > 0 && (
             <li className="px-2 pb-1 pt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
-              Densest wreck clusters (charted)
+              Densest wreck clusters worldwide (charted)
             </li>
           )}
           {graveyards.slice(0, 10).map((g) => (

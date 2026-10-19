@@ -3,6 +3,7 @@
 import { History, MapPinOff, Orbit } from "lucide-react";
 import type { FeaturedTown } from "./featured";
 import type { ThenNowPlace } from "@/components/atlas/ThenNow";
+import { hasUsgsTopo } from "@/utils/geo/topo";
 import { DrawerLink, FactGrid, FeatureDrawer } from "@/components/atlas/FeatureDrawer";
 import type { Picked } from "@/components/atlas/types";
 import { useWikiPhoto } from "@/components/atlas/useWikiPhoto";
@@ -33,7 +34,7 @@ function Featured({ id, onClose, onThenNow, onFly }: { id: string; onClose: () =
   const t = featuredById(id)!;
   const photo = useWikiPhoto(t.wiki);
   return (
-    <FeatureDrawer open onClose={onClose} eyebrow={t.kind === "drowned" ? `Drowned · ${t.era}` : `Ghost town · ${t.era}`} accent={t.accent} title={t.name} subtitle={t.where}>
+    <FeatureDrawer open onClose={onClose} eyebrow={`${t.kind === "drowned" ? "Drowned" : t.kind === "deserted" ? "Deserted village" : "Ghost town"} · ${t.era}`} accent={t.accent} title={t.name} subtitle={t.where}>
       <div className="space-y-4">
         {photo && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -53,7 +54,7 @@ function Featured({ id, onClose, onThenNow, onFly }: { id: string; onClose: () =
             </li>
           ))}
         </ul>
-        {onThenNow && <ThenNowButton onClick={() => onThenNow({ name: t.name, center: t.center, zoom: Math.min(t.zoom, 14.5) })} />}
+        {onThenNow && hasUsgsTopo(t.center) && <ThenNowButton onClick={() => onThenNow({ name: t.name, center: t.center, zoom: Math.min(t.zoom, 14.5) })} />}
         {onFly && (
           <button type="button" onClick={() => onFly(t)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 px-3 py-2 text-[13px] font-semibold text-slate-100 transition-colors hover:bg-white/10">
             <Orbit className="h-4 w-4" /> Fly over in 3D
@@ -92,7 +93,7 @@ function GhostTown({ picked, cols, drowned, onClose, onThenNow }: { picked: Pick
             ["Position", where(picked.lngLat)],
           ]}
         />
-        {onThenNow && <ThenNowButton onClick={() => onThenNow({ name, center: picked.lngLat, zoom: 14 })} />}
+        {onThenNow && hasUsgsTopo(picked.lngLat) && <ThenNowButton onClick={() => onThenNow({ name, center: picked.lngLat, zoom: 14 })} />}
         <div className="space-y-2">
           {wiki && <DrawerLink href={wikiUrl(wiki)}>Wikipedia</DrawerLink>}
           {ok && <DrawerLink href={`https://www.wikidata.org/wiki/${cols!.id[i]}`}>Wikidata record</DrawerLink>}
@@ -123,7 +124,7 @@ export function GhostDetailsDrawer({
 
   if (picked.layer === "featured" && featuredById(String(p.id))) return <Featured key={String(p.id)} id={String(p.id)} onClose={onClose} onThenNow={onThenNow} onFly={onFly} />;
   if (picked.layer === "ghost") return <GhostTown key={String(p.i)} picked={picked} cols={cols} drowned={drowned} onClose={onClose} onThenNow={onThenNow} />;
-  const thenNow = (zoom: number) => onThenNow && <ThenNowButton onClick={() => onThenNow({ name: String(p.name ?? "This place"), center: picked.lngLat, zoom })} />;
+  const thenNow = (zoom: number) => onThenNow && hasUsgsTopo(picked.lngLat) && <ThenNowButton onClick={() => onThenNow({ name: String(p.name ?? "This place"), center: picked.lngLat, zoom })} />;
 
   if (picked.layer === "gnis") {
     return (

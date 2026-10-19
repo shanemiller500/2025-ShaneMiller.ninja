@@ -72,6 +72,7 @@ const S = {
   unescoSkocjan: { label: "UNESCO · Škocjan Caves", url: "https://whc.unesco.org/en/list/390/" },
   unescoPhongNha: { label: "UNESCO · Phong Nha-Ke Bang and Hin Nam No", url: "https://whc.unesco.org/en/list/951/" },
   unescoAggtelek: { label: "UNESCO · Caves of Aggtelek Karst and Slovak Karst", url: "https://whc.unesco.org/en/list/725/" },
+  unescoMulu: { label: "UNESCO · Gunung Mulu National Park", url: "https://whc.unesco.org/en/list/1013/" },
 } satisfies Record<string, Source>;
 
 export const SOURCES = S;
@@ -275,6 +276,22 @@ export const FEATURED: FeaturedCave[] = [
     styleNote: "A long, winding stream passage thick with stalagmites and stalactites.",
     dive: { style: "trunk", depth: 45, river: true, formations: 0.9, palette: "limestone", scale: 0.8 },
     accent: "#fbbf24",
+  },
+  {
+    id: "Q555991",
+    name: "Sarawak Chamber",
+    where: "Gunung Mulu National Park, Sarawak, Malaysia",
+    center: [114.8768, 4.0719],
+    tagline: "The largest known cave chamber on Earth.",
+    facts: [
+      { text: "The Sarawak Chamber measures 600 m by 415 m and is 80 m high — the largest known cave chamber in the world.", source: S.unescoMulu },
+      { text: "Mulu has at least 295 km of explored caves, home to millions of cave swiftlets and bats.", source: S.unescoMulu },
+      { text: "It is the most studied tropical karst area in the world. Inscribed 2000.", source: S.unescoMulu },
+    ],
+    site: { label: "UNESCO World Heritage listing", url: "https://whc.unesco.org/en/list/1013/" },
+    styleNote: "One immense open chamber — depth and layout are illustrative.",
+    dive: { style: "chamber", depth: 70, formations: 0.25, palette: "limestone", scale: 1 },
+    accent: "#4ade80",
   },
 ];
 
