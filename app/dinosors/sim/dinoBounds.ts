@@ -16,7 +16,7 @@ import { TILE, type BuildingKind, type Dino } from "./types";
 import type { World } from "./world";
 
 /** Buildings for animals: they belong outside the walls. */
-export const ANIMAL_KINDS = new Set<BuildingKind>(["pen", "stable", "perch", "tack", "roost", "dragonYard", "feedPit"]);
+export const ANIMAL_KINDS = new Set<BuildingKind>(["pen", "stable", "perch", "tack", "roost", "dragonYard", "feedPit", "dragonPit"]);
 
 /** Is (x, y) inside the settlement's walls (gates count as shut)? */
 export function insideWalls(w: World, x: number, y: number) {

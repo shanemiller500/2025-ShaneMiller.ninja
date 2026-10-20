@@ -18,13 +18,14 @@ import { makeRng, pick } from "./rng";
 import { MAP_H, MAP_W, T, TILE, type Dragon, type DragonEgg, type DragonNest, type Human, type Resource } from "./types";
 import type { World } from "./world";
 import { newDragonStats } from "./dragonKeep";
+import { keeperAtHatch, keeperOf, makeKeeper } from "./keepers";
 
 /** Nests per world. */
 const NESTS = 2;
 /** People this close to a hidden nest find it. */
 const SEE_NEST = 380;
 /** A nest with fewer eggs than this gets another every so often. */
-const MAX_EGGS = 2;
+const MAX_EGGS = 6;
 /** Seconds between eggs. */
 const LAY_EVERY = 900;
 /** Seconds before a new dragon moves into a nest whose parent was driven off. */
@@ -92,9 +93,8 @@ export function seedNests(w: World) {
       emptyT: SETTLE_AT + w.dragons.rng() * 200,
     };
     ds.nests.push(nest);
-    // one or two eggs to start with (rarely a golden-flecked one)
-    const n = 1 + (w.dragons.rng() < 0.45 ? 1 : 0);
-    for (let i = 0; i < n; i++) layEgg(w, nest);
+    // a clutch of three to start with (rarely a golden-flecked one)
+    for (let i = 0; i < 3; i++) layEgg(w, nest);
   }
 }
 
@@ -119,14 +119,26 @@ function nestLoot(w: World, hot: boolean): Partial<Record<Resource, number>> {
 }
 
 /** Where egg number i sits in a nest. */
-export const eggSpot = (nest: DragonNest, i: number) => ({ x: nest.x - 10 + i * 14, y: nest.y + 2 + (i % 2) * 4 });
+/** Where egg number i sits: three in the first bowl, three more in the nest joined on beside it. */
+export const eggSpot = (nest: DragonNest, i: number) => {
+  const bowl = Math.floor(i / 3);
+  const j = i % 3;
+  return { x: nest.x - 10 + j * 14 + bowl * NEST_JOIN.x, y: nest.y + 2 + (j % 2) * 4 + bowl * NEST_JOIN.y };
+};
+/** Where the second, joined-on nest sits. */
+export const NEST_JOIN = { x: 62, y: -10 };
+/** Eggs a nest holds (3 per bowl). */
+export const nestCapacity = (nest: DragonNest) => 3 * (nest.size ?? 1);
+/** How long a parent is expecting (and building up its nest). */
+export const GRAVID_SECONDS = 240;
 
 export function nestEggs(w: World, nest: DragonNest) {
   return w.dragons.eggs.filter((e) => e.at === "nest" && e.nest === nest.id);
 }
 
-function layEgg(w: World, nest: DragonNest) {
+export function layEgg(w: World, nest: DragonNest) {
   const i = nestEggs(w, nest).length;
+  if (i >= 3) nest.size = Math.max(nest.size ?? 1, 2);
   const spot = eggSpot(nest, i);
   const egg: DragonEgg = {
     id: w.dragons.nextId(),
@@ -202,6 +214,11 @@ export function nestLost(w: World, dr: Dragon) {
 export function nestsUpdate(w: World, dt: number) {
   const ds = w.dragons;
   if (!ds.seeded) seedNests(w);
+  // (older saves) every nest starts with its clutch of three
+  if (!ds.topped) {
+    ds.topped = true;
+    for (const nest of ds.nests) while (nestEggs(w, nest).length < 3) layEgg(w, nest);
+  }
   ds.seeT -= dt;
   const look = ds.seeT <= 0;
   if (look) ds.seeT = 1;
@@ -212,18 +229,63 @@ export function nestsUpdate(w: World, dt: number) {
       nest.emptyT -= dt;
       if (nest.emptyT <= 0 && w.elapsed > SETTLE_AT) settleParent(w, nest);
     } else {
-      nest.layT -= dt;
-      if (nest.layT <= 0) {
-        nest.layT = LAY_EVERY * (0.8 + w.dragons.rng() * 0.6);
-        if (nestEggs(w, nest).length < MAX_EGGS) {
-          layEgg(w, nest);
-          if (nest.found) w.toast("🥚", "A new egg has appeared in a dragon nest!", nest.x, nest.y);
+      const parent = parentOf(w, nest)!;
+      if ((nest.gravid ?? 0) > 0) {
+        // expecting: the nest grows as it builds (fetching branches, see dragons.ts), then it lays
+        nest.gravid = (nest.gravid ?? 0) - dt;
+        nest.grow = Math.min(1, (nest.grow ?? 1) + dt / GRAVID_SECONDS);
+        parent.gravid = true;
+        if ((nest.gravid ?? 0) <= 0) layClutch(w, nest);
+      } else {
+        parent.gravid = false;
+        nest.layT -= dt;
+        if (nest.layT <= 0) {
+          nest.layT = LAY_EVERY * (0.8 + w.dragons.rng() * 0.6);
+          if (nestEggs(w, nest).length < MAX_EGGS) startGravid(w, nest);
         }
       }
     }
     if (look && !nest.found) spotNest(w, nest);
   }
   for (const egg of [...ds.eggs]) eggTick(w, egg, dt);
+}
+
+/** The parent is expecting: it starts building up the nest (a bigger, joined one if eggs are already there). */
+function startGravid(w: World, nest: DragonNest) {
+  const have = nestEggs(w, nest).length;
+  nest.clutch = 3;
+  nest.gravid = GRAVID_SECONDS * (0.85 + w.dragons.rng() * 0.3);
+  // building from scratch (an empty nest) or adding a second bowl beside the full one
+  nest.grow = have ? 0 : 0.25;
+  if (have + 3 > 3) nest.size = 2;
+  const p = parentOf(w, nest);
+  if (p) p.gravid = true;
+  if (nest.found && p) w.toast("🪺", `${p.name} is expecting and building up its nest${have ? " (a second nest joined on!)" : ""}: a clutch of eggs is coming.`, nest.x, nest.y);
+}
+
+/** Lay the clutch. */
+function layClutch(w: World, nest: DragonNest) {
+  const n = Math.min(nest.clutch ?? 3, MAX_EGGS - nestEggs(w, nest).length);
+  for (let i = 0; i < n; i++) layEgg(w, nest);
+  nest.gravid = 0;
+  nest.grow = 1;
+  const p = parentOf(w, nest);
+  if (p) p.gravid = false;
+  if (nest.found && n > 0) w.toast("🥚", `${n} new dragon egg${n > 1 ? "s" : ""} in ${p?.name ?? "the"}${p ? "'s" : ""} nest!`, nest.x, nest.y);
+}
+
+/** The Eggs tool: a dragon egg. Near a nest it goes in the nest (a second nest joins on past 3); elsewhere it sits where it's put. */
+export function placeDragonEgg(w: World, breed: DragonEgg["breed"], x: number, y: number) {
+  const nest = w.dragons.nests.find((n) => Math.hypot(n.x - x, n.y - y) < 140);
+  if (nest) {
+    if (nestEggs(w, nest).length >= MAX_EGGS) return "That nest is full (six eggs).";
+    const egg = layEgg(w, nest);
+    egg.breed = breed;
+    return null;
+  }
+  const egg: DragonEgg = { id: w.dragons.nextId(), breed, x, y, at: "camp", nest: 0, carrier: 0, heat: 0.5, progress: 0, health: 1, rare: w.dragons.rng() < 0.12, hatchT: 0 };
+  w.dragons.eggs.push(egg);
+  return null;
 }
 
 /** Does anyone see this hidden nest? */
@@ -412,6 +474,21 @@ export function hatch(w: World, egg: DragonEgg) {
   };
   newDragonStats(dr);
   ds.owned.push(dr);
+  keeperAtHatch(w, egg, dr);
+  // hatched from a stolen egg, and the parent is still out there: it will never forgive this
+  const from = egg.nest ? ds.nests.find((n) => n.id === egg.nest) : null;
+  if (from) {
+    dr.fromNest = from.id;
+    const parent = parentOf(w, from);
+    if (parent && !parent.fury) {
+      parent.fury = true;
+      parent.furyT = 150;
+      parent.waves = 0;
+      newDragonStats(parent);
+      w.sfx("screech", w.camp.x, w.camp.y, 1.4, 0.3);
+      w.toast("😡", `Far away, ${parent.name} lets out a terrible roar. It knows its egg hatched here. It's growing bigger, and it's coming for the town…`, w.camp.x, w.camp.y);
+    }
+  }
   w.particles.burst(P.Poof, egg.x, egg.y, 14, 70, { size: 10, max: 1, color: "rgba(255,240,220,0.9)" });
   w.particles.burst(P.Star, egg.x, egg.y, 10, 60, { z: 14, size: 6, max: 1.2 });
   for (let i = 0; i < 10; i++) w.particles.spawn(P.Crumb, egg.x, egg.y - 8, { z: 12, vz: 70 + w.dragons.rng() * 60, vx: (w.dragons.rng() - 0.5) * 120, g: 240, size: 3, max: 1, color: i % 2 ? def.look.egg : def.look.spots });
@@ -426,11 +503,26 @@ export function hatch(w: World, egg: DragonEgg) {
 /** Where a carried egg should go: the incubation shelter, else the campfire, else the stockpile. */
 export function eggHome(w: World): { x: number; y: number } {
   const hatch = w.colony.buildings.find((b) => b.kind === "hatchery" && b.built >= 1);
-  const taken = w.dragons.eggs.filter((e) => e.at === "camp").length;
+  // the next free spot in the shelter (rows of three)
+  const taken = hatch ? w.dragons.eggs.filter((e) => e.at === "camp" && Math.hypot(e.x - hatch.x, e.y - hatch.y) < 60).length : w.dragons.eggs.filter((e) => e.at === "camp").length;
   if (hatch) return { x: hatch.x - 14 + (taken % 3) * 14, y: hatch.y - 6 - Math.floor(taken / 3) * 8 };
   const fire = [...w.campfires].filter((f) => f.lit).sort((a, b) => Math.hypot(a.x - w.camp.x, a.y - w.camp.y) - Math.hypot(b.x - w.camp.x, b.y - w.camp.y))[0];
   if (fire) return { x: fire.x + 34 + taken * 12, y: fire.y + 10 };
   return { x: w.camp.pileX + 30 + taken * 12, y: w.camp.pileY + 10 };
+}
+
+/** Where a carrier walks to hand an egg in (the shelter's door: its egg spots are inside). */
+export function eggDropOff(w: World): { x: number; y: number } {
+  const hatch = w.colony.buildings.find((b) => b.kind === "hatchery" && b.built >= 1);
+  return hatch ? w.colony.door(hatch) : eggHome(w);
+}
+
+/** Close enough to hand an egg in? */
+export function atEggHome(w: World, h: Human) {
+  const hatch = w.colony.buildings.find((b) => b.kind === "hatchery" && b.built >= 1);
+  if (hatch) return Math.hypot(h.x - hatch.x, h.y - hatch.y) < 64;
+  const home = eggHome(w);
+  return Math.hypot(h.x - home.x, h.y - home.y) < 16;
 }
 
 /** Set an egg down at camp to incubate. */
@@ -440,6 +532,8 @@ export function settleEgg(w: World, egg: DragonEgg, h: Human | null) {
   egg.carrier = 0;
   egg.x = spot.x;
   egg.y = spot.y;
+  // whoever ran it home keeps it
+  if (h && !h.child && !keeperOf(w, egg)) makeKeeper(w, egg, h, true);
   if (h) {
     if (h.egg === egg.id) h.egg = h.egg2;
     h.egg2 = undefined;
@@ -476,8 +570,8 @@ export function eggHuntThink(w: World, h: Human, t: { target: number; people: nu
       done();
       return false;
     }
-    const home = eggHome(w);
-    if (Math.hypot(h.x - home.x, h.y - home.y) < 16) {
+    const home = eggDropOff(w);
+    if (atEggHome(w, h)) {
       settleEgg(w, egg, h);
       say(h, "Got it home!");
       for (const p of party) if (p !== h) p.taskStep = 2;

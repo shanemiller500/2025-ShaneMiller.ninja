@@ -175,7 +175,19 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
                   <div className="font-bold">
                     {cl.name} clan <span className="font-semibold text-white/60">· {cl.size - cl.children} grown · {cl.children} young</span>
                   </div>
-                  <div className="text-white/65">{cl.style} camp · level {cl.campTier + 1} · {cl.food} food</div>
+                  <div className="text-white/65">{cl.style} camp · level {cl.campTier + 1} · {cl.food} food · 🦴 {cl.bones} · 🪵 {cl.wood}</div>
+                  {cl.builds.length > 0 && <div className="truncate text-white/65">Built: {cl.builds.join(" · ")}</div>}
+                  {cl.project && <div className="truncate text-white/55">🔨 Working on a {cl.project}</div>}
+                  {cl.warDinos > 0 && <div className="text-white/65">🦖 {cl.warDinos} war-dino{cl.warDinos > 1 ? "s" : ""} in their pen</div>}
+                  {(cl.trained > 0 || cl.traps > 0) && (
+                    <div className="text-white/65">
+                      {cl.trained > 0 ? `🤼 ${cl.trained} trained warrior${cl.trained > 1 ? "s" : ""}` : ""}
+                      {cl.trained > 0 && cl.traps > 0 ? " · " : ""}
+                      {cl.traps > 0 ? `🕳️ ${cl.traps} hidden pit${cl.traps > 1 ? "s" : ""} out there` : ""}
+                    </div>
+                  )}
+                  {cl.rite && <div className="font-bold text-orange-300">🔥 Holding a dragon rite right now!</div>}
+                  {cl.dragonFriend && <div className="font-semibold text-amber-200">🐉 {cl.dragonFriend} is pleased with them (it won&apos;t attack them)</div>}
                   <div className="truncate text-white/65">
                     {cl.wars.length ? `⚔️ at war with ${cl.wars.join(", ")}` : cl.pacts.length ? `🤝 friends with ${cl.pacts.join(", ")}` : "Keeping to themselves"}
                   </div>

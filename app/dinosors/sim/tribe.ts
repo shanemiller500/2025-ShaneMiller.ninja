@@ -10,6 +10,7 @@ import { CAMP_LEVELS, FACTS } from "../data/facts";
 import { BUILDINGS, HOUSING, OUTFITS, OUTFIT_BY_ID, SCORPION_TIERS, WEAPON_BY_ID, type WeaponDef } from "../data/colony";
 import { sonicDispatch } from "./sonic";
 import { moveAnimalBuildingsOut } from "./dinoBounds";
+import { eggCourierThink, keeperThink } from "./keepers";
 import { slayerDamage, slayerDrillThink } from "./dragonRaid";
 import { saddleVolley, trainerThink, trainerWork } from "./riders";
 import { SHADE, shadeNear } from "./shade";
@@ -1291,6 +1292,7 @@ export class Tribe {
     const has = (k: BuildingKind) => w.colony.buildings.some((b) => b.kind === k);
     const want: [BuildingKind, boolean, string][] = [
       ["hatchery", eggs || ds.owned.length > 0, "an incubation shelter to keep the dragon egg warm"],
+      ["dragonPit", eggs || ds.owned.length > 0, "a dragon pit (where the dragons live and put on shows)"],
       ["feedPit", ds.owned.length > 0, "a dragon feeding area"],
       ["roost", ds.owned.some((d) => (d.growth ?? 0) >= 0.2), "a dragon roost (a big one: dragons need room)"],
       ["dragonYard", ds.owned.some((d) => (d.growth ?? 0) >= 0.2), "a dragon training area"],
@@ -1649,6 +1651,13 @@ export function retreat(w: World, d: Dino) {
   const c = w.camp;
   const a = Math.atan2(d.y - c.y, d.x - c.x);
   d.raider = false;
+  // a clan's war-dino limps home to its pen (to heal and come again)
+  if (d.clan && w.rivals.clan(d.clan)) {
+    emote(d, "💨", 1.5);
+    setState(d, "flee", d.homeX, d.homeY);
+    d.fear = 1;
+    return;
+  }
   // run off the edge of the world (migrants despawn there)
   d.migrant = true;
   d.homeX = c.x + Math.cos(a) * 6000;
@@ -1799,8 +1808,10 @@ export function roleThink(w: World, h: Human): boolean {
       return slayerDrillThink(w, h);
     }
     case "eggRunner":
-      // between raids runners fetch + carry like gatherers (they're quick)
-      return false;
+      // between raids: carry any loose dragon eggs to the incubator, otherwise fetch + carry like gatherers
+      return eggCourierThink(w, h);
+    case "dragonKeeper":
+      return keeperThink(w, h);
     case "guard": {
       if (h.riding && w.flags.has("rallyDinos")) return mountedRallyThink(w, h);
       if (!wp && !camp.learned.has("tools")) return false;

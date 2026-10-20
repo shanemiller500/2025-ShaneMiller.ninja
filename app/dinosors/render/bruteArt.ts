@@ -21,6 +21,12 @@ function windup(b: Brute) {
   if (b.state === "bash") return 0.5 + Math.sin(b.anim * 2.2) * 0.5;
   if (b.state === "fight" || b.state === "hunt") return Math.max(0, Math.min(1, 1 - b.cd / 1.5));
   if (b.state === "rally") return 0.6 + Math.sin(b.anim * 3) * 0.4;
+  // hacking at bones + branches, hammering, digging, sparring
+  if (b.state === "build" || b.state === "trap" || (b.state === "gather" && Math.hypot(b.vx, b.vy) < 2)) return 0.5 + Math.sin(b.anim * 2.2) * 0.5;
+  if (b.state === "train") return 0.5 + Math.sin(b.anim * 3) * 0.5;
+  // arms up round the altar; flung high for joy
+  if (b.state === "dance") return 0.8 + Math.sin(b.anim * 2) * 0.2;
+  if (b.state === "cheer") return 1;
   return 0.15;
 }
 
@@ -52,7 +58,7 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
     c.translate(-H * 0.12 * b.dir, -3);
   }
   c.scale(b.dir, 1);
-  const moving = st === "walk" || st === "home" || st === "wander" || st === "flee" || st === "carry" || ((st === "fight" || st === "hunt") && Math.hypot(b.vx, b.vy) > 4);
+  const moving = st === "walk" || st === "home" || st === "wander" || st === "flee" || st === "carry" || st === "dance" || ((st === "fight" || st === "hunt" || st === "gather" || st === "build" || st === "train" || st === "trap" || st === "collect") && Math.hypot(b.vx, b.vy) > 4);
   const sw = moving ? Math.sin(b.anim * 2.4) : 0;
   const bob = moving ? Math.abs(Math.sin(b.anim * 2.4)) * 1.2 : 0;
   const hipY = -H * 0.36 - bob;
@@ -107,7 +113,8 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
     c.restore();
   };
   const carrying = st === "carry";
-  arm(carrying ? -2.6 : sw * 0.5 + 0.15, true);
+  const joy = st === "dance" || st === "cheer";
+  arm(carrying ? -2.6 : joy ? -2.6 + Math.sin(b.anim * 3) * 0.35 : sw * 0.5 + 0.15, true);
 
   // barrel chest in a ragged grey pelt
   c.fillStyle = INK;
@@ -156,6 +163,39 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
   c.moveTo(-3, -H * 0.38);
   c.lineTo(1, -H * 0.28);
   c.stroke();
+
+  // a bundle on the back: bones or branches for the clan's building
+  if (b.haul) {
+    if (b.haul.r === "wood") {
+      c.strokeStyle = "#7a5530";
+      c.lineWidth = 2.6;
+      for (let k = 0; k < 3; k++) {
+        c.beginPath();
+        c.moveTo(-15, -H * 0.5 + k * 3);
+        c.lineTo(-4, -H * 0.12 + k * 2);
+        c.stroke();
+      }
+    } else {
+      for (let k = 0; k < 2; k++) {
+        c.strokeStyle = INK;
+        c.lineWidth = 4.2;
+        c.lineCap = "round";
+        c.beginPath();
+        c.moveTo(-14, -H * 0.46 + k * 5);
+        c.lineTo(-5, -H * 0.18 + k * 3);
+        c.stroke();
+        c.strokeStyle = "#e9e0c8";
+        c.lineWidth = 2.6;
+        c.stroke();
+      }
+    }
+    c.strokeStyle = "#b89a62";
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(-10, -H * 0.36);
+    c.lineTo(4, -H * 0.42);
+    c.stroke();
+  }
 
   // head: low + forward, heavy brow, big nose, shaggy hair + beard
   const hy = -H * 0.5;
@@ -384,14 +424,36 @@ function drawBruteWeapon(c: CanvasRenderingContext2D, kind: Brute["weapon"]) {
 }
 
 /** A thrown spear / rock in flight (origin = its ground spot; z lifts it). */
-export function drawBruteMissile(c: CanvasRenderingContext2D, kind: "spear" | "rock" | "sling", z: number, ang: number) {
+export function drawBruteMissile(c: CanvasRenderingContext2D, kind: "spear" | "rock" | "sling" | "boulder", z: number, ang: number) {
   c.fillStyle = "rgba(0,0,0,0.2)";
   c.beginPath();
-  c.ellipse(0, 0, 4, 1.6, 0, 0, Math.PI * 2);
+  c.ellipse(0, 0, kind === "boulder" ? 11 : 4, kind === "boulder" ? 4 : 1.6, 0, 0, Math.PI * 2);
   c.fill();
   c.save();
   c.translate(0, -z);
-  if (kind === "rock" || kind === "sling") {
+  if (kind === "boulder") {
+    // a flaming boulder trailing fire + smoke
+    c.globalCompositeOperation = "lighter";
+    for (let i = 1; i <= 4; i++) {
+      c.fillStyle = `rgba(255,${150 - i * 20},40,${0.35 - i * 0.07})`;
+      c.beginPath();
+      c.arc(-Math.cos(ang) * i * 6, -Math.sin(ang) * i * 6, 9 - i, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.globalCompositeOperation = "source-over";
+    c.fillStyle = INK;
+    c.beginPath();
+    c.arc(0, 0, 9, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#7d766b";
+    c.beginPath();
+    c.arc(0, 0, 7.8, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#ff8a2a";
+    c.beginPath();
+    c.arc(2, -2, 3.4, 0, Math.PI * 2);
+    c.fill();
+  } else if (kind === "rock" || kind === "sling") {
     c.fillStyle = INK;
     c.beginPath();
     c.arc(0, 0, 4.4, 0, Math.PI * 2);
@@ -419,9 +481,239 @@ export function drawBruteMissile(c: CanvasRenderingContext2D, kind: "spear" | "r
   c.restore();
 }
 
+/** A banner with a stripe for every colour the clan flies (a union shows them all). */
+export function clanFlag(c: CanvasRenderingContext2D, colors: string[], x: number, y: number, w: number, h: number, flap: number) {
+  const n = Math.max(1, colors.length);
+  for (let i = 0; i < n; i++) {
+    c.fillStyle = colors[i];
+    c.beginPath();
+    const y0 = y + (i / n) * h;
+    const y1 = y + ((i + 1) / n) * h;
+    c.moveTo(x, y0);
+    c.quadraticCurveTo(x + w * 0.5, y0 + flap * 0.6, x + w, y0 + flap);
+    c.lineTo(x + w, y1 + flap);
+    c.quadraticCurveTo(x + w * 0.5, y1 + flap * 0.6, x, y1);
+    c.closePath();
+    c.fill();
+  }
+  c.strokeStyle = INK;
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(x, y);
+  c.quadraticCurveTo(x + w * 0.5, y + flap * 0.6, x + w, y + flap);
+  c.lineTo(x + w, y + h + flap);
+  c.quadraticCurveTo(x + w * 0.5, y + h + flap * 0.6, x, y + h);
+  c.stroke();
+}
+
+/** A clan catapult: a timber frame on log wheels, a throwing arm, a boulder in the sling, the clan's banner. */
+export function drawCatapult(c: CanvasRenderingContext2D, b: Brute, colors: string[], t: number) {
+  c.save();
+  c.scale(b.dir, 1);
+  c.fillStyle = "rgba(0,0,0,0.25)";
+  c.beginPath();
+  c.ellipse(0, 2, 34, 9, 0, 0, Math.PI * 2);
+  c.fill();
+  // log wheels
+  for (const x of [-20, 20]) {
+    c.fillStyle = INK;
+    c.beginPath();
+    c.arc(x, -6, 8, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#7a5534";
+    c.beginPath();
+    c.arc(x, -6, 6.5, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#c69a62";
+    c.beginPath();
+    c.arc(x, -6, 2, 0, Math.PI * 2);
+    c.fill();
+  }
+  // the frame
+  c.strokeStyle = "#5e3f24";
+  c.lineWidth = 4;
+  c.lineCap = "round";
+  c.beginPath();
+  c.moveTo(-26, -10);
+  c.lineTo(26, -10);
+  c.moveTo(-6, -10);
+  c.lineTo(0, -36);
+  c.lineTo(6, -10);
+  c.stroke();
+  // lashings in the clan's colours
+  colors.forEach((col, i) => {
+    c.fillStyle = col;
+    c.fillRect(-4 + i * 3, -30, 3, 6);
+  });
+  // the throwing arm: cocked back while reloading, flung forward just after a shot
+  const reload = b.cd;
+  const fired = reload > 6.2;
+  const ang = fired ? -1.9 : -0.35 - Math.min(1, (7 - reload) / 4) * 0.25;
+  c.save();
+  c.translate(0, -34);
+  c.rotate(ang);
+  c.strokeStyle = "#7a5534";
+  c.lineWidth = 3.4;
+  c.beginPath();
+  c.moveTo(-12, 0);
+  c.lineTo(30, 0);
+  c.stroke();
+  // counterweight + sling basket
+  c.fillStyle = "#6f6a63";
+  c.fillRect(-18, -5, 9, 10);
+  if (!fired) {
+    c.fillStyle = INK;
+    c.beginPath();
+    c.arc(32, 0, 6.5, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#7d766b";
+    c.beginPath();
+    c.arc(32, 0, 5.4, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = `rgba(255,140,40,${0.6 + Math.sin(t * 12) * 0.25})`;
+    c.beginPath();
+    c.arc(33, -2, 2.4, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.restore();
+  // the banner on a pole at the back
+  c.strokeStyle = INK;
+  c.lineWidth = 2;
+  c.beginPath();
+  c.moveTo(-24, -10);
+  c.lineTo(-24, -52);
+  c.stroke();
+  clanFlag(c, colors, -24, -52, 16, 11, Math.sin(t * 4 + b.id) * 2);
+  c.restore();
+}
+
+/** A clan town's ring of mammoth tusks + sharpened bone stakes, a gap at the front for the way in. */
+function townRing(c: CanvasRenderingContext2D, rx: number, ry: number, t: number) {
+  const n = Math.round(rx / 7);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    if (Math.sin(a) > 0.86) continue; // the gateway at the front
+    const x = Math.cos(a) * rx;
+    const y = Math.sin(a) * ry;
+    const front = Math.sin(a) > 0;
+    const tusk = i % 4 === 0;
+    c.save();
+    c.translate(x, y);
+    if (tusk) {
+      // a great curved tusk
+      c.strokeStyle = INK;
+      c.lineWidth = 5.4;
+      c.lineCap = "round";
+      c.beginPath();
+      c.moveTo(0, 2);
+      c.quadraticCurveTo(-Math.cos(a) * 6, -16, Math.cos(a) * 4, -30);
+      c.stroke();
+      c.strokeStyle = front ? "#f2ead6" : "#d8cdb2";
+      c.lineWidth = 3.6;
+      c.stroke();
+    } else {
+      c.fillStyle = INK;
+      c.beginPath();
+      c.moveTo(-3.4, 2);
+      c.lineTo(0, -22 - (i % 3) * 3);
+      c.lineTo(3.4, 2);
+      c.closePath();
+      c.fill();
+      c.fillStyle = front ? "#c9a56a" : "#a3845a";
+      c.beginPath();
+      c.moveTo(-2.4, 1);
+      c.lineTo(0, -19 - (i % 3) * 3);
+      c.lineTo(2.4, 1);
+      c.closePath();
+      c.fill();
+    }
+    c.restore();
+  }
+  void t;
+}
+
+/** A big domed hut (a hide yurt), striped in the clan's colours. */
+function domeHut(c: CanvasRenderingContext2D, colors: string[], seed: number) {
+  c.fillStyle = "rgba(0,0,0,0.22)";
+  c.beginPath();
+  c.ellipse(0, 2, 30, 8, 0, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = "#8a6a48";
+  c.beginPath();
+  c.ellipse(0, -12, 28, 24, 0, Math.PI, 0);
+  c.lineTo(28, 0);
+  c.lineTo(-28, 0);
+  c.closePath();
+  c.fill();
+  // coloured bands round the dome
+  colors.forEach((col, i) => {
+    c.strokeStyle = col;
+    c.lineWidth = 3;
+    c.beginPath();
+    c.ellipse(0, -12, 28 - i * 2, 18 - i * 5, 0, Math.PI * 1.05, Math.PI * 1.95);
+    c.stroke();
+  });
+  // a smoke hole, a doorway with a hide flap
+  c.fillStyle = INK;
+  c.beginPath();
+  c.ellipse(0, -34, 5, 2.4, 0, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = "#2a1c12";
+  c.beginPath();
+  c.arc(0, 0, 9, Math.PI, 0);
+  c.fill();
+  c.fillStyle = colors[seed % colors.length];
+  c.beginPath();
+  c.moveTo(-9, 0);
+  c.lineTo(-9, -6);
+  c.quadraticCurveTo(-3, -10, 1, -7);
+  c.lineTo(-2, 0);
+  c.closePath();
+  c.fill();
+}
+
 /** A Neanderthal camp: trampled dirt, hide lean-tos, a fire pit, bones and a skull pole. */
 export function drawClanCamp(c: CanvasRenderingContext2D, clan: Clan, t: number, night: boolean, size: number) {
   const tier = clan.campTier ?? 0;
+  const colors = clan.colors?.length ? clan.colors : [clan.color];
+  const town = colors.length > 1 || tier >= 4;
+  if (town) {
+    // a clan town: a broad trampled square, a ring of tusks + stakes, big domed huts, banners all round
+    const rx = 190 + tier * 18;
+    const ry = 92 + tier * 8;
+    c.fillStyle = "rgba(110,84,56,0.4)";
+    c.beginPath();
+    c.ellipse(0, 6, rx + 10, ry + 8, 0, 0, Math.PI * 2);
+    c.fill();
+    // back half of the ring first
+    c.save();
+    c.beginPath();
+    c.rect(-rx - 40, -ry - 60, rx * 2 + 80, ry + 66);
+    c.clip();
+    townRing(c, rx, ry, t);
+    c.restore();
+    const domes: [number, number][] = [[-110, -40], [100, -46], [-10, -66], [150, 6], [-160, 4], [60, -78], [-70, -82]];
+    const n = Math.min(domes.length, 3 + Math.floor(tier / 2) + colors.length);
+    for (let i = 0; i < n; i++) {
+      c.save();
+      c.translate(domes[i][0], domes[i][1]);
+      domeHut(c, colors, i + clan.id);
+      c.restore();
+    }
+    // banner poles round the square
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.4;
+      const px = Math.cos(a) * (rx - 30);
+      const py = Math.sin(a) * (ry - 18);
+      c.strokeStyle = INK;
+      c.lineWidth = 3;
+      c.beginPath();
+      c.moveTo(px, py);
+      c.lineTo(px, py - 50);
+      c.stroke();
+      clanFlag(c, colors, px, py - 50, 20, 14, Math.sin(t * 3 + i + clan.id) * 3);
+    }
+  }
   // trampled ground
   c.fillStyle = "rgba(120,92,60,0.38)";
   c.beginPath();
@@ -431,6 +723,28 @@ export function drawClanCamp(c: CanvasRenderingContext2D, clan: Clan, t: number,
   c.beginPath();
   c.ellipse(-20, 14, 80, 36, 0.1, 0, Math.PI * 2);
   c.fill();
+  if (clan.sea) {
+    // A small woven fish trap and drying rack mark shore clans.
+    c.save();
+    c.translate(156, 42);
+    c.strokeStyle = "#382719";
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(-24, 13); c.lineTo(-24, -13); c.lineTo(24, -13); c.lineTo(24, 13);
+    c.moveTo(-24, -13); c.lineTo(24, 13);
+    c.moveTo(24, -13); c.lineTo(-24, 13);
+    c.stroke();
+    c.fillStyle = "#8f7651";
+    c.beginPath(); c.ellipse(0, 7, 29, 11, 0, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = "#d1b48a";
+    c.lineWidth = 2;
+    for (let i = -20; i <= 20; i += 10) {
+      c.beginPath(); c.moveTo(i, -1); c.lineTo(i + 6, 15); c.stroke();
+    }
+    c.fillStyle = "#b5c5ba";
+    for (const x of [-12, 3, 15]) { c.beginPath(); c.ellipse(x, -8, 6, 3, 0, 0, Math.PI * 2); c.fill(); }
+    c.restore();
+  }
   // lean-tos (one per couple of members, at least two)
   const huts = Math.max(2, Math.min(8, 2 + tier * 2, Math.ceil(size / 2) + tier));
   const spots: [number, number, number][] = [[-78, -18, 1], [70, -26, -1], [-20, -46, 1], [96, 24, -1], [-112, 25, 1], [24, -61, -1], [143, -12, -1], [-145, -12, 1]];
@@ -495,17 +809,7 @@ export function drawClanCamp(c: CanvasRenderingContext2D, clan: Clan, t: number,
   c.lineTo(0, -46);
   c.stroke();
   const flap = Math.sin(t * 3 + clan.id) * 3;
-  c.fillStyle = clan.color;
-  c.strokeStyle = INK;
-  c.lineWidth = 1;
-  c.beginPath();
-  c.moveTo(1, -40);
-  c.quadraticCurveTo(10, -38 + flap, 17, -36 + flap);
-  c.lineTo(14, -30 + flap * 0.6);
-  c.quadraticCurveTo(8, -31, 1, -29);
-  c.closePath();
-  c.fill();
-  c.stroke();
+  clanFlag(c, colors, 1, -40, 17, 11, flap);
   // the skull on top
   c.fillStyle = INK;
   c.beginPath();
@@ -553,6 +857,16 @@ export function drawClanCamp(c: CanvasRenderingContext2D, clan: Clan, t: number,
   drawFlame(c, -2, 0, 0.75, t + clan.id);
   drawFlame(c, 3, -1, 0.6, t * 1.3 + clan.id);
   c.restore();
+  if (town) {
+    const rx = 190 + tier * 18;
+    const ry = 92 + tier * 8;
+    c.save();
+    c.beginPath();
+    c.rect(-rx - 40, 6, rx * 2 + 80, ry + 40);
+    c.clip();
+    townRing(c, rx, ry, t);
+    c.restore();
+  }
 }
 
 function timberHut(c: CanvasRenderingContext2D, color: string, seed: number) {

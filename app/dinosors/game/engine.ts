@@ -3,6 +3,8 @@
 /*  World, Renderer and AudioManager and talks to React only through   */
 /*  a tiny event emitter and a polled snapshot (never per-frame state). */
 /* ------------------------------------------------------------------ */
+import { CLAN_BUILDS, nextProject } from "../sim/clanLife";
+import type { ClanBuild } from "../sim/types";
 import { FACTS } from "../data/facts";
 import { SPECIES, sp } from "../data/species";
 import { AudioManager } from "../audio/audio";
@@ -39,7 +41,9 @@ import { revealNest } from "../sim/dragonNests";
 import { launchRaid, raidTarget } from "../sim/dragonRaid";
 import { canClear, commandClear } from "../sim/clearing";
 import { canMove, startMove, type MoveRef } from "../sim/moving";
-import type { DragonEgg, DragonNest } from "../sim/types";
+import { callKeeper, keeperOf, makeKeeper, stoke } from "../sim/keepers";
+import { startShow } from "../sim/shows";
+import type { BuildingKind, DragonEgg, DragonNest } from "../sim/types";
 import { SAVE_VERSION } from "../sim/world";
 import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genetics";
 import { World, type SaveData } from "../sim/world";
@@ -163,7 +167,7 @@ export interface CommandInfo {
 /** Tapped a building: what's inside, what it needs, what you can do. */
 export type InspectInfo =
   | { kind: "shelter"; id: number; icon: string; name: string; tier: number; cap: number; built: boolean; progress: string; hp: number; hearth: boolean; warmth: number; residents: { id: number; name: string; child: boolean; inside: boolean; state: string }[]; upgrade: { icon: string; name: string; cost: Cost; have: Cost; started: boolean } | null }
-  | { kind: "building"; id: number; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost; stage?: { n: number; of: number; name: string; next: string | null }; note?: string }
+  | { kind: "building"; id: number; bkind: BuildingKind; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost; stage?: { n: number; of: number; name: string; next: string | null }; note?: string }
   | { kind: "scorpion"; id: number; name: string; tier: number; built: number; hp: number; maxHp: number; drone: boolean; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
   | { kind: "gate"; id: number; open: boolean; auto: boolean; hp: number; maxHp: number; material: string }
   | { kind: "tower"; id: number; stage: number; hp: number; maxHp: number; guards: number; stone: boolean; up: boolean; canUpgrade: boolean; upCost: number }
@@ -205,7 +209,9 @@ export interface Snapshot {
   zones: { homes: number; residents: number; beds: number; fires: number; stores: number }[];
   /** Neanderthal clans around the map */
   rivals: {
-    clans: { id: number; name: string; color: string; size: number; children: number; food: number; style: string; campTier: number; x: number; y: number; captives: string[]; wars: string[]; pacts: string[] }[];
+    clans: { id: number; name: string; color: string; size: number; children: number; food: number; style: string; campTier: number; x: number; y: number; captives: string[]; wars: string[]; pacts: string[];
+      /** clan life: stores, what's built, what's next, pits dug, trained warriors, and the dragon they've fed */
+      bones: number; wood: number; builds: string[]; project: string | null; traps: number; trained: number; dragonFriend: string | null; rite: boolean; warDinos: number }[];
   };
   tribe: {
     level: number;
@@ -313,7 +319,7 @@ interface Ptr {
   grab: Dino | null;
 }
 
-export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️", researcher: "📜", shaper: "🔷", technician: "⚡", miner: "⛏️", trainer: "🐾", dragonSlayer: "⚔️", eggRunner: "🥚" };
+export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️", researcher: "📜", shaper: "🔷", technician: "⚡", miner: "⛏️", trainer: "🐾", dragonSlayer: "⚔️", eggRunner: "🥚", dragonKeeper: "🐉" };
 export function moodOf(d: Dino): { icon: string; label: string } {
   const s = d.state;
   if (s === "sleep") return { icon: "💤", label: "Sleepy" };
@@ -376,6 +382,9 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
   relax: "Resting in the shade",
   sonic: "Blasting the fire with ultrasound",
   lift: "Carrying a building",
+  dragonPlay: "Playing with their dragon",
+  show: "Putting on a dragon show",
+  watch: "Watching the dragon show",
   drill: "Dragon-slaying drill",
   dragonCare: "Caring for a dragon",
 };
@@ -826,7 +835,7 @@ export class Engine {
         return;
       }
       this.dragonAim = { id: dr.id, kind, pts: [] };
-      this.world.toast(def.icon, kind === "route" ? "Tap up to 5 waypoints, then press Fly route." : kind === "attack" ? `Tap the creature ${dr.name} should attack.` : `Tap where ${dr.name} should ${def.name.toLowerCase()}.`);
+      this.world.toast(def.icon, kind === "route" ? "Tap up to 5 waypoints, then press Fly route." : kind === "attack" ? `Tap the creature ${dr.name} should attack.` : kind === "volcano" ? `Tap the Neanderthal ${dr.name} should carry off to the volcano.` : `Tap where ${dr.name} should ${def.name.toLowerCase()}.`);
     } else {
       const why = commandDragon(this.world, dr, kind);
       if (why) this.world.toast("🐉", why, dr.x, dr.y);
@@ -875,6 +884,14 @@ export class Engine {
         return;
       }
       target = foe.id;
+    }
+    if (aim.kind === "volcano") {
+      const b = this.pickBrute(x, y);
+      if (!b || b.weapon === "catapult") {
+        w.toast("🌋", "Tap a Neanderthal to carry off to the volcano.");
+        return;
+      }
+      target = b.id;
     }
     this.dragonAim = null;
     const why = commandDragon(w, dr, aim.kind, { x, y, target });
@@ -1744,6 +1761,40 @@ export class Engine {
   clearAim = 0;
   /** a building / home waiting for the player to tap where it should go */
   moveAim: MoveRef | null = null;
+
+  /** Make someone the keeper of an egg / dragon (from the incubator or dragon panel). */
+  setKeeper(kind: "egg" | "dragon", id: number, humanId: number) {
+    const w = this.world;
+    const thing = kind === "egg" ? w.dragons.eggs.find((e) => e.id === id) : w.dragons.owned.find((d) => d.id === id);
+    const h = w.humans.find((x) => x.id === humanId);
+    if (!thing || !h) return;
+    makeKeeper(w, thing, h);
+    this.emit({ type: "select" });
+  }
+
+  /** Call an egg's / dragon's keeper over. */
+  callKeeperOf(kind: "egg" | "dragon", id: number) {
+    const w = this.world;
+    const thing = kind === "egg" ? w.dragons.eggs.find((e) => e.id === id) : w.dragons.owned.find((d) => d.id === id);
+    if (!thing) return;
+    const why = callKeeper(w, thing);
+    w.toast("📣", why ?? `${keeperOf(w, thing)?.name} is on the way.`, thing.x, thing.y);
+    this.emit({ type: "select" });
+  }
+
+  /** Put fuel on an incubation shelter's fire now. */
+  stokeHatchery(id: number) {
+    const w = this.world;
+    if (!stoke(w, id)) w.toast("🔥", "No wood, sticks or coal in the stores to burn.");
+    this.emit({ type: "select" });
+  }
+
+  /** Start a dragon show in the pit. */
+  putOnShow() {
+    const why = startShow(this.world);
+    if (why) this.world.toast("🎪", why);
+    this.emit({ type: "select" });
+  }
 
   /** Move: the next tap picks the new spot (a crew carries it there). */
   startMoveSelected() {
@@ -3089,6 +3140,18 @@ export class Engine {
             captives: w.rivals.captives(w, cl.id).map((h) => h.name),
             wars: others.filter((o) => w.rivals.relation(o.id, cl.id) === -1).map((o) => o.name),
             pacts: others.filter((o) => w.rivals.relation(o.id, cl.id) === 1).map((o) => o.name),
+            bones: Math.floor(cl.bones ?? 0),
+            wood: Math.floor(cl.wood ?? 0),
+            builds: (Object.entries(cl.builds ?? {}) as [ClanBuild, number][]).filter(([, lv]) => lv > 0).map(([k, lv]) => `${CLAN_BUILDS[k].icon} ${CLAN_BUILDS[k].label}${CLAN_BUILDS[k].max > 1 ? ` ${lv}` : ""}`),
+            project: (() => {
+              const k = nextProject(cl);
+              return k ? CLAN_BUILDS[k].label : null;
+            })(),
+            traps: w.rivals.traps.filter((t) => t.clan === cl.id && !t.caught).length,
+            trained: w.rivals.members(cl.id).filter((b) => (b.skill ?? 0) >= 0.25).length,
+            dragonFriend: cl.favor && (cl.favorT ?? 0) > 0 ? w.dragons.byId(cl.favor)?.name ?? "a dragon" : null,
+            rite: w.rivals.rite?.clan === cl.id,
+            warDinos: w.dinos.filter((d) => d.clan === cl.id).length,
           };
         }),
       },
@@ -3178,7 +3241,7 @@ export class Engine {
           const stage = b.kind === "pyramid" ? { n: (b.stage ?? 0) + (b.built >= 1 ? 1 : 0), of: PYRAMID_STAGES.length, name: PYRAMID_STAGES[Math.min(b.stage ?? 0, PYRAMID_STAGES.length - 1)].name, next: PYRAMID_STAGES[(b.stage ?? 0) + 1]?.name ?? null } : undefined;
         const gen = buildingGen(b);
         const note = b.built < 1 && d.civ && !w.civ.has(d.civ) ? `🔒 Needs research: ${CIV_TECH[d.civ].icon} ${CIV_TECH[d.civ].name}` : gen && b.built >= 1 ? `⚡ Makes ${gen.toFixed(1)} energy/s${w.weather.storm > 0.3 ? " (storm boost!)" : ""}` : b.kind === "beamTower" && b.built >= 1 ? ((b.cd ?? 0) > 0 ? `Recharging… ${(b.cd ?? 0).toFixed(1)}s` : "Charged and watching") : undefined;
-        return { kind: "building", id: b.id, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage, note };
+        return { kind: "building", id: b.id, bkind: b.kind, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage, note };
       }
       case "scorpion": {
         const s = w.colony.scorpions.find((x) => x.id === r.id);

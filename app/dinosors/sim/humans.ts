@@ -18,6 +18,8 @@ import { aloftTick, dragonCareTick, dragonRiderDefend, dragonRiderThink } from "
 import { returnEmitter, sonicTick } from "./sonic";
 import { drillTick, eggSpeed } from "./dragonRaid";
 import { insideWalls, outsideSpot } from "./dinoBounds";
+import { playTick } from "./keepers";
+import { watchThink } from "./shows";
 import { partnerOf, riderCanFight, riderDefend, riderThink, riderType, trainBoost } from "./riders";
 import { TALL } from "./plants";
 import { roleAct, roleThink } from "./tribe";
@@ -895,7 +897,7 @@ function think(w: World, h: Human) {
   }
 
   // busy with something that finishes on its own
-  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze" || h.state === "relax" || h.state === "dragonCare" || h.state === "sonic" || h.state === "drill" || h.state === "lift") return;
+  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze" || h.state === "relax" || h.state === "dragonCare" || h.state === "sonic" || h.state === "drill" || h.state === "lift" || h.state === "dragonPlay" || h.state === "show" || h.state === "watch") return;
   if (h.state === "hunt" || h.state === "aim" || h.state === "haul" || h.state === "cook" || h.state === "farm" || h.state === "repair") return;
   if (h.state === "carry" || h.state === "walk" || h.state === "explore") {
     if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6 && !(h.riding && w.flags.has("rallyDinos") && role === "guard" && !h.taskId)) return;
@@ -934,6 +936,9 @@ function think(w: World, h: Human) {
   if (!h.child && !h.taskId && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook") && w.tribe.fireAlarm && Math.hypot(h.x - w.tribe.fireAlarm.x, h.y - w.tribe.fireAlarm.y) < 520 && camp.learned.has("firefighting")) {
     if (douseThink(w, h, () => undefined)) return;
   }
+
+  // a dragon show is on: the audience goes to sit round the pit (keepers perform)
+  if (w.dragons.show && (watchThink(w, h) || w.dragons.show.acts.some((id) => w.dragons.owned.find((d) => d.id === id)?.keeper === h.id))) return;
 
   // a Dragon Rider climbs on when their dragon is called out
   if (!h.child && h.dragon && !h.taskId && dragonRiderThink(w, h)) return;
@@ -1270,6 +1275,27 @@ export function updateHuman(w: World, h: Human, dt: number) {
     aloftTick(w, h, dt);
     return;
   }
+  if (h.falling) {
+    // dropped from a dragon's claws: falling (the dragons move the body)
+    h.vx = h.vy = 0;
+    return;
+  }
+  if (h.snatched) {
+    // in a wild dragon's claws: dangling under it, kicking
+    const dr = w.dragons.byId(h.snatched);
+    if (!dr || dr.prey !== h.id) {
+      h.snatched = undefined;
+      h.z = 0;
+    } else {
+      h.x = dr.x;
+      h.y = dr.y + 2;
+      h.z = Math.max(0, dr.z - 26);
+      h.state = "tossed";
+      h.anim += dt * 8;
+      if (w.rng() < dt * 0.6) say(h, pick(w.rng, ["HELP!", "Put me down!", "Aaaah!"]));
+      return;
+    }
+  }
   if (h.riding && passengerMount && passengerMount.owner && h.level === 0 && insideWalls(w, h.x, h.y)) {
     // animals stay outside the walls: the rider hops off at the gate
     const d = passengerMount;
@@ -1476,6 +1502,19 @@ export function updateHuman(w: World, h: Human, dt: number) {
       // heaving a building up (moving.ts moves the crew + the building)
       h.vx = h.vy = 0;
       h.anim += dt * 3;
+      break;
+    case "dragonPlay":
+      playTick(w, h, dt);
+      break;
+    case "show":
+    case "watch":
+      // performing / watching a dragon show (shows.ts runs it)
+      h.vx = h.vy = 0;
+      h.anim += dt * (h.state === "show" ? 4 : 1);
+      if (!w.dragons.show) {
+        go(h, "idle", h.x, h.y);
+        h.think = 0;
+      }
       break;
     case "sleep":
       if (w.rng() < dt * 0.3 && w.inView(h.x, h.y, 50)) w.particles.spawn(P.Note, h.x, h.y, { z: 16, vz: 12, vx: 6, size: 8, max: 1.6, color: "z" });

@@ -930,6 +930,8 @@ test('Old Ways: masonry toughens stone walls, crop rotation speeds farms, late c
 
 test('energy: towers charge up to their store, storms charge faster, condensers pull water from fog', () => {
   const w = civWorld(504, 'resonance');
+  w.rivals.started = true; // no Neanderthals: nothing to spend the charge on
+  w.rivals['arriveT'] = Infinity;
   learn(w, 'resonance', 'copperRes', 'waterAir');
   finish(w, 'energyTower', w.camp.x - 160, w.camp.y + 140);
   finish(w, 'energyTower', w.camp.x - 120, w.camp.y + 200);

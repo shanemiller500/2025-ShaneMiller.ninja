@@ -118,7 +118,7 @@ export type DragonStage = (typeof DRAGON_STAGES)[number];
 
 /* ------------------------------ commands ------------------------------ */
 
-export type DragonCmdKind = "follow" | "stay" | "flyTo" | "land" | "patrol" | "route" | "guard" | "attack" | "retreat" | "fire" | "carry" | "home";
+export type DragonCmdKind = "follow" | "stay" | "flyTo" | "land" | "patrol" | "route" | "guard" | "attack" | "retreat" | "fire" | "carry" | "home" | "volcano";
 
 export const DRAGON_COMMANDS: { id: DragonCmdKind; icon: string; name: string; tip: string; aim: boolean; needs: DragonSkill }[] = [
   { id: "follow", icon: "🚶", name: "Follow", tip: "Stay with its rider (or trainer)", aim: false, needs: "follow" },
@@ -129,6 +129,7 @@ export const DRAGON_COMMANDS: { id: DragonCmdKind; icon: string; name: string; t
   { id: "route", icon: "🧭", name: "Route", tip: "Tap up to 5 waypoints, then fly them in a loop", aim: true, needs: "flight" },
   { id: "guard", icon: "🛡️", name: "Guard", tip: "Hover over a spot and drive off anything hostile", aim: true, needs: "combat" },
   { id: "attack", icon: "⚔️", name: "Attack", tip: "Dive at a hostile creature", aim: true, needs: "combat" },
+  { id: "volcano", icon: "🌋", name: "Volcano Drop", tip: "Snatch a Neanderthal and drop them into the volcano", aim: true, needs: "combat" },
   { id: "fire", icon: "🔥", name: "Fire Breath", tip: "Breathe fire on a spot (sets plants + wood alight!)", aim: true, needs: "fire" },
   { id: "carry", icon: "📦", name: "Carry", tip: "Fly supplies from the stores to a building site", aim: true, needs: "carry" },
   { id: "retreat", icon: "↩️", name: "Retreat", tip: "Break off and fly home", aim: false, needs: "flight" },

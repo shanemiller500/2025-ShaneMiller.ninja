@@ -11,6 +11,7 @@
 import { BREEDS, type DragonBreed } from "../data/dragons";
 import { dragonStats } from "../sim/dragonKeep";
 import type { Dragon, DragonEgg, DragonNest } from "../sim/types";
+import { NEST_JOIN } from "../sim/dragonNests";
 
 /** Old saves / visitors without a breed: the classic three colour schemes. */
 const LEGACY: DragonBreed[] = ["fire", "swift", "heavy"];
@@ -45,8 +46,10 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   if (dr.hit > 0) c.filter = `brightness(${1 + dr.hit * 0.8})`;
 
   const wing = (near: boolean) => {
-    const lift = flying ? flap * 36 : (near ? -4 : -8) + flap * 18;
-    const span = flying ? 1 : 0.52 + hop * 0.35;
+    // flung wide (the clans' altar rite) or folded at rest
+    const spread = dr.spread ?? 0;
+    const lift = flying ? flap * 36 : (near ? -4 : -8) + flap * 18 + spread * (near ? 18 : 26) + Math.sin(t * 9) * spread * 3;
+    const span = flying ? 1 : Math.max(0.52 + hop * 0.35, spread * 1.15);
     const col = near ? L.wing : shade(L.wing, -0.25);
     // arm: shoulder → elbow → wrist
     const sx = -4;
@@ -100,6 +103,17 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
     c.fill();
   };
 
+  // fury: a pulsing red heat-haze round it
+  if (dr.fury) {
+    const pulse = 0.35 + Math.sin(t * 6) * 0.15;
+    const g = c.createRadialGradient(0, -24, 4, 0, -24, 80);
+    g.addColorStop(0, `rgba(255,60,30,${pulse})`);
+    g.addColorStop(1, "rgba(255,60,30,0)");
+    c.fillStyle = g;
+    c.beginPath();
+    c.ellipse(0, -24, 90, 60, 0, 0, Math.PI * 2);
+    c.fill();
+  }
   // far wing (behind everything)
   c.save();
   c.translate(10, -6);
@@ -184,7 +198,7 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   bg.addColorStop(1, shade(L.body, -0.18));
   c.fillStyle = bg;
   c.beginPath();
-  c.ellipse(0, -19, 30, 15 + (young ? 2 : 0), -0.08, 0, Math.PI * 2);
+  c.ellipse(0, -19 + (dr.gravid ? 2 : 0), 30 + (dr.gravid ? 3 : 0), 15 + (young ? 2 : 0) + (dr.gravid ? 4 : 0), -0.08, 0, Math.PI * 2);
   c.fill();
   // belly plates
   c.fillStyle = L.belly;
@@ -300,7 +314,7 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   c.beginPath();
   c.arc(64, -42 + nod, 1.1, 0, Math.PI * 2);
   c.fill();
-  c.fillStyle = dr.owner ? "#9be36b" : "#ffe066";
+  c.fillStyle = dr.fury ? "#ff2a1a" : dr.owner ? "#9be36b" : "#ffe066";
   c.beginPath();
   c.arc(49, -45 + nod, young ? 3 : 2.3, 0, Math.PI * 2);
   c.fill();
@@ -346,6 +360,10 @@ function drawBreath(c: CanvasRenderingContext2D, dr: Dragon, t: number, s: numbe
     const dy = dr.aimY - dr.y + dr.z - my;
     ang = Math.atan2(dy, dx);
     len = Math.min(Math.hypot(dx, dy), 90 + 160 * st.fire);
+  } else if (dr.skyFire) {
+    // straight up into the sky (a happy dragon)
+    ang = -Math.PI / 2 + dr.dir * (0.28 + Math.sin(t * 4) * 0.06);
+    len = 190;
   } else {
     ang = Math.atan2(Math.max(20, dr.z * 0.6), dr.dir * 120);
     len = 150;
@@ -475,22 +493,41 @@ export function drawNest(c: CanvasRenderingContext2D, nest: DragonNest, eggs: Dr
     c.lineTo(32, 3);
     c.stroke();
   }
-  // the bowl of branches
-  c.fillStyle = "#4a3320";
-  c.beginPath();
-  c.ellipse(0, -2, 30, 11, 0, 0, Math.PI * 2);
-  c.fill();
-  c.strokeStyle = "#7a5534";
-  c.lineWidth = 2.4;
-  c.lineCap = "round";
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2;
-    const x = Math.cos(a) * 28;
-    const y = -2 + Math.sin(a) * 10;
+  // the bowl(s) of branches: the second, joined-on nest builds up while the parent is expecting
+  const grow = nest.grow ?? 1;
+  const bowls = nest.size ?? 1;
+  for (let k = 0; k < bowls; k++) {
+    const ox = k * NEST_JOIN.x;
+    const oy = k * NEST_JOIN.y;
+    // the newest bowl is only as far built as the nest has grown
+    const built = k === bowls - 1 ? grow : 1;
+    if (built <= 0.02) continue;
+    if (k > 0) {
+      // the rocky ledge under the joined nest
+      c.fillStyle = hot ? "#3b3233" : "#7d776c";
+      c.beginPath();
+      c.ellipse(ox, oy + 4, 44, 17, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = "#4a3320";
+    c.globalAlpha = Math.min(1, 0.3 + built);
     c.beginPath();
-    c.moveTo(x - Math.sin(a) * 9, y + Math.cos(a) * 3);
-    c.lineTo(x + Math.sin(a) * 9, y - Math.cos(a) * 3);
-    c.stroke();
+    c.ellipse(ox, oy - 2, 30 * Math.min(1, 0.5 + built * 0.5), 11 * Math.min(1, 0.5 + built * 0.5), 0, 0, Math.PI * 2);
+    c.fill();
+    c.globalAlpha = 1;
+    c.strokeStyle = "#7a5534";
+    c.lineWidth = 2.4;
+    c.lineCap = "round";
+    const sticks = Math.round(14 * built);
+    for (let i = 0; i < sticks; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      const x = ox + Math.cos(a) * 28;
+      const y = oy - 2 + Math.sin(a) * 10;
+      c.beginPath();
+      c.moveTo(x - Math.sin(a) * 9, y + Math.cos(a) * 3);
+      c.lineTo(x + Math.sin(a) * 9, y - Math.cos(a) * 3);
+      c.stroke();
+    }
   }
   // bones + treasure
   c.strokeStyle = "#e8dfc9";
@@ -529,5 +566,105 @@ export function drawNest(c: CanvasRenderingContext2D, nest: DragonNest, eggs: Dr
     c.translate(e.x - nest.x, e.y - nest.y);
     drawDragonEgg(c, e, t);
     c.restore();
+  }
+}
+
+/**
+ * The dragon pit, seen from above + in front: a sunken oval arena with stone tiers round it, a sand
+ * floor with scorch marks, banners on poles and an entrance ramp. Origin: the building's base
+ * line (the arena's centre sits a little above it). W, H: footprint in px.
+ */
+export function drawPit(c: CanvasRenderingContext2D, W: number, H: number, t: number, show: boolean) {
+  const cx = 0;
+  const cy = -H * 0.4;
+  const rx = W / 2 - 4;
+  const ry = H * 0.42;
+  // outer stone rim (tiers)
+  for (let k = 0; k < 3; k++) {
+    c.fillStyle = k === 0 ? "#6f6a63" : k === 1 ? "#857f76" : "#9a948a";
+    c.beginPath();
+    c.ellipse(cx, cy, rx - k * 9, ry - k * 7, 0, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = "rgba(40,35,30,0.35)";
+    c.lineWidth = 1;
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2;
+      c.beginPath();
+      c.moveTo(cx + Math.cos(a) * (rx - k * 9), cy + Math.sin(a) * (ry - k * 7));
+      c.lineTo(cx + Math.cos(a) * (rx - k * 9 - 9), cy + Math.sin(a) * (ry - k * 7 - 7));
+      c.stroke();
+    }
+  }
+  // the sunken sand floor, with a shadowed inner wall at the back
+  const fx = rx - 30;
+  const fy = ry - 22;
+  c.fillStyle = "#5a5148";
+  c.beginPath();
+  c.ellipse(cx, cy - 4, fx, fy, 0, Math.PI, 0);
+  c.fill();
+  const g = c.createRadialGradient(cx, cy + 4, 4, cx, cy + 4, fx);
+  g.addColorStop(0, "#e2c48d");
+  g.addColorStop(1, "#c9a56a");
+  c.fillStyle = g;
+  c.beginPath();
+  c.ellipse(cx, cy + 4, fx, fy - 4, 0, 0, Math.PI * 2);
+  c.fill();
+  // scorch marks + claw scratches on the sand
+  c.fillStyle = "rgba(60,40,25,0.25)";
+  for (const [x, y, r] of [[-fx * 0.4, 4, 14], [fx * 0.35, -6, 10], [fx * 0.1, fy * 0.4, 8]] as const) {
+    c.beginPath();
+    c.ellipse(cx + x, cy + y, r, r * 0.5, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.strokeStyle = "rgba(90,60,35,0.35)";
+  c.lineWidth = 1.2;
+  for (let i = 0; i < 3; i++) {
+    c.beginPath();
+    c.moveTo(cx - 20 + i * 5, cy - 10);
+    c.lineTo(cx - 6 + i * 5, cy + 6);
+    c.stroke();
+  }
+  // entrance ramp at the front
+  c.fillStyle = "#b8955e";
+  c.beginPath();
+  c.moveTo(cx - 18, cy + fy);
+  c.lineTo(cx + 18, cy + fy);
+  c.lineTo(cx + 24, cy + ry + 4);
+  c.lineTo(cx - 24, cy + ry + 4);
+  c.closePath();
+  c.fill();
+  // banners on poles round the rim (they flutter faster during a show)
+  const cols = ["#b8352b", "#e0b43a", "#3a6fb0", "#3f7a4a"];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.5;
+    if (Math.sin(a) > 0.75) continue; // keep the entrance clear
+    const px = cx + Math.cos(a) * (rx - 4);
+    const py = cy + Math.sin(a) * (ry - 3);
+    c.strokeStyle = "#5e3f24";
+    c.lineWidth = 2.2;
+    c.beginPath();
+    c.moveTo(px, py);
+    c.lineTo(px, py - 34);
+    c.stroke();
+    const flap = Math.sin(t * (show ? 8 : 3) + i) * 2;
+    c.fillStyle = cols[i % cols.length];
+    c.beginPath();
+    c.moveTo(px, py - 34);
+    c.lineTo(px + 14, py - 30 + flap);
+    c.lineTo(px, py - 24);
+    c.closePath();
+    c.fill();
+  }
+  if (show) {
+    // torches lit round the arena for the show
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const px = cx + Math.cos(a) * (rx - 14);
+      const py = cy + Math.sin(a) * (ry - 10);
+      c.fillStyle = `rgba(255,170,60,${0.7 + Math.sin(t * 12 + i) * 0.2})`;
+      c.beginPath();
+      c.ellipse(px, py - 8, 4, 7, 0, 0, Math.PI * 2);
+      c.fill();
+    }
   }
 }

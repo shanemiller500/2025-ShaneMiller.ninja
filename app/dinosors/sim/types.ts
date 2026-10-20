@@ -247,6 +247,8 @@ export interface Dino {
   muddy: number;
   /** marching on the cave camp */
   raider: boolean;
+  /** tamed by a Neanderthal clan (its id): lives in their pen, fights in their raids */
+  clan?: number;
   /** evolution tier: 0 normal, 1 tough, 2 alpha */
   tier: number;
   /** working down the mine as a pack animal (parked + hidden on the surface; see packs.ts) */
@@ -361,7 +363,12 @@ export type HumanState =
   /** a dragon slayer drilling (see dragonRaid.ts) */
   | "drill"
   /** heaving a building up / setting it down (see moving.ts) */
-  | "lift";
+  | "lift"
+  /** a keeper playing with their dragon (see keepers.ts) */
+  | "dragonPlay"
+  /** a keeper directing their dragon in a show / someone watching it (see shows.ts) */
+  | "show"
+  | "watch";
 
 export type Resource =
   | "stick"
@@ -401,7 +408,7 @@ export type Resource =
   | "copperBar";
 
 /** What a cave person does. "auto" lets the tribe decide. */
-export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner" | "trainer" | "dragonSlayer" | "eggRunner";
+export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner" | "trainer" | "dragonSlayer" | "eggRunner" | "dragonKeeper";
 
 export type HumanOrder = { kind: "hunt"; id: number } | { kind: "guard"; x: number; y: number; top?: boolean } | null;
 
@@ -500,6 +507,10 @@ export interface Human {
   slayer?: number;
   /** carrying an ultrasonic fire emitter from the fire station */
   sonic?: boolean;
+  /** snatched by a wild dragon (its id): dangling under it */
+  snatched?: number;
+  /** on the way to pick up this dragon egg (to carry it to the incubator) */
+  eggFor?: number;
   /** where the emitter is pointed */
   aim?: { x: number; y: number };
   seat?: number;
@@ -515,14 +526,36 @@ export interface Human {
   captive?: number;
   /** walking out with this person to protect them (packs) */
   escort?: number;
+  /** dropped by a dragon: falling through the air (dragons.ts moves the body) */
+  falling?: boolean;
 }
 
 /* ------------------------------ Neanderthals ------------------------------ */
 
 /** Basic weapons only: Neanderthals never invent bows, metal or energy weapons. */
-export type BruteWeapon = "club" | "axe" | "spear" | "rock" | "sling";
+export type BruteWeapon = "club" | "axe" | "spear" | "rock" | "sling" | "catapult";
 
-export type BruteState = "idle" | "wander" | "walk" | "sleep" | "fight" | "hunt" | "forage" | "bash" | "carry" | "flee" | "home" | "loot" | "rally" | "spy" | "lurk";
+export type BruteState = "idle" | "wander" | "walk" | "sleep" | "fight" | "hunt" | "forage" | "bash" | "carry" | "flee" | "home" | "loot" | "rally" | "spy" | "lurk" | "siege"
+  // clan life (clanLife.ts): gathering bones + wood, building, sparring, digging traps, fetching someone caught;
+  // the dragon rite (clanRite.ts): dancing round the altar, jumping for joy
+  | "gather" | "build" | "train" | "trap" | "collect" | "dance" | "cheer"
+  // taming a wild dino for the clan's pen
+  | "tame";
+
+/** What a clan builds up at home (clanLife.ts). */
+export type ClanBuild = "longhouse" | "smokehouse" | "boneRack" | "trainingRing" | "dragonAltar" | "dinoPen";
+
+/** A Neanderthal pit trap dug where our people walk. */
+export interface ClanTrap {
+  id: number;
+  clan: number;
+  x: number;
+  y: number;
+  /** seconds it has been dug */
+  t: number;
+  /** who fell in (human id; 0 = still hidden) */
+  caught: number;
+}
 
 /** A Neanderthal: bigger + stronger than our people, not as clever. CPU-run. */
 export interface Brute {
@@ -569,6 +602,20 @@ export interface Brute {
   lootKind?: Resource;
   /** hiding in the grass waiting to jump on our people */
   ambush?: boolean;
+  /** the colour of the band they were born into (a union's members keep theirs) */
+  tint?: string;
+  /** snatched by a wild dragon (its id) */
+  snatched?: number;
+  /** dropped by a dragon: falling through the air (dragons.ts moves the body) */
+  falling?: boolean;
+  /** 0..1 fighting skill from sparring at the clan's training ring */
+  skill?: number;
+  /** bones / wood being carried home for the clan's building */
+  haul?: { r: "bones" | "wood"; n: number };
+  /** the site (gather) / project (build) it's working on */
+  job?: string;
+  /** seconds spent on the job at hand */
+  work?: number;
   bubble: { text: string; t: number } | null;
 }
 
@@ -577,6 +624,8 @@ export interface Clan {
   id: number;
   name: string;
   color: string;
+  /** every colour it flies: its own + each clan that united with it (see clanTowns.ts) */
+  colors?: string[];
   x: number;
   y: number;
   food: number;
@@ -589,6 +638,10 @@ export interface Clan {
   campTier?: number;
   /** Work contributed by adults at home toward the next camp expansion. */
   campWork?: number;
+  /** A shore camp with a fishing trap area. */
+  sea?: boolean;
+  /** Seconds until the shore traps bring in fish. */
+  fishT?: number;
   /** how cunning they've become from spying on us: 1 ambushes, 2 shields, 3 raid our stores + take kids */
   smarts?: number;
   /** spy reports brought home */
@@ -596,6 +649,22 @@ export interface Clan {
   /** seconds until they send the next spy / ambush party */
   spyT?: number;
   ambushT?: number;
+  /** building stores (clanLife.ts) */
+  bones?: number;
+  wood?: number;
+  /** what's been built, and its level */
+  builds?: Partial<Record<ClanBuild, number>>;
+  /** work done on the project under way */
+  buildWork?: number;
+  /** a wild dragon that's been fed an offering: it leaves this clan alone until favorT runs out */
+  favor?: number;
+  favorT?: number;
+  /** seconds until the next offering to the dragon */
+  riteT?: number;
+  /** seconds until the next trap is dug */
+  trapT?: number;
+  /** fresh blood on the dragon altar (fades) */
+  altarBlood?: number;
 }
 
 export type ItemKind = "meat" | "fish" | "fruit" | "berries" | "poop" | "fossil" | "stick" | "stone" | "bones" | "carcass";
@@ -818,6 +887,8 @@ export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" |
   | "roost" | "hatchery" | "dragonYard" | "feedPit"
   // sonic firefighting (see sonic.ts)
   | "fireStation"
+  // the dragons' home + show arena (see shows.ts)
+  | "dragonPit"
   // the Old Ways' last-resort project
   | "shelterDeep"
   | "refinery"
@@ -898,8 +969,13 @@ export interface ResNode {
 }
 
 export type DragonState = "arrive" | "circle" | "hunt" | "strafe" | "land" | "eat" | "flee" | "leave"
-  // wild dragons that live here: at the nest, flying home, driving off intruders, chasing an egg thief
-  | "perch" | "home" | "defend" | "chase"
+  // wild dragons that live here: at the nest, flying home, driving off intruders, chasing an egg thief,
+  // fetching branches for the nest, swooping on a person, carrying them off
+  | "perch" | "home" | "defend" | "chase" | "fetch" | "snatch" | "carry"
+  // called down to a clan's altar to take an offering (clanRite.ts)
+  | "offering"
+  // a wild parent coming to take its stolen baby back
+  | "reclaim"
   // tamed dragons (see dragonKeep.ts)
   | "idle" | "sleep" | "play" | "walk" | "fly" | "hover";
 
@@ -937,6 +1013,14 @@ export interface DragonNest {
   layT: number;
   /** seconds until a new parent moves in (after one is driven off) */
   emptyT: number;
+  /** bowls in the nest: 1, or 2 once it holds more than 3 eggs (a second nest joined on) */
+  size?: number;
+  /** the parent is expecting: seconds until it lays */
+  gravid?: number;
+  /** how many eggs are coming */
+  clutch?: number;
+  /** 0..1 how far the nest is built (it builds while expecting) */
+  grow?: number;
 }
 
 /** A dragon egg: in a nest, carried, on the ground, or incubating at camp. */
@@ -959,6 +1043,8 @@ export interface DragonEgg {
   rare: boolean;
   /** >0 while hatching (the crack animation), seconds */
   hatchT: number;
+  /** the person keeping it (warming, turning, then raising what hatches) */
+  keeper?: number;
 }
 
 export interface Dragon {
@@ -1035,6 +1121,42 @@ export interface Dragon {
   restT?: number;
   /** seconds of play / a short hop (the art bounces it) */
   hop?: number;
+  /** its keeper: raised it from the egg, plays with it, puts it in shows (see keepers.ts) */
+  keeper?: number;
+  /** a tamed dragon hatched from an egg stolen from this nest */
+  fromNest?: number;
+  /** wild parent: expecting eggs (it fetches branches for the nest) */
+  gravid?: boolean;
+  /** strafing this Neanderthal clan's town instead of ours */
+  atClan?: number;
+  /** answering a clan's offering at its altar (clan id) */
+  riteClan?: number;
+  /** a wild youngster raised at its parents' nest (it grows up there, and fights beside them) */
+  young?: boolean;
+  /** seconds until a parent tries to win its stolen baby back */
+  reclaimT?: number;
+  /** 0..1 battle-hardened: every fight won makes a war dragon bigger + stronger */
+  vet?: number;
+  /** seconds since it was last hurt (wild dragons heal once they're left alone) */
+  calmT?: number;
+  /** seconds until it next weighs up whether it can win this fight */
+  oddsT?: number;
+  /** 0..1 wings flung wide (the rite's roar) */
+  spread?: number;
+  /** breathing its fire straight up into the sky */
+  skyFire?: boolean;
+  /** its prey is a Neanderthal (not one of ours) */
+  preyBrute?: boolean;
+  /** wild parent whose stolen egg hatched: bigger, 50x tougher, fire that melts stone */
+  fury?: boolean;
+  /** seconds until its next raging attack on the town */
+  furyT?: number;
+  /** raging attacks made so far (it calms after three) */
+  waves?: number;
+  /** on a raging attack right now */
+  waveOn?: boolean;
+  /** the person it has snatched (human id) */
+  prey?: number;
 }
 
 export type ProjectileKind = "spear" | "arrow" | "bolt" | "scorpion" | "beam";

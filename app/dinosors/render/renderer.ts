@@ -26,7 +26,7 @@ import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawFish, drawFlame, d
 import { ROLES } from "../data/facts";
 import { BUILDINGS, HOUSING } from "../data/colony";
 import { drawBar, drawBones, drawBuilding, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
-import { drawDragon, drawDragonEgg, drawNest } from "./dragonArt";
+import { drawDragon, drawDragonEgg, drawNest, drawPit } from "./dragonArt";
 import { clusters, drawField, drawPaddock, drawSeatRing } from "./mergedArt";
 import { RING_R, SHADE, shadeCentre } from "../sim/shade";
 import { moveSpotOk, type MoveRef } from "../sim/moving";
@@ -40,7 +40,10 @@ import { drawBarricade, drawCarcass, drawSpikes, drawTannery, drawTotem } from "
 import { carcassStage, harvested } from "../sim/carcass";
 import { HELMET_BY_ID, OUTFIT_BY_ID } from "../data/colony";
 import { drawRefinery } from "./metalArt";
-import { drawBrute, drawBruteMissile, drawClanCamp } from "./bruteArt";
+import { drawBrute, drawCatapult, drawBruteMissile, drawClanCamp } from "./bruteArt";
+import { drawClanBuilding, drawClanTrap } from "./clanLifeArt";
+import { siteOf } from "../sim/clanLife";
+import type { Clan, ClanBuild } from "../sim/types";
 import { TerrainRenderer } from "./terrainRenderer";
 import { drawEruptionColumn, drawGhost, drawPyroclastic } from "./civArt";
 import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
@@ -102,6 +105,8 @@ const K_BMISSILE = 21;
 const K_MINE_LOAD = 22;
 const K_NEST = 23;
 const K_DEGG = 24;
+const K_CBUILD = 40;
+const K_CTRAP = 41;
 
 interface Drop {
   x: number;
@@ -290,7 +295,7 @@ export class Renderer {
     const col = w.colony;
     for (let i = 0; i < col.buildings.length; i++) {
       const b = col.buildings[i];
-      if (b.kind === "path" || b.kind === "bridge" || b.kind === "pen" || b.kind === "trap" || (b.kind === "seatRing" && b.built >= 1)) continue;
+      if (b.kind === "path" || b.kind === "bridge" || b.kind === "pen" || b.kind === "trap" || ((b.kind === "seatRing" || b.kind === "dragonPit") && b.built >= 1)) continue;
       const by = b.lift ? b.lift.y + 4 : b.y;
       if ((b.lift?.x ?? b.x) > x0 - 80 && (b.lift?.x ?? b.x) < x1 + 80 && by > y0 && by < y1 + 80) list.push({ y: by - 1, k: K_BUILDING, i });
     }
@@ -324,6 +329,22 @@ export class Renderer {
     for (let i = 0; i < rv.brutes.length; i++) {
       const b = rv.brutes[i];
       if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1 + 40) list.push({ y: b.y, k: K_BRUTE, i });
+    }
+    // what they've built at home, and their hidden pits
+    this.cbs.length = 0;
+    for (const cl of rv.clans) {
+      for (const [kind, lv] of Object.entries(cl.builds ?? {}) as [ClanBuild, number][]) {
+        if (!lv) continue;
+        const s = siteOf(cl, kind);
+        if (s.x > x0 - 140 && s.x < x1 + 140 && s.y > y0 - 30 && s.y < y1 + 140) {
+          list.push({ y: s.y, k: K_CBUILD, i: this.cbs.length });
+          this.cbs.push({ clan: cl, kind, lv, x: s.x, y: s.y });
+        }
+      }
+    }
+    for (let i = 0; i < rv.traps.length; i++) {
+      const tr = rv.traps[i];
+      if (tr.x > x0 && tr.x < x1 && tr.y > y0 && tr.y < y1 + 20) list.push({ y: tr.y - 30, k: K_CTRAP, i });
     }
     for (let i = 0; i < rv.missiles.length; i++) {
       const m = rv.missiles[i];
@@ -572,7 +593,24 @@ export class Renderer {
           c.save();
           c.translate(b.x, b.y - b.z);
           const bc = w.rivals.clan(b.clan);
-          drawBrute(c, b, this.t, bc?.color ?? "#c0392b", (bc?.smarts ?? 0) >= 2);
+          if (b.weapon === "catapult") drawCatapult(c, b, bc?.colors?.length ? bc.colors : [bc?.color ?? "#c0392b"], this.t);
+          else drawBrute(c, b, this.t, b.tint ?? bc?.color ?? "#c0392b", (bc?.smarts ?? 0) >= 2);
+          c.restore();
+          break;
+        }
+        case K_CBUILD: {
+          const cb = this.cbs[it.i];
+          c.save();
+          c.translate(cb.x, cb.y);
+          drawClanBuilding(c, cb.clan, cb.kind, cb.lv, this.t, night > 0.5);
+          c.restore();
+          break;
+        }
+        case K_CTRAP: {
+          const tr = w.rivals.traps[it.i];
+          c.save();
+          c.translate(tr.x, tr.y);
+          drawClanTrap(c, tr);
           c.restore();
           break;
         }
@@ -1118,6 +1156,8 @@ export class Renderer {
 
   /** dragons visible this frame (wild + ours), indexed by the depth sort */
   private drs: Dragon[] = [];
+  /** clan buildings in view this frame */
+  private cbs: { clan: Clan; kind: ClanBuild; lv: number; x: number; y: number }[] = [];
 
   /** A dragon (selection ring, the dragon, then whoever is riding it). */
   private drawDragonAt(c: CanvasRenderingContext2D, dr: Dragon, ov: Overlay, weapon: WeaponLook) {
@@ -1139,6 +1179,40 @@ export class Renderer {
     c.restore();
     const h = dr.rider ? this.world.humans.find((x) => x.id === dr.rider && x.aloft === dr.id) : null;
     if (h) this.drawPerson(c, h, ov, weapon);
+  }
+
+  /** A clan war-dino: a crude hide-and-bone harness daubed in the clan's colours, a skull on a pole. */
+  private clanHarness(c: CanvasRenderingContext2D, dn: Dino, L: number, fly: boolean) {
+    const cl = this.world.rivals.clan(dn.clan!);
+    if (!cl) return;
+    const cols = cl.colors?.length ? cl.colors : [cl.color];
+    const y = fly ? -L * 0.12 : -L * 0.42;
+    c.save();
+    c.scale(dn.dir, 1);
+    c.fillStyle = "#7b5a3a";
+    c.strokeStyle = "#24170e";
+    c.lineWidth = Math.max(1, L * 0.012);
+    c.beginPath(); c.ellipse(0, y + L * 0.03, L * 0.16, L * 0.05, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+    cols.forEach((col, i) => {
+      c.fillStyle = col;
+      c.fillRect(-L * 0.12, y + L * 0.01 + i * L * 0.016, L * 0.24, L * 0.014);
+    });
+    // a bone strap round the chest
+    c.strokeStyle = "#e9e0c8";
+    c.lineWidth = Math.max(1.4, L * 0.018);
+    c.beginPath(); c.moveTo(L * 0.14, y); c.lineTo(L * 0.18, y + L * 0.2); c.stroke();
+    // skull on a short pole
+    const px = -L * 0.16;
+    const top = y - L * 0.2 - 4;
+    c.strokeStyle = "#5e3f24";
+    c.lineWidth = Math.max(1.2, L * 0.012);
+    c.beginPath(); c.moveTo(px, y); c.lineTo(px, top); c.stroke();
+    c.fillStyle = "#e9e0c8";
+    c.beginPath(); c.arc(px, top, Math.max(2.5, L * 0.03), 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#24170e";
+    c.fillRect(px - L * 0.012, top - L * 0.006, L * 0.008, L * 0.008);
+    c.fillRect(px + L * 0.004, top - L * 0.006, L * 0.008, L * 0.008);
+    c.restore();
   }
 
   private drawDinoAt(c: CanvasRenderingContext2D, dn: Dino, ov: Overlay) {
@@ -1181,6 +1255,7 @@ export class Renderer {
       c.stroke();
     }
     drawDino(c, def, L, dn.dir, pose);
+    if (dn.clan) this.clanHarness(c, dn, L, def.move === "fly");
     if (dn.work?.partner && !isBaby(dn)) {
       // a Dino Rider team: a riding blanket + the team pennant on a pole at the back of the saddle
       const fly = def.move === "fly";
@@ -2231,12 +2306,12 @@ export class Renderer {
     // …and over Neanderthals, plus a name plate over each clan camp
     for (const b of w.rivals.brutes) {
       if (!b.bubble || b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
-      this.speech(c, b.x, b.y - 46, b.bubble.text, inv, Math.min(1, b.bubble.t * 3));
+      this.speech(c, b.x, b.y - b.z - 46, b.bubble.text, inv, Math.min(1, b.bubble.t * 3));
     }
     for (const cl of w.rivals.clans) {
       if (cl.x < x0 - 100 || cl.x > x1 + 100 || cl.y < y0 || cl.y > y1 + 80) continue;
       const held = w.rivals.captives(w, cl.id).length;
-      this.speech(c, cl.x + 44, cl.y - 72, `🪓 ${cl.name} clan${held ? ` · ${held} captive${held > 1 ? "s" : ""}` : ""}`, inv * 0.9, 1);
+      this.speech(c, cl.x + 44, cl.y - 72, `🪓 ${cl.name} ${cl.sea ? "Sea clan" : "clan"}${held ? ` · ${held} captive${held > 1 ? "s" : ""}` : ""}`, inv * 0.9, 1);
     }
     // crafting progress
     const cr = w.camp.crafting;
@@ -2312,7 +2387,7 @@ export class Renderer {
       c.font = `700 ${11 * inv}px ui-rounded, system-ui, sans-serif`;
       c.textAlign = "center";
       c.fillStyle = "rgba(255,255,255,0.9)";
-      c.fillText(dr.name, dr.x, top - 6);
+      c.fillText(dr.fury ? `😡 ${dr.name} · RAGING` : dr.name, dr.x, top - 6);
     }
     // Scorpions: crew + reload ring
     for (const s of w.colony.scorpions) {
@@ -2556,6 +2631,18 @@ export class Renderer {
       }
     }
     for (const b of w.colony.buildings) {
+      if (b.kind === "dragonPit" && b.built >= 1) {
+        // the dragons' arena lies flat: dragons, keepers + the crowd stand on and round it
+        const def = BUILDINGS.dragonPit;
+        const px = b.lift?.x ?? b.x;
+        const py = (b.lift?.y ?? b.y) - (b.lift?.z ?? 0);
+        if (px < x0 - 200 || px > x1 + 200 || py < y0 - 160 || py > y1 + 160) continue;
+        c.save();
+        c.translate(px, py);
+        drawPit(c, def.w * TILE, def.h * TILE, this.t, w.dragons.show?.pit === b.id);
+        c.restore();
+        continue;
+      }
       if (b.kind === "seatRing" && b.built >= 1) {
         // log seats round the campfire, flat under the fire + the people sitting on them
         const ctr = shadeCentre(w, b);

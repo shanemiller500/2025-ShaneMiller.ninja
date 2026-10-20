@@ -4,6 +4,7 @@
 /*  territory > play. `think` picks a state (throttled, cheaper off-   */
 /*  screen); `act` runs the current state every frame.                 */
 /* ------------------------------------------------------------------ */
+import { clanDinoThink } from "./clanLife";
 import { FACTS } from "../data/facts";
 import { sp } from "../data/species";
 import { emote, isBaby, scaleOf, setState, sizeOf, walkable } from "./dinos";
@@ -1301,6 +1302,8 @@ export function thinkDino(w: World, d: Dino) {
     setState(d, def.move === "walk" ? "wander" : d.state, t.x, t.y);
     return;
   }
+  // a Neanderthal clan's tamed beast lives in their pen (clanLife.ts)
+  if (d.clan && !d.raider && clanDinoThink(w, d)) return;
   if (d.raider) {
     thinkRaider(w, d);
     return;

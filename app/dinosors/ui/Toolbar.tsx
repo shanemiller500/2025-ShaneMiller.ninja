@@ -1,5 +1,6 @@
 "use client";
 
+import { BREED_LIST } from "../data/dragons";
 import { type CivPath, type CivTechId } from "../data/civ";
 import { memo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -94,11 +95,25 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
             >
               {(open === "dino" || open === "egg") && (
                 <SpeciesGrid
-                  value={open === "dino" ? tool.species : tool.egg}
+                  value={open === "dino" ? tool.species : tool.dragonEgg ? ("" as typeof tool.egg) : tool.egg}
                   unlocked={unlocked}
                   egg={open === "egg"}
-                  onPick={(s) => pick(open === "dino" ? "species" : "egg", s)}
+                  onPick={(s) => { if (open === "egg") setTool({ dragonEgg: null }); pick(open === "dino" ? "species" : "egg", s); }}
                 />
+              )}
+              {open === "egg" && (
+                <div className="mt-2 border-t border-white/10 pt-2">
+                  <p className="px-1 pb-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/75">🐉 Dragon eggs (tap near a nest to add to it)</p>
+                  <div className="flex flex-wrap justify-center gap-1.5">
+                    {BREED_LIST.map((b) => (
+                      <button key={b.id} type="button" onClick={() => setTool({ id: "egg", dragonEgg: b.id })} aria-pressed={tool.dragonEgg === b.id}
+                        className={`flex min-h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition active:scale-95 ${tool.dragonEgg === b.id ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
+                        <span className="inline-block h-4 w-3 rounded-[50%]" style={{ background: b.look.egg, boxShadow: `inset -2px -2px 0 ${b.look.spots}` }} />
+                        {b.name.replace(" Dragon", "")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
               {open === "food" && <Options opts={FOOD_OPTS} value={tool.food} onPick={(v) => pick("food", v)} />}
               {open === "plant" && <Options opts={PLANT_OPTS} value={tool.plant} onPick={(v) => pick("plant", v)} />}

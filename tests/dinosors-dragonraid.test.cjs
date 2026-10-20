@@ -54,6 +54,8 @@ test('dragon hunting: a real invention with two new jobs and their own outfits',
 
 test('a 10-strong raid: slayers drive the parent off, runners bring the eggs home', () => {
   const w = world(5103);
+  w.rivals.started = true; // no Neanderthal bands wandering through this one
+  w.rivals['arriveT'] = Infinity;
   nests.seedNests(w);
   const n = w.dragons.nests[0];
   n.x = w.camp.x + 700;

@@ -26,6 +26,7 @@ import { emote, setState, sizeOf } from "./dinos";
 import { go, say } from "./humans";
 import { hurtHuman } from "./injury";
 import { eggWarmth } from "./dragonNests";
+import { pitOf, pitSpot } from "./shows";
 import { P } from "./particles";
 import { pick } from "./rng";
 import { TILE, T, WORLD_H, WORLD_W, type Brute, type Dino, type Dragon, type DragonCmd, type Human, type Resource } from "./types";
@@ -40,16 +41,18 @@ export const dragonSkill = sk;
 /** Everything that grows with the dragon. */
 export function dragonStats(dr: Dragon) {
   const def = BREEDS[dr.breed ?? "fire"];
-  const g = dr.owner ? dr.growth ?? 0 : 1;
+  const g = dr.owner || dr.young ? dr.growth ?? 0 : 1;
+  // battle-hardened war dragons keep growing: up to half as big again, much tougher
+  const vet = dr.vet ?? 0;
   return {
     def,
-    /** drawing scale */
-    scale: def.size * (0.38 + 0.62 * g),
-    speed: def.speed * (0.45 + 0.55 * g),
-    maxHp: Math.round(def.hp * (0.22 + 0.78 * g)),
+    /** drawing scale (a furious wild parent swells to half again its size) */
+    scale: def.size * (0.38 + 0.62 * g) * (dr.fury ? 1.5 : 1) * (1 + vet * 0.45),
+    speed: def.speed * (0.45 + 0.55 * g) * (1 + vet * 0.1),
+    maxHp: Math.round(def.hp * (0.22 + 0.78 * g) * (1 + vet * 0.7)),
     carry: Math.floor(def.carry * Math.min(1, g * 1.15) * (dr.owner ? sk(dr, "carry") : 1)),
     /** fire strength 0..~1.4 */
-    fire: def.fire * Math.min(1, g * 1.15) * (dr.owner ? 0.35 + 0.65 * sk(dr, "fire") : 1),
+    fire: def.fire * Math.min(1, g * 1.15) * (dr.owner ? 0.35 + 0.65 * sk(dr, "fire") : 1) * (1 + vet * 0.3),
   };
 }
 
@@ -153,6 +156,9 @@ export function unbondDragon(w: World, dr: Dragon) {
 
 /** Who should become this dragon's rider: a fit grown-up, fighters first. */
 export function chooseDragonRider(w: World, dr: Dragon): Human | null {
+  // its keeper raised it: they're the one who flies it
+  const keeper = dr.keeper ? w.humans.find((h) => h.id === dr.keeper && !h.child && !h.stranger && !h.captive && h.state !== "down") : null;
+  if (keeper && !dragonOf(w, keeper)) return keeper;
   const pref = (h: Human) => {
     const r = w.tribe.roleOf(h);
     return (r === "guard" || r === "hunter" ? 0 : r === "trainer" ? 300 : 150) + (h.partner ? 200 : 0) + Math.hypot(h.x - dr.x, h.y - dr.y) * 0.2 - h.hp * 100;
@@ -218,10 +224,12 @@ export function aloftTick(w: World, h: Human, dt: number) {
 
 /* ------------------------------ commands ------------------------------ */
 
-const FLIGHT_CMDS = new Set<DragonCmdKind>(["flyTo", "patrol", "route", "guard", "attack", "fire", "carry"]);
+const FLIGHT_CMDS = new Set<DragonCmdKind>(["flyTo", "patrol", "route", "guard", "attack", "fire", "carry", "volcano"]);
+/** orders that are a fight (a hurt dragon breaks off and heals instead) */
+const FIGHT_CMDS = new Set<DragonCmdKind>(["patrol", "route", "guard", "attack", "volcano"]);
 const NEEDS: Record<DragonCmdKind, DragonSkill> = {
   follow: "follow", stay: "trust", flyTo: "flight", land: "flight", patrol: "flight", route: "flight", guard: "combat",
-  attack: "combat", fire: "fire", carry: "carry", retreat: "flight", home: "trust",
+  attack: "combat", fire: "fire", carry: "carry", retreat: "flight", home: "trust", volcano: "combat",
 };
 
 /** Give a tamed dragon an order. Returns why not (or null when it obeys). */
@@ -236,6 +244,7 @@ export function commandDragon(w: World, dr: Dragon, kind: DragonCmdKind, o: { x?
   if ((FLIGHT_CMDS.has(kind) || kind === "retreat") && (dr.stamina ?? 1) < 0.2) return `${dr.name} is too tired to fly. Let it rest at its roost.`;
   if (kind === "carry" && dragonStats(dr).carry < 1) return `${dr.name} is too small to carry anything yet.`;
   if (kind === "route" && (!o.pts || o.pts.length < 2)) return "Pick at least two waypoints.";
+  if (kind === "volcano" && (dr.growth ?? 0) < 0.55) return `${dr.name} is too small to carry a Neanderthal yet.`;
   dr.cmd = { kind, x: o.x ?? dr.x, y: o.y ?? dr.y, target: o.target, pts: o.pts, i: 0, t: 0 };
   dr.foe = undefined;
   emote2(w, dr, kind);
@@ -245,7 +254,7 @@ export function commandDragon(w: World, dr: Dragon, kind: DragonCmdKind, o: { x?
 function emote2(w: World, dr: Dragon, kind: DragonCmdKind) {
   const h = dragonRiderOf(w, dr);
   if (h && h.aloft === dr.id) {
-    const line: Partial<Record<DragonCmdKind, string>> = { fire: "Breathe fire!", attack: "Get them!", patrol: "Let's look around!", flyTo: "Fly!", land: "Down we go!", retreat: "Back, back!", home: "Home, boy!", guard: "Watch this spot!" };
+    const line: Partial<Record<DragonCmdKind, string>> = { fire: "Breathe fire!", attack: "Get them!", volcano: "Grab that one!", patrol: "Let's look around!", flyTo: "Fly!", land: "Down we go!", retreat: "Back, back!", home: "Home, boy!", guard: "Watch this spot!" };
     if (line[kind]) say(h, line[kind]!);
   }
 }
@@ -368,6 +377,13 @@ function landAt(w: World, dr: Dragon, tx: number, ty: number, dt: number) {
 
 /** Where it rests: its roost (any roost), else the incubation shelter, else camp. */
 export function roostOf(w: World, dr: Dragon) {
+  // the dragon pit is home (each dragon has its own spot in the arena)
+  const pit = pitOf(w);
+  if (pit) {
+    const n = w.dragons.owned.indexOf(dr);
+    const s = pitSpot(pit, Math.max(0, n), Math.max(1, w.dragons.owned.length));
+    return { x: s.x, y: s.y, roost: true };
+  }
   const all = w.colony.buildings.filter((b) => b.kind === "roost" && b.built >= 1);
   const mine = all.find((b) => b.id === dr.roost) ?? all[w.dragons.owned.indexOf(dr) % Math.max(1, all.length)];
   if (mine) {
@@ -449,10 +465,50 @@ function engage(w: World, dr: Dragon, foe: Foe, dt: number, auto: boolean) {
       foe.d.fear = 1;
       emote(foe.d, "😱", 1);
       if (sp(foe.d.species).move === "walk" && foe.d.state !== "flee") setState(foe.d, "flee", foe.d.x + (foe.d.x - dr.x) * 3, foe.d.y + (foe.d.y - dr.y) * 3);
-    } else if (foe.kind === "brute") w.rivals.hit(w, foe.b, 0.5 * power, dr.x, dr.y, false, "dragon");
-    else w.dragons.hit(w, foe.dr, 180 * power);
+    } else if (foe.kind === "brute") {
+      // jaws + claws: a Neanderthal (or their catapult) doesn't last long
+      const b = foe.b;
+      w.rivals.hit(w, b, (b.weapon === "catapult" ? 0.7 : 0.45) * power * (1 + (dr.vet ?? 0) * 0.5), dr.x, dr.y, true, "dragon");
+      if (!w.rivals.brutes.includes(b)) {
+        tornApart(w, b.x, b.y, b.weapon === "catapult");
+        w.toast("🐉", `${dr.name} tore ${b.weapon === "catapult" ? "the clan's catapult" : `${b.name} the Neanderthal`} apart!`, b.x, b.y);
+        harden(w, dr, 0.05);
+      }
+    } else {
+      w.dragons.hit(w, foe.dr, 180 * power * (1 + (dr.vet ?? 0) * 0.5));
+      if (!w.dragons.list.includes(foe.dr)) harden(w, dr, 0.15);
+    }
+    if (foe.kind === "dino" && foe.d.health <= 0) {
+      tornApart(w, foe.d.x, foe.d.y, false);
+      harden(w, dr, 0.03);
+    }
   }
   return foeById(w, foe.kind === "dino" ? foe.d.id : foe.kind === "brute" ? foe.b.id : foe.dr.id) !== null;
+}
+
+/** Blood + bits (or, for a catapult, splinters + rope). */
+function tornApart(w: World, x: number, y: number, timber: boolean) {
+  if (timber) {
+    w.particles.burst(P.Crumb, x, y, 26, 110, { z: 20, vz: 120, g: 300, size: 4, max: 1.2, color: "#8a6238" });
+    w.particles.burst(P.Rock, x, y, 8, 70, { z: 10, size: 5, max: 0.9, color: "#8f877a" });
+    w.sfx("crack", x, y, 1.1, 0.6);
+    return;
+  }
+  w.particles.burst(P.Splash, x, y, 24, 120, { z: 18, vz: 130, g: 320, size: 4, max: 1, color: "#b3121e" });
+  w.particles.burst(P.Crumb, x, y, 14, 90, { z: 14, vz: 100, g: 280, size: 3, max: 1.1, color: "#7d0a12" });
+  w.sfx("crack", x, y, 0.9, 0.8);
+}
+
+/** Every fight it wins, a war dragon gets a little bigger + stronger. */
+export function harden(w: World, dr: Dragon, n: number) {
+  if (!dr.owner) return;
+  const before = dr.vet ?? 0;
+  dr.vet = Math.min(1, before + n);
+  if (Math.floor(before * 4) !== Math.floor(dr.vet * 4)) {
+    newDragonStats(dr);
+    dr.hp = Math.min(dr.maxHp, dr.hp + dr.maxHp * 0.2);
+    w.toast("🐉", dr.vet >= 1 ? `${dr.name} is a legend of the skies: a huge, scarred battle dragon!` : `${dr.name} is battle-hardened: bigger and stronger after every fight (${Math.round(dr.vet * 100)}%).`, dr.x, dr.y);
+  }
 }
 
 /* ------------------------------ fire breath ------------------------------ */
@@ -580,6 +636,11 @@ function stepOwned(w: World, dr: Dragon, dt: number) {
   dr.restT = Math.max(0, (dr.restT ?? 0) - dt);
   if (dr.cmd) dr.cmd.t += dt;
   grow(w, dr, dt);
+  // on stage: the show moves it (shows.ts)
+  if (w.dragons.show?.acts.includes(dr.id)) {
+    dr.breath = Math.max(0, dr.breath - dt * 2.5);
+    return;
+  }
   const air = dr.z > 6;
   const def = BREEDS[dr.breed ?? "fire"];
   // stamina: flying drains it (more with a rider, cargo or a storm); resting brings it back
@@ -588,6 +649,14 @@ function stepOwned(w: World, dr: Dragon, dt: number) {
   dr.energy = Math.max(0, Math.min(1, (dr.energy ?? 1) + (dr.state === "sleep" ? dt * 0.02 : -dt * (air ? 0.0025 : 0.0012))));
   dr.hunger = Math.min(1, (dr.hunger ?? 0) + dt * ((dr.growth ?? 0) < 0.25 ? 0.0055 : 0.003));
   if (!air && dr.state !== "walk") dr.hp = Math.min(dr.maxHp, dr.hp + dt * dr.maxHp * (dr.state === "sleep" ? 0.006 : 0.003));
+  else if (air && !dr.foe) dr.hp = Math.min(dr.maxHp, dr.hp + dt * dr.maxHp * 0.001);
+  // holding a Neanderthal with no order to drop them: let go (they fall)
+  if (dr.prey && dr.cmd?.kind !== "volcano") {
+    const b = w.rivals.byId(dr.prey);
+    dr.prey = undefined;
+    dr.preyBrute = false;
+    if (b && b.snatched === dr.id) w.dragons.dropBody(w, dr, b, false, false, "");
+  }
   if (dr.burst) burstTick(w, dr, dt);
   // out of strength in the air: down it comes (wherever it is)
   if (air && (dr.stamina ?? 1) < 0.06 && dr.cmd?.kind !== "land") {
@@ -649,6 +718,20 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
     w.toast("😮‍💨", `${dr.name} is getting tired and heads home to rest.`, dr.x, dr.y);
     return true;
   }
+  // losing a fight: break off and fly home to heal (it'll live to fight again)
+  if (FIGHT_CMDS.has(cmd.kind) && dr.hp < dr.maxHp * 0.3 && !cmd.auto) {
+    dr.cmd = { kind: "home", x: 0, y: 0, t: 0, auto: true };
+    w.toast("🩹", `${dr.name} is badly hurt and pulls out of the fight to heal at its roost.`, dr.x, dr.y);
+    return true;
+  }
+  if (FIGHT_CMDS.has(cmd.kind) && dr.hp < dr.maxHp * 0.3 && cmd.auto) {
+    dr.cmd = { kind: "home", x: 0, y: 0, t: 0, auto: true };
+    if (!w.flags.has(`heal${dr.id}`)) {
+      w.flags.add(`heal${dr.id}`);
+      w.toast("🩹", `${dr.name} is hurt and smart enough to pull back: it heals at its roost, then goes again.`, dr.x, dr.y);
+    }
+    return true;
+  }
   // the rider climbs on first (if they're close enough to come)
   if (FLIGHT_CMDS.has(cmd.kind) && (cmd.i ?? 0) === 0 && boarding(w, dr, cmd, dt)) return true;
   if ((cmd.i ?? 0) === 0) cmd.i = 1;
@@ -704,8 +787,10 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
         if (engage(w, dr, foe, dt, true)) return true;
         dr.foe = undefined;
       }
+      // patrolling the skies hardens it a little too
+      if (warTrained(dr) && (dr.vet ?? 0) < 0.3) harden(w, dr, dt * 0.0006);
       if (cmd.t % 1 < dt) {
-        const f = threatNear(w, dr.x, dr.y, 360);
+        const f = threatNear(w, dr.x, dr.y, 540);
         if (f && warTrained(dr)) {
           const p = foeXY(f);
           dr.foe = f.kind === "dino" ? f.d.id : f.kind === "brute" ? f.b.id : f.dr.id;
@@ -713,8 +798,10 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
         }
       }
       if (cmd.kind === "patrol") {
-        const a = cmd.t * 0.38 + dr.id;
-        flyToward(w, dr, cmd.x + Math.cos(a) * 270, cmd.y + Math.sin(a) * 180, 200, dt, 0.75);
+        // an Auto patrol sweeps wide round the whole town
+        const a = cmd.t * (cmd.auto ? 0.28 : 0.38) + dr.id;
+        const rx = cmd.auto ? 460 : 270;
+        flyToward(w, dr, cmd.x + Math.cos(a) * rx, cmd.y + Math.sin(a) * rx * 0.66, cmd.auto ? 230 : 200, dt, 0.75);
       } else {
         const pts = cmd.pts ?? [];
         if (!pts.length) return false;
@@ -723,7 +810,7 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
         if (flyToward(w, dr, p.x, p.y, 210, dt, 0.85) < 60) cmd.i = (cmd.i ?? 1) + 1;
       }
       // an Auto patrol is a round, not forever
-      return !cmd.auto || cmd.t < 75;
+      return !cmd.auto || cmd.t < 100;
     }
     case "guard": {
       const foe = dr.foe ? foeById(w, dr.foe) : null;
@@ -772,6 +859,8 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
     }
     case "carry":
       return carryCmd(w, dr, cmd, dt);
+    case "volcano":
+      return volcanoCmd(w, dr, cmd, dt);
     case "retreat":
     case "home": {
       const home = roostOf(w, dr);
@@ -809,6 +898,40 @@ function boarding(w: World, dr: Dragon, cmd: DragonCmd, dt: number) {
   // come down near the rider
   if (dr.z > 4) landAt(w, dr, h.x + 40, h.y + 10, dt);
   else if (d > 40) walkToward(w, dr, h.x + 30, h.y + 6, dt * 0.6);
+  return true;
+}
+
+/** Volcano Drop: swoop on a Neanderthal, climb high over the volcano with them, let go. */
+function volcanoCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number) {
+  dr.state = "fly";
+  const held = dr.prey ? w.rivals.byId(dr.prey) : null;
+  if (held && held.snatched === dr.id) {
+    const v = w.volcano;
+    const d = flyToward(w, dr, v.x, v.y, 440, dt, 1);
+    if (d < 90 && dr.z > 380) {
+      dr.prey = undefined;
+      dr.preyBrute = false;
+      const clan = w.rivals.clan(held.clan);
+      w.dragons.dropBody(w, dr, held, true, true, `${dr.name} dropped ${held.name} of the ${clan?.name ?? "?"} clan into the volcano!`);
+      say2(w, dr, pick(w.rng, ["Into the fire!", "Bye bye!", "Ha! Gone!"]));
+      harden(w, dr, 0.04);
+      return false;
+    }
+    return true;
+  }
+  const b = cmd.target ? w.rivals.byId(cmd.target) : null;
+  if (!b || b.snatched || b.falling || b.hp <= 0 || cmd.t > 60) return false;
+  const near = Math.hypot(b.x - dr.x, b.y - dr.y);
+  travel(w, dr, b.x, b.y, near < 200 ? 22 : 160, dt, 1.15);
+  if (near < 42 && dr.z < 50) {
+    w.rivals.dropCaptive(w, b, false);
+    b.snatched = dr.id;
+    b.raid = false;
+    dr.prey = b.id;
+    dr.preyBrute = true;
+    w.sfx("screech", dr.x, dr.y, 1.2, 0.5);
+    w.toast("🐉", `${dr.name} snatched ${b.name} the Neanderthal! Off to the volcano…`, b.x, b.y);
+  }
   return true;
 }
 
@@ -879,12 +1002,15 @@ function autoThink(w: World, dr: Dragon, dt: number) {
     return;
   }
   // trouble near camp: a trained war dragon answers it (not a little lizard)
-  if (warTrained(dr) && (dr.stamina ?? 1) > 0.35 && w.dragons.scanT <= 0) {
-    const f = threatNear(w, w.camp.x, w.camp.y, 800);
+  if (warTrained(dr) && (dr.stamina ?? 1) > 0.35 && dr.hp > dr.maxHp * 0.45 && w.dragons.scanT <= 0) {
+    const rider = dragonRiderOf(w, dr);
+    const f = threatNear(w, w.camp.x, w.camp.y, 1100) ?? (rider && !rider.aloft ? threatNear(w, rider.x, rider.y, 500) : null);
     if (f) {
       const p = foeXY(f);
       const id = f.kind === "dino" ? f.d.id : f.kind === "brute" ? f.b.id : f.dr.id;
-      dr.cmd = { kind: "attack", x: p.x, y: p.y, target: id, t: 0, auto: true };
+      // a big war dragon now and then carries a Neanderthal off to the volcano instead
+      const drop = f.kind === "brute" && f.b.weapon !== "catapult" && (dr.growth ?? 0) >= 0.55 && w.rng() < 0.35;
+      dr.cmd = { kind: drop ? "volcano" : "attack", x: p.x, y: p.y, target: id, t: 0, auto: true };
       if (!w.flags.has(`dragonDefend${dr.id}`)) {
         w.flags.add(`dragonDefend${dr.id}`);
         w.toast("🐉", `${dr.name} takes off to defend the camp!`, dr.x, dr.y);
@@ -893,11 +1019,28 @@ function autoThink(w: World, dr: Dragon, dt: number) {
     }
   }
   // a bonded war dragon + its rider patrol the camp now and then
-  if (dr.partner && warTrained(dr) && !dr.restT && (dr.stamina ?? 1) > 0.75 && w.daylight > 0.5 && w.weather.storm < 0.4) {
+  // a bonded battle dragon + its rider patrol the skies over the town (the rider leaves their work for it)
+  if (dr.partner && warTrained(dr) && !dr.restT && (dr.stamina ?? 1) > 0.7 && dr.hp > dr.maxHp * 0.6 && w.daylight > 0.5 && w.weather.storm < 0.4) {
     const h = dragonRiderOf(w, dr);
-    if (h && !h.taskId && !h.order && h.state !== "down" && !h.under) {
+    if (h && !h.order && h.state !== "down" && !h.under && !h.captive) {
       dr.cmd = { kind: "patrol", x: w.camp.x, y: w.camp.y, t: 0, auto: true };
-      dr.restT = 220;
+      dr.restT = 140;
+      if (!w.flags.has(`skyPatrol${dr.id}`)) {
+        w.flags.add(`skyPatrol${dr.id}`);
+        w.toast("🐉", `${dr.name} and ${h.name} take to the skies on patrol: they'll swoop on anything that threatens the town.`, dr.x, dr.y);
+      }
+      return;
+    }
+  }
+  // a dragon and its rider stay together: it keeps close to them wherever they are
+  const mate = dragonRiderOf(w, dr);
+  if (mate && !mate.aloft && !mate.under && !mate.captive && mate.state !== "sleep" && (dr.growth ?? 0) >= 0.25) {
+    const d = Math.hypot(mate.x - dr.x, mate.y - dr.y);
+    if (d > 170) {
+      if (d > 520 && canFly(dr)) flyToward(w, dr, mate.x - 60, mate.y + 20, 110, dt, 0.8);
+      else if (dr.z > 6) landAt(w, dr, mate.x - 60, mate.y + 20, dt);
+      else walkToward(w, dr, mate.x - 50, mate.y + 16, dt);
+      dr.state = dr.z > 6 ? "fly" : "walk";
       return;
     }
   }
@@ -982,6 +1125,12 @@ export function dragonRiderThink(w: World, h: Human): boolean {
     return false;
   }
   const cmd = dr.cmd;
+  // their dragon is grounded far off (and can't come to them): go to it
+  if ((!cmd || !FLIGHT_CMDS.has(cmd.kind)) && dr.z < 6 && !canFly(dr) && !h.order && w.daylight > 0.3 && Math.hypot(h.x - dr.x, h.y - dr.y) > 600) {
+    go(h, "walk", dr.x - 30, dr.y + 10);
+    if (h.stateT < 0.1) say(h, `Where are you, ${dr.name}?`);
+    return true;
+  }
   if (!cmd || !FLIGHT_CMDS.has(cmd.kind) || (cmd.i ?? 0) !== 0 || dr.rider || cmd.t > 30) return false;
   if (Math.hypot(h.x - dr.x, h.y - dr.y) > 520) return false;
   go(h, "walk", dr.x - 20 * dr.dir, dr.y + 6);
@@ -1006,6 +1155,12 @@ export function dragonWork(w: World) {
   if (w.dragons.eggs.some((e) => e.at === "camp")) return 1;
   return w.dragons.owned.some((d) => nextDragonLesson(d) || (d.hunger ?? 0) > 0.6 || (rideable(d) && !d.partner)) ? 1 : 0;
 }
+
+/** Its keeper is around to look after it themselves (so trainers help elsewhere). */
+const keeperHere = (w: World, thing: { keeper?: number }) => {
+  const k = thing.keeper ? w.humans.find((x) => x.id === thing.keeper) : null;
+  return !!k && k.state !== "down" && !k.under && !k.captive;
+};
 
 /** A trainer looks after the eggs + dragons first (they're the precious ones). */
 export function dragonTrainerThink(w: World, h: Human): boolean {
@@ -1065,7 +1220,7 @@ export function dragonTrainerThink(w: World, h: Human): boolean {
   // lessons: the dragon that's furthest behind
   let pupil = ds.owned.find((d) => d.trainer === h.id && nextDragonLesson(d) && d.z < 6 && !d.cmd) ?? null;
   if (!pupil) {
-    pupil = ds.owned.filter((d) => nextDragonLesson(d) && (!d.trainer || d.trainer === h.id || !w.humans.some((o) => o.id === d.trainer && w.tribe.roleOf(o) === "trainer")) && d.z < 6 && !d.cmd && d.state !== "sleep").sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))[0] ?? null;
+    pupil = ds.owned.filter((d) => nextDragonLesson(d) && !keeperHere(w, d) && (!d.trainer || d.trainer === h.id || !w.humans.some((o) => o.id === d.trainer && w.tribe.roleOf(o) === "trainer")) && d.z < 6 && !d.cmd && d.state !== "sleep").sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))[0] ?? null;
   }
   if (pupil) {
     pupil.trainer = h.id;
@@ -1073,7 +1228,7 @@ export function dragonTrainerThink(w: World, h: Human): boolean {
     return attendDragon(w, h, pupil);
   }
   // eggs: sit with them (tended eggs come along faster)
-  const egg = ds.eggs.find((e) => e.at === "camp" && !e.hatchT && !w.humans.some((o) => o !== h && o.state === "dragonCare" && o.targetId === e.id));
+  const egg = ds.eggs.find((e) => e.at === "camp" && !e.hatchT && !keeperHere(w, e) && !w.humans.some((o) => o !== h && o.state === "dragonCare" && o.targetId === e.id));
   if (egg) {
     h.targetId = egg.id;
     if (Math.hypot(h.x - egg.x, h.y - egg.y) < 22) go(h, "dragonCare", h.x, h.y);

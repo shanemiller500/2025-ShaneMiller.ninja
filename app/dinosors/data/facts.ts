@@ -213,6 +213,7 @@ export const ROLES: { id: import("../sim/types").Role; icon: string; name: strin
   { id: "technician", icon: "⚡", name: "Technician", tip: "Tends energy buildings: fixes overloads, keeps the hum clean" },
   { id: "trainer", icon: "🐾", name: "Animal trainer", tip: "Befriends, feeds, trains + harnesses dinosaurs, and pairs trained ones with riders" },
   { id: "dragonSlayer", icon: "⚔️", name: "Dragon slayer", tip: "Drills to fight dragons (hits them harder, shrugs off fire) and leads dragon raids. Needs 🐉 Dragon hunting" },
+  { id: "dragonKeeper", icon: "🐉", name: "Dragon keeper", tip: "Keeps one dragon egg warm in the incubator, then raises what hatches: feeds it, trains it, plays with it, puts on shows in the dragon pit, and one day flies it" },
   { id: "eggRunner", icon: "🥚", name: "Egg runner", tip: "Fast on their feet: in a dragon raid they grab the eggs (two each with a runner's kit) and run them home. Needs 🐉 Dragon hunting" },
 ];
 
@@ -297,6 +298,7 @@ export const DISCOVERIES: Discovery[] = [
   { id: "dragonRider", icon: "🐉", name: "Dragon Rider", hint: "A dragon chooses its rider." },
   { id: "dragonFire", icon: "🔥", name: "Breath of Fire", hint: "Command a dragon's fire." },
   { id: "sonicFire", icon: "🚒", name: "Sound Over Flame", hint: "Send the sonic fire crew to a fire." },
+  { id: "dragonShow", icon: "🎪", name: "Dragon Show", hint: "Put on a show in the dragon pit." },
   { id: "dragonRaid", icon: "⚔️", name: "War Band", hint: "Send a band of slayers + runners at a dragon nest." },
   { id: "megaEruption", icon: "☄️", name: "MEGA ERUPTION", hint: "What if something from space hit the volcano?" },
   { id: "snow", icon: "❄️", name: "Snow Day", hint: "It gets cold up in the peaks." },

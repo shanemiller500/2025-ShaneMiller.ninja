@@ -11,6 +11,8 @@ import { addHuman } from "../sim/humans";
 import { P } from "../sim/particles";
 import { leaveScorpion } from "../sim/tasks";
 import { ringFire } from "../sim/shade";
+import { placeDragonEgg } from "../sim/dragonNests";
+import { BREEDS, type DragonBreed } from "../data/dragons";
 import { makePlant } from "../sim/plants";
 import { isWaterTile, isWalkTile } from "../sim/terrain";
 import { MAP_W, MAX_PEOPLE, T, TILE, type BuildingKind, type NodeKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
@@ -27,6 +29,8 @@ export interface ToolState {
   id: ToolId;
   species: SpeciesId;
   egg: SpeciesId;
+  /** a dragon egg instead (the Eggs tool's dragon row) */
+  dragonEgg: DragonBreed | null;
   food: FoodOpt;
   plant: PlantKind;
   land: LandOpt;
@@ -41,6 +45,7 @@ export const DEFAULT_TOOL: ToolState = {
   id: "hand",
   species: "trike",
   egg: "trike",
+  dragonEgg: null,
   food: "meat",
   plant: "broadleaf",
   land: "water",
@@ -163,6 +168,7 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("perch", "work"),
   bld("fireStation", "work"),
   bld("hatchery", "work"),
+  bld("dragonPit", "work"),
   bld("roost", "work"),
   bld("feedPit", "work"),
   bld("dragonYard", "work"),
@@ -256,7 +262,7 @@ export function toolCursor(t: ToolState): { icon: string; radius: number } | nul
     case "dino":
       return { icon: sp(t.species).emoji, radius: 30 };
     case "egg":
-      return { icon: "🥚", radius: 16 };
+      return { icon: t.dragonEgg ? BREEDS[t.dragonEgg].icon : "🥚", radius: 16 };
     case "food":
       return { icon: FOOD_OPTS.find((o) => o.value === t.food)!.icon, radius: 14 };
     case "plant":
@@ -327,6 +333,16 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
     case "egg": {
       if (drag) return false;
       if (!isWalkTile(tile) || isWaterTile(tile)) return false;
+      if (tool.dragonEgg) {
+        const why = placeDragonEgg(w, tool.dragonEgg, x, y);
+        if (why) {
+          hint(w, "🪺", why);
+          return false;
+        }
+        w.sfx("pop", x, y, 0.7, 0.8);
+        w.toast("🥚", `A ${BREEDS[tool.dragonEgg].name.toLowerCase()} egg! Keep it warm and a keeper will raise what hatches.`, x, y);
+        return true;
+      }
       if (!w.unlocked.has(tool.egg)) {
         hint(w, "🔒", `Find a ${sp(tool.egg).nick} to unlock its eggs!`);
         return false;

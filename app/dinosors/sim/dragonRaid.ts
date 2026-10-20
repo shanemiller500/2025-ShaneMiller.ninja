@@ -20,7 +20,7 @@ import { pick } from "./rng";
 import { issue, type Task } from "./tasks";
 import type { DragonEgg, DragonNest, Human } from "./types";
 import type { World } from "./world";
-import { eggHome, nestEggs, parentOf, revealNest, settleEgg } from "./dragonNests";
+import { atEggHome, eggDropOff, nestEggs, parentOf, revealNest, settleEgg } from "./dragonNests";
 
 /** Most eggs a runner can carry (with the runner's kit). */
 export const RUNNER_EGGS = 2;
@@ -74,7 +74,7 @@ export function eggSpeed(w: World, h: Human) {
 export function settleCarried(w: World, h: Human) {
   for (const id of [h.egg, h.egg2]) {
     const egg = id ? w.dragons.eggs.find((e) => e.id === id) : null;
-    if (egg) settleEgg(w, egg, null);
+    if (egg) settleEgg(w, egg, egg.keeper ? null : h);
   }
   h.egg = undefined;
   h.egg2 = undefined;
@@ -164,7 +164,7 @@ export function raidThink(w: World, h: Human, t: Task, done: () => void): boolea
   }
   const band = w.humans.filter((p) => t.people.includes(p.id));
   const runner = raidRunners.has(h.id) || w.tribe.roleOf(h) === "eggRunner";
-  const home = eggHome(w);
+  const home = eggDropOff(w);
   // the staging point: on the camp side of the nest
   const a = Math.atan2(w.camp.y - nest.y, w.camp.x - nest.x);
   const stage = { x: nest.x + Math.cos(a) * STAGE_R + ((h.id % 5) - 2) * 18, y: nest.y + Math.sin(a) * STAGE_R * 0.8 + ((h.id >> 2) % 3) * 14 };
@@ -178,7 +178,7 @@ export function raidThink(w: World, h: Human, t: Task, done: () => void): boolea
       const more = eggs[0] ?? loose[0];
       if (more) pickEgg(w, h, more);
     }
-    if (Math.hypot(h.x - home.x, h.y - home.y) < 16) {
+    if (atEggHome(w, h)) {
       const n = eggsCarried(h);
       settleCarried(w, h);
       say(h, n > 1 ? "Two eggs home!" : "Egg home!");

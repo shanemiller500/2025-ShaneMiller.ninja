@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import { RES_INFO, type Cost } from "../data/colony";
+import { IncubatorSection, PitSection } from "./DragonSites";
 import type { Engine, InspectInfo, Snapshot } from "../game/engine";
 import type { Resource } from "../sim/types";
 import { GameIcon } from "./GameIcon";
@@ -142,6 +143,8 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
           )}
           {info.stage?.next && info.built < 1 && <p className="mt-1 text-[11px] text-white/55">Then: {info.stage.next}</p>}
           {info.note && <p className="mt-2 rounded-xl bg-cyan-500/10 px-2.5 py-1.5 text-[12px] text-cyan-100">{info.note}</p>}
+          {info.built >= 1 && info.bkind === "hatchery" && <IncubatorSection engine={engine} id={info.id} />}
+          {info.built >= 1 && info.bkind === "dragonPit" && <PitSection engine={engine} />}
           {info.built < 1 ? (
             <div className="mt-3">
               <div className="mb-1 text-[11px] font-semibold text-white/60">Materials delivered</div>

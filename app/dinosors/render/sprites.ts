@@ -345,9 +345,9 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.translate(-H * 0.1 * h.dir, -2);
   }
   c.scale(h.dir, 1);
-  const moving = st === "walk" || st === "carry" || st === "flee" || st === "explore" || st === "hunt" || st === "haul";
+  const moving = st === "walk" || st === "carry" || st === "flee" || st === "explore" || st === "hunt" || st === "haul" || st === "dragonPlay";
   const sw = moving ? Math.sin(h.anim * 2.2) : 0;
-  const sit = st === "sitFire" || st === "craft" || (st === "captive" && h.z <= 0) || !!h.aloft;
+  const sit = st === "sitFire" || st === "craft" || st === "watch" || (st === "captive" && h.z <= 0) || !!h.aloft;
   const bend = st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" || st === "heal" ? 0.2 : st === "haul" || st === "loadDino" ? -0.25 : st === "hunt" ? 0.25 : st === "tame" || st === "train" ? 0.15 : 0;
   const hipY = sit ? -H * 0.22 : -H * 0.42;
 
@@ -459,7 +459,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.lineWidth = H * 0.09;
   c.beginPath();
   const shY = -H * 0.36;
-  if (st === "celebrate" || st === "lookUp" || st === "tossed" || st === "douse" || st === "lift") {
+  if (st === "celebrate" || st === "lookUp" || st === "tossed" || st === "douse" || st === "lift" || st === "show") {
     c.moveTo(-H * 0.12, shY);
     c.lineTo(-H * 0.22, shY - H * 0.32);
     c.moveTo(H * 0.12, shY);

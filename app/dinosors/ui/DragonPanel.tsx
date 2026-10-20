@@ -5,6 +5,8 @@ import type { Engine, Snapshot } from "../game/engine";
 import { BREEDS, DRAGON_COMMANDS, DRAGON_STAGES, GROWTH, LESSONS, growthStage } from "../data/dragons";
 import { chooseDragonRider, dragonInfo, dragonOf, dragonSkill, knows } from "../sim/dragonKeep";
 import { eggWarmth } from "../sim/dragonNests";
+import { keeperOf } from "../sim/keepers";
+import { ROLES } from "../data/facts";
 
 /* ------------------------------------------------------------------ */
 /*  Tap one of our dragons (or a dragon egg at camp) → this panel.     */
@@ -78,7 +80,7 @@ export default function DragonPanel({ engine, snap }: { engine: Engine; snap: Sn
       <div className="sticky top-0 z-10 mb-2 flex items-center justify-between rounded-xl bg-[#1f3b2c]/95 px-2 py-1.5 backdrop-blur">
         <div className="min-w-0">
           <div className="truncate text-base font-black">🐉 {d.name}{d.rare ? " ✨" : ""}</div>
-          <div className="text-[11px] text-emerald-100/75">{def.icon} {def.name} · {gStage.name} · {info.stage}</div>
+          <div className="text-[11px] text-emerald-100/75">{def.icon} {def.name} · {gStage.name} · {info.stage}{(d.vet ?? 0) > 0.01 ? ` · ⚔️ battle-hardened ${Math.round((d.vet ?? 0) * 100)}%` : ""}</div>
         </div>
         <div className="flex shrink-0 gap-1">
           <button type="button" onClick={() => engine.follow(d.id)} className="h-10 rounded-xl px-2 text-xs font-bold hover:bg-white/15" aria-label="Follow with the camera">🎥</button>
@@ -120,6 +122,18 @@ export default function DragonPanel({ engine, snap }: { engine: Engine; snap: Sn
           })}
         </ul>
         <p className="mt-1.5 text-[11px] text-white/55">An animal trainer teaches lessons one at a time (faster at a training area). Each lesson waits until {d.name} is old enough.</p>
+      </div>
+
+      <div className="mt-2 rounded-2xl bg-white/10 p-3 text-xs">
+        <div className="flex items-center justify-between"><strong className="text-sm">🧑‍🍼 Keeper</strong><span className="text-white/60">{keeperOf(w, d)?.name ?? "none yet"}</span></div>
+        <p className="mt-1 text-white/60">Their keeper feeds, trains and plays with them, puts them in shows, and flies them once they can take a rider.</p>
+        <div className="mt-2 flex gap-2">
+          <select aria-label="Keeper" value={d.keeper ?? 0} onChange={(e) => engine.setKeeper("dragon", d.id, Number(e.target.value))} className="h-10 min-w-0 flex-1 rounded-xl border border-white/20 bg-[#2a4a38] px-2 text-sm text-white">
+            {!d.keeper && <option value={0}>No keeper yet…</option>}
+            {w.humans.filter((h) => !h.child && !h.stranger && !h.captive && !h.under).map((h) => <option key={h.id} value={h.id}>{h.name} · {ROLES.find((r) => r.id === w.tribe.roleOf(h))?.name ?? w.tribe.roleOf(h)}</option>)}
+          </select>
+          <button type="button" disabled={!d.keeper} onClick={() => engine.callKeeperOf("dragon", d.id)} className="min-h-10 rounded-xl bg-amber-400 px-3 font-black text-slate-900 disabled:opacity-40">📣 Call</button>
+        </div>
       </div>
 
       <div className="mt-2 rounded-2xl bg-white/10 p-3 text-xs">

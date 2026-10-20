@@ -982,6 +982,7 @@ export class World {
         gen: d.gen,
         tame: r(d.tame),
         owner: d.owner,
+        clan: d.clan,
         warTraining: r(d.warTraining ?? 0),
         warArmor: d.warArmor ?? 0,
         rider: d.rider,
