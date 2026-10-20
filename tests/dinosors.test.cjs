@@ -2459,6 +2459,7 @@ test('Neanderthals cannot get through closed walls: they bash them', () => {
 test('clans feud with each other, and allies merge into one band', () => {
   const w = tribeWorld(65, ['tools']);
   w.rivals.started = true;
+  w.rivals['relT'] = Infinity; // (clans make peace now: keep politics out of this fight)
   const a = w.rivals.spawnClan(w, 4, { x: w.camp.x + 1500, y: w.camp.y });
   const b = w.rivals.spawnClan(w, 2, { x: w.camp.x + 1500, y: w.camp.y + 450 });
   w.rivals.setRelation(a.id, b.id, -1);

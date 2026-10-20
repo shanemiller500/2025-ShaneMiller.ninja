@@ -18,6 +18,7 @@ import { P } from "./particles";
 import { pick } from "./rng";
 import { GROWN_AGE, moveBrute, say, setB, type Rivals } from "./rivals";
 import { isTown } from "./clanTowns";
+import { hasTech } from "./clanTech";
 import { sp } from "../data/species";
 import { isBaby, setState, sizeOf } from "./dinos";
 import type { Brute, Clan, ClanBuild, ClanTrap, Dino, Human } from "./types";
@@ -40,10 +41,17 @@ export const CLAN_BUILDS: Record<ClanBuild, BuildDef> = {
   trainingRing: { label: "training ring", icon: "🤼", max: 2, cost: (lv) => ({ bones: 2 + lv * 2, wood: 4, food: 1 }), work: 12 },
   dragonAltar: { label: "dragon altar", icon: "🐉", max: 1, cost: () => ({ bones: 8, wood: 3, food: 2 }), work: 16 },
   dinoPen: { label: "dino pen", icon: "🦖", max: 2, cost: (lv) => ({ bones: 3 + lv * 2, wood: 6 + lv * 2, food: 2 }), work: 14 },
+  // the dino bones they collect go into a fence of ribs, tusks + skulls right round the camp
+  boneFence: { label: "bone fence", icon: "🦴", max: 2, cost: (lv) => ({ bones: 10 + lv * 6, wood: 4, food: 0 }), work: 16 },
+  // (once they've worked out bone totems: clanTech.ts) each one speeds up their learning
+  boneTotem: { label: "bone totem", icon: "🗿", max: 3, cost: (lv) => ({ bones: 5 + lv * 2, wood: 1, food: 1 }), work: 10 },
 };
 
+/** Buildings they have to invent first. */
+const LOCKED: Partial<Record<ClanBuild, Parameters<typeof hasTech>[1]>> = { boneTotem: "boneTotems" };
+
 /** The order a clan builds things in (a name repeated = its next level). */
-const PLAN: ClanBuild[] = ["longhouse", "smokehouse", "trainingRing", "dinoPen", "dragonAltar", "boneRack", "longhouse", "dinoPen", "trainingRing", "boneRack", "smokehouse", "longhouse"];
+const PLAN: ClanBuild[] = ["longhouse", "smokehouse", "trainingRing", "boneFence", "dinoPen", "dragonAltar", "boneTotem", "boneRack", "longhouse", "boneFence", "dinoPen", "boneTotem", "trainingRing", "boneRack", "smokehouse", "boneTotem", "longhouse"];
 
 /** Where each building stands, from the middle of the camp. */
 const SITES: Record<ClanBuild, [number, number]> = {
@@ -53,7 +61,14 @@ const SITES: Record<ClanBuild, [number, number]> = {
   trainingRing: [250, 96],
   dragonAltar: [0, -190],
   dinoPen: [-10, 190],
+  boneFence: [0, 0],
+  boneTotem: [-120, -95],
 };
+
+/** The bone fence goes right round everything they've built. */
+export function fenceSize(c: Clan) {
+  return isTown(c) ? { rx: 440, ry: 330 } : { rx: 310, ry: 240 };
+}
 
 export const lvOf = (c: Clan, k: ClanBuild) => c.builds?.[k] ?? 0;
 
@@ -67,6 +82,8 @@ export const altarOf = (c: Clan) => siteOf(c, "dragonAltar");
 export function nextProject(c: Clan): ClanBuild | null {
   const want: Partial<Record<ClanBuild, number>> = {};
   for (const k of PLAN) {
+    const need = LOCKED[k];
+    if (need && !hasTech(c, need)) continue;
     want[k] = (want[k] ?? 0) + 1;
     if (lvOf(c, k) < Math.min(want[k]!, CLAN_BUILDS[k].max)) return k;
   }
@@ -224,7 +241,8 @@ export function lifeAct(w: World, r: Rivals, b: Brute, clan: Clan | null, dt: nu
       }
       if (!b.work) b.work = 0;
       b.work += dt;
-      if (b.work < 3) return true;
+      // bone tools: quicker at it
+      if (b.work < (hasTech(clan, "boneTools") ? 2 : 3)) return true;
       b.work = 0;
       const got = take(w, b);
       if (got) {
@@ -252,7 +270,7 @@ export function lifeAct(w: World, r: Rivals, b: Brute, clan: Clan | null, dt: nu
         w.sfx("knock", b.x, b.y, 0.4, 0.7 + w.rng() * 0.2);
         w.particles.burst(P.Dust, s.x + (w.rng() - 0.5) * 50, s.y, 3, 30, { size: 9, max: 0.8, color: "rgba(150,125,95,0.55)" });
       }
-      clan.buildWork = (clan.buildWork ?? 0) + dt * 0.3 * (1 + (b.skill ?? 0) * 0.3);
+      clan.buildWork = (clan.buildWork ?? 0) + dt * 0.3 * (1 + (b.skill ?? 0) * 0.3) * (hasTech(clan, "boneTools") ? 1.3 : 1);
       if (clan.buildWork >= CLAN_BUILDS[k].work) finish(w, r, clan, k);
       return true;
     }

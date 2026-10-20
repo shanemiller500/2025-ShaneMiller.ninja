@@ -168,7 +168,7 @@ function stateSpeedBase(d: Dino, def: SpeciesDef) {
     case "attackWall":
       return 0;
     case "stalk":
-      return def.speed * 0.8;
+      return def.speed * (def.move === "swim" ? 0.55 : 0.8);
     case "wander":
     case "work":
     case "investigate":

@@ -179,6 +179,8 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
                   {cl.builds.length > 0 && <div className="truncate text-white/65">Built: {cl.builds.join(" · ")}</div>}
                   {cl.project && <div className="truncate text-white/55">🔨 Working on a {cl.project}</div>}
                   {cl.warDinos > 0 && <div className="text-white/65">🦖 {cl.warDinos} war-dino{cl.warDinos > 1 ? "s" : ""} in their pen</div>}
+                  <div className="text-white/65">🔬 {cl.tech.length ? cl.tech.join(" · ") : "No inventions yet"} <span className="text-white/45">({cl.science}% to the next)</span></div>
+                  {cl.holds > 0 && <div className="font-bold text-rose-300">🚩 Holding part of our town! Fight them out, or surround it and starve them.</div>}
                   {(cl.trained > 0 || cl.traps > 0) && (
                     <div className="text-white/65">
                       {cl.trained > 0 ? `🤼 ${cl.trained} trained warrior${cl.trained > 1 ? "s" : ""}` : ""}
@@ -196,6 +198,27 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
                 <button type="button" onClick={() => engine.flyTo(cl.x, cl.y, 0.9)} className="shrink-0 rounded-xl bg-white/10 px-2.5 py-1.5 font-bold hover:bg-white/20 active:scale-95">
                   📍 Look
                 </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {snap.rivals.catapults.length > 0 && (
+        <>
+          <div className="mt-3 text-sm font-bold">🪨 Our captured catapults</div>
+          <div className="mt-1.5 space-y-1.5">
+            {snap.rivals.catapults.map((c) => (
+              <div key={c.id} className="flex items-center gap-2 rounded-2xl bg-white/5 p-2 text-[12px]">
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold">Level {c.level} catapult <span className="font-semibold text-white/60">· keeper {c.keeper}</span></div>
+                  <div className={c.wear >= 100 ? "font-bold text-rose-300" : "text-white/65"}>{c.wear >= 100 ? "Worn out: needs repairing (wood)" : `Wear ${c.wear}%`}{c.cost ? ` · upgrade: ${c.cost}` : " · fully upgraded"}</div>
+                </div>
+                {c.cost && (
+                  <button type="button" onClick={() => engine.upgradeCatapult(c.id)} className="shrink-0 rounded-xl bg-amber-400/90 px-2.5 py-1.5 font-bold text-[#3a2414] hover:bg-amber-300 active:scale-95">
+                    ⬆️ Upgrade
+                  </button>
+                )}
+                <button type="button" onClick={() => engine.flyTo(c.x, c.y, 1.2)} className="shrink-0 rounded-xl bg-white/10 px-2.5 py-1.5 font-bold hover:bg-white/20 active:scale-95">📍</button>
               </div>
             ))}
           </div>

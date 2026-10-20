@@ -43,9 +43,9 @@ import { carcassStage, harvested } from "../sim/carcass";
 import { HELMET_BY_ID, OUTFIT_BY_ID } from "../data/colony";
 import { drawRefinery } from "./metalArt";
 import { drawBrute, drawCatapult, drawBruteMissile, drawClanCamp } from "./bruteArt";
-import { drawClanBuilding, drawClanTrap } from "./clanLifeArt";
-import { siteOf } from "../sim/clanLife";
-import type { Clan, ClanBuild } from "../sim/types";
+import { drawClanBuilding, drawClanHold, drawClanTrap } from "./clanLifeArt";
+import { fenceSize, siteOf } from "../sim/clanLife";
+import type { Brute, Clan, ClanBuild } from "../sim/types";
 import { TerrainRenderer } from "./terrainRenderer";
 import { drawEruptionColumn, drawGhost, drawPyroclastic } from "./civArt";
 import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
@@ -109,6 +109,9 @@ const K_NEST = 23;
 const K_DEGG = 24;
 const K_CBUILD = 40;
 const K_CTRAP = 41;
+const K_HOLD = 42;
+const K_OURCAT = 43;
+const K_OURSHOT = 44;
 
 interface Drop {
   x: number;
@@ -338,11 +341,34 @@ export class Renderer {
       for (const [kind, lv] of Object.entries(cl.builds ?? {}) as [ClanBuild, number][]) {
         if (!lv) continue;
         const s = siteOf(cl, kind);
+        if (kind === "boneFence") {
+          // a ring right round the camp: the back half sorts behind it, the front half in front
+          const f = fenceSize(cl);
+          if (s.x + f.rx > x0 && s.x - f.rx < x1 && s.y + f.ry > y0 - 60 && s.y - f.ry < y1 + 60) {
+            for (const part of ["back", "front"] as const) {
+              list.push({ y: s.y + (part === "back" ? -f.ry : f.ry), k: K_CBUILD, i: this.cbs.length });
+              this.cbs.push({ clan: cl, kind, lv, x: s.x, y: s.y, part });
+            }
+          }
+          continue;
+        }
         if (s.x > x0 - 140 && s.x < x1 + 140 && s.y > y0 - 30 && s.y < y1 + 140) {
           list.push({ y: s.y, k: K_CBUILD, i: this.cbs.length });
           this.cbs.push({ clan: cl, kind, lv, x: s.x, y: s.y });
         }
       }
+    }
+    for (let i = 0; i < rv.holds.length; i++) {
+      const hd = rv.holds[i];
+      if (hd.x > x0 - hd.r && hd.x < x1 + hd.r && hd.y > y0 - 60 && hd.y < y1 + 60) list.push({ y: hd.y, k: K_HOLD, i });
+    }
+    for (let i = 0; i < rv.taken.length; i++) {
+      const tc = rv.taken[i];
+      if (tc.x > x0 - 60 && tc.x < x1 + 60 && tc.y > y0 && tc.y < y1 + 40) list.push({ y: tc.y, k: K_OURCAT, i });
+    }
+    for (let i = 0; i < rv.ourShots.length; i++) {
+      const sh = rv.ourShots[i];
+      if (sh.x > x0 && sh.x < x1 && sh.y > y0 && sh.y < y1) list.push({ y: sh.y, k: K_OURSHOT, i });
     }
     for (let i = 0; i < rv.traps.length; i++) {
       const tr = rv.traps[i];
@@ -595,7 +621,8 @@ export class Renderer {
           c.save();
           c.translate(b.x, b.y - b.z);
           const bc = w.rivals.clan(b.clan);
-          if (b.weapon === "catapult") drawCatapult(c, b, bc?.colors?.length ? bc.colors : [bc?.color ?? "#c0392b"], this.t);
+          if (b.look) this.drawTurned(c, b, bc);
+          else if (b.weapon === "catapult") drawCatapult(c, b, bc?.colors?.length ? bc.colors : [bc?.color ?? "#c0392b"], this.t);
           else drawBrute(c, b, this.t, b.tint ?? bc?.color ?? "#c0392b", (bc?.smarts ?? 0) >= 2);
           c.restore();
           break;
@@ -604,7 +631,45 @@ export class Renderer {
           const cb = this.cbs[it.i];
           c.save();
           c.translate(cb.x, cb.y);
-          drawClanBuilding(c, cb.clan, cb.kind, cb.lv, this.t, night > 0.5);
+          drawClanBuilding(c, cb.clan, cb.kind, cb.lv, this.t, night > 0.5, cb.part);
+          c.restore();
+          break;
+        }
+        case K_HOLD: {
+          const hd = w.rivals.holds[it.i];
+          c.save();
+          c.translate(hd.x, hd.y);
+          drawClanHold(c, hd, w.rivals.clan(hd.clan), this.t);
+          c.restore();
+          break;
+        }
+        case K_OURCAT: {
+          const tc = w.rivals.taken[it.i];
+          c.save();
+          c.translate(tc.x, tc.y);
+          // drawn like theirs, but flying our blue + gold (and showing its level + wear)
+          drawCatapult(c, { id: tc.id, dir: tc.dir, cd: tc.cd > 0 ? tc.cd : 0 } as Brute, ["#3a6fb0", "#e0b43a"], this.t);
+          c.font = "10px sans-serif";
+          c.textAlign = "center";
+          c.fillText("⭐".repeat(tc.level), 0, -60);
+          if (tc.wear > 0.6) {
+            c.fillStyle = `rgba(80,70,60,${0.3 + tc.wear * 0.3})`;
+            c.beginPath();
+            c.arc(Math.sin(this.t * 2) * 4, -40 - ((this.t * 10) % 14), 6, 0, Math.PI * 2);
+            c.fill();
+          }
+          c.fillStyle = "rgba(0,0,0,0.45)";
+          c.fillRect(-18, 10, 36, 4);
+          c.fillStyle = tc.wear < 0.5 ? "#7ed37e" : tc.wear < 0.85 ? "#e0b040" : "#e05040";
+          c.fillRect(-18, 10, 36 * (1 - tc.wear), 4);
+          c.restore();
+          break;
+        }
+        case K_OURSHOT: {
+          const sh = w.rivals.ourShots[it.i];
+          c.save();
+          c.translate(sh.x, sh.y);
+          drawBruteMissile(c, "boulder", sh.z, Math.atan2(sh.vy - sh.vz * 0.6, sh.vx));
           c.restore();
           break;
         }
@@ -994,6 +1059,7 @@ export class Renderer {
         c.fillText("💫", Math.cos(a) * 6, -10 + Math.sin(a) * 2);
       }
       c.restore();
+    if (h.captive && h.clanGarb) this.captiveRags(c, h);
     if (h.sonic) this.drawEmitter(c, h);
     // dragon eggs in their arms (a runner can carry two)
     for (const [k, id] of [[0, h.egg], [1, h.egg2]] as const) {
@@ -1004,6 +1070,86 @@ export class Renderer {
       drawDragonEgg(c, egg, this.t, 0.9);
       c.restore();
     }
+  }
+
+  /** Someone who joined a clan from our tribe (or their child): drawn as themselves, in the clan's rags with a club. */
+  private drawTurned(c: CanvasRenderingContext2D, b: Brute, cl: Clan | null) {
+    const st = b.state;
+    const pose = st === "sleep" ? "sleep" : st === "fight" || st === "bash" || st === "hunt" ? "hunt" : st === "dance" || st === "cheer" ? "celebrate"
+      : Math.hypot(b.vx, b.vy) > 4 || st === "walk" || st === "wander" || st === "home" || st === "flee" || st === "carry" ? "walk" : st === "gather" || st === "build" || st === "tame" || st === "trap" ? "gather" : "idle";
+    const child = (b.age ?? 180) < 180;
+    const look = b.look!;
+    const me = {
+      id: b.id, kind: "human", name: b.name, child, skin: look.skin, hair: look.hair, fur: look.fur, state: pose, anim: b.anim, dir: b.dir, z: 0,
+      carry: null, carryN: 0, riding: 0, aloft: undefined, gear: { weapon: null, shield: 0 }, bubble: null,
+    } as unknown as Human;
+    drawHuman(c, me, this.t, child ? null : "axe", !child && pose === "hunt", 0, 1, null, 0, null, 0, false);
+    if (!cl) return;
+    const cols = cl.colors?.length ? cl.colors : [cl.color];
+    const H = child ? 20 : 29;
+    const top = -H * 0.82;
+    c.fillStyle = "#7b5a3a";
+    c.strokeStyle = "#24170e";
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(-H * 0.17, top);
+    c.lineTo(H * 0.17, top);
+    c.lineTo(H * 0.19, top + H * 0.36);
+    for (let i = 0; i < 4; i++) c.lineTo(H * (0.19 - i * 0.12) - H * 0.04, top + H * (i % 2 ? 0.32 : 0.4));
+    c.lineTo(-H * 0.19, top + H * 0.36);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    cols.forEach((col, i) => {
+      c.fillStyle = col;
+      c.fillRect(-H * 0.15, top + H * 0.08 + i * 3, H * 0.3, 2.2);
+    });
+  }
+
+  /** A captive in a clan's rags, with a rope collar tying them to the next captive along. */
+  private captiveRags(c: CanvasRenderingContext2D, h: Human) {
+    const w = this.world;
+    const cl = w.rivals.clan(h.clanGarb!);
+    if (!cl) return;
+    const cols = cl.colors?.length ? cl.colors : [cl.color];
+    const sitting = h.state === "captive" && h.z <= 0;
+    const H = h.child ? 20 : 29;
+    const top = h.y - h.z - (sitting ? H * 0.62 : H * 0.82);
+    c.save();
+    // a ragged hide tabard daubed in their colours
+    c.fillStyle = "#7b5a3a";
+    c.strokeStyle = "#24170e";
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(h.x - H * 0.17, top);
+    c.lineTo(h.x + H * 0.17, top);
+    c.lineTo(h.x + H * 0.19, top + H * 0.36);
+    for (let i = 0; i < 4; i++) c.lineTo(h.x + H * (0.19 - i * 0.12) - H * 0.04, top + H * (i % 2 ? 0.32 : 0.4));
+    c.lineTo(h.x - H * 0.19, top + H * 0.36);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    cols.forEach((col, i) => {
+      c.fillStyle = col;
+      c.fillRect(h.x - H * 0.15, top + H * 0.08 + i * 3, H * 0.3, 2.2);
+    });
+    // rope collar
+    c.strokeStyle = "#b89a62";
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.ellipse(h.x, top - 1, H * 0.12, H * 0.04, 0, 0, Math.PI * 2);
+    c.stroke();
+    // roped to the next captive of this clan
+    const next = w.humans.filter((o) => o !== h && o.captive === h.captive && o.clanGarb && o.id > h.id && Math.hypot(o.x - h.x, o.y - h.y) < 220).sort((a, b) => a.id - b.id)[0];
+    if (next) {
+      const ny = next.y - next.z - (next.state === "captive" && next.z <= 0 ? H * 0.62 : H * 0.82);
+      const sag = 14 + Math.hypot(next.x - h.x, next.y - h.y) * 0.08;
+      c.beginPath();
+      c.moveTo(h.x, top);
+      c.quadraticCurveTo((h.x + next.x) / 2, (top + ny) / 2 + sag, next.x, ny);
+      c.stroke();
+    }
+    c.restore();
   }
 
   /** An ultrasonic fire emitter in someone's hands, and its waves when it's blasting. */
@@ -1095,7 +1241,8 @@ export class Renderer {
     p.dangle = st === "carried";
     p.flying = def.move === "fly" && dn.z > 4;
     p.wing = this.t * (st === "dive" || st === "flee" ? 14 : 7) + dn.id;
-    p.submerged = def.move === "swim" ? (dn.z > 2 ? 0 : 1) : 1;
+    // swimmers cruise at the surface (backs + necks out of the water); only a stalker sinks right down
+    p.submerged = def.move === "swim" ? (dn.z > 2 ? 0 : dn.state === "stalk" ? 1 : 0.3) : 1;
     p.baby = 1 - dn.growth;
     p.muddy = dn.muddy;
     p.tailSwing = st === "defend" && def.shape.club ? Math.sin(this.t * 8) : st === "scratch" ? Math.sin(this.t * 6) * 0.5 : 0;
@@ -1165,7 +1312,7 @@ export class Renderer {
   /** dragons visible this frame (wild + ours), indexed by the depth sort */
   private drs: Dragon[] = [];
   /** clan buildings in view this frame */
-  private cbs: { clan: Clan; kind: ClanBuild; lv: number; x: number; y: number }[] = [];
+  private cbs: { clan: Clan; kind: ClanBuild; lv: number; x: number; y: number; part?: "back" | "front" }[] = [];
 
   /** A dragon (selection ring, the dragon, then whoever is riding it). */
   private drawDragonAt(c: CanvasRenderingContext2D, dr: Dragon, ov: Overlay, weapon: WeaponLook) {
@@ -1187,6 +1334,60 @@ export class Renderer {
     c.restore();
     const h = dr.rider ? this.world.humans.find((x) => x.id === dr.rider && x.aloft === dr.id) : null;
     if (h) this.drawPerson(c, h, ov, weapon);
+  }
+
+  /**
+   * A swimmer at the surface: underneath, the dark shape of the body below the water + a V-shaped
+   * wake behind it when it's moving; on top, a line of foam where the water meets its sides.
+   */
+  private swimWater(c: CanvasRenderingContext2D, dn: Dino, L: number, top: boolean) {
+    const v = Math.hypot(dn.vx, dn.vy);
+    c.save();
+    c.scale(dn.dir, 1);
+    if (!top) {
+      c.fillStyle = "rgba(10,40,60,0.28)";
+      c.beginPath();
+      c.ellipse(0, L * 0.05, L * 0.3, L * 0.08, 0, 0, Math.PI * 2);
+      c.fill();
+      if (v > 5) {
+        // the wake: two lines spreading out behind, fading
+        const k = Math.min(1, v / 50);
+        c.strokeStyle = `rgba(255,255,255,${0.45 * k})`;
+        c.lineWidth = Math.max(1.2, L * 0.012);
+        for (const s of [-1, 1]) {
+          c.beginPath();
+          c.moveTo(-L * 0.18, L * 0.05 + s * L * 0.03);
+          c.quadraticCurveTo(-L * 0.45, L * 0.05 + s * L * 0.09, -L * 0.75, L * 0.05 + s * L * 0.16);
+          c.stroke();
+        }
+        c.fillStyle = `rgba(255,255,255,${0.3 * k})`;
+        for (let i = 0; i < 4; i++) {
+          const f = (this.t * 1.5 + i / 4 + dn.id * 0.1) % 1;
+          c.beginPath();
+          c.arc(-L * (0.25 + f * 0.5), L * 0.05 + Math.sin(i * 2.1) * L * 0.05 * f, L * 0.012 * (1 - f) + 1, 0, Math.PI * 2);
+          c.fill();
+        }
+      }
+    } else {
+      // foam along the waterline, rippling as it swims
+      c.strokeStyle = "rgba(235,248,255,0.75)";
+      c.lineWidth = Math.max(1.2, L * 0.014);
+      c.beginPath();
+      for (let i = 0; i <= 12; i++) {
+        const x = -L * 0.24 + (i / 12) * L * 0.5;
+        const y = L * 0.06 + Math.sin(this.t * 6 + i * 1.3 + dn.id) * L * 0.006;
+        if (i === 0) c.moveTo(x, y);
+        else c.lineTo(x, y);
+      }
+      c.stroke();
+      if (v > 5) {
+        // a bow wave at the front
+        c.beginPath();
+        c.arc(L * 0.24, L * 0.05, L * 0.03, -Math.PI * 0.4, Math.PI * 0.4);
+        c.stroke();
+      }
+    }
+    c.restore();
   }
 
   /** A clan war-dino: a crude hide-and-bone harness daubed in the clan's colours, a skull on a pole. */
@@ -1232,10 +1433,12 @@ export class Renderer {
     if (dn.state === "tussle") jx = Math.sin(this.t * 40 + dn.id) * 3;
     if (dn.state === "stuck") jx = Math.sin(this.t * 25) * 2;
     c.translate(dn.x + jx, dn.y - dn.z);
-    if (def.move === "swim" && dn.z < 2) {
-      // a dark shape gliding under the waves
-      c.globalAlpha = 0.6;
+    const cruising = def.move === "swim" && dn.z < 2 && dn.state !== "stalk";
+    if (def.move === "swim" && dn.z < 2 && !cruising) {
+      // lying low while it stalks: barely a shadow under the waves
+      c.globalAlpha = 0.3;
     }
+    if (cruising) this.swimWater(c, dn, L, false);
     if (dn.id === ov.selectedId || dn.id === ov.followId) {
       c.strokeStyle = dn.id === ov.followId ? "rgba(255,215,90,0.95)" : "rgba(255,255,255,0.9)";
       c.lineWidth = 2.5;
@@ -1263,6 +1466,7 @@ export class Renderer {
       c.stroke();
     }
     drawDino(c, def, L, dn.dir, pose);
+    if (cruising) this.swimWater(c, dn, L, true);
     if (dn.clan) this.clanHarness(c, dn, L, def.move === "fly");
     if (dn.work?.partner && !isBaby(dn)) {
       // a Dino Rider team: a riding blanket + the team pennant on a pole at the back of the saddle

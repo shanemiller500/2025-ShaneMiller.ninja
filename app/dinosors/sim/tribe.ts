@@ -5,6 +5,7 @@
 /*  Kid-safe cartoon rules: downed dinos poof into drumsticks, and     */
 /*  "gobbled" cave people vanish in a dust cloud.                      */
 /* ------------------------------------------------------------------ */
+import { occupy } from "./clanHolds";
 import { hasVault } from "./deepBuild";
 import { CAMP_LEVELS, FACTS } from "../data/facts";
 import { BUILDINGS, HOUSING, OUTFITS, OUTFIT_BY_ID, SCORPION_TIERS, WEAPON_BY_ID, type WeaponDef } from "../data/colony";
@@ -74,6 +75,8 @@ export interface RaidState {
   by?: "brute";
   /** people they killed or carried off */
   took?: number;
+  /** (Neanderthals) already weighed up digging in */
+  held?: boolean;
 }
 
 const isFood = (r: Resource) => r === "cooked" || r === "fish" || r === "crop" || r === "berries";
@@ -879,6 +882,17 @@ export class Tribe {
       return;
     }
     const marching = party.filter((b) => b.raid);
+    // through the walls and still standing inside: they may dig in and hold that part of the town
+    const inside = marching.filter((b) => Math.hypot(b.x - w.camp.x, b.y - w.camp.y) < (CAMP_LEVELS[this.level]?.radius ?? 300) + 80);
+    if (r.breached && inside.length >= 2 && ((!r.held && r.t > 100 && inside.length >= 3) || r.t > 240)) {
+      const roll = r.t > 240 || w.rng() < 0.5;
+      r.held = true;
+      if (roll && occupy(w, w.rivals, inside)) {
+        this.raid = null;
+        for (const b of marching) b.raid = false;
+        return;
+      }
+    }
     if (marching.length && r.t <= 240) return;
     this.raid = null;
     for (const b of marching) b.raid = false;

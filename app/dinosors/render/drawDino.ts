@@ -1098,7 +1098,7 @@ function mosasaur(k: Ctx2) {
   const under = p.submerged;
   c.save();
   c.globalAlpha *= 1 - under * 0.45;
-  const arch = (1 - under) * 0.5;
+  const arch = under <= 0 ? 0.5 : 0;
   c.rotate(-arch * 0.6);
   // flippers
   const fl = Math.sin(p.t * 3) * 0.3;
@@ -1150,6 +1150,90 @@ function mosasaur(k: Ctx2) {
   void def;
 }
 
+/** Plesiosaurs + pliosaurs: a broad body on four big flippers; neck + head from shape (long + small, or short + huge). */
+function plesiosaur(k: Ctx2) {
+  const { c, L, def, p } = k;
+  const under = p.submerged;
+  const neck = def.shape.neck ?? 1;
+  const head = def.shape.head ?? 1;
+  c.save();
+  c.globalAlpha *= 1 - under * 0.45;
+  c.rotate(under <= 0 ? -0.25 : 0);
+  // four flippers, rowing in turn
+  const f1 = Math.sin(p.t * 2.6) * 0.45;
+  const f2 = Math.sin(p.t * 2.6 + Math.PI) * 0.45;
+  for (const [x, a, s] of [[L * 0.08, 0.5 + f1, 1], [-L * 0.1, 0.5 + f2, 0.85]] as const) {
+    c.beginPath();
+    c.ellipse(x, L * 0.05, L * 0.13 * s, L * 0.032 * s, a, 0, Math.PI * 2);
+    fillStroke(k, k.dark);
+  }
+  // stubby tail
+  const sw = Math.sin(p.t * 2) * L * 0.02;
+  c.beginPath();
+  c.moveTo(-L * 0.14, -L * 0.03);
+  c.quadraticCurveTo(-L * 0.26, sw, -L * (0.22 + 0.1 * (def.shape.tail ?? 1)), sw);
+  c.quadraticCurveTo(-L * 0.24, L * 0.03 + sw, -L * 0.14, L * 0.04);
+  c.closePath();
+  fillStroke(k, k.body);
+  // broad barrel body
+  c.beginPath();
+  c.ellipse(0, 0, L * 0.17, L * 0.085, 0, 0, Math.PI * 2);
+  fillStroke(k, k.body);
+  c.beginPath();
+  c.ellipse(L * 0.01, L * 0.04, L * 0.13, L * 0.035, 0, 0, Math.PI * 2);
+  c.fillStyle = k.belly;
+  c.fill();
+  if (def.look.pattern === "spots") {
+    c.fillStyle = k.accent;
+    for (let i = 0; i < 5; i++) {
+      c.beginPath();
+      c.arc(-L * 0.1 + i * L * 0.045, -L * 0.035 + (i % 2) * L * 0.012, L * 0.01, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
+  // the neck: a long swan curve rising (or a thick stub)
+  const nl = L * 0.2 * neck;
+  const lift = (1 - under) * 0.6 + 0.25 + Math.sin(p.t * 1.3) * 0.05;
+  const hx = L * 0.14 + nl * Math.cos(lift);
+  const hy = -L * 0.03 - nl * Math.sin(lift);
+  c.lineCap = "round";
+  c.strokeStyle = OUTLINE;
+  c.lineWidth = L * 0.05 * (neck < 0.6 ? 2 : 1) + k.lw * 2;
+  c.beginPath();
+  c.moveTo(L * 0.12, -L * 0.02);
+  c.quadraticCurveTo(L * 0.14 + nl * 0.6, -L * 0.02, hx, hy);
+  c.stroke();
+  c.strokeStyle = k.body;
+  c.lineWidth = L * 0.05 * (neck < 0.6 ? 2 : 1);
+  c.stroke();
+  // head: small + slim (plesiosaur) or huge crocodile jaws (pliosaur)
+  const hl = L * 0.07 * head;
+  const open = p.mouth * hl * 0.5;
+  c.beginPath();
+  c.moveTo(hx - hl * 0.3, hy - hl * 0.32);
+  c.quadraticCurveTo(hx + hl * 0.6, hy - hl * 0.36, hx + hl, hy - hl * 0.05);
+  c.lineTo(hx - hl * 0.2, hy + hl * 0.18);
+  c.closePath();
+  fillStroke(k, k.body);
+  c.beginPath();
+  c.moveTo(hx - hl * 0.2, hy + hl * 0.12);
+  c.lineTo(hx + hl * 0.9, hy + open * 0.6);
+  c.lineTo(hx - hl * 0.25, hy + hl * 0.3 + open);
+  c.closePath();
+  fillStroke(k, k.body);
+  c.fillStyle = "#fffaf0";
+  for (let i = 0; i < 3 + Math.round(head * 2); i++) {
+    const tx = hx + hl * (0.05 + i * (0.8 / (3 + head * 2)));
+    c.beginPath();
+    c.moveTo(tx, hy + hl * 0.02);
+    c.lineTo(tx + hl * 0.05, hy + hl * 0.14);
+    c.lineTo(tx + hl * 0.1, hy + hl * 0.02);
+    c.fill();
+  }
+  eye(k, hx + hl * 0.1, hy - hl * 0.15, Math.max(1.5, L * 0.011), true);
+  c.restore();
+}
+
 const PAINTERS: Record<BodyPlan, (k: Ctx2) => void> = {
   theropod,
   sauropod,
@@ -1160,6 +1244,7 @@ const PAINTERS: Record<BodyPlan, (k: Ctx2) => void> = {
   pachy,
   pterosaur,
   mosasaur,
+  plesiosaur,
 };
 
 /**

@@ -24,12 +24,16 @@ import { P } from "./particles";
 import { pick } from "./rng";
 import { isWalkTile, isWaterTile } from "./terrain";
 import { hitDino } from "./tribe";
-import { MAP_H, MAP_W, TILE, type Brute, type BruteState, type BruteWeapon, type Clan, type ClanTrap, type Human, type ItemKind, type Resource, type Wall } from "./types";
+import { MAP_H, MAP_W, TILE, type Brute, type BruteState, type BruteWeapon, type Clan, type ClanHold, type ClanTrap, type Human, type OurCatapult, type ItemKind, type Resource, type Wall } from "./types";
 import type { World } from "./world";
 import { BOULDER_DMG, CATAPULT_RANGE, CATAPULT_RELOAD, MAX_CAMP_TIER, boulderLands, colorsOf, hasEngines, isTown, siegeTarget, unite } from "./clanTowns";
 import { boneSpikes } from "./behavior";
 import { clanJob, extraRoom, huntPower, lifeAct, lvOf, spoilRate, trapTick, trapsUpdate, warDinoTick } from "./clanLife";
 import { riteAct, riteTick, riteUpdate, type Rite } from "./clanRite";
+import { armourOf, hasTech, mightOf, studyTick } from "./clanTech";
+import { captivesSlow, captivesUpdate } from "./clanCaptives";
+import { holdThink, holdsTick } from "./clanHolds";
+import { ourCatapultsUpdate, seizeTick, type OurShot } from "./ourCatapults";
 
 const WORLD_W = MAP_W * TILE;
 const WORLD_H = MAP_H * TILE;
@@ -46,7 +50,8 @@ export const BRUTE_WEAPONS: Record<BruteWeapon, { hit: number; wall: number; thr
   rock: { hit: 0.24, wall: 12, throw: 0.16, range: 125 },
   sling: { hit: 0.28, wall: 12, throw: 0.26, range: 260 },
   // a clan town's siege engine (clanTowns.ts): no melee, it lobs flaming boulders from beyond Scorpion range
-  catapult: { hit: 0, wall: 0, throw: 0, range: CATAPULT_RANGE },
+  // (740 = CATAPULT_RANGE: written out so this table never waits on clanTowns.ts loading first)
+  catapult: { hit: 0, wall: 0, throw: 0, range: 740 },
 };
 
 /** Tough: our hits are divided by this (a person is ~1; a raptor raider ~2). */
@@ -86,6 +91,11 @@ export class Rivals {
   traps: ClanTrap[] = [];
   /** a dragon offering under way (clanRite.ts) */
   rite: Rite | null = null;
+  /** parts of our town a clan has taken (clanHolds.ts) */
+  holds: ClanHold[] = [];
+  /** clan catapults we captured, and their boulders in flight (ourCatapults.ts) */
+  taken: OurCatapult[] = [];
+  ourShots: OurShot[] = [];
   /** clan pair → -1 war, 0 wary, 1 allies */
   rel = new Map<string, number>();
   /** clans have shown up in this world */
@@ -263,13 +273,19 @@ export class Rivals {
   hit(w: World, b: Brute, dmg: number, fx: number, fy: number, byBrute = false, proj?: string) {
     // cunning clans carry hide shields: they soak up a lot of an energy lance, some of an arrow
     const clan = this.clan(b.clan);
-    if (!byBrute && clan && (clan.smarts ?? 0) >= 2 && b.state !== "carry") {
+    // close up, our people seize a catapult rather than smash it (ourCatapults.ts)
+    if (b.weapon === "catapult" && proj === "melee") {
+      if (w.rng() < 0.2) say(b, "Grr!", 1);
+      return;
+    }
+    if (!byBrute && clan && ((clan.smarts ?? 0) >= 2 || hasTech(clan, "hideShields")) && b.state !== "carry") {
       const block = Math.min(0.85, (proj === "scorpion" && (clan.smarts ?? 0) >= 4 ? 0.72 : proj === "beam" || proj === "lance" ? 0.55 : proj ? 0.25 : 0.1) + (proj === "scorpion" && colorsOf(clan).length > 1 ? 0.1 : 0));
       dmg *= 1 - block;
       if (block > 0.3 && w.rng() < 0.4) w.particles.burst(P.Spark, b.x + b.dir * 8, b.y, 6, 60, { z: 20, size: 2, max: 0.4, color: "#c9f7ff" });
     }
     if (b.weapon === "catapult") dmg *= 0.35; // a timber frame takes a lot of breaking
     dmg *= 1 - (b.skill ?? 0) * 0.35; // trained at the ring: harder to put down
+    if (!byBrute) dmg *= armourOf(clan); // bone armour, then masterwork
     b.hp -= byBrute ? dmg : dmg / BRUTE_TOUGH;
     w.particles.burst(P.Star, b.x, b.y, 2, 30, { z: 26, size: 5, max: 0.6 });
     w.sfx("thunk", b.x, b.y, 0.7, 0.8);
@@ -322,6 +338,9 @@ export class Rivals {
   /** A person comes home. */
   free(w: World, h: Human, msg: string) {
     h.captive = 0;
+    h.chore = null;
+    h.captiveT = 0;
+    h.clanGarb = undefined;
     h.z = 0;
     h.path = null;
     h.pathKey = 0;
@@ -591,6 +610,8 @@ export class Rivals {
     this.updateMissiles(w, dt);
     trapsUpdate(w, this, dt);
     riteUpdate(w, this, dt);
+    captivesUpdate(w, this, dt);
+    ourCatapultsUpdate(w, this, dt);
     for (let i = this.brutes.length - 1; i >= 0; i--) {
       const b = this.brutes[i];
       if (!b) continue;
@@ -674,20 +695,29 @@ export class Rivals {
         }
       }
       // Children are born only if the clan can feed and house them.
-      clan.growT -= dt * (1 + this.captives(w, clan.id).length * 0.5);
+      // families: more of them with people who've joined from our tribe and settled in
+      const settled = members.filter((b) => b.turned && (b.age ?? GROWN_AGE) >= GROWN_AGE);
+      clan.growT -= dt * (1 + settled.length * 0.4);
       if (clan.growT <= 0) {
         clan.growT = 115 + w.rng() * 75;
         if (clan.food >= 4 && n < Math.min(MAX_BRUTES + extraRoom(clan), 6 + (clan.campTier ?? 0) * 3 + extraRoom(clan))) {
           clan.food -= 3;
-          const b = this.addBrute(w, clan, clan.x + (w.rng() - 0.5) * 40, clan.y + 20, { age: 0 });
+          // one who joined us… joined them: their child takes after them
+          const parent = settled.length && w.rng() < 0.6 ? pick(w.rng, settled) : null;
+          const b = this.addBrute(w, clan, (parent?.x ?? clan.x) + (w.rng() - 0.5) * 40, (parent?.y ?? clan.y) + 20, { age: 0, ...(parent?.look && w.rng() < 0.6 ? { look: { ...parent.look } } : {}) });
           say(b, "Baby!", 2);
-          w.toast("👶", `A child was born to the ${clan.name} clan.`, clan.x, clan.y);
+          if (parent) {
+            say(parent, "Our little one!", 2.5);
+            w.toast("👶", `${parent.name}, who joined the ${clan.name} clan, has a baby. They've made their life there now.`, parent.x, parent.y);
+          } else w.toast("👶", `A child was born to the ${clan.name} clan.`, clan.x, clan.y);
         }
       }
       // pit traps where our people walk; offerings to the dragons
       trapTick(w, this, clan, dt);
       riteTick(w, this, clan, dt);
       warDinoTick(w, this, clan);
+      // their own science (faster with every union, more hands, totems, and captives to learn from)
+      studyTick(w, clan, dt, members.filter((b) => (b.age ?? GROWN_AGE) >= GROWN_AGE && b.weapon !== "catapult").length, lvOf(clan, "boneTotem"), this.captives(w, clan.id).length);
       // spies come to watch us; a clan that's learned how sets ambushes for our people out in the wild
       const day = w.daylight > 0.45;
       if (t.danger !== "calm" && w.elapsed > 300 && day && !t.raid) {
@@ -726,6 +756,9 @@ export class Rivals {
       const friend = w.humans.some((o) => o !== h && !o.captive && !o.child && !o.stranger && o.state !== "down" && Math.hypot(o.x - h.x, o.y - h.y) < 60);
       if (friend && !guarded) this.free(w, h, `${h.name} was rescued from the ${clan.name} camp!`);
     }
+    holdsTick(w, this, dt);
+    seizeTick(w, this);
+    captivesSlow(w, this, dt);
     this.relT -= dt;
     if (this.relT <= 0) {
       this.relT = 70 + w.rng() * 70;
@@ -758,6 +791,8 @@ export class Rivals {
     if (b.captive) return; // carrying someone home: nothing else matters
     // the dragon rite: dance (but turn on anyone who comes for the offering)
     if (b.state === "cheer") return;
+    // holding part of our town
+    if (b.hold && holdThink(w, this, b, (x, hold) => this.preyFor(w, x, hold.r + 120, { x: hold.x, y: hold.y, r: hold.r + 140 }))) return;
     if (b.state === "dance") {
       const h = this.preyFor(w, b, 160, { x: b.x, y: b.y, r: 160 });
       if (h) {
@@ -855,6 +890,13 @@ export class Rivals {
       const enemy = this.clan(b.war);
       if (!enemy || b.stateT > 120) return this.goHome(w, b);
       if (Math.hypot(b.x - enemy.x, b.y - enemy.y) < 90) {
+        // they're out working round their camp: go after them
+        const out = this.brutes.filter((o) => o.clan === enemy.id && o.hp > 0 && !o.captive && !o.snatched && Math.hypot(o.x - enemy.x, o.y - enemy.y) < 700).sort((p, q) => Math.hypot(p.x - b.x, p.y - b.y) - Math.hypot(q.x - b.x, q.y - b.y))[0];
+        if (out) {
+          b.targetId = out.id;
+          setB(b, "fight", out.x, out.y);
+          return;
+        }
         // nobody left to fight: help yourself to their food and go home
         const grab = Math.min(3, enemy.food);
         enemy.food -= grab;
@@ -1306,7 +1348,7 @@ export class Rivals {
       b.think = 0;
       return;
     }
-    hurtHuman(w, h, wp.hit * (1 + (b.skill ?? 0) * 0.5), b.x, b.y, "club");
+    hurtHuman(w, h, wp.hit * (1 + (b.skill ?? 0) * 0.5) * mightOf(this.clan(b.clan)), b.x, b.y, "club");
   }
 
   grab(w: World, b: Brute, h: Human) {
@@ -1424,6 +1466,8 @@ export class Rivals {
     this.missiles = [];
     this.traps = [];
     this.rite = null;
+    this.holds = [];
+    this.ourShots = [];
     this.rel.clear();
   }
 
@@ -1435,8 +1479,10 @@ export class Rivals {
       started: this.started,
       next: this.nextClan,
       arriveT: this.arriveT,
-      clans: this.clans.map((c) => ({ id: c.id, name: c.name, color: c.color, x: r(c.x), y: r(c.y), food: Math.round(c.food * 10) / 10, raidT: r(c.raidT), growT: r(c.growT), smarts: c.smarts ?? 0, intel: c.intel ?? 0, style: c.style, campTier: c.campTier ?? 0, campWork: c.campWork ?? 0, sea: c.sea, fishT: c.fishT, colors: c.colors, bones: c.bones ?? 0, wood: c.wood ?? 0, builds: c.builds ?? {}, buildWork: Math.round((c.buildWork ?? 0) * 10) / 10, favor: c.favor, favorT: r(c.favorT ?? 0), riteT: c.riteT === undefined ? undefined : r(c.riteT), trapT: c.trapT === undefined ? undefined : r(c.trapT), altarBlood: c.altarBlood })),
-      brutes: this.brutes.map((b) => ({ clan: b.clan, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries", tint: b.tint, skill: b.skill ? Math.round(b.skill * 100) / 100 : undefined, haul: b.haul })),
+      clans: this.clans.map((c) => ({ id: c.id, name: c.name, color: c.color, x: r(c.x), y: r(c.y), food: Math.round(c.food * 10) / 10, raidT: r(c.raidT), growT: r(c.growT), smarts: c.smarts ?? 0, intel: c.intel ?? 0, style: c.style, campTier: c.campTier ?? 0, campWork: c.campWork ?? 0, sea: c.sea, fishT: c.fishT, colors: c.colors, bones: c.bones ?? 0, wood: c.wood ?? 0, builds: c.builds ?? {}, buildWork: Math.round((c.buildWork ?? 0) * 10) / 10, favor: c.favor, favorT: r(c.favorT ?? 0), riteT: c.riteT === undefined ? undefined : r(c.riteT), trapT: c.trapT === undefined ? undefined : r(c.trapT), altarBlood: c.altarBlood, science: c.science ? Math.round(c.science * 1000) / 1000 : undefined, tech: c.tech || undefined, merges: c.merges || undefined })),
+      brutes: this.brutes.map((b) => ({ clan: b.clan, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries", tint: b.tint, skill: b.skill ? Math.round(b.skill * 100) / 100 : undefined, haul: b.haul, hold: b.hold, turned: b.turned || undefined, look: b.look })),
+      holds: this.holds.map((h) => ({ ...h, x: r(h.x), y: r(h.y), food: Math.round(h.food * 10) / 10, t: r(h.t) })),
+      taken: this.taken.map((c) => ({ ...c, x: r(c.x), y: r(c.y), wear: Math.round(c.wear * 100) / 100, cd: 0, anim: 0 })),
       traps: this.traps.map((t) => ({ clan: t.clan, x: r(t.x), y: r(t.y), t: r(t.t), caught: t.caught })),
       rel: Array.from(this.rel.entries()).filter(([, v]) => v !== 0),
     };
@@ -1459,9 +1505,11 @@ export class Rivals {
       const clan = this.clan(b.clan);
       const move = moves.get(b.clan);
       const atCamp = move && Math.hypot(b.x - move.x, b.y - move.y) < 400;
-      if (clan) this.addBrute(w, clan, b.x + (atCamp ? move!.dx : 0), b.y + (atCamp ? move!.dy : 0), { name: b.name, hp: b.hp, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries", ...((b as { tint?: string }).tint ? { tint: (b as { tint?: string }).tint } : {}), ...(b.skill ? { skill: b.skill } : {}), ...(b.haul ? { haul: b.haul } : {}) });
+      if (clan) this.addBrute(w, clan, b.x + (atCamp ? move!.dx : 0), b.y + (atCamp ? move!.dy : 0), { name: b.name, hp: b.hp, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries", ...((b as { tint?: string }).tint ? { tint: (b as { tint?: string }).tint } : {}), ...(b.skill ? { skill: b.skill } : {}), ...(b.haul ? { haul: b.haul } : {}), ...((b as { hold?: number }).hold ? { hold: (b as { hold?: number }).hold } : {}), ...((b as { turned?: boolean }).turned ? { turned: true } : {}), ...((b as { look?: Brute["look"] }).look ? { look: (b as { look?: Brute["look"] }).look } : {}) });
     }
     for (const [k, v] of d.rel ?? []) this.rel.set(k, v);
+    this.holds = ((d as { holds?: ClanHold[] }).holds ?? []).filter((h) => this.clan(h.clan)).map((h) => ({ ...h }));
+    this.taken = ((d as { taken?: OurCatapult[] }).taken ?? []).map((c) => ({ ...c }));
     for (const t of d.traps ?? []) if (this.clan(t.clan)) this.traps.push({ id: w.nextId(), clan: t.clan, x: t.x, y: t.y, t: t.t, caught: t.caught && w.humans.some((h) => h.id === t.caught && h.captive === t.clan) ? t.caught : 0 });
     // anyone mid-carry when the game was saved ends up at the camp
     for (const h of w.humans) if (h.captive && !this.clan(h.captive)) h.captive = 0;

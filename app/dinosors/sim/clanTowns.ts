@@ -13,6 +13,7 @@
 /*  but people (and dragons) can still get at it.                      */
 /* ------------------------------------------------------------------ */
 import { hurtHuman } from "./injury";
+import { hasTech } from "./clanTech";
 import { P } from "./particles";
 import type { Brute, Clan } from "./types";
 import type { World } from "./world";
@@ -31,7 +32,7 @@ export const colorsOf = (c: Clan) => (c.colors?.length ? c.colors : [c.color]);
 export const isTown = (c: Clan) => colorsOf(c).length > 1 || (c.campTier ?? 0) >= 4;
 
 /** Has this clan learned to build catapults? */
-export const hasEngines = (c: Clan) => isTown(c) && (c.campTier ?? 0) >= 3;
+export const hasEngines = (c: Clan) => (isTown(c) && (c.campTier ?? 0) >= 3) || hasTech(c, "catapults");
 
 /** Two bands become one: colours + names combine, and the camp grows into a town. */
 export function unite(from: Clan, into: Clan) {
@@ -41,6 +42,10 @@ export function unite(from: Clan, into: Clan) {
   const names = (into.name + "-" + from.name).split("-");
   into.name = names.slice(0, 3).join("-");
   into.campTier = Math.min(MAX_CAMP_TIER, Math.max(into.campTier ?? 0, from.campTier ?? 0) + 1);
+  // they pool what they know, and every union makes them learn faster
+  into.tech = Math.max(into.tech ?? 0, from.tech ?? 0);
+  into.science = Math.max(into.science ?? 0, from.science ?? 0);
+  into.merges = (into.merges ?? 0) + (from.merges ?? 0) + 1;
 }
 
 /** What a catapult should smash first: Scorpions, then towers, then walls (null = nothing in sight). */

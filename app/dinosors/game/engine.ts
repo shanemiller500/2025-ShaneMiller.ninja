@@ -3,6 +3,8 @@
 /*  World, Renderer and AudioManager and talks to React only through   */
 /*  a tiny event emitter and a polled snapshot (never per-frame state). */
 /* ------------------------------------------------------------------ */
+import { CLAN_TECH, techOf } from "../sim/clanTech";
+import { upgradeCatapult, upgradeCost } from "../sim/ourCatapults";
 import { claimNest, nestEggs, orphanNests } from "../sim/dragonNests";
 import { CLAN_BUILDS, nextProject } from "../sim/clanLife";
 import type { ClanBuild } from "../sim/types";
@@ -214,7 +216,11 @@ export interface Snapshot {
   rivals: {
     clans: { id: number; name: string; color: string; size: number; children: number; food: number; style: string; campTier: number; x: number; y: number; captives: string[]; wars: string[]; pacts: string[];
       /** clan life: stores, what's built, what's next, pits dug, trained warriors, and the dragon they've fed */
-      bones: number; wood: number; builds: string[]; project: string | null; traps: number; trained: number; dragonFriend: string | null; rite: boolean; warDinos: number }[];
+      bones: number; wood: number; builds: string[]; project: string | null; traps: number; trained: number; dragonFriend: string | null; rite: boolean; warDinos: number;
+      /** their science: inventions so far (icons), progress to the next, and parts of our town they hold */
+      tech: string[]; science: number; holds: number }[];
+    /** clan catapults we captured */
+    catapults: { id: number; level: number; wear: number; keeper: string; cost: string; x: number; y: number }[];
   };
   tribe: {
     level: number;
@@ -1689,6 +1695,15 @@ export class Engine {
     const dr = claimNest(w, nest);
     if (!dr) w.toast("🐉", "That nest already has a dragon (or no eggs left).", nest.x, nest.y);
     else this.flyTo(nest.x, nest.y, 0.8);
+    this.emit({ type: "select" });
+  }
+
+  /** Upgrade one of the clan catapults we captured. */
+  upgradeCatapult(id: number) {
+    const c = this.world.rivals.taken.find((x) => x.id === id);
+    if (!c) return;
+    const why = upgradeCatapult(this.world, c);
+    if (why) this.world.toast("🪨", why, c.x, c.y);
     this.emit({ type: "select" });
   }
 
@@ -3167,8 +3182,16 @@ export class Engine {
             dragonFriend: cl.favor && (cl.favorT ?? 0) > 0 ? w.dragons.byId(cl.favor)?.name ?? "a dragon" : null,
             rite: w.rivals.rite?.clan === cl.id,
             warDinos: w.dinos.filter((d) => d.clan === cl.id).length,
+            tech: CLAN_TECH.slice(0, techOf(cl)).map((t) => `${t.icon} ${t.name}`),
+            science: Math.round((cl.science ?? 0) * 100),
+            holds: w.rivals.holds.filter((h) => h.clan === cl.id).length,
           };
         }),
+        catapults: w.rivals.taken.map((c) => ({
+          id: c.id, level: c.level, wear: Math.round(c.wear * 100), x: c.x, y: c.y,
+          keeper: w.humans.find((h) => h.id === c.keeper)?.name ?? "nobody",
+          cost: c.level >= 3 ? "" : Object.entries(upgradeCost(c)).map(([r, n]) => `${n} ${r}`).join(", "),
+        })),
       },
       orderFor: this.orderFor,
       rallied: this.rallyRoles !== null,

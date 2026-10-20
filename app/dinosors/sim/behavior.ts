@@ -4,6 +4,7 @@
 /*  territory > play. `think` picks a state (throttled, cheaper off-   */
 /*  screen); `act` runs the current state every frame.                 */
 /* ------------------------------------------------------------------ */
+import { seaHuntAct, seaHuntThink } from "./seaHunters";
 import { clanDinoThink } from "./clanLife";
 import { FACTS } from "../data/facts";
 import { sp } from "../data/species";
@@ -1203,6 +1204,8 @@ function actFlyer(w: World, d: Dino, def: SpeciesDef, dt: number) {
 
 function thinkSwimmer(w: World, d: Dino, def: SpeciesDef) {
   if (d.state === "breach") return;
+  // sea hunters stalk whatever comes to the water's edge (seaHunters.ts)
+  if (seaHuntThink(w, d)) return;
   if (d.hunger > 0.4) {
     let best: { x: number; y: number; id: number } | null = null;
     let bd = (def.sense * 2) ** 2;
@@ -1245,6 +1248,7 @@ function breach(w: World, d: Dino) {
 }
 
 function actSwimmer(w: World, d: Dino, dt: number) {
+  if (seaHuntAct(w, d, dt)) return;
   switch (d.state) {
     case "breach":
       d.z = Math.max(0, Math.sin((d.stateT / 1.6) * Math.PI) * 60);

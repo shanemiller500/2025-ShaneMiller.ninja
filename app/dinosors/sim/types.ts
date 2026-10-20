@@ -47,7 +47,8 @@ export type BodyPlan =
   | "hadrosaur"
   | "pachy"
   | "pterosaur"
-  | "mosasaur";
+  | "mosasaur"
+  | "plesiosaur";
 
 export type SpeciesId =
   | "trex"
@@ -66,6 +67,8 @@ export type SpeciesId =
   | "iguano"
   | "compy"
   | "mosa"
+  | "plesio"
+  | "plio"
   | "ptera"
   | "dimorpho";
 
@@ -150,6 +153,8 @@ export interface SpeciesDef {
 }
 
 export type DinoState =
+  // a sea hunter bursting out of the water at its prey (seaHunters.ts)
+  | "lunge"
   | "idle"
   | "wander"
   | "seekFood"
@@ -249,6 +254,10 @@ export interface Dino {
   raider: boolean;
   /** tamed by a Neanderthal clan (its id): lives in their pen, fights in their raids */
   clan?: number;
+  /** a sea hunter's current hunt: who, where it lies in wait, how long it's waited (seaHunters.ts) */
+  seaHunt?: { kind: "human" | "brute" | "dino"; prey: number; sx: number; sy: number; wait?: number; back?: boolean };
+  /** seconds until a sea hunter hunts again */
+  huntCd?: number;
   /** evolution tier: 0 normal, 1 tough, 2 alpha */
   tier: number;
   /** working down the mine as a pack animal (parked + hidden on the surface; see packs.ts) */
@@ -528,6 +537,14 @@ export interface Human {
   escort?: number;
   /** dropped by a dragon: falling through the air (dragons.ts moves the body) */
   falling?: boolean;
+  /** the captured clan catapult this person crews (bonded to it for good: ourCatapults.ts) */
+  catapult?: number;
+  /** made to wear a clan's rags while held captive (its id) */
+  clanGarb?: number;
+  /** seconds held captive (long enough, and some give up and join the clan) */
+  captiveT?: number;
+  /** a captive's chore: where they're sent to fetch from, and the load they're bringing back */
+  chore?: { x: number; y: number; r: "food" | "wood" | "bones"; t: number; back: boolean } | null;
 }
 
 /* ------------------------------ Neanderthals ------------------------------ */
@@ -543,9 +560,40 @@ export type BruteState = "idle" | "wander" | "walk" | "sleep" | "fight" | "hunt"
   | "tame";
 
 /** What a clan builds up at home (clanLife.ts). */
-export type ClanBuild = "longhouse" | "smokehouse" | "boneRack" | "trainingRing" | "dragonAltar" | "dinoPen";
+export type ClanBuild = "longhouse" | "smokehouse" | "boneRack" | "trainingRing" | "dragonAltar" | "dinoPen" | "boneFence" | "boneTotem";
 
 /** A Neanderthal pit trap dug where our people walk. */
+/** Part of our town the Neanderthals have taken and are holding (clanHolds.ts). */
+export interface ClanHold {
+  id: number;
+  clan: number;
+  x: number;
+  y: number;
+  r: number;
+  /** supplies the occupiers have left */
+  food: number;
+  /** seconds held */
+  t: number;
+  /** surrounded by our people: no supplies get through */
+  cut: boolean;
+}
+
+/** A clan catapult we captured (ourCatapults.ts). */
+export interface OurCatapult {
+  id: number;
+  x: number;
+  y: number;
+  dir: 1 | -1;
+  /** the person who took it: they crew it, keep it up and upgrade it (for good) */
+  keeper: number;
+  /** 1..3 */
+  level: number;
+  /** 0..1 worn down (1 = broken until repaired) */
+  wear: number;
+  cd: number;
+  anim: number;
+}
+
 export interface ClanTrap {
   id: number;
   clan: number;
@@ -611,6 +659,12 @@ export interface Brute {
   snatched?: number;
   /** dropped by a dragon: falling through the air (dragons.ts moves the body) */
   falling?: boolean;
+  /** holding part of our town (a clanHolds.ts hold id) */
+  hold?: number;
+  /** once one of ours: a captive who gave up and joined the clan */
+  turned?: boolean;
+  /** looks like one of our people (someone who joined, or their child), not a Neanderthal */
+  look?: { skin: string; hair: string; fur: string };
   /** 0..1 fighting skill from sparring at the clan's training ring */
   skill?: number;
   /** bones / wood being carried home for the clan's building */
@@ -668,6 +722,11 @@ export interface Clan {
   trapT?: number;
   /** fresh blood on the dragon altar (fades) */
   altarBlood?: number;
+  /** clan know-how (clanTech.ts): progress toward the next invention, and how many they have */
+  science?: number;
+  tech?: number;
+  /** how many bands have united into this one (each union speeds their progress up) */
+  merges?: number;
 }
 
 export type ItemKind = "meat" | "fish" | "fruit" | "berries" | "poop" | "fossil" | "stick" | "stone" | "bones" | "carcass";

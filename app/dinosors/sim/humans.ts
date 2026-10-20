@@ -31,6 +31,7 @@ import { autoButcher, type Task } from "./tasks";
 import { COURAGE, bandNear, canFight, courageScore, foesNear, onMission } from "./courage";
 import { cutCarcass, cutTime, hasYield } from "./carcass";
 import { hasCart, pickNeed } from "./carts";
+import { keeperThink } from "./ourCatapults";
 import { OUTFIT_BY_ID } from "../data/colony";
 
 /** How much rain + wet this person's clothes keep off (0..1). */
@@ -688,6 +689,8 @@ function think(w: World, h: Human) {
   if (nearby && !safe && !task && h.dragon && dragonRiderDefend(w, h, nearby)) return;
   // a Dino Rider whose partner can fight rides at local danger instead of running from it
   if (nearby && !safe && !task && h.partner && riderCanFight(w, h) && riderDefend(w, h, nearby)) return;
+  // a catapult's keeper mans it when enemies come in range (and keeps it repaired)
+  if (h.catapult && !h.child && h.hp > 0.35 && !task && keeperThink(w, h)) return;
   // strength in numbers: armed people out on a job size up the fight, and a band that can win stands its ground
   const courage = nearby && !safe && (nearby.kind === "predator" || nearby.kind === "raid") ? rally(w, h, task, fightTask) : null;
   if (courage === "fight") return;
@@ -1334,7 +1337,8 @@ export function updateHuman(w: World, h: Human, dt: number) {
   if (h.captive) {
     // carried off or held at a Neanderthal camp: the clan moves them, nothing else happens
     h.vx = h.vy = 0;
-    if (h.state !== "captive") h.state = "captive";
+    // (out on a chore for the clan, clanCaptives.ts moves them)
+    if (h.state !== "captive" && !h.chore) h.state = "captive";
     return;
   }
   updateWarmth(w, h, dt);

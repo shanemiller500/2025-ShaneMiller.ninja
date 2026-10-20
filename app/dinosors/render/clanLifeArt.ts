@@ -4,7 +4,8 @@
 /*  the dragon altar with its skull pillar + fire bowls) and the pit   */
 /*  traps they hide under leaves. Origin: the spot on the ground.      */
 /* ------------------------------------------------------------------ */
-import type { Clan, ClanBuild, ClanTrap } from "../sim/types";
+import type { Clan, ClanBuild, ClanHold, ClanTrap } from "../sim/types";
+import { fenceSize } from "../sim/clanLife";
 import { clanFlag } from "./bruteArt";
 import { shade } from "./drawDino";
 import { drawFlame } from "./sprites";
@@ -82,8 +83,10 @@ function skull(c: CanvasRenderingContext2D, x: number, y: number, s: number, hor
 }
 
 /** One of a clan's buildings at its level (1+). */
-export function drawClanBuilding(c: CanvasRenderingContext2D, clan: Clan, kind: ClanBuild, lv: number, t: number, night: boolean) {
+export function drawClanBuilding(c: CanvasRenderingContext2D, clan: Clan, kind: ClanBuild, lv: number, t: number, night: boolean, part?: "back" | "front") {
   const cols = colorsOf(clan);
+  if (kind === "boneFence") return boneFence(c, clan, cols, lv, part ?? "front");
+  if (kind === "boneTotem") return boneTotems(c, cols, lv, t);
   // trampled ground under everything
   c.fillStyle = "rgba(110,84,56,0.32)";
   c.beginPath();
@@ -328,6 +331,99 @@ function trainingRing(c: CanvasRenderingContext2D, cols: string[], lv: number, t
   }
 }
 
+/** A fence of the dino bones they've collected, right round the camp: ribs, tusks, skulls on posts. */
+function boneFence(c: CanvasRenderingContext2D, clan: Clan, cols: string[], lv: number, part: "back" | "front") {
+  const { rx, ry } = fenceSize(clan);
+  const n = 46 + lv * 10;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const front = Math.sin(a) >= 0;
+    if ((part === "front") !== front) continue;
+    // the gate: a gap at the front
+    if (Math.abs(a - Math.PI / 2) < 0.12) continue;
+    const x = Math.cos(a) * rx;
+    const y = Math.sin(a) * ry;
+    const h = 26 + (i % 3) * 5 + lv * 6;
+    if (i % 7 === 0) {
+      post(c, x, y, y - h - 6, 4, BONE);
+      skull(c, x, y - h - 10, 0.55, lv >= 2 && i % 14 === 0);
+    } else if (i % 2) {
+      // a curved rib
+      c.strokeStyle = INK;
+      c.lineWidth = 5;
+      c.lineCap = "round";
+      c.beginPath();
+      c.moveTo(x, y);
+      c.quadraticCurveTo(x + (x > 0 ? 8 : -8), y - h * 0.6, x + (x > 0 ? 2 : -2), y - h);
+      c.stroke();
+      c.strokeStyle = BONE;
+      c.lineWidth = 3.4;
+      c.stroke();
+    } else bone(c, x, y, x, y - h * 0.85, 3.4);
+  }
+  // lashed rails between them (two at level 2)
+  c.strokeStyle = "rgba(122,85,48,0.9)";
+  c.lineWidth = 2;
+  for (const hy of lv >= 2 ? [-10, -22] : [-12]) {
+    c.beginPath();
+    let first = true;
+    for (let i = 0; i <= 60; i++) {
+      const a = (i / 60) * Math.PI * 2;
+      const front = Math.sin(a) >= 0;
+      if ((part === "front") !== front || Math.abs(a - Math.PI / 2) < 0.14) {
+        first = true;
+        continue;
+      }
+      const x = Math.cos(a) * rx;
+      const y = Math.sin(a) * ry + hy;
+      if (first) c.moveTo(x, y);
+      else c.lineTo(x, y);
+      first = false;
+    }
+    c.stroke();
+  }
+  // gate posts with the clan's banner
+  if (part === "front") {
+    for (const k of [-1, 1]) {
+      const a = Math.PI / 2 + k * 0.14;
+      const x = Math.cos(a) * rx;
+      const y = Math.sin(a) * ry;
+      post(c, x, y, y - 54, 5, BONE);
+      skull(c, x, y - 58, 0.7, true);
+      clanFlag(c, cols, x, y - 50, 16 * k, 11, 1);
+    }
+  }
+}
+
+/** Carved bone totems: stacked skulls + vertebrae, painted in the clan's colours. */
+function boneTotems(c: CanvasRenderingContext2D, cols: string[], lv: number, t: number) {
+  const spots: [number, number, number][] = [[0, 0, 1], [-40, 14, 0.8], [38, 18, 0.85]];
+  for (let i = 0; i < Math.min(lv, 3); i++) {
+    const [x, y, s] = spots[i];
+    c.save();
+    c.translate(x, y);
+    c.scale(s, s);
+    post(c, 0, 0, -64, 9, "#d9cfb3");
+    for (let k = 0; k < 4; k++) {
+      c.fillStyle = cols[k % cols.length];
+      c.fillRect(-6, -12 - k * 12, 12, 3);
+    }
+    skull(c, 0, -30, 0.8);
+    skull(c, 0, -52, 0.9, true);
+    skull(c, 0, -74, 1.1, true);
+    // feathers + a flickering offering bowl at the foot
+    c.strokeStyle = cols[0];
+    c.lineWidth = 2;
+    for (const k of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(k * 8, -82);
+      c.lineTo(k * 14, -96 + Math.sin(t * 3 + k) * 2);
+      c.stroke();
+    }
+    c.restore();
+  }
+}
+
 function dinoPen(c: CanvasRenderingContext2D, cols: string[], lv: number) {
   const rx = 78 + lv * 16;
   const ry = 34 + lv * 7;
@@ -565,4 +661,43 @@ export function drawClanTrap(c: CanvasRenderingContext2D, trap: ClanTrap) {
   c.moveTo(4, 3);
   c.lineTo(14, -1);
   c.stroke();
+}
+
+/** Part of our town a clan is holding: their banner planted in it, the ground trampled, wreckage about. */
+export function drawClanHold(c: CanvasRenderingContext2D, hold: ClanHold, clan: Clan | null, t: number) {
+  const cols = clan ? colorsOf(clan) : ["#c0392b"];
+  c.strokeStyle = "rgba(200,40,40,0.35)";
+  c.lineWidth = 3;
+  c.setLineDash([10, 8]);
+  c.beginPath();
+  c.ellipse(0, 0, hold.r, hold.r * 0.55, 0, 0, Math.PI * 2);
+  c.stroke();
+  c.setLineDash([]);
+  // wreckage
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.4 + hold.id;
+    const x = Math.cos(a) * hold.r * (0.3 + (i % 3) * 0.2);
+    const y = Math.sin(a) * hold.r * 0.4 * (0.4 + (i % 2) * 0.4);
+    c.strokeStyle = i % 2 ? "#6a4a2a" : "#8a6238";
+    c.lineWidth = 2.5;
+    c.beginPath();
+    c.moveTo(x - 6, y);
+    c.lineTo(x + 6, y - 3 + (i % 3));
+    c.stroke();
+  }
+  // their banner on a bone pole, a skull on top
+  post(c, 0, 0, -70, 5, BONE);
+  skull(c, 0, -74, 0.75, true);
+  clanFlag(c, cols, 0, -66, 30, 20, Math.sin(t * 3 + hold.id) * 3);
+  // how hungry they are (a little food bar)
+  const k = Math.max(0, Math.min(1, hold.food / 25));
+  c.fillStyle = "rgba(0,0,0,0.45)";
+  c.fillRect(-20, 8, 40, 5);
+  c.fillStyle = k > 0.3 ? "#e0a040" : "#e05040";
+  c.fillRect(-20, 8, 40 * k, 5);
+  if (hold.cut) {
+    c.font = "12px sans-serif";
+    c.textAlign = "center";
+    c.fillText("⛺", 0, 26);
+  }
 }

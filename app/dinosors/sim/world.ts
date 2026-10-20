@@ -288,6 +288,8 @@ export class World {
     g("compy", { x: 46, y: 62 }, 5);
     g("mosa", { x: 30, y: 100 }, 1);
     g("mosa", { x: 120, y: 106 }, 1);
+    g("plesio", { x: 70, y: 104 }, 2);
+    g("plio", { x: 150, y: 100 }, 1);
     g("ptera", { x: 90, y: 24 }, 4);
     g("dimorpho", { x: 24, y: 18 }, 3);
     // a few babies tagging along
@@ -1015,6 +1017,8 @@ export class World {
         ...(h.partner ? { partner: h.partner } : {}),
         ...(h.dragon ? { dragon: h.dragon } : {}),
         ...(h.sonic ? { sonic: true } : {}),
+        ...(h.catapult ? { catapult: h.catapult } : {}),
+        ...(h.captive && h.captiveT ? { captiveT: Math.round(h.captiveT), clanGarb: h.clanGarb } : {}),
       })),
       tribe: this.tribe.serialize(),
       shifts: this.shifts.serialize(),
@@ -1093,6 +1097,8 @@ export class World {
         ...((h as { partner?: number }).partner ? { partner: (h as { partner?: number }).partner } : {}),
         ...((h as { dragon?: number }).dragon ? { dragon: (h as { dragon?: number }).dragon } : {}),
         ...((h as { sonic?: boolean }).sonic ? { sonic: true } : {}),
+        ...((h as { catapult?: number }).catapult ? { catapult: (h as { catapult?: number }).catapult } : {}),
+        ...((h as { captiveT?: number }).captiveT ? { captiveT: (h as { captiveT?: number }).captiveT, clanGarb: (h as { clanGarb?: number }).clanGarb } : {}),
       });
       hu.id = h.id;
     }
