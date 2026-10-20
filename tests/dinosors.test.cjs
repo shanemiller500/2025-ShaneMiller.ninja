@@ -936,7 +936,9 @@ test('energy: towers charge up to their store, storms charge faster, condensers 
   finish(w, 'energyTower', w.camp.x - 160, w.camp.y + 140);
   finish(w, 'energyTower', w.camp.x - 120, w.camp.y + 200);
   w.civ.energy = 0;
-  run(w, 20);
+  // (no random grid failures while we time the charging)
+  const steady = () => { w.civ.strain = 0; };
+  run(w, 20, steady);
   const calm = w.civ.energy;
   assert.ok(calm > 10, `charged (${calm.toFixed(1)})`);
   run(w, 400);
@@ -944,7 +946,7 @@ test('energy: towers charge up to their store, storms charge faster, condensers 
   w.civ.energy = 0;
   w.weather.set(w, 'storm');
   w.weather.storm = 1;
-  run(w, 20);
+  run(w, 20, steady);
   assert.ok(w.civ.energy > calm * 1.3, `storm charges faster (${w.civ.energy.toFixed(1)} vs ${calm.toFixed(1)})`);
   finish(w, 'condenser', w.camp.x + 240, w.camp.y + 260);
   const humid = (o) => { Object.assign(w.weather, o); };

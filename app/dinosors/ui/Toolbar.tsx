@@ -21,7 +21,7 @@ const HAS_OPTIONS = new Set<ToolId>(["dino", "egg", "food", "plant", "land", "we
 export default memo(Toolbar);
 
 /** The toy box: memoized, so it only re-renders when the tool, unlocks, techs or stock actually change. */
-function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none", trainOpen = false, onTrain, shiftOpen = false, onShifts }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void; shiftOpen?: boolean; onShifts?: () => void }) {
+function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none", trainOpen = false, onTrain, shiftOpen = false, onShifts, orphanNests = [], onClaimNest }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void; shiftOpen?: boolean; onShifts?: () => void; orphanNests?: { id: number; breed: string; eggs: number; found: boolean }[]; onClaimNest?: (id: number) => void }) {
   const [open, setOpen] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<ToolId | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -100,6 +100,23 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
                   egg={open === "egg"}
                   onPick={(s) => { if (open === "egg") setTool({ dragonEgg: null }); pick(open === "dino" ? "species" : "egg", s); }}
                 />
+              )}
+              {open === "dino" && orphanNests.length > 0 && onClaimNest && (
+                <div className="mt-2 border-t border-white/10 pt-2">
+                  <p className="px-1 pb-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/75">🐉 Nests with eggs and no dragon: send one to take over</p>
+                  <div className="flex flex-wrap justify-center gap-1.5">
+                    {orphanNests.map((n) => {
+                      const b = BREED_LIST.find((x) => x.id === n.breed);
+                      return (
+                        <button key={n.id} type="button" onClick={() => onClaimNest(n.id)}
+                          className="flex min-h-11 items-center gap-1.5 rounded-xl bg-white/10 px-2.5 text-xs font-bold transition hover:bg-white/20 active:scale-95">
+                          <span className="inline-block h-4 w-3 rounded-[50%]" style={{ background: b?.look.egg, boxShadow: `inset -2px -2px 0 ${b?.look.spots}` }} />
+                          {b?.name ?? "Dragon"} · {n.eggs} egg{n.eggs > 1 ? "s" : ""}{n.found ? "" : " (hidden nest)"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
               {open === "egg" && (
                 <div className="mt-2 border-t border-white/10 pt-2">

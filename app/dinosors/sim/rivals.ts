@@ -71,8 +71,9 @@ interface Missile {
   dur: number;
   target: number;
   dmg: number;
-  kind: "spear" | "rock" | "sling" | "boulder";
-  targetKind?: "scorpion" | "tower" | "wall";
+  kind: "spear" | "rock" | "sling" | "boulder" | "fireball" | "arrow" | "gore";
+  targetKind?: "scorpion" | "tower" | "wall" | "camp";
+  goreName?: string;
 }
 
 const relKey = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
@@ -372,7 +373,8 @@ export class Rivals {
     // a clan town rolls out its catapult(s)
     if (hasEngines(clan)) {
       const want = (clan.campTier ?? 0) >= MAX_CAMP_TIER ? 2 : 1;
-      for (let i = 0; i < want; i++) party.push(this.addBrute(w, clan, clan.x + (i - 0.5) * 40, clan.y + 30, { weapon: "catapult", name: "Catapult", age: GROWN_AGE }));
+      const captives = this.captives(w, clan.id).filter((h) => !h.child && !this.brutes.some((b) => b.captive === h.id));
+      for (let i = 0; i < want; i++) party.push(this.addBrute(w, clan, clan.x + (i - 0.5) * 40, clan.y + 30, { weapon: "catapult", name: "Catapult", age: GROWN_AGE, siegeCaptive: captives[i]?.id, siegeShots: 0 }));
     }
     for (const b of party) {
       b.raid = true;
@@ -990,13 +992,13 @@ export class Rivals {
   private actBrute(w: World, b: Brute, dt: number) {
     const clan = this.clan(b.clan);
     const wp = BRUTE_WEAPONS[b.weapon];
-    // a catapult rolls slowly, and lobs boulders when it's dug in
+    // a catapult rolls up and fires once it is dug in
     if (b.weapon === "catapult") {
       if (b.state === "siege") {
         b.vx = b.vy = 0;
-        if (b.cd <= 0) this.fireBoulder(w, b);
+        if (b.cd <= 0) this.fireSiege(w, b);
       } else if (b.state === "walk" || b.state === "home") {
-        if (moveBrute(w, b, dt, SPEED * 0.45)) setB(b, "idle", b.x, b.y);
+        if (moveBrute(w, b, dt, SPEED * 0.7)) setB(b, "idle", b.x, b.y);
       }
       return;
     }
@@ -1248,8 +1250,8 @@ export class Rivals {
     }
   }
 
-  /** Lob a flaming boulder at whatever the catapult is besieging. */
-  private fireBoulder(w: World, b: Brute) {
+  /** Siege salvos: repeated structure damage, fireballs, arrows, and one captive volley. */
+  private fireSiege(w: World, b: Brute) {
     const t = siegeTarget(w, b);
     if (!t || Math.hypot(t.x - b.x, t.y - b.y) > CATAPULT_RANGE + 10) {
       setB(b, "idle", b.x, b.y);
@@ -1257,10 +1259,25 @@ export class Rivals {
     }
     b.cd = CATAPULT_RELOAD;
     b.anim = 0;
-    const flight = 2.2;
-    const tx = t.x + (w.rng() - 0.5) * 30;
-    const ty = t.y + (w.rng() - 0.5) * 20;
-    this.missiles.push({ x: b.x, y: b.y, z: 30, vx: (tx - b.x) / flight, vy: (ty - b.y) / flight, vz: (10 - 30) / flight + 0.5 * 260 * flight, t: 0, dur: flight, target: t.id, targetKind: t.kind, dmg: BOULDER_DMG, kind: "boulder" });
+    b.siegeShots = (b.siegeShots ?? 0) + 1;
+    const flight = 1.6;
+    const launch = (kind: Missile["kind"], x: number, y: number, target: number, damage: number, targetKind?: Missile["targetKind"], goreName?: string) => {
+      this.missiles.push({ x: b.x, y: b.y, z: 30, vx: (x - b.x) / flight, vy: (y - b.y) / flight, vz: (10 - 30) / flight + 0.5 * 260 * flight, t: 0, dur: flight, target, targetKind, dmg: damage, kind, goreName });
+    };
+    const captive = b.siegeCaptive ? w.humans.find((h) => h.id === b.siegeCaptive && h.captive === b.clan && !h.child) : null;
+    if (captive && b.siegeShots === 2) {
+      b.siegeCaptive = undefined;
+      const name = captive.name;
+      killHuman(w, captive, `${name} was loaded into the ${this.clan(b.clan)?.name ?? "enemy"} clan's catapult!`);
+      const aim = Math.hypot(w.camp.pileX - b.x, w.camp.pileY - b.y) <= CATAPULT_RANGE ? { x: w.camp.pileX, y: w.camp.pileY } : t;
+      for (let i = 0; i < 3; i++) launch("gore", aim.x + (i - 1) * 32, aim.y + (i % 2 ? -18 : 18), 0, 0, undefined, i === 0 ? name : undefined);
+    } else if (b.siegeShots % 4 === 0) {
+      launch("fireball", t.x, t.y, t.id, BOULDER_DMG * 1.35, t.kind);
+    } else if (b.siegeShots % 3 === 0) {
+      const defender = w.humans.filter((h) => !h.child && !h.captive && !h.under && !h.aloft && h.state !== "down" && Math.hypot(h.x - b.x, h.y - b.y) < CATAPULT_RANGE).sort((a, z) => Math.hypot(a.x - b.x, a.y - b.y) - Math.hypot(z.x - b.x, z.y - b.y))[0];
+      if (defender) for (let i = 0; i < 4; i++) launch("arrow", defender.x + (i - 1.5) * 5, defender.y + (i % 2 ? 4 : -4), defender.id, 0.13);
+      else launch("boulder", t.x, t.y, t.id, BOULDER_DMG, t.kind);
+    } else launch("boulder", t.x, t.y, t.id, BOULDER_DMG, t.kind);
     w.sfx("thud", b.x, b.y, 0.9, 0.5);
   }
 
@@ -1351,8 +1368,20 @@ export class Rivals {
       m.z += m.vz * dt;
       m.vz -= 260 * dt;
       if (m.t >= m.dur) {
-        if (m.kind === "boulder") {
-          boulderLands(w, m.x, m.y, m.target, m.targetKind);
+        if (m.kind === "boulder" || m.kind === "fireball") {
+          boulderLands(w, m.x, m.y, m.target, m.targetKind, m.dmg, m.kind === "fireball");
+          continue;
+        }
+        if (m.kind === "gore") {
+          w.particles.burst(P.Rock, m.x, m.y, 9, 95, { z: 12, vz: 75, g: 160, size: 5, max: 1.6, color: "#8d1d27" });
+          w.particles.burst(P.Mud, m.x, m.y, 16, 80, { size: 8, max: 2.2, color: "#b32632" });
+          w.particles.burst(P.Dust, m.x, m.y, 5, 35, { size: 16, max: 0.8, color: "rgba(115,18,27,0.6)" });
+          w.sfx("plop", m.x, m.y, 1, 0.5);
+          if (m.goreName) {
+            w.toast("💥", `${m.goreName}'s remains splattered across the camp!`, m.x, m.y);
+            w.shake(4, 0.5);
+          }
+          for (const h of w.humans) if (!h.captive && Math.hypot(h.x - m.x, h.y - m.y) < 75) h.fear = 1;
           continue;
         }
         if (m.targetKind === "scorpion") {
@@ -1365,7 +1394,7 @@ export class Rivals {
           continue;
         }
         const h = w.humans.find((o) => o.id === m.target);
-        if (h && !h.captive && Math.hypot(h.x - m.x, h.y - m.y) < 16) hurtHuman(w, h, m.dmg, m.x - m.vx * 0.1, m.y - m.vy * 0.1, m.kind === "rock" ? "rock" : "club");
+        if (h && !h.captive && Math.hypot(h.x - m.x, h.y - m.y) < 18) hurtHuman(w, h, m.dmg, m.x - m.vx * 0.1, m.y - m.vy * 0.1, m.kind === "rock" || m.kind === "arrow" ? "rock" : "club");
         else w.particles.burst(P.Dust, m.x, m.y, 3, 20, { size: 3, max: 0.4, color: "rgba(160,140,110,0.6)" });
       }
     }

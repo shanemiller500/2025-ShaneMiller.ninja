@@ -4,6 +4,8 @@
 /*  Layers: terrain → water/lava/fire ground FX → shadows → y-sorted   */
 /*  entities → flyers → particles → sky FX → light map → UI overlays.  */
 /* ------------------------------------------------------------------ */
+import { hasCart } from "../sim/carts";
+import { drawCart } from "./cartArt";
 import { sp } from "../data/species";
 import { CRAFT_STEPS } from "../sim/camp";
 import { isBaby, sizeOf } from "../sim/dinos";
@@ -24,7 +26,7 @@ import { drawDino, restPose, shade, type DinoPose } from "./drawDino";
 import { lookKey } from "../sim/genetics";
 import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawPlantLod, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
 import { ROLES } from "../data/facts";
-import { BUILDINGS, HOUSING } from "../data/colony";
+import { BUILDINGS, HOUSING, SCORPION_TIERS } from "../data/colony";
 import { drawBar, drawBones, drawBuilding, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
 import { drawDragon, drawDragonEgg, drawNest, drawPit } from "./dragonArt";
 import { clusters, drawField, drawPaddock, drawSeatRing } from "./mergedArt";
@@ -955,6 +957,12 @@ export class Renderer {
   private drawPerson(c: CanvasRenderingContext2D, h: Human, ov: Overlay, weapon: WeaponLook) {
     const w = this.world;
     const tribe = w.tribe;
+    if (hasCart(w, h)) {
+      c.save();
+      c.translate(h.x, h.y - h.z);
+      drawCart(c, h.dir, h.anim, h.state === "carry" ? h.carry : null, h.carryN);
+      c.restore();
+    }
       const picked = ov.selection.includes(h.id);
       if (picked || h.id === ov.followId) {
         c.save();
@@ -2393,6 +2401,8 @@ export class Renderer {
     for (const s of w.colony.scorpions) {
       if (s.built < 1 || s.x < x0 || s.x > x1 || s.y < y0 || s.y > y1) continue;
       const lift = s.mount === "tower" ? TOWER_Z : s.mount === "wall" ? 26 : 0;
+      const maxHp = SCORPION_TIERS[s.tier - 1]?.hp ?? 300;
+      if (s.hp < maxHp) drawBar(c, s.x, s.y - lift - 46, 46, Math.max(0, s.hp / maxHp), s.hp < maxHp * 0.3 ? "#ef4444" : "#f59e0b");
       if (!s.crew && (w.tribe.raid || w.dragons.menacing(w))) this.bubbleIcon(c, s.x, s.y - lift - 42, "❔", inv * 0.8, 0.9);
       if (ov.inspect?.kind === "scorpion" && ov.inspect.id === s.id) this.inspectRing(c, s.x, s.y - lift, 26);
     }

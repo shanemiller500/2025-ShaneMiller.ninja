@@ -30,6 +30,7 @@ import { healTick, hurtHuman, recover } from "./injury";
 import { autoButcher, type Task } from "./tasks";
 import { COURAGE, bandNear, canFight, courageScore, foesNear, onMission } from "./courage";
 import { cutCarcass, cutTime, hasYield } from "./carcass";
+import { hasCart, pickNeed } from "./carts";
 import { OUTFIT_BY_ID } from "../data/colony";
 
 /** How much rain + wet this person's clothes keep off (0..1). */
@@ -507,8 +508,11 @@ function nearestNode(w: World, x: number, y: number, r: Resource, max: number): 
   return best;
 }
 
-/** Refill the lowest relative supply first, counting loads already on their way home. */
-export function stockPriorities(w: World): Resource[] {
+/**
+ * Refill the lowest relative supply first, counting loads already on their way home.
+ * `all`: everything we collect, lowest first, even once it's all past its target (keep topping up).
+ */
+export function stockPriorities(w: World, all = false): Resource[] {
   const adults = w.humans.filter((h) => !h.child && !h.stranger).length;
   const target = Math.max(6, Math.ceil(adults * 0.6));
   const goals: [Resource, number][] = [
@@ -526,7 +530,7 @@ export function stockPriorities(w: World): Resource[] {
   return goals.map(([r, n]) => ({
     r,
     ratio: (w.camp.stock[r] + w.humans.reduce((sum, h) => sum + (h.carry === r ? h.carryN : h.task === r ? 1 : 0), 0)) / n,
-  })).filter((x) => x.ratio < 1).sort((a, b) => a.ratio - b.ratio).map((x) => x.r);
+  })).filter((x) => x.ratio < (all ? 4 : 1)).sort((a, b) => a.ratio - b.ratio).map((x) => x.r);
 }
 
 /** Where this person goes to hide / sleep: their home, else the cave. */
@@ -1025,15 +1029,20 @@ function think(w: World, h: Human) {
 
   // Urgent plans first (including whatever a build site is stuck waiting for), then restock the lowest supplies evenly.
   const urgent = camp.missing(w) ?? w.colony.missing(w) ?? w.civ.missing(w) ?? siteShortage(w);
-  const needs = urgent ? [urgent, ...stockPriorities(w).filter((r) => r !== urgent)] : stockPriorities(w);
-  for (const need of needs) {
-    const src = sourceFor(w, h, need);
-    if (src) {
-      h.task = need;
-      h.targetId = src.id;
-      go(h, "walk", src.x, src.y);
-      return;
+  let needs = urgent ? [urgent, ...stockPriorities(w).filter((r) => r !== urgent)] : stockPriorities(w);
+  // nothing short: keep topping up whatever's lowest (now and then they take a break or go exploring instead)
+  if (!needs.length && w.rng() < 0.7) needs = stockPriorities(w, true);
+  // the lowest supplies first, two people each, then the next lowest… (carts for the bulky loads)
+  const job = pickNeed(w, h, needs, (r) => sourceFor(w, h, r));
+  if (job) {
+    h.task = job.r;
+    h.targetId = job.src.id;
+    go(h, "walk", job.src.x, job.src.y);
+    if (hasCart(w, h) && !w.flags.has("carts")) {
+      w.flags.add("carts");
+      w.toast("🛒", `${h.name} took a cart out: twice the load of ${job.r} each trip! Everyone heads for whatever the camp is lowest on, two at a time.`, h.x, h.y);
     }
+    return;
   }
 
   // 8. leisure: a seat in the shade (most of all on hot days), chat, explore, wander
@@ -1125,7 +1134,8 @@ function arrive(w: World, h: Human) {
 function finishGather(w: World, h: Human) {
   const r = h.task as Resource;
   const basket = w.camp.learned.has("basket");
-  const ride = h.riding ? (heavyRider(w, h) ? 4 : 3) : 1;
+  // a cart (or a dino to carry it) takes a much bigger load
+  const ride = h.riding ? (heavyRider(w, h) ? 4 : 3) : hasCart(w, h) ? 2 : 1;
   // deposits: ore, clay, flint, artifacts…
   const node = h.targetId > 0 ? w.colony.nodeById(h.targetId) : null;
   if (node && Math.hypot(node.x - h.x, node.y - h.y) < 60) {
@@ -1261,13 +1271,21 @@ function fireTime(w: World, h: Human, dt: number) {
   }
 }
 
+/** How high a rider sits: on the back of the animal (up with it, on a flyer; long-necked giants are tall at the shoulder). */
+export function saddleZ(d: Dino) {
+  const def = sp(d.species);
+  if (def.move === "fly") return d.z + Math.max(6, sizeOf(d) * 0.13);
+  const tall = d.species === "brachio" ? 0.5 : d.species === "apato" ? 0.45 : 0.38;
+  return Math.max(18, sizeOf(d) * tall);
+}
+
 export function updateHuman(w: World, h: Human, dt: number) {
   const passengerMount = h.riding ? w.dinoById(h.riding) : null;
   if (passengerMount && h.id !== passengerMount.rider && passengerMount.passengers?.includes(h.id)) {
     const seat = passengerMount.passengers.indexOf(h.id);
     h.x = passengerMount.x + (seat === 0 ? -15 : 15) * passengerMount.dir;
     h.y = passengerMount.y - 2;
-    h.z = Math.max(18, sizeOf(passengerMount) * 0.38) + (sp(passengerMount.species).move === "fly" ? passengerMount.z : 0);
+    h.z = saddleZ(passengerMount);
     h.anim += dt * Math.max(0.2, Math.hypot(passengerMount.vx, passengerMount.vy) / 30);
     return;
   }
@@ -1362,7 +1380,8 @@ export function updateHuman(w: World, h: Human, dt: number) {
   if (h.state !== "celebrate") {
     const onTower = h.level === 1 && w.nav.isTower(tileOf(h.x, h.y));
     const mount = h.riding ? w.dinoById(h.riding) : null;
-    const z = mount ? Math.max(18, sizeOf(mount) * 0.38) : h.level === 1 ? (onTower ? TOWER_Z : WALK_Z) : 0;
+    // on its back (up in the air with it, on a flyer)
+    const z = mount ? saddleZ(mount) : h.level === 1 ? (onTower ? TOWER_Z : WALK_Z) : 0;
     h.z += (z - h.z) * Math.min(1, dt * 10);
   }
   if (h.riding) {

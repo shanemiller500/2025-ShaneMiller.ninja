@@ -338,7 +338,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           ) : (
             <>
               <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} />
-              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} shiftOpen={shiftsOpen} onShifts={() => setShiftsOpen((o) => !o)} />
+              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} shiftOpen={shiftsOpen} onShifts={() => setShiftsOpen((o) => !o)} orphanNests={snap.orphanNests} onClaimNest={(id) => engineRef.current?.claimNest(id)} />
               {trainOpen && <TrainPanel engine={engine} onClose={() => setTrainOpen(false)} />}
               <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
               {snap.inspect && !snap.selected && !engine.selectedDragon() && !engine.selectedEgg && <InspectPanel info={snap.inspect} snap={snap} engine={engine} />}

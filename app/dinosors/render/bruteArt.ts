@@ -6,6 +6,7 @@
 /*  Origin: feet (brute) / camp centre.                                */
 /* ------------------------------------------------------------------ */
 import type { Brute, Clan } from "../sim/types";
+import { CATAPULT_RELOAD } from "../sim/clanTowns";
 import { shade } from "./drawDino";
 import { drawFlame } from "./sprites";
 
@@ -424,18 +425,18 @@ function drawBruteWeapon(c: CanvasRenderingContext2D, kind: Brute["weapon"]) {
 }
 
 /** A thrown spear / rock in flight (origin = its ground spot; z lifts it). */
-export function drawBruteMissile(c: CanvasRenderingContext2D, kind: "spear" | "rock" | "sling" | "boulder", z: number, ang: number) {
+export function drawBruteMissile(c: CanvasRenderingContext2D, kind: "spear" | "rock" | "sling" | "boulder" | "fireball" | "arrow" | "gore", z: number, ang: number) {
   c.fillStyle = "rgba(0,0,0,0.2)";
   c.beginPath();
-  c.ellipse(0, 0, kind === "boulder" ? 11 : 4, kind === "boulder" ? 4 : 1.6, 0, 0, Math.PI * 2);
+  c.ellipse(0, 0, kind === "boulder" || kind === "fireball" ? 11 : 4, kind === "boulder" || kind === "fireball" ? 4 : 1.6, 0, 0, Math.PI * 2);
   c.fill();
   c.save();
   c.translate(0, -z);
-  if (kind === "boulder") {
+  if (kind === "boulder" || kind === "fireball") {
     // a flaming boulder trailing fire + smoke
     c.globalCompositeOperation = "lighter";
-    for (let i = 1; i <= 4; i++) {
-      c.fillStyle = `rgba(255,${150 - i * 20},40,${0.35 - i * 0.07})`;
+    for (let i = 1; i <= (kind === "fireball" ? 7 : 4); i++) {
+      c.fillStyle = `rgba(255,${160 - i * 16},30,${0.43 - i * 0.045})`;
       c.beginPath();
       c.arc(-Math.cos(ang) * i * 6, -Math.sin(ang) * i * 6, 9 - i, 0, Math.PI * 2);
       c.fill();
@@ -443,16 +444,25 @@ export function drawBruteMissile(c: CanvasRenderingContext2D, kind: "spear" | "r
     c.globalCompositeOperation = "source-over";
     c.fillStyle = INK;
     c.beginPath();
-    c.arc(0, 0, 9, 0, Math.PI * 2);
+    c.arc(0, 0, kind === "fireball" ? 13 : 9, 0, Math.PI * 2);
     c.fill();
     c.fillStyle = "#7d766b";
     c.beginPath();
-    c.arc(0, 0, 7.8, 0, Math.PI * 2);
+    c.arc(0, 0, kind === "fireball" ? 11 : 7.8, 0, Math.PI * 2);
     c.fill();
     c.fillStyle = "#ff8a2a";
     c.beginPath();
-    c.arc(2, -2, 3.4, 0, Math.PI * 2);
+    c.arc(2, -2, kind === "fireball" ? 8 : 3.4, 0, Math.PI * 2);
     c.fill();
+  } else if (kind === "gore") {
+    c.rotate(ang);
+    c.fillStyle = "#651722";
+    c.beginPath(); c.ellipse(0, 0, 11, 7, 0.3, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#b72d39";
+    c.beginPath(); c.ellipse(-1, -1, 8, 5, 0.3, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = "#e9d9bd";
+    c.lineWidth = 3;
+    c.beginPath(); c.moveTo(5, 0); c.lineTo(15, 3); c.stroke();
   } else if (kind === "rock" || kind === "sling") {
     c.fillStyle = INK;
     c.beginPath();
@@ -467,14 +477,14 @@ export function drawBruteMissile(c: CanvasRenderingContext2D, kind: "spear" | "r
     c.strokeStyle = "#7a5230";
     c.lineWidth = 2;
     c.beginPath();
-    c.moveTo(-14, 0);
-    c.lineTo(10, 0);
+    c.moveTo(kind === "arrow" ? -18 : -14, 0);
+    c.lineTo(kind === "arrow" ? 12 : 10, 0);
     c.stroke();
     c.fillStyle = "#c9c2b5";
     c.beginPath();
-    c.moveTo(10, -2.4);
-    c.lineTo(16, 0);
-    c.lineTo(10, 2.4);
+    c.moveTo(kind === "arrow" ? 12 : 10, -2.4);
+    c.lineTo(kind === "arrow" ? 18 : 16, 0);
+    c.lineTo(kind === "arrow" ? 12 : 10, 2.4);
     c.closePath();
     c.fill();
   }
@@ -547,8 +557,8 @@ export function drawCatapult(c: CanvasRenderingContext2D, b: Brute, colors: stri
   });
   // the throwing arm: cocked back while reloading, flung forward just after a shot
   const reload = b.cd;
-  const fired = reload > 6.2;
-  const ang = fired ? -1.9 : -0.35 - Math.min(1, (7 - reload) / 4) * 0.25;
+  const fired = reload > CATAPULT_RELOAD - 0.8;
+  const ang = fired ? -1.9 : -0.35 - Math.min(1, (CATAPULT_RELOAD - reload) / 3) * 0.25;
   c.save();
   c.translate(0, -34);
   c.rotate(ang);

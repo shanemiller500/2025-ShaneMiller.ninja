@@ -169,7 +169,8 @@ test('wild dragons heal when left alone, and break off a fight they cannot win',
   Object.assign(dr, { x: w.camp.x + 2000, y: w.camp.y, state: 'circle', tx: w.camp.x + 2000, ty: w.camp.y });
   dr.hp = dr.maxHp * 0.5;
   dr.calmT = 0;
-  run(w, 30);
+  // (keep it circling here, so it doesn't fly off)
+  run(w, 30, () => { dr.t = 0; dr.state = 'circle'; });
   assert.ok(dr.hp > dr.maxHp * 0.55, 'healing');
   // over a well-defended town, hurt: it reads the odds and flies off
   const w2 = world(9906);

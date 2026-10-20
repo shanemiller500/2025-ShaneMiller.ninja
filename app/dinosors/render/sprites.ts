@@ -347,15 +347,24 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.scale(h.dir, 1);
   const moving = st === "walk" || st === "carry" || st === "flee" || st === "explore" || st === "hunt" || st === "haul" || st === "dragonPlay";
   const sw = moving ? Math.sin(h.anim * 2.2) : 0;
-  const sit = st === "sitFire" || st === "craft" || st === "watch" || (st === "captive" && h.z <= 0) || !!h.aloft;
-  const bend = st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" || st === "heal" ? 0.2 : st === "haul" || st === "loadDino" ? -0.25 : st === "hunt" ? 0.25 : st === "tame" || st === "train" ? 0.15 : 0;
-  const hipY = sit ? -H * 0.22 : -H * 0.42;
+  // astride a dinosaur or a dragon: sitting on its back, the near leg hanging down its side
+  const ride = (!!h.aloft || !!h.riding) && st !== "tossed" && st !== "down";
+  const sit = !ride && (st === "sitFire" || st === "craft" || st === "watch" || (st === "captive" && h.z <= 0));
+  const bend = ride ? 0.06 : st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" || st === "heal" ? 0.2 : st === "haul" || st === "loadDino" ? -0.25 : st === "hunt" ? 0.25 : st === "tame" || st === "train" ? 0.15 : 0;
+  // a rider bobs with the animal's stride
+  const bob = ride ? -Math.abs(Math.sin(h.anim * 2.4)) * H * 0.025 : 0;
+  const hipY = ride ? -H * 0.05 + bob : sit ? -H * 0.22 : -H * 0.42;
 
   // legs
-  const feet: [number, number][] = sit ? [[H * 0.22, 0], [H * 0.3, 0]] : [[-H * 0.04 + sw * H * 0.18, 0], [H * 0.04 - sw * H * 0.18, 0]];
+  const feet: [number, number][] = ride ? [[H * 0.1, hipY + H * 0.3]] : sit ? [[H * 0.22, 0], [H * 0.3, 0]] : [[-H * 0.04 + sw * H * 0.18, 0], [H * 0.04 - sw * H * 0.18, 0]];
   c.lineCap = "round";
   c.beginPath();
-  if (sit) {
+  if (ride) {
+    // thigh forward along the back, shin down the flank (the far leg is hidden on the other side)
+    c.moveTo(H * 0.02, hipY);
+    c.lineTo(H * 0.17, hipY + H * 0.07);
+    c.lineTo(feet[0][0], feet[0][1]);
+  } else if (sit) {
     c.moveTo(-H * 0.05, hipY);
     c.lineTo(H * 0.2, hipY + H * 0.05);
     c.lineTo(feet[0][0], 0);
@@ -375,35 +384,35 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.lineWidth = H * 0.11;
   c.stroke();
   // rope-wrapped ankles + flat wooden sandals, like the storybook art
-  for (const [fx] of feet) {
+  for (const [fx, fy] of feet) {
     c.fillStyle = "#6b4a2a";
     c.beginPath();
-    c.ellipse(fx + H * 0.03, -H * 0.005, H * 0.09, H * 0.03, 0, 0, Math.PI * 2);
+    c.ellipse(fx + H * 0.03, fy - H * 0.005, H * 0.09, H * 0.03, ride ? 0.5 : 0, 0, Math.PI * 2);
     c.fill();
     c.strokeStyle = "#b08a5a";
     c.lineWidth = H * 0.035;
     c.lineCap = "butt";
     c.beginPath();
-    c.moveTo(fx - H * 0.065, -H * 0.06);
-    c.lineTo(fx + H * 0.065, -H * 0.08);
-    c.moveTo(fx - H * 0.065, -H * 0.11);
-    c.lineTo(fx + H * 0.065, -H * 0.13);
+    c.moveTo(fx - H * 0.065, fy - H * 0.06);
+    c.lineTo(fx + H * 0.065, fy - H * 0.08);
+    c.moveTo(fx - H * 0.065, fy - H * 0.11);
+    c.lineTo(fx + H * 0.065, fy - H * 0.13);
     c.stroke();
     c.lineCap = "round";
   }
   if (outfit?.winter) {
     // winter boots: tall hide boots with a fur cuff (iron-ringed for the elite gear)
-    for (const [fx] of feet) {
+    for (const [fx, fy] of feet) {
       c.fillStyle = outfit.winter >= 4 ? "#4a4f57" : "#5a3e26";
       c.beginPath();
-      c.roundRect(fx - H * 0.07, -H * 0.17, H * 0.14, H * 0.17, H * 0.03);
+      c.roundRect(fx - H * 0.07, fy - H * 0.17, H * 0.14, H * 0.17, H * 0.03);
       c.fill();
       c.beginPath();
-      c.ellipse(fx + H * 0.03, -H * 0.01, H * 0.1, H * 0.035, 0, 0, Math.PI * 2);
+      c.ellipse(fx + H * 0.03, fy - H * 0.01, H * 0.1, H * 0.035, 0, 0, Math.PI * 2);
       c.fill();
       c.fillStyle = outfit.trim;
       c.beginPath();
-      c.ellipse(fx, -H * 0.17, H * 0.085, H * 0.035, 0, 0, Math.PI * 2);
+      c.ellipse(fx, fy - H * 0.17, H * 0.085, H * 0.035, 0, 0, Math.PI * 2);
       c.fill();
     }
   }

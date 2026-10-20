@@ -20,9 +20,9 @@ import type { World } from "./world";
 /** Highest camp tier (3 = a big camp; 4 + 5 = a clan town). */
 export const MAX_CAMP_TIER = 5;
 /** A catapult throws this far: just past our heaviest Scorpion (700). */
-export const CATAPULT_RANGE = 740;
-export const CATAPULT_RELOAD = 7;
-export const BOULDER_DMG = 120;
+export const CATAPULT_RANGE = 940;
+export const CATAPULT_RELOAD = 4.5;
+export const BOULDER_DMG = 170;
 
 /** Every colour the clan flies (its own, plus each band that joined it). */
 export const colorsOf = (c: Clan) => (c.colors?.length ? c.colors : [c.color]);
@@ -44,8 +44,8 @@ export function unite(from: Clan, into: Clan) {
 }
 
 /** What a catapult should smash first: Scorpions, then towers, then walls (null = nothing in sight). */
-export function siegeTarget(w: World, b: Brute): { x: number; y: number; kind: "scorpion" | "tower" | "wall"; id: number } | null {
-  let best: { x: number; y: number; kind: "scorpion" | "tower" | "wall"; id: number } | null = null;
+export function siegeTarget(w: World, b: Brute): { x: number; y: number; kind: "scorpion" | "tower" | "wall" | "camp"; id: number } {
+  let best: { x: number; y: number; kind: "scorpion" | "tower" | "wall" | "camp"; id: number } | null = null;
   let bd = Infinity;
   for (const s of w.colony.scorpions) {
     if (s.built < 1 || s.hp <= 0) continue;
@@ -75,31 +75,33 @@ export function siegeTarget(w: World, b: Brute): { x: number; y: number; kind: "
       best = { x, y, kind: "wall", id: wl.id };
     }
   }
-  return best;
+  return best ?? { x: w.camp.pileX, y: w.camp.pileY, kind: "camp", id: 0 };
 }
 
 /** A flaming boulder lands: smashes what it hit and sets the ground alight. */
-export function boulderLands(w: World, x: number, y: number, target: number, kind: "scorpion" | "tower" | "wall" | undefined) {
+export function boulderLands(w: World, x: number, y: number, target: number, kind: "scorpion" | "tower" | "wall" | "camp" | undefined, damage = BOULDER_DMG, fireball = false) {
   w.particles.burst(P.Rock, x, y, 10, 70, { z: 20, size: 5, max: 0.8, color: "#8f877a" });
   w.particles.burst(P.Ember, x, y, 10, 60, { z: 10, vz: 60, size: 4, max: 0.9, color: "#ff8a2a" });
+  if (fireball) w.particles.burst(P.Ember, x, y, 24, 110, { z: 18, vz: 95, g: 110, size: 7, max: 1.2, color: "#ff5a1f" });
   w.particles.burst(P.Dust, x, y, 6, 50, { size: 14, max: 1, color: "rgba(150,130,100,0.6)" });
   w.sfx("boom", x, y, 0.8, 0.9);
   const tx = Math.floor(x / 32);
   const ty = Math.floor(y / 32);
-  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (w.rng() < 0.35) w.fire.ignite(w, tx + dx, ty + dy, 0.7);
+  const radius = fireball ? 2 : 1;
+  for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) if (w.rng() < (fireball ? 0.55 : 0.35)) w.fire.ignite(w, tx + dx, ty + dy, fireball ? 1 : 0.7);
   if (kind === "scorpion") {
     const sc = w.colony.scorpions.find((s) => s.id === target && s.built >= 1);
     if (sc && Math.hypot(sc.x - x, sc.y - y) < 44) {
-      sc.hp = Math.max(0, sc.hp - BOULDER_DMG);
+      sc.hp = Math.max(0, sc.hp - damage);
       if (sc.hp <= 0) w.toast("🪨", "A clan catapult smashed one of our Scorpions!", sc.x, sc.y);
     }
   } else if (kind === "tower") {
     const t = w.tribe.towers.find((o) => o.id === target);
-    if (t && Math.hypot(t.x - x, t.y - y) < 50) t.hp = Math.max(0, t.hp - BOULDER_DMG * 0.8);
+    if (t && Math.hypot(t.x - x, t.y - y) < 50) t.hp = Math.max(0, t.hp - damage * 0.8);
   } else if (kind === "wall") {
     const wl = w.tribe.walls.find((o) => o.id === target);
-    if (wl && Math.hypot(wl.tx * 32 + 16 - x, wl.ty * 32 + 16 - y) < 40) wl.hp -= BOULDER_DMG * 0.9;
+    if (wl && Math.hypot(wl.tx * 32 + 16 - x, wl.ty * 32 + 16 - y) < 40) wl.hp -= damage * 0.9;
   }
   // anyone standing there gets knocked flat
-  for (const h of w.humans) if (!h.aloft && Math.hypot(h.x - x, h.y - y) < 30) hurtHuman(w, h, 0.25, x, y, "rock");
+  for (const h of w.humans) if (!h.aloft && Math.hypot(h.x - x, h.y - y) < (fireball ? 65 : 30)) hurtHuman(w, h, fireball ? 0.35 : 0.25, x, y, fireball ? "burn" : "rock");
 }

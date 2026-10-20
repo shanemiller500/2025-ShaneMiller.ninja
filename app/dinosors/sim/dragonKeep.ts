@@ -207,9 +207,11 @@ export function aloftTick(w: World, h: Human, dt: number) {
     return;
   }
   const st = dragonStats(dr);
-  h.x = dr.x - dr.dir * 6 * st.scale;
+  // in the saddle on its shoulders (it bobs with the hop / wingbeat)
+  const hop = dr.hop ? Math.sin(Math.min(1, dr.hop / 1.4) * Math.PI) : 0;
+  h.x = dr.x - dr.dir * 3 * st.scale;
   h.y = dr.y + 0.5;
-  h.z = dr.z + 26 * st.scale;
+  h.z = dr.z + (32 + hop * 14) * st.scale;
   h.dir = dr.dir;
   h.vx = dr.vx;
   h.vy = dr.vy;

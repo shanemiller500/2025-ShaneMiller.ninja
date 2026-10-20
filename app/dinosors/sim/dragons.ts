@@ -495,7 +495,8 @@ export class Dragons {
 
   /** A bolt or arrow struck a dragon. */
   hit(w: World, dr: Dragon, dmg: number) {
-    // a furious parent shrugs off almost everything: 50x harder to kill
+    // thick scales: a wild dragon takes half of any hit (a furious parent shrugs off almost everything: 50x harder)
+    dmg *= 0.5;
     if (dr.fury) dmg /= 50;
     if (dr.prey && this.rng() < 0.1) this.release(w, dr, true);
     dr.hp -= dmg;

@@ -3,6 +3,7 @@
 /*  World, Renderer and AudioManager and talks to React only through   */
 /*  a tiny event emitter and a polled snapshot (never per-frame state). */
 /* ------------------------------------------------------------------ */
+import { claimNest, nestEggs, orphanNests } from "../sim/dragonNests";
 import { CLAN_BUILDS, nextProject } from "../sim/clanLife";
 import type { ClanBuild } from "../sim/types";
 import { FACTS } from "../data/facts";
@@ -196,6 +197,8 @@ export interface Snapshot {
     shelters: { stage: number; have: number }[];
   };
   discoveries: string[];
+  /** nests that still have eggs but no dragon (one can be sent to take over: Dinos tool) */
+  orphanNests: { id: number; breed: string; eggs: number; found: boolean }[];
   unlocked: SpeciesId[];
   seen: SpeciesId[];
   fps: number;
@@ -1678,6 +1681,17 @@ export class Engine {
   }
 
   /** Send the currently selected adult fighters to a specific clan camp. */
+  /** Dinos tool: send a new dragon to take over a nest whose eggs have nobody left to guard them. */
+  claimNest(nestId: number) {
+    const w = this.world;
+    const nest = w.dragons.nests.find((n) => n.id === nestId);
+    if (!nest) return;
+    const dr = claimNest(w, nest);
+    if (!dr) w.toast("🐉", "That nest already has a dragon (or no eggs left).", nest.x, nest.y);
+    else this.flyTo(nest.x, nest.y, 0.8);
+    this.emit({ type: "select" });
+  }
+
   raidClan(clanId: number) {
     const w = this.world;
     const clan = w.rivals.clan(clanId);
@@ -3108,6 +3122,7 @@ export class Engine {
         shelters: w.shelters.map((s) => ({ stage: s.stage, have: s.have })),
       },
       discoveries: this.stable("discoveries", Array.from(w.discoveries)),
+      orphanNests: this.stable("orphanNests", orphanNests(w).map((n) => ({ id: n.id, breed: n.breed, eggs: nestEggs(w, n).length, found: !!n.found }))),
       unlocked: this.stable("unlocked", Array.from(w.unlocked)),
       seen: this.stable("seen", Array.from(w.seen)),
       fps: this.fpsAcc.fps,

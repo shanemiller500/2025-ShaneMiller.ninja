@@ -194,6 +194,33 @@ function settleParent(w: World, nest: DragonNest) {
   return dr;
 }
 
+/** Nests that still have eggs but no dragon left to guard them. */
+export function orphanNests(w: World) {
+  return w.dragons.nests.filter((n) => !parentOf(w, n) && nestEggs(w, n).length > 0);
+}
+
+/**
+ * Send a new dragon to take over an orphaned nest. It's made the same way as any dragon that settles
+ * a nest (its own id range + the dragons' own dice, so nothing else in the world shifts; the breed of
+ * the eggs it finds), and flies in from the nearest edge of the map to adopt them.
+ */
+export function claimNest(w: World, nest: DragonNest): Dragon | null {
+  if (parentOf(w, nest) || !nestEggs(w, nest).length) return null;
+  const dr = settleParent(w, nest);
+  const W = MAP_W * TILE;
+  const H = MAP_H * TILE;
+  const sides = [{ x: -200, y: nest.y }, { x: W + 200, y: nest.y }, { x: nest.x, y: -200 }, { x: nest.x, y: H + 200 }];
+  const from = sides.sort((a, b) => Math.hypot(a.x - nest.x, a.y - nest.y) - Math.hypot(b.x - nest.x, b.y - nest.y))[0];
+  dr.x = from.x + (w.dragons.rng() - 0.5) * 300;
+  dr.y = from.y + (w.dragons.rng() - 0.5) * 300;
+  dr.z = 260;
+  dr.dir = nest.x > dr.x ? 1 : -1;
+  dr.state = "home";
+  dr.t = 0;
+  w.toast("🐉", `A ${BREEDS[nest.breed].name.toLowerCase()}, ${dr.name}, is flying in to take over the ${nest.found ? "" : "hidden "}nest and its ${nestEggs(w, nest).length} egg${nestEggs(w, nest).length > 1 ? "s" : ""}. It'll guard them as its own.`, nest.x, nest.y);
+  return dr;
+}
+
 /** The parent at its nest (if it's alive and still lives here). */
 export function parentOf(w: World, nest: DragonNest) {
   const dr = nest.parent ? w.dragons.byId(nest.parent) : null;

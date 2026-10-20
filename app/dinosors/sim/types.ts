@@ -591,6 +591,9 @@ export interface Brute {
   war: number;
   /** person being carried off (id) */
   captive: number;
+  /** Captive reserved as one gruesome catapult salvo during this raid. */
+  siegeCaptive?: number;
+  siegeShots?: number;
   /** food grabbed from a stockpile */
   loot: number;
   /** Age in game seconds; young clan members stay near home until grown. */
