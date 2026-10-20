@@ -25,7 +25,8 @@ import { goalKey, nodePos, tileOf, TOWER_Z, WALK_Z, type NavClass } from "./nav"
 import { shelterDone, stagesOf } from "./build";
 import { buildAct, buildThink, deliverToSite, dismount, douseThink, joinTask, leaveScorpion, taskCarrying, taskThink } from "./tasks";
 import { healTick, hurtHuman, recover } from "./injury";
-import { autoButcher } from "./tasks";
+import { autoButcher, type Task } from "./tasks";
+import { COURAGE, bandNear, canFight, courageScore, foesNear, onMission } from "./courage";
 import { cutCarcass, cutTime, hasYield } from "./carcass";
 import { OUTFIT_BY_ID } from "../data/colony";
 
@@ -361,7 +362,7 @@ function localDanger(w: World, h: Human): LocalDanger | null {
   return best;
 }
 
-function emergencySpot(w: World, h: Human, danger: LocalDanger): { x: number; y: number } {
+function emergencySpot(w: World, h: Human, danger: LocalDanger): { x: number; y: number; open?: boolean } {
   const candidates: { x: number; y: number; protection: number; capacity: number }[] = [];
   for (const s of w.shelters) if (shelterDone(s) && s.hp > 0.2) candidates.push({ x: s.x, y: s.y + 6, protection: 110 + s.tier * 35, capacity: HOUSING[s.tier].cap });
   if (Math.hypot(h.x - w.camp.caveX, h.y - w.camp.caveY) < 650) candidates.push({ x: w.camp.caveX, y: w.camp.caveY, protection: 140, capacity: 12 });
@@ -395,7 +396,8 @@ function emergencySpot(w: World, h: Human, danger: LocalDanger): { x: number; y:
   if (best) return best;
   const a = Math.atan2(h.y - danger.y, h.x - danger.x);
   const escape = danger.kind === "volcano" ? 520 : 220;
-  return { x: clamp(h.x + Math.cos(a) * escape, TILE, WORLD_W - TILE), y: clamp(h.y + Math.sin(a) * escape, TILE, WORLD_H - TILE) };
+  // no cover in reach: just open ground further away — somewhere to run, not somewhere to hide
+  return { x: clamp(h.x + Math.cos(a) * escape, TILE, WORLD_W - TILE), y: clamp(h.y + Math.sin(a) * escape, TILE, WORLD_H - TILE), open: true };
 }
 
 /** A dragon swooping low nearby. */
@@ -610,6 +612,46 @@ export function heavyRider(w: World, h: Human) {
   return !!d && riderType(d) === "heavy";
 }
 
+/**
+ * Someone out on a job meets a predator, raider or Neanderthal: if the armed friends around
+ * them could win the fight, they stand and fight it together ("fight"); if not, they run
+ * for it ("run" — even a guard or hunter, when they're badly outnumbered out there).
+ * null = courage doesn't apply (not on a job, unarmed, a child, or sent to fight anyway).
+ */
+function rally(w: World, h: Human, task: Task | null | undefined, fightTask: boolean): "fight" | "run" | null {
+  // people sent to fight (a hunt / guard / defend order) fight whatever the odds; this is for everyone out working
+  if (fightTask || h.order || !onMission(h, task) || !canFight(w, h)) {
+    h.rally = undefined;
+    return null;
+  }
+  const foes = foesNear(w, h);
+  if (!foes.length) return null;
+  const band = bandNear(w, h);
+  const holding = !!h.rally;
+  if (courageScore(w, h, band, foes) < (holding ? COURAGE.hold : COURAGE.start)) {
+    if (holding) say(h, band.length > 1 ? pick(w.rng, ["Too many — fall back!", "Back! Back!"]) : "I can't hold it alone!");
+    h.rally = undefined;
+    return "run";
+  }
+  const f = foes[0];
+  const id = f.kind === "dino" ? f.d.id : f.b.id;
+  const fx = f.kind === "dino" ? f.d.x : f.b.x;
+  const fy = f.kind === "dino" ? f.d.y : f.b.y;
+  if (!holding) {
+    say(h, band.length >= 3 ? pick(w.rng, ["Together!", "There's more of us!", "Hold the line!"]) : band.length === 2 ? pick(w.rng, ["With me!", "We can take it!"]) : pick(w.rng, ["I've got this!", "Come on then!"]));
+    if (!w.flags.has("courage")) {
+      w.flags.add("courage");
+      w.toast("⚔️", band.length > 1 ? `Strength in numbers! ${band.length} of your people stood their ground instead of running.` : `${h.name} stood their ground!`, h.x, h.y);
+    }
+  }
+  h.rally = { id, band: band.length };
+  // already fighting one of them: carry on
+  if ((h.state === "hunt" || h.state === "aim") && foes.some((x) => (x.kind === "dino" ? x.d.id : x.b.id) === h.targetId)) return "fight";
+  h.targetId = id;
+  go(h, "hunt", fx, fy);
+  return "fight";
+}
+
 function think(w: World, h: Human) {
   const camp = w.camp;
   h.think = 0.4 + w.rng() * 0.5;
@@ -640,7 +682,16 @@ function think(w: World, h: Human) {
   if (nearby && !safe && !task && h.dragon && dragonRiderDefend(w, h, nearby)) return;
   // a Dino Rider whose partner can fight rides at local danger instead of running from it
   if (nearby && !safe && !task && h.partner && riderCanFight(w, h) && riderDefend(w, h, nearby)) return;
-  const civilian = h.child || h.hp < 0.45 || !fighter;
+  // strength in numbers: armed people out on a job size up the fight, and a band that can win stands its ground
+  const courage = nearby && !safe && (nearby.kind === "predator" || nearby.kind === "raid") ? rally(w, h, task, fightTask) : null;
+  if (courage === "fight") return;
+  if (h.rally && (!nearby || safe)) {
+    // the danger's gone (or the walls have us): back to the job
+    h.rally = undefined;
+    if (h.state === "hunt" || h.state === "aim") go(h, "idle", h.x, h.y);
+  }
+  // (out on a job and badly outnumbered, even a guard or hunter runs for it)
+  const civilian = h.child || h.hp < 0.45 || !fighter || courage === "run";
   if (nearby && !safe && civilian && !(task && (task.kind === "douse" || (task.kind === "dragonRaid" && nearby.kind === "dragon")))) {
     h.dangerUntil = w.elapsed + 3;
     if (!h.interrupted && h.state !== "flee" && h.state !== "hide") h.interrupted = { state: h.state, x: h.x, y: h.y, tx: h.tx, ty: h.ty };
@@ -650,7 +701,12 @@ function think(w: World, h: Human) {
     h.refuge = s;
     if (h.state === "hide" && Math.hypot(h.x - s.x, h.y - s.y) < 14) return;
     if (h.state === "operate") leaveScorpion(w, h);
-    if (Math.hypot(h.x - s.x, h.y - s.y) < 14) go(h, "hide", h.x, h.y);
+    if (Math.hypot(h.x - s.x, h.y - s.y) < 14 && s.open) {
+      // reached open ground with the danger still close: crouching here hides nothing, so keep running
+      const next = emergencySpot(w, h, nearby);
+      h.refuge = next;
+      go(h, "flee", next.x, next.y);
+    } else if (Math.hypot(h.x - s.x, h.y - s.y) < 14) go(h, "hide", h.x, h.y);
     else {
       if (h.state !== "flee") say(h, nearby.kind === "dragon" ? "Dragon!" : nearby.kind === "fire" || nearby.kind === "volcano" ? "Fire!" : "Get to safety!");
       h.wantTop = false;
@@ -1310,7 +1366,9 @@ export function updateHuman(w: World, h: Human, dt: number) {
     case "explore":
       if (moveHuman(w, h, dt)) {
         if (h.state === "flee") {
-          go(h, "hide", h.x, h.y);
+          // cover hides you; open ground doesn't — stand there and let the danger check decide (run on, or get back to work)
+          if (h.refuge?.open && Math.hypot(h.x - h.refuge.x, h.y - h.refuge.y) < 20) go(h, "idle", h.x, h.y);
+          else go(h, "hide", h.x, h.y);
           break;
         }
         arrive(w, h);

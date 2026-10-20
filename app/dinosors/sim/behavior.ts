@@ -791,7 +791,8 @@ function actWalker(w: World, d: Dino, def: SpeciesDef, dt: number) {
       d.ty = target.y;
       const dist = dd(d, target);
       // pounce when close, or when the prey has spotted us and bolts
-      if (d.state === "stalk" && (dist < def.sense * 0.45 || (target.kind === "dino" && target.state === "flee"))) {
+      // (people bolt too — without this a stalker at 80% walking pace can never close on someone running away)
+      if (d.state === "stalk" && (dist < def.sense * 0.45 || target.state === "flee")) {
         setState(d, "chase");
         w.sfx(def.sound.kind, d.x, d.y, 0.7, def.sound.pitch);
       }

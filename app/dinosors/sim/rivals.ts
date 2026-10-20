@@ -44,7 +44,7 @@ export const BRUTE_WEAPONS: Record<BruteWeapon, { hit: number; wall: number; thr
 };
 
 /** Tough: our hits are divided by this (a person is ~1; a raptor raider ~2). */
-const BRUTE_TOUGH = 150;
+export const BRUTE_TOUGH = 150;
 const REACH = 24;
 const SPEED = 40;
 export const MAX_CLANS = 6;

@@ -57,7 +57,9 @@ test('species catalog is complete and data-driven', () => {
 test('world populates and stays alive for 4 minutes', () => {
   const w = new World(42);
   assert.ok(w.dinos.length > 40, `dinos: ${w.dinos.length}`);
-  assert.equal(w.humans.length, 8);
+  // one family to start (two grown-ups + a kid); the tribe grows from there
+  assert.equal(w.humans.length, 3);
+  assert.equal(w.humans.filter((h) => h.child).length, 1);
   assert.ok(w.plants.length > 600, `plants: ${w.plants.length}`);
   const states = new Set();
   const humanStates = new Set();
@@ -204,6 +206,12 @@ test('save → load round-trips the world', () => {
 
 /* ----------------------------- tribe layer ----------------------------- */
 const { addHuman } = require(path.join(root, 'sim', 'humans.ts'));
+
+/** Top the tribe up with grown-ups near camp (worlds start with one family of three). */
+function grow(w, n) {
+  while (w.humans.length < n) addHuman(w, w.camp.x + (w.humans.length % 5) * 24 - 48, w.camp.y + 30 + Math.floor(w.humans.length / 5) * 20, false);
+  return w;
+}
 
 function tribeWorld(seed, techs) {
   const w = new World(seed);
@@ -382,9 +390,11 @@ test('befriend a triceratops, then ride it', () => {
   tasks.issue(w, [h], cmd);
   let t = run(w, 80, () => trike.owner);
   assert.ok(t >= 0, `befriended (tame ${trike.tame.toFixed(2)})`);
+  // a tamed rideable dino offers Train for battle first, with Ride as the alternative
   cmd = tasks.inferCommand(w, [h], trike.x, trike.y - 20, { ...pickNone, dino: trike });
-  assert.equal(cmd.kind, 'ride');
-  tasks.issue(w, [h], cmd);
+  const rideCmd = cmd.kind === 'ride' ? cmd : (cmd.alts ?? []).find((c) => c.kind === 'ride');
+  assert.ok(rideCmd, 'Ride is offered (' + cmd.kind + ')');
+  tasks.issue(w, [h], rideCmd);
   t = run(w, 40, () => h.riding === trike.id);
   assert.ok(t >= 0, 'riding');
   assert.equal(trike.state, 'ridden');
@@ -720,7 +730,8 @@ test('calm mode never raids', () => {
 });
 
 test('farms grow crops; a fed tribe has babies and the camp levels up', () => {
-  const w = tribeWorld(25, ['tools', 'basket', 'farming', 'axe', 'shelter']);
+  // a tribe of 8: one baby away from Little Village (9 people + 2 huts)
+  const w = grow(tribeWorld(25, ['tools', 'basket', 'farming', 'axe', 'shelter']), 8);
   w.tribe.addFarm(w, w.camp.x + 40, w.camp.y + 140);
   const f = w.tribe.farms[0];
   w.humans.find((h) => !h.child).role = 'farmer';
@@ -730,13 +741,15 @@ test('farms grow crops; a fed tribe has babies and the camp levels up', () => {
   // huts + food → babies → Little Village
   for (let i = 0; i < 2; i++) { const s = w.camp.addShelter(w, w.camp.x - 150 + i * 80, w.camp.y + 80); s.stage = 4; }
   w.camp.stock.cooked = 60;
+  const n0 = w.humans.length;
   run(w, 200, () => w.tribe.level >= 1);
-  assert.ok(w.humans.length >= 9, `population ${w.humans.length}`);
+  assert.ok(w.humans.length > n0, `babies were born (population ${n0} → ${w.humans.length})`);
   assert.equal(w.tribe.level, 1);
 });
 
 test('jobs auto-assign and direct orders work', () => {
-  const w = tribeWorld(26, ['tools', 'spear', 'axe', 'palisade', 'fire']);
+  // enough grown-ups for guard + builders + hunters + a cook at once
+  const w = grow(tribeWorld(26, ['tools', 'spear', 'axe', 'palisade', 'fire']), 9);
   w.camp.lightCampfire(w);
   w.camp.stock.meat = 3;
   w.tribe.planRing(w, 'palisade');
@@ -823,7 +836,8 @@ const SETTLED = ['tools', 'fire', 'axe', 'spear', 'basket', 'palisade', 'stonewa
 
 /** A settled tribe that has already opened the chamber (and picked a path). */
 function civWorld(seed, pathId) {
-  const w = tribeWorld(seed, SETTLED);
+  // a settled tribe of 8 (the chamber needs 3+ grown-ups; a new world starts with one family)
+  const w = grow(tribeWorld(seed, SETTLED), 8);
   // these tests are about civilization research, not Auto's own plans (which would ring the camp in walls)
   w.tribe.planT = Infinity;
   w.civ.update(w, 2.1);
@@ -843,7 +857,7 @@ const learn = (w, ...ids) => ids.forEach((id) => w.civ.done.add(id));
 const clone = (w) => World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
 
 test('the humming chamber surfaces once the tribe is settled, and offers the choice', () => {
-  const w = tribeWorld(501, ['tools']);
+  const w = grow(tribeWorld(501, ['tools']), 8);
   run(w, 3);
   assert.equal(w.civ.chamberX, 0, 'not before the tribe is settled');
   for (const t of SETTLED) w.camp.learned.add(t);
@@ -875,7 +889,11 @@ test('Resonance research: researchers at the table learn ideas that unlock build
   const [a, b] = w.humans.filter((h) => !h.child);
   a.role = 'researcher';
   b.role = 'researcher';
-  const t0 = run(w, 150, (w) => w.civ.done.has('resonance') && w.civ.done.has('copperRes'));
+  // Night Work comes next in the path's order; the player picks Copper resonance instead (as you can in the Civ panel)
+  const t0 = run(w, 150, (w) => {
+    if (w.civ.done.has('resonance') && !w.civ.done.has('copperRes') && w.civ.current !== 'copperRes') w.civ.setResearch(w, 'copperRes');
+    return w.civ.done.has('resonance') && w.civ.done.has('copperRes');
+  });
   assert.ok(t0 > 0, `learned two ideas (done: ${[...w.civ.done]}, current ${w.civ.current} ${w.civ.rp.toFixed(1)})`);
   assert.ok(w.camp.stock.copper < 10, 'materials were used');
   const tw = w.colony.addBuilding(w, 'energyTower', w.camp.x - 200, w.camp.y + 150);
@@ -1442,7 +1460,8 @@ function crewDown(w, n) {
 }
 
 test('people sent down walk to the cave, ride the lift and leave the surface alone', () => {
-  const w = mineWorld(601);
+  // three miners + a guard who stays up top: more grown-ups than a new world's one family
+  const w = grow(mineWorld(601), 6);
   const guard = w.humans.find((h) => !h.child);
   guard.role = 'guard';
   const picked = pickMiners(w, 3);
@@ -1596,7 +1615,7 @@ test('hazards hurt miners; badly hurt ones head up, and a knocked-out miner ride
 });
 
 test('recall brings everyone up; the crew survives save + load', () => {
-  const w = mineWorld(606);
+  const w = grow(mineWorld(606), 6);
   crewDown(w, 3);
   for (let x = LIFT_X + 2; x < LIFT_X + 10; x++) setOrder(w, x, 1, 'dig');
   run(w, 10);
@@ -2208,23 +2227,40 @@ test('inside the walls with auto-defenses up, people keep working through a raid
     // one person out in the field
     const outside = w.humans.find((h) => !h.child && !inside.includes(h));
     outside.x = w.camp.x + 700; outside.y = w.camp.y + 300; outside.role = 'gatherer';
+    // gates stand open in peacetime; the tribe slams them shut as the raid comes in
+    for (const g of w.tribe.walls) w.tribe.setGate(g, false);
     return { w, inside, outside };
+  };
+  // people react to danger near them, not to a raid announced far away: bring the raiders up to the north wall
+  const raidAtTheWall = (w) => {
+    assert.ok(w.tribe.startRaid(w));
+    w.tribe.raid.phase = 'attack';
+    w.tribe.raid.ids.forEach((id, i) => {
+      const d = w.dinos.find((x) => x.id === id);
+      if (d) { d.x = w.camp.x - 40 + i * 40; d.y = w.camp.y + 1 * TILE; }
+    });
   };
   // no auto-defenses: everyone runs for cover
   const a = setup(7801, false);
   assert.ok(a.w.tribe.enclosed(a.w, a.inside[0].x, a.inside[0].y), 'the compound counts as inside the walls');
   assert.ok(!a.w.tribe.enclosed(a.w, a.outside.x, a.outside.y));
-  assert.ok(a.w.tribe.startRaid(a.w));
-  run(a.w, 4);
-  assert.ok(a.inside.some((h) => h.state === 'flee' || h.state === 'hide'), 'without auto-defenses they run');
+  raidAtTheWall(a.w);
+  const ranAt = run(a.w, 4, () => a.inside.some((h) => h.state === 'flee' || h.state === 'hide'));
+  assert.ok(ranAt >= 0, 'without auto-defenses they run');
   // powered Scorpion: the people inside carry on
   const b = setup(7801, true);
   assert.ok(b.w.tribe.autoDefense(b.w) >= 1);
-  assert.ok(b.w.tribe.startRaid(b.w));
+  raidAtTheWall(b.w);
   // nobody who is inside the walls panics while the raid is on
+  // (someone who wandered out to work and runs back in for cover isn't panicking — only count a run that starts inside)
   let panicked = 0;
+  const running = new Set();
   run(b.w, 6, (w) => {
-    for (const h of b.inside) if ((h.state === 'flee' || h.state === 'hide') && w.tribe.enclosed(w, h.x, h.y)) panicked++;
+    for (const h of b.inside) {
+      const now = h.state === 'flee' || h.state === 'hide';
+      if (now && !running.has(h.id) && w.tribe.enclosed(w, h.x, h.y)) panicked++;
+      if (now) running.add(h.id); else running.delete(h.id);
+    }
   });
   assert.equal(panicked, 0, 'they keep working inside the walls');
   assert.ok(b.outside.state === 'flee' || b.outside.state === 'hide' || !b.w.tribe.enclosed(b.w, b.outside.x, b.outside.y), 'outside the walls is still dangerous');
@@ -2393,9 +2429,13 @@ test('guards, Scorpions + drones target raiding Neanderthals, and our bolts hurt
   w.tribe.fireBolt(w, w.camp.x, w.camp.y, 20, t, 60, 700, 0.5);
   run(w, 1);
   assert.ok(b.hp < 1 && b.hp > 0.3, `a bolt hurts but he's tough (${b.hp.toFixed(2)})`);
-  // far away at home they're left alone
+  // the clans and us never get along (every Neanderthal counts as hostile), but one at his own camp is out of range
   const home = brutes[1];
-  assert.ok(!w.rivals.hostile(w, home), 'not a target at their own camp');
+  assert.ok(w.rivals.hostile(w, home), 'always hostile');
+  assert.ok(Math.hypot(home.x - w.camp.x, home.y - w.camp.y) > 400, 'his camp is a walk away');
+  b.hp = 0;
+  const far = scorpionTarget(w, w.camp.x, w.camp.y, 400);
+  assert.ok(!far || far.id !== home.id, 'Scorpions do not reach him at home');
 });
 
 test('Neanderthals cannot get through closed walls: they bash them', () => {

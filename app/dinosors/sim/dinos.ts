@@ -16,6 +16,12 @@ import { blockedForDino } from "./dinoBounds";
 export const scaleOf = (d: Dino) => 0.42 + 0.58 * d.growth;
 export const sizeOf = (d: Dino) => sp(d.species).size * scaleOf(d) * (1 + d.tier * 0.14) * d.genes.size;
 export const isBaby = (d: Dino) => d.growth < 0.5;
+/**
+ * Damage a dino can take at full health. Bigger bodies soak up far more hits:
+ * a T. rex takes ~2x, a Brachiosaurus ~2.7x, a raptor ~0.65x.
+ */
+export const dinoMaxHp = (d: Dino) =>
+  sp(d.species).hp * Math.max(0.6, Math.pow(sizeOf(d) / 60, 1.1)) * (1 + d.tier * 0.7) * (0.5 + d.growth * 0.5) * (d.raider ? 1.8 : 1) * d.genes.tough;
 
 /** Bridges only hold chicken-sized dinos (compys, little hatchlings). */
 const BRIDGE_MAX_SIZE = 34;

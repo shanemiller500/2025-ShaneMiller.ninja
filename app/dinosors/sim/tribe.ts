@@ -14,7 +14,7 @@ import { slayerDamage, slayerDrillThink } from "./dragonRaid";
 import { saddleVolley, trainerThink, trainerWork } from "./riders";
 import { SHADE, shadeNear } from "./shade";
 import { sp } from "../data/species";
-import { addDino, emote, findSpawnSpot, isBaby, setState, sizeOf } from "./dinos";
+import { addDino, dinoMaxHp, emote, findSpawnSpot, isBaby, setState, sizeOf } from "./dinos";
 import { addHuman, go, homeArea, moveHuman, say, sourceFor } from "./humans";
 import { P } from "./particles";
 import { pick } from "./rng";
@@ -1580,10 +1580,8 @@ const KIND_CODE: Record<WallKind, number> = { palisade: 0, stone: 1, polygon: 2 
 
 export function hitDino(w: World, d: Dino, dmg: number, fx: number, fy: number) {
   const def = sp(d.species);
-  // bigger bodies soak up far more hits: a T. rex takes ~2x, a Brachiosaurus ~2.7x, a raptor ~0.65x
   const bulk = Math.max(0.6, Math.pow(sizeOf(d) / 60, 1.1));
-  const hp = def.hp * bulk * (1 + d.tier * 0.7) * (0.5 + d.growth * 0.5) * (d.raider ? 1.8 : 1) * d.genes.tough;
-  d.health -= dmg / hp;
+  d.health -= dmg / dinoMaxHp(d);
   // big animals barely flinch
   d.fear = Math.min(1, d.fear + 0.35 / Math.max(1, bulk));
   w.particles.burst(P.Star, d.x, d.y, 2, 30, { z: sizeOf(d) * 0.5, size: 5, max: 0.6 });

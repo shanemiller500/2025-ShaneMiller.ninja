@@ -468,7 +468,10 @@ export interface Human {
   taskStep: number;
   /** Local emergency state; ordinary work remains assigned while sheltering. */
   dangerUntil?: number;
-  refuge?: { x: number; y: number };
+  /** standing their ground beside friends (see courage.ts): who they're fighting, how many were with them. Not saved. */
+  rally?: { id: number; band: number };
+  /** where they're running to; `open` = just open ground away from the threat, not cover */
+  refuge?: { x: number; y: number; open?: boolean };
   interrupted?: { state: HumanState; x: number; y: number; tx: number; ty: number };
   /** nav path: node ids (tile + level * tiles) */
   path: number[] | null;

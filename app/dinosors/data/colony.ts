@@ -409,7 +409,7 @@ export const SCORPION_TIERS: ScorpionTier[] = [
 
 export const NODES: Record<NodeKind, { icon: string; name: string; gives: Resource | null; per: number; amount: [number, number]; hidden: boolean; color: string; needs?: TechId }> = {
   stone: { icon: "🪨", name: "Loose stone", gives: "stone", per: 2, amount: [14, 22], hidden: false, color: "#9b958b" },
-  limestone: { icon: "⬜", name: "Limestone outcrop", gives: "limestone", per: 2, amount: [14, 22], hidden: false, color: "#e0d8bd", needs: "tools" },
+  limestone: { icon: "⬜", name: "Limestone blocks", gives: "limestone", per: 2, amount: [14, 22], hidden: false, color: "#e0d8bd", needs: "tools" },
   clay: { icon: "🟫", name: "Clay lumps", gives: "clay", per: 2, amount: [10, 16], hidden: false, color: "#b6764f" },
   flint: { icon: "🔷", name: "Flint shards", gives: "flint", per: 2, amount: [8, 14], hidden: false, color: "#5f7d99" },
   iron: { icon: "⛓️", name: "Iron ore chunks", gives: "iron", per: 1, amount: [10, 16], hidden: true, color: "#9a5a46", needs: "tools" },
