@@ -83,6 +83,7 @@ export default function DragonPanel({ engine, snap }: { engine: Engine; snap: Sn
           <div className="text-[11px] text-emerald-100/75">{def.icon} {def.name} · {gStage.name} · {info.stage}{(d.vet ?? 0) > 0.01 ? ` · ⚔️ battle-hardened ${Math.round((d.vet ?? 0) * 100)}%` : ""}</div>
         </div>
         <div className="flex shrink-0 gap-1">
+          <button type="button" onClick={() => engine.watchHatch(d.id)} className="h-10 rounded-xl px-2 text-xs font-bold hover:bg-white/15" aria-label="Watch its hatching again" title="Watch its hatching again">🎬</button>
           <button type="button" onClick={() => engine.follow(d.id)} className="h-10 rounded-xl px-2 text-xs font-bold hover:bg-white/15" aria-label="Follow with the camera">🎥</button>
           <button type="button" aria-label="Close" onClick={() => { engine.cancelDragonAim(); engine.select(0); }} className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-white/15"><X size={20} /></button>
         </div>

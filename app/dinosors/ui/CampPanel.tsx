@@ -9,7 +9,8 @@ import { GameIcon } from "./GameIcon";
 import { CRAFT_STEPS } from "../sim/camp";
 import { shelterDone } from "../sim/build";
 import type { Engine, Snapshot } from "../game/engine";
-import { TILE, type Danger, type Role, type TechId } from "../sim/types";
+import { TILE, type Danger, type HuntFormation, type Role, type TechId } from "../sim/types";
+import { FORMATIONS } from "../sim/chariots";
 import { useClickAway } from "./useClickAway";
 import { UpgradeAllButton } from "./UpgradeAllButton";
 
@@ -318,6 +319,7 @@ function JobsTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
             🐉 Dragon raid! ⚔️ {counts.get("dragonSlayer") ?? 0} slayers · 🥚 {counts.get("eggRunner") ?? 0} runners
           </button>
         )}
+        {snap.camp.learned.includes("dragonHunting") && <ChariotHunt snap={snap} engine={engine} />}
       </div>
       <div className="mt-2 rounded-2xl bg-white/5 p-2.5">
         <div className="flex items-center justify-between gap-2">
@@ -623,5 +625,42 @@ function InventTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
       )}
       <p className="mt-2 text-[11px] text-white/45">Level {snap.tribe.level + 1} of {CAMP_LEVELS.length}</p>
     </>
+  );
+}
+
+const PHASE: Record<string, string> = { muster: "Boarding", march: "Riding out", surround: "Surrounding", battle: "Battle!", return: "Heading home" };
+
+/** War chariots + the chariot dragon hunt: pick a formation and go. */
+function ChariotHunt({ snap, engine }: { snap: Snapshot; engine: Engine }) {
+  const [formation, setFormation] = useState<HuntFormation>("ring");
+  const cars = snap.chariots;
+  const h = snap.hunt;
+  return (
+    <div className="mt-1.5 rounded-2xl bg-white/5 p-2.5 text-[12px]">
+      <div className="flex items-center justify-between font-bold">
+        <span>🛡️ War chariots: {cars.length}</span>
+        <span className="text-[11px] font-semibold text-white/55">{cars.length ? cars.map((c) => `${c.hp}%${c.trike ? "" : " (no trike)"}`).join(" · ") : "Build one: Build → Defense"}</span>
+      </div>
+      {h ? (
+        <div className={`mt-1.5 rounded-xl p-2 font-bold ${h.result === "won" ? "bg-emerald-500/25" : h.result === "lost" ? "bg-rose-500/25" : "bg-amber-500/20"}`}>
+          {h.result === "won" ? "🏆 Victory! " : h.result === "lost" ? "💀 Defeat. " : ""}{PHASE[h.phase] ?? h.phase} · {FORMATIONS.find((f) => f.id === h.formation)?.icon} {FORMATIONS.find((f) => f.id === h.formation)?.name} · {h.alive}/{h.start} standing{h.eggs ? ` · 🥚 ${h.eggs}` : ""}
+        </div>
+      ) : cars.length > 0 && (
+        <>
+          <div className="mt-1.5 grid grid-cols-3 gap-1">
+            {FORMATIONS.map((f) => (
+              <button key={f.id} type="button" title={f.tip} aria-pressed={formation === f.id} onClick={() => setFormation(f.id)}
+                className={`rounded-lg py-1.5 text-[11px] font-bold transition ${formation === f.id ? "bg-amber-400 text-slate-950" : "bg-white/[0.07] hover:bg-white/15"}`}>
+                {f.icon} {f.name}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => engine.startChariotHunt(formation)}
+            className="mt-1.5 w-full rounded-xl bg-gradient-to-r from-sky-700 to-amber-600 py-2 text-sm font-bold transition hover:brightness-110 active:scale-95">
+            🛡️ Chariot hunt! ({cars.filter((c) => c.trike).length} ready)
+          </button>
+        </>
+      )}
+    </div>
   );
 }

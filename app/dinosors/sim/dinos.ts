@@ -23,9 +23,14 @@ export const isBaby = (d: Dino) => d.growth < 0.5;
 export const dinoMaxHp = (d: Dino) =>
   sp(d.species).hp * Math.max(0.6, Math.pow(sizeOf(d) / 60, 1.1)) * (1 + d.tier * 0.7) * (0.5 + d.growth * 0.5) * (d.raider ? 1.8 : 1) * d.genes.tough;
 
-/** Bridges only hold chicken-sized dinos (compys, little hatchlings). */
+/** Wild dinosaurs only trust bridges when they are small. */
 const BRIDGE_MAX_SIZE = 34;
-const navClassOf = (d: Dino): NavClass => (sizeOf(d) <= BRIDGE_MAX_SIZE ? "dino" : (d.species === "apato" || d.species === "brachio") && !isBaby(d) || sizeOf(d) >= 110 ? "hugeDino" : "bigDino");
+const routeVersion = new WeakMap<Dino, number>();
+export const navClassOf = (d: Dino): NavClass => {
+  const huge = ((d.species === "apato" || d.species === "brachio") && !isBaby(d)) || sizeOf(d) >= 110;
+  if (d.owner) return huge ? "trainedHugeDino" : "dino";
+  return sizeOf(d) <= BRIDGE_MAX_SIZE ? "dino" : huge ? "hugeDino" : "bigDino";
+};
 
 export function makeDino(w: World, species: SpeciesId, x: number, y: number, o: Partial<Dino> = {}): Dino {
   const def = sp(species);
@@ -236,17 +241,23 @@ export function walkable(w: World, d: Dino, x: number, y: number) {
  */
 function planRoute(w: World, d: Dino, dist: number) {
   const key = goalKey(d.tx, d.ty);
-  if (d.pathKey === key) return;
+  const nextBlocked = !!d.path && d.pathI < d.path.length && !w.nav.ok(navClassOf(d), d.path[d.pathI]);
+  const bridgeChanged = routeVersion.get(d) !== w.nav.version && (d.pathI === -1 || nextBlocked);
+  if (d.pathKey === key && (!d.owner || (d.stuckT < 1 && !bridgeChanged))) return;
   d.pathKey = key;
+  routeVersion.set(d, w.nav.version);
   d.path = null;
   d.pathI = 0;
   if (dist < 70 || w.nav.lineClear(navClassOf(d), d.x, d.y, d.tx, d.ty)) return;
   // far-off animals don't need perfect routes every time
-  if (!w.inView(d.x, d.y, 600) && w.rng() < 0.5 && !d.raider) return;
+  if (!w.inView(d.x, d.y, 600) && w.rng() < 0.5 && !d.raider && !d.owner) return;
   const path = w.nav.find(w, navClassOf(d), d.x, d.y, 0, d.tx, d.ty, 0, d.raider ? 9000 : 4000);
   if (path === undefined) d.pathKey = 0;
   else if (path === null) d.pathI = -1; // no way there at all (raiders take that as "smash through")
-  else d.path = path;
+  else {
+    d.path = path;
+    if (d.owner) d.stuckT = 0;
+  }
 }
 
 function swimmable(w: World, x: number, y: number) {
@@ -270,15 +281,18 @@ function steer(w: World, d: Dino, speed: number, dt: number) {
     planRoute(w, d, dist);
     if (d.path && d.pathI < d.path.length) {
       const np = nodePos(d.path[d.pathI]);
-      if (Math.hypot(np.x - d.x, np.y - d.y) < Math.max(14, sizeOf(d) * 0.3)) d.pathI++;
+      const onBridge = w.nav.isBridge(d.path[d.pathI]) || w.nav.isBridge(tileOf(d.x, d.y));
+      if (Math.hypot(np.x - d.x, np.y - d.y) < (onBridge ? 8 : Math.max(14, sizeOf(d) * 0.3))) d.pathI++;
       if (d.pathI < d.path.length) {
-        tgx = np.x;
-        tgy = np.y;
+        const next = nodePos(d.path[d.pathI]);
+        tgx = next.x;
+        tgy = next.y;
       }
     }
   }
   let ang = Math.atan2(tgy - d.y, tgx - d.x);
-  const look = Math.max(18, sizeOf(d) * 0.45);
+  const bridgeAhead = w.nav.isBridge(tileOf(d.x, d.y)) || w.nav.isBridge(tileOf(tgx, tgy));
+  const look = bridgeAhead ? 14 : Math.max(18, sizeOf(d) * 0.45);
   const ok = (a: number) => {
     const px = d.x + Math.cos(a) * look;
     const py = d.y + Math.sin(a) * look;
@@ -321,6 +335,8 @@ function steer(w: World, d: Dino, speed: number, dt: number) {
 
 /** Per-frame update: needs, motion, timers. Decisions happen in the brain. */
 export function moveDino(w: World, d: Dino, dt: number) {
+  // harnessed to a war chariot: the chariot moves it (chariots.ts)
+  if (d.chariot) return;
   const def = sp(d.species);
   d.stateT += dt;
   d.age += dt;

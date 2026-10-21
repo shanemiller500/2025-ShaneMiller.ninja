@@ -3,6 +3,8 @@
 /*  the camp's current goal, fish, build, sit by the fire, hide from   */
 /*  dinosaurs and storms, and sleep in the cave at night.              */
 /* ------------------------------------------------------------------ */
+import { roomOf } from "./riderHall";
+import { huntThink } from "./chariots";
 import { CAVE_NAMES } from "../data/facts";
 import { HOUSING, NODES } from "../data/colony";
 import { sp } from "../data/species";
@@ -121,7 +123,7 @@ const replanAt = new WeakMap<Human, number>();
 
 const navClass = (w: World, h: Human): NavClass => {
   const mount = h.riding ? w.dinoById(h.riding) : null;
-  return mount && (sizeOf(mount) >= 110 || ((mount.species === "apato" || mount.species === "brachio") && mount.growth >= 0.5)) ? "hugeDino" : mount ? "rider" : "human";
+  return mount && (sizeOf(mount) >= 110 || ((mount.species === "apato" || mount.species === "brachio") && mount.growth >= 0.5)) ? (mount.owner ? "trainedHugeDino" : "hugeDino") : mount ? "rider" : "human";
 };
 
 /** Can this person step here (ground level)? Also avoids hot ground. */
@@ -536,6 +538,9 @@ export function stockPriorities(w: World, all = false): Resource[] {
 
 /** Where this person goes to hide / sleep: their home, else the cave. */
 export function shelterSpot(w: World, h?: Human): { x: number; y: number } {
+  // dragon riders + keepers sleep in their own rooms in the colosseum, next to their dragons
+  const room = h ? roomOf(w, h) : null;
+  if (room) return { x: room.x, y: room.y };
   const home = h?.home ? w.shelters.find((s) => s.id === h.home && shelterDone(s)) : undefined;
   const s = home ?? w.shelters.find((s) => shelterDone(s));
   if (s) return { x: s.x, y: s.y + 6 };
@@ -665,6 +670,8 @@ function think(w: World, h: Human) {
   if (h.state === "tossed" || h.state === "lookUp" || h.state === "celebrate" || h.state === "down") return;
   if (h.state === "craft" && camp.crafting?.by === h.id && (w.shifts.active(w, h) || h.stateT < 3)) return;
 
+  // on a chariot hunt: boarding, marching beside the chariots, fighting, fetching eggs (chariots.ts)
+  if (w.colony.hunt && huntThink(w, h)) return;
   const tribe = w.tribe;
   const role = tribe.roleOf(h);
   const weapon = tribe.weaponFor(w, h);
@@ -1294,6 +1301,10 @@ export function updateHuman(w: World, h: Human, dt: number) {
   }
   if (h.aloft) {
     aloftTick(w, h, dt);
+    return;
+  }
+  if (h.chariot) {
+    // aboard a war chariot: it carries them (chariots.ts)
     return;
   }
   if (h.falling) {

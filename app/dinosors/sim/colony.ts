@@ -3,6 +3,8 @@
 /*  resource deposits, the armory and the forge queue. Walls, towers,  */
 /*  farms and raids stay in tribe.ts; huts stay in camp.ts.            */
 /* ------------------------------------------------------------------ */
+import { hallTick } from "./riderHall";
+import { CHARIOT_HP, chariotsUpdate } from "./chariots";
 import { ARTIFACTS, BUILDINGS, FORGE_ITEMS, HELMETS, HELMET_BY_ID, KIT_BY_ID, NODES, OUTFITS, OUTFIT_BY_ID, RES_INFO, SCORPION_TIERS, SHIELD_BY_ID, WEAPON_BY_ID, type Cost } from "../data/colony";
 import { hitDino } from "./tribe";
 import { sp } from "../data/species";
@@ -11,7 +13,7 @@ import { shelterTiles, tileOf, TOWER_Z, WALK_Z } from "./nav";
 import { P } from "./particles";
 import { hash2 } from "./rng";
 import { LM, isWalkTile, isWaterTile } from "./terrain";
-import { MAP_H, MAP_W, T, TILE, type Building, type BuildingKind, type Dino, type Human, type NodeKind, type ResNode, type Resource, type Scorpion } from "./types";
+import { type Chariot, type DragonHunt, MAP_H, MAP_W, T, TILE, type Building, type BuildingKind, type Dino, type Human, type NodeKind, type ResNode, type Resource, type Scorpion } from "./types";
 import type { World } from "./world";
 import { ANIMAL_KINDS, insideWalls } from "./dinoBounds";
 
@@ -32,6 +34,9 @@ export const DRONE_SHOT = 3;
 export class Colony {
   buildings: Building[] = [];
   scorpions: Scorpion[] = [];
+  /** war chariots (chariots.ts) and the chariot dragon hunt under way */
+  chariots: Chariot[] = [];
+  hunt: DragonHunt | null = null;
   nodes: ResNode[] = [];
   /** crafted gear waiting to be picked up: item id → count */
   armory: Record<string, number> = {};
@@ -731,6 +736,8 @@ export class Colony {
   /* ----------------------------- update ----------------------------- */
 
   update(w: World, dt: number) {
+    chariotsUpdate(w, dt);
+    if (Math.floor(w.elapsed) !== Math.floor(w.elapsed - dt)) hallTick(w);
     for (const b of this.buildings) {
       if (b.kind !== "well") continue;
       if (b.built < 1) {
@@ -915,7 +922,7 @@ export class Colony {
   serialize() {
     const r = (n: number) => Math.round(n * 100) / 100;
     return {
-      buildings: this.buildings.map((b) => ({ kind: b.kind, tx: b.tx, ty: b.ty, built: r(b.built), have: b.have, hp: Math.round(b.hp), ...(b.stage ? { stage: b.stage } : {}) })),
+      buildings: this.buildings.map((b) => ({ kind: b.kind, tx: b.tx, ty: b.ty, built: r(b.built), have: b.have, hp: Math.round(b.hp), ...(b.stage ? { stage: b.stage } : {}), ...(b.grow ? { grow: Math.round(b.grow * 100) / 100 } : {}) })),
       scorpions: this.scorpions.map((s) => ({ tx: s.tx, ty: s.ty, x: r(s.x), y: r(s.y), tier: s.tier, built: r(s.built), have: s.have, up: s.up, hp: Math.round(s.hp), mount: s.mount })),
       nodes: this.nodes.map((n) => [n.kind, Math.round(n.x), Math.round(n.y), n.amount, n.max, n.found ? 1 : 0] as const),
       armory: this.armory,
@@ -924,6 +931,7 @@ export class Colony {
       known: Array.from(this.known),
       civNodes: 1,
       limestoneNodes: 1,
+      chariots: this.chariots.map((c) => ({ x: r(c.x), y: r(c.y), homeX: r(c.homeX), homeY: r(c.homeY), hp: Math.round(c.hp), trike: c.trike, dir: c.dir })),
     };
   }
 
@@ -936,7 +944,11 @@ export class Colony {
       const def = BUILDINGS[b.kind];
       if (!def) continue;
       const oldFinishedPyramid = b.kind === "pyramid" && (b as { stage?: number }).stage === 5 && b.built >= 1 && !(d as { limestoneNodes?: number }).limestoneNodes;
-      this.buildings.push({ id: w.nextId(), kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: oldFinishedPyramid ? 0.4 : b.built, have: oldFinishedPyramid ? {} : b.have ?? {}, hp: b.hp ?? def.hp, ...((b as { stage?: number }).stage ? { stage: oldFinishedPyramid ? 6 : (b as { stage?: number }).stage } : {}) });
+      this.buildings.push({ id: w.nextId(), kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: oldFinishedPyramid ? 0.4 : b.built, have: oldFinishedPyramid ? {} : b.have ?? {}, hp: b.hp ?? def.hp, ...((b as { stage?: number }).stage ? { stage: oldFinishedPyramid ? 6 : (b as { stage?: number }).stage } : {}), ...((b as { grow?: number }).grow ? { grow: (b as { grow?: number }).grow } : {}) });
+    }
+    // chariots park at home after a load (a hunt in progress is called off)
+    for (const c of (d as { chariots?: { x: number; y: number; homeX: number; homeY: number; hp: number; trike: number; dir: 1 | -1 }[] }).chariots ?? []) {
+      this.chariots.push({ id: w.nextId(), x: c.homeX, y: c.homeY, dir: c.dir ?? 1, hp: c.hp, maxHp: CHARIOT_HP, trike: c.trike, homeX: c.homeX, homeY: c.homeY, to: null, path: null, pathI: 0, pathKey: 0, cd: [0, 1.3], aim: [0, Math.PI], anim: 0, hit: 0 });
     }
     for (const s of d.scorpions ?? []) this.scorpions.push({ id: w.nextId(), ...s, aim: Math.PI / 2, reload: 0, crew: 0, kick: 0 });
     for (const [kind, x, y, amount, max, found] of d.nodes ?? []) {

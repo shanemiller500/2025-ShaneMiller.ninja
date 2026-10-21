@@ -4,6 +4,11 @@
 /*  Layers: terrain → water/lava/fire ground FX → shadows → y-sorted   */
 /*  entities → flyers → particles → sky FX → light map → UI overlays.  */
 /* ------------------------------------------------------------------ */
+import { dragonFor, hallFolk, hallOf, hallRing, hallTiers, inRoom, roomOf } from "../sim/riderHall";
+import { drawHallBack, drawHallFront } from "./riderHallArt";
+import { pitOf } from "../sim/shows";
+import { drawChariot } from "./chariotArt";
+import { pitScale } from "../sim/shows";
 import { hasCart } from "../sim/carts";
 import { drawCart } from "./cartArt";
 import { sp } from "../data/species";
@@ -112,6 +117,9 @@ const K_CTRAP = 41;
 const K_HOLD = 42;
 const K_OURCAT = 43;
 const K_OURSHOT = 44;
+const K_CHARIOT = 45;
+const K_HALL_BACK = 46;
+const K_HALL_FRONT = 47;
 
 interface Drop {
   x: number;
@@ -300,7 +308,7 @@ export class Renderer {
     const col = w.colony;
     for (let i = 0; i < col.buildings.length; i++) {
       const b = col.buildings[i];
-      if (b.kind === "path" || b.kind === "bridge" || b.kind === "pen" || b.kind === "trap" || ((b.kind === "seatRing" || b.kind === "dragonPit") && b.built >= 1)) continue;
+      if (b.kind === "path" || b.kind === "bridge" || b.kind === "pen" || b.kind === "trap" || ((b.kind === "seatRing" || b.kind === "dragonPit" || b.kind === "riderHall") && b.built >= 1)) continue;
       const by = b.lift ? b.lift.y + 4 : b.y;
       if ((b.lift?.x ?? b.x) > x0 - 80 && (b.lift?.x ?? b.x) < x1 + 80 && by > y0 && by < y1 + 80) list.push({ y: by - 1, k: K_BUILDING, i });
     }
@@ -357,6 +365,20 @@ export class Renderer {
           this.cbs.push({ clan: cl, kind, lv, x: s.x, y: s.y });
         }
       }
+    }
+    // the riders' colosseum round the pit: its tall back half behind the pit, the low front half in front
+    const hallB = hallOf(w);
+    const hallPit = hallB ? pitOf(w) : null;
+    if (hallB && hallPit) {
+      const r = hallRing(hallPit);
+      if (r.cx + r.rx + 120 > x0 && r.cx - r.rx - 120 < x1 && r.cy + r.ry + 60 > y0 && r.cy - r.ry - 200 < y1) {
+        list.push({ y: r.cy - r.ry - 30, k: K_HALL_BACK, i: 0 });
+        list.push({ y: r.cy + r.ry + 26, k: K_HALL_FRONT, i: 0 });
+      }
+    }
+    for (let i = 0; i < w.colony.chariots.length; i++) {
+      const chr = w.colony.chariots[i];
+      if (chr.x > x0 - 140 && chr.x < x1 + 140 && chr.y > y0 - 40 && chr.y < y1 + 120) list.push({ y: chr.y, k: K_CHARIOT, i });
     }
     for (let i = 0; i < rv.holds.length; i++) {
       const hd = rv.holds[i];
@@ -632,6 +654,30 @@ export class Renderer {
           c.save();
           c.translate(cb.x, cb.y);
           drawClanBuilding(c, cb.clan, cb.kind, cb.lv, this.t, night > 0.5, cb.part);
+          c.restore();
+          break;
+        }
+        case K_HALL_BACK:
+        case K_HALL_FRONT: {
+          const pit = pitOf(w);
+          if (!pit) break;
+          const r = hallRing(pit);
+          const rooms = hallFolk(w).map((h) => {
+            const rm = roomOf(w, h);
+            return { a: rm?.a ?? 0, eye: dragonFor(w, h)?.eye ?? "#e0b43a", lit: h.state === "sleep" || h.state === "rest" };
+          });
+          c.save();
+          c.translate(r.cx, r.cy);
+          if (it.k === K_HALL_BACK) drawHallBack(c, r.rx, r.ry, hallTiers(w), rooms, this.t, night > 0.5);
+          else drawHallFront(c, r.rx, r.ry, rooms, this.t, night > 0.5);
+          c.restore();
+          break;
+        }
+        case K_CHARIOT: {
+          const chr = w.colony.chariots[it.i];
+          c.save();
+          c.translate(chr.x, chr.y);
+          drawChariot(c, chr, this.t);
           c.restore();
           break;
         }
@@ -1195,6 +1241,8 @@ export class Renderer {
     if (h.state !== "hide" && h.state !== "sleep" && h.state !== "rest") return false;
     const w = this.world;
     if (Math.hypot(h.x - w.camp.caveX, h.y - w.camp.caveY) < 30) return true;
+    // tucked up in their room in the colosseum
+    if (inRoom(w, h)) return true;
     for (const d of this.healerDoorList()) if (Math.hypot(h.x - d.x, h.y - d.y) < 24) return true;
     return w.shelters.some((s) => shelterDone(s) && Math.hypot(h.x - s.x, h.y - s.y) < 30);
   }
@@ -2768,6 +2816,11 @@ export class Renderer {
       if (!b) return;
       const fp = w.colony.footprint(b.kind, p.x, p.y);
       for (let dy = 0; dy < fp.h; dy++) for (let dx = 0; dx < fp.w; dx++) tiles.push([fp.tx + dx, fp.ty + dy]);
+    } else if (p.ref.kind === "wall") tiles.push([Math.floor(p.x / TILE), Math.floor(p.y / TILE)]);
+    else if (p.ref.kind === "farm") {
+      const tx = Math.floor(p.x / TILE);
+      const ty = Math.floor(p.y / TILE);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) tiles.push([tx + dx, ty + dy]);
     } else for (const i of shelterTiles(p.x, p.y)) tiles.push([i % MAP_W, Math.floor(i / MAP_W)]);
     if (!tiles.length) return;
     c.fillStyle = ok ? "rgba(74,222,128,0.22)" : "rgba(248,113,113,0.25)";
@@ -2787,7 +2840,7 @@ export class Renderer {
     c.font = `700 ${12 * inv}px ui-rounded, system-ui, sans-serif`;
     c.textAlign = "center";
     c.fillStyle = ok ? "#bbf7d0" : "#fecaca";
-    c.fillText(ok ? "🚚 Carry it here" : why ?? "", (tx0 + tw / 2) * TILE, ty0 * TILE - 10 * inv);
+    c.fillText(ok ? p.ref.kind === "wall" || p.ref.kind === "farm" ? "🔷 Move here" : "🚚 Carry it here" : why ?? "", (tx0 + tw / 2) * TILE, ty0 * TILE - 10 * inv);
   }
 
   /** Snow lying on the ground (per tile, soft edges). */
@@ -2850,10 +2903,12 @@ export class Renderer {
         const def = BUILDINGS.dragonPit;
         const px = b.lift?.x ?? b.x;
         const py = (b.lift?.y ?? b.y) - (b.lift?.z ?? 0);
-        if (px < x0 - 200 || px > x1 + 200 || py < y0 - 160 || py > y1 + 160) continue;
+        // dug out wider as the dragons grow in number + size: it widens round the same arena centre
+        const s = pitScale(b);
+        if (px < x0 - 200 * s || px > x1 + 200 * s || py < y0 - 160 * s || py > y1 + 160 * s) continue;
         c.save();
-        c.translate(px, py);
-        drawPit(c, def.w * TILE, def.h * TILE, this.t, w.dragons.show?.pit === b.id);
+        c.translate(px, py + def.h * TILE * 0.4 * (s - 1));
+        drawPit(c, def.w * TILE * s, def.h * TILE * s, this.t, w.dragons.show?.pit === b.id);
         c.restore();
         continue;
       }

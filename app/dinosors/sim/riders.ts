@@ -17,6 +17,7 @@
 /*  The existing systems do the work: taming + training states, the    */
 /*  mount/passenger code, war-dino behaviour, deposit discovery.       */
 /* ------------------------------------------------------------------ */
+import { warRiderThink } from "./warGuard";
 import { TAMEABLE } from "../data/colony";
 import { WEAPON_BY_ID } from "../data/colony";
 import { warTarget } from "./behavior";
@@ -448,6 +449,9 @@ export function riderThink(w: World, h: Human): boolean {
   // a hungry partner gets fed first
   if (d.hunger > 0.65 && !h.riding && FOODS.some((r) => w.camp.stock[r] > 0)) return feed(w, h, d);
   if (isFlyer(d)) return flyerRiderThink(w, h, d);
+  // a war-trained partner: they ride its guard duty together, full time (warGuard.ts)
+  const duty = warRiderThink(w, h, d);
+  if (duty !== null) return duty;
   const type = riderType(d);
   const day = w.daylight > 0.45;
   // scouts ride out now and then towards land nobody has looked at

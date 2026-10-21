@@ -21,8 +21,8 @@ import { MAP_H, MAP_W, T, TILE } from "./types";
 import type { World } from "./world";
 
 export const NT = MAP_W * MAP_H;
-/** "bigDino": a ground dino too big for bridges (anything bigger than a chicken) */
-export type NavClass = "human" | "dino" | "bigDino" | "hugeDino" | "rider";
+/** Wild large dinosaurs avoid narrow bridges; trained mounts can use them. */
+export type NavClass = "human" | "dino" | "bigDino" | "hugeDino" | "trainedHugeDino" | "rider";
 
 const F_TERRAIN = 1; // deep water, mountain, cliff
 const F_SOLID = 2; // walls, buildings, huts: nobody walks through
@@ -201,14 +201,25 @@ export class Nav {
     if (f & (F_TERRAIN | F_SOLID)) return false;
     if (cls === "human") return !(f & F_TAR);
     if (f & (F_STAIRS | F_TOWER)) return false;
-    if ((cls === "bigDino" || cls === "hugeDino" || cls === "rider") && f & F_BRIDGE) return false;
+    if ((cls === "bigDino" || cls === "hugeDino") && f & F_BRIDGE) return false;
     if ((f & F_GATE) && !(f & F_OPEN)) return false;
-    if ((cls === "rider" || cls === "hugeDino") && f & F_TAR) return false;
-    if (cls === "hugeDino") {
+    if ((cls === "rider" || cls === "hugeDino" || cls === "trainedHugeDino") && f & F_TAR) return false;
+    if (cls === "hugeDino" || cls === "trainedHugeDino") {
       const x = i % MAP_W;
       const y = Math.floor(i / MAP_W);
       if (x <= 0 || y <= 0 || x >= MAP_W - 1 || y >= MAP_H - 1) return false;
-      // A sauropod and its cargo need a full three-tile-wide clearance.
+      // On a bridge, a trained giant follows the deck's centre instead of
+      // demanding three dry tiles across the water.
+      const bridgeApproach = cls === "trainedHugeDino" && ((f & F_BRIDGE) || [-MAP_W, -1, 1, MAP_W].some((offset) => this.flags[i + offset] & F_BRIDGE));
+      if (bridgeApproach) {
+        for (const offset of [-MAP_W - 1, -MAP_W, -MAP_W + 1, -1, 1, MAP_W - 1, MAP_W, MAP_W + 1]) {
+          const around = this.flags[i + offset];
+          if (around & (F_SOLID | F_STAIRS | F_TOWER | F_TAR)) return false;
+          if ((around & F_GATE) && !(around & F_OPEN)) return false;
+        }
+        return true;
+      }
+      // Away from the bridge, a sauropod and its cargo still need full clearance.
       for (const offset of [-MAP_W - 1, -MAP_W, -MAP_W + 1, -1, 1, MAP_W - 1, MAP_W, MAP_W + 1]) {
         const around = this.flags[i + offset];
         if (around & (F_TERRAIN | F_SOLID | F_STAIRS | F_TOWER | F_BRIDGE | F_TAR)) return false;
@@ -254,6 +265,13 @@ export class Nav {
       const t = k / Math.max(1, steps);
       const i = tileOf(ax + (bx - ax) * t, ay + (by - ay) * t);
       if (i === last) continue;
+      if (last >= 0) {
+        const lx = last % MAP_W;
+        const ly = Math.floor(last / MAP_W);
+        const nx = i % MAP_W;
+        const ny = Math.floor(i / MAP_W);
+        if (nx !== lx && ny !== ly && (!this.ok(cls, ly * MAP_W + nx) || !this.ok(cls, ny * MAP_W + lx))) return false;
+      }
       last = i;
       if (!this.ok(cls, i) || this.cost[i] > 1.6) return false;
     }

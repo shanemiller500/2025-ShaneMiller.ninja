@@ -192,8 +192,12 @@ export function raidThink(w: World, h: Human, t: Task, done: () => void): boolea
   const gather = goAt.get(t.id);
   // gathering: everyone to the staging point first
   if (gather === undefined) {
-    const there = band.filter((p) => Math.hypot(p.x - stage.x, p.y - stage.y) < 60).length;
-    const ready = there >= Math.ceil(band.length * 0.7) || t.t > GATHER_FOR + 30;
+    // counted round the middle of the staging line (everyone's own spot is a little to the side)
+    const mid = { x: nest.x + Math.cos(a) * STAGE_R, y: nest.y + Math.sin(a) * STAGE_R * 0.8 + 14 };
+    const there = band.filter((p) => Math.hypot(p.x - mid.x, p.y - mid.y) < 90).length;
+    // 98% gathered (or the dragon comes at them while they wait: then they charge right away)
+    const jumped = !!parent && band.some((p) => Math.hypot(p.x - parent.x, p.y - parent.y) < 220 || p.state === "down");
+    const ready = there >= Math.ceil(band.length * 0.98) || jumped || t.t > GATHER_FOR + 30;
     if (ready && band.some((p) => Math.hypot(p.x - nest.x, p.y - nest.y) < STAGE_R + 100)) {
       goAt.set(t.id, w.elapsed);
       revealNest(w, nest, h.name);

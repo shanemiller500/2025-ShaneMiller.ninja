@@ -166,6 +166,26 @@ export class Tribe {
     this.version++;
   }
 
+  /** Move one existing piece without changing its material or build progress. */
+  relocateWall(w: World, wl: Wall, tx: number, ty: number, checkOnly = false) {
+    if (tx === wl.tx && ty === wl.ty) return true;
+    if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1 || this.wallAt(tx, ty) || !w.colony.footing(w, tx, ty)) return false;
+    const x = (tx + 0.5) * TILE;
+    const y = (ty + 0.5) * TILE;
+    const c = w.camp;
+    if (this.vetoed("wall", x, y) || Math.hypot(x - c.caveX, y - c.caveY) < 50 || Math.hypot(x - c.pileX, y - c.pileY) < 70 || Math.hypot(x - c.x, y - c.y) < 60) return false;
+    if (this.towers.some((o) => tx >= o.tx && tx <= o.tx + 1 && ty >= o.ty && ty <= o.ty + 1) || w.colony.occupied(w).has(ty * MAP_W + tx)) return false;
+    if (checkOnly) return true;
+    for (const h of w.humans) if (h.level === 1 && Math.floor(h.x / TILE) === wl.tx && Math.floor(h.y / TILE) === wl.ty) { h.level = 0; h.wantTop = false; h.think = 0; }
+    this.wallMap.delete(wl.ty * MAP_W + wl.tx);
+    wl.tx = tx;
+    wl.ty = ty;
+    this.wallMap.set(ty * MAP_W + tx, wl);
+    this.version++;
+    w.nav.sync(w);
+    return true;
+  }
+
   /**
    * Plan a grand bone gate here: a fresh one in a gap, a blueprint turned into one,
    * or a finished gate / wall piece queued to be rebuilt (it keeps working meanwhile).
@@ -977,6 +997,21 @@ export class Tribe {
     const f: Farm = { id: w.nextId(), x, y, growth: 0, planted: false, crop };
     this.farms.push(f);
     return f;
+  }
+
+
+  relocateFarm(w: World, farm: Farm, x: number, y: number, checkOnly = false) {
+    if (Math.hypot(farm.x - x, farm.y - y) < 8) return true;
+    if (x < TILE || y < TILE || x >= (MAP_W - 1) * TILE || y >= (MAP_H - 1) * TILE) return false;
+    const t = w.terrain.tileAt(x, y);
+    if (this.vetoed("farm", x, y) || !isWalkTile(t) || isWaterTile(t) || t === T.Tar || t === T.Rock || t === T.Basalt) return false;
+    if (w.colony.occupied(w).has(Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE))) return false;
+    if (this.farms.some((f) => f !== farm && Math.hypot(f.x - x, f.y - y) < 70)) return false;
+    if (checkOnly) return true;
+    farm.x = x;
+    farm.y = y;
+    this.version++;
+    return true;
   }
 
   /** Can one footprint tile of a tower go here? (solid ground or a finished bridge deck, nothing in the way but walls) */

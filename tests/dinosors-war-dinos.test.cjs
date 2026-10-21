@@ -72,11 +72,16 @@ test('battle-ready pets return to a finished pen, sleep on its hay, and still an
   w.nav.sync(w);
   const d = addDino(w, 'trike', pen.x + 135, pen.y + 20, { owner: true, tame: 1, warTraining: 1, hunger: 0, thirst: 0, energy: 0.6 });
   w.daylight = 1;
+  // a war-trained pet is on guard duty full time: rested, it patrols (warGuard.ts)
+  thinkDino(w, d);
+  assert.equal(d.state, 'wander', 'on patrol');
+  assert.ok(!(Math.abs(d.tx - pen.x) < 50 && d.ty < pen.y), 'patrolling, not heading for the pen');
+  // worn out: it goes back to its pen to rest (then back on duty)
+  d.energy = 0.1;
   thinkDino(w, d);
   assert.equal(d.state, 'wander');
   assert.ok(Math.abs(d.tx - pen.x) < 50 && d.ty < pen.y, 'pet heads back inside the pen');
   d.x = d.tx; d.y = d.ty;
-  d.energy = 0.5;
   w.daylight = 0;
   thinkDino(w, d);
   assert.equal(d.state, 'sleep');

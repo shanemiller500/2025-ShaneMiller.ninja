@@ -2,7 +2,7 @@ import { sp } from "../data/species";
 import { deliver, siteByKey, siteKey, sites } from "./build";
 import { clearTick } from "./clearing";
 import { issue } from "./tasks";
-import { isBaby, setState, sizeOf } from "./dinos";
+import { isBaby, navClassOf, setState, sizeOf } from "./dinos";
 import { tileOf } from "./nav";
 import { TILE, type Dino, type Resource } from "./types";
 import type { World } from "./world";
@@ -55,9 +55,8 @@ export function canWork(d: Dino) {
 }
 
 function safe(w: World, d: Dino, x: number, y: number) {
-  const cls = ((d.species === "apato" || d.species === "brachio") && !isBaby(d)) || sizeOf(d) >= 110 ? "hugeDino" : sizeOf(d) > 34 ? "bigDino" : "dino";
   const i = tileOf(x, y);
-  return w.nav.ok(cls, i) && w.fire.heat[i] < 0.2 && w.lava.heat[i] < 0.15 && !w.rivals.brutes.some((b) => Math.hypot(b.x - x, b.y - y) < 110);
+  return w.nav.ok(navClassOf(d), i) && w.fire.heat[i] < 0.2 && w.lava.heat[i] < 0.15 && !w.rivals.brutes.some((b) => Math.hypot(b.x - x, b.y - y) < 110);
 }
 
 function approach(w: World, d: Dino, x: number, y: number) {

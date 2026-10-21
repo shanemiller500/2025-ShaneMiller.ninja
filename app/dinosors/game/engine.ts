@@ -3,6 +3,8 @@
 /*  World, Renderer and AudioManager and talks to React only through   */
 /*  a tiny event emitter and a polled snapshot (never per-frame state). */
 /* ------------------------------------------------------------------ */
+import { startHunt } from "../sim/chariots";
+import type { HuntFormation } from "../sim/types";
 import { CLAN_TECH, techOf } from "../sim/clanTech";
 import { upgradeCatapult, upgradeCost } from "../sim/ourCatapults";
 import { claimNest, nestEggs, orphanNests } from "../sim/dragonNests";
@@ -38,7 +40,7 @@ import { condition, type Condition } from "../sim/injury";
 import { STONE_TOWER_UP, queueUpgrades, shelterDone, stagesOf, towerMaxHp, wallMaxHp, sites, siteKey, type UpgradeKind } from "../sim/build";
 import { commandCollect, commandDeliver, commandTravel, eligible, workOf, type WorkSkill } from "../sim/workDinos";
 import { bond, callRider, chooseRider, jobSpot, rideTeamTo, riderOf, riderReady, unbond } from "../sim/riders";
-import { DRAGON_COMMANDS, type DragonCmdKind } from "../data/dragons";
+import { BREEDS, DRAGON_COMMANDS, type DragonCmdKind } from "../data/dragons";
 import { bondDragon, commandDragon, dismountDragon, unbondDragon } from "../sim/dragonKeep";
 import { revealNest } from "../sim/dragonNests";
 import { launchRaid, raidTarget } from "../sim/dragonRaid";
@@ -65,7 +67,9 @@ export type UIEvent =
   | { type: "confirmEnd"; cause: "asteroid" | "supervolcano" }
   | { type: "select" }
   | { type: "saved" }
-  | { type: "inspect" };
+  | { type: "inspect" }
+  /** play a dragon's hatching scene (ui/HatchScene.tsx) */
+  | { type: "hatchScene"; dragon: number };
 
 export interface DinoInfo {
   kind: "dino";
@@ -173,6 +177,8 @@ export type InspectInfo =
   | { kind: "building"; id: number; bkind: BuildingKind; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost; stage?: { n: number; of: number; name: string; next: string | null }; note?: string }
   | { kind: "scorpion"; id: number; name: string; tier: number; built: number; hp: number; maxHp: number; drone: boolean; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
   | { kind: "gate"; id: number; open: boolean; auto: boolean; hp: number; maxHp: number; material: string }
+  | { kind: "wall"; id: number; material: string; part: string; built: number; hp: number; maxHp: number }
+  | { kind: "farm"; id: number; crop: string; growth: number; planted: boolean }
   | { kind: "tower"; id: number; stage: number; hp: number; maxHp: number; guards: number; stone: boolean; up: boolean; canUpgrade: boolean; upCost: number }
   | { kind: "carcass"; id: number; name: string; stage: string; left: { r: string; n: number; max: number }[]; working: number; burnt: boolean; fresh: number };
 
@@ -199,6 +205,9 @@ export interface Snapshot {
     shelters: { stage: number; have: number }[];
   };
   discoveries: string[];
+  /** war chariots, and the chariot dragon hunt under way */
+  chariots: { id: number; hp: number; trike: boolean }[];
+  hunt: { phase: string; formation: string; alive: number; start: number; eggs: number; result: string | null } | null;
   /** nests that still have eggs but no dragon (one can be sent to take over: Dinos tool) */
   orphanNests: { id: number; breed: string; eggs: number; found: boolean }[];
   unlocked: SpeciesId[];
@@ -417,7 +426,7 @@ export class Engine {
   /** last command + its alternatives (for the "instead…" chip) */
   private lastCmd: { cmd: Command; people: number[]; at: number; weapon: WeaponKind | null } | null = null;
   /** tapped building being looked at */
-  inspectRef: { kind: "shelter" | "building" | "scorpion" | "gate" | "tower" | "carcass"; id: number } | null = null;
+  inspectRef: { kind: "shelter" | "building" | "scorpion" | "gate" | "wall" | "farm" | "tower" | "carcass"; id: number } | null = null;
   /** shift-drag selection box (screen px) */
   private box: { x0: number; y0: number; x1: number; y1: number } | null = null;
   private hoverHint: { x: number; y: number; icon: string; label: string } | null = null;
@@ -673,6 +682,9 @@ export class Engine {
           break;
         case "unlock":
           this.emit(e);
+          break;
+        case "hatched":
+          this.emit({ type: "hatchScene", dragon: e.dragon });
           break;
         case "removed":
           if (this.selectedId === e.id) {
@@ -979,6 +991,12 @@ export class Engine {
       return;
     }
     const wp = this.renderer.toWorld(this.cam, sx, sy);
+    if (this.moveAim?.kind === "wall" || this.moveAim?.kind === "farm") {
+      const ref = this.moveAim;
+      const wl = ref.kind === "wall" ? this.world.tribe.walls.find((v) => v.id === ref.id) : null;
+      const farm = ref.kind === "farm" ? this.world.tribe.farms.find((v) => v.id === ref.id) : null;
+      if (wl && Math.hypot(wp.x - (wl.tx + 0.5) * TILE, wp.y - (wl.ty + 0.5) * TILE) < TILE || farm && Math.hypot(wp.x - farm.x, wp.y - farm.y) < 44) this.moveDrag = e.pointerId;
+    }
     // shift-drag draws a box to select people
     if ((e.shiftKey && e.pointerType === "mouse" || this.groupSelectMode) && this.tool.id === "hand") {
       this.box = { x0: sx, y0: sy, x1: sx, y1: sy };
@@ -987,7 +1005,7 @@ export class Engine {
       this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: now, lastMoveAt: now, pointerType: e.pointerType, moved: false, grab: null });
       return;
     }
-    const grab = this.tool.id === "hand" && this.ptrs.size === 0 && !this.selection.length ? this.pickDino(wp.x, wp.y) : null;
+    const grab = this.moveDrag === e.pointerId ? null : this.tool.id === "hand" && this.ptrs.size === 0 && !this.selection.length ? this.pickDino(wp.x, wp.y) : null;
     const now = performance.now();
     this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: now, lastMoveAt: now, pointerType: e.pointerType, moved: false, grab });
     this.vel.x = this.vel.y = 0;
@@ -1055,6 +1073,7 @@ export class Engine {
     }
 
     const wp = this.renderer.toWorld(this.cam, sx, sy);
+    if (this.moveDrag === e.pointerId) { this.hover = wp; p.x = sx; p.y = sy; if (Math.hypot(sx - p.sx, sy - p.sy) > 7) p.moved = true; return; }
     if (this.carried) {
       const d = this.carried;
       d.x = wp.x;
@@ -1131,6 +1150,14 @@ export class Engine {
     }
     if (this.ptrs.size < 2) this.pinch = null;
     if (!p) return;
+    if (this.moveDrag === e.pointerId) {
+      this.moveDrag = null;
+      if (e.type !== "pointercancel" && p.moved) {
+        const wp = this.renderer.toWorld(this.cam, p.x, p.y);
+        this.tap(wp.x, wp.y, p.x, p.y);
+        return;
+      }
+    }
     if (this.carried) {
       this.drop();
       this.vel.x = this.vel.y = 0;
@@ -1637,6 +1664,9 @@ export class Engine {
       w.toast("🚪", wl.open ? "Gate opened — dinos can wander through now." : "Gate shut! Only people can get through (by the side door).");
       return this.inspect({ kind: "gate", id: wl.id });
     }
+    if (wl) return this.inspect({ kind: "wall", id: wl.id });
+    const farm = w.tribe.farms.find((f) => Math.hypot(f.x - x, (f.y - y) * 1.6) < 40);
+    if (farm) return this.inspect({ kind: "farm", id: farm.id });
     const s = w.shelters.find((sh) => Math.abs(sh.x - x) < 32 && y < sh.y + 8 && y > sh.y - 58);
     if (s) return this.inspect({ kind: "shelter", id: s.id });
     const b = w.colony.buildings.find((bd) => x > bd.tx * TILE && x < (bd.tx + BUILDINGS[bd.kind].w) * TILE && y > bd.ty * TILE - 30 && y < bd.y + 6);
@@ -1698,6 +1728,23 @@ export class Engine {
     this.emit({ type: "select" });
   }
 
+  /** Everything the hatching scene needs: the dragon as it was the moment it hatched, and the person who was there. */
+  hatchSceneData(id: number) {
+    const w = this.world;
+    const d = w.dragons.owned.find((x) => x.id === id) ?? w.dragons.list.find((x) => x.id === id);
+    if (!d) return null;
+    const k = w.humans.find((h) => h.id === (d.hatchedBy ?? d.keeper)) ?? null;
+    const dragon = { ...d, x: 0, y: 0, z: 0, vx: 0, vy: 0, growth: 0.04, age: 0, skills: {}, cmd: null, carrying: null, vet: 0, fury: false, breath: 0, hop: 0, hit: 0, spread: 0, skyFire: false, aimX: undefined, aimY: undefined, state: "sleep" as const, dir: -1 as const, anim: 0 };
+    const keeper = k ? { ...k, gear: { ...k.gear }, x: 0, y: 0, z: 0, riding: 0, aloft: undefined, carry: null, carryN: 0, bubble: null, state: "watch" as const, dir: 1 as const, anim: 0, captive: 0, clanGarb: undefined, egg: undefined, egg2: undefined } : null;
+    const def = BREEDS[d.breed ?? "fire"];
+    return { dragon, keeper, name: d.name, breed: def.name, icon: def.icon, rare: !!d.rare, egg: { id: d.id, breed: d.breed ?? "fire", x: 0, y: 0, at: "camp" as const, nest: 0, carrier: 0, heat: 1, progress: 0.2, health: 1, rare: !!d.rare, hatchT: 0 } };
+  }
+
+  /** Watch a dragon's hatching scene again (dragon panel). */
+  watchHatch(id: number) {
+    this.emit({ type: "hatchScene", dragon: id });
+  }
+
   /** Upgrade one of the clan catapults we captured. */
   upgradeCatapult(id: number) {
     const c = this.world.rivals.taken.find((x) => x.id === id);
@@ -1747,6 +1794,18 @@ export class Engine {
   private runCommand(cmd: Command, people: Human[], weapon: WeaponKind | null) {
     const w = this.world;
     const wpn = weapon ?? (cmd.weapons && cmd.weapons.length > 1 ? null : cmd.weapons?.[0] ?? null);
+    // an attack on a clan camp or a dragon's nest goes out as one force: chariots filled, riders mounted, 98% in place first
+    if ((cmd.kind === "raid" || cmd.kind === "dragonRaid") && !w.colony.hunt) {
+      if (wpn) for (const h of people) if (!h.child) w.colony.equipKind(h, wpn);
+      const why = startHunt(w, this.huntFormation, cmd.kind === "raid" ? { people, clan: cmd.target } : { people, nest: cmd.target });
+      if (!why) {
+        this.marker = { x: cmd.x, y: cmd.y, t: 0, icon: cmd.icon };
+        this.audio.play("pop", 0, 0, 0.5);
+        this.selectedId = 0;
+        this.emit({ type: "select" });
+        return;
+      }
+    }
     const t = issue(w, people, cmd, wpn ?? undefined);
     this.lastCmd = { cmd, people: people.map((h) => h.id), at: performance.now(), weapon: wpn };
     this.marker = { x: cmd.x, y: cmd.y, t: 0, icon: cmd.icon };
@@ -1780,7 +1839,18 @@ export class Engine {
     const picked = this.selectionHumans();
     const band = picked.length >= 2 ? picked : w.humans.filter((h) => !h.child && !h.stranger && !h.under && (w.tribe.roleOf(h) === "dragonSlayer" || w.tribe.roleOf(h) === "eggRunner"));
     if (band.length < 2) return w.toast("⚔️", "A raid needs at least a few people: make some Dragon slayers + Egg runners in Your tribe → Assign a duty, or select a group.");
-    if (!launchRaid(w, band, nest)) w.toast("⚔️", "Nobody could set out.");
+    const why = w.colony.hunt ? "busy" : startHunt(w, this.huntFormation, { people: band, nest: nest.id });
+    if (why && !launchRaid(w, band, nest)) w.toast("⚔️", "Nobody could set out.");
+    this.emit({ type: "select" });
+  }
+
+  /** Send the war chariots on a dragon hunt in the chosen formation. */
+  /** the formation the last attack used (clan raids + nest raids go out in it too) */
+  huntFormation: HuntFormation = "ring";
+  startChariotHunt(formation: HuntFormation) {
+    this.huntFormation = formation;
+    const why = startHunt(this.world, formation);
+    if (why) this.world.toast("🛡️", why);
     this.emit({ type: "select" });
   }
 
@@ -1790,6 +1860,7 @@ export class Engine {
   clearAim = 0;
   /** a building / home waiting for the player to tap where it should go */
   moveAim: MoveRef | null = null;
+  private moveDrag: number | null = null;
 
   /** Make someone the keeper of an egg / dragon (from the incubator or dragon panel). */
   setKeeper(kind: "egg" | "dragon", id: number, humanId: number) {
@@ -1825,19 +1896,21 @@ export class Engine {
     this.emit({ type: "select" });
   }
 
-  /** Move: the next tap picks the new spot (a crew carries it there). */
+  /** Move: drag the selected wall or farm, or tap a destination. */
   startMoveSelected() {
     const ref = this.inspectRef;
-    if (!ref || (ref.kind !== "building" && ref.kind !== "shelter")) return;
-    const why = canMove(this.world, { kind: ref.kind, id: ref.id });
+    if (!ref || !(["building", "shelter", "wall", "farm", "gate"] as string[]).includes(ref.kind)) return;
+    const kind = ref.kind === "gate" ? "wall" : ref.kind as MoveRef["kind"];
+    const why = canMove(this.world, { kind, id: ref.id });
     if (why) return this.world.toast("🚚", why);
-    this.moveAim = { kind: ref.kind, id: ref.id };
-    this.world.toast("🚚", "Tap where it should go.");
+    this.moveAim = { kind, id: ref.id };
+    this.world.toast("🔷", kind === "wall" || kind === "farm" ? "Drag it to a new spot, or tap where it should go." : "Tap where it should go.");
     this.emit({ type: "select" });
   }
 
   cancelMove() {
     this.moveAim = null;
+    this.moveDrag = null;
     this.emit({ type: "select" });
   }
 
@@ -2071,6 +2144,10 @@ export class Engine {
     if (sc) return { x: sc.x, y: sc.y - (sc.mount === "tower" ? 46 : sc.mount === "wall" ? 26 : 10), radius: 27, icon: "🎯", label: "Scorpion · tap to inspect" };
     const tower = w.tribe.towers.find((t) => x >= t.x - 34 && x <= t.x + 34 && y >= t.y - 90 && y <= t.y + 4);
     if (tower) return { x: tower.x, y: tower.y - 46, radius: 36, icon: "🗼", label: "Watchtower · tap to inspect" };
+    const wl = w.tribe.wallAt(Math.floor(x / TILE), Math.floor(y / TILE));
+    if (wl) return { x: (wl.tx + 0.5) * TILE, y: (wl.ty + 0.5) * TILE, radius: 20, icon: "🔷", label: `${wl.kind} ${wl.part} · tap to edit` };
+    const farm = w.tribe.farms.find((f) => Math.hypot(f.x - x, (f.y - y) * 1.6) < 40);
+    if (farm) return { x: farm.x, y: farm.y, radius: 38, icon: "🌾", label: "Farm · tap to edit" };
     const shelter = w.shelters.find((s) => Math.abs(s.x - x) < 32 && y < s.y + 8 && y > s.y - 58);
     if (shelter) return { x: shelter.x, y: shelter.y - 18, radius: 34, icon: "🏠", label: "Home · tap to inspect" };
     const building = w.colony.buildings.find((b) => x > b.tx * TILE && x < (b.tx + BUILDINGS[b.kind].w) * TILE && y > b.ty * TILE - 30 && y < b.y + 6);
@@ -3137,6 +3214,13 @@ export class Engine {
         shelters: w.shelters.map((s) => ({ stage: s.stage, have: s.have })),
       },
       discoveries: this.stable("discoveries", Array.from(w.discoveries)),
+      chariots: w.colony.chariots.map((c) => ({ id: c.id, hp: Math.round((c.hp / c.maxHp) * 100), trike: !!c.trike })),
+      hunt: w.colony.hunt ? {
+        phase: w.colony.hunt.phase, formation: w.colony.hunt.formation, start: w.colony.hunt.start,
+        alive: w.colony.hunt.crew.filter((m) => w.humans.some((h) => h.id === m.id)).length,
+        eggs: w.humans.filter((h) => w.colony.hunt!.crew.some((m) => m.id === h.id) && (h.egg || h.egg2)).length,
+        result: w.colony.hunt.result ?? null,
+      } : null,
       orphanNests: this.stable("orphanNests", orphanNests(w).map((n) => ({ id: n.id, breed: n.breed, eggs: nestEggs(w, n).length, found: !!n.found }))),
       unlocked: this.stable("unlocked", Array.from(w.unlocked)),
       seen: this.stable("seen", Array.from(w.seen)),
@@ -3308,6 +3392,14 @@ export class Engine {
         const g = w.tribe.walls.find((x) => x.id === r.id);
         if (!g) return null;
         return { kind: "gate", id: g.id, open: g.open, auto: g.auto, hp: g.hp, maxHp: wallMaxHp(g), material: g.bone ? "Bone" : g.kind === "polygon" ? "Polygon" : g.kind === "stone" ? "Stone" : "Wooden" };
+      }
+      case "wall": {
+        const wl = w.tribe.walls.find((v) => v.id === r.id);
+        return wl ? { kind: "wall", id: wl.id, material: wl.kind, part: wl.part, built: wl.built, hp: wl.hp, maxHp: wallMaxHp(wl) } : null;
+      }
+      case "farm": {
+        const f = w.tribe.farms.find((v) => v.id === r.id);
+        return f ? { kind: "farm", id: f.id, crop: f.crop ?? "wheat", growth: f.growth, planted: f.planted } : null;
       }
       case "carcass": {
         const it = w.items.find((x) => x.id === r.id);

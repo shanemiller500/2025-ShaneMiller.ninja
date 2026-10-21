@@ -117,12 +117,25 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
           )}
         </>
       )}
-      {(info.kind === "building" || info.kind === "shelter") && (
+      {(["building", "shelter", "gate", "wall", "farm"] as string[]).includes(info.kind) && (
         <button type="button" onClick={() => (engine.moveAim ? engine.cancelMove() : engine.startMoveSelected())}
           className={`absolute right-12 top-3 z-10 rounded-xl px-2.5 py-1.5 text-xs font-bold transition active:scale-95 ${engine.moveAim ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}
           title="Pick it up and carry it somewhere else">
           {engine.moveAim ? "✕ Cancel move" : "🚚 Move"}
         </button>
+      )}
+      {info.kind === "wall" && (
+        <div className="pr-8">
+          <div className="text-lg font-bold">🔷 {info.material} {info.part}</div>
+          <p className="mt-1 text-xs text-white/60">{info.built < 1 ? "Blueprint" : "Built"} · Drag after choosing Move, or tap a new tile. Workers levitate and reshape the existing stones.</p>
+          <div className="mt-3"><Bar value={info.hp / info.maxHp} color="linear-gradient(90deg,#22c55e,#a3e635)" /></div>
+        </div>
+      )}
+      {info.kind === "farm" && (
+        <div className="pr-8">
+          <div className="text-lg font-bold">🌾 {info.crop} farm</div>
+          <p className="mt-1 text-xs text-white/60">{info.planted ? `Growing · ${Math.round(info.growth * 100)}%` : "Ready to plant"} · Choose Move, then drag the field or tap a new spot.</p>
+        </div>
       )}
       {info.kind === "building" && (
         <>

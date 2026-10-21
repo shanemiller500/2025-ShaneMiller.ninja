@@ -4,6 +4,7 @@
 /*  territory > play. `think` picks a state (throttled, cheaper off-   */
 /*  screen); `act` runs the current state every frame.                 */
 /* ------------------------------------------------------------------ */
+import { warDinoThink } from "./warGuard";
 import { seaHuntAct, seaHuntThink } from "./seaHunters";
 import { clanDinoThink } from "./clanLife";
 import { FACTS } from "../data/facts";
@@ -531,6 +532,15 @@ export function boneSpikes(w: World, x: number, y: number) {
   w.sfx("thunk", x, y, 0.6, 0.8);
 }
 
+/** The foe a war dino was sent at (alive, hostile, and not run off too far). */
+function lockedFoe(w: World, d: Dino): Dino | Brute | null {
+  const o = w.dinoById(d.targetId);
+  if (o && !o.owner && o.health > 0 && o.state !== "faint" && o.state !== "carried" && dd(d, o) < 600) return o;
+  const b = w.rivals.byId(d.targetId);
+  if (b && b.hp > 0 && !b.captive && !b.snatched && w.rivals.hostile(w, b) && dd(d, b) < 600) return b;
+  return null;
+}
+
 function actWarDino(w: World, d: Dino, dt: number) {
   if (!d.owner || (d.warTraining ?? 0) < 0.35 || isBaby(d)) return;
   d.spikeCd = Math.max(0, (d.spikeCd ?? 0) - dt);
@@ -551,7 +561,8 @@ function actWarDino(w: World, d: Dino, dt: number) {
   }
   d.warCd = Math.max(0, (d.warCd ?? 0) - dt);
   if (d.warCd > 0) return;
-  const foe = warTarget(w, d, d.rider ? Math.max(32, sizeOf(d) * 0.6) : 260);
+  // the foe it was sent at on guard duty (warGuard.ts) stays its target while it's still there to fight
+  const foe = (d.state === "war" && !d.rider ? lockedFoe(w, d) : null) ?? warTarget(w, d, d.rider ? Math.max(32, sizeOf(d) * 0.6) : 260);
   if (!foe) {
     if (d.state === "war") setState(d, "idle", d.x, d.y);
     return;
@@ -1295,6 +1306,8 @@ export function thinkDino(w: World, d: Dino) {
   const far = !w.inView(d.x, d.y, 1400);
   d.think = (onScreen ? 0.35 : far ? 1.8 : 1.1) + w.rng() * 0.35;
   if (LOCKED.has(d.state)) return;
+  // harnessed to a war chariot: nothing to decide
+  if (d.chariot) return;
   if (d.health <= 0) {
     setState(d, "faint", d.x, d.y);
     emote(d, "😵", 3);
@@ -1323,6 +1336,8 @@ export function thinkDino(w: World, d: Dino) {
   }
   // its person is coming for it (a rally, a call): run to meet them
   if (d.owner && meetRider(w, d)) return;
+  // war-trained: on guard duty full time (fight, guard someone in the wild, or patrol)
+  if (warDinoThink(w, d)) return;
   // no grown dinosaur inside the walls: walk back out
   if (!d.rider) {
     const out = leaveWalls(w, d);

@@ -43,7 +43,9 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   c.translate(0, -hop * 14 * s);
   c.rotate((dr.bank ?? 0) * 0.6);
   c.scale(dr.dir * s, s);
-  if (dr.hit > 0) c.filter = `brightness(${1 + dr.hit * 0.8})`;
+  // its own shade of the breed's colours (and a flash when it's hit)
+  const fx = `${dr.tint ? `hue-rotate(${dr.tint}deg)` : ""}${dr.hit > 0 ? ` brightness(${1 + dr.hit * 0.8})` : ""}`.trim();
+  if (fx) c.filter = fx;
 
   const wing = (near: boolean) => {
     // flung wide (the clans' altar rite) or folded at rest
@@ -200,6 +202,27 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   c.beginPath();
   c.ellipse(0, -19 + (dr.gravid ? 2 : 0), 30 + (dr.gravid ? 3 : 0), 15 + (young ? 2 : 0) + (dr.gravid ? 4 : 0), -0.08, 0, Math.PI * 2);
   c.fill();
+  // its own markings: stripes, spots, or a pale blaze along the back
+  if (dr.marks === 1) {
+    c.fillStyle = shade(L.body, -0.32);
+    for (let i = 0; i < 5; i++) {
+      c.beginPath();
+      c.ellipse(-20 + i * 9, -25, 2.2, 7, 0.25, 0, Math.PI * 2);
+      c.fill();
+    }
+  } else if (dr.marks === 2) {
+    c.fillStyle = shade(L.body, 0.3);
+    for (const [x, y, r] of [[-18, -24, 3], [-9, -28, 2.4], [0, -25, 3.2], [10, -29, 2.2], [16, -23, 2.6], [-4, -20, 2]] as const) {
+      c.beginPath();
+      c.arc(x, y, r, 0, Math.PI * 2);
+      c.fill();
+    }
+  } else if (dr.marks === 3) {
+    c.fillStyle = shade(L.belly, 0.25);
+    c.beginPath();
+    c.ellipse(-2, -29, 22, 3.6, -0.06, 0, Math.PI * 2);
+    c.fill();
+  }
   // belly plates
   c.fillStyle = L.belly;
   c.beginPath();
@@ -314,7 +337,7 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   c.beginPath();
   c.arc(64, -42 + nod, 1.1, 0, Math.PI * 2);
   c.fill();
-  c.fillStyle = dr.fury ? "#ff2a1a" : dr.owner ? "#9be36b" : "#ffe066";
+  c.fillStyle = dr.fury ? "#ff2a1a" : dr.eye ?? (dr.owner ? "#9be36b" : "#ffe066");
   c.beginPath();
   c.arc(49, -45 + nod, young ? 3 : 2.3, 0, Math.PI * 2);
   c.fill();
@@ -635,8 +658,9 @@ export function drawPit(c: CanvasRenderingContext2D, W: number, H: number, t: nu
   c.fill();
   // banners on poles round the rim (they flutter faster during a show)
   const cols = ["#b8352b", "#e0b43a", "#3a6fb0", "#3f7a4a"];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + 0.5;
+  const poles = Math.max(6, Math.round(W / 34));
+  for (let i = 0; i < poles; i++) {
+    const a = (i / poles) * Math.PI * 2 + 0.5;
     if (Math.sin(a) > 0.75) continue; // keep the entrance clear
     const px = cx + Math.cos(a) * (rx - 4);
     const py = cy + Math.sin(a) * (ry - 3);

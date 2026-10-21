@@ -17,6 +17,7 @@ import Toasts, { type Toast } from "./ui/Toasts";
 import Toolbar from "./ui/Toolbar";
 import TrainPanel from "./ui/TrainPanel";
 import DragonPanel from "./ui/DragonPanel";
+import HatchScene from "./ui/HatchScene";
 import TopBar, { type TopPanel } from "./ui/TopBar";
 import ViewControls from "./ui/ViewControls";
 import RaidBanner from "./ui/RaidBanner";
@@ -84,6 +85,8 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [tool, setToolState] = useState<ToolState>(DEFAULT_TOOL);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  /** a dragon hatching scene playing (its dragon id) */
+  const [hatchId, setHatchId] = useState<number | null>(null);
   const [panel, setPanel] = useState<TopPanel>(null);
   const [campOpen, setCampOpen] = useState(false);
   const [shiftsOpen, setShiftsOpen] = useState(false);
@@ -162,6 +165,9 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           break;
         case "saved":
           pushToast({ icon: "💾", text: "World saved!" });
+          break;
+        case "hatchScene":
+          setHatchId(e.dragon);
           break;
         case "select":
         case "inspect":
@@ -360,6 +366,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           {campOpen && <CampPanel snap={snap} engine={engine} onClose={() => setCampOpen(false)} />}
           {shiftsOpen && <ShiftsPanel snap={snap} engine={engine} onClose={() => setShiftsOpen(false)} onResearch={() => { setShiftsOpen(false); setCivOpen(true); }} />}
           <RaidBanner snap={snap} engine={engine} />
+          {hatchId !== null && <HatchScene key={hatchId} engine={engine} dragonId={hatchId} onClose={() => setHatchId(null)} />}
           {evoOpen && <EvolutionPanel snap={snap} engine={engine} onClose={() => setEvoOpen(false)} />}
           {civOpen && <CivPanel snap={snap} engine={engine} onClose={() => setCivOpen(false)} onChoose={() => setChoiceOpen(true)} onExtinction={() => setExtOpen(true)} />}
           <CivChoice open={choiceOpen} onClose={() => setChoiceOpen(false)} engine={engine} fontClass={fontClass} />

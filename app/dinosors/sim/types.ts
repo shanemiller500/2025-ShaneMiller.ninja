@@ -254,6 +254,11 @@ export interface Dino {
   raider: boolean;
   /** tamed by a Neanderthal clan (its id): lives in their pen, fights in their raids */
   clan?: number;
+  /** a war animal on guard duty (warGuard.ts): the person it's guarding out in the wild, and where it is on its patrol ring */
+  ward?: number;
+  /** harnessed to pull a war chariot (its id): the chariot moves it (chariots.ts) */
+  chariot?: number;
+  patrolA?: number;
   /** a sea hunter's current hunt: who, where it lies in wait, how long it's waited (seaHunters.ts) */
   seaHunt?: { kind: "human" | "brute" | "dino"; prey: number; sx: number; sy: number; wait?: number; back?: boolean };
   /** seconds until a sea hunter hunts again */
@@ -545,6 +550,8 @@ export interface Human {
   captiveT?: number;
   /** a captive's chore: where they're sent to fetch from, and the load they're bringing back */
   chore?: { x: number; y: number; r: "food" | "wood" | "bones"; t: number; back: boolean } | null;
+  /** riding in a war chariot (its id): the chariot moves them (chariots.ts) */
+  chariot?: number;
 }
 
 /* ------------------------------ Neanderthals ------------------------------ */
@@ -576,6 +583,51 @@ export interface ClanHold {
   t: number;
   /** surrounded by our people: no supplies get through */
   cut: boolean;
+}
+
+/** A war chariot: a Triceratops-drawn fighting wagon with two Scorpions and 10 seats (chariots.ts). */
+export interface Chariot {
+  id: number;
+  x: number;
+  y: number;
+  dir: 1 | -1;
+  hp: number;
+  maxHp: number;
+  /** the Triceratops pulling it (dino id; 0 = none harnessed yet) */
+  trike: number;
+  /** where it parks at home */
+  homeX: number;
+  homeY: number;
+  /** where it's driving to (null = standing) */
+  to: { x: number; y: number } | null;
+  path: number[] | null;
+  pathI: number;
+  pathKey: number;
+  /** the two Scorpions: seconds to reload, and aim (radians) */
+  cd: [number, number];
+  aim: [number, number];
+  anim: number;
+  /** flash when it's hit */
+  hit: number;
+}
+
+export type HuntFormation = "ring" | "pincer" | "wedge";
+
+/** A dragon hunt in war chariots: an event you win or lose (chariots.ts). */
+export interface DragonHunt {
+  nest: number;
+  formation: HuntFormation;
+  phase: "muster" | "march" | "surround" | "battle" | "return";
+  t: number;
+  /** attacking a Neanderthal clan's camp instead of a nest (its id) */
+  clan?: number;
+  /** each crew member: which chariot + seat (0..9), their own dino / dragon to ride, or on foot; runners fetch the eggs;
+   *  their place in the formation (set when they march) */
+  crew: { id: number; chariot: number; seat: number; runner: boolean; ride?: "dino" | "dragon"; mount?: number; sx?: number; sy?: number }[];
+  /** how many set out (to judge losses) */
+  start: number;
+  eggs: number;
+  result?: "won" | "lost";
 }
 
 /** A clan catapult we captured (ourCatapults.ts). */
@@ -951,6 +1003,8 @@ export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" |
   | "fireStation"
   // the dragons' home + show arena (see shows.ts)
   | "dragonPit"
+  | "warChariot"
+  | "riderHall"
   // the Old Ways' last-resort project
   | "shelterDeep"
   | "refinery"
@@ -988,6 +1042,8 @@ export interface Building {
   stage?: number;
   /** beam towers: seconds until they can fire again */
   cd?: number;
+  /** the dragon pit: how far it's been dug out (1 = as first built; it grows with the dragons, shows.ts) */
+  grow?: number;
 }
 
 /** A giant crossbow. Sits on a wall tile, a tower or the ground. */
@@ -1056,6 +1112,8 @@ export interface DragonCmd {
   t: number;
   /** set by Auto mode (a player order replaces it) */
   auto?: boolean;
+  /** a war dragon's full-time guard duty patrol (warGuard.ts): it doesn't end on its own */
+  duty?: boolean;
 }
 
 /** A dragon nest high in the mountains or on a volcanic ridge. */
@@ -1195,6 +1253,14 @@ export interface Dragon {
   riteClan?: number;
   /** a wild youngster raised at its parents' nest (it grows up there, and fights beside them) */
   young?: boolean;
+  /** a war dragon on guard duty: the person it's watching over out in the wild (warGuard.ts) */
+  ward?: number;
+  /** its own look (set when it hatches, so no two are alike): a colour shift (degrees), markings, eye colour */
+  tint?: number;
+  marks?: 0 | 1 | 2 | 3;
+  eye?: string;
+  /** who was there when it hatched (the hatching scene) */
+  hatchedBy?: number;
   /** seconds until a parent tries to win its stolen baby back */
   reclaimT?: number;
   /** 0..1 battle-hardened: every fight won makes a war dragon bigger + stronger */
@@ -1251,6 +1317,8 @@ export type GameEvent =
   | { type: "shake"; amount: number; time: number }
   | { type: "flash"; amount: number; color: string }
   | { type: "unlock"; species: SpeciesId }
-  | { type: "removed"; id: number };
+  | { type: "removed"; id: number }
+  /** a dragon egg just hatched: play its hatching scene */
+  | { type: "hatched"; dragon: number };
 
 export type Creature = Dino | Human;

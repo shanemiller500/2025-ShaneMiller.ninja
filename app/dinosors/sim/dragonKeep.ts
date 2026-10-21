@@ -19,6 +19,7 @@
 /*  the cone. Bursts cost stamina, have a cooldown, and are short and  */
 /*  weak in young or untrained dragons.                                */
 /* ------------------------------------------------------------------ */
+import { threatAt } from "./warGuard";
 import { sp } from "../data/species";
 import { BREEDS, GROW_SECONDS, GROWTH, LESSON_BY_ID, LESSONS, growthStage, type DragonCmdKind, type DragonSkill, type DragonStage } from "../data/dragons";
 import { deliver, sites } from "./build";
@@ -26,7 +27,7 @@ import { emote, setState, sizeOf } from "./dinos";
 import { go, say } from "./humans";
 import { hurtHuman } from "./injury";
 import { eggWarmth } from "./dragonNests";
-import { pitOf, pitSpot } from "./shows";
+import { pitOf, pitSpot, pitWanderSpot } from "./shows";
 import { P } from "./particles";
 import { pick } from "./rng";
 import { TILE, T, WORLD_H, WORLD_W, type Brute, type Dino, type Dragon, type DragonCmd, type Human, type Resource } from "./types";
@@ -413,6 +414,22 @@ function foeById(w: World, id: number): Foe | null {
   return null;
 }
 
+/** A threat near someone it's guarding out in the wild (anything hostile there, not just near camp). */
+function wardThreat(w: World, x: number, y: number, r: number): Foe | null {
+  const t = threatAt(w, x, y, r, true);
+  if (!t) return null;
+  if (t.kind === "dino") {
+    const d = w.dinoById(t.id);
+    return d ? { kind: "dino", d } : null;
+  }
+  if (t.kind === "brute") {
+    const b = w.rivals.byId(t.id);
+    return b ? { kind: "brute", b } : null;
+  }
+  const dr = w.dragons.byId(t.id);
+  return dr ? { kind: "dragon", dr } : null;
+}
+
 /** A real threat worth a dragon's attention (not a little lizard): raiders, Neanderthals, big predators, wild dragons. */
 export function threatNear(w: World, x: number, y: number, r: number): Foe | null {
   let best: Foe | null = null;
@@ -791,8 +808,22 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
       }
       // patrolling the skies hardens it a little too
       if (warTrained(dr) && (dr.vet ?? 0) < 0.3) harden(w, dr, dt * 0.0006);
+      // on guard duty: circle over its person out in the wild (and pick its rider up whenever it can)
+      const ward = cmd.duty && dr.ward ? w.humans.find((h) => h.id === dr.ward) ?? null : null;
+      if (cmd.duty) {
+        if (ward) {
+          cmd.x = ward.x;
+          cmd.y = ward.y;
+        } else {
+          cmd.x = w.camp.x;
+          cmd.y = w.camp.y;
+        }
+        const rider = dragonRiderOf(w, dr);
+        if (cmd.t % 30 < dt && rider && !rider.aloft && !rider.order && !rider.taskId && !rider.captive && w.daylight > 0.35 && Math.hypot(rider.x - dr.x, rider.y - dr.y) < 480) cmd.i = 0;
+      }
       if (cmd.t % 1 < dt) {
-        const f = threatNear(w, dr.x, dr.y, 540);
+        const near = ward ? wardThreat(w, ward.x, ward.y, 380) : null;
+        const f = near ?? threatNear(w, dr.x, dr.y, 540);
         if (f && warTrained(dr)) {
           const p = foeXY(f);
           dr.foe = f.kind === "dino" ? f.d.id : f.kind === "brute" ? f.b.id : f.dr.id;
@@ -800,9 +831,9 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
         }
       }
       if (cmd.kind === "patrol") {
-        // an Auto patrol sweeps wide round the whole town
+        // an Auto patrol sweeps wide round the whole town (tight circles over someone it's guarding)
         const a = cmd.t * (cmd.auto ? 0.28 : 0.38) + dr.id;
-        const rx = cmd.auto ? 460 : 270;
+        const rx = ward ? 170 : cmd.auto ? 460 : 270;
         flyToward(w, dr, cmd.x + Math.cos(a) * rx, cmd.y + Math.sin(a) * rx * 0.66, cmd.auto ? 230 : 200, dt, 0.75);
       } else {
         const pts = cmd.pts ?? [];
@@ -811,7 +842,8 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
         const p = pts[i];
         if (flyToward(w, dr, p.x, p.y, 210, dt, 0.85) < 60) cmd.i = (cmd.i ?? 1) + 1;
       }
-      // an Auto patrol is a round, not forever
+      // guard duty doesn't end (only a fight, tiredness or wounds break it off); an Auto patrol is a round
+      if (cmd.duty) return warTrained(dr);
       return !cmd.auto || cmd.t < 100;
     }
     case "guard": {
@@ -1020,19 +1052,23 @@ function autoThink(w: World, dr: Dragon, dt: number) {
       return;
     }
   }
-  // a bonded war dragon + its rider patrol the camp now and then
-  // a bonded battle dragon + its rider patrol the skies over the town (the rider leaves their work for it)
-  if (dr.partner && warTrained(dr) && !dr.restT && (dr.stamina ?? 1) > 0.7 && dr.hp > dr.maxHp * 0.6 && w.daylight > 0.5 && w.weather.storm < 0.4) {
+  // a war dragon is on guard duty full time (warGuard.ts): it patrols the skies over the town, or circles
+  // over the person it's guarding out in the wild, with its rider on its back whenever they can be picked up
+  if (warTrained(dr) && (dr.stamina ?? 1) > 0.5 && dr.hp > dr.maxHp * 0.5 && w.weather.storm < 0.6 && canFly(dr)) {
     const h = dragonRiderOf(w, dr);
-    if (h && !h.order && h.state !== "down" && !h.under && !h.captive) {
-      dr.cmd = { kind: "patrol", x: w.camp.x, y: w.camp.y, t: 0, auto: true };
-      dr.restT = 140;
-      if (!w.flags.has(`skyPatrol${dr.id}`)) {
-        w.flags.add(`skyPatrol${dr.id}`);
-        w.toast("🐉", `${dr.name} and ${h.name} take to the skies on patrol: they'll swoop on anything that threatens the town.`, dr.x, dr.y);
-      }
+    const free = !!h && !h.order && !h.taskId && h.state !== "down" && !h.under && !h.captive && w.daylight > 0.35;
+    // its rider's free but too far off to call down to: go and fetch them first
+    if (free && h && !h.aloft && !dr.ward && Math.hypot(h.x - dr.x, h.y - dr.y) > 480) {
+      if (dr.z > 6 || Math.hypot(h.x - dr.x, h.y - dr.y) > 520) flyToward(w, dr, h.x - 60, h.y + 20, 110, dt, 0.9);
+      dr.state = "fly";
       return;
     }
+    dr.cmd = { kind: "patrol", x: w.camp.x, y: w.camp.y, t: 0, auto: true, duty: true };
+    if (!w.flags.has(`skyPatrol${dr.id}`)) {
+      w.flags.add(`skyPatrol${dr.id}`);
+      w.toast("🐉", `${dr.name}${h ? ` and ${h.name}` : ""} are on guard duty: patrolling the skies, watching over anyone out in the wild, and swooping on anything that threatens the town.`, dr.x, dr.y);
+    }
+    return;
   }
   // a dragon and its rider stay together: it keeps close to them wherever they are
   const mate = dragonRiderOf(w, dr);
@@ -1069,8 +1105,11 @@ function autoThink(w: World, dr: Dragon, dt: number) {
     dr.t = 0;
     const r = w.rng();
     if (r < 0.35) {
-      dr.tx = home.x + (w.rng() - 0.5) * 140;
-      dr.ty = home.y + (w.rng() - 0.5) * 80;
+      // living in the pit: stroll about its floor; else potter round its roost
+      const pit = pitOf(w);
+      const to = pit && home.roost ? pitWanderSpot(w, pit) : { x: home.x + (w.rng() - 0.5) * 140, y: home.y + (w.rng() - 0.5) * 80 };
+      dr.tx = to.x;
+      dr.ty = to.y;
       dr.state = "walk";
     } else if (r < 0.6 + (g < 0.55 ? 0.2 : 0)) {
       dr.state = "play";

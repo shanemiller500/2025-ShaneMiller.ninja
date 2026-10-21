@@ -34,14 +34,79 @@ export const pitOf = (w: World): Building | null => w.colony.buildings.find((b) 
 
 /** The arena floor's centre (the pit is a sunken bowl a bit above its base line). */
 export const pitCentre = (b: Building) => ({ x: b.x, y: b.y - TILE * 1.6 });
+/** How far the pit has been dug out (1 = as built). */
+export const pitScale = (b: Building) => b.grow ?? 1;
 /** Arena radius (horizontal). */
-export const pitRadius = (b: Building) => TILE * 2.4;
+export const pitRadius = (b: Building) => TILE * 2.4 * pitScale(b);
+/** The biggest the tribe will dig it. */
+export const PIT_MAX = 4;
 
-/** Where dragon n of the troupe sleeps / stands in the pit. */
+/** How big the pit should be for the dragons we have: room for every one of them (big ones need more). */
+export function pitWant(w: World) {
+  let area = 0;
+  for (const d of w.dragons.owned) area += dragonStats(d).scale ** 2;
+  return Math.max(1, Math.min(PIT_MAX, 0.9 + 0.6 * Math.sqrt(area)));
+}
+
+/** Every frame: dig the pit out wider whenever the dragons have outgrown it (it never shrinks). */
+export function pitGrow(w: World, dt: number) {
+  const pit = pitOf(w);
+  if (!pit) return;
+  // the arena floor is kept clear: anything growing in it is dug out (the timber goes to the stores)
+  // (every couple of seconds of game time)
+  if (Math.floor(w.elapsed / 2) !== Math.floor((w.elapsed - dt) / 2)) clearPitFloor(w, pit);
+  const want = pitWant(w);
+  const now = pitScale(pit);
+  if (now >= want - 0.01) return;
+  pit.grow = Math.min(want, now + dt * 0.012);
+  const c = pitCentre(pit);
+  if (w.rng() < dt * 3) {
+    const a = w.rng() * Math.PI * 2;
+    const r = pitRadius(pit);
+    w.particles.burst(P.Dust, c.x + Math.cos(a) * r, c.y + Math.sin(a) * r * 0.5, 3, 30, { size: 12, max: 1, color: "rgba(170,145,100,0.55)" });
+  }
+  const step = Math.floor(want * 4);
+  if (!w.flags.has(`pitDig${pit.id}:${step}`)) {
+    w.flags.add(`pitDig${pit.id}:${step}`);
+    w.toast("🏟️", `The dragons are outgrowing their pit: the tribe is digging it out wider so they have room to walk about and sleep (${w.dragons.owned.length} dragon${w.dragons.owned.length === 1 ? "" : "s"}).`, c.x, c.y);
+  }
+}
+
+/** Dig out any trees + bushes standing inside the arena. */
+export function clearPitFloor(w: World, pit: Building) {
+  const c = pitCentre(pit);
+  const r = pitRadius(pit) + 16;
+  let n = 0;
+  for (let i = w.plants.length - 1; i >= 0; i--) {
+    const p = w.plants[i];
+    // (the drawn bowl is 0.7 as deep as it is wide, rim included)
+    if (Math.hypot(p.x - c.x, (p.y - c.y) / 0.7) > r) continue;
+    w.plants.splice(i, 1);
+    n++;
+    if (p.size > 0.5 && !p.stump) w.camp.stock.wood += 1;
+    if (n < 6) w.particles.burst(P.Leaf, p.x, p.y - 12, 6, 50, { z: 16, size: 3, max: 0.8, color: "#6b9a3f" });
+  }
+  if (n) w.plantsDirty = true;
+  return n;
+}
+
+/** Where dragon n of the troupe sleeps / stands in the pit (one ring, then an inner ring too once there are lots). */
 export function pitSpot(b: Building, n: number, of: number) {
   const c = pitCentre(b);
-  const a = (n / Math.max(1, of)) * Math.PI * 2 + 0.3;
-  const r = pitRadius(b) * 0.55;
+  const outer = of <= 6 ? of : Math.ceil(of * 0.62);
+  const inner = n >= outer;
+  const k = inner ? n - outer : n;
+  const ring = inner ? of - outer : outer;
+  const a = (k / Math.max(1, ring)) * Math.PI * 2 + (inner ? 0.9 : 0.3);
+  const r = pitRadius(b) * (inner ? 0.26 : 0.6);
+  return { x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r * 0.5 };
+}
+
+/** Somewhere on the arena floor to wander to. */
+export function pitWanderSpot(w: World, b: Building) {
+  const c = pitCentre(b);
+  const a = w.rng() * Math.PI * 2;
+  const r = pitRadius(b) * 0.72 * Math.sqrt(w.rng());
   return { x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r * 0.5 };
 }
 
@@ -87,6 +152,7 @@ export function startShow(w: World, quiet = false): string | null {
 
 /** Per frame: run the show (dragons + keepers do tricks, the crowd cheers), and plan the evening one. */
 export function showsUpdate(w: World, dt: number) {
+  pitGrow(w, dt);
   const s = w.dragons.show;
   if (!s) {
     // an evening show, once a day, when there's a pit and a dragon to show off

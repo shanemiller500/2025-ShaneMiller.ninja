@@ -2,12 +2,14 @@
 /*  The toy box. Tool + option definitions (for the UI) and what each  */
 /*  one does when it touches the world (for the engine).               */
 /* ------------------------------------------------------------------ */
+import { placeHall } from "../sim/riderHall";
 import { TECH } from "../data/facts";
 import { CIV_TECH, LIFT, type CivTechId } from "../data/civ";
 import { BUILDINGS, HOUSING, NODES, SCORPION_TIERS, TENT_STAGES, type Cost } from "../data/colony";
 import { SHELTER_STAGES } from "../data/facts";
 import { sp } from "../data/species";
 import { addHuman } from "../sim/humans";
+import { MAX_CLANS } from "../sim/rivals";
 import { P } from "../sim/particles";
 import { leaveScorpion } from "../sim/tasks";
 import { ringFire } from "../sim/shade";
@@ -22,7 +24,7 @@ export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire
 export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
 export type LandOpt = "water" | "rock" | "mud" | "grass" | NodeKind;
 export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon" | "supervolcano";
-export type PeopleOpt = "adult" | "child";
+export type PeopleOpt = "adult" | "child" | "clan";
 export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "bonegate" | "levitate" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | "cleanMud" | BuildingKind;
 
 export interface ToolState {
@@ -114,7 +116,11 @@ export const DISASTER_OPTS: Opt<DisasterOpt>[] = [
 export const PEOPLE_OPTS: Opt<PeopleOpt>[] = [
   { value: "adult", icon: "🧔", label: "Cave person" },
   { value: "child", icon: "🧒", label: "Cave kid" },
+  { value: "clan", icon: "🪓", label: "Neanderthal clan" },
 ];
+
+/** A new clan can't settle on top of our camp. */
+export const CLAN_MIN_DIST = 700;
 export interface BuildDef extends Opt<BuildOpt> {
   cat: "homes" | "defense" | "work" | "land" | "wonders";
   cost: Cost;
@@ -169,6 +175,8 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("fireStation", "work"),
   bld("hatchery", "work"),
   bld("dragonPit", "work"),
+  bld("riderHall", "homes"),
+  bld("warChariot", "defense"),
   bld("roost", "work"),
   bld("feedPit", "work"),
   bld("dragonYard", "work"),
@@ -446,6 +454,26 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
     case "people": {
       if (drag) return false;
       if (!isWalkTile(tile) || isWaterTile(tile)) return false;
+      // a whole Neanderthal band settles where you tap
+      if (tool.people === "clan") {
+        if (Math.hypot(x - w.camp.x, y - w.camp.y) < CLAN_MIN_DIST) {
+          hint(w, "🪓", "Too close to our camp: a clan needs its own ground further out.");
+          return false;
+        }
+        if (w.rivals.clans.length >= MAX_CLANS) {
+          hint(w, "🪓", `There are already ${MAX_CLANS} clans: that's all the land can hold.`);
+          return false;
+        }
+        const clan = w.rivals.spawnClan(w, undefined, { x, y });
+        if (!clan) {
+          hint(w, "🪓", "No dry ground for a camp there. Try somewhere else.");
+          return false;
+        }
+        w.rivals.started = true;
+        w.sfx("drums", clan.x, clan.y, 0.9, 0.8);
+        w.toast("🪓", `The ${clan.name} clan has settled here: ${w.rivals.members(clan.id).length} Neanderthals. They'll gather, build, and sooner or later come raiding.`, clan.x, clan.y);
+        return true;
+      }
       if (w.humans.length >= MAX_PEOPLE) {
         hint(w, "🛖", "The camp is full!");
         return false;
@@ -485,6 +513,13 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
     return false;
   }
   if (drag && !def.line) return false;
+  // the riders' colosseum always goes round the dragon pit, wherever you tap
+  if (opt === "riderHall") {
+    const why = placeHall(w);
+    if (why) hint(w, "🏛️", why);
+    else w.sfx("build", x, y, 0.6);
+    return !why;
+  }
   switch (opt) {
     case "levitate": {
       if (drag) return false;

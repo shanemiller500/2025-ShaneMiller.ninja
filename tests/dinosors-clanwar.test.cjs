@@ -234,3 +234,32 @@ test('someone who joined a clan keeps their looks, settles in, and in time has a
   const back = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
   assert.ok(back.rivals.brutes.some((b) => b.turned && b.look && b.name === h.name));
 });
+
+test('the People tool can settle a new Neanderthal clan where you tap (not on top of our camp)', () => {
+  const tools = require(path.join(root, 'game', 'tools.ts'));
+  const w = world(9608);
+  w.rivals.started = false;
+  const tool = { ...tools.DEFAULT_TOOL, id: 'people', people: 'clan' };
+  assert.ok(tools.PEOPLE_OPTS.some((o) => o.value === 'clan'), 'in the People menu');
+  // too close to camp: refused
+  assert.equal(tools.applyTool(w, tool, w.camp.x + 200, w.camp.y + 100, false), false);
+  assert.equal(w.rivals.clans.length, 0);
+  // further out, on dry land: a clan settles there
+  let placed = false;
+  for (const [dx, dy] of [[1500, 0], [-1500, 0], [0, 1200], [0, -1200], [1200, 900], [-1200, -900]]) {
+    const x = w.camp.x + dx;
+    const y = w.camp.y + dy;
+    if (tools.applyTool(w, tool, x, y, false)) {
+      const c = w.rivals.clans[0];
+      assert.ok(Math.hypot(c.x - x, c.y - y) < 600, 'near where we tapped');
+      placed = true;
+      break;
+    }
+  }
+  assert.ok(placed, 'a clan was placed');
+  assert.ok(w.rivals.started, 'the clans are switched on');
+  assert.ok(w.rivals.members(w.rivals.clans[0].id).length >= 4);
+  // capped
+  while (w.rivals.clans.length < 6) w.rivals.clans.push({ ...w.rivals.clans[0], id: 900 + w.rivals.clans.length });
+  assert.equal(tools.applyTool(w, tool, w.camp.x + 1500, w.camp.y, false), false);
+});

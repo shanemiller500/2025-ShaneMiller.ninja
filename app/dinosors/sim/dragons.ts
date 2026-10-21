@@ -14,6 +14,8 @@
 /*  live in `owned` (see dragonKeep.ts), never in `list`, so nothing   */
 /*  that fights wild dragons ever turns on them.                       */
 /* ------------------------------------------------------------------ */
+import { hitChariot } from "./chariots";
+import { assignWards } from "./warGuard";
 import { sp } from "../data/species";
 import { sizeOf, setState, emote } from "./dinos";
 import { tileOf } from "./nav";
@@ -86,6 +88,8 @@ export class Dragons {
   falls: Fall[] = [];
   lastShowDay = 0;
   private keeperT = 0;
+  /** seconds until guards are next matched to the people out in the wild */
+  private guardT = 0;
   /** fire-breath damage ticks */
   pulse = 0;
   /** dice for nests + eggs (separate from the world's, see seedNests) */
@@ -185,6 +189,11 @@ export class Dragons {
       assignKeepers(w);
     }
     showsUpdate(w, dt);
+    this.guardT -= dt;
+    if (this.guardT <= 0) {
+      this.guardT = 1;
+      assignWards(w);
+    }
     if (this.scanT <= 0) this.scanT = 1;
   }
 
@@ -470,7 +479,10 @@ export class Dragons {
       emote(d, "🔥", 1.2);
       if (sp(d.species).move === "walk" && d.state !== "flee") setState(d, "flee", d.x + (d.x - fx) * 4, d.y + (d.y - fy) * 4);
     }
+    // a war chariot's shields take the fire for the crew behind them
+    for (const ch of [...w.colony.chariots]) if (Math.hypot(ch.x - fx, ch.y - fy) < r + 46) hitChariot(w, ch, dr.fury ? 16 : 7, dr.name);
     for (const h of w.humans) {
+      if (h.chariot) continue;
       if (Math.hypot(h.x - fx, h.y - fy) > r * (dr.fury ? 1.4 : 1)) continue;
       const home = h.state === "hide" || h.state === "sleep" || h.state === "rest" ? w.shelters.find((s) => s.id === h.home) : null;
       if (home && home.tier >= 3 && !dr.fury) continue; // stone + reinforced houses keep the fire out (not a furious dragon's)
@@ -866,7 +878,7 @@ export class Dragons {
     let best: Human | null = null;
     let bs = -Infinity;
     for (const h of w.humans) {
-      if (h.child || h.under || h.aloft || h.captive || h.snatched || h.stranger) continue;
+      if (h.child || h.under || h.aloft || h.captive || h.snatched || h.stranger || h.chariot) continue;
       const d = Math.hypot(h.x - x, h.y - y);
       if (d > r) continue;
       const inside = w.tribe.walledIn(w, h.x, h.y);
@@ -1087,6 +1099,8 @@ export class Dragons {
       ...(d.fromNest ? { fromNest: d.fromNest } : {}),
       ...(d.young ? { young: true, age: r(d.age ?? 0) } : {}),
       ...(d.vet ? { vet: Math.round(d.vet * 100) / 100 } : {}),
+      ...(d.tint !== undefined ? { tint: d.tint, marks: d.marks, eye: d.eye } : {}),
+      ...(d.hatchedBy ? { hatchedBy: d.hatchedBy } : {}),
       ...(d.owner ? {
         owner: true, age: r(d.age ?? 0), skills: d.skills, partner: d.partner, stamina: r(d.stamina ?? 1), energy: r(d.energy ?? 1),
         hunger: r(d.hunger ?? 0), auto: d.auto !== false, keeper: d.keeper, roost: d.roost, rare: d.rare || undefined, carrying: d.carrying || undefined,
@@ -1122,6 +1136,9 @@ export class Dragons {
         id: s.id, kind: "dragon", name: s.name, x: s.x, y: s.y, z: 0, vx: 0, vy: 0, dir: 1, hp: s.hp, maxHp: BREEDS[breed].hp,
         state: owned ? "idle" : "perch", t: 0, target: 0, tx: s.x, ty: s.y, breath: 0, anim: 0, hue: 0, passes: 0, hit: 0, breed, nest: s.nest,
       };
+      const look = s as { tint?: number; marks?: Dragon["marks"]; eye?: string; hatchedBy?: number };
+      if (look.tint !== undefined) Object.assign(dr, { tint: look.tint, marks: look.marks, eye: look.eye });
+      if (look.hatchedBy) dr.hatchedBy = look.hatchedBy;
       if (owned) {
         Object.assign(dr, {
           owner: true, age: o.age ?? 0, skills: { ...(o.skills ?? {}) }, partner: o.partner, stamina: o.stamina ?? 1, energy: o.energy ?? 1,

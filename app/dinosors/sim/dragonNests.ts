@@ -499,9 +499,15 @@ export function hatch(w: World, egg: DragonEgg) {
     auto: true,
     rare: egg.rare,
   };
+  // no two alike: its own shade of the breed's colours, its own markings + eyes (the dragons' own dice)
+  dr.tint = Math.round((ds.rng() - 0.5) * 70);
+  dr.marks = Math.floor(ds.rng() * 4) as Dragon["marks"];
+  dr.eye = pick(ds.rng, ["#9be36b", "#ffd23f", "#5ad1ff", "#ff8a3d", "#c38bff", "#ff5d7a"]);
   newDragonStats(dr);
   ds.owned.push(dr);
   keeperAtHatch(w, egg, dr);
+  dr.hatchedBy = dr.keeper;
+  w.events.push({ type: "hatched", dragon: dr.id });
   // hatched from a stolen egg, and the parent is still out there: it will never forgive this
   const from = egg.nest ? ds.nests.find((n) => n.id === egg.nest) : null;
   if (from) {
