@@ -32,12 +32,12 @@ import { P } from "./particles";
 import { killHuman } from "./rivals";
 import { pick } from "./rng";
 import { eggCapacity, eggsCarried, pickEgg, raidTarget, settleCarried, slayerDamage } from "./dragonRaid";
-import { nestEggs, parentOf, revealNest } from "./dragonNests";
+import { nestEggs, nestLost, parentOf, revealNest } from "./dragonNests";
 import { canFly, mountDragon, rideable } from "./dragonKeep";
 import { mount } from "./tasks";
 import { partnerOf } from "./riders";
 import { sp } from "../data/species";
-import type { Building, Chariot, Dino, Dragon, DragonHunt, Human, HuntFormation } from "./types";
+import type { Building, Chariot, Dino, Dragon, DragonEgg, DragonHunt, Human, HuntFormation } from "./types";
 import type { World } from "./world";
 
 export const SEATS = 10;
@@ -706,10 +706,36 @@ function huntUpdate(w: World, hunt: DragonHunt, dt: number) {
       }
       break;
     }
+    case "collect": {
+      // more eggs than free hands on the ground: crews climb down to help
+      if (Math.floor(hunt.t) !== Math.floor(hunt.t - dt)) {
+        const left = eggsToCollect(w, hunt).length;
+        const hands = hunt.crew.map((m) => person(w, m)).filter((h): h is Human => !!h && !h.chariot && !h.aloft && h.state !== "down").reduce((n, h) => n + Math.max(0, eggCapacity(h) - eggsCarried(h)), 0);
+        if (left > hands) {
+          for (const c of cars) for (const h of crewOf(w, c)) if (!eggsCarried(h)) {
+            dismount(w, h);
+            break;
+          }
+        }
+      }
+      // gathering up every egg: once they're all in hand and everyone's back aboard, home they go
+      const left = eggsToCollect(w, hunt).length;
+      const aboard = hunt.crew.every((m) => !m.chariot || !person(w, m) || person(w, m)!.chariot === m.chariot || !cars.some((c) => c.id === m.chariot));
+      if ((!left && aboard) || hunt.t > 150) {
+        hunt.phase = "return";
+        hunt.t = 0;
+        for (const c of cars) c.to = { x: c.homeX, y: c.homeY };
+        const got = hunt.crew.reduce((n, m) => n + eggsCarried(person(w, m) ?? ({} as Human)), 0);
+        w.toast("🥚", `${got} dragon egg${got === 1 ? "" : "s"} gathered up: the unit heads home with them!`, cars[0]?.x ?? w.camp.x, cars[0]?.y ?? w.camp.y);
+      }
+      break;
+    }
     case "return": {
       for (const c of cars) if (!c.to && Math.hypot(c.x - c.homeX, c.y - c.homeY) > 20) c.to = { x: c.homeX, y: c.homeY };
       const home = cars.every((c) => Math.hypot(c.x - c.homeX, c.y - c.homeY) < 24);
-      const back = alive.every((m) => m.chariot || Math.hypot(person(w, m)!.x - w.camp.x, person(w, m)!.y - w.camp.y) < 420);
+      // (nobody heads off for good while one of our eggs still lies out there)
+      const dropped = hunt.result === "won" && w.dragons.eggs.some((e) => e.at === "ground" && hunt.crew.some((m) => person(w, m) && Math.hypot(person(w, m)!.x - e.x, person(w, m)!.y - e.y) < 600));
+      const back = !dropped && alive.every((m) => m.chariot || Math.hypot(person(w, m)!.x - w.camp.x, person(w, m)!.y - w.camp.y) < 420);
       if ((home && back) || hunt.t > 300) {
         // everyone climbs down at home; runners take the eggs to the incubator
         for (const c of cars) for (const h of crewOf(w, c)) dismount(w, h);
@@ -891,6 +917,8 @@ function steerDragons(w: World, hunt: DragonHunt, tgt: { x: number; y: number },
     } else if (hunt.phase === "battle") {
       const foe = hunt.clan ? clanFoe(w, hunt.clan, dr.x, dr.y) : hunt.dragon ? w.dragons.list.find((d) => d.id === hunt.dragon) ?? null : parent;
       if (foe && (!cmd || cmd.kind !== "attack" || cmd.target !== foe.id)) dr.cmd = { kind: "attack", x: foe.x, y: foe.y, target: foe.id, t: 0, i: 1 };
+    } else if (hunt.phase === "collect") {
+      if (!cmd || cmd.kind !== "stay") dr.cmd = { kind: "stay", x: dr.x, y: dr.y, t: 0, i: 1 };
     } else if (hunt.phase === "return" && (!cmd || cmd.kind !== "home")) dr.cmd = { kind: "home", x: 0, y: 0, t: 0, i: 1 };
   }
 }
@@ -902,21 +930,40 @@ function dismount(w: World, h: Human) {
   go(h, "idle", h.x, h.y);
 }
 
-function endHunt(w: World, hunt: DragonHunt, result: "won" | "lost", why: string) {
+export function endHunt(w: World, hunt: DragonHunt, result: "won" | "lost", why: string) {
   hunt.result = result;
   hunt.phase = "return";
   hunt.t = 0;
+  // a win at a nest: every egg there is ours. The beaten dragon abandons it, and the unit gathers them all up first.
+  const nest = result === "won" && hunt.nest ? w.dragons.nests.find((n) => n.id === hunt.nest) ?? null : null;
+  if (nest) {
+    const parent = parentOf(w, nest);
+    if (parent) {
+      nestLost(w, parent);
+      parent.nest = undefined;
+      parent.state = "flee";
+      parent.t = 0;
+      const a = Math.atan2(parent.y - w.camp.y, parent.x - w.camp.x);
+      parent.tx = parent.x + Math.cos(a) * 6000;
+      parent.ty = parent.y + Math.sin(a) * 6000;
+    }
+    if (eggsToCollect(w, hunt).length) {
+      hunt.phase = "collect";
+      for (const c of huntChariots(w, hunt)) c.to = null;
+    }
+  }
   const fell = hunt.start - hunt.crew.filter((m) => !!person(w, m)).length;
   const eggs = hunt.crew.reduce((n, m) => n + eggsCarried(person(w, m) ?? ({} as Human)), 0) + hunt.eggs;
   for (const m of hunt.crew) {
     const h = person(w, m);
     if (h?.order?.kind === "hunt") h.order = null;
   }
-  for (const c of huntChariots(w, hunt)) c.to = { x: c.homeX, y: c.homeY };
+  if (hunt.phase === "return") for (const c of huntChariots(w, hunt)) c.to = { x: c.homeX, y: c.homeY };
   if (result === "won") {
     w.celebrate("Victory!");
     w.sfx("cheer", w.camp.x, w.camp.y, 1);
-    w.toast("🏆", `VICTORY! ${why} ${eggs ? `${eggs} egg${eggs > 1 ? "s" : ""} coming home. ` : ""}${fell ? `${fell} fell in the fight. ` : ""}Everyone heads home.`, w.camp.x, w.camp.y);
+    const left = hunt.phase === "collect" ? eggsToCollect(w, hunt).length : 0;
+    w.toast("🏆", `VICTORY! ${why} ${left ? `Every egg is ours: the unit gathers up all ${left + eggs} before heading home. ` : eggs ? `${eggs} egg${eggs > 1 ? "s" : ""} coming home. ` : ""}${fell ? `${fell} fell in the fight. ` : ""}${left ? "" : "Everyone heads home."}`, w.camp.x, w.camp.y);
     if (!hunt.clan) w.discover("dragonRaid", w.camp.x, w.camp.y);
   } else {
     w.toast("💀", `DEFEAT. ${why} ${fell ? `${fell} lost. ` : ""}The survivors fall back to camp.`, w.camp.x, w.camp.y);
@@ -935,7 +982,22 @@ export function huntThink(w: World, h: Human): boolean {
   if (m.chariot && !car) m.chariot = 0;
   const dino = m.ride === "dino" ? w.dinoById(m.mount ?? 0) : null;
   if (m.ride === "dino" && (!dino || dino.health <= 0)) m.ride = undefined;
+  if (hunt.phase === "collect") return collectThink(w, h, hunt, m, car);
   if (hunt.phase === "return") {
+    // an egg somebody dropped on the way (knocked down carrying it): whoever's near with a free hand takes it on
+    if (hunt.result === "won" && eggsCarried(h) < eggCapacity(h)) {
+      const loose = w.dragons.eggs.filter((e) => e.at === "ground" && Math.hypot(e.x - h.x, e.y - h.y) < 320 && !hunt.crew.some((o) => o.id !== h.id && person(w, o)?.targetId === -e.id - 1))
+        .sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))[0];
+      if (loose) {
+        h.targetId = -loose.id - 1;
+        if (Math.hypot(h.x - loose.x, h.y - loose.y) < 18) {
+          pickEgg(w, h, loose);
+          h.targetId = 0;
+          say(h, "Got it, I'll carry it!");
+        } else go(h, "walk", loose.x, loose.y + 4);
+        return true;
+      }
+    }
     if (eggsCarried(h) && car && Math.hypot(h.x - car.x, h.y - car.y) < 160) return board(w, h, car, m);
     const home = { x: w.camp.x + ((h.id % 5) - 2) * 20, y: w.camp.y + 40 };
     go(h, "walk", home.x, home.y);
@@ -1025,6 +1087,35 @@ export function huntThink(w: World, h: Human): boolean {
     return false; // the hunt order does the fighting (roleThink)
   }
   return false;
+}
+
+/** Every egg still to be gathered after a win: in the nest, or lying loose round about it. */
+export function eggsToCollect(w: World, hunt: DragonHunt) {
+  const nest = hunt.nest ? w.dragons.nests.find((n) => n.id === hunt.nest) : null;
+  if (!nest) return [];
+  return w.dragons.eggs.filter((e) => (e.at === "nest" && e.nest === nest.id) || (e.at === "ground" && Math.hypot(e.x - nest.x, e.y - nest.y) < 600));
+}
+
+/** After a win: pick up the nearest egg nobody else is going for, until hands are full; then back aboard. */
+function collectThink(w: World, h: Human, hunt: DragonHunt, m: Member, car: Chariot | null) {
+  if (eggsCarried(h) < eggCapacity(h)) {
+    const mine = (e: DragonEgg) => !hunt.crew.some((o) => o.id !== h.id && person(w, o)?.targetId === -e.id - 1);
+    const egg = eggsToCollect(w, hunt).filter(mine).sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))[0];
+    if (egg) {
+      h.targetId = -egg.id - 1;
+      if (Math.hypot(h.x - egg.x, h.y - egg.y) < 18) {
+        pickEgg(w, h, egg);
+        h.targetId = 0;
+        say(h, eggsCarried(h) > 1 ? "Two!" : "Got one!");
+      } else go(h, "walk", egg.x, egg.y + 4);
+      return true;
+    }
+  }
+  h.targetId = 0;
+  // hands full (or none left): back aboard, or wait by the nest for the others
+  if (car) return board(w, h, car, m);
+  if (h.state !== "guard") go(h, "guard", h.x, h.y);
+  return true;
 }
 
 /** Walk to the chariot and climb into the seat. */

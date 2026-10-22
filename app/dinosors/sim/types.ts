@@ -627,7 +627,7 @@ export type HuntFormation = "ring" | "pincer" | "wedge";
 export interface DragonHunt {
   nest: number;
   formation: HuntFormation;
-  phase: "muster" | "march" | "surround" | "battle" | "return";
+  phase: "muster" | "march" | "surround" | "battle" | "collect" | "return";
   t: number;
   /** attacking a Neanderthal clan's camp instead of a nest (its id) */
   clan?: number;
@@ -756,6 +756,8 @@ export interface Brute {
   flank?: number;
   /** a Tree Person's perch: how high up the tree they climb / sit (px) */
   up?: number;
+  /** after dark a Tree Person is only seen for this long after coming close / near a fire / striking (s, not saved) */
+  spotT?: number;
   bubble: { text: string; t: number } | null;
 }
 
@@ -807,6 +809,8 @@ export interface TreeTribe {
   colors?: string[];
   /** how many tribes have united into this one (each union lets the camp grow bigger) */
   merges?: number;
+  /** seconds of darkness till they next sneak into our town */
+  nightT?: number;
   /** our people have spotted its warning signs */
   seen?: boolean;
   /** our people have scouted the camp itself */
@@ -824,7 +828,8 @@ export interface TreeBand {
   ids: number[];
   t: number;
   /** a raid's target: our town's edge, a Neanderthal camp, or one person */
-  goal?: { kind: "town" | "clan" | "human"; id: number };
+  /** "night": a sneak raid on our town after dark (steal + snatch people) */
+  goal?: { kind: "town" | "clan" | "human" | "night"; id: number };
   /** how many set out (morale: they break once too many are down) */
   size: number;
   /** a volley's been thrown: the charge comes next */

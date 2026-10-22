@@ -245,3 +245,57 @@ test('on the way, the unit stops to fight a predator it runs into, then carries 
   assert.equal(w.colony.hunt.phase, 'march');
   void fighting;
 });
+
+test('a win at a nest: the beaten dragon abandons it and the unit gathers up EVERY egg before heading home', () => {
+  const w = world(9307, 14);
+  const n = nestAt(w, 1200, 100);
+  w.elapsed = 1000;
+  n.emptyT = 0;
+  nests.nestsUpdate(w, 0.1);
+  const parent = nests.parentOf(w, n);
+  assert.ok(parent, 'guarded');
+  // a full nest of six, more than the chariot crew's runners could ever grab in the fight
+  while (nests.nestEggs(w, n).length < 6) nests.layEgg(w, n);
+  const eggs = nests.nestEggs(w, n).slice();
+  for (const h of w.humans) h.role = 'guard'; // nobody is an egg runner
+  const c = chariot(w, w.camp.x + 300, w.camp.y + 200);
+  run(w, 1.2);
+  assert.equal(ch.startRaid(w, { kind: 'nest', id: n.id }, 'ring', 0, 0), null);
+  assert.ok(run(w, 300, () => w.colony.hunt?.phase === 'battle'), 'in battle');
+  // the dragon is beaten (if the Scorpions haven't brought it down already)
+  if (w.dragons.list.includes(parent)) {
+    parent.hp = parent.maxHp * 0.2;
+    parent.state = 'flee';
+  }
+  const home = run(w, 600, () => !w.colony.hunt);
+  assert.ok(home, 'the unit came home');
+  assert.equal(eggs.filter((e) => w.dragons.eggs.includes(e) && e.at === 'camp').length, eggs.length, `every egg is home (${eggs.map((e) => e.at).join(',')})`);
+  assert.notEqual(nests.parentOf(w, n), parent, 'the beaten dragon is gone from its nest');
+  void c;
+});
+
+test('collect step: eggs still in the nest when the fight is won are all gathered before the unit leaves', () => {
+  const w = world(9308, 12);
+  const n = nestAt(w, 1200, 100);
+  while (nests.nestEggs(w, n).length < 6) nests.layEgg(w, n);
+  const eggs = nests.nestEggs(w, n).slice();
+  for (const h of w.humans) h.role = 'guard';
+  chariot(w, w.camp.x + 300, w.camp.y + 200);
+  run(w, 1.2);
+  assert.equal(ch.startRaid(w, { kind: 'nest', id: n.id }, 'ring', 0, 0), null);
+  assert.ok(run(w, 300, () => w.colony.hunt?.phase === 'battle'), 'in battle');
+  // the nest is unguarded and nobody's a runner: won on the spot, before anyone grabbed a single egg
+  assert.equal(nests.parentOf(w, n), null);
+  for (const m of w.colony.hunt.crew) m.runner = false;
+  assert.equal(nests.nestEggs(w, n).length, 6);
+  ch.endHunt(w, w.colony.hunt, 'won', 'The nest is ours!');
+  assert.equal(w.colony.hunt.phase, 'collect', 'they stop to gather the eggs');
+  let collected = false;
+  const home = run(w, 600, () => {
+    if (w.colony.hunt?.phase === 'collect') collected = true;
+    return !w.colony.hunt;
+  });
+  assert.ok(collected, 'they stopped to gather the eggs');
+  assert.ok(home, 'home');
+  assert.equal(eggs.filter((e) => e.at === 'camp').length, eggs.length, `every egg is home (${eggs.map((e) => e.at).join(',')})`);
+});

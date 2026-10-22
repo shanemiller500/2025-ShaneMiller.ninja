@@ -127,15 +127,17 @@ export class Rivals {
   setRelation(a: number, b: number, v: number) {
     if (a !== b) this.rel.set(relKey(a, b), v);
   }
+  /** People held by the clans (the Tree People's captives have a negative id: see treeFolk.ts). */
   captives(w: World, clan?: number) {
-    return w.humans.filter((h) => h.captive && (clan === undefined || h.captive === clan));
+    return w.humans.filter((h) => (h.captive ?? 0) > 0 && (clan === undefined || h.captive === clan));
   }
 
   /** Should our guards + defenses shoot this one? Always (the clans and us never get along), once they can see it:
    *  a Tree Person hidden up in the leaves isn't a target until it shows itself. */
   hostile(w: World, b: Brute) {
     // (nor are their little ones up on the decks: TREE_GROWN, written out so this never waits on treeFolk.ts loading)
-    return !!w && !!b && !(b.tree && (b.hidden || (b.age ?? 100) < 100));
+    // after dark a Tree Person is a shadow: only seen up close, by firelight, or once they strike (treeFolk.ts sets spotT)
+    return !!w && !!b && !(b.tree && (b.hidden || (b.age ?? 100) < 100 || (w.daylight < 0.3 && !((b.spotT ?? 0) > 0))));
   }
   /** "Thog the Neanderthal" / "Kit of the Moss Eye Tree People" */
   label(w: World, b: Brute) {
@@ -1538,7 +1540,7 @@ export class Rivals {
     this.taken = ((d as { taken?: OurCatapult[] }).taken ?? []).map((c) => ({ ...c }));
     for (const t of d.traps ?? []) if (this.clan(t.clan)) this.traps.push({ id: w.nextId(), clan: t.clan, x: t.x, y: t.y, t: t.t, caught: t.caught && w.humans.some((h) => h.id === t.caught && h.captive === t.clan) ? t.caught : 0 });
     // anyone mid-carry when the game was saved ends up at the camp
-    for (const h of w.humans) if (h.captive && !this.clan(h.captive)) h.captive = 0;
+    for (const h of w.humans) if ((h.captive ?? 0) > 0 && !this.clan(h.captive!)) h.captive = 0;
   }
 }
 

@@ -240,6 +240,7 @@ function CampTab({ snap, engine, onForge }: { snap: Snapshot; engine: Engine; on
                       <div className="text-white/65">Canopy village level {tr.tier + 1} · {tr.decksUp}/{tr.decks} decks standing</div>
                       {tr.merges > 0 && <div className="font-semibold text-amber-200">🤝 A union of {tr.merges + 1} tribes</div>}
                       {tr.raiding && <div className="font-bold text-rose-300">🏃 A raiding party is out!</div>}
+                      {tr.captives.length > 0 && <div className="font-bold text-rose-300">😢 Holding {tr.captives.join(", ")}, tied up at their camp: send armed people to bring them home!</div>}
                     </>
                   ) : (
                     <>
@@ -698,7 +699,7 @@ function InventTab({ snap, engine, onNavigate }: { snap: Snapshot; engine: Engin
   );
 }
 
-const PHASE: Record<string, string> = { muster: "Boarding", march: "Riding out", surround: "Surrounding", battle: "Battle!", return: "Heading home" };
+const PHASE: Record<string, string> = { muster: "Boarding", march: "Riding out", surround: "Surrounding", battle: "Battle!", collect: "🥚 Gathering the eggs", return: "Heading home" };
 
 /** War chariots + the chariot dragon hunt: pick a formation and go. */
 function ChariotHunt({ snap, engine }: { snap: Snapshot; engine: Engine }) {

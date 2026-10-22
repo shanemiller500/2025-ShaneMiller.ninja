@@ -236,7 +236,7 @@ export interface Snapshot {
   };
   /** Tree People camps we've found signs of (treeFolk.ts) */
   forest: {
-    tribes: { id: number; name: string; color: string; colors: string[]; merges: number; found: boolean; warriors: number; young: number; tier: number; decks: number; decksUp: number; outpost: boolean; raiding: boolean; x: number; y: number }[];
+    tribes: { id: number; name: string; color: string; colors: string[]; merges: number; found: boolean; warriors: number; young: number; tier: number; decks: number; decksUp: number; outpost: boolean; raiding: boolean; captives: string[]; x: number; y: number }[];
     /** forests nobody's looked into yet that have Tree People in them */
     unknown: number;
   };
@@ -3401,6 +3401,7 @@ export class Engine {
             warriors: t.found ? folk.length - young : 0, young: t.found ? young : 0,
             decks: t.pods.length, decksUp: t.pods.filter((p) => p.hp > 0).length,
             raiding: w.forest.bands.some((b) => b.tribe === t.id && b.mode === "raid"),
+            captives: w.forest.captivesOf(w, t).map((h) => h.name),
           };
         }),
         unknown: w.forest.tribes.filter((t) => !t.seen && !t.found).length,

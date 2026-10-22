@@ -32,7 +32,23 @@ function windup(b: Brute) {
   return 0.2;
 }
 
-export function drawTreeFolk(c: CanvasRenderingContext2D, b: Brute, t: number, paint: string) {
+export function drawTreeFolk(c: CanvasRenderingContext2D, b: Brute, t: number, paint: string, shadow = false) {
+  if (shadow && !b.hidden) {
+    // creeping about in the dark: a faint shape, and two eyes that catch the light
+    c.save();
+    c.globalAlpha = 0.4;
+    drawTreeFolk(c, b, t, "#3a3a3a", false);
+    c.restore();
+    const blink = (t * 0.9 + b.id * 0.31) % 3.5;
+    if (blink > 0.12) {
+      c.fillStyle = "rgba(255,230,120,0.95)";
+      c.beginPath();
+      c.ellipse(b.dir * 3.5 - 1.6, -31 + (b.z > 4 ? 6 : 0), 1.2, 0.8, 0, 0, Math.PI * 2);
+      c.ellipse(b.dir * 3.5 + 1.8, -31.2 + (b.z > 4 ? 6 : 0), 1.2, 0.8, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+    return;
+  }
   const young = (b.age ?? 100) < 100;
   // its shadow stays on the ground under the tree
   const zs = Math.max(0.35, 1 - b.z / 140);

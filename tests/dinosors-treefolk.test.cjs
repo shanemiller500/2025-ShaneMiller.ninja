@@ -409,3 +409,77 @@ test('tribes unite like the clans: the smaller moves in with the bigger, names +
   assert.equal(back.forest.tribes[0].name, u.name);
   assert.equal(back.forest.tribes[0].colors.length, u.colors.length);
 });
+
+test("after dark Scorpions can't see Tree People at all; our people only spot them up close or by firelight", () => {
+  const { scorpionTarget } = require(path.join(root, 'sim', 'colony.ts'));
+  const w = forestWorld();
+  w.time = 23;
+  run(w, 0.1);
+  assert.ok(w.daylight < 0.3, 'night');
+  const b = w.forest.members(w.forest.tribes[0].id).find((x) => x.age >= TREE_GROWN);
+  b.band = undefined;
+  b.hidden = false;
+  b.x = w.camp.x + 400;
+  b.y = w.camp.y;
+  b.spotT = 0;
+  for (const h of w.humans) h.x = w.camp.x - 300, h.y = w.camp.y;
+  assert.equal(w.rivals.hostile(w, b), false, 'a shadow in the dark');
+  assert.equal(scorpionTarget(w, b.x - 200, b.y, 700), null, 'a Scorpion has nothing to shoot at');
+  // someone awake walks right up to it: seen
+  const h = addHuman(w, b.x + 60, b.y);
+  h.state = 'idle';
+  w.forest['spot'](w, b);
+  assert.ok(b.spotT > 0 && w.rivals.hostile(w, b), 'seen up close');
+  assert.equal(scorpionTarget(w, b.x - 200, b.y, 700), null, "the Scorpion still can't pick it out");
+  // by day there's nowhere to hide on open ground
+  w.time = 12;
+  run(w, 0.1);
+  b.spotT = 0;
+  assert.ok(w.rivals.hostile(w, b));
+});
+
+test('a night raid: thieves empty the stores, snatchers carry someone off to the tree camp; reach them unguarded to free them', () => {
+  const w = forestWorld();
+  const f = w.forest;
+  const t = f.tribes[0];
+  w.time = 23;
+  w.elapsed = 900;
+  for (const r of ['meat', 'berries', 'wood', 'flint']) w.camp.stock[r] = 30;
+  const before = ['meat', 'berries', 'wood', 'flint'].reduce((s, r) => s + w.camp.stock[r], 0);
+  const sleeper = addHuman(w, w.camp.pileX + 120, w.camp.pileY + 60);
+  run(w, 0.1);
+  assert.ok(f.startNightRaid(w, t), 'they slip out of the trees');
+  const bd = f.bands.find((x) => x.goal?.kind === 'night');
+  let snatched = null;
+  run(w, 400, () => {
+    if (sleeper.state !== 'captive' && sleeper.captive === 0 && w.humans.includes(sleeper)) sleeper.state = 'sleep';
+    snatched = w.humans.find((h) => h.captive === -t.id && !w.rivals.brutes.some((b) => b.captive === h.id) && Math.hypot(h.x - t.x, h.y - t.y) < 260) ?? null;
+    return !!snatched && !f.bands.includes(bd);
+  });
+  const after = ['meat', 'berries', 'wood', 'flint'].reduce((s, r) => s + w.camp.stock[r], 0);
+  assert.ok(after < before, 'something went missing from the stores');
+  assert.ok(snatched, 'someone was carried back to their camp');
+  assert.ok(w.toasts.some((s) => s.includes('snatched')), 'we heard about it');
+  assert.equal(w.rivals.captives(w).includes(snatched), false, "not counted as a Neanderthal clan's captive");
+  assert.ok(f.captivesOf(w, t).includes(snatched));
+  // still held after a reload
+  const back = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  assert.equal(back.humans.find((h) => h.id === snatched.id).captive, -t.id);
+  // guards gone + a friend at their side: free
+  for (const b of f.members(t.id)) b.x = t.x + 900, b.y = t.y + 900;
+  addHuman(w, snatched.x + 20, snatched.y);
+  f['captivesTick'](w, t);
+  assert.equal(snatched.captive, 0, 'rescued');
+  assert.ok(w.toasts.some((s) => s.includes('rescued from the')));
+});
+
+test('a tree camp torn down frees the people it held', () => {
+  const w = forestWorld();
+  const f = w.forest;
+  const t = f.tribes[0];
+  const h = addHuman(w, t.x + 10, t.y + 10);
+  h.captive = -t.id;
+  h.state = 'captive';
+  f.raze(w, t, 'us');
+  assert.equal(h.captive, 0);
+});

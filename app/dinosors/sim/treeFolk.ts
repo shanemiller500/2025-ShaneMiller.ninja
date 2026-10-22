@@ -190,6 +190,7 @@ export class Forest {
 
   /** One Tree Person's frame (called from Rivals.update, after the shared fire / dragon-claw handling). */
   step(w: World, b: Brute, dt: number) {
+    if (b.spotT) b.spotT = Math.max(0, b.spotT - dt);
     b.think -= dt;
     if (b.think <= 0) this.think(w, b);
     this.act(w, b, dt);
@@ -475,6 +476,15 @@ export class Forest {
         t.raidT = 300 + this.rng() * 260;
         if (!this.bands.some((bd) => bd.tribe === t.id && bd.mode === "raid")) this.startRaid(w, t);
       }
+      // their best work is done in the dark: sneak into our town, empty the stores, carry people off
+      if (!calm && w.elapsed > 600 && w.daylight < 0.25) {
+        t.nightT = (t.nightT ?? 60 + this.rng() * 120) - dt;
+        if (t.nightT <= 0) {
+          t.nightT = 420 + this.rng() * 300;
+          if (!this.bands.some((bd) => bd.tribe === t.id && bd.mode === "raid")) this.startNightRaid(w, t);
+        }
+      }
+      this.captivesTick(w, t);
     }
     // a band with nobody left in it is over
     this.bands = this.bands.filter((bd) => {
@@ -585,6 +595,14 @@ export class Forest {
       setB(b, "home", into.x + (this.rng() - 0.5) * 80, into.y + (this.rng() - 0.5) * 40);
     }
     for (const bd of this.bands) if (bd.tribe === from.id) bd.ids = [];
+    // their captives are walked over to the new camp
+    for (const h of this.captivesOf(w, from)) {
+      h.captive = -into.id;
+      if (!w.rivals.brutes.some((b) => b.captive === h.id)) {
+        h.x = into.x + 14 + (this.rng() - 0.5) * 60;
+        h.y = into.y + 12;
+      }
+    }
     const cols = colorsOf(into);
     into.colors = cols.concat(colorsOf(from).filter((c) => !cols.includes(c)));
     // "Moss Eye & Red Bark", then the "Great Moss Eye" once more join in
@@ -647,6 +665,11 @@ export class Forest {
       }
     }
     this.index.delete(t.id);
+    // the people they held walk free (or go with the survivors to their kin's trees)
+    for (const h of this.captivesOf(w, t)) {
+      if (w.rivals.brutes.some((b) => b.captive === h.id)) continue;
+      w.rivals.free(w, h, `${h.name} is free: the ${t.name} tree camp is gone!`);
+    }
     if (by === "empty") return;
     const ours = by === "us" || w.humans.some((h) => !h.captive && dist(h, t) < 600);
     if (!ours) {
@@ -905,6 +928,14 @@ export class Forest {
 
   private raidTick(w: World, t: TreeTribe, bd: TreeBand, party: Brute[]) {
     const g = bd.goal!;
+    if (g.kind === "night") {
+      // home before first light, or once they've got what they came for (carriers are already on their way)
+      const busy = party.filter((b) => !b.loot && !b.captive && b.state !== "carry");
+      const spotted = party.filter((b) => (b.spotT ?? 0) > 0 && b.state !== "carry");
+      const ours = spotted.length ? this.armedNear(w, centroid(spotted).x, centroid(spotted).y, 220) : 0;
+      if (w.daylight > 0.35 || bd.t > 220 || !busy.length || (ours > 0 && ours > party.length * 1.3)) return this.sendHome(bd, party, t, ours > party.length);
+      return;
+    }
     // a raid on one person follows them
     if (g.kind === "human") {
       const h = w.humans.find((o) => o.id === g.id);
@@ -940,6 +971,158 @@ export class Forest {
     }
   }
 
+  /* ------------------------------ by night ------------------------------ */
+
+  /** A few slip out of the trees after dark: half to empty our stores, half to carry people off. */
+  startNightRaid(w: World, t: TreeTribe): boolean {
+    const free = this.members(t.id).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && b.hp > 0.6 && b.state !== "flee");
+    if (free.length < 3 || Math.hypot(w.camp.pileX - t.x, w.camp.pileY - t.y) > 3600) return false;
+    const n = Math.min(free.length - 1, 3 + t.tier, 7);
+    if (n < 2) return false;
+    const party = free.sort((a, b) => dist(a, t) - dist(b, t)).slice(0, n);
+    // no war whoops tonight: straight out (bd.t starts past the rally)
+    const bd: TreeBand = { id: this.nextId(), tribe: t.id, mode: "raid", x: w.camp.pileX, y: w.camp.pileY, ids: party.map((b) => b.id), t: 6.5, size: party.length, goal: { kind: "night", id: 0 } };
+    this.bands.push(bd);
+    party.forEach((b, i) => {
+      b.band = bd.id;
+      b.hidden = false;
+      b.raid = false;
+      b.job = i % 2 ? "thief" : "snatch";
+      b.think = this.rng();
+      setB(b, "walk", bd.x + (this.rng() - 0.5) * 200, bd.y + (this.rng() - 0.5) * 140);
+    });
+    return true;
+  }
+
+  /** One night raider's mind: creep in, do the job, slip away; fight only if they're seen. */
+  private nightThink(w: World, b: Brute, t: TreeTribe, bd: TreeBand) {
+    if (b.state === "carry") return;
+    if (b.loot) {
+      if (b.state !== "home" && b.state !== "flee") setB(b, "home", t.x, t.y);
+      return;
+    }
+    // seen: deal with whoever saw them (or run if it's hopeless)
+    if ((b.spotT ?? 0) > 0) {
+      if ((b.state === "fight" || b.state === "hunt") && this.keepFighting(w, b, t, bd)) return;
+      const foe = this.foeNear(w, b, 90, true);
+      if (foe) return this.engage(w, b, t, foe);
+    }
+    if (b.job === "snatch") {
+      const h = this.sleeperNear(w, b, bd);
+      if (h) {
+        if (Math.hypot(h.x - b.x, h.y - b.y) < 22) {
+          if (h.state === "sleep" || h.state === "down" || h.hp < 0.35) this.snatch(w, b, h, t);
+          else {
+            // awake: knock them down first
+            b.targetId = h.id;
+            setB(b, "fight", h.x, h.y);
+          }
+        } else if (b.state !== "walk" || Math.hypot(b.tx - h.x, b.ty - h.y) > 20) setB(b, "walk", h.x, h.y);
+        return;
+      }
+      b.job = "thief"; // nobody to take: help empty the stores
+    }
+    // the thieves: the stockpile, then away
+    if (Math.hypot(b.x - bd.x, b.y - bd.y) < 40) {
+      const got = takeAnything(w, 3, this.rng);
+      if (got) {
+        b.loot = got.n;
+        b.lootKind = got.r;
+        setB(b, "home", t.x, t.y);
+        if (w.elapsed - this.toastAt > 25) {
+          this.toastAt = w.elapsed;
+          w.toast("🌙", `Something is creeping round the stores in the dark… Tree People are stealing our ${got.r}!`, b.x, b.y);
+        }
+        return;
+      }
+      b.job = "snatch";
+      return;
+    }
+    if (b.state !== "walk" || Math.hypot(b.tx - bd.x, b.ty - bd.y) > 30) setB(b, "walk", bd.x + (this.rng() - 0.5) * 30, bd.y + (this.rng() - 0.5) * 20);
+  }
+
+  /** Someone to carry off: asleep, hurt or out on their own in the dark — never anyone behind our walls. */
+  private sleeperNear(w: World, b: Brute, bd: TreeBand): Human | null {
+    let best: Human | null = null;
+    let bdist = Infinity;
+    for (const h of w.humans) {
+      if (h.captive || h.under || h.aloft || h.stranger || h.riding || h.chariot || h.child || h.level !== 0 || h.state === "hide" || h.state === "tossed") continue;
+      if (Math.hypot(h.x - bd.x, h.y - bd.y) > 900) continue;
+      if (w.tribe.walls.length && w.tribe.walledIn(w, h.x, h.y)) continue;
+      if (w.rivals.brutes.some((o) => o.captive === h.id || (o !== b && o.tree && o.job === "snatch" && o.band && o.targetId === h.id))) continue;
+      // sleepers first, then the hurt, then anyone alone
+      const d = Math.hypot(h.x - b.x, h.y - b.y) - (h.state === "sleep" ? 300 : h.state === "down" ? 200 : 0);
+      if (d < bdist) {
+        bdist = d;
+        best = h;
+      }
+    }
+    if (best) b.targetId = best.id;
+    return best;
+  }
+
+  /** Take one of ours: over the shoulder and off to the trees. */
+  snatch(w: World, b: Brute, h: Human, t: TreeTribe) {
+    if (h.riding) return;
+    for (const task of w.tasks.list) task.people = task.people.filter((id) => id !== h.id);
+    h.captive = -t.id;
+    h.state = "captive";
+    h.stateT = 0;
+    h.path = null;
+    h.pathKey = 0;
+    h.task = null;
+    h.carry = null;
+    h.carryN = 0;
+    h.order = null;
+    h.taskId = 0;
+    h.level = 0;
+    h.vx = h.vy = 0;
+    b.captive = h.id;
+    b.spotT = 3;
+    setB(b, "carry", t.x + (this.rng() - 0.5) * 40, t.y + 20);
+    say(h, "HELP!!", 2.5);
+    w.sfx("yelp", h.x, h.y, 1);
+    w.alarm(h.x, h.y, 260, 0.7, "😱", false);
+    w.toast("😱", `${h.name} was snatched ${w.daylight < 0.3 ? "in the night " : ""}by the Tree People! They're carrying ${h.name} off to their camp in the trees. Stop them!`, h.x, h.y);
+  }
+
+  /** Once a second: the people they hold sit tied at the foot of the camp trees; reach one unguarded to free them. */
+  private captivesTick(w: World, t: TreeTribe) {
+    for (const h of w.humans) {
+      if (h.captive !== -t.id || w.rivals.brutes.some((b) => b.captive === h.id)) continue;
+      h.z = 0;
+      h.state = "captive";
+      const guarded = this.members(t.id).some((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && b.hp > 0.2 && dist(b, h) < 170);
+      const friend = w.humans.some((o) => o !== h && !o.captive && !o.child && !o.stranger && o.state !== "down" && dist(o, h) < 60);
+      if (friend && !guarded) w.rivals.free(w, h, `${h.name} was rescued from the ${t.name} tree camp!`);
+    }
+  }
+
+  /** Everyone they hold. */
+  captivesOf(w: World, t: TreeTribe) {
+    return w.humans.filter((h) => h.captive === -t.id);
+  }
+
+  /** After dark: seen only up close, near firelight, or once they've struck. */
+  private spot(w: World, b: Brute) {
+    if (w.daylight >= 0.3 || (b.spotT ?? 0) > 1.5) return;
+    for (const h of w.humans) {
+      if (h.captive || h.under || h.state === "sleep" || h.state === "hide") continue;
+      if (Math.abs(h.x - b.x) < 110 && Math.abs(h.y - b.y) < 110 && Math.hypot(h.x - b.x, h.y - b.y) < 110) {
+        b.spotT = 2.5;
+        return;
+      }
+    }
+    for (const f of w.campfires) if (f.lit && Math.hypot(f.x - b.x, f.y - b.y) < 160) {
+      b.spotT = 2.5;
+      return;
+    }
+    for (const o of w.colony.buildings) if (o.kind === "boneTorch" && o.built >= 1 && Math.hypot(o.x - b.x, o.y - b.y) < 130) {
+      b.spotT = 2.5;
+      return;
+    }
+  }
+
   /* ------------------------------ brains ------------------------------ */
 
   /** Anyone of ours or anything near enough to bother thinking hard about? */
@@ -956,9 +1139,11 @@ export class Forest {
     const active = this.awake(w, b);
     if (active) this.live.add(b);
     else this.live.delete(b);
+    if (active) this.spot(w, b);
     b.think = active ? 0.35 + this.rng() * 0.3 : 2 + this.rng() * 1.5;
     if (!t) return; // camp gone: slowTick walks them off
-    if (b.state === "drop" || b.state === "climb" || b.state === "dart") return;
+    // mid-leap, mid-climb, or carrying one of ours home: nothing else matters
+    if (b.state === "drop" || b.state === "climb" || b.state === "dart" || b.state === "carry") return;
     // youngsters stay up on the decks
     if ((b.age ?? TREE_GROWN) < TREE_GROWN) {
       if (b.state !== "perch" && b.state !== "sleep") this.goUp(w, b, t);
@@ -1027,7 +1212,7 @@ export class Forest {
       return;
     }
     if (bd.mode === "home") {
-      if (b.state !== "home" && b.state !== "flee") setB(b, "home", t.x + (this.rng() - 0.5) * 80, t.y);
+      if (b.state !== "home" && b.state !== "flee" && b.state !== "carry") setB(b, "home", t.x + (this.rng() - 0.5) * 80, t.y);
       return;
     }
     if (bd.mode === "strike") {
@@ -1036,6 +1221,7 @@ export class Forest {
       if (foe) return this.engage(w, b, t, foe);
       return;
     }
+    if (bd.goal?.kind === "night") return this.nightThink(w, b, t, bd);
     // a raid: rally, run there, fight whoever's about, grab what they can, run home
     if (bd.t < 6) {
       if (b.state !== "rally") setB(b, "rally", b.x, b.y);
@@ -1375,6 +1561,34 @@ export class Forest {
         }
         return;
       }
+      case "carry": {
+        // one of ours over the shoulder, off home to the trees
+        const h = w.humans.find((o) => o.id === b.captive);
+        if (!h || !t || h.captive !== -t.id) {
+          b.captive = 0;
+          setB(b, "home", t?.x ?? b.x, t?.y ?? b.y);
+          return;
+        }
+        const home = this.move(w, b, dt, SPEED * 0.95, quick);
+        h.x = b.x - b.dir * 3;
+        h.y = b.y + 1;
+        h.z = 20;
+        h.dir = b.dir;
+        if (this.rng() < dt * 0.4) say(h, pick(this.rng, ["Help!!", "Let me go!", "HELP ME!"]), 2);
+        if (home || dist(b, t) < 50) {
+          b.captive = 0;
+          h.z = 0;
+          // tied at the foot of one of the camp trees
+          const pods = t.pods.filter((p) => p.hp > 0);
+          const p = pods.length ? pods[h.id % pods.length] : t;
+          h.x = p.x + 12;
+          h.y = p.y + 8;
+          say(h, "Help…", 3);
+          w.toast("😢", `${h.name} is held at the ${t.name} tree camp, tied to a tree. Send armed people to bring them home!`, h.x, h.y);
+          this.goUp(w, b, t);
+        }
+        return;
+      }
       case "dart": {
         if (this.move(w, b, dt, SPEED * 1.6, true) || b.stateT > 1.2) {
           setB(b, "fight", b.x, b.y);
@@ -1466,6 +1680,9 @@ export class Forest {
   /** A blow (×mul for a leap from the trees). */
   private strike(w: World, b: Brute, f: Foe, mul: number) {
     const arms = armsOf(b);
+    // out of the dark, unseen: the first blow lands hard
+    if (w.daylight < 0.3 && !((b.spotT ?? 0) > 0)) mul *= 1.3;
+    b.spotT = 3;
     w.sfx("whoosh", b.x, b.y, 0.4, 1.3);
     if (f.kind === "human") {
       const h = f.h;
@@ -1504,6 +1721,7 @@ export class Forest {
 
   private throwAt(w: World, b: Brute, f: Foe) {
     const arms = armsOf(b);
+    b.spotT = 2;
     const p = foeXY(f);
     b.cd = (arms.range ? 2.2 : 3.2) + this.rng() * 0.8;
     b.dir = p.x > b.x ? 1 : -1;
@@ -1528,6 +1746,7 @@ export class Forest {
 
   /** From Rivals.hit: lighter than a Neanderthal, and they fight back (or scatter). */
   hit(w: World, b: Brute, dmg: number, fx: number, fy: number, byBrute = false, proj?: string) {
+    b.spotT = 4;
     // quick + slippery: a lot of a Neanderthal's big swings only catch air
     b.hp -= byBrute ? dmg * (proj ? 1 : 0.6) : dmg / TREE_TOUGH;
     b.hidden = false;
@@ -1622,6 +1841,8 @@ export class Forest {
       // everyone wakes up back at camp business (bands don't survive a reload)
       if (dist(b, t) < 200) this.goUp(w, b, t);
     }
+    // anyone held by a tribe that's no longer about found their way home
+    for (const h of w.humans) if ((h.captive ?? 0) < 0 && !this.tribe(-h.captive!)) w.rivals.free(w, h, `${h.name} found the way home!`);
   }
 }
 
@@ -1640,6 +1861,20 @@ function centroid(list: { x: number; y: number }[]) {
     y += p.y;
   }
   return { x: x / Math.max(1, list.length), y: y / Math.max(1, list.length) };
+}
+
+/** A night thief takes whatever's worth carrying: food most of the time, else good materials. */
+function takeAnything(w: World, n: number, rng: Rng): { r: Resource; n: number } | null {
+  const s = w.camp.stock;
+  const kinds = (["iron", "copper", "flint", "hide", "wood", "stone", "bone"] as Resource[]).filter((r) => Math.floor(s[r] ?? 0) > 0);
+  if (!kinds.length || rng() < 0.6) {
+    const food = takeFood(w, n);
+    if (food || !kinds.length) return food;
+  }
+  const r = kinds[Math.floor(rng() * Math.min(3, kinds.length))];
+  const k = Math.min(n, Math.floor(s[r]));
+  s[r] -= k;
+  return { r, n: k };
 }
 
 /** Grab some food off our stores. */

@@ -283,7 +283,8 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
   if (grove?.found) {
     if (!armed) return { kind: "move", icon: "😬", label: "Nobody has a weapon to attack a Tree People camp!", x: grove.x, y: grove.y, target: 0 };
     const n = w.forest.members(grove.id).length;
-    return { kind: "treeRaid", icon: "🔥", label: `Attack the ${grove.name} tree camp${n ? ` (${n} Tree People)` : ""}`, x: grove.x, y: grove.y, target: grove.id, weapons: kinds };
+    const held = w.forest.captivesOf(w, grove).length;
+    return { kind: "treeRaid", icon: "🔥", label: `Attack the ${grove.name} tree camp${n ? ` (${n} Tree People)` : ""}${held ? ` + free ${held} of ours` : ""}`, x: grove.x, y: grove.y, target: grove.id, weapons: kinds };
   }
   // a Neanderthal camp: raid it (beat whoever's home, take their food, bring our people back)
   const enemy = w.rivals.clans.find((k) => Math.hypot(k.x - x, k.y - y) < 110);

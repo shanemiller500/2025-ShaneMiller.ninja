@@ -680,7 +680,8 @@ export class Renderer {
           c.save();
           c.translate(b.x, b.y - b.z);
           const bc = w.rivals.clan(b.clan);
-          if (b.tree) drawTreeFolk(c, b, this.t, b.tint ?? "#d94f2a");
+          // after dark, a Tree Person nobody has spotted is only a shadow with glinting eyes
+          if (b.tree) drawTreeFolk(c, b, this.t, b.tint ?? "#d94f2a", w.daylight < 0.3 && !((b.spotT ?? 0) > 0));
           else if (b.look) this.drawTurned(c, b, bc);
           else if (b.weapon === "catapult") drawCatapult(c, b, bc?.colors?.length ? bc.colors : [bc?.color ?? "#c0392b"], this.t);
           else drawBrute(c, b, this.t, b.tint ?? bc?.color ?? "#c0392b", (bc?.smarts ?? 0) >= 2);

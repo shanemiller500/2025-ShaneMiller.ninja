@@ -14,7 +14,7 @@ import type { Engine, InspectInfo, Snapshot } from "../game/engine";
 
 type Info = Extract<InspectInfo, { kind: "chariot" }>;
 
-const PHASE: Record<string, string> = { muster: "Mustering", march: "On the march", battle: "Battle!", return: "Heading home" };
+const PHASE: Record<string, string> = { muster: "Mustering", march: "On the march", battle: "Battle!", collect: "🥚 Gathering the eggs", return: "Heading home" };
 
 function Stepper({ icon, label, value, max, onChange }: { icon: string; label: string; value: number; max: number; onChange: (n: number) => void }) {
   return (
