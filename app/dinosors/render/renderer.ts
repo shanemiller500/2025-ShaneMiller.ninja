@@ -125,6 +125,11 @@ const K_CHARIOT = 45;
 const K_HALL_BACK = 46;
 const K_HALL_FRONT = 47;
 const K_FEAST = 48;
+/** Zoomed out past these, people / dinos are drawn as quick little stand-ins (they're tiny on screen anyway). */
+const PEOPLE_LOD = 0.35;
+const DINO_LOD = 0.27;
+/** Zoomed out past this: no chatter / emote bubbles (except for whoever's picked). */
+const BUBBLE_LOD = 0.5;
 /** Speech bubbles shown at once (besides the people you've picked). */
 const MAX_BUBBLES = 3;
 /** the Tree People: a camp's canopy village, its ground ring, a warning display */
@@ -164,6 +169,8 @@ export class Renderer {
   private w = 1;
   private h = 1;
   private dpr = 1;
+  /** the screen's own pixel ratio (dpr drops below it when zoomed far out: far fewer pixels to fill) */
+  private baseDpr = 1;
   private t = 0;
   private drops: Drop[] = [];
   private drawables: Drawable[] = [];
@@ -240,11 +247,24 @@ export class Renderer {
   resize(w: number, h: number, dpr: number) {
     this.w = w;
     this.h = h;
+    this.baseDpr = dpr;
+    dpr = this.zoomDpr(dpr, this.lastZoom);
     this.dpr = dpr;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
     this.light.width = Math.max(1, Math.round(w / 2));
     this.light.height = Math.max(1, Math.round(h / 2));
+  }
+
+  private lastZoom = 1;
+
+  /** Pixel ratio for this zoom: full detail close up; fewer pixels the further out (with a gap so it doesn't flicker). */
+  private zoomDpr(base: number, z: number) {
+    const cur = this.dpr / Math.max(0.01, this.baseDpr);
+    let k = 1;
+    if (z < 0.28 || (z < 0.31 && cur < 0.9)) k = 0.8 / base;
+    else if (z < 0.4 || (z < 0.45 && cur < 0.99)) k = 1 / base;
+    return Math.min(base, base * k);
   }
 
   /** screen px → world px */
@@ -267,6 +287,14 @@ export class Renderer {
     const w = this.world;
     const c = this.ctx;
     const z = cam.zoom;
+    this.lastZoom = z;
+    // zoomed out: drop the pixel ratio (a canvas resize only when it actually changes)
+    const want = this.zoomDpr(this.baseDpr, z);
+    if (Math.abs(want - this.dpr) > 0.01) {
+      this.dpr = want;
+      this.canvas.width = Math.round(this.w * want);
+      this.canvas.height = Math.round(this.h * want);
+    }
     const cx = cam.x + ov.shakeX;
     const cy = cam.y + ov.shakeY;
     const d = this.dpr;
@@ -601,12 +629,18 @@ export class Renderer {
           c.restore();
           break;
         }
-        case K_DINO:
-          this.drawDinoAt(c, w.dinos[it.i], ov);
+        case K_DINO: {
+          const dn = w.dinos[it.i];
+          if (z < DINO_LOD && dn.id !== ov.selectedId && dn.id !== ov.followId) this.drawTinyDino(c, dn);
+          else this.drawDinoAt(c, dn, ov);
           break;
-        case K_HUMAN:
-          this.drawPerson(c, w.humans[it.i], ov, weapon);
+        }
+        case K_HUMAN: {
+          const h = w.humans[it.i];
+          if (z < PEOPLE_LOD && !ov.selection.includes(h.id) && h.id !== ov.followId) this.drawTinyPerson(c, h);
+          else this.drawPerson(c, h, ov, weapon);
           break;
+        }
         case K_BUILDING: {
           const b = col.buildings[it.i];
           const def = BUILDINGS[b.kind];
@@ -1540,6 +1574,84 @@ export class Renderer {
     c.fillRect(px - L * 0.012, top - L * 0.006, L * 0.008, L * 0.008);
     c.fillRect(px + L * 0.004, top - L * 0.006, L * 0.008, L * 0.008);
     c.restore();
+  }
+
+  /** Far out: a person is a little body + head in their own colours (no gear, no shadow detail). */
+  private drawTinyPerson(c: CanvasRenderingContext2D, h: Human) {
+    const s = h.child ? 0.7 : 1;
+    const y = h.y - h.z;
+    if (h.state === "down") {
+      c.fillStyle = h.fur;
+      c.fillRect(h.x - 7 * s, y - 4 * s, 14 * s, 5 * s);
+      return;
+    }
+    c.fillStyle = "rgba(0,0,0,0.2)";
+    c.fillRect(h.x - 5 * s, y - 1, 10 * s, 3);
+    c.fillStyle = h.fur;
+    c.fillRect(h.x - 4.5 * s, y - 15 * s, 9 * s, 14 * s);
+    c.fillStyle = h.skin;
+    c.fillRect(h.x - 4 * s, y - 23 * s, 8 * s, 8 * s);
+    c.fillStyle = h.hair;
+    c.fillRect(h.x - 4 * s, y - 24 * s, 8 * s, 3 * s);
+  }
+
+  /** Far out: a dino is a quick silhouette in its colours (body, belly, head, legs), sized + facing right. */
+  private drawTinyDino(c: CanvasRenderingContext2D, dn: Dino) {
+    const def = this.lookFor(dn);
+    const L = sizeOf(dn);
+    const y = dn.y - dn.z;
+    const d = dn.dir;
+    const fly = def.move === "fly";
+    const swim = def.move === "swim";
+    if (swim && dn.z < 2) {
+      c.fillStyle = "rgba(20,40,60,0.35)";
+      c.beginPath();
+      c.ellipse(dn.x, y, L * 0.45, L * 0.12, 0, 0, Math.PI * 2);
+      c.fill();
+      return;
+    }
+    const sauropod = def.plan === "sauropod";
+    const bodyH = L * (sauropod ? 0.2 : 0.16);
+    const lift = fly ? 0 : L * (sauropod ? 0.28 : 0.2);
+    if (!fly) {
+      c.fillStyle = "rgba(0,0,0,0.18)";
+      c.fillRect(dn.x - L * 0.32, y - 2, L * 0.64, 4);
+      // legs
+      c.fillStyle = def.look.accent;
+      c.fillRect(dn.x - L * 0.18, y - lift, L * 0.07, lift);
+      c.fillRect(dn.x + L * 0.1, y - lift, L * 0.07, lift);
+    }
+    // body + tail
+    c.fillStyle = def.look.body;
+    c.beginPath();
+    c.ellipse(dn.x, y - lift - bodyH * 0.5, L * (fly ? 0.18 : 0.3), bodyH * 0.6, 0, 0, Math.PI * 2);
+    c.fill();
+    if (fly) {
+      c.beginPath();
+      c.moveTo(dn.x - L * 0.45, y - lift - bodyH);
+      c.lineTo(dn.x, y - lift - bodyH * 0.4);
+      c.lineTo(dn.x + L * 0.45, y - lift - bodyH);
+      c.lineTo(dn.x, y - lift - bodyH * 0.1);
+      c.closePath();
+      c.fill();
+    } else {
+      c.beginPath();
+      c.moveTo(dn.x - d * L * 0.25, y - lift - bodyH * 0.6);
+      c.lineTo(dn.x - d * L * 0.62, y - lift - bodyH * 0.2);
+      c.lineTo(dn.x - d * L * 0.25, y - lift - bodyH * 0.1);
+      c.closePath();
+      c.fill();
+    }
+    c.fillStyle = def.look.belly;
+    c.fillRect(dn.x - L * 0.14, y - lift - bodyH * 0.25, L * 0.28, bodyH * 0.3);
+    // neck + head
+    c.fillStyle = def.look.body;
+    const hx = dn.x + d * L * (sauropod ? 0.32 : 0.3);
+    const hy = y - lift - bodyH * (sauropod ? 2.4 : 1.1);
+    if (sauropod) c.fillRect(Math.min(dn.x + d * L * 0.2, hx), hy, Math.abs(hx - (dn.x + d * L * 0.2)) + L * 0.05, L * 0.05);
+    c.beginPath();
+    c.ellipse(hx, hy, L * 0.09, L * 0.06, 0, 0, Math.PI * 2);
+    c.fill();
   }
 
   private drawDinoAt(c: CanvasRenderingContext2D, dn: Dino, ov: Overlay) {
@@ -2623,9 +2735,10 @@ export class Renderer {
   private overlays(c: CanvasRenderingContext2D, ov: Overlay, x0: number, y0: number, x1: number, y1: number, z: number) {
     const w = this.world;
     const inv = 1 / Math.max(0.35, z);
-    // emotes over dinos
+    // emotes over dinos (not when zoomed far out: too small to read, and costly in a crowd)
     for (const dn of w.dinos) {
       if (!dn.emote || dn.x < x0 || dn.x > x1 || dn.y < y0 || dn.y > y1) continue;
+      if (z < BUBBLE_LOD && dn.id !== ov.selectedId && dn.id !== ov.followId) continue;
       const L = sizeOf(dn);
       const k = Math.min(1, dn.emote.t * 3);
       const hy = dn.y - dn.z - L * (sp(dn.species).plan === "sauropod" ? 0.85 : 0.6) - 10 - (1 - k) * 8;
@@ -2641,6 +2754,7 @@ export class Renderer {
     let others = 0;
     for (const h of talking) {
       const picked = mine(h);
+      if (!picked && z < BUBBLE_LOD) continue;
       if (!picked && (others >= MAX_BUBBLES || shown.some((p) => Math.abs(p.x - h.x) < 90 && Math.abs(p.y - h.y) < 40))) continue;
       if (!picked) others++;
       shown.push({ x: h.x, y: h.y });

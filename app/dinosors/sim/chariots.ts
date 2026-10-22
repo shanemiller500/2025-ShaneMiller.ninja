@@ -49,7 +49,7 @@ export const MUSTER_FOR = 120;
 const BATTLE_FOR = 260;
 /** Scorpion bolt reload (s), reach */
 const SC_RELOAD = 2.6;
-const SC_RANGE = 620;
+const SC_RANGE = 420;
 const SPEAR_RANGE = 340;
 
 /* ------------------------------ the vehicle ------------------------------ */

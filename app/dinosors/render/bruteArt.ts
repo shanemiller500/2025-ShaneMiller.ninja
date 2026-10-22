@@ -656,11 +656,13 @@ function domeHut(c: CanvasRenderingContext2D, colors: string[], seed: number) {
   c.closePath();
   c.fill();
   // coloured bands round the dome
+  // (a clan united from many clans flies many colours: the bands squeeze closer so they all fit the dome)
+  const step = Math.min(5, 14 / Math.max(1, colors.length - 1));
   colors.forEach((col, i) => {
     c.strokeStyle = col;
-    c.lineWidth = 3;
+    c.lineWidth = colors.length > 4 ? 2 : 3;
     c.beginPath();
-    c.ellipse(0, -12, 28 - i * 2, 18 - i * 5, 0, Math.PI * 1.05, Math.PI * 1.95);
+    c.ellipse(0, -12, Math.max(4, 28 - i * step * 0.4), Math.max(2, 18 - i * step), 0, Math.PI * 1.05, Math.PI * 1.95);
     c.stroke();
   });
   // a smoke hole, a doorway with a hide flap

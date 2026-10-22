@@ -404,9 +404,9 @@ export interface ScorpionTier {
 }
 
 export const SCORPION_TIERS: ScorpionTier[] = [
-  { name: "Scorpion", cost: { wood: 4, stick: 4, stone: 2 }, range: 520, dmg: 70, reload: 4.2, speed: 900, hp: 300, big: 1.8 },
-  { name: "Reinforced Scorpion", cost: { wood: 4, iron: 2, tar: 1 }, range: 600, dmg: 105, reload: 3.6, speed: 980, hp: 420, big: 2, at: "blacksmith" },
-  { name: "Heavy Siege Scorpion", cost: { wood: 4, iron: 4, obsidian: 1, gold: 1 }, range: 700, dmg: 160, reload: 3.4, speed: 1060, hp: 560, big: 2.3, at: "blacksmith" },
+  { name: "Scorpion", cost: { wood: 4, stick: 4, stone: 2 }, range: 340, dmg: 70, reload: 4.2, speed: 900, hp: 300, big: 1.8 },
+  { name: "Reinforced Scorpion", cost: { wood: 4, iron: 2, tar: 1 }, range: 390, dmg: 105, reload: 3.6, speed: 980, hp: 420, big: 2, at: "blacksmith" },
+  { name: "Heavy Siege Scorpion", cost: { wood: 4, iron: 4, obsidian: 1, gold: 1 }, range: 450, dmg: 160, reload: 3.4, speed: 1060, hp: 560, big: 2.3, at: "blacksmith" },
 ];
 
 /* ------------------------------ deposits ------------------------------ */

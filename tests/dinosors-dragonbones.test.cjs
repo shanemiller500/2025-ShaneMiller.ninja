@@ -69,7 +69,7 @@ test('one of our dragons dies: its bones are laid out as a monument with its nam
   assert.equal(b2.ours, true);
 });
 
-test('a wild dragon brought down leaves its bones too', () => {
+test('a wild dragon brought down leaves only a scatter of bones (no shrine: that is for our own dragons)', () => {
   const w = world(9962);
   nests.seedNests(w);
   w.elapsed = 1000;
@@ -78,10 +78,12 @@ test('a wild dragon brought down leaves its bones too', () => {
   const p = nests.parentOf(w, w.dragons.nests[0]);
   p.x = w.camp.x + 600;
   p.y = w.camp.y + 200;
+  const before = w.items.filter((i) => i.kind === 'bones').length;
   w.dragons.hit(w, p, p.maxHp * 10);
-  const b = bones(w).find((x) => x.label === p.name);
-  assert.ok(b, 'its bones');
-  assert.equal(b.ours, false);
+  assert.ok(!w.dragons.list.includes(p), 'it fell');
+  assert.equal(bones(w).length, 0, 'no shrine for a wild one');
+  const piles = w.items.filter((i) => i.kind === 'bones' && Math.hypot(i.x - p.x, i.y - p.y) < 80);
+  assert.ok(w.items.filter((i) => i.kind === 'bones').length > before && piles.length >= 3, 'its bones lie where it fell');
 });
 
 test('the bones are a statue the tribe can pick up and move', () => {

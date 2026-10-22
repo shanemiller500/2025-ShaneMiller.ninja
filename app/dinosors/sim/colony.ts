@@ -878,7 +878,7 @@ export class Colony {
       s.reload = Math.max(0, s.reload - dt);
       const tier = SCORPION_TIERS[s.tier - 1];
       const siege = w.civ.has("siegecraft");
-      const range = tier.range + (s.mount === "tower" ? 90 : s.mount === "wall" ? 40 : 0) + (siege ? 80 : 0);
+      const range = tier.range + (s.mount === "tower" ? 60 : s.mount === "wall" ? 25 : 0) + (siege ? 50 : 0);
       const target = scorpionTarget(w, s.x, s.y, range);
       if (!target) {
         // drones sweep slowly while they watch

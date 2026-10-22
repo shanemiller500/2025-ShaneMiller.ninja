@@ -519,7 +519,7 @@ export class Tribe {
           if (s.mount !== "tower" || s.built < 1 || s.hp <= 0 || s.tx !== t.tx || s.ty !== t.ty) return false;
           const crew = w.humans.find((o) => o.id === s.crew);
           const armed = w.colony.dronesPowered(w) || !!crew && crew.state === "operate" && crew.level === 1 && Math.hypot(crew.x - s.x, crew.y - s.y) < 26;
-          return armed && Math.hypot(s.x - x, s.y - y) < SCORPION_TIERS[s.tier - 1].range + 90;
+          return armed && Math.hypot(s.x - x, s.y - y) < SCORPION_TIERS[s.tier - 1].range + 60;
         }) || w.humans.some((o) => {
           if (o.level !== 1 || o.state === "down" || (this.roleOf(o) !== "guard" && o.order?.kind !== "guard") || Math.hypot(o.x - t.x, o.y - (t.y - 18)) >= 45) return false;
           const weapon = this.weaponFor(w, o);

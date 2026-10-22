@@ -47,11 +47,17 @@ export interface Particle {
 
 export const MAX_PARTICLES = 1400;
 
+/** Purely decorative kinds: these thin out when the camera is zoomed far out (markers, hits, notes always show). */
+const DECOR = new Set<P>([P.Dust, P.Splash, P.Smoke, P.Ember, P.Spark, P.Leaf, P.Ash, P.Ripple, P.Steam, P.Firefly, P.Drop, P.Rock, P.Mud, P.Crumb, P.Poof]);
+
 export class Particles {
   pool: Particle[] = [];
   private cursor = 0;
   /** global budget multiplier (lowered when frame time is high) */
   budget = 1;
+  /** 0..1 how much decoration to keep for the camera zoom (set by the engine each frame: 1 close up) */
+  zoomDetail = 1;
+  private bursting = false;
   active = 0;
 
   constructor() {
@@ -63,6 +69,8 @@ export class Particles {
   spawn(k: P, x: number, y: number, o: Partial<Omit<Particle, "on" | "k" | "x" | "y">> = {}) {
     // when stressed, randomly skip cosmetic particles
     if (this.budget < 1 && Math.random() > this.budget) return null;
+    // zoomed far out: most decoration isn't worth the cost (it's specks on screen)
+    if (this.zoomDetail < 1 && !this.bursting && DECOR.has(k) && Math.random() > this.zoomDetail) return null;
     let p: Particle | null = null;
     for (let n = 0; n < 16; n++) {
       const c = this.pool[this.cursor];
@@ -95,11 +103,15 @@ export class Particles {
   }
 
   burst(k: P, x: number, y: number, n: number, speed: number, o: Partial<Particle> = {}) {
+    // (a far-out burst is a few specks: fewer of them, rather than each one being a coin toss)
+    if (this.zoomDetail < 1 && DECOR.has(k)) n = Math.max(1, Math.round(n * this.zoomDetail));
+    this.bursting = true;
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = speed * (0.4 + Math.random() * 0.6);
       this.spawn(k, x, y, { ...o, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.6, max: (o.max ?? 1) * (0.6 + Math.random() * 0.6) });
     }
+    this.bursting = false;
   }
 
   update(dt: number) {

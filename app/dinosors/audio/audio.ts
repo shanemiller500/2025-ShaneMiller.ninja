@@ -7,6 +7,9 @@
 
 import type { MusicMood } from "../game/musicMood";
 
+/** Seconds of music scheduled ahead on the audio clock (covers a stutter of the main thread). */
+const MUSIC_AHEAD = 1.2;
+
 export type Category = "ambient" | "weather" | "creatures" | "effects" | "ui" | "music";
 
 const THEMES = {
@@ -91,6 +94,9 @@ export class AudioManager {
   private musicLayer: GainNode | null = null;
   private musicStep = 0;
   private nextMusicAt = 0;
+  /** the mood the game wants (the music's own clock plays it, frame rate or not) */
+  private wantMood: MusicMood | null = null;
+  private musicTimer = 0;
   muted = false;
   volume = 0.8;
   listener: Listener = { x: 0, y: 0, zoom: 1, span: 800 };
@@ -144,7 +150,22 @@ export class AudioManager {
     if (this.ctx && this.ctx.state === "suspended") void this.ctx.resume();
   }
 
+  /**
+   * The game says which mood it wants; the music keeps its own time on a real-time timer + the audio
+   * clock, so a slow frame (zoomed right out, a busy battle) never drags the tempo.
+   */
+  setMusicMood(mood: MusicMood) {
+    this.wantMood = mood;
+    if (!this.musicTimer && typeof window !== "undefined") {
+      this.musicTimer = window.setInterval(() => {
+        if (this.wantMood) this.updateMusic(this.wantMood);
+      }, 50);
+    }
+  }
+
   dispose() {
+    if (this.musicTimer) window.clearInterval(this.musicTimer);
+    this.musicTimer = 0;
     void this.ctx?.close();
     this.ctx = null;
     this.musicLayer = null;
@@ -159,7 +180,7 @@ export class AudioManager {
     if (this.musicMood === null) this.nextMusicAt = now + 0.04;
     const phraseEnded = this.musicMood !== null && this.musicStep >= THEMES[this.musicMood].notes.length;
     // Hold the last notes and accompaniment until the next phrase starts.
-    if (this.musicMood === null || (phraseEnded && this.nextMusicAt < now + 0.55)) {
+    if (this.musicMood === null || (phraseEnded && this.nextMusicAt < now + MUSIC_AHEAD)) {
       const at = Math.max(now + 0.02, this.nextMusicAt);
       if (mood !== this.musicMood) {
         const old = this.musicLayer;
@@ -178,10 +199,15 @@ export class AudioManager {
       this.musicStep = 0;
       this.nextMusicAt = at;
     }
-    if (this.nextMusicAt < now) this.nextMusicAt = now + 0.02;
     const theme = THEMES[this.musicMood!];
+    // fell behind (the tab was busy): skip the beats we missed so the tune keeps its tempo, never slows
+    if (this.nextMusicAt < now - 0.01) {
+      const miss = Math.ceil((now - this.nextMusicAt) / theme.beat);
+      this.musicStep += miss;
+      this.nextMusicAt += miss * theme.beat;
+    }
     let scheduled = 0;
-    while (this.musicStep < theme.notes.length && this.nextMusicAt < now + 0.55 && scheduled++ < 4) {
+    while (this.musicStep < theme.notes.length && this.nextMusicAt < now + MUSIC_AHEAD && scheduled++ < 32) {
       const at = this.nextMusicAt;
       const step = this.musicStep++;
       const layer = this.musicLayer!;

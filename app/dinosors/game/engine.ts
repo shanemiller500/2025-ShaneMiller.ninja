@@ -551,6 +551,8 @@ export class Engine {
     this.updateCamera(dt);
     const v = this.renderer.viewRect(this.cam);
     w.view = v;
+    // zoomed far out: thin the decorative particles (full detail from zoom 0.5 in; at most a fifth at the furthest)
+    w.particles.zoomDetail = Math.max(0.2, Math.min(1, (this.cam.zoom / 0.5) ** 2));
     w.camX = this.cam.x;
     w.camY = this.cam.y;
 
@@ -568,7 +570,7 @@ export class Engine {
     this.musicT -= dt;
     if (this.musicT <= 0) {
       this.musicT = 0.25;
-      this.audio.updateMusic(musicMood(w));
+      this.audio.setMusicMood(musicMood(w));
     }
 
     this.shake.t = Math.max(0, this.shake.t - dt);

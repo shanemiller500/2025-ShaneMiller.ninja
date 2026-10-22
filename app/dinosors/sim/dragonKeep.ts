@@ -696,6 +696,8 @@ function stepOwned(w: World, dr: Dragon, dt: number) {
       w.toast("😮‍💨", `${dr.name} is exhausted and has to land! Dragons need rest between long flights.`, dr.x, dr.y);
     }
   }
+  // one of our people grabbed by a wild dragon (or falling into the volcano): race to save them
+  if (rescueThink(w, dr, dt)) return;
   // carrying a rider on a raid: it stays put between the unit's orders (no wandering back to its patrol)
   if (!dr.cmd && onExpedition(w, dr)) {
     idle(w, dr, dt);
@@ -711,6 +713,129 @@ function stepOwned(w: World, dr: Dragon, dt: number) {
   }
   if (dr.auto !== false) autoThink(w, dr, dt);
   else idle(w, dr, dt);
+}
+
+/* ------------------------------ guarding the camp + rescues ------------------------------ */
+
+/** How far round the camp another dragon is an intruder. */
+export const CAMP_GUARD_R = 1100;
+
+/** A grown dragon of ours that can fly and fight: it sees off other dragons near the camp. */
+export function defender(dr: Dragon) {
+  return (dr.growth ?? 0) >= 0.55 && canFly(dr) && (dr.skills?.flight ?? 0) >= 1;
+}
+
+/** The nearest wild dragon (not a youngster, not already leaving) within r of the camp. */
+export function intruderNear(w: World, r: number): Foe | null {
+  let best: Dragon | null = null;
+  let bd = r;
+  for (const d of w.dragons.list) {
+    if (d.young || d.hp <= 0 || d.state === "leave" || d.state === "flee" || d.state === "offering") continue;
+    const dd = Math.hypot(d.x - w.camp.x, d.y - w.camp.y);
+    if (dd < bd) {
+      bd = dd;
+      best = d;
+    }
+  }
+  return best ? { kind: "dragon", dr: best } : null;
+}
+
+/** Our people in danger in the air: in a wild dragon's claws, or falling (the volcano!). */
+function inDanger(w: World): { h: Human; x: number; y: number; z: number; carrier: Dragon | null; fall: boolean }[] {
+  const out: { h: Human; x: number; y: number; z: number; carrier: Dragon | null; fall: boolean }[] = [];
+  for (const h of w.humans) {
+    if (h.stranger || h.captive || h.rescuedBy) continue;
+    if (h.snatched) {
+      const c = w.dragons.byId(h.snatched);
+      if (c && c.prey === h.id) out.push({ h, x: c.x, y: c.y, z: c.z, carrier: c, fall: false });
+    } else if (h.falling) {
+      const f = w.dragons.falls.find((x) => !x.brute && x.id === h.id);
+      if (f && (f.lethal || f.volcano)) out.push({ h, x: f.x, y: f.y, z: f.z, carrier: null, fall: true });
+    }
+  }
+  return out;
+}
+
+/**
+ * One of our dragons saving a person: it races to the dragon carrying them (and makes it let go), or to them
+ * as they fall, catches them, and glides down to safe ground near the camp. True = busy with it.
+ */
+function rescueThink(w: World, dr: Dragon, dt: number): boolean {
+  // carrying someone we caught: down to safe ground (on the camp side, well clear of the volcano)
+  if (dr.saved) {
+    const h = w.humans.find((x) => x.id === dr.saved);
+    if (!h || h.rescuedBy !== dr.id) {
+      dr.saved = undefined;
+      return false;
+    }
+    const v = w.volcano;
+    const a = Math.atan2(w.camp.y - v.y, w.camp.x - v.x);
+    const far = Math.hypot(dr.x - v.x, dr.y - v.y) > 900;
+    const tx = far ? dr.x : v.x + Math.cos(a) * 900;
+    const ty = far ? dr.y : v.y + Math.sin(a) * 700;
+    const spot = landingSpot(w, tx, ty, dragonStats(dr).scale);
+    dr.state = "fly";
+    if (landAt(w, dr, spot.x, spot.y, dt)) {
+      dr.saved = undefined;
+      h.rescuedBy = undefined;
+      h.z = 0;
+      h.x = dr.x + dr.dir * 26;
+      h.y = dr.y + 10;
+      go(h, "idle", h.x, h.y);
+      h.think = 0.5;
+      say(h, pick(w.rng, ["You saved me!", "Thank you, " + dr.name + "!", "I thought I was done for!"]));
+      w.particles.burst(P.Heart, h.x, h.y, 6, 40, { z: 20, size: 6, max: 1.4 });
+      w.toast("🦸", `${dr.name} brought ${h.name} down safe and sound!`, h.x, h.y);
+      w.discover("dragonRescue", h.x, h.y);
+    }
+    return true;
+  }
+  // a rescue under way: still someone to save?
+  const danger = inDanger(w);
+  let job = dr.rescue ? danger.find((x) => x.h.id === dr.rescue) ?? null : null;
+  if (dr.rescue && !job) dr.rescue = undefined;
+  // nobody being saved yet: the nearest free dragon of ours that can fly goes
+  if (!job) {
+    if (!canFly(dr) || (dr.growth ?? 0) < 0.4 || dr.hp < dr.maxHp * 0.3 || (dr.stamina ?? 1) < 0.15 || dr.carrying || dr.prey) return false;
+    if (w.colony.hunt?.crew.some((m) => m.ride === "dragon" && m.mount === dr.id)) return false;
+    for (const x of danger) {
+      if (w.dragons.owned.some((o) => o !== dr && o.rescue === x.h.id)) continue;
+      if (Math.hypot(x.x - dr.x, x.y - dr.y) > 2800) continue;
+      // the nearest of ours takes it
+      const mine = Math.hypot(x.x - dr.x, x.y - dr.y);
+      const closer = w.dragons.owned.some((o) => o !== dr && !o.rescue && !o.saved && canFly(o) && (o.growth ?? 0) >= 0.4 && Math.hypot(x.x - o.x, x.y - o.y) < mine);
+      if (closer) continue;
+      job = x;
+      dr.rescue = x.h.id;
+      dr.cmd = null;
+      w.sfx("screech", dr.x, dr.y, 1.2, 0.6);
+      w.toast("🐉", `${dr.name} dives to save ${x.h.name}!`, dr.x, dr.y);
+      break;
+    }
+    if (!job) return false;
+  }
+  // flat out after them
+  dr.state = "fly";
+  const tz = Math.max(30, job.z + (job.carrier ? 0 : 10));
+  const d = flyToward(w, dr, job.x, job.y, tz, dt, 1.6);
+  if (d > 75 || Math.abs(dr.z - job.z) > 95) return true;
+  // close enough: snatch them back
+  if (job.carrier) {
+    w.dragons.hit(w, job.carrier, 60);
+    w.dragons.release(w, job.carrier, false);
+  }
+  const fi = w.dragons.falls.findIndex((x) => !x.brute && x.id === job!.h.id);
+  if (fi >= 0) w.dragons.falls.splice(fi, 1);
+  const h = job.h;
+  h.falling = false;
+  h.snatched = undefined;
+  h.rescuedBy = dr.id;
+  dr.saved = h.id;
+  dr.rescue = undefined;
+  w.sfx("whoosh", dr.x, dr.y, 1, 0.8);
+  w.particles.burst(P.Star, dr.x, dr.y, 8, 50, { z: dr.z, size: 6, max: 1 });
+  w.toast("🦸", job.carrier ? `${dr.name} tore ${h.name} out of ${job.carrier.name}'s claws in mid-air!` : `${dr.name} caught ${h.name} in mid-air, just before the fall!`, dr.x, dr.y);
+  return true;
 }
 
 /** Rested, fed and healed enough to go back to its patrol (and not asleep for the night)? */
@@ -851,7 +976,7 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
       if (cmd.t % 1 < dt) {
         const near = ward ? wardThreat(w, ward.x, ward.y, 380) : null;
         const f = near ?? threatNear(w, dr.x, dr.y, 540);
-        if (f && warTrained(dr)) {
+        if (f && (warTrained(dr) || (f.kind === "dragon" && defender(dr)))) {
           const p = foeXY(f);
           dr.foe = f.kind === "dino" ? f.d.id : f.kind === "brute" ? f.b.id : f.dr.id;
           w.toast("🐉", `${dr.name} spotted trouble on patrol and dives at it!`, p.x, p.y);
@@ -892,6 +1017,14 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
     }
     case "attack": {
       const foe = cmd.target ? foeById(w, cmd.target) : null;
+      if (foe && foe.kind === "dragon" && cmd.auto && Math.hypot(foe.dr.x - w.camp.x, foe.dr.y - w.camp.y) > CAMP_GUARD_R * 1.5) {
+        say2(w, dr, pick(w.rng, ["And stay away!", "Gone!", "Ha!"]));
+        if (!w.flags.has(`chasedOff${foe.dr.id}`)) {
+          w.flags.add(`chasedOff${foe.dr.id}`);
+          w.toast("🛡️", `${dr.name} chased ${foe.dr.name} away from the camp!`, dr.x, dr.y);
+        }
+        return false;
+      }
       if (!foe || cmd.t > 60) {
         if (!foe) say2(w, dr, pick(w.rng, ["Got it!", "Ha! Gone!", "Good dragon!"]));
         return false;
@@ -1045,7 +1178,7 @@ function autoThink(w: World, dr: Dragon, dt: number) {
   const night = w.daylight < 0.25;
   // asleep: stay asleep until morning (and rested)
   if (dr.state === "sleep") {
-    if ((!night && (dr.energy ?? 1) > 0.6) || dr.hit > 0.5) dr.state = "idle";
+    if ((!night && (dr.energy ?? 1) > 0.6) || dr.hit > 0.5 || (defender(dr) && w.dragons.scanT <= 0 && intruderNear(w, CAMP_GUARD_R * 0.8))) dr.state = "idle";
     else {
       dr.vx = dr.vy = 0;
       return;
@@ -1063,17 +1196,23 @@ function autoThink(w: World, dr: Dragon, dt: number) {
     dr.state = "sleep";
     return;
   }
-  // trouble near camp: a trained war dragon answers it (not a little lizard)
-  if (warTrained(dr) && (dr.stamina ?? 1) > 0.35 && dr.hp > dr.maxHp * 0.45 && w.dragons.scanT <= 0) {
+  // trouble near camp: a trained war dragon answers it (not a little lizard); any grown dragon of ours
+  // that can fly sees off another dragon that comes near the camp
+  if ((warTrained(dr) || defender(dr)) && (dr.stamina ?? 1) > 0.35 && dr.hp > dr.maxHp * 0.45 && w.dragons.scanT <= 0) {
     const rider = dragonRiderOf(w, dr);
-    const f = threatNear(w, w.camp.x, w.camp.y, 1100) ?? (rider && !rider.aloft ? threatNear(w, rider.x, rider.y, 500) : null);
+    const f = warTrained(dr)
+      ? threatNear(w, w.camp.x, w.camp.y, 1100) ?? (rider && !rider.aloft ? threatNear(w, rider.x, rider.y, 500) : null)
+      : intruderNear(w, CAMP_GUARD_R);
     if (f) {
       const p = foeXY(f);
       const id = f.kind === "dino" ? f.d.id : f.kind === "brute" ? f.b.id : f.dr.id;
       // a big war dragon now and then carries a Neanderthal off to the volcano instead
       const drop = f.kind === "brute" && f.b.weapon !== "catapult" && (dr.growth ?? 0) >= 0.55 && w.rng() < 0.35;
       dr.cmd = { kind: drop ? "volcano" : "attack", x: p.x, y: p.y, target: id, t: 0, auto: true };
-      if (!w.flags.has(`dragonDefend${dr.id}`)) {
+      if (f.kind === "dragon" && !w.flags.has(`chaseDragon${dr.id}:${f.dr.id}`)) {
+        w.flags.add(`chaseDragon${dr.id}:${f.dr.id}`);
+        w.toast("🐉", `${dr.name} takes off to chase ${f.dr.name} away from the camp!`, dr.x, dr.y);
+      } else if (!w.flags.has(`dragonDefend${dr.id}`)) {
         w.flags.add(`dragonDefend${dr.id}`);
         w.toast("🐉", `${dr.name} takes off to defend the camp!`, dr.x, dr.y);
       }

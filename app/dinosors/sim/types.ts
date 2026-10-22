@@ -462,6 +462,8 @@ export interface Human {
   carryN: number;
   /** on town clean-up duty (cleanup.ts) */
   cleaning?: boolean;
+  /** caught in mid-air by one of our dragons (its id): carried down to safety (dragonKeep.ts) */
+  rescuedBy?: number;
   /** knocked out: seconds lying there waiting for help, whether they're fading, and when someone last patched them up (death.ts) */
   downT?: number;
   fading?: boolean;
@@ -1398,6 +1400,9 @@ export interface Dragon {
   post?: DragonCmd;
   /** a wild parent flying back with wood for its nest */
   wood?: boolean;
+  /** one of ours racing to save a person a wild dragon grabbed / dropped (their id), and the one it's carrying down safe */
+  rescue?: number;
+  saved?: number;
   /** 0..3 rage: its young were killed. Each level: harder to hurt, fiercer fire, bigger, slower to give up (dragonRage.ts) */
   rage?: number;
   /** what it's turned on (retaliate): a person, a chariot or one of our dragons */

@@ -1363,6 +1363,21 @@ export function updateHuman(w: World, h: Human, dt: number) {
     h.vx = h.vy = 0;
     return;
   }
+  if (h.rescuedBy) {
+    // caught by one of our dragons: held safe in its claws on the way down
+    const dr = w.dragons.owned.find((d) => d.id === h.rescuedBy);
+    if (!dr || dr.saved !== h.id) {
+      h.rescuedBy = undefined;
+      h.z = 0;
+    } else {
+      h.x = dr.x;
+      h.y = dr.y + 2;
+      h.z = Math.max(0, dr.z - 26);
+      h.state = "tossed";
+      h.anim += dt * 4;
+      return;
+    }
+  }
   if (h.snatched) {
     // in a wild dragon's claws: dangling under it, kicking
     const dr = w.dragons.byId(h.snatched);

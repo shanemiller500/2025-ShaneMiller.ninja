@@ -1,10 +1,10 @@
 /* ------------------------------------------------------------------ */
 /*  Dragon bones: a monument.                                          */
 /*                                                                     */
-/*  When a dragon dies (one of ours, or a wild one brought down) its   */
-/*  great skeleton is laid out where it fell, on a stone plinth with   */
-/*  its name carved in: a statue the tribe can carry anywhere (the     */
-/*  Move tool, like any building).                                     */
+/*  When one of OUR dragons dies, its great skeleton is laid out where */
+/*  it fell, on a stone plinth with its name carved in: a shrine the   */
+/*  tribe can carry anywhere (the Move tool, like any building). Wild  */
+/*  dragons just leave a scatter of bones (dragons.ts).                */
 /* ------------------------------------------------------------------ */
 import { dragonStats } from "./dragonKeep";
 import { P } from "./particles";

@@ -34,7 +34,6 @@ import { dismountDragon, dragonRiderOf, newDragonStats, ownedUpdate, warTrained 
 import { assignKeepers } from "./keepers";
 import { showsUpdate, type Show } from "./shows";
 import { broodStep } from "./dragonBrood";
-import { raiseBones } from "./dragonBones";
 import { fightBack, giveUpAt, rageTick, retaliateStep, youngLost } from "./dragonRage";
 
 const d0 = (dr: Dragon) => Math.hypot(dr.tx - dr.x, dr.ty - dr.y);
@@ -565,8 +564,13 @@ export class Dragons {
       w.particles.burst(P.Poof, dr.x, dr.y, 18, 90, { size: 18, max: 1.4, color: "rgba(220,210,200,0.95)" });
       w.addItem("meat", dr.x, dr.y, { amount: 4 });
       w.camp.stock.gold += 3;
-      w.toast("🏆", `${dr.name} crashed down and fell! The tribe found 3 gold dragon scales.`, dr.x, dr.y);
-      raiseBones(w, dr, false);
+      // a wild one leaves just its bones lying where it fell (only our own dragons get a shrine)
+      const piles = dr.young ? 2 : 5;
+      for (let i = 0; i < piles; i++) {
+        const a = (i / piles) * Math.PI * 2 + this.rng();
+        w.addItem("bones", dr.x + Math.cos(a) * 30, dr.y + Math.sin(a) * 16, { amount: dr.young ? 1 : 2 });
+      }
+      w.toast("🏆", `${dr.name} crashed down and fell! The tribe found 3 gold dragon scales, and its bones lie where it fell.`, dr.x, dr.y);
       w.discover("dragonSlayer", dr.x, dr.y);
       w.celebrate("Hooray!");
       this.list.splice(this.list.indexOf(dr), 1);
