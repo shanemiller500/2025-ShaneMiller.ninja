@@ -19,6 +19,7 @@ import { isWalkTile } from "./terrain";
 import { Trails } from "./trails";
 import { MAP_H, MAP_W, T, TILE } from "./types";
 import type { World } from "./world";
+import { hallKey, hallTiles } from "./riderHall";
 
 export const NT = MAP_W * MAP_H;
 /** Wild large dinosaurs avoid narrow bridges; trained mounts can use them. */
@@ -121,7 +122,7 @@ export class Nav {
   /** Rebuild the grid if terrain or any structure changed. Cheap otherwise. */
   sync(w: World) {
     const tr = w.tribe;
-    const key = `${w.terrain.version}|${tr.version}|${w.colony.version}|${w.shelters.length}:${w.shelterVersion}|${w.snow.navVersion}|${w.trails.version}|${w.trails.wornVersion}`;
+    const key = `${w.terrain.version}|${tr.version}|${w.colony.version}|${w.shelters.length}:${w.shelterVersion}|${w.snow.navVersion}|${w.trails.version}|${w.trails.wornVersion}|${hallKey(w)}`;
     if (key === this.key) return;
     this.key = key;
     this.rebuild(w);
@@ -192,6 +193,8 @@ export class Nav {
       if (s.stage < 1) continue;
       for (const i of shelterTiles(s.x, s.y)) if (i >= 0 && i < NT) f[i] |= F_SOLID;
     }
+    // the Dragon Riders' Colosseum: a ring of walls round the pit, in only through the great gate
+    for (const i of hallTiles(w)) f[i] |= F_SOLID;
     this.version++;
   }
 

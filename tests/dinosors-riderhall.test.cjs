@@ -72,7 +72,7 @@ test('every dragon rider + keeper gets their own room, right behind where their 
   const folk = hall.hallFolk(w);
   assert.ok(folk.includes(r1) && folk.includes(r2) && !folk.includes(plain), 'only the dragon people');
   const room = hall.roomOf(w, r1);
-  const bed = keep.roostOf(w, d1);
+  const bed = shows.pitSpot(p, w.dragons.owned.indexOf(d1), w.dragons.owned.length);
   assert.ok(Math.hypot(room.x - bed.x, room.y - bed.y) < 140, `room by its dragon's spot (${Math.hypot(room.x - bed.x, room.y - bed.y).toFixed(0)})`);
   assert.ok(Math.hypot(hall.roomOf(w, r2).x - room.x, hall.roomOf(w, r2).y - room.y) > 30, 'their own rooms');
   assert.deepEqual(shelterSpot(w, r1), { x: room.x, y: room.y }, 'it is home');
@@ -104,4 +104,41 @@ test('it grows with the pit and with the people in it', () => {
   assert.ok(hall.hallTiers(w) >= 3, `taller (${hall.hallTiers(w)} tiers)`);
   for (let i = 0; i < 400; i++) shows.pitGrow(w, 1);
   assert.ok(hall.hallRing(p).rx > small * 1.5, 'wider with the pit');
+});
+
+test('the colosseum walls are solid: nobody walks through from behind, everyone goes in by the great gate', () => {
+  const w = world(9004);
+  const p = pit(w);
+  hall.placeHall(w);
+  w.colony.buildings.find((x) => x.kind === 'riderHall').built = 1;
+  const rider = w.humans.filter((h) => !h.child)[0];
+  dragonFor(w, rider);
+  w.nav.sync(w);
+  const r = hall.hallRing(p);
+  // the back wall (top of the ring) and the sides are solid; the gate (front) is open
+  assert.equal(w.nav.passable('human', r.cx, r.cy - r.ry), false, 'back wall');
+  assert.equal(w.nav.passable('human', r.cx - r.rx, r.cy), false, 'side wall');
+  assert.equal(w.nav.passable('bigDino', r.cx + r.rx, r.cy), false, 'dinos too');
+  assert.equal(w.nav.passable('human', r.cx, r.cy + r.ry), true, 'the great gate');
+  assert.equal(w.nav.passable('human', r.cx, r.cy), true, 'the arena floor');
+  // someone behind the colosseum gets to their room the long way round, through the gate
+  const room = hall.roomOf(w, rider);
+  assert.ok(w.nav.passable('human', room.x, room.y), 'rooms are reachable (just inside the wall)');
+  rider.x = r.cx;
+  rider.y = r.cy - r.ry - 60;
+  w.time = 23;
+  w.daylight = 0.05;
+  rider.energy = 0.1;
+  let crossed = false;
+  let through = false;
+  for (let i = 0; i < 30 * 120 && !hall.inRoom(w, rider); i++) {
+    w.update(1 / 30);
+    w.events.length = 0;
+    w.daylight = 0.05;
+    const e = Math.hypot((rider.x - r.cx) / r.rx, (rider.y - r.cy) / r.ry);
+    if (e > 0.9 && e < 1.05 && Math.abs(Math.atan2((rider.y - r.cy) / r.ry, (rider.x - r.cx) / r.rx) - Math.PI / 2) > 0.5) through = true;
+    if (e < 0.8) crossed = true;
+  }
+  assert.ok(crossed, 'got inside');
+  assert.ok(!through, 'never went through the wall');
 });

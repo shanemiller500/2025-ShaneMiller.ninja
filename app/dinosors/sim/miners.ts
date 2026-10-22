@@ -22,6 +22,7 @@ import type { Human, Resource } from "./types";
 import type { World } from "./world";
 import { canWork, workOf } from "./workDinos";
 import { loadPack, packBeside, recallPacks } from "./packs";
+import { researchShortages } from "./researchNeeds";
 
 export type OrderKind = "dig" | "support" | "blast" | "pump";
 
@@ -508,6 +509,18 @@ function think(w: World, m: Miner, h: Human) {
   if (flood) return plan(w, m, flood, "Bail it out!");
   // ore they can see in the walls
   if (mine.autoMine) {
+    const wanted = new Set(researchShortages(w));
+    if (wanted.size) {
+      const neededOre = search(mine, here, (s) => {
+        for (const t of NB(s)) {
+          if (mine.seen[t] !== 2 || claimed(w, m, t)) continue;
+          const c = mine.known.get(t);
+          if (c && wanted.has(c as Resource) && !mine.cantDig(cx(t), cy(t), tools)) return { kind: "ore", cell: t, stand: s };
+        }
+        return null;
+      }, 2500);
+      if (neededOre) return plan(w, m, neededOre, "Research needs this ore!");
+    }
     const ore = search(mine, here, (s) => {
       for (const t of NB(s)) {
         if (mine.seen[t] !== 2 || claimed(w, m, t)) continue;

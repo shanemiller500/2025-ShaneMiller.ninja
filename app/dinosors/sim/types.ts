@@ -460,6 +460,12 @@ export interface Human {
   task: Resource | "craft" | "build" | null;
   carry: Resource | null;
   carryN: number;
+  /** on town clean-up duty (cleanup.ts) */
+  cleaning?: boolean;
+  /** knocked out: seconds lying there waiting for help, whether they're fading, and when someone last patched them up (death.ts) */
+  downT?: number;
+  fading?: boolean;
+  helpedAt?: number;
   anim: number;
   bubble: { text: string; t: number } | null;
   hair: string;
@@ -557,14 +563,18 @@ export interface Human {
 /* ------------------------------ Neanderthals ------------------------------ */
 
 /** Basic weapons only: Neanderthals never invent bows, metal or energy weapons. */
-export type BruteWeapon = "club" | "axe" | "spear" | "rock" | "sling" | "catapult";
+export type BruteWeapon = "club" | "axe" | "spear" | "rock" | "sling" | "catapult"
+  // the Tree People's (treeFolk.ts): bone knives + short bows
+  | "bone" | "bow";
 
 export type BruteState = "idle" | "wander" | "walk" | "sleep" | "fight" | "hunt" | "forage" | "bash" | "carry" | "flee" | "home" | "loot" | "rally" | "spy" | "lurk" | "siege"
   // clan life (clanLife.ts): gathering bones + wood, building, sparring, digging traps, fetching someone caught;
   // the dragon rite (clanRite.ts): dancing round the altar, jumping for joy
   | "gather" | "build" | "train" | "trap" | "collect" | "dance" | "cheer"
   // taming a wild dino for the clan's pen
-  | "tame";
+  | "tame"
+  // Tree People (treeFolk.ts): up in a tree, climbing, leaping down on someone, darting back out of reach
+  | "perch" | "climb" | "drop" | "dart";
 
 /** What a clan builds up at home (clanLife.ts). */
 export type ClanBuild = "longhouse" | "smokehouse" | "boneRack" | "trainingRing" | "dragonAltar" | "dinoPen" | "boneFence" | "boneTotem";
@@ -621,6 +631,17 @@ export interface DragonHunt {
   t: number;
   /** attacking a Neanderthal clan's camp instead of a nest (its id) */
   clan?: number;
+  /** hunting one wild dragon wherever it goes (its id) instead of a nest */
+  dragon?: number;
+  /** on the march: stopped to fight a threat on the way (its id), and for how long */
+  engage?: number;
+  engageT?: number;
+  /** mustering: how many are ready / needed */
+  ready?: number;
+  need?: number;
+  /** where the formation was laid out (a moving dragon gets it laid out again) */
+  cx?: number;
+  cy?: number;
   /** each crew member: which chariot + seat (0..9), their own dino / dragon to ride, or on foot; runners fetch the eggs;
    *  their place in the formation (set when they march) */
   crew: { id: number; chariot: number; seat: number; runner: boolean; ride?: "dino" | "dragon"; mount?: number; sx?: number; sy?: number }[];
@@ -725,7 +746,89 @@ export interface Brute {
   job?: string;
   /** seconds spent on the job at hand */
   work?: number;
+  /** one of the Tree People (treeFolk.ts): the id of their tree tribe (clan is 0) */
+  tree?: number;
+  /** a Tree Person hidden up in the leaves / down in the brush: our side can't see them to shoot */
+  hidden?: boolean;
+  /** the ambush / raid band (treeFolk.ts) they're part of */
+  band?: number;
+  /** which way round they circle a foe (−1 / 1) and how wide */
+  flank?: number;
+  /** a Tree Person's perch: how high up the tree they climb / sit (px) */
+  up?: number;
   bubble: { text: string; t: number } | null;
+}
+
+/* ------------------------------ Tree People (treeFolk.ts) ------------------------------ */
+
+/** One platform up in a camp tree: a hut, a bare deck, a lookout, a hanging store or the ritual deck. */
+export interface TreePod {
+  x: number;
+  y: number;
+  /** height of the deck above the ground (px) */
+  h: number;
+  kind: "hut" | "deck" | "lookout" | "store" | "ritual";
+  /** 0..1: 0 = pulled down / burnt */
+  hp: number;
+}
+
+/** A tribal warning display at the edge of their forest. */
+export interface TreeSign {
+  x: number;
+  y: number;
+  kind: "totem" | "bones" | "spikes" | "marks" | "trophy" | "remains";
+  v: number;
+}
+
+/** A feral tribe living up in the forest canopy. */
+export interface TreeTribe {
+  id: number;
+  name: string;
+  /** body-paint colour */
+  color: string;
+  /** the camp's heart (the ground under the platforms) */
+  x: number;
+  y: number;
+  pods: TreePod[];
+  signs: TreeSign[];
+  /** territory radius (they roam + ambush inside it) */
+  r: number;
+  /** 0-3: bigger camps hold more of them */
+  tier: number;
+  food: number;
+  growT: number;
+  raidT: number;
+  ambushT: number;
+  /** growth toward the next tier */
+  work: number;
+  /** an outpost founded from this tribe */
+  parent?: number;
+  /** every paint it wears: its own + each tribe that united with it */
+  colors?: string[];
+  /** how many tribes have united into this one (each union lets the camp grow bigger) */
+  merges?: number;
+  /** our people have spotted its warning signs */
+  seen?: boolean;
+  /** our people have scouted the camp itself */
+  found?: boolean;
+}
+
+/** An ambush or raiding party. */
+export interface TreeBand {
+  id: number;
+  tribe: number;
+  mode: "lurk" | "strike" | "raid" | "home";
+  /** the ambush spot / the raid's goal */
+  x: number;
+  y: number;
+  ids: number[];
+  t: number;
+  /** a raid's target: our town's edge, a Neanderthal camp, or one person */
+  goal?: { kind: "town" | "clan" | "human"; id: number };
+  /** how many set out (morale: they break once too many are down) */
+  size: number;
+  /** a volley's been thrown: the charge comes next */
+  volley?: boolean;
 }
 
 /** A small Neanderthal band with its own camp. Relations: -1 war, 0 wary, 1 allies. */
@@ -798,6 +901,12 @@ export interface Carcass {
   burnt: boolean;
   /** 0..1 decay */
   rot: number;
+  /** lying in the town: it never rots there (it's gathered, or a dragon roasts it) */
+  town?: boolean;
+  /** roasted by dragon fire: portions of cooked meat waiting to go to the feast table */
+  roast?: number;
+  /** a dragon roasted it (drawn browned + steaming) */
+  cooked?: boolean;
 }
 
 export interface Item {
@@ -1003,6 +1112,8 @@ export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" |
   | "fireStation"
   // the dragons' home + show arena (see shows.ts)
   | "dragonPit"
+  /** a dead dragon's bones laid out on a plinth: a monument (dragonBones.ts) */
+  | "dragonBones"
   | "warChariot"
   | "riderHall"
   // the Old Ways' last-resort project
@@ -1044,6 +1155,13 @@ export interface Building {
   cd?: number;
   /** the dragon pit: how far it's been dug out (1 = as first built; it grows with the dragons, shows.ts) */
   grow?: number;
+  /** dragon pit: how many other pits have been joined into this one (each lets it grow bigger) */
+  merged?: number;
+  /** dragon bones monument: whose they were, its breed, how big it was, and whether it was one of ours */
+  label?: string;
+  breed?: string;
+  size?: number;
+  ours?: boolean;
 }
 
 /** A giant crossbow. Sits on a wall tile, a tower or the ground. */
@@ -1094,6 +1212,8 @@ export type DragonState = "arrive" | "circle" | "hunt" | "strafe" | "land" | "ea
   | "offering"
   // a wild parent coming to take its stolen baby back
   | "reclaim"
+  // a wild dragon that's been attacked, turning on whoever attacked it (dragonRage.ts)
+  | "retaliate"
   // tamed dragons (see dragonKeep.ts)
   | "idle" | "sleep" | "play" | "walk" | "fly" | "hover";
 
@@ -1141,6 +1261,12 @@ export interface DragonNest {
   clutch?: number;
   /** 0..1 how far the nest is built (it builds while expecting) */
   grow?: number;
+  /** wood stocked in the nest for the brooding fire (dragonBrood.ts) */
+  wood?: number;
+  /** 0..1 how hot the nest is (the parent breathes fire into the wood; it cools off) */
+  warmth?: number;
+  /** seconds left of the parent breathing fire into it */
+  fireT?: number;
 }
 
 /** A dragon egg: in a nest, carried, on the ground, or incubating at camp. */
@@ -1263,6 +1389,19 @@ export interface Dragon {
   hatchedBy?: number;
   /** seconds until a parent tries to win its stolen baby back */
   reclaimT?: number;
+  /** its standing job: a patrol / route the player gave it. It breaks off to rest, eat or heal, then goes back to it, until it's told otherwise */
+  post?: DragonCmd;
+  /** a wild parent flying back with wood for its nest */
+  wood?: boolean;
+  /** 0..3 rage: its young were killed. Each level: harder to hurt, fiercer fire, bigger, slower to give up (dragonRage.ts) */
+  rage?: number;
+  /** what it's turned on (retaliate): a person, a chariot or one of our dragons */
+  foeKind?: "human" | "chariot" | "dragon";
+  /** where a gentle (cooking / brooding) flame is aimed: drawn from the mouth to here */
+  fireAt?: { x: number; y: number };
+  /** the dead dino (item id) it's off to roast for the feast table, and how long it's been breathing on it */
+  cook?: number;
+  cookT?: number;
   /** 0..1 battle-hardened: every fight won makes a war dragon bigger + stronger */
   vet?: number;
   /** seconds since it was last hurt (wild dragons heal once they're left alone) */

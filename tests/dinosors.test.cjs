@@ -220,6 +220,7 @@ function tribeWorld(seed, techs) {
   w.time = 10;
   w.randomEvents.enabled = false;
   w.dinos.length = 0;
+  w.wildlife.enabled = false; // an empty valley on purpose: don't let the wild ones come back
   for (const t of techs) w.camp.learned.add(t);
   w.camp.goal = null;
   return w;

@@ -13,6 +13,8 @@ import { TILE, type Danger, type HuntFormation, type Role, type TechId } from ".
 import { FORMATIONS } from "../sim/chariots";
 import { useClickAway } from "./useClickAway";
 import { UpgradeAllButton } from "./UpgradeAllButton";
+import { ResearchSupplies } from "./ResearchSupplies";
+import type { BuildingKind } from "../sim/types";
 
 /* ------------------------------------------------------------------ */
 /*  The tribe's HQ. Tabs:                                              */
@@ -23,6 +25,16 @@ import { UpgradeAllButton } from "./UpgradeAllButton";
 /* ------------------------------------------------------------------ */
 
 type Tab = "camp" | "jobs" | "defend" | "invent" | "forge";
+
+function equipmentRecommendations(snap: Snapshot, engine: Engine) {
+  const people = engine.world.humans.filter((h) => !h.child && !h.stranger);
+  const choices = snap.forge.items.filter((it) => !it.done && !snap.forge.queue.some((q) => q.id === it.id) && (it.cat === "weapons" || it.cat === "gear") && !it.why?.startsWith("Invent") && !it.why?.startsWith("Research"));
+  const worn = (id: string) => people.filter((h) => h.gear.weapon === id || h.gear.outfit === id || h.gear.helmet === id).length;
+  const owned = (id: string) => (snap.forge.armory.find((a) => a.id === id)?.n ?? 0) + worn(id);
+  const weapon = choices.filter((it) => it.cat === "weapons" && owned(it.id) < people.length).sort((a, b) => b.tier - a.tier)[0];
+  const clothes = choices.filter((it) => it.cat === "gear" && owned(it.id) < people.length).sort((a, b) => b.tier - a.tier)[0];
+  return [weapon, clothes].filter((it): it is NonNullable<typeof it> => !!it);
+}
 
 const RES: [string, string, string][] = Object.entries(RES_INFO).map(([k, v]) => [k, v.icon, v.name]);
 const RES_ICON = Object.fromEntries(RES.map(([k, i]) => [k, i]));
@@ -42,7 +54,7 @@ function amountLabel(value: number): string {
   return `${rounded}${["", "K", "M", "B", "T", "Q"][unit]}`;
 }
 
-export default function CampPanel({ snap, engine, onClose, tab: initial = "camp" }: { snap: Snapshot; engine: Engine; onClose: () => void; tab?: Tab }) {
+export default function CampPanel({ snap, engine, onClose, onBuildStation, tab: initial = "camp" }: { snap: Snapshot; engine: Engine; onClose: () => void; onBuildStation: (kind: BuildingKind) => void; tab?: Tab }) {
   const panelRef = useRef<HTMLElement>(null);
   useClickAway(true, panelRef, onClose);
   const [tab, setTab] = useState<Tab>(initial);
@@ -89,16 +101,16 @@ export default function CampPanel({ snap, engine, onClose, tab: initial = "camp"
 
       </div>
 
-      {tab === "camp" && <CampTab snap={snap} engine={engine} />}
+      {tab === "camp" && <CampTab snap={snap} engine={engine} onForge={() => setTab("forge")} />}
       {tab === "jobs" && <JobsTab snap={snap} engine={engine} />}
       {tab === "defend" && <DefendTab snap={snap} engine={engine} />}
-      {tab === "invent" && <InventTab snap={snap} engine={engine} />}
-      {tab === "forge" && <ForgeTab snap={snap} engine={engine} />}
+      {tab === "invent" && <InventTab snap={snap} engine={engine} onNavigate={onClose} />}
+      {tab === "forge" && <ForgeTab snap={snap} engine={engine} onNavigate={onClose} onBuildStation={onBuildStation} />}
     </motion.aside>
   );
 }
 
-function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
+function CampTab({ snap, engine, onForge }: { snap: Snapshot; engine: Engine; onForge: () => void }) {
   const camp = snap.camp;
   const tribe = snap.tribe;
   const [cool, setCool] = useState(0);
@@ -117,6 +129,7 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   const needDefense = outlyingHomes.some((s) => !w.tribe.towers.some((t) => t.stage >= 3 && near(t.x, t.y, s, 240)) && !w.tribe.walls.some((wall) => wall.built >= 1 && near(wall.tx * TILE, wall.ty * TILE, s, 180)));
   return (
     <>
+      {equipmentRecommendations(snap, engine).length > 0 && <button type="button" onClick={onForge} className="mt-3 w-full rounded-2xl bg-amber-400/20 p-3 text-left text-[12px] font-bold hover:bg-amber-400/30">⚒️ Equipment upgrades available: {equipmentRecommendations(snap, engine).map((it) => it.name).join(" · ")} → Open Forge</button>}
       <div className="mt-3 rounded-2xl bg-white/5 p-2.5">
         <UpgradeAllButton engine={engine} label="Upgrade all available" className="w-full" />
         <p className="mt-1.5 text-[11px] leading-snug text-white/60">Queues every eligible home, tower, Scorpion and wall upgrade. Builders collect the materials; research unlocks later tiers.</p>
@@ -201,6 +214,53 @@ function CampTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
                 </button>
               </div>
             ))}
+          </div>
+        </>
+      )}
+      {(snap.forest.tribes.length > 0 || snap.forest.unknown > 0) && (
+        <>
+          <div className="mt-3 flex items-center justify-between text-sm font-bold">
+            <span>🌿 Tree People</span>
+            <span className="text-[11px] font-semibold text-white/55">feral forest tribes</span>
+          </div>
+          <div className="mt-1.5 space-y-1.5">
+            {snap.forest.tribes.map((tr) => (
+              <div key={tr.id} className="flex items-center gap-2 rounded-2xl bg-white/5 p-2 text-[12px]">
+                <span className="flex shrink-0 -space-x-1">
+                  {tr.colors.map((c) => (
+                    <span key={c} className="h-3 w-3 rounded-full border-2 border-black/40" style={{ background: c }} />
+                  ))}
+                </span>
+                <div className="min-w-0 flex-1">
+                  {tr.found ? (
+                    <>
+                      <div className="font-bold">
+                        {tr.name} {tr.outpost ? "outpost" : "tree camp"} <span className="font-semibold text-white/60">· {tr.warriors} warriors · {tr.young} young</span>
+                      </div>
+                      <div className="text-white/65">Canopy village level {tr.tier + 1} · {tr.decksUp}/{tr.decks} decks standing</div>
+                      {tr.merges > 0 && <div className="font-semibold text-amber-200">🤝 A union of {tr.merges + 1} tribes</div>}
+                      {tr.raiding && <div className="font-bold text-rose-300">🏃 A raiding party is out!</div>}
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-bold">Warning signs in the forest</div>
+                      <div className="text-white/65">Painted totems + bone charms… Scout closer (in a group) to find their camp.</div>
+                    </>
+                  )}
+                </div>
+                {tr.found && (
+                  <button type="button" onClick={() => engine.raidTreeCamp(tr.id)} className="shrink-0 rounded-xl bg-rose-500/80 px-2.5 py-1.5 font-bold hover:bg-rose-400 active:scale-95" title="Send the people you've selected">
+                    🔥 Attack
+                  </button>
+                )}
+                <button type="button" onClick={() => engine.flyTo(tr.x, tr.y, 0.9)} className="shrink-0 rounded-xl bg-white/10 px-2.5 py-1.5 font-bold hover:bg-white/20 active:scale-95">
+                  📍
+                </button>
+              </div>
+            ))}
+            {snap.forest.unknown > 0 && snap.forest.tribes.length === 0 && (
+              <p className="rounded-2xl bg-white/5 p-2 text-[12px] text-white/65">Hunters say the deep woods feel… watched. Nobody has seen anything yet.</p>
+            )}
           </div>
         </>
       )}
@@ -345,7 +405,12 @@ function JobsTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
           <button type="button" disabled={!available.length} onClick={() => engine.setAllRoles(bulkRole)}
             className="rounded-lg bg-amber-400 px-2.5 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-amber-300 disabled:opacity-40">All</button>
         </div>
-        <p className="mt-1.5 text-[10.5px] leading-snug text-white/55">Set number makes exactly that many manual assignments. All gives every available adult this duty. Auto balances supplies and plans a building or upgrade each day after day one.</p>
+        <button type="button" disabled={!available.length} onClick={() => engine.splitRolesEvenly()}
+          title="Spread every available adult evenly over all the jobs (people already in a job keep it where they can)"
+          className="mt-1.5 w-full rounded-lg bg-gradient-to-r from-emerald-600 to-sky-600 py-1.5 text-[11.5px] font-bold transition hover:brightness-110 active:scale-95 disabled:opacity-40">
+          ⚖️ Split evenly across all jobs ({available.length} → {engine.splitRoleList().length} jobs, ~{Math.max(1, Math.round(available.length / Math.max(1, engine.splitRoleList().length)))} each)
+        </button>
+        <p className="mt-1.5 text-[10.5px] leading-snug text-white/55">Set number makes exactly that many manual assignments. All gives every available adult this duty. Split evenly shares everyone out across every job. Auto balances supplies and plans a building or upgrade each day after day one.</p>
         {bulkRole === "miner" && <p className="mt-1 text-[10.5px] text-cyan-100/75">Miner works surface deposits. Send a crew underground from the Deep panel.</p>}
       </div>
       <p className="mt-2 text-[11px] text-white/55">Tap a job below to assign one person. Tap a person in the world to send them on a mission.</p>
@@ -433,7 +498,7 @@ function DefendTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   );
 }
 
-function ForgeTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
+function ForgeTab({ snap, engine, onNavigate, onBuildStation }: { snap: Snapshot; engine: Engine; onNavigate: () => void; onBuildStation: (kind: BuildingKind) => void }) {
   const f = snap.forge;
   const [kind, setKind] = useState<"weapons" | "shields" | "gear" | "kits">("gear");
   // looking at the forge clears the NEW badges (after a moment, so you see them first)
@@ -443,8 +508,11 @@ function ForgeTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   }, [engine]);
   const items = f.items.filter((i) => i.cat === kind);
   const newIn = (c: string) => f.items.some((i) => i.cat === c && i.fresh);
+  const recommended = equipmentRecommendations(snap, engine);
+  const station = (at: string) => engine.world.colony.buildings.find((b) => b.built >= 1 && (b.kind === at || (at === "workshop" && b.kind === "blacksmith")));
   return (
     <>
+      {recommended.length > 0 && <div className="mt-3 rounded-2xl bg-amber-400/15 p-2.5 text-[12px]"><div className="font-bold">Recommended equipment</div><div className="mt-1.5 space-y-1">{recommended.map((it) => <div key={it.id} className="flex items-center justify-between gap-2"><span>{it.icon} {it.name}</span><button type="button" className="rounded-lg bg-amber-400 px-2 py-1 font-bold text-slate-900" onClick={() => setKind(it.cat === "weapons" ? "weapons" : "gear")}>View {it.cat === "weapons" ? "weapons" : "clothes"}</button></div>)}</div></div>}
       <div className="mt-3 flex flex-wrap gap-1.5 text-[12px] font-bold">
         <span className={`rounded-full px-2.5 py-1 ${f.hasWorkshop ? "bg-emerald-500/30" : "bg-white/10 text-white/50"}`}>🛠️ Workshop {f.hasWorkshop ? "✓" : "—"}</span>
         <span className={`rounded-full px-2.5 py-1 ${f.hasSmith ? "bg-emerald-500/30" : "bg-white/10 text-white/50"}`}>⚒️ Blacksmith {f.hasSmith ? "✓" : "—"}</span>
@@ -452,6 +520,7 @@ function ForgeTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
           <GameIcon id="tannery" size={14} /> Hide rack {f.hasTannery ? "✓" : "—"}
         </span>
       </div>
+      {recommended.map((it) => <button key={`${it.id}-place`} type="button" className="mt-1.5 mr-1.5 rounded-xl bg-white/10 px-2.5 py-1.5 text-[11px] font-bold hover:bg-white/20" onClick={() => { const place = station(it.at); if (place) { engine.flyTo(place.x, place.y, 0.9); onNavigate(); } else onBuildStation(it.at as BuildingKind); }}>{station(it.at) ? `Find ${it.at} for ${it.name}` : `Build ${it.at} for ${it.name}`}</button>)}
       <div className="mt-3 text-sm font-bold">Armory</div>
       <div className="mt-1.5 flex min-h-[32px] flex-wrap gap-1.5">
         {f.armory.length ? (
@@ -541,7 +610,7 @@ function Stat({ icon, value, label }: { icon: string; value: string; label: stri
   );
 }
 
-function InventTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
+function InventTab({ snap, engine, onNavigate }: { snap: Snapshot; engine: Engine; onNavigate: () => void }) {
   const camp = snap.camp;
   const [factFor, setFactFor] = useState<TechId | null>(null);
   const learned = new Set(camp.learned);
@@ -584,6 +653,7 @@ function InventTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
             })}
           </div>
           <p className="mt-1.5 text-[11px] text-white/55">{TECH[goal].what}</p>
+          <ResearchSupplies cost={TECH[goal].needs} snap={snap} engine={engine} onNavigate={onNavigate} />
         </div>
       ) : null}
       <div className="mt-3 grid grid-cols-4 gap-1.5">

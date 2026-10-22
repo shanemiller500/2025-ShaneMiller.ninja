@@ -33,6 +33,9 @@ import { dropEgg, eggSpot, nestEggs, nestLost, nestsUpdate } from "./dragonNests
 import { dismountDragon, dragonRiderOf, newDragonStats, ownedUpdate, warTrained } from "./dragonKeep";
 import { assignKeepers } from "./keepers";
 import { showsUpdate, type Show } from "./shows";
+import { broodStep } from "./dragonBrood";
+import { raiseBones } from "./dragonBones";
+import { fightBack, giveUpAt, rageTick, retaliateStep, youngLost } from "./dragonRage";
 
 const d0 = (dr: Dragon) => Math.hypot(dr.tx - dr.x, dr.ty - dr.y);
 
@@ -223,7 +226,7 @@ export class Dragons {
     if (dr.calmT > 10 && dr.hp < dr.maxHp) dr.hp = Math.min(dr.maxHp, dr.hp + dt * dr.maxHp * 0.005);
     const c = w.camp;
     // badly hurt: one that lives here flies home to its nest to heal (it'll be back); a visitor flees for good
-    if (dr.nest && dr.hp < dr.maxHp * (dr.fury ? 0.12 : 0.35) && dr.state !== "home" && dr.state !== "perch" && dr.state !== "offering") {
+    if (dr.nest && dr.hp < dr.maxHp * giveUpAt(dr) && dr.state !== "home" && dr.state !== "perch" && dr.state !== "offering") {
       if (dr.prey) this.release(w, dr, true);
       this.go(dr, "home");
       if (!w.flags.has(`healHome${dr.id}`)) {
@@ -232,7 +235,7 @@ export class Dragons {
         w.discover("dragonSlayer", dr.x, dr.y);
         w.celebrate("Dragon gone!");
       }
-    } else if (!dr.nest && dr.hp < dr.maxHp * (dr.fury ? 0.12 : 0.35) && dr.state !== "flee" && dr.state !== "leave") {
+    } else if (!dr.nest && dr.hp < dr.maxHp * giveUpAt(dr) && dr.state !== "flee" && dr.state !== "leave") {
       if (dr.prey) this.release(w, dr, true);
       this.go(dr, "flee");
       const a = Math.atan2(dr.y - c.y, dr.x - c.x);
@@ -242,6 +245,19 @@ export class Dragons {
       w.toast("🛡️", `${dr.name} is hurt and flees! The tribe drove off a dragon!`, dr.x, dr.y);
       w.discover("dragonSlayer", dr.x, dr.y);
       w.celebrate("Dragon gone!");
+    }
+    rageTick(w, dr, dt);
+    // turned on whoever attacked it (dragonRage.ts)
+    if (dr.state === "retaliate") {
+      const done = retaliateStep(w, dr, dt, (tx, ty, sp, tz) => this.fly(dr, tx, ty, sp, dt, tz), () => this.breathe(w, dr, dt));
+      if (!done) return;
+      if (dr.nest) this.go(dr, "home");
+      else {
+        dr.tx = dr.x;
+        dr.ty = dr.y;
+        this.go(dr, "circle");
+      }
+      return;
     }
     // called down to a clan's altar (clanRite.ts runs the rest)
     if (dr.state === "offering") {
@@ -454,6 +470,7 @@ export class Dragons {
   /** A cone of fire in front of the dragon. */
   private breathe(w: World, dr: Dragon, dt: number) {
     dr.breath = 1;
+    dr.fireAt = undefined;
     const fx = dr.x + dr.vx * 0.35;
     const fy = dr.y + dr.vy * 0.35;
     if (w.inView(fx, fy, 200)) {
@@ -479,14 +496,21 @@ export class Dragons {
       emote(d, "🔥", 1.2);
       if (sp(d.species).move === "walk" && d.state !== "flee") setState(d, "flee", d.x + (d.x - fx) * 4, d.y + (d.y - fy) * 4);
     }
+    // (a dragon fighting back but not yet raging holds a little back against people; rage burns hotter)
+    const hot = (dr.state === "retaliate" && !dr.rage ? 0.65 : 1) + (dr.rage ?? 0) * 0.35;
     // a war chariot's shields take the fire for the crew behind them
-    for (const ch of [...w.colony.chariots]) if (Math.hypot(ch.x - fx, ch.y - fy) < r + 46) hitChariot(w, ch, dr.fury ? 16 : 7, dr.name);
+    for (const ch of [...w.colony.chariots]) if (Math.hypot(ch.x - fx, ch.y - fy) < r + 46) hitChariot(w, ch, (dr.fury ? 16 : 7) * hot, dr.name);
+    // our own dragons in the flames (up in the air with it, or on the ground)
+    if (!dr.owner) for (const o of this.owned) if (Math.hypot(o.x - fx, o.y - fy) < r + 40 && Math.abs(o.z - dr.z * 0.5) < 160) {
+      o.hp -= 18 * hot * (dr.fury ? 2 : 1);
+      o.hit = 1;
+    }
     for (const h of w.humans) {
       if (h.chariot) continue;
       if (Math.hypot(h.x - fx, h.y - fy) > r * (dr.fury ? 1.4 : 1)) continue;
       const home = h.state === "hide" || h.state === "sleep" || h.state === "rest" ? w.shelters.find((s) => s.id === h.home) : null;
       if (home && home.tier >= 3 && !dr.fury) continue; // stone + reinforced houses keep the fire out (not a furious dragon's)
-      hurtHuman(w, h, dr.fury ? 0.5 : 0.32, fx, fy, "burn");
+      hurtHuman(w, h, (dr.fury ? 0.5 : 0.32) * hot, fx, fy, "burn");
     }
     // Neanderthals in the flames, and their camps' stores
     for (const b of [...w.rivals.brutes]) if (!b.snatched && !favored(w, b.clan, dr) && Math.hypot(b.x - fx, b.y - fy) < r) w.rivals.hit(w, b, dr.fury ? 0.4 : 0.25, fx, fy, true);
@@ -510,12 +534,14 @@ export class Dragons {
     // thick scales: a wild dragon takes half of any hit (a furious parent shrugs off almost everything: 50x harder)
     dmg *= 0.5;
     if (dr.fury) dmg /= 50;
+    // raging (its young were killed): every level of rage makes it much harder to hurt
+    dmg /= 1 + (dr.rage ?? 0) * 1.5;
     if (dr.prey && this.rng() < 0.1) this.release(w, dr, true);
     dr.hp -= dmg;
     dr.hit = 1;
     dr.calmT = 0;
     // smart: hurt + outmatched, it doesn't fight to the end: it breaks off to heal
-    if (!dr.owner && !dr.fury && dr.hp > 0 && dr.hp < dr.maxHp * 0.6 && !(dr.oddsT ?? 0) && !["flee", "leave", "home", "perch", "offering"].includes(dr.state)) {
+    if (!dr.owner && !dr.fury && !(dr.rage ?? 0) && dr.hp > 0 && dr.hp < dr.maxHp * 0.6 && !(dr.oddsT ?? 0) && !["flee", "leave", "home", "perch", "offering"].includes(dr.state)) {
       dr.oddsT = 3;
       if (this.foesNear(w, dr.x, dr.y) > (dr.hp / dr.maxHp) * 18) {
         dr.oddsT = 30;
@@ -533,17 +559,21 @@ export class Dragons {
     }
     w.particles.burst(P.Star, dr.x, dr.y, 2, 30, { z: dr.z + 20, size: 6, max: 0.6 });
     w.sfx("thunk", dr.x, dr.y, 0.9, 0.7);
+    if (dr.hp <= 0 && dr.young) youngLost(w, dr);
     if (dr.hp <= 0) {
       // cartoon crash-landing: a poof of smoke, a feast, and a shiny scale
       w.particles.burst(P.Poof, dr.x, dr.y, 18, 90, { size: 18, max: 1.4, color: "rgba(220,210,200,0.95)" });
       w.addItem("meat", dr.x, dr.y, { amount: 4 });
       w.camp.stock.gold += 3;
-      w.toast("🏆", `${dr.name} crashed down and limped away! The tribe found 3 gold dragon scales.`, dr.x, dr.y);
+      w.toast("🏆", `${dr.name} crashed down and fell! The tribe found 3 gold dragon scales.`, dr.x, dr.y);
+      raiseBones(w, dr, false);
       w.discover("dragonSlayer", dr.x, dr.y);
       w.celebrate("Hooray!");
       this.list.splice(this.list.indexOf(dr), 1);
       if (dr.nest) nestLost(w, dr);
       w.events.push({ type: "removed", id: dr.id });
+    } else if (fightBack(w, dr)) {
+      // it turns on whoever attacked it (dragonRage.ts)
     } else if (dr.state === "circle" || dr.state === "eat") {
       // being shot makes it angry: go straight for whoever is shooting
       if (dr.state === "eat") {
@@ -624,8 +654,9 @@ export class Dragons {
 
   /** A wild youngster at its parents' nest. */
   private youngStep(w: World, dr: Dragon, nest: DragonNest, dt: number) {
+    // (it keeps getting older once grown: in time it flies off to make its own nest, dragonBrood.ts)
+    dr.age = (dr.age ?? 0) + dt;
     if ((dr.growth ?? 0) < 1) {
-      dr.age = (dr.age ?? 0) + dt;
       const before = dr.growth ?? 0;
       dr.growth = Math.min(1, (dr.age ?? 0) / GROW_SECONDS);
       if (Math.floor(before * 4) !== Math.floor(dr.growth * 4)) newDragonStats(dr);
@@ -750,6 +781,8 @@ export class Dragons {
           w.alarm(w.camp.x, w.camp.y, 1400, 1, "😱", false);
           return true;
         }
+        // brooding: wood into the nest, fire into the wood, to keep its eggs hot (dragonBrood.ts)
+        if (broodStep(w, dr, nest, dt)) return true;
         // expecting: back and forth with branches for the nest
         if (dr.gravid && dr.t > 14) {
           dr.t = 0;
@@ -777,7 +810,8 @@ export class Dragons {
         if (dr.t > 60 + (dr.id % 50)) {
           dr.t = 0;
           // now and then it goes raiding the settlement (rarely, never in Calm), else hunting
-          if (w.tribe.danger !== "calm" && w.elapsed > 1800 && this.rng() < 0.1 && !w.tribe.raid) {
+          // (one nest dragon at a time: with dragons spreading over the land, the town isn't swamped)
+          if (w.tribe.danger !== "calm" && w.elapsed > 1800 && this.rng() < 0.1 && !w.tribe.raid && !this.list.some((o) => o !== dr && o.nest && (o.state === "arrive" || o.state === "circle" || o.state === "strafe"))) {
             dr.tx = w.camp.x;
             dr.ty = w.camp.y;
             this.go(dr, "arrive");
@@ -928,7 +962,7 @@ export class Dragons {
         dr.prey = p.id;
         this.go(dr, "carry");
         w.sfx("screech", dr.x, dr.y, 1.2, 0.5);
-        w.toast("🐉", `${dr.name} snatched ${p.name} the Neanderthal right out of the camp!`, p.x, p.y);
+        w.toast("🐉", `${dr.name} snatched ${w.rivals.label(w, p)} right out of the camp!`, p.x, p.y);
       }
     }
   }
@@ -954,11 +988,11 @@ export class Dragons {
     // a Neanderthal: let go over the volcano (we watch them fall), or eaten at the nest
     dr.prey = undefined;
     const clan = w.rivals.clan(p.clan);
-    if (toVolcano) this.dropBody(w, dr, p, true, true, `${dr.name} dropped ${p.name} of the ${clan?.name ?? "?"} clan into the volcano!`);
+    if (toVolcano) this.dropBody(w, dr, p, true, true, p.tree ? `${dr.name} dropped ${w.rivals.label(w, p)} into the volcano!` : `${dr.name} dropped ${p.name} of the ${clan?.name ?? "?"} clan into the volcano!`);
     else {
       p.snatched = undefined;
       w.sfx("chomp", dr.x, dr.y, 1.2, 0.5);
-      w.toast("🐉", `${dr.name} ate ${p.name} the Neanderthal.`, dr.x, dr.y);
+      w.toast("🐉", `${dr.name} ate ${w.rivals.label(w, p)}.`, dr.x, dr.y);
       w.rivals.kill(w, p);
     }
     this.afterPrey(dr);
@@ -1099,11 +1133,12 @@ export class Dragons {
       ...(d.fromNest ? { fromNest: d.fromNest } : {}),
       ...(d.young ? { young: true, age: r(d.age ?? 0) } : {}),
       ...(d.vet ? { vet: Math.round(d.vet * 100) / 100 } : {}),
+      ...(d.rage ? { rage: d.rage } : {}),
       ...(d.tint !== undefined ? { tint: d.tint, marks: d.marks, eye: d.eye } : {}),
       ...(d.hatchedBy ? { hatchedBy: d.hatchedBy } : {}),
       ...(d.owner ? {
         owner: true, age: r(d.age ?? 0), skills: d.skills, partner: d.partner, stamina: r(d.stamina ?? 1), energy: r(d.energy ?? 1),
-        hunger: r(d.hunger ?? 0), auto: d.auto !== false, keeper: d.keeper, roost: d.roost, rare: d.rare || undefined, carrying: d.carrying || undefined,
+        hunger: r(d.hunger ?? 0), auto: d.auto !== false, post: d.post ? { kind: d.post.kind, x: r(d.post.x), y: r(d.post.y), t: 0, pts: d.post.pts?.map((p) => ({ x: r(p.x), y: r(p.y) })) } : undefined, keeper: d.keeper, roost: d.roost, rare: d.rare || undefined, carrying: d.carrying || undefined,
       } : {}),
     });
     return {
@@ -1142,14 +1177,15 @@ export class Dragons {
       if (owned) {
         Object.assign(dr, {
           owner: true, age: o.age ?? 0, skills: { ...(o.skills ?? {}) }, partner: o.partner, stamina: o.stamina ?? 1, energy: o.energy ?? 1,
-          hunger: o.hunger ?? 0, auto: o.auto !== false, keeper: o.keeper, roost: o.roost, rare: !!o.rare, carrying: o.carrying ?? null, cmd: null, fireCd: 0, burst: 0, lesson: null,
+          hunger: o.hunger ?? 0, auto: o.auto !== false, keeper: o.keeper, roost: o.roost, rare: !!o.rare, carrying: o.carrying ?? null, post: o.post, cmd: null, fireCd: 0, burst: 0, lesson: null,
         });
       }
       return dr;
     };
     for (const s of d.wild ?? []) {
       const dr = make(s, false);
-      const o = s as { fury?: boolean; furyT?: number; waves?: number; young?: boolean; age?: number };
+      const o = s as { fury?: boolean; furyT?: number; waves?: number; young?: boolean; age?: number; rage?: number };
+      if (o.rage) dr.rage = o.rage;
       if (o.fury) Object.assign(dr, { fury: true, furyT: o.furyT ?? 120, waves: o.waves ?? 0, maxHp: BREEDS[dr.breed ?? "fire"].hp });
       if (o.young) {
         dr.young = true;

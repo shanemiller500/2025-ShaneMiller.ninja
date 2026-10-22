@@ -5,6 +5,7 @@
 /*  Kid-safe cartoon rules: downed dinos poof into drumsticks, and     */
 /*  "gobbled" cave people vanish in a dust cloud.                      */
 /* ------------------------------------------------------------------ */
+import { removeHuman } from "./death";
 import { occupy } from "./clanHolds";
 import { hasVault } from "./deepBuild";
 import { CAMP_LEVELS, FACTS } from "../data/facts";
@@ -88,6 +89,8 @@ export class Tribe {
   towers: Tower[] = [];
   projectiles: Projectile[] = [];
   level = 0;
+  /** people we've lost for good (death.ts) */
+  lost = 0;
   danger: Danger = "normal";
   /** how evolved raiders have become */
   evolution = 0;
@@ -1748,9 +1751,7 @@ export function gobble(w: World, d: Dino, h: Human) {
   const def = sp(d.species);
   w.particles.burst(P.Poof, h.x, h.y, 12, 70, { size: 14, max: 1, color: "rgba(235,228,210,0.95)" });
   w.sfx("chomp", h.x, h.y, 1);
-  const i = w.humans.indexOf(h);
-  if (i >= 0) w.humans.splice(i, 1);
-  w.events.push({ type: "removed", id: h.id });
+  removeHuman(w, h);
   w.toast("😱", `Oh no! ${h.name} got gobbled by a ${def.nick}!`, h.x, h.y);
   d.hunger = 0;
   emote(d, "😋", 2);

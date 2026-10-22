@@ -6,6 +6,7 @@
 /*  Ash hangs in the air afterwards. A Deep shelter or a charged       */
 /*  Resonance shield gives people a chance — never a promise.          */
 /* ------------------------------------------------------------------ */
+import { removeHuman } from "./death";
 import { BUILDINGS } from "../data/colony";
 import { SHIELD_HOLD } from "../data/civ";
 import { sp } from "../data/species";
@@ -571,9 +572,7 @@ export class Extinction {
 
   private kill(w: World, h: Human) {
     w.particles.burst(P.Dust, h.x, h.y, 6, 40, { size: 8, max: 0.8, color: "rgba(90,80,70,0.6)" });
-    const i = w.humans.indexOf(h);
-    if (i >= 0) w.humans.splice(i, 1);
-    w.events.push({ type: "removed", id: h.id });
+    removeHuman(w, h);
     if (this.stats) this.stats.peopleLost++;
   }
 

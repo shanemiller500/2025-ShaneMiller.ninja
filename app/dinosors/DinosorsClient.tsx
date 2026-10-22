@@ -363,12 +363,12 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
               }}
             />
           )}
-          {campOpen && <CampPanel snap={snap} engine={engine} onClose={() => setCampOpen(false)} />}
+          {campOpen && <CampPanel snap={snap} engine={engine} onClose={() => setCampOpen(false)} onBuildStation={(kind) => { setTool({ id: "build", build: kind }); setCampOpen(false); }} />}
           {shiftsOpen && <ShiftsPanel snap={snap} engine={engine} onClose={() => setShiftsOpen(false)} onResearch={() => { setShiftsOpen(false); setCivOpen(true); }} />}
           <RaidBanner snap={snap} engine={engine} />
           {hatchId !== null && <HatchScene key={hatchId} engine={engine} dragonId={hatchId} onClose={() => setHatchId(null)} />}
           {evoOpen && <EvolutionPanel snap={snap} engine={engine} onClose={() => setEvoOpen(false)} />}
-          {civOpen && <CivPanel snap={snap} engine={engine} onClose={() => setCivOpen(false)} onChoose={() => setChoiceOpen(true)} onExtinction={() => setExtOpen(true)} />}
+          {civOpen && <CivPanel snap={snap} engine={engine} onClose={() => setCivOpen(false)} onChoose={() => setChoiceOpen(true)} onExtinction={() => setExtOpen(true)} onBuildStation={(kind) => { setTool({ id: "build", build: kind }); setCivOpen(false); }} />}
           <CivChoice open={choiceOpen} onClose={() => setChoiceOpen(false)} engine={engine} fontClass={fontClass} />
           <ExtinctionConfirm open={extOpen} cause={extCause} onClose={() => setExtOpen(false)} snap={snap} engine={engine} fontClass={fontClass} onToast={(icon, text) => pushToast({ icon, text })} />
           <ExtinctionBanner snap={snap} />

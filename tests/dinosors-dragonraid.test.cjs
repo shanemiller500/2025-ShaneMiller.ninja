@@ -86,7 +86,8 @@ test('a 10-strong raid: slayers drive the parent off, runners bring the eggs hom
   assert.equal(w.dragons.eggs.filter((e) => e.at === 'camp').length, 4, 'every egg made it home');
   assert.equal(most, 2, 'a runner carried two at once');
   assert.ok(parent.hp < parent.maxHp * 0.6 || !w.dragons.list.includes(parent), 'the slayers hurt the dragon badly');
-  assert.ok(people.every((h) => w.humans.includes(h)), 'nobody was killed');
+  // dragons fight back now and the fallen can die: a strong band still wins, at a price
+  assert.ok(people.filter((h) => !w.humans.includes(h)).length <= 3, 'most of the band made it home');
 });
 
 test('war dino riders: hard to hit, shoot from the saddle, and the bone spikes gore attackers', () => {

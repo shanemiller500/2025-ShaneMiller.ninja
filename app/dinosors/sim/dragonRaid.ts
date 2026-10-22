@@ -136,11 +136,16 @@ export function raidTarget(w: World): DragonNest | null {
 export function launchRaid(w: World, people: Human[], nest: DragonNest): Task | null {
   const band = people.filter((h) => !h.child && !h.stranger && !h.captive && !h.under && h.state !== "down");
   if (band.length < 2) return null;
-  const want = Math.max(1, Math.min(3, Math.round(band.length * 0.25)));
+  const eggs = nestEggs(w, nest).length;
   let runners = band.filter((h) => w.tribe.roleOf(h) === "eggRunner");
-  if (runners.length < want) {
-    const rest = band.filter((h) => !runners.includes(h) && w.tribe.roleOf(h) !== "dragonSlayer").sort((a, b) => (b.gear.outfit === OUTFIT_RUNNER ? 1 : 0) - (a.gear.outfit === OUTFIT_RUNNER ? 1 : 0) || b.hp - a.hp);
-    runners = runners.concat(rest.slice(0, want - runners.length));
+  if (runners.reduce((n, h) => n + eggCapacity(h), 0) < eggs || !runners.length) {
+    const rest = band.filter((h) => !runners.includes(h)).sort((a, b) => (b.gear.outfit === OUTFIT_RUNNER ? 1 : 0) - (a.gear.outfit === OUTFIT_RUNNER ? 1 : 0) || Number(w.tribe.roleOf(a) === "dragonSlayer") - Number(w.tribe.roleOf(b) === "dragonSlayer") || b.hp - a.hp);
+    const keepFighters = parentOf(w, nest) ? 1 : 0;
+    for (const h of rest) {
+      if (runners.length && runners.reduce((n, runner) => n + eggCapacity(runner), 0) >= eggs) break;
+      if (runners.length >= band.length - keepFighters) break;
+      runners.push(h);
+    }
   }
   for (const h of runners) raidRunners.add(h.id);
   for (const h of band) if (!runners.includes(h)) raidRunners.delete(h.id);
@@ -189,6 +194,21 @@ export function raidThink(w: World, h: Human, t: Task, done: () => void): boolea
     go(h, "walk", home.x, home.y);
     return true;
   }
+  // going badly (half the band down or lost, the dragon still strong): fall back home, carrying on is death now
+  t.size ??= band.length;
+  const fallen = band.filter((p) => p.state === "down").length + Math.max(0, t.size - band.length);
+  if (!t.retreat && parent && fallen >= Math.ceil(t.size * 0.5) && parent.hp > parent.maxHp * 0.5) {
+    t.retreat = true;
+    w.toast("🏃", `The raid is going badly: ${fallen} down or lost and ${parent.name} is still strong. Fall back to camp!`, nest.x, nest.y);
+  }
+  if (t.retreat) {
+    if (Math.hypot(h.x - home.x, h.y - home.y) < 120) {
+      done();
+      return false;
+    }
+    go(h, "walk", home.x, home.y);
+    return true;
+  }
   const gather = goAt.get(t.id);
   // gathering: everyone to the staging point first
   if (gather === undefined) {
@@ -210,6 +230,16 @@ export function raidThink(w: World, h: Human, t: Task, done: () => void): boolea
     }
   }
   const busy = !parent || Math.hypot(parent.x - nest.x, parent.y - nest.y) > 260 || parent.state === "defend" || parent.state === "chase" || parent.hit > 0 || band.some((p) => !raidRunners.has(p.id) && Math.hypot(p.x - parent.x, p.y - parent.y) < 140);
+  if (eggs.length && busy && !runner) {
+    const free = band.filter((p) => raidRunners.has(p.id)).reduce((n, p) => n + Math.max(0, eggCapacity(p) - eggsCarried(p)), 0);
+    const fighters = band.filter((p) => !raidRunners.has(p.id));
+    if (free < eggs.length && (!parent || fighters.length > 1)) {
+      raidRunners.add(h.id);
+      h.order = null;
+      say(h, "I'll help carry eggs!");
+      return true;
+    }
+  }
   if (runner) {
     // wait for the slayers to draw the dragon off, then dash in
     if (!busy && (w.elapsed - (goAt.get(t.id) ?? w.elapsed)) < 30) {

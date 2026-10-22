@@ -97,7 +97,7 @@ export function cutCarcass(w: World, it: Item, prefer?: Resource | null, cap = 2
       const bits = r === "meat" ? "#c8584a" : r === "hide" ? "#8a5a36" : "#efe6cf";
       w.particles.burst(P.Crumb, it.x, it.y, 5, 50, { z: 8, vz: 50, g: 200, size: 2.4, max: 0.6, color: bits });
       w.sfx(r === "bone" || r === "tooth" ? "clack" : "chop", it.x, it.y, 0.45);
-      if (carcassTotal(c) <= 0) clearCarcass(w, it);
+      if (carcassTotal(c) <= 0 && !c.roast) clearCarcass(w, it);
       return { r, n };
     }
   }
@@ -125,6 +125,8 @@ export function eatCarcass(it: Item, units: number) {
 export function updateCarcass(w: World, it: Item, dt: number) {
   const c = it.carcass;
   if (!c) return;
+  // in the town nothing rots: it's gathered, or a dragon roasts it for the feast table (feast.ts)
+  if (c.town) it.t = Math.min(it.t, 80);
   const t = it.t;
   // after a couple of minutes the meat starts to go off, then the hide
   const meatCap = c.max.meat * Math.max(0, Math.min(1, 1 - (t - 120) / 150));
@@ -137,7 +139,7 @@ export function updateCarcass(w: World, it: Item, dt: number) {
   if (c.rot > 0.15 && c.meat > 0 && w.inView(it.x, it.y, 60) && w.rng() < dt * 3) {
     w.particles.spawn(P.Note, it.x + (w.rng() - 0.5) * c.size * 0.5, it.y, { z: 10 + w.rng() * 16, vz: 6, vx: (w.rng() - 0.5) * 20, size: 3, max: 1, color: "fly" });
   }
-  if (t > 900 || carcassTotal(c) <= 0.01) clearCarcass(w, it);
+  if ((t > 900 && !c.town) || carcassTotal(c) + (c.roast ?? 0) <= 0.01) clearCarcass(w, it);
 }
 
 /** People who are cutting at (or walking to) this body. */

@@ -12,6 +12,7 @@
 /*  take up the clan's ways, keep their own looks, and in time they    */
 /*  start families there (rivals.ts: births).                          */
 /* ------------------------------------------------------------------ */
+import { removeHuman } from "./death";
 import { GROWN_AGE, killHuman, say as sayB, type Rivals } from "./rivals";
 import { say } from "./humans";
 import { pick } from "./rng";
@@ -124,9 +125,7 @@ function join(w: World, r: Rivals, h: Human, clan: Clan) {
   // let go of anything that tied them to us
   const dr = h.dragon ? w.dragons.owned.find((d) => d.id === h.dragon) : null;
   if (dr && dr.partner === h.id) dr.partner = undefined;
-  const i = w.humans.indexOf(h);
-  if (i >= 0) w.humans.splice(i, 1);
-  w.events.push({ type: "removed", id: h.id });
+  removeHuman(w, h);
   const b = r.addBrute(w, clan, h.x, h.y, { name: h.name, age: GROWN_AGE, turned: true, weapon: "club", look: { skin: h.skin, hair: h.hair, fur: h.fur } });
   sayB(b, "I'm one of you now.", 3);
   w.toast("💔", `${h.name} gave up waiting to be rescued and joined the ${clan.name} clan. They live their way now, and in time they may start a family there.`, h.x, h.y);

@@ -2,11 +2,19 @@
 /*  Dinosaur Land audio: every sound is synthesized with WebAudio      */
 /*  (no recordings, no licensing). Sounds are grouped into categories, */
 /*  attenuated + panned by distance from the camera, rate-limited, and */
-/*  the ambience beds (jungle, night, rain, wind, water, fire) fade    */
-/*  with context instead of playing all the time.                      */
+/*  music and tonal birds provide the background without noise beds.   */
 /* ------------------------------------------------------------------ */
 
-export type Category = "ambient" | "weather" | "creatures" | "effects" | "ui";
+import type { MusicMood } from "../game/musicMood";
+
+export type Category = "ambient" | "weather" | "creatures" | "effects" | "ui" | "music";
+
+const THEMES = {
+  calm: { beat: 0.56, notes: [60, 64, 67, 72, 69, 67, 64, 62, 65, 69, 72, 69, 67, 64, 62, 60], roots: [48, 45, 41, 43], wave: "sine" as OscillatorType, peak: 0.15 },
+  hunt: { beat: 0.41, notes: [62, 65, 69, 72, 69, 65, 64, 62, 60, 65, 69, 72, 74, 72, 69, 65], roots: [50, 48, 46, 45], wave: "triangle" as OscillatorType, peak: 0.13 },
+  attack: { beat: 0.3, notes: [69, 72, 76, 72, 67, 71, 74, 71, 65, 69, 72, 69, 64, 68, 71, 68], roots: [45, 43, 41, 40], wave: "triangle" as OscillatorType, peak: 0.17 },
+};
+const pitchOf = (midi: number) => 440 * Math.pow(2, (midi - 69) / 12);
 
 interface Listener {
   x: number;
@@ -77,10 +85,12 @@ export class AudioManager {
   private cats = new Map<Category, GainNode>();
   private noise: AudioBuffer | null = null;
   private last = new Map<string, number>();
-  private bedNodes: Partial<Record<keyof Beds, GainNode>> = {};
   private birdT = 0;
-  private crackleT = 0;
   private active = 0;
+  private musicMood: MusicMood | null = null;
+  private musicLayer: GainNode | null = null;
+  private musicStep = 0;
+  private nextMusicAt = 0;
   muted = false;
   volume = 0.8;
   listener: Listener = { x: 0, y: 0, zoom: 1, span: 800 };
@@ -99,16 +109,15 @@ export class AudioManager {
       comp.threshold.value = -14;
       comp.ratio.value = 4;
       this.master.connect(comp).connect(ctx.destination);
-      for (const c of ["ambient", "weather", "creatures", "effects", "ui"] as Category[]) {
+      for (const c of ["ambient", "weather", "creatures", "effects", "ui", "music"] as Category[]) {
         const g = ctx.createGain();
-        g.gain.value = c === "ambient" ? 0.55 : c === "weather" ? 0.8 : 1;
+        g.gain.value = c === "ambient" ? 0.55 : c === "weather" ? 0.8 : c === "music" ? 0.48 : 1;
         g.connect(this.master);
         this.cats.set(c, g);
       }
       this.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
       const d = this.noise.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-      this.startBeds();
     }
     if (this.ctx.state === "suspended") void this.ctx.resume();
   }
@@ -138,6 +147,83 @@ export class AudioManager {
   dispose() {
     void this.ctx?.close();
     this.ctx = null;
+    this.musicLayer = null;
+    this.musicMood = null;
+  }
+
+  /** Finish the current melody before choosing the next scene's music. */
+  updateMusic(mood: MusicMood) {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== "running" || this.muted || this.volume <= 0) return;
+    const now = ctx.currentTime;
+    if (this.musicMood === null) this.nextMusicAt = now + 0.04;
+    const phraseEnded = this.musicMood !== null && this.musicStep >= THEMES[this.musicMood].notes.length;
+    // Hold the last notes and accompaniment until the next phrase starts.
+    if (this.musicMood === null || (phraseEnded && this.nextMusicAt < now + 0.55)) {
+      const at = Math.max(now + 0.02, this.nextMusicAt);
+      if (mood !== this.musicMood) {
+        const old = this.musicLayer;
+        if (old) {
+          old.gain.cancelScheduledValues(at);
+          old.gain.setTargetAtTime(0, at, 0.12);
+          window.setTimeout(() => old.disconnect(), Math.max(0, at - now) * 1000 + 2200);
+        }
+        const layer = ctx.createGain();
+        layer.gain.setValueAtTime(0, at);
+        layer.gain.setTargetAtTime(1, at, 0.12);
+        layer.connect(this.cats.get("music")!);
+        this.musicLayer = layer;
+        this.musicMood = mood;
+      }
+      this.musicStep = 0;
+      this.nextMusicAt = at;
+    }
+    if (this.nextMusicAt < now) this.nextMusicAt = now + 0.02;
+    const theme = THEMES[this.musicMood!];
+    let scheduled = 0;
+    while (this.musicStep < theme.notes.length && this.nextMusicAt < now + 0.55 && scheduled++ < 4) {
+      const at = this.nextMusicAt;
+      const step = this.musicStep++;
+      const layer = this.musicLayer!;
+      this.musicNote(layer, pitchOf(theme.notes[step]), at, theme.beat * (this.musicMood === "calm" ? 0.9 : 0.72), theme.peak, theme.wave);
+      if (step % 4 === 0) {
+        const root = theme.roots[Math.floor(step / 4)];
+        this.musicNote(layer, pitchOf(root), at, theme.beat * 3.5, this.musicMood === "calm" ? 0.1 : 0.13, "sine");
+        if (this.musicMood === "calm") this.musicNote(layer, pitchOf(root + 7), at, theme.beat * 2.7, 0.045, "sine");
+      }
+      if (this.musicMood !== "calm" && step % 2 === 0) this.musicPulse(layer, at, step % 4 === 0 ? 0.13 : 0.075);
+      this.nextMusicAt += theme.beat;
+    }
+  }
+
+  private musicNote(layer: GainNode, freq: number, at: number, dur: number, peak: number, wave: OscillatorType) {
+    const ctx = this.ctx!;
+    const tone = ctx.createOscillator();
+    tone.type = wave;
+    tone.frequency.setValueAtTime(freq, at);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, at);
+    gain.gain.exponentialRampToValueAtTime(peak, at + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    tone.connect(gain).connect(layer);
+    tone.start(at);
+    tone.stop(at + dur + 0.02);
+    tone.onended = () => { tone.disconnect(); gain.disconnect(); };
+  }
+
+  private musicPulse(layer: GainNode, at: number, peak: number) {
+    const ctx = this.ctx!;
+    const drum = ctx.createOscillator();
+    drum.type = "sine";
+    drum.frequency.setValueAtTime(105, at);
+    drum.frequency.exponentialRampToValueAtTime(48, at + 0.17);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(peak, at);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.19);
+    drum.connect(gain).connect(layer);
+    drum.start(at);
+    drum.stop(at + 0.2);
+    drum.onended = () => { drum.disconnect(); gain.disconnect(); };
   }
 
   /* ----------------------------- spatial ----------------------------- */
@@ -343,24 +429,14 @@ export class AudioManager {
         break;
       }
       case "hiss":
-        noise("highpass", 3000 * p, 5000 * p, 0.7, 0.7, 0.35, 0.05);
+        osc("sine", 680 * p, 280 * p, 0.22, 0.1, 0.02);
         break;
       case "grunt":
         osc("square", 120 * p, 80 * p, 0.25, 0.3, 0.02);
         noise("lowpass", 600, 300, 1, 0.2, 0.2);
         break;
       case "snore": {
-        const n = this.noiseSrc(at, 1.3);
-        const f = ctx.createBiquadFilter();
-        f.type = "bandpass";
-        f.frequency.value = 280 * p;
-        f.Q.value = 4;
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0.0001, at);
-        g.gain.linearRampToValueAtTime(0.5, at + 0.5);
-        g.gain.linearRampToValueAtTime(0.0001, at + 1.2);
-        n.connect(f).connect(g).connect(out);
-        osc("sawtooth", 60 * p, 55 * p, 1, 0.08, 0.4);
+        osc("sine", 115 * p, 75 * p, 0.65, 0.12, 0.18);
         break;
       }
       case "step":
@@ -389,7 +465,7 @@ export class AudioManager {
         osc("sine", 90, 28, 1.8, 0.9, 0.005);
         break;
       case "ignite":
-        noise("bandpass", 600, 2400, 1, 0.5, 0.35, 0.05);
+        osc("triangle", 190 * p, 460 * p, 0.25, 0.14, 0.02);
         break;
       case "chomp":
         noise("bandpass", 1200, 800, 2, 0.06, 0.5);
@@ -432,17 +508,7 @@ export class AudioManager {
         noise("bandpass", 1800, 1200, 3, 0.05, 0.4);
         break;
       case "whoosh": {
-        const n = this.noiseSrc(at, 3.3);
-        const f = ctx.createBiquadFilter();
-        f.type = "bandpass";
-        f.Q.value = 2;
-        f.frequency.setValueAtTime(300, at);
-        f.frequency.exponentialRampToValueAtTime(2500, at + 3.1);
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0.0001, at);
-        g.gain.exponentialRampToValueAtTime(0.7, at + 3);
-        g.gain.exponentialRampToValueAtTime(0.0001, at + 3.25);
-        n.connect(f).connect(g).connect(out);
+        osc("triangle", 220 * p, 620 * p, 0.38, 0.17, 0.06);
         break;
       }
       case "clack":
@@ -516,7 +582,7 @@ export class AudioManager {
         break;
       }
       case "rustle":
-        noise("highpass", 3500, 2500, 0.6, 0.3, 0.25, 0.03);
+        osc("triangle", 240 * p, 130 * p, 0.08, 0.09, 0.01);
         break;
       case "stampede":
         noise("lowpass", 200, 120, 1, 2.5, 0.7, 0.3);
@@ -561,8 +627,7 @@ export class AudioManager {
         noise("bandpass", 900, 500, 2, 0.06, 0.4);
         break;
       case "sizzle":
-        noise("highpass", 4500, 3500, 0.7, 0.9, 0.18, 0.08);
-        for (let i = 0; i < 5; i++) noise("highpass", 3000, 2500, 1, 0.02, 0.35, 0.001, Math.random() * 0.8);
+        osc("sine", 540 * p, 340 * p, 0.12, 0.08, 0.02);
         break;
       case "hum":
         // low, slightly beating drone of tuned stone
@@ -606,84 +671,14 @@ export class AudioManager {
 
   /* ----------------------------- ambience ----------------------------- */
 
-  private startBeds() {
-    const ctx = this.ctx!;
-    const loop = (type: BiquadFilterType, freq: number, q: number, cat: Category) => {
-      const n = ctx.createBufferSource();
-      n.buffer = this.noise;
-      n.loop = true;
-      const f = ctx.createBiquadFilter();
-      f.type = type;
-      f.frequency.value = freq;
-      f.Q.value = q;
-      const g = ctx.createGain();
-      g.gain.value = 0;
-      n.connect(f).connect(g).connect(this.cats.get(cat)!);
-      n.start();
-      return { g, f };
-    };
-    this.bedNodes.rain = loop("bandpass", 2400, 0.4, "weather").g;
-    const wind = loop("bandpass", 500, 1.5, "weather");
-    this.bedNodes.wind = wind.g;
-    // wind howls by slowly sweeping its filter
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.15;
-    const lg = ctx.createGain();
-    lg.gain.value = 250;
-    lfo.connect(lg).connect(wind.f.frequency);
-    lfo.start();
-    this.bedNodes.water = loop("lowpass", 900, 0.5, "ambient").g;
-    this.bedNodes.volcano = loop("lowpass", 90, 1, "ambient").g;
-    // crickets: a high tone chopped by a fast LFO
-    const cr = ctx.createOscillator();
-    cr.frequency.value = 4400;
-    const am = ctx.createGain();
-    am.gain.value = 0;
-    const chop = ctx.createOscillator();
-    chop.type = "square";
-    chop.frequency.value = 28;
-    const chopG = ctx.createGain();
-    chopG.gain.value = 0.5;
-    chop.connect(chopG).connect(am.gain);
-    const ng = ctx.createGain();
-    ng.gain.value = 0;
-    cr.connect(am).connect(ng).connect(this.cats.get("ambient")!);
-    cr.start();
-    chop.start();
-    this.bedNodes.night = ng;
-  }
-
-  /** Called a few times a second with what the camera can see. */
+  /** Occasional tonal bird calls; no continuous static or crackle. */
   updateBeds(b: Beds, dt: number) {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== "running") return;
-    const now = ctx.currentTime;
-    const set = (k: keyof Beds, v: number) => this.bedNodes[k]?.gain.setTargetAtTime(v, now, 0.6);
-    set("rain", b.rain * 0.35);
-    set("wind", b.wind * 0.22);
-    set("water", b.water * 0.12);
-    set("night", b.night * 0.025);
-    set("volcano", b.volcano * 0.5);
-    // birds by day (random little calls, never a loop)
     this.birdT -= dt;
     if (b.day > 0.4 && b.rain < 0.4 && this.birdT <= 0) {
       this.birdT = 1.5 + Math.random() * 4;
       this.bird(b.day);
-    }
-    // crackles from visible fires
-    this.crackleT -= dt;
-    if (b.fire > 0 && this.crackleT <= 0) {
-      this.crackleT = 0.05 + Math.random() * (0.4 / Math.min(4, b.fire));
-      const out = this.out("ambient", Math.min(0.35, 0.08 + b.fire * 0.03), (Math.random() - 0.5) * 0.8);
-      const at = now + 0.01;
-      const n = this.noiseSrc(at, 0.05);
-      const f = ctx.createBiquadFilter();
-      f.type = "highpass";
-      f.frequency.value = 1500 + Math.random() * 2500;
-      const g = ctx.createGain();
-      this.env(g, at, 0.002, 0.6, 0.03);
-      n.connect(f).connect(g).connect(out);
-      window.setTimeout(() => out.disconnect(), 300);
     }
   }
 

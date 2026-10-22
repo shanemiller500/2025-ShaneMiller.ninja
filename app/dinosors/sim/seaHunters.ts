@@ -235,7 +235,7 @@ function seize(w: World, d: Dino, p: Prey) {
     return;
   }
   if (p.kind === "brute") {
-    w.toast("🌊", `A ${who} dragged ${p.b.name} the Neanderthal into the water!`, at.x, at.y);
+    w.toast("🌊", `A ${who} dragged ${w.rivals.label(w, p.b)} into the water!`, at.x, at.y);
     w.rivals.kill(w, p.b);
     return;
   }

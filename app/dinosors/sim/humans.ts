@@ -5,6 +5,8 @@
 /* ------------------------------------------------------------------ */
 import { roomOf } from "./riderHall";
 import { huntThink } from "./chariots";
+import { feastThink } from "./feast";
+import { cleanupThink } from "./cleanup";
 import { CAVE_NAMES } from "../data/facts";
 import { HOUSING, NODES } from "../data/colony";
 import { sp } from "../data/species";
@@ -34,7 +36,44 @@ import { COURAGE, bandNear, canFight, courageScore, foesNear, onMission } from "
 import { cutCarcass, cutTime, hasYield } from "./carcass";
 import { hasCart, pickNeed } from "./carts";
 import { keeperThink } from "./ourCatapults";
+import { researchShortages } from "./researchNeeds";
 import { OUTFIT_BY_ID } from "../data/colony";
+
+/**
+ * Go and patch up someone who's knocked out. `comrade`: only a teammate on the same job (or in the same raid
+ * unit) who's been down a while, but then even in the thick of a fight. True = on their way / patching them up.
+ */
+function rescueThink(w: World, h: Human, comrade: boolean): boolean {
+  if (h.child || h.riding || h.aloft || h.chariot || h.captive || h.under || h.state === "down" || h.state === "heal") return false;
+  const unit = (o: Human) => !!w.colony.hunt?.crew.some((m) => m.id === o.id) && !!w.colony.hunt?.crew.some((m) => m.id === h.id);
+  let best: Human | null = null;
+  let bd = comrade ? 450 : 500;
+  for (const o of w.humans) {
+    if (o === h || o.state !== "down") continue;
+    if (comrade && !((h.taskId && o.taskId === h.taskId) || unit(o))) continue;
+    if (comrade && (o.downT ?? 0) < 8) continue;
+    // don't run into the fire: wait till the dragon (or the predator) isn't right on top of them
+    // (a dragon that's badly hurt and sulking on its nest lets them be dragged clear)
+    if (w.dragons.list.some((d) => !d.young && d.hp > 0 && Math.hypot(d.x - o.x, d.y - o.y) < 260 && d.z < 160 && !(d.state === "perch" && d.hp < d.maxHp * 0.6))) continue;
+    if (w.dinos.some((d) => !d.owner && d.health > 0 && sp(d.species).diet !== "herbivore" && sizeOf(d) > 30 && Math.hypot(d.x - o.x, d.y - o.y) < 180)) continue;
+    if (w.humans.some((q) => q !== h && q.state === "heal" && q.targetId === o.id)) continue;
+    const d = Math.hypot(o.x - h.x, o.y - h.y);
+    if (d < bd) {
+      bd = d;
+      best = o;
+    }
+  }
+  if (!best) return false;
+  if (Math.hypot(h.x - best.x - 14, h.y - best.y) < 12) {
+    go(h, "heal", h.x, h.y);
+    h.targetId = best.id;
+    h.dir = best.x > h.x ? 1 : -1;
+  } else {
+    say(h, `${best.name}!`);
+    go(h, "walk", best.x + 14, best.y);
+  }
+  return true;
+}
 
 /** How much rain + wet this person's clothes keep off (0..1). */
 export function rainGuard(h: Human) {
@@ -670,6 +709,23 @@ function think(w: World, h: Human) {
   if (h.state === "tossed" || h.state === "lookUp" || h.state === "celebrate" || h.state === "down") return;
   if (h.state === "craft" && camp.crafting?.by === h.id && (w.shifts.active(w, h) || h.stateT < 3)) return;
 
+  // a comrade on the same job (a raid, the unit) is down and fading: get to them, even mid-fight (death.ts)
+  if (rescueThink(w, h, true)) return;
+  // a nest raid that's falling back: everyone breaks off and heads home (dragonRaid.ts)
+  const raid = w.tasks.get(h.taskId);
+  if (raid?.kind === "dragonRaid" && raid.retreat && h.state !== "heal" && !h.egg) {
+    const home = { x: w.camp.x, y: w.camp.y + 40 };
+    if (Math.hypot(h.x - home.x, h.y - home.y) < 140) {
+      raid.people = raid.people.filter((id) => id !== h.id);
+      h.taskId = 0;
+      h.order = null;
+      go(h, "idle", h.x, h.y);
+    } else if (h.state !== "walk" || Math.hypot(h.tx - home.x, h.ty - home.y) > 20) {
+      h.order = null;
+      go(h, "walk", home.x, home.y);
+    }
+    return;
+  }
   // on a chariot hunt: boarding, marching beside the chariots, fighting, fetching eggs (chariots.ts)
   if (w.colony.hunt && huntThink(w, h)) return;
   const tribe = w.tribe;
@@ -828,7 +884,7 @@ function think(w: World, h: Human) {
     if (spot) {
       if (Math.hypot(h.x - spot.x, h.y - spot.y) < 14) go(h, spot.home ? "hide" : "sitFire", h.x, h.y);
       else {
-        if (h.state !== "walk") say(h, pick(w.rng, ["Brrr!", "So cold!", "Fire, please!"]));
+        if (h.state !== "walk" && w.rng() < 0.25) say(h, pick(w.rng, ["Brrr!", "So cold!", "Fire, please!"]));
         go(h, "walk", spot.x, spot.y);
       }
       return;
@@ -917,6 +973,9 @@ function think(w: World, h: Human) {
     if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6 && !(h.riding && w.flags.has("rallyDinos") && role === "guard" && !h.taskId)) return;
   }
 
+  // the feast table: carrying the dragon roast over, or in line for a plate (feast.ts)
+  if (feastThink(w, h, !!task)) return;
+
   // 5. hungry → eat from the stockpile
   if (h.hunger > (task ? 0.85 : 0.6) && tribe.foodTotal(w) + (h.hunger > 0.9 ? camp.stock.meat : 0) > 0) {
     const area = homeArea(w, h);
@@ -926,25 +985,15 @@ function think(w: World, h: Human) {
     return;
   }
 
+  // the town gets cleaned up first: dead animals + loose bones inside our borders (cleanup.ts)
+  if (!task && cleanupThink(w, h)) return;
+
   // 6. the player's orders come before anything the tribe would choose
   if (task && taskThink(w, h)) return;
   if (h.taskId && w.tasks.get(h.taskId)?.kind === "operate") return;
 
-  // 7. a friend is knocked out nearby → help them up
-  if (!h.child && !h.taskId) {
-    const hurt = w.humans.find((o) => o !== h && o.state === "down" && Math.hypot(o.x - h.x, o.y - h.y) < 500 && !w.humans.some((q) => q !== h && q.state === "heal" && q.targetId === o.id));
-    if (hurt && !nearby) {
-      if (Math.hypot(h.x - hurt.x - 14, h.y - hurt.y) < 12) {
-        go(h, "heal", h.x, h.y);
-        h.targetId = hurt.id;
-        h.dir = hurt.x > h.x ? 1 : -1;
-      } else {
-        say(h, `${hurt.name}!`);
-        go(h, "walk", hurt.x + 14, hurt.y);
-      }
-      return;
-    }
-  }
+  // 7. a friend is knocked out nearby → help them up (see rescueThink, which runs earlier for comrades on a job)
+  if (!h.child && !h.taskId && !nearby && rescueThink(w, h, false)) return;
 
   // 8. fire near camp → bucket brigade
   if (!h.child && !h.taskId && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook") && w.tribe.fireAlarm && Math.hypot(h.x - w.tribe.fireAlarm.x, h.y - w.tribe.fireAlarm.y) < 520 && camp.learned.has("firefighting")) {
@@ -1038,12 +1087,14 @@ function think(w: World, h: Human) {
   if (role === "gatherer" && autoButcher(w, h, 700)) return;
 
   // Urgent plans first (including whatever a build site is stuck waiting for), then restock the lowest supplies evenly.
-  const urgent = camp.missing(w) ?? w.colony.missing(w) ?? w.civ.missing(w) ?? siteShortage(w);
-  let needs = urgent ? [urgent, ...stockPriorities(w).filter((r) => r !== urgent)] : stockPriorities(w);
+  const research = researchShortages(w);
+  const urgent = camp.missing(w) ?? w.colony.missing(w) ?? siteShortage(w);
+  const priority = [...(urgent ? [urgent] : []), ...research.filter((r) => r !== urgent)];
+  let needs = [...priority, ...stockPriorities(w).filter((r) => !priority.includes(r))];
   // nothing short: keep topping up whatever's lowest (now and then they take a break or go exploring instead)
   if (!needs.length && w.rng() < 0.7) needs = stockPriorities(w, true);
   // the lowest supplies first, two people each, then the next lowest… (carts for the bulky loads)
-  const job = pickNeed(w, h, needs, (r) => sourceFor(w, h, r));
+  const job = pickNeed(w, h, needs, (r) => sourceFor(w, h, r, undefined, undefined, research.includes(r) ? Math.hypot(WORLD_W, WORLD_H) : 900));
   if (job) {
     h.task = job.r;
     h.targetId = job.src.id;
@@ -1354,6 +1405,8 @@ export function updateHuman(w: World, h: Human, dt: number) {
   }
   updateWarmth(w, h, dt);
   recover(w, h, dt);
+  // didn't make it (death.ts): they're gone
+  if (!w.humans.includes(h)) return;
   if (h.state === "down") {
     h.vx = h.vy = 0;
     h.z = 0;

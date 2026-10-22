@@ -2,6 +2,7 @@
 /*  The toy box. Tool + option definitions (for the UI) and what each  */
 /*  one does when it touches the world (for the engine).               */
 /* ------------------------------------------------------------------ */
+import { removeHuman } from "../sim/death";
 import { placeHall } from "../sim/riderHall";
 import { TECH } from "../data/facts";
 import { CIV_TECH, LIFT, type CivTechId } from "../data/civ";
@@ -24,7 +25,7 @@ export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire
 export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
 export type LandOpt = "water" | "rock" | "mud" | "grass" | NodeKind;
 export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon" | "supervolcano";
-export type PeopleOpt = "adult" | "child" | "clan";
+export type PeopleOpt = "adult" | "child" | "clan" | "treeFolk";
 export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "bonegate" | "levitate" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | "cleanMud" | BuildingKind;
 
 export interface ToolState {
@@ -117,6 +118,7 @@ export const PEOPLE_OPTS: Opt<PeopleOpt>[] = [
   { value: "adult", icon: "🧔", label: "Cave person" },
   { value: "child", icon: "🧒", label: "Cave kid" },
   { value: "clan", icon: "🪓", label: "Neanderthal clan" },
+  { value: "treeFolk", icon: "🌿", label: "Tree People camp" },
 ];
 
 /** A new clan can't settle on top of our camp. */
@@ -474,6 +476,17 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
         w.toast("🪓", `The ${clan.name} clan has settled here: ${w.rivals.members(clan.id).length} Neanderthals. They'll gather, build, and sooner or later come raiding.`, clan.x, clan.y);
         return true;
       }
+      // a Tree People tribe builds its canopy camp in the forest where you tap
+      if (tool.people === "treeFolk") {
+        const t = w.forest.placeCamp(w, x, y, CLAN_MIN_DIST);
+        if (typeof t === "string") {
+          hint(w, "🌿", t);
+          return false;
+        }
+        w.sfx("drums", t.x, t.y, 0.8, 1.4);
+        w.toast("🌿", `The ${t.name} Tree People have built a camp up in the trees: ${w.forest.members(t.id).length} of them. They'll hide in the leaves, ambush anyone passing and raid when they're strong.`, t.x, t.y);
+        return true;
+      }
       if (w.humans.length >= MAX_PEOPLE) {
         hint(w, "🛖", "The camp is full!");
         return false;
@@ -745,7 +758,7 @@ function erase(w: World, x: number, y: number, drag: boolean) {
   }
   const human = w.humans.find((h) => Math.hypot(h.x - x, h.y - 10 - y) < 16);
   if (human && !drag && w.humans.length > 2) {
-    w.humans.splice(w.humans.indexOf(human), 1);
+    removeHuman(w, human);
     poof(human.x, human.y);
     return true;
   }

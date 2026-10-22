@@ -46,10 +46,34 @@ export class Population {
     this.timer = 300 + w.rng() * 260;
     const residents = w.humans.filter((h) => !h.stranger).length;
     const strangers = w.humans.length - residents;
+    // the tribe's (nearly) all gone: a wandering family finds the camp soon, and moves straight in to start again
+    // (only once a real tribe has been lost: a world that never had people stays empty)
+    if (residents < 2 && w.tribe.lost > 0) {
+      this.timer = 90 + w.rng() * 60;
+      if (!strangers && w.daylight > 0.25) this.restart(w, residents);
+      return;
+    }
     const safe = !w.tribe.raid && !w.dragons.menacing(w) && w.daylight > 0.4;
     const fed = w.tribe.foodTotal(w) >= 3;
     if (!safe || !fed || strangers > 0 || residents >= Math.min(MAX_PEOPLE, this.capacity(w) + 2) || residents < 2) return;
     this.spawnWanderers(w);
+  }
+
+  /** The camp stands (almost) empty: a family of wanderers comes and settles in for good. */
+  restart(w: World, residents: number) {
+    const before = w.humans.length;
+    this.spawnWanderers(w);
+    const fresh = w.humans.slice(before);
+    // they don't wait at the edge: there's nobody to ask, so they move in
+    for (const h of fresh) h.stranger = false;
+    if (fresh.length < 2) {
+      const at = fresh[0] ?? { x: w.camp.x, y: w.camp.y + 600 };
+      const fam = fresh[0]?.family ?? w.nextId();
+      while (w.humans.length - before < 2) addHuman(w, at.x + (w.humans.length % 3) * 16, at.y + 10, false, { family: fam });
+    }
+    const n = w.humans.length - before;
+    this.joined += n;
+    if (n) w.toast("🏕️", residents ? `A family of ${n} wanderers joins the last of the tribe: together they'll build the community up again.` : `A family of ${n} wanderers found the empty camp and moved in. Build the community up again!`, w.camp.x, w.camp.y);
   }
 
   /** A lone traveller or a family appears at the edge of the map and heads for camp. */

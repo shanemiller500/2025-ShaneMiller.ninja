@@ -106,8 +106,8 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   };
 
   // fury: a pulsing red heat-haze round it
-  if (dr.fury) {
-    const pulse = 0.35 + Math.sin(t * 6) * 0.15;
+  if (dr.fury || dr.rage) {
+    const pulse = (dr.fury ? 0.35 : 0.12 + (dr.rage ?? 0) * 0.08) + Math.sin(t * 6) * 0.15;
     const g = c.createRadialGradient(0, -24, 4, 0, -24, 80);
     g.addColorStop(0, `rgba(255,60,30,${pulse})`);
     g.addColorStop(1, "rgba(255,60,30,0)");
@@ -337,7 +337,7 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   c.beginPath();
   c.arc(64, -42 + nod, 1.1, 0, Math.PI * 2);
   c.fill();
-  c.fillStyle = dr.fury ? "#ff2a1a" : dr.eye ?? (dr.owner ? "#9be36b" : "#ffe066");
+  c.fillStyle = dr.fury || (dr.rage ?? 0) >= 1 ? "#ff2a1a" : dr.eye ?? (dr.owner ? "#9be36b" : "#ffe066");
   c.beginPath();
   c.arc(49, -45 + nod, young ? 3 : 2.3, 0, Math.PI * 2);
   c.fill();
@@ -377,7 +377,13 @@ function drawBreath(c: CanvasRenderingContext2D, dr: Dragon, t: number, s: numbe
   const my = MOUTH.y * s - hop * 14 * s;
   let ang: number;
   let len: number;
-  if (dr.owner && dr.aimX !== undefined && dr.aimY !== undefined) {
+  if (dr.fireAt) {
+    // a gentle flame into its nest / onto a roast
+    const dx = dr.fireAt.x - dr.x - mx;
+    const dy = dr.fireAt.y - dr.y + dr.z - my;
+    ang = Math.atan2(dy, dx);
+    len = Math.max(30, Math.min(Math.hypot(dx, dy) + 10, 120));
+  } else if (dr.owner && dr.aimX !== undefined && dr.aimY !== undefined) {
     // aim is on the ground: from the mouth (which is up at z) to the target
     const dx = dr.aimX - dr.x - mx;
     const dy = dr.aimY - dr.y + dr.z - my;
@@ -442,7 +448,7 @@ export function drawDragonEgg(c: CanvasRenderingContext2D, egg: DragonEgg, t: nu
   const wob = egg.hatchT > 0 ? Math.sin(t * 30) * 0.18 : egg.progress > 0.85 ? Math.sin(t * 6 + egg.id) * 0.06 : 0;
   c.save();
   c.scale(scale, scale);
-  if (egg.at === "camp" && egg.heat > 0.55) {
+  if ((egg.at === "camp" || egg.at === "nest") && egg.heat > 0.55) {
     const g = c.createRadialGradient(0, -8, 0, 0, -8, 18);
     g.addColorStop(0, `rgba(255,170,70,${0.35 * egg.heat})`);
     g.addColorStop(1, "rgba(255,170,70,0)");
@@ -583,6 +589,63 @@ export function drawNest(c: CanvasRenderingContext2D, nest: DragonNest, eggs: Dr
     c.lineTo(-20, 4);
     c.fill();
   }
+  // the brooding fire: logs stacked in the bowl, glowing embers + flames while it's hot
+  const wood = nest.wood ?? 0;
+  const warm = nest.warmth ?? 0;
+  const lit = (nest.fireT ?? 0) > 0;
+  if (wood > 0 || warm > 0.02) {
+    c.lineCap = "round";
+    for (let i = 0; i < Math.min(6, wood + (warm > 0.05 ? 2 : 0)); i++) {
+      const lx = -16 + (i % 3) * 14 + (i >= 3 ? 7 : 0);
+      const ly = 6 - (i >= 3 ? 4 : 0);
+      c.strokeStyle = warm > 0.3 && i >= wood ? "#2b1a10" : "#6b4423";
+      c.lineWidth = 4;
+      c.beginPath();
+      c.moveTo(lx - 7, ly + 1);
+      c.lineTo(lx + 7, ly - 1);
+      c.stroke();
+      c.fillStyle = "#c79a5a";
+      c.beginPath();
+      c.arc(lx + 7, ly - 1, 1.8, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
+  if (warm > 0.02 || lit) {
+    const k = lit ? 1 : warm;
+    const g = c.createRadialGradient(0, 2, 2, 0, 2, 40);
+    g.addColorStop(0, `rgba(255,190,80,${0.55 * k})`);
+    g.addColorStop(0.6, `rgba(255,110,30,${0.25 * k})`);
+    g.addColorStop(1, "rgba(255,80,20,0)");
+    c.fillStyle = g;
+    c.beginPath();
+    c.ellipse(0, 2, 40, 18, 0, 0, Math.PI * 2);
+    c.fill();
+    // embers glowing in the wood
+    for (let i = 0; i < 7; i++) {
+      const a = i * 2.1 + nest.id;
+      const f = 0.5 + 0.5 * Math.sin(t * 5 + i * 1.7);
+      c.fillStyle = `rgba(255,${150 + Math.round(f * 80)},60,${(0.5 + 0.5 * f) * k})`;
+      c.beginPath();
+      c.arc(Math.cos(a) * 16, 4 + Math.sin(a) * 5, 1.6 + f, 0, Math.PI * 2);
+      c.fill();
+    }
+    // flames licking up round the eggs (tall while the parent is breathing into it)
+    const n = lit ? 6 : Math.round(4 * k);
+    for (let i = 0; i < n; i++) {
+      const x = -20 + (i / Math.max(1, n - 1)) * 40;
+      const hgt = (lit ? 26 : 12 * k) * (0.7 + 0.3 * Math.sin(t * 9 + i * 2.3));
+      const fg = c.createLinearGradient(x, 4, x, 4 - hgt);
+      fg.addColorStop(0, "rgba(255,120,30,0.85)");
+      fg.addColorStop(0.6, "rgba(255,200,70,0.7)");
+      fg.addColorStop(1, "rgba(255,240,180,0)");
+      c.fillStyle = fg;
+      c.beginPath();
+      c.moveTo(x - 4, 5);
+      c.quadraticCurveTo(x - 3 + Math.sin(t * 7 + i) * 2, 4 - hgt * 0.6, x + Math.sin(t * 6 + i) * 2, 4 - hgt);
+      c.quadraticCurveTo(x + 3, 4 - hgt * 0.5, x + 4, 5);
+      c.fill();
+    }
+  }
   c.restore();
   for (const e of eggs) {
     c.save();
@@ -632,6 +695,76 @@ export function drawPit(c: CanvasRenderingContext2D, W: number, H: number, t: nu
   c.beginPath();
   c.ellipse(cx, cy + 4, fx, fy - 4, 0, 0, Math.PI * 2);
   c.fill();
+  // the shade: a rocky overhang along the back wall, casting a cool shadow strip across the sand
+  {
+    const sx = fx * 0.62;
+    const sy = fy * 0.26;
+    const scy = cy - fy * 0.42;
+    const sg = c.createRadialGradient(cx, scy, 2, cx, scy, sx);
+    sg.addColorStop(0, "rgba(25,20,30,0.34)");
+    sg.addColorStop(0.75, "rgba(25,20,30,0.26)");
+    sg.addColorStop(1, "rgba(25,20,30,0)");
+    c.fillStyle = sg;
+    c.beginPath();
+    c.ellipse(cx, scy, sx, sy, 0, 0, Math.PI * 2);
+    c.fill();
+    // the overhang itself: a rock ledge jutting out from the back wall
+    const a0 = Math.PI * 1.18;
+    const a1 = Math.PI * 1.82;
+    const lip = Math.max(8, fy * 0.16);
+    c.fillStyle = "#6c6156";
+    c.beginPath();
+    for (let i = 0; i <= 16; i++) {
+      const a = a0 + ((a1 - a0) * i) / 16;
+      const x = cx + Math.cos(a) * fx;
+      const y = cy - 4 + Math.sin(a) * fy;
+      if (i === 0) c.moveTo(x, y - 14);
+      else c.lineTo(x, y - 14);
+    }
+    for (let i = 16; i >= 0; i--) {
+      const a = a0 + ((a1 - a0) * i) / 16;
+      const x = cx + Math.cos(a) * fx * 0.92;
+      const y = cy - 4 + Math.sin(a) * fy * 0.78 + lip + (i % 3 === 0 ? 3 : 0);
+      c.lineTo(x, y);
+    }
+    c.closePath();
+    c.fill();
+    // lit top edge + the shadowed underside of the lip
+    c.strokeStyle = "#8f8476";
+    c.lineWidth = 2;
+    c.beginPath();
+    for (let i = 0; i <= 16; i++) {
+      const a = a0 + ((a1 - a0) * i) / 16;
+      const x = cx + Math.cos(a) * fx;
+      const y = cy - 4 + Math.sin(a) * fy - 14;
+      if (i === 0) c.moveTo(x, y);
+      else c.lineTo(x, y);
+    }
+    c.stroke();
+    c.strokeStyle = "rgba(20,15,12,0.55)";
+    c.lineWidth = 2.5;
+    c.beginPath();
+    for (let i = 0; i <= 16; i++) {
+      const a = a0 + ((a1 - a0) * i) / 16;
+      const x = cx + Math.cos(a) * fx * 0.92;
+      const y = cy - 4 + Math.sin(a) * fy * 0.78 + lip + (i % 3 === 0 ? 3 : 0);
+      if (i === 0) c.moveTo(x, y);
+      else c.lineTo(x, y);
+    }
+    c.stroke();
+    // a few vines hanging off the ledge
+    c.strokeStyle = "#4f7a3a";
+    c.lineWidth = 1.4;
+    for (let i = 2; i < 16; i += 3) {
+      const a = a0 + ((a1 - a0) * i) / 16;
+      const x = cx + Math.cos(a) * fx * 0.92;
+      const y = cy - 4 + Math.sin(a) * fy * 0.78 + lip;
+      c.beginPath();
+      c.moveTo(x, y);
+      c.quadraticCurveTo(x + Math.sin(t + i) * 2, y + 6, x + 1, y + 10 + (i % 4));
+      c.stroke();
+    }
+  }
   // scorch marks + claw scratches on the sand
   c.fillStyle = "rgba(60,40,25,0.25)";
   for (const [x, y, r] of [[-fx * 0.4, 4, 14], [fx * 0.35, -6, 10], [fx * 0.1, fy * 0.4, 8]] as const) {

@@ -149,3 +149,99 @@ test('sent at a clan camp: the same force goes out, waits for 98%, then wins the
   assert.ok(placedAtAttack >= 0, 'attacked');
   assert.equal(result, 'won', 'took the camp');
 });
+
+test('set up from a chariot: every seat filled automatically, plus the chosen dragon + dino riders, as one unit', () => {
+  const w = world(9303, 30);
+  const n = nestAt(w, 1300, 100);
+  const c1 = chariot(w, w.camp.x + 300, w.camp.y + 200);
+  const c2 = chariot(w, w.camp.x + 300, w.camp.y + 320);
+  const people = w.humans.filter((h) => !h.child);
+  const dragonPeople = people.slice(0, 3);
+  const dinoPeople = people.slice(3, 7);
+  for (const h of dragonPeople) rideDragon(w, h);
+  for (const h of dinoPeople) rideDino(w, h);
+  run(w, 1.2);
+  assert.equal(ch.chariotAt(w, c1.x, c1.y - 20)?.id, c1.id, 'tap the chariot');
+  const pool = ch.raidPool(w);
+  assert.equal(pool.seats, 20);
+  assert.equal(pool.dragonRiders.length, 3);
+  assert.equal(pool.dinoRiders.length, 4);
+  assert.ok(ch.raidTargets(w).some((t) => t.kind === 'nest' && t.id === n.id), 'the nest is a target');
+  assert.equal(ch.startRaid(w, { kind: 'nest', id: n.id }, 'wedge', 2, 3), null);
+  const hunt = w.colony.hunt;
+  assert.equal(hunt.formation, 'wedge');
+  assert.equal(hunt.crew.filter((m) => m.chariot === c1.id).length, 10, 'chariot 1 full');
+  assert.equal(hunt.crew.filter((m) => m.chariot === c2.id).length, 10, 'chariot 2 full');
+  assert.equal(hunt.crew.filter((m) => m.ride === 'dragon').length, 2, 'two dragon riders');
+  assert.equal(hunt.crew.filter((m) => m.ride === 'dino').length, 3, 'three dino riders');
+  assert.equal(hunt.crew.filter((m) => !m.chariot && !m.ride).length, 0, 'nobody walks');
+  assert.ok(hunt.crew.some((m) => m.runner && m.chariot), 'egg runners aboard');
+  // riders not picked stay home, and the rest of the camp stays home
+  assert.equal(hunt.crew.length, 25);
+  assert.match(ch.startRaid(w, { kind: 'nest', id: n.id }, 'ring', 0, 0), /already/);
+});
+
+test('a rider whose dragon is on a patrol job still gets aboard: the dragon waits for them, and the unit sets out', () => {
+  const w = world(9304, 14);
+  const n = nestAt(w, 1300, 100);
+  chariot(w, w.camp.x + 300, w.camp.y + 200);
+  const [rider] = w.humans.filter((h) => !h.child);
+  const dr = rideDragon(w, rider);
+  Object.assign(dr.skills, { fire: 1, combat: 1 });
+  assert.equal(keep.commandDragon(w, dr, 'patrol', { x: w.camp.x, y: w.camp.y }), null);
+  run(w, 8);
+  if (rider.aloft) keep.dismountDragon(w, rider);
+  assert.equal(ch.startRaid(w, { kind: 'nest', id: n.id }, 'ring', 1, 0), null);
+  const set = run(w, ch.MUSTER_FOR - 5, () => w.colony.hunt.phase !== 'muster');
+  assert.ok(set, `set out before the muster timed out (${w.colony.hunt.ready}/${w.colony.hunt.need} ready)`);
+  assert.equal(rider.aloft, dr.id, 'on its back');
+  assert.equal(dr.post?.kind, 'patrol', 'its patrol job is kept for after');
+});
+
+test('choose the target: retarget a gathering unit at another nest, a clan camp or a roaming dragon', () => {
+  const w = world(9305, 14);
+  const n = nestAt(w, 1300, 100);
+  chariot(w, w.camp.x + 300, w.camp.y + 200);
+  const clan = w.rivals.spawnClan(w, 3, { x: w.camp.x + 1400, y: w.camp.y - 300 });
+  Object.assign(clan, { raidT: Infinity, spyT: Infinity, ambushT: Infinity, trapT: Infinity, riteT: Infinity });
+  run(w, 1.2);
+  assert.equal(ch.startRaid(w, { kind: 'nest', id: n.id }, 'ring', 0, 0), null);
+  assert.equal(ch.retargetHunt(w, { kind: 'clan', id: clan.id }), null);
+  assert.equal(w.colony.hunt.clan, clan.id);
+  assert.equal(w.colony.hunt.nest, 0);
+  // a roaming wild dragon is on the list, and can be picked
+  const wild = w.dragons.summon(w, { x: w.camp.x + 1600, y: w.camp.y });
+  assert.ok(wild);
+  wild.nest = undefined;
+  const t = ch.raidTargets(w).find((x) => x.kind === 'dragon' && x.id === wild.id);
+  assert.ok(t, 'listed');
+  assert.equal(ch.retargetHunt(w, { kind: 'dragon', id: wild.id }), null);
+  assert.equal(w.colony.hunt.dragon, wild.id);
+  assert.equal(w.colony.hunt.clan, undefined);
+  // once it's a fight, too late
+  w.colony.hunt.phase = 'battle';
+  assert.match(ch.retargetHunt(w, { kind: 'nest', id: n.id }), /too late/i);
+});
+
+test('on the way, the unit stops to fight a predator it runs into, then carries on with the mission', () => {
+  const w = world(9306, 12);
+  const n = nestAt(w, 1500, 100);
+  const c = chariot(w, w.camp.x + 300, w.camp.y + 200);
+  run(w, 1.2);
+  assert.equal(ch.startRaid(w, { kind: 'nest', id: n.id }, 'wedge', 0, 0), null);
+  assert.ok(run(w, 150, () => w.colony.hunt.phase === 'march'), 'marching');
+  // a hungry raptor pack in the way
+  run(w, 3);
+  const foe = addDino(w, 'raptor', c.x + 160, c.y, { hunger: 0.9, age: 9999 });
+  let engaged = false, stopped = false;
+  run(w, 3, () => { if (w.colony.hunt.engage === foe.id) engaged = true; if (engaged && !c.to) stopped = true; return engaged && stopped; });
+  assert.ok(engaged, 'spotted it');
+  assert.ok(stopped, 'the chariot stopped to fight');
+  const fighting = w.colony.hunt.crew.map((m) => w.humans.find((h) => h.id === m.id)).filter((h) => h && !h.chariot);
+  // it's dealt with (killed or gone): back on the march
+  w.removeDino(foe);
+  const resumed = run(w, 3, () => !w.colony.hunt.engage && !!c.to);
+  assert.ok(resumed, 'back on the march to its place');
+  assert.equal(w.colony.hunt.phase, 'march');
+  void fighting;
+});

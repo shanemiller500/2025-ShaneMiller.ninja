@@ -20,6 +20,9 @@
 /*  weak in young or untrained dragons.                                */
 /* ------------------------------------------------------------------ */
 import { threatAt } from "./warGuard";
+import { cookThink } from "./feast";
+import { onExpedition } from "./chariots";
+import { raiseBones } from "./dragonBones";
 import { sp } from "../data/species";
 import { BREEDS, GROW_SECONDS, GROWTH, LESSON_BY_ID, LESSONS, growthStage, type DragonCmdKind, type DragonSkill, type DragonStage } from "../data/dragons";
 import { deliver, sites } from "./build";
@@ -27,7 +30,7 @@ import { emote, setState, sizeOf } from "./dinos";
 import { go, say } from "./humans";
 import { hurtHuman } from "./injury";
 import { eggWarmth } from "./dragonNests";
-import { pitOf, pitSpot, pitWanderSpot } from "./shows";
+import { hotHours, pitOf, pitShadeSpot, pitSpot, pitWanderSpot } from "./shows";
 import { P } from "./particles";
 import { pick } from "./rng";
 import { TILE, T, WORLD_H, WORLD_W, type Brute, type Dino, type Dragon, type DragonCmd, type Human, type Resource } from "./types";
@@ -48,7 +51,7 @@ export function dragonStats(dr: Dragon) {
   return {
     def,
     /** drawing scale (a furious wild parent swells to half again its size) */
-    scale: def.size * (0.38 + 0.62 * g) * (dr.fury ? 1.5 : 1) * (1 + vet * 0.45),
+    scale: def.size * (0.38 + 0.62 * g) * (dr.fury ? 1.5 : 1) * (1 + vet * 0.45) * (1 + (dr.rage ?? 0) * 0.12),
     speed: def.speed * (0.45 + 0.55 * g) * (1 + vet * 0.1),
     maxHp: Math.round(def.hp * (0.22 + 0.78 * g) * (1 + vet * 0.7)),
     carry: Math.floor(def.carry * Math.min(1, g * 1.15) * (dr.owner ? sk(dr, "carry") : 1)),
@@ -249,6 +252,8 @@ export function commandDragon(w: World, dr: Dragon, kind: DragonCmdKind, o: { x?
   if (kind === "route" && (!o.pts || o.pts.length < 2)) return "Pick at least two waypoints.";
   if (kind === "volcano" && (dr.growth ?? 0) < 0.55) return `${dr.name} is too small to carry a Neanderthal yet.`;
   dr.cmd = { kind, x: o.x ?? dr.x, y: o.y ?? dr.y, target: o.target, pts: o.pts, i: 0, t: 0 };
+  // a patrol / route is its job from now on (it rests + eats in between, then goes back); any other order ends it
+  dr.post = kind === "patrol" || kind === "route" ? { ...dr.cmd, pts: o.pts?.map((p) => ({ ...p })) } : undefined;
   dr.foe = undefined;
   emote2(w, dr, kind);
   return null;
@@ -309,7 +314,7 @@ function flyToward(w: World, dr: Dragon, tx: number, ty: number, tz: number, dt:
 }
 
 /** Walk on the ground (dragons too young to fly, short hops round camp). */
-function walkToward(w: World, dr: Dragon, tx: number, ty: number, dt: number) {
+export function walkToward(w: World, dr: Dragon, tx: number, ty: number, dt: number) {
   const dx = tx - dr.x;
   const dy = ty - dr.y;
   const d = Math.hypot(dx, dy);
@@ -359,7 +364,7 @@ export function landingSpot(w: World, x: number, y: number, scale = 1) {
 }
 
 /** Come down (to a clear spot near tx, ty). Returns true once on the ground. */
-function landAt(w: World, dr: Dragon, tx: number, ty: number, dt: number) {
+export function landAt(w: World, dr: Dragon, tx: number, ty: number, dt: number) {
   const d = Math.hypot(tx - dr.x, ty - dr.y);
   if (d > 30 || dr.z > 2) {
     if (!canFly(dr)) return walkToward(w, dr, tx, ty, dt) < 6;
@@ -384,7 +389,8 @@ export function roostOf(w: World, dr: Dragon) {
   const pit = pitOf(w);
   if (pit) {
     const n = w.dragons.owned.indexOf(dr);
-    const s = pitSpot(pit, Math.max(0, n), Math.max(1, w.dragons.owned.length));
+    // the heat of the day: out of the sun, under the overhang at the back
+    const s = hotHours(w) && dr.state !== "sleep" ? pitShadeSpot(pit, Math.max(0, n), Math.max(1, w.dragons.owned.length)) : pitSpot(pit, Math.max(0, n), Math.max(1, w.dragons.owned.length));
     return { x: s.x, y: s.y, roost: true };
   }
   const all = w.colony.buildings.filter((b) => b.kind === "roost" && b.built >= 1);
@@ -490,7 +496,7 @@ function engage(w: World, dr: Dragon, foe: Foe, dt: number, auto: boolean) {
       w.rivals.hit(w, b, (b.weapon === "catapult" ? 0.7 : 0.45) * power * (1 + (dr.vet ?? 0) * 0.5), dr.x, dr.y, true, "dragon");
       if (!w.rivals.brutes.includes(b)) {
         tornApart(w, b.x, b.y, b.weapon === "catapult");
-        w.toast("🐉", `${dr.name} tore ${b.weapon === "catapult" ? "the clan's catapult" : `${b.name} the Neanderthal`} apart!`, b.x, b.y);
+        w.toast("🐉", `${dr.name} tore ${b.weapon === "catapult" ? "the clan's catapult" : w.rivals.label(w, b)} apart!`, b.x, b.y);
         harden(w, dr, 0.05);
       }
     } else {
@@ -556,6 +562,7 @@ function burstTick(w: World, dr: Dragon, dt: number) {
   const st = dragonStats(dr);
   dr.burst = Math.max(0, (dr.burst ?? 0) - dt);
   dr.breath = 1;
+  dr.fireAt = undefined;
   dr.stamina = Math.max(0, (dr.stamina ?? 1) - (dt * 0.1) / st.def.stamina);
   const ax = dr.aimX ?? dr.x;
   const ay = dr.aimY ?? dr.y;
@@ -642,8 +649,12 @@ function loseDragon(w: World, dr: Dragon) {
   if (on) dismountDragon(w, on);
   if (h) h.dragon = undefined;
   w.dragons.owned.splice(w.dragons.owned.indexOf(dr), 1);
+  for (const p of w.humans) {
+    if (p.dragon === dr.id) p.dragon = undefined;
+  }
   w.particles.burst(P.Poof, dr.x, dr.y, 16, 80, { size: 16, max: 1.2, color: "rgba(220,210,200,0.9)" });
-  w.toast("💔", `${dr.name} was badly hurt and flew off into the mountains. It may never come back…`, dr.x, dr.y);
+  // it died: its bones become a monument (dragonBones.ts)
+  if (!raiseBones(w, dr, true)) w.toast("💔", `${dr.name} has died. The tribe mourns its dragon.`, dr.x, dr.y);
 }
 
 function stepOwned(w: World, dr: Dragon, dt: number) {
@@ -685,12 +696,28 @@ function stepOwned(w: World, dr: Dragon, dt: number) {
       w.toast("😮‍💨", `${dr.name} is exhausted and has to land! Dragons need rest between long flights.`, dr.x, dr.y);
     }
   }
+  // carrying a rider on a raid: it stays put between the unit's orders (no wandering back to its patrol)
+  if (!dr.cmd && onExpedition(w, dr)) {
+    idle(w, dr, dt);
+    return;
+  }
+  if (!dr.cmd && dr.post && backOnPost(w, dr)) {
+    dr.cmd = { ...dr.post, i: 1, t: 0, pts: dr.post.pts?.map((p) => ({ ...p })) };
+    if (dr.post.kind === "route") dr.cmd.i = 1;
+  }
   if (dr.cmd) {
     if (runCmd(w, dr, dr.cmd, dt)) return;
     dr.cmd = null;
   }
   if (dr.auto !== false) autoThink(w, dr, dt);
   else idle(w, dr, dt);
+}
+
+/** Rested, fed and healed enough to go back to its patrol (and not asleep for the night)? */
+export function backOnPost(w: World, dr: Dragon) {
+  if (dr.state === "sleep" && (w.daylight < 0.25 || (dr.energy ?? 1) < 0.6)) return false;
+  if ((dr.restT ?? 0) > 60 && (dr.stamina ?? 1) < 0.95) return false;
+  return (dr.stamina ?? 1) >= 0.7 && (dr.energy ?? 1) >= 0.3 && (dr.hunger ?? 0) < 0.75 && dr.hp >= dr.maxHp * 0.6 && canFly(dr);
 }
 
 function grow(w: World, dr: Dragon, dt: number) {
@@ -734,7 +761,7 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
   // tired out: home, whatever the order was
   if (FLIGHT_CMDS.has(cmd.kind) && (dr.stamina ?? 1) < 0.18 && !(dr.burst ?? 0)) {
     dr.cmd = { kind: "home", x: 0, y: 0, t: 0, auto: true };
-    w.toast("😮‍💨", `${dr.name} is getting tired and heads home to rest.`, dr.x, dr.y);
+    w.toast("😮‍💨", dr.post ? `${dr.name} is getting tired: it heads home to rest, then back to its ${dr.post.kind}.` : `${dr.name} is getting tired and heads home to rest.`, dr.x, dr.y);
     return true;
   }
   // losing a fight: break off and fly home to heal (it'll live to fight again)
@@ -844,6 +871,7 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
       }
       // guard duty doesn't end (only a fight, tiredness or wounds break it off); an Auto patrol is a round
       if (cmd.duty) return warTrained(dr);
+      // a player's patrol never runs out (dr.post brings it back after every rest); an Auto one is a round
       return !cmd.auto || cmd.t < 100;
     }
     case "guard": {
@@ -946,7 +974,7 @@ function volcanoCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number) {
       dr.prey = undefined;
       dr.preyBrute = false;
       const clan = w.rivals.clan(held.clan);
-      w.dragons.dropBody(w, dr, held, true, true, `${dr.name} dropped ${held.name} of the ${clan?.name ?? "?"} clan into the volcano!`);
+      w.dragons.dropBody(w, dr, held, true, true, held.tree ? `${dr.name} dropped ${w.rivals.label(w, held)} into the volcano!` : `${dr.name} dropped ${held.name} of the ${clan?.name ?? "?"} clan into the volcano!`);
       say2(w, dr, pick(w.rng, ["Into the fire!", "Bye bye!", "Ha! Gone!"]));
       harden(w, dr, 0.04);
       return false;
@@ -964,7 +992,7 @@ function volcanoCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number) {
     dr.prey = b.id;
     dr.preyBrute = true;
     w.sfx("screech", dr.x, dr.y, 1.2, 0.5);
-    w.toast("🐉", `${dr.name} snatched ${b.name} the Neanderthal! Off to the volcano…`, b.x, b.y);
+    w.toast("🐉", `${dr.name} snatched ${w.rivals.label(w, b)}! Off to the volcano…`, b.x, b.y);
   }
   return true;
 }
@@ -1052,6 +1080,19 @@ function autoThink(w: World, dr: Dragon, dt: number) {
       return;
     }
   }
+  // it has a job (a patrol): between shifts it just rests at home (stepOwned sends it back once it's ready)
+  if (dr.post) {
+    if (dr.z > 6 || Math.hypot(home.x - dr.x, home.y - dr.y) > 40) {
+      dr.state = "fly";
+      landAt(w, dr, home.x, home.y, dt);
+    } else {
+      dr.vx = dr.vy = 0;
+      dr.state = (dr.energy ?? 1) < 0.5 || w.daylight < 0.25 ? "sleep" : "idle";
+    }
+    return;
+  }
+  // a dead dinosaur in town: roast it for the feast table (feast.ts)
+  if (dr.cook && cookThink(w, dr, dt)) return;
   // a war dragon is on guard duty full time (warGuard.ts): it patrols the skies over the town, or circles
   // over the person it's guarding out in the wild, with its rider on its back whenever they can be picked up
   if (warTrained(dr) && (dr.stamina ?? 1) > 0.5 && dr.hp > dr.maxHp * 0.5 && w.weather.storm < 0.6 && canFly(dr)) {
@@ -1107,7 +1148,8 @@ function autoThink(w: World, dr: Dragon, dt: number) {
     if (r < 0.35) {
       // living in the pit: stroll about its floor; else potter round its roost
       const pit = pitOf(w);
-      const to = pit && home.roost ? pitWanderSpot(w, pit) : { x: home.x + (w.rng() - 0.5) * 140, y: home.y + (w.rng() - 0.5) * 80 };
+      // (in the heat of the day it just shifts about in the shade)
+      const to = pit && home.roost ? (hotHours(w) ? { x: home.x + (w.rng() - 0.5) * 40, y: home.y + (w.rng() - 0.5) * 10 } : pitWanderSpot(w, pit)) : { x: home.x + (w.rng() - 0.5) * 140, y: home.y + (w.rng() - 0.5) * 80 };
       dr.tx = to.x;
       dr.ty = to.y;
       dr.state = "walk";

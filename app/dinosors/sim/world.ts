@@ -58,8 +58,10 @@ import { Dragons } from "./dragons";
 import { regrowTick } from "./clearing";
 import { moveTick } from "./moving";
 import { Rivals } from "./rivals";
+import { Forest } from "./treeFolk";
 import { TaskBoard, issue } from "./tasks";
 import { Population } from "./population";
+import { Wildlife } from "./repopulate";
 import { Trails } from "./trails";
 import { sites, type Site } from "./build";
 import { HOUSING } from "../data/colony";
@@ -180,8 +182,12 @@ export class World {
   dragons = new Dragons();
   /** Neanderthal clans (CPU rivals) */
   rivals = new Rivals();
+  /** the Tree People: feral tribes up in the forest canopy (treeFolk.ts) */
+  forest: Forest;
   tasks = new TaskBoard();
   population = new Population();
+  /** wild dinosaur numbers: good years, lean years, and nothing ever gone for good (repopulate.ts) */
+  wildlife = new Wildlife();
   civ = new Civ();
   extinction = new Extinction();
   /** sky watching: knowledge, the moon, weather forecasts */
@@ -236,10 +242,15 @@ export class World {
     this.terrain = new Terrain(seed, terrainGen);
     this.camp = new Camp(seed);
     this.mine = new Mine(seed);
+    this.forest = new Forest(seed);
     this.fire.initFuel(this);
     this.snow.init(this);
     for (const s of SPECIES) if (s.starter) this.unlocked.add(s.id);
     if (populate) this.populate();
+    else {
+      this.wildlife.enabled = false;
+      this.forest.enabled = false;
+    }
   }
 
   /** Construction sites (cached per frame: several builders ask every tick). */
@@ -421,11 +432,12 @@ export class World {
   }
 
   canLayEgg(s: SpeciesId) {
-    if (this.dinos.length + this.eggs.length >= MAX_DINOS) return false;
     let n = 0;
     for (const d of this.dinos) if (d.species === s) n++;
     for (const e of this.eggs) if (e.species === s) n++;
-    return n < (sp(s).diet === "herbivore" ? 7 : 3);
+    if (this.dinos.length + this.eggs.length >= MAX_DINOS && n >= 3) return false;
+    // a species down to its last few may always lay (so it never dies out); else up to this year's number
+    return n < this.wildlife.cap(s);
   }
 
   plantFuelNear(x: number, y: number) {
@@ -748,7 +760,9 @@ export class World {
       regrowTick(this);
     }
     this.rivals.update(this, dt);
+    this.forest.update(this, dt);
     this.population.update(this, dt);
+    this.wildlife.update(this, dt);
     this.civ.update(this, dt);
     this.extinction.update(this, dt);
     this.tasks.update(this, dt);
@@ -763,7 +777,7 @@ export class World {
       const by = this.byId.get(this.camp.crafting.by);
       if (!by || by.kind !== "human" || by.state !== "craft") {
         // crafter wandered off: refund + try again later
-        this.camp.crafting = null;
+        this.camp.cancelCraft();
       } else this.camp.updateCraft(this, dt);
     }
 
@@ -1023,6 +1037,7 @@ export class World {
       tribe: this.tribe.serialize(),
       shifts: this.shifts.serialize(),
       rivals: this.rivals.serialize(),
+      forest: this.forest.serialize(this),
       dragons: this.dragons.serialize(),
       items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
       cleared: this.cleared.map((c) => [c.i, Math.round(c.at)] as const),
@@ -1039,6 +1054,7 @@ export class World {
       shelters: this.shelters.map((s) => ({ id: s.id, x: r(s.x), y: r(s.y), stage: s.stage, have: s.have, plan: s.plan, tier: s.tier, hp: r(s.hp), up: s.up, upHave: s.upHave })),
       colony: this.colony.serialize(),
       population: this.population.serialize(),
+      wildlife: this.wildlife.serialize(),
       civ: this.civ.serialize(),
       extinction: this.extinction.serialize(),
       mine: this.mine.serialize(),
@@ -1047,7 +1063,8 @@ export class World {
       trails: this.trails.serialize(),
       trailDetail: this.trails.serializeDetail(),
       lightLinks: this.trails.lightLinks,
-      camp: { stock: this.camp.stock, learned: Array.from(this.camp.learned), goal: this.camp.goal },
+      // Inventing restarts after load; return its reserved supplies to the saved stock.
+      camp: { stock: this.camp.savedStock(), learned: Array.from(this.camp.learned), goal: this.camp.goal, manualGoal: this.camp.manualGoal },
       edits: this.terrain.edits(),
       discoveries: Array.from(this.discoveries),
       unlocked: Array.from(this.unlocked),
@@ -1129,6 +1146,7 @@ export class World {
     }
     w.colony.load(w, data.colony);
     w.population.load(data.population);
+    w.wildlife.load((data as { wildlife?: Parameters<Wildlife["load"]>[0] }).wildlife);
     w.civ.load(data.civ);
     w.shifts.load((data as SaveData & { shifts?: { mode?: "all" | "split"; auto?: boolean } }).shifts);
     w.extinction.load(data.extinction);
@@ -1149,6 +1167,7 @@ export class World {
     w.camp.stock = { ...w.camp.stock, ...data.camp.stock };
     w.tribe.load(w, data.tribe);
     w.rivals.load(w, (data as { rivals?: ReturnType<Rivals["serialize"]> }).rivals);
+    w.forest.load(w, (data as { forest?: ReturnType<Forest["serialize"]> }).forest);
     w.dragons.load(w, (data as { dragons?: ReturnType<Dragons["serialize"]> }).dragons);
     w.evo = data.evo ?? {};
     w.sky.load(data.sky);
@@ -1159,6 +1178,7 @@ export class World {
     w.camp.learned = new Set(data.camp.learned);
     w.camp.goal = data.camp.goal;
     w.camp.pickGoal();
+    w.camp.manualGoal = data.camp.manualGoal ?? false;
     w.discoveries = new Set(data.discoveries);
     w.unlocked = new Set(Array.from(w.unlocked).concat(data.unlocked));
     w.seen = new Set(data.seen);

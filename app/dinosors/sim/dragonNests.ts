@@ -19,6 +19,7 @@ import { MAP_H, MAP_W, T, TILE, type Dragon, type DragonEgg, type DragonNest, ty
 import type { World } from "./world";
 import { newDragonStats } from "./dragonKeep";
 import { keeperAtHatch, keeperOf, makeKeeper } from "./keepers";
+import { broodUpdate, heirTakeover } from "./dragonBrood";
 
 /** Nests per world. */
 const NESTS = 2;
@@ -253,6 +254,7 @@ export function nestsUpdate(w: World, dt: number) {
     // a parent moves in (or back in)
     if (!parentOf(w, nest)) {
       nest.parent = 0;
+      if (heirTakeover(w, nest)) continue;
       nest.emptyT -= dt;
       if (nest.emptyT <= 0 && w.elapsed > SETTLE_AT) settleParent(w, nest);
     } else {
@@ -275,6 +277,7 @@ export function nestsUpdate(w: World, dt: number) {
     if (look && !nest.found) spotNest(w, nest);
   }
   for (const egg of [...ds.eggs]) eggTick(w, egg, dt);
+  broodUpdate(w, dt);
 }
 
 /** The parent is expecting: it starts building up the nest (a bigger, joined one if eggs are already there). */
@@ -388,7 +391,7 @@ export function eggWarmth(w: World, x: number, y: number) {
 function eggTick(w: World, egg: DragonEgg, dt: number) {
   switch (egg.at) {
     case "nest":
-      egg.heat = 1;
+      // heat + hatching: the brooding fire (dragonBrood.ts)
       egg.health = Math.min(1, egg.health + dt * 0.01);
       return;
     case "carried": {
@@ -584,8 +587,8 @@ export function settleEgg(w: World, egg: DragonEgg, h: Human | null) {
 /* ------------------------------ egg hunts (task) ------------------------------ */
 
 /**
- * The egg-hunt party: walk to the nest; the first one there takes an egg, the rest fill their
- * packs with treasure and escort the carrier home. A dropped egg gets picked up again.
+ * The egg-hunt party shares the whole clutch. Free hands fetch another egg while
+ * carriers head home; a small party returns for the rest.
  * Returns true if it decided what to do; `done` ends this person's part.
  */
 export function eggHuntThink(w: World, h: Human, t: { target: number; people: number[]; x: number; y: number }, done: () => void): boolean {
@@ -595,57 +598,50 @@ export function eggHuntThink(w: World, h: Human, t: { target: number; people: nu
     return false;
   }
   const party = w.humans.filter((p) => t.people.includes(p.id));
-  // carrying the egg: home with it
+  const eggs = nestEggs(w, nest);
+  const loose = w.dragons.eggs.filter((e) => e.at === "ground" && e.nest === nest.id && Math.hypot(e.x - nest.x, e.y - nest.y) < 900);
+  const target = loose[0] ?? eggs[0];
+  const capacity = h.gear.outfit === "runnerKit" ? 2 : 1;
+  // Carriers with room take a second egg before leaving the nest.
   if (h.egg) {
     const egg = w.dragons.eggs.find((e) => e.id === h.egg);
     if (!egg) {
       h.egg = undefined;
-      done();
-      return false;
-    }
-    const home = eggDropOff(w);
-    if (atEggHome(w, h)) {
-      settleEgg(w, egg, h);
-      say(h, "Got it home!");
-      for (const p of party) if (p !== h) p.taskStep = 2;
-      done();
+      h.egg2 = undefined;
+    } else {
+      if (!h.egg2 && capacity > 1 && target) {
+        if (Math.hypot(h.x - target.x, h.y - target.y) < 18) takeEgg(w, h, target);
+        else {
+          go(h, "walk", target.x, target.y + 4);
+          return true;
+        }
+      }
+      const home = eggDropOff(w);
+      if (atEggHome(w, h)) {
+        for (const id of [h.egg, h.egg2]) {
+          const carried = id ? w.dragons.eggs.find((e) => e.id === id) : null;
+          if (carried) settleEgg(w, carried, h);
+        }
+        h.egg = undefined;
+        h.egg2 = undefined;
+        say(h, "Eggs home!");
+        if (!target && !party.some((p) => p !== h && (p.egg || p.egg2))) done();
+        return true;
+      }
+      go(h, "walk", home.x, home.y);
       return true;
     }
-    go(h, "walk", home.x, home.y);
-    return true;
-  }
-  // an egg lying about (dropped): pick it up
-  const loose = w.dragons.eggs.find((e) => e.at === "ground" && Math.hypot(e.x - h.x, e.y - h.y) < 500);
-  if (loose && !h.child) {
-    if (Math.hypot(h.x - loose.x, h.y - loose.y) < 14) {
-      takeEgg(w, h, loose);
-      return true;
-    }
-    go(h, "walk", loose.x, loose.y);
-    return true;
-  }
-  const carrier = party.find((p) => p.egg);
-  if (carrier) {
-    // escort: stay close, fight whatever comes after the egg
-    h.order = { kind: "guard", x: carrier.x, y: carrier.y };
-    const d = Math.hypot(h.x - carrier.x, h.y - carrier.y);
-    if (d > 50) go(h, "walk", carrier.x + ((h.id % 3) - 1) * 26, carrier.y + 16);
-    return d > 50;
-  }
-  if (h.taskStep === 2) {
-    h.order = null;
-    done();
-    return false;
   }
   // on the way: sneak up to the nest
-  if (Math.hypot(h.x - nest.x, h.y - nest.y) > 30) {
-    if (h.stateT > 4 || h.state !== "walk") go(h, "walk", nest.x + ((h.id % 5) - 2) * 10, nest.y + 14);
+  if (target && Math.hypot(h.x - target.x, h.y - target.y) > 18) {
+    h.order = null;
+    if (h.stateT > 4 || h.state !== "walk") go(h, "walk", target.x, target.y + 4);
     return true;
   }
-  revealNest(w, nest, h.name);
-  const egg = nestEggs(w, nest)[0];
-  if (egg && !party.some((p) => p.egg)) {
-    takeEgg(w, h, egg);
+  if (target) {
+    h.order = null;
+    revealNest(w, nest, h.name);
+    takeEgg(w, h, target);
     const parent = parentOf(w, nest);
     if (parent && Math.hypot(parent.x - nest.x, parent.y - nest.y) < 1400) {
       parent.foe = h.id;
@@ -656,6 +652,13 @@ export function eggHuntThink(w: World, h: Human, t: { target: number; people: nu
     }
     return true;
   }
+  const carrier = party.find((p) => p.egg || p.egg2);
+  if (carrier) {
+    h.order = { kind: "guard", x: carrier.x, y: carrier.y };
+    const d = Math.hypot(h.x - carrier.x, h.y - carrier.y);
+    if (d > 50) go(h, "walk", carrier.x + ((h.id % 3) - 1) * 26, carrier.y + 16);
+    return d > 50;
+  }
   // treasure: whatever fits in a pack
   const r = (Object.keys(nest.loot) as Resource[]).find((k) => (nest.loot[k] ?? 0) > 0);
   if (r && !h.carry) {
@@ -665,10 +668,7 @@ export function eggHuntThink(w: World, h: Human, t: { target: number; people: nu
     h.carryN = n;
     say(h, r === "gold" ? "Shiny!" : "Treasure!");
   }
-  if (!party.some((p) => p.egg)) {
-    say(h, "No eggs here…");
-    h.taskStep = 2;
-  }
+  say(h, "All eggs carried home!");
   done();
   return false;
 }
@@ -676,7 +676,8 @@ export function eggHuntThink(w: World, h: Human, t: { target: number; people: nu
 function takeEgg(w: World, h: Human, egg: DragonEgg) {
   egg.at = "carried";
   egg.carrier = h.id;
-  h.egg = egg.id;
+  if (h.egg) h.egg2 = egg.id;
+  else h.egg = egg.id;
   if (h.carry) {
     // hands full of treasure: it goes in the stores later
     w.camp.stock[h.carry] += h.carryN;

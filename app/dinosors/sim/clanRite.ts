@@ -210,6 +210,7 @@ export function riteUpdate(w: World, r: Rivals, dt: number) {
       // wings flung wide, fire up into the sky
       dr.spread = Math.min(1, (dr.spread ?? 0) + dt * 2.5);
       dr.skyFire = true;
+      dr.fireAt = undefined;
       dr.breath = 1;
       dr.anim += dt * 2;
       if (w.inView(dr.x, dr.y, 300)) {

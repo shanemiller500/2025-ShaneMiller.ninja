@@ -202,6 +202,19 @@ export class Camp {
     return true;
   }
 
+  /** Return reserved materials if the inventor has to stop before finishing. */
+  cancelCraft() {
+    if (!this.crafting) return;
+    for (const [r, n] of Object.entries(TECH[this.crafting.tech].needs) as [Resource, number][]) this.stock[r] += n;
+    this.crafting = null;
+  }
+
+  savedStock(): Stock {
+    const stock = { ...this.stock };
+    if (this.crafting) for (const [r, n] of Object.entries(TECH[this.crafting.tech].needs) as [Resource, number][]) stock[r] += n;
+    return stock;
+  }
+
   /** Called every frame while somebody is crafting. Returns true when done. */
   updateCraft(w: World, dt: number) {
     const c = this.crafting;

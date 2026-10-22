@@ -12,6 +12,7 @@ import { pick } from "./rng";
 import type { Human } from "./types";
 import type { World } from "./world";
 import { burnGuard, rollsClear } from "./dragonRaid";
+import { DOWN_FOR, dies, downTick, upAgain } from "./death";
 
 export type Condition = "healthy" | "injured" | "badly" | "down";
 
@@ -49,7 +50,17 @@ export function hurtHuman(w: World, h: Human, dmg: number, fx: number, fy: numbe
     }
     dmg *= burnGuard(h);
   }
-  if (h.state === "down") return false;
+  // hurt again while they lie there: every hit takes time off what they have left (not in Calm, not the cold)
+  if (h.state === "down") {
+    if (cause !== "cold" && w.tribe.danger !== "calm") {
+      h.downT = (h.downT ?? 0) + dmg * 80;
+      if (h.downT >= DOWN_FOR) {
+        dies(w, h, `${h.name} was ${cause === "burn" ? "caught in the flames" : cause === "bite" ? "attacked" : "struck"} again while they lay hurt, and didn't survive.`);
+        return true;
+      }
+    }
+    return false;
+  }
   // up on a war-trained dinosaur: hard to reach, and the saddle + bone armour take a lot of it
   const mount = h.riding ? w.dinoById(h.riding) : null;
   if (mount && mount.owner && (mount.warTraining ?? 0) >= 0.35 && cause !== "cold") {
@@ -82,6 +93,7 @@ export function hurtHuman(w: World, h: Human, dmg: number, fx: number, fy: numbe
 }
 
 export function knockOut(w: World, h: Human) {
+  upAgain(h);
   h.hp = 0;
   h.state = "down";
   h.stateT = 0;
@@ -101,7 +113,7 @@ export function knockOut(w: World, h: Human) {
     h.riding = 0;
   }
   w.particles.spawn(P.Star, h.x, h.y, { z: 14, size: 7, max: 2.2 });
-  if (!h.stranger) w.toast("😵", `${h.name} is knocked out! Someone should help them up.`, h.x, h.y);
+  if (!h.stranger) w.toast("😵", w.tribe.danger === "calm" ? `${h.name} is knocked out! Someone should help them up.` : `${h.name} is knocked out! Get someone to them within a minute, or they won't make it.`, h.x, h.y);
 }
 
 /** One tick of a friend patching someone up. Returns true once they're back on their feet. */
@@ -109,8 +121,10 @@ export function healTick(w: World, patient: Human, dt: number) {
   const hut = w.colony.buildings.some((b) => b.kind === "healer" && b.built >= 1 && Math.hypot(b.x - patient.x, b.y - patient.y) < 160);
   const rate = 0.12 * (w.camp.learned.has("medicine") ? 1.6 : 1) * (hut ? 1.6 : 1);
   patient.hp = Math.min(1, patient.hp + rate * dt);
+  patient.helpedAt = w.elapsed;
   if (w.rng() < dt * 2) w.particles.spawn(P.Heart, patient.x, patient.y, { z: 16, vz: 20, size: 5, max: 1 });
   if (patient.state === "down" && patient.hp > 0.3) {
+    upAgain(patient);
     patient.state = "idle";
     patient.stateT = 0;
     patient.think = 0;
@@ -134,8 +148,10 @@ export function recover(w: World, h: Human, dt: number) {
   if (w.civ.has("herbalism")) rate *= 2;
   if (h.state === "down") {
     rate = 0.004;
-    // nobody came: they come round by themselves eventually
-    if (h.stateT > 50 && h.hp > 0.18) {
+    // nobody's come: the clock runs out (death.ts). Only in Calm do they come round by themselves.
+    if (downTick(w, h, dt)) return;
+    if (w.tribe.danger === "calm" && h.stateT > 50 && h.hp > 0.18) {
+      upAgain(h);
       h.state = "idle";
       h.stateT = 0;
       h.think = 0;

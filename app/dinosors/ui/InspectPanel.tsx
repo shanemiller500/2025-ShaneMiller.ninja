@@ -7,6 +7,7 @@ import { RES_INFO, type Cost } from "../data/colony";
 import { IncubatorSection, PitSection } from "./DragonSites";
 import type { Engine, InspectInfo, Snapshot } from "../game/engine";
 import type { Resource } from "../sim/types";
+import { ChariotRaidCard } from "./ChariotRaidCard";
 import { GameIcon } from "./GameIcon";
 import { useClickAway } from "./useClickAway";
 import { UpgradeAllButton } from "./UpgradeAllButton";
@@ -269,6 +270,7 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
           <p className="mt-2 text-[11px] leading-snug text-white/55">Meat feeds the tribe, hide makes clothes + tents, bones make tools, spikes + totems. Predators come for the meat, and it spoils if it's left too long.</p>
         </>
       )}
+      {info.kind === "chariot" && <ChariotRaidCard info={info} snap={snap} engine={engine} />}
       {info.kind === "tower" && (
         <>
           <div className="flex items-center gap-3 pr-8">

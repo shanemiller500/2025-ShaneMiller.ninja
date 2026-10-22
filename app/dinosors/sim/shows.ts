@@ -15,6 +15,7 @@ import { TILE, type Building, type Dragon, type Human } from "./types";
 import type { World } from "./world";
 import { canFly, dragonStats } from "./dragonKeep";
 import { keeperOf } from "./keepers";
+import { BUILDINGS } from "../data/colony";
 
 /** How long a show runs (seconds). */
 export const SHOW_SECONDS = 50;
@@ -38,24 +39,94 @@ export const pitCentre = (b: Building) => ({ x: b.x, y: b.y - TILE * 1.6 });
 export const pitScale = (b: Building) => b.grow ?? 1;
 /** Arena radius (horizontal). */
 export const pitRadius = (b: Building) => TILE * 2.4 * pitScale(b);
-/** The biggest the tribe will dig it. */
+/** The biggest the tribe will dig it (each pit joined into it lets it go bigger). */
 export const PIT_MAX = 4;
+export const pitMax = (b: Building) => PIT_MAX + (b.merged ?? 0) * 1.2;
+/** Pits whose rims are this close (or overlapping) join into one. */
+export const PIT_JOIN = 260;
 
 /** How big the pit should be for the dragons we have: room for every one of them (big ones need more). */
-export function pitWant(w: World) {
+export function pitWant(w: World, pit?: Building | null) {
   let area = 0;
   for (const d of w.dragons.owned) area += dragonStats(d).scale ** 2;
-  return Math.max(1, Math.min(PIT_MAX, 0.9 + 0.6 * Math.sqrt(area)));
+  return Math.max(1, Math.min(pit ? pitMax(pit) : PIT_MAX, 0.9 + 0.6 * Math.sqrt(area)));
+}
+
+/**
+ * A second pit finished next to the first: they're dug into one great pit, centred between them, bigger than
+ * either (the colosseum round it moves with it). Returns the pit that was joined in, if any.
+ */
+export function joinPits(w: World): Building | null {
+  const main = pitOf(w);
+  if (!main) return null;
+  const other = w.colony.buildings.find((b) => b !== main && b.kind === "dragonPit" && b.built >= 1 && b.hp > 0
+    && Math.hypot(pitCentre(b).x - pitCentre(main).x, pitCentre(b).y - pitCentre(main).y) < pitRadius(main) + pitRadius(b) + PIT_JOIN);
+  if (!other) return null;
+  const def = BUILDINGS.dragonPit;
+  // the new middle, weighted by how big each one was
+  const a = pitScale(main) ** 2;
+  const b = pitScale(other) ** 2;
+  const x = (main.x * a + other.x * b) / (a + b);
+  const y = (main.y * a + other.y * b) / (a + b);
+  const gap = Math.hypot(main.x - other.x, main.y - other.y);
+  main.merged = (main.merged ?? 0) + 1 + (other.merged ?? 0);
+  // big enough to take in both (and the ground between)
+  main.grow = Math.min(pitMax(main), Math.max(pitScale(main), pitScale(other)) + 0.8 + gap / (TILE * 2.4) * 0.35);
+  main.x = x;
+  main.y = y;
+  main.tx = Math.round(x / TILE - def.w / 2);
+  main.ty = Math.round((y + TILE / 2) / TILE - def.h);
+  main.hp = Math.max(main.hp, other.hp);
+  w.colony.buildings.splice(w.colony.buildings.indexOf(other), 1);
+  for (const h of w.colony.buildings) if (h.kind === "riderHall") {
+    h.x = main.x;
+    h.y = main.y;
+    h.tx = main.tx;
+    h.ty = main.ty;
+  }
+  w.colony.version++;
+  clearPitFloor(w, main);
+  const c = pitCentre(main);
+  w.particles.burst(P.Dust, c.x, c.y, 24, pitRadius(main), { size: 16, max: 1.4, color: "rgba(170,145,100,0.55)" });
+  w.sfx("rumble", c.x, c.y, 1, 0.8);
+  w.toast("🏟️", `The two dragon pits are dug into one great pit, with a shady overhang at the back for the dragons to rest out of the sun!`, c.x, c.y);
+  return other;
+}
+
+/* ------------------------------ the shade ------------------------------ */
+
+/** The shady strip under the rock overhang at the back of the arena. */
+export function pitShade(b: Building) {
+  const c = pitCentre(b);
+  const r = pitRadius(b);
+  return { x: c.x, y: c.y - r * 0.5 * 0.42, rx: r * 0.62, ry: r * 0.5 * 0.26 };
+}
+
+/** The hot middle of the day: dragons rest in the shade. */
+export const hotHours = (w: World) => w.time >= 11 && w.time <= 16.5 && w.daylight > 0.55 && w.weather.rain < 0.3;
+
+/** Dragon n's spot in the shade (spread along the overhang, two rows once it's crowded). */
+export function pitShadeSpot(b: Building, n: number, of: number) {
+  const s = pitShade(b);
+  const per = Math.max(1, Math.ceil(of / 2));
+  const row = of > 4 && n >= per ? 1 : 0;
+  const k = row ? n - per : n;
+  const cols = row ? of - per : Math.min(of, of > 4 ? per : of);
+  // the back row a half-step over from the front one, so nobody lies on top of anyone
+  const f = cols <= 1 ? 0.5 : (k + (row ? 0.5 : 0)) / (cols - (row ? 0 : 1));
+  return { x: s.x - s.rx * 0.85 + Math.min(1, f) * s.rx * 1.7, y: s.y - s.ry * 0.45 + row * Math.max(s.ry * 1.1, 36) };
 }
 
 /** Every frame: dig the pit out wider whenever the dragons have outgrown it (it never shrinks). */
 export function pitGrow(w: World, dt: number) {
+  // a second pit finished beside it: dig them into one
+  if (Math.floor(w.elapsed) !== Math.floor(w.elapsed - dt)) joinPits(w);
   const pit = pitOf(w);
   if (!pit) return;
   // the arena floor is kept clear: anything growing in it is dug out (the timber goes to the stores)
   // (every couple of seconds of game time)
   if (Math.floor(w.elapsed / 2) !== Math.floor((w.elapsed - dt) / 2)) clearPitFloor(w, pit);
-  const want = pitWant(w);
+  const want = pitWant(w, pit);
   const now = pitScale(pit);
   if (now >= want - 0.01) return;
   pit.grow = Math.min(want, now + dt * 0.012);

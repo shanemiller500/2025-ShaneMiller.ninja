@@ -45,12 +45,16 @@ import { TOWER_Z } from "../sim/nav";
 import { condition, CONDITION_LABEL } from "../sim/injury";
 import { drawBarricade, drawCarcass, drawSpikes, drawTannery, drawTotem } from "./boneArt";
 import { carcassStage, harvested } from "../sim/carcass";
+import { feastTable } from "../sim/feast";
+import { drawFeastTable, drawRoastPile } from "./feastArt";
+import { drawDragonBones } from "./dragonBonesArt";
 import { HELMET_BY_ID, OUTFIT_BY_ID } from "../data/colony";
 import { drawRefinery } from "./metalArt";
 import { drawBrute, drawCatapult, drawBruteMissile, drawClanCamp } from "./bruteArt";
+import { drawTreeCanopy, drawTreeFolk, drawTreeGround, drawTreeSign } from "./treeFolkArt";
 import { drawClanBuilding, drawClanHold, drawClanTrap } from "./clanLifeArt";
 import { fenceSize, siteOf } from "../sim/clanLife";
-import type { Brute, Clan, ClanBuild } from "../sim/types";
+import type { Brute, Clan, ClanBuild, TreeSign } from "../sim/types";
 import { TerrainRenderer } from "./terrainRenderer";
 import { drawEruptionColumn, drawGhost, drawPyroclastic } from "./civArt";
 import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
@@ -120,6 +124,13 @@ const K_OURSHOT = 44;
 const K_CHARIOT = 45;
 const K_HALL_BACK = 46;
 const K_HALL_FRONT = 47;
+const K_FEAST = 48;
+/** Speech bubbles shown at once (besides the people you've picked). */
+const MAX_BUBBLES = 3;
+/** the Tree People: a camp's canopy village, its ground ring, a warning display */
+const K_TREECAMP = 49;
+const K_TREEGROUND = 50;
+const K_TREESIGN = 51;
 
 interface Drop {
   x: number;
@@ -341,7 +352,27 @@ export class Renderer {
     }
     for (let i = 0; i < rv.brutes.length; i++) {
       const b = rv.brutes[i];
-      if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1 + 40) list.push({ y: b.y, k: K_BRUTE, i });
+      // a Tree Person up in a tree goes after the tree (and the deck) it's sitting in
+      if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1 + 160) list.push({ y: b.tree && b.z > 8 ? b.y + 70 : b.y, k: K_BRUTE, i });
+    }
+    // Tree People camps: the village up in the canopy (after its trees), the ground ring, the warning signs
+    const fo = w.forest;
+    for (let i = 0; i < fo.tribes.length; i++) {
+      const tr = fo.tribes[i];
+      const R = 230 + tr.tier * 30;
+      if (tr.x + R < x0 || tr.x - R > x1 || tr.y + R < y0 || tr.y - R > y1 + 200) continue;
+      let maxY = tr.y;
+      for (const p of tr.pods) maxY = Math.max(maxY, p.y);
+      list.push({ y: maxY + 4, k: K_TREECAMP, i });
+      list.push({ y: tr.y - 60, k: K_TREEGROUND, i });
+    }
+    this.signs.length = 0;
+    for (const tr of fo.tribes) {
+      for (const s of tr.signs) {
+        if (s.x < x0 - 40 || s.x > x1 + 40 || s.y < y0 || s.y > y1 + 80) continue;
+        list.push({ y: s.y, k: K_TREESIGN, i: this.signs.length });
+        this.signs.push({ s, color: tr.color });
+      }
     }
     // what they've built at home, and their hidden pits
     this.cbs.length = 0;
@@ -426,6 +457,11 @@ export class Renderer {
       }
     }
     if (w.camp.pileX > x0 && w.camp.pileX < x1 && w.camp.pileY > y0 && w.camp.pileY < y1) list.push({ y: w.camp.pileY, k: K_PILE, i: 0 });
+    // the feast table by the fire (once a dragon has roasted anything)
+    if (w.colony.feast.food > 0 || w.colony.feast.eaten > 0 || w.flags.has("dragonCook")) {
+      const ft = feastTable(w);
+      if (ft.x > x0 - 80 && ft.x < x1 + 80 && ft.y > y0 - 60 && ft.y < y1 + 60) list.push({ y: ft.y, k: K_FEAST, i: 0 });
+    }
     if (Object.values(w.mineLoads).some((n) => (n ?? 0) > 0) && w.camp.caveX > x0 - 100 && w.camp.caveX < x1 + 100 && w.camp.caveY > y0 - 80 && w.camp.caveY < y1 + 80) list.push({ y: w.camp.caveY + 36, k: K_MINE_LOAD, i: 0 });
     const vo = w.volcano;
     if (vo.x + 450 > x0 && vo.x - 450 < x1 && vo.y - 400 < y1 && vo.y + 200 > y0) list.push({ y: vo.y + 150, k: K_VOLCANO, i: 0 });
@@ -580,6 +616,7 @@ export class Renderer {
           if (b.kind === "spikes") drawSpikes(c, Math.atan2(b.y - (w.camp.y + 30), b.x - w.camp.x), b.built, b.hp / def.hp, b.tx * 7 + b.ty);
           else if (b.kind === "barricade") drawBarricade(c, b.built, b.hp / def.hp);
           else if (b.kind === "totem") drawTotem(c, b.built, this.t);
+          else if (b.kind === "dragonBones") drawDragonBones(c, def.w * TILE, b, this.t);
           else if (b.kind === "tannery") drawTannery(c, def.w * TILE, b.built, w.camp.stock.hide, this.t);
           else if (b.kind === "refinery" && b.built >= 1) drawRefinery(c, def.w * TILE, w.camp.stock, this.t, night > 0.5);
           else if (CIV_KINDS.has(b.kind)) drawCivBuilding(c, b, def.w, def.h, { power: w.civ.energy > 1, night: night > 0.5, storm: w.weather.storm, t: this.t });
@@ -643,9 +680,30 @@ export class Renderer {
           c.save();
           c.translate(b.x, b.y - b.z);
           const bc = w.rivals.clan(b.clan);
-          if (b.look) this.drawTurned(c, b, bc);
+          if (b.tree) drawTreeFolk(c, b, this.t, b.tint ?? "#d94f2a");
+          else if (b.look) this.drawTurned(c, b, bc);
           else if (b.weapon === "catapult") drawCatapult(c, b, bc?.colors?.length ? bc.colors : [bc?.color ?? "#c0392b"], this.t);
           else drawBrute(c, b, this.t, b.tint ?? bc?.color ?? "#c0392b", (bc?.smarts ?? 0) >= 2);
+          c.restore();
+          break;
+        }
+        case K_TREECAMP: {
+          const tr = w.forest.tribes[it.i];
+          if (tr) drawTreeCanopy(c, tr, this.t, night > 0.5);
+          break;
+        }
+        case K_TREEGROUND: {
+          const tr = w.forest.tribes[it.i];
+          if (tr) drawTreeGround(c, tr, this.t, night > 0.5, !!tr.found);
+          break;
+        }
+        case K_TREESIGN: {
+          const sg = this.signs[it.i];
+          c.save();
+          c.translate(sg.s.x, sg.s.y);
+          // big enough to read as a warning from a way off
+          c.scale(1.5, 1.5);
+          drawTreeSign(c, sg.s, sg.color, this.t);
           c.restore();
           break;
         }
@@ -765,6 +823,7 @@ export class Renderer {
               const def = sp(item.species);
               drawCarcass(c, cc.size, cc.dir, { body: def.look.body, belly: def.look.belly, plan: def.plan, carnivore: def.diet !== "herbivore", horned: !!def.shape.horns, plates: !!def.shape.plates, k: harvested(cc), stage, burnt: cc.burnt, rot: cc.rot }, this.t);
             }
+            if (cc.roast) drawRoastPile(c, cc.roast, cc.size, this.t);
           } else if (item.kind === "bones") drawBones(c, item.amount);
           else drawItem(c, item, this.t);
           c.restore();
@@ -819,6 +878,14 @@ export class Renderer {
           }
           if (s.up) drawScaffold(c, Object.values(s.upHave).reduce((a, b) => a + (b ?? 0), 0) / Math.max(1, Object.values(HOUSING[s.tier + 1]?.cost ?? {}).reduce((a, b) => a + (b ?? 0), 0)));
           if (done && s.hp < 0.6) this.damageBadge(c, 0, -60);
+          c.restore();
+          break;
+        }
+        case K_FEAST: {
+          const ft = feastTable(w);
+          c.save();
+          c.translate(ft.x, ft.y);
+          drawFeastTable(c, w.colony.feast.food, this.t);
           c.restore();
           break;
         }
@@ -1361,6 +1428,8 @@ export class Renderer {
   private drs: Dragon[] = [];
   /** clan buildings in view this frame */
   private cbs: { clan: Clan; kind: ClanBuild; lv: number; x: number; y: number; part?: "back" | "front" }[] = [];
+  /** Tree People warning signs in view this frame (with their tribe's paint) */
+  private signs: { s: TreeSign; color: string }[] = [];
 
   /** A dragon (selection ring, the dragon, then whoever is riding it). */
   private drawDragonAt(c: CanvasRenderingContext2D, dr: Dragon, ov: Overlay, weapon: WeaponLook) {
@@ -2389,6 +2458,11 @@ export class Renderer {
     add(w.volcano.x, w.volcano.y - 150, 160 + w.volcano.glow * 240, 0.4 + w.volcano.glow * 0.5);
     for (const s of w.shelters) if (s.stage >= 2) add(s.x, s.y - 8, HOUSING[s.tier]?.hearth && shelterDone(s) ? 120 : 80, HOUSING[s.tier]?.hearth && shelterDone(s) ? 0.85 : 0.6);
     for (const b of w.colony.buildings) if (b.kind === "blacksmith" && b.built >= 1) add(b.x - 10, b.y - 12, 110, 0.75);
+    // Tree People camps: the ritual fire below, firelit doorways + the fire bowl up in the canopy
+    for (const tr of w.forest.tribes) {
+      add(tr.x, tr.y + 10, 200 + Math.sin(this.t * 8 + tr.id) * 10, 0.85);
+      for (const p of tr.pods) if (p.hp > 0 && (p.kind === "hut" || p.kind === "ritual")) add(p.x + (p.kind === "ritual" ? 9 : 2), p.y - p.h - 6, p.kind === "ritual" ? 70 : 55, 0.6 + Math.sin(this.t * 6 + p.x) * 0.06);
+    }
     // crystals light up the night (brighter in storms)
     if (w.civ.energy > 1) for (const b of w.colony.buildings) if ((b.built >= 1 || pyramidAwake(b)) && (b.kind === "energyTower" || b.kind === "chamber" || b.kind === "beamTower" || b.kind === "obelisk" || b.kind === "pyramid" || b.kind === "resShield")) add(b.x, b.y - (b.kind === "pyramid" ? 120 : 50), b.kind === "pyramid" ? (pyramidCased(b) ? 340 : 260) : 90, 0.55 + w.weather.storm * 0.3);
     for (const h of w.humans) if (!h.under && h.state !== "sleep" && h.state !== "hide" && w.shifts.poweredOutfit(w, h)) add(h.x, h.y - h.z - 14, 135, 0.58, true);
@@ -2556,17 +2630,32 @@ export class Renderer {
       const hy = dn.y - dn.z - L * (sp(dn.species).plan === "sauropod" ? 0.85 : 0.6) - 10 - (1 - k) * 8;
       this.bubbleIcon(c, dn.x + dn.dir * L * 0.2, hy, dn.emote.icon, inv * 0.9, k);
     }
-    // speech bubbles over people
+    // speech bubbles over people: whoever's picked always, plus only the few newest elsewhere (and never piled
+    // on top of each other), so a busy town doesn't turn into a wall of chatter
     c.textAlign = "center";
-    for (const h of w.humans) {
-      if (!h.bubble || h.x < x0 || h.x > x1 || h.y < y0 || h.y > y1 || this.hidden(h)) continue;
-      const k = Math.min(1, h.bubble.t * 3);
-      this.speech(c, h.x, h.y - h.z - 34, h.bubble.text, inv, k);
+    const talking = w.humans.filter((h) => h.bubble && h.x >= x0 && h.x <= x1 && h.y >= y0 && h.y <= y1 && !this.hidden(h));
+    const mine = (h: Human) => ov.selection.includes(h.id) || h.id === ov.followId || h.id === ov.selectedId;
+    talking.sort((a, b) => (mine(b) ? 1 : 0) - (mine(a) ? 1 : 0) || b.bubble!.t - a.bubble!.t);
+    const shown: { x: number; y: number }[] = [];
+    let others = 0;
+    for (const h of talking) {
+      const picked = mine(h);
+      if (!picked && (others >= MAX_BUBBLES || shown.some((p) => Math.abs(p.x - h.x) < 90 && Math.abs(p.y - h.y) < 40))) continue;
+      if (!picked) others++;
+      shown.push({ x: h.x, y: h.y });
+      const k = Math.min(1, h.bubble!.t * 3);
+      this.speech(c, h.x, h.y - h.z - 34, h.bubble!.text, inv, k);
     }
     // …and over Neanderthals, plus a name plate over each clan camp
     for (const b of w.rivals.brutes) {
-      if (!b.bubble || b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
-      this.speech(c, b.x, b.y - b.z - 46, b.bubble.text, inv, Math.min(1, b.bubble.t * 3));
+      if (!b.bubble || b.hidden || b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
+      this.speech(c, b.x, b.y - b.z - (b.tree ? 40 : 46), b.bubble.text, inv, Math.min(1, b.bubble.t * 3));
+    }
+    // …and over each Tree People camp we've scouted
+    for (const tr of w.forest.tribes) {
+      if (!tr.found || tr.x < x0 - 100 || tr.x > x1 + 100 || tr.y < y0 || tr.y > y1 + 200) continue;
+      const top = tr.pods.reduce((m, p) => Math.min(m, p.y - p.h), tr.y);
+      this.speech(c, tr.x, top - 52, `🌿 ${tr.name} Tree People · ${w.forest.members(tr.id).length}`, inv * 0.9, 1);
     }
     for (const cl of w.rivals.clans) {
       if (cl.x < x0 - 100 || cl.x > x1 + 100 || cl.y < y0 || cl.y > y1 + 80) continue;

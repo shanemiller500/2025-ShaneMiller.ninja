@@ -66,9 +66,14 @@ export type TaskKind =
   /** a war band: fighters hold the parent dragon off while runners steal the eggs (see dragonRaid.ts) */
   | "dragonRaid"
   /** a crew picks a building up and carries it somewhere new (see moving.ts) */
-  | "moveBuilding";
+  | "moveBuilding"
+  /** attack a Tree People camp: beat whoever comes down out of the trees, then pull the decks down (treeFolk.ts) */
+  | "treeRaid";
 
 export interface Task {
+  /** a dragon raid: how many set out, and whether it's falling back (dragonRaid.ts) */
+  size?: number;
+  retreat?: boolean;
   id: number;
   kind: TaskKind;
   icon: string;
@@ -218,8 +223,9 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
 
   if (picked.brute) {
     const b = picked.brute;
-    if (!armed) return { kind: "move", icon: "😬", label: "Nobody has a weapon to fight a Neanderthal!", x: b.x, y: b.y, target: 0 };
-    return { kind: "hunt", icon: "🪓", label: `Fight ${b.name} the Neanderthal`, x: b.x, y: b.y, target: b.id, weapons: kinds };
+    const who = b.tree ? "one of the Tree People" : "a Neanderthal";
+    if (!armed) return { kind: "move", icon: "😬", label: `Nobody has a weapon to fight ${who}!`, x: b.x, y: b.y, target: 0 };
+    return { kind: "hunt", icon: b.tree ? "🌿" : "🪓", label: b.tree ? `Fight ${b.name} of the Tree People` : `Fight ${b.name} the Neanderthal`, x: b.x, y: b.y, target: b.id, weapons: kinds };
   }
   if (picked.egg && adults.length) {
     const e = picked.egg;
@@ -228,12 +234,11 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
   if (picked.nest && adults.length) {
     const n = picked.nest;
     const eggs = w.dragons.eggs.filter((e) => e.at === "nest" && e.nest === n.id).length;
-    const steal: Command = { kind: "eggHunt", icon: "🥚", label: eggs ? `Steal a dragon egg (${eggs} in the nest)${armed ? "" : " (nobody's armed!)"}` : "Raid the nest for treasure (no eggs)", x: n.x, y: n.y, target: n.id };
+    const steal: Command = { kind: "eggHunt", icon: "🥚", label: eggs ? `Steal all ${eggs} dragon eggs${armed ? "" : " (nobody's armed!)"}` : "Raid the nest for treasure (no eggs)", x: n.x, y: n.y, target: n.id };
     const look: Command = { kind: "move", icon: "👣", label: "Go and look at the nest", x: n.x + 60, y: n.y + 60, target: 0 };
     // a proper war band: fighters hold the dragon, runners grab the eggs
     if (adults.length >= 3 && eggs) {
-      const runners = Math.max(1, Math.min(3, Math.round(adults.length * 0.25)));
-      return { kind: "dragonRaid", icon: "🐉", label: `Dragon raid! ${adults.length - runners} fight, ${runners} grab eggs`, x: n.x, y: n.y, target: n.id, alts: [steal, look] };
+      return { kind: "dragonRaid", icon: "🐉", label: `Dragon raid! ${adults.length} share fighting and carrying ${eggs} eggs`, x: n.x, y: n.y, target: n.id, alts: [steal, look] };
     }
     return { ...steal, alts: [look] };
   }
@@ -272,6 +277,13 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
     const o = picked.human;
     if (condition(o) !== "healthy") return { kind: "heal", icon: "🩹", label: `Help ${o.name}`, x: o.x, y: o.y, target: o.id };
     return null;
+  }
+  // a Tree People camp we've scouted: attack it (fight them down out of the trees, then tear the decks down)
+  const grove = w.forest.campAt(x, y, 150);
+  if (grove?.found) {
+    if (!armed) return { kind: "move", icon: "😬", label: "Nobody has a weapon to attack a Tree People camp!", x: grove.x, y: grove.y, target: 0 };
+    const n = w.forest.members(grove.id).length;
+    return { kind: "treeRaid", icon: "🔥", label: `Attack the ${grove.name} tree camp${n ? ` (${n} Tree People)` : ""}`, x: grove.x, y: grove.y, target: grove.id, weapons: kinds };
   }
   // a Neanderthal camp: raid it (beat whoever's home, take their food, bring our people back)
   const enemy = w.rivals.clans.find((k) => Math.hypot(k.x - x, k.y - y) < 110);
@@ -462,7 +474,7 @@ export function issue(w: World, people: Human[], c: Command, weapon?: WeaponKind
     for (const h of crew) say(h, "I'm too little!");
     return null;
   }
-  if (c.kind === "hunt" || c.kind === "guard" || c.kind === "defend" || c.kind === "operate" || c.kind === "raid") {
+  if (c.kind === "hunt" || c.kind === "guard" || c.kind === "defend" || c.kind === "operate" || c.kind === "raid" || c.kind === "treeRaid") {
     // fighters only: kids head home instead
     for (const h of crew) if (h.child) say(h, "I'll stay safe!");
   }
@@ -575,6 +587,8 @@ function taskAlive(w: World, t: Task): boolean {
       return !!(w.dinoById(t.target) || w.dragons.byId(t.target) || w.rivals.byId(t.target));
     case "raid":
       return !!w.rivals.clan(t.target);
+    case "treeRaid":
+      return !!w.forest.tribe(t.target);
     case "heal": {
       const p = w.humans.find((x) => x.id === t.target);
       return !!p && p.hp < 0.95;
@@ -704,6 +718,49 @@ export function taskThink(w: World, h: Human): boolean {
         return false;
       }
       go(h, "walk", clan.x + (w.rng() - 0.5) * 40, clan.y + 20);
+      return true;
+    }
+    case "treeRaid": {
+      const camp = w.forest.tribe(t.target);
+      if (!camp) {
+        say(h, pick(w.rng, ["The forest is ours!", "They're gone!", "Ha!"]));
+        personDone(w, h, t);
+        return false;
+      }
+      // whoever comes down out of the trees to fight (or is still up there): grown-ups only, never their little ones
+      let foe: ReturnType<typeof w.rivals.byId> = null;
+      let fd = 380;
+      for (const b of w.forest.members(camp.id)) {
+        if (b.hp <= 0 || (b.age ?? 100) < 100 || (b.hidden && Math.hypot(b.x - h.x, b.y - h.y) > 90)) continue;
+        const d = Math.min(Math.hypot(b.x - h.x, b.y - h.y), Math.hypot(b.x - camp.x, b.y - camp.y) + 60);
+        if (d < fd) {
+          fd = d;
+          foe = b;
+        }
+      }
+      const there = Math.hypot(h.x - camp.x, h.y - camp.y);
+      if (foe && there < 1000) {
+        foe.hidden = false;
+        h.order = { kind: "hunt", id: foe.id };
+        return false; // roleThink runs the fight
+      }
+      h.order = null;
+      // nobody left to stop us: pull the decks down, one tree at a time
+      const pod = camp.pods.filter((p) => p.hp > 0).sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))[0];
+      if (!pod) {
+        w.forest.raze(w, camp, "us");
+        personDone(w, h, t);
+        return false;
+      }
+      if (Math.hypot(h.x - pod.x, h.y - (pod.y + 8)) < 30) {
+        h.vx = h.vy = 0;
+        h.dir = pod.x > h.x ? 1 : -1;
+        if (w.rng() < 0.3) say(h, pick(w.rng, ["Pull it down!", "Heave!", "Cut the ropes!"]));
+        w.forest.wreck(w, camp, pod, 0.16);
+        h.think = 1.1;
+        return true;
+      }
+      go(h, "walk", pod.x + (w.rng() - 0.5) * 16, pod.y + 8);
       return true;
     }
     case "hunt": {

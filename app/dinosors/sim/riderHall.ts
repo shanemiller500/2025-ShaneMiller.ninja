@@ -11,7 +11,7 @@
 /*  people in it (another tier for every few who move in).             */
 /* ------------------------------------------------------------------ */
 import { pitCentre, pitOf, pitRadius, pitSpot } from "./shows";
-import type { Building, Dragon, Human } from "./types";
+import { MAP_H, MAP_W, TILE, type Building, type Dragon, type Human } from "./types";
 import type { World } from "./world";
 
 export const MAX_TIERS = 3;
@@ -59,8 +59,48 @@ export function roomOf(w: World, h: Human): { x: number; y: number; a: number } 
     const mates = folk.filter((o) => dragonFor(w, o) === dr);
     a += (mates.indexOf(h) - (mates.length - 1) / 2) * 0.22;
   } else a = (i / Math.max(1, folk.length)) * Math.PI * 2 + 1.1;
+  // (just inside the wall: it's reached through the great gate, from the arena)
   const r = hallRing(pit);
-  return { x: r.cx + Math.cos(a) * r.rx, y: r.cy + Math.sin(a) * r.ry + 4, a };
+  return { x: r.cx + Math.cos(a) * (r.rx - 44), y: r.cy + Math.sin(a) * (r.ry - 32) + 4, a };
+}
+
+/** The great gate at the front: half its width as an angle round the ring. */
+export const GATE_HALF = 0.26;
+
+/**
+ * The tiles the colosseum's walls stand on: a solid ring round the pit that nobody walks through,
+ * except at the great gate at the front.
+ */
+export function hallTiles(w: World): number[] {
+  const hall = w.colony.buildings.find((b) => b.kind === "riderHall" && b.built >= 0.4 && b.hp > 0);
+  const pit = pitOf(w);
+  if (!hall || !pit) return [];
+  const r = hallRing(pit);
+  const inner = 1 - 12 / r.rx;
+  const outer = 1 + 26 / r.rx;
+  const out: number[] = [];
+  const x0 = Math.max(0, Math.floor((r.cx - r.rx * outer) / TILE));
+  const x1 = Math.min(MAP_W - 1, Math.ceil((r.cx + r.rx * outer) / TILE));
+  const y0 = Math.max(0, Math.floor((r.cy - r.ry * outer) / TILE));
+  const y1 = Math.min(MAP_H - 1, Math.ceil((r.cy + r.ry * outer) / TILE));
+  for (let ty = y0; ty <= y1; ty++) {
+    for (let tx = x0; tx <= x1; tx++) {
+      const dx = (tx * TILE + TILE / 2 - r.cx) / r.rx;
+      const dy = (ty * TILE + TILE / 2 - r.cy) / r.ry;
+      const e = Math.hypot(dx, dy);
+      if (e < inner || e > outer) continue;
+      if (Math.abs(Math.atan2(dy, dx) - Math.PI / 2) < GATE_HALF) continue;
+      out.push(ty * MAP_W + tx);
+    }
+  }
+  return out;
+}
+
+/** Changes whenever the walls move or grow (so the walking map is rebuilt). */
+export function hallKey(w: World) {
+  const hall = w.colony.buildings.find((b) => b.kind === "riderHall" && b.built >= 0.4 && b.hp > 0);
+  const pit = pitOf(w);
+  return hall && pit ? `${hall.id}:${Math.round(pit.x)}:${Math.round(pit.y)}:${Math.round(pitRadius(pit) / 8)}` : "";
 }
 
 /** Is this person tucked up in their room right now? (drawn as inside) */

@@ -8,9 +8,10 @@ import { CIV_ORDER, CIV_TECH, EXPERIMENT_MATS, FREQ_MAX, FREQ_MIN, PATH_INFO, PY
 import { RES_INFO, type Cost } from "../data/colony";
 import type { Engine, Snapshot } from "../game/engine";
 import type { ExperimentResult } from "../sim/civ";
-import type { Resource } from "../sim/types";
+import type { BuildingKind, Resource } from "../sim/types";
 import { GameIcon } from "./GameIcon";
 import { useClickAway } from "./useClickAway";
+import { ResearchSupplies } from "./ResearchSupplies";
 
 /* ------------------------------------------------------------------ */
 /*  Civilization HQ. Before the choice: where the humming chamber is.  */
@@ -37,7 +38,7 @@ function Costs({ cost, stock, paid = false }: { cost: Cost; stock: Record<string
   );
 }
 
-export default function CivPanel({ snap, engine, onClose, onChoose, onExtinction }: { snap: Snapshot; engine: Engine; onClose: () => void; onChoose: () => void; onExtinction: () => void }) {
+export default function CivPanel({ snap, engine, onClose, onChoose, onExtinction, onBuildStation }: { snap: Snapshot; engine: Engine; onClose: () => void; onChoose: () => void; onExtinction: () => void; onBuildStation: (kind: BuildingKind) => void }) {
   const panelRef = useRef<HTMLElement>(null);
   useClickAway(true, panelRef, onClose);
   const civ = snap.civ;
@@ -78,7 +79,7 @@ export default function CivPanel({ snap, engine, onClose, onChoose, onExtinction
               </button>
             ))}
           </div>
-          {tab === "research" && <Research snap={snap} engine={engine} />}
+          {tab === "research" && <Research snap={snap} engine={engine} onNavigate={onClose} onBuildStation={onBuildStation} />}
           {tab === "energy" && <Energy snap={snap} />}
           {tab === "lab" && <Lab snap={snap} engine={engine} />}
           {tab === "projects" && <Projects snap={snap} engine={engine} onExtinction={onExtinction} />}
@@ -137,7 +138,7 @@ function Before({ snap, engine, onChoose }: { snap: Snapshot; engine: Engine; on
 
 /* ------------------------------ research ------------------------------ */
 
-function Research({ snap, engine }: { snap: Snapshot; engine: Engine }) {
+function Research({ snap, engine, onNavigate, onBuildStation }: { snap: Snapshot; engine: Engine; onNavigate: () => void; onBuildStation: (kind: BuildingKind) => void }) {
   const civ = snap.civ;
   const stock = snap.camp.stock;
   const cur = civ.current;
@@ -162,8 +163,9 @@ function Research({ snap, engine }: { snap: Snapshot; engine: Engine }) {
           <p className="mt-1.5 text-[12px] text-white/70">{CIV_TECH[cur.id].what}</p>
           <div className="mt-2 flex items-center gap-2 text-[11px]">
             <Costs cost={cur.cost} stock={stock} paid={cur.paid} />
-            <span className="text-white/55">{cur.paid ? "✓ materials in" : cur.missing ? `gatherers are fetching ${RES_INFO[cur.missing as Resource]?.name.toLowerCase() ?? cur.missing}` : "ready"}</span>
+            <span className="text-white/55">{cur.paid ? "✓ materials in" : cur.missing ? "Collect missing materials" : "ready"}</span>
           </div>
+          {!cur.paid && <ResearchSupplies cost={cur.cost} snap={snap} engine={engine} onNavigate={onNavigate} onBuildStation={onBuildStation} />}
           <p className="mt-2 text-[11px] text-white/50">
             📜 {civ.jobs.researcher || "No"} researcher{civ.jobs.researcher === 1 ? "" : "s"} on it
             {civ.path === "resonance" && !snap.civ.canExperiment && cur.id !== "resonance" ? " · build a 🔔 Resonance table: research there is 4× faster" : ""}. Set jobs in the tribe panel (or leave them on Auto).

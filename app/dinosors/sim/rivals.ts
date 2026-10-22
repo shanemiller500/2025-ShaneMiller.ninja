@@ -14,6 +14,7 @@
 /*  then to raid our stores for wood + stone as well as food.          */
 /*  Everyone drops what they carried when they fall.                   */
 /* ------------------------------------------------------------------ */
+import { removeHuman } from "./death";
 import { sp } from "../data/species";
 import { CAMP_LEVELS, FEMALE_NAMES } from "../data/facts";
 import { findSpawnSpot, isBaby, sizeOf } from "./dinos";
@@ -49,6 +50,9 @@ export const BRUTE_WEAPONS: Record<BruteWeapon, { hit: number; wall: number; thr
   spear: { hit: 0.3, wall: 10, throw: 0.2, range: 150 },
   rock: { hit: 0.24, wall: 12, throw: 0.16, range: 125 },
   sling: { hit: 0.28, wall: 12, throw: 0.26, range: 260 },
+  // the Tree People's (treeFolk.ts keeps their own, lighter numbers)
+  bone: { hit: 0.26, wall: 6, throw: 0.12, range: 0 },
+  bow: { hit: 0.12, wall: 4, throw: 0.16, range: 280 },
   // a clan town's siege engine (clanTowns.ts): no melee, it lobs flaming boulders from beyond Scorpion range
   // (740 = CATAPULT_RANGE: written out so this table never waits on clanTowns.ts loading first)
   catapult: { hit: 0, wall: 0, throw: 0, range: 740 },
@@ -65,7 +69,7 @@ export const GROWN_AGE = 180;
 export const isFemale = (h: Human) => FEMALE_NAMES.has(h.name);
 
 /** A thrown spear or rock in flight. */
-interface Missile {
+export interface Missile {
   x: number;
   y: number;
   z: number;
@@ -127,9 +131,15 @@ export class Rivals {
     return w.humans.filter((h) => h.captive && (clan === undefined || h.captive === clan));
   }
 
-  /** Should our guards + defenses shoot this one? Always: the clans and us never get along. */
+  /** Should our guards + defenses shoot this one? Always (the clans and us never get along), once they can see it:
+   *  a Tree Person hidden up in the leaves isn't a target until it shows itself. */
   hostile(w: World, b: Brute) {
-    return !!w && !!b;
+    // (nor are their little ones up on the decks: TREE_GROWN, written out so this never waits on treeFolk.ts loading)
+    return !!w && !!b && !(b.tree && (b.hidden || (b.age ?? 100) < 100));
+  }
+  /** "Thog the Neanderthal" / "Kit of the Moss Eye Tree People" */
+  label(w: World, b: Brute) {
+    return b.tree ? w.forest.label(b) : `${b.name} the Neanderthal`;
   }
   /** Any hostile Neanderthal within r of (x, y)? */
   threatNear(w: World, x: number, y: number, r: number) {
@@ -231,6 +241,8 @@ export class Rivals {
       if (Math.hypot(x - c.x, y - c.y) < 1300) continue;
       if (Math.hypot(x - w.volcano.x, y - w.volcano.y) < 650) continue;
       if (this.clans.some((o) => Math.hypot(o.x - x, o.y - y) < 700)) continue;
+      // never in the Tree People's woods
+      if (w.forest.tribes.some((t) => Math.hypot(t.x - x, t.y - y) < t.r + 450)) continue;
       const s = findSpawnSpot(w, raptor, x, y, 120);
       if (!s || !this.dryCamp(w, s.x, s.y)) continue;
       // finding firm ground can nudge the spot: it still has to be well away from us
@@ -271,6 +283,8 @@ export class Rivals {
 
   /** Our spear / arrow / bolt (or another Neanderthal's club) lands. */
   hit(w: World, b: Brute, dmg: number, fx: number, fy: number, byBrute = false, proj?: string) {
+    // the Tree People take hits their own way (lighter; they scatter or swarm whoever did it)
+    if (b.tree) return w.forest.hit(w, b, dmg, fx, fy, byBrute, proj);
     // cunning clans carry hide shields: they soak up a lot of an energy lance, some of an arrow
     const clan = this.clan(b.clan);
     // close up, our people seize a catapult rather than smash it (ourCatapults.ts)
@@ -311,6 +325,12 @@ export class Rivals {
       w.camp.stock[kind] += b.loot;
       w.toast("🎒", `Got back ${b.loot} ${kind} that ${b.name} stole!`, b.x, b.y);
       b.loot = 0;
+    }
+    if (b.tree) {
+      const k = this.brutes.indexOf(b);
+      if (k >= 0) this.brutes.splice(k, 1);
+      w.forest.died(w, b);
+      return;
     }
     if (b.forage) w.addItem(b.forageKind ?? "berries", b.x, b.y, { amount: b.forage });
     w.particles.burst(P.Poof, b.x, b.y, 10, 60, { size: 12, max: 0.9, color: "rgba(200,190,170,0.9)" });
@@ -642,6 +662,11 @@ export class Rivals {
         this.hit(w, b, 0.12, b.x, b.y - 10, true);
         if (!this.brutes.includes(b)) continue;
       }
+      // the Tree People have their own brains (treeFolk.ts)
+      if (b.tree) {
+        w.forest.step(w, b, dt);
+        continue;
+      }
       b.think -= dt;
       if (b.think <= 0) this.thinkBrute(w, b);
       this.actBrute(w, b, dt);
@@ -961,7 +986,8 @@ export class Rivals {
     let best: Brute | null = null;
     let bd = r;
     for (const o of this.brutes) {
-      if (o === b || this.relation(o.clan, b.clan) !== -1) continue;
+      // feuding clans, and any Tree Person who's shown themselves
+      if (o === b || (o.tree ? o.hidden || o.hp <= 0 : this.relation(o.clan, b.clan) !== -1)) continue;
       const d = Math.hypot(o.x - b.x, o.y - b.y);
       if (d < bd) {
         bd = d;
@@ -1480,7 +1506,7 @@ export class Rivals {
       next: this.nextClan,
       arriveT: this.arriveT,
       clans: this.clans.map((c) => ({ id: c.id, name: c.name, color: c.color, x: r(c.x), y: r(c.y), food: Math.round(c.food * 10) / 10, raidT: r(c.raidT), growT: r(c.growT), smarts: c.smarts ?? 0, intel: c.intel ?? 0, style: c.style, campTier: c.campTier ?? 0, campWork: c.campWork ?? 0, sea: c.sea, fishT: c.fishT, colors: c.colors, bones: c.bones ?? 0, wood: c.wood ?? 0, builds: c.builds ?? {}, buildWork: Math.round((c.buildWork ?? 0) * 10) / 10, favor: c.favor, favorT: r(c.favorT ?? 0), riteT: c.riteT === undefined ? undefined : r(c.riteT), trapT: c.trapT === undefined ? undefined : r(c.trapT), altarBlood: c.altarBlood, science: c.science ? Math.round(c.science * 1000) / 1000 : undefined, tech: c.tech || undefined, merges: c.merges || undefined })),
-      brutes: this.brutes.map((b) => ({ clan: b.clan, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries", tint: b.tint, skill: b.skill ? Math.round(b.skill * 100) / 100 : undefined, haul: b.haul, hold: b.hold, turned: b.turned || undefined, look: b.look })),
+      brutes: this.brutes.filter((b) => !b.tree).map((b) => ({ clan: b.clan, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries", tint: b.tint, skill: b.skill ? Math.round(b.skill * 100) / 100 : undefined, haul: b.haul, hold: b.hold, turned: b.turned || undefined, look: b.look })),
       holds: this.holds.map((h) => ({ ...h, x: r(h.x), y: r(h.y), food: Math.round(h.food * 10) / 10, t: r(h.t) })),
       taken: this.taken.map((c) => ({ ...c, x: r(c.x), y: r(c.y), wear: Math.round(c.wear * 100) / 100, cd: 0, anim: 0 })),
       traps: this.traps.map((t) => ({ clan: t.clan, x: r(t.x), y: r(t.y), t: r(t.t), caught: t.caught })),
@@ -1570,9 +1596,7 @@ export function killHuman(w: World, h: Human, msg: string) {
   }
   w.particles.burst(P.Poof, h.x, h.y, 10, 60, { size: 12, max: 0.9, color: "rgba(235,228,210,0.95)" });
   w.sfx("thud", h.x, h.y, 0.9, 0.6);
-  const i = w.humans.indexOf(h);
-  if (i >= 0) w.humans.splice(i, 1);
-  w.events.push({ type: "removed", id: h.id });
+  removeHuman(w, h);
   w.toast("💀", msg, h.x, h.y);
   w.alarm(h.x, h.y, 500, 0.9, "😱", false);
 }
