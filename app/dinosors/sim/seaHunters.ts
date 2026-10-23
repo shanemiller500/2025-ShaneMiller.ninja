@@ -85,8 +85,10 @@ function pickPrey(w: World, d: Dino): { p: Prey; spot: { x: number; y: number } 
       best = { p, spot };
     }
   };
-  for (const h of w.humans) if (catchable(h)) consider({ kind: "human", h }, (h.state === "fish" ? 260 : 120) + (h.hp < 0.5 ? 40 : 0));
-  for (const b of w.rivals.brutes) if (b.hp > 0 && !b.snatched && !b.falling && !b.captive && b.weapon !== "catapult") consider({ kind: "brute", b }, 100);
+  // the Sea People are their friends: never them; and anyone in a sea village's waters is the first to go
+  const guard = (x: number, y: number) => (w.seaFolk.guarded(x, y) ? 220 : 0);
+  for (const h of w.humans) if (catchable(h)) consider({ kind: "human", h }, (h.state === "fish" ? 260 : 120) + (h.hp < 0.5 ? 40 : 0) + guard(h.x, h.y));
+  for (const b of w.rivals.brutes) if (!b.sea && b.hp > 0 && !b.snatched && !b.falling && !b.captive && b.weapon !== "catapult") consider({ kind: "brute", b }, 100 + guard(b.x, b.y));
   for (const o of w.dinos) {
     if (o === d || o.under || isSeaHunter(o) || sp(o.species).move !== "walk" || sizeOf(o) > sizeOf(d) * 1.2) continue;
     consider({ kind: "dino", d: o }, (o.state === "drink" ? 140 : 60) - sizeOf(o) * 0.2);

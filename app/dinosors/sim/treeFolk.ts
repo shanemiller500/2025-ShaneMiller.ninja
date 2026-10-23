@@ -1853,7 +1853,7 @@ export function colorsOf(t: TreeTribe) {
   return t.colors?.length ? t.colors : [t.color];
 }
 
-function centroid(list: { x: number; y: number }[]) {
+export function centroid(list: { x: number; y: number }[]) {
   let x = 0;
   let y = 0;
   for (const p of list) {
@@ -1878,7 +1878,7 @@ function takeAnything(w: World, n: number, rng: Rng): { r: Resource; n: number }
 }
 
 /** Grab some food off our stores. */
-function takeFood(w: World, n: number): { r: Resource; n: number } | null {
+export function takeFood(w: World, n: number): { r: Resource; n: number } | null {
   const s = w.camp.stock;
   for (const r of ["cooked", "meat", "fish", "crop", "berries"] as Resource[]) {
     const k = Math.min(n, Math.floor(s[r]));

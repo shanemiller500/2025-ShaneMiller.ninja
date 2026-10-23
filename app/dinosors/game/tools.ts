@@ -18,14 +18,14 @@ import { placeDragonEgg } from "../sim/dragonNests";
 import { BREEDS, type DragonBreed } from "../data/dragons";
 import { makePlant } from "../sim/plants";
 import { isWaterTile, isWalkTile } from "../sim/terrain";
-import { MAP_W, MAX_PEOPLE, T, TILE, type BuildingKind, type NodeKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
+import { MAP_W, MAX_PEOPLE, T, TILE, type BuildingKind, type FarmCrop, type NodeKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
 import type { World } from "../sim/world";
 
 export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire" | "weather" | "disaster" | "people" | "build" | "erase";
 export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
 export type LandOpt = "water" | "rock" | "mud" | "grass" | NodeKind;
 export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon" | "supervolcano";
-export type PeopleOpt = "adult" | "child" | "clan" | "treeFolk";
+export type PeopleOpt = "adult" | "child" | "clan" | "treeFolk" | "seaFolk";
 export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "bonegate" | "levitate" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | "cleanMud" | BuildingKind;
 
 export interface ToolState {
@@ -41,7 +41,7 @@ export interface ToolState {
   disaster: DisasterOpt;
   people: PeopleOpt;
   build: BuildOpt;
-  farmCrop: "flower" | "wheat" | "barley";
+  farmCrop: FarmCrop;
 }
 
 export const DEFAULT_TOOL: ToolState = {
@@ -85,6 +85,7 @@ export const FARM_CROP_OPTS: Opt<NonNullable<ToolState["farmCrop"]>>[] = [
   { value: "flower", icon: "🌼", label: "Flowers" },
   { value: "wheat", icon: "🌾", label: "Wheat" },
   { value: "barley", icon: "🌿", label: "Barley" },
+  { value: "grape", icon: "🍇", label: "Vineyard" },
 ];
 export const LAND_OPTS: Opt<LandOpt>[] = [
   { value: "water", icon: "💧", label: "Water" },
@@ -119,6 +120,7 @@ export const PEOPLE_OPTS: Opt<PeopleOpt>[] = [
   { value: "child", icon: "🧒", label: "Cave kid" },
   { value: "clan", icon: "🪓", label: "Neanderthal clan" },
   { value: "treeFolk", icon: "🌿", label: "Tree People camp" },
+  { value: "seaFolk", icon: "🛶", label: "Sea People village" },
 ];
 
 /** A new clan can't settle on top of our camp. */
@@ -177,6 +179,7 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("fireStation", "work"),
   bld("hatchery", "work"),
   bld("dragonPit", "work"),
+  bld("winery", "work"),
   bld("riderHall", "homes"),
   bld("warChariot", "defense"),
   bld("roost", "work"),
@@ -455,6 +458,17 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
     }
     case "people": {
       if (drag) return false;
+      // a Sea People village goes up out on the water where you tap
+      if (tool.people === "seaFolk") {
+        const t = w.seaFolk.placeVillage(w, x, y, 1000);
+        if (typeof t === "string") {
+          hint(w, "🛶", t);
+          return false;
+        }
+        w.sfx("drums", t.x, t.y, 0.8, 0.9);
+        w.toast("🛶", `The ${t.name} Sea People have built a village on stilts out on the water: ${w.seaFolk.members(t.id).length} of them, with canoes and their sea-beast friends. They'll fish, and raid up the rivers when they're ready.`, t.x, t.y);
+        return true;
+      }
       if (!isWalkTile(tile) || isWaterTile(tile)) return false;
       // a whole Neanderthal band settles where you tap
       if (tool.people === "clan") {
@@ -623,7 +637,7 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
     }
     case "farm": {
       const f = w.tribe.addFarm(w, x, y, tool.farmCrop);
-      if (f) w.toast(f.crop === "flower" ? "🌼" : "🌾", `New ${f.crop ?? "wheat"} field! Farmers plant it with grass seeds.`);
+      if (f) w.toast(f.crop === "grape" ? "🍇" : f.crop === "flower" ? "🌼" : "🌾", f.crop === "grape" ? "New vineyard! A farmer clears the wild growth here and plants trellised vines (wild berry bushes become the cuttings, else 2 berries)." : `New ${f.crop ?? "wheat"} field! Farmers plant it with grass seeds.`);
       else hint(w, "🌾", "Fields need open soil (and a little space).");
       return !!f;
     }

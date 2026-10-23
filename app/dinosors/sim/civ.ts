@@ -56,6 +56,13 @@ export type ExperimentResult = {
 const ENERGY_KINDS = new Set<BuildingKind>(["chamber", "energyTower", "obelisk", "stoneCircle", "pyramid", "condenser", "beamTower", "pylon", "levPad", "resShield"]);
 const MONUMENT_KINDS = new Set<BuildingKind>(["pyramid", "obelisk", "stoneCircle"]);
 
+/** Shaped blocks the planned (unbuilt) walls + buildings still want: a builder cuts until there are this many. */
+export function shapedWanted(w: World) {
+  let n = 0;
+  for (const s of w.buildSites()) if (s.need === "shaped" && !s.locked) n += 3;
+  return Math.max(3, Math.min(40, n));
+}
+
 export class Civ {
   path: CivPath = "none";
   /** where the humming chamber sits (0 = not surfaced yet) */
@@ -821,6 +828,7 @@ export class Civ {
   }
 
   /** Working at a civ station (states "research" + "resonate"). */
+  // (see shapedWanted below for how many blocks the planned walls still want)
   work(w: World, h: Human, dt: number) {
     h.anim += dt * 3;
     const role = w.tribe.roleOf(h);
@@ -840,9 +848,11 @@ export class Civ {
       return;
     }
     // resonate: shapers cut blocks, technicians tune + fix the grid
-    if (role === "shaper") {
+    if (role === "shaper" || h.shaping) {
       const yard = w.colony.buildings.find((b) => b.id === h.targetId && b.built >= 1);
-      if (!yard || w.camp.stock.stone < 2) {
+      // (a builder only cuts what the planned walls need, then gets back to building)
+      if (!yard || w.camp.stock.stone < 2 || (h.shaping && role !== "shaper" && w.camp.stock.shaped >= shapedWanted(w))) {
+        h.shaping = false;
         go(h, "idle", h.x, h.y);
         return;
       }

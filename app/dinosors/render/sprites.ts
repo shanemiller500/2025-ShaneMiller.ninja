@@ -7,7 +7,7 @@ import { sp } from "../data/species";
 import { FEMALE_NAMES, SHELTER_STAGES } from "../data/facts";
 import type { Stock } from "../sim/camp";
 import { PLANT_H } from "../sim/plants";
-import type { Egg, Human, Item, Plant, Prop, Shelter } from "../sim/types";
+import type { Egg, FarmCrop, Human, Item, Plant, Prop, Shelter } from "../sim/types";
 import { shade } from "./drawDino";
 
 const OUT = "rgba(35,28,22,0.5)";
@@ -1884,7 +1884,8 @@ export function drawVolcano(c: CanvasRenderingContext2D, glow: number, lavaOn: b
 
 /* ------------------------------- tribe structures ------------------------------- */
 
-export function drawFarm(c: CanvasRenderingContext2D, growth: number, planted: boolean, t: number, crop: "flower" | "wheat" | "barley" = "wheat") {
+export function drawFarm(c: CanvasRenderingContext2D, growth: number, planted: boolean, t: number, crop: FarmCrop = "wheat") {
+  if (crop === "grape") return drawVineyard(c, growth, planted, t);
   const W = 72;
   const H = 40;
   c.fillStyle = "#7a5a3a";
@@ -1929,4 +1930,141 @@ export function drawFarm(c: CanvasRenderingContext2D, growth: number, planted: b
     c.textAlign = "center";
     c.fillText("✦", W / 2 - 4, -H / 2 - 6);
   }
+}
+
+/** A vineyard: tilled rows with trellis posts + wires, vines that leaf out as they grow, purple grapes when ripe. */
+export function drawVineyard(c: CanvasRenderingContext2D, growth: number, planted: boolean, t: number) {
+  const W = 72;
+  const H = 40;
+  c.fillStyle = "#6e5233";
+  c.beginPath();
+  c.ellipse(0, 0, W / 2 + 4, H / 2 + 3, 0, 0, Math.PI * 2);
+  c.fill();
+  const rows = 3;
+  for (let r = 0; r < rows; r++) {
+    const y = -H / 2 + 9 + r * 12;
+    // furrow
+    c.strokeStyle = "#5a4128";
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(-W / 2 + 5, y + 2);
+    c.lineTo(W / 2 - 5, y + 2);
+    c.stroke();
+    if (!planted) continue;
+    // trellis: posts + a wire
+    c.strokeStyle = "#8a6a44";
+    c.lineWidth = 1.6;
+    for (const px of [-W / 2 + 8, 0, W / 2 - 8]) {
+      c.beginPath();
+      c.moveTo(px, y + 2);
+      c.lineTo(px, y - 11);
+      c.stroke();
+    }
+    c.strokeStyle = "rgba(70,60,50,0.7)";
+    c.lineWidth = 0.8;
+    c.beginPath();
+    c.moveTo(-W / 2 + 8, y - 10);
+    c.lineTo(W / 2 - 8, y - 10);
+    c.stroke();
+    // the vine along the wire, leafing out as it grows
+    const g = Math.max(0.15, growth);
+    const leaves = Math.round(4 + g * 8);
+    for (let i = 0; i < leaves; i++) {
+      const x = -W / 2 + 10 + (i / Math.max(1, leaves - 1)) * (W - 20);
+      const sway = Math.sin(t * 1.6 + i + r) * 0.8;
+      c.fillStyle = (i + r) % 3 === 0 ? "#4f8a32" : "#5f9e3a";
+      c.beginPath();
+      c.ellipse(x + sway, y - 9 + (i % 2) * 2, 2.4 + g * 1.6, 2 + g * 1.2, 0.4, 0, Math.PI * 2);
+      c.fill();
+      // grapes hang under the leaves once it's ripening
+      if (growth >= 0.6 && i % 2 === 0) {
+        const ripe = growth >= 1;
+        c.fillStyle = ripe ? "#6a2c8e" : "#8faa4a";
+        for (let k = 0; k < 4; k++) {
+          c.beginPath();
+          c.arc(x + sway + (k % 2) * 1.6 - 0.8, y - 5 + Math.floor(k / 2) * 1.6, 1.1, 0, Math.PI * 2);
+          c.fill();
+        }
+      }
+    }
+  }
+  if (planted && growth >= 1) {
+    const a = (Math.sin(t * 3) + 1) / 2;
+    c.fillStyle = `rgba(200,140,255,${0.25 + a * 0.25})`;
+    c.beginPath();
+    c.ellipse(0, -16, 5, 5, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+}
+
+/** The winery: a timber press-house with a big wooden press out front and a stack of barrels. W: width px. */
+export function drawWinery(c: CanvasRenderingContext2D, W: number, built: number, wine: number, t: number) {
+  if (built < 1) return;
+  const half = W / 2;
+  c.fillStyle = "rgba(0,0,0,0.2)";
+  c.beginPath();
+  c.ellipse(0, 2, half + 4, 10, 0, 0, Math.PI * 2);
+  c.fill();
+  // the house: timber walls, a thatched roof
+  c.fillStyle = "#9b6b3d";
+  c.fillRect(-half + 6, -38, W - 12, 38);
+  c.strokeStyle = "rgba(60,35,15,0.5)";
+  c.lineWidth = 1;
+  for (let x = -half + 12; x < half - 6; x += 7) {
+    c.beginPath();
+    c.moveTo(x, -38);
+    c.lineTo(x, 0);
+    c.stroke();
+  }
+  c.fillStyle = "#c9a35a";
+  c.beginPath();
+  c.moveTo(-half, -36);
+  c.lineTo(0, -60);
+  c.lineTo(half, -36);
+  c.closePath();
+  c.fill();
+  c.fillStyle = "#4a2c16";
+  c.fillRect(-7, -20, 14, 20);
+  // a hanging sign: a grape bunch
+  c.fillStyle = "#6a2c8e";
+  for (let k = 0; k < 6; k++) {
+    c.beginPath();
+    c.arc(half - 14 + (k % 3) * 3 - 3, -30 + Math.floor(k / 3) * 3, 1.6, 0, Math.PI * 2);
+    c.fill();
+  }
+  // the press: a vat with a big screw beam
+  c.fillStyle = "#7a5230";
+  c.beginPath();
+  c.ellipse(-half + 2, -8, 12, 5, 0, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = "#5a1f45";
+  c.beginPath();
+  c.ellipse(-half + 2, -9, 9, 3, 0, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = "#5e3f24";
+  c.lineWidth = 3;
+  c.beginPath();
+  c.moveTo(-half - 8, -22);
+  c.lineTo(-half + 12, -22);
+  c.moveTo(-half + 2, -22);
+  c.lineTo(-half + 2, -10);
+  c.stroke();
+  // barrels: more of them the more wine is stored
+  const n = Math.min(5, Math.ceil(wine / 6));
+  for (let i = 0; i < n; i++) {
+    const bx = half - 4 - (i % 3) * 11;
+    const by = -4 - Math.floor(i / 3) * 9;
+    c.fillStyle = "#8b5a2b";
+    c.beginPath();
+    c.ellipse(bx, by, 5.5, 4.5, 0, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = "#3e2a16";
+    c.lineWidth = 1;
+    c.beginPath();
+    c.ellipse(bx, by, 5.5, 4.5, 0, 0, Math.PI * 2);
+    c.moveTo(bx - 5.5, by);
+    c.lineTo(bx + 5.5, by);
+    c.stroke();
+  }
+  void t;
 }

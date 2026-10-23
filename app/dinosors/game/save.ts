@@ -23,9 +23,11 @@ export interface Settings {
   welcomed: boolean;
   /** little guide tips + "?" bubbles */
   tips: boolean;
+  /** messages pop up over the game (off: they just collect in the 🔔 list) */
+  popups: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { muted: false, volume: 0.8, welcomed: false, tips: true };
+export const DEFAULT_SETTINGS: Settings = { muted: false, volume: 0.8, welcomed: false, tips: true, popups: false };
 
 /** Any save version this build understands (v1 = before the colony upgrade). */
 export function readSave(raw: string | null): World | null {

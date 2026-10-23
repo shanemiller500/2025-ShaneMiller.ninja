@@ -75,7 +75,9 @@ export function clearTick(w: World, d: Dino, dt: number) {
   // the next plant: whichever is closest to the dino, inside the clearing
   let next: Plant | null = null;
   let bd = Infinity;
+  const box = work.clearRect;
   w.plantHash.each(cx, cy, CLEAR_R, (p) => {
+    if (box && (p.x < box.x0 || p.x > box.x1 || p.y < box.y0 || p.y > box.y1)) return;
     const dd = Math.hypot(p.x - d.x, p.y - d.y);
     if (dd < bd) {
       bd = dd;
@@ -87,7 +89,8 @@ export function clearTick(w: World, d: Dino, dt: number) {
     work.manual = false;
     work.clearX = work.clearY = undefined;
     setState(d, "idle", d.x, d.y);
-    w.toast("🌱", `${d.name} cleared the land. Grass will grow back over the trampled dirt.`, cx, cy);
+    // (on a Clear area job the job itself says when the whole box is done)
+    if (!box) w.toast("🌱", `${d.name} cleared the land. Grass will grow back over the trampled dirt.`, cx, cy);
     return;
   }
   const p = next as Plant;

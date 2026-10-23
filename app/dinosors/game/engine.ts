@@ -3,6 +3,7 @@
 /*  World, Renderer and AudioManager and talks to React only through   */
 /*  a tiny event emitter and a polled snapshot (never per-frame state). */
 /* ------------------------------------------------------------------ */
+import { startClearJob, type ClearRect } from "../sim/clearArea";
 import { chariotAt, huntFoeName, huntTargetName, MUSTER_FOR, raidPool, raidTargets, retargetHunt, startHunt, startRaid, type RaidTarget } from "../sim/chariots";
 import type { HuntFormation } from "../sim/types";
 import { CLAN_TECH, techOf } from "../sim/clanTech";
@@ -42,7 +43,7 @@ import { condition, type Condition } from "../sim/injury";
 import { STONE_TOWER_UP, queueUpgrades, shelterDone, stagesOf, towerMaxHp, wallMaxHp, sites, siteKey, type UpgradeKind } from "../sim/build";
 import { commandCollect, commandDeliver, commandTravel, eligible, workOf, type WorkSkill } from "../sim/workDinos";
 import { bond, callRider, chooseRider, jobSpot, rideTeamTo, riderOf, riderReady, unbond } from "../sim/riders";
-import { BREEDS, DRAGON_COMMANDS, type DragonCmdKind } from "../data/dragons";
+import { BREEDS, BREED_LIST, DRAGON_COMMANDS, DRAGON_NAMES, type DragonCmdKind } from "../data/dragons";
 import { bondDragon, commandDragon, dismountDragon, unbondDragon } from "../sim/dragonKeep";
 import { revealNest } from "../sim/dragonNests";
 import { launchRaid, raidTarget } from "../sim/dragonRaid";
@@ -240,6 +241,10 @@ export interface Snapshot {
     /** forests nobody's looked into yet that have Tree People in them */
     unknown: number;
   };
+  /** Sea People villages we've spotted (seaFolk.ts) */
+  sea: {
+    tribes: { id: number; name: string; color: string; colors: string[]; merges: number; folk: number; young: number; tier: number; huts: number; hutsUp: number; raiding: boolean; dragons: number; farms: string[]; pearls: number; x: number; y: number }[];
+  };
   tribe: {
     level: number;
     levelName: string;
@@ -416,6 +421,9 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
   dragonCare: "Caring for a dragon",
 };
 
+/** The hatching film without a real dragon: a demo with a random baby (About panel). */
+export const DEMO_HATCH = -1;
+
 export class Engine {
   world: World;
   renderer: Renderer;
@@ -432,6 +440,9 @@ export class Engine {
   addMode = false;
   /** lets mouse, pen or touch drag a box around several people */
   groupSelectMode = false;
+  /** 🪓 Clear area: the next drag marks a box to clear down to grass */
+  clearAreaMode = false;
+  private boxForClear = false;
   /** last command + its alternatives (for the "instead…" chip) */
   private lastCmd: { cmd: Command; people: number[]; at: number; weapon: WeaponKind | null } | null = null;
   /** tapped building being looked at */
@@ -1021,8 +1032,9 @@ export class Engine {
       if (wl && Math.hypot(wp.x - (wl.tx + 0.5) * TILE, wp.y - (wl.ty + 0.5) * TILE) < TILE || farm && Math.hypot(wp.x - farm.x, wp.y - farm.y) < 44) this.moveDrag = e.pointerId;
     }
     // shift-drag draws a box to select people
-    if ((e.shiftKey && e.pointerType === "mouse" || this.groupSelectMode) && this.tool.id === "hand") {
+    if ((e.shiftKey && e.pointerType === "mouse" || this.groupSelectMode || this.clearAreaMode) && this.tool.id === "hand") {
       this.box = { x0: sx, y0: sy, x1: sx, y1: sy };
+      this.boxForClear = this.clearAreaMode;
       this.canvas.setPointerCapture?.(e.pointerId);
       const now = performance.now();
       this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: now, lastMoveAt: now, pointerType: e.pointerType, moved: false, grab: null });
@@ -1155,6 +1167,15 @@ export class Engine {
     if (this.box) {
       const b = this.box;
       this.box = null;
+      if (this.boxForClear) {
+        this.boxForClear = false;
+        if (Math.abs(b.x1 - b.x0) > 8 || Math.abs(b.y1 - b.y0) > 8) {
+          const a = this.renderer.toWorld(this.cam, Math.min(b.x0, b.x1), Math.min(b.y0, b.y1));
+          const c = this.renderer.toWorld(this.cam, Math.max(b.x0, b.x1), Math.max(b.y0, b.y1));
+          this.clearArea({ x0: a.x, y0: a.y, x1: c.x, y1: c.y });
+        }
+        return;
+      }
       if (Math.abs(b.x1 - b.x0) > 8 || Math.abs(b.y1 - b.y0) > 8) {
         const a = this.renderer.toWorld(this.cam, Math.min(b.x0, b.x1), Math.min(b.y0, b.y1));
         const c = this.renderer.toWorld(this.cam, Math.max(b.x0, b.x1), Math.max(b.y0, b.y1));
@@ -1487,6 +1508,10 @@ export class Engine {
     }
 
     const br = this.pickBrute(x, y);
+    if (br?.sea) {
+      w.toast("🛶", `${w.seaFolk.label(br)}: a canoe raider from the coast. The sea beasts are their friends. Hit them with bows from the bank, or catch them on land. Select armed people and tap them to fight.`, br.x, br.y);
+      return;
+    }
     if (br?.tree) {
       w.toast("🌿", `${w.forest.label(br)}: fast, sneaky and never alone. Each one falls quicker than a Neanderthal, so go in numbers. Select armed people and tap them to fight.`, br.x, br.y);
       return;
@@ -1539,6 +1564,12 @@ export class Engine {
       const n = w.forest.members(grove.id).length;
       const up = grove.pods.filter((p) => p.hp > 0).length;
       w.toast("🌳", `The ${grove.name} tree camp: ${n} Tree People, ${up} of ${grove.pods.length} decks standing${grove.parent ? " (an outpost)" : ""}. Select armed people and tap it to attack: beat them down out of the trees, then pull the decks down. Fire works too.`, grove.x, grove.y);
+      return;
+    }
+    const village = w.seaFolk.villageAt(x, y, 180);
+    if (village?.found) {
+      const up = village.huts.filter((h) => h.hp > 0).length;
+      w.toast("🛶", `The ${village.name} sea village: ${w.seaFolk.members(village.id).length} Sea People, ${up} of ${village.huts.length} stilt-houses standing. Select armed people and tap it to attack: beat them, then wade in and pull the houses down. Mind the sea beasts in their waters!`, village.x, village.y);
       return;
     }
     if (grove?.seen) {
@@ -1760,6 +1791,29 @@ export class Engine {
 
   toggleGroupSelectMode() {
     this.groupSelectMode = !this.groupSelectMode;
+    if (this.groupSelectMode) this.clearAreaMode = false;
+    this.emit({ type: "select" });
+  }
+
+  /** 🪓 Clear area: the next drag marks the box (the people you've picked, and a picked dino, do the work). */
+  toggleClearAreaMode() {
+    this.clearAreaMode = !this.clearAreaMode;
+    if (this.clearAreaMode) {
+      this.groupSelectMode = false;
+      this.toastOnce("clearAreaHow", "🪓", "Drag a box over the trees + bushes to clear. Whoever you've picked (and a picked dino) will clear it down to grass; with nobody picked, free hands go.");
+    }
+    this.emit({ type: "select" });
+  }
+
+  /** Clear everything in a box down to grass, with the picked people + dino (or free hands). */
+  clearArea(r: ClearRect) {
+    const w = this.world;
+    this.clearAreaMode = false;
+    const people = this.selectionHumans().filter((h) => !h.child);
+    const dino = w.dinoById(this.selectedId);
+    const r2 = startClearJob(w, r, people, dino ? [dino] : []);
+    w.toast(r2.ok ? "🪓" : "🤷", r2.msg, (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2);
+    if (r2.ok) this.audio.play("pop", 0, 0, 0.5);
     this.emit({ type: "select" });
   }
 
@@ -1778,13 +1832,32 @@ export class Engine {
   /** Everything the hatching scene needs: the dragon as it was the moment it hatched, and the person who was there. */
   hatchSceneData(id: number) {
     const w = this.world;
-    const d = w.dragons.owned.find((x) => x.id === id) ?? w.dragons.list.find((x) => x.id === id);
+    const d = id === DEMO_HATCH ? this.demoDragon() : w.dragons.owned.find((x) => x.id === id) ?? w.dragons.list.find((x) => x.id === id);
     if (!d) return null;
     const k = w.humans.find((h) => h.id === (d.hatchedBy ?? d.keeper)) ?? null;
     const dragon = { ...d, x: 0, y: 0, z: 0, vx: 0, vy: 0, growth: 0.04, age: 0, skills: {}, cmd: null, carrying: null, vet: 0, fury: false, breath: 0, hop: 0, hit: 0, spread: 0, skyFire: false, aimX: undefined, aimY: undefined, state: "sleep" as const, dir: -1 as const, anim: 0 };
     const keeper = k ? { ...k, gear: { ...k.gear }, x: 0, y: 0, z: 0, riding: 0, aloft: undefined, carry: null, carryN: 0, bubble: null, state: "watch" as const, dir: 1 as const, anim: 0, captive: 0, clanGarb: undefined, egg: undefined, egg2: undefined } : null;
     const def = BREEDS[d.breed ?? "fire"];
     return { dragon, keeper, name: d.name, breed: def.name, icon: def.icon, rare: !!d.rare, egg: { id: d.id, breed: d.breed ?? "fire", x: 0, y: 0, at: "camp" as const, nest: 0, carrier: 0, heat: 1, progress: 0.2, health: 1, rare: !!d.rare, hatchT: 0 } };
+  }
+
+  /** A made-up baby dragon for the demo film (its own random breed + looks; nothing in the world changes). */
+  private demoDragon(): Dragon {
+    const w = this.world;
+    const breeds = BREED_LIST;
+    const breed = breeds[Math.floor(Math.random() * breeds.length)].id;
+    const keeper = w.humans.filter((h) => !h.child && !h.stranger)[Math.floor(Math.random() * Math.max(1, w.humans.filter((h) => !h.child && !h.stranger).length))];
+    return {
+      id: DEMO_HATCH, kind: "dragon", name: DRAGON_NAMES[Math.floor(Math.random() * DRAGON_NAMES.length)], x: 0, y: 0, z: 0, vx: 0, vy: 0, dir: -1, hp: 1, maxHp: 1,
+      state: "sleep", t: 0, target: 0, tx: 0, ty: 0, breath: 0, anim: 0, hue: 0, passes: 0, hit: 0, breed, owner: true, growth: 0.04,
+      rare: Math.random() < 0.15, tint: Math.round((Math.random() - 0.5) * 70), marks: Math.floor(Math.random() * 4) as Dragon["marks"],
+      eye: ["#9be36b", "#ffd23f", "#5ad1ff", "#ff8a3d", "#c38bff", "#ff5d7a"][Math.floor(Math.random() * 6)], hatchedBy: keeper?.id,
+    };
+  }
+
+  /** Our dragons, for picking whose hatching to watch again (About panel). */
+  hatchList() {
+    return this.world.dragons.owned.map((d) => ({ id: d.id, name: d.name, icon: BREEDS[d.breed ?? "fire"].icon }));
   }
 
   /** Watch a dragon's hatching scene again (dragon panel). */
@@ -1828,6 +1901,28 @@ export class Engine {
       weapons,
     };
     this.runCommand(cmd, fighters, null);
+    return true;
+  }
+
+  /** Send the people picked against a Sea People village we've spotted. */
+  raidSeaVillage(id: number) {
+    const w = this.world;
+    const vil = w.seaFolk.tribe(id);
+    if (!vil?.found) return false;
+    const fighters = this.selectionHumans().filter((h) => !h.child && !h.stranger && !h.captive && !h.under && h.state !== "down");
+    if (!fighters.length) {
+      w.toast("⚔️", "Select a group of armed people first (bows are best against canoes).", vil.x, vil.y);
+      this.emit({ type: "select" });
+      return false;
+    }
+    const weapons = weaponKindsFor(w, fighters);
+    if (!weapons.length) {
+      w.toast("🛡️", "Your group needs weapons before it can attack a sea village.", vil.x, vil.y);
+      this.emit({ type: "select" });
+      return false;
+    }
+    const n = w.seaFolk.members(vil.id).length;
+    this.runCommand({ kind: "seaRaid", icon: "🔥", label: `Attack the ${vil.name} sea village${n ? ` (${n} Sea People)` : ""}`, x: vil.x, y: vil.y, target: vil.id, weapons }, fighters, null);
     return true;
   }
 
@@ -2231,6 +2326,8 @@ export class Engine {
     if (car) return { x: car.x, y: car.y - 24, radius: 52, icon: "🛡️", label: "War chariot · tap to set up a raid" };
     const grove = w.forest.campAt(x, y, 120);
     if (grove?.found) return { x: grove.x, y: grove.y - 50, radius: 90, icon: "🌳", label: `${grove.name} tree camp · tap to inspect` };
+    const village = w.seaFolk.villageAt(x, y, 150);
+    if (village?.found) return { x: village.x, y: village.y - 30, radius: 110, icon: "🛶", label: `${village.name} sea village · tap to inspect` };
     const sc = w.colony.scorpions.find((s) => Math.hypot(s.x - x, s.y - (s.mount === "tower" ? 46 : s.mount === "wall" ? 26 : 10) - y) < 30);
     if (sc) return { x: sc.x, y: sc.y - (sc.mount === "tower" ? 46 : sc.mount === "wall" ? 26 : 10), radius: 27, icon: "🎯", label: "Scorpion · tap to inspect" };
     const tower = w.tribe.towers.find((t) => x >= t.x - 34 && x <= t.x + 34 && y >= t.y - 90 && y <= t.y + 4);
@@ -3407,6 +3504,20 @@ export class Engine {
           };
         }),
         unknown: w.forest.tribes.filter((t) => !t.seen && !t.found).length,
+      },
+      sea: {
+        tribes: w.seaFolk.tribes.filter((t) => t.found).map((t) => {
+          const folk = w.seaFolk.members(t.id);
+          const young = folk.filter((b) => (b.age ?? 120) < 120).length;
+          return {
+            id: t.id, name: t.name, color: t.color, colors: t.colors?.length ? t.colors : [t.color], merges: t.merges ?? 0, tier: t.tier, x: t.x, y: t.y, folk: folk.length - young, young,
+            dragons: w.dinos.filter((d) => d.seaTribe === t.id && d.health > 0).length,
+            farms: t.huts.filter((h) => h.hp > 0 && (h.kind === "pearlBed" || h.kind === "fishPen" || h.kind === "sharkPen")).map((h) => (h.kind === "pearlBed" ? "🦪 pearls" : h.kind === "fishPen" ? "🐟 fish" : "🦈 sharks")),
+            pearls: Math.floor(t.pearls ?? 0),
+            huts: t.huts.length, hutsUp: t.huts.filter((h) => h.hp > 0).length,
+            raiding: w.seaFolk.bands.some((b) => b.tribe === t.id && b.mode === "raid"),
+          };
+        }),
       },
       orderFor: this.orderFor,
       rallied: this.rallyRoles !== null,

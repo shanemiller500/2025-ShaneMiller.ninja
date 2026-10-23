@@ -254,6 +254,10 @@ export interface Dino {
   raider: boolean;
   /** tamed by a Neanderthal clan (its id): lives in their pen, fights in their raids */
   clan?: number;
+  /** a sea dragon (Mosasaurus, Plesiosaurus, Liopleurodon) trained by a Sea People village (its id) */
+  seaTribe?: number;
+  /** a Sea Person riding it right now (their id; not saved) */
+  seaRider?: number;
   /** a war animal on guard duty (warGuard.ts): the person it's guarding out in the wild, and where it is on its patrol ring */
   ward?: number;
   /** harnessed to pull a war chariot (its id): the chariot moves it (chariots.ts) */
@@ -311,6 +315,8 @@ export interface Dino {
     /** land clearing: the middle of the patch being cleared */
     clearX?: number;
     clearY?: number;
+    /** clearing a box the player dragged out: only plants inside it (clearArea.ts) */
+    clearRect?: { x0: number; y0: number; x1: number; y1: number };
     source: "stock" | "mine" | null;
     site: string;
     targetX: number;
@@ -382,7 +388,11 @@ export type HumanState =
   | "dragonPlay"
   /** a keeper directing their dragon in a show / someone watching it (see shows.ts) */
   | "show"
-  | "watch";
+  | "watch"
+  /** treading grapes at the winery (vineyard.ts) */
+  | "press"
+  /** chopping / pulling up a plant on a Clear area job (clearArea.ts) */
+  | "clear";
 
 export type Resource =
   | "stick"
@@ -419,7 +429,12 @@ export type Resource =
   | "coal"
   | "goldBar"
   | "silverBar"
-  | "copperBar";
+  | "copperBar"
+  /** from the Sea People's oyster beds */
+  | "pearl"
+  /** picked in the vineyards; the winery presses them into wine (vineyard.ts) */
+  | "grapes"
+  | "wine";
 
 /** What a cave person does. "auto" lets the tribe decide. */
 export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner" | "trainer" | "dragonSlayer" | "eggRunner" | "dragonKeeper";
@@ -462,6 +477,12 @@ export interface Human {
   carryN: number;
   /** on town clean-up duty (cleanup.ts) */
   cleaning?: boolean;
+  /** a builder cutting shaped stone at the Shaping yard for a wall that needs it (nobody else was) */
+  shaping?: boolean;
+  /** when they last enjoyed a cup of wine (vineyard.ts) */
+  drankAt?: number;
+  /** on a Clear area job (its id): chopping everything in the box down to grass (clearArea.ts) */
+  clearJob?: number;
   /** caught in mid-air by one of our dragons (its id): carried down to safety (dragonKeep.ts) */
   rescuedBy?: number;
   /** knocked out: seconds lying there waiting for help, whether they're fading, and when someone last patched them up (death.ts) */
@@ -760,6 +781,12 @@ export interface Brute {
   up?: number;
   /** after dark a Tree Person is only seen for this long after coming close / near a fire / striking (s, not saved) */
   spotT?: number;
+  /** one of the Sea People (seaFolk.ts): their village's id (clan is 0) */
+  sea?: number;
+  /** a Sea Person out on the water, in their canoe */
+  boat?: boolean;
+  /** a Sea Person riding a trained sea dragon (the dino's id) */
+  mount?: number;
   bubble: { text: string; t: number } | null;
 }
 
@@ -782,6 +809,75 @@ export interface TreeSign {
   y: number;
   kind: "totem" | "bones" | "spikes" | "marks" | "trophy" | "remains";
   v: number;
+}
+
+/* ------------------------------ Sea People (seaFolk.ts) ------------------------------ */
+
+/** One stilt-house (or dock, fish rack, shrine…) of a sea village, standing in the water. */
+export interface SeaHut {
+  x: number;
+  y: number;
+  kind: "hut" | "dock" | "rack" | "lookout" | "shrine" | "longhouse"
+    // their sea farms: oyster beds for pearls, a woven fish pen, a stake pen of sharks
+    | "pearlBed" | "fishPen" | "sharkPen";
+  /** 0..1: 0 = pulled down */
+  hp: number;
+}
+
+/** Shore markers round a sea village's waters. */
+export interface SeaSign {
+  x: number;
+  y: number;
+  kind: "shellTotem" | "fishSkull" | "netPole" | "beached";
+  v: number;
+}
+
+/** Fisher-raiders living on stilts out on the water, friends of the sea reptiles. */
+export interface SeaTribe {
+  id: number;
+  name: string;
+  color: string;
+  /** the village's heart (out on the water) */
+  x: number;
+  y: number;
+  huts: SeaHut[];
+  signs: SeaSign[];
+  /** waters they call theirs */
+  r: number;
+  /** 0-3 */
+  tier: number;
+  food: number;
+  growT: number;
+  raidT: number;
+  work: number;
+  seen?: boolean;
+  found?: boolean;
+  /** every colour it wears: its own + each village that joined it */
+  colors?: string[];
+  /** how many villages have joined into this one */
+  merges?: number;
+  /** progress training the next sea dragon (s) */
+  taming?: number;
+  /** pearls + shark teeth their farms have built up (what a raid on them carries off) */
+  pearls?: number;
+  teeth?: number;
+}
+
+/** A war-canoe party: up the rivers to a target, then home the same way. */
+export interface SeaBand {
+  id: number;
+  tribe: number;
+  mode: "raid" | "home";
+  x: number;
+  y: number;
+  ids: number[];
+  t: number;
+  size: number;
+  goal: { kind: "town" | "clan" | "tree" | "human"; id: number };
+  /** the way there (tile indexes), mostly by water */
+  route: number[];
+  /** "they're coming up the river" told */
+  warned?: boolean;
 }
 
 /** A feral tribe living up in the forest canopy. */
@@ -1088,8 +1184,11 @@ export interface Farm {
   /** 0 = bare, 0..1 growing, 1 = ripe */
   growth: number;
   planted: boolean;
-  crop?: "flower" | "wheat" | "barley";
+  crop?: FarmCrop;
 }
+
+/** What a field grows: flowers, wheat, barley, or grape vines (a vineyard, vineyard.ts). */
+export type FarmCrop = "flower" | "wheat" | "barley" | "grape";
 
 export interface Tower {
   id: number;
@@ -1121,6 +1220,8 @@ export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" |
   | "dragonPit"
   /** a dead dragon's bones laid out on a plinth: a monument (dragonBones.ts) */
   | "dragonBones"
+  /** presses the vineyards' grapes into wine (vineyard.ts) */
+  | "winery"
   | "warChariot"
   | "riderHall"
   // the Old Ways' last-resort project

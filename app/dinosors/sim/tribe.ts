@@ -5,6 +5,7 @@
 /*  Kid-safe cartoon rules: downed dinos poof into drumsticks, and     */
 /*  "gobbled" cave people vanish in a dust cloud.                      */
 /* ------------------------------------------------------------------ */
+import { tendVines, vinesReady, wineThink } from "./vineyard";
 import { removeHuman } from "./death";
 import { occupy } from "./clanHolds";
 import { hasVault } from "./deepBuild";
@@ -1510,7 +1511,7 @@ export class Tribe {
       }
     }
     const seasonal = season(w).farms * w.almanac.farmsMul();
-    for (const f of this.farms) if (f.planted && f.growth < 1) f.growth = Math.min(1, f.growth + (dt / 80) * (1 + w.weather.rain * 1.5) * (w.weather.temp > 0.85 ? 0.5 : 1) * (w.civ.has("cropRotation") ? 2 : 1) * seasonal);
+    for (const f of this.farms) if (f.planted && f.growth < 1) f.growth = Math.min(1, f.growth + (dt / (f.crop === "grape" ? 150 : 80)) * (1 + w.weather.rain * 1.5) * (w.weather.temp > 0.85 ? 0.5 : 1) * (w.civ.has("cropRotation") ? 2 : 1) * seasonal);
     // crops near lava/fire get scorched
     for (const f of this.farms) {
       const tx = Math.floor(f.x / TILE);
@@ -1882,7 +1883,7 @@ export function roleThink(w: World, h: Human): boolean {
       // the lit fire nearest home, where people actually gather
       const area = homeArea(w, h);
       const fire = w.campfires.filter((f) => f.lit).sort((a, b) => Math.hypot(a.x - area.x, a.y - area.y) - Math.hypot(b.x - area.x, b.y - area.y))[0];
-      if (!fire || (camp.stock.meat <= 0 && camp.stock.fish <= 0)) return false;
+      if (!fire || (camp.stock.meat <= 0 && camp.stock.fish <= 0)) return wineThink(w, h);
       if (Math.hypot(h.x - fire.x - 24, h.y - fire.y) < 10) {
         go(h, "cook", h.x, h.y);
         h.dir = -1;
@@ -1893,8 +1894,20 @@ export function roleThink(w: World, h: Human): boolean {
       return true;
     }
     case "farmer": {
-      const f = tribe.farms.find((f) => !f.planted && camp.stock.grass > 0) ?? tribe.farms.find((f) => f.planted && f.growth >= 1);
+      const f = tribe.farms.find((f) => !f.planted && (f.crop === "grape" ? vinesReady(w, f) : camp.stock.grass > 0)) ?? tribe.farms.find((f) => f.planted && f.growth >= 1);
       if (!f) {
+        // vineyards waiting for cuttings: bring berries
+        if (tribe.farms.some((f) => !f.planted && f.crop === "grape") && camp.stock.berries < 2) {
+          const src = sourceFor(w, h, "berries");
+          if (src) {
+            h.task = "berries";
+            h.targetId = src.id;
+            go(h, "walk", src.x, src.y);
+            return true;
+          }
+        }
+        // nothing to sow or reap: press the grapes into wine
+        if (wineThink(w, h)) return true;
         if (tribe.farms.some((f) => !f.planted)) {
           // need seed grass
           const src = sourceFor(w, h, "grass");
@@ -2287,6 +2300,11 @@ export function roleAct(w: World, h: Human, dt: number): boolean {
         return true;
       }
       if (w.rng() < dt * 3) w.particles.spawn(P.Crumb, f.x + (w.rng() - 0.5) * 30, f.y, { z: 4, vz: 30, vx: (w.rng() - 0.5) * 30, g: 140, size: 2, max: 0.5, color: "#7a5a3a" });
+      if (h.stateT > 2.5 && f.crop === "grape") {
+        tendVines(w, h, f);
+        go(h, "idle", h.x, h.y);
+        return true;
+      }
       if (h.stateT > 2.5) {
         if (!f.planted && w.camp.stock.grass > 0) {
           w.camp.stock.grass--;

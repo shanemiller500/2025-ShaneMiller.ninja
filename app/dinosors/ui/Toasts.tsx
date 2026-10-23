@@ -13,16 +13,91 @@ export interface Toast {
   y?: number;
 }
 
-/** Little pill messages at the top. Facts hide behind a 💡 so they never become homework. */
-export default function Toasts({ toasts, onDismiss, onGo }: { toasts: Toast[]; onDismiss: (id: number) => void; onGo: (x: number, y: number) => void }) {
+/**
+ * Messages: they no longer pop up over the game (too many). They go into a 🔔 list under the clock instead
+ * (newest first, with 📍 to fly there and 💡 for the fact); pop-ups can be switched back on from the list.
+ */
+export default function Toasts({ toasts, log, unread, popups, onDismiss, onGo, onTogglePopups, onRead }: {
+  toasts: Toast[];
+  log: Toast[];
+  unread: number;
+  popups: boolean;
+  onDismiss: (id: number) => void;
+  onGo: (x: number, y: number) => void;
+  onTogglePopups: (on: boolean) => void;
+  onRead: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  useClickAway(open, boxRef, () => setOpen(false), false);
   return (
-    // phones: no alert pills over the game (the screen is too small for them)
-    <div className="pointer-events-none absolute inset-x-0 top-20 z-30 hidden flex-col items-center gap-2 px-3 sm:top-4 sm:flex">
-      <AnimatePresence initial={false}>
-        {toasts.map((t) => (
-          <ToastPill key={t.id} t={t} onDismiss={onDismiss} onGo={onGo} />
-        ))}
-      </AnimatePresence>
+    <>
+      {popups && (
+        // phones: no alert pills over the game (the screen is too small for them)
+        <div className="pointer-events-none absolute inset-x-0 top-20 z-30 hidden flex-col items-center gap-2 px-3 sm:top-4 sm:flex">
+          <AnimatePresence initial={false}>
+            {toasts.map((t) => (
+              <ToastPill key={t.id} t={t} onDismiss={onDismiss} onGo={onGo} />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+      <div ref={boxRef} className="pointer-events-none absolute left-2 top-[76px] z-30 sm:left-4 sm:top-[100px]">
+        <button type="button" aria-label={`Messages${unread ? ` (${unread} new)` : ""}`} aria-expanded={open}
+          onClick={() => {
+            setOpen((o) => !o);
+            onRead();
+          }}
+          className="dl-glass pointer-events-auto relative flex h-10 items-center gap-1.5 rounded-2xl px-3 text-sm font-bold shadow-lg transition hover:brightness-110 active:scale-95">
+          <span className="text-lg leading-none">🔔</span>
+          <span className="hidden sm:inline">Messages</span>
+          {unread > 0 && <span className="absolute -right-1.5 -top-1.5 min-w-5 rounded-full bg-amber-400 px-1.5 text-center text-[11px] font-black text-slate-900">{unread > 99 ? "99+" : unread}</span>}
+        </button>
+        <AnimatePresence>
+          {open && (
+            <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }}
+              className="dl-glass dl-scroll pointer-events-auto mt-2 max-h-[min(60vh,520px)] w-[min(92vw,380px)] overflow-y-auto rounded-3xl p-3 shadow-2xl">
+              <div className="flex items-center justify-between gap-2 px-1 pb-2">
+                <span className="text-sm font-bold">🔔 Recent messages</span>
+                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-white/70">
+                  <input type="checkbox" checked={popups} onChange={(e) => onTogglePopups(e.target.checked)} className="accent-amber-400" />
+                  Pop-ups
+                </label>
+              </div>
+              {log.length === 0 && <p className="px-1 py-3 text-[13px] text-white/55">Nothing yet. News from the tribe will collect here.</p>}
+              <div className="space-y-1">
+                {log.map((t) => (
+                  <LogRow key={t.id} t={t} onGo={onGo} />
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </>
+  );
+}
+
+function LogRow({ t, onGo }: { t: Toast; onGo: (x: number, y: number) => void }) {
+  const [fact, setFact] = useState(false);
+  const where = t.x !== undefined && t.y !== undefined && t.x >= 0;
+  return (
+    <div className="rounded-2xl bg-white/5 px-2.5 py-1.5">
+      <div className="flex items-start gap-2">
+        <span className="text-lg leading-tight">{t.icon}</span>
+        <span className="flex-1 text-[12.5px] leading-snug text-white/90">{t.text}</span>
+        {where && (
+          <button type="button" title="Show me" onClick={() => onGo(t.x!, t.y!)} className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs hover:bg-white/20 active:scale-95">
+            📍
+          </button>
+        )}
+        {t.fact && (
+          <button type="button" title="Tell me more" onClick={() => setFact((f) => !f)} className={`shrink-0 rounded-full px-2 py-0.5 text-xs hover:bg-amber-300/40 ${fact ? "bg-amber-300/40" : "bg-amber-300/15"}`}>
+            💡
+          </button>
+        )}
+      </div>
+      {fact && t.fact && <p className="mt-1 border-t border-white/10 pt-1 text-[12px] text-amber-100">{t.fact}</p>}
     </div>
   );
 }

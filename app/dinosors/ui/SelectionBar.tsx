@@ -37,6 +37,9 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
             <button type="button" onClick={() => engine.toggleGroupSelectMode()} aria-pressed={engine.groupSelectMode} title="Drag a box around people with your mouse or finger" className={`flex min-h-10 items-center gap-1.5 rounded-full px-3 transition active:scale-95 ${engine.groupSelectMode ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
               <MousePointer2 className="h-4 w-4" /> Group select
             </button>
+            <button type="button" onClick={() => engine.toggleClearAreaMode()} aria-pressed={engine.clearAreaMode} title="Drag a box over trees + bushes: free hands (or whoever you pick first) clear it down to grass" className={`flex min-h-10 items-center gap-1.5 rounded-full px-3 transition active:scale-95 ${engine.clearAreaMode ? "bg-emerald-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
+              🪓 Clear area
+            </button>
             <span className="hidden text-[11px] font-medium text-white/50 sm:inline">· or tap someone</span>
             <button type="button" onClick={() => setHidePickTip(true)} aria-label="Close pick people tip" className="ml-1 rounded-full p-0.5 text-white/60 hover:bg-white/15 hover:text-white"><X className="h-3.5 w-3.5" /></button>
           </motion.div>
@@ -76,6 +79,9 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
               <span className="hidden max-w-[150px] text-[11.5px] leading-tight text-white/65 md:block">{kidsOnly ? "Kids help with light jobs near camp" : "Tap anything in the world to give an order"}</span>
               <button type="button" onClick={() => engine.toggleGroupSelectMode()} aria-pressed={engine.groupSelectMode} title="Drag a box around more people" className={`flex min-h-10 items-center gap-1 rounded-xl px-2 transition active:scale-90 ${engine.groupSelectMode ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
                 <MousePointer2 className="h-4 w-4" /><span className="hidden text-[11px] font-bold sm:inline">Box</span>
+              </button>
+              <button type="button" onClick={() => engine.toggleClearAreaMode()} aria-pressed={engine.clearAreaMode} title="Clear area: drag a box over trees + bushes and these people clear it down to grass" className={`flex min-h-10 items-center gap-1 rounded-xl px-2 transition active:scale-90 ${engine.clearAreaMode ? "bg-emerald-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
+                <span>🪓</span><span className="hidden text-[11px] font-bold sm:inline">Clear area</span>
               </button>
               {rescueClans.length > 0 && (
                 <div className="relative">

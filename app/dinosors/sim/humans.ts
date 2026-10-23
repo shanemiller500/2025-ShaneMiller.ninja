@@ -7,6 +7,8 @@ import { roomOf } from "./riderHall";
 import { huntThink } from "./chariots";
 import { feastThink } from "./feast";
 import { cleanupThink } from "./cleanup";
+import { maybeDrink, pressTick } from "./vineyard";
+import { clearThink, clearTick as clearAreaTick } from "./clearArea";
 import { CAVE_NAMES } from "../data/facts";
 import { HOUSING, NODES } from "../data/colony";
 import { sp } from "../data/species";
@@ -967,7 +969,7 @@ function think(w: World, h: Human) {
   }
 
   // busy with something that finishes on its own
-  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze" || h.state === "relax" || h.state === "dragonCare" || h.state === "sonic" || h.state === "drill" || h.state === "lift" || h.state === "dragonPlay" || h.state === "show" || h.state === "watch") return;
+  if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze" || h.state === "relax" || h.state === "dragonCare" || h.state === "sonic" || h.state === "drill" || h.state === "lift" || h.state === "dragonPlay" || h.state === "show" || h.state === "watch" || h.state === "press" || h.state === "clear") return;
   if (h.state === "hunt" || h.state === "aim" || h.state === "haul" || h.state === "cook" || h.state === "farm" || h.state === "repair") return;
   if (h.state === "carry" || h.state === "walk" || h.state === "explore") {
     if (Math.hypot(h.tx - h.x, h.ty - h.y) > 6 && !(h.riding && w.flags.has("rallyDinos") && role === "guard" && !h.taskId)) return;
@@ -984,6 +986,9 @@ function think(w: World, h: Human) {
     else go(h, "walk", meal.x, meal.y);
     return;
   }
+
+  // a Clear area job: chop the box down to grass (clearArea.ts)
+  if (h.clearJob && clearThink(w, h)) return;
 
   // the town gets cleaned up first: dead animals + loose bones inside our borders (cleanup.ts)
   if (!task && cleanupThink(w, h)) return;
@@ -1587,6 +1592,14 @@ export function updateHuman(w: World, h: Human, dt: number) {
       break;
     case "sitFire":
       fireTime(w, h, dt);
+      // an evening cup of wine by the fire (vineyard.ts)
+      if (w.rng() < dt * 0.05) maybeDrink(w, h);
+      break;
+    case "press":
+      pressTick(w, h, dt);
+      break;
+    case "clear":
+      clearAreaTick(w, h, dt);
       break;
     case "relax":
       relaxTick(w, h, dt);

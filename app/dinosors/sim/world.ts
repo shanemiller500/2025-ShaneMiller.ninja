@@ -59,9 +59,11 @@ import { regrowTick } from "./clearing";
 import { moveTick } from "./moving";
 import { Rivals } from "./rivals";
 import { Forest } from "./treeFolk";
+import { SeaFolk } from "./seaFolk";
 import { TaskBoard, issue } from "./tasks";
 import { Population } from "./population";
 import { Wildlife } from "./repopulate";
+import { clearJobsTick, keptClear, type ClearJob, type ClearRect } from "./clearArea";
 import { Trails } from "./trails";
 import { sites, type Site } from "./build";
 import { HOUSING } from "../data/colony";
@@ -155,6 +157,9 @@ export class World {
   eggs: Egg[] = [];
   /** trampled tiles waiting to grow back into grass (see clearing.ts) */
   cleared: { i: number; at: number }[] = [];
+  /** Clear area jobs under way, and the boxes the tribe keeps clear (nothing sprouts there) (clearArea.ts) */
+  clearJobs: ClearJob[] = [];
+  keepClear: ClearRect[] = [];
   private regrowT = 0;
   plants: Plant[] = [];
   props: Prop[] = [];
@@ -184,6 +189,8 @@ export class World {
   rivals = new Rivals();
   /** the Tree People: feral tribes up in the forest canopy (treeFolk.ts) */
   forest: Forest;
+  /** the Sea People: stilt villages out on the water, canoe raiders, friends of the sea reptiles (seaFolk.ts) */
+  seaFolk: SeaFolk;
   tasks = new TaskBoard();
   population = new Population();
   /** wild dinosaur numbers: good years, lean years, and nothing ever gone for good (repopulate.ts) */
@@ -243,6 +250,7 @@ export class World {
     this.camp = new Camp(seed);
     this.mine = new Mine(seed);
     this.forest = new Forest(seed);
+    this.seaFolk = new SeaFolk(seed);
     this.fire.initFuel(this);
     this.snow.init(this);
     for (const s of SPECIES) if (s.starter) this.unlocked.add(s.id);
@@ -250,6 +258,7 @@ export class World {
     else {
       this.wildlife.enabled = false;
       this.forest.enabled = false;
+      this.seaFolk.enabled = false;
     }
   }
 
@@ -652,6 +661,7 @@ export class World {
       const y = Math.floor(i / MAP_W) * TILE + TILE / 2;
       if (Math.hypot(x - this.camp.x, y - this.camp.y) < 420) continue;
       if (this.rng() > 0.35) continue;
+      if (keptClear(this, x, y)) continue;
       this.terrain.setTile(i % MAP_W, Math.floor(i / MAP_W), base[i] as T);
       // and something sprouts there
       if (this.rng() < 0.4) {
@@ -761,8 +771,10 @@ export class World {
     }
     this.rivals.update(this, dt);
     this.forest.update(this, dt);
+    this.seaFolk.update(this, dt);
     this.population.update(this, dt);
     this.wildlife.update(this, dt);
+    if (this.clearJobs.length && Math.floor(this.elapsed) !== Math.floor(this.elapsed - dt)) clearJobsTick(this);
     this.civ.update(this, dt);
     this.extinction.update(this, dt);
     this.tasks.update(this, dt);
@@ -831,7 +843,7 @@ export class World {
         // poop feeds the soil: a little plant sprouts
         if (it.kind === "poop") {
           const t = this.terrain.tileAt(it.x, it.y);
-          if (VEG_TILES.has(t) || t === T.Dirt || t === T.Sand) {
+          if ((VEG_TILES.has(t) || t === T.Dirt || t === T.Sand) && !keptClear(this, it.x, it.y)) {
             this.plants.push(makePlant(this, this.rng() < 0.6 ? "fern" : "bush", it.x, it.y, 0.15));
             this.plantsDirty = true;
             if (!this.flags.has("poopFact") && this.inView(it.x, it.y)) {
@@ -999,6 +1011,7 @@ export class World {
         tame: r(d.tame),
         owner: d.owner,
         clan: d.clan,
+        seaTribe: d.seaTribe,
         warTraining: r(d.warTraining ?? 0),
         warArmor: d.warArmor ?? 0,
         rider: d.rider,
@@ -1038,9 +1051,11 @@ export class World {
       shifts: this.shifts.serialize(),
       rivals: this.rivals.serialize(),
       forest: this.forest.serialize(this),
+      seaFolk: this.seaFolk.serialize(this),
       dragons: this.dragons.serialize(),
       items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
       cleared: this.cleared.map((c) => [c.i, Math.round(c.at)] as const),
+      keepClear: this.keepClear.map((r) => [Math.round(r.x0), Math.round(r.y0), Math.round(r.x1), Math.round(r.y1)] as const),
       eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent, genes: e.genes, gen: e.gen })),
       evo: this.evo,
       terrainGen: this.terrain.gen,
@@ -1126,6 +1141,7 @@ export class World {
     }
     for (const e of data.eggs) w.eggs.push({ id: w.nextId(), ...e });
     w.cleared = ((data as { cleared?: (readonly [number, number])[] }).cleared ?? []).map(([i, at]) => ({ i, at }));
+    w.keepClear = ((data as { keepClear?: (readonly [number, number, number, number])[] }).keepClear ?? []).map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1 }));
     for (const [kind, x, y, size, food, burnt, fruit, stump] of data.plants) {
       const p = makePlant(w, kind, x, y, size);
       p.food = food;
@@ -1168,6 +1184,7 @@ export class World {
     w.tribe.load(w, data.tribe);
     w.rivals.load(w, (data as { rivals?: ReturnType<Rivals["serialize"]> }).rivals);
     w.forest.load(w, (data as { forest?: ReturnType<Forest["serialize"]> }).forest);
+    w.seaFolk.load(w, (data as { seaFolk?: ReturnType<SeaFolk["serialize"]> }).seaFolk);
     w.dragons.load(w, (data as { dragons?: ReturnType<Dragons["serialize"]> }).dragons);
     w.evo = data.evo ?? {};
     w.sky.load(data.sky);

@@ -29,12 +29,12 @@ function toHex(rgb: string) {
 import type { World } from "../sim/world";
 import { drawDino, restPose, shade, type DinoPose } from "./drawDino";
 import { lookKey } from "../sim/genetics";
-import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawPlantLod, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
+import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawWinery, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawPlantLod, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
 import { ROLES } from "../data/facts";
 import { BUILDINGS, HOUSING, SCORPION_TIERS } from "../data/colony";
 import { drawBar, drawBones, drawBuilding, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
 import { drawDragon, drawDragonEgg, drawNest, drawPit } from "./dragonArt";
-import { clusters, drawField, drawPaddock, drawSeatRing } from "./mergedArt";
+import { clusters, drawField, drawVineyardField, drawPaddock, drawSeatRing } from "./mergedArt";
 import { RING_R, SHADE, shadeCentre } from "../sim/shade";
 import { moveSpotOk, type MoveRef } from "../sim/moving";
 import { shelterTiles } from "../sim/nav";
@@ -52,9 +52,10 @@ import { HELMET_BY_ID, OUTFIT_BY_ID } from "../data/colony";
 import { drawRefinery } from "./metalArt";
 import { drawBrute, drawCatapult, drawBruteMissile, drawClanCamp } from "./bruteArt";
 import { drawTreeCanopy, drawTreeFolk, drawTreeGround, drawTreeSign } from "./treeFolkArt";
+import { drawSeaFolk, drawSeaHut, drawSeaSign, drawSeaWalks } from "./seaFolkArt";
 import { drawClanBuilding, drawClanHold, drawClanTrap } from "./clanLifeArt";
 import { fenceSize, siteOf } from "../sim/clanLife";
-import type { Brute, Clan, ClanBuild, TreeSign } from "../sim/types";
+import type { Brute, Clan, ClanBuild, SeaHut, SeaSign, SeaTribe, TreeSign } from "../sim/types";
 import { TerrainRenderer } from "./terrainRenderer";
 import { drawEruptionColumn, drawGhost, drawPyroclastic } from "./civArt";
 import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
@@ -136,6 +137,10 @@ const MAX_BUBBLES = 3;
 const K_TREECAMP = 49;
 const K_TREEGROUND = 50;
 const K_TREESIGN = 51;
+/** the Sea People: a village's boardwalks, one stilt-house, a shore marker */
+const K_SEAWALK = 52;
+const K_SEAHUT = 53;
+const K_SEASIGN = 54;
 
 interface Drop {
   x: number;
@@ -381,7 +386,8 @@ export class Renderer {
     for (let i = 0; i < rv.brutes.length; i++) {
       const b = rv.brutes[i];
       // a Tree Person up in a tree goes after the tree (and the deck) it's sitting in
-      if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1 + 160) list.push({ y: b.tree && b.z > 8 ? b.y + 70 : b.y, k: K_BRUTE, i });
+      // …and a Sea Person riding a sea dragon goes straight after the dragon (sitting on its back)
+      if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1 + 160) list.push({ y: b.tree && b.z > 8 ? b.y + 70 : b.mount ? b.y + 1 : b.y, k: K_BRUTE, i });
     }
     // Tree People camps: the village up in the canopy (after its trees), the ground ring, the warning signs
     const fo = w.forest;
@@ -393,6 +399,29 @@ export class Renderer {
       for (const p of tr.pods) maxY = Math.max(maxY, p.y);
       list.push({ y: maxY + 4, k: K_TREECAMP, i });
       list.push({ y: tr.y - 60, k: K_TREEGROUND, i });
+    }
+    // Sea People villages out on the water
+    const sf = w.seaFolk;
+    this.seaHuts.length = 0;
+    this.seaSigns.length = 0;
+    for (let i = 0; i < sf.tribes.length; i++) {
+      const tr = sf.tribes[i];
+      const R = tr.r;
+      if (tr.x + R < x0 || tr.x - R > x1 || tr.y + R < y0 || tr.y - R > y1 + 200) continue;
+      let minY = tr.y;
+      for (const h of tr.huts) {
+        minY = Math.min(minY, h.y);
+        if (h.x > x0 - 80 && h.x < x1 + 80 && h.y > y0 - 20 && h.y < y1 + 120) {
+          list.push({ y: h.y, k: K_SEAHUT, i: this.seaHuts.length });
+          this.seaHuts.push({ h, tr });
+        }
+      }
+      list.push({ y: minY - 40, k: K_SEAWALK, i });
+      for (const s of tr.signs) {
+        if (s.x < x0 - 40 || s.x > x1 + 40 || s.y < y0 || s.y > y1 + 80) continue;
+        list.push({ y: s.y, k: K_SEASIGN, i: this.seaSigns.length });
+        this.seaSigns.push({ s, color: tr.color });
+      }
     }
     this.signs.length = 0;
     for (const tr of fo.tribes) {
@@ -567,7 +596,8 @@ export class Renderer {
 
     // farm fields (plots next to each other are one big field)
     const farms = w.tribe.farms;
-    for (const g of clusters(farms, (a, b) => Math.abs(a.x - b.x) < 100 && Math.abs(a.y - b.y) < 62)) {
+    // (vineyards join up with other vineyards, fields with fields)
+    for (const g of clusters(farms, (a, b) => (a.crop === "grape") === (b.crop === "grape") && Math.abs(a.x - b.x) < 100 && Math.abs(a.y - b.y) < 62)) {
       if (g.length > 1) {
         const fs = g.map((i) => farms[i]);
         const fx0 = Math.min(...fs.map((f) => f.x)) - 38;
@@ -575,7 +605,8 @@ export class Renderer {
         const fy0 = Math.min(...fs.map((f) => f.y)) - 22;
         const fy1 = Math.max(...fs.map((f) => f.y)) + 22;
         if (fx0 > x1 + 20 || fx1 < x0 - 20 || fy0 > y1 + 20 || fy1 < y0 - 20) continue;
-        drawField(c, fx0, fy0, fx1, fy1, fs, this.t);
+        if (fs[0].crop === "grape") drawVineyardField(c, fx0, fy0, fx1, fy1, fs, this.t);
+        else drawField(c, fx0, fy0, fx1, fy1, fs, this.t);
         continue;
       }
       const f = farms[g[0]];
@@ -651,6 +682,7 @@ export class Renderer {
           else if (b.kind === "barricade") drawBarricade(c, b.built, b.hp / def.hp);
           else if (b.kind === "totem") drawTotem(c, b.built, this.t);
           else if (b.kind === "dragonBones") drawDragonBones(c, def.w * TILE, b, this.t);
+          else if (b.kind === "winery" && b.built >= 1) drawWinery(c, def.w * TILE, b.built, w.camp.stock.wine, this.t);
           else if (b.kind === "tannery") drawTannery(c, def.w * TILE, b.built, w.camp.stock.hide, this.t);
           else if (b.kind === "refinery" && b.built >= 1) drawRefinery(c, def.w * TILE, w.camp.stock, this.t, night > 0.5);
           else if (CIV_KINDS.has(b.kind)) drawCivBuilding(c, b, def.w, def.h, { power: w.civ.energy > 1, night: night > 0.5, storm: w.weather.storm, t: this.t });
@@ -716,6 +748,8 @@ export class Renderer {
           const bc = w.rivals.clan(b.clan);
           // after dark, a Tree Person nobody has spotted is only a shadow with glinting eyes
           if (b.tree) drawTreeFolk(c, b, this.t, b.tint ?? "#d94f2a", w.daylight < 0.3 && !((b.spotT ?? 0) > 0));
+          // a Sea Person (in their canoe on the water); a canoe in the dark is a shadow until it's spotted
+          else if (b.sea) drawSeaFolk(c, b, this.t, b.tint ?? "#2fb7c9", !!b.boat && w.daylight < 0.3 && !((b.spotT ?? 0) > 0));
           else if (b.look) this.drawTurned(c, b, bc);
           else if (b.weapon === "catapult") drawCatapult(c, b, bc?.colors?.length ? bc.colors : [bc?.color ?? "#c0392b"], this.t);
           else drawBrute(c, b, this.t, b.tint ?? bc?.color ?? "#c0392b", (bc?.smarts ?? 0) >= 2);
@@ -730,6 +764,25 @@ export class Renderer {
         case K_TREEGROUND: {
           const tr = w.forest.tribes[it.i];
           if (tr) drawTreeGround(c, tr, this.t, night > 0.5, !!tr.found);
+          break;
+        }
+        case K_SEAWALK: {
+          const tr = w.seaFolk.tribes[it.i];
+          if (tr) drawSeaWalks(c, tr, this.t);
+          break;
+        }
+        case K_SEAHUT: {
+          const sh = this.seaHuts[it.i];
+          if (sh) drawSeaHut(c, sh.h, sh.tr, this.t, night > 0.5);
+          break;
+        }
+        case K_SEASIGN: {
+          const sg = this.seaSigns[it.i];
+          c.save();
+          c.translate(sg.s.x, sg.s.y);
+          c.scale(1.5, 1.5);
+          drawSeaSign(c, sg.s, sg.color, this.t);
+          c.restore();
           break;
         }
         case K_TREESIGN: {
@@ -1465,6 +1518,9 @@ export class Renderer {
   private cbs: { clan: Clan; kind: ClanBuild; lv: number; x: number; y: number; part?: "back" | "front" }[] = [];
   /** Tree People warning signs in view this frame (with their tribe's paint) */
   private signs: { s: TreeSign; color: string }[] = [];
+  /** Sea People stilt-houses + shore markers in view this frame */
+  private seaHuts: { h: SeaHut; tr: SeaTribe }[] = [];
+  private seaSigns: { s: SeaSign; color: string }[] = [];
 
   /** A dragon (selection ring, the dragon, then whoever is riding it). */
   private drawDragonAt(c: CanvasRenderingContext2D, dr: Dragon, ov: Overlay, weapon: WeaponLook) {
@@ -2571,6 +2627,8 @@ export class Renderer {
     add(w.volcano.x, w.volcano.y - 150, 160 + w.volcano.glow * 240, 0.4 + w.volcano.glow * 0.5);
     for (const s of w.shelters) if (s.stage >= 2) add(s.x, s.y - 8, HOUSING[s.tier]?.hearth && shelterDone(s) ? 120 : 80, HOUSING[s.tier]?.hearth && shelterDone(s) ? 0.85 : 0.6);
     for (const b of w.colony.buildings) if (b.kind === "blacksmith" && b.built >= 1) add(b.x - 10, b.y - 12, 110, 0.75);
+    // Sea People villages: firelit doorways over the water + the shrine's fire bowl
+    for (const tr of w.seaFolk.tribes) for (const h of tr.huts) if (h.hp > 0 && (h.kind === "hut" || h.kind === "longhouse" || h.kind === "shrine")) add(h.x, h.y - 24, h.kind === "longhouse" ? 90 : 60, 0.6 + Math.sin(this.t * 5 + h.x) * 0.06);
     // Tree People camps: the ritual fire below, firelit doorways + the fire bowl up in the canopy
     for (const tr of w.forest.tribes) {
       add(tr.x, tr.y + 10, 200 + Math.sin(this.t * 8 + tr.id) * 10, 0.85);
@@ -2765,6 +2823,11 @@ export class Renderer {
     for (const b of w.rivals.brutes) {
       if (!b.bubble || b.hidden || b.x < x0 || b.x > x1 || b.y < y0 || b.y > y1) continue;
       this.speech(c, b.x, b.y - b.z - (b.tree ? 40 : 46), b.bubble.text, inv, Math.min(1, b.bubble.t * 3));
+    }
+    // …over each Sea People village we've spotted
+    for (const tr of w.seaFolk.tribes) {
+      if (!tr.found || tr.x < x0 - 100 || tr.x > x1 + 100 || tr.y < y0 || tr.y > y1 + 200) continue;
+      this.speech(c, tr.x, tr.y - 80, `🛶 ${tr.name} Sea People · ${w.seaFolk.members(tr.id).length}`, inv * 0.9, 1);
     }
     // …and over each Tree People camp we've scouted
     for (const tr of w.forest.tribes) {

@@ -68,7 +68,9 @@ export type TaskKind =
   /** a crew picks a building up and carries it somewhere new (see moving.ts) */
   | "moveBuilding"
   /** attack a Tree People camp: beat whoever comes down out of the trees, then pull the decks down (treeFolk.ts) */
-  | "treeRaid";
+  | "treeRaid"
+  /** attack a Sea People village: beat them (on the stilt-houses, in their canoes), then pull the houses down (seaFolk.ts) */
+  | "seaRaid";
 
 export interface Task {
   /** a dragon raid: how many set out, and whether it's falling back (dragonRaid.ts) */
@@ -223,9 +225,9 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
 
   if (picked.brute) {
     const b = picked.brute;
-    const who = b.tree ? "one of the Tree People" : "a Neanderthal";
+    const who = b.tree ? "one of the Tree People" : b.sea ? "one of the Sea People" : "a Neanderthal";
     if (!armed) return { kind: "move", icon: "😬", label: `Nobody has a weapon to fight ${who}!`, x: b.x, y: b.y, target: 0 };
-    return { kind: "hunt", icon: b.tree ? "🌿" : "🪓", label: b.tree ? `Fight ${b.name} of the Tree People` : `Fight ${b.name} the Neanderthal`, x: b.x, y: b.y, target: b.id, weapons: kinds };
+    return { kind: "hunt", icon: b.tree ? "🌿" : b.sea ? "🛶" : "🪓", label: b.tree ? `Fight ${b.name} of the Tree People` : b.sea ? `Fight ${b.name} of the Sea People` : `Fight ${b.name} the Neanderthal`, x: b.x, y: b.y, target: b.id, weapons: kinds };
   }
   if (picked.egg && adults.length) {
     const e = picked.egg;
@@ -279,6 +281,13 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
     return null;
   }
   // a Tree People camp we've scouted: attack it (fight them down out of the trees, then tear the decks down)
+  // a Sea People village we've spotted: attack it
+  const village = w.seaFolk.villageAt(x, y, 180);
+  if (village?.found) {
+    if (!armed) return { kind: "move", icon: "😬", label: "Nobody has a weapon to attack a Sea People village!", x: village.x, y: village.y, target: 0 };
+    const n = w.seaFolk.members(village.id).length;
+    return { kind: "seaRaid", icon: "🔥", label: `Attack the ${village.name} sea village${n ? ` (${n} Sea People)` : ""}`, x: village.x, y: village.y, target: village.id, weapons: kinds };
+  }
   const grove = w.forest.campAt(x, y, 150);
   if (grove?.found) {
     if (!armed) return { kind: "move", icon: "😬", label: "Nobody has a weapon to attack a Tree People camp!", x: grove.x, y: grove.y, target: 0 };
@@ -475,7 +484,7 @@ export function issue(w: World, people: Human[], c: Command, weapon?: WeaponKind
     for (const h of crew) say(h, "I'm too little!");
     return null;
   }
-  if (c.kind === "hunt" || c.kind === "guard" || c.kind === "defend" || c.kind === "operate" || c.kind === "raid" || c.kind === "treeRaid") {
+  if (c.kind === "hunt" || c.kind === "guard" || c.kind === "defend" || c.kind === "operate" || c.kind === "raid" || c.kind === "treeRaid" || c.kind === "seaRaid") {
     // fighters only: kids head home instead
     for (const h of crew) if (h.child) say(h, "I'll stay safe!");
   }
@@ -590,6 +599,8 @@ function taskAlive(w: World, t: Task): boolean {
       return !!w.rivals.clan(t.target);
     case "treeRaid":
       return !!w.forest.tribe(t.target);
+    case "seaRaid":
+      return !!w.seaFolk.tribe(t.target);
     case "heal": {
       const p = w.humans.find((x) => x.id === t.target);
       return !!p && p.hp < 0.95;
@@ -719,6 +730,60 @@ export function taskThink(w: World, h: Human): boolean {
         return false;
       }
       go(h, "walk", clan.x + (w.rng() - 0.5) * 40, clan.y + 20);
+      return true;
+    }
+    case "seaRaid": {
+      const vil = w.seaFolk.tribe(t.target);
+      if (!vil) {
+        say(h, pick(w.rng, ["The coast is ours!", "They're gone!", "Ha!"]));
+        personDone(w, h, t);
+        return false;
+      }
+      // fight whoever's about (on the boardwalks, or close in on the water); never their little ones
+      let foe: ReturnType<typeof w.rivals.byId> = null;
+      let fd = 420;
+      for (const b of w.seaFolk.members(vil.id)) {
+        if (b.hp <= 0 || (b.age ?? 120) < 120) continue;
+        const d = Math.min(Math.hypot(b.x - h.x, b.y - h.y), Math.hypot(b.x - vil.x, b.y - vil.y) + 60);
+        if (d < fd) {
+          fd = d;
+          foe = b;
+        }
+      }
+      if (foe && Math.hypot(h.x - vil.x, h.y - vil.y) < 1100) {
+        h.order = { kind: "hunt", id: foe.id };
+        return false;
+      }
+      h.order = null;
+      // nobody left: wade out (or get as close as the water lets us) and pull the stilt-houses down
+      const hut = vil.huts.filter((x) => x.hp > 0).sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))[0];
+      if (!hut) {
+        w.seaFolk.raze(w, vil, "us");
+        personDone(w, h, t);
+        return false;
+      }
+      let spot: { x: number; y: number } | null = null;
+      for (let r = 0; r <= 160 && !spot; r += 20) {
+        for (let i = 0; i < 12 && !spot; i++) {
+          const sx = hut.x + Math.cos((i / 12) * Math.PI * 2) * r;
+          const sy = hut.y + 12 + Math.sin((i / 12) * Math.PI * 2) * r;
+          if (w.nav.passable("human", sx, sy)) spot = { x: sx, y: sy };
+        }
+      }
+      if (!spot) {
+        // out of reach in deep water: it'll have to go when the village falls
+        hut.hp = 0;
+        return true;
+      }
+      if (Math.hypot(h.x - spot.x, h.y - spot.y) < 26) {
+        h.vx = h.vy = 0;
+        h.dir = hut.x > h.x ? 1 : -1;
+        if (w.rng() < 0.3) say(h, pick(w.rng, ["Cut the stilts!", "Heave!", "Down it comes!"]));
+        w.seaFolk.wreck(w, vil, hut, 0.16);
+        h.think = 1.1;
+        return true;
+      }
+      go(h, "walk", spot.x, spot.y);
       return true;
     }
     case "treeRaid": {
@@ -1233,6 +1298,9 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
       }
       return true;
     }
+    // Shaped stone can't be picked up anywhere: it's cut at the Shaping yard. If nobody's at it, a builder
+    // cuts the blocks (fetching raw stone first if the stores are out of it).
+    if (s.need === "shaped" && makeShaped(w, h, s)) return true;
     // Assigned builders search well beyond the ordinary gather radius so
     // remote settlement sites can still bring their materials in.
     const src = sourceFor(w, h, s.need, undefined, undefined, 3000)
@@ -1247,6 +1315,37 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
   }
   h.site = "";
   return false;
+}
+
+/** A builder making shaped blocks for a site (true = on it): at the yard cutting, or off for raw stone. */
+function makeShaped(w: World, h: Human, s: Site): boolean {
+  const yard = w.colony.buildings.find((b) => b.kind === "shapingYard" && b.built >= 1 && b.hp > 0);
+  if (!yard) return false;
+  const cutting = w.humans.filter((o) => o !== h && o.state === "resonate" && o.targetId === yard.id && (o.shaping || w.tribe.roleOf(o) === "shaper")).length;
+  if (cutting >= 2) return false;
+  if (w.camp.stock.stone < 2) {
+    // no stone to cut: fetch some
+    const src = sourceFor(w, h, "stone", undefined, undefined, 3000) ?? sourceFor(w, h, "stone", yard.x, yard.y, 3000);
+    if (!src) return false;
+    h.site = "";
+    h.task = "stone";
+    h.targetId = src.id;
+    go(h, "walk", src.x, src.y);
+    return true;
+  }
+  const d = w.colony.door(yard);
+  h.site = siteKey(s);
+  h.task = null;
+  if (near(h, d.x, d.y, 14)) {
+    h.shaping = true;
+    h.targetId = yard.id;
+    go(h, "resonate", d.x, d.y);
+    if (!w.flags.has("builderShapes")) {
+      w.flags.add("builderShapes");
+      w.toast("🔷", `No stone shaper at work, so ${h.name} the builder is cutting shaped blocks for the polygon walls.`, d.x, d.y);
+    }
+  } else go(h, "walk", d.x, d.y);
+  return true;
 }
 
 /** Somewhere a builder can actually stand next to the site (blueprints in a wall line, corners…). */

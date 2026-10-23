@@ -3,7 +3,7 @@
 import { Modal } from "@/components/ui/modal";
 
 /** About + a gentle note that this mix of creatures is make-believe. */
-export default function AboutPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function AboutPanel({ open, onClose, dragons = [], onWatchHatch }: { open: boolean; onClose: () => void; dragons?: { id: number; name: string; icon: string }[]; onWatchHatch?: (id: number) => void }) {
   const how: [string, string][] = [
     ["✋", "Drag to look around, pinch or scroll to zoom"],
     ["👆", "Tap anything: dinos, trees, water, the volcano…"],
@@ -33,6 +33,33 @@ export default function AboutPanel({ open, onClose }: { open: boolean; onClose: 
               <div className="font-bold">🕰️ A little time-travel secret</div>
               In real life, these animals didn’t all live together! Stegosaurus lived about 150 million years ago, T. rex about 66 million years ago, and people only showed up around 300,000 years ago — long after the big dinosaurs were gone. Here, everyone gets to hang out together just for fun.
             </div>
+            {onWatchHatch && (
+              <div className="mt-4 rounded-2xl bg-emerald-50 p-4 dark:bg-emerald-400/10">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-emerald-900 dark:text-emerald-100">🐣 The dragon hatching film</div>
+                    <div className="text-[13px] text-emerald-800/80 dark:text-emerald-100/70">Watch a baby dragon crack out of its egg and meet the one who hatched it.</div>
+                  </div>
+                  <button type="button" onClick={() => onWatchHatch(-1)}
+                    className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white shadow transition hover:bg-emerald-400 active:scale-95">
+                    ▶ Watch a dragon hatch
+                  </button>
+                </div>
+                {dragons.length > 0 && (
+                  <div className="mt-3">
+                    <div className="text-[12px] font-semibold text-emerald-900/80 dark:text-emerald-100/70">Or replay one of yours:</div>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {dragons.map((d) => (
+                        <button key={d.id} type="button" onClick={() => onWatchHatch(d.id)}
+                          className="rounded-full bg-white px-3 py-1 text-[13px] font-semibold text-slate-800 shadow-sm transition hover:bg-emerald-100 active:scale-95 dark:bg-white/10 dark:text-slate-100 dark:hover:bg-white/20">
+                          {d.icon} {d.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {how.map(([i, t]) => (
                 <div key={t} className="flex items-center gap-3 rounded-2xl bg-slate-100 px-3 py-2 text-[14px] dark:bg-white/5">

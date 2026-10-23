@@ -1306,8 +1306,8 @@ export function thinkDino(w: World, d: Dino) {
   const far = !w.inView(d.x, d.y, 1400);
   d.think = (onScreen ? 0.35 : far ? 1.8 : 1.1) + w.rng() * 0.35;
   if (LOCKED.has(d.state)) return;
-  // harnessed to a war chariot: nothing to decide
-  if (d.chariot) return;
+  // harnessed to a war chariot, or carrying a Sea Person: nothing to decide
+  if (d.chariot || d.seaRider) return;
   if (d.health <= 0) {
     setState(d, "faint", d.x, d.y);
     emote(d, "😵", 3);

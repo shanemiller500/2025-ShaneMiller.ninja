@@ -359,3 +359,95 @@ export function drawField(c: CanvasRenderingContext2D, x0: number, y0: number, x
     c.fillText("✦", x1 - 10, y0 - 4);
   }
 }
+
+/**
+ * Neighbouring vineyard plots as one vineyard: long trellis rows right across the block (posts + wires),
+ * vines leafing out along them at each plot's stage, purple bunches where a plot is ripe, a fence round it.
+ */
+export function drawVineyardField(c: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, farms: Farm[], t: number) {
+  const W = x1 - x0;
+  const H = y1 - y0;
+  c.fillStyle = "#5f4529";
+  c.beginPath();
+  c.roundRect(x0 - 3, y0 - 3, W + 6, H + 6, 12);
+  c.fill();
+  c.fillStyle = "#6e5233";
+  c.beginPath();
+  c.roundRect(x0, y0, W, H, 10);
+  c.fill();
+  const near = (x: number, y: number) => {
+    let f: Farm | null = null;
+    let bd = 80;
+    for (const o of farms) {
+      const d = Math.hypot(o.x - x, (o.y - y) * 1.4);
+      if (d < bd) {
+        bd = d;
+        f = o;
+      }
+    }
+    return f;
+  };
+  for (let y = y0 + 14; y < y1 - 2; y += 13) {
+    // furrow
+    c.strokeStyle = "#5a4128";
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(x0 + 5, y + 2);
+    c.lineTo(x1 - 5, y + 2);
+    c.stroke();
+    if (!farms.some((f) => f.planted)) continue;
+    // posts every so often + one long wire
+    c.strokeStyle = "#8a6a44";
+    c.lineWidth = 1.6;
+    for (let x = x0 + 8; x <= x1 - 8; x += 28) {
+      c.beginPath();
+      c.moveTo(x, y + 2);
+      c.lineTo(x, y - 11);
+      c.stroke();
+    }
+    c.strokeStyle = "rgba(70,60,50,0.7)";
+    c.lineWidth = 0.8;
+    c.beginPath();
+    c.moveTo(x0 + 8, y - 10);
+    c.lineTo(x1 - 8, y - 10);
+    c.stroke();
+    for (let x = x0 + 10; x < x1 - 8; x += 7) {
+      const f = near(x, y);
+      if (!f || !f.planted) continue;
+      const g = Math.max(0.15, f.growth);
+      if (((x / 7) | 0) % Math.max(1, Math.round(3 - g * 2)) !== 0) continue;
+      const i = Math.round(x / 7);
+      const sway = Math.sin(t * 1.6 + i + y) * 0.8;
+      c.fillStyle = i % 3 === 0 ? "#4f8a32" : "#5f9e3a";
+      c.beginPath();
+      c.ellipse(x + sway, y - 9 + (i % 2) * 2, 2.4 + g * 1.6, 2 + g * 1.2, 0.4, 0, Math.PI * 2);
+      c.fill();
+      if (f.growth >= 0.6 && i % 2 === 0) {
+        c.fillStyle = f.growth >= 1 ? "#6a2c8e" : "#8faa4a";
+        for (let k = 0; k < 4; k++) {
+          c.beginPath();
+          c.arc(x + sway + (k % 2) * 1.6 - 0.8, y - 5 + Math.floor(k / 2) * 1.6, 1.1, 0, Math.PI * 2);
+          c.fill();
+        }
+      }
+    }
+  }
+  // a low wattle fence round the vineyard
+  c.strokeStyle = "#8a6238";
+  c.lineWidth = 1.6;
+  for (let x = x0; x <= x1; x += 14) {
+    c.beginPath();
+    c.moveTo(x, y0 - 2);
+    c.lineTo(x, y0 - 9);
+    c.moveTo(x, y1 + 2);
+    c.lineTo(x, y1 - 5);
+    c.stroke();
+  }
+  if (farms.some((f) => f.planted && f.growth >= 1)) {
+    const a = (Math.sin(t * 3) + 1) / 2;
+    c.fillStyle = `rgba(220,170,255,${0.35 + a * 0.4})`;
+    c.font = "10px serif";
+    c.textAlign = "center";
+    c.fillText("✦", x1 - 10, y0 - 4);
+  }
+}

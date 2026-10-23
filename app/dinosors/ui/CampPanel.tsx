@@ -265,6 +265,41 @@ function CampTab({ snap, engine, onForge }: { snap: Snapshot; engine: Engine; on
           </div>
         </>
       )}
+      {snap.sea.tribes.length > 0 && (
+        <>
+          <div className="mt-3 flex items-center justify-between text-sm font-bold">
+            <span>🛶 Sea People</span>
+            <span className="text-[11px] font-semibold text-white/55">stilt villages on the water</span>
+          </div>
+          <div className="mt-1.5 space-y-1.5">
+            {snap.sea.tribes.map((tr) => (
+              <div key={tr.id} className="flex items-center gap-2 rounded-2xl bg-white/5 p-2 text-[12px]">
+                <span className="flex shrink-0 -space-x-1">
+                  {tr.colors.map((c) => (
+                    <span key={c} className="h-3 w-3 rounded-full border-2 border-black/40" style={{ background: c }} />
+                  ))}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold">
+                    {tr.name} village <span className="font-semibold text-white/60">· {tr.folk} raiders · {tr.young} young</span>
+                  </div>
+                  <div className="text-white/65">Shell village level {tr.tier + 1} · {tr.hutsUp}/{tr.huts} shell houses + farms standing</div>
+                  {tr.farms.length > 0 && <div className="truncate text-white/65">Sea farms: {Array.from(new Set(tr.farms)).join(" · ")}{tr.pearls > 0 ? ` · ${tr.pearls} pearls stored` : ""}</div>}
+                  <div className="text-white/65">{tr.dragons > 0 ? `🐉 ${tr.dragons} trained sea dragon${tr.dragons > 1 ? "s" : ""} (they ride them to war)` : "💙 Friends of the sea beasts (training one to ride)"}</div>
+                  {tr.merges > 0 && <div className="font-semibold text-amber-200">🐚 A union of {tr.merges + 1} villages</div>}
+                  {tr.raiding && <div className="font-bold text-rose-300">🛶 War canoes are out on the rivers!</div>}
+                </div>
+                <button type="button" onClick={() => engine.raidSeaVillage(tr.id)} className="shrink-0 rounded-xl bg-rose-500/80 px-2.5 py-1.5 font-bold hover:bg-rose-400 active:scale-95" title="Send the people you've selected">
+                  🔥 Attack
+                </button>
+                <button type="button" onClick={() => engine.flyTo(tr.x, tr.y, 0.9)} className="shrink-0 rounded-xl bg-white/10 px-2.5 py-1.5 font-bold hover:bg-white/20 active:scale-95">
+                  📍
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {snap.rivals.catapults.length > 0 && (
         <>
           <div className="mt-3 text-sm font-bold">🪨 Our captured catapults</div>

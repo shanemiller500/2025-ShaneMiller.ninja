@@ -85,6 +85,10 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [tool, setToolState] = useState<ToolState>(DEFAULT_TOOL);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  /** every message, newest first (the 🔔 list), and how many came in since it was last opened */
+  const [log, setLog] = useState<Toast[]>([]);
+  const [unread, setUnread] = useState(0);
+  const popupsRef = useRef(false);
   /** a dragon hatching scene playing (its dragon id) */
   const [hatchId, setHatchId] = useState<number | null>(null);
   const [panel, setPanel] = useState<TopPanel>(null);
@@ -108,9 +112,16 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
 
   const pushToast = useCallback((t: Omit<Toast, "id">) => {
     const id = toastId.current++;
+    setLog((list) => [{ ...t, id }, ...list.filter((x) => x.text !== t.text)].slice(0, 60));
+    setUnread((n) => n + 1);
+    // pop-ups only if they've been switched on (they collect in the 🔔 list either way)
+    if (!popupsRef.current) return;
     // only the newest evolution update is worth keeping on screen
     setToasts((list) => [...list.filter((x) => x.text !== t.text && !(t.icon === "🧬" && x.icon === "🧬")).slice(-2), { ...t, id }]);
   }, []);
+  useEffect(() => {
+    popupsRef.current = settings.popups;
+  }, [settings.popups]);
 
   useEffect(() => {
     trackEvent("Dinosors Page Viewed", { page: "Dinosors" });
@@ -336,6 +347,14 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           />
           <Toasts
             toasts={toasts}
+            log={log}
+            unread={unread}
+            popups={settings.popups}
+            onTogglePopups={(on) => {
+              updateSettings({ popups: on });
+              if (!on) setToasts([]);
+            }}
+            onRead={() => setUnread(0)}
             onDismiss={(id) => setToasts((l) => l.filter((t) => t.id !== id))}
             onGo={(x, y) => engine.flyTo(x, y, Math.max(engine.cam.zoom, 0.8))}
           />
@@ -423,7 +442,15 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             </button>
           )}
           <StickerBook open={stickersOpen} onClose={() => setStickersOpen(false)} found={snap.discoveries} seen={snap.seen} />
-          <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
+          <AboutPanel
+            open={aboutOpen}
+            onClose={() => setAboutOpen(false)}
+            dragons={aboutOpen ? engine.hatchList() : []}
+            onWatchHatch={(id) => {
+              setAboutOpen(false);
+              setHatchId(id);
+            }}
+          />
           <SavedGames open={savesOpen} onClose={() => setSavesOpen(false)} engine={engine} fontClass={fontClass} onToast={(icon, text) => pushToast({ icon, text })} />
           <CloudPanel cloud={cloud} fontClass={fontClass} hasLocal={hasDinoProgress(engine)} />
           <Modal className="dl-modal" open={!!confirm} onClose={() => setConfirm(null)} size="sm" accent="#f59e0b" labelledBy="dl-confirm">

@@ -2534,3 +2534,28 @@ test('older activated pyramids open the casing stage and gain limestone on load'
   assert.ok(restored.shifts.pyramid(restored), 'activated core stays powered');
   assert.ok(restored.colony.nodes.some((n) => n.kind === 'limestone'), 'older land gains limestone');
 });
+test('builders finish every planned polygon wall: with no stone shaper, they cut the shaped blocks themselves (fetching stone too)', () => {
+  const w = civWorld(507, 'resonance');
+  learn(w, 'resonance', 'copperRes', 'quartzTuning', 'precisionStone');
+  finish(w, 'shapingYard', w.camp.x + 180, w.camp.y + 130);
+  w.camp.stock.stone = 4; // not enough: they'll have to fetch more
+  w.camp.stock.shaped = 0;
+  const adults = w.humans.filter((x) => !x.child);
+  for (const h of adults) h.role = 'builder';
+  assert.ok(!adults.some((h) => w.tribe.roleOf(h) === 'shaper'), 'nobody is a stone shaper');
+  const tx = Math.floor(w.camp.x / TILE) + 8;
+  const ty = Math.floor(w.camp.y / TILE) + 6;
+  const walls = [];
+  for (let i = 0; i < 3; i++) {
+    const wl = w.tribe.addWall(w, tx + i, ty, 'polygon');
+    if (wl) walls.push(wl);
+  }
+  assert.ok(walls.length >= 2, 'polygon walls planned');
+  let cut = false;
+  const done = run(w, 900, () => {
+    if (adults.some((h) => h.shaping && h.state === 'resonate')) cut = true;
+    return walls.every((wl) => wl.built >= 1);
+  });
+  assert.ok(cut, 'a builder cut shaped blocks at the yard');
+  assert.ok(done, `every planned wall built (${walls.map((wl) => wl.built.toFixed(2)).join(', ')})`);
+});

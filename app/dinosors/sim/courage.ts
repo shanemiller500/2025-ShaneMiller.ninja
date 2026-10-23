@@ -1,6 +1,7 @@
 import { sp } from "../data/species";
 import { BRUTE_TOUGH } from "./rivals";
 import { TREE_TOUGH } from "./treeFolk";
+import { SEA_TOUGH } from "./seaFolk";
 import { dinoMaxHp, sizeOf } from "./dinos";
 import type { Brute, Dino, Human } from "./types";
 import type { Task } from "./tasks";
@@ -77,7 +78,7 @@ export function foesNear(w: World, h: Human, r = COURAGE.threatR): Foe[] {
 
 /** Damage it still takes to bring a foe down. */
 export function toughness(f: Foe) {
-  return f.kind === "dino" ? dinoMaxHp(f.d) * Math.max(0, f.d.health) : Math.max(0, f.b.hp) * (f.b.tree ? TREE_TOUGH : BRUTE_TOUGH);
+  return f.kind === "dino" ? dinoMaxHp(f.d) * Math.max(0, f.d.health) : Math.max(0, f.b.hp) * (f.b.tree ? TREE_TOUGH : f.b.sea ? SEA_TOUGH : BRUTE_TOUGH);
 }
 
 /** Everyone who'd fight beside `h`: armed grown-ups close by who are on a job, on guard or hunting, or already fighting. */

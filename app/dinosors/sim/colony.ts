@@ -1023,8 +1023,8 @@ export function scorpionTarget(w: World, x: number, y: number, range: number): T
   }
   for (const b of w.rivals.brutes) {
     if (!w.rivals.hostile(w, b)) continue;
-    // a Scorpion's crew can't pick a Tree Person out of the dark at all
-    if (b.tree && w.daylight < 0.3) continue;
+    // a Scorpion's crew can't pick a Tree Person (or a canoe on the water) out of the dark at all
+    if ((b.tree || (b.sea && b.boat)) && w.daylight < 0.3) continue;
     const dist = Math.hypot(b.x - x, b.y - y);
     if (dist > range) continue;
     const s = dist - (b.raid || b.captive ? 170 : 0);

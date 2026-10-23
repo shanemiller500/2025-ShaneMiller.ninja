@@ -335,8 +335,8 @@ function steer(w: World, d: Dino, speed: number, dt: number) {
 
 /** Per-frame update: needs, motion, timers. Decisions happen in the brain. */
 export function moveDino(w: World, d: Dino, dt: number) {
-  // harnessed to a war chariot: the chariot moves it (chariots.ts)
-  if (d.chariot) return;
+  // harnessed to a war chariot: the chariot moves it (chariots.ts); ridden by a Sea Person: the rider steers (seaFolk.ts)
+  if (d.chariot || d.seaRider) return;
   const def = sp(d.species);
   d.stateT += dt;
   d.age += dt;
