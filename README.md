@@ -12,6 +12,12 @@ Welcome to my portfolio website! This project is built using [Next.js](https://n
 
 ## Getting Started
 
+### Contact form verification
+
+Create a Cloudflare Turnstile widget for `shanemiller.ninja` (and `www.shanemiller.ninja` if used). Set its **site key** as `NEXT_PUBLIC_TURNSTILE_SITE_KEY` in this portfolio's deployment and local environment, then rebuild and redeploy. The portfolio sends a fresh `turnstileToken` directly to U-Mail's `/api/send-email/contact` endpoint. Without the site key, the contact form cannot send.
+
+The U-Mail API deployment must have the matching private `UMAIL_TURNSTILE_SECRET` and an allowlist such as `UMAIL_TURNSTILE_HOSTNAMES=u-mail.ai,shanemiller.ninja` (also include `www.shanemiller.ninja` if used). Keep any other host that uses this API route. If `UMAIL_TURNSTILE_ACTION` is set, it must match the widget action; this form does not set one. Do not put the secret in this portfolio. The API performs the single server-side token verification; the portfolio must not verify the same token first. A production send still needs an authorized mailbox check after both deployments.
+
 To set up the project locally, follow these steps:
 
 ### Prerequisites

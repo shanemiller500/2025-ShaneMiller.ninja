@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
 import { trackEvent } from "@/utils/mixpanel";
 import {
@@ -35,6 +36,22 @@ interface ContactFormState {
   attachment: File | null;
 }
 
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (container: HTMLElement, options: {
+        sitekey: string;
+        theme: "auto";
+        callback: (token: string) => void;
+        "expired-callback": () => void;
+        "error-callback": () => void;
+      }) => string;
+      reset: (widgetId: string) => void;
+      remove: (widgetId: string) => void;
+    };
+  }
+}
+
 interface Language {
   name: string;
   code: string;
@@ -49,7 +66,8 @@ const INPUT_BASE_STYLES =
 const MIN_LOADING_DELAY_MS = 2000;
 const STYLE_LOADING_DELAY_MS = 3000;
 const POPUP_DURATION_MS = 3500;
-const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_SIZE_BYTES = 2 * 1024 * 1024;
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 export default function ContactPage() {
   const [formData, setFormData] = useState<ContactFormState>({
@@ -71,8 +89,12 @@ export default function ContactPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileReady, setTurnstileReady] = useState(false);
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const turnstileContainerRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaSelectionRef = useRef<{ start: number; end: number } | null>(null);
 
@@ -87,6 +109,23 @@ export default function ContactPage() {
     trackEvent("Contact Page Viewed", { page: "Contact" });
   }, []);
 
+  useEffect(() => () => {
+    if (turnstileWidgetRef.current) window.turnstile?.remove(turnstileWidgetRef.current);
+    turnstileWidgetRef.current = null;
+  }, []);
+
+  function renderTurnstile() {
+    if (!TURNSTILE_SITE_KEY || !window.turnstile || !turnstileContainerRef.current || turnstileWidgetRef.current) return;
+    turnstileWidgetRef.current = window.turnstile.render(turnstileContainerRef.current, {
+      sitekey: TURNSTILE_SITE_KEY,
+      theme: "auto",
+      callback: setTurnstileToken,
+      "expired-callback": () => setTurnstileToken(""),
+      "error-callback": () => setTurnstileToken(""),
+    });
+    setTurnstileReady(true);
+  }
+
   function showPopup(message: string, success = false) {
     setStatusMessage(message);
     setIsSuccess(success);
@@ -100,8 +139,13 @@ export default function ContactPage() {
   }
 
   function selectAttachment(file: File) {
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      showPopup("Attachments must be PNG, JPEG, or WebP images.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-      showPopup("Please choose a file smaller than 10 MB.");
+      showPopup("Please choose a PNG, JPEG, or WebP image smaller than 2 MB.");
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
@@ -133,6 +177,15 @@ export default function ContactPage() {
       return;
     }
 
+    if (!TURNSTILE_SITE_KEY || !turnstileReady) {
+      showPopup("The security check is unavailable. Please try again later.");
+      return;
+    }
+    if (!turnstileToken) {
+      showPopup("Please complete the security check before sending.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -143,6 +196,7 @@ export default function ContactPage() {
       payload.append("topic", "Portfolio contact");
       payload.append("subject", formData.subject.trim() || "Portfolio message");
       payload.append("description", formData.description.trim());
+      payload.append("turnstileToken", turnstileToken);
       if (formData.attachment) {
         payload.append("attachment", formData.attachment);
       }
@@ -153,8 +207,8 @@ export default function ContactPage() {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Error: ${errorText}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || "The message could not be sent.");
       }
 
       showPopup("Message sent successfully!", true);
@@ -164,9 +218,11 @@ export default function ContactPage() {
       }
     } catch (error) {
       console.error(error);
-      showPopup("An error occurred while sending the message.", false);
+      showPopup(error instanceof Error ? error.message : "An error occurred while sending the message.", false);
     } finally {
       setIsSubmitting(false);
+      setTurnstileToken("");
+      if (turnstileWidgetRef.current) window.turnstile?.reset(turnstileWidgetRef.current);
     }
   }
 
@@ -464,7 +520,24 @@ export default function ContactPage() {
                     onClear={clearAttachment}
                   />
 
-                  <SubmitButton isSubmitting={isSubmitting} />
+                  <div className="space-y-2">
+                    {TURNSTILE_SITE_KEY ? (
+                      <>
+                        <Script
+                          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+                          strategy="afterInteractive"
+                          onReady={renderTurnstile}
+                        />
+                        <div ref={turnstileContainerRef} aria-label="Security check" />
+                      </>
+                    ) : (
+                      <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
+                        Contact verification is not configured yet.
+                      </p>
+                    )}
+                  </div>
+
+                  <SubmitButton isSubmitting={isSubmitting} isVerificationAvailable={Boolean(TURNSTILE_SITE_KEY)} />
               </div>
             </form>
           </div>
@@ -692,7 +765,7 @@ function AttachmentDropZone({
             {attachment ? attachment.name : "Attachment"}
           </p>
           <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            {attachment ? formatFileSize(attachment.size) : "Up to 10 MB"}
+            {attachment ? formatFileSize(attachment.size) : "PNG, JPEG, or WebP · up to 2 MB"}
           </p>
         </div>
 
@@ -719,6 +792,7 @@ function AttachmentDropZone({
 
       <input
         type="file"
+        accept="image/png,image/jpeg,image/webp"
         id="attachment"
         name="attachment"
         className="sr-only"
@@ -735,7 +809,7 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function SubmitButton({ isSubmitting }: { isSubmitting: boolean }) {
+function SubmitButton({ isSubmitting, isVerificationAvailable }: { isSubmitting: boolean; isVerificationAvailable: boolean }) {
   return (
     <div className="border-t border-slate-200/60 pt-8 dark:border-white/10 sm:pt-10">
       <Button
@@ -743,7 +817,7 @@ function SubmitButton({ isSubmitting }: { isSubmitting: boolean }) {
         variant="indigo"
         size="lg"
         fullWidth
-        disabled={isSubmitting}
+        disabled={isSubmitting || !isVerificationAvailable}
         aria-busy={isSubmitting}
         className="contact-send group inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-indigo-500 text-white shadow-[0_6px_20px_-10px_rgba(99,102,241,0.35)] transition-colors duration-300 motion-reduce:transition-none hover:bg-indigo-600 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:text-white dark:hover:bg-indigo-400"
       >
