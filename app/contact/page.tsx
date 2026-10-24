@@ -44,7 +44,7 @@ declare global {
         theme: "auto";
         callback: (token: string) => void;
         "expired-callback": () => void;
-        "error-callback": () => void;
+        "error-callback": (code: string) => boolean;
       }) => string;
       reset: (widgetId: string) => void;
       remove: (widgetId: string) => void;
@@ -91,6 +91,7 @@ export default function ContactPage() {
   const [isDragActive, setIsDragActive] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileReady, setTurnstileReady] = useState(false);
+  const [turnstileError, setTurnstileError] = useState("");
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const turnstileContainerRef = useRef<HTMLDivElement>(null);
@@ -119,9 +120,22 @@ export default function ContactPage() {
     turnstileWidgetRef.current = window.turnstile.render(turnstileContainerRef.current, {
       sitekey: TURNSTILE_SITE_KEY,
       theme: "auto",
-      callback: setTurnstileToken,
-      "expired-callback": () => setTurnstileToken(""),
-      "error-callback": () => setTurnstileToken(""),
+      callback: (token) => {
+        setTurnstileToken(token);
+        setTurnstileError("");
+      },
+      "expired-callback": () => {
+        setTurnstileToken("");
+        setTurnstileError("The security check expired. Please try again.");
+      },
+      "error-callback": (code) => {
+        setTurnstileToken("");
+        const configurationError = /^(110100|110110|110200|400020|400021|400070)$/.test(code);
+        setTurnstileError(configurationError
+          ? `The security check is not configured for this site (Cloudflare ${code}).`
+          : `The security check could not finish (Cloudflare ${code}). Please try again.`);
+        return true;
+      },
     });
     setTurnstileReady(true);
   }
@@ -182,7 +196,7 @@ export default function ContactPage() {
       return;
     }
     if (!turnstileToken) {
-      showPopup("Please complete the security check before sending.");
+      showPopup(turnstileError || "Please complete the security check before sending.");
       return;
     }
 
@@ -529,6 +543,21 @@ export default function ContactPage() {
                           onReady={renderTurnstile}
                         />
                         <div ref={turnstileContainerRef} aria-label="Security check" />
+                        {turnstileError && (
+                          <div role="alert" className="text-sm text-rose-600 dark:text-rose-300">
+                            {turnstileError}
+                            <button
+                              type="button"
+                              className="ml-2 underline underline-offset-2"
+                              onClick={() => {
+                                setTurnstileError("");
+                                if (turnstileWidgetRef.current) window.turnstile?.reset(turnstileWidgetRef.current);
+                              }}
+                            >
+                              Retry
+                            </button>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
