@@ -16,6 +16,7 @@ import { focusGeoJSON, type FocusScope } from "./report-focus";
 import { PARCEL_SOURCES, type ParcelRecord } from "./parcel-sources";
 import type { ParcelDetail } from "./parcel-detail";
 import type { FatalCrash } from "./crash";
+import type { EpaFacility } from "./facility";
 import { downloadReport } from "./export-report";
 import { EvidenceSummary, TerrainCard } from "./SiteAnalysis";
 import type { Facility, Finding, Report, FeatureSet, Parcel, Road, TerrainResult } from "./report-types";
@@ -25,8 +26,9 @@ type SearchResult = { label: string; center: Coord };
 type SoilSelection = { kind: "soil"; point: Coord; properties: Record<string, string | number | null> };
 type ParcelSelection = { kind: "parcel"; point: Coord; properties: ParcelRecord & { parcelKey: string } };
 type CrashSelection = { kind: "crash"; point: Coord; properties: FatalCrash };
+type FacilitySelection = { kind: "facility"; point: Coord; properties: EpaFacility };
 type OverlaySelection = { kind: "overlay"; results: { id: string; label: string; url: string; status: string; features: Record<string, unknown>[] }[] };
-type Inspection = SoilSelection | ParcelSelection | CrashSelection | OverlaySelection;
+type Inspection = SoilSelection | ParcelSelection | CrashSelection | FacilitySelection | OverlaySelection;
 type SoilComponent = { name: string; percentage: number | null; hydric: string; drainage: string; classification: string; slopePercent: number | null };
 
 const DRAW_LAYER: AtlasLayer = {
@@ -90,7 +92,7 @@ export default function LandApp() {
   const [terrainNonce, setTerrainNonce] = useState(0);
   const [showLayers, setShowLayers] = useState(false);
   const [visibleLayers, setVisibleLayers] = useState<Record<string, boolean>>({ "study-shape": true, "report-focus": true, "land-soils": true, "land-parcels": true, "land-crashes": true, "land-contours": true });
-  const legendAvailable = !!(visibleLayers["land-soils"] || visibleLayers["land-parcels"] || visibleLayers["land-crashes"]);
+  const legendAvailable = !!(visibleLayers["land-soils"] || visibleLayers["land-parcels"] || visibleLayers["land-crashes"] || visibleLayers["land-facilities"]);
   const [soilData, setSoilData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [soilStatus, setSoilStatus] = useState("Zoom in to level 12 to see colored soil map units.");
   const [parcelData, setParcelData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
@@ -98,6 +100,8 @@ export default function LandApp() {
   const [parcelStatus, setParcelStatus] = useState("Zoom in to level 14 to see parcel boundaries in connected states.");
   const [crashData, setCrashData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [crashStatus, setCrashStatus] = useState("Zoom in to level 8 to see 2024 fatal crash points.");
+  const [facilityData, setFacilityData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
+  const [facilityStatus, setFacilityStatus] = useState("Zoom in to level 10 to see EPA regulated facilities.");
   const [reportFocus, setReportFocus] = useState<keyof Report | null>(null);
   const [focusScope, setFocusScope] = useState<FocusScope>("inside");
   const [inspection, setInspection] = useState<Inspection | null>(null);
@@ -109,7 +113,7 @@ export default function LandApp() {
   const [soilDetailError, setSoilDetailError] = useState("");
 
   const focusData = useMemo(() => shape && complete && reportFocus ? focusGeoJSON(shape, selectedParcel, focusScope) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, [shape, complete, reportFocus, selectedParcel, focusScope]);
-  const data = useMemo(() => ({ "study-shape-source": shape ? shapeGeoJSON(shape) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, "report-focus-source": focusData, "land-soils-source": soilData, "land-parcels-source": parcelData, "land-parcels-selected-source": { type: "FeatureCollection", features: selectedParcel ? [selectedParcel] : [] } as GeoJSON.FeatureCollection, "land-crashes-source": crashData }), [shape, soilData, parcelData, selectedParcel, crashData, focusData]);
+  const data = useMemo(() => ({ "study-shape-source": shape ? shapeGeoJSON(shape) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, "report-focus-source": focusData, "land-soils-source": soilData, "land-parcels-source": parcelData, "land-parcels-selected-source": { type: "FeatureCollection", features: selectedParcel ? [selectedParcel] : [] } as GeoJSON.FeatureCollection, "land-crashes-source": crashData, "land-facilities-source": facilityData }), [shape, soilData, parcelData, selectedParcel, crashData, facilityData, focusData]);
   const onMapReady = useCallback((instance: MlMap) => setMap(instance), []);
 
   useEffect(() => {
@@ -226,6 +230,32 @@ export default function LandApp() {
 
   useEffect(() => {
     if (!map) return;
+    let controller: AbortController | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const loadFacilities = () => {
+      controller?.abort();
+      if (!visibleLayers["land-facilities"] || map.getZoom() < 10) {
+        setFacilityData({ type: "FeatureCollection", features: [] });
+        setFacilityStatus(visibleLayers["land-facilities"] ? "Zoom in to level 10 to see EPA regulated facilities." : "EPA facility layer is off.");
+        return;
+      }
+      const bounds = map.getBounds();
+      const coords = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+      if (coords[2] - coords[0] > 1 || coords[3] - coords[1] > 1) { setFacilityData({ type: "FeatureCollection", features: [] }); setFacilityStatus("Zoom in further to load EPA facilities."); return; }
+      const current = new AbortController(); controller = current;
+      setFacilityStatus("Loading EPA regulated facilities…");
+      fetch(`/api/land-intelligence/facility-map?bbox=${coords.map((value) => value.toFixed(6)).join(",")}`, { signal: current.signal })
+        .then(async (response) => { const json = await response.json(); if (!response.ok) throw new Error(json.error ?? "EPA facility data unavailable."); return json; })
+        .then((json) => { setFacilityData({ type: "FeatureCollection", features: json.features }); setFacilityStatus(json.limited ? `${json.features.length} EPA facilities shown; zoom in for a complete view.` : `${json.features.length} EPA regulated facilit${json.features.length === 1 ? "y" : "ies"} in this view. Tap one for details.`); })
+        .catch((error) => { if (!current.signal.aborted) { setFacilityData({ type: "FeatureCollection", features: [] }); setFacilityStatus(error.message); } });
+    };
+    const schedule = () => { if (timer) clearTimeout(timer); timer = setTimeout(loadFacilities, 220); };
+    map.on("moveend", schedule); schedule();
+    return () => { map.off("moveend", schedule); if (timer) clearTimeout(timer); controller?.abort(); };
+  }, [map, visibleLayers]);
+
+  useEffect(() => {
+    if (!map) return;
     const update = () => {
       const objectid = inspection?.kind === "soil" ? Number(inspection.properties.objectid) : -1;
       if (map.getLayer("land-soils-selected")) map.setFilter("land-soils-selected", ["==", ["get", "objectid"], Number.isFinite(objectid) ? objectid : -1]);
@@ -252,7 +282,7 @@ export default function LandApp() {
     if (!map) return;
     setShowReport(false);
     identifyController.current?.abort();
-    const layers = LAND_OVERLAYS.filter((layer) => layer.id !== "soils" && layer.id !== "parcels" && layer.id !== "crashes" && visibleLayers[`land-${layer.id}`] && map.getZoom() >= layer.minzoom).map((layer) => layer.id);
+    const layers = LAND_OVERLAYS.filter((layer) => layer.id !== "soils" && layer.id !== "parcels" && layer.id !== "crashes" && layer.id !== "facilities" && visibleLayers[`land-${layer.id}`] && map.getZoom() >= layer.minzoom).map((layer) => layer.id);
     if (!layers.length) { setInspection({ kind: "overlay", results: [] }); setInspectionLoading(false); return; }
     const controller = new AbortController();
     identifyController.current = controller;
@@ -269,8 +299,12 @@ export default function LandApp() {
     const click = (event: maplibregl.MapMouseEvent) => {
       if (mode === "browse") {
         identifyController.current?.abort();
-        const crashHit = visibleLayers["land-crashes"] && map.getLayer("land-crashes-points") ? map.queryRenderedFeatures(event.point, { layers: ["land-crashes-points"] })[0] : null;
+        // Small points get a finger-sized target: anything within 10 px of the tap.
+        const touch: [maplibregl.PointLike, maplibregl.PointLike] = [[event.point.x - 10, event.point.y - 10], [event.point.x + 10, event.point.y + 10]];
+        const crashHit = visibleLayers["land-crashes"] && map.getLayer("land-crashes-points") ? map.queryRenderedFeatures(touch, { layers: ["land-crashes-points"] })[0] : null;
         if (crashHit?.properties) { setSelectedParcel(null); setInspection({ kind: "crash", point: [event.lngLat.lng, event.lngLat.lat], properties: crashHit.properties as FatalCrash }); setInspectionLoading(false); return; }
+        const facilityHit = visibleLayers["land-facilities"] && map.getLayer("land-facilities-points") ? map.queryRenderedFeatures(touch, { layers: ["land-facilities-points"] })[0] : null;
+        if (facilityHit?.properties) { setSelectedParcel(null); setInspection({ kind: "facility", point: [event.lngLat.lng, event.lngLat.lat], properties: facilityHit.properties as EpaFacility }); setInspectionLoading(false); return; }
         const parcelHit = visibleLayers["land-parcels"] && map.getLayer("land-parcels-fill") ? map.queryRenderedFeatures(event.point, { layers: ["land-parcels-fill"] })[0] : null;
         if (parcelHit?.properties) {
           const properties = parcelHit.properties as ParcelRecord & { parcelKey: string };
@@ -473,7 +507,7 @@ export default function LandApp() {
       </div>}
     </div>
 
-    <MapKey open={showKey} soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} />
+    <MapKey open={showKey} soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} facilities={!!visibleLayers["land-facilities"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} facilityStatus={facilityStatus} />
     <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} onInspectOther={inspectOtherAt} onClose={() => { identifyController.current?.abort(); setInspection(null); setInspectionLoading(false); }} />
 
     {/* Drawing hints: on phones only while drawing, so a finished result leaves the map clear. */}

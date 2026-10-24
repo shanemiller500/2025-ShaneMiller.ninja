@@ -6,6 +6,7 @@ import type { ParcelRecord } from "./parcel-sources";
 import type { ParcelDetail } from "./parcel-detail";
 import type { BoulderAccount, BoulderProperty } from "./boulder-property";
 import type { FatalCrash } from "./crash";
+import { FACILITY_STATUSES, type EpaFacility } from "./facility";
 import type { ZoningLookup } from "./zoning";
 import { isOfficial, type CodeLink, type ZoningCode } from "./zoning-code";
 import { FILL_FIELDS, formatFilled, isUseCode, missingFields, type FillKey, type FilledValue, type PropertyFill } from "./property-fill";
@@ -13,11 +14,12 @@ import { FILL_FIELDS, formatFilled, isUseCode, missingFields, type FillKey, type
 type SoilSelection = { kind: "soil"; point: [number, number]; properties: Record<string, string | number | null> };
 type ParcelSelection = { kind: "parcel"; point: [number, number]; properties: ParcelRecord & { parcelKey: string } };
 type CrashSelection = { kind: "crash"; point: [number, number]; properties: FatalCrash };
+type FacilitySelection = { kind: "facility"; point: [number, number]; properties: EpaFacility };
 type OverlaySelection = { kind: "overlay"; results: { id: string; label: string; url: string; status: string; features: Record<string, unknown>[] }[] };
 type SoilComponent = { name: string; percentage: number | null; hydric: string; drainage: string; classification: string; slopePercent: number | null };
 
 export function MapInspection({ inspection, loading, components, error, propertyDetail, propertyLoading, propertyError, onClose, onInspectOther }: {
-  inspection: SoilSelection | ParcelSelection | CrashSelection | OverlaySelection | null; loading: boolean; components: SoilComponent[] | null; error: string;
+  inspection: SoilSelection | ParcelSelection | CrashSelection | FacilitySelection | OverlaySelection | null; loading: boolean; components: SoilComponent[] | null; error: string;
   propertyDetail: ParcelDetail | null; propertyLoading: boolean; propertyError: string;
   onClose: () => void; onInspectOther: (point: [number, number]) => void;
 }) {
@@ -29,7 +31,7 @@ export function MapInspection({ inspection, loading, components, error, property
   return <aside className="pointer-events-auto fixed inset-x-0 bottom-0 z-30 flex max-h-[62dvh] flex-col rounded-t-2xl border-t border-white/15 li-panel bg-slate-950/95 text-xs shadow-[0_-12px_40px_-12px_rgba(0,0,0,.6)] backdrop-blur-xl md:absolute md:inset-x-auto md:bottom-auto md:right-5 md:top-28 md:max-h-[calc(100dvh-200px)] md:w-[360px] md:rounded-2xl md:border md:shadow-2xl" aria-label="Map feature details">
     <div className="shrink-0 px-4 pb-2 pt-2 md:pt-4">
       <button type="button" onClick={() => setCollapsed((value) => !value)} aria-expanded={!collapsed} aria-label={collapsed ? "Expand feature details" : "Minimize feature details"} className="mx-auto mb-1 flex h-5 w-16 items-center justify-center md:hidden"><span className="h-1 w-10 rounded-full bg-white/30" /></button>
-      <div className="flex items-start justify-between gap-3"><button type="button" onClick={() => setCollapsed(false)} className="min-w-0 text-left md:cursor-default"><div className="font-mono text-[9px] uppercase tracking-[0.18em] text-cyan-300">Map inspection</div><h2 className="mt-1 truncate text-sm font-semibold text-white md:whitespace-normal">{inspection?.kind === "soil" ? String(inspection.properties.muname ?? "Soil map unit") : inspection?.kind === "parcel" ? inspection.properties.address || `Parcel ${inspection.properties.id || "record"}` : inspection?.kind === "crash" ? `Fatal crash · ${inspection.properties.date || "2024"}` : "Features at or near this point"}</h2></button><button type="button" aria-label="Close feature details" onClick={onClose} className="-mr-1 shrink-0 rounded-lg p-2 text-slate-300 hover:bg-white/10 md:p-1"><X className="h-5 w-5 md:h-4 md:w-4" /></button></div>
+      <div className="flex items-start justify-between gap-3"><button type="button" onClick={() => setCollapsed(false)} className="min-w-0 text-left md:cursor-default"><div className="font-mono text-[9px] uppercase tracking-[0.18em] text-cyan-300">Map inspection</div><h2 className="mt-1 truncate text-sm font-semibold text-white md:whitespace-normal">{inspection?.kind === "soil" ? String(inspection.properties.muname ?? "Soil map unit") : inspection?.kind === "parcel" ? inspection.properties.address || `Parcel ${inspection.properties.id || "record"}` : inspection?.kind === "crash" ? `Fatal crash · ${inspection.properties.date || "2024"}` : inspection?.kind === "facility" ? inspection.properties.name : "Features at or near this point"}</h2></button><button type="button" aria-label="Close feature details" onClick={onClose} className="-mr-1 shrink-0 rounded-lg p-2 text-slate-300 hover:bg-white/10 md:p-1"><X className="h-5 w-5 md:h-4 md:w-4" /></button></div>
     </div>
     <div className={`min-h-0 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] ${collapsed ? "hidden md:block" : ""}`}>
     {loading && <p className="mt-1 text-cyan-200">Checking source details…</p>}
@@ -48,6 +50,7 @@ export function MapInspection({ inspection, loading, components, error, property
       {inspection.properties.state === "Colorado" && inspection.properties.county.toLowerCase() === "boulder" && <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-cyan-300 underline"><a href="https://bouldercounty.gov/departments/assessor/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1"><Landmark className="h-3 w-3" />Assessor search ↗</a><a href="https://bouldercounty.gov/departments/treasurer/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1"><BadgeDollarSign className="h-3 w-3" />Tax account ↗</a><a href="https://bouldercounty.gov/records/recording/search-public-records/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1"><FileText className="h-3 w-3" />Recorded deeds ↗</a></div>}
       <a href={inspection.properties.sourceUrl} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-cyan-300 underline">{inspection.properties.source} ↗</a>
     </div>}
+    {inspection?.kind === "facility" && <FacilityDetails facility={inspection.properties} />}
     {inspection?.kind === "crash" && <div className="mt-3 space-y-3 text-[11px] text-slate-200">
       <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><p>{[inspection.properties.city, inspection.properties.county, inspection.properties.state].filter(Boolean).join(", ") || "Location not named"}</p>{inspection.properties.road && <p className="mt-1">Road: {inspection.properties.road}</p>}<p className="mt-1">Fatalities: {inspection.properties.fatalities ?? "Not reported"} · Vehicles: {inspection.properties.vehicles ?? "Not reported"}</p><p className="mt-1">Case: {inspection.properties.id || "Not reported"}</p></div>
       <p className="text-slate-400">2024 FARS initial release. Fatal crashes only; locations and case details are reported by the source.</p>
@@ -69,6 +72,21 @@ function FactRows({ rows }: { rows: FactRow[] }) {
 
 function SectionTitle({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
   return <h3 className="flex items-center gap-2 text-xs font-semibold text-white"><Icon aria-hidden className="h-4 w-4 shrink-0 text-cyan-300" />{children}</h3>;
+}
+
+// One EPA-regulated facility: what it is, how it is regulated, and its current compliance, with EPA's full report.
+function FacilityDetails({ facility }: { facility: EpaFacility }) {
+  const status = FACILITY_STATUSES.find((item) => item.id === facility.status) ?? FACILITY_STATUSES[3];
+  const panel = "rounded-xl border border-white/10 bg-white/[0.04] p-3";
+  return <div className="mt-1 space-y-3">
+    <section className={panel}>
+      <div className="flex items-center gap-2"><span className="h-3 w-3 shrink-0 rounded-full border-2 border-white" style={{ background: status.color }} /><span className="text-[12px] font-semibold text-white">{status.label}</span></div>
+      <p className="mt-1.5 text-[10px] leading-relaxed text-slate-400">Current compliance status reported to EPA across this facility&apos;s programs. It describes paperwork and inspections, not measured pollution at this spot.</p>
+      <FactRows rows={[["Address", fact(facility.address)], ["Regulated for", fact(facility.programs)], ["Last inspection", fact(facility.lastInspection)], ["Formal actions", facility.formalActions == null ? "Not in this feed" : String(facility.formalActions)], ["Penalties", facility.penalties ? money(facility.penalties) : "None reported"], ["EPA registry ID", fact(facility.id)]]} />
+    </section>
+    {facility.reportUrl && <a href={facility.reportUrl} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-cyan-300/40 bg-cyan-400/10 px-3 py-2.5 text-xs font-medium text-cyan-200 hover:bg-cyan-400/20"><FileText className="h-3.5 w-3.5" />EPA detailed facility report ↗</a>}
+    <p className="text-[10px] leading-relaxed text-slate-400">From EPA ECHO (Enforcement and Compliance History Online). Locations are reported by facilities and can be approximate.</p>
+  </div>;
 }
 
 // The tapped parcel: public record, zoning, conditions at the tapped point, and the optional AI fill for blank fields.
