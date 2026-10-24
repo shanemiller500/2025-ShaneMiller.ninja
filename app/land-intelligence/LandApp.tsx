@@ -50,8 +50,8 @@ const FOCUS_LAYER: AtlasLayer = {
   },
 };
 
+// Inspect comes first and is the default; a search result still drops a pin and opens its report.
 const TOOL = [
-  { id: "pin" as const, label: "Pin", icon: MapPin, hint: "Click once to inspect a location" },
   { id: "line" as const, label: "Route", icon: Pencil, hint: "Click points along a road or corridor" },
   { id: "area" as const, label: "Area", icon: Crosshair, hint: "Click around a site or study area" },
 ];
@@ -69,7 +69,8 @@ export default function LandApp() {
   const identifyController = useRef<AbortController | null>(null);
   const refreshReport = useRef(false);
   const refreshTerrain = useRef(false);
-  const [mode, setMode] = useState<Mode>("pin");
+  const [mode, setMode] = useState<Mode>("browse");
+  const [showKey, setShowKey] = useState(false);
   const [shape, setShape] = useState<AnalysisShape | null>(null);
   const [complete, setComplete] = useState(false);
   const [basemap, setBasemap] = useState<Basemap>("map");
@@ -89,6 +90,7 @@ export default function LandApp() {
   const [terrainNonce, setTerrainNonce] = useState(0);
   const [showLayers, setShowLayers] = useState(false);
   const [visibleLayers, setVisibleLayers] = useState<Record<string, boolean>>({ "study-shape": true, "report-focus": true, "land-soils": true, "land-parcels": true, "land-crashes": true, "land-contours": true });
+  const legendAvailable = !!(visibleLayers["land-soils"] || visibleLayers["land-parcels"] || visibleLayers["land-crashes"]);
   const [soilData, setSoilData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [soilStatus, setSoilStatus] = useState("Zoom in to level 12 to see colored soil map units.");
   const [parcelData, setParcelData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
@@ -262,14 +264,6 @@ export default function LandApp() {
       .finally(() => { if (!controller.signal.aborted) setInspectionLoading(false); });
   }, [map, visibleLayers]);
 
-  const inspectSoilAt = useCallback((point: Coord) => {
-    if (!map || !map.getLayer("land-soils-fill") || !visibleLayers["land-soils"]) return false;
-    const hit = map.queryRenderedFeatures(map.project(point), { layers: ["land-soils-fill"] })[0];
-    if (!hit?.properties) return false;
-    setInspection({ kind: "soil", point, properties: hit.properties as Record<string, string | number | null> });
-    return true;
-  }, [map, visibleLayers]);
-
   useEffect(() => {
     if (!map) return;
     const click = (event: maplibregl.MapMouseEvent) => {
@@ -384,6 +378,13 @@ export default function LandApp() {
   };
   const clear = () => { setShape(null); setComplete(false); setReport(null); setReportFocus(null); setSelectedParcel(null); setMode("pin"); };
 
+  // On phones the inspection opens as a bottom sheet; keep the tapped spot in the map area above it.
+  useEffect(() => {
+    if (!map || !window.matchMedia("(max-width: 767px)").matches) return;
+    const point = inspection && "point" in inspection ? inspection.point : null;
+    map.easeTo({ ...(point ? { center: point } : {}), padding: { top: 0, right: 0, left: 0, bottom: point ? Math.round(window.innerHeight * 0.55) : 0 }, duration: 450 });
+  }, [map, inspection]);
+
   const search = async (event: FormEvent) => {
     event.preventDefault();
     if (query.trim().length < 4) return;
@@ -420,14 +421,15 @@ export default function LandApp() {
     <AtlasMap layers={[...LAND_LAYERS, DRAW_LAYER, FOCUS_LAYER]} visible={visibleLayers} data={data} basemap={basemap} terrain="flat" dark={dark} initialView={{ center: [-105.5, 39.1], zoom: 6.5 }} atmosphere onMapReady={onMapReady} flyTo={flyTo} emptyCursor={mode === "browse" ? "grab" : "crosshair"} controls={false} className="absolute inset-0 h-full w-full" />
     <div className="li-map-wash pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/45 via-transparent to-slate-950/30" />
 
-    <header className="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2 sm:inset-x-5 sm:top-5">
-      <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-white/15 li-panel bg-slate-950/85 px-3 py-2.5 shadow-2xl backdrop-blur-xl sm:px-4">
-        <Link href="/projects" aria-label="Back to projects" className="rounded-lg p-1 text-slate-300 hover:bg-white/10 hover:text-white"><ArrowLeft className="h-4 w-4" /></Link>
-        <div className="h-6 w-px bg-white/15" />
-        <div><div className="font-mono text-[9px] uppercase tracking-[0.24em] text-cyan-300">Atlas / U.S. study tool</div><h1 className="font-aspekta text-[17px] font-semibold leading-5">Land Intelligence</h1></div>
-        <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} aria-label={dark ? "Switch to light theme" : "Switch to dark theme"} title={dark ? "Light theme" : "Dark theme"} className="ml-1 rounded-lg border border-white/15 p-2 text-slate-200 hover:bg-white/10">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
+    {/* Phones get one header row (back, search, theme) so the map keeps most of the screen. */}
+    <header className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2 md:inset-x-5 md:top-5 md:flex-wrap">
+      <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-2xl border border-white/15 li-panel bg-slate-950/85 p-1.5 shadow-2xl backdrop-blur-xl md:gap-3 md:px-4 md:py-2.5">
+        <Link href="/projects" aria-label="Back to projects" className="rounded-lg p-2 text-slate-300 hover:bg-white/10 hover:text-white md:p-1"><ArrowLeft className="h-4 w-4" /></Link>
+        <div className="hidden h-6 w-px bg-white/15 md:block" />
+        <div className="sr-only md:not-sr-only"><div className="font-mono text-[9px] uppercase tracking-[0.24em] text-cyan-300">Atlas / U.S. study tool</div><h1 className="font-aspekta text-[17px] font-semibold leading-5">Land Intelligence</h1></div>
+        <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} aria-label={dark ? "Switch to light theme" : "Switch to dark theme"} title={dark ? "Light theme" : "Dark theme"} className="rounded-lg p-2 text-slate-200 hover:bg-white/10 md:ml-1 md:border md:border-white/15">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
       </div>
-      <form onSubmit={search} className="pointer-events-auto relative flex w-full max-w-[370px] items-center gap-2 rounded-2xl border border-white/15 li-panel bg-slate-950/90 px-3 py-2 shadow-2xl backdrop-blur-xl sm:w-[370px]">
+      <form onSubmit={search} className="pointer-events-auto relative flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-white/15 li-panel bg-slate-950/90 px-3 py-2 shadow-2xl backdrop-blur-xl md:w-[370px] md:flex-none">
         <Search className="h-4 w-4 shrink-0 text-cyan-300" />
         <input value={query} onChange={(event) => { setQuery(event.target.value); setResults([]); setSearchError(""); }} placeholder="U.S. address or lat, lon" aria-label="Search U.S. address or coordinates" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-400" />
         {query && <button type="button" onClick={() => { setQuery(""); setResults([]); }} aria-label="Clear search" className="p-1 text-slate-400 hover:text-white"><X className="h-3.5 w-3.5" /></button>}
@@ -436,7 +438,7 @@ export default function LandApp() {
       </form>
     </header>
 
-    {showCoverageNotice && <aside role="dialog" aria-label="Connected parcel states" className="pointer-events-auto absolute left-1/2 top-[116px] z-30 w-[min(390px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-white/15 li-panel bg-slate-950/95 p-4 text-xs shadow-2xl backdrop-blur-xl sm:top-24">
+    {showCoverageNotice && <aside role="dialog" aria-label="Connected parcel states" className="pointer-events-auto absolute left-1/2 top-[120px] z-30 w-[min(390px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-white/15 li-panel bg-slate-950/95 p-4 text-xs shadow-2xl backdrop-blur-xl md:top-24">
       <div className="flex items-start justify-between gap-3"><div className="flex items-center gap-2.5"><div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-2 text-cyan-200"><Globe2 className="h-5 w-5" /></div><div><div className="font-mono text-[9px] uppercase tracking-[0.18em] text-cyan-300">Parcel coverage</div><h2 className="mt-1 text-sm font-semibold text-white">Explore connected states</h2></div></div><button type="button" onClick={() => setShowCoverageNotice(false)} aria-label="Close parcel coverage notice" className="rounded-lg p-1 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button></div>
       <p className="mt-2 leading-relaxed text-slate-300">Parcel boundaries and available public property facts are connected in these states. Zoom to level 14 to see individual parcels.</p>
       <div className="mt-3 flex flex-wrap gap-1.5">{PARCEL_SOURCES.map((source) => <span key={source.id} className="inline-flex items-center gap-1 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[11px] text-cyan-100"><MapPin className="h-3 w-3" />{source.state}</span>)}</div>
@@ -444,19 +446,26 @@ export default function LandApp() {
       <button type="button" onClick={() => { setShowCoverageNotice(false); setFlyTo({ center: [-105.5, 39.1], zoom: 6.5, nonce: Date.now() }); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-cyan-400 px-3 py-1.5 text-[11px] font-semibold text-slate-950 hover:bg-cyan-300"><MapPin className="h-3.5 w-3.5" />Back to Colorado</button>
     </aside>}
 
-    <div className="pointer-events-auto absolute left-3 right-3 top-[145px] z-10 flex flex-wrap items-start gap-2 sm:left-5 sm:right-auto sm:top-28 sm:flex-col">
-      <div className="flex rounded-2xl border border-white/15 li-panel bg-slate-950/90 p-1.5 shadow-2xl backdrop-blur-xl sm:block">
-        <button type="button" onClick={() => setMode("browse")} title="Click mapped features to inspect them" aria-pressed={mode === "browse"} className={`flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-medium transition-colors sm:w-full sm:gap-2 sm:px-3 sm:py-2.5 sm:text-xs ${mode === "browse" ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><CircleHelp className="h-4 w-4" />Inspect</button>
-        {TOOL.map(({ id, label, icon: Icon, hint }) => <button key={id} type="button" onClick={() => startTool(id)} title={hint} aria-pressed={mode === id} className={`flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-medium transition-colors sm:w-full sm:gap-2 sm:px-3 sm:py-2.5 sm:text-xs ${mode === id ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><Icon className="h-4 w-4" />{label}</button>)}
+    <div className="pointer-events-none absolute left-3 right-3 top-[68px] z-10 flex flex-wrap items-start gap-2 md:left-5 md:right-auto md:top-28 md:flex-col">
+      {/* One swipeable row on phones; the wrapper dissolves on larger screens. */}
+      <div className="li-scroll-x pointer-events-auto flex max-w-full gap-2 overflow-x-auto md:contents">
+      <div className="flex shrink-0 rounded-2xl border border-white/15 li-panel bg-slate-950/90 p-1.5 shadow-2xl backdrop-blur-xl md:block">
+        <button type="button" onClick={() => setMode("browse")} title="Click mapped features to inspect them" aria-pressed={mode === "browse"} className={`flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-medium transition-colors md:w-full md:gap-2 md:px-3 md:py-2.5 md:text-xs ${mode === "browse" ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><CircleHelp className="h-4 w-4" />Inspect</button>
+        {TOOL.map(({ id, label, icon: Icon, hint }) => <button key={id} type="button" onClick={() => startTool(id)} title={hint} aria-pressed={mode === id} className={`flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-medium transition-colors md:w-full md:gap-2 md:px-3 md:py-2.5 md:text-xs ${mode === id ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><Icon className="h-4 w-4" />{label}</button>)}
       </div>
-      <div className="flex gap-1 rounded-2xl border border-white/15 li-panel bg-slate-950/90 p-1.5 shadow-2xl backdrop-blur-xl sm:flex-col">
-        <button type="button" title="Zoom in" onClick={() => map?.zoomIn()} className="rounded-xl p-2.5 text-slate-200 hover:bg-white/10"><Plus className="h-4 w-4" /></button>
-        <button type="button" title="Zoom out" onClick={() => map?.zoomOut()} className="rounded-xl p-2.5 text-slate-200 hover:bg-white/10"><Minus className="h-4 w-4" /></button>
+      <div className="flex shrink-0 gap-1 rounded-2xl border border-white/15 li-panel bg-slate-950/90 p-1.5 shadow-2xl backdrop-blur-xl md:flex-col">
+        {/* Pinch zoom covers phones. */}
+        <button type="button" title="Zoom in" aria-label="Zoom in" onClick={() => map?.zoomIn()} className="hidden rounded-xl p-2.5 text-slate-200 hover:bg-white/10 md:block"><Plus className="h-4 w-4" /></button>
+        <button type="button" title="Zoom out" aria-label="Zoom out" onClick={() => map?.zoomOut()} className="hidden rounded-xl p-2.5 text-slate-200 hover:bg-white/10 md:block"><Minus className="h-4 w-4" /></button>
         <button type="button" title="Switch basemap" onClick={() => setBasemap((value) => value === "map" ? "satellite" : "map")} className="rounded-xl p-2.5 text-slate-200 hover:bg-white/10">{basemap === "map" ? <Satellite className="h-4 w-4" /> : <Layers3 className="h-4 w-4" />}</button>
         <button type="button" title="Map layers" aria-label="Map layers" aria-expanded={showLayers} onClick={() => setShowLayers((value) => !value)} className={`rounded-xl p-2.5 hover:bg-white/10 ${showLayers ? "bg-cyan-400/20 text-cyan-200" : "text-slate-200"}`}><Layers3 className="h-4 w-4" /></button>
-        <button type="button" title="Clear drawing" onClick={clear} disabled={!shape} className="rounded-xl p-2.5 text-slate-200 hover:bg-white/10 disabled:opacity-35"><Eraser className="h-4 w-4" /></button>
+        {/* Phones only show Clear when there is something to clear, so the row fits on one line. */}
+        <button type="button" title="Clear drawing" aria-label="Clear drawing" onClick={clear} disabled={!shape} className={`rounded-xl p-2.5 text-slate-200 hover:bg-white/10 disabled:opacity-35 ${shape ? "" : "hidden md:block"}`}><Eraser className="h-4 w-4" /></button>
+        {/* The legend opens from here below xl; wide screens keep it open. */}
+        {legendAvailable && <button type="button" title="Map key" aria-expanded={showKey} onClick={() => setShowKey((value) => !value)} className={`rounded-xl px-2.5 py-2 text-[11px] font-semibold hover:bg-white/10 xl:hidden ${showKey ? "bg-cyan-400/20 text-cyan-200" : "text-slate-200"}`}>Key</button>}
       </div>
-      {showLayers && <div className="max-h-[calc(100vh-250px)] w-[min(280px,calc(100vw-24px))] overflow-y-auto rounded-2xl border border-white/15 li-panel bg-slate-950/95 p-3 shadow-2xl backdrop-blur-xl sm:absolute sm:left-[100px] sm:top-0">
+      </div>
+      {showLayers && <div className="pointer-events-auto max-h-[calc(100dvh-140px)] w-[min(280px,calc(100vw-24px))] md:max-h-[calc(100vh-250px)] overflow-y-auto rounded-2xl border border-white/15 li-panel bg-slate-950/95 p-3 shadow-2xl backdrop-blur-xl md:absolute md:left-[100px] md:top-0">
         <div className="mb-2 flex items-center justify-between"><h2 className="text-xs font-semibold">Map layers</h2><button type="button" aria-label="Close map layers" onClick={() => setShowLayers(false)} className="rounded-lg p-1 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button></div>
         <p className="mb-3 text-[11px] leading-relaxed text-slate-400">Turn on source maps to explore. Layers appear as you zoom into their supported scale.</p>
         {LAND_OVERLAYS.map((layer) => <label key={layer.id} className="flex cursor-pointer items-start gap-2 border-t border-white/10 py-2.5"><input type="checkbox" checked={!!visibleLayers[`land-${layer.id}`]} onChange={(event) => setVisibleLayers((current) => ({ ...current, [`land-${layer.id}`]: event.target.checked }))} className="mt-0.5 accent-cyan-400" /><span className="min-w-0"><span className="block text-xs font-medium text-white">{layer.label}</span><span className="block text-[10px] text-slate-400">{layer.scope} · zoom {layer.minzoom}+</span><a href={layer.url} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="text-[10px] text-cyan-300 underline underline-offset-2">{layer.source}</a></span></label>)}
@@ -464,24 +473,25 @@ export default function LandApp() {
       </div>}
     </div>
 
-    <MapKey soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} />
-    <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} onInspectOther={inspectOtherAt} onInspectSoil={inspectSoilAt} onClose={() => { identifyController.current?.abort(); setInspection(null); setInspectionLoading(false); }} />
+    <MapKey open={showKey} soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} />
+    <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} onInspectOther={inspectOtherAt} onClose={() => { identifyController.current?.abort(); setInspection(null); setInspectionLoading(false); }} />
 
-    <div className={`pointer-events-none absolute bottom-3 left-3 right-3 z-10 flex-col items-start gap-2 sm:bottom-5 sm:left-5 sm:right-auto ${shape && complete && showReport ? "hidden md:flex" : "flex"}`}>
+    {/* Drawing hints: on phones only while drawing, so a finished result leaves the map clear. */}
+    <div className={`pointer-events-none absolute bottom-3 left-3 right-3 z-10 flex-col items-start gap-2 md:bottom-5 md:left-5 md:right-auto ${(shape && complete) || inspection ? "hidden md:flex" : "flex"}`}>
       <div className="pointer-events-auto max-w-[340px] rounded-2xl border border-white/15 li-panel bg-slate-950/90 px-4 py-3 text-xs shadow-2xl backdrop-blur-xl">
-        <p className="font-semibold text-white">{mode === "pin" ? "Drop a pin" : mode === "line" ? "Trace a route" : mode === "area" ? "Outline an area" : shape ? "Study shape ready" : "Choose a drawing tool"}</p>
-        <p className="mt-1 leading-relaxed text-slate-300">{mode === "pin" ? "Click the map, or search for a U.S. address." : mode === "line" || mode === "area" ? "Click each corner, then finish. Drag any point to adjust it." : shape ? "Drag a point to refine the report." : "Use Pin, Route or Area to start."}</p>
+        <p className="font-semibold text-white">{mode === "pin" ? "Drop a pin" : mode === "line" ? "Trace a route" : mode === "area" ? "Outline an area" : shape ? "Study shape ready" : "Inspect the map"}</p>
+        <p className="mt-1 leading-relaxed text-slate-300">{mode === "pin" ? "Click the map, or search for a U.S. address." : mode === "line" || mode === "area" ? "Click each corner, then finish. Drag any point to adjust it." : shape ? "Drag a point to refine the report." : "Tap a parcel or mapped feature, or search a U.S. address. Use Route or Area to study a corridor or site."}</p>
         {measure && <div className="mt-2 font-mono text-cyan-200">{measure}</div>}
         {shape && shape.kind !== "pin" && !complete && <p className="mt-1 font-mono text-[10px] text-slate-400">{shape.points.length}/40 points{shape.points.length === 40 ? " · finish or undo to change" : ""}</p>}
         {(mode === "line" || mode === "area") && <div className="mt-3 flex gap-2"><button type="button" onClick={finish} disabled={!shape || !validShape(shape)} className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-400 px-3 py-1.5 font-semibold text-slate-950 disabled:opacity-40"><Check className="h-3.5 w-3.5" />Finish</button><button type="button" onClick={undo} disabled={!shape?.points.length} className="inline-flex items-center gap-1 rounded-lg border border-white/20 px-2.5 py-1.5 text-slate-200 disabled:opacity-40"><Undo2 className="h-3.5 w-3.5" />Undo</button></div>}
         {shape && shape.kind !== "pin" && shape.points.length >= (shape.kind === "area" ? 3 : 2) && !validShape(shape) && <p className="mt-2 text-[10px] text-amber-200">The drawing crosses itself or is too small. Undo or drag a point to fix it.</p>}
       </div>
-      <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 li-panel bg-slate-950/75 px-2.5 py-1.5 font-mono text-[10px] text-slate-300 backdrop-blur"><CircleHelp className="h-3 w-3" /> Screening only · source detail in report</div>
+      <div className="pointer-events-auto hidden items-center gap-1.5 rounded-xl border border-white/10 li-panel bg-slate-950/75 px-2.5 py-1.5 font-mono text-[10px] text-slate-300 backdrop-blur md:flex"><CircleHelp className="h-3 w-3" /> Screening only · source detail in report</div>
     </div>
 
-    {shape && complete && <div className={`pointer-events-auto absolute z-20 overflow-hidden rounded-2xl border border-white/15 li-panel bg-slate-950/95 shadow-2xl backdrop-blur-xl transition-all ${showReport ? "bottom-3 left-3 right-3 max-h-[55vh] sm:bottom-5 sm:left-auto sm:right-5 sm:max-h-[calc(100vh-130px)] sm:w-[380px]" : "bottom-3 right-3 w-auto sm:bottom-5 sm:right-5"}`}>
+    {shape && complete && <div className={`pointer-events-auto absolute z-20 overflow-hidden rounded-2xl border border-white/15 li-panel bg-slate-950/95 shadow-2xl backdrop-blur-xl transition-all ${showReport ? "bottom-0 left-0 right-0 max-h-[45dvh] rounded-b-none border-x-0 border-b-0 md:bottom-5 md:left-auto md:right-5 md:max-h-[calc(100vh-130px)] md:w-[380px] md:rounded-2xl md:border" : "bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-3 w-auto md:bottom-5 md:right-5"}`}>
       <button type="button" onClick={() => setShowReport((value) => !value)} className="flex w-full items-center justify-between gap-4 border-b border-white/10 px-4 py-3 text-left text-sm font-semibold"><span>Location report</span>{showReport ? <Minus className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
-      {showReport && <div className="max-h-[calc(55vh-48px)] space-y-3 overflow-y-auto p-4 sm:max-h-[calc(100vh-180px)]">
+      {showReport && <div className="max-h-[calc(45dvh-48px)] space-y-3 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:max-h-[calc(100vh-180px)] md:pb-4">
         {reporting && <p className="flex items-center gap-2 text-xs text-cyan-200"><RotateCcw className="h-3.5 w-3.5 animate-spin" />Checking public data…</p>}
         {reportError && <p className="rounded-lg bg-amber-500/10 p-3 text-xs text-amber-200">{reportError}</p>}
         {!reporting && (report || reportError) && <button type="button" onClick={() => { refreshReport.current = true; refreshTerrain.current = true; setReportNonce((value) => value + 1); setTerrainNonce((value) => value + 1); }} className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] text-slate-200 hover:bg-white/10"><RotateCcw className="h-3 w-3" />Check again</button>}

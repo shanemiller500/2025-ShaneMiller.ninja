@@ -41,11 +41,24 @@ export function parcelCategory(landUse: string, ownerType: string): ParcelCatego
   // group is classified here; other codes stay unclassified until decoded.
   if (/^\d+$/.test(use)) return /^1[1-9]$/.test(use) ? "residential" : "other";
   if (/public|school|park|government|municipal|civic/.test(use) || /federal|state|tribal/.test(owner)) return "public";
-  if (/residen|housing|single.family|multi.family|apartment|household/.test(use)) return "residential";
+  if (/residen|housing|single.family|multi.family|apartment|household|mobile home|condominium|cooperative|retirement home/.test(use)) return "residential";
   if (/farm|ranch|agric|crop|pasture/.test(use)) return "agricultural";
   if (/industrial|manufactur|warehouse|mining/.test(use)) return "industrial";
   if (/commerc|retail|office|hotel|business/.test(use)) return "commercial";
   return "other";
+}
+
+// Florida DOR county numbers run alphabetically from 11 (Alachua) to 77 (Washington), with Dade filed under D.
+const FLORIDA_COUNTIES = ["Alachua", "Baker", "Bay", "Bradford", "Brevard", "Broward", "Calhoun", "Charlotte", "Citrus", "Clay", "Collier", "Columbia", "Miami-Dade", "DeSoto", "Dixie", "Duval", "Escambia", "Flagler", "Franklin", "Gadsden", "Gilchrist", "Glades", "Gulf", "Hamilton", "Hardee", "Hendry", "Hernando", "Highlands", "Hillsborough", "Holmes", "Indian River", "Jackson", "Jefferson", "Lafayette", "Lake", "Lee", "Leon", "Levy", "Liberty", "Madison", "Manatee", "Marion", "Martin", "Monroe", "Nassau", "Okaloosa", "Okeechobee", "Orange", "Osceola", "Palm Beach", "Pasco", "Pinellas", "Polk", "Putnam", "St. Johns", "St. Lucie", "Santa Rosa", "Sarasota", "Seminole", "Sumter", "Suwannee", "Taylor", "Union", "Volusia", "Wakulla", "Walton", "Washington"];
+
+// Florida DOR use codes (3 digits, "0NN"): 00–09 residential types by name, then the standard groups.
+const FLORIDA_RESIDENTIAL_USES = ["Vacant residential", "Single family", "Mobile home", "Multi-family (10+ units)", "Condominium", "Cooperative", "Retirement home", "Miscellaneous residential", "Multi-family (under 10 units)", "Residential common area"];
+export function floridaUse(code: string) {
+  if (!/^0\d\d$/.test(code)) return code ? `DOR code ${code}` : "";
+  const n = Number(code);
+  const name = n < 10 ? FLORIDA_RESIDENTIAL_USES[n] : n === 10 ? "Vacant commercial" : n === 40 ? "Vacant industrial" : n === 70 ? "Vacant institutional"
+    : n < 40 ? "Commercial" : n < 50 ? "Industrial" : n < 70 ? "Agricultural" : n < 80 ? "Institutional" : n < 90 ? "Government" : "Miscellaneous";
+  return `${name} (DOR ${code})`;
 }
 
 export function normalizeParcel(source: ParcelSource, a: Record<string, unknown>): ParcelRecord {
@@ -55,6 +68,6 @@ export function normalizeParcel(source: ParcelSource, a: Record<string, unknown>
   else if (source.id === "wa") record = { id: value(a.PARCEL_ID_NR) || value(a.ORIG_PARCEL_ID), county: /^\d+$/.test(value(a.COUNTY_NM)) ? `County code ${value(a.FIPS_NR) || value(a.COUNTY_NM)}` : value(a.COUNTY_NM), address: [value(a.SITUS_ADDRESS), value(a.SITUS_CITY_NM)].filter(Boolean).join(", "), acres: null, zoning: "", landUse: value(a.LANDUSE_CD), ownerType: "", landValue: numeric(a.VALUE_LAND), received: "2026", recordUrl: safeUrl(a.DATA_LINK) };
   else if (source.id === "nc") record = { id: value(a.parno) || value(a.altparno), county: value(a.cntyname), address: [value(a.siteadd), value(a.scity)].filter(Boolean).join(", "), acres: numeric(a.gisacres), zoning: "", landUse: value(a.parusedesc), ownerType: value(a.owntype), landValue: numeric(a.landval), received: date(a.revisedate), recordUrl: "" };
   else if (source.id === "wi") record = { id: value(a.PARCELID) || value(a.TAXPARCELID), county: value(a.CONAME), address: value(a.SITEADRESS), acres: numeric(a.GISACRES), zoning: "", landUse: value(a.PROPCLASS), ownerType: "", landValue: numeric(a.LNDVALUE), received: value(a.PARCELDATE) || value(a.TAXROLLYEAR), recordUrl: "" };
-  else { const sqft = numeric(a.LND_SQFOOT); record = { id: value(a.PARCEL_ID) || value(a.ALT_KEY), county: value(a.CO_NO) ? `County code ${value(a.CO_NO)}` : "", address: [value(a.PHY_ADDR1), value(a.PHY_CITY)].filter(Boolean).join(", "), acres: sqft != null && sqft > 0 ? sqft / 43560 : null, zoning: "", landUse: value(a.DOR_UC) ? `DOR code ${value(a.DOR_UC)}` : "", ownerType: "", landValue: numeric(a.LND_VAL), received: value(a.ASMNT_YR), recordUrl: "" }; }
+  else { const sqft = numeric(a.LND_SQFOOT); record = { id: value(a.PARCEL_ID) || value(a.ALT_KEY), county: FLORIDA_COUNTIES[Number(value(a.CO_NO)) - 11] ?? (value(a.CO_NO) ? `County code ${value(a.CO_NO)}` : ""), address: [value(a.PHY_ADDR1), value(a.PHY_CITY)].filter(Boolean).join(", "), acres: sqft != null && sqft > 0 ? sqft / 43560 : null, zoning: "", landUse: floridaUse(value(a.DOR_UC)), ownerType: "", landValue: numeric(a.LND_VAL), received: value(a.ASMNT_YR), recordUrl: "" }; }
   return { ...record, state: source.state, source: source.source, sourceUrl: source.url, category: parcelCategory(record.landUse, record.ownerType) };
 }

@@ -1,4 +1,4 @@
-import { normalizeParcel, type ParcelRecord, type ParcelSource } from "./parcel-sources";
+import { PARCEL_SOURCES, normalizeParcel, type ParcelRecord, type ParcelSource } from "./parcel-sources";
 import type { BoulderLookup } from "./boulder-property";
 
 export type ParcelSale = { date: string; price: number | null; reference: string };
@@ -52,6 +52,27 @@ const date = (raw: unknown) => {
 };
 const owners = (...values: unknown[]) => Array.from(new Set(values.map(str).filter(Boolean)));
 const sale = (saleDate: string, price: number | null, reference = ""): ParcelSale[] => saleDate || price != null ? [{ date: saleDate, price, reference }] : [];
+
+export const PARCEL_KEY = /^(co|ut|wa|fl|nc|wi):([1-9]\d{0,11})$/;
+
+/** One clicked parcel's public record by `<source>:<objectid>` key. Null when the key is invalid or the record is gone; throws when the source fails. */
+export async function queryParcelDetail(key: string): Promise<ParcelDetail | null> {
+  const match = key.match(PARCEL_KEY);
+  const source = match && PARCEL_SOURCES.find((item) => item.id === match[1]);
+  if (!match || !source) return null;
+  const params = new URLSearchParams({ objectIds: match[2], outFields: PARCEL_DETAIL_FIELDS[source.id], returnGeometry: "false", f: "json" });
+  const response = await fetch(`${source.url}/query`, {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params, signal: AbortSignal.timeout(15000), cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Source returned HTTP ${response.status}`);
+  const raw = await response.text();
+  if (raw.length > 200_000) throw new Error("Parcel detail response exceeded limit");
+  const json = JSON.parse(raw);
+  if (json.error) throw new Error(json.error.message || "Source rejected parcel detail request");
+  const attributes = json.features?.[0]?.attributes;
+  return attributes && typeof attributes === "object" ? normalizeParcelDetail(source, attributes) : null;
+}
 
 export function normalizeParcelDetail(source: ParcelSource, a: Record<string, unknown>): ParcelDetail {
   const parcel = normalizeParcel(source, a);
