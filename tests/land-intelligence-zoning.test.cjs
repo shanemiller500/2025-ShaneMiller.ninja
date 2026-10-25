@@ -340,4 +340,6 @@ test('county record only counts when it names the tapped parcel', async () => {
   assert.equal(found.attributes.PIN, '8823900910', 'a right-of-way strip and the neighbour are skipped');
   const none = await findCountyRecord({ lng: -122.31, lat: 47.66, county: 'King County', state: 'Washington', parcelId: '999', address: '1 OTHER ST' });
   assert.equal(none, null);
+  const addressOnly = await findCountyRecord({ lng: -122.31, lat: 47.66, county: 'King County', state: 'Washington', parcelId: '999', address: '5023 16TH AVE NE, SEATTLE' });
+  assert.equal(addressOnly, null, 'the same street address cannot attach a different parcel record');
 });

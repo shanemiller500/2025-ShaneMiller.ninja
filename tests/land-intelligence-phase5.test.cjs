@@ -131,8 +131,12 @@ test('fatal crash map uses 2024 FARS and rejects broad views', async () => {
 test('clicked property details distinguish sale price and assessment', () => {
   const { PARCEL_SOURCES } = load('app/land-intelligence/parcel-sources.ts');
   const { normalizeParcelDetail } = load('app/land-intelligence/parcel-detail.ts');
-  const co = normalizeParcelDetail(PARCEL_SOURCES[0], { parcel_id: '42', owner: 'Example Owner', saleDate: '2024-04-01', salePrice: '$425,000', apprValTot: '$510,000', asedValTot: '$36,000' });
+  const co = normalizeParcelDetail(PARCEL_SOURCES[0], { parcel_id: '42', owner: 'Example Owner', account: 'A-42', subName: 'Example Addition', block: '2', lot: '7', saleDate: '2024-04-01', salePrice: '$425,000', apprValTot: '$510,000', asedValTot: '$36,000' });
   assert.equal(co.owners[0], 'Example Owner');
+  assert.equal(co.accountNumber, 'A-42');
+  assert.equal(co.subdivision, 'Example Addition');
+  assert.equal(co.block, '2');
+  assert.equal(co.lot, '7');
   assert.equal(co.sales[0].price, 425000);
   assert.equal(co.assessedTotal, 510000);
   assert.equal(co.taxableValue, 36000);

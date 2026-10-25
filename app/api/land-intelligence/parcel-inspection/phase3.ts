@@ -35,7 +35,7 @@ export async function denverStormGroup(geometry: ParcelGeometry, parcelKey: stri
     });
     return { id, label, source, sourceUrl, status: status(findings.length, result.capped), note, findings };
   } catch {
-    return { id, label, source, sourceUrl, status: "unavailable", note: `Denver storm main service did not respond. ${note}`, findings: [] };
+    return { id, label, source, sourceUrl, status: "source_error", note: `Denver storm main service did not respond. ${note}`, findings: [] };
   }
 }
 
@@ -58,7 +58,7 @@ export async function coloradoTankGroup(geometry: ParcelGeometry, parcelKey: str
     });
     return { id, label, source, sourceUrl, status: status(findings.length, result.capped), note, findings };
   } catch {
-    return { id, label, source, sourceUrl, status: "unavailable", note: `Colorado tank service did not respond. ${note}`, findings: [] };
+    return { id, label, source, sourceUrl, status: "source_error", note: `Colorado tank service did not respond. ${note}`, findings: [] };
   }
 }
 
@@ -81,7 +81,7 @@ export async function floridaSubsidenceGroup(geometry: ParcelGeometry, parcelKey
     });
     return { id, label, source, sourceUrl, status: status(findings.length, result.capped), note, findings };
   } catch {
-    return { id, label, source, sourceUrl, status: "unavailable", note: `Florida subsidence service did not respond. ${note}`, findings: [] };
+    return { id, label, source, sourceUrl, status: "source_error", note: `Florida subsidence service did not respond. ${note}`, findings: [] };
   }
 }
 

@@ -4,14 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import maplibregl, { type Map as MlMap } from "maplibre-gl";
-import { Activity, ArrowLeft, Building2, CarFront, Check, ChevronDown, CircleHelp, Crosshair, Download, Droplets, Eraser, Globe2, Layers3, MapPin, Minus, Moon, Mountain, Pencil, Plus, RotateCcw, Route, Search, Satellite, Sprout, Sun, Undo2, Users, Waves, X } from "lucide-react";
+import { Activity, ArrowLeft, ArrowRight, Building2, CarFront, Check, ChevronDown, CircleHelp, Crosshair, Database, Download, Droplets, Eraser, Factory, Layers3, Leaf, MapPin, MapPinned, Minus, Moon, Mountain, Pencil, Plus, RotateCcw, Route, Search, Satellite, Sprout, Sun, Undo2, Users, Waves, X } from "lucide-react";
 import { AtlasMap } from "@/components/atlas/AtlasMap";
 import { useAtlasTheme } from "@/components/atlas/Hud";
 import type { AtlasLayer, Basemap } from "@/components/atlas/types";
 import { areaSquareMeters, lengthMeters, shapeCenter, shapeGeoJSON, validShape, type AnalysisShape, type Coord, type ShapeKind } from "./geometry";
 import { LAND_LAYERS, LAND_OVERLAYS } from "./layers";
 import { MapInspection } from "./MapInspection";
-import { PARCEL_INSPECTION_GROUPS, type ParcelFinding, type ParcelGeometry, type ParcelInspectionReport } from "./parcel-inspection";
+import { PARCEL_INSPECTION_GROUPS, pointInParcel, type ParcelFinding, type ParcelGeometry, type ParcelInspectionReport } from "./parcel-inspection";
 import { MapKey } from "./MapKey";
 import { focusGeoJSON, type FocusScope } from "./report-focus";
 import { PARCEL_SOURCES, type ParcelRecord } from "./parcel-sources";
@@ -23,7 +23,7 @@ import { EvidenceSummary, TerrainCard } from "./SiteAnalysis";
 import type { Facility, Finding, Report, FeatureSet, Parcel, Road, TerrainResult } from "./report-types";
 
 type Mode = "browse" | "road" | ShapeKind;
-type SearchResult = { label: string; center: Coord };
+type SearchResult = { label: string; detail?: string; provider?: string; precisionType?: "address" | "street" | "place" | "coordinate"; center: Coord };
 type SoilSelection = { kind: "soil"; point: Coord; properties: Record<string, string | number | null> };
 type ParcelSelection = { kind: "parcel"; point: Coord; properties: ParcelRecord & { parcelKey: string } };
 type CrashSelection = { kind: "crash"; point: Coord; properties: FatalCrash };
@@ -91,19 +91,21 @@ export default function LandApp() {
   const dark = useAtlasTheme();
   const { setTheme } = useTheme();
   const [map, setMap] = useState<MlMap | null>(null);
-  const [showCoverageNotice, setShowCoverageNotice] = useState(false);
-  const coverageNoticeSeen = useRef(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const addressSearchController = useRef<AbortController | null>(null);
+  const addressSearchTimeout = useRef<number | null>(null);
   const keyboardVertex = useRef<number | null>(null);
   const identifyController = useRef<AbortController | null>(null);
+  const addressParcelController = useRef<AbortController | null>(null);
   const refreshReport = useRef(false);
   const refreshTerrain = useRef(false);
   const [mode, setMode] = useState<Mode>("browse");
-  const [showKey, setShowKey] = useState(false);
   const [shape, setShape] = useState<AnalysisShape | null>(null);
   const [complete, setComplete] = useState(false);
   const [basemap, setBasemap] = useState<Basemap>("map");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const selectedAddressValue = useRef<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [flyTo, setFlyTo] = useState<{ center: Coord; zoom: number; nonce: number } | null>(null);
@@ -118,7 +120,6 @@ export default function LandApp() {
   const [terrainNonce, setTerrainNonce] = useState(0);
   const [showLayers, setShowLayers] = useState(false);
   const [visibleLayers, setVisibleLayers] = useState<Record<string, boolean>>({ "study-shape": true, "report-focus": true, "land-soils": true, "land-parcels": true, "land-crashes": true, "land-contours": true });
-  const legendAvailable = !!(visibleLayers["land-soils"] || visibleLayers["land-parcels"] || visibleLayers["land-crashes"] || visibleLayers["land-facilities"]);
   const [soilData, setSoilData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [soilStatus, setSoilStatus] = useState("Zoom in to level 12 to see colored soil map units.");
   const [parcelData, setParcelData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
@@ -147,21 +148,9 @@ export default function LandApp() {
     const currentInspection = inspection?.kind === "parcel" && parcelInspection?.parcelKey === inspection.properties.parcelKey && selectedParcel?.properties?.parcelKey === inspection.properties.parcelKey ? parcelInspection : null;
     const findingData = Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [`parcel-inspection-${group.id}-source`, { type: "FeatureCollection", features: (currentInspection?.groups.find((item) => item.id === group.id)?.findings ?? []).map((finding) => ({ type: "Feature", id: finding.id, properties: { id: finding.id, name: finding.name }, geometry: finding.geometry })) } as GeoJSON.FeatureCollection]));
     const selectedFinding = currentInspection?.groups.filter((group) => visibleLayers[`parcel-inspection-${group.id}`] !== false).flatMap((group) => group.findings).find((finding) => finding.id === selectedFindingId);
-    return { ...findingData, "parcel-inspection-selected-source": { type: "FeatureCollection", features: selectedFinding ? [{ type: "Feature", properties: {}, geometry: selectedFinding.geometry }] : [] } as GeoJSON.FeatureCollection, "study-shape-source": shape ? shapeGeoJSON(shape) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, "report-focus-source": focusData, "land-soils-source": soilData, "land-parcels-source": parcelData, "land-parcels-selected-source": { type: "FeatureCollection", features: selectedParcel ? [selectedParcel] : [] } as GeoJSON.FeatureCollection, "land-crashes-source": crashData, "land-facilities-source": facilityData };
+    return { ...findingData, "parcel-inspection-selected-source": { type: "FeatureCollection", features: selectedFinding ? [{ type: "Feature", properties: {}, geometry: selectedFinding.geometry }] : [] } as GeoJSON.FeatureCollection, "study-shape-source": shape ? shapeGeoJSON(shape) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, "report-focus-source": focusData, "land-soils-source": soilData, "land-parcels-source": parcelData, "land-parcels-selected-source": { type: "FeatureCollection", features: selectedParcel ? [{ ...selectedParcel, geometry: currentInspection?.geometry ?? selectedParcel.geometry }] : [] } as GeoJSON.FeatureCollection, "land-crashes-source": crashData, "land-facilities-source": facilityData };
   }, [shape, soilData, parcelData, selectedParcel, crashData, facilityData, focusData, parcelInspection, selectedFindingId, visibleLayers, inspection]);
   const onMapReady = useCallback((instance: MlMap) => setMap(instance), []);
-
-  useEffect(() => {
-    if (!map) return;
-    const showOnZoomOut = () => {
-      if (map.getZoom() <= 5.5 && !coverageNoticeSeen.current) {
-        coverageNoticeSeen.current = true;
-        setShowCoverageNotice(true);
-      }
-    };
-    map.on("zoomend", showOnZoomOut);
-    return () => { map.off("zoomend", showOnZoomOut); };
-  }, [map]);
 
   const propertyKey = inspection?.kind === "parcel" ? inspection.properties.parcelKey : null;
   useEffect(() => {
@@ -169,7 +158,7 @@ export default function LandApp() {
     if (!propertyKey || !selectedParcel || (selectedParcel.geometry.type !== "Polygon" && selectedParcel.geometry.type !== "MultiPolygon")) { setParcelInspectionLoading(false); return; }
     const controller = new AbortController();
     setParcelInspectionLoading(true);
-    fetch("/api/land-intelligence/parcel-inspection", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ parcelKey: propertyKey, geometry: selectedParcel.geometry }), signal: controller.signal })
+    fetch("/api/land-intelligence/parcel-inspection", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ parcelKey: propertyKey }), signal: controller.signal })
       .then(async (response) => { const json = await response.json(); if (!response.ok) throw new Error(json.error || "Parcel-wide inspection failed."); return json as ParcelInspectionReport; })
       .then((result) => { if (!controller.signal.aborted) setParcelInspection(result); })
       .catch((error) => { if (!controller.signal.aborted) setParcelInspectionError(error.message || "Parcel-wide inspection failed."); })
@@ -335,6 +324,9 @@ export default function LandApp() {
     const click = (event: maplibregl.MapMouseEvent) => {
       if (mode === "road") { inspectOtherAt([event.lngLat.lng, event.lngLat.lat], true); setMode("browse"); return; }
       if (mode === "browse") {
+        addressParcelController.current?.abort();
+        addressParcelController.current = null;
+        setInspectionLoading(false);
         identifyController.current?.abort();
         // Small points get a finger-sized target: anything within 10 px of the tap.
         const touch: [maplibregl.PointLike, maplibregl.PointLike] = [[event.point.x - 10, event.point.y - 10], [event.point.x + 10, event.point.y + 10]];
@@ -459,23 +451,107 @@ export default function LandApp() {
     map.easeTo({ ...(point ? { center: point } : {}), padding: { top: 0, right: 0, left: 0, bottom: point ? Math.round(window.innerHeight * 0.55) : 0 }, duration: 450 });
   }, [map, inspection]);
 
-  const search = async (event: FormEvent) => {
-    event.preventDefault();
-    if (query.trim().length < 4) return;
-    setSearching(true); setSearchError(""); setResults([]);
+  const runAddressSearch = useCallback(async (term: string) => {
+    addressSearchController.current?.abort();
+    const controller = new AbortController();
+    addressSearchController.current = controller;
+    setSearching(true); setSearchError("");
     try {
-      const response = await fetch(`/api/land-intelligence/search?q=${encodeURIComponent(query.trim())}`);
+      const center = map?.getCenter();
+      const params = new URLSearchParams({ q: term });
+      if (center) { params.set("lat", String(center.lat)); params.set("lon", String(center.lng)); }
+      const response = await fetch(`/api/land-intelligence/search?${params}`, { signal: controller.signal });
       const json = await response.json();
-      if (!response.ok) throw new Error(json.error ?? "Search failed.");
+      if (!response.ok) throw new Error(json.error ?? "Address search is temporarily unavailable.");
+      if (controller.signal.aborted || addressSearchController.current !== controller) return;
       setResults(json.results ?? []);
-      if (!json.results?.length) setSearchError("No address match. Try a full U.S. street address or latitude, longitude.");
-    } catch (error) { setSearchError((error as Error).message); }
-    finally { setSearching(false); }
+      if (!json.results?.length) setSearchError("No matches yet. Try adding a city, state, or ZIP code.");
+    } catch (error) {
+      if (!controller.signal.aborted) setSearchError((error as Error).message || "Address search is temporarily unavailable.");
+    } finally {
+      if (addressSearchController.current === controller) { addressSearchController.current = null; setSearching(false); }
+    }
+  }, [map]);
+  useEffect(() => {
+    const term = query.trim();
+    if (selectedAddressValue.current === term) { selectedAddressValue.current = null; return; }
+    selectedAddressValue.current = null;
+    if (term.length < 4) {
+      addressSearchController.current?.abort(); addressSearchController.current = null;
+      setResults([]); setSearchError(""); setSearching(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => { addressSearchTimeout.current = null; void runAddressSearch(term); }, 600);
+    addressSearchTimeout.current = timeout;
+    return () => { window.clearTimeout(timeout); if (addressSearchTimeout.current === timeout) addressSearchTimeout.current = null; addressSearchController.current?.abort(); };
+  }, [query, runAddressSearch]);
+  const search = (event: FormEvent) => {
+    event.preventDefault();
+    if (results[0]) chooseResult(results[0]);
+    else if (query.trim().length >= 4) {
+      if (addressSearchTimeout.current != null) window.clearTimeout(addressSearchTimeout.current);
+      addressSearchTimeout.current = null;
+      void runAddressSearch(query.trim());
+    }
   };
-  const chooseResult = (result: SearchResult) => {
+  const dismissWelcome = () => {
+    setShowWelcome(false);
+  };
+  const exploreBoulder = () => {
+    dismissWelcome(); setMode("browse"); setShape(null); setComplete(false); setInspection(null); setSelectedParcel(null);
+    setFlyTo({ center: [-105.2705, 40.015], zoom: 14.2, nonce: Date.now() });
+  };
+  const chooseResult = async (result: SearchResult) => {
+    selectedAddressValue.current = result.label;
+    addressSearchController.current?.abort(); addressSearchController.current = null; setSearching(false);
     setQuery(result.label); setResults([]); setSearchError("");
+    addressParcelController.current?.abort();
+    const controller = new AbortController();
+    addressParcelController.current = controller;
+    identifyController.current?.abort();
+    setInspection(null); setSelectedParcel(null); setInspectionLoading(true);
     setShape({ kind: "pin", points: [result.center] }); setComplete(true); setMode("browse"); setShowReport(true);
-    setFlyTo({ center: result.center, zoom: 13, nonce: Date.now() });
+    const zoom = result.precisionType === "street" ? 16 : result.precisionType === "address" || result.precisionType === "coordinate" ? 17 : 12;
+    setFlyTo({ center: result.center, zoom, nonce: Date.now() });
+    // Use the same parcel source as the map layer, then open the same parcel
+    // inspection used by a map click. A geocoder pin alone never selects a parcel.
+    if (zoom >= 14) {
+      const [lng, lat] = result.center;
+      const radius = 0.0004;
+      const bounds = [lng - radius, lat - radius, lng + radius, lat + radius];
+      try {
+        const response = await fetch(`/api/land-intelligence/parcel-map?bbox=${bounds.join(",")}`, { signal: controller.signal });
+        const json = await response.json();
+        if (!response.ok) throw new Error(json.error || "Parcel boundary lookup failed.");
+        if (controller.signal.aborted) return;
+        const features = (json.features ?? []) as GeoJSON.Feature[];
+        setParcelData((current) => {
+          const byKey = new Map(current.features.map((feature) => [feature.properties?.parcelKey, feature]));
+          for (const feature of features) byKey.set(feature.properties?.parcelKey, feature);
+          return { type: "FeatureCollection", features: Array.from(byKey.values()) };
+        });
+        const parcel = features.find((feature) => feature.properties?.parcelKey && feature.geometry && (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") && pointInParcel(result.center, feature.geometry as ParcelGeometry));
+        if (parcel?.properties) {
+          const properties = parcel.properties as ParcelRecord & { parcelKey: string };
+          setSelectedParcel(parcel);
+          setShowReport(false);
+          setInspection({ kind: "parcel", point: result.center, properties });
+          return;
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.warn("Address matched, but parcel boundaries could not be loaded.", error);
+      } finally {
+        if (addressParcelController.current === controller) {
+          addressParcelController.current = null;
+          setInspectionLoading(false);
+        }
+      }
+    }
+    if (addressParcelController.current === controller) {
+      addressParcelController.current = null;
+      setInspectionLoading(false);
+    }
   };
   const locate = (point: Coord) => setFlyTo({ center: point, zoom: Math.max(map?.getZoom() ?? 10, 12), nonce: Date.now() });
   const focusOn = (key: Exclude<keyof Report, "checkedAt">) => {
@@ -495,62 +571,61 @@ export default function LandApp() {
     <AtlasMap layers={[...LAND_LAYERS, ...INSPECTION_LAYERS, INSPECTION_SELECTED_LAYER, DRAW_LAYER, FOCUS_LAYER]} visible={{ ...Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [`parcel-inspection-${group.id}`, true])), "parcel-inspection-selected": true, ...visibleLayers }} data={data} basemap={basemap} terrain="flat" dark={dark} initialView={{ center: [-105.5, 39.1], zoom: 6.5 }} atmosphere onMapReady={onMapReady} flyTo={flyTo} emptyCursor={mode === "browse" ? "grab" : "crosshair"} controls={false} className="absolute inset-0 h-full w-full" />
     <div className="li-map-wash pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/45 via-transparent to-slate-950/30" />
 
-    {/* Phones get one header row (back, search, theme) so the map keeps most of the screen. */}
-    <header className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2 md:inset-x-5 md:top-5 md:flex-wrap">
-      <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-2xl border border-white/15 li-panel bg-slate-950/85 p-1.5 shadow-2xl backdrop-blur-xl md:gap-3 md:px-4 md:py-2.5">
-        <Link href="/projects" aria-label="Back to projects" className="rounded-lg p-2 text-slate-300 hover:bg-white/10 hover:text-white md:p-1"><ArrowLeft className="h-4 w-4" /></Link>
-        <div className="hidden h-6 w-px bg-white/15 md:block" />
-        <div className="sr-only md:not-sr-only"><div className="font-mono text-[9px] uppercase tracking-[0.24em] text-cyan-300">Atlas / U.S. study tool</div><h1 className="font-aspekta text-[17px] font-semibold leading-5">Land Intelligence</h1></div>
-        <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} aria-label={dark ? "Switch to light theme" : "Switch to dark theme"} title={dark ? "Light theme" : "Dark theme"} className="rounded-lg p-2 text-slate-200 hover:bg-white/10 md:ml-1 md:border md:border-white/15">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
-      </div>
-      <form onSubmit={search} className="pointer-events-auto relative flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-white/15 li-panel bg-slate-950/90 px-3 py-2 shadow-2xl backdrop-blur-xl md:w-[370px] md:flex-none">
+    {showWelcome && <div className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/55 p-3 backdrop-blur-sm [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))] [padding-top:max(0.75rem,env(safe-area-inset-top))] sm:p-6">
+      <section role="dialog" aria-modal="true" aria-labelledby="land-welcome-title" className="li-panel my-auto w-full max-w-xl overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/95 p-4 shadow-2xl backdrop-blur-xl sm:rounded-3xl sm:p-6">
+        <div className="flex items-center gap-3"><div className="rounded-2xl border border-cyan-300/25 bg-cyan-300/10 p-3 text-cyan-200"><MapPinned className="h-6 w-6" /></div><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-cyan-300">Atlas · U.S. study tool</p><h2 id="land-welcome-title" className="mt-1 text-xl font-semibold text-white">Land Intelligence</h2></div></div>
+        <p className="mt-3 text-sm leading-relaxed text-slate-300 sm:mt-4">Explore property records and site conditions together on one map.</p>
+        <div className="mt-3 grid gap-2 sm:mt-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 sm:rounded-2xl"><div className="flex items-center gap-2 text-xs font-semibold text-white"><Database className="h-4 w-4 shrink-0 text-cyan-300" />Parcel data in {PARCEL_SOURCES.length} states</div><div className="mt-2 grid grid-cols-2 gap-1">{PARCEL_SOURCES.map((source) => <span key={source.id} className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-2 py-1.5 text-[10px] text-cyan-100">{source.state}</span>)}</div></div>
+          <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-3 sm:rounded-2xl"><div className="flex items-center gap-2 text-xs font-semibold text-white"><Building2 className="h-4 w-4 shrink-0 text-cyan-300" />Richest detail: Boulder County</div><p className="mt-2 text-[11px] leading-relaxed text-slate-300">Owner, value, building, permit, and sale records.</p></div>
+        </div>
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-400">Early concept; coverage varies by county. More data is coming.</p>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:mt-5 sm:grid-cols-2"><button type="button" onClick={exploreBoulder} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 py-3 text-xs font-semibold text-slate-950 hover:bg-cyan-300"><MapPin className="h-4 w-4" />Explore Boulder County</button><button type="button" onClick={dismissWelcome} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-3 text-xs font-semibold text-slate-100 hover:bg-white/10">Continue to the map<ArrowRight className="h-4 w-4" /></button></div>
+      </section>
+    </div>}
+
+    <aside className="pointer-events-auto absolute left-3 top-3 z-20 flex max-h-[calc(100dvh-24px)] w-[min(290px,calc(100vw-24px))] flex-col overflow-y-auto rounded-2xl border border-white/15 li-panel bg-slate-950/90 p-2.5 shadow-2xl backdrop-blur-xl md:left-5 md:top-5" aria-label="Map controls">
+      <header className="flex items-center gap-1.5 pb-2">
+        <Link href="/projects" aria-label="Back to projects" className="rounded-lg p-2 text-slate-300 hover:bg-white/10 hover:text-white"><ArrowLeft className="h-4 w-4" /></Link>
+        <div className="min-w-0 flex-1"><div className="font-mono text-[9px] uppercase tracking-[0.2em] text-cyan-300">Atlas / U.S. study tool</div><h1 className="font-aspekta text-[16px] font-semibold leading-5">Land Intelligence</h1></div>
+        <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} aria-label={dark ? "Switch to light theme" : "Switch to dark theme"} title={dark ? "Light theme" : "Dark theme"} className="rounded-lg p-2 text-slate-200 hover:bg-white/10">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
+      </header>
+      <form onSubmit={search} className="relative flex w-full min-w-0 items-center gap-2 rounded-xl border border-white/10 bg-black/10 px-2.5 py-2">
         <Search className="h-4 w-4 shrink-0 text-cyan-300" />
-        <input value={query} onChange={(event) => { setQuery(event.target.value); setResults([]); setSearchError(""); }} placeholder="U.S. address or lat, lon" aria-label="Search U.S. address or coordinates" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-400" />
-        {query && <button type="button" onClick={() => { setQuery(""); setResults([]); }} aria-label="Clear search" className="p-1 text-slate-400 hover:text-white"><X className="h-3.5 w-3.5" /></button>}
-        <button type="submit" disabled={searching || query.trim().length < 4} className="rounded-lg bg-cyan-400 px-2.5 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50">{searching ? "Finding…" : "Find"}</button>
-        {(results.length > 0 || searchError) && <div className="absolute left-0 right-0 top-[calc(100%+6px)] overflow-hidden rounded-xl border border-white/15 li-panel bg-slate-950 p-1 shadow-2xl">{results.map((result) => <button type="button" key={result.label} onClick={() => chooseResult(result)} className="block w-full rounded-lg px-3 py-2 text-left text-xs text-slate-100 hover:bg-white/10">{result.label}</button>)}{searchError && <p className="px-3 py-2 text-xs text-amber-200">{searchError}</p>}</div>}
+        <input role="combobox" aria-autocomplete="list" aria-expanded={query.trim().length >= 4 && (searching || results.length > 0 || !!searchError)} aria-controls="land-address-suggestions" value={query} onChange={(event) => { addressSearchController.current?.abort(); addressSearchController.current = null; setSearching(false); setQuery(event.target.value); setResults([]); setSearchError(""); }} placeholder="Address, city, or coordinates" aria-label="Search U.S. address or coordinates" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-400" />
+        {query && <button type="button" onClick={() => { addressSearchController.current?.abort(); addressSearchController.current = null; setSearching(false); setQuery(""); setResults([]); setSearchError(""); }} aria-label="Clear search" className="p-1 text-slate-400 hover:text-white"><X className="h-3.5 w-3.5" /></button>}
+        <button type="submit" disabled={query.trim().length < 4} className="rounded-lg bg-cyan-400 px-2.5 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50">Find</button>
+        {query.trim().length >= 4 && (searching || results.length > 0 || !!searchError) && <div id="land-address-suggestions" role="listbox" aria-label="Address suggestions" className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 max-h-64 overflow-y-auto rounded-xl border border-white/15 li-panel bg-slate-950 p-1 shadow-2xl">{searching && !results.length && <p role="status" className="px-3 py-2 text-xs text-slate-300">Searching addresses and nearby places…</p>}{results.map((result) => <button type="button" role="option" aria-selected="false" key={`${result.label}-${result.center.join(",")}`} onClick={() => chooseResult(result)} className="flex w-full items-start gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-white/10"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" /><span className="min-w-0"><span className="block text-xs font-medium text-slate-100">{result.label}</span><span className="mt-0.5 block text-[10px] text-slate-400">{result.detail || "United States"}</span>{result.provider && <span className="mt-0.5 block text-[9px] text-slate-500">{result.provider}</span>}</span></button>)}{searchError && <p className="px-3 py-2 text-[11px] leading-relaxed text-amber-200">{searchError}</p>}{results.some((result) => result.provider?.includes("OpenStreetMap")) && <div className="border-t border-white/10 px-3 py-2 text-[9px] text-slate-500">Search data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">OpenStreetMap contributors</a> via Photon.</div>}</div>}
       </form>
-    </header>
 
-    {showCoverageNotice && <aside role="dialog" aria-label="Connected parcel states" className="pointer-events-auto absolute left-1/2 top-[120px] z-30 w-[min(390px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-white/15 li-panel bg-slate-950/95 p-4 text-xs shadow-2xl backdrop-blur-xl md:top-24">
-      <div className="flex items-start justify-between gap-3"><div className="flex items-center gap-2.5"><div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-2 text-cyan-200"><Globe2 className="h-5 w-5" /></div><div><div className="font-mono text-[9px] uppercase tracking-[0.18em] text-cyan-300">Parcel coverage</div><h2 className="mt-1 text-sm font-semibold text-white">Explore connected states</h2></div></div><button type="button" onClick={() => setShowCoverageNotice(false)} aria-label="Close parcel coverage notice" className="rounded-lg p-1 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button></div>
-      <p className="mt-2 leading-relaxed text-slate-300">Parcel boundaries and available public property facts are connected in these states. Zoom to level 14 to see individual parcels.</p>
-      <div className="mt-3 flex flex-wrap gap-1.5">{PARCEL_SOURCES.map((source) => <span key={source.id} className="inline-flex items-center gap-1 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[11px] text-cyan-100"><MapPin className="h-3 w-3" />{source.state}</span>)}</div>
-      <p className="mt-3 text-[10px] leading-relaxed text-slate-400">Property fields vary by county. Other map layers may cover places beyond these parcel states.</p>
-      <button type="button" onClick={() => { setShowCoverageNotice(false); setFlyTo({ center: [-105.5, 39.1], zoom: 6.5, nonce: Date.now() }); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-cyan-400 px-3 py-1.5 text-[11px] font-semibold text-slate-950 hover:bg-cyan-300"><MapPin className="h-3.5 w-3.5" />Back to Colorado</button>
-    </aside>}
-
-    <div className="pointer-events-none absolute left-3 right-3 top-[68px] z-10 flex flex-wrap items-start gap-2 md:left-5 md:right-auto md:top-28 md:flex-col">
-      {/* One swipeable row on phones; the wrapper dissolves on larger screens. */}
-      <div className="li-scroll-x pointer-events-auto flex max-w-full gap-2 overflow-x-auto md:contents">
-      <div className="flex shrink-0 rounded-2xl border border-white/15 li-panel bg-slate-950/90 p-1.5 shadow-2xl backdrop-blur-xl md:block">
-        <button type="button" onClick={() => setMode("browse")} title="Click mapped features to inspect them" aria-pressed={mode === "browse"} className={`flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-medium transition-colors md:w-full md:gap-2 md:px-3 md:py-2.5 md:text-xs ${mode === "browse" ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><CircleHelp className="h-4 w-4" />Inspect</button>
-        <button type="button" onClick={() => { setVisibleLayers((current) => ({ ...current, "land-roads": true })); setMode("road"); setShowReport(false); }} title="Tap a Colorado highway segment for crashes, incidents, and conditions" aria-pressed={mode === "road"} className={`flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-medium transition-colors md:w-full md:gap-2 md:px-3 md:py-2.5 md:text-xs ${mode === "road" ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><Route className="h-4 w-4" />Roads</button>
-        {TOOL.map(({ id, label, icon: Icon, hint }) => <button key={id} type="button" onClick={() => startTool(id)} title={hint} aria-pressed={mode === id} className={`flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-medium transition-colors md:w-full md:gap-2 md:px-3 md:py-2.5 md:text-xs ${mode === id ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><Icon className="h-4 w-4" />{label}</button>)}
+      <div className="border-t border-white/10 pt-2">
+      <div className="grid grid-cols-2 gap-1.5">
+        <button type="button" onClick={() => setMode("browse")} title="Click mapped features to inspect them" aria-pressed={mode === "browse"} className={`flex items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-medium transition-colors ${mode === "browse" ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><CircleHelp className="h-4 w-4" />Inspect</button>
+        <button type="button" onClick={() => { setVisibleLayers((current) => ({ ...current, "land-roads": true })); setMode("road"); setShowReport(false); }} title="Tap a Colorado highway segment for crashes, incidents, and conditions" aria-pressed={mode === "road"} className={`flex items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-medium transition-colors ${mode === "road" ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><Route className="h-4 w-4" />Roads</button>
+        {TOOL.map(({ id, label, icon: Icon, hint }) => <button key={id} type="button" onClick={() => startTool(id)} title={hint} aria-pressed={mode === id} className={`flex items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-medium transition-colors ${mode === id ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><Icon className="h-4 w-4" />{label}</button>)}
       </div>
-      <div className="flex shrink-0 gap-1 rounded-2xl border border-white/15 li-panel bg-slate-950/90 p-1.5 shadow-2xl backdrop-blur-xl md:flex-col">
-        {/* Pinch zoom covers phones. */}
-        <button type="button" title="Zoom in" aria-label="Zoom in" onClick={() => map?.zoomIn()} className="hidden rounded-xl p-2.5 text-slate-200 hover:bg-white/10 md:block"><Plus className="h-4 w-4" /></button>
-        <button type="button" title="Zoom out" aria-label="Zoom out" onClick={() => map?.zoomOut()} className="hidden rounded-xl p-2.5 text-slate-200 hover:bg-white/10 md:block"><Minus className="h-4 w-4" /></button>
-        <button type="button" title="Switch basemap" onClick={() => setBasemap((value) => value === "map" ? "satellite" : "map")} className="rounded-xl p-2.5 text-slate-200 hover:bg-white/10">{basemap === "map" ? <Satellite className="h-4 w-4" /> : <Layers3 className="h-4 w-4" />}</button>
-        <button type="button" title="Map layers" aria-label="Map layers" aria-expanded={showLayers} onClick={() => setShowLayers((value) => !value)} className={`rounded-xl p-2.5 hover:bg-white/10 ${showLayers ? "bg-cyan-400/20 text-cyan-200" : "text-slate-200"}`}><Layers3 className="h-4 w-4" /></button>
-        {/* Phones only show Clear when there is something to clear, so the row fits on one line. */}
-        <button type="button" title="Clear drawing" aria-label="Clear drawing" onClick={clear} disabled={!shape} className={`rounded-xl p-2.5 text-slate-200 hover:bg-white/10 disabled:opacity-35 ${shape ? "" : "hidden md:block"}`}><Eraser className="h-4 w-4" /></button>
-        {/* The legend opens from here below xl; wide screens keep it open. */}
-        {legendAvailable && <button type="button" title="Map key" aria-expanded={showKey} onClick={() => setShowKey((value) => !value)} className={`rounded-xl px-2.5 py-2 text-[11px] font-semibold hover:bg-white/10 xl:hidden ${showKey ? "bg-cyan-400/20 text-cyan-200" : "text-slate-200"}`}>Key</button>}
+      <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
+        <div className="flex items-center gap-1">
+          <button type="button" title="Zoom in" aria-label="Zoom in" onClick={() => map?.zoomIn()} className="rounded-lg p-2 text-slate-200 hover:bg-white/10"><Plus className="h-4 w-4" /></button>
+          <button type="button" title="Zoom out" aria-label="Zoom out" onClick={() => map?.zoomOut()} className="rounded-lg p-2 text-slate-200 hover:bg-white/10"><Minus className="h-4 w-4" /></button>
+        </div>
+        <div className="flex items-center gap-1">
+          <button type="button" title={basemap === "map" ? "Switch to satellite basemap" : "Switch to street basemap"} aria-label="Switch basemap" onClick={() => setBasemap((value) => value === "map" ? "satellite" : "map")} className="rounded-lg p-2 text-slate-200 hover:bg-white/10">{basemap === "map" ? <Satellite className="h-4 w-4" /> : <Layers3 className="h-4 w-4" />}</button>
+          <button type="button" title="Map filters and key" aria-label="Map filters and key" aria-expanded={showLayers} onClick={() => setShowLayers((value) => !value)} className={`rounded-lg p-2 hover:bg-white/10 ${showLayers ? "bg-cyan-400/20 text-cyan-200" : "text-slate-200"}`}><Layers3 className="h-4 w-4" /></button>
+          <button type="button" title="Clear drawing" aria-label="Clear drawing" onClick={clear} disabled={!shape} className="rounded-lg p-2 text-slate-200 hover:bg-white/10 disabled:opacity-35"><Eraser className="h-4 w-4" /></button>
+        </div>
       </div>
       </div>
-      {showLayers && <div className="pointer-events-auto max-h-[calc(100dvh-140px)] w-[min(280px,calc(100vw-24px))] md:max-h-[calc(100vh-250px)] overflow-y-auto rounded-2xl border border-white/15 li-panel bg-slate-950/95 p-3 shadow-2xl backdrop-blur-xl md:absolute md:left-[100px] md:top-0">
-        <div className="mb-2 flex items-center justify-between"><h2 className="text-xs font-semibold">Map layers</h2><button type="button" aria-label="Close map layers" onClick={() => setShowLayers(false)} className="rounded-lg p-1 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button></div>
+      {showLayers && <div className="border-t border-white/10 pt-2">
+        <div className="mb-2 flex items-center justify-between"><h2 className="text-xs font-semibold">Map filters &amp; key</h2><button type="button" aria-label="Close map filters and key" onClick={() => setShowLayers(false)} className="rounded-lg p-1 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button></div>
         <p className="mb-3 text-[11px] leading-relaxed text-slate-400">Turn on source maps to explore. Layers appear as you zoom into their supported scale.</p>
         {LAND_OVERLAYS.map((layer) => <label key={layer.id} className="flex cursor-pointer items-start gap-2 border-t border-white/10 py-2.5"><input type="checkbox" checked={!!visibleLayers[`land-${layer.id}`]} onChange={(event) => setVisibleLayers((current) => ({ ...current, [`land-${layer.id}`]: event.target.checked }))} className="mt-0.5 accent-cyan-400" /><span className="min-w-0"><span className="block text-xs font-medium text-white">{layer.label}</span><span className="block text-[10px] text-slate-400">{layer.scope} · zoom {layer.minzoom}+</span><a href={layer.url} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="text-[10px] text-cyan-300 underline underline-offset-2">{layer.source}</a></span></label>)}
         <div className="border-t border-white/10 pt-3 text-[10px] leading-relaxed text-slate-400">Reference guides: <a href="https://www.nrcs.usda.gov/resources/data-and-reports/soil-survey-geographic-database-ssurgo" target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">SSURGO</a> · <a href="https://www.fws.gov/program/national-wetlands-inventory" target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">NWI</a> · <a href="https://www.nae.usace.army.mil/Missions/Regulatory/Jurisdiction-and-Wetlands/Wetland-Delineation-Manual/" target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">USACE delineation</a> · <a href="https://highways.dot.gov/environment/noise" target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">FHWA noise</a>. USACE and FHWA provide guidance rather than map data here.</div>
+        <MapKey soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} facilities={!!visibleLayers["land-facilities"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} facilityStatus={facilityStatus} />
       </div>}
-    </div>
-
-    <MapKey open={showKey} soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} facilities={!!visibleLayers["land-facilities"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} facilityStatus={facilityStatus} />
+    </aside>
     {mode === "road" && <div role="status" className="pointer-events-none absolute bottom-5 left-1/2 z-20 w-[min(360px,calc(100vw-24px))] -translate-x-1/2 rounded-xl border border-cyan-300/30 li-panel bg-slate-950/95 px-3 py-2 text-center text-[11px] font-medium text-cyan-200 shadow-xl">Tap a Colorado highway line to inspect that segment. Zoom in to level 9+ to see the road layer.</div>}
-    <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} parcelInspection={parcelInspection} parcelGeometry={inspection?.kind === "parcel" && selectedParcel?.properties?.parcelKey === inspection.properties.parcelKey && (selectedParcel.geometry.type === "Polygon" || selectedParcel.geometry.type === "MultiPolygon") ? selectedParcel.geometry as ParcelGeometry : null} parcelInspectionLoading={parcelInspectionLoading} parcelInspectionError={parcelInspectionError} visibleFindingGroups={Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [group.id, visibleLayers[`parcel-inspection-${group.id}`] !== false]))} selectedFindingId={selectedFindingId} onToggleFindingGroup={(id) => setVisibleLayers((current) => ({ ...current, [`parcel-inspection-${id}`]: current[`parcel-inspection-${id}`] === false }))} onSetFindingGroupsVisible={(ids, shown) => setVisibleLayers((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [`parcel-inspection-${id}`, shown])) }))} onSelectFinding={(finding: ParcelFinding) => setSelectedFindingId(finding.id)} onInspectOther={inspectOtherAt} onClose={() => { identifyController.current?.abort(); setInspection(null); setSelectedParcel(null); setSelectedFindingId(null); setInspectionLoading(false); }} />
+    <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} parcelInspection={parcelInspection} parcelGeometry={inspection?.kind === "parcel" && selectedParcel?.properties?.parcelKey === inspection.properties.parcelKey && (selectedParcel.geometry.type === "Polygon" || selectedParcel.geometry.type === "MultiPolygon") ? (parcelInspection?.parcelKey === inspection.properties.parcelKey ? parcelInspection.geometry : null) ?? selectedParcel.geometry as ParcelGeometry : null} parcelInspectionLoading={parcelInspectionLoading} parcelInspectionError={parcelInspectionError} visibleFindingGroups={Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [group.id, visibleLayers[`parcel-inspection-${group.id}`] !== false]))} selectedFindingId={selectedFindingId} onToggleFindingGroup={(id) => setVisibleLayers((current) => ({ ...current, [`parcel-inspection-${id}`]: current[`parcel-inspection-${id}`] === false }))} onSetFindingGroupsVisible={(ids, shown) => setVisibleLayers((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [`parcel-inspection-${id}`, shown])) }))} onSelectFinding={(finding: ParcelFinding) => setSelectedFindingId(finding.id)} onInspectOther={inspectOtherAt} onClose={() => { addressParcelController.current?.abort(); addressParcelController.current = null; identifyController.current?.abort(); setInspection(null); setSelectedParcel(null); setSelectedFindingId(null); setInspectionLoading(false); }} />
 
     {shape && complete && <div className={`pointer-events-auto absolute z-20 overflow-hidden rounded-2xl border border-white/15 li-panel bg-slate-950/95 shadow-2xl backdrop-blur-xl transition-all ${showReport ? "bottom-0 left-0 right-0 max-h-[45dvh] rounded-b-none border-x-0 border-b-0 md:bottom-5 md:left-auto md:right-5 md:max-h-[calc(100vh-130px)] md:w-[380px] md:rounded-2xl md:border" : "bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-3 w-auto md:bottom-5 md:right-5"}`}>
       <button type="button" onClick={() => setShowReport((value) => !value)} className="flex w-full items-center justify-between gap-4 border-b border-white/10 px-4 py-3 text-left text-sm font-semibold"><span>Location report</span>{showReport ? <Minus className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
@@ -604,7 +679,7 @@ function facilityDetail(item: Facility) {
   return [item.name, [item.city, item.state].filter(Boolean).join(", "), item.programs.length ? item.programs.join("/" ) : "", item.compliance, item.accuracyMeters == null ? "" : `Location accuracy ${Math.round(item.accuracyMeters)} m`].filter(Boolean).join(" · ");
 }
 
-const FINDING_ICONS = { "Ground elevation": Mountain, "FEMA flood mapping": Waves, "Mapped waterways": Droplets, "Mapped wetlands": Sprout, "Mapped faults": Activity, "Public parcel records": Layers3, "Soil map units": Sprout, "EPA regulated facilities": Building2, "Census tract context": Users, "Colorado highways": Route, "Fatal crashes (2024)": CarFront } as const;
+const FINDING_ICONS = { "Ground elevation": Mountain, "FEMA flood mapping": Waves, "Mapped waterways": Droplets, "Mapped wetlands": Leaf, "Mapped faults": Activity, "Public parcel records": Layers3, "Soil map units": Sprout, "EPA regulated facilities": Factory, "Census tract context": Users, "Colorado highways": Route, "Fatal crashes (2024)": CarFront } as const;
 
 function FindingCard<T>({ title, finding, value, details, links, active, onFocus }: { title: string; finding: Finding<T>; value: string | null; details?: string[]; links?: { label: string; url: string }[]; active: boolean; onFocus: () => void }) {
   const Icon = FINDING_ICONS[title as keyof typeof FINDING_ICONS] ?? MapPin;

@@ -1,5 +1,6 @@
 import { PARCEL_SOURCES, normalizeParcel, type ParcelRecord, type ParcelSource } from "./parcel-sources";
 import type { BoulderLookup } from "./boulder-property";
+import { validParcelGeometry, type ParcelGeometry } from "./parcel-inspection";
 
 export type ParcelSale = { date: string; price: number | null; reference: string };
 export type ParcelDetail = {
@@ -15,6 +16,10 @@ export type ParcelDetail = {
   annualPropertyTax: number | null;
   valueYear: string;
   legalDescription: string;
+  accountNumber?: string;
+  subdivision?: string;
+  block?: string;
+  lot?: string;
   yearBuilt: number | null;
   livingAreaSqft: number | null;
   buildingCount: number | null;
@@ -24,7 +29,7 @@ export type ParcelDetail = {
 
 // Keep the map response small. Fetch these public attributes only for a clicked parcel.
 export const PARCEL_DETAIL_FIELDS: Record<ParcelSource["id"], string> = {
-  co: "OBJECTID,parcel_id,countyName,situsAdd,sitAddCty,landAcres,zoningCode,zoningDesc,landUseDsc,dateReceived,URL,owner,owner2,account,saleDate,salePrice,apprValTot,asedValTot,legalDesc,landSqft",
+  co: "OBJECTID,parcel_id,countyName,situsAdd,sitAddCty,landAcres,zoningCode,zoningDesc,landUseDsc,dateReceived,URL,owner,owner2,account,subName,block,lot,saleDate,salePrice,apprValTot,asedValTot,legalDesc,landSqft",
   ut: "OBJECTID,PARCEL_ID,PARCEL_ADD,PARCEL_CITY,OWN_TYPE,ParcelsCur,County,CoParcel_URL,RECORDER",
   wa: "OBJECTID,PARCEL_ID_NR,ORIG_PARCEL_ID,SITUS_ADDRESS,SITUS_CITY_NM,COUNTY_NM,FIPS_NR,LANDUSE_CD,VALUE_LAND,VALUE_BLDG,DATA_LINK",
   fl: "OBJECTID,PARCEL_ID,ALT_KEY,CO_NO,PHY_ADDR1,PHY_CITY,DOR_UC,LND_SQFOOT,LND_VAL,ASMNT_YR,OWN_NAME,JV,AV_SD,AV_NSD,TV_SD,TV_NSD,ACT_YR_BLT,EFF_YR_BLT,TOT_LVG_AR,NO_BULDNG,S_LEGAL,SALE_PRC1,SALE_YR1,SALE_MO1,OR_BOOK1,OR_PAGE1,CLERK_NO1,SALE_PRC2,SALE_YR2,SALE_MO2,OR_BOOK2,OR_PAGE2,CLERK_NO2",
@@ -55,6 +60,30 @@ const sale = (saleDate: string, price: number | null, reference = ""): ParcelSal
 
 export const PARCEL_KEY = /^(co|ut|wa|fl|nc|wi):([1-9]\d{0,11})$/;
 
+/** Fetch the exact selected feature in full resolution. Map viewport polygons are simplified and never authorize an inspection. */
+export async function queryParcelGeometry(key: string, signal?: AbortSignal): Promise<ParcelGeometry | null> {
+  const match = key.match(PARCEL_KEY);
+  const source = match && PARCEL_SOURCES.find((item) => item.id === match[1]);
+  if (!match || !source) return null;
+  const objectIdField = source.id === "nc" ? "objectid" : "OBJECTID";
+  const params = new URLSearchParams({
+    objectIds: match[2], outFields: objectIdField, returnGeometry: "true", outSR: "4326", f: "geojson",
+  });
+  const response = await fetch(`${source.url}/query`, {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000), cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Parcel source returned HTTP ${response.status}`);
+  const raw = await response.text();
+  if (raw.length > 2_000_000) throw new Error("Parcel geometry response exceeded limit");
+  const json = JSON.parse(raw);
+  if (json.error || json.type !== "FeatureCollection" || !Array.isArray(json.features)) throw new Error("Invalid parcel geometry response");
+  const feature = json.features.find((item: GeoJSON.Feature) => String(item.properties?.[objectIdField] ?? item.id ?? "") === match[2]);
+  if (!feature) return null;
+  if (!validParcelGeometry(feature.geometry)) throw new Error("Parcel source returned invalid geometry");
+  return feature.geometry;
+}
+
 /** One clicked parcel's public record by `<source>:<objectid>` key. Null when the key is invalid or the record is gone; throws when the source fails. */
 export async function queryParcelDetail(key: string): Promise<ParcelDetail | null> {
   const match = key.match(PARCEL_KEY);
@@ -83,6 +112,10 @@ export function normalizeParcelDetail(source: ParcelSource, a: Record<string, un
     valueLabels: { total: "Assessed total", land: "Assessed land", improvements: "Assessed improvements" },
   };
   if (source.id === "co") {
+    detail.accountNumber = str(a.account);
+    detail.subdivision = str(a.subName);
+    detail.block = str(a.block);
+    detail.lot = str(a.lot);
     detail.owners = owners(a.owner, a.owner2);
     detail.sales = sale(date(a.saleDate), positive(a.salePrice));
     detail.assessedTotal = positive(a.apprValTot);

@@ -49,7 +49,7 @@ export async function surveyControlGroup(geometry: ParcelGeometry, signal?: Abor
     });
     return { id, label, source, sourceUrl: "https://www.ngs.noaa.gov/web_services/data-explorer.shtml", status: rows.length >= 500 ? "partial" : findings.length ? "found" : "no_features", note: rows.length >= 500 ? `${note} NGS returned its 500-record maximum; results may be incomplete.` : note, findings };
   } catch {
-    return { id, label, source, sourceUrl: "https://www.ngs.noaa.gov/web_services/data-explorer.shtml", status: "unavailable", note: `NGS did not return survey marks. ${note}`, findings: [] };
+    return { id, label, source, sourceUrl: "https://www.ngs.noaa.gov/web_services/data-explorer.shtml", status: "source_error", note: `NGS did not return survey marks. ${note}`, findings: [] };
   }
 }
 
@@ -80,6 +80,6 @@ export async function groundwaterSitesGroup(geometry: ParcelGeometry, signal?: A
     const truncated = payload.features.length >= 100 || (typeof payload.numberMatched === "number" && payload.numberMatched > payload.features.length) || !!payload.links?.some((link) => link.rel === "next");
     return { id, label, source, sourceUrl: "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations", status: truncated ? "partial" : findings.length ? "found" : "no_features", note: truncated ? `${note} The provider has more records than this response includes.` : note, findings };
   } catch {
-    return { id, label, source, sourceUrl: "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations", status: "unavailable", note: `USGS monitoring locations did not respond. ${note}`, findings: [] };
+    return { id, label, source, sourceUrl: "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations", status: "source_error", note: `USGS monitoring locations did not respond. ${note}`, findings: [] };
   }
 }

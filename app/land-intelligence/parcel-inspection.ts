@@ -1,7 +1,7 @@
 import { distanceMeters, type Coord } from "./geometry";
 
 export type ParcelGeometry = GeoJSON.Polygon | GeoJSON.MultiPolygon;
-export type InspectionStatus = "found" | "no_features" | "coverage_unknown" | "outside_coverage" | "not_queried" | "partial" | "unavailable";
+export type InspectionStatus = "found" | "no_features" | "coverage_unknown" | "outside_coverage" | "not_queried" | "partial" | "unavailable" | "source_error";
 export type ParcelFinding = {
   id: string;
   name: string;
@@ -13,6 +13,8 @@ export type ParcelFinding = {
   recordUrl: string;
   recordDate: string;
   geometry: GeoJSON.Geometry;
+  verification?: "official_map" | "derived" | "unverified";
+  positionalAccuracyMeters?: number | null;
 };
 export type InspectionGroup = {
   id: string;
@@ -22,8 +24,11 @@ export type InspectionGroup = {
   status: InspectionStatus;
   note: string;
   findings: ParcelFinding[];
+  checkedAt?: string;
+  coverage?: "confirmed" | "unknown" | "outside";
+  recordLimit?: number;
 };
-export type ParcelInspectionReport = { parcelKey: string; checkedAt: string; groups: InspectionGroup[] };
+export type ParcelInspectionReport = { parcelKey: string; checkedAt: string; groups: InspectionGroup[]; geometry?: ParcelGeometry; geometrySource?: string };
 
 export const PARCEL_INSPECTION_GROUPS = [
   { id: "flood", label: "Flood mapping", color: "#38bdf8" },
@@ -34,6 +39,8 @@ export const PARCEL_INSPECTION_GROUPS = [
   { id: "karst", label: "Karst geology", color: "#c084fc" },
   { id: "mines", label: "Historical mine symbols", color: "#fbbf24" },
   { id: "roads", label: "Colorado highways", color: "#f97316" },
+  { id: "colorado-local-roads", label: "Colorado local roads", color: "#fb923c" },
+  { id: "colorado-bridges", label: "Colorado bridges and culverts", color: "#facc15" },
   { id: "facilities", label: "EPA facilities within 500 m", color: "#f472b6" },
   { id: "superfund", label: "EPA Superfund boundaries", color: "#e879f9" },
   { id: "survey-control", label: "Survey control within 1 km", color: "#facc15" },
@@ -65,6 +72,10 @@ export function validParcelGeometry(value: unknown): value is ParcelGeometry {
       vertices += ring.length;
       if (vertices > 5000 || !ring.every((p) => Array.isArray(p) && p.length === 2 && p.every((n) => typeof n === "number" && Number.isFinite(n)) && p[0] >= -180 && p[0] <= 180 && p[1] >= -90 && p[1] <= 90)) return false;
       if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) return false;
+      if (Math.abs(signedArea(ring)) < 1e-15 || ringSelfIntersects(ring)) return false;
+    }
+    for (const hole of polygon.slice(1)) {
+      if (!insideRing(hole[0] as Coord, polygon[0]) || ringsIntersect(hole, polygon[0])) return false;
     }
   }
   const [w, s, e, n] = parcelBounds(geometry);
@@ -73,8 +84,41 @@ export function validParcelGeometry(value: unknown): value is ParcelGeometry {
 
 const signedArea = (ring: number[][]) => ring.slice(0, -1).reduce((sum, point, index) => {
   const next = ring[index + 1];
-  return sum + point[0] * next[1] - next[0] * point[1];
+  const origin = ring[0];
+  return sum + (point[0] - origin[0]) * (next[1] - origin[1]) - (next[0] - origin[0]) * (point[1] - origin[1]);
 }, 0);
+
+function orientation(a: number[], b: number[], c: number[]) {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function segmentsIntersect(a: number[], b: number[], c: number[], d: number[]) {
+  const abC = orientation(a, b, c), abD = orientation(a, b, d);
+  const cdA = orientation(c, d, a), cdB = orientation(c, d, b);
+  if (abC * abD < 0 && cdA * cdB < 0) return true;
+  const on = (p: number[], u: number[], v: number[]) => Math.abs(orientation(u, v, p)) < 1e-13 &&
+    p[0] >= Math.min(u[0], v[0]) && p[0] <= Math.max(u[0], v[0]) &&
+    p[1] >= Math.min(u[1], v[1]) && p[1] <= Math.max(u[1], v[1]);
+  return on(c, a, b) || on(d, a, b) || on(a, c, d) || on(b, c, d);
+}
+
+function ringSelfIntersects(ring: number[][]) {
+  const edges = ring.length - 1;
+  for (let i = 0; i < edges; i++) {
+    if (ring[i][0] === ring[i + 1][0] && ring[i][1] === ring[i + 1][1]) return true;
+    for (let j = i + 2; j < edges; j++) {
+      if (i === 0 && j === edges - 1) continue;
+      if (segmentsIntersect(ring[i], ring[i + 1], ring[j], ring[j + 1])) return true;
+    }
+  }
+  return false;
+}
+
+function ringsIntersect(a: number[][], b: number[][]) {
+  for (let i = 1; i < a.length; i++) for (let j = 1; j < b.length; j++)
+    if (segmentsIntersect(a[i - 1], a[i], b[j - 1], b[j])) return true;
+  return false;
+}
 
 /** ArcGIS polygon rings use clockwise exteriors and counterclockwise holes. */
 export function esriParcelGeometry(geometry: ParcelGeometry) {

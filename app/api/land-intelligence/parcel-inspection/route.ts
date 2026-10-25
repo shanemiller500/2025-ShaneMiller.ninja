@@ -1,37 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LAND_OVERLAYS } from "@/app/land-intelligence/layers";
-import { PARCEL_KEY } from "@/app/land-intelligence/parcel-detail";
+import { createHash } from "node:crypto";
+import { PARCEL_KEY, queryParcelGeometry } from "@/app/land-intelligence/parcel-detail";
 import { parcelBounds, pointToParcelMeters, validParcelGeometry, type InspectionGroup, type ParcelFinding, type ParcelGeometry, type ParcelInspectionReport } from "@/app/land-intelligence/parcel-inspection";
 import { KARST_CLASSES, KARST_SERVICE } from "@/utils/geo/karst";
 import { queryUsminPoints } from "@/utils/geo/usmin-server";
 import { groundwaterSitesGroup, surveyControlGroup } from "./phase2";
 import { arcgisFeatures } from "./arcgis-query";
+import { spatialRelation } from "./spatial-match";
+import { PROVIDER_POLICY, type SourceId } from "./provider-policy";
 import { coloradoTankGroup, denverStormGroup, floridaSubsidenceGroup, unqueriedUtilityGroups } from "./phase3";
+import { coloradoBridgeGroup, coloradoLocalRoadGroup } from "./colorado-transport";
 
 export const runtime = "nodejs";
 
-type SourceId = "flood" | "wetlands" | "waterways" | "soils" | "faults" | "roads" | "facilities" | "superfund";
-const SOURCE_FIELDS: Record<SourceId, string> = {
-  flood: "OBJECTID,FLD_ZONE,ZONE_SUBTY,SFHA_TF",
-  wetlands: "OBJECTID,WETLAND_TYPE,ATTRIBUTE,ACRES",
-  waterways: "OBJECTID,GNIS_NAME,FTYPE,FCODE",
-  soils: "objectid,mukey,musym,muname,farmlndcl",
-  faults: "OBJECTID,fault_name,age,mapped_certainty,last_review",
-  roads: "OBJECTID,ROUTE,ALIAS,AADT,AADTYR,SPEEDLIM",
-  facilities: "OBJECTID,REGISTRY_ID,FAC_NAME,FAC_CITY,FAC_STATE,FAC_ACCURACY_METERS",
-  superfund: "OBJECTID,EPA_ID,Site_Name,City,State,NPL_Status,FACILITY_URL",
-};
-const SOURCE_NOTES: Record<SourceId, string> = {
-  flood: "FEMA mapping varies by community. No returned polygon does not confirm no flood risk or mapped coverage.",
-  wetlands: "NWI is an inventory, not a jurisdictional wetland determination; mapped coverage and imagery dates vary.",
-  waterways: "USGS legacy hydrography can omit small or altered drainage features.",
-  soils: "This connected NRCS map service describes a FY2015 SSURGO snapshot, not conditions verified by a site boring. Check current Web Soil Survey data.",
-  faults: "Mapped fault traces are regional reference features, not a site seismic design assessment.",
-  roads: "Colorado state highways only; local streets and legal access are not assessed.",
-  facilities: "EPA facility coordinates may be approximate. Proximity does not establish contamination or exposure.",
-  superfund: "EPA site polygons reflect current understanding of a whole site; they are not legal boundaries or parcel-specific contamination findings. Some sites have no mapped polygon.",
-};
 const reportCache = new Map<string, { expires: number; report: ParcelInspectionReport }>();
+const geometryCache = new Map<string, { expires: number; geometry: ParcelGeometry }>();
+const geometryInFlight = new Map<string, Promise<ParcelGeometry | null>>();
+const reportsInFlight = new Map<string, { promise: Promise<ParcelInspectionReport>; controller: AbortController; users: number }>();
+const INSPECTION_VERSION = "3";
+
+function waitForReport(promise: Promise<ParcelInspectionReport>, signal?: AbortSignal) {
+  if (!signal) return promise;
+  return new Promise<ParcelInspectionReport>((resolve, reject) => {
+    if (signal.aborted) { reject(new Error("Request aborted")); return; }
+    const abort = () => reject(new Error("Request aborted"));
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+
+async function resolvedGeometry(key: string) {
+  const cached = geometryCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.geometry;
+  let pending = geometryInFlight.get(key);
+  if (!pending) {
+    pending = queryParcelGeometry(key).then((geometry) => {
+      if (geometry) {
+        if (geometryCache.size >= 30) geometryCache.delete(geometryCache.keys().next().value!);
+        geometryCache.set(key, { expires: Date.now() + 3 * 60_000, geometry });
+      }
+      return geometry;
+    }).finally(() => geometryInFlight.delete(key));
+    geometryInFlight.set(key, pending);
+  }
+  return pending;
+}
 
 const field = (value: unknown) => value == null ? "" : String(value).trim();
 const service = (id: SourceId) => {
@@ -65,30 +79,31 @@ function finding(id: string, feature: GeoJSON.Feature, geometry: ParcelGeometry,
     karst: [field(p.KARST_TYPE), field(p.UNIT_AGE)].filter(Boolean).join(" · "),
     superfund: [field(p.NPL_Status), field(p.City), field(p.State)].filter(Boolean).join(" · "),
   };
-  const point = feature.geometry.type === "Point" ? feature.geometry.coordinates as [number, number] : null;
-  const distance = point ? pointToParcelMeters(point, geometry) : null;
+  const relation = spatialRelation(feature.geometry, geometry, id === "facilities" ? 500 : 0);
   const source = id === "karst" ? KARST_SERVICE : service(id as SourceId).url;
   return {
     id: `${id}:${tag}:${recordId || feature.id || JSON.stringify(feature.geometry).slice(0, 80)}`,
     name: names[id] || "Mapped feature", detail: details[id] || "",
-    relationship: distance == null ? "intersects" : distance <= 1 ? "inside" : "nearby",
-    distanceMeters: distance == null ? null : Math.round(distance),
+    relationship: relation?.relationship ?? "intersects",
+    distanceMeters: relation?.distanceMeters ?? null,
     sourceId: id, sourceRecordId: recordId,
     recordUrl: id === "roads" && /^\d+$/.test(recordId) ? `${source}/query?objectIds=${recordId}&outFields=*&f=pjson` : id === "facilities" && p.REGISTRY_ID ? `https://echo.epa.gov/detailed-facility-report?fid=${encodeURIComponent(field(p.REGISTRY_ID))}` : id === "superfund" && /^https:\/\//.test(field(p.FACILITY_URL)) ? field(p.FACILITY_URL) : source,
     recordDate: field(p.last_review ?? p.AADTYR ?? p.topoDate), geometry: feature.geometry,
+    verification: "official_map",
+    positionalAccuracyMeters: id === "facilities" && Number.isFinite(Number(p.FAC_ACCURACY_METERS)) ? Number(p.FAC_ACCURACY_METERS) : null,
   };
 }
 
 async function landGroup(id: SourceId, geometry: ParcelGeometry, isColorado: boolean, signal?: AbortSignal): Promise<InspectionGroup> {
   const meta = service(id);
-  if (id === "roads" && !isColorado) return { id, label: meta.label, source: meta.source, sourceUrl: meta.url, status: "outside_coverage", note: SOURCE_NOTES[id], findings: [] };
+  const policy = PROVIDER_POLICY[id];
+  if ("state" in policy && policy.state === "co" && !isColorado) return { id, label: meta.label, source: meta.source, sourceUrl: meta.url, status: "outside_coverage", note: policy.note, findings: [] };
   try {
-    const result = await arcgisFeatures(meta.url, geometry, SOURCE_FIELDS[id], id === "facilities" ? 500 : 0, signal);
+    const result = await arcgisFeatures(meta.url, geometry, policy.fields, policy.nearbyMeters, signal);
     const findings = result.features.map((feature) => finding(id, feature, geometry));
-    const emptyStatus = ["flood", "wetlands", "soils", "facilities", "superfund"].includes(id) ? "coverage_unknown" : "no_features";
-    return { id, label: meta.label, source: meta.source, sourceUrl: meta.url, status: result.capped ? "partial" : findings.length ? "found" : emptyStatus, note: SOURCE_NOTES[id], findings };
+    return { id, label: meta.label, source: meta.source, sourceUrl: meta.url, status: result.capped ? "partial" : findings.length ? "found" : policy.emptyStatus, note: policy.note, findings, recordLimit: 120 };
   } catch {
-    return { id, label: meta.label, source: meta.source, sourceUrl: meta.url, status: "unavailable", note: `${meta.source} did not respond. ${SOURCE_NOTES[id]}`, findings: [] };
+    return { id, label: meta.label, source: meta.source, sourceUrl: meta.url, status: "source_error", note: `${meta.source} did not respond. ${policy.note}`, findings: [] };
   }
 }
 
@@ -98,7 +113,7 @@ async function karstGroup(geometry: ParcelGeometry, signal?: AbortSignal): Promi
   const findings = settled.flatMap((entry, index) => entry.status === "fulfilled" ? entry.value.features.map((feature) => finding(id, feature, geometry, KARST_CLASSES[index].key)) : []);
   const failed = settled.filter((entry) => entry.status === "rejected").length;
   const capped = settled.some((entry) => entry.status === "fulfilled" && entry.value.capped);
-  return { id, label, source, sourceUrl, status: failed === settled.length ? "unavailable" : failed || capped ? "partial" : findings.length ? "found" : "no_features", note: "Mapped rock type only. It does not locate caves, voids, or parcel-specific sinkhole risk.", findings };
+  return { id, label, source, sourceUrl, status: failed === settled.length ? "source_error" : failed || capped ? "partial" : findings.length ? "found" : "no_features", note: "Mapped rock type only. It does not locate caves, voids, or parcel-specific sinkhole risk.", findings };
 }
 
 async function mineGroup(geometry: ParcelGeometry, signal?: AbortSignal): Promise<InspectionGroup> {
@@ -119,29 +134,59 @@ async function mineGroup(geometry: ParcelGeometry, signal?: AbortSignal): Promis
     });
     return { id, label, source, sourceUrl, status: result.truncated ? "partial" : findings.length ? "found" : "no_features", note: "Historical topographic-map symbols within 500 m. These do not delineate underground workings; mapped mine areas are not assessed here.", findings };
   } catch {
-    return { id, label, source, sourceUrl, status: "unavailable", note: "USMIN did not respond; mine records may still exist.", findings: [] };
+    return { id, label, source, sourceUrl, status: "source_error", note: "USMIN did not respond; mine records may still exist.", findings: [] };
   }
 }
 
 export async function POST(request: NextRequest) {
   let body: { parcelKey?: string; geometry?: unknown };
   try { body = await request.json(); } catch { return NextResponse.json({ error: "Invalid parcel inspection request." }, { status: 400 }); }
-  if (!PARCEL_KEY.test(body.parcelKey ?? "") || !validParcelGeometry(body.geometry)) return NextResponse.json({ error: "A valid selected parcel polygon is required." }, { status: 400 });
-  const geometry = body.geometry;
-  const cacheKey = JSON.stringify([body.parcelKey, geometry]);
+  if (!PARCEL_KEY.test(body.parcelKey ?? "") || (body.geometry !== undefined && !validParcelGeometry(body.geometry)))
+    return NextResponse.json({ error: "A valid selected parcel key is required." }, { status: 400 });
+  const parcelKey = body.parcelKey!;
+  let geometry: ParcelGeometry | null;
+  try { geometry = await resolvedGeometry(parcelKey); }
+  catch { return NextResponse.json({ error: "The parcel source could not verify this boundary. Try again shortly." }, { status: 503 }); }
+  if (!geometry) return NextResponse.json({ error: "The selected parcel was not found in its source." }, { status: 404 });
+  if (request.signal?.aborted) return NextResponse.json({ error: "Inspection cancelled." }, { status: 408 });
+  const fingerprint = createHash("sha256").update(JSON.stringify(geometry)).digest("hex");
+  const cacheKey = `${INSPECTION_VERSION}:${parcelKey}:${fingerprint}`;
   const cached = reportCache.get(cacheKey);
   if (cached && cached.expires > Date.now()) return NextResponse.json(cached.report, { headers: { "Cache-Control": "private, max-age=0" } });
-  const isColorado = body.parcelKey?.startsWith("co:") ?? false;
+  let flight = reportsInFlight.get(cacheKey);
+  if (!flight) {
+    const controller = new AbortController();
+    const promise = buildReport(cacheKey, parcelKey, geometry, controller.signal).finally(() => reportsInFlight.delete(cacheKey));
+    flight = { promise, controller, users: 0 };
+    reportsInFlight.set(cacheKey, flight);
+  }
+  flight.users++;
+  const current = flight;
+  try {
+    const report = await waitForReport(current.promise, request.signal);
+    return NextResponse.json(report, { headers: { "Cache-Control": "private, max-age=0" } });
+  } catch {
+    return NextResponse.json({ error: request.signal?.aborted ? "Inspection cancelled." : "Parcel inspection failed." }, { status: request.signal?.aborted ? 408 : 503 });
+  } finally {
+    current.users--;
+    if (current.users === 0 && reportsInFlight.get(cacheKey) === current) current.controller.abort();
+  }
+}
+
+async function buildReport(cacheKey: string, parcelKey: string, geometry: ParcelGeometry, signal: AbortSignal): Promise<ParcelInspectionReport> {
+  const isColorado = parcelKey.startsWith("co:");
   const groups = await Promise.all([
-    ...(["flood", "wetlands", "waterways", "soils", "faults", "roads", "facilities", "superfund"] as SourceId[]).map((id) => landGroup(id, geometry, isColorado, request.signal)),
-    karstGroup(geometry, request.signal), mineGroup(geometry, request.signal),
-    surveyControlGroup(geometry, request.signal), groundwaterSitesGroup(geometry, request.signal),
-    denverStormGroup(geometry, body.parcelKey!, request.signal), coloradoTankGroup(geometry, body.parcelKey!, request.signal), floridaSubsidenceGroup(geometry, body.parcelKey!, request.signal),
+    ...(Object.keys(PROVIDER_POLICY) as SourceId[]).map((id) => landGroup(id, geometry, isColorado, signal)),
+    karstGroup(geometry, signal), mineGroup(geometry, signal),
+    surveyControlGroup(geometry, signal), groundwaterSitesGroup(geometry, signal),
+    coloradoLocalRoadGroup(geometry, parcelKey, signal), coloradoBridgeGroup(geometry, parcelKey, signal),
+    denverStormGroup(geometry, parcelKey, signal), coloradoTankGroup(geometry, parcelKey, signal), floridaSubsidenceGroup(geometry, parcelKey, signal),
   ]);
-  const report: ParcelInspectionReport = { parcelKey: body.parcelKey!, checkedAt: new Date().toISOString(), groups: [...groups, ...unqueriedUtilityGroups()] };
-  if (!request.signal?.aborted && groups.every((group) => group.status !== "unavailable" && group.status !== "partial")) {
+  const checkedAt = new Date().toISOString();
+  const report: ParcelInspectionReport = { parcelKey, geometry, geometrySource: "Authoritative parcel layer; full-resolution feature", checkedAt, groups: [...groups, ...unqueriedUtilityGroups()].map((group) => ({ ...group, checkedAt, coverage: group.status === "outside_coverage" ? "outside" : "unknown" })) };
+  if (!signal.aborted && groups.every((group) => group.status !== "unavailable" && group.status !== "source_error" && group.status !== "partial")) {
     if (reportCache.size >= 12) reportCache.delete(reportCache.keys().next().value!);
     reportCache.set(cacheKey, { expires: Date.now() + 3 * 60 * 1000, report });
   }
-  return NextResponse.json(report, { headers: { "Cache-Control": "private, max-age=0" } });
+  return report;
 }

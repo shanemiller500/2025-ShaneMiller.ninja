@@ -66,7 +66,7 @@ async function discoverLayers(county: string, state: string): Promise<CountyLaye
 
 const compact = (value: unknown) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
-/** The county parcel feature that contains the point. Prefers a record whose ID or address matches the clicked parcel. */
+/** The county parcel feature that contains the point and names the selected parcel ID. */
 export async function findCountyRecord({ lng, lat, county, state, parcelId, address }: { lng: number; lat: number; county: string; state: string; parcelId: string; address: string }): Promise<CountyRecord | null> {
   const key = `${county}|${state}`.toLowerCase();
   const cached = layerCache.get(key);
@@ -79,19 +79,21 @@ export async function findCountyRecord({ lng, lat, county, state, parcelId, addr
     const params = new URLSearchParams({ geometry: `${lng},${lat}`, geometryType: "esriGeometryPoint", inSR: "4326", spatialRel: "esriSpatialRelIntersects", outFields: "*", returnGeometry: "false", f: "json", ...(bufferMeters ? { distance: String(bufferMeters), units: "esriSRUnit_Meter" } : {}) });
     try { return ((await getJson(`${layer.url}/query?${params}`, 7000)).features ?? []).slice(0, 40).map((feature: { attributes?: Record<string, unknown> }) => ({ layer, attributes: feature.attributes ?? {} })); } catch { return []; }
   }))).flat() as CountyRecord[];
-  // Only a record that names this parcel counts: its ID, or its street address. A neighbour or a right-of-way strip never does.
+  // An address can be shared or stale, so it only breaks ties between matching parcel IDs.
   const id = compact(parcelId), idDigits = parcelId.replace(/\D/g, ""), street = compact(address.split(",")[0]);
   const [houseNumber, streetName] = address.split(",")[0].trim().split(/\s+/).filter((part) => !/^[NSEW]$/i.test(part)).map(compact);
   const score = ({ attributes }: CountyRecord) => {
     const values = Object.values(attributes).map(compact);
     // Feeds and counties format IDs differently ("033-8823900910" vs "8823900910"): equal, or one ends with the other (8+ digits).
-    const sameId = (id.length >= 4 && values.includes(id)) || Object.values(attributes).some((value) => {
+    const sameId = Object.entries(attributes).some(([field, value]) => {
+      if (!/(?:^|_)(?:parcel|folio|apn|pin|account|tax.?id|parno|property.?id)(?:_|$)/i.test(field) && !/^(?:parcel|folio|apn|pin|account|taxid|parno|propertyid)/i.test(field)) return false;
+      if (id.length >= 4 && compact(value) === id) return true;
       const digits = String(value ?? "").replace(/\D/g, "");
       return digits.length >= 8 && idDigits.length >= 8 && (digits === idDigits || idDigits.endsWith(digits) || digits.endsWith(idDigits)) && String(value).replace(/[\d\s-]/g, "").length <= 2;
     });
     // Whole address in one field, or house number and street name in separate fields.
     const sameAddress = (street.length > 6 && values.includes(street)) || (!!houseNumber && /^\d+$/.test(houseNumber) && !!streetName && values.includes(houseNumber) && values.some((value) => value === streetName || value.startsWith(streetName)));
-    const match = (sameId ? 4 : 0) + (sameAddress ? 2 : 0);
+    const match = sameId ? 4 + (sameAddress ? 2 : 0) : 0;
     return match && match + Object.values(attributes).filter((value) => value != null && value !== "" && value !== 0).length / 1000;
   };
   const pick = (records: CountyRecord[]) => records.map((record) => ({ record, score: score(record) })).filter((item) => item.score > 0).sort((a, b) => b.score - a.score)[0]?.record ?? null;

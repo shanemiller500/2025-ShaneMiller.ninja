@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 export const BOULDER_DATA_URL = 'https://assessor.boco.solutions/ASR_PublicDataFiles/';
 export const TABLES = ['Account_Parcels', 'Owner_Address', 'Buildings', 'Land', 'Permits', 'Sales', 'Values'];
@@ -34,7 +35,7 @@ export async function* csvRows(stream) {
   if (cell || cells.length) { cells.push(cell.replace(/\r$/, '')); if (headers) yield record(headers, cells); }
 }
 
-const blankAccount = (accountNo) => ({ accountNo, siteAddress: '', owners: [], subdivision: '', legalDescription: '', taxArea: '', millLevy: null, accountType: '', landUses: [], buildings: [], sales: [], permits: [], values: null });
+const blankAccount = (accountNo) => ({ accountNo, linkedParcelCount: 1, siteAddress: '', owners: [], subdivision: '', legalDescription: '', taxArea: '', millLevy: null, accountType: '', landUses: [], buildings: [], sales: [], permits: [], values: null });
 export function createBoulderIndex() {
   const parcels = new Map(), accountToFolios = new Map();
   let sourceDate = '';
@@ -48,7 +49,7 @@ export function createBoulderIndex() {
   const ingest = (table, row) => {
     const accountNo = field(row, 'strap', 'accountNo');
     if (table === 'Account_Parcels') {
-      const folio = field(row, 'folio');
+      const folio = field(row, 'folio', 'Parcelno');
       if (!folio || !accountNo) return;
       if (!accountToFolios.has(accountNo)) accountToFolios.set(accountNo, new Set());
       accountToFolios.get(accountNo).add(folio);
@@ -67,11 +68,11 @@ export function createBoulderIndex() {
       } else if (table === 'Buildings') account.buildings.push({ buildingNumber: field(row, 'bld_num'), design: field(row, 'designCodeDscr', 'bldgClassDscr'), yearBuilt: positive(field(row, 'builtYear')), effectiveYear: positive(field(row, 'EffectiveYear')), bedrooms: number(field(row, 'nbrBedRoom')), fullBaths: number(field(row, 'nbrFullBaths')), halfBaths: number(field(row, 'nbrHalfBaths')), threeQuarterBaths: number(field(row, 'nbrThreeQtrBaths')), mainFloorSqft: positive(field(row, 'mainfloorSF')), basementSqft: positive(field(row, 'bsmtSF')), garageSqft: positive(field(row, 'carStorageSF')) });
       else if (table === 'Land') { const use = field(row, 'landClassDscr'); if (use && !account.landUses.includes(use)) account.landUses.push(use); }
       else if (table === 'Sales') account.sales.push({ date: field(row, 'Tdate'), price: positive(field(row, 'Price')), qualification: field(row, 'sales_cd'), deedType: field(row, 'deed_type'), reception: field(row, 'deedNum') });
-      else if (table === 'Permits') account.permits.push({ number: field(row, 'permit_num'), date: field(row, 'issue_dt'), description: field(row, 'Description'), estimatedValue: positive(field(row, 'estimated_value')), issuedBy: field(row, 'issued_by') });
-      else if (table === 'Values') account.values = { taxYear: field(row, 'tax_yr'), actualTotal: number(field(row, 'totalActualVal')), actualLand: number(field(row, 'landActualVal')), actualBuildings: number(field(row, 'bldActualVal')), assessedTotal: number(field(row, 'totalAssessedVal')) };
+      else if (table === 'Permits') account.permits.push({ number: field(row, 'permit_num'), category: field(row, 'permit_category'), date: field(row, 'issue_dt'), description: field(row, 'Description'), estimatedValue: positive(field(row, 'estimated_value')), issuedBy: field(row, 'issued_by') });
+      else if (table === 'Values') account.values = { taxYear: field(row, 'tax_yr'), actualTotal: number(field(row, 'totalActualVal')), actualLand: number(field(row, 'LandAcutalVal', 'landActualVal')), actualBuildings: number(field(row, 'bldAcutalVal', 'bldActualVal')), assessedTotal: number(field(row, 'totalAssessedVal')) };
     }
   };
-  return { parcels, ingest, get sourceDate() { return sourceDate; } };
+  return { parcels, accountToFolios, ingest, get sourceDate() { return sourceDate; } };
 }
 
 export function bucketForFolio(folio) {
@@ -98,13 +99,15 @@ export async function buildBoulderSnapshot({ inputDir, outputDir, fetchImpl = fe
     process.stdout.write(`${name}: ${count.toLocaleString()} rows\n`);
   }
   if (parcels.size === 0) throw new Error('No Boulder parcel records were joined');
+  for (const parcel of parcels.values()) for (const account of parcel.accounts)
+    account.linkedParcelCount = index.accountToFolios.get(account.accountNo)?.size ?? 1;
   const snapshot = `snapshot-${new Date().toISOString().replace(/[:.]/g, '-')}`;
   const snapshotDir = join(outputDir, snapshot);
   await mkdir(snapshotDir, { recursive: true });
   const buckets = new Map();
   for (const [folio, parcel] of parcels) { const bucket = bucketForFolio(folio); if (!buckets.has(bucket)) buckets.set(bucket, {}); buckets.get(bucket)[folio] = parcel; }
-  for (const [bucket, records] of buckets) await writeFile(join(snapshotDir, `${bucket}.json`), JSON.stringify(records));
-  const manifest = { updatedAt: new Date().toISOString(), sourceDate: index.sourceDate, snapshot, parcelCount: parcels.size, source: 'Boulder County Assessor public CSV', sourceUrl: 'https://bouldercounty.gov/property-and-land/assessor/data-download/' };
+  for (const [bucket, records] of buckets) await writeFile(join(snapshotDir, `${bucket}.json.gz`), gzipSync(JSON.stringify(records), { level: 6 }));
+  const manifest = { updatedAt: new Date().toISOString(), sourceDate: index.sourceDate, snapshot, format: 'json-gzip-v1', parcelCount: parcels.size, source: 'Boulder County Assessor public CSV', sourceUrl: 'https://bouldercounty.gov/property-and-land/assessor/data-download/' };
   const temporary = join(outputDir, 'manifest.next.json'); await writeFile(temporary, JSON.stringify(manifest)); await rename(temporary, join(outputDir, 'manifest.json'));
   return manifest;
 }
@@ -113,6 +116,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const inputAt = process.argv.indexOf('--input');
   const inputDir = inputAt >= 0 ? resolve(process.argv[inputAt + 1] ?? '') : undefined;
   if (inputAt >= 0 && !process.argv[inputAt + 1]) throw new Error('--input needs a directory of Boulder County CSV files');
-  const outputDir = resolve('public/land-intelligence/boulder');
+  // Keep the joined county snapshot out of Next.js public static assets.
+  const outputDir = resolve('data/land-intelligence/boulder');
   buildBoulderSnapshot({ inputDir, outputDir }).then((manifest) => process.stdout.write(`Boulder snapshot: ${manifest.parcelCount.toLocaleString()} parcels\n`)).catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
 }

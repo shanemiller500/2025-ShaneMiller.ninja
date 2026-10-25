@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const detail = await queryParcelDetail(key);
     if (!detail) return NextResponse.json({ error: "This parcel record was not found in the public source." }, { status: 404 });
     if (key.startsWith("co:") && detail.parcel.county.toLowerCase() === "boulder") detail.boulder = await loadBoulderProperty(detail.parcel.id);
-    return NextResponse.json({ detail }, { headers: { "Cache-Control": "public, s-maxage=300" } });
+    return NextResponse.json({ detail }, { headers: { "Cache-Control": "private, max-age=0" } });
   } catch {
     return NextResponse.json({ error: "The public property record could not be loaded. Try the source link below." }, { status: 503 });
   }
