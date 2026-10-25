@@ -302,3 +302,15 @@ test('road segment reports an alert outage separately from an empty crash result
   assert.equal(result.body.crashes.status, 'none');
   assert.equal(result.body.alerts.status, 'unavailable');
 });
+
+test('map identify retains the CDOT segment ID for interactive road details', async () => {
+  const fetchMock = async (_url, options) => {
+    const params = new URLSearchParams(String(options.body));
+    assert.match(params.get('outFields'), /OBJECTID/);
+    return { ok: true, json: async () => ({ features: [{ attributes: { OBJECTID: 33, ROUTE: 'US-6', SPEEDLIM: 45 } }] }) };
+  };
+  const { POST } = load('app/api/land-intelligence/identify/route.ts', fetchMock);
+  const response = await POST({ json: async () => ({ lng: -105, lat: 40, layers: ['roads'] }) });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.results[0].features[0].OBJECTID, 33);
+});

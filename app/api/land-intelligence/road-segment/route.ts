@@ -36,7 +36,7 @@ async function crashRecords(line: RoadLine, signal: AbortSignal): Promise<RoadSo
   try {
     const params = new URLSearchParams({ where: "YEAR=2024", geometry: envelope(roadBounds(line, 60)), geometryType: "esriGeometryEnvelope", inSR: "4326", outSR: "4326", spatialRel: "esriSpatialRelIntersects", outFields: CRASH_FIELDS, returnGeometry: "true", resultRecordCount: "500", f: "geojson" });
     const result = await query(CRASH_SOURCE, params, signal);
-    const items = result.features.slice(0, 100).flatMap((feature) => {
+    const items = result.features.flatMap((feature) => {
       if (feature.geometry?.type !== "Point") return [];
       const distance = pointToRoadMeters(feature.geometry.coordinates as [number, number], line);
       if (distance > 50) return [];
@@ -52,7 +52,7 @@ async function activeAlerts(line: RoadLine, signal: AbortSignal): Promise<RoadSo
   try {
     const params = new URLSearchParams({ where: "1=1", geometry: envelope(roadBounds(line, 100)), geometryType: "esriGeometryEnvelope", inSR: "4326", outSR: "4326", spatialRel: "esriSpatialRelIntersects", outFields: ALERT_FIELDS, returnGeometry: "true", resultRecordCount: "500", f: "geojson" });
     const result = await query(ALERT_SOURCE, params, signal);
-    const items = result.features.flatMap((feature) => {
+    const items = result.features.slice(0, 100).flatMap((feature) => {
       if (!validRoadLine(feature.geometry)) return [];
       if (linesNearMeters(feature.geometry, line) > 75) return [];
       const p = feature.properties ?? {};

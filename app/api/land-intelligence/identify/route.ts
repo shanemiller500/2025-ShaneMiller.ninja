@@ -6,7 +6,7 @@ const SOURCES = {
   waterways: { url: "https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/6", label: "Mapped waterway", fields: ["GNIS_NAME", "FTYPE", "FCODE"] },
   contours: { url: "https://carto.nationalmap.gov/arcgis/rest/services/contours/MapServer/25", label: "USGS index contour", fields: ["contourelevation", "contourunits", "contourinterval"] },
   faults: { url: "https://earthquake.usgs.gov/arcgis/rest/services/haz/Qfaults/MapServer/21", label: "Mapped fault", fields: ["fault_name", "age", "mapped_certainty"] },
-  roads: { url: "https://dtdapps.codot.gov/server/rest/services/Webapps/HighwaySegments/MapServer/2", label: "Colorado highway", fields: ["ROUTE", "ALIAS", "AADT", "AADTYR", "SPEEDLIM"] },
+  roads: { url: "https://dtdapps.codot.gov/server/rest/services/Webapps/HighwaySegments/MapServer/2", label: "Colorado highway", fields: ["OBJECTID", "ROUTE", "ALIAS", "AADT", "AADTYR", "SPEEDLIM"] },
   facilities: { url: "https://echogeo.epa.gov/arcgis/rest/services/ECHO/Facilities/MapServer/0", label: "EPA facility", fields: ["FAC_NAME", "REGISTRY_ID", "FAC_CITY", "FAC_STATE"] },
 } as const;
 type SourceId = keyof typeof SOURCES;

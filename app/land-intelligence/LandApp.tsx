@@ -22,7 +22,7 @@ import { downloadReport } from "./export-report";
 import { EvidenceSummary, TerrainCard } from "./SiteAnalysis";
 import type { Facility, Finding, Report, FeatureSet, Parcel, Road, TerrainResult } from "./report-types";
 
-type Mode = "browse" | ShapeKind;
+type Mode = "browse" | "road" | ShapeKind;
 type SearchResult = { label: string; center: Coord };
 type SoilSelection = { kind: "soil"; point: Coord; properties: Record<string, string | number | null> };
 type ParcelSelection = { kind: "parcel"; point: Coord; properties: ParcelRecord & { parcelKey: string } };
@@ -302,17 +302,6 @@ export default function LandApp() {
   }, [map, visibleLayers]);
 
   useEffect(() => {
-    if (!map) return;
-    const update = () => {
-      const objectid = inspection?.kind === "soil" ? Number(inspection.properties.objectid) : -1;
-      if (map.getLayer("land-soils-selected")) map.setFilter("land-soils-selected", ["==", ["get", "objectid"], Number.isFinite(objectid) ? objectid : -1]);
-    };
-    map.on("style.load", update);
-    update();
-    return () => { map.off("style.load", update); };
-  }, [map, inspection]);
-
-  useEffect(() => {
     if (inspection?.kind !== "soil") { setSoilComponents(null); setSoilDetailError(""); return; }
     const key = String(inspection.properties.mukey ?? "");
     const controller = new AbortController();
@@ -325,11 +314,11 @@ export default function LandApp() {
     return () => controller.abort();
   }, [inspection]);
 
-  const inspectOtherAt = useCallback((point: Coord) => {
+  const inspectOtherAt = useCallback((point: Coord, roadsOnly = false) => {
     if (!map) return;
     setShowReport(false);
     identifyController.current?.abort();
-    const layers = LAND_OVERLAYS.filter((layer) => layer.id !== "soils" && layer.id !== "parcels" && layer.id !== "crashes" && layer.id !== "facilities" && visibleLayers[`land-${layer.id}`] && map.getZoom() >= layer.minzoom).map((layer) => layer.id);
+    const layers = roadsOnly ? ["roads"] : LAND_OVERLAYS.filter((layer) => layer.id !== "soils" && layer.id !== "parcels" && layer.id !== "crashes" && layer.id !== "facilities" && visibleLayers[`land-${layer.id}`] && map.getZoom() >= layer.minzoom).map((layer) => layer.id);
     if (!layers.length) { setInspection({ kind: "overlay", results: [] }); setInspectionLoading(false); return; }
     const controller = new AbortController();
     identifyController.current = controller;
@@ -344,6 +333,7 @@ export default function LandApp() {
   useEffect(() => {
     if (!map) return;
     const click = (event: maplibregl.MapMouseEvent) => {
+      if (mode === "road") { inspectOtherAt([event.lngLat.lng, event.lngLat.lat], true); setMode("browse"); return; }
       if (mode === "browse") {
         identifyController.current?.abort();
         // Small points get a finger-sized target: anything within 10 px of the tap.
@@ -535,6 +525,7 @@ export default function LandApp() {
       <div className="li-scroll-x pointer-events-auto flex max-w-full gap-2 overflow-x-auto md:contents">
       <div className="flex shrink-0 rounded-2xl border border-white/15 li-panel bg-slate-950/90 p-1.5 shadow-2xl backdrop-blur-xl md:block">
         <button type="button" onClick={() => setMode("browse")} title="Click mapped features to inspect them" aria-pressed={mode === "browse"} className={`flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-medium transition-colors md:w-full md:gap-2 md:px-3 md:py-2.5 md:text-xs ${mode === "browse" ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><CircleHelp className="h-4 w-4" />Inspect</button>
+        <button type="button" onClick={() => { setVisibleLayers((current) => ({ ...current, "land-roads": true })); setMode("road"); setShowReport(false); }} title="Tap a Colorado highway segment for crashes, incidents, and conditions" aria-pressed={mode === "road"} className={`flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-medium transition-colors md:w-full md:gap-2 md:px-3 md:py-2.5 md:text-xs ${mode === "road" ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><Route className="h-4 w-4" />Roads</button>
         {TOOL.map(({ id, label, icon: Icon, hint }) => <button key={id} type="button" onClick={() => startTool(id)} title={hint} aria-pressed={mode === id} className={`flex items-center gap-1.5 rounded-xl px-2 py-2 text-left text-[11px] font-medium transition-colors md:w-full md:gap-2 md:px-3 md:py-2.5 md:text-xs ${mode === id ? "bg-cyan-400 text-slate-950" : "text-slate-200 hover:bg-white/10"}`}><Icon className="h-4 w-4" />{label}</button>)}
       </div>
       <div className="flex shrink-0 gap-1 rounded-2xl border border-white/15 li-panel bg-slate-950/90 p-1.5 shadow-2xl backdrop-blur-xl md:flex-col">
@@ -558,20 +549,8 @@ export default function LandApp() {
     </div>
 
     <MapKey open={showKey} soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} facilities={!!visibleLayers["land-facilities"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} facilityStatus={facilityStatus} />
+    {mode === "road" && <div role="status" className="pointer-events-none absolute bottom-5 left-1/2 z-20 w-[min(360px,calc(100vw-24px))] -translate-x-1/2 rounded-xl border border-cyan-300/30 li-panel bg-slate-950/95 px-3 py-2 text-center text-[11px] font-medium text-cyan-200 shadow-xl">Tap a Colorado highway line to inspect that segment. Zoom in to level 9+ to see the road layer.</div>}
     <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} parcelInspection={parcelInspection} parcelGeometry={inspection?.kind === "parcel" && selectedParcel?.properties?.parcelKey === inspection.properties.parcelKey && (selectedParcel.geometry.type === "Polygon" || selectedParcel.geometry.type === "MultiPolygon") ? selectedParcel.geometry as ParcelGeometry : null} parcelInspectionLoading={parcelInspectionLoading} parcelInspectionError={parcelInspectionError} visibleFindingGroups={Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [group.id, visibleLayers[`parcel-inspection-${group.id}`] !== false]))} selectedFindingId={selectedFindingId} onToggleFindingGroup={(id) => setVisibleLayers((current) => ({ ...current, [`parcel-inspection-${id}`]: current[`parcel-inspection-${id}`] === false }))} onSetFindingGroupsVisible={(ids, shown) => setVisibleLayers((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [`parcel-inspection-${id}`, shown])) }))} onSelectFinding={(finding: ParcelFinding) => setSelectedFindingId(finding.id)} onInspectOther={inspectOtherAt} onClose={() => { identifyController.current?.abort(); setInspection(null); setSelectedParcel(null); setSelectedFindingId(null); setInspectionLoading(false); }} />
-
-    {/* Drawing hints: on phones only while drawing, so a finished result leaves the map clear. */}
-    <div className={`pointer-events-none absolute bottom-3 left-3 right-3 z-10 flex-col items-start gap-2 md:bottom-5 md:left-5 md:right-auto ${(shape && complete) || inspection ? "hidden md:flex" : "flex"}`}>
-      <div className="pointer-events-auto max-w-[340px] rounded-2xl border border-white/15 li-panel bg-slate-950/90 px-4 py-3 text-xs shadow-2xl backdrop-blur-xl">
-        <p className="font-semibold text-white">{mode === "pin" ? "Drop a pin" : mode === "line" ? "Trace a route" : mode === "area" ? "Outline an area" : shape ? "Study shape ready" : "Inspect the map"}</p>
-        <p className="mt-1 leading-relaxed text-slate-300">{mode === "pin" ? "Click the map, or search for a U.S. address." : mode === "line" || mode === "area" ? "Click each corner, then finish. Drag any point to adjust it." : shape ? "Drag a point to refine the report." : "Tap a parcel or mapped feature, or search a U.S. address. Use Route or Area to study a corridor or site."}</p>
-        {measure && <div className="mt-2 font-mono text-cyan-200">{measure}</div>}
-        {shape && shape.kind !== "pin" && !complete && <p className="mt-1 font-mono text-[10px] text-slate-400">{shape.points.length}/40 points{shape.points.length === 40 ? " · finish or undo to change" : ""}</p>}
-        {(mode === "line" || mode === "area") && <div className="mt-3 flex gap-2"><button type="button" onClick={finish} disabled={!shape || !validShape(shape)} className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-400 px-3 py-1.5 font-semibold text-slate-950 disabled:opacity-40"><Check className="h-3.5 w-3.5" />Finish</button><button type="button" onClick={undo} disabled={!shape?.points.length} className="inline-flex items-center gap-1 rounded-lg border border-white/20 px-2.5 py-1.5 text-slate-200 disabled:opacity-40"><Undo2 className="h-3.5 w-3.5" />Undo</button></div>}
-        {shape && shape.kind !== "pin" && shape.points.length >= (shape.kind === "area" ? 3 : 2) && !validShape(shape) && <p className="mt-2 text-[10px] text-amber-200">The drawing crosses itself or is too small. Undo or drag a point to fix it.</p>}
-      </div>
-      <div className="pointer-events-auto hidden items-center gap-1.5 rounded-xl border border-white/10 li-panel bg-slate-950/75 px-2.5 py-1.5 font-mono text-[10px] text-slate-300 backdrop-blur md:flex"><CircleHelp className="h-3 w-3" /> Screening only · source detail in report</div>
-    </div>
 
     {shape && complete && <div className={`pointer-events-auto absolute z-20 overflow-hidden rounded-2xl border border-white/15 li-panel bg-slate-950/95 shadow-2xl backdrop-blur-xl transition-all ${showReport ? "bottom-0 left-0 right-0 max-h-[45dvh] rounded-b-none border-x-0 border-b-0 md:bottom-5 md:left-auto md:right-5 md:max-h-[calc(100vh-130px)] md:w-[380px] md:rounded-2xl md:border" : "bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-3 w-auto md:bottom-5 md:right-5"}`}>
       <button type="button" onClick={() => setShowReport((value) => !value)} className="flex w-full items-center justify-between gap-4 border-b border-white/10 px-4 py-3 text-left text-sm font-semibold"><span>Location report</span>{showReport ? <Minus className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>

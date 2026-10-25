@@ -5,6 +5,7 @@ import { BadgeDollarSign, Building2, CalendarDays, Database, FileText, Hammer, H
 import type { ParcelRecord } from "./parcel-sources";
 import type { ParcelFinding, ParcelGeometry, ParcelInspectionReport } from "./parcel-inspection";
 import { ParcelFindings } from "./ParcelFindings";
+import { RoadSegmentDetails } from "./RoadSegmentDetails";
 import type { ParcelDetail } from "./parcel-detail";
 import type { BoulderAccount, BoulderProperty } from "./boulder-property";
 import type { FatalCrash } from "./crash";
@@ -62,9 +63,14 @@ export function MapInspection({ inspection, loading, components, error, property
       <p className="text-slate-400">2024 FARS initial release. Fatal crashes only; locations and case details are reported by the source.</p>
       <a href={inspection.properties.sourceUrl} target="_blank" rel="noopener noreferrer" className="block text-cyan-300 underline">USDOT / NHTSA source ↗</a>
     </div>}
-    {inspection?.kind === "overlay" && <div className="mt-3 space-y-2">{inspection.results.flatMap((result) => result.features.map((feature, index) => <section key={`${result.id}-${index}`} className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><h3 className="font-semibold text-white">{result.label}</h3><dl className="mt-1.5 space-y-1 text-[11px]">{Object.entries(feature).map(([key, value]) => <div key={key} className="grid grid-cols-[110px_1fr] gap-2"><dt className="text-slate-400">{key.replaceAll("_", " ")}</dt><dd className="break-words text-slate-100">{String(value)}</dd></div>)}</dl><a href={result.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-[10px] text-cyan-300 underline">Source service ↗</a></section>))}{!inspection.results.some((result) => result.features.length) && <p className="text-slate-300">No mapped feature returned at this click. Turn on layers or click a visible feature; a blank result does not establish absence.</p>}{inspection.results.some((result) => result.status === "unavailable") && <p className="text-amber-200">Some source services did not respond.</p>}</div>}
+    {inspection?.kind === "overlay" && <div className="mt-3 space-y-2">{inspection.results.flatMap((result) => result.features.map((feature, index) => <section key={`${result.id}-${index}`} className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><h3 className="font-semibold text-white">{result.label}</h3><dl className="mt-1.5 space-y-1 text-[11px]">{Object.entries(feature).map(([key, value]) => <div key={key} className="grid grid-cols-[110px_1fr] gap-2"><dt className="text-slate-400">{key.replaceAll("_", " ")}</dt><dd className="break-words text-slate-100">{String(value)}</dd></div>)}</dl>{result.id === "roads" && Number.isSafeInteger(Number(feature.OBJECTID)) && Number(feature.OBJECTID) > 0 && <RoadOverlayControl segmentId={String(feature.OBJECTID)} />}<a href={result.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-[10px] text-cyan-300 underline">Source service ↗</a></section>))}{!inspection.results.some((result) => result.features.length) && <p className="text-slate-300">No mapped feature returned at this click. Turn on layers or click a visible feature; a blank result does not establish absence.</p>}{inspection.results.some((result) => result.status === "unavailable") && <p className="text-amber-200">Some source services did not respond.</p>}</div>}
     </div>
   </aside>;
+}
+
+function RoadOverlayControl({ segmentId }: { segmentId: string }) {
+  const [open, setOpen] = useState(false);
+  return <div className="mt-2"><button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="rounded-lg border border-cyan-300/40 px-2.5 py-1.5 text-[11px] font-semibold text-cyan-200 hover:bg-cyan-400/10">{open ? "Hide" : "View"} crashes, incidents, and conditions for this segment</button>{open && <RoadSegmentDetails segmentId={segmentId} />}</div>;
 }
 
 const money = (amount: number | null) => amount == null ? "Not in this feed" : `$${amount.toLocaleString()}`;

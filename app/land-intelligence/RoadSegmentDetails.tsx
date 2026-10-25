@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { RoadSegmentReport, RoadSourceResult } from "./road-segment";
+import { CDOT_CRASH_URL, CONDITIONS_URL, ROAD_SOURCE, type RoadSegmentReport, type RoadSourceResult } from "./road-segment";
 
 const statusText = <T,>(source: RoadSourceResult<T>, noun: string) => source.status === "unavailable" ? `${noun} source unavailable` : source.status === "partial" ? `${source.items.length} ${noun.toLowerCase()} shown · incomplete source response` : source.items.length ? `${source.items.length} ${noun.toLowerCase()} mapped nearby` : `No ${noun.toLowerCase()} returned`;
 const fact = (value: string | number | null, suffix = "") => value == null || value === "" ? "Not reported" : `${value}${suffix}`;
@@ -25,7 +25,7 @@ export function RoadSegmentDetails({ segmentId }: { segmentId: string }) {
   return <div className="mt-2 space-y-2 border-t border-white/10 pt-2 text-[10px] leading-relaxed">
     <h5 className="text-[11px] font-semibold text-white">CDOT highway segment {segmentId}</h5>
     {loading && <p role="status" className="text-cyan-200">Loading segment crashes, alerts, and attributes…</p>}
-    {error && <p role="alert" className="text-amber-200">{error}</p>}
+    {error && <><p role="alert" className="text-amber-200">{error}</p><p className="flex flex-wrap gap-x-3 gap-y-1"><a href={`${ROAD_SOURCE}/query?objectIds=${encodeURIComponent(segmentId)}&outFields=*&f=pjson`} target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">CDOT segment ↗</a><a href={CDOT_CRASH_URL} target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">CDOT crash data ↗</a><a href={CONDITIONS_URL} target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">Current COtrip conditions ↗</a></p></>}
     {report && <>
       <p className="text-slate-300">{[report.road.route, report.road.alias, report.road.city, report.road.county].filter(Boolean).join(" · ") || "CDOT highway"}{report.road.fromMile != null && report.road.toMile != null ? ` · mile ${report.road.fromMile}–${report.road.toMile}` : ""}</p>
       <div className="grid grid-cols-2 gap-2 rounded-md border border-white/10 p-2 text-slate-300"><p><span className="block text-slate-400">Speed limit</span>{fact(report.road.speedLimit, " mph")}</p><p><span className="block text-slate-400">Traffic volume</span>{report.road.aadt == null ? "Not reported" : `${report.road.aadt.toLocaleString()} vehicles/day${report.road.aadtYear ? ` (${report.road.aadtYear})` : ""}`}</p><p><span className="block text-slate-400">Surface type</span>{fact(report.road.surface)}</p><p><span className="block text-slate-400">Through lanes</span>{fact(report.road.lanes)}</p></div>
