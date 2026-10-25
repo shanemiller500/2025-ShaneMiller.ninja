@@ -21,6 +21,27 @@
 .li-app:not(.dark) .li-panel input::placeholder { color: #64748b; }
 .li-app:not(.dark) .li-panel button:hover:not(:disabled) { filter: brightness(.96); }
 .li-app:not(.dark) .li-panel button[aria-pressed="true"] { color: #082f49; }
+.li-inspection { background: rgba(9, 21, 38, .88); }
+.li-inspection-overview { background: #172b43; }
+.li-inspection-discipline { background: #14253c; border-color: #35506a; }
+.li-inspection-source { background: #1c3049; border-color: #40566d; }
+.li-inspection-record { background: #14253b; border-color: #40566d; }
+.li-inspection-record button[aria-pressed="true"] { background: #174763; }
+.li-inspection-action { border: 1px solid #55748b; color: #b8edf8; }
+.li-inspection-action:hover:not(:disabled) { background: #24435a; }
+.li-inspection-action:disabled { opacity: .45; }
+.li-inspection-download { background: #174763; color: #b8edf8; border: 1px solid #418ba2; }
+.li-inspection-download:hover { background: #205a76; }
+.li-app:not(.dark) .li-panel .li-inspection { background: #fff; border-color: #a8d5df; }
+.li-app:not(.dark) .li-panel .li-inspection-overview { background: #eaf5f8; }
+.li-app:not(.dark) .li-panel .li-inspection-discipline { background: #f7fafc; border-color: #c5d4df; }
+.li-app:not(.dark) .li-panel .li-inspection-source { background: #fff; border-color: #cbd5e1; }
+.li-app:not(.dark) .li-panel .li-inspection-record { background: #f8fafc; border-color: #d5e0e8; }
+.li-app:not(.dark) .li-panel .li-inspection-record button[aria-pressed="true"] { background: #d9f2f8; }
+.li-app:not(.dark) .li-panel .li-inspection-action { border-color: #87b8c4; color: #075f74; }
+.li-app:not(.dark) .li-panel .li-inspection-action:hover:not(:disabled) { background: #e3f5f8; }
+.li-app:not(.dark) .li-panel .li-inspection-download { background: #dcf6fa; color: #075f74; border-color: #91dce9; }
+.li-app:not(.dark) .li-panel .li-inspection-download:hover { background: #c6edf4; }
 .li-scroll-x { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .li-scroll-x::-webkit-scrollbar { display: none; }
 @media (prefers-reduced-motion: reduce) {

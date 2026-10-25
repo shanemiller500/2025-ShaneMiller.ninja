@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BadgeDollarSign, Building2, CalendarDays, Database, FileText, Hammer, House, Landmark, MapPinned, Receipt, RotateCcw, Scale, Sparkles, Sprout, UserRound, Waves, X, type LucideIcon } from "lucide-react";
 import type { ParcelRecord } from "./parcel-sources";
+import type { ParcelFinding, ParcelGeometry, ParcelInspectionReport } from "./parcel-inspection";
+import { ParcelFindings } from "./ParcelFindings";
 import type { ParcelDetail } from "./parcel-detail";
 import type { BoulderAccount, BoulderProperty } from "./boulder-property";
 import type { FatalCrash } from "./crash";
@@ -18,9 +20,12 @@ type FacilitySelection = { kind: "facility"; point: [number, number]; properties
 type OverlaySelection = { kind: "overlay"; results: { id: string; label: string; url: string; status: string; features: Record<string, unknown>[] }[] };
 type SoilComponent = { name: string; percentage: number | null; hydric: string; drainage: string; classification: string; slopePercent: number | null };
 
-export function MapInspection({ inspection, loading, components, error, propertyDetail, propertyLoading, propertyError, onClose, onInspectOther }: {
+export function MapInspection({ inspection, loading, components, error, propertyDetail, propertyLoading, propertyError, parcelInspection, parcelGeometry, parcelInspectionLoading, parcelInspectionError, visibleFindingGroups, selectedFindingId, onToggleFindingGroup, onSetFindingGroupsVisible, onSelectFinding, onClose, onInspectOther }: {
   inspection: SoilSelection | ParcelSelection | CrashSelection | FacilitySelection | OverlaySelection | null; loading: boolean; components: SoilComponent[] | null; error: string;
   propertyDetail: ParcelDetail | null; propertyLoading: boolean; propertyError: string;
+  parcelInspection: ParcelInspectionReport | null; parcelGeometry: ParcelGeometry | null; parcelInspectionLoading: boolean; parcelInspectionError: string;
+  visibleFindingGroups: Record<string, boolean>; selectedFindingId: string | null;
+  onToggleFindingGroup: (id: string) => void; onSetFindingGroupsVisible: (ids: string[], visible: boolean) => void; onSelectFinding: (finding: ParcelFinding) => void;
   onClose: () => void; onInspectOther: (point: [number, number]) => void;
 }) {
   // Phones only: the sheet can shrink to its title bar so the map stays usable.
@@ -45,7 +50,8 @@ export function MapInspection({ inspection, loading, components, error, property
       <a href="https://websoilsurvey.nrcs.usda.gov/" target="_blank" rel="noopener noreferrer" className="inline-block text-[11px] text-cyan-300 underline">Validate in USDA Web Soil Survey ↗</a>
     </div>}
     {inspection?.kind === "parcel" && <div className="mt-3 space-y-3">
-      <ParcelBody key={inspection.properties.parcelKey} inspection={inspection} detail={propertyDetail} loading={propertyLoading} error={propertyError} />
+      <ParcelFindings report={parcelInspection?.parcelKey === inspection.properties.parcelKey ? parcelInspection : null} geometry={parcelGeometry} heading={{ name: inspection.properties.address || `Parcel ${inspection.properties.id || "record"}`, id: inspection.properties.id || inspection.properties.parcelKey, locality: [inspection.properties.county, inspection.properties.state].filter(Boolean).join(", "), sourceUrl: inspection.properties.recordUrl || inspection.properties.sourceUrl }} loading={parcelInspectionLoading} error={parcelInspectionError} visible={visibleFindingGroups} selectedId={selectedFindingId} onToggle={onToggleFindingGroup} onSetVisible={onSetFindingGroupsVisible} onSelect={onSelectFinding} />
+      <details className="li-property-details rounded-xl border border-white/10"><summary className="cursor-pointer px-3 py-2.5 text-[11px] font-semibold text-white">Property record and site context</summary><div className="space-y-3 border-t border-white/10 p-2.5"><ParcelBody key={inspection.properties.parcelKey} inspection={inspection} detail={propertyDetail} loading={propertyLoading} error={propertyError} /></div></details>
       {(propertyDetail?.parcel.recordUrl || inspection.properties.recordUrl) && <a href={propertyDetail?.parcel.recordUrl || inspection.properties.recordUrl} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-cyan-300 underline">County parcel record ↗</a>}
       {inspection.properties.state === "Colorado" && inspection.properties.county.toLowerCase() === "boulder" && <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-cyan-300 underline"><a href="https://bouldercounty.gov/departments/assessor/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1"><Landmark className="h-3 w-3" />Assessor search ↗</a><a href="https://bouldercounty.gov/departments/treasurer/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1"><BadgeDollarSign className="h-3 w-3" />Tax account ↗</a><a href="https://bouldercounty.gov/records/recording/search-public-records/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1"><FileText className="h-3 w-3" />Recorded deeds ↗</a></div>}
       <a href={inspection.properties.sourceUrl} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-cyan-300 underline">{inspection.properties.source} ↗</a>
@@ -92,10 +98,11 @@ function FacilityDetails({ facility }: { facility: EpaFacility }) {
 // The tapped parcel: public record, zoning, conditions at the tapped point, and the optional AI fill for blank fields.
 function ParcelBody({ inspection, detail, loading, error }: { inspection: ParcelSelection; detail: ParcelDetail | null; loading: boolean; error: string }) {
   const [fill, setFill] = useState<PropertyFill | null>(null);
+  const [pointOpen, setPointOpen] = useState(false);
   const { properties, point } = inspection;
   return <>
     <PropertyFacts summary={properties} detail={detail} loading={loading} error={error} fill={fill}><ZoningSection point={point} /></PropertyFacts>
-    <SiteConditions point={point} />
+    <section className="rounded-xl border border-white/10 bg-white/[0.04] p-3"><button type="button" aria-expanded={pointOpen} onClick={() => setPointOpen((value) => !value)} className="w-full text-left text-[11px] font-medium text-cyan-200">{pointOpen ? "Hide" : "Show"} conditions at the tapped point</button><p className="mt-1 text-[10px] text-slate-400">Detailed soil components and mapped features at the click location.</p>{pointOpen && <div className="mt-3 space-y-3"><SiteConditions point={point} /></div>}</section>
     {detail && detail.boulder?.status !== "ready" && <PropertyFillBar parcelKey={properties.parcelKey} point={point} detail={detail} fill={fill} onFill={setFill} />}
   </>;
 }

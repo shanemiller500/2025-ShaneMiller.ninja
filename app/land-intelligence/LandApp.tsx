@@ -11,6 +11,7 @@ import type { AtlasLayer, Basemap } from "@/components/atlas/types";
 import { areaSquareMeters, lengthMeters, shapeCenter, shapeGeoJSON, validShape, type AnalysisShape, type Coord, type ShapeKind } from "./geometry";
 import { LAND_LAYERS, LAND_OVERLAYS } from "./layers";
 import { MapInspection } from "./MapInspection";
+import { PARCEL_INSPECTION_GROUPS, type ParcelFinding, type ParcelGeometry, type ParcelInspectionReport } from "./parcel-inspection";
 import { MapKey } from "./MapKey";
 import { focusGeoJSON, type FocusScope } from "./report-focus";
 import { PARCEL_SOURCES, type ParcelRecord } from "./parcel-sources";
@@ -49,6 +50,31 @@ const FOCUS_LAYER: AtlasLayer = {
     map.addLayer({ id: "report-focus-halo", type: "line", source: "report-focus-source", paint: { "line-color": "#0f172a", "line-width": 5, "line-opacity": 0.75 } });
     map.addLayer({ id: "report-focus-line", type: "line", source: "report-focus-source", paint: { "line-color": "#facc15", "line-width": 3, "line-dasharray": [2, 1] } });
     return ["report-focus-fill", "report-focus-halo", "report-focus-line"];
+  },
+};
+
+const INSPECTION_LAYERS: AtlasLayer[] = PARCEL_INSPECTION_GROUPS.map((group) => ({
+  id: `parcel-inspection-${group.id}`, label: group.label, group: "Parcel findings", citation: { label: "Source details in Map Inspection", href: "#" },
+  clickable: [`parcel-inspection-${group.id}-source-point`, `parcel-inspection-${group.id}-source-line`, `parcel-inspection-${group.id}-source-fill`],
+  hoverLabel: (feature) => `${group.label}: ${String(feature.properties?.name ?? "mapped feature")}`,
+  install(map) {
+    const source = `parcel-inspection-${group.id}-source`;
+    map.addSource(source, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    const fill = `${source}-fill`, line = `${source}-line`, point = `${source}-point`;
+    map.addLayer({ id: fill, type: "fill", source, filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": group.color, "fill-opacity": 0.24 } });
+    map.addLayer({ id: line, type: "line", source, filter: ["in", ["geometry-type"], ["literal", ["LineString", "Polygon"]]], paint: { "line-color": group.color, "line-width": 3, "line-opacity": 0.95 } });
+    map.addLayer({ id: point, type: "circle", source, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-color": group.color, "circle-radius": 6, "circle-stroke-color": "#0f172a", "circle-stroke-width": 2 } });
+    return [fill, line, point];
+  },
+}));
+const INSPECTION_SELECTED_LAYER: AtlasLayer = {
+  id: "parcel-inspection-selected", label: "Selected finding", group: "Parcel findings", citation: { label: "Source details in Map Inspection", href: "#" },
+  install(map) {
+    const source = "parcel-inspection-selected-source";
+    map.addSource(source, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({ id: `${source}-line`, type: "line", source, filter: ["in", ["geometry-type"], ["literal", ["LineString", "Polygon"]]], paint: { "line-color": "#fff", "line-width": 5, "line-opacity": 0.9 } });
+    map.addLayer({ id: `${source}-point`, type: "circle", source, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 10, "circle-color": "#fff", "circle-opacity": 0.15, "circle-stroke-color": "#fff", "circle-stroke-width": 2 } });
+    return [`${source}-line`, `${source}-point`];
   },
 };
 
@@ -97,6 +123,10 @@ export default function LandApp() {
   const [soilStatus, setSoilStatus] = useState("Zoom in to level 12 to see colored soil map units.");
   const [parcelData, setParcelData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [selectedParcel, setSelectedParcel] = useState<GeoJSON.Feature | null>(null);
+  const [parcelInspection, setParcelInspection] = useState<ParcelInspectionReport | null>(null);
+  const [parcelInspectionLoading, setParcelInspectionLoading] = useState(false);
+  const [parcelInspectionError, setParcelInspectionError] = useState("");
+  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [parcelStatus, setParcelStatus] = useState("Zoom in to level 14 to see parcel boundaries in connected states.");
   const [crashData, setCrashData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [crashStatus, setCrashStatus] = useState("Zoom in to level 8 to see 2024 fatal crash points.");
@@ -113,7 +143,12 @@ export default function LandApp() {
   const [soilDetailError, setSoilDetailError] = useState("");
 
   const focusData = useMemo(() => shape && complete && reportFocus ? focusGeoJSON(shape, selectedParcel, focusScope) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, [shape, complete, reportFocus, selectedParcel, focusScope]);
-  const data = useMemo(() => ({ "study-shape-source": shape ? shapeGeoJSON(shape) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, "report-focus-source": focusData, "land-soils-source": soilData, "land-parcels-source": parcelData, "land-parcels-selected-source": { type: "FeatureCollection", features: selectedParcel ? [selectedParcel] : [] } as GeoJSON.FeatureCollection, "land-crashes-source": crashData, "land-facilities-source": facilityData }), [shape, soilData, parcelData, selectedParcel, crashData, facilityData, focusData]);
+  const data = useMemo(() => {
+    const currentInspection = inspection?.kind === "parcel" && parcelInspection?.parcelKey === inspection.properties.parcelKey && selectedParcel?.properties?.parcelKey === inspection.properties.parcelKey ? parcelInspection : null;
+    const findingData = Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [`parcel-inspection-${group.id}-source`, { type: "FeatureCollection", features: (currentInspection?.groups.find((item) => item.id === group.id)?.findings ?? []).map((finding) => ({ type: "Feature", id: finding.id, properties: { id: finding.id, name: finding.name }, geometry: finding.geometry })) } as GeoJSON.FeatureCollection]));
+    const selectedFinding = currentInspection?.groups.filter((group) => visibleLayers[`parcel-inspection-${group.id}`] !== false).flatMap((group) => group.findings).find((finding) => finding.id === selectedFindingId);
+    return { ...findingData, "parcel-inspection-selected-source": { type: "FeatureCollection", features: selectedFinding ? [{ type: "Feature", properties: {}, geometry: selectedFinding.geometry }] : [] } as GeoJSON.FeatureCollection, "study-shape-source": shape ? shapeGeoJSON(shape) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, "report-focus-source": focusData, "land-soils-source": soilData, "land-parcels-source": parcelData, "land-parcels-selected-source": { type: "FeatureCollection", features: selectedParcel ? [selectedParcel] : [] } as GeoJSON.FeatureCollection, "land-crashes-source": crashData, "land-facilities-source": facilityData };
+  }, [shape, soilData, parcelData, selectedParcel, crashData, facilityData, focusData, parcelInspection, selectedFindingId, visibleLayers, inspection]);
   const onMapReady = useCallback((instance: MlMap) => setMap(instance), []);
 
   useEffect(() => {
@@ -129,6 +164,18 @@ export default function LandApp() {
   }, [map]);
 
   const propertyKey = inspection?.kind === "parcel" ? inspection.properties.parcelKey : null;
+  useEffect(() => {
+    setParcelInspection(null); setParcelInspectionError(""); setSelectedFindingId(null);
+    if (!propertyKey || !selectedParcel || (selectedParcel.geometry.type !== "Polygon" && selectedParcel.geometry.type !== "MultiPolygon")) { setParcelInspectionLoading(false); return; }
+    const controller = new AbortController();
+    setParcelInspectionLoading(true);
+    fetch("/api/land-intelligence/parcel-inspection", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ parcelKey: propertyKey, geometry: selectedParcel.geometry }), signal: controller.signal })
+      .then(async (response) => { const json = await response.json(); if (!response.ok) throw new Error(json.error || "Parcel-wide inspection failed."); return json as ParcelInspectionReport; })
+      .then((result) => { if (!controller.signal.aborted) setParcelInspection(result); })
+      .catch((error) => { if (!controller.signal.aborted) setParcelInspectionError(error.message || "Parcel-wide inspection failed."); })
+      .finally(() => { if (!controller.signal.aborted) setParcelInspectionLoading(false); });
+    return () => controller.abort();
+  }, [propertyKey, selectedParcel]);
   useEffect(() => {
     setPropertyDetailResult(null);
     setPropertyError("");
@@ -301,11 +348,14 @@ export default function LandApp() {
         identifyController.current?.abort();
         // Small points get a finger-sized target: anything within 10 px of the tap.
         const touch: [maplibregl.PointLike, maplibregl.PointLike] = [[event.point.x - 10, event.point.y - 10], [event.point.x + 10, event.point.y + 10]];
+        const parcelHit = visibleLayers["land-parcels"] && map.getLayer("land-parcels-fill") ? map.queryRenderedFeatures(event.point, { layers: ["land-parcels-fill"] })[0] : null;
+        const findingLayers = PARCEL_INSPECTION_GROUPS.filter((group) => visibleLayers[`parcel-inspection-${group.id}`] !== false).flatMap((group) => [`parcel-inspection-${group.id}-source-point`, `parcel-inspection-${group.id}-source-line`, `parcel-inspection-${group.id}-source-fill`]).filter((id) => map.getLayer(id));
+        const findingHit = findingLayers.length ? map.queryRenderedFeatures(touch, { layers: findingLayers })[0] : null;
+        if (findingHit?.properties?.id && inspection?.kind === "parcel") { setSelectedFindingId(String(findingHit.properties.id)); return; }
         const crashHit = visibleLayers["land-crashes"] && map.getLayer("land-crashes-points") ? map.queryRenderedFeatures(touch, { layers: ["land-crashes-points"] })[0] : null;
         if (crashHit?.properties) { setSelectedParcel(null); setInspection({ kind: "crash", point: [event.lngLat.lng, event.lngLat.lat], properties: crashHit.properties as FatalCrash }); setInspectionLoading(false); return; }
         const facilityHit = visibleLayers["land-facilities"] && map.getLayer("land-facilities-points") ? map.queryRenderedFeatures(touch, { layers: ["land-facilities-points"] })[0] : null;
         if (facilityHit?.properties) { setSelectedParcel(null); setInspection({ kind: "facility", point: [event.lngLat.lng, event.lngLat.lat], properties: facilityHit.properties as EpaFacility }); setInspectionLoading(false); return; }
-        const parcelHit = visibleLayers["land-parcels"] && map.getLayer("land-parcels-fill") ? map.queryRenderedFeatures(event.point, { layers: ["land-parcels-fill"] })[0] : null;
         if (parcelHit?.properties) {
           const properties = parcelHit.properties as ParcelRecord & { parcelKey: string };
           setSelectedParcel(parcelData.features.find((feature) => feature.properties?.parcelKey === properties.parcelKey) ?? parcelHit as GeoJSON.Feature);
@@ -330,7 +380,7 @@ export default function LandApp() {
     };
     map.on("click", click);
     return () => { map.off("click", click); };
-  }, [map, mode, complete, visibleLayers, parcelData, inspectOtherAt]);
+  }, [map, mode, complete, visibleLayers, parcelData, inspectOtherAt, inspection, propertyKey]);
 
   useEffect(() => {
     if (!map || !shape) return;
@@ -452,7 +502,7 @@ export default function LandApp() {
       ? `${shape.points[0][1].toFixed(5)}, ${shape.points[0][0].toFixed(5)}` : null;
 
   return <div className={`li-app fixed inset-0 overflow-hidden ${dark ? "dark bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
-    <AtlasMap layers={[...LAND_LAYERS, DRAW_LAYER, FOCUS_LAYER]} visible={visibleLayers} data={data} basemap={basemap} terrain="flat" dark={dark} initialView={{ center: [-105.5, 39.1], zoom: 6.5 }} atmosphere onMapReady={onMapReady} flyTo={flyTo} emptyCursor={mode === "browse" ? "grab" : "crosshair"} controls={false} className="absolute inset-0 h-full w-full" />
+    <AtlasMap layers={[...LAND_LAYERS, ...INSPECTION_LAYERS, INSPECTION_SELECTED_LAYER, DRAW_LAYER, FOCUS_LAYER]} visible={{ ...Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [`parcel-inspection-${group.id}`, true])), "parcel-inspection-selected": true, ...visibleLayers }} data={data} basemap={basemap} terrain="flat" dark={dark} initialView={{ center: [-105.5, 39.1], zoom: 6.5 }} atmosphere onMapReady={onMapReady} flyTo={flyTo} emptyCursor={mode === "browse" ? "grab" : "crosshair"} controls={false} className="absolute inset-0 h-full w-full" />
     <div className="li-map-wash pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/45 via-transparent to-slate-950/30" />
 
     {/* Phones get one header row (back, search, theme) so the map keeps most of the screen. */}
@@ -508,7 +558,7 @@ export default function LandApp() {
     </div>
 
     <MapKey open={showKey} soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} facilities={!!visibleLayers["land-facilities"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} facilityStatus={facilityStatus} />
-    <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} onInspectOther={inspectOtherAt} onClose={() => { identifyController.current?.abort(); setInspection(null); setInspectionLoading(false); }} />
+    <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} parcelInspection={parcelInspection} parcelGeometry={inspection?.kind === "parcel" && selectedParcel?.properties?.parcelKey === inspection.properties.parcelKey && (selectedParcel.geometry.type === "Polygon" || selectedParcel.geometry.type === "MultiPolygon") ? selectedParcel.geometry as ParcelGeometry : null} parcelInspectionLoading={parcelInspectionLoading} parcelInspectionError={parcelInspectionError} visibleFindingGroups={Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [group.id, visibleLayers[`parcel-inspection-${group.id}`] !== false]))} selectedFindingId={selectedFindingId} onToggleFindingGroup={(id) => setVisibleLayers((current) => ({ ...current, [`parcel-inspection-${id}`]: current[`parcel-inspection-${id}`] === false }))} onSetFindingGroupsVisible={(ids, shown) => setVisibleLayers((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [`parcel-inspection-${id}`, shown])) }))} onSelectFinding={(finding: ParcelFinding) => setSelectedFindingId(finding.id)} onInspectOther={inspectOtherAt} onClose={() => { identifyController.current?.abort(); setInspection(null); setSelectedParcel(null); setSelectedFindingId(null); setInspectionLoading(false); }} />
 
     {/* Drawing hints: on phones only while drawing, so a finished result leaves the map clear. */}
     <div className={`pointer-events-none absolute bottom-3 left-3 right-3 z-10 flex-col items-start gap-2 md:bottom-5 md:left-5 md:right-auto ${(shape && complete) || inspection ? "hidden md:flex" : "flex"}`}>
