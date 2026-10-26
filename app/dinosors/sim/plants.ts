@@ -4,7 +4,7 @@
 /* ------------------------------------------------------------------ */
 import { P } from "./particles";
 import { hash2 } from "./rng";
-import { LM } from "./terrain";
+import { LM, REGION } from "./terrain";
 import { MAP_H, MAP_W, T, TILE, type Plant, type PlantKind } from "./types";
 import type { World } from "./world";
 import { season } from "./seasons";
@@ -26,7 +26,17 @@ export const PLANT_H: Record<PlantKind, number> = {
 
 type Mix = [PlantKind, number][];
 
-function mixFor(t: T, tx: number, ty: number): { density: number; mix: Mix } | null {
+function mixFor(t: T, tx: number, ty: number, region = 0): { density: number; mix: Mix } | null {
+  // the desert: a scrubby bush here and there; palms + ferns crowd round an oasis
+  if (region === REGION.oasis && (t === T.Grass || t === T.Jungle || t === T.Sand)) return { density: 0.3, mix: [["palm", 0.55], ["fern", 0.25], ["fruit", 0.1], ["reeds", 0.1]] };
+  if (region === REGION.desert) return t === T.Sand || t === T.Dune || t === T.Rock ? { density: t === T.Dune ? 0.006 : 0.014, mix: [["bush", 0.7], ["cycad", 0.3]] } : null;
+  // the Great Peaks: pines, a few hardy bushes on the meadows, nothing on the snow
+  if (region === REGION.peaks) {
+    if (t === T.Forest) return { density: 0.24, mix: [["conifer", 0.85], ["bush", 0.1], ["fern", 0.05]] };
+    if (t === T.Grass) return { density: 0.03, mix: [["conifer", 0.45], ["bush", 0.45], ["fern", 0.1]] };
+    if (t === T.Rock) return { density: 0.008, mix: [["conifer", 1]] };
+    return null;
+  }
   const feeding = Math.hypot(tx - LM.feeding.x, ty - LM.feeding.y) < 9;
   const glade = Math.hypot(tx - LM.glade.x, ty - LM.glade.y) < 3.4;
   if (glade) return { density: 0.12, mix: [["fruit", 0.6], ["fern", 0.4]] };
@@ -79,12 +89,14 @@ export function makePlant(w: World, kind: PlantKind, x: number, y: number, size 
   };
 }
 
-export function generatePlants(w: World) {
+/** Scatter the wild plants (only where `only` says, when given: an older world's new lands). */
+export function generatePlants(w: World, only?: (tx: number, ty: number) => boolean) {
   const seed = w.seed + 77;
   for (let ty = 0; ty < MAP_H; ty++) {
     for (let tx = 0; tx < MAP_W; tx++) {
+      if (only && !only(tx, ty)) continue;
       const t = w.terrain.tiles[ty * MAP_W + tx];
-      const m = mixFor(t, tx, ty);
+      const m = mixFor(t, tx, ty, w.terrain.region[ty * MAP_W + tx]);
       if (!m) continue;
       if (hash2(tx, ty, seed) > m.density) continue;
       const kind = pickMix(m.mix, hash2(tx, ty, seed + 1));

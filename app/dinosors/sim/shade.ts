@@ -6,7 +6,7 @@
 /*  Sitting there rests them: a little healing + energy, and a chat.   */
 /*  Seats are claimed like campfire seats (Human.fireId + seat).       */
 /* ------------------------------------------------------------------ */
-import { go, homeArea, say } from "./humans";
+import { go, homeArea, rainSendsIn, say } from "./humans";
 import { pick } from "./rng";
 import { TILE, type Building, type BuildingKind, type Human } from "./types";
 import type { World } from "./world";
@@ -149,8 +149,8 @@ export function relaxTick(w: World, h: Human, dt: number) {
   h.hp = Math.min(1, h.hp + dt * (b.kind === "pavilion" ? 0.006 : 0.004));
   h.energy = Math.min(1, h.energy + dt * 0.01);
   if (w.rng() < dt * 0.04) say(h, pick(w.rng, ["Ahh, shade.", "Nice spot.", "Did you see that dino?", "My feet hurt.", "Lovely breeze."]));
-  // a while in the shade, then back to work (unless it's still pouring and this one has a roof)
-  const raining = w.weather.rain > 0.55 && SHADE[b.kind]!.covered;
+  // a while in the shade, then back to work (unless it's still pouring, this one has a roof, and they've no rain gear)
+  const raining = w.weather.rain > 0.55 && SHADE[b.kind]!.covered && rainSendsIn(w, h);
   if (h.stateT > (raining ? 60 : 18 + (h.id % 7) * 2)) {
     go(h, "idle", h.x, h.y);
     h.think = 0;

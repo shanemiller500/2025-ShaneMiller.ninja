@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { BookOpen, FolderOpen, Info, Lightbulb, LogOut, Menu, RefreshCw, Save, Sparkles, Trophy, Volume2, VolumeX, Map as MapIcon, Pause, Play } from "lucide-react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { BookOpen, FolderOpen, Info, Lightbulb, LogOut, Menu, RefreshCw, Save, Sparkles, Trophy, Volume2, VolumeX, Map as MapIcon, Pause, Play, X } from "lucide-react";
 import { DISCOVERIES } from "../data/facts";
 import { Engine, type Snapshot } from "../game/engine";
 import { WEATHER_LABEL } from "../sim/weather";
 import { WORLD_H, WORLD_W } from "../sim/types";
 import { useClickAway } from "./useClickAway";
+import { MessageFeed, type Toast } from "./Toasts";
 
 export type TopPanel = null | "time" | "places" | "menu";
 
@@ -38,6 +39,12 @@ interface Props {
   cloudStatus: string;
   campOpen: boolean;
   evoOpen: boolean;
+  log: Toast[];
+  unread: number;
+  popups: boolean;
+  onTogglePopups: (on: boolean) => void;
+  onRead: () => void;
+  onGo: (x: number, y: number) => void;
 }
 
 const fmtTime = (h: number) => {
@@ -51,6 +58,7 @@ const btn = "dl-glass flex h-12 w-12 items-center justify-center rounded-2xl sha
 
 export default function TopBar(p: Props) {
   const { snap, panel, setPanel } = p;
+  const reduceMotion = useReducedMotion();
   const barRef = useRef<HTMLDivElement>(null);
   useClickAway(!!panel, barRef, () => setPanel(null));
   const toggle = (k: TopPanel) => setPanel(panel === k ? null : k);
@@ -58,14 +66,22 @@ export default function TopBar(p: Props) {
     <>
       <div ref={barRef} onPointerDownCapture={(e) => {
         if (panel && e.target instanceof Element && !e.target.closest("[data-dl-top-panel], [data-dl-top-trigger]")) setPanel(null);
-      }} className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-2 sm:p-4">
+      }} className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between gap-2 p-2 sm:p-4">
         <div className="pointer-events-auto relative flex items-center gap-2">
           <SkyDial snap={snap} onClick={() => toggle("time")} />
           <AnimatePresence>{panel === "time" && <TimePanel {...p} />}</AnimatePresence>
         </div>
         <div className="pointer-events-auto relative flex min-w-0 flex-1 justify-end">
+          <button type="button" data-dl-top-trigger aria-label={panel === "menu" ? "Close menu" : "Open menu"} aria-expanded={panel === "menu"} aria-controls="dl-mobile-actions"
+            onClick={() => toggle("menu")}
+            className="dl-glass relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-lg transition active:scale-95 sm:hidden">
+            <motion.span animate={{ rotate: panel === "menu" ? 90 : 0 }} transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 30 }}>
+              {panel === "menu" ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </motion.span>
+            {p.unread > 0 && panel !== "menu" && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-amber-400 px-1 text-center text-[10px] font-black text-slate-900">{p.unread > 99 ? "99+" : p.unread}</span>}
+          </button>
           {/* phones: the buttons scroll sideways (panels sit outside the strip so they aren't clipped) */}
-          <div className="dl-noscroll flex min-w-0 items-center gap-1.5 overflow-x-auto pb-1 pl-1 pr-1.5 pt-1.5 sm:gap-2 sm:overflow-visible sm:p-0">
+          <div className="dl-noscroll hidden min-w-0 items-center gap-1.5 overflow-x-auto pb-1 pl-1 pr-1.5 pt-1.5 sm:flex sm:gap-2 sm:overflow-visible sm:p-0">
           <span aria-hidden className="ml-auto" />
           {p.cloudStatus !== "off" && (
             <button type="button" className={`${btn} relative`} title={p.cloudStatus === "signedIn" ? "Cloud save: on" : "Save to the cloud"} aria-label="Cloud save" onClick={p.onCloud}>
@@ -111,7 +127,7 @@ export default function TopBar(p: Props) {
           </div>
           <AnimatePresence>
             {panel === "places" && <PlacesPanel engine={p.engine} close={() => setPanel(null)} onCamp={p.onCamp} />}
-            {panel === "menu" && <MenuPanel {...p} close={() => setPanel(null)} />}
+            {panel === "menu" && <><MobileActionsPanel {...p} close={() => setPanel(null)} openPlaces={() => setPanel("places")} /><MenuPanel {...p} close={() => setPanel(null)} /></>}
           </AnimatePresence>
         </div>
       </div>
@@ -309,10 +325,51 @@ function PlacesPanel({ engine, close, onCamp }: { engine: Engine; close: () => v
   );
 }
 
-function MenuPanel(p: Props & { close: () => void }) {
+function MobileActionsPanel(p: Props & { close: () => void; openPlaces: () => void }) {
+  const reduceMotion = useReducedMotion();
+  const action = (label: string, icon: ReactNode, onClick: () => void, active = false) => (
+    <button key={label} type="button" onClick={onClick} aria-label={label} aria-pressed={active}
+      className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl border px-1.5 py-2 text-center text-[11px] font-bold leading-tight transition active:scale-95 ${active ? "border-amber-300/50 bg-amber-300/20 text-amber-100" : "border-white/10 bg-white/[0.07] text-white/85 hover:bg-white/15"}`}>
+      <span className="text-xl leading-none">{icon}</span>{label}
+    </button>
+  );
+  const run = (fn: () => void) => () => { fn(); p.close(); };
+  return (
+    <motion.div id="dl-mobile-actions" data-dl-top-panel initial={reduceMotion ? false : { opacity: 0, x: 14, y: -12, scale: 0.94 }} animate={{ opacity: 1, x: 0, y: 0, scale: 1 }} exit={{ opacity: 0, x: 10, y: -8, scale: 0.96 }}
+      transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 400, damping: 30 }}
+      className="dl-glass dl-scroll pointer-events-auto absolute right-0 top-[calc(100%+8px)] z-50 max-h-[min(78dvh,680px)] w-[min(92vw,360px)] overflow-y-auto rounded-3xl border border-amber-200/20 p-3 shadow-2xl shadow-black/40 sm:hidden">
+      <div className="mb-3 flex items-center justify-between px-1">
+        <div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-200/70">Dinosaur Land</div><div className="text-lg font-black">World menu</div></div>
+        <span className="rounded-full bg-amber-300/15 px-2.5 py-1 text-[11px] font-bold text-amber-100">Day {p.snap.day}</span>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {p.cloudStatus !== "off" && action("Cloud", "☁️", run(p.onCloud), p.cloudStatus === "signedIn")}
+        {action("Evolution", "🧬", run(p.onEvolution), p.evoOpen)}
+        {action(p.snap.view === "deep" ? "Surface" : "The Deep", p.snap.view === "deep" ? "🌤️" : "⛏️", run(p.onDeep), p.snap.view === "deep")}
+        {action("Civilization", p.snap.civ.path === "resonance" ? "💠" : p.snap.civ.path === "traditional" ? "🔥" : "🏛️", run(p.onCiv), p.civOpen)}
+        {action("Your tribe", p.snap.tribe.levelIcon, run(p.onCamp), p.campOpen)}
+        {action("Places", <MapIcon className="h-5 w-5" />, p.openPlaces)}
+        {action("Stickers", <Trophy className="h-5 w-5 text-amber-300" />, run(p.onStickers))}
+        {action(p.muted ? "Sound on" : "Mute", p.muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />, p.onMute, p.muted)}
+      </div>
+      <details className="group mt-3 rounded-2xl bg-black/15 p-2" onToggle={(e) => { if (e.currentTarget.open) p.onRead(); }}>
+        <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between px-1 text-sm font-bold">
+          <span>🔔 Alerts</span><span className="rounded-full bg-amber-300/20 px-2 py-0.5 text-[11px] text-amber-100">{p.unread ? `${p.unread} new` : p.log.length}</span>
+        </summary>
+        <div className="dl-scroll max-h-[min(38dvh,300px)] overflow-y-auto border-t border-white/10 pt-2">
+          <MessageFeed log={p.log} popups={p.popups} onTogglePopups={p.onTogglePopups} onGo={(x, y) => { p.onGo(x, y); p.close(); }} />
+        </div>
+      </details>
+      <div className="my-3 h-px bg-white/10" />
+      <MenuPanel {...p} embedded />
+    </motion.div>
+  );
+}
+
+function MenuPanel(p: Props & { close: () => void; embedded?: boolean }) {
   const item = "flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-[15px] font-semibold transition hover:bg-white/15 active:scale-[0.98]";
   return (
-    <motion.div {...pop} data-dl-top-panel className="dl-glass absolute right-0 top-[calc(100%+8px)] w-60 rounded-3xl p-2 shadow-2xl">
+    <motion.div {...(p.embedded ? {} : pop)} data-dl-top-panel className={p.embedded ? "rounded-2xl bg-white/[0.04] p-1" : "dl-glass absolute right-0 top-[calc(100%+8px)] hidden w-60 rounded-3xl p-2 shadow-2xl sm:block"}>
       <button type="button" className={item} onClick={() => { p.onSave(); p.close(); }}>
         <Save className="h-5 w-5 text-emerald-300" /> Save now
       </button>

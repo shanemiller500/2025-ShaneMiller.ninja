@@ -14,11 +14,15 @@ import { addHuman, say, setHumanState, updateHuman } from "./humans";
 import { Shifts } from "./shifts";
 import { P, Particles } from "./particles";
 import { burnPlantsAt, generatePlants, makePlant, plantFuelNear, tallestNear, updatePlants, PLANT_H } from "./plants";
+import { clearPlantsUnderBuilds } from "./buildClear";
 import { makeRng, type Rng } from "./rng";
 import { SpatialHash } from "./spatial";
 import { LM, TERRAIN_GEN, Terrain, VEG_TILES, cliffY, isWaterTile } from "./terrain";
 import {
+  MAP_H,
   MAP_W,
+  OLD_MAP_H,
+  OLD_MAP_W,
   T,
   TILE,
   WORLD_H,
@@ -60,16 +64,26 @@ import { moveTick } from "./moving";
 import { Rivals } from "./rivals";
 import { Forest } from "./treeFolk";
 import { SeaFolk } from "./seaFolk";
+import { SandFolk } from "./sandFolk";
+import { SnowFolk } from "./snowFolk";
+import { SNOW_SPECIES, SnowLife, snowMayLay } from "./snowBeasts";
+import { FolkGroups } from "./folkGroups";
+import { Hazards } from "./breath";
+import { Monks } from "./monks";
+import { Atlas } from "./atlas";
+import { Priorities } from "./priority";
+import { denNear } from "./dinoScorpions";
 import { TaskBoard, issue } from "./tasks";
 import { Population } from "./population";
 import { Wildlife } from "./repopulate";
-import { clearJobsTick, keptClear, type ClearJob, type ClearRect } from "./clearArea";
+import { clearJobsTick, keptClear, loadClearJobs, serializeClearJobs, type ClearJob, type ClearRect } from "./clearArea";
 import { Trails } from "./trails";
 import { sites, type Site } from "./build";
 import { HOUSING } from "../data/colony";
 import { hurtHuman } from "./injury";
 import { actWorkDino } from "./workDinos";
 import { updateCarcass } from "./carcass";
+import { hitScorpion, type Side } from "./factions";
 import type { Carcass } from "./types";
 import type { Gear, ShelterPlan } from "./types";
 
@@ -191,6 +205,22 @@ export class World {
   forest: Forest;
   /** the Sea People: stilt villages out on the water, canoe raiders, friends of the sea reptiles (seaFolk.ts) */
   seaFolk: SeaFolk;
+  /** the Sand People of the central desert: camel riders, archers, Sand Dragon Riders (sandFolk.ts) */
+  sandFolk: SandFolk;
+  /** the Snow People of the Great Peaks: igloos, Frosthorn riders, hunting parties (snowFolk.ts) */
+  snowFolk: SnowFolk;
+  /** the peaks' animals' numbers: snow leopards, Rimeclaws, Frosthorns, Glacierbacks, the Snow Rex + the Yeti (snowBeasts.ts) */
+  snowLife: SnowLife;
+  /** how the Tree, Sea + Sand People keep together: families, patrols, raiding parties, caravans (folkGroups.ts) */
+  groups = new FolkGroups();
+  /** hot sand + frost left on the ground by dragon breath (breath.ts) */
+  hazards = new Hazards();
+  /** the peaceful Mountain Monks of the Great Peaks (monks.ts) */
+  monks: Monks;
+  /** what the tribe has seen of the world (the minimap) */
+  atlas = new Atlas();
+  /** Low / Normal / High / Urgent for anything queued: build sites, mine orders, tasks (priority.ts) */
+  priority = new Priorities();
   tasks = new TaskBoard();
   population = new Population();
   /** wild dinosaur numbers: good years, lean years, and nothing ever gone for good (repopulate.ts) */
@@ -224,6 +254,7 @@ export class World {
   creatureHash = new SpatialHash<Creature>(128);
   plantHash = new SpatialHash<Plant>(96);
   plantsDirty = true;
+  private buildClearT = 1;
   visiblePlants: Plant[] = [];
   herdCenters = new Map<number, { x: number; y: number; n: number }>();
 
@@ -251,6 +282,11 @@ export class World {
     this.mine = new Mine(seed);
     this.forest = new Forest(seed);
     this.seaFolk = new SeaFolk(seed);
+    this.sandFolk = new SandFolk(seed);
+    this.snowFolk = new SnowFolk(seed);
+    this.snowLife = new SnowLife(seed);
+    this.monks = new Monks(seed);
+    this.groups = new FolkGroups(seed);
     this.fire.initFuel(this);
     this.snow.init(this);
     for (const s of SPECIES) if (s.starter) this.unlocked.add(s.id);
@@ -259,6 +295,10 @@ export class World {
       this.wildlife.enabled = false;
       this.forest.enabled = false;
       this.seaFolk.enabled = false;
+      this.sandFolk.enabled = false;
+      this.snowFolk.enabled = false;
+      this.snowLife.enabled = false;
+      this.monks.enabled = false;
     }
   }
 
@@ -353,6 +393,39 @@ export class World {
       [86, 92],
     ];
     for (const [x, y] of fishSpots) this.addSchool(x * TILE, y * TILE);
+    this.populateEast();
+  }
+
+  /**
+   * The eastern lands' animals: camel herds round the oases, a few Dinosaur Scorpions at their dens
+   * (rare), herds + hunters in the lake country, and fish in the east lake.
+   */
+  populateEast() {
+    const herd = (s: SpeciesId, tx: number, ty: number, n: number) => {
+      const list = spawnGroup(this, s, tx * TILE, ty * TILE, n);
+      for (const d of list) {
+        d.homeX = tx * TILE;
+        d.homeY = ty * TILE;
+      }
+      return list;
+    };
+    herd("camel", LM.oasis.x + 3, LM.oasis.y + 4, 4);
+    herd("camel", 172, 76, 3);
+    for (const [tx, ty] of [[196, 64], [167, 58], [138, 44]] as const) {
+      const den = denNear(this, tx * TILE, ty * TILE, 380);
+      if (!den) continue;
+      const d = addDino(this, "dinoScorpion", den.x, den.y, { growth: 1 });
+      d.homeX = den.x;
+      d.homeY = den.y;
+    }
+    herd("trike", 222, 86, 4);
+    herd("para", 254, 92, 4);
+    herd("brachio", 270, 84, 2);
+    herd("stego", 212, 78, 3);
+    herd("raptor", 262, 72, 3);
+    herd("ptera", 236, 36, 3);
+    this.addSchool(LM.eastLake.x * TILE, LM.eastLake.y * TILE);
+    this.addSchool(230 * TILE, 112 * TILE);
   }
 
   addProp(kind: Prop["kind"], x: number, y: number, size = 1) {
@@ -441,6 +514,8 @@ export class World {
   }
 
   canLayEgg(s: SpeciesId) {
+    // the snow animals: the legends never lay, the rest up to the peaks' number (snowBeasts.ts)
+    if (SNOW_SPECIES.has(s)) return snowMayLay(this, s);
     let n = 0;
     for (const d of this.dinos) if (d.species === s) n++;
     for (const e of this.eggs) if (e.species === s) n++;
@@ -671,8 +746,8 @@ export class World {
     }
   }
 
-  /** Something heavy landed: walls, towers, homes + buildings nearby take damage. */
-  crush(x: number, y: number, r: number, power: number) {
+  /** Something heavy landed: walls, towers, homes + buildings nearby take damage (Scorpions only from another side's blow: factions.ts). */
+  crush(x: number, y: number, r: number, power: number, by: Side = "nature") {
     for (const wl of this.tribe.walls) {
       if (wl.built < 1) continue;
       const d = Math.hypot(wl.tx * TILE + 16 - x, wl.ty * TILE + 16 - y);
@@ -681,7 +756,7 @@ export class World {
     for (const t of this.tribe.towers) if (Math.hypot(t.x - x, t.y - y) < r) t.hp -= power * 260;
     for (const s of this.shelters) if (s.stage > 0 && Math.hypot(s.x - x, s.y - y) < r) s.hp -= power * (1 - HOUSING[s.tier].protect * 0.6);
     for (const b of this.colony.buildings) if (Math.hypot(b.x - x, b.y - y) < r) b.hp -= power * 220 * (b.kind === "pyramid" || b.kind === "shelterDeep" ? 0.2 : 1);
-    for (const sc of this.colony.scorpions) if (Math.hypot(sc.x - x, sc.y - y) < r) sc.hp -= power * 200;
+    for (const sc of this.colony.scorpions) if (Math.hypot(sc.x - x, sc.y - y) < r) hitScorpion(this, sc, power * 200, by);
   }
 
   startQuake() {
@@ -700,6 +775,11 @@ export class World {
   update(dt: number) {
     this.elapsed += dt;
     this.frame++;
+    this.buildClearT -= dt;
+    if (this.buildClearT <= 0) {
+      this.buildClearT = 1;
+      clearPlantsUnderBuilds(this);
+    }
     if (!this.timePaused) {
       this.time += (dt * 24 * this.timeSpeed) / DAY_SECONDS;
       if (this.time >= 24) {
@@ -772,8 +852,15 @@ export class World {
     this.rivals.update(this, dt);
     this.forest.update(this, dt);
     this.seaFolk.update(this, dt);
+    this.sandFolk.update(this, dt);
+    this.snowFolk.update(this, dt);
+    this.groups.update(this, dt);
+    this.monks.update(this, dt);
+    this.atlas.update(this, dt);
+    this.priority.update(this, dt);
     this.population.update(this, dt);
     this.wildlife.update(this, dt);
+    this.snowLife.update(this, dt);
     if (this.clearJobs.length && Math.floor(this.elapsed) !== Math.floor(this.elapsed - dt)) clearJobsTick(this);
     this.civ.update(this, dt);
     this.extinction.update(this, dt);
@@ -797,6 +884,7 @@ export class World {
     this.updateEggs(dt);
     updatePlants(this, dt);
     this.fire.update(this, dt);
+    this.hazards.update(this, dt);
     this.lava.update(this, dt);
     this.volcano.update(this, dt);
     this.updateFish(dt);
@@ -964,6 +1052,13 @@ export class World {
     return d;
   }
 
+  /** An older, smaller world loaded into the bigger map: plants, deposits + animals for the new lands. */
+  settleNewLands(oldW = OLD_MAP_W) {
+    generatePlants(this, (tx, ty) => tx >= oldW || ty >= OLD_MAP_H);
+    this.colony.generateEastNodes(this);
+    this.populateEast();
+  }
+
   /** Tallest point a plant reaches (for picking + lightning). */
   plantHeight(p: Plant) {
     return PLANT_H[p.kind] * p.size;
@@ -975,6 +1070,8 @@ export class World {
     const r = (n: number) => Math.round(n * 100) / 100;
     return {
       v: SAVE_VERSION,
+      /** the map width tile indexes below were written with (older saves: the original 160) */
+      mapW: MAP_W,
       /** wall-clock time of this save (newest save wins on load) */
       savedAt: Date.now(),
       elapsed: r(this.elapsed),
@@ -1012,6 +1109,8 @@ export class World {
         owner: d.owner,
         clan: d.clan,
         seaTribe: d.seaTribe,
+        sandTribe: d.sandTribe,
+        snowTribe: d.snowTribe,
         warTraining: r(d.warTraining ?? 0),
         warArmor: d.warArmor ?? 0,
         rider: d.rider,
@@ -1052,10 +1151,19 @@ export class World {
       rivals: this.rivals.serialize(),
       forest: this.forest.serialize(this),
       seaFolk: this.seaFolk.serialize(this),
+      sandFolk: this.sandFolk.serialize(this),
+      snowFolk: this.snowFolk.serialize(this),
+      snowLife: this.snowLife.serialize(),
+      groups: this.groups.serialize(),
+      monks: this.monks.serialize(),
+      hazards: this.hazards.serialize(),
+      atlas: this.atlas.serialize(),
+      priority: this.priority.serialize(),
       dragons: this.dragons.serialize(),
       items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
       cleared: this.cleared.map((c) => [c.i, Math.round(c.at)] as const),
       keepClear: this.keepClear.map((r) => [Math.round(r.x0), Math.round(r.y0), Math.round(r.x1), Math.round(r.y1)] as const),
+      clearJobs: serializeClearJobs(this),
       eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent, genes: e.genes, gen: e.gen })),
       evo: this.evo,
       terrainGen: this.terrain.gen,
@@ -1099,7 +1207,11 @@ export class World {
     w.timePaused = !!data.timePaused;
     w.weather.kind = data.weather;
     w.weather.auto = data.weatherAuto ?? true;
-    w.terrain.applyEdits(data.edits ?? []);
+    // saves from before the world grew wrote tile indexes for the old 160-wide map
+    const oldW = (data as { mapW?: number }).mapW ?? OLD_MAP_W;
+    const grew = oldW !== MAP_W;
+    const re = (i: number) => (grew ? (i % oldW) + Math.floor(i / oldW) * MAP_W : i);
+    w.terrain.applyEdits((data.edits ?? []).map(([i, t]) => [re(i), t] as [number, number]));
     w.fire.initFuel(w);
     w.snow.init(w);
     w.idCounter = Math.max(data.idCounter ?? 1, 1);
@@ -1140,8 +1252,10 @@ export class World {
       w.addItem(i.kind, i.x, i.y, { amount: i.amount, t: i.t, species: i.species, ...(carcass ? { carcass: { ...carcass, max: { ...carcass.max } } } : {}) });
     }
     for (const e of data.eggs) w.eggs.push({ id: w.nextId(), ...e });
-    w.cleared = ((data as { cleared?: (readonly [number, number])[] }).cleared ?? []).map(([i, at]) => ({ i, at }));
+    w.cleared = ((data as { cleared?: (readonly [number, number])[] }).cleared ?? []).map(([i, at]) => ({ i: re(i), at }));
     w.keepClear = ((data as { keepClear?: (readonly [number, number, number, number])[] }).keepClear ?? []).map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1 }));
+    // Clear area jobs under way carry on (and no dino is left limited to a box nobody's clearing)
+    loadClearJobs(w, (data as { clearJobs?: ReturnType<typeof serializeClearJobs> }).clearJobs);
     for (const [kind, x, y, size, food, burnt, fruit, stump] of data.plants) {
       const p = makePlant(w, kind, x, y, size);
       p.food = food;
@@ -1186,12 +1300,34 @@ export class World {
     w.forest.load(w, (data as { forest?: ReturnType<Forest["serialize"]> }).forest);
     w.seaFolk.load(w, (data as { seaFolk?: ReturnType<SeaFolk["serialize"]> }).seaFolk);
     w.dragons.load(w, (data as { dragons?: ReturnType<Dragons["serialize"]> }).dragons);
+    // (after the dragons: the Sand People's dragons + the monks' rite live in w.dragons.list)
+    const more = data as Partial<Pick<SaveData, "groups" | "sandFolk" | "snowFolk" | "snowLife" | "monks" | "hazards" | "atlas" | "priority">>;
+    w.groups.load(more.groups);
+    w.sandFolk.load(w, more.sandFolk);
+    w.snowFolk.load(w, more.snowFolk);
+    w.snowLife.load(more.snowLife);
+    w.monks.load(w, more.monks);
+    w.hazards.load(more.hazards);
+    w.atlas.load(more.atlas);
+    w.priority.load(more.priority);
+    // Older saves kept priority keys but did not save Scorpion ids. Recover an
+    // all-Scorpions choice when every queued Scorpion had the same priority.
+    if (data.colony?.scorpions?.length && data.colony.scorpions.every((s) => !("id" in s))) {
+      const oldScorpionPriorities = (more.priority ?? []).filter(([key]) => key.startsWith("scorpion:"));
+      const liveScorpions = w.buildSites().filter((site) => site.kind === "scorpion");
+      if (liveScorpions.length > 0 && oldScorpionPriorities.length === liveScorpions.length && oldScorpionPriorities.every(([, p]) => p === oldScorpionPriorities[0][1])) {
+        for (const [key] of oldScorpionPriorities) w.priority.set(key, 1);
+        for (const site of liveScorpions) w.priority.set(`scorpion:${site.id}`, oldScorpionPriorities[0][1] as 0 | 2 | 3);
+      }
+    }
     w.evo = data.evo ?? {};
     w.sky.load(data.sky);
-    w.trails.loadWorn(data.worn);
+    w.trails.loadWorn((data.worn ?? []).map(([i, n]) => [re(i), n] as [number, number]));
     w.almanac.load(data.almanac, w);
     w.evoLeaps = data.evoLeaps ?? 0;
     w.evoAuto = !!data.evoAuto;
+    // a world saved before the land grew east: fill the new lands (plants, deposits, wildlife)
+    if (grew) w.settleNewLands(oldW);
     w.camp.learned = new Set(data.camp.learned);
     w.camp.goal = data.camp.goal;
     w.camp.pickGoal();
@@ -1273,6 +1409,7 @@ export class World {
         placedTorches.push(torch);
       }
     }
+    clearPlantsUnderBuilds(w);
     w.nav.sync(w);
     return w;
   }

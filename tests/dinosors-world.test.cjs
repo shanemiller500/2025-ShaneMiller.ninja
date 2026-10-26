@@ -211,7 +211,8 @@ test('busy routes wear footpaths that make walking easier, and unused ones grass
 
 test('new worlds get the bigger northern range; old saves keep the map they were made with', () => {
   assert.ok(TERRAIN_GEN >= 2);
-  const mountains = (w) => w.terrain.tiles.reduce((n, t) => n + (t === T.Mountain ? 1 : 0), 0);
+  // (the northern range of the old valley: the eastern lands are the same for every generation)
+  const mountains = (w) => w.terrain.tiles.reduce((n, t, i) => n + (t === T.Mountain && i % MAP_W < 160 && i < 40 * MAP_W ? 1 : 0), 0);
   const fresh = new World(21, false);
   const old = new World(21, false, 1);
   assert.ok(mountains(fresh) > mountains(old) * 1.1, `a bigger range (${mountains(old)} → ${mountains(fresh)})`);

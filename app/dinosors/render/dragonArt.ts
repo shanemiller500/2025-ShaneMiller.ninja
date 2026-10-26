@@ -34,10 +34,16 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   const flying = dr.z > 6;
   const legsDown = flying && dr.z < 90;
   const hop = dr.hop ? Math.sin(Math.min(1, dr.hop / 1.4) * Math.PI) : 0;
-  // quick downstroke, slower recovery
+  // quick downstroke, slower recovery (only ever in the air: taking off, flying, landing)
   const ph = dr.anim * 1.6;
-  const flap = flying ? Math.sin(ph) + 0.28 * Math.sin(ph * 2) : hop * 0.7 - 0.2;
+  const flap = flying ? Math.sin(ph) + 0.28 * Math.sin(ph * 2) : 0;
   const young = (dr.growth ?? 1) < 0.25;
+  // on the ground the wings stay folded along its back: it breathes, and every so often settles
+  // them with a little rustle (never a flap). Asleep it lies still, head down.
+  const asleep = !flying && dr.state === "sleep";
+  const breathe = Math.sin(t * (asleep ? 1.1 : 1.7) + dr.id);
+  const cyc = (t * 0.9 + dr.id * 1.7) % 9;
+  const rustle = !flying && !asleep && cyc < 1.1 ? Math.sin((cyc / 1.1) * Math.PI) : 0;
 
   c.save();
   c.translate(0, -hop * 14 * s);
@@ -50,8 +56,8 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   const wing = (near: boolean) => {
     // flung wide (the clans' altar rite) or folded at rest
     const spread = dr.spread ?? 0;
-    const lift = flying ? flap * 36 : (near ? -4 : -8) + flap * 18 + spread * (near ? 18 : 26) + Math.sin(t * 9) * spread * 3;
-    const span = flying ? 1 : Math.max(0.52 + hop * 0.35, spread * 1.15);
+    const lift = flying ? flap * 36 : (near ? -4 : -8) + breathe * 1.2 + rustle * 9 + hop * 3 + spread * (near ? 18 : 26) + Math.sin(t * 9) * spread * 3;
+    const span = flying ? 1 : Math.max((asleep ? 0.46 : 0.5) + rustle * 0.2 + hop * 0.06, spread * 1.15);
     const col = near ? L.wing : shade(L.wing, -0.25);
     // arm: shoulder → elbow → wrist
     const sx = -4;
@@ -128,7 +134,7 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   const pts: [number, number][] = [];
   for (let i = 0; i <= 8; i++) {
     const k = i / 8;
-    pts.push([-18 - k * 70, -18 + k * 4 + Math.sin(t * 2.6 + dr.id + k * 2.2) * k * 10 + (flying ? k * 6 : 0)]);
+    pts.push([-18 - k * 70, -18 + k * 4 + Math.sin(t * (asleep ? 0.8 : 2.6) + dr.id + k * 2.2) * k * (asleep ? 3 : 10) + (flying ? k * 6 : asleep ? k * 8 : 0)]);
   }
   c.fillStyle = L.body;
   c.beginPath();
@@ -200,7 +206,7 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   bg.addColorStop(1, shade(L.body, -0.18));
   c.fillStyle = bg;
   c.beginPath();
-  c.ellipse(0, -19 + (dr.gravid ? 2 : 0), 30 + (dr.gravid ? 3 : 0), 15 + (young ? 2 : 0) + (dr.gravid ? 4 : 0), -0.08, 0, Math.PI * 2);
+  c.ellipse(0, -19 + (dr.gravid ? 2 : 0), 30 + (dr.gravid ? 3 : 0), (15 + (young ? 2 : 0) + (dr.gravid ? 4 : 0)) * (1 + breathe * (flying ? 0 : 0.035)), -0.08, 0, Math.PI * 2);
   c.fill();
   // its own markings: stripes, spots, or a pale blaze along the back
   if (dr.marks === 1) {
@@ -282,7 +288,9 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   }
 
   // neck + head
-  const nod = flying ? Math.sin(t * 2.2) * 3 : Math.sin(t * 1.8 + dr.id) * 2 + hop * 3;
+  // the head: steady in flight; on the ground it looks about (a slow lift + dip), and rests low asleep
+  const look = Math.sin(t * 0.43 + dr.id * 0.7);
+  const nod = flying ? Math.sin(t * 2.2) * 3 : asleep ? 12 + breathe * 0.8 : Math.sin(t * 1.8 + dr.id) * 1.2 + look * 3 + hop * 3 - rustle * 2;
   const ng = c.createLinearGradient(20, -22, 44, -44);
   ng.addColorStop(0, L.body);
   ng.addColorStop(1, shade(L.body, 0.08));

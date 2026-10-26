@@ -4,7 +4,7 @@
 /*  baked texture details once and is cached (LRU) until it changes.   */
 /* ------------------------------------------------------------------ */
 import { hash2, valueNoise } from "../sim/rng";
-import { CHUNKS_X, CHUNKS_Y, CHUNK_TILES, type Terrain } from "../sim/terrain";
+import { CHUNKS_X, CHUNKS_Y, CHUNK_TILES, REGION, type Terrain } from "../sim/terrain";
 import { MAP_H, MAP_W, T, TILE } from "../sim/types";
 
 export const TILE_RGB: Record<T, [number, number, number]> = {
@@ -26,7 +26,15 @@ export const TILE_RGB: Record<T, [number, number, number]> = {
   [T.Cave]: [40, 34, 30],
   [T.Nest]: [206, 180, 124],
   [T.River]: [88, 170, 205],
+  [T.Dune]: [226, 186, 122],
+  [T.Snow]: [236, 242, 250],
+  [T.Ice]: [186, 220, 238],
 };
+
+/** the desert's sand (warmer + deeper than a beach) */
+const DESERT_SAND: [number, number, number] = [228, 196, 138];
+/** snow on a high peak / scree */
+const SNOWCAP: [number, number, number] = [240, 245, 252];
 
 const CHUNK_PX = CHUNK_TILES * TILE;
 /** painted map pixels per tile */
@@ -103,7 +111,8 @@ export class TerrainRenderer {
     const py0 = ty0 * RES;
     const pw = (tx1 - tx0 + 1) * RES;
     const ph = (ty1 - ty0 + 1) * RES;
-    const sharp = (k: number) => k === T.Cliff || k === T.Cave || k === T.Mountain;
+    // (cliffs + caves keep crisp edges; mountain rock blends into the snow + scree round it)
+    const sharp = (k: number) => k === T.Cliff || k === T.Cave;
     // pass 1: which terrain lives at each sub-pixel (wobbly, natural borders)
     for (let py = py0; py < py0 + ph; py++) {
       for (let px = px0; px < px0 + pw; px++) {
@@ -135,6 +144,24 @@ export class TerrainRenderer {
         const fy = (py + 0.5) / RES;
         let [r, g, b] = TILE_RGB[k];
         const water = isW(k);
+        const ti = Math.floor(fy) * MAP_W + Math.floor(fx);
+        const e = t.elev[ti];
+        // the desert's sand is warmer; dunes get long wind-blown ridges (they read even zoomed right out)
+        if (k === T.Sand && t.region[ti] === REGION.desert) [r, g, b] = DESERT_SAND;
+        if (k === T.Dune) {
+          const ridge = Math.sin((fx * 1.25 + fy * 0.42 + valueNoise(fx * 0.25, fy * 0.25, seed + 31) * 3.2) * Math.PI * 2);
+          const lit = ridge > 0.55 ? 14 : ridge < -0.6 ? -16 : ridge * 4;
+          r += lit;
+          g += lit * 0.9;
+          b += lit * 0.6;
+        }
+        // high up, the rock goes grey and the snow comes down onto it
+        if ((k === T.Mountain || k === T.Rock || k === T.Cliff) && e > 0.55) {
+          const snow = Math.min(1, (e - 0.55) * (k === T.Mountain ? 3.2 : 1.6)) * (0.55 + valueNoise(fx * 0.7, fy * 0.7, seed + 33) * 0.6);
+          r += (SNOWCAP[0] - r) * Math.min(1, snow);
+          g += (SNOWCAP[1] - g) * Math.min(1, snow);
+          b += (SNOWCAP[2] - b) * Math.min(1, snow);
+        }
         // smooth hillshade from interpolated height (light from the north-west)
         const ix = Math.floor(fx - 0.5);
         const iy = Math.floor(fy - 0.5);
@@ -176,9 +203,11 @@ export class TerrainRenderer {
           }
         }
         const green = k === T.Grass || k === T.Jungle || k === T.Forest;
-        r = clamp255(r + shade + patch * (green ? 0.6 : 1) + grain);
-        g = clamp255(g + shade + patch * (green ? 1.3 : 1) + grain);
-        b = clamp255(b + shade + patch * 0.4 + grain);
+        // snow + ice take the shade blue (shadowed snow is blue, not grey)
+        const cold = k === T.Snow || k === T.Ice || e > 0.66;
+        r = clamp255(r + shade * (cold && shade < 0 ? 0.75 : 1) + patch * (green ? 0.6 : cold ? 0.3 : 1) + grain);
+        g = clamp255(g + shade * (cold && shade < 0 ? 0.85 : 1) + patch * (green ? 1.3 : cold ? 0.3 : 1) + grain);
+        b = clamp255(b + shade * (cold && shade < 0 ? 0.55 : 1) + patch * 0.4 + grain);
         const o = ((py - py0) * pw + (px - px0)) * 4;
         img.data[o] = r;
         img.data[o + 1] = g;
@@ -265,7 +294,7 @@ export class TerrainRenderer {
         const px = tx * TILE;
         const py = ty * TILE;
         const h = (k: number) => hash2(gx, gy, t.seed + k);
-        detailTile(ctx, tile, px, py, h, gx, gy, (k) => t.tiles[k] as T);
+        detailTile(ctx, tile, px, py, h, gx, gy, (k) => t.tiles[k] as T, t);
       }
     }
     return canvas;
@@ -348,8 +377,130 @@ function clamp255(v: number) {
   return v < 0 ? 0 : v > 255 ? 255 : v;
 }
 
-function detailTile(ctx: CanvasRenderingContext2D, tile: T, px: number, py: number, h: (k: number) => number, gx: number, gy: number, tileAt: (i: number) => T) {
+function detailTile(ctx: CanvasRenderingContext2D, tile: T, px: number, py: number, h: (k: number) => number, gx: number, gy: number, tileAt: (i: number) => T, tr: Terrain) {
+  const elev = tr.elev[gy * MAP_W + gx];
   switch (tile) {
+    case T.Dune: {
+      // wind ripples: shallow arcs across the slope, a sun-lit crest + a shaded lee
+      ctx.lineWidth = 1;
+      for (let k = 0; k < 3; k++) {
+        const y = py + (k + 0.5) * (TILE / 3) + (h(10 + k) - 0.5) * 4;
+        ctx.strokeStyle = "rgba(255,236,190,0.45)";
+        ctx.beginPath();
+        ctx.moveTo(px, y);
+        ctx.quadraticCurveTo(px + TILE / 2, y - 3 - h(20 + k) * 2, px + TILE, y + (h(30 + k) - 0.5) * 3);
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(150,104,52,0.22)";
+        ctx.beginPath();
+        ctx.moveTo(px, y + 1.5);
+        ctx.quadraticCurveTo(px + TILE / 2, y - 1.5 - h(20 + k) * 2, px + TILE, y + 1.5 + (h(30 + k) - 0.5) * 3);
+        ctx.stroke();
+      }
+      if (h(4) > 0.97) {
+        // a sun-bleached bone / a pebble
+        ctx.fillStyle = h(5) > 0.5 ? "#f3ead6" : "#9a8466";
+        ctx.beginPath();
+        ctx.ellipse(px + h(6) * TILE, py + h(7) * TILE, 3, 1.4, h(8) * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case T.Snow: {
+      // wind streaks + sparkle
+      ctx.strokeStyle = "rgba(170,195,225,0.28)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let k = 0; k < 2; k++) {
+        const y = py + h(10 + k) * TILE;
+        ctx.moveTo(px + h(20 + k) * 10, y);
+        ctx.lineTo(px + 14 + h(30 + k) * 16, y - 1);
+      }
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      for (let k = 0; k < 3; k++) ctx.fillRect(px + h(40 + k) * TILE, py + h(50 + k) * TILE, 1.2, 1.2);
+      // deep drifts: soft mounds, sunlit on top with a blue shadow in their lee
+      if (h(11) > 0.45) {
+        const dx = px + h(12) * TILE;
+        const dy = py + h(13) * TILE;
+        const rw = 8 + h(14) * 10;
+        ctx.fillStyle = "rgba(150,180,220,0.28)";
+        ctx.beginPath();
+        ctx.ellipse(dx + 2, dy + 2.5, rw, 3.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.beginPath();
+        ctx.ellipse(dx, dy, rw, 3, 0, Math.PI, 0);
+        ctx.fill();
+      }
+      if (h(6) > 0.82) {
+        // a snow-covered boulder: grey sides, a thick white cap
+        const bx = px + h(7) * TILE;
+        const by = py + h(8) * TILE;
+        const r = 3 + h(9) * 3.5;
+        ctx.fillStyle = "rgba(110,108,118,0.65)";
+        ctx.beginPath();
+        ctx.ellipse(bx, by, r, r * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(252,253,255,0.95)";
+        ctx.beginPath();
+        ctx.ellipse(bx - 0.4, by - r * 0.35, r * 0.95, r * 0.42, 0, Math.PI, 0);
+        ctx.fill();
+      }
+      if (h(15) > 0.9) {
+        // a frozen patch: glassy ice with a glint
+        ctx.fillStyle = "rgba(170,215,240,0.5)";
+        ctx.beginPath();
+        ctx.ellipse(px + h(16) * TILE, py + h(17) * TILE, 6 + h(18) * 5, 2.5, h(19) - 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.fillRect(px + h(16) * TILE - 2, py + h(17) * TILE - 0.6, 3, 1.2);
+      }
+      if (h(21) > 0.93 && elev > 0.4 && elev < 0.72) {
+        // a stunted alpine pine, snow loaded on its boughs
+        const tx = px + h(22) * TILE;
+        const ty = py + h(23) * TILE;
+        const s = 0.7 + h(24) * 0.5;
+        ctx.fillStyle = "rgba(60,50,40,0.8)";
+        ctx.fillRect(tx - 1, ty - 3 * s, 2, 4 * s);
+        for (let k = 0; k < 3; k++) {
+          const yy = ty - (4 + k * 4) * s;
+          const ww = (7 - k * 2) * s;
+          ctx.fillStyle = "rgba(40,78,58,0.95)";
+          ctx.beginPath();
+          ctx.moveTo(tx - ww, yy + 3 * s);
+          ctx.lineTo(tx, yy - 3 * s);
+          ctx.lineTo(tx + ww, yy + 3 * s);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = "rgba(250,252,255,0.9)";
+          ctx.beginPath();
+          ctx.moveTo(tx - ww * 0.8, yy + 1.5 * s);
+          ctx.lineTo(tx, yy - 3 * s);
+          ctx.lineTo(tx + ww * 0.6, yy + 0.8 * s);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+      break;
+    }
+    case T.Ice: {
+      // glassy sheen + cracks
+      ctx.fillStyle = "rgba(255,255,255,0.32)";
+      ctx.beginPath();
+      ctx.ellipse(px + h(1) * TILE, py + h(2) * TILE, 7, 2, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(90,140,180,0.4)";
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      const cx = px + h(3) * TILE;
+      const cy = py + h(4) * TILE;
+      for (let k = 0; k < 3; k++) {
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + (h(10 + k) - 0.5) * 22, cy + (h(20 + k) - 0.5) * 16);
+      }
+      ctx.stroke();
+      break;
+    }
     case T.Grass:
     case T.Nest: {
       ctx.strokeStyle = tile === T.Nest ? "rgba(120,90,50,0.45)" : h(1) > 0.5 ? "rgba(70,120,40,0.35)" : "rgba(190,225,120,0.35)";
@@ -420,7 +571,38 @@ function detailTile(ctx: CanvasRenderingContext2D, tile: T, px: number, py: numb
       ctx.lineTo(px + h(52) * TILE, py + h(53) * TILE);
       ctx.lineTo(px + h(54) * TILE, py + h(55) * TILE);
       ctx.stroke();
-      if (tile === T.Mountain && gy < 6 && h(7) > 0.3) {
+      // crags: a lit edge + a shadowed face, the bigger the higher up
+      if (tile === T.Mountain || (tile === T.Rock && elev > 0.5)) {
+        ctx.strokeStyle = "rgba(40,36,44,0.35)";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        const cx = px + h(60) * TILE;
+        const cy = py + h(61) * TILE;
+        ctx.moveTo(cx - 6, cy + 4);
+        ctx.lineTo(cx, cy - 5);
+        ctx.lineTo(cx + 7, cy + 3);
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx - 6, cy + 3);
+        ctx.lineTo(cx - 0.5, cy - 4.5);
+        ctx.stroke();
+        // high rock under snow: a white cap on the crag + snow packed in the cracks
+        if (tile === T.Rock && elev > 0.55) {
+          ctx.fillStyle = "rgba(248,251,255,0.85)";
+          ctx.beginPath();
+          ctx.moveTo(cx - 6, cy + 2);
+          ctx.quadraticCurveTo(cx, cy - 8, cx + 7, cy + 2);
+          ctx.quadraticCurveTo(cx, cy - 2, cx - 6, cy + 2);
+          ctx.fill();
+          ctx.fillStyle = "rgba(240,246,252,0.55)";
+          ctx.beginPath();
+          ctx.ellipse(px + h(62) * TILE, py + h(63) * TILE, 5 + h(64) * 4, 2 + h(64) * 1.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      if (tile === T.Mountain && (gy < 6 || elev > 0.7) && h(7) > 0.3) {
         ctx.fillStyle = "rgba(250,250,255,0.75)";
         ctx.beginPath();
         ctx.ellipse(px + h(8) * TILE, py + h(9) * TILE, 6, 3, 0, 0, Math.PI * 2);
@@ -437,10 +619,12 @@ function detailTile(ctx: CanvasRenderingContext2D, tile: T, px: number, py: numb
       const x0 = px - (left ? 0 : 2);
       const x1 = px + TILE + (right ? 0 : 2);
       const bottom = py + TILE + (below ? 0 : 4);
+      // (high up, the rock face is pale and frosted, with snow along the lip)
+      const icy = tr.elev[gy * MAP_W + gx] > 0.6;
       const face = ctx.createLinearGradient(0, py, 0, bottom);
-      face.addColorStop(0, "#a49a8c");
-      face.addColorStop(0.18, "#857a6d");
-      face.addColorStop(1, "#4e463f");
+      face.addColorStop(0, icy ? "#e6ecf4" : "#a49a8c");
+      face.addColorStop(0.18, icy ? "#a9a7ad" : "#857a6d");
+      face.addColorStop(1, icy ? "#5d5a62" : "#4e463f");
       ctx.fillStyle = face;
       ctx.beginPath();
       ctx.moveTo(x0, top(0));
@@ -507,6 +691,21 @@ function detailTile(ctx: CanvasRenderingContext2D, tile: T, px: number, py: numb
       break;
     }
     case T.Dirt: {
+      if (tr.wadi[gy * MAP_W + gx]) {
+        // the dry riverbed: cracked, sun-baked mud plates
+        ctx.strokeStyle = "rgba(95,62,32,0.5)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let k = 0; k < 4; k++) {
+          const x = px + h(10 + k) * TILE;
+          const y = py + h(20 + k) * TILE;
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + (h(30 + k) - 0.5) * 18, y + (h(40 + k) - 0.5) * 14);
+          ctx.lineTo(x + (h(50 + k) - 0.5) * 22, y + (h(60 + k) - 0.2) * 16);
+        }
+        ctx.stroke();
+        break;
+      }
       ctx.fillStyle = "rgba(120,90,50,0.35)";
       for (let k = 0; k < 4; k++) ctx.fillRect(px + h(10 + k) * TILE, py + h(20 + k) * TILE, 2, 1.5);
       break;

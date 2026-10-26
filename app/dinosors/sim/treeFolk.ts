@@ -31,9 +31,10 @@ import { P } from "./particles";
 import { PLANT_H, TALL } from "./plants";
 import { makeRng, pick, type Rng } from "./rng";
 import { hitDino } from "./tribe";
-import { T, TILE, WORLD_H, WORLD_W, type Brute, type BruteWeapon, type Dino, type Human, type Resource, type TreeBand, type TreePod, type TreeSign, type TreeTribe } from "./types";
+import { OLD_MAP_H, OLD_MAP_W, T, TILE, WORLD_H, WORLD_W, type Brute, type BruteWeapon, type Dino, type Human, type Resource, type TreeBand, type TreePod, type TreeSign, type TreeTribe } from "./types";
 import type { World } from "./world";
 import { moveBrute, say, setB } from "./rivals";
+import { foundingGroups, type FolkGroup, type GroupKind } from "./folkGroups";
 
 /** Our hits are divided by this (Neanderthals take 150: one of these goes down in about half the hits). */
 export const TREE_TOUGH = 70;
@@ -220,8 +221,9 @@ export class Forest {
         x = near.x + Math.cos(a) * r;
         y = near.y + Math.sin(a) * r;
       } else {
-        x = 200 + rng() * (WORLD_W - 400);
-        y = 200 + rng() * (WORLD_H - 400);
+        // their home woods: the old valley's forests + jungle (the far eastern woods are for outposts)
+        x = 200 + rng() * (OLD_MAP_W * TILE - 400);
+        y = 200 + rng() * (OLD_MAP_H * TILE - 400);
       }
       if (x < 160 || y < 160 || x > WORLD_W - 160 || y > WORLD_H - 160) continue;
       if (!isCover(w, x, y) || !w.nav.passable("dino", x, y)) continue;
@@ -316,8 +318,11 @@ export class Forest {
     this.tribes.push(t);
     if (!parent) {
       const n = 4 + tier * 2;
-      for (let i = 0; i < n; i++) this.add(w, t, t.x + (this.rng() - 0.5) * 120, t.y + (this.rng() - 0.5) * 80);
-      for (let i = 0; i < 2; i++) this.add(w, t, t.x + (this.rng() - 0.5) * 60, t.y + 10, { age: this.rng() * 60 });
+      const folk: Brute[] = [];
+      for (let i = 0; i < n; i++) folk.push(this.add(w, t, t.x + (this.rng() - 0.5) * 120, t.y + (this.rng() - 0.5) * 80));
+      for (let i = 0; i < 2; i++) folk.push(this.add(w, t, t.x + (this.rng() - 0.5) * 60, t.y + 10, { age: this.rng() * 60 }));
+      // they live in groups, like the clans: a patrol, and families round the camp (folkGroups.ts)
+      foundingGroups(w, "tree", t.id, folk, t);
     }
     return t;
   }
@@ -357,6 +362,35 @@ export class Forest {
     t.seen = true;
     t.found = true;
     return t;
+  }
+
+  /**
+   * The People tool, a group: a family, a patrol or a raiding party of Tree People where you tap in the
+   * woods. They belong to the nearest tree camp (or a new camp goes up in these woods if there's none).
+   */
+  placeGroup(w: World, x: number, y: number, kind: GroupKind): { t: TreeTribe; n: number; g: FolkGroup } | string {
+    this.prepPlants(w);
+    if (!isCover(w, x, y)) return "Tree People only come out of the forest or jungle. Tap in the trees.";
+    let t = this.tribes.slice().sort((a, b) => dist(a, { x, y }) - dist(b, { x, y }))[0] ?? null;
+    if (!t || dist(t, { x, y }) > 3000) {
+      const made = this.placeCamp(w, x, y, 900);
+      if (typeof made === "string") return made;
+      t = made;
+    }
+    this.enabled = true;
+    this.started = true;
+    w.rivals.started = true;
+    const n = kind === "raid" || kind === "war" ? 6 : 4;
+    const folk: Brute[] = [];
+    for (let i = 0; i < n; i++) folk.push(this.add(w, t, x + (this.rng() - 0.5) * 60, y + (this.rng() - 0.5) * 40, kind === "family" && i >= 2 ? { age: 30 + this.rng() * 50 } : {}));
+    const g = w.groups.make("tree", t.id, kind === "caravan" ? "patrol" : kind, folk, x, y)!;
+    t.seen = true;
+    if ((kind === "raid" || kind === "war") && this.startRaid(w, t, folk)) return { t, n, g };
+    if (kind === "patrol") {
+      const spot = this.coverSpot(w, t, t.r * 0.9);
+      w.groups.moveTo(w, g, spot?.x ?? t.x, spot?.y ?? t.y, "wander");
+    } else w.groups.moveTo(w, g, t.x, t.y, "home");
+    return { t, n, g };
   }
 
   /** One more of them. */
@@ -587,6 +621,8 @@ export class Forest {
   unite(w: World, from: TreeTribe, into: TreeTribe) {
     if (from === into || !this.tribes.includes(from) || !this.tribes.includes(into)) return;
     const was = into.name;
+    // their groups (families, patrols) move in with them
+    w.groups.retribe("tree", from.id, into.id);
     for (const b of this.members(from.id)) {
       b.tree = into.id;
       b.band = undefined;
@@ -871,8 +907,9 @@ export class Forest {
   /* ------------------------------ raids ------------------------------ */
 
   /** A raiding party: the edge of our town, a lone worker, or a Neanderthal camp. */
-  startRaid(w: World, t: TreeTribe): boolean {
-    const free = this.members(t.id).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && b.hp > 0.6 && b.state !== "flee");
+  /** A raid (`only`: these folk, e.g. a raiding party placed with the People tool). */
+  startRaid(w: World, t: TreeTribe, only?: Brute[]): boolean {
+    const free = (only ?? this.members(t.id)).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && b.hp > 0.6 && b.state !== "flee");
     if (free.length < 4) return false;
     const goals: NonNullable<TreeBand["goal"]>[] = [];
     const spots: { x: number; y: number }[] = [];
@@ -911,7 +948,7 @@ export class Forest {
     }
     if (!goals.length) return false;
     const k = Math.floor(this.rng() * goals.length);
-    const n = Math.min(free.length - 1, 3 + t.tier * 2, 9 + (t.merges ?? 0) * 2);
+    const n = only ? free.length : Math.min(free.length - 1, 3 + t.tier * 2, 9 + (t.merges ?? 0) * 2);
     if (n < 3) return false;
     const party = free.sort((a, b) => dist(a, t) - dist(b, t)).slice(0, n);
     const bd: TreeBand = { id: this.nextId(), tribe: t.id, mode: "raid", x: spots[k].x, y: spots[k].y, ids: party.map((b) => b.id), t: 0, size: party.length, goal: goals[k] };
@@ -1184,10 +1221,21 @@ export class Forest {
     const busy = ((b.state === "perch" || b.state === "lurk") && b.stateT < 25) || (b.state === "idle" && b.stateT < 8);
     if (busy || ((b.state === "walk" || b.state === "wander" || b.state === "home") && b.stateT < 40)) return;
     b.stateT = 0;
+    // in a group, they do what their leader does: up into the huts together, or out through the woods together
+    const g = w.groups.of(b);
+    const lead = g ? w.groups.leader(w, g) : null;
+    if (lead && lead !== b) {
+      if (lead.state === "perch" || lead.state === "climb" || lead.state === "sleep") this.goUp(w, b, t);
+      else {
+        const spot = w.groups.spot(w, b, () => this.coverSpot(w, t, t.r * 0.9));
+        if (spot) setB(b, "wander", spot.x, spot.y);
+      }
+      return;
+    }
     const r = this.rng();
     if (r < 0.4) this.goUp(w, b, t);
     else if (r < 0.75) {
-      const spot = this.coverSpot(w, t, t.r * 0.9);
+      const spot = w.groups.spot(w, b, () => this.coverSpot(w, t, t.r * 0.9));
       if (spot) setB(b, "wander", spot.x, spot.y);
     } else if (r < 0.9) {
       // keep watch from a tree out in the woods (hidden)
@@ -1767,7 +1815,10 @@ export class Forest {
     const foe: Foe | null = byBrute
       ? this.bruteNear(w, fx, fy, 60)
       : proj === "dragon" || proj === "fire" ? null : this.humanNear(w, fx, fy, 320, false);
-    if (foe) this.engage(w, b, t, foe);
+    if (!foe) return;
+    this.engage(w, b, t, foe);
+    // their group comes to help, wherever it is
+    w.groups.rally(w, b, (m) => this.engage(w, m, t, foe));
   }
 
   /** From Rivals.kill (already out of the list): what they drop. */
@@ -1814,7 +1865,7 @@ export class Forest {
       settleT: r(this.settleT),
       uniteT: r(this.uniteT),
       tribes: this.tribes.map((t) => ({ ...t, food: Math.round(t.food * 10) / 10, growT: r(t.growT), raidT: r(t.raidT), ambushT: r(t.ambushT), work: Math.round(t.work * 10) / 10, pods: t.pods.map((p) => ({ ...p, hp: Math.round(p.hp * 100) / 100 })), signs: t.signs.map((s) => ({ ...s })) })),
-      folk: this.folk(w).filter((b) => this.tribe(b.tree)).map((b) => ({ tree: b.tree!, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: r(b.age ?? TREE_GROWN), tint: b.tint })),
+      folk: this.folk(w).filter((b) => this.tribe(b.tree)).map((b) => ({ tree: b.tree!, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: r(b.age ?? TREE_GROWN), tint: b.tint, grp: b.grp })),
       cleared: this.cleared.filter((c) => w.elapsed - c.t < CLEARED_FOR).map((c) => ({ x: r(c.x), y: r(c.y), t: r(c.t) })),
     };
   }
@@ -1837,7 +1888,7 @@ export class Forest {
     for (const f of d.folk ?? []) {
       const t = this.tribe(f.tree);
       if (!t) continue;
-      const b = this.add(w, t, f.x, f.y, { name: f.name, hp: f.hp, weapon: f.weapon, age: f.age, tint: f.tint ?? t.color });
+      const b = this.add(w, t, f.x, f.y, { name: f.name, hp: f.hp, weapon: f.weapon, age: f.age, tint: f.tint ?? t.color, grp: (f as { grp?: number }).grp });
       // everyone wakes up back at camp business (bands don't survive a reload)
       if (dist(b, t) < 200) this.goUp(w, b, t);
     }

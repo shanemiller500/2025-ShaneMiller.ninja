@@ -14,6 +14,8 @@ import { FORMATIONS } from "../sim/chariots";
 import { useClickAway } from "./useClickAway";
 import { UpgradeAllButton } from "./UpgradeAllButton";
 import { ResearchSupplies } from "./ResearchSupplies";
+import { PriorityPicker } from "./PriorityPicker";
+import { PROTECTED_INFO } from "../sim/duties";
 import type { BuildingKind } from "../sim/types";
 
 /* ------------------------------------------------------------------ */
@@ -375,10 +377,36 @@ function CampTab({ snap, engine, onForge }: { snap: Snapshot; engine: Engine; on
   );
 }
 
+/** Everything waiting to be built or repaired, most urgent first, each with its priority. */
+function BuildQueue({ snap, engine }: { snap: Snapshot; engine: Engine }) {
+  const q = snap.buildQueue;
+  if (!q.length) return null;
+  return (
+    <div className="mt-2 rounded-2xl bg-white/5 p-2.5">
+      <h3 className="text-[12px] font-bold">🏗️ Build queue</h3>
+      <p className="mt-0.5 text-[10.5px] text-white/55">Urgent pulls in everyone free to gather, haul and build it; High goes before the rest; Low waits.</p>
+      <div className="dl-scroll mt-1.5 max-h-[220px] space-y-1 overflow-y-auto pr-1">
+        {q.map((s) => (
+          <div key={s.key} className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.04] px-2 py-1">
+            <span className="min-w-0 truncate text-[12px] font-semibold">
+              {s.icon} {s.name}
+              <span className="ml-1 text-[10.5px] font-medium text-white/50">{s.repair ? "repair" : s.need ? `needs ${s.need}` : "building"}</span>
+            </span>
+            <PriorityPicker compact value={s.p} onPick={(p) => engine.setPriority(s.key, p)} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function JobsTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
   const people = snap.tribe.people;
   const adults = people.filter((p) => !p.child);
-  const available = adults.filter((p) => p.availableForJob);
+  // bulk tools never touch protected riders + specialists (Dragon Riders always; the others per the toggles below)
+  const available = adults.filter((p) => p.availableForJob && !p.guarded);
+  const kept = adults.filter((p) => p.availableForJob && p.guarded);
+  const guard = snap.tribe.jobGuard;
   const [bulkRole, setBulkRole] = useState<Role>("auto");
   const [amount, setAmount] = useState("1");
   const selected = ROLE_BY_ID[bulkRole];
@@ -417,6 +445,7 @@ function JobsTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
         )}
         {snap.camp.learned.includes("dragonHunting") && <ChariotHunt snap={snap} engine={engine} />}
       </div>
+      <BuildQueue snap={snap} engine={engine} />
       <div className="mt-2 rounded-2xl bg-white/5 p-2.5">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-[12px] font-bold">Assign a duty</h3>
@@ -446,6 +475,12 @@ function JobsTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
           className="mt-1.5 w-full rounded-lg bg-gradient-to-r from-emerald-600 to-sky-600 py-1.5 text-[11.5px] font-bold transition hover:brightness-110 active:scale-95 disabled:opacity-40">
           ⚖️ Split evenly across all jobs ({available.length} → {engine.splitRoleList().length} jobs, ~{Math.max(1, Math.round(available.length / Math.max(1, engine.splitRoleList().length)))} each)
         </button>
+        <div className="mt-2 rounded-xl bg-indigo-400/10 p-2 text-[10.5px] leading-snug text-indigo-100/85">
+          <p className="font-bold">🛡️ Protected roles{kept.length ? `: ${kept.length} kept out of bulk changes` : ""}</p>
+          <p className="mt-0.5 text-white/60">🐉 Bonded Dragon Riders (and keepers raising one) are never moved by Set number, All, Split evenly or a rally, so their bond is never broken. Tap a job on a person below to move one by hand.</p>
+          <label className="mt-1 flex items-center gap-1.5"><input type="checkbox" checked={guard.dinoRiders} onChange={(e) => engine.setJobGuard("dinoRiders", e.target.checked)} /> 🏇 Keep bonded Dino Riders in their jobs too</label>
+          <label className="mt-0.5 flex items-center gap-1.5"><input type="checkbox" checked={guard.specialists} onChange={(e) => engine.setJobGuard("specialists", e.target.checked)} /> 🎓 Keep animal trainers + researchers in their jobs</label>
+        </div>
         <p className="mt-1.5 text-[10.5px] leading-snug text-white/55">Set number makes exactly that many manual assignments. All gives every available adult this duty. Split evenly shares everyone out across every job. Auto balances supplies and plans a building or upgrade each day after day one.</p>
         {bulkRole === "miner" && <p className="mt-1 text-[10.5px] text-cyan-100/75">Miner works surface deposits. Send a crew underground from the Deep panel.</p>}
       </div>
@@ -458,6 +493,7 @@ function JobsTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
               <div className="flex items-center justify-between text-[13px] font-bold">
                 <button type="button" onClick={() => { const h = engine.world.humans.find((x) => x.id === p.id); if (h) { engine.select(h.id); engine.flyTo(h.x, h.y); } }} className="hover:underline">
                   {ROLE_BY_ID[eff]?.icon} {p.name}
+                  {p.protectedAs && <span title={p.guarded ? `${PROTECTED_INFO[p.protectedAs].name}: protected from bulk job changes` : `${PROTECTED_INFO[p.protectedAs].name} (not protected right now)`} className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${p.guarded ? "bg-indigo-400/25 text-indigo-100" : "bg-white/10 text-white/50"}`}>{PROTECTED_INFO[p.protectedAs].icon} {PROTECTED_INFO[p.protectedAs].name}</span>}
                 </button>
                 <span className="text-[11px] font-semibold text-white/50">{p.role === "auto" ? `Auto → ${ROLE_BY_ID[eff]?.name}` : ROLE_BY_ID[p.role].name}</span>
               </div>

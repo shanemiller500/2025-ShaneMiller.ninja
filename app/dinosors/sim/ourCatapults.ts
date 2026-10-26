@@ -15,6 +15,7 @@ import { CATAPULT_RANGE } from "./clanTowns";
 import { emote, setState, sizeOf } from "./dinos";
 import { go, say } from "./humans";
 import { P } from "./particles";
+import { hitScorpionsAt } from "./factions";
 import { pick } from "./rng";
 import type { Rivals } from "./rivals";
 import { sp } from "../data/species";
@@ -188,6 +189,8 @@ function land(w: World, r: Rivals, s: OurShot) {
   w.particles.burst(P.Dust, s.x, s.y, 6, 50, { size: 14, max: 1, color: "rgba(150,130,100,0.6)" });
   w.sfx("boom", s.x, s.y, 0.8, 0.9);
   w.shake(2, 0.2);
+  // our own boulder never smashes our own Scorpions, even landing right by one (factions.ts)
+  hitScorpionsAt(w, s.x, s.y, 44, 60 * s.power, "us");
   for (const b of [...r.brutes]) if (b.hp > 0 && Math.hypot(b.x - s.x, b.y - s.y) < 44) r.hit(w, b, 0.45 * s.power, s.x, s.y, true, "boulder");
   for (const d of w.dinos) {
     if (!d.raider || Math.hypot(d.x - s.x, d.y - s.y) > 40 + sizeOf(d) * 0.3) continue;

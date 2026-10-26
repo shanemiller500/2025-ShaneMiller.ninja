@@ -119,6 +119,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   beamTower: { kind: "beamTower", icon: "🔆", name: "Beam tower", tip: "Fires a crystal beam at attackers and dragons (uses energy, needs to cool down). Beams can light dry grass!", cost: { shaped: 2, crystal: 1, copper: 2 }, w: 1, h: 1, solid: true, civ: "energyWeapons", work: 10, hp: 520 },
   pylon: { kind: "pylon", icon: "🔹", name: "Pylon", tip: "Pylons near each other link into a humming barrier that pushes dinosaurs back. Uses energy.", cost: { copper: 1, magnetite: 1, stone: 2 }, w: 1, h: 1, solid: true, civ: "defensiveEnergy", work: 5, hp: 320 },
   pyramid: { kind: "pyramid", icon: "🔺", name: "Pyramid", tip: "Seven stages. Activate the core, then clad the pyramid in smooth limestone for more power, storage and a brighter beam.", cost: PYRAMID_STAGES[0].cost, w: 5, h: 4, solid: true, civ: "monumental", work: PYRAMID_STAGES[0].work, hp: 4000 },
+  dragonShield: { kind: "dragonShield", icon: "🛡️", name: "Dragon Shield", tip: "Fantasy tech: a crystal frequency pylon. Put them round the edge of town: their fields knit together, and a hostile dragon flying in gets rattled by the hum and turns away (it isn't hurt). Uses energy while it works; tap one to upgrade it.", cost: { copper: 2, magnetite: 1, quartz: 1, stone: 2 }, w: 1, h: 1, solid: true, civ: "defensiveEnergy", work: 7, hp: 420 },
   resShield: { kind: "resShield", icon: "🌀", name: "Resonance shield", tip: "Raises a dome of energy over the camp. With enough stored energy it might hold when the sky falls.", cost: { crystal: 3, meteorite: 2, shaped: 4, copper: 4 }, w: 2, h: 2, solid: true, civ: "advancedArch", work: 16, hp: 900 },
 };
 
@@ -452,6 +453,6 @@ export const ARTIFACTS = [
 ];
 
 /** Species gentle enough (and big enough) to ride. */
-export const RIDEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo", "apato", "brachio"]);
+export const RIDEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo", "apato", "brachio", "camel", "frosthorn"]);
 /** Herbivores the tribe can befriend at all. */
-export const TAMEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo", "pachy", "apato", "brachio", "ptera"]);
+export const TAMEABLE = new Set(["trike", "para", "iguano", "stego", "ankylo", "pachy", "apato", "brachio", "ptera", "camel", "frosthorn", "glacierback"]);

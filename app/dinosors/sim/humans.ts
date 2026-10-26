@@ -21,6 +21,8 @@ import type { World } from "./world";
 import { season } from "./seasons";
 import { goRelax, relaxTick, sitIfAtShade } from "./shade";
 import { aloftTick, dragonCareTick, dragonRiderDefend, dragonRiderThink } from "./dragonKeep";
+import { ferryTick, riderDutyThink } from "./riderDuty";import { sitePrio, urgentSite, URGENT } from "./priority";
+
 import { returnEmitter, sonicTick } from "./sonic";
 import { drillTick, eggSpeed } from "./dragonRaid";
 import { insideWalls, outsideSpot } from "./dinoBounds";
@@ -81,6 +83,26 @@ function rescueThink(w: World, h: Human, comrade: boolean): boolean {
 export function rainGuard(h: Human) {
   const o = h.gear.outfit ? OUTFIT_BY_ID[h.gear.outfit] : null;
   return o ? o.rain : 0;
+}
+
+/** Rain gear at least this good (the tar-sealed cloak, night suits) is "proper rainproof": ordinary rain + storms don't stop the work. */
+export const RAINPROOF = 0.85;
+/** A storm this strong sends everyone under cover, rain gear or not. */
+export const SEVERE_STORM = 0.95;
+
+/**
+ * Does the weather send this person under cover right now? Proper rain gear keeps them out working
+ * through ordinary rain and storms; only genuinely dangerous weather (a severe storm, lightning
+ * striking close by) brings them in. Shared by the shelter decision and the covered rest seats.
+ */
+export function rainSendsIn(w: World, h: Human) {
+  const wt = w.weather;
+  if (wt.storm > SEVERE_STORM) return true;
+  // lightning striking right by you is dangerous whatever you're wearing
+  if (wt.storm > 0.3 && w.bolts.some((b) => Math.abs(b.x - h.x) < 240 && Math.abs(b.y - h.y) < 240)) return true;
+  const guard = rainGuard(h);
+  if (guard >= RAINPROOF) return false;
+  return (wt.rain > 0.55 && guard < 0.6) || wt.storm > 0.5;
 }
 
 /** How warm this person's clothes are (0..1). */
@@ -255,7 +277,7 @@ export function moveHuman(w: World, h: Human, dt: number) {
   // a sprinting person can't outrun a hungry predator for long, and hurt people limp
   // rain + snow slow people down, unless their hide clothes keep them dry + warm
   const wet = w.weather.rain * 0.28 * (1 - rainGuard(h));
-  let speed = (fast ? (h.child ? 30 : 36) * (h.state === "flee" ? 1.9 : 1.6) : base) * (h.level ? 0.9 : groundSpeed(w.terrain.tileAt(h.x, h.y))) * (1 - snow * 0.3 * (1 - coatWarmth(h) * 0.6)) * (1 - wet) * (0.55 + 0.45 * Math.min(1, h.hp * 1.4)) * eggSpeed(w, h);
+  let speed = (fast ? (h.child ? 30 : 36) * (h.state === "flee" ? 1.9 : 1.6) : base) * (h.level ? 0.9 : groundSpeed(w.terrain.tileAt(h.x, h.y))) * (1 - snow * 0.3 * (1 - coatWarmth(h) * 0.6)) * (1 - wet) * (0.55 + 0.45 * Math.min(1, h.hp * 1.4)) * eggSpeed(w, h) * (h.slowT ? 0.45 : 1);
   if (mount) {
     // mounted: an easy walk about camp, a flat-out run into battle, a rally or anywhere the player sends them
     const k = rideTask?.kind;
@@ -650,13 +672,26 @@ function warmSpot(w: World, h: Human): { x: number; y: number; home: boolean } |
   return home ? { x: home.x, y: home.y + 6, home: true } : { x: w.camp.caveX, y: w.camp.caveY, home: true };
 }
 
+/** Jobs that stay at their posts even for an Urgent build (watch, the dragon slayers, the deep). */
+const URGENT_SKIP = new Set<string>(["guard", "dragonSlayer", "miner", "researcher", "technician"]);
+
 /**
  * A material an open build site needs that the stockpile has none of: anyone with nothing
  * better to do fetches it, so the builders (capped per site) aren't left waiting.
  */
 function siteShortage(w: World): Resource | null {
-  for (const s of w.buildSites()) if (!s.locked && s.need && w.camp.stock[s.need] <= 0) return s.need;
-  return null;
+  // the most urgent site's shortage first (priority.ts), then any other
+  let best: Resource | null = null;
+  let bp = -1;
+  for (const s of w.buildSites()) {
+    if (s.locked || !s.need || w.camp.stock[s.need] > 0) continue;
+    const p = sitePrio(w, s);
+    if (p > bp) {
+      bp = p;
+      best = s.need;
+    }
+  }
+  return best;
 }
 
 /** Riding a heavy partner (a big work mount): carries four times as much. */
@@ -936,8 +971,7 @@ function think(w: World, h: Human) {
   const onWatch = (role === "guard" || h.state === "operate") && !h.child && h.energy > 0.15;
   const busy = !!task && (!night || (scheduled && h.shift === "night"));
   // rainproof hides keep people out working in the wet; furs keep them going in the snow
-  const guard = rainGuard(h);
-  const tooWet = (w.weather.rain > 0.55 && guard < 0.6) || (w.weather.storm > 0.5 && guard < 0.85) || w.weather.storm > 0.95;
+  const tooWet = rainSendsIn(w, h);
   const tooCold = w.weather.snow > 0.85 && coatWarmth(h) < 0.6;
   // caught in the rain by day: a covered rest area close by is as good as home
   if (!onWatch && !busy && tooWet && !tooCold && !night && h.state !== "relax" && goRelax(w, h, { covered: true, reach: 350, from: h })) return;
@@ -1010,6 +1044,8 @@ function think(w: World, h: Human) {
 
   // a Dragon Rider climbs on when their dragon is called out
   if (!h.child && h.dragon && !h.taskId && dragonRiderThink(w, h)) return;
+  // …and between fights, the pair take on jobs for the tribe: scouting, ferrying, cargo, patrols (riderDuty.ts)
+  if (!h.child && h.dragon && !h.taskId && riderDutyThink(w, h)) return;
 
   // a Dino Rider looks after their partner, scouts, and rides to work
   if (!h.child && h.partner && !h.taskId && riderThink(w, h)) return;
@@ -1061,6 +1097,9 @@ function think(w: World, h: Human) {
 
   // fire's out: the emitter goes back on the fire station's rack
   if (h.sonic && !h.taskId && returnEmitter(w, h)) return;
+
+  // an Urgent build (priority.ts): everyone free who isn't on watch drops their usual job to gather, haul and build for it
+  if (!h.order && !h.taskId && !URGENT_SKIP.has(role) && urgentSite(w) && buildThink(w, h, (s) => sitePrio(w, s) === URGENT)) return;
 
   // 5b. the job they've been given (or picked up automatically)
   if (roleThink(w, h)) return;
@@ -1359,6 +1398,12 @@ export function updateHuman(w: World, h: Human, dt: number) {
     aloftTick(w, h, dt);
     return;
   }
+  if (h.ferry) {
+    // a passenger on someone's dragon (riderDuty.ts)
+    ferryTick(w, h, dt);
+    return;
+  }
+  if (h.slowT) h.slowT = Math.max(0, h.slowT - dt);
   if (h.chariot) {
     // aboard a war chariot: it carries them (chariots.ts)
     return;

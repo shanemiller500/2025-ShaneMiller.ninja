@@ -20,6 +20,7 @@ import { knockOut } from "./injury";
 import { N, idx, inMine, lanternOf, toolsOf, type Mine } from "./mine";
 import type { Human, Resource } from "./types";
 import type { World } from "./world";
+import { mineKey, type Prio } from "./priority";
 import { canWork, workOf } from "./workDinos";
 import { loadPack, packBeside, recallPacks } from "./packs";
 import { researchShortages } from "./researchNeeds";
@@ -231,12 +232,13 @@ export function recallAll(w: World) {
 /* ======================================================================= */
 
 /** Mark a cell (returns why not, or null). */
-export function setOrder(w: World, x: number, y: number, kind: OrderKind | null): string | null {
+export function setOrder(w: World, x: number, y: number, kind: OrderKind | null, prio?: Prio): string | null {
   const mine = w.mine;
   if (!inMine(x, y)) return "Out of the mine.";
   const i = idx(x, y);
   if (kind === null) {
     mine.orders.delete(i);
+    if (w.priority.get(mineKey(i)) !== 1) w.priority.set(mineKey(i), 1);
     mine.version++;
     return null;
   }
@@ -261,6 +263,8 @@ export function setOrder(w: World, x: number, y: number, kind: OrderKind | null)
       break;
   }
   mine.orders.set(i, kind);
+  // painted with the priority brush (DeepHud): High + Urgent tunnels get dug first
+  if (prio !== undefined) w.priority.set(mineKey(i), prio);
   mine.version++;
   return null;
 }
@@ -483,11 +487,13 @@ function think(w: World, m: Miner, h: Human) {
       m.target = undefined;
     }
   }
-  // the player's orders, nearest first
-  const order = search(mine, here, (s) => {
+  // the player's orders: High + Urgent ones first (priority.ts), then the nearest
+  const top = w.priority.topMine();
+  const pass = (min: number) => search(mine, here, (s) => {
     for (const t of [s, ...NB(s)]) {
       const kind = mine.orders.get(t);
       if (!kind || claimed(w, m, t)) continue;
+      if (min > 0 && w.priority.get(mineKey(t)) < min) continue;
       if (kind === "dig" && t !== s && !mine.cantDig(cx(t), cy(t), tools)) return { kind, cell: t, stand: s };
       if (kind === "support" && t === s && w.camp.stock.wood >= 1 && !mine.buildAt.has(t)) return { kind, cell: t, stand: s };
       if (kind === "blast" && t !== s && tools.dynamite) return { kind, cell: t, stand: s };
@@ -495,7 +501,8 @@ function think(w: World, m: Miner, h: Human) {
     }
     return null;
   });
-  if (order) return plan(w, m, order, order.job.kind === "dig" ? "On it!" : undefined);
+  const order = (top >= 2 ? pass(top) ?? (top === 3 ? pass(2) : null) : null) ?? pass(0);
+  if (order) return plan(w, m, order, order.job.kind === "dig" ? (top >= 2 && w.priority.get(mineKey(order.job.cell)) >= 2 ? "Priority dig!" : "On it!") : undefined);
   const loose = search(mine, here, (s) => mine.seen[s] && mine.loose.has(s) && !claimed(w, m, s) ? { kind: "pickup", cell: s, stand: s } : null, 2500);
   if (loose) return plan(w, m, loose, "Found a nugget!");
   const site = buildJob(w, m, here);

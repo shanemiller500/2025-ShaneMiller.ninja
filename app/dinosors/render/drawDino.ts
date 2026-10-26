@@ -1234,8 +1234,519 @@ function plesiosaur(k: Ctx2) {
   c.restore();
 }
 
+/** A camel: long thin legs, a big hump, a swan neck carrying a droopy-lipped head. */
+function camel(k: Ctx2) {
+  const { c, L, def, p } = k;
+  const s = def.shape;
+  const legH = L * 0.34 * (s.legs ?? 1) * (1 - p.lie * 0.78);
+  const rx = L * 0.28;
+  const ry = L * 0.13;
+  const bodyCy = -legH - ry * 0.4;
+  const thick = L * 0.065;
+  // far legs
+  pillarLeg(k, -rx * 0.62, bodyCy + ry * 0.2, legH + ry * 0.2, p.walk + Math.PI, k.dark, thick);
+  pillarLeg(k, rx * 0.55, bodyCy + ry * 0.2, legH + ry * 0.2, p.walk, k.dark, thick);
+  // tail: a short tuft
+  c.strokeStyle = k.accent;
+  c.lineWidth = L * 0.018;
+  c.lineCap = "round";
+  c.beginPath();
+  c.moveTo(-rx * 0.95, bodyCy - ry * 0.1);
+  c.quadraticCurveTo(-rx * 1.12, bodyCy + ry * 0.4 + Math.sin(p.t * 3) * L * 0.01, -rx * 1.05, bodyCy + ry * 1.1);
+  c.stroke();
+  // body + hump
+  c.beginPath();
+  c.moveTo(-rx, bodyCy);
+  c.quadraticCurveTo(-rx * 0.9, bodyCy - ry * 1.1, -rx * 0.35, bodyCy - ry * 1.15);
+  c.quadraticCurveTo(-rx * 0.05, bodyCy - ry * 2.9, rx * 0.35, bodyCy - ry * 1.2);
+  c.quadraticCurveTo(rx * 1.0, bodyCy - ry * 1.05, rx, bodyCy - ry * 0.1);
+  c.quadraticCurveTo(rx * 0.9, bodyCy + ry * 0.95, 0, bodyCy + ry * 0.9);
+  c.quadraticCurveTo(-rx * 0.9, bodyCy + ry * 0.95, -rx, bodyCy);
+  c.closePath();
+  fillStroke(k, k.body);
+  // a soft lighter belly + a shaggy hump top
+  c.fillStyle = k.belly;
+  c.beginPath();
+  c.ellipse(0, bodyCy + ry * 0.45, rx * 0.7, ry * 0.35, 0, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = shade(def.look.body, -0.12);
+  c.beginPath();
+  c.ellipse(-rx * 0.02, bodyCy - ry * 1.85, rx * 0.28, ry * 0.32, 0, 0, Math.PI * 2);
+  c.fill();
+  mud(k, 0, bodyCy, rx, ry);
+  // near legs (knobbly knees)
+  pillarLeg(k, -rx * 0.5, bodyCy + ry * 0.4, legH, p.walk, k.body, thick * 1.05);
+  pillarLeg(k, rx * 0.68, bodyCy + ry * 0.4, legH, p.walk + Math.PI, k.body, thick * 1.05);
+  // neck: dips forward, then up
+  const sway = Math.sin(p.t * 1.6) * L * 0.012;
+  const graze = p.headDown;
+  const nx0 = rx * 0.85;
+  const ny0 = bodyCy - ry * 0.3;
+  const hx = rx * 1.55 + sway;
+  const hy = bodyCy - ry * 2.6 + graze * (legH + ry * 2.4) - p.headUp * L * 0.04;
+  c.lineCap = "round";
+  c.strokeStyle = OUTLINE;
+  c.lineWidth = L * 0.075 + k.lw * 2;
+  c.beginPath();
+  c.moveTo(nx0, ny0);
+  c.quadraticCurveTo(rx * 1.5, bodyCy + ry * 0.3 + graze * L * 0.1, hx - L * 0.02, hy + L * 0.03);
+  c.stroke();
+  c.strokeStyle = k.body;
+  c.lineWidth = L * 0.075;
+  c.stroke();
+  // head + droopy lips
+  const hs = L * 0.07 * (s.head ?? 1) * (1 + p.baby * 0.4);
+  c.beginPath();
+  c.ellipse(hx, hy, hs * 1.05, hs * 0.6, 0.15 + graze * 0.5, 0, Math.PI * 2);
+  fillStroke(k, k.body);
+  c.beginPath();
+  c.ellipse(hx + hs * 0.85, hy + hs * 0.25 + p.mouth * hs * 0.2, hs * 0.38, hs * 0.3, 0.3, 0, Math.PI * 2);
+  fillStroke(k, shade(def.look.body, 0.08));
+  // ears
+  c.fillStyle = k.dark;
+  c.beginPath();
+  c.ellipse(hx - hs * 0.6, hy - hs * 0.55, hs * 0.14, hs * 0.26, -0.4, 0, Math.PI * 2);
+  c.fill();
+  eye(k, hx + hs * 0.05, hy - hs * 0.15, hs * 0.16, false);
+}
+
+/**
+ * The Dinosaur Scorpion: a fantasy giant. Plated segments over a dinosaur's heavy legs, two
+ * great pincers and a segmented tail arching over its back to a glowing venom stinger.
+ * `mouth` drives the attack: the claws snap and the tail whips forward over the head.
+ */
+function scorpion(k: Ctx2) {
+  const { c, L, def, p } = k;
+  const legH = L * 0.13 * (def.shape.legs ?? 1) * (1 - p.lie * 0.75);
+  const rx = L * 0.3;
+  const ry = L * 0.11;
+  const cy = -legH - ry * 0.4;
+  const strike = p.mouth;
+  const plate = shade(def.look.body, 0.14);
+  const glow = def.look.accent;
+  // six heavy legs, three a side, scuttling in turn (the far side darker)
+  for (let i = 0; i < 3; i++) {
+    const x = -rx * 0.55 + i * rx * 0.55;
+    pillarLeg(k, x + rx * 0.08, cy + ry * 0.1, legH + ry * 0.35, p.walk * 1.4 + i * 2.1 + Math.PI, k.dark, L * 0.045);
+  }
+  // the tail: a thick segmented arch rising from the back, curling over to the stinger
+  const segs = 12;
+  const pts: { x: number; y: number; r: number }[] = [];
+  // (an arc round a point above its back: it starts low at the rear, climbs, and curls forward;
+  // at rest a tall question mark, striking it whips on over the head)
+  const R = L * 0.22 * (def.shape.tail ?? 1) * (1 + strike * 0.15);
+  // striking: the whole arch leans forward + down, so the stinger stabs out past the head
+  const ax = -rx * 0.3 + strike * rx * 0.85;
+  const ay = cy - ry * 0.4 - R * 0.9 + strike * R * 0.25;
+  const end = 0.1 - strike * 0.18;
+  for (let i = 0; i <= segs; i++) {
+    const f = i / segs;
+    const a = Math.PI * (1.15 - f * (1.15 - end)) + Math.sin(p.t * 1.7 + f * 2) * 0.04 * (1 - strike);
+    pts.push({ x: ax + Math.cos(a) * R, y: ay - Math.sin(a) * R * 1.1, r: L * (0.06 - f * 0.028) });
+  }
+  // the tail's core (so the plates read as one curling tail, not beads)
+  c.lineCap = "round";
+  c.lineJoin = "round";
+  for (const [w2, col] of [[L * 0.09 + k.lw * 2, OUTLINE], [L * 0.085, k.dark]] as const) {
+    c.strokeStyle = col;
+    c.lineWidth = w2;
+    c.beginPath();
+    c.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+    c.stroke();
+  }
+  for (let i = 0; i < pts.length; i++) {
+    const q = pts[i];
+    const n = pts[Math.min(pts.length - 1, i + 1)];
+    c.beginPath();
+    c.ellipse(q.x, q.y, q.r * 1.2, q.r, Math.atan2(n.y - q.y, n.x - q.x), 0, Math.PI * 2);
+    fillStroke(k, i % 2 ? k.body : plate);
+  }
+  // stinger: a curved barb with a glowing drop of venom
+  const tip = pts[pts.length - 1];
+  const pre = pts[pts.length - 2];
+  const ang = Math.atan2(tip.y - pre.y, tip.x - pre.x);
+  c.save();
+  c.translate(tip.x, tip.y);
+  c.rotate(ang);
+  c.beginPath();
+  c.moveTo(0, -L * 0.03);
+  c.quadraticCurveTo(L * 0.09, -L * 0.03, L * 0.11, L * 0.04);
+  c.quadraticCurveTo(L * 0.05, 0, 0, L * 0.03);
+  c.closePath();
+  fillStroke(k, "#2a1a12");
+  c.globalAlpha = Math.min(1, 0.55 + Math.sin(p.t * 4) * 0.2 + strike * 0.3);
+  c.fillStyle = glow;
+  c.beginPath();
+  c.arc(L * 0.11, L * 0.045, L * (0.014 + strike * 0.01), 0, Math.PI * 2);
+  c.fill();
+  c.globalAlpha = 1;
+  c.restore();
+  // the armoured body: overlapping plates and a ridge of spikes
+  c.beginPath();
+  c.ellipse(0, cy, rx, ry * 1.25, 0, 0, Math.PI * 2);
+  fillStroke(k, k.body);
+  for (let i = 0; i < 5; i++) {
+    const x = -rx * 0.8 + i * rx * 0.4;
+    c.beginPath();
+    c.ellipse(x, cy - ry * 0.35, rx * 0.24, ry * 0.85, 0, Math.PI, 0);
+    fillStroke(k, i % 2 ? plate : shade(def.look.body, 0.05));
+    c.fillStyle = "#e9dcc0";
+    c.beginPath();
+    c.moveTo(x - L * 0.018, cy - ry * 1.05);
+    c.lineTo(x, cy - ry * 1.55);
+    c.lineTo(x + L * 0.018, cy - ry * 1.05);
+    c.fill();
+  }
+  c.fillStyle = k.belly;
+  c.beginPath();
+  c.ellipse(rx * 0.1, cy + ry * 0.7, rx * 0.75, ry * 0.32, 0, 0, Math.PI * 2);
+  c.fill();
+  mud(k, 0, cy, rx, ry);
+  // near legs
+  for (let i = 0; i < 3; i++) {
+    const x = -rx * 0.6 + i * rx * 0.55;
+    pillarLeg(k, x, cy + ry * 0.5, legH + ry * 0.1, p.walk * 1.4 + i * 2.1, k.body, L * 0.05);
+  }
+  // head + the two great pincers out in front
+  const hx = rx * 1.02;
+  const hy = cy + ry * 0.15 + p.headDown * L * 0.03;
+  c.beginPath();
+  c.ellipse(hx, hy, L * 0.07, L * 0.055, 0, 0, Math.PI * 2);
+  fillStroke(k, plate);
+  const snap = strike > 0.05 ? (Math.sin(p.t * 14) * 0.5 + 0.5) * strike : 0.12 + Math.sin(p.t * 1.3) * 0.05;
+  for (const side of [-1, 1]) {
+    const far = side < 0;
+    const ax = hx + L * 0.03;
+    const ay = hy + side * L * 0.02;
+    const ex = hx + L * 0.16;
+    const ey = hy - L * 0.07 + side * L * 0.02 + strike * L * 0.04;
+    const cx2 = hx + L * 0.3 + strike * L * 0.05;
+    const cy2 = hy - L * 0.04 + side * L * 0.015;
+    limb(k, ax, ay, ex, ey, cx2 - L * 0.06, cy2, L * 0.045, L * 0.04, far ? k.dark : k.body);
+    // the claw: a fat pincer that opens + snaps shut
+    c.save();
+    c.translate(cx2 - L * 0.04, cy2);
+    c.beginPath();
+    c.ellipse(0, 0, L * 0.08, L * 0.055, 0, 0, Math.PI * 2);
+    fillStroke(k, far ? k.dark : plate);
+    for (const jaw of [-1, 1]) {
+      c.save();
+      c.rotate(jaw * (0.12 + snap * 0.55));
+      c.beginPath();
+      c.moveTo(L * 0.05, -L * 0.016 * jaw);
+      c.quadraticCurveTo(L * 0.14, -L * 0.04 * jaw, L * 0.17, L * 0.004 * jaw);
+      c.lineTo(L * 0.06, L * 0.016 * jaw);
+      c.closePath();
+      fillStroke(k, far ? k.dark : shade(def.look.body, 0.2));
+      c.restore();
+    }
+    c.restore();
+  }
+  // a cluster of small eyes that glow when it means business
+  c.fillStyle = strike > 0.1 ? "#ffcf4a" : "#1a120c";
+  for (let i = 0; i < 3; i++) {
+    c.beginPath();
+    c.arc(hx + L * 0.015 + i * L * 0.016, hy - L * 0.035 + (i % 2) * L * 0.006, Math.max(1, L * 0.008), 0, Math.PI * 2);
+    c.fill();
+  }
+}
+
+/**
+ * A big cat (the snow leopard): low and long, a thick furry tail as long as its body, wide snowshoe
+ * paws, a small round head with rounded ears. It slinks low when stalking (headDown), and the mouth
+ * opens in a snarl when it pounces.
+ */
+function cat(k: Ctx2) {
+  const { c, L, def, p } = k;
+  const s = def.shape;
+  const crouch = Math.max(p.headDown * 0.5, 0);
+  const legH = L * 0.2 * (s.legs ?? 1) * (1 - p.lie * 0.75) * (1 - crouch * 0.35);
+  const rx = L * 0.27;
+  const ry = L * 0.1;
+  const cx = -L * 0.02;
+  const cy = -legH - ry * 0.55;
+  const thick = L * 0.06;
+  // far legs
+  pillarLeg(k, cx - rx * 0.6, cy + ry * 0.2, legH + ry * 0.3, p.walk + Math.PI, k.dark, thick);
+  pillarLeg(k, cx + rx * 0.62, cy + ry * 0.2, legH + ry * 0.3, p.walk, k.dark, thick * 0.95);
+  // the great furry tail: a thick curve trailing low then up (it swishes when it's about to pounce)
+  const sw = Math.sin(p.t * 1.8) * L * 0.03 + p.tailSwing * L * 0.1;
+  const tl = L * 0.55 * (s.tail ?? 1);
+  c.lineCap = "round";
+  for (const [wid, col] of [[L * 0.085 + k.lw * 2, OUTLINE], [L * 0.085, k.body]] as const) {
+    c.strokeStyle = col;
+    c.lineWidth = wid;
+    c.beginPath();
+    c.moveTo(cx - rx * 0.85, cy - ry * 0.2);
+    c.quadraticCurveTo(cx - rx - tl * 0.55, cy + ry * 1.4 + sw * 0.4, cx - rx - tl * 0.95, cy - ry * 0.4 + sw);
+    c.stroke();
+  }
+  // dark rings on the tail
+  c.strokeStyle = k.accent;
+  c.lineWidth = L * 0.014;
+  for (let i = 1; i <= 4; i++) {
+    const f = i / 5;
+    const x = cx - rx - tl * 0.95 * f;
+    const y = cy + ry * (1.1 * Math.sin(f * Math.PI)) + sw * f;
+    c.beginPath();
+    c.arc(x, y, L * 0.034, 0, Math.PI * 2);
+    c.stroke();
+  }
+  // long low body
+  c.beginPath();
+  c.ellipse(cx, cy, rx, ry * (1 + p.lie * 0.15), crouch * 0.12, 0, Math.PI * 2);
+  fillStroke(k, k.body);
+  c.fillStyle = k.belly;
+  c.beginPath();
+  c.ellipse(cx + rx * 0.1, cy + ry * 0.45, rx * 0.78, ry * 0.45, 0, 0, Math.PI * 2);
+  c.fill();
+  // rosettes: open dark rings, the snow leopard's smoky spots
+  c.strokeStyle = shade(def.look.accent, 0.1);
+  c.lineWidth = Math.max(0.8, L * 0.01);
+  for (let i = 0; i < 9; i++) {
+    const x = cx - rx * 0.75 + ((i * 37) % 10) / 10 * rx * 1.5;
+    const y = cy - ry * 0.55 + ((i * 53) % 10) / 10 * ry * 0.85;
+    c.beginPath();
+    c.arc(x, y, L * 0.016 + (i % 3) * L * 0.003, 0.3, Math.PI * 1.7);
+    c.stroke();
+  }
+  mud(k, cx, cy, rx, ry);
+  // near legs + big furry paws
+  pillarLeg(k, cx - rx * 0.5, cy + ry * 0.4, legH + ry * 0.1, p.walk, k.body, thick * 1.05);
+  pillarLeg(k, cx + rx * 0.72, cy + ry * 0.4, legH + ry * 0.1, p.walk + Math.PI, k.body, thick);
+  // head: low and forward, small rounded ears
+  const hs = L * 0.085 * (s.head ?? 1) * (1 + p.baby * 0.45);
+  const hx = cx + rx * 1.08;
+  const hy = cy - ry * 0.35 + p.headDown * L * 0.06 - p.headUp * L * 0.04;
+  c.beginPath();
+  c.ellipse(hx, hy, hs, hs * 0.85, 0, 0, Math.PI * 2);
+  fillStroke(k, k.body);
+  for (const ex of [-0.55, 0.15]) {
+    c.beginPath();
+    c.ellipse(hx + hs * ex, hy - hs * 0.8, hs * 0.26, hs * 0.22, 0, 0, Math.PI * 2);
+    fillStroke(k, shade(def.look.body, -0.06));
+  }
+  // muzzle + nose + a snarl
+  c.beginPath();
+  c.ellipse(hx + hs * 0.7, hy + hs * 0.2, hs * 0.42, hs * 0.32, 0, 0, Math.PI * 2);
+  fillStroke(k, k.belly);
+  c.fillStyle = "#c98f86";
+  c.beginPath();
+  c.ellipse(hx + hs * 1.02, hy + hs * 0.05, hs * 0.11, hs * 0.08, 0, 0, Math.PI * 2);
+  c.fill();
+  if (p.mouth > 0.1) {
+    c.fillStyle = "#5a2626";
+    c.beginPath();
+    c.ellipse(hx + hs * 0.78, hy + hs * 0.42, hs * 0.26, hs * 0.12 * p.mouth, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#fff";
+    c.fillRect(hx + hs * 0.62, hy + hs * 0.33, hs * 0.07, hs * 0.14);
+    c.fillRect(hx + hs * 0.88, hy + hs * 0.33, hs * 0.07, hs * 0.14);
+  }
+  // pale green-grey eyes
+  eye(k, hx + hs * 0.35, hy - hs * 0.15, hs * 0.17, p.mouth > 0.3);
+}
+
+/**
+ * The Yeti: a towering shaggy ape-like giant on two legs. Long white fur hangs in layers, a dark
+ * leathery face, long arms that swing as it walks; it rears up and beats its chest to roar
+ * (headUp), and swings its arms overhead to hurl ice (mouth).
+ */
+function yeti(k: Ctx2) {
+  const { c, L, def, p } = k;
+  const s = def.shape;
+  const tall = 1 - p.lie * 0.7;
+  const legH = L * 0.32 * (s.legs ?? 1) * tall;
+  const hipY = -legH;
+  const torsoH = L * 0.42 * tall;
+  const cx = 0;
+  const sway = Math.sin(p.walk) * p.stride * L * 0.02;
+  const fur = k.body;
+  const furD = shade(def.look.body, -0.14);
+  const skin = def.look.accent;
+  // legs: thick and furry, big flat feet
+  for (const [ph, col, off] of [[p.walk + Math.PI, furD, -0.06], [p.walk, fur, 0.07]] as const) {
+    const sw = Math.sin(ph) * p.stride;
+    const fx = cx + off * L + sw * L * 0.12;
+    limb(k, cx + off * L, hipY, fx + L * 0.01, hipY * 0.45, fx, -Math.max(0, Math.cos(ph)) * p.stride * L * 0.05, L * 0.12, L * 0.1, col);
+    c.fillStyle = shade(skin, 0.15);
+    c.beginPath();
+    c.ellipse(fx + L * 0.04, -Math.max(0, Math.cos(ph)) * p.stride * L * 0.05, L * 0.09, L * 0.03, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+  // far arm (swings opposite the near one; raised overhead to throw)
+  const lift = Math.max(p.mouth, p.headUp * 0.6);
+  const shoulderY = hipY - torsoH * 0.82 + sway;
+  const armSwing = Math.sin(p.walk) * p.stride * 0.5;
+  limb(k, cx - L * 0.08, shoulderY, cx - L * 0.12 - armSwing * L * 0.1, shoulderY + L * 0.2 - lift * L * 0.42, cx - L * 0.1 - armSwing * L * 0.16, shoulderY + L * 0.38 - lift * L * 0.75, L * 0.1, L * 0.085, furD);
+  // the shaggy torso: a big rounded mass with layered fur hanging down
+  c.beginPath();
+  c.moveTo(cx - L * 0.15, hipY + L * 0.02);
+  c.quadraticCurveTo(cx - L * 0.2, hipY - torsoH * 0.6, cx - L * 0.1, hipY - torsoH + sway);
+  c.quadraticCurveTo(cx + L * 0.02, hipY - torsoH * 1.08 + sway, cx + L * 0.14, hipY - torsoH * 0.9 + sway);
+  c.quadraticCurveTo(cx + L * 0.2, hipY - torsoH * 0.45, cx + L * 0.15, hipY + L * 0.02);
+  c.closePath();
+  fillStroke(k, fur);
+  c.strokeStyle = furD;
+  c.lineWidth = Math.max(0.8, L * 0.008);
+  for (let row = 0; row < 4; row++) {
+    const y = hipY - torsoH * (0.15 + row * 0.2) + sway;
+    for (let i = -3; i <= 3; i++) {
+      const x = cx + i * L * 0.04;
+      c.beginPath();
+      c.moveTo(x, y - L * 0.02);
+      c.quadraticCurveTo(x + L * 0.008, y + L * 0.02, x - L * 0.004, y + L * 0.05);
+      c.stroke();
+    }
+  }
+  // a ragged fringe hanging over the hips
+  c.fillStyle = fur;
+  c.beginPath();
+  for (let i = 0; i <= 8; i++) {
+    const x = cx - L * 0.15 + (i / 8) * L * 0.3;
+    const y = hipY + L * (i % 2 ? 0.06 : 0.02);
+    if (i) c.lineTo(x, y);
+    else c.moveTo(x, y - L * 0.04);
+  }
+  c.lineTo(cx + L * 0.15, hipY - L * 0.04);
+  c.closePath();
+  c.fill();
+  // head: furry dome over a dark leathery face
+  const hs = L * 0.1 * (s.head ?? 1) * (1 + p.baby * 0.4);
+  const hx = cx + L * 0.05;
+  const hy = hipY - torsoH - hs * 0.55 + sway - p.headUp * L * 0.03;
+  c.beginPath();
+  c.ellipse(hx, hy, hs, hs * 1.05, 0, 0, Math.PI * 2);
+  fillStroke(k, fur);
+  c.beginPath();
+  c.ellipse(hx + hs * 0.3, hy + hs * 0.2, hs * 0.6, hs * 0.55, 0, 0, Math.PI * 2);
+  fillStroke(k, skin);
+  // brow, eyes that glint icy blue, and a mouth that roars
+  c.fillStyle = fur;
+  c.beginPath();
+  c.ellipse(hx + hs * 0.3, hy - hs * 0.15, hs * 0.66, hs * 0.18, 0, Math.PI, 0);
+  c.fill();
+  c.fillStyle = p.mouth > 0.3 || p.headUp > 0.3 ? "#9fe4ff" : "#151a20";
+  for (const ex of [0.08, 0.5]) {
+    c.beginPath();
+    c.arc(hx + hs * ex, hy + hs * 0.02, Math.max(1, hs * 0.08), 0, Math.PI * 2);
+    c.fill();
+  }
+  const roar = Math.max(p.mouth, p.headUp);
+  c.fillStyle = "#3a1d1d";
+  c.beginPath();
+  c.ellipse(hx + hs * 0.32, hy + hs * 0.45, hs * 0.26, hs * (0.06 + roar * 0.2), 0, 0, Math.PI * 2);
+  c.fill();
+  if (roar > 0.3) {
+    c.fillStyle = "#f4f1e8";
+    c.fillRect(hx + hs * 0.14, hy + hs * 0.36, hs * 0.08, hs * 0.1);
+    c.fillRect(hx + hs * 0.44, hy + hs * 0.36, hs * 0.08, hs * 0.1);
+  }
+  // near arm: long, swinging, a big dark hand (overhead with a block of ice when it throws)
+  const handX = cx + L * 0.16 + armSwing * L * 0.16;
+  const handY = shoulderY + L * 0.4 - lift * L * 0.78;
+  limb(k, cx + L * 0.1, shoulderY, cx + L * 0.2 + armSwing * L * 0.1, shoulderY + L * 0.2 - lift * L * 0.42, handX, handY, L * 0.11, L * 0.09, fur);
+  c.fillStyle = skin;
+  c.beginPath();
+  c.ellipse(handX, handY + L * 0.02, L * 0.045, L * 0.04, 0, 0, Math.PI * 2);
+  c.fill();
+  if (p.mouth > 0.5) {
+    c.fillStyle = "rgba(200,240,255,0.92)";
+    c.strokeStyle = "rgba(90,150,200,0.8)";
+    c.lineWidth = k.lw;
+    c.beginPath();
+    c.moveTo(handX - L * 0.07, handY - L * 0.03);
+    c.lineTo(handX + L * 0.01, handY - L * 0.12);
+    c.lineTo(handX + L * 0.09, handY - L * 0.05);
+    c.lineTo(handX + L * 0.03, handY + L * 0.02);
+    c.closePath();
+    c.fill();
+    c.stroke();
+  }
+}
+
+/** A shaggy winter coat (fur) + frost (pale ice tips, a sparkle) over a body, for the snowy peaks' animals. */
+function winterCoat(k: Ctx2) {
+  const { c, L, def, p } = k;
+  const s = def.shape;
+  if (!s.fur && !s.frost) return;
+  let cx = -L * 0.03;
+  let cy = -L * 0.36;
+  let rx = L * 0.28;
+  let ry = L * 0.14;
+  if (def.plan === "theropod") {
+    const legH = L * 0.27 * (s.legs ?? 1) * (1 - p.lie * 0.8);
+    cx = L * 0.04;
+    cy = -legH - L * 0.07;
+    rx = L * 0.2;
+    ry = L * 0.105;
+  } else if (def.plan === "ceratopsian") {
+    const legH = L * 0.17 * (s.legs ?? 1) * (1 - p.lie * 0.8);
+    rx = L * 0.27;
+    ry = L * 0.15;
+    cy = -legH - ry * 0.6;
+  } else if (def.plan === "ankylosaur") {
+    const legH = L * 0.11 * (s.legs ?? 1) * (1 - p.lie * 0.7);
+    cx = -L * 0.02;
+    rx = L * 0.3;
+    ry = L * 0.15;
+    cy = -legH - ry * 0.35;
+  }
+  if (s.fur) {
+    // long hair hanging off the back and the belly, swaying a little as it walks
+    const sw = Math.sin(p.walk) * p.stride * L * 0.008;
+    const n = L > 70 ? 15 : 9;
+    c.lineCap = "round";
+    for (const [col, wid] of [[shade(def.look.body, -0.22), L * 0.022], [shade(def.look.body, 0.08), L * 0.012]] as const) {
+      c.strokeStyle = col;
+      c.lineWidth = wid;
+      c.beginPath();
+      for (let i = 0; i < n; i++) {
+        const a = Math.PI * (1.08 + (i / (n - 1)) * 0.84);
+        const x = cx + Math.cos(a) * rx * 0.98;
+        const y = cy + Math.sin(a) * ry * 0.98;
+        c.moveTo(x, y);
+        c.lineTo(x + sw - Math.cos(a) * L * 0.004, y + L * 0.035);
+        // and the belly fringe below
+        const bx = cx + Math.cos(a) * rx * 0.9;
+        const by = cy + ry * 0.85;
+        c.moveTo(bx, by);
+        c.lineTo(bx + sw * 1.5, by + L * (0.045 + ((i * 7) % 3) * 0.01));
+      }
+      c.stroke();
+    }
+  }
+  if (s.frost) {
+    // ice-blue frost along the top line, and a glint or two
+    c.strokeStyle = "rgba(220,245,255,0.85)";
+    c.lineWidth = Math.max(0.8, L * 0.012);
+    c.beginPath();
+    c.ellipse(cx, cy, rx * 0.92, ry * 0.9, 0, Math.PI * 1.15, Math.PI * 1.85);
+    c.stroke();
+    c.fillStyle = "#ffffff";
+    const g = (Math.sin(p.t * 2.3 + L) + 1) / 2;
+    for (let i = 0; i < 3; i++) {
+      const x = cx + (i - 1) * rx * 0.5;
+      const y = cy - ry * 0.85;
+      const r = Math.max(0.8, L * 0.008) * (0.6 + g * 0.6);
+      c.beginPath();
+      c.moveTo(x, y - r * 2);
+      c.lineTo(x + r * 0.5, y);
+      c.lineTo(x, y + r * 2);
+      c.lineTo(x - r * 0.5, y);
+      c.closePath();
+      c.fill();
+    }
+  }
+}
+
 const PAINTERS: Record<BodyPlan, (k: Ctx2) => void> = {
   theropod,
+  camel,
+  scorpion,
+  cat,
+  yeti,
   sauropod,
   ceratopsian,
   stegosaur,
@@ -1275,6 +1786,12 @@ export function drawDino(c: CanvasRenderingContext2D, def: SpeciesDef, L: number
   const breathe = 1 + Math.sin(p.t * 2.4) * 0.012;
   c.scale(1, breathe);
   PAINTERS[def.plan](k);
+  if (def.plan === "cat" || def.plan === "yeti") {
+    // fur, not scales
+    c.restore();
+    return;
+  }
   skinTexture(k);
+  winterCoat(k);
   c.restore();
 }

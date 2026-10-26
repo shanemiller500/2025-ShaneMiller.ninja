@@ -27,9 +27,10 @@ import { hurtHuman } from "./injury";
 import { P } from "./particles";
 import { makeRng, pick, type Rng } from "./rng";
 import { isWaterTile } from "./terrain";
-import { MAP_H, MAP_W, T, TILE, WORLD_H, WORLD_W, type Brute, type BruteWeapon, type Dino, type Human, type Resource, type SeaBand, type SeaHut, type SeaSign, type SeaTribe } from "./types";
+import { MAP_H, MAP_W, OLD_MAP_H, OLD_MAP_W, T, TILE, WORLD_H, WORLD_W, type Brute, type BruteWeapon, type Dino, type Human, type Resource, type SeaBand, type SeaHut, type SeaSign, type SeaTribe } from "./types";
 import type { World } from "./world";
 import { say, setB } from "./rivals";
+import { foundingGroups, type FolkGroup, type GroupKind } from "./folkGroups";
 import { centroid, fairGame, takeFood } from "./treeFolk";
 
 /** Our hits are divided by this (Tree People 70, Neanderthals 150). */
@@ -279,8 +280,9 @@ export class SeaFolk {
     let best: { x: number; y: number } | null = null;
     let bs = -Infinity;
     for (let k = 0; k < 900; k++) {
-      const x = 160 + this.rng() * (WORLD_W - 320);
-      const y = 160 + this.rng() * (WORLD_H - 320);
+      // the old valley's coast (the eastern shore is for later villages + the People tool)
+      const x = 160 + this.rng() * (OLD_MAP_W * TILE - 320);
+      const y = 160 + this.rng() * (OLD_MAP_H * TILE - 320);
       const s = this.siteScore(w, x, y, minFromUs);
       if (s > bs) {
         bs = s;
@@ -383,11 +385,14 @@ export class SeaFolk {
     this.plantSigns(w, t);
     this.tribes.push(t);
     const n = 4 + tier * 2;
+    const folk: Brute[] = [];
     for (let i = 0; i < n; i++) {
       const h = t.huts[i % t.huts.length];
-      this.add(w, t, h.x + (this.rng() - 0.5) * 20, h.y + 3);
+      folk.push(this.add(w, t, h.x + (this.rng() - 0.5) * 20, h.y + 3));
     }
-    for (let i = 0; i < 2; i++) this.add(w, t, t.x + (this.rng() - 0.5) * 20, t.y + 3, { age: this.rng() * 80 });
+    for (let i = 0; i < 2; i++) folk.push(this.add(w, t, t.x + (this.rng() - 0.5) * 20, t.y + 3, { age: this.rng() * 80 }));
+    // they live in groups, like the clans: a crew that fishes + paddles together, families at home (folkGroups.ts)
+    foundingGroups(w, "sea", t.id, folk, t);
     return t;
   }
 
@@ -416,6 +421,32 @@ export class SeaFolk {
     t.seen = true;
     t.found = true;
     return t;
+  }
+
+  /**
+   * The People tool, a group: a fishing family, a patrol or a raiding party of Sea People in their canoes where
+   * you tap on the water. They belong to the nearest village (a new one goes up if there's none along this coast).
+   */
+  placeGroup(w: World, x: number, y: number, kind: GroupKind): { t: SeaTribe; n: number; g: FolkGroup } | string {
+    if (!waterAt(w, x, y)) return "Sea People paddle in from the water. Tap on the sea (or a river near the coast).";
+    let t = this.tribes.slice().sort((a, b) => dist(a, { x, y }) - dist(b, { x, y }))[0] ?? null;
+    if (!t || dist(t, { x, y }) > 3200) {
+      const made = this.placeVillage(w, x, y, 1000);
+      if (typeof made === "string") return made;
+      t = made;
+    }
+    this.enabled = true;
+    this.started = true;
+    w.rivals.started = true;
+    const n = kind === "raid" || kind === "war" ? 6 : 4;
+    const folk: Brute[] = [];
+    for (let i = 0; i < n; i++) folk.push(this.add(w, t, x + (this.rng() - 0.5) * 70, y + (this.rng() - 0.5) * 40, kind === "family" && i >= 2 ? { age: 40 + this.rng() * 60 } : {}));
+    const g = w.groups.make("sea", t.id, kind === "caravan" ? "patrol" : kind, folk, x, y)!;
+    t.seen = true;
+    if ((kind === "raid" || kind === "war") && this.launch(w, t, folk, { kind: "town", id: 0 }, w.camp.pileX, w.camp.pileY, true)) return { t, n, g };
+    const spot = kind === "patrol" ? this.waterSpot(w, t, t.r * 0.9, false) : null;
+    w.groups.moveTo(w, g, spot?.x ?? t.x, spot?.y ?? t.y, kind === "patrol" ? "wander" : "home");
+    return { t, n, g };
   }
 
   private add(w: World, t: SeaTribe, x: number, y: number, o: Partial<Brute> = {}): Brute {
@@ -647,10 +678,11 @@ export class SeaFolk {
   }
 
   /** Off they go (exported for tests + the odd scripted raid). */
-  launch(w: World, t: SeaTribe, free: Brute[], goal: SeaBand["goal"], gx: number, gy: number): boolean {
+  /** Send a raid out (`all`: every one of `free` goes, e.g. a raiding party placed with the People tool). */
+  launch(w: World, t: SeaTribe, free: Brute[], goal: SeaBand["goal"], gx: number, gy: number, all = false): boolean {
     const route = seaRoute(w, t.x, t.y, gx, gy);
     if (!route || !route.length) return false;
-    const n = Math.min(free.length - 1, 3 + t.tier * 2, 8);
+    const n = all ? free.length : Math.min(free.length - 1, 3 + t.tier * 2, 8);
     if (n < 3) return false;
     const party = free.sort((a, b) => dist(a, t) - dist(b, t)).slice(0, n);
     const bd: SeaBand = { id: this.nextId(), tribe: t.id, mode: "raid", x: gx, y: gy, ids: party.map((b) => b.id), t: 0, size: party.length, goal, route };
@@ -796,6 +828,16 @@ export class SeaFolk {
     const busy = (b.state === "idle" && b.stateT < 10) || ((b.state === "walk" || b.state === "wander" || b.state === "home") && b.stateT < 40) || (b.state === "forage" && b.stateT < 60);
     if (busy) return;
     b.stateT = 0;
+    // in a group, they go where their leader goes: out fishing together, or home to the stilt-houses together
+    const g = w.groups.of(b);
+    const lead = g ? w.groups.leader(w, g) : null;
+    if (lead && lead !== b && !b.mount) {
+      if (lead.state === "forage" || lead.state === "wander") {
+        const spot = w.groups.spot(w, b, () => this.waterSpot(w, t, t.r * 0.85, true));
+        if (spot) setB(b, lead.state, spot.x, spot.y);
+      } else this.toHut(w, b, t, "idle");
+      return;
+    }
     // out on a sea dragon: another lap of the village waters, or home to the stilt-houses
     if (b.mount) {
       if (this.rng() < 0.3) this.toHut(w, b, t, "idle");
@@ -822,8 +864,8 @@ export class SeaFolk {
       return;
     }
     if (r < 0.55) {
-      // out fishing in the deep water
-      const spot = this.waterSpot(w, t, t.r * 0.85, true);
+      // out fishing in the deep water (their group comes along)
+      const spot = w.groups.spot(w, b, () => this.waterSpot(w, t, t.r * 0.85, true));
       if (spot) setB(b, "forage", spot.x, spot.y);
     } else if (r < 0.62) {
       const spot = this.waterSpot(w, t, t.r * 0.9, false);
@@ -1275,7 +1317,10 @@ export class SeaFolk {
         }
       }
     }
-    if (foe) this.engage(w, b, t, foe);
+    if (!foe) return;
+    this.engage(w, b, t, foe);
+    const f = foe;
+    w.groups.rally(w, b, (m) => this.engage(w, m, t, f));
   }
 
   /** From Rivals.kill (already out of the list). */
@@ -1418,6 +1463,7 @@ export class SeaFolk {
   unite(w: World, from: SeaTribe, into: SeaTribe) {
     if (from === into || !this.tribes.includes(from) || !this.tribes.includes(into)) return;
     const was = into.name;
+    w.groups.retribe("sea", from.id, into.id);
     for (const b of this.members(from.id)) {
       this.dismount(w, b);
       b.sea = into.id;
@@ -1476,7 +1522,7 @@ export class SeaFolk {
       settleT: r(this.settleT),
       uniteT: r(this.uniteT),
       tribes: this.tribes.map((t) => ({ ...t, food: Math.round(t.food * 10) / 10, growT: r(t.growT), raidT: r(t.raidT), work: Math.round(t.work * 10) / 10, huts: t.huts.map((h) => ({ ...h, hp: Math.round(h.hp * 100) / 100 })), signs: t.signs.map((s) => ({ ...s })) })),
-      folk: this.folk(w).filter((b) => this.tribe(b.sea)).map((b) => ({ sea: b.sea!, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: r(b.age ?? SEA_GROWN), tint: b.tint })),
+      folk: this.folk(w).filter((b) => this.tribe(b.sea)).map((b) => ({ sea: b.sea!, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: r(b.age ?? SEA_GROWN), tint: b.tint, grp: b.grp })),
       cleared: this.cleared.filter((c) => w.elapsed - c.t < CLEARED_FOR).map((c) => ({ x: r(c.x), y: r(c.y), t: r(c.t) })),
     };
   }
@@ -1499,7 +1545,7 @@ export class SeaFolk {
     for (const f of d.folk ?? []) {
       const t = this.tribe(f.sea);
       if (!t) continue;
-      const b = this.add(w, t, f.x, f.y, { name: f.name, hp: f.hp, weapon: f.weapon, age: f.age, tint: f.tint ?? t.color });
+      const b = this.add(w, t, f.x, f.y, { name: f.name, hp: f.hp, weapon: f.weapon, age: f.age, tint: f.tint ?? t.color, grp: (f as { grp?: number }).grp });
       if (dist(b, t) < 300) this.toHut(w, b, t, "idle");
     }
     // trained sea dragons whose village is gone are wild again; nobody's riding anything after a load

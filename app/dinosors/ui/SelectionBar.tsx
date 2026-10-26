@@ -21,7 +21,7 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
   const [rescueOpen, setRescueOpen] = useState(false);
   const rescueClans = snap.rivals.clans.filter((clan) => clan.captives.length > 0);
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-[78px] z-30 flex flex-col-reverse items-center gap-2 px-2 sm:bottom-[96px]">
+    <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+78px)] z-30 flex flex-col-reverse items-center gap-2 px-2 sm:bottom-[96px]">
       <AnimatePresence mode="popLayout">
         {sel.length === 0 && (toolOn || hidePickTip) ? null : sel.length === 0 ? (
           <motion.div
@@ -29,7 +29,7 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="dl-glass pointer-events-auto flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-white/85 shadow-lg transition hover:bg-white/15 active:scale-95"
+            className="dl-glass pointer-events-auto hidden items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-white/85 shadow-lg transition hover:bg-white/15 active:scale-95 sm:flex"
           >
             <button type="button" onClick={() => engine.selectAll(true)} title="Pick everyone who isn't busy (or tap a person, shift-drag a box)" className="flex items-center gap-2">
               <Users className="h-4 w-4" /> Pick idle people
@@ -40,6 +40,11 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
             <button type="button" onClick={() => engine.toggleClearAreaMode()} aria-pressed={engine.clearAreaMode} title="Drag a box over trees + bushes: free hands (or whoever you pick first) clear it down to grass" className={`flex min-h-10 items-center gap-1.5 rounded-full px-3 transition active:scale-95 ${engine.clearAreaMode ? "bg-emerald-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
               🪓 Clear area
             </button>
+            {snap.tribe.walls.built + snap.tribe.walls.planned > 0 && (
+              <button type="button" onClick={() => engine.toggleWallEditMode()} aria-pressed={engine.wallEditMode} title="Edit walls: pick wall pieces and drag them to a new spot together" className={`flex min-h-10 items-center gap-1.5 rounded-full px-3 transition active:scale-95 ${engine.wallEditMode ? "bg-cyan-300 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
+                ✏️ Walls
+              </button>
+            )}
             <span className="hidden text-[11px] font-medium text-white/50 sm:inline">· or tap someone</span>
             <button type="button" onClick={() => setHidePickTip(true)} aria-label="Close pick people tip" className="ml-1 rounded-full p-0.5 text-white/60 hover:bg-white/15 hover:text-white"><X className="h-3.5 w-3.5" /></button>
           </motion.div>

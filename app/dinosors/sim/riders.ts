@@ -161,7 +161,7 @@ export function trainerWork(w: World) {
 }
 
 function wildPupil(w: World, d: Dino) {
-  return !d.owner && !d.raider && !d.migrant && !isBaby(d) && TAMEABLE.has(d.species) && d.health > 0.5 && Math.hypot(d.x - w.camp.x, d.y - w.camp.y) < 1500;
+  return !d.owner && !d.raider && !d.migrant && !d.sandRider && !d.snowRider && !d.snowTribe && !isBaby(d) && TAMEABLE.has(d.species) && d.health > 0.5 && Math.hypot(d.x - w.camp.x, d.y - w.camp.y) < 1500;
 }
 
 const near = (h: Human, d: Dino, extra = 30) => Math.hypot(d.x - h.x, d.y - h.y) < sizeOf(d) * 0.5 + extra;

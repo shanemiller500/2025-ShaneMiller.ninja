@@ -4,8 +4,9 @@ import { BREED_LIST } from "../data/dragons";
 import { type CivPath, type CivTechId } from "../data/civ";
 import { memo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { Map as MapIcon } from "lucide-react";
 import { SPECIES } from "../data/species";
-import { BUILD_BY_ID, BUILD_DEFS, bestBuild, buildCost, buildVisible, DISASTER_OPTS, FARM_CROP_OPTS, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type BuildDef, type BuildOpt, type Opt, type ToolId, type ToolState } from "../game/tools";
+import { BUILD_BY_ID, BUILD_DEFS, bestBuild, buildCost, buildVisible, DISASTER_OPTS, FARM_CROP_OPTS, FOLK_GROUP_OPTS, FOLK_PEOPLE, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type BuildDef, type BuildOpt, type Opt, type ToolId, type ToolState } from "../game/tools";
 import type { Resource, SpeciesId, TechId } from "../sim/types";
 import Portrait from "./Portrait";
 import { GameIcon } from "./GameIcon";
@@ -21,7 +22,7 @@ const HAS_OPTIONS = new Set<ToolId>(["dino", "egg", "food", "plant", "land", "we
 export default memo(Toolbar);
 
 /** The toy box: memoized, so it only re-renders when the tool, unlocks, techs or stock actually change. */
-function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none", trainOpen = false, onTrain, shiftOpen = false, onShifts, orphanNests = [], onClaimNest }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void; shiftOpen?: boolean; onShifts?: () => void; orphanNests?: { id: number; breed: string; eggs: number; found: boolean }[]; onClaimNest?: (id: number) => void }) {
+function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none", trainOpen = false, onTrain, shiftOpen = false, onShifts, orphanNests = [], onClaimNest, mapOpen, onMap }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void; shiftOpen?: boolean; onShifts?: () => void; orphanNests?: { id: number; breed: string; eggs: number; found: boolean }[]; onClaimNest?: (id: number) => void; mapOpen: boolean; onMap: () => void }) {
   const [open, setOpen] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<ToolId | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -81,7 +82,7 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
   };
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center px-2 sm:bottom-4">
+    <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+8px)] z-20 flex justify-center px-2 sm:bottom-4">
       <div ref={toolbarRef} className="pointer-events-auto relative max-w-full">
         <AnimatePresence>
           {open && (
@@ -140,7 +141,24 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
                 <p className="px-1 pt-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/75">Place surface materials</p>
                 <Options opts={LAND_OPTS.slice(4)} value={tool.land} onPick={(v) => pick("land", v)} />
               </div>}
-              {open === "people" && <Options opts={PEOPLE_OPTS} value={tool.people} onPick={(v) => pick("people", v)} />}
+              {open === "people" && (
+                <>
+                  <Options opts={PEOPLE_OPTS} value={tool.people} onPick={(v) => pick("people", v, !FOLK_PEOPLE.has(v))} />
+                  {FOLK_PEOPLE.has(tool.people) && (
+                    <>
+                      <p className="mt-2 px-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/75">They arrive as…</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {FOLK_GROUP_OPTS.filter((o) => o.value !== "caravan" || tool.people === "sandFolk" || tool.people === "snowFolk").map((o) => (
+                          <button key={o.value} type="button" aria-pressed={tool.folkGroup === o.value} onClick={() => { setTool({ id: "people", folkGroup: o.value }); setOpen(null); }}
+                            className={`flex min-h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition active:scale-95 ${tool.folkGroup === o.value ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
+                            <span className="text-base">{o.icon}</span> {o.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
               {open === "build" && <BuildMenu value={tool.build} farmCrop={tool.farmCrop} onFarmCrop={(v) => setTool({ farmCrop: v })} learned={learned} civDone={civDone} civPath={civPath} stock={stock} onPick={(v) => pick("build", v)} />}
               {open === "weather" && <Options opts={WEATHER_OPTS} value={tool.weather} onPick={(v) => pick("weather", v)} />}
               {open === "disaster" && <Options opts={DISASTER_OPTS} value={tool.disaster} onPick={(v) => pick("disaster", v)} />}
@@ -176,6 +194,11 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
               </div>
             );
           })}
+          <button type="button" onClick={() => { setOpen(null); onMap(); }} aria-label="Map" aria-pressed={mapOpen} title="Show the world map"
+            className={`order-1 group flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-[22px] transition active:scale-90 sm:hidden ${mapOpen ? "dl-btn bg-gradient-to-b from-amber-300 to-amber-500 text-[#3a2414]" : "hover:-translate-y-1 hover:bg-white/15"}`}>
+            <MapIcon className="h-7 w-7" />
+            <span className="mt-0.5 text-[10px] font-bold">Map</span>
+          </button>
           <button type="button" onClick={() => { setOpen(null); setTool({ id: "hand" }); onTrain?.(); }} aria-label="Train dinosaurs" aria-pressed={trainOpen} title="Train dinosaurs and manage hauling" className={`order-1 group flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-[22px] transition active:scale-90 sm:h-16 sm:w-16 ${trainOpen ? "dl-btn bg-gradient-to-b from-amber-300 to-amber-500 text-[#3a2414]" : "hover:-translate-y-1 hover:bg-white/15"}`}>
             <span className="text-[26px] leading-none group-hover:scale-110 sm:text-[30px]">🦕</span>
             <span className="mt-0.5 text-[10px] font-bold">Train</span>

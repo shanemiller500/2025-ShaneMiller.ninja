@@ -3,7 +3,11 @@
 /*  (Fantasy! Dragons never lived alongside dinosaurs.)                */
 /* ------------------------------------------------------------------ */
 
-export type DragonBreed = "fire" | "mountain" | "swift" | "heavy";
+export type DragonBreed = "fire" | "mountain" | "swift" | "heavy" | "ice" | "sand";
+
+/** What comes out when it breathes: fire, a freezing blast (Ice Dragons), or super-heated sand (Sand Dragons). */
+export type BreathKind = "fire" | "frost" | "sand";
+export const breathOf = (b: DragonBreed | undefined): BreathKind => (b === "ice" ? "frost" : b === "sand" ? "sand" : "fire");
 
 export interface BreedDef {
   id: DragonBreed;
@@ -54,6 +58,17 @@ export const BREEDS: Record<DragonBreed, BreedDef> = {
     id: "heavy", name: "Heavy Dragon", icon: "🏋️", tip: "Huge and strong: carries the most, flies slowly.",
     size: 1.35, speed: 210, hp: 4200, stamina: 0.9, fire: 1.05, carry: 16, smarts: 0.45, aggression: 0.6, temper: 0.4,
     look: { body: "#3b3f73", belly: "#a7b4ff", wing: "#262a52", horn: "#f3e7c9", egg: "#4c5299", spots: "#c4ccff" }, weight: 1,
+  },
+  // only from their own homes (weight 0: never a random egg): the snowy peaks, the Sand People's roosts
+  ice: {
+    id: "ice", name: "Ice Dragon", icon: "❄️", tip: "Lives high in the snowy peaks. Its freezing breath slows and chills whatever it hits, and leaves the ground iced over.",
+    size: 1.1, speed: 270, hp: 3200, stamina: 1.2, fire: 1.1, carry: 8, smarts: 0.6, aggression: 0.55, temper: 0.5,
+    look: { body: "#bcd9ee", belly: "#f4fbff", wing: "#7fa9cc", horn: "#eaf7ff", egg: "#c3e4f6", spots: "#ffffff" }, weight: 0,
+  },
+  sand: {
+    id: "sand", name: "Sand Dragon", icon: "🏜️", tip: "The Sand People's desert dragon: sand-coloured, at home on the dunes. It blasts super-heated sand that scorches and leaves the ground glowing hot.",
+    size: 1.05, speed: 290, hp: 2800, stamina: 1.25, fire: 1.15, carry: 7, smarts: 0.55, aggression: 0.75, temper: 0.4,
+    look: { body: "#d2ac72", belly: "#f3dfb0", wing: "#b38652", horn: "#fff1d0", egg: "#d9b77c", spots: "#f6e3b5" }, weight: 0,
   },
 };
 
@@ -118,7 +133,9 @@ export type DragonStage = (typeof DRAGON_STAGES)[number];
 
 /* ------------------------------ commands ------------------------------ */
 
-export type DragonCmdKind = "follow" | "stay" | "flyTo" | "land" | "patrol" | "route" | "guard" | "attack" | "retreat" | "fire" | "carry" | "home" | "volcano";
+export type DragonCmdKind = "follow" | "stay" | "flyTo" | "land" | "patrol" | "route" | "guard" | "attack" | "retreat" | "fire" | "carry" | "home" | "volcano"
+  // a Dragon Rider's job for the tribe (riderDuty.ts; never a button)
+  | "duty";
 
 export const DRAGON_COMMANDS: { id: DragonCmdKind; icon: string; name: string; tip: string; aim: boolean; needs: DragonSkill }[] = [
   { id: "follow", icon: "🚶", name: "Follow", tip: "Stay with its rider (or trainer)", aim: false, needs: "follow" },

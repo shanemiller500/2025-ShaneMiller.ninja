@@ -17,15 +17,19 @@ import { ringFire } from "../sim/shade";
 import { placeDragonEgg } from "../sim/dragonNests";
 import { BREEDS, type DragonBreed } from "../data/dragons";
 import { makePlant } from "../sim/plants";
+import { clearPlantsUnderBuilds } from "../sim/buildClear";
 import { isWaterTile, isWalkTile } from "../sim/terrain";
 import { MAP_W, MAX_PEOPLE, T, TILE, type BuildingKind, type FarmCrop, type NodeKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
 import type { World } from "../sim/world";
+import { GROUP_INFO } from "../sim/folkGroups";
 
 export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire" | "weather" | "disaster" | "people" | "build" | "erase";
 export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
 export type LandOpt = "water" | "rock" | "mud" | "grass" | NodeKind;
 export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon" | "supervolcano";
-export type PeopleOpt = "adult" | "child" | "clan" | "treeFolk" | "seaFolk";
+export type PeopleOpt = "adult" | "child" | "clan" | "treeFolk" | "seaFolk" | "sandFolk" | "snowFolk";
+/** How Tree / Sea / Sand People arrive with the People tool: a whole camp, or a group of them (folkGroups.ts). */
+export type FolkGroupOpt = "camp" | "family" | "patrol" | "raid" | "caravan";
 export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "bonegate" | "levitate" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | "cleanMud" | BuildingKind;
 
 export interface ToolState {
@@ -40,6 +44,7 @@ export interface ToolState {
   weather: WeatherKind;
   disaster: DisasterOpt;
   people: PeopleOpt;
+  folkGroup: FolkGroupOpt;
   build: BuildOpt;
   farmCrop: FarmCrop;
 }
@@ -55,6 +60,7 @@ export const DEFAULT_TOOL: ToolState = {
   weather: "rain",
   disaster: "lightning",
   people: "adult",
+  folkGroup: "camp",
   build: "wall",
   farmCrop: "wheat",
 };
@@ -120,8 +126,19 @@ export const PEOPLE_OPTS: Opt<PeopleOpt>[] = [
   { value: "child", icon: "🧒", label: "Cave kid" },
   { value: "clan", icon: "🪓", label: "Neanderthal clan" },
   { value: "treeFolk", icon: "🌿", label: "Tree People camp" },
-  { value: "seaFolk", icon: "🛶", label: "Sea People village" },
+  { value: "seaFolk", icon: "🛶", label: "Sea People" },
+  { value: "sandFolk", icon: "🐪", label: "Sand People" },
+  { value: "snowFolk", icon: "🏔️", label: "Snow People" },
 ];
+/** (only for the Tree, Sea + Sand People) */
+export const FOLK_GROUP_OPTS: Opt<FolkGroupOpt>[] = [
+  { value: "camp", icon: "⛺", label: "A whole camp" },
+  { value: "family", icon: "👪", label: "A family" },
+  { value: "patrol", icon: "🛡️", label: "A patrol" },
+  { value: "raid", icon: "⚔️", label: "A raiding party" },
+  { value: "caravan", icon: "🐪", label: "A caravan (Sand) / hunting party (Snow)" },
+];
+export const FOLK_PEOPLE = new Set<PeopleOpt>(["treeFolk", "seaFolk", "sandFolk", "snowFolk"]);
 
 /** A new clan can't settle on top of our camp. */
 export const CLAN_MIN_DIST = 700;
@@ -195,6 +212,7 @@ export const BUILD_DEFS: BuildDef[] = [
   { value: "polygate", icon: "⛩️", label: "Monumental gate", cat: "defense", cost: { shaped: 3 }, civ: "precisionStone", tip: "A shaped-stone gate. Put it in a wall (or draw over an old gate)." },
   bld("beamTower", "defense"),
   bld("pylon", "defense"),
+  bld("dragonShield", "defense"),
   bld("shelterDeep", "wonders"),
   bld("resTable", "wonders"),
   bld("chamber", "wonders"),
@@ -330,6 +348,24 @@ function hint(w: World, icon: string, text: string) {
  * Apply the active tool at a world point. `drag` is true for brush strokes
  * after the first touch (so single-shot tools don't spam).
  */
+/** The People tool: a group of Tree / Sea / Sand People arrives together where you tap (folkGroups.ts). */
+function placeFolkGroup(w: World, tool: ToolState, x: number, y: number): boolean {
+  // (the Snow People have no caravans: a hunting party instead)
+  const kind = tool.folkGroup === "camp" ? "family" : tool.people === "snowFolk" && tool.folkGroup === "caravan" ? "hunt" : tool.folkGroup;
+  const info = GROUP_INFO[kind];
+  const r = tool.people === "snowFolk" ? w.snowFolk.placeGroup(w, x, y, kind) : tool.people === "sandFolk" ? w.sandFolk.placeGroup(w, x, y, kind) : tool.people === "seaFolk" ? w.seaFolk.placeGroup(w, x, y, kind) : w.forest.placeGroup(w, x, y, kind);
+  const icon = tool.people === "snowFolk" ? "🏔️" : tool.people === "sandFolk" ? "🐪" : tool.people === "seaFolk" ? "🛶" : "🌿";
+  if (typeof r === "string") {
+    hint(w, icon, r);
+    return false;
+  }
+  const people = tool.people === "snowFolk" ? "Snow People" : tool.people === "sandFolk" ? "Sand People" : tool.people === "seaFolk" ? "Sea People" : "Tree People";
+  const what = kind === "raid" ? "They're off on a raid!" : kind === "patrol" ? "They'll patrol their land together." : kind === "caravan" ? "They're taking their camels to the water." : "They head home to their camp.";
+  w.sfx("drums", x, y, 0.6, 1.1);
+  w.toast(info.icon, `A ${info.name} of the ${r.t.name} ${people} has arrived: they stay together, travel together and fight for each other. ${what}`, x, y);
+  return true;
+}
+
 export function applyTool(w: World, tool: ToolState, x: number, y: number, drag: boolean): boolean {
   const tile = w.terrain.tileAt(x, y);
   switch (tool.id) {
@@ -458,6 +494,30 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
     }
     case "people": {
       if (drag) return false;
+      // a group of Tree / Sea / Sand People (a family, a patrol, a raiding party, a caravan) where you tap
+      if (FOLK_PEOPLE.has(tool.people) && tool.folkGroup !== "camp") return placeFolkGroup(w, tool, x, y);
+      // a Snow People camp goes up on the high snowfields where you tap
+      if (tool.people === "snowFolk") {
+        const t = w.snowFolk.placeCamp(w, x, y, 1000);
+        if (typeof t === "string") {
+          hint(w, "🏔️", t);
+          return false;
+        }
+        w.sfx("drums", t.x, t.y, 0.8, 0.6);
+        w.toast("🏔️", `The ${t.name} Snow People have built their igloos here: ${w.snowFolk.members(t.id).length} of them in furs, with Frosthorn mounts. They guard their land fiercely, but leave travellers be elsewhere.`, t.x, t.y);
+        return true;
+      }
+      // a Sand People camp pitches out on the sand where you tap
+      if (tool.people === "sandFolk") {
+        const t = w.sandFolk.placeCamp(w, x, y, 1000);
+        if (typeof t === "string") {
+          hint(w, "🐪", t);
+          return false;
+        }
+        w.sfx("drums", t.x, t.y, 0.8, 0.7);
+        w.toast("🐪", `The ${t.name} Sand People have pitched their tents here: ${w.sandFolk.members(t.id).length} of them, with camels${w.dragons.list.some((d) => d.sandTribe === t.id) ? " and a Sand Dragon" : ""}. Out on the dunes they're hard to see. They raid everyone.`, t.x, t.y);
+        return true;
+      }
       // a Sea People village goes up out on the water where you tap
       if (tool.people === "seaFolk") {
         const t = w.seaFolk.placeVillage(w, x, y, 1000);
@@ -510,8 +570,11 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
       w.sfx("babble", x, y, 0.7);
       return true;
     }
-    case "build":
-      return build(w, tool, x, y, drag);
+    case "build": {
+      const placed = build(w, tool, x, y, drag);
+      if (placed) clearPlantsUnderBuilds(w);
+      return placed;
+    }
     case "erase":
       return erase(w, x, y, drag);
     default:

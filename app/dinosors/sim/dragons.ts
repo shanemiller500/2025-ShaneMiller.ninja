@@ -28,13 +28,16 @@ import { say as sayH } from "./humans";
 import { colorsOf } from "./clanTowns";
 import { favored } from "./clanRite";
 import type { World } from "./world";
-import { BREEDS, GROW_SECONDS, type DragonBreed } from "../data/dragons";
-import { dropEgg, eggSpot, nestEggs, nestLost, nestsUpdate } from "./dragonNests";
+import { BREEDS, GROW_SECONDS, breathOf, type DragonBreed } from "../data/dragons";
+import { breathBlast } from "./breath";
+import { dropEgg, eggSpot, nestEggs, nestLost, nestsUpdate, seedIceNests } from "./dragonNests";
 import { dismountDragon, dragonRiderOf, newDragonStats, ownedUpdate, warTrained } from "./dragonKeep";
 import { assignKeepers } from "./keepers";
 import { showsUpdate, type Show } from "./shows";
 import { broodStep } from "./dragonBrood";
 import { fightBack, giveUpAt, rageTick, retaliateStep, youngLost } from "./dragonRage";
+import { hitScorpionsAt, sideOfDragon } from "./factions";
+import { repelStep, shieldsTick } from "./dragonShield";
 
 const d0 = (dr: Dragon) => Math.hypot(dr.tx - dr.x, dr.ty - dr.y);
 
@@ -80,6 +83,8 @@ export class Dragons {
   seeded = false;
   /** every nest has been topped up to its clutch of three (older saves) */
   topped = false;
+  /** the Great Peaks have their Ice Dragon nests (dragonNests.seedIceNests) */
+  iceSeeded = false;
   /** seconds until the next look for hidden nests */
   seeT = 0;
   /** seconds until tamed dragons next scan for threats */
@@ -180,8 +185,17 @@ export class Dragons {
       }
     }
     this.breathT -= dt;
-    for (const dr of [...this.list]) this.step(w, dr, dt, calm);
+    if (!this.iceSeeded && w.wildlife.enabled) seedIceNests(w);
+    for (const dr of [...this.list]) {
+      // a Sand People war dragon flies for its tribe (sandFolk.ts)
+      if (dr.sandTribe) w.sandFolk.dragonStep(w, dr, dt);
+      // answering the Mountain Monks' offering (monks.ts): nothing disturbs it
+      else if (dr.monkRite) w.monks.riteDragonStep(w, dr, dt);
+      else this.step(w, dr, dt, calm);
+    }
     this.fallsUpdate(w, dt);
+    // Dragon Shields: charge near hostile dragons, rattle the ones in a live field (dragonShield.ts)
+    shieldsTick(w, dt);
     nestsUpdate(w, dt);
     this.scanT -= dt;
     ownedUpdate(w, dt);
@@ -219,6 +233,8 @@ export class Dragons {
     dr.t += dt;
     dr.hit = Math.max(0, dr.hit - dt * 3);
     dr.breath = Math.max(0, dr.breath - dt * 2);
+    // rattled by a Dragon Shield's hum: it flies out of the field and away (dragonShield.ts)
+    if (repelStep(w, dr, dt)) return;
     dr.oddsT = Math.max(0, (dr.oddsT ?? 0) - dt);
     // left alone for a bit, a wild dragon's wounds close up
     dr.calmT = (dr.calmT ?? 99) + dt;
@@ -472,6 +488,13 @@ export class Dragons {
     dr.fireAt = undefined;
     const fx = dr.x + dr.vx * 0.35;
     const fy = dr.y + dr.vy * 0.35;
+    // an Ice Dragon's frost, a Sand Dragon's scorching sand (breath.ts): no flames, their own effects
+    if (breathOf(dr.breed) !== "fire") {
+      if (this.breathT > 0) return;
+      this.breathT = 0.18;
+      breathBlast(w, dr, fx, fy, breathOf(dr.breed), 1 + (dr.rage ?? 0) * 0.35);
+      return;
+    }
     if (w.inView(fx, fy, 200)) {
       for (let k = 0; k < 3; k++) {
         const t = w.rng();
@@ -525,11 +548,13 @@ export class Dragons {
     if (dr.fury && w.rng() < 0.3) w.particles.burst(P.Ember, fx, fy, 6, 50, { z: 4, vz: 40, size: 4, max: 0.9, color: "#ff8a2a" });
     for (const s of w.shelters) if (Math.hypot(s.x - fx, s.y - fy) < 60 && s.stage > 0) s.hp = Math.max(0, s.hp - (s.tier >= 4 ? 0.01 : s.tier >= 3 ? 0.04 : 0.12) * (dr.fury ? 4 : 1));
     for (const b of w.colony.buildings) if (Math.hypot(b.x - fx, b.y - fy) < 60) b.hp -= b.kind === "blacksmith" ? 4 : 20;
-    for (const s of w.colony.scorpions) if (Math.hypot(s.x - fx, s.y - fy) < 50) s.hp -= 15;
+    hitScorpionsAt(w, fx, fy, 50, 15, sideOfDragon(dr));
   }
 
   /** A bolt or arrow struck a dragon. */
   hit(w: World, dr: Dragon, dmg: number) {
+    // a dragon at the monks' offering is under the peace of the mountain (monks.ts isProtected)
+    if (dr.monkRite) return;
     // thick scales: a wild dragon takes half of any hit (a furious parent shrugs off almost everything: 50x harder)
     dmg *= 0.5;
     if (dr.fury) dmg /= 50;
@@ -540,7 +565,7 @@ export class Dragons {
     dr.hit = 1;
     dr.calmT = 0;
     // smart: hurt + outmatched, it doesn't fight to the end: it breaks off to heal
-    if (!dr.owner && !dr.fury && !(dr.rage ?? 0) && dr.hp > 0 && dr.hp < dr.maxHp * 0.6 && !(dr.oddsT ?? 0) && !["flee", "leave", "home", "perch", "offering"].includes(dr.state)) {
+    if (!dr.owner && !dr.sandTribe && !dr.fury && !(dr.rage ?? 0) && dr.hp > 0 && dr.hp < dr.maxHp * 0.6 && !(dr.oddsT ?? 0) && !["flee", "leave", "home", "perch", "offering"].includes(dr.state)) {
       dr.oddsT = 3;
       if (this.foesNear(w, dr.x, dr.y) > (dr.hp / dr.maxHp) * 18) {
         dr.oddsT = 30;
@@ -576,6 +601,8 @@ export class Dragons {
       this.list.splice(this.list.indexOf(dr), 1);
       if (dr.nest) nestLost(w, dr);
       w.events.push({ type: "removed", id: dr.id });
+    } else if (dr.sandTribe) {
+      // a Sand Dragon: its tribe's brain picks its fights (sandFolk.ts)
     } else if (fightBack(w, dr)) {
       // it turns on whoever attacked it (dragonRage.ts)
     } else if (dr.state === "circle" || dr.state === "eat") {
@@ -1149,6 +1176,7 @@ export class Dragons {
       timer: Math.round(this.timer),
       seeded: this.seeded,
       topped: this.topped,
+      iceSeeded: this.iceSeeded,
       // only dragons that live here are saved (a visitor in the sky is just passing through)
       wild: this.list.filter((d) => d.nest).map(dragon),
       owned: this.owned.map(dragon),
@@ -1164,6 +1192,7 @@ export class Dragons {
     this.timer = d.timer ?? 1500;
     this.seeded = !!d.seeded;
     this.topped = !!(d as { topped?: boolean }).topped;
+    this.iceSeeded = !!(d as { iceSeeded?: boolean }).iceSeeded;
     this.rng = makeRng(w.seed * 31 + 7 + Math.floor(w.elapsed));
     this.nests = (d.nests ?? []).map((n) => ({ ...n, loot: { ...(n.loot as Partial<Record<Resource, number>>) } }));
     this.eggs = (d.eggs ?? []).map((e) => ({ ...e }));
@@ -1224,6 +1253,7 @@ export class Dragons {
   }
 
   clear() {
+    this.iceSeeded = false;
     this.list = [];
     this.owned = [];
     this.nests = [];

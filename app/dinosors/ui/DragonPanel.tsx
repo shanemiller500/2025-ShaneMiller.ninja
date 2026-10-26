@@ -6,6 +6,7 @@ import { BREEDS, DRAGON_COMMANDS, DRAGON_STAGES, GROWTH, LESSONS, growthStage } 
 import { chooseDragonRider, dragonInfo, dragonOf, dragonSkill, knows } from "../sim/dragonKeep";
 import { eggWarmth } from "../sim/dragonNests";
 import { keeperOf } from "../sim/keepers";
+import { dutyLabel } from "../sim/riderDuty";
 import { ROLES } from "../data/facts";
 
 /* ------------------------------------------------------------------ */
@@ -139,6 +140,7 @@ export default function DragonPanel({ engine, snap }: { engine: Engine; snap: Sn
 
       <div className="mt-2 rounded-2xl bg-white/10 p-3 text-xs">
         <div className="flex items-center justify-between"><strong className="text-sm">🐉 Dragon Rider</strong>{rider && <span className="rounded-full bg-emerald-400/25 px-2 py-0.5 font-bold">{rider.name}{info.aloft ? " · flying" : ""}</span>}</div>
+        {rider && <p className="mt-1 text-[11.5px] text-emerald-100/85">{dutyLabel(d) ?? "Between jobs: the rider works on the ground until the next one (scouting, patrols, lifts, cargo, far-off supplies, alerts)."}</p>}
         {rider ? <p className="mt-1 text-white/75">{rider.name} is bonded to {d.name} for life. Flight orders: the rider climbs on first if they're close by.</p>
           : <p className="mt-1 text-white/65">{info.stage === "Rideable" || info.stage === "War-Trained" ? "Ready to bond with a rider." : `Needs to be a young adult and learn rider acceptance first.`}</p>}
         <div className="mt-2 flex gap-2">

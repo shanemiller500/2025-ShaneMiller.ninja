@@ -38,8 +38,9 @@ export function clearForVines(w: World, f: Farm) {
   for (let i = w.plants.length - 1; i >= 0; i--) {
     const p = w.plants[i];
     if (Math.hypot(p.x - f.x, (p.y - f.y) * 1.4) > VINE_CLEAR_R) continue;
-    // low wild growth is cleared; a small tree too (big ones stay: they give shade at the edge)
-    if (!WILD.has(p.kind) && !(p.size < 0.6 && !p.stump)) continue;
+    // The planted plot itself stays clear, including large tree trunks.
+    const onPlot = Math.abs(p.x - f.x) <= 38 && Math.abs(p.y - f.y) <= 22;
+    if (!onPlot && !WILD.has(p.kind) && !(p.size < 0.6 && !p.stump)) continue;
     w.plants.splice(i, 1);
     cleared++;
     if (p.kind === "bush") {

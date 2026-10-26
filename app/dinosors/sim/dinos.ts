@@ -7,7 +7,7 @@ import { sp } from "../data/species";
 import { P } from "./particles";
 import { clamp, pick } from "./rng";
 import { baseGenes } from "./genetics";
-import { groundSpeed, isSwimTile, isWalkTile } from "./terrain";
+import { groundSpeed, isSandTile, isSwimTile, isWalkTile } from "./terrain";
 import { T, TILE, WORLD_H, WORLD_W, type Dino, type DinoState, type SpeciesDef, type SpeciesId } from "./types";
 import { goalKey, nodePos, tileOf, type NavClass } from "./nav";
 import type { World } from "./world";
@@ -319,7 +319,13 @@ function steer(w: World, d: Dino, speed: number, dt: number) {
     }
   }
   let mul = 1;
-  if (def.move === "walk") mul = groundSpeed(w.terrain.tileAt(d.x, d.y)) * (1 - w.snow.at(d.x, d.y) * 0.3) * (w.nav.cost[tileOf(d.x, d.y)] < 0.9 ? 1.1 : 1);
+  if (def.move === "walk") {
+    const ground = w.terrain.tileAt(d.x, d.y);
+    // camels stride over soft sand that slows everyone else
+    mul = (d.species === "camel" && isSandTile(ground) ? 1.15 : groundSpeed(ground)) * (1 - w.snow.at(d.x, d.y) * 0.3) * (w.nav.cost[tileOf(d.x, d.y)] < 0.9 ? 1.1 : 1);
+  }
+  // dizzy from a Dinosaur Scorpion's sting, or frozen stiff by an Ice Dragon
+  if (d.slowT) mul *= 0.45;
   if (def.move === "fly") {
     // wind pushes flyers around a little
     mul = 1;
@@ -336,9 +342,10 @@ function steer(w: World, d: Dino, speed: number, dt: number) {
 /** Per-frame update: needs, motion, timers. Decisions happen in the brain. */
 export function moveDino(w: World, d: Dino, dt: number) {
   // harnessed to a war chariot: the chariot moves it (chariots.ts); ridden by a Sea Person: the rider steers (seaFolk.ts)
-  if (d.chariot || d.seaRider) return;
+  if (d.chariot || d.seaRider || d.sandRider || d.snowRider) return;
   const def = sp(d.species);
   d.stateT += dt;
+  if (d.slowT) d.slowT = Math.max(0, d.slowT - dt);
   d.age += dt;
   if (d.growth < 1) d.growth = Math.min(1, d.growth + dt / 300);
   if (d.emote) {

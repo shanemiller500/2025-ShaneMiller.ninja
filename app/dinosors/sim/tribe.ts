@@ -55,6 +55,7 @@ import {
 import type { World } from "./world";
 import { homeSpot, updateZones, type Zone } from "./zones";
 import { season } from "./seasons";
+import { DEFAULT_JOB_GUARD, bulkProtected, type JobGuard } from "./duties";
 
 /** Seconds between the projects Auto plans by itself (it used to be one a day). */
 const IMPROVE_EVERY = 75;
@@ -93,6 +94,8 @@ export class Tribe {
   /** people we've lost for good (death.ts) */
   lost = 0;
   danger: Danger = "normal";
+  /** which protected roles the bulk job tools leave alone (duties.ts; Dragon Riders always) */
+  jobGuard: JobGuard = { ...DEFAULT_JOB_GUARD };
   /** how evolved raiders have become */
   evolution = 0;
   raidsWon = 0;
@@ -188,6 +191,111 @@ export class Tribe {
     this.version++;
     w.nav.sync(w);
     return true;
+  }
+
+  /**
+   * Can these wall pieces all shift by (dtx, dty) tiles together? Each target tile is checked as
+   * if the picked pieces had already left their own tiles, so a group can slide over itself.
+   * Returns one flag per piece (true = that piece's new tile is fine).
+   */
+  wallMoveFits(w: World, pieces: Wall[], dtx: number, dty: number): boolean[] {
+    const moving = new Set(pieces);
+    const taken = new Set<number>();
+    const c = w.camp;
+    const occ = w.colony.occupied(w);
+    return pieces.map((wl) => {
+      const tx = wl.tx + dtx;
+      const ty = wl.ty + dty;
+      const i = ty * MAP_W + tx;
+      if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1 || taken.has(i)) return false;
+      taken.add(i);
+      const other = this.wallAt(tx, ty);
+      if (other && !moving.has(other)) return false;
+      if (!w.colony.footing(w, tx, ty)) return false;
+      const x = (tx + 0.5) * TILE;
+      const y = (ty + 0.5) * TILE;
+      if (Math.hypot(x - c.caveX, y - c.caveY) < 50 || Math.hypot(x - c.pileX, y - c.pileY) < 70 || Math.hypot(x - c.x, y - c.y) < 60) return false;
+      // (occupied counts every wall tile: one of the moving pieces' own tiles is fine to land on)
+      if (this.towers.some((o) => tx >= o.tx && tx <= o.tx + 1 && ty >= o.ty && ty <= o.ty + 1) || (occ.has(i) && !other)) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Snap a dragged group: if shifting it one tile more (any way) joins it onto walls or towers that
+   * aren't moving, without breaking the fit, take that spot instead. Returns the offset to use.
+   */
+  snapWallMove(w: World, pieces: Wall[], dtx: number, dty: number) {
+    const moving = new Set(pieces);
+    const touches = (ox: number, oy: number) => {
+      let n = 0;
+      for (const wl of pieces) for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = wl.tx + ox + ax;
+        const ny = wl.ty + oy + ay;
+        const o = this.wallAt(nx, ny);
+        if ((o && !moving.has(o)) || this.towers.some((t) => nx >= t.tx && nx <= t.tx + 1 && ny >= t.ty && ny <= t.ty + 1)) n++;
+      }
+      return n;
+    };
+    let best = { dtx, dty };
+    let bs = this.wallMoveFits(w, pieces, dtx, dty).every(Boolean) ? touches(dtx, dty) : -1;
+    for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const fit = this.wallMoveFits(w, pieces, dtx + ox, dty + oy).every(Boolean);
+      const s = fit ? touches(dtx + ox, dty + oy) : -1;
+      // only snap when it actually joins up with more than where it was dropped
+      if (s > bs && s > 0) {
+        bs = s;
+        best = { dtx: dtx + ox, dty: dty + oy };
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Move a group of wall pieces by (dtx, dty) tiles at once, keeping their arrangement (the Edit
+   * walls tool). All or nothing. Scorpions mounted on a piece ride along with it; anyone up on the
+   * walkway of a moved piece steps down. Returns where they were (for undo), or why not.
+   */
+  moveWalls(w: World, pieces: Wall[], dtx: number, dty: number): { from: { id: number; tx: number; ty: number }[] } | string {
+    if (!pieces.length) return "Pick some wall pieces first.";
+    if (!dtx && !dty) return { from: [] };
+    const fits = this.wallMoveFits(w, pieces, dtx, dty);
+    const bad = fits.filter((f) => !f).length;
+    if (bad) return `${bad} of the ${pieces.length} piece${pieces.length === 1 ? "" : "s"} would land on blocked ground (another wall, a building, water or a cliff).`;
+    const from = pieces.map((wl) => ({ id: wl.id, tx: wl.tx, ty: wl.ty }));
+    const moved = new Set(pieces.map((wl) => wl.ty * MAP_W + wl.tx));
+    for (const h of w.humans) if (h.level === 1 && moved.has(Math.floor(h.y / TILE) * MAP_W + Math.floor(h.x / TILE))) {
+      h.level = 0;
+      h.wantTop = false;
+      h.think = 0;
+    }
+    for (const s of w.colony.scorpions) {
+      if (s.mount !== "wall" || !moved.has(s.ty * MAP_W + s.tx)) continue;
+      s.tx += dtx;
+      s.ty += dty;
+      s.x += dtx * TILE;
+      s.y += dty * TILE;
+    }
+    for (const wl of pieces) this.wallMap.delete(wl.ty * MAP_W + wl.tx);
+    for (const wl of pieces) {
+      wl.tx += dtx;
+      wl.ty += dty;
+      this.wallMap.set(wl.ty * MAP_W + wl.tx, wl);
+    }
+    this.version++;
+    w.colony.version++;
+    w.nav.sync(w);
+    return { from };
+  }
+
+  /** Put moved pieces back where they were (undo). All or nothing. */
+  restoreWalls(w: World, from: { id: number; tx: number; ty: number }[]): string | null {
+    const pieces = from.map((f) => this.walls.find((wl) => wl.id === f.id)).filter((wl): wl is Wall => !!wl);
+    if (!pieces.length) return "Those wall pieces are gone.";
+    // every piece moved by the same amount, so one offset undoes the lot
+    const f0 = from.find((f) => f.id === pieces[0].id)!;
+    const r = this.moveWalls(w, pieces, f0.tx - pieces[0].tx, f0.ty - pieces[0].ty);
+    return typeof r === "string" ? `Can't undo: ${r}` : null;
   }
 
   /**
@@ -550,7 +658,8 @@ export class Tribe {
   private assignJobs(w: World) {
     const c = w.camp;
     // people down the mine don't fill surface jobs
-    const autos = w.humans.filter((h) => !h.child && !h.under && h.role === "auto").sort((a, b) => a.id - b.id);
+    // protected people on Auto (Dino Riders) keep their current pick first: the balancer reshuffles everyone else (duties.ts)
+    const autos = w.humans.filter((h) => !h.child && !h.under && h.role === "auto").sort((a, b) => (bulkProtected(w, b) ? 1 : 0) - (bulkProtected(w, a) ? 1 : 0) || a.id - b.id);
     const adults = this.adults(w).filter((h) => !h.under).length;
     const armed = c.learned.has("spear");
     const quota: [Role, number][] = [];
@@ -1578,9 +1687,9 @@ export class Tribe {
 
   serialize() {
     return {
-      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0)] as const),
+      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0), wl.id] as const),
       farms: this.farms.map((f) => [Math.round(f.x), Math.round(f.y), Math.round(f.growth * 100) / 100, f.planted ? 1 : 0, f.crop ?? "wheat"] as const),
-      towers: this.towers.map((t) => [Math.round(t.x), Math.round(t.y), t.stage, Math.max(0, t.have), t.tx, t.ty, Math.round(t.hp), (t.stone ? 1 : 0) | (t.up ? 2 : 0)] as const),
+      towers: this.towers.map((t) => [Math.round(t.x), Math.round(t.y), t.stage, Math.max(0, t.have), t.tx, t.ty, Math.round(t.hp), (t.stone ? 1 : 0) | (t.up ? 2 : 0), t.id] as const),
       level: this.level,
       danger: this.danger,
       evolution: this.evolution,
@@ -1589,6 +1698,7 @@ export class Tribe {
       improvementDay: this.improvementDay,
       improvedAt: Number.isFinite(this.improvedAt) ? Math.round(this.improvedAt) : null,
       erased: this.erased,
+      jobGuard: { ...this.jobGuard },
     };
   }
 
@@ -1598,7 +1708,9 @@ export class Tribe {
       const [tx, ty, stone, hp, built, up] = row;
       const part: WallPart = row[6] === 1 ? "gate" : row[6] === 2 ? "stairs" : "wall";
       const kind: WallKind = stone === 2 ? "polygon" : stone ? "stone" : "palisade";
-      const wl: Wall = { id: w.nextId(), tx, ty, kind, part, open: row[7] === undefined ? true : !!row[7], auto: true, hp, built, have: 0, upgrade: !!up, ...(up === 2 ? { upTo: "polygon" as WallKind } : {}) };
+      const id = (row as readonly number[])[9] ?? w.nextId();
+      w.reserveIds(id);
+      const wl: Wall = { id, tx, ty, kind, part, open: row[7] === undefined ? true : !!row[7], auto: true, hp, built, have: 0, upgrade: !!up, ...(up === 2 ? { upTo: "polygon" as WallKind } : {}) };
       const bone = row[8] ?? 0;
       if (bone & 1) wl.bone = true;
       if (bone & 2) wl.boneUp = true;
@@ -1612,10 +1724,13 @@ export class Tribe {
       const tx = row[4] ?? Math.floor(x / TILE - 0.5);
       const ty = row[5] ?? Math.floor(y / TILE) - 1;
       const flags = row[7] ?? 0;
-      this.towers.push({ id: w.nextId(), x: (tx + 1) * TILE, y: (ty + 2) * TILE - 4, tx, ty, stage, have, hp: row[6] ?? (flags & 1 ? 900 : 400), ...(flags & 1 ? { stone: true } : {}), ...(flags & 2 ? { up: true } : {}) });
+      const id = (row as readonly number[])[8] ?? w.nextId();
+      w.reserveIds(id);
+      this.towers.push({ id, x: (tx + 1) * TILE, y: (ty + 2) * TILE - 4, tx, ty, stage, have, hp: row[6] ?? (flags & 1 ? 900 : 400), ...(flags & 1 ? { stone: true } : {}), ...(flags & 2 ? { up: true } : {}) });
     }
     this.level = d.level;
     this.danger = d.danger;
+    this.jobGuard = { ...DEFAULT_JOB_GUARD, ...((d as { jobGuard?: Partial<JobGuard> }).jobGuard ?? {}) };
     this.erased = (d as { erased?: { kind: string; x: number; y: number }[] }).erased?.map((e) => ({ ...e })) ?? [];
     this.evolution = d.evolution;
     this.raidsWon = d.raidsWon;

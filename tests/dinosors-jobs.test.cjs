@@ -21,7 +21,7 @@ test('bulk jobs set an exact manual count and release old work', () => {
   const oldTask = { people: [2, 9] };
   const people = [person(1, 'builder'), person(2, 'auto', { state: 'smith', taskId: 7, order: { kind: 'guard', x: 1, y: 2 } }), person(3, 'gatherer', { carry: 'stick', carryN: 2 }), person(4, 'auto', { child: true }), person(5, 'auto', { under: true }), person(6, 'auto', { state: 'down' })];
   const engine = Object.create(Engine.prototype);
-  engine.world = { humans: people, mine: { pending: new Map() }, tasks: { get: (id) => id === 7 ? oldTask : null }, colony: { scorpions: [] }, camp: { stock: { stick: 0 } }, flags: new Set(), toast: () => {} };
+  engine.world = { humans: people, mine: { pending: new Map() }, tasks: { get: (id) => id === 7 ? oldTask : null }, colony: { scorpions: [] }, camp: { stock: { stick: 0 } }, flags: new Set(), toast: () => {}, dragons: { owned: [], eggs: [] }, dinos: [], dinoById: () => null, tribe: { jobGuard: { dinoRiders: true, specialists: true } } };
   assert.equal(engine.setRoleCount('miner', 2), 2);
   assert.deepEqual(people.filter((h) => h.role === 'miner').map((h) => h.id), [2, 3]);
   assert.deepEqual(oldTask.people, [9]);

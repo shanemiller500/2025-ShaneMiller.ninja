@@ -24,6 +24,15 @@ function distToRidge(x: number, y: number) {
   return best;
 }
 
+/** Extra cold from altitude (0 low down … ~0.45 on the peaks). */
+export function altitudeCold(w: World, x: number, y: number) {
+  const tx = Math.floor(x / TILE);
+  const ty = Math.floor(y / TILE);
+  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return 0;
+  const e = w.terrain.elev[ty * MAP_W + tx];
+  return e > 0.45 ? (e - 0.45) * 0.85 : 0;
+}
+
 export class Snow {
   depth = new Float32Array(NT);
   /** permanent snowcaps (high peaks) */
@@ -41,8 +50,9 @@ export class Snow {
       for (let x = 0; x < MAP_W; x++) {
         const i = y * MAP_W + x;
         const t = tiles[i] as T;
-        const high = t === T.Mountain || t === T.Rock;
-        const peak = (high && y < w.terrain.mountLine(x) - 1) || (high && distToRidge(x, y) < 4.5);
+        const high = t === T.Mountain || t === T.Rock || t === T.Snow || t === T.Ice;
+        // the snowfields + glaciers never thaw, nor does anything high enough up (the Great Peaks above the tree line)
+        const peak = t === T.Snow || t === T.Ice || (high && w.terrain.elev[i] > 0.6) || (high && y < w.terrain.mountLine(x) - 1) || (high && w.terrain.gen < 3 && distToRidge(x, y) < 4.5);
         this.cap[i] = peak ? 1 : 0;
         this.depth[i] = peak ? 0.85 : 0;
       }
@@ -56,10 +66,10 @@ export class Snow {
     return this.depth[ty * MAP_W + tx];
   }
 
-  /** How cold it feels at a spot (0 = fine, 1 = freezing). */
+  /** How cold it feels at a spot (0 = fine, 1 = freezing). High up it's colder, whatever the weather. */
   chill(w: World, x: number, y: number) {
     const air = Math.max(0, 0.42 - w.weather.temp) * 2.2 + w.weather.snow * 0.35 + w.weather.wind * w.weather.snow * 0.3;
-    return Math.min(1, air + this.at(x, y) * 0.4 + (w.daylight < 0.3 ? 0.08 : 0));
+    return Math.min(1, air + this.at(x, y) * 0.4 + altitudeCold(w, x, y) + (w.daylight < 0.3 ? 0.08 : 0));
   }
 
   update(w: World, dt: number) {

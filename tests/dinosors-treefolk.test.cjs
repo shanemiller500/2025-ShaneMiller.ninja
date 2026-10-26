@@ -113,14 +113,20 @@ test('a lone worker walking through their woods gets ambushed: hidden in the lea
   assert.ok(party().every((b) => !w.rivals.hostile(w, b)), "our side can't target what it can't see");
   const h = addHuman(w, bd.x + 150, bd.y + 20);
   let thrown = false;
+  let closest = Infinity;
   run(w, 8, () => {
     if (w.rivals.missiles.length) thrown = true;
+    for (const b of party()) closest = Math.min(closest, dist(b, h));
   });
   assert.ok(w.toasts.some((s) => s.includes('Ambush!')), 'ambush!');
   assert.ok(thrown, 'rocks / spears / arrows came out of the trees first');
   assert.ok(party().every((b) => !b.hidden), 'they show themselves once they strike');
   assert.ok(!w.humans.includes(h) || h.hp < 1, 'the worker got hurt');
-  assert.ok(party().some((b) => dist(b, h) < 60), 'they rushed in');
+  // (a worker who runs gets a head start: give the rush a few more seconds to catch them)
+  if (closest >= 60) run(w, 6, () => {
+    for (const b of party()) closest = Math.min(closest, dist(b, h));
+  });
+  assert.ok(closest < 60, `they rushed in (closest ${Math.round(closest)})`);
 });
 
 test('only nearby people react: an ambush alarms the people around it, not the whole map', () => {

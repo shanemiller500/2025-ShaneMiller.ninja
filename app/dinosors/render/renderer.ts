@@ -53,6 +53,20 @@ import { drawRefinery } from "./metalArt";
 import { drawBrute, drawCatapult, drawBruteMissile, drawClanCamp } from "./bruteArt";
 import { drawTreeCanopy, drawTreeFolk, drawTreeGround, drawTreeSign } from "./treeFolkArt";
 import { drawSeaFolk, drawSeaHut, drawSeaSign, drawSeaWalks } from "./seaFolkArt";
+import { drawSandFolk, drawSandTent } from "./sandFolkArt";
+import { drawClearBox, drawClearJobs, drawWallEdit, type WallEditView } from "./editArt";
+import { drawShieldFields } from "./shieldArt";
+import { drawSnowFolk, drawSnowLodge } from "./snowFolkArt";
+import type { SnowLodge, SnowTribe } from "../sim/snowFolk";
+import { snowCamo } from "../sim/snowBeasts";
+import { PeaksFx } from "./snowArt";
+import { shieldView } from "../sim/dragonShield";
+import { drawMonk, drawMonkPlace } from "./monkArt";
+import { strength } from "../sim/breath";
+import { REGION, isSandTile } from "../sim/terrain";
+import { PRIOS } from "../sim/priority";
+import { siteKey } from "../sim/build";
+import type { SandTent, SandTribe } from "../sim/sandFolk";
 import { drawClanBuilding, drawClanHold, drawClanTrap } from "./clanLifeArt";
 import { fenceSize, siteOf } from "../sim/clanLife";
 import type { Brute, Clan, ClanBuild, SeaHut, SeaSign, SeaTribe, TreeSign } from "../sim/types";
@@ -83,6 +97,12 @@ export interface Overlay {
   /** choosing where a building / home is carried to (see moving.ts) */
   movePreview?: { x: number; y: number; ref: MoveRef } | null;
   hover: { x: number; y: number; icon: string; radius: number } | null;
+  /** the box is marking an area to clear (🪓 Clear area), not picking people */
+  boxClear?: boolean;
+  /** 🪓 Clear area mode is waiting for a box */
+  clearMode?: boolean;
+  /** ✏️ wall edit mode: picked pieces + the drag preview */
+  wallEdit?: WallEditView | null;
   shakeX: number;
   shakeY: number;
   flash: number;
@@ -141,6 +161,10 @@ const K_TREESIGN = 51;
 const K_SEAWALK = 52;
 const K_SEAHUT = 53;
 const K_SEASIGN = 54;
+const K_SANDTENT = 55;
+const K_MONK = 56;
+const K_MONKPLACE = 57;
+const K_SNOWLODGE = 58;
 
 interface Drop {
   x: number;
@@ -185,7 +209,8 @@ export class Renderer {
   /** shelter id -> people resting inside, counted once per frame */
   private insideCount = new Map<number, number>();
   private insideFrame = -1;
-  private peaks: { x: number; y: number; s: number }[] = [];
+  /** mountain peaks to draw: where, how big, how snowy (0..1), a shape seed */
+  private peaks: { x: number; y: number; s: number; snow: number; v: number }[] = [];
   private cloudX = 0;
   private cloudY = 0;
   private warmLight = radial("rgba(255,170,90,1)", "rgba(255,150,70,0)");
@@ -241,10 +266,15 @@ export class Renderer {
     const t = this.world.terrain;
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
-        if (t.tiles[y * MAP_W + x] !== T.Mountain) continue;
-        if (hash2(x, y, t.seed + 31) > 0.16) continue;
+        const i = y * MAP_W + x;
+        if (t.tiles[i] !== T.Mountain) continue;
+        const e = t.elev[i];
+        // the Great Peaks crowd together (the bigger the higher); the old ridges stay sparse
+        if (hash2(x, y, t.seed + 31) > (e > 0.8 ? 0.22 : 0.16)) continue;
         if (Math.hypot(x - 128, y - 20) < 4) continue;
-        this.peaks.push({ x: x * TILE + TILE / 2, y: y * TILE + TILE, s: 0.7 + hash2(x, y, t.seed + 32) * 0.7 });
+        const s = (0.7 + hash2(x, y, t.seed + 32) * 0.7) * (e > 0.8 ? 1 + (e - 0.8) * 3 : 1);
+        const snow = e > 0.84 ? 1 : e > 0.6 ? 0.55 + (e - 0.6) * 1.8 : y < 8 ? 0.5 : 0.3;
+        this.peaks.push({ x: x * TILE + TILE / 2, y: y * TILE + TILE, s, snow: Math.min(1, snow), v: hash2(y, x, t.seed + 33) });
       }
     }
   }
@@ -319,6 +349,9 @@ export class Renderer {
     this.trailFx(c, v.x0, v.y0, v.x1, v.y1);
     this.groundFx(c, v.x0, v.y0, v.x1, v.y1, z);
     this.snowFx(c, v.x0, v.y0, v.x1, v.y1, z);
+    // the peaks: footprints in the snow + spindrift (render/snowArt.ts)
+    this.peaksFx.draw(c, w, v.x0, v.y0, v.x1, v.y1, this.t, z);
+    this.hazardFx(c, v.x0, v.y0, v.x1, v.y1);
     this.flatStructures(c, x0, y0, x1, y1);
 
     const lod = z < 0.5;
@@ -343,7 +376,7 @@ export class Renderer {
     for (let i = 0; i < w.humans.length; i++) {
       const h = w.humans[i];
       if (h.x < x0 || h.x > x1 || h.y < y0 || h.y > y1) continue;
-      if (this.hidden(h) || h.aloft) continue;
+      if (this.hidden(h) || h.aloft || h.ferry) continue;
       // up on a wall / tower: draw after the structure underneath; riders after their mount
       const mount = h.riding ? w.dinoById(h.riding) : null;
       const sky = !!mount && sp(mount.species).move === "fly" && mount.z > 6;
@@ -387,7 +420,37 @@ export class Renderer {
       const b = rv.brutes[i];
       // a Tree Person up in a tree goes after the tree (and the deck) it's sitting in
       // …and a Sea Person riding a sea dragon goes straight after the dragon (sitting on its back)
+      // (a Sand Dragon Rider is drawn on their dragon, with it)
+      if (b.onDragon) continue;
       if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1 + 160) list.push({ y: b.tree && b.z > 8 ? b.y + 70 : b.mount ? b.y + 1 : b.y, k: K_BRUTE, i });
+    }
+    // Sand People camps: each tent, the pen, the roost sort on their own
+    this.sandTents.length = 0;
+    for (const tr of w.sandFolk.tribes) {
+      if (tr.x + 320 < x0 || tr.x - 320 > x1 || tr.y + 200 < y0 || tr.y - 200 > y1 + 200) continue;
+      for (const s of tr.tents) {
+        list.push({ y: s.kind === "pen" ? s.y - 34 : s.y, k: K_SANDTENT, i: this.sandTents.length });
+        this.sandTents.push({ s, tr });
+      }
+    }
+    // Snow People camps: each igloo, the longhouse, the pen… sort on their own
+    this.snowLodges.length = 0;
+    for (const tr of w.snowFolk.tribes) {
+      if (tr.x + 320 < x0 || tr.x - 320 > x1 || tr.y + 200 < y0 || tr.y - 200 > y1 + 200) continue;
+      for (const s of tr.lodges) {
+        list.push({ y: s.kind === "pen" ? s.y - 34 : s.y, k: K_SNOWLODGE, i: this.snowLodges.length });
+        this.snowLodges.push({ s, tr });
+      }
+    }
+    // the Mountain Monks and their places
+    const mk = w.monks;
+    for (let i = 0; i < mk.list.length; i++) {
+      const m = mk.list[i];
+      if (m.x > x0 && m.x < x1 && m.y > y0 && m.y < y1 + 60) list.push({ y: m.y, k: K_MONK, i });
+    }
+    for (let i = 0; i < mk.places.length; i++) {
+      const p = mk.places[i];
+      if (p.x > x0 - 100 && p.x < x1 + 100 && p.y > y0 - 40 && p.y < y1 + 400) list.push({ y: p.kind === "flags" ? p.y - 30 : p.y, k: K_MONKPLACE, i });
     }
     // Tree People camps: the village up in the canopy (after its trees), the ground ring, the warning signs
     const fo = w.forest;
@@ -685,7 +748,7 @@ export class Renderer {
           else if (b.kind === "winery" && b.built >= 1) drawWinery(c, def.w * TILE, b.built, w.camp.stock.wine, this.t);
           else if (b.kind === "tannery") drawTannery(c, def.w * TILE, b.built, w.camp.stock.hide, this.t);
           else if (b.kind === "refinery" && b.built >= 1) drawRefinery(c, def.w * TILE, w.camp.stock, this.t, night > 0.5);
-          else if (CIV_KINDS.has(b.kind)) drawCivBuilding(c, b, def.w, def.h, { power: w.civ.energy > 1, night: night > 0.5, storm: w.weather.storm, t: this.t });
+          else if (CIV_KINDS.has(b.kind)) drawCivBuilding(c, b, def.w, def.h, { power: w.civ.energy > 1, night: night > 0.5, storm: w.weather.storm, t: this.t, charge: b.kind === "dragonShield" ? shieldView(w).charge.get(b.id) ?? 0 : 0 });
           else drawBuilding(c, b, def.w, def.h, night > 0.5, this.t);
           if (b.built < 1 && (b.kind === "spikes" || b.kind === "barricade" || b.kind === "totem" || b.kind === "tannery")) {
             c.strokeStyle = "rgba(255,255,255,0.75)";
@@ -748,6 +811,10 @@ export class Renderer {
           const bc = w.rivals.clan(b.clan);
           // after dark, a Tree Person nobody has spotted is only a shadow with glinting eyes
           if (b.tree) drawTreeFolk(c, b, this.t, b.tint ?? "#d94f2a", w.daylight < 0.3 && !((b.spotT ?? 0) > 0));
+          // a Sand Person: faint out on the dunes until someone spots them
+          else if (b.sand) drawSandFolk(c, b, this.t, b.tint ?? "#c0392b", !w.sandFolk.seen(w, b) ? 2 : isSandTile(w.terrain.tileAt(b.x, b.y)) ? 1 : 0);
+          // a Snow Person in their furs
+          else if (b.snow) drawSnowFolk(c, b, this.t, b.tint ?? "#2e86c1");
           // a Sea Person (in their canoe on the water); a canoe in the dark is a shadow until it's spotted
           else if (b.sea) drawSeaFolk(c, b, this.t, b.tint ?? "#2fb7c9", !!b.boat && w.daylight < 0.3 && !((b.spotT ?? 0) > 0));
           else if (b.look) this.drawTurned(c, b, bc);
@@ -764,6 +831,30 @@ export class Renderer {
         case K_TREEGROUND: {
           const tr = w.forest.tribes[it.i];
           if (tr) drawTreeGround(c, tr, this.t, night > 0.5, !!tr.found);
+          break;
+        }
+        case K_SANDTENT: {
+          const st = this.sandTents[it.i];
+          if (st) drawSandTent(c, st.s, st.tr, this.t, night > 0.5);
+          break;
+        }
+        case K_SNOWLODGE: {
+          const sl = this.snowLodges[it.i];
+          if (sl) drawSnowLodge(c, sl.s, sl.tr, this.t, night > 0.5);
+          break;
+        }
+        case K_MONK: {
+          const m = w.monks.list[it.i];
+          if (!m) break;
+          c.save();
+          c.translate(m.x, m.y - m.z);
+          drawMonk(c, m, this.t, m.slot === 0 && !m.pilgrim, night > 0.45);
+          c.restore();
+          break;
+        }
+        case K_MONKPLACE: {
+          const p = w.monks.places[it.i];
+          if (p) drawMonkPlace(c, p, this.t, night > 0.45, !!w.monks.rite && (w.monks.rite.phase !== "gather" || p.kind === "shrine"));
           break;
         }
         case K_SEAWALK: {
@@ -1018,7 +1109,7 @@ export class Renderer {
           break;
         case K_PEAK: {
           const p = this.peaks[it.i];
-          this.drawPeak(c, p.x, p.y, p.s);
+          this.drawPeak(c, p.x, p.y, p.s, p.snow, p.v);
           break;
         }
         case K_FIRE: {
@@ -1166,6 +1257,12 @@ export class Renderer {
     }
     for (const b of civ.beams) drawBeam(c, b);
     for (const l of civ.lifts) drawLift(c, l);
+    // Dragon Shields: rings, links, the hum on a rattled dragon; the full coverage while placing / inspecting one
+    {
+      const placing = ov.buildPreview?.build === "dragonShield" ? ov.buildPreview : null;
+      const picked = ov.inspect?.kind === "building" && w.colony.buildings.some((b) => b.id === ov.inspect!.id && b.kind === "dragonShield");
+      drawShieldFields(c, w, this.t, !!placing || picked, placing ? { x: placing.x, y: placing.y, ok: !w.colony.canPlace(w, "dragonShield", placing.x, placing.y) } : null, x0, y0, x1, y1);
+    }
     this.stringLights(c, x0, y0, x1, y1);
     const ex = w.extinction;
     if (ex.stats?.shieldHeld && (ex.phase === "impact" || ex.phase === "aftermath")) {
@@ -1174,6 +1271,7 @@ export class Renderer {
     }
 
     this.drawParticles(c, x0, y0, x1, y1);
+    this.heatHaze(c, v.x0, v.y0, v.x1, v.y1);
     this.skyWorld(c, v, z);
     if (ex.phase === "incoming") drawAsteroid(c, ex.x, ex.y, Math.min(1, ex.t / EXT_TIMES.incoming), this.t);
     const sv = ex.cause === "supervolcano";
@@ -1186,11 +1284,24 @@ export class Renderer {
     // screen-space passes
     c.setTransform(d, 0, 0, d, 0, 0);
     this.lighting(c, { x: cx, y: cy, zoom: z });
+    this.peaksFx.coldLight(c, w, this.peaksFx.coldness(w, v.x0, v.y0, v.x1, v.y1), this.w, this.h);
     this.screenWeather(c, dt);
 
     // overlays that should stay readable at night
     c.setTransform(d * z, 0, 0, d * z, d * (this.w / 2 - cx * z), d * (this.h / 2 - cy * z));
     this.overlays(c, ov, x0, y0, x1, y1, z);
+    {
+      // edit overlays: Clear area jobs + the box being marked, and wall edit picks (render/editArt.ts)
+      const inv = 1 / Math.max(0.35, z);
+      drawClearJobs(c, w, this.t, inv, x0, y0, x1, y1);
+      if (ov.box && ov.boxClear) {
+        const a = this.toWorld(cam, Math.min(ov.box.x0, ov.box.x1), Math.min(ov.box.y0, ov.box.y1));
+        const b = this.toWorld(cam, Math.max(ov.box.x0, ov.box.x1), Math.max(ov.box.y0, ov.box.y1));
+        drawClearBox(c, w, { x0: a.x, y0: a.y, x1: b.x, y1: b.y }, this.t, inv);
+      }
+      if (ov.wallEdit) drawWallEdit(c, w, ov.wallEdit, this.t, inv);
+    }
+    this.priorityBadges(c, x0, y0, x1, y1);
     // the supervolcano glows through the darkness: drawn after the lighting pass
     const exv = w.extinction;
     if (exv.cause === "supervolcano" && (exv.phase === "impact" || exv.phase === "aftermath")) {
@@ -1207,8 +1318,8 @@ export class Renderer {
       c.globalAlpha = 1;
     }
     this.raidArrows({ x: cx, y: cy, zoom: z });
-    // shift-drag selection box
-    if (ov.box) {
+    // shift-drag selection box (a Clear area box is drawn in the world, with what it'll clear)
+    if (ov.box && !ov.boxClear) {
       const b = ov.box;
       c.fillStyle = "rgba(255,214,80,0.12)";
       c.strokeStyle = "rgba(255,214,80,0.9)";
@@ -1438,6 +1549,8 @@ export class Renderer {
     if (st === "eat" && def.reach === "high") p.headDown = 0;
     p.headUp = st === "roar" || st === "lookUp" || st === "annoyed" ? 1 : st === "flee" ? 0.4 : 0;
     p.mouth = st === "roar" ? Math.min(1, dn.stateT * 4) : st === "eat" ? (Math.sin(this.t * 10 + dn.id) + 1) * 0.3 : st === "chase" || st === "annoyed" ? 0.6 : st === "lookUp" ? 0.4 : 0;
+    // a Dinosaur Scorpion's claws + tail strike follow its attack timer
+    if (dn.species === "dinoScorpion") p.mouth = Math.max(st === "chase" ? 0.15 : 0, dn.strike ?? 0);
     p.lie = st === "sleep" ? Math.min(1, dn.stateT) : st === "wallow" ? 0.9 : st === "faint" ? 1 : 0;
     p.flip = st === "knocked" ? Math.min(1, (dn.stateT + 2) * 3) * (dn.stateT > 1.6 ? Math.max(0, (2 - dn.stateT) / 0.4) : 1) : st === "wallow" ? Math.abs(Math.sin(dn.stateT * 1.5)) * 0.9 : 0;
     p.eyesClosed = st === "sleep" || st === "faint" || (Math.sin(this.t * 0.7 + dn.id * 3) > 0.985);
@@ -1520,6 +1633,10 @@ export class Renderer {
   private signs: { s: TreeSign; color: string }[] = [];
   /** Sea People stilt-houses + shore markers in view this frame */
   private seaHuts: { h: SeaHut; tr: SeaTribe }[] = [];
+  /** Sand People tents etc. in view this frame */
+  private sandTents: { s: SandTent; tr: SandTribe }[] = [];
+  private snowLodges: { s: SnowLodge; tr: SnowTribe }[] = [];
+  private peaksFx = new PeaksFx();
   private seaSigns: { s: SeaSign; color: string }[] = [];
 
   /** A dragon (selection ring, the dragon, then whoever is riding it). */
@@ -1538,10 +1655,22 @@ export class Renderer {
     }
     c.save();
     c.translate(dr.x, dr.y - dr.z);
+    // a Sand Dragon low over the dunes melts into them (like its riders)
+    const w = this.world;
+    const rider = dr.sandRider ? w.rivals.byId(dr.sandRider) : null;
+    if (dr.breed === "sand" && dr.z < 70 && isSandTile(w.terrain.tileAt(dr.x, dr.y)) && !((rider?.spotT ?? 0) > 0)) c.globalAlpha = 0.55;
     drawDragon(c, dr, this.t);
     c.restore();
-    const h = dr.rider ? this.world.humans.find((x) => x.id === dr.rider && x.aloft === dr.id) : null;
+    // someone getting a lift sits behind the rider
+    for (const p of w.humans) if (p.ferry === dr.id) this.drawPerson(c, p, ov, weapon);
+    const h = dr.rider ? w.humans.find((x) => x.id === dr.rider && x.aloft === dr.id) : null;
     if (h) this.drawPerson(c, h, ov, weapon);
+    if (rider && rider.onDragon === dr.id) {
+      c.save();
+      c.translate(rider.x, rider.y - rider.z);
+      drawSandFolk(c, rider, this.t, rider.tint ?? "#c0392b", dr.breed === "sand" && c.globalAlpha < 1 ? 1 : 0);
+      c.restore();
+    }
   }
 
   /**
@@ -1719,6 +1848,8 @@ export class Renderer {
     if (dn.state === "tussle") jx = Math.sin(this.t * 40 + dn.id) * 3;
     if (dn.state === "stuck") jx = Math.sin(this.t * 25) * 2;
     c.translate(dn.x + jx, dn.y - dn.z);
+    // a snow animal lying still on the snow melts into it (snowBeasts.ts): faint until it moves (or you pick it)
+    if (snowCamo(this.world, dn) && dn.id !== ov.selectedId && dn.id !== ov.followId) c.globalAlpha *= dn.state === "stalk" ? 0.42 : 0.6;
     const cruising = def.move === "swim" && dn.z < 2 && dn.state !== "stalk";
     if (def.move === "swim" && dn.z < 2 && !cruising) {
       // lying low while it stalks: barely a shadow under the waves
@@ -1911,35 +2042,193 @@ export class Renderer {
     c.restore();
   }
 
-  private drawPeak(c: CanvasRenderingContext2D, x: number, y: number, s: number) {
+  /**
+   * A mountain peak: a jagged silhouette with a sunlit west face and a shaded east face, a ridge line,
+   * a few rock bands, and a snowcap that comes further down the higher the mountain (with snow
+   * streaking down the gullies). `v` varies the shape so no two peaks match.
+   */
+  private drawPeak(c: CanvasRenderingContext2D, x: number, y: number, s: number, snow = 0.3, v = 0.5) {
     const W = 46 * s;
-    const H = 70 * s;
-    c.fillStyle = "#6f665d";
+    const H = 70 * s * (0.85 + v * 0.35);
+    const tipX = x - W * (0.25 - v * 0.3);
+    const tipY = y - H;
+    // the outline: shoulders + notches down each side
+    const left: [number, number][] = [[x - W, y], [x - W * 0.66, y - H * (0.32 + v * 0.1)], [x - W * 0.5, y - H * 0.38], [tipX - W * 0.18, y - H * 0.78], [tipX, tipY]];
+    const right: [number, number][] = [[tipX, tipY], [tipX + W * 0.2, y - H * 0.74], [x + W * 0.34, y - H * (0.5 - v * 0.1)], [x + W * 0.5, y - H * 0.44], [x + W, y]];
+    // a soft shadow at the foot
+    c.fillStyle = "rgba(30,26,34,0.18)";
     c.beginPath();
-    c.moveTo(x - W, y);
-    c.lineTo(x - W * 0.1, y - H);
-    c.lineTo(x + W, y);
+    c.ellipse(x, y - 2, W * 1.05, W * 0.22, 0, 0, Math.PI * 2);
+    c.fill();
+    // the shaded east face (the whole body)
+    const dark = c.createLinearGradient(x, tipY, x, y);
+    dark.addColorStop(0, "#5e5866");
+    dark.addColorStop(1, "#4a443f");
+    c.fillStyle = dark;
+    c.beginPath();
+    c.moveTo(left[0][0], left[0][1]);
+    for (const [px, py] of left.slice(1)) c.lineTo(px, py);
+    for (const [px, py] of right.slice(1)) c.lineTo(px, py);
     c.closePath();
     c.fill();
-    c.fillStyle = "#857b70";
+    // the sunlit west face, down to the ridge line
+    const ridgeX = tipX + W * 0.08;
+    const lit = c.createLinearGradient(x - W, y, tipX, tipY);
+    lit.addColorStop(0, "#8a7f72");
+    lit.addColorStop(1, "#a69d92");
+    c.fillStyle = lit;
     c.beginPath();
-    c.moveTo(x - W, y);
-    c.lineTo(x - W * 0.1, y - H);
-    c.lineTo(x - W * 0.05, y);
+    c.moveTo(left[0][0], left[0][1]);
+    for (const [px, py] of left.slice(1)) c.lineTo(px, py);
+    c.lineTo(ridgeX + W * 0.06, y - H * 0.55);
+    c.lineTo(ridgeX - W * 0.05, y - H * 0.25);
+    c.lineTo(x + W * 0.05, y);
     c.closePath();
     c.fill();
-    c.fillStyle = "#f4f6fb";
+    // rock bands (strata) across both faces
+    c.strokeStyle = "rgba(40,34,38,0.28)";
+    c.lineWidth = Math.max(1, s);
     c.beginPath();
-    c.moveTo(x - W * 0.32, y - H * 0.7);
-    c.lineTo(x - W * 0.1, y - H);
-    c.lineTo(x + W * 0.25, y - H * 0.68);
-    c.lineTo(x + W * 0.05, y - H * 0.75);
-    c.lineTo(x - W * 0.1, y - H * 0.66);
-    c.closePath();
-    c.fill();
+    for (let k = 1; k <= 2; k++) {
+      const by = y - H * (0.18 + k * 0.17);
+      const half = W * (1 - (y - by) / H) * 0.9;
+      c.moveTo(tipX - half, by + 2);
+      c.quadraticCurveTo(tipX, by - 3, tipX + half, by + 3);
+    }
+    c.stroke();
+    // the snowcap: further down on high peaks, with streaks down the gullies
+    if (snow > 0.05) {
+      const d = 0.22 + snow * 0.42;
+      const sy = y - H * (1 - d);
+      const half = W * d * 0.92;
+      c.fillStyle = "#f4f7fc";
+      c.beginPath();
+      c.moveTo(tipX, tipY);
+      c.lineTo(tipX - half, sy);
+      c.lineTo(tipX - half * 0.6, sy - H * 0.04);
+      c.lineTo(tipX - half * 0.42, sy + H * 0.07 * snow);
+      c.lineTo(tipX - half * 0.15, sy - H * 0.03);
+      c.lineTo(tipX + half * 0.12, sy + H * 0.1 * snow);
+      c.lineTo(tipX + half * 0.38, sy - H * 0.02);
+      c.lineTo(tipX + half * 0.62, sy + H * 0.05 * snow);
+      c.lineTo(tipX + half, sy);
+      c.closePath();
+      c.fill();
+      // the shaded side of the snow is blue
+      c.fillStyle = "rgba(150,175,215,0.55)";
+      c.beginPath();
+      c.moveTo(tipX, tipY);
+      c.lineTo(ridgeX + W * 0.04, sy + H * 0.02);
+      c.lineTo(tipX + half * 0.62, sy + H * 0.05 * snow);
+      c.lineTo(tipX + half, sy);
+      c.closePath();
+      c.fill();
+    }
+    // a crisp lit ridge line
+    c.strokeStyle = "rgba(255,255,255,0.35)";
+    c.lineWidth = Math.max(1, 1.2 * s);
+    c.beginPath();
+    c.moveTo(tipX, tipY);
+    c.lineTo(ridgeX + W * 0.06, y - H * 0.55);
+    c.stroke();
   }
 
   /* ----------------------------- ground FX ----------------------------- */
+
+  /** Hot sand (glowing, cooling to plain sand) and frost (icy patches) left by dragon breath. */
+  private hazardFx(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number) {
+    const list = this.world.hazards.list;
+    if (!list.length) return;
+    for (const h of list) {
+      if (h.x + h.r < vx0 || h.x - h.r > vx1 || h.y + h.r < vy0 || h.y - h.r > vy1) continue;
+      const s = strength(h);
+      const g = c.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r);
+      if (h.kind === "hotSand") {
+        // white-hot in the middle → orange → dull red, cooling to the colour of sand
+        const fl = 0.85 + Math.sin(this.t * 7 + h.x) * 0.15;
+        g.addColorStop(0, s > 0.5 ? `rgba(255,${200 + 40 * s},${120 * s},${0.85 * fl})` : `rgba(${200 + 55 * s * 2},${150 + 30 * s},${100},${0.55 + s * 0.4})`);
+        g.addColorStop(0.55, s > 0.3 ? `rgba(240,110,40,${0.55 * s})` : `rgba(212,180,120,${0.5})`);
+        g.addColorStop(1, "rgba(214,184,128,0)");
+      } else {
+        g.addColorStop(0, `rgba(235,248,255,${0.75 * s + 0.1})`);
+        g.addColorStop(0.7, `rgba(190,225,250,${0.45 * s})`);
+        g.addColorStop(1, "rgba(190,225,250,0)");
+      }
+      c.fillStyle = g;
+      c.beginPath();
+      c.ellipse(h.x, h.y, h.r, h.r * 0.62, 0, 0, Math.PI * 2);
+      c.fill();
+      if (h.kind === "frost" && s > 0.2) {
+        // crystals radiating out
+        c.strokeStyle = `rgba(255,255,255,${0.6 * s})`;
+        c.lineWidth = 1;
+        c.beginPath();
+        for (let k = 0; k < 7; k++) {
+          const a = (k / 7) * Math.PI * 2 + h.x;
+          c.moveTo(h.x, h.y);
+          c.lineTo(h.x + Math.cos(a) * h.r * 0.75, h.y + Math.sin(a) * h.r * 0.45);
+        }
+        c.stroke();
+      }
+    }
+  }
+
+  /** Heat shimmer over the desert on a hot day (a few wavering bands of light; cheap). */
+  private heatHaze(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number) {
+    const w = this.world;
+    if (w.daylight < 0.55 || w.weather.rain > 0.3) return;
+    const t = w.terrain;
+    let desert = 0;
+    for (let k = 0; k < 16; k++) {
+      const x = vx0 + ((k % 4) + 0.5) * ((vx1 - vx0) / 4);
+      const y = vy0 + (Math.floor(k / 4) + 0.5) * ((vy1 - vy0) / 4);
+      const tx = Math.floor(x / TILE);
+      const ty = Math.floor(y / TILE);
+      if (tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H && t.region[ty * MAP_W + tx] === REGION.desert) desert++;
+    }
+    if (desert < 3) return;
+    const a = (desert / 16) * Math.min(1, (w.daylight - 0.55) * 3) * 0.09;
+    const H = vy1 - vy0;
+    for (let k = 0; k < 6; k++) {
+      const y = vy0 + ((k + 0.5) / 6) * H + Math.sin(this.t * 0.7 + k * 1.7) * 14;
+      const g = c.createLinearGradient(0, y - 18, 0, y + 18);
+      g.addColorStop(0, "rgba(255,240,210,0)");
+      g.addColorStop(0.5, `rgba(255,240,210,${a})`);
+      g.addColorStop(1, "rgba(255,240,210,0)");
+      c.fillStyle = g;
+      c.beginPath();
+      c.moveTo(vx0, y);
+      for (let x = vx0; x <= vx1 + 40; x += 40) c.lineTo(x, y + Math.sin(x * 0.02 + this.t * 2.2 + k) * 5 - 18);
+      for (let x = vx1 + 40; x >= vx0; x -= 40) c.lineTo(x, y + Math.sin(x * 0.02 + this.t * 2.2 + k + 1) * 5 + 18);
+      c.closePath();
+      c.fill();
+    }
+  }
+
+  /** High + Urgent (and Low) badges over prioritized building sites, so it's obvious what comes first. */
+  private priorityBadges(c: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
+    const w = this.world;
+    if (!w.priority.entries().length) return;
+    const want = new Map(w.priority.entries());
+    for (const s of w.buildSites()) {
+      const p = want.get(siteKey(s));
+      if (p === undefined || s.x < x0 || s.x > x1 || s.y < y0 || s.y > y1) continue;
+      const info = PRIOS[p];
+      const y = s.y - 70 + Math.sin(this.t * 3 + s.id) * (p === 3 ? 3 : 1.5);
+      c.fillStyle = "rgba(20,12,6,0.75)";
+      c.beginPath();
+      c.roundRect(s.x - 22, y - 11, 44, 20, 9);
+      c.fill();
+      c.strokeStyle = info.color;
+      c.lineWidth = 2;
+      c.stroke();
+      c.fillStyle = info.color;
+      c.font = "bold 11px system-ui, sans-serif";
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText(`${info.icon} ${info.name}`, s.x, y);
+    }
+  }
 
   /** Worn footpaths: soft bare-earth patches where people walk a lot (four strengths, one fill each). */
   private footpaths(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number) {
@@ -2828,6 +3117,11 @@ export class Renderer {
     for (const tr of w.seaFolk.tribes) {
       if (!tr.found || tr.x < x0 - 100 || tr.x > x1 + 100 || tr.y < y0 || tr.y > y1 + 200) continue;
       this.speech(c, tr.x, tr.y - 80, `🛶 ${tr.name} Sea People · ${w.seaFolk.members(tr.id).length}`, inv * 0.9, 1);
+    }
+    // …over each Snow People camp we've found
+    for (const tr of w.snowFolk.tribes) {
+      if (!tr.found || tr.x < x0 - 100 || tr.x > x1 + 100 || tr.y < y0 || tr.y > y1 + 200) continue;
+      this.speech(c, tr.x, tr.y - 92, `🏔️ ${tr.name} Snow People · ${w.snowFolk.members(tr.id).length}${tr.grudge > 0 ? " · angry with us" : ""}`, inv * 0.9, 1);
     }
     // …and over each Tree People camp we've scouted
     for (const tr of w.forest.tribes) {

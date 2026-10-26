@@ -9,8 +9,16 @@ import type { DragonBreed, DragonCmdKind, DragonSkill } from "../data/dragons";
 export const TILE = 32;
 /** The most people a tribe can grow to. */
 export const MAX_PEOPLE = 100;
-export const MAP_W = 160;
-export const MAP_H = 112;
+/**
+ * The map (tiles). The original valley is the top-left 160 × 112; the land east of it (the
+ * central desert, the Great Peaks, the south-east lakes) and the deeper sea south of it were
+ * added later. Saves record the width their tile indexes were written with (see world.ts).
+ */
+export const MAP_W = 288;
+export const MAP_H = 120;
+/** the original valley's size (older saves wrote tile indexes with this width) */
+export const OLD_MAP_W = 160;
+export const OLD_MAP_H = 112;
 export const WORLD_W = MAP_W * TILE;
 export const WORLD_H = MAP_H * TILE;
 
@@ -34,6 +42,12 @@ export enum T {
   Cave = 15,
   Nest = 16,
   River = 17,
+  /** desert dunes (the central desert): deep loose sand */
+  Dune = 18,
+  /** a high snowfield (walkable, slow + cold) */
+  Snow = 19,
+  /** a frozen tarn / glacier ice (walkable, slippery) */
+  Ice = 20,
 }
 
 export type Diet = "herbivore" | "carnivore" | "piscivore";
@@ -48,7 +62,13 @@ export type BodyPlan =
   | "pachy"
   | "pterosaur"
   | "mosasaur"
-  | "plesiosaur";
+  | "plesiosaur"
+  // not dinosaurs: the desert's camels, and the fantasy Dinosaur Scorpion
+  | "camel"
+  | "scorpion"
+  // the mountains' snow leopard, and the Yeti
+  | "cat"
+  | "yeti";
 
 export type SpeciesId =
   | "trex"
@@ -70,7 +90,17 @@ export type SpeciesId =
   | "plesio"
   | "plio"
   | "ptera"
-  | "dimorpho";
+  | "dimorpho"
+  | "camel"
+  /** the giant fantasy Dinosaur Scorpion (never confuse it with the Scorpion war machine) */
+  | "dinoScorpion"
+  // the snowy Great Peaks (snowBeasts.ts): a big cat, the rare Yeti, and cold-adapted (made-up) dinosaurs
+  | "snowLeopard"
+  | "yeti"
+  | "snowRex"
+  | "frosthorn"
+  | "rimeclaw"
+  | "glacierback";
 
 export type SoundKind = "roar" | "bellow" | "honk" | "chirp" | "screech" | "hiss" | "grunt";
 
@@ -96,6 +126,10 @@ export interface DinoShape {
   thumb?: boolean;
   /** wingspan multiplier (pterosaurs) */
   wings?: number;
+  /** a shaggy winter coat over the body (the snowy peaks' animals) */
+  fur?: boolean;
+  /** frosted: pale ice tips + a sparkle (cold-adapted animals) */
+  frost?: boolean;
 }
 
 export interface DinoLook {
@@ -258,6 +292,22 @@ export interface Dino {
   seaTribe?: number;
   /** a Sea Person riding it right now (their id; not saved) */
   seaRider?: number;
+  /** a camel a Sand People band keeps (their tribe id; saved) */
+  sandTribe?: number;
+  /** a Sand Person riding it right now (their id; not saved) */
+  sandRider?: number;
+  /** a woolly mount / pack beast a Snow People tribe keeps (their tribe id; saved) */
+  snowTribe?: number;
+  /** a Snow Person riding it right now (their id; not saved) */
+  snowRider?: number;
+  /** the Yeti: seconds until it can hurl another ice boulder (not saved) */
+  hurlCd?: number;
+  /** dizzy + slow (Dinosaur Scorpion venom, an Ice Dragon's frost): seconds left (not saved) */
+  slowT?: number;
+  /** Dinosaur Scorpion attack timers + the strike pose (not saved) */
+  stingCd?: number;
+  clawCd?: number;
+  strike?: number;
   /** a war animal on guard duty (warGuard.ts): the person it's guarding out in the wild, and where it is on its patrol ring */
   ward?: number;
   /** harnessed to pull a war chariot (its id): the chariot moves it (chariots.ts) */
@@ -542,6 +592,12 @@ export interface Human {
   dragon?: number;
   /** riding a dragon right now (its id): position follows it, the sim leaves them be */
   aloft?: number;
+  /** a passenger on someone's dragon (the dragon's id): carried along like the rider (riderDuty.ts) */
+  ferry?: number;
+  /** a Dragon Rider's next game with their dragon (keepers.ts: not all day, there's work to do; not saved) */
+  playAt?: number;
+  /** dizzy + slow (Dinosaur Scorpion venom, an Ice Dragon's frost): seconds left (not saved) */
+  slowT?: number;
   /** carrying a dragon egg (its id) */
   egg?: number;
   /** a second egg (egg runners in their kit carry two) */
@@ -785,8 +841,22 @@ export interface Brute {
   sea?: number;
   /** a Sea Person out on the water, in their canoe */
   boat?: boolean;
-  /** a Sea Person riding a trained sea dragon (the dino's id) */
+  /** a Sea Person riding a trained sea dragon, or a Sand Person on their camel (the dino's id) */
   mount?: number;
+  /** one of the Sand People (sandFolk.ts): their tribe's id (clan is 0) */
+  sand?: number;
+  /** a Sand Person's kind: camel rider, archer, fighter, scout, or a Sand Dragon Rider */
+  sandRole?: "camel" | "archer" | "fighter" | "scout" | "dragon";
+  /** one of the Snow People of the Great Peaks (snowFolk.ts): their tribe's id (clan is 0) */
+  snow?: number;
+  /** a Snow Person's kind: hunter, archer, ice-axe warrior, Frosthorn rider, or the tribe's frost-caller */
+  snowRole?: "hunter" | "archer" | "warrior" | "rider" | "shaman";
+  /** the group they belong to (family, patrol, raiding party, camp… see folkGroups.ts) */
+  grp?: number;
+  /** a Sand Dragon Rider up on their dragon (its id): it carries them (sandFolk.ts) */
+  onDragon?: number;
+  /** dizzy + slow (Dinosaur Scorpion venom, an Ice Dragon's frost): seconds left (not saved) */
+  slowT?: number;
   bubble: { text: string; t: number } | null;
 }
 
@@ -1239,7 +1309,9 @@ export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" |
   | "beamTower"
   | "pylon"
   | "pyramid"
-  | "resShield";
+  | "resShield"
+  /** a frequency pylon that drives dragons away from the town (dragonShield.ts) */
+  | "dragonShield";
 
 export interface Building {
   id: number;
@@ -1270,6 +1342,8 @@ export interface Building {
   breed?: string;
   size?: number;
   ours?: boolean;
+  /** a Dragon Shield's upgrades (dragonShield.ts; saved) */
+  shield?: import("./dragonShield").ShieldLevels;
 }
 
 /** A giant crossbow. Sits on a wall tile, a tower or the ground. */
@@ -1487,6 +1561,20 @@ export interface Dragon {
   riteClan?: number;
   /** a wild youngster raised at its parents' nest (it grows up there, and fights beside them) */
   young?: boolean;
+  /** a Sand People war dragon (their tribe id): sandFolk.ts flies it, never the wild dragon brain */
+  sandTribe?: number;
+  /** the Sand Dragon Rider on its back (a Sand Person's id) */
+  sandRider?: number;
+  /** a Sand Dragon's next sky patrol over its tribe's land (sandFolk.ts; not saved) */
+  skyT?: number;
+  /** caught in a Dragon Shield's frequency (dragonShield.ts; not saved): how rattled it is (0..1), and where the hum comes from */
+  repel?: { k: number; x: number; y: number; t: number; away: number };
+  /** come down to the Mountain Monks' yearly offering (monks.ts flies it; protected: nothing may harm it) */
+  monkRite?: boolean;
+  /** when its rider may take it out on the next job (riderDuty.ts; not saved) */
+  dutyAt?: number;
+  /** riding duty for one of our Dragon Riders (riderDuty.ts): what job, where, and its progress */
+  duty?: { job: "scout" | "patrol" | "ferry" | "cargo" | "gather" | "inspect" | "alert"; x: number; y: number; t: number; step: number; target?: number; r?: Resource; n?: number; passenger?: number };
   /** a war dragon on guard duty: the person it's watching over out in the wild (warGuard.ts) */
   ward?: number;
   /** its own look (set when it hatches, so no two are alike): a colour shift (degrees), markings, eye colour */

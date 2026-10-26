@@ -15,6 +15,7 @@
 import { hurtHuman } from "./injury";
 import { hasTech } from "./clanTech";
 import { P } from "./particles";
+import { hitScorpion } from "./factions";
 import type { Brute, Clan } from "./types";
 import type { World } from "./world";
 
@@ -97,7 +98,7 @@ export function boulderLands(w: World, x: number, y: number, target: number, kin
   if (kind === "scorpion") {
     const sc = w.colony.scorpions.find((s) => s.id === target && s.built >= 1);
     if (sc && Math.hypot(sc.x - x, sc.y - y) < 44) {
-      sc.hp = Math.max(0, sc.hp - damage);
+      hitScorpion(w, sc, damage, "clan");
       if (sc.hp <= 0) w.toast("🪨", "A clan catapult smashed one of our Scorpions!", sc.x, sc.y);
     }
   } else if (kind === "tower") {

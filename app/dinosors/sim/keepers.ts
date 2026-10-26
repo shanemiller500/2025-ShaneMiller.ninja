@@ -150,8 +150,13 @@ function dragonKeeper(w: World, h: Human, dr: Dragon) {
     else go(h, "walk", dr.x + (h.x < dr.x ? -reach * 0.8 : reach * 0.8), dr.y + 8);
     return true;
   }
-  // otherwise: playtime (and sometimes just a rest together)
+  // otherwise: playtime (and sometimes just a rest together). A grown Dragon Rider has work to do:
+  // a game now and then between jobs, the rest of the time they're out working (riderDuty.ts + the usual jobs)
   if (dr.state === "sleep" || w.daylight < 0.3) return false;
+  if (rideable(dr) && dr.partner === h.id) {
+    if (w.elapsed < (h.playAt ?? 0)) return false;
+    h.playAt = w.elapsed + 150 + w.rng() * 120;
+  }
   h.targetId = dr.id;
   if (!close) {
     go(h, "walk", dr.x - 30, dr.y + 10);

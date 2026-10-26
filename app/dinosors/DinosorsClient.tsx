@@ -20,10 +20,12 @@ import DragonPanel from "./ui/DragonPanel";
 import HatchScene from "./ui/HatchScene";
 import TopBar, { type TopPanel } from "./ui/TopBar";
 import ViewControls from "./ui/ViewControls";
+import { Minimap } from "./ui/Minimap";
 import RaidBanner from "./ui/RaidBanner";
 import EvolutionPanel from "./ui/EvolutionPanel";
 import CloudPanel from "./ui/CloudPanel";
 import SelectionBar from "./ui/SelectionBar";
+import EditModeBar from "./ui/EditModeBar";
 import InspectPanel from "./ui/InspectPanel";
 import SavedGames from "./ui/SavedGames";
 import CivPanel, { CivChoice } from "./ui/CivPanel";
@@ -88,6 +90,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   /** every message, newest first (the 🔔 list), and how many came in since it was last opened */
   const [log, setLog] = useState<Toast[]>([]);
   const [unread, setUnread] = useState(0);
+  const [mobileMapOpen, setMobileMapOpen] = useState(false);
   const popupsRef = useRef(false);
   /** a dragon hatching scene playing (its dragon id) */
   const [hatchId, setHatchId] = useState<number | null>(null);
@@ -313,6 +316,12 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             engine={engine}
             panel={panel}
             setPanel={setPanel}
+            log={log}
+            unread={unread}
+            popups={settings.popups}
+            onTogglePopups={(on) => { updateSettings({ popups: on }); if (!on) setToasts([]); }}
+            onRead={() => setUnread(0)}
+            onGo={(x, y) => engine.flyTo(x, y, Math.max(engine.cam.zoom, 0.8))}
             muted={settings.muted}
             onMute={() => {
               engine.audio.unlock();
@@ -362,10 +371,12 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             <DeepHud snap={snap} engine={engine} />
           ) : (
             <>
-              <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} />
-              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} shiftOpen={shiftsOpen} onShifts={() => setShiftsOpen((o) => !o)} orphanNests={snap.orphanNests} onClaimNest={(id) => engineRef.current?.claimNest(id)} />
+              <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} showQuickActions={snap.selection.length === 0 && tool.id === "hand"} wallsAvailable={snap.tribe.walls.built + snap.tribe.walls.planned > 0} />
+              <Minimap engine={engine} cardOpen={!!snap.selected} mobileOpen={mobileMapOpen} onMobileToggle={() => setMobileMapOpen((o) => !o)} />
+              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} shiftOpen={shiftsOpen} onShifts={() => setShiftsOpen((o) => !o)} orphanNests={snap.orphanNests} onClaimNest={(id) => engineRef.current?.claimNest(id)} mapOpen={mobileMapOpen} onMap={() => setMobileMapOpen((o) => !o)} />
               {trainOpen && <TrainPanel engine={engine} onClose={() => setTrainOpen(false)} />}
               <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
+              <EditModeBar engine={engine} />
               {snap.inspect && !snap.selected && !engine.selectedDragon() && !engine.selectedEgg && <InspectPanel info={snap.inspect} snap={snap} engine={engine} />}
               {!trainOpen && (engine.selectedDragon() || engine.selectedEgg) ? <DragonPanel engine={engine} snap={snap} /> : null}
             </>

@@ -53,7 +53,7 @@ export type ExperimentResult = {
   note?: number;
 };
 
-const ENERGY_KINDS = new Set<BuildingKind>(["chamber", "energyTower", "obelisk", "stoneCircle", "pyramid", "condenser", "beamTower", "pylon", "levPad", "resShield"]);
+const ENERGY_KINDS = new Set<BuildingKind>(["chamber", "energyTower", "obelisk", "stoneCircle", "pyramid", "condenser", "beamTower", "pylon", "levPad", "resShield", "dragonShield"]);
 const MONUMENT_KINDS = new Set<BuildingKind>(["pyramid", "obelisk", "stoneCircle"]);
 
 /** Shaped blocks the planned (unbuilt) walls + buildings still want: a builder cuts until there are this many. */

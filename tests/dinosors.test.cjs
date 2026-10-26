@@ -17,7 +17,7 @@ require.extensions['.ts'] = (module, filename) => {
 const root = path.join(__dirname, '..', 'app', 'dinosors');
 const { World } = require(path.join(root, 'sim', 'world.ts'));
 const { LM } = require(path.join(root, 'sim', 'terrain.ts'));
-const { T, TILE } = require(path.join(root, 'sim', 'types.ts'));
+const { MAP_W, T, TILE } = require(path.join(root, 'sim', 'types.ts'));
 const { addDino } = require(path.join(root, 'sim', 'dinos.ts'));
 const { SPECIES, sp } = require(path.join(root, 'data', 'species.ts'));
 
@@ -31,7 +31,7 @@ function run(w, seconds, each) {
   }
   return -1;
 }
-const tileAt = (w, p) => w.terrain.tiles[p.y * 160 + p.x];
+const tileAt = (w, p) => w.terrain.tiles[p.y * MAP_W + p.x];
 
 test('terrain has its landmarks', () => {
   const w = new World(1234, false);
@@ -200,7 +200,7 @@ test('save → load round-trips the world', () => {
   assert.equal(w2.plants.length, w.plants.length);
   assert.ok(w2.camp.learned.has('tools'));
   assert.ok(w2.discoveries.has('poop'));
-  assert.equal(w2.terrain.tiles[10 * 160 + 10], T.Shallow);
+  assert.equal(w2.terrain.tiles[10 * MAP_W + 10], T.Shallow);
   run(w2, 5);
 });
 
@@ -221,6 +221,7 @@ function tribeWorld(seed, techs) {
   w.randomEvents.enabled = false;
   w.dinos.length = 0;
   w.wildlife.enabled = false; // an empty valley on purpose: don't let the wild ones come back
+  w.sandFolk.enabled = false; w.snowFolk.enabled = false; // (and no desert raiders riding in: these tests are about our own tribe)
   for (const t of techs) w.camp.learned.add(t);
   w.camp.goal = null;
   return w;
@@ -285,11 +286,11 @@ test('gates: people pass, dinos only when open; stairs lead up onto the walkway'
   const gate = w.tribe.wallAt(gx, gy);
   w.tribe.setGate(gate, false, true);
   w.nav.sync(w);
-  assert.equal(w.nav.ok('dino', gy * 160 + gx), false, 'closed gate blocks dinos');
-  assert.equal(w.nav.ok('human', gy * 160 + gx), true, 'people use the side door');
+  assert.equal(w.nav.ok('dino', gy * MAP_W + gx), false, 'closed gate blocks dinos');
+  assert.equal(w.nav.ok('human', gy * MAP_W + gx), true, 'people use the side door');
   w.tribe.setGate(gate, true, true);
   w.nav.sync(w);
-  assert.equal(w.nav.ok('dino', gy * 160 + gx), true, 'open gate lets dinos through');
+  assert.equal(w.nav.ok('dino', gy * MAP_W + gx), true, 'open gate lets dinos through');
   // a person outside walks in through the gate, climbs the stairs and stands on the north wall
   const h = addHuman(w, 110 * TILE, 76 * TILE, false);
   h.order = { kind: 'guard', x: 110 * TILE + 16, y: 60 * TILE + 16, top: true };
@@ -1968,7 +1969,7 @@ test('the supervolcano: a meteor hits the volcano and nothing is spared', () => 
   assert.ok(w.plants.every((p) => p.burnt >= 1), 'every plant burned');
   const vx = Math.floor(w.volcano.x / TILE);
   const vy = Math.floor(w.volcano.y / TILE);
-  assert.equal(w.terrain.tiles[vy * 160 + vx], T.Basalt, 'the mountain is a molten crater');
+  assert.equal(w.terrain.tiles[vy * MAP_W + vx], T.Basalt, 'the mountain is a molten crater');
   let grass = 0;
   for (const t of w.terrain.tiles) if (t === T.Grass || t === T.Forest || t === T.Jungle) grass++;
   assert.ok(grass < 40, `a wasteland (${grass} green tiles left)`);
@@ -2134,7 +2135,7 @@ test('the polygon age: both paths reach it; polygon houses + walls + buildings s
   s.tier = HOUSING.length - 1;
   assert.ok(HOUSING[s.tier].polygon);
   // fire under it does nothing
-  const ti = Math.floor((s.y - 8) / TILE) * 160 + Math.floor(s.x / TILE);
+  const ti = Math.floor((s.y - 8) / TILE) * MAP_W + Math.floor(s.x / TILE);
   w.fire.ignite(w, Math.floor(s.x / TILE), Math.floor((s.y - 8) / TILE), 1);
   run(w, 4);
   assert.equal(s.hp, 1, 'polygon house untouched by fire');

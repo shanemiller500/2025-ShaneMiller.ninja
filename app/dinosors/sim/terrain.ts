@@ -3,7 +3,7 @@
 /*  landmarks kids can learn) + seeded noise for natural edges.        */
 /* ------------------------------------------------------------------ */
 import { fbm, hash2 } from "./rng";
-import { MAP_H, MAP_W, T, TILE } from "./types";
+import { MAP_H, MAP_W, OLD_MAP_W, T, TILE } from "./types";
 
 export const CHUNK_TILES = 16;
 export const CHUNKS_X = Math.ceil(MAP_W / CHUNK_TILES);
@@ -29,9 +29,108 @@ export const LM = {
   forest: { x: 30, y: 22 },
   grass: { x: 110, y: 55 },
   mountains: { x: 80, y: 6 },
-  /** the snowy Frostpeak range in the south-east */
+  /** the snowy Frostpeak range in the south-east (generation 1–2 maps; generation 3 has the Great Peaks) */
   frost: { x: 147, y: 80 },
+  /** the central desert (generation 3 + the eastern lands) */
+  desert: { x: 180, y: 62 },
+  oasis: { x: 187, y: 50 },
+  /** the Great Peaks: the big snowy massif in the east */
+  peaks: { x: 250, y: 30 },
+  /** a sheltered high valley in the Great Peaks (the Mountain Monks live here) */
+  monastery: { x: 246, y: 46 },
+  /** the high ledge where the monks meet the dragons once a year */
+  altar: { x: 257, y: 21 },
+  eastLake: { x: 236, y: 95 },
 } as const;
+
+/* ------------------------------ the eastern lands ------------------------------ */
+
+/** The Great Peaks massif: centre + radii (tiles). */
+const PEAKS = { x: 250, y: 30, rx: 42, ry: 40 };
+/** Valley floors through the Great Peaks (walkable passes) and how deep each is carved (0..1). */
+export const VALLEYS: { pts: [number, number][]; carve: number }[] = [
+  // the west pass: up from the desert's edge into the high valley, and on out east
+  { pts: [[206, 50], [220, 47], [234, 46], [246, 46], [261, 51], [287, 57]], carve: 0.62 },
+  // the south valley: up from the lakes (past the falls) to the high valley
+  { pts: [[238, 88], [242, 78], [244, 66], [245, 56], [246, 46]], carve: 0.62 },
+  // the monks' path, high + snowy, up to the dragon ledge
+  { pts: [[246, 46], [250, 37], [254, 28], [257, 21]], carve: 0.34 },
+];
+/** Frozen tarns high in the peaks (ice) and the lower mountain lake that feeds the falls. */
+const TARNS = [
+  { x: 239, y: 37, r: 2.1, ice: true },
+  { x: 264, y: 41, r: 1.9, ice: true },
+  { x: 244, y: 61, r: 2.3, ice: false },
+];
+/** The stream from the mountain lake, over the falls, to the east lake and the sea. */
+const RIVER_EAST: [number, number][] = [
+  [244, 62],
+  [246, 70],
+  [246, 74],
+  [242, 82],
+  [238, 89],
+  [236, 95],
+];
+const RIVER_EAST_OUT: [number, number][] = [
+  [236, 95],
+  [233, 102],
+  [236, 112],
+];
+/** the rock ledge the stream falls over (row, columns) */
+const FALLS = { y: 72, x0: 245, x1: 251 };
+/** Cave mouths in the peaks + in the desert's rock outcrops (tile of the mouth). */
+export const EAST_CAVES = [
+  { x: 233, y: 41, kind: "mountain" as const },
+  { x: 262, y: 59, kind: "mountain" as const },
+  { x: 271, y: 25, kind: "mountain" as const },
+  { x: 197, y: 69, kind: "desert" as const },
+  { x: 161, y: 50, kind: "desert" as const },
+];
+/** Desert oases: fresh water ringed with green. */
+export const OASES = [
+  { x: 187, y: 50, r: 2.4 },
+  { x: 168, y: 72, r: 2.1 },
+  { x: 197, y: 79, r: 1.8 },
+];
+/** A dry riverbed winding across the desert to the sea. */
+const WADI: [number, number][] = [
+  [205, 43],
+  [195, 54],
+  [183, 65],
+  [171, 77],
+  [161, 89],
+  [155, 99],
+];
+const EAST_LAKE = { x: 236, y: 95, rx: 7, ry: 4.5 };
+
+/** Big named regions (Terrain.region). 0 = the old valley + ordinary open country. */
+export const REGION = { none: 0, desert: 1, peaks: 2, oasis: 3 } as const;
+
+const smooth = (a: number, b: number, v: number) => {
+  const k = Math.max(0, Math.min(1, (v - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
+
+/** How far into the central desert a tile is (< 1 = desert, < 0.72 = the dunes). */
+export function desertMask(x: number, y: number, seed: number) {
+  const n = fbm(x / 14, y / 14, seed);
+  return ((x - LM.desert.x) / 32) ** 2 + ((y - LM.desert.y) / 30) ** 2 + (n - 0.5) * 0.55;
+}
+
+/** Height of the Great Peaks at a tile (0 = not in the mountains, 0.8+ = bare peaks). */
+export function peaksElev(x: number, y: number, seed: number) {
+  const r = Math.hypot((x - PEAKS.x) / PEAKS.rx, (y - PEAKS.y) / PEAKS.ry) + (fbm(x / 11, y / 11, seed + 41) - 0.5) * 0.35;
+  if (r >= 1.05) return 0;
+  const mask = smooth(0, 0.55, 1.05 - r);
+  // sharp ridges (cubed): bare rock only along the crests, broad snowfields + valleys between them
+  const ridge = (1 - Math.abs(fbm(x / 7, y / 7, seed + 43) * 2 - 1)) ** 3;
+  let e = mask * (0.42 + 0.6 * ridge);
+  for (const v of VALLEYS) {
+    const d = distToPolyline(x, y, v.pts);
+    if (d < 9) e *= 1 - v.carve * Math.exp(-((d / 3.2) ** 2));
+  }
+  return Math.min(1, e);
+}
 
 /** Tar pits (tile coords + radius). The first is the original swamp pit. */
 export const TAR_PITS = [
@@ -87,7 +186,9 @@ function distToPolyline(px: number, py: number, pts: [number, number][]) {
   return best;
 }
 
-export const coastY = (x: number, seed: number) => 98 + (fbm(x / 10, 0.5, seed + 3) - 0.5) * 9 - Math.max(0, 46 - x) * 0.75;
+export const coastY = (x: number, seed: number) => 98 + (fbm(x / 10, 0.5, seed + 3) - 0.5) * 9 - Math.max(0, 46 - x) * 0.75
+  // the eastern lands reach a little further south
+  + smooth(160, 205, x) * 7;
 export const mountY = (x: number, seed: number) => 9 + (fbm(x / 8, 3.3, seed + 5) - 0.5) * 9;
 export const cliffY = (x: number, seed: number) => 30 + (fbm(x / 9, 5.1, seed + 9) - 0.5) * 2.4;
 
@@ -97,8 +198,11 @@ export const cliffY = (x: number, seed: number) => 30 + (fbm(x / 9, 5.1, seed + 
  *   1  the original map
  *   2  the northern range bulges south across the middle into big snowy peaks, cut by
  *      two valley passes (it always leaves the plateau, the cave + the waterfall clear)
+ *   3  the world grows east: the central desert takes over Frostpeak's ground, and the
+ *      Great Peaks (a real snowy massif) rise beyond it. Older worlds keep their own valley
+ *      exactly as it was and get the new eastern lands beside it.
  */
-export const TERRAIN_GEN = 2;
+export const TERRAIN_GEN = 3;
 /** where the two passes cut through the bigger range (map columns) */
 const PASSES = [63, 97];
 
@@ -119,6 +223,12 @@ export class Terrain {
   base = new Uint8Array(MAP_W * MAP_H);
   height = new Float32Array(MAP_W * MAP_H);
   salt = new Uint8Array(MAP_W * MAP_H);
+  /** how high up a tile is (0 = lowland … 1 = the bare peaks): snowcaps, cold, mountain life */
+  elev = new Float32Array(MAP_W * MAP_H);
+  /** the desert's dry riverbed (drawn as cracked mud) */
+  wadi = new Uint8Array(MAP_W * MAP_H);
+  /** which big region a tile belongs to (REGION): the desert, the Great Peaks, an oasis */
+  region = new Uint8Array(MAP_W * MAP_H);
   /** bumps whenever a chunk's ground changes (renderer re-bakes it) */
   chunkVersion = new Uint32Array(CHUNKS_X * CHUNKS_Y);
   version = 0;
@@ -169,14 +279,16 @@ export class Terrain {
         }
         for (const pit of TAR_PITS) if (Math.hypot(x - pit.x, y - pit.y) < pit.r + (n2 - 0.5) * 0.6) t = T.Tar;
 
-        // Frostpeak: a short snowy ridge with rocky skirts
-        const fr = distToPolyline(x, y, FROST_RIDGE) + (n - 0.5) * 2.2;
+        // Frostpeak: a short snowy ridge with snowfield skirts (generation 3 has the desert here instead)
+        const fr = this.gen < 3 ? distToPolyline(x, y, FROST_RIDGE) + (n - 0.5) * 2.2 : 99;
         if (fr < 2.3) {
           t = T.Mountain;
           h += 0.9;
+          this.elev[i] = 0.85;
         } else if (fr < 5.2) {
-          t = n2 > 0.7 ? T.Mountain : T.Rock;
+          t = n2 > 0.7 ? T.Mountain : n2 < 0.45 ? T.Snow : T.Rock;
           h += 0.45;
+          this.elev[i] = 0.6;
         }
 
         // lava field from old eruptions
@@ -192,6 +304,7 @@ export class Terrain {
         if (y < my) {
           t = y < my - 3 ? T.Mountain : T.Rock;
           h += (my - y) * 0.06 + 0.3;
+          this.elev[i] = Math.max(this.elev[i], Math.min(0.95, 0.5 + (my - y) * 0.06));
         } else if (x >= 42 && x <= 102 && y < cliffY(x, s) && vd > vRad) {
           h += 0.25;
           if (t === T.Forest || t === T.Grass) t = n2 > 0.6 ? T.Rock : T.Grass;
@@ -222,6 +335,13 @@ export class Terrain {
           else if (t !== T.Mountain || rTop < 1) t = T.River;
           h -= 0.05;
         } else if (rd < rw + 1.2 && (t === T.Grass || t === T.Jungle || t === T.Forest) && n2 > 0.45) t = T.Sand;
+
+        // the eastern lands (and, in a generation-3 world, the desert's western reaches)
+        if (x >= OLD_MAP_W || this.gen >= 3) {
+          const east = this.eastLands(x, y, i, t, h, n, n2);
+          t = east.t;
+          h = east.h;
+        }
 
         // ocean
         if (y > cy + 1.5) {
@@ -255,6 +375,135 @@ export class Terrain {
       for (const x of [42, 43, 101, 102]) {
         const i = y * MAP_W + x;
         if (this.tiles[i] === T.Cliff) this.tiles[i] = T.Rock;
+      }
+    }
+    this.carveEast();
+  }
+
+  /**
+   * One tile of the eastern lands: the central desert (dunes, rock outcrops, a dry riverbed,
+   * oases), the Great Peaks (bare peaks, snowfields, glaciers, scree, alpine meadows, a pine
+   * belt, carved passes) and the green lake country south of them.
+   */
+  private eastLands(x: number, y: number, i: number, t: T, h: number, n: number, n2: number) {
+    const s = this.seed;
+    const east = x >= OLD_MAP_W;
+    if (east) {
+      // open country by default: grassland with stands of forest (the old rocky east thins out)
+      if ((t === T.Rock || t === T.Grass || t === T.Forest || t === T.Jungle) && y >= this.mountLine(x)) {
+        const wood = fbm(x / 9, y / 9, s + 51);
+        t = wood > 0.6 ? T.Forest : n2 > 0.8 ? T.Rock : T.Grass;
+      }
+    }
+    // the desert (a generation-3 world's desert starts just past the volcano's lava field)
+    const dm = desertMask(x, y, s);
+    if (dm < 1 && t !== T.Mountain && t !== T.Volcano && t !== T.Basalt && t !== T.Tar && t !== T.Cliff) {
+      t = dm < 0.72 ? T.Dune : T.Sand;
+      this.region[i] = REGION.desert;
+      if (n2 > 0.77 || (dm > 0.55 && n2 > 0.7)) t = T.Rock;
+      // dune ridges: long low swells
+      h += 0.05 + Math.sin(x * 0.55 + y * 0.18 + n * 6) * 0.03;
+      this.elev[i] = Math.max(this.elev[i], 0.12);
+      if (distToPolyline(x, y, WADI) < 1.1 + (n2 - 0.5) * 0.6) {
+        t = T.Dirt;
+        this.wadi[i] = 1;
+        h -= 0.04;
+      }
+      for (const o of OASES) {
+        const d = Math.hypot(x - o.x, (y - o.y) * 1.2) + (n2 - 0.5) * 0.8;
+        if (d < o.r * 0.45) t = T.Deep;
+        else if (d < o.r) t = T.Shallow;
+        else if (d < o.r + 2.3) t = n2 > 0.5 ? T.Grass : T.Jungle;
+        if (d < o.r) h = 0.2;
+        if (d < o.r + 2.3) this.region[i] = REGION.oasis;
+      }
+    } else if (dm < 1.25 && (t === T.Grass || t === T.Forest || t === T.Jungle)) {
+      // the desert's edge: scrubby, sandy, rocky
+      t = n2 > 0.6 ? T.Rock : n2 > 0.4 ? T.Sand : T.Grass;
+    }
+    if (!east) return { t, h };
+    // the Great Peaks
+    const e = peaksElev(x, y, s);
+    if (e > 0.2) this.region[i] = REGION.peaks;
+    if (e > 0.2 && t !== T.Mountain) {
+      this.elev[i] = Math.max(this.elev[i], e);
+      h += e * 1.5;
+      if (e > 0.8) t = T.Mountain;
+      else if (e > 0.67) t = n2 > 0.78 ? T.Ice : T.Snow;
+      else if (e > 0.56) t = n2 < 0.5 ? T.Snow : T.Rock;
+      else if (e > 0.45) t = n2 > 0.58 ? T.Rock : T.Grass;
+      else if (e > 0.31) t = T.Forest;
+      else if (t !== T.Dune && t !== T.Sand) t = n2 > 0.55 ? T.Forest : T.Grass;
+    } else if (t === T.Mountain) this.elev[i] = Math.max(this.elev[i], 0.85);
+    for (const tn of TARNS) {
+      const d = Math.hypot(x - tn.x, y - tn.y) + (n2 - 0.5) * 0.7;
+      if (d < tn.r) {
+        t = tn.ice ? T.Ice : d < tn.r * 0.5 ? T.Deep : T.Shallow;
+        h = tn.ice ? h : 0.5;
+      } else if (d < tn.r + 1.4 && t === T.Mountain) t = tn.ice ? T.Snow : T.Rock;
+    }
+    // the stream down from the mountain lake, the east lake, and out to the sea
+    const rd = Math.min(distToPolyline(x, y, RIVER_EAST), distToPolyline(x, y, RIVER_EAST_OUT));
+    if (rd < 1.2 + n * 0.8 && t !== T.Ice) {
+      t = T.River;
+      h -= 0.05;
+    }
+    const le = ((x - EAST_LAKE.x) / EAST_LAKE.rx) ** 2 + ((y - EAST_LAKE.y) / EAST_LAKE.ry) ** 2 + (n2 - 0.5) * 0.5;
+    if (le < 1) {
+      t = le < 0.5 ? T.Deep : T.Shallow;
+      h = 0.18;
+    } else if (le < 1.3 && t !== T.River) t = T.Sand;
+    return { t, h };
+  }
+
+  /** After the main pass: cliffs on the steepest mountainsides, the falls, and the cave mouths. */
+  private carveEast() {
+    const s = this.seed;
+    const { tiles, elev } = this;
+    const E = (x: number, y: number) => elev[Math.max(0, Math.min(MAP_H - 1, y)) * MAP_W + Math.max(0, Math.min(MAP_W - 1, x))];
+    for (let y = 1; y < MAP_H - 1; y++) {
+      for (let x = OLD_MAP_W; x < MAP_W - 1; x++) {
+        const i = y * MAP_W + x;
+        const t = tiles[i] as T;
+        if (t !== T.Rock && t !== T.Snow && t !== T.Grass) continue;
+        const e = elev[i];
+        if (e < 0.46 || e > 0.79) continue;
+        const grad = Math.hypot(E(x + 1, y) - E(x - 1, y), E(x, y + 1) - E(x, y - 1));
+        // keep the passes open
+        if (grad < 0.2 || hash2(x, y, s + 61) < 0.45 || VALLEYS.some((v) => distToPolyline(x, y, v.pts) < 3.5)) continue;
+        tiles[i] = T.Cliff;
+      }
+    }
+    // a lone cliff tile is just a speck: cliffs come in runs along the steep slopes
+    for (let y = 1; y < MAP_H - 1; y++) {
+      for (let x = OLD_MAP_W; x < MAP_W - 1; x++) {
+        const i = y * MAP_W + x;
+        if (tiles[i] !== T.Cliff) continue;
+        let run = 0;
+        for (const j of [i - 1, i + 1, i - MAP_W, i + MAP_W, i - MAP_W - 1, i - MAP_W + 1, i + MAP_W - 1, i + MAP_W + 1]) if (tiles[j] === T.Cliff) run++;
+        // (always snow: nothing grows on it, so the wild plants come out the same)
+        if (run < 2) tiles[i] = T.Snow;
+      }
+    }
+    // the falls: a rock ledge across the stream (the waterfall is drawn where river meets cliff)
+    for (let x = FALLS.x0; x <= FALLS.x1; x++) {
+      const i = FALLS.y * MAP_W + x;
+      if (tiles[i] !== T.Deep && tiles[i] !== T.Shallow) tiles[i] = T.Cliff;
+    }
+    // cave mouths: a rock face with the opening at its foot, and open ground below it
+    for (const c of EAST_CAVES) {
+      if (c.x < OLD_MAP_W && this.gen < 3) continue;
+      for (let dy = -3; dy <= 0; dy++)
+        for (let dx = -3; dx <= 3; dx++) {
+          if (Math.hypot(dx, dy * 1.3) > 3.2) continue;
+          const i = (c.y + dy) * MAP_W + c.x + dx;
+          if (tiles[i] !== T.Mountain) tiles[i] = dy === 0 && Math.abs(dx) <= 1 ? T.Cliff : T.Rock;
+          elev[i] = Math.max(elev[i], c.kind === "desert" ? 0.3 : elev[i]);
+        }
+      tiles[c.y * MAP_W + c.x] = T.Cave;
+      for (let dx = -1; dx <= 1; dx++) {
+        const below = (c.y + 1) * MAP_W + c.x + dx;
+        if (!isWalkTile(tiles[below] as T) || isWaterTile(tiles[below] as T)) tiles[below] = c.kind === "desert" ? T.Sand : T.Rock;
       }
     }
   }
@@ -397,9 +646,21 @@ export function groundSpeed(t: T) {
       return 0.7;
     case T.Sand:
       return 0.9;
+    case T.Dune:
+      return 0.78;
+    case T.Snow:
+      return 0.72;
+    case T.Ice:
+      return 0.82;
     default:
       return 1;
   }
 }
+
+/** Open sand (the desert's dunes, beaches, sandy flats): Sand People blend in here, camels stride across it. */
+export const isSandTile = (t: T) => t === T.Sand || t === T.Dune;
+
+/** Snow + ice + bare rock high up: Ice Dragon + Mountain Monk country. */
+export const isHighTile = (t: T) => t === T.Snow || t === T.Ice || t === T.Mountain;
 
 export const VEG_TILES = new Set<T>([T.Grass, T.Jungle, T.Forest, T.Swamp, T.Nest]);

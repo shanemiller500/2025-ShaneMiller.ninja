@@ -20,7 +20,7 @@ const LIME_D = "#d9d3c4";
 const COPPER = "#c8743f";
 const CRYSTAL = "#8fe3ff";
 
-export const CIV_KINDS = new Set<BuildingKind>(["shelterDeep", "resTable", "chamber", "shapingYard", "energyTower", "condenser", "obelisk", "stoneCircle", "levPad", "beamTower", "pylon", "pyramid", "resShield"]);
+export const CIV_KINDS = new Set<BuildingKind>(["shelterDeep", "resTable", "chamber", "shapingYard", "energyTower", "condenser", "obelisk", "stoneCircle", "levPad", "beamTower", "pylon", "pyramid", "resShield", "dragonShield"]);
 
 export interface CivLook {
   /** the grid has power */
@@ -29,6 +29,8 @@ export interface CivLook {
   /** 0..1 storm (crystals glow brighter) */
   storm: number;
   t: number;
+  /** a Dragon Shield's charge (0 = on watch, 1 = its field is live) */
+  charge?: number;
 }
 
 const seeded = (n: number) => {
@@ -406,6 +408,51 @@ export function drawCivBuilding(c: CanvasRenderingContext2D, b: Building, wt: nu
       c.beginPath();
       c.arc(0, -40, 2.6, 0, Math.PI * 2);
       c.fill();
+      break;
+    }
+    case "dragonShield": {
+      // a tall frequency pylon: a stepped plinth, three copper-wound fins round a stone shaft, and a
+      // crystal held floating in a ring at the top. It hums brighter as it charges.
+      const k = L.power ? L.charge ?? 0 : 0;
+      const bob = Math.sin(t * 2.2 + b.id) * 1.5 + k * Math.sin(t * 9) * 0.8;
+      c.fillStyle = STONE_D;
+      c.fillRect(-10, -6, 20, 6);
+      polyBlocks(c, -8, -14, 8, -6, b.id + 5, STONE);
+      polyBlocks(c, -4, -54, 4, -14, b.id + 19, STONE_L);
+      for (const s of [-1, 1]) {
+        c.fillStyle = s < 0 ? "#9d5a30" : COPPER;
+        c.beginPath();
+        c.moveTo(s * 4, -16);
+        c.lineTo(s * 11, -26);
+        c.lineTo(s * 10, -44);
+        c.lineTo(s * 4, -50);
+        c.closePath();
+        c.fill();
+        c.strokeStyle = "rgba(255,210,150,0.55)";
+        c.lineWidth = 0.8;
+        for (let y = -42; y < -20; y += 4) {
+          c.beginPath();
+          c.moveTo(s * 5, y);
+          c.lineTo(s * 10, y + 1.5);
+          c.stroke();
+        }
+      }
+      // the floating ring + crystal
+      c.strokeStyle = `rgba(140,240,255,${0.45 + glow * 0.3 + k * 0.4})`;
+      c.lineWidth = 2;
+      c.beginPath();
+      c.ellipse(0, -62 + bob, 11, 4, 0, 0, Math.PI * 2);
+      c.stroke();
+      crystal(c, 0, -58 + bob, 16, Math.max(L.power ? 0.35 : 0.05, glow * 0.6 + k), k > 0.5 ? "#d9f9ff" : CRYSTAL);
+      if (k > 0.05) {
+        const g = c.createRadialGradient(0, -64 + bob, 0, 0, -64 + bob, 40);
+        g.addColorStop(0, `rgba(170,245,255,${0.5 * k})`);
+        g.addColorStop(1, "rgba(170,245,255,0)");
+        c.fillStyle = g;
+        c.beginPath();
+        c.arc(0, -64 + bob, 40, 0, Math.PI * 2);
+        c.fill();
+      }
       break;
     }
     case "resShield": {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import { RES_INFO, type Cost } from "../data/colony";
@@ -11,6 +11,30 @@ import { ChariotRaidCard } from "./ChariotRaidCard";
 import { GameIcon } from "./GameIcon";
 import { useClickAway } from "./useClickAway";
 import { UpgradeAllButton } from "./UpgradeAllButton";
+import { PriorityPicker } from "./PriorityPicker";
+
+function InspectPriorityControl({ priority, engine, wall }: { priority: NonNullable<Snapshot["inspectPrio"]>; engine: Engine; wall: boolean }) {
+  const [scope, setScope] = useState<"one" | "all">("one");
+  return (
+    <div>
+      {priority.sameCount > 1 && (
+        <div className="mt-3 flex gap-1.5" role="radiogroup" aria-label="Apply priority to">
+          {(["one", "all"] as const).map((choice) => (
+            <button key={choice} type="button" role="radio" aria-checked={scope === choice} onClick={() => setScope(choice)}
+              className={`min-h-8 rounded-full px-2.5 text-[11px] font-bold transition active:scale-95 ${scope === choice ? "bg-amber-300 text-slate-900" : "bg-white/10 text-white/75 hover:bg-white/20"}`}>
+              {choice === "one" ? (wall ? "This wall run" : "This one") : `All ${priority.sameName} (${priority.sameCount})`}
+            </button>
+          ))}
+        </div>
+      )}
+      <PriorityPicker
+        value={priority.p}
+        onPick={(p) => engine.setPriority(priority.key, p, scope)}
+        label={`Priority (${priority.what}${wall && scope === "one" ? ", the whole run of wall" : ""})`}
+      />
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /*  Tap a home, building, Scorpion, gate or tower → this card.         */
@@ -130,6 +154,8 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
           <div className="text-lg font-bold">🔷 {info.material} {info.part}</div>
           <p className="mt-1 text-xs text-white/60">{info.built < 1 ? "Blueprint" : "Built"} · Drag after choosing Move, or tap a new tile. Workers levitate and reshape the existing stones.</p>
           <div className="mt-3"><Bar value={info.hp / info.maxHp} color="linear-gradient(90deg,#22c55e,#a3e635)" /></div>
+          <button type="button" onClick={() => engine.toggleWallEditMode(info.id)} title="Pick several wall pieces and drag them somewhere else together, keeping their shape"
+            className="mt-2 w-full rounded-xl bg-cyan-400/20 py-2 text-sm font-bold text-cyan-50 transition hover:bg-cyan-400/30 active:scale-95">✏️ Edit walls (move many pieces at once)</button>
         </div>
       )}
       {info.kind === "farm" && (
@@ -159,6 +185,25 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
           {info.note && <p className="mt-2 rounded-xl bg-cyan-500/10 px-2.5 py-1.5 text-[12px] text-cyan-100">{info.note}</p>}
           {info.built >= 1 && info.bkind === "hatchery" && <IncubatorSection engine={engine} id={info.id} />}
           {info.built >= 1 && info.bkind === "dragonPit" && <PitSection engine={engine} />}
+          {info.shield && (
+            <div className="mt-2 rounded-2xl bg-cyan-400/10 p-2.5">
+              <div className="flex items-center justify-between text-[11.5px] font-semibold text-cyan-50">
+                <span>Field {info.shield.r} px · {info.shield.linked ? `knitted to ${info.shield.linked} shield${info.shield.linked === 1 ? "" : "s"}` : "on its own"}</span>
+                <span className="tabular-nums">{info.shield.powered ? `⚡ ${Math.round(info.shield.charge * 100)}%` : "🔌 off"}</span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-violet-300" style={{ width: `${Math.round(info.shield.charge * 100)}%` }} /></div>
+              <div className="mt-2 space-y-1">
+                {info.shield.ups.map((u) => (
+                  <button key={u.key} type="button" disabled={!u.ok} onClick={() => engine.upgradeDragonShield(info.id, u.key)} title={u.tip}
+                    className="flex w-full items-center gap-2 rounded-xl bg-white/[0.07] px-2 py-1.5 text-left text-[11.5px] transition hover:bg-white/15 disabled:opacity-45">
+                    <span className="text-base">{u.icon}</span>
+                    <span className="min-w-0 flex-1"><b>{u.name}</b> <span className="text-white/55">{"●".repeat(u.lvl)}{"○".repeat(u.max - u.lvl)}</span><br /><span className="text-[10.5px] text-white/55">{u.tip}</span></span>
+                    {u.lvl < u.max ? <CostChips cost={u.cost} stock={stock} /> : <span className="text-[10.5px] text-emerald-300">max</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {info.built < 1 ? (
             <div className="mt-3">
               <div className="mb-1 text-[11px] font-semibold text-white/60">Materials delivered</div>
@@ -295,6 +340,61 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
           )}
           <p className="mt-2 text-[12px] text-white/70">{info.stone ? "Stone towers are much tougher and come with a 🎯 Scorpion on top (once it's invented)." : "Archers up here shoot further and better. Place a 🎯 Scorpion on top for dragons."} Pick people and tap the tower to send them up.</p>
         </>
+      )}
+      {info.kind === "monks" && (
+        <>
+          <div className="flex items-center gap-3 pr-8">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-amber-300/30 to-rose-700/25 text-3xl">🛕</span>
+            <div>
+              <div className="text-lg font-bold leading-tight">Mountain Monks</div>
+              <div className="text-xs text-white/60">
+                {info.n} monk{info.n === 1 ? "" : "s"}
+                {info.pilgrims ? ` · ${info.pilgrims} pilgrim${info.pilgrims === 1 ? "" : "s"} on the way up` : ""}
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-[13px] font-semibold">{info.rite ? `🔔 The offering: ${info.rite}` : info.activity}</p>
+          <p className="mt-1 text-[12px] text-white/70">A small, peaceful order. Nobody harms them and they harm no one: no beast, raider or dragon will ever go for them. Pilgrims climb up to join them (up to about ten).</p>
+          {info.names.length > 0 && <p className="mt-2 text-[11.5px] text-white/60">{info.names.join(" · ")}</p>}
+          <div className="mt-3 rounded-2xl bg-white/[0.06] p-3">
+            <div className="text-[12px] font-bold">🐉 The yearly offering</div>
+            <p className="mt-1 text-[11.5px] text-white/70">
+              Once a year, on the last day of winter, they climb in a line to the high ledge and give themselves to the dragons in a ceremony of light. The eldest stay and the order slowly grows again.
+              {!info.rite && ` Next: ${info.daysToRite === 0 ? "today, around midday" : `in ${info.daysToRite} day${info.daysToRite === 1 ? "" : "s"}`}.`}
+            </p>
+            {!info.rite && info.n >= 3 && (
+              <button type="button" onClick={() => engine.startMonkRite()} className="mt-2 w-full rounded-xl bg-amber-400/90 py-2 text-sm font-bold text-[#3a2414] transition hover:bg-amber-300 active:scale-95">
+                🔔 Watch the offering now
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {info.kind === "sandCamp" && (
+        <>
+          <div className="flex items-center gap-3 pr-8">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl text-3xl" style={{ background: `linear-gradient(180deg, ${info.color}55, #d8bd8a33)` }}>🏜️</span>
+            <div>
+              <div className="text-lg font-bold leading-tight">{info.name} Sand People</div>
+              <div className="text-xs text-white/60">
+                {info.folk} warriors{info.young ? ` · ${info.young} young` : ""} · {info.camels} camel{info.camels === 1 ? "" : "s"}
+                {info.raiding ? " · out raiding!" : ""}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1">
+            {info.roles.map((r) => (
+              <span key={r.name} className="rounded-full bg-white/10 px-2 py-0.5 text-[12px] font-bold">
+                {r.icon} {r.n} {r.name}
+              </span>
+            ))}
+          </div>
+          {info.dragons.length > 0 && <p className="mt-2 text-[12.5px] font-semibold text-amber-200">🐉 Sand Dragon{info.dragons.length > 1 ? "s" : ""}: {info.dragons.join(", ")} (hot sand breath!)</p>}
+          <p className="mt-2 text-[12px] text-white/70">Hostile to everyone. Out on the open sand their robes hide them: guards only notice them up close or once they strike. They ride out in groups (patrols, caravans, raiding parties), never alone.</p>
+        </>
+      )}
+      {snap.inspectPrio && (
+        <InspectPriorityControl key={snap.inspectPrio.key} priority={snap.inspectPrio} engine={engine} wall={info.kind === "wall" || info.kind === "gate"} />
       )}
     </motion.aside>
   );

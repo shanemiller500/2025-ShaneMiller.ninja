@@ -12,7 +12,8 @@ import { claimNest, nestEggs, orphanNests } from "../sim/dragonNests";
 import { CLAN_BUILDS, nextProject } from "../sim/clanLife";
 import type { ClanBuild } from "../sim/types";
 import { FACTS, ROLES } from "../data/facts";
-import { evenSplit } from "../sim/duties";
+import { bulkProtected, evenSplit, protectedRole, type JobGuard, type ProtectedRole } from "../sim/duties";
+import { SHIELD, SHIELD_UP_ORDER, SHIELD_UPS, shieldLinks, shieldRadius, shieldView, upgradeShield, type ShieldUp } from "../sim/dragonShield";
 import { SPECIES, sp } from "../data/species";
 import { AudioManager } from "../audio/audio";
 import { musicMood } from "./musicMood";
@@ -40,7 +41,11 @@ import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion
 import { carcassStage, makeCarcass, STAGE_LABEL } from "../sim/carcass";
 import { OUTFIT_BY_ID, type ForgeCat } from "../data/colony";
 import { condition, type Condition } from "../sim/injury";
-import { STONE_TOWER_UP, queueUpgrades, shelterDone, stagesOf, towerMaxHp, wallMaxHp, sites, siteKey, type UpgradeKind } from "../sim/build";
+import { STONE_TOWER_UP, queueUpgrades, shelterDone, stagesOf, towerMaxHp, wallMaxHp, wallStretch, sites, siteKey, type Site, type UpgradeKind } from "../sim/build";
+import { PRIOS, mineKey, type Prio } from "../sim/priority";
+import { ATLAS_H, ATLAS_PLACES, ATLAS_W } from "../sim/atlas";
+import { SAND_ROLE_NAMES } from "../sim/sandFolk";
+import { YEAR_DAYS } from "../sim/seasons";
 import { commandCollect, commandDeliver, commandTravel, eligible, workOf, type WorkSkill } from "../sim/workDinos";
 import { bond, callRider, chooseRider, jobSpot, rideTeamTo, riderOf, riderReady, unbond } from "../sim/riders";
 import { BREEDS, BREED_LIST, DRAGON_COMMANDS, DRAGON_NAMES, type DragonCmdKind } from "../data/dragons";
@@ -151,6 +156,10 @@ export interface PersonRow {
   task: string | null;
   stranger: boolean;
   availableForJob: boolean;
+  /** a protected role (duties.ts): shown as a badge */
+  protectedAs: ProtectedRole | null;
+  /** kept out of the bulk job tools right now */
+  guarded: boolean;
 }
 
 /** One picked person in the selection bar. */
@@ -177,14 +186,20 @@ export interface CommandInfo {
 /** Tapped a building: what's inside, what it needs, what you can do. */
 export type InspectInfo =
   | { kind: "shelter"; id: number; icon: string; name: string; tier: number; cap: number; built: boolean; progress: string; hp: number; hearth: boolean; warmth: number; residents: { id: number; name: string; child: boolean; inside: boolean; state: string }[]; upgrade: { icon: string; name: string; cost: Cost; have: Cost; started: boolean } | null }
-  | { kind: "building"; id: number; bkind: BuildingKind; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost; stage?: { n: number; of: number; name: string; next: string | null }; note?: string }
+  | { kind: "building"; id: number; bkind: BuildingKind; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost; stage?: { n: number; of: number; name: string; next: string | null }; note?: string;
+      /** a Dragon Shield: its field, charge + the upgrades on offer (dragonShield.ts) */
+      shield?: { r: number; charge: number; powered: boolean; pushing: boolean; linked: number; ups: { key: ShieldUp; icon: string; name: string; tip: string; lvl: number; max: number; cost: Cost; ok: boolean }[] } }
   | { kind: "scorpion"; id: number; name: string; tier: number; built: number; hp: number; maxHp: number; drone: boolean; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
   | { kind: "gate"; id: number; open: boolean; auto: boolean; hp: number; maxHp: number; material: string }
   | { kind: "wall"; id: number; material: string; part: string; built: number; hp: number; maxHp: number }
   | { kind: "farm"; id: number; crop: string; growth: number; planted: boolean }
   | { kind: "tower"; id: number; stage: number; hp: number; maxHp: number; guards: number; stone: boolean; up: boolean; canUpgrade: boolean; upCost: number }
   | { kind: "carcass"; id: number; name: string; stage: string; left: { r: string; n: number; max: number }[]; working: number; burnt: boolean; fresh: number }
-  | { kind: "chariot"; id: number; hp: number; trike: boolean; crew: number; cars: number; seats: number; dragonRiders: number; dinoRiders: number; fillers: number; targets: { kind: "nest" | "clan" | "dragon"; id: number; icon: string; name: string; note: string; dist: number }[]; busy: boolean };
+  | { kind: "chariot"; id: number; hp: number; trike: boolean; crew: number; cars: number; seats: number; dragonRiders: number; dinoRiders: number; fillers: number; targets: { kind: "nest" | "clan" | "dragon"; id: number; icon: string; name: string; note: string; dist: number }[]; busy: boolean }
+  // the Mountain Monks (tap one, or their huts / shrine)
+  | { kind: "monks"; id: number; n: number; pilgrims: number; activity: string; rite: string | null; daysToRite: number; names: string[]; found: boolean }
+  // a Sand People camp (tap its tents)
+  | { kind: "sandCamp"; id: number; name: string; color: string; folk: number; young: number; roles: { icon: string; name: string; n: number }[]; camels: number; dragons: string[]; raiding: boolean; tier: number };
 
 export interface Snapshot {
   shifts: { mode: "all" | "split"; auto: boolean; day: number; night: number; draw: number; required: number; powered: number; pyramid: boolean; people: { id: number; name: string; job: string; shift: "day" | "night"; manual: boolean; outfit: string | null; powered: boolean }[] };
@@ -245,6 +260,10 @@ export interface Snapshot {
   sea: {
     tribes: { id: number; name: string; color: string; colors: string[]; merges: number; folk: number; young: number; tier: number; huts: number; hutsUp: number; raiding: boolean; dragons: number; farms: string[]; pearls: number; x: number; y: number }[];
   };
+  /** the priority picker for the structure being inspected (only while it's a build / repair / upgrade site) */
+  inspectPrio: { key: string; p: Prio; what: string; sameCount: number; sameName: string } | null;
+  /** every building site waiting on work, most urgent first (CampPanel's build queue) */
+  buildQueue: { key: string; icon: string; name: string; need: string | null; repair: boolean; p: Prio }[];
   tribe: {
     level: number;
     levelName: string;
@@ -252,6 +271,8 @@ export interface Snapshot {
     next: { name: string; icon: string; people: number; huts: number; need?: string; havePeople: number; haveHuts: number; haveTech: boolean } | null;
     capacity: number;
     danger: Danger;
+    /** which protected roles the bulk job tools leave alone (Dragon Riders always) */
+    jobGuard: JobGuard;
     evolution: number;
     raidsWon: number;
     raid: { phase: "warn" | "attack"; label: string; left: number; x: number; y: number; t: number; brutes: boolean } | null;
@@ -443,10 +464,12 @@ export class Engine {
   /** 🪓 Clear area: the next drag marks a box to clear down to grass */
   clearAreaMode = false;
   private boxForClear = false;
+  /** the pointer drawing the selection / clear box (other fingers never move it) */
+  private boxPtr: number | null = null;
   /** last command + its alternatives (for the "instead…" chip) */
   private lastCmd: { cmd: Command; people: number[]; at: number; weapon: WeaponKind | null } | null = null;
   /** tapped building being looked at */
-  inspectRef: { kind: "shelter" | "building" | "scorpion" | "gate" | "wall" | "farm" | "tower" | "carcass" | "chariot"; id: number } | null = null;
+  inspectRef: { kind: "shelter" | "building" | "scorpion" | "gate" | "wall" | "farm" | "tower" | "carcass" | "chariot" | "monks" | "sandCamp"; id: number } | null = null;
   /** shift-drag selection box (screen px) */
   private box: { x0: number; y0: number; x1: number; y1: number } | null = null;
   private hoverHint: { x: number; y: number; icon: string; label: string } | null = null;
@@ -630,6 +653,9 @@ export class Engine {
       followId: this.followId,
       selection: this.selection,
       box: this.box,
+      boxClear: this.boxForClear,
+      clearMode: this.clearAreaMode,
+      wallEdit: this.wallEditView(),
       hint: this.hoverHint,
       hoverItem: this.hoverItem,
       marker: this.marker,
@@ -1031,10 +1057,27 @@ export class Engine {
       const farm = ref.kind === "farm" ? this.world.tribe.farms.find((v) => v.id === ref.id) : null;
       if (wl && Math.hypot(wp.x - (wl.tx + 0.5) * TILE, wp.y - (wl.ty + 0.5) * TILE) < TILE || farm && Math.hypot(wp.x - farm.x, wp.y - farm.y) < 44) this.moveDrag = e.pointerId;
     }
-    // shift-drag draws a box to select people
-    if ((e.shiftKey && e.pointerType === "mouse" || this.groupSelectMode || this.clearAreaMode) && this.tool.id === "hand") {
+    // a second finger while a box is being dragged: it's a pinch, not a box (the box is dropped, the mode stays on)
+    if (this.box && this.boxPtr !== e.pointerId) {
+      this.box = null;
+      this.boxForClear = false;
+      this.boxPtr = null;
+    } else if (this.wallDrag && this.wallDrag.ptr !== e.pointerId) {
+      // a second finger mid wall-drag: a pinch (the pieces stay where they were)
+      this.wallDrag = null;
+    } else if (this.wallEditMode && this.tool.id === "hand" && this.ptrs.size === 0 && !(e.shiftKey && e.pointerType === "mouse") && this.wallUnder(wp.x, wp.y)) {
+      // ✏️ wall edit: press on a piece (a tap toggles it, a drag moves the picked group)
+      const wl = this.wallUnder(wp.x, wp.y)!;
+      this.wallDrag = { ptr: e.pointerId, id: wl.id, sx, sy, fromTx: Math.floor(wp.x / TILE), fromTy: Math.floor(wp.y / TILE), rawX: 0, rawY: 0, dtx: 0, dty: 0, fits: [], moved: false };
+      const now = performance.now();
+      this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: now, lastMoveAt: now, pointerType: e.pointerType, moved: false, grab: null });
+      this.vel.x = this.vel.y = 0;
+      return;
+    } else if ((e.shiftKey && e.pointerType === "mouse" || ((this.groupSelectMode || this.clearAreaMode) && !this.wallEditMode)) && this.tool.id === "hand" && this.ptrs.size === 0) {
+      // shift-drag draws a box to select people (or, in 🪓 Clear area mode, marks the box to clear; in wall edit, picks walls)
       this.box = { x0: sx, y0: sy, x1: sx, y1: sy };
       this.boxForClear = this.clearAreaMode;
+      this.boxPtr = e.pointerId;
       this.canvas.setPointerCapture?.(e.pointerId);
       const now = performance.now();
       this.ptrs.set(e.pointerId, { x: sx, y: sy, sx, sy, t: now, lastMoveAt: now, pointerType: e.pointerType, moved: false, grab: null });
@@ -1075,11 +1118,12 @@ export class Engine {
     if (e.pointerType === "mouse") this.hover = this.renderer.toWorld(this.cam, sx, sy);
     const p = this.ptrs.get(e.pointerId);
     if (!p) return;
-    if (this.box) {
+    if (this.box && this.boxPtr === e.pointerId) {
       this.box.x1 = sx;
       this.box.y1 = sy;
       return;
     }
+    if (this.wallEditMode && this.wallDragMove(e.pointerId, sx, sy)) return;
     const dx = sx - p.x;
     const dy = sy - p.y;
     const now = performance.now();
@@ -1164,9 +1208,16 @@ export class Engine {
     if (p && (e.type === "pointercancel" || performance.now() - p.lastMoveAt > 100 || p.pointerType === "mouse")) {
       this.vel.x = this.vel.y = 0;
     }
-    if (this.box) {
+    if (this.box && this.boxPtr === e.pointerId) {
       const b = this.box;
       this.box = null;
+      this.boxPtr = null;
+      // the browser took the touch (a scroll / system gesture): nothing was meant, keep the mode for another try
+      if (e.type === "pointercancel") {
+        this.boxForClear = false;
+        this.emit({ type: "select" });
+        return;
+      }
       if (this.boxForClear) {
         this.boxForClear = false;
         if (Math.abs(b.x1 - b.x0) > 8 || Math.abs(b.y1 - b.y0) > 8) {
@@ -1174,6 +1225,18 @@ export class Engine {
           const c = this.renderer.toWorld(this.cam, Math.max(b.x0, b.x1), Math.max(b.y0, b.y1));
           this.clearArea({ x0: a.x, y0: a.y, x1: c.x, y1: c.y });
         }
+        return;
+      }
+      if (this.wallEditMode) {
+        // shift-drag in wall edit: add every piece inside the box to the picked group
+        const a = this.renderer.toWorld(this.cam, Math.min(b.x0, b.x1), Math.min(b.y0, b.y1));
+        const c = this.renderer.toWorld(this.cam, Math.max(b.x0, b.x1), Math.max(b.y0, b.y1));
+        for (const wl of this.world.tribe.walls) {
+          const x = (wl.tx + 0.5) * TILE;
+          const y = (wl.ty + 0.5) * TILE;
+          if (x > a.x && x < c.x && y > a.y && y < c.y) this.wallSel.add(wl.id);
+        }
+        this.emit({ type: "select" });
         return;
       }
       if (Math.abs(b.x1 - b.x0) > 8 || Math.abs(b.y1 - b.y0) > 8) {
@@ -1191,6 +1254,16 @@ export class Engine {
         if (h) this.toggleSelect(h.id);
         return;
       }
+    }
+    if (this.wallDrag && this.wallDrag.ptr === e.pointerId) {
+      // ✏️ wall edit: a tap toggles the piece, a drag drops the picked group (a cancelled touch does nothing)
+      const d = this.wallDrag;
+      if (e.type === "pointercancel") this.wallDrag = null;
+      else if (!d.moved) {
+        this.wallDrag = null;
+        this.toggleWallPiece(d.id);
+      } else this.wallDrop();
+      return;
     }
     if (this.ptrs.size < 2) this.pinch = null;
     if (!p) return;
@@ -1251,6 +1324,12 @@ export class Engine {
       return;
     }
     const k = e.key.toLowerCase();
+    // wall edit: Ctrl/⌘+Z undoes the last move
+    if (this.wallEditMode && k === "z" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      this.undoWallMove();
+      return;
+    }
     if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"].includes(k)) {
       this.keys.add(k);
       this.followId = 0;
@@ -1266,6 +1345,14 @@ export class Engine {
       this.selectedEgg = 0;
       this.orderFor = 0;
       this.groupSelectMode = false;
+      this.clearAreaMode = false;
+      this.box = null;
+      this.boxPtr = null;
+      // wall edit: Esc first cancels a drag in progress, then the selection, then leaves the mode
+      if (this.wallEditMode && this.wallEscape()) {
+        this.emit({ type: "select" });
+        return;
+      }
       this.tool = { ...this.tool, id: "hand" };
       this.select(0);
       this.selection = [];
@@ -1401,6 +1488,8 @@ export class Engine {
       this.aimTap(x, y);
       return;
     }
+    // ✏️ wall edit: taps on pieces are handled on press/release; a tap on open ground does nothing
+    if (this.wallEditMode && this.tool.id === "hand") return;
     if (this.moveAim) {
       const ref = this.moveAim;
       const people = this.selectionHumans();
@@ -1733,6 +1822,11 @@ export class Engine {
     const ty = Math.floor(y / TILE);
     const sc = w.colony.scorpions.find((s) => Math.hypot(s.x - x, s.y - (s.mount === "tower" ? 46 : s.mount === "wall" ? 26 : 10) - y) < 30);
     if (sc) return this.inspect({ kind: "scorpion", id: sc.id });
+    // the Mountain Monks (a monk, or one of their huts / the shrine / the altar)
+    if (w.monks.list.some((m) => Math.hypot(m.x - x, m.y - 14 - m.z - y) < 22) || w.monks.places.some((p) => Math.abs(p.x - x) < 40 && y < p.y + 8 && y > p.y - 50)) return this.inspect({ kind: "monks", id: 0 });
+    // a Sand People camp
+    const sand = w.sandFolk.tribes.find((t) => t.found && t.tents.some((s) => Math.abs(s.x - x) < 50 && y < s.y + 10 && y > s.y - 60));
+    if (sand) return this.inspect({ kind: "sandCamp", id: sand.id });
     const tower = w.tribe.towers.find((t) => x > t.tx * TILE - 6 && x < (t.tx + 2) * TILE + 6 && y > t.ty * TILE - 90 && y < (t.ty + 2) * TILE + 4);
     if (tower) return this.inspect({ kind: "tower", id: tower.id });
     const wl = w.tribe.wallAt(tx, ty) ?? w.tribe.wallAt(tx, Math.floor((y + 14) / TILE));
@@ -1798,10 +1892,27 @@ export class Engine {
   /** 🪓 Clear area: the next drag marks the box (the people you've picked, and a picked dino, do the work). */
   toggleClearAreaMode() {
     this.clearAreaMode = !this.clearAreaMode;
+    this.box = null;
+    this.boxPtr = null;
+    this.boxForClear = false;
     if (this.clearAreaMode) {
       this.groupSelectMode = false;
+      this.wallEditMode = false;
+      // the box is drawn with the Hand: switch to it so the very next drag works on any tool
+      if (this.tool.id !== "hand") this.tool = { ...this.tool, id: "hand" };
       this.toastOnce("clearAreaHow", "🪓", "Drag a box over the trees + bushes to clear. Whoever you've picked (and a picked dino) will clear it down to grass; with nobody picked, free hands go.");
     }
+    this.emit({ type: "select" });
+  }
+
+  /** Upgrade a Dragon Shield (Inspect card). */
+  upgradeDragonShield(id: number, key: ShieldUp) {
+    const w = this.world;
+    const b = w.colony.buildings.find((x) => x.id === id);
+    if (!b) return;
+    const why = upgradeShield(w, b, key);
+    if (why) w.toast("🛡️", why, b.x, b.y);
+    else this.audio.play("pop", 0, 0, 0.5);
     this.emit({ type: "select" });
   }
 
@@ -2094,6 +2205,169 @@ export class Engine {
     this.moveAim = null;
     this.moveDrag = null;
     this.emit({ type: "select" });
+  }
+
+  /* ----------------------------- ✏️ wall edit mode ----------------------------- */
+
+  /** Edit walls: tap pieces to pick them (tap again to drop one), drag the picked group to move it. */
+  wallEditMode = false;
+  /** the picked wall pieces (ids) */
+  wallSel = new Set<number>();
+  /** a drag under way: the grabbed piece, the raw + snapped tile offset, and whether each piece fits there */
+  private wallDrag: { ptr: number; id: number; sx: number; sy: number; fromTx: number; fromTy: number; rawX: number; rawY: number; dtx: number; dty: number; fits: boolean[]; moved: boolean } | null = null;
+  /** moves that can be undone (newest last) */
+  private wallUndo: { id: number; tx: number; ty: number }[][] = [];
+
+  get wallUndoCount() {
+    return this.wallUndo.length;
+  }
+
+  /** Enter / leave wall edit mode (optionally with one piece already picked). */
+  toggleWallEditMode(startId = 0) {
+    this.wallEditMode = startId ? true : !this.wallEditMode;
+    this.wallDrag = null;
+    if (!this.wallEditMode) {
+      this.wallSel.clear();
+      this.emit({ type: "select" });
+      return;
+    }
+    this.clearAreaMode = false;
+    this.groupSelectMode = false;
+    this.moveAim = null;
+    this.box = null;
+    this.boxPtr = null;
+    if (this.tool.id !== "hand") this.tool = { ...this.tool, id: "hand" };
+    if (startId) this.wallSel.add(startId);
+    this.inspectRef = null;
+    this.toastOnce("wallEditHow", "✏️", "Edit walls: tap wall pieces to pick them (tap again to drop one). Drag any picked piece to slide the whole group: it keeps its shape and snaps onto the tile grid (and onto walls it lands next to). Green = fits, red = blocked. ↶ Undo puts the last move back.");
+    this.emit({ type: "select" });
+  }
+
+  private selectedWalls() {
+    return this.world.tribe.walls.filter((wl) => this.wallSel.has(wl.id));
+  }
+
+  /** The wall piece drawn at a world point (the art stands up off its tile, so the tile below counts too). */
+  private wallUnder(x: number, y: number) {
+    const t = this.world.tribe;
+    const tx = Math.floor(x / TILE);
+    return t.wallAt(tx, Math.floor(y / TILE)) ?? t.wallAt(tx, Math.floor((y + TILE * 0.6) / TILE)) ?? null;
+  }
+
+  private toggleWallPiece(id: number) {
+    if (this.wallSel.has(id)) this.wallSel.delete(id);
+    else this.wallSel.add(id);
+    this.audio.play("click", 0, 0, 0.3);
+    this.emit({ type: "select" });
+  }
+
+  /** Pick every piece joined (side or corner) to the ones already picked: a whole wall run at once. */
+  selectConnectedWalls() {
+    const t = this.world.tribe;
+    const todo = this.selectedWalls();
+    if (!todo.length) return this.world.toast("✏️", "Pick one piece of the wall first, then this picks the rest of it.");
+    while (todo.length) {
+      const wl = todo.pop()!;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const o = t.wallAt(wl.tx + dx, wl.ty + dy);
+        if (o && !this.wallSel.has(o.id)) {
+          this.wallSel.add(o.id);
+          todo.push(o);
+        }
+      }
+    }
+    this.emit({ type: "select" });
+  }
+
+  clearWallSelection() {
+    this.wallSel.clear();
+    this.wallDrag = null;
+    this.emit({ type: "select" });
+  }
+
+  /** Put the last wall move back. */
+  undoWallMove() {
+    const last = this.wallUndo.pop();
+    if (!last) return;
+    const why = this.world.tribe.restoreWalls(this.world, last);
+    if (why) {
+      this.wallUndo.push(last);
+      this.world.toast("↶", why);
+    } else {
+      this.wallSel = new Set(last.map((f) => f.id));
+      this.audio.play("pop", 0, 0, 0.4);
+    }
+    this.emit({ type: "select" });
+  }
+
+  /** Esc in wall edit mode: cancel a drag, else drop the selection, else leave. True when it handled the key. */
+  private wallEscape() {
+    if (this.wallDrag) {
+      this.wallDrag = null;
+      return true;
+    }
+    if (this.wallSel.size) {
+      this.wallSel.clear();
+      return true;
+    }
+    this.wallEditMode = false;
+    return true;
+  }
+
+  /** A wall drag's pointer moved (true when it was the drag's pointer). */
+  private wallDragMove(ptr: number, sx: number, sy: number) {
+    const d = this.wallDrag;
+    if (!d || d.ptr !== ptr) return false;
+    if (!d.moved) {
+      if (Math.hypot(sx - d.sx, sy - d.sy) < 8) return true;
+      d.moved = true;
+      // dragging a piece that isn't picked yet picks it up too
+      if (!this.wallSel.has(d.id)) this.wallSel.add(d.id);
+      this.cancelHold();
+    }
+    const wp = this.renderer.toWorld(this.cam, sx, sy);
+    const rawX = Math.floor(wp.x / TILE) - d.fromTx;
+    const rawY = Math.floor(wp.y / TILE) - d.fromTy;
+    if (rawX === d.rawX && rawY === d.rawY && d.fits.length) return true;
+    d.rawX = rawX;
+    d.rawY = rawY;
+    const pieces = this.selectedWalls();
+    const s = this.world.tribe.snapWallMove(this.world, pieces, rawX, rawY);
+    d.dtx = s.dtx;
+    d.dty = s.dty;
+    d.fits = this.world.tribe.wallMoveFits(this.world, pieces, d.dtx, d.dty);
+    return true;
+  }
+
+  /** Drop the dragged group where the preview shows it. */
+  private wallDrop() {
+    const d = this.wallDrag;
+    this.wallDrag = null;
+    if (!d) return;
+    const w = this.world;
+    const pieces = this.selectedWalls();
+    if (!d.dtx && !d.dty) return this.emit({ type: "select" });
+    const r = w.tribe.moveWalls(w, pieces, d.dtx, d.dty);
+    if (typeof r === "string") w.toast("✏️", r);
+    else {
+      this.wallUndo.push(r.from);
+      if (this.wallUndo.length > 20) this.wallUndo.shift();
+      for (const wl of pieces) if (w.inView(wl.tx * TILE, wl.ty * TILE, 40)) w.particles.burst(P.Dust, (wl.tx + 0.5) * TILE, (wl.ty + 0.8) * TILE, 3, 30, { size: 7, max: 0.6, color: wl.kind === "polygon" ? "rgba(155,185,240,0.8)" : "rgba(160,130,90,0.6)" });
+      w.sfx("thud", (pieces[0].tx + 0.5) * TILE, (pieces[0].ty + 0.5) * TILE, 0.6, 0.8);
+    }
+    this.emit({ type: "select" });
+  }
+
+  /** What the renderer shows in wall edit mode. */
+  wallEditView() {
+    if (!this.wallEditMode) return null;
+    const d = this.wallDrag?.moved ? this.wallDrag : null;
+    const pieces = d ? this.selectedWalls() : [];
+    return {
+      sel: this.wallSel,
+      ghost: d ? pieces.map((wl, i) => ({ tx: wl.tx + d.dtx, ty: wl.ty + d.dty, ok: d.fits[i] ?? false })) : null,
+      hover: this.hover ? this.wallUnder(this.hover.x, this.hover.y)?.id ?? 0 : 0,
+    };
   }
 
   /** Clear land: the next tap picks the patch of trees + shrubs. */
@@ -2477,6 +2751,15 @@ export class Engine {
   setTool(t: Partial<ToolState>) {
     const prev = this.tool.id;
     this.tool = { ...this.tool, ...t };
+    // picking another tool ends the Hand's edit modes (nothing stays half-selected)
+    if (this.tool.id !== "hand" && (this.clearAreaMode || this.wallEditMode)) {
+      this.clearAreaMode = false;
+      this.box = null;
+      this.boxPtr = null;
+      this.wallEditMode = false;
+      this.wallDrag = null;
+      this.wallSel.clear();
+    }
     const w = this.world;
     // weather + volcano + quake act instantly, then hand back the previous tool
     const back = () => {
@@ -2543,10 +2826,15 @@ export class Engine {
   }
 
   setRole(id: number, role: Role) {
-    const h = this.world.humans.find((x) => x.id === id);
+    const w = this.world;
+    const h = w.humans.find((x) => x.id === id);
     if (!h || h.child) return;
+    // assigning one person by hand always works (it's the player's choice), but a Dragon Rider's bond is never
+    // broken by it: they keep their dragon, and the panel says what that means
+    const dr = protectedRole(w, h) === "dragonRider" && role !== "dragonKeeper" && h.role === "dragonKeeper" ? w.dragons.owned.find((d) => d.partner === h.id || d.keeper === h.id) : null;
     this.changeRole(h, role);
     h.bubble = { text: role === "auto" ? "I'll help wherever!" : `I'm a ${role}!`, t: 2 };
+    if (dr) w.toast("🐉", `${h.name} is still bonded to ${dr.name} and still flies it, but won't tend it full-time as a ${ROLES.find((r) => r.id === role)?.name ?? role}. Set them back to Dragon keeper any time.`, h.x, h.y);
     this.audio.play("pop", 0, 0, 0.4);
   }
 
@@ -2566,9 +2854,26 @@ export class Engine {
     h.gear.weapon = "nightSidearm";
   }
 
+  /** Can bulk job tools (Set number, All, Split evenly) move this person? Protected riders + specialists stay put (duties.ts). */
+  private availableForBulk(h: Human) {
+    return this.availableForJob(h) && !bulkProtected(this.world, h);
+  }
+
+  /** "(3 protected kept their roles)" for the bulk-tool toasts. */
+  private keptNote() {
+    const n = this.world.humans.filter((h) => this.availableForJob(h) && bulkProtected(this.world, h)).length;
+    return n ? ` (${n} protected ${n === 1 ? "rider/specialist kept their role" : "riders/specialists kept their roles"})` : "";
+  }
+
+  /** Camp → Jobs: should bulk tools leave Dino Riders / specialists alone? (Dragon Riders always are.) */
+  setJobGuard(key: keyof JobGuard, on: boolean) {
+    this.world.tribe.jobGuard = { ...this.world.tribe.jobGuard, [key]: on };
+    this.emit({ type: "select" });
+  }
+
   /** Set the exact number of available surface adults manually assigned to a duty. */
   setRoleCount(role: Role, requested: number) {
-    const people = this.world.humans.filter((h) => this.availableForJob(h)).sort((a, b) => a.id - b.id);
+    const people = this.world.humans.filter((h) => this.availableForBulk(h)).sort((a, b) => a.id - b.id);
     const count = Number.isFinite(requested) ? Math.max(0, Math.min(people.length, Math.trunc(requested))) : 0;
     const assigned = people.filter((h) => h.role === role);
     for (const h of assigned.slice(count)) this.changeRole(h, role === "auto" ? "gatherer" : "auto");
@@ -2578,7 +2883,7 @@ export class Engine {
     for (const h of candidates.slice(0, need)) this.changeRole(h, role);
     this.rallyRoles = null;
     this.world.flags.delete("rallyDinos");
-    this.world.toast("👥", `${count} ${count === 1 ? "person" : "people"} assigned to ${role === "auto" ? "Auto" : role}.`);
+    this.world.toast("👥", `${count} ${count === 1 ? "person" : "people"} assigned to ${role === "auto" ? "Auto" : role}.${this.keptNote()}`);
     return count;
   }
 
@@ -2591,19 +2896,19 @@ export class Engine {
   /** Spread every available adult evenly across all the duties (people already in a job keep it where they can). */
   splitRolesEvenly() {
     const roles = this.splitRoleList();
-    const people = this.world.humans.filter((h) => this.availableForJob(h)).sort((a, b) => a.id - b.id);
+    const people = this.world.humans.filter((h) => this.availableForBulk(h)).sort((a, b) => a.id - b.id);
     if (!roles.length || !people.length) return 0;
     evenSplit(people, roles).forEach((r, h) => this.changeRole(h, r));
     this.rallyRoles = null;
     this.world.flags.delete("rallyDinos");
     const each = Math.floor(people.length / roles.length);
-    this.world.toast("⚖️", `Duties split evenly: ${people.length} people across ${roles.length} jobs (${each}${people.length % roles.length ? `–${each + 1}` : ""} each).`);
+    this.world.toast("⚖️", `Duties split evenly: ${people.length} people across ${roles.length} jobs (${each}${people.length % roles.length ? `–${each + 1}` : ""} each).${this.keptNote()}`);
     this.emit({ type: "select" });
     return people.length;
   }
 
   setAllRoles(role: Role) {
-    return this.setRoleCount(role, this.world.humans.filter((h) => this.availableForJob(h)).length);
+    return this.setRoleCount(role, this.world.humans.filter((h) => this.availableForBulk(h)).length);
   }
 
   /** Next world tap gives this person an order (dino = hunt, ground = guard there). */
@@ -2654,6 +2959,8 @@ export class Engine {
     let n = 0;
     for (const h of w.humans) {
       if (h.child || h.stranger || h.captive || h.state === "down") continue;
+      // Dragon Riders fight from their dragons: the rally never takes their bond's job away (duties.ts)
+      if (protectedRole(w, h) === "dragonRider") continue;
       h.role = "guard";
       h.order = null;
       h.think = 0;
@@ -2794,6 +3101,12 @@ export class Engine {
     const ok = saveWorld(json);
     if (ok && !auto) this.emit({ type: "saved" });
     return ok;
+  }
+
+  /** Priority changes must survive a refresh even before the next autosave. */
+  private savePriorityChange() {
+    this.saveCache = null;
+    if (this.save(true)) void putSlot(this.makeSlot("latest"));
   }
 
   /** A small JPEG of what's on screen (for the saved-games list). */
@@ -2951,6 +3264,10 @@ export class Engine {
     if (egg) add(`egg:${egg.id}`, egg.x, egg.y - 20);
     const dino = w.dinos.find((d) => inView(d.x, d.y) && d.state !== "carried");
     if (dino) add(`dino:${dino.id}`, dino.x, dino.y - sizeOf(dino) * 0.7);
+    const monk = w.monks.list.find((m) => inView(m.x, m.y));
+    if (monk) add("monks", monk.x, monk.y - 40);
+    const sand = w.sandFolk.tribes.find((t) => t.found && inView(t.x, t.y));
+    if (sand) add(`sandCamp:${sand.id}`, sand.x, sand.y - 80);
     return out;
   }
 
@@ -3157,7 +3474,7 @@ export class Engine {
     }
     const grid = new Map<string, { kind: string; icon: string; name: string; n: number; gen: number }>();
     for (const b of w.colony.buildings) {
-      if (b.built < 1 || !(b.kind in ENERGY_GEN || b.kind === "condenser" || b.kind === "beamTower" || b.kind === "pylon" || b.kind === "levPad" || b.kind === "resShield")) continue;
+      if (b.built < 1 || !(b.kind in ENERGY_GEN || b.kind === "condenser" || b.kind === "beamTower" || b.kind === "pylon" || b.kind === "levPad" || b.kind === "resShield" || b.kind === "dragonShield")) continue;
       const d = BUILDINGS[b.kind];
       const g = grid.get(b.kind) ?? { kind: b.kind, icon: d.icon, name: d.name, n: 0, gen: 0 };
       g.n++;
@@ -3528,6 +3845,8 @@ export class Engine {
       }),
       command: this.commandInfo(),
       inspect: this.inspectInfo(),
+      inspectPrio: this.inspectPrio(),
+      buildQueue: this.buildQueue(),
       forge: this.forgeInfo(),
       colony: {
         buildings: w.colony.buildings.filter((b) => b.built >= 1).length,
@@ -3569,11 +3888,201 @@ export class Engine {
     };
   }
 
+  /** The priority control for the structure being inspected: only while it's a building / repair / upgrade site. */
+  private inspectPrio(): Snapshot["inspectPrio"] {
+    const r = this.inspectRef;
+    if (!r) return null;
+    const kind = r.kind === "gate" ? "wall" : r.kind;
+    const site = this.world.buildSites().find((s) => s.id === r.id && (s.kind === kind || (kind === "shelter" && s.kind === "upgrade")));
+    if (!site) return null;
+    const key = siteKey(site);
+    const matches = this.samePrioritySites(site);
+    const sameName = site.kind === "scorpion" ? "Scorpions" : site.kind === "tower" ? "towers" : site.kind === "wall" ? "walls" : site.kind === "building" ? "buildings of this type" : "homes";
+    return { key, p: this.world.priority.get(key), what: site.repair ? "repair" : site.kind === "upgrade" ? "upgrade" : "build", sameCount: matches.length, sameName };
+  }
+
+  /** Other queued jobs for the same kind of structure. Building variants stay separate. */
+  private samePrioritySites(site: Site): Site[] {
+    const buildings = this.world.colony.buildings;
+    const buildingKind = site.kind === "building" ? buildings.find((b) => b.id === site.id)?.kind : null;
+    return this.world.buildSites().filter((s) => s.kind === site.kind && (s.kind !== "building" || buildings.find((b) => b.id === s.id)?.kind === buildingKind));
+  }
+
+  /** Every site waiting on work, most urgent first (then the old order). */
+  private buildQueue(): Snapshot["buildQueue"] {
+    const w = this.world;
+    const name = (s: Site) => {
+      if (s.kind === "building") {
+        const b = w.colony.buildings.find((x) => x.id === s.id);
+        return b ? { icon: BUILDINGS[b.kind].icon, name: BUILDINGS[b.kind].name } : { icon: "🏗️", name: "Building" };
+      }
+      if (s.kind === "scorpion") return { icon: "🎯", name: "Scorpion (war machine)" };
+      if (s.kind === "tower") return { icon: "🗼", name: "Watchtower" };
+      if (s.kind === "wall") return { icon: "🧱", name: "Wall" };
+      return { icon: "🛖", name: s.kind === "upgrade" ? "Home upgrade" : "Home" };
+    };
+    // walls come in long runs: one row per kind of wall work, the rest are one row each
+    const out: Snapshot["buildQueue"] = [];
+    let walls = 0;
+    for (const s of w.buildSites()) {
+      if (s.locked) continue;
+      if (s.kind === "wall" && w.priority.get(siteKey(s)) === 1 && walls++ > 0) continue;
+      out.push({ key: siteKey(s), ...name(s), need: s.need, repair: s.repair, p: w.priority.get(siteKey(s)) });
+    }
+    return out.sort((a, b) => b.p - a.p).slice(0, 24);
+  }
+
+  /** Set a priority (a wall piece sets the whole run of wall it's part of). */
+  setPriority(key: string, p: Prio, scope: "one" | "all" = "one") {
+    const w = this.world;
+    const site = w.buildSites().find((s) => siteKey(s) === key);
+    if (!site) return;
+    const matching = scope === "all" ? this.samePrioritySites(site) : [];
+    if (scope === "all") {
+      for (const item of matching) w.priority.set(siteKey(item), p);
+    } else {
+      const [kind, id] = key.split(":");
+      const wall = kind === "wall" ? w.tribe.walls.find((x) => x.id === Number(id)) : null;
+      if (wall) for (const wid of Array.from(wallStretch(w, wall))) w.priority.set(`wall:${wid}`, p);
+      else w.priority.set(key, p);
+    }
+    const info = PRIOS[p];
+    if (p >= 2) w.toast(info.icon, scope === "all" && matching.length > 1
+      ? `${matching.length} matching jobs set to ${info.name.toLowerCase()} priority.`
+      : p === 3 ? "Urgent! Everyone free drops their usual work to gather, haul and build this first." : "High priority: builders + gatherers do this before the rest.");
+    this.savePriorityChange();
+    this.audio.play("click", 0, 0, 0.35);
+    this.emit({ type: "inspect" });
+  }
+
+  /** The Deep: the priority newly painted orders get. */
+  deepBrush(p: Prio) {
+    this.deep.brush = p;
+    this.emit({ type: "select" });
+  }
+
+  /** The Deep: change the selected cell's order priority. */
+  deepOrderPrio(p: Prio) {
+    const s = this.deep.sel;
+    if (s === null || !this.world.mine.orders.has(s)) return;
+    this.world.priority.set(mineKey(s), p);
+    this.savePriorityChange();
+    this.audio.play("click", 0, 0, 0.3);
+    this.emit({ type: "select" });
+  }
+
+  /** The Mountain Monks begin their yearly offering now (the 🔔 button). */
+  startMonkRite() {
+    const why = this.world.monks.startRite(this.world);
+    if (why) this.world.toast("🏔️", why);
+    else this.flyTo(this.world.monks.home.x, this.world.monks.home.y, Math.max(0.55, Math.min(this.cam.zoom, 0.8)));
+    this.emit({ type: "inspect" });
+  }
+
+  /* ----------------------------- the minimap ----------------------------- */
+
+  private miniFog: HTMLCanvasElement | null = null;
+  private miniFogV = -1;
+
+  /**
+   * Draw the minimap: the painted terrain, the fog over land nobody has seen yet, known places,
+   * camps (once found), our people + dragons, and the box the main view shows.
+   */
+  drawMinimap(canvas: HTMLCanvasElement) {
+    const w = this.world;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const W = canvas.width;
+    const H = canvas.height;
+    const sx = W / WORLD_W;
+    const sy = H / WORLD_H;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(this.renderer.mapImage, 0, 0, W, H);
+    if (!this.miniFog || this.miniFogV !== w.atlas.version) {
+      const f = this.miniFog ?? document.createElement("canvas");
+      f.width = ATLAS_W;
+      f.height = ATLAS_H;
+      const fc = f.getContext("2d")!;
+      const img = fc.createImageData(ATLAS_W, ATLAS_H);
+      for (let i = 0; i < w.atlas.seen.length; i++) {
+        img.data[i * 4] = 22;
+        img.data[i * 4 + 1] = 16;
+        img.data[i * 4 + 2] = 12;
+        img.data[i * 4 + 3] = w.atlas.seen[i] ? 0 : 228;
+      }
+      fc.putImageData(img, 0, 0);
+      this.miniFog = f;
+      this.miniFogV = w.atlas.version;
+    }
+    ctx.drawImage(this.miniFog, 0, 0, W, H);
+    const dot = (x: number, y: number, r: number, color: string, ring = "rgba(20,12,6,0.85)") => {
+      ctx.fillStyle = ring;
+      ctx.beginPath();
+      ctx.arc(x * sx, y * sy, r + 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x * sx, y * sy, r, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    // known places (emoji, tiny)
+    ctx.font = `${Math.max(9, Math.round(W / 22))}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const p of ATLAS_PLACES) if (p.id !== "camp" && w.atlas.places.has(p.id)) ctx.fillText(p.icon, p.x * TILE * sx, p.y * TILE * sy);
+    // the other peoples' camps (only once found)
+    for (const t of w.sandFolk.tribes) if (t.found) dot(t.x, t.y, 3, t.color);
+    for (const t of w.snowFolk.tribes) if (t.found) dot(t.x, t.y, 3, t.color);
+    for (const t of w.forest.tribes) if (t.found) dot(t.x, t.y, 3, t.color);
+    for (const t of w.seaFolk.tribes) if (t.found) dot(t.x, t.y, 3, t.color);
+    for (const c of w.rivals.clans) if (w.atlas.isSeen(c.x, c.y)) dot(c.x, c.y, 3, c.color ?? "#c0392b");
+    for (const n of w.dragons.nests) if (n.found) dot(n.x, n.y, 2.4, n.breed === "ice" ? "#bfe3f7" : "#ff7a3a");
+    if (w.monks.found) dot(w.monks.home.x, w.monks.home.y, 3, "#f2b33d");
+    // home, our people, our dragons
+    dot(w.camp.x, w.camp.y, 4, "#fde68a");
+    for (const h of w.humans) if (!h.under && !h.captive && !h.stranger && Math.hypot(h.x - w.camp.x, h.y - w.camp.y) > 500) dot(h.x, h.y, 1.4, "#ffffff", "rgba(20,12,6,0.6)");
+    for (const d of w.dragons.owned) dot(d.x, d.y, 2, "#f97316");
+    // what the main view shows
+    const v = this.renderer.viewRect(this.cam);
+    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(Math.max(0, v.x0 * sx), Math.max(0, v.y0 * sy), Math.min(W, (v.x1 - v.x0) * sx), Math.min(H, (v.y1 - v.y0) * sy));
+  }
+
+  /** Tapped the minimap (fx, fy: 0..1 across it): the camera glides there. */
+  minimapJump(fx: number, fy: number) {
+    this.flyTo(Math.max(0, Math.min(1, fx)) * WORLD_W, Math.max(0, Math.min(1, fy)) * WORLD_H);
+  }
+
   private inspectInfo(): InspectInfo | null {
     const w = this.world;
     const r = this.inspectRef;
     if (!r) return null;
     switch (r.kind) {
+      case "monks": {
+        const mk = w.monks;
+        const settled = mk.list.filter((m) => !m.pilgrim);
+        const dayInYear = (w.day - 1) % YEAR_DAYS;
+        const ACT: Record<string, string> = { rest: "Resting by the huts", meditate: "Meditating round the shrine", walk: "Walking the mountain paths", gaze: "Watching the sky", sleep: "Asleep in their huts", rite: "The offering" };
+        const RITE: Record<string, string> = { gather: "Gathering at the shrine", climb: "Walking up to the high ledge", call: "Calling the dragon down", offer: "Walking into the light", depart: "The dragon is leaving", return: "Walking home" };
+        return { kind: "monks", id: 0, n: settled.length, pilgrims: mk.list.length - settled.length, activity: ACT[mk.activity] ?? mk.activity, rite: mk.rite ? RITE[mk.rite.phase] ?? mk.rite.phase : null, daysToRite: YEAR_DAYS - 1 - dayInYear, names: settled.map((m) => m.name), found: mk.found };
+      }
+      case "sandCamp": {
+        const t = w.sandFolk.tribe(r.id);
+        if (!t) return null;
+        const folk = w.sandFolk.members(t.id);
+        const young = folk.filter((b) => (b.age ?? 200) < 110).length;
+        const counts = new Map<string, number>();
+        for (const b of folk) if ((b.age ?? 200) >= 110) counts.set(b.sandRole ?? "fighter", (counts.get(b.sandRole ?? "fighter") ?? 0) + 1);
+        const ICON: Record<string, string> = { camel: "🐪", archer: "🏹", fighter: "🗡️", scout: "👁️", dragon: "🐉" };
+        return {
+          kind: "sandCamp", id: t.id, name: t.name, color: t.color, folk: folk.length - young, young, tier: t.tier,
+          roles: Array.from(counts.entries()).map(([k, n]) => ({ icon: ICON[k] ?? "🗡️", name: SAND_ROLE_NAMES[k as keyof typeof SAND_ROLE_NAMES] ?? k, n })),
+          camels: w.dinos.filter((d) => d.sandTribe === t.id).length,
+          dragons: w.dragons.list.filter((d) => d.sandTribe === t.id).map((d) => d.name),
+          raiding: w.sandFolk.bands.some((b) => b.tribe === t.id && b.mode === "raid"),
+        };
+      }
       case "shelter": {
         const s = w.shelters.find((x) => x.id === r.id);
         if (!s) return null;
@@ -3608,6 +4117,23 @@ export class Engine {
         if (b.kind === "dragonBones") {
           return { kind: "building", id: b.id, bkind: b.kind, icon: d.icon, name: `${b.label ?? "A dragon"}'s bones`, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage,
             note: b.ours ? `🕊️ ${b.label}, a ${b.breed ?? "fire"} dragon of ours. Remembered here.` : `🏆 ${b.label}, a wild ${b.breed ?? "fire"} dragon brought down by the tribe.` };
+        }
+        if (b.kind === "dragonShield" && b.built >= 1) {
+          const sv = shieldView(w);
+          const lv = b.shield ?? { radius: 0, force: 0, eff: 0, speed: 0, link: 0 };
+          const shield = {
+            r: Math.round(shieldRadius(b)),
+            charge: sv.charge.get(b.id) ?? 0,
+            powered: sv.powered,
+            pushing: Array.from(sv.pushing.values()).includes(b.id),
+            linked: shieldLinks(w).filter(([a, c]) => a === b || c === b).length,
+            ups: SHIELD_UP_ORDER.map((key) => {
+              const cost = SHIELD_UPS[key].cost(lv[key]);
+              return { key, icon: SHIELD_UPS[key].icon, name: SHIELD_UPS[key].name, tip: SHIELD_UPS[key].tip, lvl: lv[key], max: SHIELD.max, cost, ok: lv[key] < SHIELD.max && w.colony.affordable(w, cost) };
+            }),
+          };
+          const shNote = !sv.powered ? "🔌 No energy: the field is down. Dragons fly straight through until the grid recharges." : shield.pushing ? "〰️ Humming hard: pushing a dragon away." : shield.charge > 0 ? "⚡ Charging: a dragon is coming in." : "🛡️ On watch: the field wakes when a dragon comes near.";
+          return { kind: "building", id: b.id, bkind: b.kind, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage, note: shNote, shield };
         }
         return { kind: "building", id: b.id, bkind: b.kind, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage, note };
       }
@@ -3719,10 +4245,11 @@ export class Engine {
       next: t.nextLevel(w),
       capacity: t.capacity(w),
       danger: t.danger,
+      jobGuard: t.jobGuard,
       evolution: t.evolution,
       raidsWon: t.raidsWon,
       raid: raid ? { phase: raid.phase, label: raid.label, left, x: rx, y: ry, t: raid.t, brutes: raid.by === "brute" } : null,
-      people: w.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, role: h.role, autoRole: h.autoRole, state: h.state, hp: h.hp, condition: condition(h), task: w.tasks.get(h.taskId)?.label ?? null, stranger: h.stranger, availableForJob: this.availableForJob(h) })),
+      people: w.humans.map((h) => ({ id: h.id, name: h.name, child: h.child, role: h.role, autoRole: h.autoRole, state: h.state, hp: h.hp, condition: condition(h), task: w.tasks.get(h.taskId)?.label ?? null, stranger: h.stranger, availableForJob: this.availableForJob(h), protectedAs: h.child ? null : protectedRole(w, h), guarded: !h.child && !!bulkProtected(w, h) })),
       walls: {
         built: t.walls.filter((x) => x.built >= 1 && x.hp > 0).length,
         planned: t.walls.length,

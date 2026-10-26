@@ -15,7 +15,8 @@ import { BREED_LIST, BREEDS, DRAGON_NAMES, INCUBATE_SECONDS, type DragonBreed } 
 import { go, say } from "./humans";
 import { P } from "./particles";
 import { makeRng, pick } from "./rng";
-import { MAP_H, MAP_W, T, TILE, type Dragon, type DragonEgg, type DragonNest, type Human, type Resource } from "./types";
+import { LM } from "./terrain";
+import { MAP_H, MAP_W, OLD_MAP_H, OLD_MAP_W, T, TILE, type Dragon, type DragonEgg, type DragonNest, type Human, type Resource } from "./types";
 import type { World } from "./world";
 import { newDragonStats } from "./dragonKeep";
 import { keeperAtHatch, keeperOf, makeKeeper } from "./keepers";
@@ -48,8 +49,9 @@ export function seedNests(w: World) {
   if (ds.nests.length) return;
   const tiles = w.terrain.tiles;
   const cands: { x: number; y: number; score: number; hot: boolean; rocky: number }[] = [];
-  for (let ty = 5; ty < MAP_H - 5; ty += 2) {
-    for (let tx = 5; tx < MAP_W - 5; tx += 2) {
+  // the classic nests stay in the old valley (the Great Peaks get their Ice Dragons: seedIceNests)
+  for (let ty = 5; ty < OLD_MAP_H - 5; ty += 2) {
+    for (let tx = 5; tx < OLD_MAP_W - 5; tx += 2) {
       const x = tx * TILE + TILE / 2;
       const y = ty * TILE + TILE / 2;
       if (!w.nav.passable("human", x, y)) continue;
@@ -99,6 +101,60 @@ export function seedNests(w: World) {
   }
 }
 
+/** How many Ice Dragon nests the Great Peaks hold. */
+export const ICE_NESTS = 2;
+
+/**
+ * Ice Dragons nest high in the Great Peaks, on snowfields + glaciers by the bare rock (once per world;
+ * older worlds get theirs the first time they load with the eastern lands).
+ */
+export function seedIceNests(w: World) {
+  const ds = w.dragons;
+  ds.iceSeeded = true;
+  if (ds.nests.some((n) => n.breed === "ice")) return;
+  const tiles = w.terrain.tiles;
+  const cands: { x: number; y: number; score: number }[] = [];
+  for (let ty = 3; ty < MAP_H - 3; ty += 2) {
+    for (let tx = OLD_MAP_W; tx < MAP_W - 3; tx += 2) {
+      const i = ty * MAP_W + tx;
+      const t = tiles[i];
+      if (t !== T.Snow && t !== T.Ice) continue;
+      const e = w.terrain.elev[i];
+      if (e < 0.66) continue;
+      const x = tx * TILE + TILE / 2;
+      const y = ty * TILE + TILE / 2;
+      if (!w.nav.passable("human", x, y)) continue;
+      let peak = 0;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (tiles[(ty + dy) * MAP_W + tx + dx] === T.Mountain) peak++;
+      if (peak < 2) continue;
+      cands.push({ x, y, score: e * 100 + peak * 8 + (w.dragons.rng() - 0.5) * 30 });
+    }
+  }
+  cands.sort((a, b) => b.score - a.score);
+  let made = 0;
+  for (const c of cands) {
+    if (made >= ICE_NESTS) break;
+    if (ds.nests.some((n) => Math.hypot(n.x - c.x, n.y - c.y) < 900)) continue;
+    // never right on top of the monks' high valley or their altar
+    if (Math.hypot(c.x - LM.monastery.x * TILE, c.y - LM.monastery.y * TILE) < 600) continue;
+    const nest: DragonNest = {
+      id: ds.nextId(),
+      x: c.x,
+      y: c.y,
+      breed: "ice",
+      site: "peak",
+      found: false,
+      parent: 0,
+      loot: { ...nestLoot(w, false), crystal: 2 + Math.floor(ds.rng() * 2) },
+      layT: LAY_EVERY * (0.5 + ds.rng()),
+      emptyT: SETTLE_AT + ds.rng() * 200,
+    };
+    ds.nests.push(nest);
+    for (let i = 0; i < 2; i++) layEgg(w, nest);
+    made++;
+  }
+}
+
 function weightedBreed(w: World, from: DragonBreed[]) {
   const total = from.reduce((s, b) => s + BREEDS[b].weight, 0);
   let r = w.dragons.rng() * total;
@@ -143,7 +199,7 @@ export function layEgg(w: World, nest: DragonNest) {
   const spot = eggSpot(nest, i);
   const egg: DragonEgg = {
     id: w.dragons.nextId(),
-    breed: w.dragons.rng() < 0.8 ? nest.breed : pick(w.dragons.rng, BREED_LIST).id,
+    breed: w.dragons.rng() < 0.8 || nest.breed === "ice" ? nest.breed : pick(w.dragons.rng, BREED_LIST.filter((b) => b.weight > 0)).id,
     x: spot.x,
     y: spot.y,
     at: "nest",
@@ -349,6 +405,7 @@ export function revealNest(w: World, nest: DragonNest, who: string) {
   const eggs = nestEggs(w, nest).length;
   w.toast("🪺", `${who} found a ${BREEDS[nest.breed].name.toLowerCase()}'s nest${nest.site === "volcanic" ? " on a volcanic ridge" : nest.site === "peak" ? " high on a peak" : nest.site === "cliff" ? " on a cliff ledge" : ""}! ${eggs ? `${eggs} egg${eggs > 1 ? "s" : ""}, and treasure.` : "Treasure, but no eggs right now."} Select armed people and tap it to steal an egg.`, nest.x, nest.y);
   w.discover("dragonNest", nest.x, nest.y);
+  if (nest.breed === "ice") w.discover("iceDragon", nest.x, nest.y);
   w.pois.push({ x: nest.x, y: nest.y, t: w.elapsed });
 }
 

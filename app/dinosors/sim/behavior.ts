@@ -24,6 +24,8 @@ import { season } from "./seasons";
 import { thinkWorkDino } from "./workDinos";
 import { meetRider, partnerThink } from "./riders";
 import { leaveWalls, outsideSpot } from "./dinoBounds";
+import { isDinoScorpion, scorpionAct, scorpionThink } from "./dinoScorpions";
+import { isSnowBeast, snowAct, snowThink } from "./snowBeasts";
 
 /** States that run to completion; `think` leaves them alone. */
 const LOCKED = new Set<DinoState>([
@@ -1306,8 +1308,8 @@ export function thinkDino(w: World, d: Dino) {
   const far = !w.inView(d.x, d.y, 1400);
   d.think = (onScreen ? 0.35 : far ? 1.8 : 1.1) + w.rng() * 0.35;
   if (LOCKED.has(d.state)) return;
-  // harnessed to a war chariot, or carrying a Sea Person: nothing to decide
-  if (d.chariot || d.seaRider) return;
+  // harnessed to a war chariot, or carrying a Sea Person (or a Sand Person): nothing to decide
+  if (d.chariot || d.seaRider || d.sandRider || d.snowRider) return;
   if (d.health <= 0) {
     setState(d, "faint", d.x, d.y);
     emote(d, "😵", 3);
@@ -1319,6 +1321,10 @@ export function thinkDino(w: World, d: Dino) {
     setState(d, def.move === "walk" ? "wander" : d.state, t.x, t.y);
     return;
   }
+  // a Dinosaur Scorpion guards its den (dinoScorpions.ts)
+  if (isDinoScorpion(d) && scorpionThink(w, d)) return;
+  // the snowy peaks' animals keep to the cold; the Yeti guards its cave (snowBeasts.ts)
+  if (isSnowBeast(d) && snowThink(w, d)) return;
   // a Neanderthal clan's tamed beast lives in their pen (clanLife.ts)
   if (d.clan && !d.raider && clanDinoThink(w, d)) return;
   if (d.raider) {
@@ -1393,6 +1399,8 @@ export function actDino(w: World, d: Dino, dt: number) {
     }
   }
   if (d.raider && actRaider(w, d, dt)) return;
+  if (isDinoScorpion(d) && scorpionAct(w, d, dt)) return;
+  if (d.species === "yeti" && snowAct(w, d, dt)) return;
   if (def.move === "fly") actFlyer(w, d, def, dt);
   else if (def.move === "swim") actSwimmer(w, d, dt);
   else actWalker(w, d, def, dt);

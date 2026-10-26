@@ -30,12 +30,14 @@ import { emote, setState, sizeOf } from "./dinos";
 import { go, say } from "./humans";
 import { hurtHuman } from "./injury";
 import { eggWarmth } from "./dragonNests";
+import { hitScorpionsAt, sideOfDragon } from "./factions";
 import { hotHours, pitOf, pitShadeSpot, pitSpot, pitWanderSpot } from "./shows";
 import { P } from "./particles";
 import { pick } from "./rng";
 import { TILE, T, WORLD_H, WORLD_W, type Brute, type Dino, type Dragon, type DragonCmd, type Human, type Resource } from "./types";
 import { isWaterTile } from "./terrain";
-import type { World } from "./world";
+import type { World } from "./world";import { dutyCmd } from "./riderDuty";
+
 
 /* ------------------------------ stats ------------------------------ */
 
@@ -230,12 +232,12 @@ export function aloftTick(w: World, h: Human, dt: number) {
 
 /* ------------------------------ commands ------------------------------ */
 
-const FLIGHT_CMDS = new Set<DragonCmdKind>(["flyTo", "patrol", "route", "guard", "attack", "fire", "carry", "volcano"]);
+const FLIGHT_CMDS = new Set<DragonCmdKind>(["flyTo", "patrol", "route", "guard", "attack", "fire", "carry", "volcano", "duty"]);
 /** orders that are a fight (a hurt dragon breaks off and heals instead) */
 const FIGHT_CMDS = new Set<DragonCmdKind>(["patrol", "route", "guard", "attack", "volcano"]);
 const NEEDS: Record<DragonCmdKind, DragonSkill> = {
   follow: "follow", stay: "trust", flyTo: "flight", land: "flight", patrol: "flight", route: "flight", guard: "combat",
-  attack: "combat", fire: "fire", carry: "carry", retreat: "flight", home: "trust", volcano: "combat",
+  attack: "combat", fire: "fire", carry: "carry", retreat: "flight", home: "trust", volcano: "combat", duty: "rider",
 };
 
 /** Give a tamed dragon an order. Returns why not (or null when it obeys). */
@@ -273,7 +275,7 @@ const clampX = (x: number) => Math.max(80, Math.min(WORLD_W - 80, x));
 const clampY = (y: number) => Math.max(80, Math.min(WORLD_H - 80, y));
 
 /** Smooth flight toward (tx, ty) at altitude tz. Returns the distance left. */
-function flyToward(w: World, dr: Dragon, tx: number, ty: number, tz: number, dt: number, mul = 1) {
+export function flyToward(w: World, dr: Dragon, tx: number, ty: number, tz: number, dt: number, mul = 1) {
   const st = dragonStats(dr);
   tx = clampX(tx);
   ty = clampY(ty);
@@ -300,9 +302,10 @@ function flyToward(w: World, dr: Dragon, tx: number, ty: number, tz: number, dt:
   dr.vy += ((dy / len) * s - dr.vy) * k;
   dr.x = clampX(dr.x + dr.vx * dt);
   dr.y = clampY(dr.y + dr.vy * dt);
-  // don't skim through mountains + cliffs
+  // don't skim through mountains + cliffs (but it can come down to land right beside them)
   const under = w.terrain.tileAt(dr.x, dr.y);
-  const floor = under === T.Mountain || under === T.Cliff ? 200 : under === T.Volcano ? 240 : 0;
+  const landing = tz <= 0 && d < 150;
+  const floor = landing ? 0 : under === T.Mountain || under === T.Cliff ? 200 : under === T.Volcano ? 240 : 0;
   const goalZ = Math.max(tz, floor);
   dr.z += (goalZ - dr.z) * Math.min(1, dt * (goalZ > dr.z ? 1.1 : 0.9));
   if (Math.abs(dr.vx) > 12) dr.dir = dr.vx > 0 ? 1 : -1;
@@ -617,6 +620,8 @@ function burstTick(w: World, dr: Dragon, dt: number) {
   for (const s of w.shelters) if (s.stage > 0 && hit(s.x, s.y, 20)) s.hp = Math.max(0, s.hp - (s.tier >= 4 ? 0.005 : s.tier >= 3 ? 0.02 : 0.07) * st.fire);
   const wl = w.tribe.wallAt(tx, ty);
   if (wl && wl.built >= 1) wl.hp -= (wl.kind === "palisade" ? 18 : 3) * st.fire;
+  // Scorpions in the cone: friendly fire is ruled out by side, not by luck (factions.ts)
+  hitScorpionsAt(w, ex, ey, r + 20, 12 * st.fire, sideOfDragon(dr));
   // Neanderthal camps: their stores + shelters burn
   for (const c of w.rivals.clans) {
     if (Math.hypot(c.x - ex, c.y - ey) > 140) continue;
@@ -1054,6 +1059,8 @@ function runCmd(w: World, dr: Dragon, cmd: DragonCmd, dt: number): boolean {
     }
     case "carry":
       return carryCmd(w, dr, cmd, dt);
+    case "duty":
+      return dutyCmd(w, dr, cmd, dt);
     case "volcano":
       return volcanoCmd(w, dr, cmd, dt);
     case "retreat":
@@ -1226,7 +1233,8 @@ function autoThink(w: World, dr: Dragon, dt: number) {
       landAt(w, dr, home.x, home.y, dt);
     } else {
       dr.vx = dr.vy = 0;
-      dr.state = (dr.energy ?? 1) < 0.5 || w.daylight < 0.25 ? "sleep" : "idle";
+      // (it rests between shifts, but it only sleeps at night or when it's really worn out)
+      dr.state = (dr.energy ?? 1) < 0.3 || w.daylight < 0.25 ? "sleep" : "idle";
     }
     return;
   }

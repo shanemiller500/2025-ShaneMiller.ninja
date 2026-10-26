@@ -23,7 +23,7 @@ import { hurtHuman } from "./injury";
 import { goalKey, nodePos, tileOf } from "./nav";
 import { P } from "./particles";
 import { pick } from "./rng";
-import { isWalkTile, isWaterTile } from "./terrain";
+import { REGION, isWalkTile, isWaterTile } from "./terrain";
 import { hitDino } from "./tribe";
 import { MAP_H, MAP_W, TILE, type Brute, type BruteState, type BruteWeapon, type Clan, type ClanHold, type ClanTrap, type Human, type OurCatapult, type ItemKind, type Resource, type Wall } from "./types";
 import type { World } from "./world";
@@ -35,6 +35,7 @@ import { armourOf, hasTech, mightOf, studyTick } from "./clanTech";
 import { captivesSlow, captivesUpdate } from "./clanCaptives";
 import { holdThink, holdsTick } from "./clanHolds";
 import { ourCatapultsUpdate, seizeTick, type OurShot } from "./ourCatapults";
+import { hitScorpion } from "./factions";
 
 const WORLD_W = MAP_W * TILE;
 const WORLD_H = MAP_H * TILE;
@@ -141,11 +142,15 @@ export class Rivals {
     if (b.tree && (b.hidden || (b.age ?? 100) < 100)) return false;
     if (b.sea && (b.age ?? 120) < 120) return false;
     if ((b.tree || (b.sea && b.boat)) && w.daylight < 0.3 && !((b.spotT ?? 0) > 0)) return false;
+    // a Sand Person still out on the sand blends right in: only seen up close or once they strike (sandFolk.ts)
+    if (b.sand && !w.sandFolk.seen(w, b)) return false;
+    // the Snow People are neighbours, not enemies, until they're at odds with us (snowFolk.ts)
+    if (b.snow && !w.snowFolk.hostileToUs(w, b)) return false;
     return !!w && !!b;
   }
   /** "Thog the Neanderthal" / "Kit of the Moss Eye Tree People" / "Nalu of the Salt Fin Sea People" */
   label(w: World, b: Brute) {
-    return b.tree ? w.forest.label(b) : b.sea ? w.seaFolk.label(b) : `${b.name} the Neanderthal`;
+    return b.tree ? w.forest.label(b) : b.sea ? w.seaFolk.label(b) : b.sand ? w.sandFolk.label(b) : b.snow ? w.snowFolk.label(b) : `${b.name} the Neanderthal`;
   }
   /** Any hostile Neanderthal within r of (x, y)? */
   threatNear(w: World, x: number, y: number, r: number) {
@@ -247,8 +252,11 @@ export class Rivals {
       if (Math.hypot(x - c.x, y - c.y) < 1300) continue;
       if (Math.hypot(x - w.volcano.x, y - w.volcano.y) < 650) continue;
       if (this.clans.some((o) => Math.hypot(o.x - x, o.y - y) < 700)) continue;
-      // never in the Tree People's woods
+      // never in the Tree People's woods, and only on open, green ground: the desert is the Sand People's,
+      // the snowy peaks the monks' and the Ice Dragons'
       if (w.forest.tribes.some((t) => Math.hypot(t.x - x, t.y - y) < t.r + 450)) continue;
+      const reg = w.terrain.region[Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE)];
+      if (reg === REGION.desert || reg === REGION.peaks || w.sandFolk.tribes.some((t) => Math.hypot(t.x - x, t.y - y) < t.r + 400)) continue;
       const s = findSpawnSpot(w, raptor, x, y, 120);
       if (!s || !this.dryCamp(w, s.x, s.y)) continue;
       // finding firm ground can nudge the spot: it still has to be well away from us
@@ -292,6 +300,8 @@ export class Rivals {
     // the Tree People take hits their own way (lighter; they scatter or swarm whoever did it); so do the Sea People
     if (b.tree) return w.forest.hit(w, b, dmg, fx, fy, byBrute, proj);
     if (b.sea) return w.seaFolk.hit(w, b, dmg, fx, fy, byBrute, proj);
+    if (b.sand) return w.sandFolk.hit(w, b, dmg, fx, fy, byBrute, proj);
+    if (b.snow) return w.snowFolk.hit(w, b, dmg, fx, fy, byBrute, proj);
     // cunning clans carry hide shields: they soak up a lot of an energy lance, some of an arrow
     const clan = this.clan(b.clan);
     // close up, our people seize a catapult rather than smash it (ourCatapults.ts)
@@ -333,11 +343,13 @@ export class Rivals {
       w.toast("🎒", `Got back ${b.loot} ${kind} that ${b.name} stole!`, b.x, b.y);
       b.loot = 0;
     }
-    if (b.tree || b.sea) {
+    if (b.tree || b.sea || b.sand || b.snow) {
       const k = this.brutes.indexOf(b);
       if (k >= 0) this.brutes.splice(k, 1);
       if (b.tree) w.forest.died(w, b);
-      else w.seaFolk.died(w, b);
+      else if (b.sea) w.seaFolk.died(w, b);
+      else if (b.snow) w.snowFolk.died(w, b);
+      else w.sandFolk.died(w, b);
       return;
     }
     if (b.forage) w.addItem(b.forageKind ?? "berries", b.x, b.y, { amount: b.forage });
@@ -646,8 +658,8 @@ export class Rivals {
       // falling from a dragon's claws: the dragons move the body
       if (b.falling) continue;
       if (b.snatched) {
-        // a Sea Person snatched off their sea dragon: it's free
-        if (b.mount) w.seaFolk.dismount(w, b);
+        // a Sea Person snatched off their sea dragon (a Sand Person off their camel): it's free
+        if (b.mount) (b.sand ? w.sandFolk : b.snow ? w.snowFolk : w.seaFolk).dismount(w, b);
         const dr = w.dragons.anyById(b.snatched);
         if (dr && dr.prey === b.id) {
           b.x = dr.x;
@@ -672,18 +684,24 @@ export class Rivals {
         this.hit(w, b, 0.12, b.x, b.y - 10, true);
         if (!this.brutes.includes(b)) continue;
       }
-      // the Tree People have their own brains (treeFolk.ts)
-      if (b.tree) {
-        w.forest.step(w, b, dt);
-        continue;
+      // dizzy from a Dinosaur Scorpion's sting / frozen by an Ice Dragon: they only get half as far
+      const ox = b.x;
+      const oy = b.y;
+      // the Tree, Sea + Sand People have their own brains (treeFolk.ts, seaFolk.ts, sandFolk.ts)
+      if (b.tree) w.forest.step(w, b, dt);
+      else if (b.sea) w.seaFolk.step(w, b, dt);
+      else if (b.sand) w.sandFolk.step(w, b, dt);
+      else if (b.snow) w.snowFolk.step(w, b, dt);
+      else {
+        b.think -= dt;
+        if (b.think <= 0) this.thinkBrute(w, b);
+        this.actBrute(w, b, dt);
       }
-      if (b.sea) {
-        w.seaFolk.step(w, b, dt);
-        continue;
+      if (b.slowT) {
+        b.slowT = Math.max(0, b.slowT - dt);
+        b.x = ox + (b.x - ox) * 0.45;
+        b.y = oy + (b.y - oy) * 0.45;
       }
-      b.think -= dt;
-      if (b.think <= 0) this.thinkBrute(w, b);
-      this.actBrute(w, b, dt);
     }
     // captives stay put at the camp (being carried is handled by the carrier)
     for (const h of w.humans) {
@@ -1001,7 +1019,8 @@ export class Rivals {
     let bd = r;
     for (const o of this.brutes) {
       // feuding clans, any Tree Person who's shown themselves, and the Sea People
-      if (o === b || (o.tree ? o.hidden || o.hp <= 0 : o.sea ? o.hp <= 0 || !!o.boat : this.relation(o.clan, b.clan) !== -1)) continue;
+      // (and any Sand Person they can see: out on the open sand they're hard to make out)
+      if (o === b || (o.tree ? o.hidden || o.hp <= 0 : o.sea ? o.hp <= 0 || !!o.boat : o.sand ? o.hp <= 0 || !!o.onDragon || !w.sandFolk.seen(w, o) : o.snow ? o.hp <= 0 : this.relation(o.clan, b.clan) !== -1)) continue;
       const d = Math.hypot(o.x - b.x, o.y - b.y);
       if (d < bd) {
         bd = d;
@@ -1469,7 +1488,7 @@ export class Rivals {
         if (m.targetKind === "scorpion") {
           const sc = w.colony.scorpions.find((o) => o.id === m.target && o.built >= 1 && o.hp > 0);
           if (sc && Math.hypot(sc.x - m.x, sc.y - m.y) < 38) {
-            sc.hp = Math.max(0, sc.hp - m.dmg);
+            hitScorpion(w, sc, m.dmg, "clan");
             w.particles.burst(P.Rock, sc.x, sc.y - 12, 5, 38, { z: 20, size: 3, max: 0.5, color: "#baa77f" });
             w.sfx("thunk", sc.x, sc.y, 0.45, 0.8);
           } else w.particles.burst(P.Dust, m.x, m.y, 3, 20, { size: 3, max: 0.4, color: "rgba(160,140,110,0.6)" });
@@ -1520,7 +1539,7 @@ export class Rivals {
       next: this.nextClan,
       arriveT: this.arriveT,
       clans: this.clans.map((c) => ({ id: c.id, name: c.name, color: c.color, x: r(c.x), y: r(c.y), food: Math.round(c.food * 10) / 10, raidT: r(c.raidT), growT: r(c.growT), smarts: c.smarts ?? 0, intel: c.intel ?? 0, style: c.style, campTier: c.campTier ?? 0, campWork: c.campWork ?? 0, sea: c.sea, fishT: c.fishT, colors: c.colors, bones: c.bones ?? 0, wood: c.wood ?? 0, builds: c.builds ?? {}, buildWork: Math.round((c.buildWork ?? 0) * 10) / 10, favor: c.favor, favorT: r(c.favorT ?? 0), riteT: c.riteT === undefined ? undefined : r(c.riteT), trapT: c.trapT === undefined ? undefined : r(c.trapT), altarBlood: c.altarBlood, science: c.science ? Math.round(c.science * 1000) / 1000 : undefined, tech: c.tech || undefined, merges: c.merges || undefined })),
-      brutes: this.brutes.filter((b) => !b.tree && !b.sea).map((b) => ({ clan: b.clan, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries", tint: b.tint, skill: b.skill ? Math.round(b.skill * 100) / 100 : undefined, haul: b.haul, hold: b.hold, turned: b.turned || undefined, look: b.look })),
+      brutes: this.brutes.filter((b) => !b.tree && !b.sea && !b.sand && !b.snow).map((b) => ({ clan: b.clan, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries", tint: b.tint, skill: b.skill ? Math.round(b.skill * 100) / 100 : undefined, haul: b.haul, hold: b.hold, turned: b.turned || undefined, look: b.look })),
       holds: this.holds.map((h) => ({ ...h, x: r(h.x), y: r(h.y), food: Math.round(h.food * 10) / 10, t: r(h.t) })),
       taken: this.taken.map((c) => ({ ...c, x: r(c.x), y: r(c.y), wear: Math.round(c.wear * 100) / 100, cd: 0, anim: 0 })),
       traps: this.traps.map((t) => ({ clan: t.clan, x: r(t.x), y: r(t.y), t: r(t.t), caught: t.caught })),

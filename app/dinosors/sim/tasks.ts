@@ -28,7 +28,8 @@ import { sonicDouse, sonicReady } from "./sonic";
 import { raidThink } from "./dragonRaid";
 import { moveThink } from "./moving";
 import { eggHuntThink, trackThink } from "./dragonNests";
-import type { World } from "./world";
+import type { World } from "./world";import { PRIO_CREW, sitePrio, taskKey } from "./priority";
+
 
 export type TaskKind =
   | "chop"
@@ -265,7 +266,7 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
     if (d.owner && RIDEABLE.has(d.species) && !isBaby(d)) {
       return { kind: "ride", icon: "🏇", label: `Ride ${d.name} the ${def.nick}`, x: d.x, y: d.y, target: d.id };
     }
-    if (TAMEABLE.has(d.species) && def.diet === "herbivore" && !d.raider) {
+    if (TAMEABLE.has(d.species) && def.diet === "herbivore" && !d.raider && !d.sandRider) {
       const tame: Command = { kind: "tame", icon: "🤝", label: L.has("taming") ? `Befriend the ${def.nick}` : `Befriend (invent 🐾 Taming)`, x: d.x, y: d.y, target: d.id };
       if (d.owner) return { kind: "tame", icon: "💚", label: `${d.name} is a friend`, x: d.x, y: d.y, target: d.id };
       if (L.has("taming")) return { ...tame, alts: armed ? [hunt] : undefined };
@@ -566,13 +567,17 @@ export function joinTask(w: World, h: Human, idleOnly = false): boolean {
   if (h.child || h.stranger || h.captive || h.taskId) return false;
   let best: Task | null = null;
   let bd = idleOnly ? 700 : 1600;
+  let bp = -1;
   for (const t of w.tasks.list) {
     // closed tasks belong to the people the player picked
     if (!t.open) continue;
     if (!taskAlive(w, t)) continue;
     const d = Math.hypot(t.x - h.x, t.y - h.y);
-    if (d < bd) {
+    // a higher-priority task first (its own, or its most urgent building site), then the nearest
+    const p = taskPrio(w, t);
+    if (d < (idleOnly ? 700 : 1600) && (p > bp || (p === bp && d < bd))) {
       bd = d;
+      bp = p;
       best = t;
     }
   }
@@ -583,6 +588,13 @@ export function joinTask(w: World, h: Human, idleOnly = false): boolean {
   h.site = "";
   say(h, idleOnly ? "I'll help!" : "Next job!");
   return true;
+}
+
+/** A task's priority: its own, or the most urgent of the building sites it covers. */
+export function taskPrio(w: World, t: Task) {
+  let p = w.priority.get(taskKey(t.id));
+  for (const k of t.group ?? []) p = Math.max(p, w.priority.get(k)) as typeof p;
+  return p;
 }
 
 /** Is there still something to do for this task? */
@@ -1239,7 +1251,7 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
   const crew = crews(w, h);
   // a site already full of people is someone else's job (unless it's the one I'm on)
   // (a crew the player sent always gets onto its own job, however busy the site is)
-  const room = (s: Site) => siteKey(s) === h.site || !!h.taskId || (crew.get(siteKey(s)) ?? 0) < crewCap(s);
+  const room = (s: Site) => siteKey(s) === h.site || !!h.taskId || (crew.get(siteKey(s)) ?? 0) < Math.max(1, Math.round(crewCap(s) * PRIO_CREW[sitePrio(w, s)]));
   // A construction task uses h.task as its temporary material request while
   // the builder walks to and gathers that source. Keep that trip intact.
   if (h.task && (h.state === "walk" || h.state === "gather") && list.some((s) => siteKey(s) === h.site && s.need === h.task)) return true;
@@ -1251,7 +1263,11 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
   const preferred = h.site ? list.find((x) => siteKey(x) === h.site) : undefined;
   const autoDefenseFirst = h.role === "auto" && !h.order && !h.taskId;
   const defenseRank = (s: Site) => s.kind === "wall" || s.kind === "tower" ? 0 : 1;
+  // the player's priorities come first (Urgent → High → Normal → Low), then defences, then the nearest
+  const prio = new Map(list.map((s) => [s, sitePrio(w, s)]));
   list.sort((a, b) => {
+    const pd = prio.get(b)! - prio.get(a)!;
+    if (pd) return pd;
     if (autoDefenseFirst && defenseRank(a) !== defenseRank(b)) return defenseRank(a) - defenseRank(b);
     return a === preferred ? -1 : b === preferred ? 1 : score(a) - score(b);
   });

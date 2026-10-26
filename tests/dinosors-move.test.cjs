@@ -12,7 +12,7 @@ require.extensions['.ts'] = (module, filename) => {
 const root = path.join(__dirname, '..', 'app', 'dinosors');
 const { World } = require(path.join(root, 'sim', 'world.ts'));
 const { addHuman } = require(path.join(root, 'sim', 'humans.ts'));
-const { T, TILE } = require(path.join(root, 'sim', 'types.ts'));
+const { MAP_W, T, TILE } = require(path.join(root, 'sim', 'types.ts'));
 const { stagesOf } = require(path.join(root, 'sim', 'build.ts'));
 const moving = require(path.join(root, 'sim', 'moving.ts'));
 
@@ -52,7 +52,7 @@ test('a crew picks a finished building up, carries it over their heads and sets 
       lifted = true;
       if (b.lift.z > 20) liftedHigh = true;
       // while it's up, it doesn't block the ground it stood on
-      assert.equal(w.colony.occupied(w).has(b.ty * 160 + b.tx), false);
+      assert.equal(w.colony.occupied(w).has(b.ty * MAP_W + b.tx), false);
     }
     if (!b.lift && lifted) { done = i / 30; break; }
   }
@@ -60,7 +60,7 @@ test('a crew picks a finished building up, carries it over their heads and sets 
   assert.ok(done > 0, 'and set it down');
   assert.ok(Math.hypot(b.x - to.x, b.y - to.y) < 48, `it stands at the new spot (${Math.round(b.x)},${Math.round(b.y)})`);
   assert.equal(b.built, 1, 'still finished');
-  assert.ok(w.colony.occupied(w).has(b.ty * 160 + b.tx), 'and blocks its new ground');
+  assert.ok(w.colony.occupied(w).has(b.ty * MAP_W + b.tx), 'and blocks its new ground');
   for (let i = 0; i < 30; i++) w.update(1 / 30);
   assert.ok(crew.every((h) => w.tasks.get(h.taskId)?.kind !== 'moveBuilding'), 'the crew goes back to work');
 });

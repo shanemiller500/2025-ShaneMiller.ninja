@@ -15,6 +15,7 @@ import { sp } from "../data/species";
 import { sizeOf } from "../sim/dinos";
 import { DEEP_DEFS, DEEP_ORDER, LANDMARKS, LANDMARK_ORDER, MILESTONES, type DeepKind } from "../data/mine";
 import { canPlaceDeep, deepRoom, finished, placeDeep } from "../sim/deepBuild";
+import { mineKey, type Prio } from "../sim/priority";
 
 export interface DeepCell {
   x: number;
@@ -29,6 +30,8 @@ export interface DeepCell {
   digTime: number | null;
   why: string | null;
   order: string | null;
+  /** the order's priority (0 Low … 3 Urgent) */
+  prio: Prio;
   building: { id: number; kind: string; name: string; icon: string; tip: string; built: number; have: boolean; grow: number } | null;
   water: number;
   /** natural underground pool water (a reservoir), not a flooded tunnel */
@@ -66,6 +69,10 @@ export interface DeepInfo {
   pending: number;
   canSend: number;
   orders: Record<string, number>;
+  /** High + Urgent orders waiting */
+  urgentOrders: number;
+  /** the priority new orders get painted with */
+  brush: Prio;
   mode: string;
   autoMine: boolean;
   recall: boolean;
@@ -248,6 +255,8 @@ export class DeepView {
 
   /** look = tap to inspect; build = place a room; the others paint orders onto cells */
   mode: "look" | OrderKind | "clear" | "build" = "look";
+  /** the priority new orders are painted with (priority.ts): High + Urgent tunnels get dug first */
+  brush: Prio = 1;
   buildKind: DeepKind = "home";
 
   /** Top-left cell for a building under the pointer (centred on it). */
@@ -288,7 +297,7 @@ export class DeepView {
     const have = w.mine.orders.get(i);
     if (this.mode === "clear" || (tap && have === this.mode)) setOrder(w, c.x, c.y, null);
     else {
-      const why = setOrder(w, c.x, c.y, this.mode);
+      const why = setOrder(w, c.x, c.y, this.mode, this.brush);
       if (why && tap) this.lastWhy = why;
     }
   }
@@ -374,7 +383,7 @@ export class DeepView {
         }
         if (this.selectedMiners.size && (MATERIALS[w.mine.cells[idx(c.x, c.y)] as M].solid || (w.mine.seen[idx(c.x, c.y)] && w.mine.loose.has(idx(c.x, c.y))))) {
           const isLoose = !!w.mine.seen[idx(c.x, c.y)] && w.mine.loose.has(idx(c.x, c.y));
-          const why = isLoose ? null : setOrder(w, c.x, c.y, "dig");
+          const why = isLoose ? null : setOrder(w, c.x, c.y, "dig", this.brush);
           if (why) this.lastWhy = why;
           else {
             const selected = w.mine.crew.filter((m) => this.selectedMiners.has(m.id));
@@ -519,6 +528,8 @@ export class DeepView {
       pending: mine.pending.size,
       canSend: world.humans.filter((h) => canSend(h) && !mine.pending.has(h.id)).length,
       orders: Array.from(mine.orders.values()).reduce<Record<string, number>>((a, k) => ((a[k] = (a[k] ?? 0) + 1), a), {}),
+      urgentOrders: Array.from(mine.orders.keys()).filter((i) => world.priority.get(mineKey(i)) >= 2).length,
+      brush: this.brush,
       mode: this.mode,
       autoMine: mine.autoMine,
       recall: mine.recall,
@@ -567,6 +578,7 @@ export class DeepView {
       digTime: seen && solid && !why ? Math.round(mine.digTime(x, y, tools) * 10) / 10 : null,
       why,
       order: mine.orders.get(i) ?? null,
+      prio: world.priority.get(mineKey(i)),
       building: (() => {
         const b = mine.buildAt.get(i);
         if (!b) return null;

@@ -13,7 +13,7 @@ const root = path.join(__dirname, '..', 'app', 'dinosors');
 const { World } = require(path.join(root, 'sim', 'world.ts'));
 const { addHuman } = require(path.join(root, 'sim', 'humans.ts'));
 const { addDino } = require(path.join(root, 'sim', 'dinos.ts'));
-const { T, TILE } = require(path.join(root, 'sim', 'types.ts'));
+const { MAP_W, T, TILE } = require(path.join(root, 'sim', 'types.ts'));
 const { isWaterTile } = require(path.join(root, 'sim', 'terrain.ts'));
 const { toughness } = require(path.join(root, 'sim', 'courage.ts'));
 const { scorpionTarget } = require(path.join(root, 'sim', 'colony.ts'));
@@ -121,12 +121,23 @@ test('the sea reptiles are their friends: they never hunt them, and go for intru
   const s = w.seaFolk;
   const t = s.tribes[0];
   const sp = s.members(t.id)[0];
-  // a bank spot by deep water near the village
+  // a bank spot (real dry land, inside the map) a sea hunter can reach from deep water, near the village
+  const { deepNear } = require(path.join(root, 'sim', 'seaHunters.ts'));
   let bank = null;
-  for (let r = 100; r < t.r && !bank; r += 16) for (let a = 0; a < 6.28 && !bank; a += 0.2) {
+  for (let r = 100; r < t.r * 1.6 && !bank; r += 16) for (let a = 0; a < 6.28 && !bank; a += 0.2) {
     const x = t.x + Math.cos(a) * r;
     const y = t.y + Math.sin(a) * r;
-    if (!water(w, x, y) && [[32, 0], [-32, 0], [0, 32], [0, -32]].some(([dx, dy]) => w.terrain.tileAt(x + dx, y + dy) === T.Deep)) bank = { x, y };
+    const tile = w.terrain.tileAt(x, y);
+    if (!water(w, x, y) && tile !== T.Mountain && tile !== T.Cliff && deepNear(w, x, y, 70)) bank = { x, y };
+  }
+  // (no natural bank there: shallows all along the shore) make a little sand spit out to the deep water
+  for (let r = 100; r < t.r * 1.6 && !bank; r += 16) for (let a = 0; a < 6.28 && !bank; a += 0.2) {
+    const tx = Math.floor((t.x + Math.cos(a) * r) / TILE);
+    const ty = Math.floor((t.y + Math.sin(a) * r) / TILE);
+    if (w.terrain.tiles[ty * MAP_W + tx] === T.Shallow && w.terrain.tiles[(ty + 1) * MAP_W + tx] === T.Deep) {
+      w.terrain.setTile(tx, ty, T.Sand);
+      bank = { x: tx * TILE + 16, y: ty * TILE + 12 };
+    }
   }
   assert.ok(bank, 'a spot on the bank');
   w.dinos.length = 0;

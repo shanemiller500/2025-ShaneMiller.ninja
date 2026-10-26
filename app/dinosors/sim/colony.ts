@@ -13,9 +13,10 @@ import { sizeOf } from "./dinos";
 import { shelterTiles, tileOf, TOWER_Z, WALK_Z } from "./nav";
 import { P } from "./particles";
 import { hash2 } from "./rng";
-import { LM, isWalkTile, isWaterTile } from "./terrain";
-import { type Chariot, type DragonHunt, MAP_H, MAP_W, T, TILE, type Building, type BuildingKind, type Dino, type Human, type NodeKind, type ResNode, type Resource, type Scorpion } from "./types";
+import { LM, REGION, isWalkTile, isWaterTile } from "./terrain";
+import { type Chariot, type DragonHunt, MAP_H, MAP_W, OLD_MAP_H, OLD_MAP_W, T, TILE, type Building, type BuildingKind, type Dino, type Human, type NodeKind, type ResNode, type Resource, type Scorpion } from "./types";
 import type { World } from "./world";
+import type { ShieldLevels } from "./dragonShield";
 import { ANIMAL_KINDS, insideWalls } from "./dinoBounds";
 
 export interface DropOff {
@@ -299,8 +300,9 @@ export class Colony {
       for (let k = 0; k < 4000 && placed < n; k++) {
         const r1 = hash2(k, salt * 31 + n, seed + 77);
         const r2 = hash2(k * 7 + 3, salt * 17, seed + 91);
-        let tx = Math.floor(r1 * MAP_W);
-        let ty = Math.floor(r2 * MAP_H);
+        // the old valley's deposits stay where they always were (the eastern lands get their own: generateEastNodes)
+        let tx = Math.floor(r1 * OLD_MAP_W);
+        let ty = Math.floor(r2 * OLD_MAP_H);
         if (near) {
           const a = r1 * Math.PI * 2;
           const rr = Math.sqrt(r2) * near.r;
@@ -327,9 +329,10 @@ export class Colony {
     place("flint", 5, (t, tx, ty) => walk(t) && (t === T.Rock || nextTo(tx, ty, (o) => o === T.Cliff || o === T.Rock)));
     place("clay", 5, (t, tx, ty) => (t === T.Sand || t === T.Mud) && nextTo(tx, ty, (o) => o === T.River || o === T.Shallow));
     place("iron", 6, (t, tx, ty) => walk(t) && nextTo(tx, ty, (o) => o === T.Mountain || o === T.Rock));
-    place("iron", 3, (t) => walk(t), { x: LM.frost.x, y: LM.frost.y, r: 11 });
+    const frost = w.terrain.gen >= 3 ? LM.peaks : LM.frost;
+    place("iron", 3, (t) => walk(t), { x: frost.x, y: frost.y, r: 11 });
     place("gold", 2, (t, tx, ty) => walk(t) && nextTo(tx, ty, (o) => o === T.Mountain));
-    place("gold", 1, (t) => walk(t), { x: LM.frost.x, y: LM.frost.y, r: 9 });
+    place("gold", 1, (t) => walk(t), { x: frost.x, y: frost.y, r: 9 });
     place("obsidian", 4, (t) => t === T.Basalt || t === T.Volcano);
     place("salt", 3, (t, tx, ty) => t === T.Sand && w.terrain.salt[ty * MAP_W + tx + 1] + w.terrain.salt[(ty + 1) * MAP_W + tx] > 0);
     place("tar", 3, (t, tx, ty) => walk(t) && nextTo(tx, ty, (o) => o === T.Tar));
@@ -337,6 +340,62 @@ export class Colony {
     place("fossil", 3, (t) => walk(t) && (t === T.Sand || t === T.Rock || t === T.Dirt || t === T.Grass));
     this.generateCivNodes(w, salt + 40);
     place("limestone", 5, (t, tx, ty) => walk(t) && (t === T.Rock || nextTo(tx, ty, (o) => o === T.Cliff || o === T.Rock)));
+    this.generateEastNodes(w);
+  }
+
+  /**
+   * Deposits out in the eastern lands (new worlds at birth; older worlds the first time they load
+   * with the bigger map): rare minerals high in the Great Peaks, salt, copper + fossil beds in the
+   * desert, ordinary stone, flint + clay in the lake country.
+   */
+  generateEastNodes(w: World) {
+    const seed = w.seed + 4242;
+    const tiles = w.terrain.tiles;
+    const walk = (t: T) => isWalkTile(t) && !isWaterTile(t) && t !== T.Tar && t !== T.Cave;
+    const nextTo = (tx: number, ty: number, pred: (t: T) => boolean) => [tiles[ty * MAP_W + tx + 1], tiles[ty * MAP_W + tx - 1], tiles[(ty + 1) * MAP_W + tx], tiles[(ty - 1) * MAP_W + tx]].some((t) => pred(t as T));
+    const reg = (tx: number, ty: number) => w.terrain.region[ty * MAP_W + tx];
+    let salt = 300;
+    const place = (kind: NodeKind, n: number, ok: (t: T, tx: number, ty: number) => boolean) => {
+      let placed = 0;
+      for (let k = 0; k < 6000 && placed < n; k++) {
+        const tx = Math.floor(150 + hash2(k, salt * 23 + n, seed) * (MAP_W - 152));
+        const ty = Math.floor(2 + hash2(k * 3 + 5, salt * 11, seed + 7) * (MAP_H - 4));
+        if (tx < OLD_MAP_W - 10 || tx >= MAP_W - 2 || ty >= MAP_H - 2) continue;
+        const t = tiles[ty * MAP_W + tx] as T;
+        if (!walk(t) || !ok(t, tx, ty)) continue;
+        const x = tx * TILE + TILE / 2;
+        const y = ty * TILE + TILE / 2;
+        if (this.nodes.some((o) => Math.abs(o.x - x) < 130 && Math.abs(o.y - y) < 130 && Math.hypot(o.x - x, o.y - y) < 130)) continue;
+        const def = NODES[kind];
+        const amt = Math.round(def.amount[0] + hash2(tx, ty, seed + 5) * (def.amount[1] - def.amount[0]));
+        this.nodes.push({ id: w.nextId(), kind, x, y, amount: amt, max: amt, found: !def.hidden, variant: Math.floor(hash2(ty, tx, seed) * 4) });
+        placed++;
+      }
+      salt++;
+    };
+    const peaks = (tx: number, ty: number) => reg(tx, ty) === REGION.peaks;
+    const high = (tx: number, ty: number) => w.terrain.elev[ty * MAP_W + tx] > 0.55;
+    const desert = (tx: number, ty: number) => reg(tx, ty) === REGION.desert;
+    // the Great Peaks: the richest rock in the land (the best of it up by the snow)
+    place("stone", 4, (t, tx, ty) => peaks(tx, ty) && t === T.Rock);
+    place("iron", 4, (t, tx, ty) => peaks(tx, ty) && nextTo(tx, ty, (o) => o === T.Mountain || o === T.Cliff));
+    place("silver", 3, (t, tx, ty) => peaks(tx, ty) && high(tx, ty));
+    place("gold", 3, (t, tx, ty) => peaks(tx, ty) && high(tx, ty) && nextTo(tx, ty, (o) => o === T.Mountain || o === T.Cliff));
+    place("crystal", 3, (t, tx, ty) => peaks(tx, ty) && (t === T.Snow || t === T.Ice || nextTo(tx, ty, (o) => o === T.Cave || o === T.Ice)));
+    place("quartz", 3, (t, tx, ty) => peaks(tx, ty) && nextTo(tx, ty, (o) => o === T.Cliff || o === T.Mountain));
+    place("diamond", 1, (t, tx, ty) => peaks(tx, ty) && w.terrain.elev[ty * MAP_W + tx] > 0.66);
+    place("coal", 2, (t, tx, ty) => peaks(tx, ty) && !high(tx, ty) && t === T.Rock);
+    // the desert: salt pans, copper in the outcrops, fossil beds in the sand, old relics, a fallen star
+    place("salt", 3, (t, tx, ty) => desert(tx, ty) && (t === T.Dirt || t === T.Sand));
+    place("copper", 3, (t, tx, ty) => desert(tx, ty) && (t === T.Rock || nextTo(tx, ty, (o) => o === T.Rock)));
+    place("fossil", 3, (t, tx, ty) => desert(tx, ty) && (t === T.Dune || t === T.Sand));
+    place("artifact", 2, (t, tx, ty) => desert(tx, ty));
+    place("obsidian", 1, (t, tx, ty) => desert(tx, ty) && t === T.Rock);
+    place("meteorite", 1, (t, tx, ty) => desert(tx, ty) && t === T.Dune);
+    // the lake country south of the peaks
+    place("stone", 3, (t, tx, ty) => !peaks(tx, ty) && !desert(tx, ty) && t === T.Rock);
+    place("flint", 2, (t, tx, ty) => !peaks(tx, ty) && !desert(tx, ty) && nextTo(tx, ty, (o) => o === T.Rock || o === T.Cliff));
+    place("clay", 3, (t, tx, ty) => !desert(tx, ty) && (t === T.Sand || t === T.Mud || t === T.Grass) && nextTo(tx, ty, (o) => o === T.River || o === T.Shallow));
   }
 
   /** Copper, quartz, magnetite, crystal + an old meteor strike. */
@@ -350,8 +409,8 @@ export class Colony {
       for (let k = 0; k < 5000 && placed < n; k++) {
         const r1 = hash2(k, salt * 29 + n, seed + 131);
         const r2 = hash2(k * 5 + 1, salt * 13, seed + 171);
-        let tx = Math.floor(r1 * MAP_W);
-        let ty = Math.floor(r2 * MAP_H);
+        let tx = Math.floor(r1 * OLD_MAP_W);
+        let ty = Math.floor(r2 * OLD_MAP_H);
         if (near) {
           const a = r1 * Math.PI * 2;
           const rr = Math.sqrt(r2) * near.r;
@@ -377,7 +436,8 @@ export class Colony {
     place("quartz", 4, (_t, tx, ty) => nextTo(tx, ty, (o) => o === T.Mountain || o === T.Cliff));
     place("magnetite", 3, (t, tx, ty) => t === T.Basalt || nextTo(tx, ty, (o) => o === T.Basalt || o === T.Mountain));
     place("crystal", 2, (_t, tx, ty) => nextTo(tx, ty, (o) => o === T.Mountain || o === T.Cave));
-    place("crystal", 1, () => true, { x: LM.frost.x, y: LM.frost.y, r: 10 });
+    const frost = w.terrain.gen >= 3 ? LM.peaks : LM.frost;
+    place("crystal", 1, () => true, { x: frost.x, y: frost.y, r: 10 });
     place("meteorite", 1, (t) => t === T.Grass || t === T.Dirt || t === T.Sand);
   }
 
@@ -928,8 +988,8 @@ export class Colony {
   serialize() {
     const r = (n: number) => Math.round(n * 100) / 100;
     return {
-      buildings: this.buildings.map((b) => ({ kind: b.kind, tx: b.tx, ty: b.ty, built: r(b.built), have: b.have, hp: Math.round(b.hp), ...(b.stage ? { stage: b.stage } : {}), ...(b.grow ? { grow: Math.round(b.grow * 100) / 100 } : {}), ...(b.merged ? { merged: b.merged } : {}), ...(b.label ? { label: b.label, breed: b.breed, size: b.size, ours: b.ours } : {}) })),
-      scorpions: this.scorpions.map((s) => ({ tx: s.tx, ty: s.ty, x: r(s.x), y: r(s.y), tier: s.tier, built: r(s.built), have: s.have, up: s.up, hp: Math.round(s.hp), mount: s.mount })),
+      buildings: this.buildings.map((b) => ({ id: b.id, kind: b.kind, tx: b.tx, ty: b.ty, built: r(b.built), have: b.have, hp: Math.round(b.hp), ...(b.stage ? { stage: b.stage } : {}), ...(b.grow ? { grow: Math.round(b.grow * 100) / 100 } : {}), ...(b.merged ? { merged: b.merged } : {}), ...(b.label ? { label: b.label, breed: b.breed, size: b.size, ours: b.ours } : {}), ...(b.shield ? { shield: { ...b.shield } } : {}) })),
+      scorpions: this.scorpions.map((s) => ({ id: s.id, tx: s.tx, ty: s.ty, x: r(s.x), y: r(s.y), tier: s.tier, built: r(s.built), have: s.have, up: s.up, hp: Math.round(s.hp), mount: s.mount })),
       nodes: this.nodes.map((n) => [n.kind, Math.round(n.x), Math.round(n.y), n.amount, n.max, n.found ? 1 : 0] as const),
       armory: this.armory,
       queue: this.queue,
@@ -951,14 +1011,20 @@ export class Colony {
       const def = BUILDINGS[b.kind];
       if (!def) continue;
       const oldFinishedPyramid = b.kind === "pyramid" && (b as { stage?: number }).stage === 5 && b.built >= 1 && !(d as { limestoneNodes?: number }).limestoneNodes;
-      this.buildings.push({ id: w.nextId(), kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: oldFinishedPyramid ? 0.4 : b.built, have: oldFinishedPyramid ? {} : b.have ?? {}, hp: b.hp ?? def.hp, ...((b as { stage?: number }).stage ? { stage: oldFinishedPyramid ? 6 : (b as { stage?: number }).stage } : {}), ...((b as { grow?: number }).grow ? { grow: (b as { grow?: number }).grow } : {}), ...((b as { merged?: number }).merged ? { merged: (b as { merged?: number }).merged } : {}), ...((b as { label?: string }).label ? { label: (b as { label?: string }).label, breed: (b as { breed?: string }).breed, size: (b as { size?: number }).size, ours: (b as { ours?: boolean }).ours } : {}) });
+      const id = (b as { id?: number }).id ?? w.nextId();
+      w.reserveIds(id);
+      this.buildings.push({ id, kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: oldFinishedPyramid ? 0.4 : b.built, have: oldFinishedPyramid ? {} : b.have ?? {}, hp: b.hp ?? def.hp, ...((b as { stage?: number }).stage ? { stage: oldFinishedPyramid ? 6 : (b as { stage?: number }).stage } : {}), ...((b as { grow?: number }).grow ? { grow: (b as { grow?: number }).grow } : {}), ...((b as { merged?: number }).merged ? { merged: (b as { merged?: number }).merged } : {}), ...((b as { label?: string }).label ? { label: (b as { label?: string }).label, breed: (b as { breed?: string }).breed, size: (b as { size?: number }).size, ours: (b as { ours?: boolean }).ours } : {}), ...((b as { shield?: ShieldLevels }).shield ? { shield: { ...(b as { shield: ShieldLevels }).shield } } : {}) });
     }
     this.feast.food = (d as { feast?: number }).feast ?? 0;
     // chariots park at home after a load (a hunt in progress is called off)
     for (const c of (d as { chariots?: { x: number; y: number; homeX: number; homeY: number; hp: number; trike: number; dir: 1 | -1 }[] }).chariots ?? []) {
       this.chariots.push({ id: w.nextId(), x: c.homeX, y: c.homeY, dir: c.dir ?? 1, hp: c.hp, maxHp: CHARIOT_HP, trike: c.trike, homeX: c.homeX, homeY: c.homeY, to: null, path: null, pathI: 0, pathKey: 0, cd: [0, 1.3], aim: [0, Math.PI], anim: 0, hit: 0 });
     }
-    for (const s of d.scorpions ?? []) this.scorpions.push({ id: w.nextId(), ...s, aim: Math.PI / 2, reload: 0, crew: 0, kick: 0 });
+    for (const s of d.scorpions ?? []) {
+      const id = (s as { id?: number }).id ?? w.nextId();
+      w.reserveIds(id);
+      this.scorpions.push({ ...s, id, aim: Math.PI / 2, reload: 0, crew: 0, kick: 0 });
+    }
     for (const [kind, x, y, amount, max, found] of d.nodes ?? []) {
       if (!NODES[kind]) continue;
       this.nodes.push({ id: w.nextId(), kind, x, y, amount, max, found: !!found, variant: Math.floor(hash2(x, y, 3) * 4) });

@@ -81,7 +81,7 @@ export const CIV_TECH: Record<CivTechId, CivTechDef> = {
   monumental: T({ id: "monumental", path: "resonance", icon: "🔺", name: "Monumental construction", what: "Pyramid, Stone circle and monumental gates.", rp: 90, cost: { shaped: 6, crystal: 1 }, after: ["levitation"] }),
   energyStorage: T({ id: "energyStorage", path: "resonance", icon: "🔋", name: "Energy storage", what: "Crystal banks: every energy tower stores twice as much.", rp: 70, cost: { crystal: 2, copper: 2 }, after: ["quartzTuning"] }),
   energyWeapons: T({ id: "energyWeapons", path: "resonance", icon: "⚡", name: "Energy weapons", what: "Beam towers + resonance lances. Beams can set dry grass on fire!", rp: 95, cost: { crystal: 2, copper: 3, meteorite: 1 }, after: ["energyStorage"] }),
-  defensiveEnergy: T({ id: "defensiveEnergy", path: "resonance", icon: "🛡️", name: "Defensive energy", what: "Pylons: nearby pylons link into humming barriers that push dinosaurs back.", rp: 85, cost: { magnetite: 2, copper: 2 }, after: ["energyStorage"] }),
+  defensiveEnergy: T({ id: "defensiveEnergy", path: "resonance", icon: "🛡️", name: "Defensive energy", what: "Pylons: nearby pylons link into humming barriers that push dinosaurs back. Dragon Shields: frequency fields that turn dragons away from the town.", rp: 85, cost: { magnetite: 2, copper: 2 }, after: ["energyStorage"] }),
   advancedArch: T({ id: "advancedArch", path: "resonance", icon: "🌀", name: "Advanced resonance architecture", what: "The Resonance shield: a dome that might survive the end of the world.", rp: 130, cost: { crystal: 3, meteorite: 2, shaped: 6 }, after: ["monumental", "defensiveEnergy"] }),
   nightWork: T({ id: "nightWork", path: "resonance", icon: "🌙", name: "Night Work", what: "Night crews learn safe handoffs and work routes.", rp: 35, cost: { hide: 2, wood: 2 }, after: ["resonance"] }),
   nightClothing: T({ id: "nightClothing", path: "resonance", icon: "🧥", name: "Night Clothing", what: "Forge dark hide night gear with stronger boots and weather protection.", rp: 45, cost: { hide: 4, copper: 1 }, after: ["nightWork", "copperRes"] }),
@@ -159,7 +159,7 @@ export const PYRAMID_CASED_STORE = 400;
 /** What a building adds to the grid each second (the pyramid counts its casing). */
 export const buildingGen = (b: Pick<Building, "kind" | "stage" | "built">) => (ENERGY_GEN[b.kind] ?? 0) + (pyramidCased(b) ? PYRAMID_CASED_GEN : 0);
 /** Constant drain while they work. */
-export const ENERGY_USE: Partial<Record<string, number>> = { condenser: 0.25, pylon: 0.12, resShield: 0.6 };
+export const ENERGY_USE: Partial<Record<string, number>> = { condenser: 0.25, pylon: 0.12, resShield: 0.6, dragonShield: 0.05 };
 
 export const BEAM = { range: 460, dmg: 95, cost: 10, reload: 3.2 };
 export const LIFT = { range: 760, cost: 18, shaped: 2 };

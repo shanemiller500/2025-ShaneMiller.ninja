@@ -337,6 +337,23 @@ export const DISCOVERIES: Discovery[] = [
   { id: "meteorCore", icon: "☄️", name: "Star Metal", hint: "Something fell from the sky, long ago." },
   { id: "troglodon", icon: "🦎", name: "Troglodon", hint: "Pale things live in the dark." },
   { id: "deepVillage", icon: "🏘️", name: "Underground Village", hint: "Homes, a vault and a farm, all underground." },
+  // the bigger world
+  { id: "desert", icon: "🏜️", name: "Sea of Sand", hint: "Far to the east, past the volcano, the grass gives way to dunes." },
+  { id: "oasis", icon: "🌴", name: "Oasis", hint: "Water in the middle of the desert." },
+  { id: "greatPeaks", icon: "🏔️", name: "The Great Peaks", hint: "Snowy mountains, further east still." },
+  { id: "sandPeople", icon: "🐪", name: "Sand People", hint: "Robed riders who vanish into the dunes." },
+  { id: "sandDragon", icon: "🏜️", name: "Hot Sand", hint: "Some dragons breathe something other than fire." },
+  { id: "dinoScorpion", icon: "🦂", name: "Dinosaur Scorpion", hint: "Something huge guards a den in the rocky desert." },
+  { id: "iceDragon", icon: "❄️", name: "Ice Dragon", hint: "Dragons nest high in the snow too." },
+  { id: "monks", icon: "🛕", name: "Mountain Monks", hint: "A peaceful people live high in the peaks." },
+  { id: "monkOffering", icon: "🔔", name: "The Offering", hint: "Once a year, the monks climb to meet the dragons." },
+  { id: "cartographer", icon: "🗺️", name: "Cartographer", hint: "Fill in half of the map." },
+  { id: "hiddenCave", icon: "🕳️", name: "Hidden Cave", hint: "Caves in the far mountains + the desert rocks hide things." },
+  // the snowy peaks
+  { id: "snowPeople", icon: "🏔️", name: "Snow People", hint: "Fur-clad hunters live high in the snow, among the ice lodges." },
+  { id: "snowRex", icon: "🦖", name: "Snow Rex", hint: "Something huge and white hunts the snowfields." },
+  { id: "yeti", icon: "❄️", name: "Yeti", hint: "Giant footprints lead to an ice cave…" },
+  { id: "dragonShield", icon: "🛡️", name: "Dragon Shield", hint: "Turn a dragon away without a single blow." },
 ];
 
 export const DISCOVERY_BY_ID = Object.fromEntries(DISCOVERIES.map((d) => [d.id, d]));

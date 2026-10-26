@@ -7,6 +7,7 @@ import { MINE_H, MINE_W } from "../data/mine";
 import type { Engine, Snapshot } from "../game/engine";
 import { GameIcon } from "./GameIcon";
 import { useClickAway } from "./useClickAway";
+import { PriorityPicker } from "./PriorityPicker";
 
 /* ------------------------------------------------------------------ */
 /*  The Deep HUD: a survey-console look (dark glass, cyan accents,     */
@@ -278,6 +279,13 @@ function ModeBar({ snap, engine }: { snap: Snapshot; engine: Engine }) {
           {m.id !== "look" && m.id !== "clear" && m.id !== "build" && d.orders[m.id] ? <span className="font-mono text-[9px] opacity-80">{d.orders[m.id]}</span> : null}
         </button>
       ))}
+      {/* painting orders: what priority they go down with (High + Urgent tunnels are dug first) */}
+      {d.mode !== "look" && d.mode !== "clear" && d.mode !== "build" && (
+        <div className="ml-1 border-l border-white/15 pl-1.5" title="Priority for the marks you paint now">
+          <PriorityPicker compact value={d.brush} onPick={(p) => engine.deepBrush(p)} label="Paint priority" />
+        </div>
+      )}
+      {d.urgentOrders > 0 && <span className="ml-1 rounded-full bg-rose-500/80 px-1.5 text-[9px] font-bold" title="High + Urgent orders waiting">‼ {d.urgentOrders}</span>}
     </div>
   );
 }
@@ -587,6 +595,7 @@ function CellCard({ snap, engine }: { snap: Snapshot; engine: Engine }) {
           </>
         ) : null}
       </div>
+      {c.order && <PriorityPicker value={c.prio} onPick={(p) => engine.deepOrderPrio(p)} label="Order priority (miners dig High + Urgent first)" />}
       {snap.deep!.crew.length === 0 && <p className="mt-2 text-[10.5px] text-amber-200/70">No miners down here yet: send some from the Crew panel.</p>}
     </motion.div>
     </div>

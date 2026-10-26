@@ -42,7 +42,7 @@ export default function Toasts({ toasts, log, unread, popups, onDismiss, onGo, o
           </AnimatePresence>
         </div>
       )}
-      <div ref={boxRef} className="pointer-events-none absolute left-2 top-[76px] z-30 sm:left-4 sm:top-[100px]">
+      <div ref={boxRef} className="pointer-events-none absolute left-4 top-[100px] z-30 hidden sm:block">
         <button type="button" aria-label={`Messages${unread ? ` (${unread} new)` : ""}`} aria-expanded={open}
           onClick={() => {
             setOpen((o) => !o);
@@ -57,22 +57,33 @@ export default function Toasts({ toasts, log, unread, popups, onDismiss, onGo, o
           {open && (
             <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }}
               className="dl-glass dl-scroll pointer-events-auto mt-2 max-h-[min(60vh,520px)] w-[min(92vw,380px)] overflow-y-auto rounded-3xl p-3 shadow-2xl">
-              <div className="flex items-center justify-between gap-2 px-1 pb-2">
-                <span className="text-sm font-bold">🔔 Recent messages</span>
-                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-white/70">
-                  <input type="checkbox" checked={popups} onChange={(e) => onTogglePopups(e.target.checked)} className="accent-amber-400" />
-                  Pop-ups
-                </label>
-              </div>
-              {log.length === 0 && <p className="px-1 py-3 text-[13px] text-white/55">Nothing yet. News from the tribe will collect here.</p>}
-              <div className="space-y-1">
-                {log.map((t) => (
-                  <LogRow key={t.id} t={t} onGo={onGo} />
-                ))}
-              </div>
+              <MessageFeed log={log} popups={popups} onTogglePopups={onTogglePopups} onGo={onGo} />
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+    </>
+  );
+}
+
+export function MessageFeed({ log, popups, onTogglePopups, onGo }: {
+  log: Toast[];
+  popups: boolean;
+  onTogglePopups: (on: boolean) => void;
+  onGo: (x: number, y: number) => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 px-1 pb-2">
+        <span className="text-sm font-bold">🔔 Recent messages</span>
+        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-white/70">
+          <input type="checkbox" checked={popups} onChange={(e) => onTogglePopups(e.target.checked)} className="accent-amber-400" />
+          Pop-ups
+        </label>
+      </div>
+      {log.length === 0 && <p className="px-1 py-3 text-[13px] text-white/55">Nothing yet. News from the tribe will collect here.</p>}
+      <div className="space-y-1">
+        {log.map((t) => <LogRow key={t.id} t={t} onGo={onGo} />)}
       </div>
     </>
   );

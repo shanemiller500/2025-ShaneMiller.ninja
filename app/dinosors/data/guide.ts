@@ -211,6 +211,51 @@ export const HELP: HelpSection[] = [
       "Save first (📂 Saved games) if you want to come back!",
     ],
   },
+  {
+    id: "world",
+    icon: "🗺️",
+    title: "The wider world",
+    scene: "scene-cave",
+    intro: "Past the volcano the land goes on: a central desert, then the snowy Great Peaks, and green lake country to the south-east.",
+    steps: [
+      "🗺️ The map (bottom right, above the zoom buttons) shows what your tribe has seen. Tap it to fly there; fold it away with the arrow.",
+      "The desert: dunes, a dry riverbed, oases with palms, rock outcrops with caves. Camels live here, and so do the Sand People.",
+      "🦂 Dinosaur Scorpions (a fantasy beast, not the war machine!) guard rocky dens in the desert + by the lava fields. Their sting leaves you dizzy.",
+      "🏔️ The Great Peaks: bare rock crests, snowfields, glaciers, cliffs, waterfalls and passes. It's cold up there: bring furs.",
+      "❄️ Ice Dragons nest high in the snow. Their frost slows and chills. Steal an egg (or use the 🥚 Eggs tool) and raise one like any dragon.",
+      "🛕 Mountain Monks walk the high paths in a line. They're peaceful and nobody ever harms them. Once a year they make an offering to the dragons.",
+      "Caves out east hide things: walk someone up to one.",
+    ],
+  },
+  {
+    id: "sand",
+    icon: "🐪",
+    title: "Sand People",
+    scene: "scene-cave",
+    intro: "A hostile desert people: camel riders, archers, warriors, scouts and Sand Dragon Riders.",
+    steps: [
+      "Out on the open sand their robes hide them: your guards only notice them up close, or once they strike. Off the sand they're easy to see.",
+      "They always move in groups: patrols, caravans to the oasis, raiding parties and war bands. Hurt one and the rest come for you.",
+      "They raid everyone: your town, the Neanderthal clans, the Tree + Sea People, even each other.",
+      "🐉 Sand Dragons blast super-heated sand. The ground glows where it lands, burns anyone standing there, then cools back to plain sand.",
+      "People tool → 🐪 Sand People: a whole camp, or just a family, patrol, raiding party or caravan. Tree + Sea People can come as groups too.",
+    ],
+  },
+  {
+    id: "priority",
+    icon: "‼️",
+    title: "Priorities + Dragon Riders",
+    scene: "scene-firemaking",
+    intro: "Tell your people what matters most, and put your Dragon Riders to work.",
+    steps: [
+      "Tap a building site (a building, wall, tower, Scorpion or home) and pick Low · Normal · High · Urgent.",
+      "‼ Urgent: everyone free drops their usual job to gather the materials, haul them over and build it. ⬆ High: done before normal work. ⬇ Low: waits.",
+      "🏕️ Your tribe → Jobs shows the whole Build queue with the same buttons.",
+      "In the Deep, pick a priority before you paint dig marks: miners dig High + Urgent tunnels first.",
+      "A bonded Dragon Rider and their dragon take jobs between fights: scouting new land, patrols, lifts for people with a long walk, flying supplies to building sites, fetching from far-off deposits, and answering alarms.",
+      "They still sleep at night, rest when tired or hurt, and keep to their shift. A command you give the dragon always comes first.",
+    ],
+  },
 ];
 
 /* ------------------------------ "?" bubbles on things ------------------------------ */
@@ -230,4 +275,6 @@ export const BUBBLES: Record<string, { title: string; text: string; art: GuideAr
   lift: { title: "The lift", text: "Carries miners down and ore up. Upgrade it to reach deeper.", art: "crystal-miner" },
   vein: { title: "Ore vein", text: "A seam of ore in the rock. Mark it to dig — miners follow it along.", art: "crystal-miner" },
   bedrock: { title: "Bedrock", text: "Too hard to dig. Mark it with 🧨 Blast to break through to the next section.", art: "builder" },
+  monks: { title: "Mountain Monks", text: "A peaceful order of the high peaks. Nobody harms them. Tap one to see when their yearly offering is.", art: "ugg-face" },
+  sandCamp: { title: "Sand People camp", text: "Hostile desert folk. On the sand they're hard to see; they ride out in groups on camels and Sand Dragons.", art: "hunter" },
 };
