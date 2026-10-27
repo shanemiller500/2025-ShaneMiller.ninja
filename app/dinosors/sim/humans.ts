@@ -5,7 +5,7 @@
 /* ------------------------------------------------------------------ */
 import { roomOf } from "./riderHall";
 import { shieldedAt } from "./dragonShield";
-import { answersFire, douseAim, dropClaim } from "./firefight";
+import { answersFire, bucketBrigade, douseAim, dropClaim } from "./firefight";
 import { huntThink } from "./chariots";
 import { feastThink } from "./feast";
 import { cleanupThink } from "./cleanup";
@@ -447,7 +447,7 @@ function localDanger(w: World, h: Human): LocalDanger | null {
   const role = w.tribe.roleOf(h);
   // (someone holding an ultrasonic emitter works from a distance: flames only matter right on top of them)
   // (a dragon raid doesn't stop for burning grass either)
-  const firefighter = !sensitive && (!!h.sonic || w.tasks.get(h.taskId)?.kind === "dragonRaid" || (w.camp.learned.has("firefighting") && w.tribe.fireAlarm && (role === "firefighter" || role === "gatherer" || role === "builder" || role === "farmer" || role === "cook")));
+  const firefighter = !sensitive && (!!h.sonic || w.tasks.get(h.taskId)?.kind === "dragonRaid" || (w.tribe.fireAlarm && h.site === "douse" && bucketBrigade(w)) || (w.camp.learned.has("firefighting") && w.tribe.fireAlarm && (role === "firefighter" || role === "gatherer" || role === "builder" || role === "farmer" || role === "cook")));
   for (let y = ty - 5; y <= ty + 5; y++) for (let x = tx - 5; x <= tx + 5; x++) {
     if (w.lava.heatAt(x, y) > 0.14) offer((x + 0.5) * TILE, (y + 0.5) * TILE, sensitive ? 210 : 165, "fire");
     else if (w.fire.at(x, y) > 0.24) offer((x + 0.5) * TILE, (y + 0.5) * TILE, firefighter ? 40 : sensitive ? 210 : 165, "fire");
@@ -1877,7 +1877,8 @@ export function updateHuman(w: World, h: Human, dt: number) {
       // thrown at the fire they're aiming at (from a safe spot beside it), or just ahead
       const aim = douseAim(w, h) ?? { x: h.x, y: h.y - 26 };
       h.dir = aim.x >= h.x ? 1 : -1;
-      if (h.stateT > 0.8) {
+      // the bucket brigade (no fire station) throws as fast as it can
+      if (h.stateT > (bucketBrigade(w) ? 0.45 : 0.8)) {
         w.fire.extinguish(w, aim.x, aim.y, TILE * 2.2);
         w.particles.burst(P.Splash, (h.x + aim.x) / 2, (h.y + aim.y) / 2 - 10, 10, 70, { vz: 80, g: 220, size: 2.5, max: 0.7 });
         w.particles.burst(P.Steam, aim.x, aim.y - 4, 4, 20, { vz: 30, size: 10, max: 1.2, color: "rgba(230,230,230,0.6)" });

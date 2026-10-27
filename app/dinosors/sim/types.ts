@@ -500,7 +500,7 @@ export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook"
 
 export type HumanOrder = { kind: "hunt"; id: number } | { kind: "guard"; x: number; y: number; top?: boolean } | null;
 
-export type WeaponKind = "spear" | "sword" | "axe" | "bow";
+export type WeaponKind = "spear" | "sword" | "axe" | "bow" | "club";
 
 export interface Gear {
   /** armory item id like "spear2" (null = whatever the tribe's tech allows) */

@@ -7,7 +7,8 @@ import { P } from "./particles";
 import { MAP_H, MAP_W, T, TILE } from "./types";
 import type { World } from "./world";
 
-const MAX_ACTIVE = 650;
+// Keep accidental wildfires local; the previous cap allowed most of a forest to burn at once.
+const MAX_ACTIVE = 220;
 
 export function baseFuel(t: T) {
   switch (t) {
@@ -100,10 +101,10 @@ export class FireSystem {
       const y = (i - x) / MAP_W;
       let h = this.heat[i];
       const f = this.fuel[i];
-      h += dt * (f > 0.05 ? 0.35 : -0.8);
+      h += dt * (f > 0.05 ? 0.22 : -1.25);
       h -= dt * rain * 0.9;
       h = Math.min(1, h);
-      this.fuel[i] = Math.max(0, f - dt * 0.085 * h);
+      this.fuel[i] = Math.max(0, f - dt * 0.18 * h);
       if (this.burnt[i] < h * 0.95) {
         this.burnt[i] = Math.max(this.burnt[i], h * 0.95);
         this.scorched.add(i);
@@ -116,7 +117,7 @@ export class FireSystem {
       this.heat[i] = h;
 
       // spread to neighbours with fuel, pushed by wind
-      if (rng() < dt * 2.2) {
+      if (rng() < dt * 1.25) {
         const dx = Math.floor(rng() * 3) - 1;
         const dy = Math.floor(rng() * 3) - 1;
         if (dx || dy) {
@@ -125,7 +126,7 @@ export class FireSystem {
           if (nx >= 0 && ny >= 0 && nx < MAP_W && ny < MAP_H) {
             const j = ny * MAP_W + nx;
             const windBoost = 1 + (dx * wx + dy * wy) * 0.08;
-            const chance = h * this.fuel[j] * 0.38 * windBoost * dry * (1 - rain);
+            const chance = h * this.fuel[j] * 0.18 * windBoost * dry * (1 - rain);
             if (this.heat[j] === 0 && rng() < chance) spread.push(j);
           }
         }

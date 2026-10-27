@@ -7,7 +7,7 @@
 /* ------------------------------------------------------------------ */
 import { tendVines, vinesReady, wineThink } from "./vineyard";
 import { peopleCap } from "./population";
-import { crewWanted, fireThreats, PRI_LABEL } from "./firefight";
+import { bucketBrigade, crewWanted, fireThreats, PRI_LABEL } from "./firefight";
 import { mountedDamage, wearArmor } from "./gear";
 import { carrySidearm, repelHit, repelsHere } from "./territory";
 import { removeHuman } from "./death";
@@ -610,7 +610,8 @@ export class Tribe {
     if (l.has("crossbow")) return WEAPON_BY_ID[LEGACY.crossbow];
     if (l.has("bow")) return WEAPON_BY_ID[LEGACY.bow];
     if (l.has("spear")) return WEAPON_BY_ID[LEGACY.spear];
-    return null;
+    // before any weapon is invented, everyone still has a wooden club to defend themselves
+    return WEAPON_BY_ID.club;
   }
 
   /* ------------------------------ inside the walls ------------------------------ */
@@ -929,7 +930,8 @@ export class Tribe {
     const best = top ? { x: top.x, y: top.y } : null;
     if (top && !this.fireAlarm) {
       const b = top;
-      if (w.camp.learned.has("firefighting")) w.toast("🧑‍🚒", `Fire in the camp (${PRI_LABEL[top.pri]})! Firefighters are on their way${top.pri <= 3 ? ", everyone nearby grab water" : ""}.`, b.x, b.y);
+      if (bucketBrigade(w)) w.toast("🪣", "Fire near camp and no fire station! Everyone grab a bucket: the bucket brigade is on its way.", b.x, b.y);
+      else if (w.camp.learned.has("firefighting")) w.toast("🧑‍🚒", `Fire in the camp (${PRI_LABEL[top.pri]})! Firefighters are on their way${top.pri <= 3 ? ", everyone nearby grab water" : ""}.`, b.x, b.y);
       else w.toast("🔥", "Fire near camp and nobody knows how to fight it! Invent 🪣 Fire fighting in the camp's 💡 Invent tab.", b.x, b.y);
       w.sfx("yelp", b.x, b.y, 0.6);
     }

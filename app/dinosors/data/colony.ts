@@ -216,6 +216,8 @@ export const WEAPONS: WeaponDef[] = [
   { id: "swordC", metal: "copper", kind: "sword", tier: 2, name: "Copper sword", icon: "🗡️", melee: true, range: 35, dmg: 38, cd: 1.1, speed: 0, prey: 68, cost: { wood: 1, copperBar: 2 }, at: "blacksmith" },
   { id: "sword2", kind: "sword", tier: 2, name: "Iron sword", icon: "🗡️", melee: true, range: 36, dmg: 46, cd: 1.1, speed: 0, prey: 80, cost: { wood: 1, iron: 3 }, at: "blacksmith" },
   { id: "sword3", metal: "steel", kind: "sword", tier: 3, name: "Great battle sword", icon: "⚔️", melee: true, range: 40, dmg: 72, cd: 1.4, speed: 0, prey: 130, cost: { steel: 3, gold: 1 }, at: "blacksmith" },
+  // every grown-up starts with one: a knobbly wooden club, until the tribe invents something better (tribe.weaponFor)
+  { id: "club", kind: "club", tier: 0, name: "Wooden club", icon: "🏏", melee: true, range: 30, dmg: 16, cd: 1.2, speed: 0, prey: 35, cost: { stick: 1 }, at: "camp" },
   { id: "axe1", kind: "axe", tier: 1, name: "Stone axe", icon: "🪓", melee: true, range: 32, dmg: 28, cd: 1.3, speed: 0, prey: 55, cost: { stick: 1, stone: 2 }, at: "camp", tech: "axe" },
   { id: "axeB", kind: "axe", tier: 1, name: "Bone-edge axe", icon: "🪓", melee: true, range: 32, dmg: 36, cd: 1.3, speed: 0, prey: 65, cost: { wood: 1, bone: 2, tooth: 1 }, at: "camp", tech: "axe" },
   { id: "axeC", metal: "copper", kind: "axe", tier: 2, name: "Copper axe", icon: "🪓", melee: true, range: 33, dmg: 39, cd: 1.3, speed: 0, prey: 72, cost: { wood: 1, copperBar: 1 }, at: "blacksmith" },

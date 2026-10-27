@@ -12,7 +12,7 @@
 /*  go back to running themselves (auto mode) when there are none.     */
 /* ------------------------------------------------------------------ */
 import { NODES, RIDEABLE, TAMEABLE, WEAPON_BY_ID } from "../data/colony";
-import { claimFire, setDouseAim, throwSpot } from "./firefight";
+import { bucketBrigade, claimFire, setDouseAim, throwSpot } from "./firefight";
 import { sp } from "../data/species";
 import { deliver, siteByKey, siteKey, siteOnTop, sites, wallMaxHp, wallStretch, work, type Site } from "./build";
 import { isBaby, setState, emote, sizeOf } from "./dinos";
@@ -418,7 +418,7 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
   }
   if (tile === T.Tar) return { kind: "mine", icon: "🛢️", label: "Scoop tar (carefully!)", x, y, target: 0, res: "tar" };
   if (tile === T.Rock || tile === T.Basalt) return { kind: "mine", icon: "🪨", label: "Quarry stone", x, y, target: 0, res: "stone" };
-  if (w.fire.at(tx, ty) > 0.1) return L.has("firefighting") || L.has("sonicFire") ? { kind: "douse", icon: sonicReady(w) ? "🔊" : "🪣", label: sonicReady(w) ? "Blast the fire out with sonic emitters!" : "Put out the fire!", x, y, target: 0 } : { kind: "move", icon: "🔒", label: "Invent 🪣 Fire fighting to put fires out", x, y, target: 0 };
+  if (w.fire.at(tx, ty) > 0.1) return L.has("firefighting") || L.has("sonicFire") || bucketBrigade(w) ? { kind: "douse", icon: sonicReady(w) ? "🔊" : "🪣", label: sonicReady(w) ? "Blast the fire out with sonic emitters!" : "Put out the fire!", x, y, target: 0 } : { kind: "move", icon: "🔒", label: "Invent 🪣 Fire fighting to put fires out", x, y, target: 0 };
   if (tile === T.Grass) {
     const move: Command = armed ? { kind: "guard", icon: "🛡️", label: "Stand guard here", x, y, target: 0 } : { kind: "move", icon: "👣", label: "Go here", x, y, target: 0 };
     return { ...move, alts: [{ kind: "forage", icon: "🌾", label: "Cut grass", x, y, target: 0, res: "grass" }] };

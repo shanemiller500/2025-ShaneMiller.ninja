@@ -572,7 +572,8 @@ export class Colony {
     // a sidearm for everyone (a mix of shock sticks + ray guns), before the fighters' main weapons
     const armed = sidearmWanted(w, people);
     if (armed && canMake(armed, WEAPON_BY_ID[armed].cost)) return queue(armed);
-    const weapons = WEAPONS.filter((item) => !item.sidearm && (item.id !== "nightSidearm" || w.shifts.mode === "split")).filter((item) => canMake(item.id, item.cost)).sort((a, b) => b.dmg - a.dmg);
+    // (the wooden club is everyone's fallback, never crafted)
+    const weapons = WEAPONS.filter((item) => !item.sidearm && item.id !== "club" && (item.id !== "nightSidearm" || w.shifts.mode === "split")).filter((item) => canMake(item.id, item.cost)).sort((a, b) => b.dmg - a.dmg);
     for (const item of weapons) {
       const enough = WEAPONS.filter((candidate) => candidate.dmg >= item.dmg).reduce((n, candidate) => n + owned(candidate.id, (h) => h.gear.weapon === candidate.id), 0);
       if (enough < fighterTarget) return queue(item.id);

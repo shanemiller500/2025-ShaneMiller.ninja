@@ -600,21 +600,18 @@ test('upgrading wood walls to stone gives the logs back', () => {
   assert.ok(w.camp.stock.stick >= sticks0 + pieces.length * 2 - 4, `sticks refunded (${sticks0} → ${w.camp.stock.stick})`);
 });
 
-test('putting out fires is a skill: no bucket brigade until the tribe learns it', () => {
+test('no fire station: a fire by camp gets the bucket brigade even before fire fighting is invented', () => {
   const w = tribeWorld(48, ['tools', 'fire']);
   w.weather.rain = 0;
   w.camp.stock.water = 0;
-  const fire = () => { w.fire.ignite(w, Math.floor(w.camp.x / TILE) + 4, Math.floor(w.camp.y / TILE) + 4, 1); };
   w.fire.initFuel(w);
-  fire();
-  run(w, 6);
-  assert.ok(!w.humans.some((h) => h.state === 'douse' || h.site === 'douse'), 'nobody fights it without the skill');
-  const cmd = tasks.inferCommand(w, [w.humans[0]], w.camp.x + 4 * TILE, w.camp.y + 4 * TILE, pickNone);
-  if (w.fire.active.size) assert.notEqual(cmd.kind, 'douse');
-  w.camp.learned.add('firefighting');
+  w.fire.ignite(w, Math.floor(w.camp.x / TILE) + 4, Math.floor(w.camp.y / TILE) + 4, 1);
+  assert.ok(!w.camp.learned.has('firefighting'));
   let fought = false;
-  run(w, 60, () => { if (w.humans.some((h) => h.site === 'douse')) fought = true; return fought; });
-  assert.ok(fought || w.fire.active.size === 0, 'with the skill they grab water');
+  run(w, 30, () => { if (w.humans.some((h) => h.site === 'douse')) fought = true; return fought; });
+  assert.ok(fought || w.fire.active.size === 0, 'they grab buckets without the skill');
+  const cmd = tasks.inferCommand(w, [w.humans[0]], w.camp.x + 4 * TILE, w.camp.y + 4 * TILE, pickNone);
+  if (w.fire.active.size) assert.equal(cmd.kind, 'douse', 'and can be sent to douse it');
 });
 
 test('chopped + burnt trees grow back', () => {
@@ -858,11 +855,9 @@ const finish = (w, kind, x, y) => {
 const learn = (w, ...ids) => ids.forEach((id) => w.civ.done.add(id));
 const clone = (w) => World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
 
-test('the humming chamber surfaces once the tribe is settled, and offers the choice', () => {
-  const w = grow(tribeWorld(501, ['tools']), 8);
-  run(w, 3);
-  assert.equal(w.civ.chamberX, 0, 'not before the tribe is settled');
-  for (const t of SETTLED) w.camp.learned.add(t);
+test('the humming chamber surfaces once there are 3 grown-ups (no inventions needed), and offers the choice', () => {
+  const w = grow(tribeWorld(501, []), 8);
+  assert.equal(w.camp.learned.size, 0, 'nothing invented yet');
   run(w, 3);
   assert.ok(w.civ.chamberX > 0, 'chamber surfaced');
   assert.ok(w.props.some((p) => p.kind === 'chamber'), 'as a prop in the world');
@@ -878,6 +873,9 @@ test('the humming chamber surfaces once the tribe is settled, and offers the cho
   assert.ok(w.civ.choose(w, 'resonance'));
   assert.equal(w.civ.current, 'resonance', 'starts on the first idea');
   assert.equal(w.camp.stock.meteorite, meteor + 1, 'the meteor shard from the chamber');
+  const { TECH_ORDER } = require(path.join(__dirname, '..', 'app', 'dinosors', 'data', 'facts.ts'));
+  assert.deepEqual(TECH_ORDER.filter((t) => !w.camp.learned.has(t)), [], 'every basic invention (fire too) comes with the path');
+  assert.ok(w.campfires.some((f) => f.lit), 'and the campfire is lit');
   assert.ok(!w.civ.choose(w, 'traditional'), 'the choice is final');
   const w2 = clone(w);
   assert.equal(w2.civ.path, 'resonance');

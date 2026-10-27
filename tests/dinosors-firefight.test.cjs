@@ -25,7 +25,7 @@ const { T, TILE, MAP_W } = require(path.join(root, 'sim', 'types.ts'));
 const { hitScorpion, hitScorpionsAt } = require(path.join(root, 'sim', 'factions.ts'));
 const { scorpionCondition, scorpionMaxHp, scorpionWorks, orderObsidian, obsidianProblem, OBSIDIAN_SHIELD } = require(path.join(root, 'sim', 'scorpionArmor.ts'));
 const { footprint, distToCamp, refreshFootprint, raidSpotProblem, RAID_MARGIN } = require(path.join(root, 'sim', 'settlement.ts'));
-const { fireThreats, refreshFires, claimFire, throwSpot, safeToStand, answersFire, OUTER_R } = require(path.join(root, 'sim', 'firefight.ts'));
+const { fireThreats, refreshFires, claimFire, throwSpot, safeToStand, answersFire, bucketBrigade, OUTER_R } = require(path.join(root, 'sim', 'firefight.ts'));
 
 const DT = 1 / 30;
 function run(w, seconds, each) {
@@ -234,6 +234,41 @@ test('fire priorities: people, then homes, then critical buildings…; far-off f
   for (const f of list) assert.ok(distToCamp(w, f.x, f.y) <= OUTER_R + 1);
 });
 
+/** The camp has a finished fire station (so the fire crew, not the bucket brigade, handles fires). */
+function stationFor(w) {
+  const finished = w.colony.finished.bind(w.colony);
+  w.colony.finished = (k) => k === 'fireStation' || finished(k);
+}
+
+test('no fire station + fire near camp: the bucket brigade (no invention needed) puts it out fast', () => {
+  const w = quiet(12);
+  const c = w.camp;
+  assert.ok(!c.learned.has('firefighting'), 'nobody has invented fire fighting');
+  c.stock.water = 40;
+  const people = [];
+  for (let i = 0; i < 5; i++) {
+    const h = addHuman(w, c.x - 40 + i * 20, c.y + 40, false);
+    h.role = i < 3 ? 'gatherer' : 'builder';
+    people.push(h);
+  }
+  const at = { x: c.x + 200, y: c.y + 170 };
+  grass(w, at.x, at.y, 3);
+  const tx = Math.floor(at.x / TILE), ty = Math.floor(at.y / TILE);
+  w.fire.ignite(w, tx, ty, 1);
+  refreshFootprint(w);
+  refreshFires(w);
+  assert.ok(bucketBrigade(w), 'the brigade is called out');
+  assert.ok(people.every((h) => answersFire(w, h)), 'every grown-up grabs a bucket');
+  const out = run(w, 60, () => {
+    let burning = 0;
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) burning += w.fire.heat[(ty + dy) * MAP_W + tx + dx] > 0.1 ? 1 : 0;
+    return burning === 0;
+  });
+  assert.ok(out >= 0, 'the fire is out');
+  run(w, 10);
+  assert.ok(people.every((h) => h.site !== 'douse'), 'everyone back to work');
+});
+
 test('a firefighter puts out a fire in camp from a safe spot, a busy gatherer keeps working, and both go back to normal after', () => {
   const w = quiet(10);
   const c = w.camp;
@@ -243,6 +278,8 @@ test('a firefighter puts out a fire in camp from a safe spot, a busy gatherer ke
   ff.role = 'firefighter';
   const g = addHuman(w, c.x - 30, c.y + 40, false);
   g.role = 'gatherer';
+  // with a fire station the fire crew handles it (no station = the bucket brigade, tested below)
+  stationFor(w);
   // a small patch of burning grass near the camp's edge
   const at = { x: c.x + 230, y: c.y + 190 };
   grass(w, at.x, at.y, 3);

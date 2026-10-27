@@ -3707,7 +3707,7 @@ export class Engine {
     const w = this.world;
     const civ = w.civ;
     if (!civ.chamberX) {
-      if (!civ.ripe(w)) return "The tribe needs to settle in first (6 inventions + 3 grown-ups).";
+      if (!civ.ripe(w)) return "The tribe needs at least 3 grown-ups first.";
       w.civ.update(w, 2.1);
     }
     if (!civ.chamberX) return "Couldn't find the chamber yet — try again soon.";

@@ -479,6 +479,12 @@ export function moveDino(w: World, d: Dino, dt: number) {
   // lava + fire hurt (cartoon hot-foot hop)
   const tx = Math.floor(d.x / TILE);
   const ty = Math.floor(d.y / TILE);
+  // Large dinosaurs can stomp out a small patch as they pass. Keep this after movement so
+  // it follows their feet, and leave lava completely unaffected.
+  if (d.z < 4 && sizeOf(d) >= 42 && w.fire.at(tx, ty) > 0.05 && w.lava.heatAt(tx, ty) <= 0.15) {
+    const stomp = w.fire.extinguish(w, d.x, d.y, Math.max(TILE * 1.2, Math.min(TILE * 2.2, sizeOf(d) * 0.06)));
+    if (stomp && w.rng() < dt * 5) w.particles.burst(P.Dust, d.x, d.y + 5, 5, 30, { vz: 22, size: 3, max: 0.5, color: "rgba(170,145,110,0.6)" });
+  }
   if (d.z < 4 && (w.lava.heatAt(tx, ty) > 0.15 || w.fire.at(tx, ty) > 0.3)) {
     d.health -= dt * 0.25;
     d.burn = 0;

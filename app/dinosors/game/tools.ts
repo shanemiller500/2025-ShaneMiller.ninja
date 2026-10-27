@@ -277,7 +277,7 @@ export const TOOLS: ToolDef[] = [
   { id: "food", icon: "🍖", label: "Food", tip: "Drop food for hungry dinos" },
   { id: "plant", icon: "🌳", label: "Plants", tip: "Grow trees and bushes", brush: true },
   { id: "land", icon: "🏞️", label: "Land", tip: "Paint terrain or place loose surface materials to mine", brush: true },
-  { id: "fire", icon: "🔥", label: "Fire", tip: "Light a fire (careful!)", brush: true },
+  { id: "fire", icon: "🔥", label: "Fire", tip: "Light a small fire. Nearby adults use buckets to protect the camp; large dinosaurs stomp out flames. Choose Land → Water to douse fires by hand.", brush: true },
   { id: "weather", icon: "🌦️", label: "Weather", tip: "Change the weather" },
   { id: "disaster", icon: "💥", label: "Boom", tip: "Lightning, meteors, volcano, quakes" },
   { id: "people", icon: "🧔", label: "People", tip: "Add cave people (tap one to give them a job!)" },

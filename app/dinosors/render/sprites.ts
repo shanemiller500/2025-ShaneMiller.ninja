@@ -305,7 +305,7 @@ export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind
 
 /* ------------------------------- people ------------------------------- */
 
-export type WeaponLook = "spear" | "bow" | "crossbow" | "sword" | "axe" | "lance" | "shock" | "ray" | null;
+export type WeaponLook = "spear" | "bow" | "crossbow" | "sword" | "axe" | "club" | "lance" | "shock" | "ray" | null;
 
 /** A metal helmet drawn over the hair. */
 export interface HelmetLook {
@@ -849,6 +849,32 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
       c.fillStyle = "rgba(220,250,255,0.9)";
       c.fillRect(Math.cos(a) * H * 0.18 - 0.6, -H * 0.7 + Math.sin(a) * H * 0.1 - 0.6, 1.2, 1.2);
     }
+    c.restore();
+  } else if (showWeapon && weapon === "club") {
+    // a knobbly wooden club, swung overhand when fighting
+    const swing = st === "aim" ? Math.sin(t * 8) * 0.9 : 0;
+    c.save();
+    c.translate(H * 0.2, shY + H * 0.12);
+    c.rotate(-0.6 + swing);
+    c.strokeStyle = "#3a2616";
+    c.lineWidth = 2.6;
+    c.beginPath();
+    c.moveTo(0, H * 0.1);
+    c.lineTo(0, -H * 0.42);
+    c.stroke();
+    c.strokeStyle = "#8a5d33";
+    c.lineWidth = 1.6;
+    c.stroke();
+    c.fillStyle = "#3a2616";
+    c.beginPath();
+    c.ellipse(0, -H * 0.5, H * 0.11, H * 0.15, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#8a5d33";
+    c.beginPath();
+    c.ellipse(0, -H * 0.5, H * 0.085, H * 0.125, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#5e3f24";
+    for (const [x, y] of [[-0.03, -0.55], [0.03, -0.47], [-0.02, -0.42]]) c.fillRect(H * x - 0.6, H * y - 0.6, 1.2, 1.2);
     c.restore();
   } else if (showWeapon && weapon === "axe") {
     const swing = st === "aim" ? Math.sin(t * 8) * 0.9 : 0;

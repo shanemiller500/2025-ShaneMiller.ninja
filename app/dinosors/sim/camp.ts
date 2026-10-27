@@ -261,6 +261,22 @@ export class Camp {
     return true;
   }
 
+  /**
+   * Every basic camp invention (the whole 💡 Invent list) the tribe hasn't got yet, all at once:
+   * once the tribe is on a Civilization path nothing from the first research is left behind.
+   */
+  grantBasics(w: World) {
+    const missing = TECH_ORDER.filter((t) => !this.learned.has(t));
+    if (!missing.length) return 0;
+    if (this.crafting && missing.includes(this.crafting.tech)) this.cancelCraft();
+    for (const t of missing) this.learned.add(t);
+    if (missing.includes("fire")) this.lightCampfire(w);
+    this.goal = null;
+    this.pickGoal();
+    w.toast("💡", `The tribe caught up on the basics: ${missing.map((t) => TECH[t].icon + " " + TECH[t].name).join(", ")}.`, this.x, this.y);
+    return missing.length;
+  }
+
   lightCampfire(w: World) {
     let f = w.campfires[0];
     if (!f) {

@@ -257,7 +257,7 @@ export class Civ {
 
   /** Is the tribe settled enough for the chamber to surface? */
   ripe(w: World) {
-    return w.camp.learned.size >= 6 && w.humans.filter((h) => !h.child).length >= 3;
+    return w.humans.filter((h) => !h.child).length >= 3;
   }
 
   /** Someone reached the chamber (or the player tapped "investigate"). */
@@ -292,6 +292,8 @@ export class Civ {
     }
     // the meteor shard inside the chamber
     w.camp.stock.meteorite += 1;
+    // all the basic research from the first (camp) path comes with it, whatever was still missing
+    w.camp.grantBasics(w);
     this.autoPick(w);
     // the chamber's crystals point at deposits nearby
     for (const n of w.colony.nodes) if (CIV_NODES.includes(n.kind) && Math.hypot(n.x - this.chamberX, n.y - this.chamberY) < 1100) n.found = true;
@@ -342,6 +344,8 @@ export class Civ {
     this.discoverT -= dt;
     if (this.discoverT <= 0) {
       this.discoverT = 2;
+      // a tribe already on a path (older saves) catches up on any basics it never got
+      if (this.path !== "none") w.camp.grantBasics(w);
       if (!this.chamberX && this.ripe(w)) this.placeChamber(w);
       else if (this.chamberX && !this.found) {
         const by = w.humans.find((h) => !h.child && !h.stranger && Math.hypot(h.x - this.chamberX, h.y - this.chamberY) < 90);

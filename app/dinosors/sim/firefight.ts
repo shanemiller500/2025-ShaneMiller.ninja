@@ -39,6 +39,8 @@ const EVERY = 0.75;
 
 export const CRITICAL = new Set<BuildingKind>(["healer", "waterStore", "well", "fireStation", "hatchery", "energyTower", "dragonShield"]);
 export const STORES = new Set<BuildingKind>(["storage", "foodStore", "post"]);
+/** With no fire station, a fire this close to camp (px) calls out the bucket brigade. */
+export const BRIGADE_R = PROTECT_R;
 /** Workers who'll grab a bucket in a major emergency (never guards, hunters, keepers…). */
 const HELPERS = new Set<Role>(["gatherer", "builder", "farmer", "cook"]);
 
@@ -123,9 +125,19 @@ export function majorFire(w: World, list = fireThreats(w)) {
   return list.some((f) => f.pri <= 3) || list.length >= 10;
 }
 
+/**
+ * No finished fire station and fire close to camp: the bucket brigade. Every grown-up nearby grabs a
+ * bucket (no invention needed) and throws fast until it's out.
+ */
+export function bucketBrigade(w: World, list = fireThreats(w)) {
+  // Buckets are basic emergency behavior; the station improves the response, it should not disable it.
+  return list.some((f) => f.pri <= 7);
+}
+
 /** How many people this fire needs right now. */
 export function crewWanted(w: World, list = fireThreats(w)) {
   if (!list.length) return 0;
+  if (bucketBrigade(w, list)) return Math.min(16, list.length + 4);
   return Math.min(8, Math.ceil(list.length / 3) + (majorFire(w, list) ? 2 : 0));
 }
 
@@ -227,9 +239,16 @@ export function throwSpot(w: World, f: { x: number; y: number }, from: { x: numb
  */
 export function answersFire(w: World, h: Human): boolean {
   if (h.child || h.stranger || h.captive || h.under) return false;
-  if (!w.camp.learned.has("firefighting") && !w.camp.learned.has("sonicFire")) return false;
   const list = fireThreats(w);
   if (!list.length) return false;
+  if (bucketBrigade(w, list)) {
+    // everyone grabs a bucket: only the guards hold their posts in a raid, and riders stay mounted
+    if (h.riding || h.aloft || h.state === "down" || (w.tribe.raid && w.tribe.roleOf(h) === "guard")) return false;
+    if (claimsOf(w).has(h.id) || isFirefighter(w, h)) return true;
+    if (claimsOf(w).size >= crewWanted(w, list)) return false;
+    return list.some((f) => f.pri <= 7 && near(f.x, f.y, h.x, h.y, 900));
+  }
+  if (!w.camp.learned.has("firefighting") && !w.camp.learned.has("sonicFire")) return false;
   if (isFirefighter(w, h)) return true;
   if (!HELPERS.has(w.tribe.roleOf(h)) || !majorFire(w, list)) return false;
   // already on it

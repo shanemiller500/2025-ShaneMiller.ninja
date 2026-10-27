@@ -88,6 +88,7 @@ import { actWorkDino } from "./workDinos";
 import { updateCarcass } from "./carcass";
 import { hitScorpion, type Side } from "./factions";
 import { dragonForBolt, lightningHits, meteorHits } from "./dragonPeril";
+import { strikeGround } from "./lightningStrike";
 import type { Carcass } from "./types";
 import type { Gear, ShelterPlan } from "./types";
 
@@ -655,6 +656,8 @@ export class World {
     this.particles.burst(P.Spark, x, y, 14, 120, { vz: 100, g: 200, size: 2, max: 0.6, color: "#fffbe0" });
     this.alarm(x, y, 650, 0.8, "⚡", false);
     lightningHits(this, x, y);
+    // right where it lands: people + animals killed, weapons burnt up (lightningStrike.ts)
+    strikeGround(this, x, y);
     for (const d of this.dinos) {
       if (Math.hypot(d.x - x, d.y - y) < 260 && sp(d.species).move === "walk" && d.state !== "carried") {
         const a = Math.atan2(d.y - y, d.x - x);

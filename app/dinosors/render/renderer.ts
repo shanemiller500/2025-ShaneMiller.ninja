@@ -350,7 +350,6 @@ export class Renderer {
     const y1 = v.y1 + pad * 2;
 
     this.terrainR.draw(c, v.x0, v.y0, v.x1, v.y1, z);
-    this.footpaths(c, v.x0, v.y0, v.x1, v.y1);
     this.trailFx(c, v.x0, v.y0, v.x1, v.y1);
     this.groundFx(c, v.x0, v.y0, v.x1, v.y1, z);
     this.snowFx(c, v.x0, v.y0, v.x1, v.y1, z);
@@ -1139,10 +1138,10 @@ export class Renderer {
           const fx = (idx % MAP_W) * TILE + TILE / 2;
           const fy = Math.floor(idx / MAP_W) * TILE + TILE / 2;
           const h = w.fire.heat[idx];
-          const s = 0.6 + h * 0.7;
-          drawFlame(c, fx - 8, fy + 6, s * 0.8, this.t + idx);
-          drawFlame(c, fx + 6, fy + 2, s, this.t + idx * 1.7);
-          if (!lod) drawFlame(c, fx, fy + 12, s * 0.7, this.t + idx * 0.7);
+          // A tile is a small, readable ground fire; clusters communicate intensity.
+          const s = 0.38 + h * 0.28;
+          drawFlame(c, fx, fy + 5, s, this.t + idx);
+          if (!lod && h > 0.7 && idx % 3 === 0) drawFlame(c, fx + 5, fy + 7, s * 0.65, this.t + idx * 1.7);
           break;
         }
         case K_WALL: {
@@ -2299,34 +2298,6 @@ export class Renderer {
       c.textAlign = "center";
       c.textBaseline = "middle";
       c.fillText(`${info.icon} ${info.name}`, s.x, y);
-    }
-  }
-
-  /** Worn footpaths: soft bare-earth patches where people walk a lot (four strengths, one fill each). */
-  private footpaths(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number) {
-    const worn = this.world.trails.worn;
-    const tx0 = Math.max(0, Math.floor(vx0 / TILE));
-    const tx1 = Math.min(MAP_W - 1, Math.floor(vx1 / TILE));
-    const ty0 = Math.max(0, Math.floor(vy0 / TILE));
-    const ty1 = Math.min(MAP_H - 1, Math.floor(vy1 / TILE));
-    const paths = [new Path2D(), new Path2D(), new Path2D(), new Path2D()];
-    let any = false;
-    for (let ty = ty0; ty <= ty1; ty++)
-      for (let tx = tx0; tx <= tx1; tx++) {
-        const v = worn[ty * MAP_W + tx];
-        if (v < 24) continue;
-        any = true;
-        const k = v < 40 ? 0 : v < 80 ? 1 : v < 150 ? 2 : 3;
-        const x = tx * TILE + TILE / 2;
-        const y = ty * TILE + TILE / 2;
-        paths[k].moveTo(x + TILE * 0.62, y);
-        paths[k].ellipse(x, y, TILE * 0.62, TILE * 0.45, 0, 0, Math.PI * 2);
-      }
-    if (!any) return;
-    const alpha = [0.08, 0.14, 0.2, 0.26];
-    for (let k = 0; k < 4; k++) {
-      c.fillStyle = `rgba(150,118,78,${alpha[k]})`;
-      c.fill(paths[k]);
     }
   }
 

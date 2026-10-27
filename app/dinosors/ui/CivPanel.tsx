@@ -101,8 +101,8 @@ function Before({ snap, engine, onChoose }: { snap: Snapshot; engine: Engine; on
         {!civ.chamber && (
           <>
             <p className="font-bold">🎵 Something is sleeping in the rocks…</p>
-            <p className="mt-1 text-white/70">Once the tribe is settled (6 inventions and at least 3 grown-ups), a strange humming chamber will surface somewhere near camp.</p>
-            <p className="mt-2 text-xs text-white/50">Inventions: {snap.camp.learned.length}/6 · grown-ups: {snap.tribe.people.filter((p) => !p.child).length}/3</p>
+            <p className="mt-1 text-white/70">Once the tribe has at least 3 grown-ups, a strange humming chamber will surface somewhere near camp. No inventions needed.</p>
+            <p className="mt-2 text-xs text-white/50">Grown-ups: {snap.tribe.people.filter((p) => !p.child).length}/3</p>
           </>
         )}
         {civ.chamber && !civ.found && (
