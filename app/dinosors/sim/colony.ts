@@ -4,9 +4,14 @@
 /*  farms and raids stay in tribe.ts; huts stay in camp.ts.            */
 /* ------------------------------------------------------------------ */
 import { hallTick } from "./riderHall";
+import { armourHit, scorpionMaxHp, scorpionWorks } from "./scorpionArmor";
 import { feastTick } from "./feast";
 import { CHARIOT_HP, chariotsUpdate } from "./chariots";
-import { ARTIFACTS, BUILDINGS, FORGE_ITEMS, HELMETS, HELMET_BY_ID, KIT_BY_ID, NODES, OUTFITS, OUTFIT_BY_ID, RES_INFO, SCORPION_TIERS, SHIELD_BY_ID, WEAPON_BY_ID, type Cost } from "../data/colony";
+import { CHARIOT_TIERS } from "./chariotTiers";
+import { armorWanted, isRider } from "./gear";
+import { sidearmWanted } from "./territory";
+import { ARMORS, ARTIFACTS, BUILDINGS, FORGE_ITEMS, HELMETS, HELMET_BY_ID, KITS, KIT_BY_ID, NODES, OUTFITS, OUTFIT_BY_ID, RES_INFO, SCORPION_TIERS, SHIELDS, SHIELD_BY_ID, WEAPONS, WEAPON_BY_ID, type Cost } from "../data/colony";
+import { TECH } from "../data/facts";
 import { hitDino } from "./tribe";
 import { sp } from "../data/species";
 import { sizeOf } from "./dinos";
@@ -26,6 +31,9 @@ export interface DropOff {
 }
 
 const FOOD = new Set<Resource>(["cooked", "fish", "crop", "flour", "berries", "meat"]);
+/** Raw iron kept back for iron recipes before any is smelted into steel, and the steel stockpile it stops at. */
+const STEEL_KEEP = 4;
+const STEEL_CAP = 12;
 
 /** Mostly stone: fire barely scorches it. */
 const STONEWORK = new Set<BuildingKind>(["pyramid", "obelisk", "stoneCircle", "shelterDeep", "chamber", "shapingYard", "beamTower", "energyTower", "pylon", "resShield"]);
@@ -60,6 +68,7 @@ export class Colony {
   fresh = new Set<string>();
   private primed = false;
   private recipeT = 0;
+  private autoCraftT = 0;
   private wellT = 0;
   private settledWells = new WeakSet<Building>();
   /** last time spikes bit each dino */
@@ -542,6 +551,74 @@ export class Colony {
     return (Object.entries(cost) as [Resource, number][]).every(([r, n]) => w.camp.stock[r] >= n);
   }
 
+  /** Auto workers keep the camp supplied with useful gear without overtaking player orders or research. */
+  private planAutoCraft(w: World) {
+    if (this.queue.length || this.craftT > 0) return;
+    const people = w.humans.filter((h) => !h.child && !h.stranger && !h.under);
+    if (!people.length || !people.some((h) => h.role === "auto")) return;
+    const goal = w.camp.goal && !w.camp.learned.has(w.camp.goal) ? TECH[w.camp.goal].needs : {};
+    const civGoal = w.civ.current && !w.civ.paid ? w.civ.costOf(w.civ.current) : {};
+    const canMake = (id: string, cost: Cost) => this.canCraft(w, id) && (Object.entries(cost) as [Resource, number][]).every(([r, n]) => w.camp.stock[r] - n >= Math.min(w.camp.stock[r], (goal[r] ?? 0) + (civGoal[r] ?? 0)));
+    const queue = (id: string) => { this.queue.push(id); this.version++; };
+    const owned = (id: string, equipped: (h: Human) => boolean) => (this.armory[id] ?? 0) + people.filter(equipped).length;
+
+    for (const id of ["boneKnives", "waterSkins", "hideCovers", "storageWraps", "cutter", "drill", "harness", "torch", "precision", "copperPick", "shovel", "chisel", "minerPack", "reinforcedPick", "diamondDrill", "steelSaddles"]) {
+      const kit = KITS.find((item) => item.id === id);
+      if (kit && !this.kits.has(id) && canMake(id, kit.cost) && (!["copperPick", "shovel", "chisel", "minerPack", "reinforcedPick", "diamondDrill"].includes(id) || w.mine.crew.length > 0) && (id !== "steelSaddles" || people.some(isRider))) return queue(id);
+    }
+
+    const fighters = people.filter((h) => ["guard", "hunter", "dragonSlayer", "eggRunner"].includes(w.tribe.roleOf(h)));
+    const fighterTarget = Math.min(people.length, Math.max(fighters.length, Math.ceil(people.length * 0.35)));
+    // a sidearm for everyone (a mix of shock sticks + ray guns), before the fighters' main weapons
+    const armed = sidearmWanted(w, people);
+    if (armed && canMake(armed, WEAPON_BY_ID[armed].cost)) return queue(armed);
+    const weapons = WEAPONS.filter((item) => !item.sidearm && (item.id !== "nightSidearm" || w.shifts.mode === "split")).filter((item) => canMake(item.id, item.cost)).sort((a, b) => b.dmg - a.dmg);
+    for (const item of weapons) {
+      const enough = WEAPONS.filter((candidate) => candidate.dmg >= item.dmg).reduce((n, candidate) => n + owned(candidate.id, (h) => h.gear.weapon === candidate.id), 0);
+      if (enough < fighterTarget) return queue(item.id);
+    }
+
+    for (const id of ["dragonMail", "runnerKit"]) {
+      const item = OUTFITS.find((outfit) => outfit.id === id);
+      const role = id === "dragonMail" ? "dragonSlayer" : "eggRunner";
+      const target = people.filter((h) => w.tribe.roleOf(h) === role).length;
+      if (item && target > owned(id, (h) => h.gear.outfit === id) && canMake(id, item.cost)) return queue(id);
+    }
+
+    // body armour: rider armour for the riders, the heaviest plate for the fighters, hide for everyone (gear.ts)
+    const want = armorWanted(w, people, fighterTarget);
+    const rider = ARMORS.find((a) => a.mounted);
+    if (rider && want.rider > owned(rider.id, (h) => h.gear.armor === rider.id) && canMake(rider.id, rider.cost)) return queue(rider.id);
+    for (const item of ARMORS.filter((a) => !a.mounted).sort((a, b) => b.armor - a.armor)) {
+      if (!canMake(item.id, item.cost)) continue;
+      const enough = ARMORS.filter((candidate) => candidate.armor >= item.armor).reduce((n, candidate) => n + owned(candidate.id, (h) => h.gear.armor === candidate.id), 0);
+      if (enough < (item.look === "hide" ? want.any : want.heavy)) return queue(item.id);
+    }
+
+    const outfitScore = (id: string) => {
+      const item = OUTFIT_BY_ID[id];
+      if (!item) return 0;
+      return item.rain * (0.4 + w.weather.rain * 1.5 + w.weather.storm) + item.warmth * (0.4 + Math.max(0, 0.45 - w.weather.temp) * 2 + w.weather.snow * 1.5) + item.armor * 2;
+    };
+    const outfits = OUTFITS.filter((item) => !["dragonMail", "runnerKit"].includes(item.id) && canMake(item.id, item.cost)).sort((a, b) => outfitScore(b.id) - outfitScore(a.id));
+    for (const item of outfits) {
+      const score = outfitScore(item.id);
+      const enough = OUTFITS.filter((candidate) => outfitScore(candidate.id) >= score - 0.01).reduce((n, candidate) => n + owned(candidate.id, (h) => h.gear.outfit === candidate.id), 0);
+      if (enough < people.length) return queue(item.id);
+    }
+
+    for (const item of [...SHIELDS].reverse()) {
+      if (!canMake(item.id, item.cost)) continue;
+      const enough = SHIELDS.filter((candidate) => candidate.tier >= item.tier).reduce((n, candidate) => n + owned(candidate.id, (h) => h.gear.shield === candidate.tier), 0);
+      if (enough < fighterTarget) return queue(item.id);
+    }
+    for (const item of [...HELMETS].reverse()) {
+      if (!canMake(item.id, item.cost)) continue;
+      const enough = HELMETS.filter((candidate) => candidate.armor >= item.armor).reduce((n, candidate) => n + owned(candidate.id, (h) => h.gear.helmet === candidate.id), 0);
+      if (enough < people.length) return queue(item.id);
+    }
+  }
+
   /** Smith hammering. Returns true when an item is finished. */
   forgeTick(w: World, h: Human, dt: number) {
     const id = this.current(w);
@@ -641,7 +718,7 @@ export class Colony {
   private refineT = 0;
   private foodProcessT = 0;
 
-  /** Refineries smelt raw metal into bars: 2 ore + a log → 1 bar, every few seconds. */
+  /** Refineries smelt raw metal into bars: 2 ore + a log → 1 bar, every few seconds (2 iron + coal → 1 steel). */
   private refine(w: World, dt: number) {
     const refs = this.buildings.filter((b) => b.kind === "refinery" && b.built >= 1);
     if (!refs.length) return;
@@ -650,9 +727,10 @@ export class Colony {
     this.refineT = 7;
     const s = w.camp.stock;
     if (s.coal < 1 && s.wood < 1) return;
-    const pairs: [Resource, Resource][] = [["gold", "goldBar"], ["silver", "silverBar"], ["copper", "copperBar"]];
-    // keep a little raw copper for other recipes; smelt whatever there's most of
-    const pick = pairs.filter(([raw]) => s[raw] >= (raw === "copper" ? 6 : 2)).sort((a, b) => s[b[0]] - s[a[0]])[0];
+    const pairs: [Resource, Resource][] = [["gold", "goldBar"], ["silver", "silverBar"], ["copper", "copperBar"], ["iron", "steel"]];
+    // keep a little raw copper + iron for other recipes; steel needs coal (a log fire isn't hot enough) and
+    // stops at a stockpile; smelt whatever there's most of
+    const pick = pairs.filter(([raw, bar]) => bar === "steel" ? s.coal >= 1 && s.iron >= STEEL_KEEP + 2 && s.steel < STEEL_CAP : s[raw] >= (raw === "copper" ? 6 : 2)).sort((a, b) => s[b[0]] - s[a[0]])[0];
     if (!pick) return;
     const [raw, bar] = pick;
     s[raw] -= 2;
@@ -752,7 +830,7 @@ export class Colony {
     let best = cur;
     for (const [id, n] of Object.entries(this.armory)) {
       const wp = WEAPON_BY_ID[id];
-      if (!wp || n <= 0) continue;
+      if (!wp || n <= 0 || wp.sidearm) continue;
       if (id === "nightSidearm" && (w.shifts.mode !== "split" || h.shift !== "night")) continue;
       const score = wp.dmg * (prefer && wp.kind === prefer ? 1.6 : 1);
       const bestScore = best ? best.dmg * (prefer && best.kind === prefer ? 1.6 : 1) : -1;
@@ -782,7 +860,7 @@ export class Colony {
     let bd = -1;
     for (const [id, n] of Object.entries(this.armory)) {
       const wp = WEAPON_BY_ID[id];
-      if (wp && n > 0 && wp.kind === kind && wp.dmg > bd) {
+      if (wp && n > 0 && !wp.sidearm && wp.kind === kind && wp.dmg > bd) {
         bd = wp.dmg;
         best = id;
       }
@@ -827,6 +905,11 @@ export class Colony {
     if (this.recipeT <= 0) {
       this.recipeT = 2;
       this.checkRecipes(w);
+    }
+    this.autoCraftT -= dt;
+    if (this.autoCraftT <= 0) {
+      this.autoCraftT = 8;
+      this.planAutoCraft(w);
     }
     this.updateBoneDefenses(w, dt);
     this.refine(w, dt);
@@ -876,20 +959,33 @@ export class Colony {
   }
 
   private updateScorpions(w: World, dt: number) {
-    // a Scorpion whose wall / tower was torn down falls with it
+    // a Scorpion whose wall / tower was torn down drops to the ground with it (it isn't lost:
+    // builders repair it there); only one with no ground under it is gone (scorpionArmor.ts)
     for (const s of [...this.scorpions]) {
       const gone = (s.mount === "wall" && !w.tribe.wallAt(s.tx, s.ty)) || (s.mount === "tower" && !w.tribe.towers.some((t) => s.tx >= t.tx && s.tx <= t.tx + 1 && s.ty >= t.ty && s.ty <= t.ty + 1));
-      if (gone || s.hp <= 0) {
-        this.scorpions.splice(this.scorpions.indexOf(s), 1);
-        this.version++;
-        w.particles.burst(P.Dust, s.x, s.y, 8, 50, { size: 8, max: 0.9, color: "rgba(160,130,90,0.6)" });
-      }
+      if (!gone) continue;
+      const t = w.terrain.tiles[s.ty * MAP_W + s.tx] as T;
+      if (isWalkTile(t) && !isWaterTile(t)) {
+        s.mount = "ground";
+        s.x = s.tx * TILE + TILE / 2;
+        s.y = s.ty * TILE + TILE / 2;
+        if (s.built >= 1) s.hp = Math.max(1, s.hp - scorpionMaxHp(s) * 0.25);
+        if (s.crew) s.crew = 0;
+      } else this.scorpions.splice(this.scorpions.indexOf(s), 1);
+      this.version++;
+      w.particles.burst(P.Dust, s.x, s.y, 8, 50, { size: 8, max: 0.9, color: "rgba(160,130,90,0.6)" });
     }
     const powered = this.dronesPowered(w);
     for (const s of this.scorpions) {
       s.kick = Math.max(0, s.kick - dt * 3);
+      if (s.glint) s.glint = Math.max(0, s.glint - dt * 2.5);
       s.drone = powered && s.built >= 1;
       if (s.built < 1) continue;
+      // standing in a fire or by lava: scorched (it can't burn to nothing; obsidian plates barely notice)
+      const heat = Math.max(w.fire.at(s.tx, s.ty), w.lava.heatAt(s.tx, s.ty));
+      if (heat > 0.2) armourHit(w, s, heat * 18 * dt, "fire");
+      // knocked out, or its wall / tower is down: it can't shoot till it's fixed
+      if (!scorpionWorks(w, s)) continue;
       if (s.drone) {
         // an energy tower runs it: nobody needs to crew it
         if (s.crew) {
@@ -989,16 +1085,17 @@ export class Colony {
     const r = (n: number) => Math.round(n * 100) / 100;
     return {
       buildings: this.buildings.map((b) => ({ id: b.id, kind: b.kind, tx: b.tx, ty: b.ty, built: r(b.built), have: b.have, hp: Math.round(b.hp), ...(b.stage ? { stage: b.stage } : {}), ...(b.grow ? { grow: Math.round(b.grow * 100) / 100 } : {}), ...(b.merged ? { merged: b.merged } : {}), ...(b.label ? { label: b.label, breed: b.breed, size: b.size, ours: b.ours } : {}), ...(b.shield ? { shield: { ...b.shield } } : {}) })),
-      scorpions: this.scorpions.map((s) => ({ id: s.id, tx: s.tx, ty: s.ty, x: r(s.x), y: r(s.y), tier: s.tier, built: r(s.built), have: s.have, up: s.up, hp: Math.round(s.hp), mount: s.mount })),
+      scorpions: this.scorpions.map((s) => ({ id: s.id, tx: s.tx, ty: s.ty, x: r(s.x), y: r(s.y), tier: s.tier, built: r(s.built), have: s.have, up: s.up, hp: Math.round(s.hp), mount: s.mount, ...(s.obsidian ? { obsidian: true } : {}), ...(s.obsidianUp ? { obsidianUp: true } : {}) })),
       nodes: this.nodes.map((n) => [n.kind, Math.round(n.x), Math.round(n.y), n.amount, n.max, n.found ? 1 : 0] as const),
       armory: this.armory,
       queue: this.queue,
+      craftT: r(this.craftT),
       kits: Array.from(this.kits),
       known: Array.from(this.known),
       civNodes: 1,
       limestoneNodes: 1,
       feast: this.feast.food,
-      chariots: this.chariots.map((c) => ({ x: r(c.x), y: r(c.y), homeX: r(c.homeX), homeY: r(c.homeY), hp: Math.round(c.hp), trike: c.trike, dir: c.dir })),
+      chariots: this.chariots.map((c) => ({ x: r(c.x), y: r(c.y), homeX: r(c.homeX), homeY: r(c.homeY), hp: Math.round(c.hp), trike: c.trike, dir: c.dir, tier: c.tier ?? 0, up: c.up ? 1 : 0, have: c.have ?? {} })),
     };
   }
 
@@ -1017,8 +1114,9 @@ export class Colony {
     }
     this.feast.food = (d as { feast?: number }).feast ?? 0;
     // chariots park at home after a load (a hunt in progress is called off)
-    for (const c of (d as { chariots?: { x: number; y: number; homeX: number; homeY: number; hp: number; trike: number; dir: 1 | -1 }[] }).chariots ?? []) {
-      this.chariots.push({ id: w.nextId(), x: c.homeX, y: c.homeY, dir: c.dir ?? 1, hp: c.hp, maxHp: CHARIOT_HP, trike: c.trike, homeX: c.homeX, homeY: c.homeY, to: null, path: null, pathI: 0, pathKey: 0, cd: [0, 1.3], aim: [0, Math.PI], anim: 0, hit: 0 });
+    for (const c of (d as { chariots?: { x: number; y: number; homeX: number; homeY: number; hp: number; trike: number; dir: 1 | -1; tier?: number; up?: number; have?: Partial<Record<Resource, number>> }[] }).chariots ?? []) {
+      const tier = c.tier ?? 0;
+      this.chariots.push({ id: w.nextId(), x: c.homeX, y: c.homeY, dir: c.dir ?? 1, hp: c.hp, maxHp: CHARIOT_TIERS[tier]?.hp ?? CHARIOT_HP, trike: c.trike, homeX: c.homeX, homeY: c.homeY, to: null, path: null, pathI: 0, pathKey: 0, cd: [0, 1.3], aim: [0, Math.PI], anim: 0, hit: 0, tier, up: !!c.up, have: c.have ?? {} });
     }
     for (const s of d.scorpions ?? []) {
       const id = (s as { id?: number }).id ?? w.nextId();
@@ -1031,6 +1129,7 @@ export class Colony {
     }
     this.armory = { ...(d.armory ?? {}) };
     this.queue = [...(d.queue ?? [])];
+    this.craftT = this.queue.length ? Math.max(0, (d as { craftT?: number }).craftT ?? 0) : 0;
     this.kits = new Set(d.kits ?? []);
     this.known = new Set(d.known ?? []);
     this.primed = this.known.size > 0;

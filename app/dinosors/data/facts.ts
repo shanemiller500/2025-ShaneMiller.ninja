@@ -214,6 +214,7 @@ export const ROLES: { id: import("../sim/types").Role; icon: string; name: strin
   { id: "trainer", icon: "🐾", name: "Animal trainer", tip: "Befriends, feeds, trains + harnesses dinosaurs, and pairs trained ones with riders" },
   { id: "dragonSlayer", icon: "⚔️", name: "Dragon slayer", tip: "Drills to fight dragons (hits them harder, shrugs off fire) and leads dragon raids. Needs 🐉 Dragon hunting" },
   { id: "dragonKeeper", icon: "🐉", name: "Dragon keeper", tip: "Keeps one dragon egg warm in the incubator, then raises what hatches: feeds it, trains it, plays with it, puts on shows in the dragon pit, and one day flies it" },
+  { id: "firefighter", icon: "🧑‍🚒", name: "Firefighter", tip: "Watches for fires in + around the camp and runs water to the worst first: people, homes, key buildings, defences, stores. Works as a gatherer when nothing's burning. Needs 🪣 Fire fighting" },
   { id: "eggRunner", icon: "🥚", name: "Egg runner", tip: "Fast on their feet: in a dragon raid they grab the eggs (two each with a runner's kit) and run them home. Needs 🐉 Dragon hunting" },
 ];
 

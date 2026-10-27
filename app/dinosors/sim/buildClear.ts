@@ -1,5 +1,6 @@
 import { BUILDINGS } from "../data/colony";
 import { MAP_H, MAP_W, TILE } from "./types";
+import { wineryEstates } from "./wineEstate";
 import type { World } from "./world";
 
 type Footprint = { x0: number; y0: number; x1: number; y1: number };
@@ -49,6 +50,8 @@ function footprints(w: World): Footprint[] {
   }
   // The central work area should stay open in existing camps too.
   areas.push({ x0: w.camp.x - 170, y0: w.camp.y - 105, x1: w.camp.x + 170, y1: w.camp.y + 105 });
+  // a wine estate's vine rows (only the open land tiles they're planted on)
+  for (const e of wineryEstates(w)) for (const i of e.vines) tileRect(i % MAP_W, Math.floor(i / MAP_W));
   for (const fire of w.campfires) areas.push({ x0: fire.x - 18, y0: fire.y - 14, x1: fire.x + 18, y1: fire.y + 14 });
   return areas;
 }

@@ -305,13 +305,27 @@ export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind
 
 /* ------------------------------- people ------------------------------- */
 
-export type WeaponLook = "spear" | "bow" | "crossbow" | "sword" | "axe" | "lance" | null;
+export type WeaponLook = "spear" | "bow" | "crossbow" | "sword" | "axe" | "lance" | "shock" | "ray" | null;
 
 /** A metal helmet drawn over the hair. */
 export interface HelmetLook {
   color: string;
   trim: string;
   glow?: boolean;
+}
+
+/** Body armour look (from data/colony ARMORS): a breastplate, shoulder plates, arm guards + greaves. */
+export interface ArmorLook {
+  look: "hide" | "scale" | "mail" | "plate";
+  color: string;
+  trim: string;
+  gilded?: boolean;
+}
+
+/** Extra gear drawn on a person: body armour and the colour of their weapon's metal. */
+export interface GearLook {
+  armor?: ArmorLook | null;
+  metal?: string | null;
 }
 
 /** Hide clothing look (from data/colony OUTFITS). */
@@ -324,6 +338,104 @@ export interface OutfitLook {
   winter?: number;
 }
 
+/** A guard strapped along a limb from (ax, ay) to (bx, by): arm guards + greaves. */
+function armorStrip(c: CanvasRenderingContext2D, ax: number, ay: number, bx: number, by: number, w: number, a: ArmorLook) {
+  c.save();
+  c.lineCap = "butt";
+  c.beginPath();
+  c.moveTo(ax, ay);
+  c.lineTo(bx, by);
+  c.strokeStyle = INK;
+  c.lineWidth = w + 0.8;
+  c.stroke();
+  c.strokeStyle = a.color;
+  c.lineWidth = w;
+  c.stroke();
+  // straps / a knee cop at the top
+  c.fillStyle = a.gilded ? "#f1c24a" : a.trim;
+  c.beginPath();
+  c.arc(ax, ay, w * 0.55, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
+/** The breastplate over the tunic (torso coords: y -0.4H shoulders … 0 the hips). */
+function drawBreastplate(c: CanvasRenderingContext2D, H: number, a: ArmorLook) {
+  c.save();
+  c.beginPath();
+  c.moveTo(-H * 0.17, -H * 0.39);
+  c.quadraticCurveTo(0, -H * 0.43, H * 0.17, -H * 0.39);
+  c.lineTo(H * 0.16, -H * 0.06);
+  c.quadraticCurveTo(0, -H * 0.02, -H * 0.16, -H * 0.06);
+  c.closePath();
+  if (a.look === "plate") {
+    const g = c.createLinearGradient(-H * 0.17, 0, H * 0.17, 0);
+    g.addColorStop(0, shade(a.color, -0.25));
+    g.addColorStop(0.45, shade(a.color, 0.18));
+    g.addColorStop(1, shade(a.color, -0.3));
+    c.fillStyle = g;
+  } else c.fillStyle = a.color;
+  c.fill();
+  c.strokeStyle = INK;
+  c.lineWidth = 0.9;
+  c.stroke();
+  c.clip();
+  if (a.look === "scale") {
+    // rows of overlapping scales
+    c.strokeStyle = a.trim;
+    c.lineWidth = 0.7;
+    for (let r = 0; r < 5; r++) for (let k = -2; k <= 2; k++) {
+      const x = k * H * 0.075 + (r % 2 ? H * 0.037 : 0);
+      const y = -H * 0.36 + r * H * 0.065;
+      c.beginPath();
+      c.arc(x, y, H * 0.04, 0.15 * Math.PI, 0.85 * Math.PI);
+      c.stroke();
+    }
+  } else if (a.look === "mail") {
+    // little iron rings
+    c.fillStyle = a.trim;
+    for (let r = 0; r < 7; r++) for (let k = -4; k <= 4; k++) {
+      c.beginPath();
+      c.arc(k * H * 0.04 + (r % 2 ? H * 0.02 : 0), -H * 0.37 + r * H * 0.048, H * 0.012, 0, Math.PI * 2);
+      c.fill();
+    }
+  } else if (a.look === "plate") {
+    // the centre ridge, a shine and a lower lame
+    c.strokeStyle = shade(a.color, -0.4);
+    c.lineWidth = 0.8;
+    c.beginPath();
+    c.moveTo(0, -H * 0.41);
+    c.lineTo(0, -H * 0.12);
+    c.moveTo(-H * 0.16, -H * 0.13);
+    c.quadraticCurveTo(0, -H * 0.09, H * 0.16, -H * 0.13);
+    c.stroke();
+    c.fillStyle = "rgba(255,255,255,0.4)";
+    c.beginPath();
+    c.ellipse(-H * 0.07, -H * 0.3, H * 0.035, H * 0.08, 0.2, 0, Math.PI * 2);
+    c.fill();
+  } else {
+    // hardened hide: bone studs
+    c.fillStyle = "#efe6cf";
+    for (const [x, y] of [[-0.09, -0.32], [0.09, -0.32], [-0.1, -0.2], [0.1, -0.2], [0, -0.26], [0, -0.12]]) {
+      c.beginPath();
+      c.arc(H * x, H * y, H * 0.018, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
+  c.restore();
+  // a belt, gold-edged for the elite set
+  c.fillStyle = a.gilded ? "#f1c24a" : a.trim;
+  c.fillRect(-H * 0.17, -H * 0.08, H * 0.34, H * 0.035);
+  if (a.gilded) {
+    c.strokeStyle = "#f1c24a";
+    c.lineWidth = H * 0.025;
+    c.beginPath();
+    c.moveTo(-H * 0.17, -H * 0.39);
+    c.quadraticCurveTo(0, -H * 0.43, H * 0.17, -H * 0.39);
+    c.stroke();
+  }
+}
+
 /**
  * How well-dressed the tribe is, from what it has learned:
  * 0 a leopard loincloth, 1 rope belts, pouches + wristbands (palisades),
@@ -331,8 +443,9 @@ export interface OutfitLook {
  */
 export type GarbLevel = 0 | 1 | 2 | 3;
 
-export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean, shield = 0, tier = 1, outfit: OutfitLook | null = null, wet = 0, helmet: HelmetLook | null = null, garb: GarbLevel = 0, powered = false) {
+export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weapon: WeaponLook, armed: boolean, shield = 0, tier = 1, outfit: OutfitLook | null = null, wet = 0, helmet: HelmetLook | null = null, garb: GarbLevel = 0, powered = false, gearLook: GearLook = {}) {
   const H = h.child ? 20 : 29;
+  const armor = h.child ? null : gearLook.armor ?? null;
   const st = h.state;
   c.save();
   if (st === "tossed") {
@@ -417,6 +530,20 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     }
   }
 
+  // greaves down the shins (body armour)
+  if (armor) {
+    const shins: [number, number, number, number][] = ride
+      ? [[H * 0.17, hipY + H * 0.07, feet[0][0], feet[0][1]]]
+      : sit
+        ? [[H * 0.2, hipY + H * 0.05, feet[0][0], 0], [H * 0.26, hipY + H * 0.02, feet[1][0], 0]]
+        : [[-H * 0.04, hipY, feet[0][0], 0], [H * 0.04, hipY, feet[1][0], 0]];
+    for (const [ax, ay, bx, by] of shins) {
+      const k0 = ride || sit ? 0.1 : 0.5;
+      const k1 = ride || sit ? 0.85 : 0.86;
+      armorStrip(c, ax + (bx - ax) * k0, ay + (by - ay) * k0, ax + (bx - ax) * k1, ay + (by - ay) * k1, H * 0.15, armor);
+    }
+  }
+
   c.save();
   c.translate(0, hipY);
   c.rotate(bend + (st === "celebrate" ? Math.sin(t * 10) * 0.1 : 0));
@@ -448,6 +575,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.fill();
   if (garb > 0) drawGarb(c, H, garb, h.child);
   if (outfit) drawOutfit(c, H, outfit, t, wet, st === "walk" || st === "carry" || st === "flee");
+  if (armor) drawBreastplate(c, H, armor);
   if (outfit?.id.startsWith("night")) {
     // Night suits remain recognizable with the grid down: plated shoulders,
     // belt pockets and a copper chest socket. The socket glows only on power.
@@ -514,6 +642,23 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   c.strokeStyle = h.skin;
   c.lineWidth = H * 0.09;
   c.stroke();
+  if (armor) {
+    // arm guards: the same arm strokes, but only down the forearm (the dash restarts at each shoulder)
+    c.save();
+    c.lineCap = "butt";
+    c.setLineDash([H * 0.22, H * 0.4]);
+    c.lineDashOffset = H * 0.48;
+    c.strokeStyle = INK;
+    c.lineWidth = H * 0.13 + 0.8;
+    c.stroke();
+    c.strokeStyle = armor.color;
+    c.lineWidth = H * 0.13;
+    c.stroke();
+    c.strokeStyle = armor.gilded ? "#f1c24a" : armor.trim;
+    c.lineWidth = H * 0.03;
+    c.stroke();
+    c.restore();
+  }
   // shoulder pieces over the arms: fur tufts → leather + studs → gold-trimmed cloth
   if (garb > 0 && !h.child) {
     for (const sx of [-H * 0.12, H * 0.12]) {
@@ -534,10 +679,61 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     }
   }
 
+  // shoulder plates (mail + plate armour)
+  if (armor && (armor.look === "plate" || armor.look === "mail" || armor.look === "scale")) {
+    for (const sx of [-H * 0.13, H * 0.13]) {
+      c.fillStyle = armor.color;
+      c.strokeStyle = INK;
+      c.lineWidth = 0.8;
+      c.beginPath();
+      c.ellipse(sx, shY + H * 0.02, H * 0.1, H * 0.075, 0, Math.PI, Math.PI * 2.0001);
+      c.lineTo(sx + H * 0.1, shY + H * 0.06);
+      c.lineTo(sx - H * 0.1, shY + H * 0.06);
+      c.closePath();
+      c.fill();
+      c.stroke();
+      c.fillStyle = armor.gilded ? "#f1c24a" : armor.trim;
+      c.fillRect(sx - H * 0.1, shY + H * 0.04, H * 0.2, H * 0.022);
+      if (armor.look === "plate") {
+        c.fillStyle = "rgba(255,255,255,0.45)";
+        c.beginPath();
+        c.ellipse(sx - H * 0.03, shY - H * 0.015, H * 0.035, H * 0.018, -0.3, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+  }
   // weapons, roasting stick, hoe or fishing pole
   const showWeapon = weapon && !h.child && !h.carry && (st === "aim" || (armed && (st === "idle" || st === "walk" || st === "flee" || st === "talk" || st === "guard" || st === "hunt")));
   // shield on the off-arm
-  if (shield > 0 && !h.child && st !== "sleep" && st !== "down" && st !== "rest") {
+  if (shield >= 4 && !h.child && st !== "sleep" && st !== "down" && st !== "rest") {
+    // the steel tower shield: tall, riveted, a gold rim + boss
+    const g = c.createLinearGradient(-H * 0.36, 0, -H * 0.04, 0);
+    g.addColorStop(0, "#9aa2ac");
+    g.addColorStop(0.5, "#e6ebf1");
+    g.addColorStop(1, "#a7afb8");
+    c.fillStyle = g;
+    c.strokeStyle = "#2c3036";
+    c.lineWidth = 1.1;
+    c.beginPath();
+    c.roundRect(-H * 0.36, -H * 0.5, H * 0.32, H * 0.56, [H * 0.04, H * 0.04, H * 0.14, H * 0.14]);
+    c.fill();
+    c.stroke();
+    c.strokeStyle = "#e0b43a";
+    c.lineWidth = H * 0.035;
+    c.beginPath();
+    c.roundRect(-H * 0.34, -H * 0.48, H * 0.28, H * 0.52, [H * 0.03, H * 0.03, H * 0.12, H * 0.12]);
+    c.stroke();
+    c.fillStyle = "#e0b43a";
+    c.beginPath();
+    c.arc(-H * 0.2, -H * 0.22, H * 0.055, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "#4b525b";
+    for (const [rx, ry] of [[-0.3, -0.42], [-0.1, -0.42], [-0.3, -0.02], [-0.1, -0.02]]) {
+      c.beginPath();
+      c.arc(H * rx, H * ry, H * 0.016, 0, Math.PI * 2);
+      c.fill();
+    }
+  } else if (shield > 0 && !h.child && st !== "sleep" && st !== "down" && st !== "rest") {
     c.fillStyle = shield >= 3 ? "#8a9099" : shield === 2 ? "#7a5230" : "#a07a4a";
     c.beginPath();
     c.ellipse(-H * 0.2, -H * 0.2, H * 0.14, H * 0.2, 0, 0, Math.PI * 2);
@@ -550,8 +746,54 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.arc(-H * 0.2, -H * 0.2, H * 0.04, 0, Math.PI * 2);
     c.fill();
   }
-  const metal = tier >= 2 ? "#b8c0c8" : "#8f8a82";
-  if (showWeapon && weapon === "sword") {
+  const metal = gearLook.metal ?? (tier >= 2 ? "#b8c0c8" : "#8f8a82");
+  if (showWeapon && weapon === "shock") {
+    // a shock stick: a copper-banded rod with a crackling crystal tip
+    const swing = st === "aim" ? Math.sin(t * 9) * 0.9 : 0;
+    c.save();
+    c.translate(H * 0.2, shY + H * 0.1);
+    c.rotate(-0.9 + swing);
+    c.fillStyle = "#2b3138";
+    c.fillRect(-1.6, -H * 0.55, 3.2, H * 0.55);
+    c.fillStyle = "#d58a52";
+    for (const k of [0.15, 0.3, 0.45]) c.fillRect(-2, -H * k, 4, 1.4);
+    c.fillStyle = "#bff6ff";
+    c.beginPath();
+    c.arc(0, -H * 0.6, H * 0.06, 0, Math.PI * 2);
+    c.fill();
+    const fl = (Math.sin(t * 23) + 1) / 2;
+    c.strokeStyle = `rgba(150,240,255,${0.5 + fl * 0.5})`;
+    c.lineWidth = 0.9;
+    c.beginPath();
+    for (let k = 0; k < 3; k++) {
+      const a = t * 11 + k * 2.1;
+      c.moveTo(0, -H * 0.6);
+      c.lineTo(Math.cos(a) * H * 0.1, -H * 0.6 + Math.sin(a) * H * 0.1);
+      c.lineTo(Math.cos(a + 0.6) * H * 0.16, -H * 0.6 + Math.sin(a + 0.6) * H * 0.14);
+    }
+    c.stroke();
+    c.restore();
+  } else if (showWeapon && weapon === "ray") {
+    // a ray gun: a stubby grip, finned barrel and a glowing emitter (levelled when firing)
+    const aiming = st === "aim";
+    c.save();
+    c.translate(H * (aiming ? 0.38 : 0.22), shY + H * (aiming ? 0.04 : 0.3));
+    c.rotate(aiming ? 0 : 0.9);
+    c.fillStyle = "#3b434c";
+    c.fillRect(-H * 0.03, 0, H * 0.07, H * 0.14);
+    c.fillStyle = "#c9d2db";
+    c.beginPath();
+    c.roundRect(-H * 0.05, -H * 0.06, H * 0.26, H * 0.08, H * 0.03);
+    c.fill();
+    c.fillStyle = "#d58a52";
+    for (const k of [0.03, 0.08]) c.fillRect(H * k, -H * 0.09, H * 0.025, H * 0.14);
+    const pulse = (Math.sin(t * 7) + 1) / 2;
+    c.fillStyle = `rgba(120,240,255,${0.6 + pulse * 0.4})`;
+    c.beginPath();
+    c.arc(H * 0.22, -H * 0.02, H * 0.035 + (aiming ? pulse * H * 0.02 : 0), 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  } else if (showWeapon && weapon === "sword") {
     const swing = st === "aim" ? Math.sin(t * 9) * 0.9 : 0;
     c.save();
     c.translate(H * 0.2, shY + H * 0.1);
@@ -672,7 +914,7 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
       c.lineTo(H * 0.3, -H * 0.95);
     }
     c.stroke();
-    c.fillStyle = "#8f8a82";
+    c.fillStyle = metal;
     c.beginPath();
     if (st === "aim") {
       c.moveTo(H * 0.85, shY - H * 0.17);
@@ -2068,3 +2310,4 @@ export function drawWinery(c: CanvasRenderingContext2D, W: number, built: number
   }
   void t;
 }
+

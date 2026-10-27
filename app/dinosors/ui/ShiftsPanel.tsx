@@ -15,7 +15,7 @@ export default function ShiftsPanel({ snap, engine, onClose, onResearch }: { sna
   useClickAway(true, ref, onClose);
   const s = snap.shifts;
   const learned = new Set(snap.civ.done);
-  return <motion.aside ref={ref} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="dl-glass dl-scroll pointer-events-auto absolute bottom-[84px] left-1/2 z-30 max-h-[min(62vh,560px)] w-[min(390px,calc(100vw-16px))] -translate-x-1/2 overflow-y-auto rounded-3xl p-4 shadow-2xl sm:bottom-[96px]">
+  return <motion.aside ref={ref} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 14 }} className="dl-glass dl-scroll pointer-events-auto absolute bottom-[84px] left-1/2 z-30 max-h-[min(62vh,560px)] w-[min(390px,calc(100vw-16px))] -translate-x-1/2 overflow-y-auto rounded-3xl p-4 shadow-2xl sm:bottom-[96px]">
     <div className="flex items-start justify-between gap-2">
       <div><h2 className="text-lg font-bold">🌗 Shifts</h2><p className="text-xs text-white/65">Keep the settlement working around the clock.</p></div>
       <button type="button" onClick={onClose} aria-label="Close shifts" className="rounded-full p-1.5 hover:bg-white/10"><X className="h-5 w-5" /></button>

@@ -31,7 +31,7 @@ export const ATLAS_PLACES: { id: string; name: string; icon: string; x: number; 
   { id: "desert", name: "The central desert", icon: "🏜️", x: LM.desert.x, y: LM.desert.y },
   { id: "oasis", name: "An oasis", icon: "🌴", x: LM.oasis.x, y: LM.oasis.y },
   { id: "peaks", name: "The Great Peaks", icon: "🏔️", x: LM.peaks.x, y: LM.peaks.y },
-  { id: "monastery", name: "The monks' valley", icon: "🛕", x: LM.monastery.x, y: LM.monastery.y },
+  { id: "monastery", name: "The peak chapel", icon: "🛕", x: LM.monastery.x, y: LM.monastery.y },
   { id: "eastLake", name: "The east lake", icon: "💧", x: LM.eastLake.x, y: LM.eastLake.y },
 ];
 
@@ -171,7 +171,7 @@ export class Atlas {
     else if (sea) what = `the ${sea.name} sea village: ${w.seaFolk.members(sea.id).length} Sea People`;
     else if (clan) what = `the ${clan.name} clan: ${w.rivals.members(clan.id).length} Neanderthals`;
     else if (nest) what = `a dragon nest with ${w.dragons.eggs.filter((e) => e.at === "nest" && e.nest === nest.id).length} eggs`;
-    else if (w.monks.found && near(w.monks.home)) what = `the Mountain Monks' valley (${w.monks.list.length} monks, all well)`;
+    else if (w.monks.found && near(w.monks.home)) what = `the Mountain Monks' peak chapel (${w.monks.list.length} monks, all well)`;
     if (what) w.toast("👁️", `${dr.name}'s rider flew over ${what}.`, x, y);
   }
 

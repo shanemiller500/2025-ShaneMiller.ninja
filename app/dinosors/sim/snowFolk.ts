@@ -40,6 +40,7 @@ import type { World } from "./world";
 import { moveBrute, say, setB } from "./rivals";
 import { fairGame, takeFood } from "./treeFolk";
 import { foundingGroups, type FolkGroup, type GroupKind } from "./folkGroups";
+import { survived } from "./growth";
 
 /** Our hits are divided by this (Neanderthals take 150, Sand People 105). */
 export const SNOW_TOUGH = 120;
@@ -75,12 +76,16 @@ export const SNOW_ROLE_NAMES: Record<Role, string> = { hunter: "Snow Hunter", ar
 export interface SnowLodge {
   x: number;
   y: number;
-  kind: "lodge" | "igloo" | "yurt" | "pen" | "fire" | "rack" | "totem";
+  kind: "lodge" | "igloo" | "yurt" | "pen" | "fire" | "rack" | "totem"
+    // a grown settlement (growLodges): stone + ice watchtowers, and the great hall
+    | "tower" | "hall";
   hp: number;
 }
 
 export interface SnowTribe {
   id: number;
+  /** when it was founded (growth.ts: settlements that last grow bigger) */
+  since?: number;
   name: string;
   color: string;
   x: number;
@@ -490,10 +495,12 @@ export class SnowFolk {
           const b = this.add(w, t, t.x + (this.rng() - 0.5) * 60, t.y + 24, role, { age: 0 });
           fs.push(b);
         }
-        if (fs.length > 9 + t.tier * 4 && t.tier < 3) {
+        // a strong camp grows (and, if it lasts, into a town with watchtowers and a great hall: growth.ts)
+        if (fs.length > 9 + t.tier * 3 && t.food > 4 && t.tier < Math.min(5, 3 + survived(w, t))) {
           t.tier++;
           t.r += 70;
-          if (t.found) w.toast("🏔️", `The ${t.name} Snow People's camp is growing stronger.`, t.x, t.y);
+          t.food -= 3;
+          this.growLodges(w, t);
         }
       }
       // a grown rider without a Frosthorn: they catch one from the pen
@@ -553,6 +560,31 @@ export class SnowFolk {
         if (t && w.humans.some((h) => dist(h, t) < 900)) w.toast("🏔️", `More Snow People have built igloos up in the peaks: the ${t.name} tribe.`, t.x, t.y);
       }
     }
+  }
+
+  /** A grown settlement builds more: more igloos (tier 2-3), stone + ice watchtowers (4), the great hall (5). */
+  private growLodges(w: World, t: SnowTribe) {
+    const add = (kind: SnowLodge["kind"], r: number, a: number) => {
+      for (let k = 0; k < 10; k++) {
+        const aa = a + (k ? (this.rng() - 0.5) * 1.2 : 0);
+        const x = Math.round(t.x + Math.cos(aa) * r);
+        const y = Math.round(t.y + Math.sin(aa) * r * 0.62);
+        if (!w.nav.passable("dino", x, y) || t.lodges.some((s) => Math.abs(s.x - x) < 44 && Math.abs(s.y - y) < 30)) continue;
+        t.lodges.push({ x, y, kind, hp: 1 });
+        return;
+      }
+    };
+    for (let i = 0; i < 2; i++) add("igloo", 180 + i * 20, this.rng() * Math.PI * 2);
+    if (t.tier >= 4 && !t.lodges.some((x) => x.kind === "tower")) {
+      add("tower", t.r * 0.55, 0.4);
+      add("tower", t.r * 0.55, Math.PI + 0.4);
+    }
+    if (t.tier >= 5) {
+      const lodge = t.lodges.find((x) => x.kind === "lodge");
+      if (lodge) lodge.kind = "hall";
+    }
+    if (!t.found) return;
+    w.toast("🏔️", t.tier >= 5 ? `The ${t.name} Snow People have raised a great hall of stone and ice: theirs is the greatest settlement in the peaks.` : t.tier === 4 ? `The ${t.name} Snow People have built watchtowers of stone and ice round their igloos.` : `The ${t.name} Snow People's camp is growing stronger.`, t.x, t.y);
   }
 
   /* ------------------------------ bands: hunts, patrols, raids ------------------------------ */
@@ -781,7 +813,7 @@ export class SnowFolk {
     if (w.daylight < 0.3 || w.weather.snow > 0.8) {
       // night (or a blizzard): into the igloos
       if (b.state !== "sleep") {
-        const homes = t.lodges.filter((x) => x.kind === "igloo" || x.kind === "lodge" || x.kind === "yurt");
+        const homes = t.lodges.filter((x) => x.kind === "igloo" || x.kind === "lodge" || x.kind === "yurt" || x.kind === "hall");
         const home = homes[b.id % Math.max(1, homes.length)] ?? t;
         if (dist(b, home) < 30) setB(b, "sleep", b.x, b.y);
         else setB(b, "home", home.x + (this.rng() - 0.5) * 20, home.y + 14);

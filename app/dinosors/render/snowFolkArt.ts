@@ -397,6 +397,106 @@ export function drawSnowLodge(c: CanvasRenderingContext2D, s: SnowLodge, tr: Sno
       c.fillRect(-14, -12, 10, 9);
       break;
     }
+    case "tower": {
+      // a watchtower of stacked stone with an ice-block lookout, an archer up top
+      shadow(c, 18, 6);
+      c.fillStyle = "#8d949c";
+      c.beginPath();
+      c.moveTo(-14, 0);
+      c.lineTo(-10, -52);
+      c.lineTo(10, -52);
+      c.lineTo(14, 0);
+      c.closePath();
+      c.fill();
+      c.strokeStyle = "rgba(60,66,74,0.45)";
+      c.lineWidth = 1;
+      for (let y = -46; y < 0; y += 8) {
+        c.beginPath();
+        c.moveTo(-12, y);
+        c.lineTo(12, y);
+        c.stroke();
+      }
+      c.fillStyle = "#dcebf5";
+      c.fillRect(-13, -62, 26, 10);
+      c.fillStyle = "#f8fbfd";
+      for (let i = -12; i <= 8; i += 7) c.fillRect(i, -67, 4, 5);
+      c.fillStyle = FUR;
+      c.fillRect(-3, -76, 6, 9);
+      c.fillStyle = FUR_D;
+      c.beginPath();
+      c.arc(0, -79, 3.6, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = col;
+      c.beginPath();
+      c.moveTo(4, -66);
+      c.lineTo(4, -90);
+      c.lineTo(15, -86 + Math.sin(t * 3 + s.x) * 1.5);
+      c.lineTo(4, -82);
+      c.closePath();
+      c.fill();
+      break;
+    }
+    case "hall": {
+      // the great hall: a long stone house with an ice-block roof ridge, glowing windows, tusks over the door
+      shadow(c, 70, 15);
+      c.fillStyle = "#7f868f";
+      c.fillRect(-66, -40, 132, 40);
+      c.strokeStyle = "rgba(55,60,68,0.45)";
+      c.lineWidth = 1;
+      for (let y = -34; y < 0; y += 8) {
+        c.beginPath();
+        c.moveTo(-66, y);
+        c.lineTo(66, y);
+        c.stroke();
+      }
+      const g = c.createLinearGradient(0, -78, 0, -40);
+      g.addColorStop(0, "#ffffff");
+      g.addColorStop(1, "#bcd4e6");
+      c.fillStyle = g;
+      c.beginPath();
+      c.moveTo(-72, -40);
+      c.lineTo(-40, -76);
+      c.lineTo(40, -76);
+      c.lineTo(72, -40);
+      c.closePath();
+      c.fill();
+      c.strokeStyle = "rgba(120,160,190,0.6)";
+      for (let x = -36; x <= 36; x += 12) {
+        c.beginPath();
+        c.moveTo(x, -76);
+        c.lineTo(x * 1.6, -40);
+        c.stroke();
+      }
+      c.fillStyle = night ? "rgba(255,190,110,0.9)" : "rgba(40,55,70,0.7)";
+      c.beginPath();
+      c.ellipse(0, 0, 13, 20, 0, Math.PI, 0);
+      c.fill();
+      for (const wx of [-46, -26, 26, 46]) c.fillRect(wx - 4, -28, 8, 9);
+      c.strokeStyle = "#efe6d2";
+      c.lineWidth = 3;
+      c.beginPath();
+      c.moveTo(-18, 0);
+      c.quadraticCurveTo(-26, -22, -6, -32);
+      c.moveTo(18, 0);
+      c.quadraticCurveTo(26, -22, 6, -32);
+      c.stroke();
+      c.fillStyle = col;
+      c.beginPath();
+      c.moveTo(0, -76);
+      c.lineTo(0, -96);
+      c.lineTo(13, -92 + Math.sin(t * 3) * 1.5);
+      c.lineTo(0, -88);
+      c.closePath();
+      c.fill();
+      for (let i = 0; i < 2; i++) {
+        const f = (t * 0.25 + i / 2) % 1;
+        c.fillStyle = `rgba(210,215,220,${0.4 * (1 - f)})`;
+        c.beginPath();
+        c.arc(-30 + f * 6, -78 - f * 30, 4 + f * 7, 0, Math.PI * 2);
+        c.fill();
+      }
+      break;
+    }
     case "totem": {
       // a carved pole: a bear's head, a ring of the tribe's colour, an ice crystal crown
       c.fillStyle = "#7a5f45";

@@ -13,6 +13,7 @@ import type { Human } from "./types";
 import type { World } from "./world";
 import { burnGuard, rollsClear } from "./dragonRaid";
 import { DOWN_FOR, dies, downTick, upAgain } from "./death";
+import { armorGuard, MIN_HARM } from "./gear";
 
 export type Condition = "healthy" | "injured" | "badly" | "down";
 
@@ -35,6 +36,7 @@ export type HurtCause = "bite" | "burn" | "rock" | "cold" | "kick" | "club";
 /** Damage a person. Returns true if it knocked them out. */
 export function hurtHuman(w: World, h: Human, dmg: number, fx: number, fy: number, cause: HurtCause): boolean {
   if (h.stranger && cause === "cold") return false;
+  const raw = dmg;
   const shield = h.gear.shield ? SHIELDS[h.gear.shield - 1] : null;
   if (shield && cause !== "cold") dmg *= 1 - shield.block * (cause === "burn" ? 0.5 : 1);
   // hide tunics + furs soften bites
@@ -42,6 +44,10 @@ export function hurtHuman(w: World, h: Human, dmg: number, fx: number, fy: numbe
   if (coat && (cause === "bite" || cause === "kick" || cause === "club")) dmg *= 1 - coat.armor;
   const helm = h.gear.helmet ? HELMET_BY_ID[h.gear.helmet] : null;
   if (helm && cause !== "cold") dmg *= 1 - helm.armor;
+  // body armour (breastplate, arm guards, greaves) + a rider's steel saddle (gear.ts)
+  dmg *= armorGuard(w, h, cause);
+  // all of it together never makes anyone untouchable
+  if (cause !== "cold") dmg = Math.max(dmg, raw * MIN_HARM);
   if (h.child) dmg *= 0.8;
   if (cause === "burn") {
     if (rollsClear(w, h)) {

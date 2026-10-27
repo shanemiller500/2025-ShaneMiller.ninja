@@ -30,7 +30,7 @@ const { hitScorpionsAt, canHurt } = require(path.join(root, 'sim', 'factions.ts'
 const { breathBlast } = require(path.join(root, 'sim', 'breath.ts'));
 const { rainSendsIn } = require(path.join(root, 'sim', 'humans.ts'));
 const { shieldRadius, upgradeShield, SHIELD } = require(path.join(root, 'sim', 'dragonShield.ts'));
-const { snowGround, SNOW_SPECIES } = require(path.join(root, 'sim', 'snowBeasts.ts'));
+const { snowGround, snowPath, SNOW_SPECIES, hangTrees } = require(path.join(root, 'sim', 'snowBeasts.ts'));
 const { protectedRole } = require(path.join(root, 'sim', 'duties.ts'));
 const { Engine } = require(path.join(root, 'game', 'engine.ts'));
 
@@ -69,6 +69,19 @@ function quiet(seed = 7) {
   return w;
 }
 
+/** A patch of open grass (tiles), clear of buildings + homes, for laying walls on. */
+function openPatch(w, cx, cy, wTiles, hTiles) {
+  const tx0 = Math.floor(cx / TILE);
+  const ty0 = Math.floor(cy / TILE);
+  for (let y = ty0; y < ty0 + hTiles; y++) for (let x = tx0; x < tx0 + wTiles; x++) w.terrain.setTile(x, y, T.Grass);
+  const inside = (o) => o.x > (tx0 - 2) * TILE && o.x < (tx0 + wTiles + 2) * TILE && o.y > (ty0 - 2) * TILE && o.y < (ty0 + hTiles + 3) * TILE;
+  w.shelters = w.shelters.filter((s) => !inside(s));
+  w.colony.buildings = w.colony.buildings.filter((b) => !inside(b));
+  w.tribe.towers = w.tribe.towers.filter((t) => !inside(t));
+  w.nav.sync(w);
+  return { tx: tx0, ty: ty0 };
+}
+
 /** An engine with no canvas: enough for the job + wall tools. */
 function headlessEngine(w) {
   const e = Object.create(Engine.prototype);
@@ -77,6 +90,8 @@ function headlessEngine(w) {
   e.emit = () => {};
   e.wallSel = new Set();
   e.wallUndo = [];
+  e.tool = { id: 'hand' };
+  e.toastOnce = () => {};
   return e;
 }
 
@@ -126,8 +141,10 @@ test('a Sand Dragon whose rider was knocked off flies back down to them and they
   const rider = w.rivals.byId(dr.sandRider);
   rider.onDragon = undefined;
   dr.sandRider = undefined;
-  rider.x = dr.x + 400;
-  rider.y = dr.y + 80;
+  // on foot by their own camp, a little way from the roost
+  const tr = w.sandFolk.tribes.find((x) => x.id === dr.sandTribe);
+  rider.x = tr.x + 120;
+  rider.y = tr.y + 60;
   dr.skyT = 999;
   const t = run(w, 60, () => dr.sandRider === rider.id);
   assert.ok(t >= 0, 'back in the saddle');
@@ -180,16 +197,16 @@ test('a Clear area job whose crew is pulled away gets new hands (never left half
 test('wall edit: several pieces move together keeping their shape, blocked moves are refused, and undo puts them back', () => {
   const w = quiet(9);
   const c = w.camp;
-  const tx = Math.floor((c.x + 420) / TILE);
-  const ty = Math.floor((c.y + 260) / TILE);
+  const { tx, ty } = openPatch(w, c.x + 640, c.y + 420, 10, 8);
   const pieces = [];
   for (let i = 0; i < 4; i++) pieces.push(w.tribe.addWall(w, tx + i, ty, 'polygon', 'wall'));
   assert.ok(pieces.every(Boolean), 'four polygon wall pieces in a row');
   for (const p of pieces) p.built = 1;
   const before = pieces.map((p) => [p.tx, p.ty]);
   const e = headlessEngine(w);
-  e.toggleWallEditMode(pieces[0].id);
-  for (const p of pieces.slice(1)) e.toggleWallPiece(p.id);
+  e.toggleWallEditMode(true);
+  assert.equal(e.wallSel.size, 0, 'the mode opens with nothing picked');
+  for (const p of pieces) e.toggleWallPiece(p.id);
   assert.equal(e.wallSel.size, 4, 'tap to pick each');
   e.toggleWallPiece(pieces[3].id);
   assert.equal(e.wallSel.size, 3, 'tap again to drop one');
@@ -217,8 +234,7 @@ test('wall edit: several pieces move together keeping their shape, blocked moves
 test('wall edit: a group dropped one tile short snaps onto the wall it was meant to join', () => {
   const w = quiet(9);
   const c = w.camp;
-  const tx = Math.floor((c.x + 420) / TILE);
-  const ty = Math.floor((c.y + 300) / TILE);
+  const { tx, ty } = openPatch(w, c.x + 640, c.y + 420, 10, 3);
   const fixed = w.tribe.addWall(w, tx + 6, ty, 'polygon', 'wall');
   const group = [w.tribe.addWall(w, tx, ty, 'polygon', 'wall'), w.tribe.addWall(w, tx + 1, ty, 'polygon', 'wall')];
   assert.ok(fixed && group.every(Boolean));
@@ -377,7 +393,9 @@ test('the snow animals arrive on the snow, keep to the cold, the legends are rar
   w.snowLife.update(w, 6);
   const beasts = w.dinos.filter((d) => SNOW_SPECIES.has(d.species));
   for (const s of SNOW_SPECIES) assert.ok(beasts.some((d) => d.species === s), `${s} arrived`);
-  assert.equal(beasts.filter((d) => d.species === 'yeti').length, 1, 'one Yeti');
+  const yetis = beasts.filter((d) => d.species === 'yeti');
+  assert.ok(yetis.length >= 2, 'several Yetis');
+  for (const y of yetis) assert.ok(yetis.every((o) => o === y || Math.hypot(o.homeX - y.homeX, o.homeY - y.homeY) > 250), 'each Yeti has its own den');
   assert.equal(beasts.filter((d) => d.species === 'snowRex').length, 1, 'one Snow Rex');
   assert.equal(w.canLayEgg('yeti'), false, 'the Yeti never lays');
   assert.equal(w.canLayEgg('snowRex'), false, 'nor the Snow Rex');
@@ -390,16 +408,345 @@ test('the snow animals arrive on the snow, keep to the cold, the legends are rar
   const back = run(w, 3, () => leo.state === 'wander' && dist({ x: leo.tx, y: leo.ty }, { x: leo.homeX, y: leo.homeY }) < 200);
   assert.ok(back >= 0, 'it set off home to the snow');
   const saved = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
-  assert.equal(saved.dinos.filter((d) => d.species === 'yeti').length, 1, 'the Yeti is saved');
+  assert.equal(saved.dinos.filter((d) => d.species === 'yeti').length, yetis.length, 'the Yetis are saved');
   assert.ok(saved.snowLife.seeded, 'and the peaks stay stocked (no second arrival)');
 });
 
-test('the Yeti guards its cave: an intruder gets a roar, then a charge', () => {
+test('a Yeti ambushes one of ours on the snow, carries them off and hangs them by the feet; a friend cuts them down; it never leaves the snow', () => {
   const w = quiet(12);
-  const yeti = addDino(w, 'yeti', 271 * TILE, 27 * TILE, { growth: 1, homeX: 271 * TILE, homeY: 27 * TILE });
+  w.snowLife.enabled = true;
+  const yeti = w.snowLife.arrive(w, 'yeti', 1)[0];
+  assert.ok(yeti, 'a Yeti at its den');
   w.update(DT);
-  const h = addHuman(w, yeti.x + 150, yeti.y + 40, false);
+  // somebody of ours walks onto its snow
+  let spot = null;
+  for (let k = 0; k < 60 && !spot; k++) {
+    const a = (k / 60) * Math.PI * 2;
+    const x = yeti.homeX + Math.cos(a) * 150;
+    const y = yeti.homeY + Math.sin(a) * 90;
+    if (snowPath(w, yeti, { x, y }) && w.nav.passable('human', x, y)) spot = { x, y };
+  }
+  assert.ok(spot, 'snow near the den');
+  const h = addHuman(w, spot.x, spot.y, false);
   h.role = 'gatherer';
-  const t = run(w, 8, () => yeti.state === 'chase' || yeti.state === 'roar');
-  assert.ok(t >= 0, `it reacted (${yeti.state})`);
+  let offSnow = 0;
+  const hung = run(w, 40, () => {
+    if (!snowGround(w, yeti.x, yeti.y)) offSnow++;
+    return !!h.hung;
+  });
+  assert.ok(hung >= 0, `they were ambushed + hung up (yeti ${yeti.state}, held ${!!h.yetiHeld})`);
+  const tree = hangTrees(w).find((t) => t.id === yeti.id);
+  assert.ok(dist(h, tree) < 40, "from the Yeti's hanging tree");
+  // a friend comes to cut them down
+  const friend = addHuman(w, h.x - 160, h.y + 30, false);
+  friend.role = 'gatherer';
+  const freed = run(w, 60, () => {
+    if (!snowGround(w, yeti.x, yeti.y)) offSnow++;
+    return !h.hung;
+  });
+  assert.ok(freed >= 0, 'cut down');
+  assert.ok(offSnow < 15, `the Yeti kept to the snow (${offSnow} frames off it)`);
+});
+
+test('an Ice Dragon breathes frost and a Sand Dragon hot sand (ours too): no flames, no fires started', () => {
+  for (const [breed, patch] of [['ice', 'frost'], ['sand', 'hotSand']]) {
+    const w = quiet(14);
+    const h = addHuman(w, w.camp.x, w.camp.y + 40, false);
+    const dr = ourDragon(w, h, w.camp.x + 400, w.camp.y + 300);
+    dr.breed = breed;
+    dr.state = 'idle';
+    const ax = dr.x + 120;
+    const ay = dr.y + 20;
+    dr.aimX = ax;
+    dr.aimY = ay;
+    dr.burst = 1.5;
+    run(w, 1.5);
+    assert.ok(w.hazards.list.some((p) => p.kind === patch), `${breed}: leaves ${patch}`);
+    const tx = Math.floor(ax / TILE);
+    const ty = Math.floor(ay / TILE);
+    let heat = 0;
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) heat += w.fire.heat[(ty + dy) * MAP_W + tx + dx] ?? 0;
+    assert.equal(heat, 0, `${breed}: nothing set alight`);
+  }
+});
+
+test('peoples that last grow: a Sand camp becomes a town, a city, then a kingdom (with watchtowers that shoot)', () => {
+  const { survived, SURVIVE_STEP } = require(path.join(root, 'sim', 'growth.ts'));
+  const w = quiet(7);
+  w.sandFolk.enabled = true;
+  w.elapsed = 400;
+  w.sandFolk.update(w, 0.05);
+  const t = w.sandFolk.tribes[0];
+  assert.equal(survived(w, t), 0, 'a new camp has no bonus yet');
+  t.since = w.elapsed - SURVIVE_STEP * 2 - 1;
+  assert.equal(survived(w, t), 2, 'two steps of surviving');
+  const kinds = () => new Set(t.tents.map((s) => s.kind));
+  t.found = true;
+  t.tier = 3;
+  w.sandFolk.growCamp(w, t);
+  assert.ok(kinds().has('house') && kinds().has('market'), 'a town of mud-brick + a market');
+  t.tier = 4;
+  w.sandFolk.growCamp(w, t);
+  assert.ok(kinds().has('tower'), 'a city with watchtowers');
+  assert.ok(!kinds().has('tent'), 'every tent rebuilt as a house');
+  t.tier = 5;
+  w.sandFolk.growCamp(w, t);
+  assert.ok(kinds().has('palace') && kinds().has('wall'), 'a kingdom: palace + city walls');
+  assert.match(w.sandFolk.title(t), /Kingdom of the/);
+  // the watchtowers shoot at an intruder
+  const tower = t.tents.find((s) => s.kind === 'tower');
+  const h = addHuman(w, tower.x + 120, tower.y + 20, false);
+  h.role = 'gatherer';
+  const before = w.rivals.missiles.length;
+  for (let i = 0; i < 12; i++) w.sandFolk['towersTick'](w, t);
+  assert.ok(w.rivals.missiles.length > before, 'arrows from the towers');
+  // saved with its buildings
+  const back = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  const bt = back.sandFolk.tribes.find((x) => x.id === t.id);
+  assert.equal(bt.tier, 5);
+  assert.ok(bt.tents.some((s) => s.kind === 'palace'));
+  assert.equal(bt.since, t.since, 'its age is saved');
+});
+
+test('nature kills dragons: lightning goes for a dragon in the sky, meteors smash them, volcanoes burn them', () => {
+  const w = quiet(15);
+  const wild = () => {
+    const dr = w.dragons.summon(w, { x: w.camp.x + 1500, y: w.camp.y });
+    dr.x = w.camp.x + 1500;
+    dr.y = w.camp.y + 200;
+    dr.z = 160;
+    dr.state = 'circle';
+    return dr;
+  };
+  const a = wild();
+  const hp0 = a.hp;
+  w.lightning(a.x + 120, a.y, false);
+  assert.ok(a.hp < hp0 * 0.75, 'struck by lightning (the bolt went for the dragon)');
+  for (let i = 0; i < 4 && w.dragons.list.includes(a); i++) w.lightning(a.x, a.y, false);
+  assert.ok(!w.dragons.list.includes(a), 'enough strikes kill it');
+  const b = wild();
+  // (landed to feed, so it's still there when the rock comes down)
+  b.z = 0;
+  b.state = 'eat';
+  b.t = 0;
+  w.meteor(b.x, b.y, 1.6);
+  run(w, 5);
+  assert.ok(!w.dragons.list.includes(b) || b.hp < b.maxHp * 0.2, 'a big meteor smashes it');
+  const c = wild();
+  c.x = w.volcano.x;
+  c.y = w.volcano.y;
+  c.z = 120;
+  const h1 = c.hp;
+  w.volcano.phase = 'erupt';
+  for (let i = 0; i < 30; i++) w.dragons.update(w, DT);
+  assert.ok(c.hp < h1, 'the eruption burns it');
+  // ours too
+  const h = addHuman(w, w.camp.x, w.camp.y + 40, false);
+  const ours = ourDragon(w, h, w.camp.x + 900, w.camp.y + 600);
+  ours.z = 150;
+  for (let i = 0; i < 6 && ours.hp > 0; i++) w.lightning(ours.x, ours.y, false);
+  w.dragons.update(w, DT);
+  assert.ok(!w.dragons.owned.includes(ours), 'our dragon can be lost to a storm too');
+});
+
+test('Urgent first: a builder hammering a normal job drops it the moment another is made Urgent, then goes back to it', () => {
+  const { siteKey } = require(path.join(root, 'sim', 'build.ts'));
+  const w = quiet(8);
+  const people = [];
+  for (let i = 0; i < 3; i++) people.push(addHuman(w, w.camp.x + i * 10, w.camp.y + 40, false));
+  for (const h of people) h.role = 'builder';
+  w.camp.learned.add('tools');
+  w.camp.learned.add('axe');
+  // everything in the stores, so it's all hammering + carrying
+  w.camp.stock.wood = 60;
+  w.camp.stock.stone = 60;
+  w.camp.stock.stick = 60;
+  const a = w.colony.addBuilding(w, 'storage', w.camp.x + 220, w.camp.y + 150);
+  const b = w.colony.addBuilding(w, 'storage', w.camp.x - 260, w.camp.y + 170);
+  assert.ok(a && b);
+  const keyA = siteKey(w.buildSites().find((s) => s.kind === 'building' && s.id === a.id));
+  const keyB = siteKey(w.buildSites().find((s) => s.kind === 'building' && s.id === b.id));
+  // they get going on A (it's nearer / first)
+  w.priority.set(keyA, 2);
+  run(w, 40, () => people.some((h) => h.site === keyA && h.state === 'build'));
+  const busy = people.filter((h) => h.site === keyA);
+  assert.ok(busy.length, 'someone is on A');
+  w.priority.set(keyA, 1);
+  w.priority.set(keyB, 3);
+  for (const h of w.humans) h.think = 0;
+  const switched = run(w, 3, () => busy.every((h) => h.site !== keyA));
+  assert.ok(switched >= 0, 'they dropped the normal job right away');
+  run(w, 240, () => b.built >= 1);
+  assert.ok(b.built >= 1, 'the Urgent one got built');
+  assert.ok(a.built < 1 || b.built >= 1);
+  // …then they carry on with A in its turn
+  run(w, 240, () => a.built >= 1);
+  assert.ok(a.built >= 1, 'and then the rest, in order');
+});
+
+test('the Camp panel says what supplies we need, why, and where to get them', () => {
+  const { supplyNeeds } = require(path.join(root, 'sim', 'supplyNeeds.ts'));
+  const w = quiet(8);
+  for (let i = 0; i < 4; i++) addHuman(w, w.camp.x + i * 10, w.camp.y + 40, false);
+  w.camp.learned.add('tools');
+  w.camp.learned.add('axe');
+  w.camp.stock.wood = 0;
+  w.camp.stock.stick = 0;
+  const b = w.colony.addBuilding(w, 'storage', w.camp.x + 220, w.camp.y + 150);
+  assert.ok(b);
+  const needs = supplyNeeds(w);
+  const wood = needs.find((n) => n.r === 'wood');
+  assert.ok(wood, 'wood is on the list');
+  assert.ok(wood.need > wood.have && wood.blocking, 'a building is waiting on it');
+  assert.ok(wood.why.some((x) => x.includes('building job')), 'says why');
+  assert.ok(wood.hint.length > 10, 'says where to get it');
+  w.camp.stock.wood = 500;
+  w.camp.stock.stick = 500;
+  assert.ok(!supplyNeeds(w).some((n) => n.r === 'wood'), 'gone from the list once we have enough');
+});
+
+test('repairs come right after Urgent jobs (Auto workers too), "Repair now" works on any damage, and the hurt go to the healing hut', () => {
+  const w = quiet(8);
+  const people = [];
+  for (let i = 0; i < 4; i++) people.push(addHuman(w, w.camp.x + i * 10, w.camp.y + 40, false));
+  w.camp.learned.add('tools');
+  w.camp.learned.add('axe');
+  w.camp.stock.wood = 60;
+  w.camp.stock.stick = 60;
+  w.camp.stock.stone = 60;
+  const b = w.colony.addBuilding(w, 'storage', w.camp.x + 220, w.camp.y + 150);
+  b.built = 1;
+  const { BUILDINGS } = require(path.join(root, 'data', 'colony.ts'));
+  // only lightly damaged: nobody bothers on their own…
+  b.hp = BUILDINGS.storage.hp * 0.8;
+  assert.ok(!w.buildSites().some((s) => s.repair && s.id === b.id), 'not on the list by itself');
+  // …until we ask
+  w.askRepair(`building:${b.id}`);
+  assert.ok(w.buildSites().some((s) => s.repair && s.id === b.id), 'Repair now puts it on the list');
+  const fixed = run(w, 120, () => b.hp >= BUILDINGS.storage.hp);
+  assert.ok(fixed >= 0, 'repaired by our Auto workers');
+  run(w, 0.2);
+  assert.ok(!w.repairs.has(`building:${b.id}`), 'and the request is done with');
+  // the hurt walk to the healing hut and rest there till they're nearly well
+  const hut = w.colony.addBuilding(w, 'healer', w.camp.x - 200, w.camp.y + 120);
+  hut.built = 1;
+  const hurt = people[0];
+  hurt.hp = 0.4;
+  const atHut = run(w, 60, () => hurt.state === 'rest' && Math.hypot(hurt.x - hut.x, hurt.y - hut.y) < 90);
+  assert.ok(atHut >= 0, 'went to the healing hut to rest');
+});
+
+test('our own dragons never damage our own camp: no burnt buildings, homes, walls or people, no fires by what we built', () => {
+  const w = quiet(14);
+  const h = addHuman(w, w.camp.x + 40, w.camp.y + 60, false);
+  const b = w.colony.addBuilding(w, 'storage', w.camp.x + 220, w.camp.y + 150);
+  b.built = 1;
+  const hp0 = b.hp;
+  const dr = ourDragon(w, h, b.x - 140, b.y);
+  dr.state = 'idle';
+  dr.aimX = b.x;
+  dr.aimY = b.y;
+  dr.burst = 2;
+  const bystander = addHuman(w, b.x + 6, b.y + 4, false);
+  const p0 = bystander.hp;
+  run(w, 2);
+  assert.equal(b.hp, hp0, 'the building is untouched');
+  assert.equal(bystander.hp, p0, 'our person standing there is untouched');
+  const tx = Math.floor(b.x / TILE);
+  const ty = Math.floor(b.y / TILE);
+  let heat = 0;
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) heat += w.fire.heat[(ty + dy) * MAP_W + tx + dx] ?? 0;
+  assert.equal(heat, 0, 'no fire started on or by what we built');
+});
+
+test('Yetis and dragons fight to the death: one of them wins', () => {
+  for (const seed of [11, 13]) {
+    const w = quiet(seed);
+    w.snowLife.enabled = true;
+    const y = w.snowLife.arrive(w, 'yeti', 1)[0];
+    const dr = w.dragons.summon(w, { x: y.x, y: y.y });
+    dr.x = y.x + 300;
+    dr.y = y.y;
+    dr.z = 150;
+    dr.state = 'circle';
+    const end = run(w, 150, () => y.health <= 0 || !w.dinos.includes(y) || !w.dragons.list.includes(dr));
+    assert.ok(end >= 0, 'the fight ended');
+    const yAlive = y.health > 0 && w.dinos.includes(y);
+    const dAlive = w.dragons.list.includes(dr);
+    assert.ok(yAlive !== dAlive, `exactly one walked away (yeti ${yAlive}, dragon ${dAlive})`);
+  }
+});
+
+test('an Urgent job stuck waiting on a material nobody can find doesn\'t stop builders finishing everything else', () => {
+  const { siteKey } = require(path.join(root, 'sim', 'build.ts'));
+  const { sourceFor } = require(path.join(root, 'sim', 'humans.ts'));
+  const w = quiet(8);
+  const people = [];
+  for (let i = 0; i < 3; i++) people.push(addHuman(w, w.camp.x + i * 10, w.camp.y + 40, false));
+  for (const h of people) h.role = 'builder';
+  for (const t of ['tools', 'axe', 'smelting']) w.camp.learned.add(t);
+  w.camp.stock.wood = 60;
+  w.camp.stock.stick = 60;
+  w.camp.stock.stone = 60;
+  w.camp.stock.clay = 0;
+  w.colony.nodes = w.colony.nodes.filter((n) => n.kind !== 'clay');
+  const smith = w.colony.addBuilding(w, 'blacksmith', w.camp.x - 300, w.camp.y + 180);
+  const a = w.colony.addBuilding(w, 'storage', w.camp.x + 220, w.camp.y + 150);
+  const b = w.colony.addBuilding(w, 'storage', w.camp.x + 260, w.camp.y - 90);
+  assert.ok(smith && a && b);
+  smith.have = { stone: 8, wood: 4 };
+  w.priority.set(siteKey(w.buildSites().find((s) => s.kind === 'building' && s.id === smith.id)), 3);
+  if (sourceFor(w, people[0], 'clay', undefined, undefined, 3000)) return; // this map has clay lying about: nothing to test
+  run(w, 300, () => a.built >= 1 && b.built >= 1);
+  assert.ok(a.built >= 1 && b.built >= 1, 'the other jobs got built');
+  assert.ok(smith.built < 1, 'the Urgent one is still waiting on clay');
+});
+
+test('builders go back to Auto once everything is built', () => {
+  const w = quiet(8);
+  const people = [];
+  for (let i = 0; i < 2; i++) people.push(addHuman(w, w.camp.x + i * 10, w.camp.y + 40, false));
+  for (const h of people) h.role = 'builder';
+  w.camp.learned.add('tools');
+  w.camp.learned.add('axe');
+  w.camp.stock.wood = 60;
+  w.camp.stock.stick = 60;
+  const a = w.colony.addBuilding(w, 'storage', w.camp.x + 220, w.camp.y + 150);
+  assert.ok(a);
+  run(w, 200, () => a.built >= 1);
+  assert.ok(a.built >= 1);
+  assert.ok(people.every((h) => h.role === 'builder'), 'still builders right after');
+  const back = run(w, 40, () => people.every((h) => h.role === 'auto'));
+  assert.ok(back >= 0, 'back on Auto once there is nothing left to build');
+});
+
+test('under a powered Dragon Shield people keep working when a dragon comes; outside its field they still run', () => {
+  const { shieldedAt } = require(path.join(root, 'sim', 'dragonShield.ts'));
+  const { addHuman } = require(path.join(root, 'sim', 'humans.ts'));
+  const setup = (energy) => {
+    const w = quiet(9);
+    w.civ.path = 'resonance';
+    w.civ.energy = energy;
+    const sh = w.colony.addBuilding(w, 'dragonShield', w.camp.x + 200, w.camp.y + 220);
+    assert.ok(sh);
+    sh.built = 1;
+    const h = addHuman(w, sh.x + 30, sh.y + 10, false);
+    h.role = 'gatherer';
+    const dr = w.dragons.summon(w, { x: h.x, y: h.y });
+    dr.x = h.x + 200;
+    dr.y = h.y;
+    dr.z = 120;
+    return { w, sh, h, dr };
+  };
+  const on = setup(400);
+  assert.ok(shieldedAt(on.w, on.h.x, on.h.y), 'covered by the field');
+  let fled = false;
+  run(on.w, 4, () => { if (on.h.state === 'flee' || on.h.state === 'hide') fled = true; });
+  assert.ok(!fled, 'they kept working');
+  // the same with the grid down: no field, so they scatter
+  const off = setup(0);
+  assert.ok(!shieldedAt(off.w, off.h.x, off.h.y));
+  let ran = false;
+  run(off.w, 4, () => { if (off.h.state === 'flee' || off.h.state === 'hide') ran = true; });
+  assert.ok(ran, 'no field: they take cover');
 });

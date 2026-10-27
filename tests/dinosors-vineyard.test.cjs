@@ -128,3 +128,49 @@ test('grown-ups enjoy a cup of wine of an evening (it perks them up); children n
   w.time = 12;
   for (let i = 0; i < 50; i++) assert.equal(vine.maybeDrink(w, other), false);
 });
+
+test('wineries built side by side grow vines round them; the vines keep to open land, off the water and clear of what we built', () => {
+  const estate = require(path.join(root, 'sim', 'wineEstate.ts'));
+  const { MAP_W } = require(path.join(root, 'sim', 'types.ts'));
+  const w = world(9987);
+  const cx = Math.floor(w.camp.x / TILE) + 14, cy = Math.floor(w.camp.y / TILE) + 8;
+  // water a few tiles east of the wineries
+  for (let y = cy - 8; y <= cy + 10; y++) for (let x = cx + 5; x <= cx + 12; x++) w.terrain.setTile(x, y, T.Shallow);
+  w.nav.sync(w);
+  const a = w.colony.addBuilding(w, 'winery', (cx - 1) * TILE, (cy + 1) * TILE);
+  assert.ok(a && typeof a === 'object');
+  a.built = 1;
+  w.colony.version++;
+  assert.equal(estate.wineryEstates(w).length, 0, 'one winery on its own stays a winery');
+  const b = w.colony.addBuilding(w, 'winery', (cx + 1) * TILE, (cy + 1) * TILE);
+  assert.ok(b && typeof b === 'object', `second winery placed (${b})`);
+  b.built = 1;
+  assert.ok(w.tribe.addTower(w, (cx - 6) * TILE, cy * TILE), 'a tower nearby');
+  w.colony.version++;
+  const [e] = estate.wineryEstates(w);
+  assert.ok(e, 'they joined');
+  assert.equal(e.wineries.length, 2);
+  assert.ok(e.vines.length > 10, `vines planted round it (${e.vines.length})`);
+  const water = (i) => w.terrain.tiles[i] === T.Shallow;
+  for (const i of e.vines) {
+    const tx = i % MAP_W, ty = Math.floor(i / MAP_W);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) assert.ok(!water((ty + dy) * MAP_W + tx + dx), 'never on or right beside the water');
+  }
+  const built = w.colony.occupied(w);
+  for (const i of e.vines) assert.ok(!built.has(i), 'never on anything built');
+  const t = w.tribe.towers[0];
+  assert.ok(e.vines.every((i) => Math.abs((i % MAP_W) - t.tx - 0.5) > 1.5 || Math.abs(Math.floor(i / MAP_W) - t.ty - 0.5) > 1.5), 'a tile clear of the tower');
+  // wild growth on a vine tile is cleared for the rows; a bush off the vines stays
+  const v = e.vines[0];
+  const inside = makePlant(w, 'bush', (v % MAP_W) * TILE + 16, Math.floor(v / MAP_W) * TILE + 16, 1);
+  const outside = makePlant(w, 'bush', (cx + 2) * TILE, (cy - 8) * TILE, 1);
+  w.plants.push(inside, outside);
+  run(w, 2);
+  assert.ok(!w.plants.includes(inside), 'the vine rows are cleared');
+  assert.ok(w.plants.includes(outside), 'off the vines is left alone');
+  assert.ok(w.flags.has('wineVines'), 'the player is told');
+  // pulled down to one: back to a plain winery
+  w.colony.buildings.splice(w.colony.buildings.indexOf(b), 1);
+  w.colony.version++;
+  assert.equal(estate.wineryEstates(w).length, 0);
+});

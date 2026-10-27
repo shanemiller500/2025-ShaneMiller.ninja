@@ -7,7 +7,7 @@
 /*    walks in from the wilds. If the camp is safe, fed and has room   */
 /*    they join; otherwise they wait at the edge of camp.              */
 /* ------------------------------------------------------------------ */
-import { MAX_PEOPLE } from "./types";
+import { BASE_PEOPLE, MAX_PEOPLE } from "./types";
 import { deepRoom } from "./deepBuild";
 import { HOUSING } from "../data/colony";
 import { findSpawnSpot } from "./dinos";
@@ -18,6 +18,21 @@ import type { Human } from "./types";
 import type { World } from "./world";
 
 export const CAVE_ROOM = 6;
+
+/**
+ * Is the tribe settled enough to grow past BASE_PEOPLE? Well fed, not under attack, nobody down,
+ * and a roof for everyone it has.
+ */
+export function stableTribe(w: World) {
+  const people = w.humans.filter((h) => !h.stranger);
+  const food = w.tribe.foodTotal(w);
+  return !w.tribe.raid && !w.dragons.menacing(w) && food >= people.length * 1.2 && !people.some((h) => h.state === "down") && w.population.capacity(w) >= people.length;
+}
+
+/** How many people the tribe can grow to right now: BASE_PEOPLE, or up to MAX_PEOPLE once it's stable. */
+export function peopleCap(w: World) {
+  return stableTribe(w) ? MAX_PEOPLE : BASE_PEOPLE;
+}
 
 export class Population {
   /** seconds until the next wanderers might show up */
@@ -55,8 +70,22 @@ export class Population {
     }
     const safe = !w.tribe.raid && !w.dragons.menacing(w) && w.daylight > 0.4;
     const fed = w.tribe.foodTotal(w) >= 3;
-    if (!safe || !fed || strangers > 0 || residents >= Math.min(MAX_PEOPLE, this.capacity(w) + 2) || residents < 2) return;
+    if (!safe || !fed || strangers > 0 || residents < 2 || residents >= peopleCap(w)) return;
+    // full up: no newcomers till there's room, and the player is told (again every few minutes)
+    if (residents >= this.capacity(w) + 2) return this.needHomes(w, residents);
     this.spawnWanderers(w);
+  }
+
+  private homesToldAt = -Infinity;
+
+  /** Out of room: tell the player how many homes are short (every few minutes while it lasts). */
+  needHomes(w: World, residents = w.humans.filter((o) => !o.stranger).length) {
+    if (w.elapsed - this.homesToldAt < 240) return;
+    this.homesToldAt = w.elapsed;
+    const room = this.capacity(w);
+    const cap = peopleCap(w);
+    const huts = Math.max(1, Math.ceil((Math.min(cap, residents + 10) - room) / 4));
+    w.toast("🛖", `More homes needed! ${residents} people, room for ${room}. Build or upgrade about ${huts} more home${huts === 1 ? "" : "s"} so newcomers can join and families can grow${cap > BASE_PEOPLE ? ` (up to ${MAX_PEOPLE} people)` : residents >= BASE_PEOPLE - 5 ? ` (past ${BASE_PEOPLE} once the tribe is stable: well fed, safe and housed)` : ""}.`, w.camp.x, w.camp.y);
   }
 
   /** The camp stands (almost) empty: a family of wanderers comes and settles in for good. */
@@ -108,10 +137,7 @@ export class Population {
     const room = residents < this.capacity(w) + 2;
     const family = w.humans.filter((o) => o.stranger && o.family === h.family);
     if (!room) {
-      if (!w.flags.has("noRoom")) {
-        w.flags.add("noRoom");
-        w.toast("🛖", "Newcomers are waiting at the edge of camp — build or upgrade homes to make room!");
-      }
+      this.needHomes(w, residents);
       say(h, "No room…");
       h.think = 8;
       return;

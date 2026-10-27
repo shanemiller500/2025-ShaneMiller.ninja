@@ -15,6 +15,9 @@ import { Shifts } from "./shifts";
 import { P, Particles } from "./particles";
 import { burnPlantsAt, generatePlants, makePlant, plantFuelNear, tallestNear, updatePlants, PLANT_H } from "./plants";
 import { clearPlantsUnderBuilds } from "./buildClear";
+import { connectWalls, joinMessage } from "./wallLinks";
+import { territoryTick } from "./territory";
+import { announceEstates } from "./wineEstate";
 import { makeRng, type Rng } from "./rng";
 import { SpatialHash } from "./spatial";
 import { LM, TERRAIN_GEN, Terrain, VEG_TILES, cliffY, isWaterTile } from "./terrain";
@@ -84,6 +87,7 @@ import { hurtHuman } from "./injury";
 import { actWorkDino } from "./workDinos";
 import { updateCarcass } from "./carcass";
 import { hitScorpion, type Side } from "./factions";
+import { dragonForBolt, lightningHits, meteorHits } from "./dragonPeril";
 import type { Carcass } from "./types";
 import type { Gear, ShelterPlan } from "./types";
 
@@ -174,6 +178,13 @@ export class World {
   /** Clear area jobs under way, and the boxes the tribe keeps clear (nothing sprouts there) (clearArea.ts) */
   clearJobs: ClearJob[] = [];
   keepClear: ClearRect[] = [];
+  /** things the player asked to have repaired now, whatever the damage (site keys: "building:12", "wall:8"…; build.ts) */
+  repairs = new Set<string>();
+  /** Ask for a repair (the site list is rebuilt at once, not next frame). */
+  askRepair(key: string) {
+    this.repairs.add(key);
+    this.sitesCache.t = -1;
+  }
   private regrowT = 0;
   plants: Plant[] = [];
   props: Prop[] = [];
@@ -310,6 +321,11 @@ export class World {
 
   nextId() {
     return this.idCounter++;
+  }
+
+  /** The id the next new thing will get (to pick out what was made after a moment). */
+  peekId() {
+    return this.idCounter;
   }
 
   /** Make sure new ids stay above n (things loaded with saved ids). */
@@ -609,6 +625,17 @@ export class World {
   /* ------------------------- disasters ------------------------- */
 
   lightning(x: number, y: number, manual: boolean) {
+    // a dragon up in the sky is the tallest thing about: the bolt goes for it (dragonPeril.ts)
+    const sky = dragonForBolt(this, x, y, manual ? 140 : 320);
+    if (sky) {
+      this.bolts.push({ x: sky.x, y: sky.y - sky.z, t: 0, seed: Math.floor(this.rng() * 1e6) });
+      this.flash(0.6, "#e8f0ff");
+      this.sfx("thunder", sky.x, sky.y, 1.3);
+      this.particles.burst(P.Spark, sky.x, sky.y, 18, 140, { z: sky.z + 20, vz: 60, g: 200, size: 2.4, max: 0.7, color: "#fffbe0" });
+      this.alarm(sky.x, sky.y, 500, 0.6, "⚡", false);
+      lightningHits(this, sky.x, sky.y);
+      return;
+    }
     const tree = tallestNear(this, x, y, manual ? 70 : 220);
     if (tree) {
       x = tree.x;
@@ -627,6 +654,7 @@ export class World {
     if (this.rng() > this.weather.rain * 0.7) this.fire.ignite(this, tx, ty, 0.9);
     this.particles.burst(P.Spark, x, y, 14, 120, { vz: 100, g: 200, size: 2, max: 0.6, color: "#fffbe0" });
     this.alarm(x, y, 650, 0.8, "⚡", false);
+    lightningHits(this, x, y);
     for (const d of this.dinos) {
       if (Math.hypot(d.x - x, d.y - y) < 260 && sp(d.species).move === "walk" && d.state !== "carried") {
         const a = Math.atan2(d.y - y, d.x - x);
@@ -665,6 +693,8 @@ export class World {
       this.volcano.mega(this);
     }
     this.crush(x, y, 120 * S, 0.5 * Math.min(1.6, S));
+    // and any dragon under it, or flying low over it (dragonPeril.ts)
+    meteorHits(this, x, y, 120 * S, S);
     this.shake(Math.min(26, 18 * S), 0.6 + S * 0.8);
     // shower rocks only flash the screen when they get big (and softly), so the view stays readable
     if (m.quiet ? S > 1 : S > 0.35) this.flash(m.quiet ? 0.22 : Math.min(0.8, 0.25 + S * 0.5), "#fff1d0");
@@ -756,7 +786,8 @@ export class World {
     for (const t of this.tribe.towers) if (Math.hypot(t.x - x, t.y - y) < r) t.hp -= power * 260;
     for (const s of this.shelters) if (s.stage > 0 && Math.hypot(s.x - x, s.y - y) < r) s.hp -= power * (1 - HOUSING[s.tier].protect * 0.6);
     for (const b of this.colony.buildings) if (Math.hypot(b.x - x, b.y - y) < r) b.hp -= power * 220 * (b.kind === "pyramid" || b.kind === "shelterDeep" ? 0.2 : 1);
-    for (const sc of this.colony.scorpions) if (Math.hypot(sc.x - x, sc.y - y) < r) hitScorpion(this, sc, power * 200, by);
+    // (a big impact is a heavy blow; a small one's just a blast the frame shrugs off)
+    for (const sc of this.colony.scorpions) if (Math.hypot(sc.x - x, sc.y - y) < r) hitScorpion(this, sc, power * 200, by, power >= 0.8 ? "heavy" : "blast");
   }
 
   startQuake() {
@@ -779,6 +810,7 @@ export class World {
     if (this.buildClearT <= 0) {
       this.buildClearT = 1;
       clearPlantsUnderBuilds(this);
+      announceEstates(this);
     }
     if (!this.timePaused) {
       this.time += (dt * 24 * this.timeSpeed) / DAY_SECONDS;
@@ -862,6 +894,8 @@ export class World {
     this.wildlife.update(this, dt);
     this.snowLife.update(this, dt);
     if (this.clearJobs.length && Math.floor(this.elapsed) !== Math.floor(this.elapsed - dt)) clearJobsTick(this);
+    // strays on our ground get seen off (territory.ts)
+    if (Math.floor(this.elapsed) !== Math.floor(this.elapsed - dt)) territoryTick(this);
     this.civ.update(this, dt);
     this.extinction.update(this, dt);
     this.tasks.update(this, dt);
@@ -1145,6 +1179,7 @@ export class World {
         ...(h.sonic ? { sonic: true } : {}),
         ...(h.catapult ? { catapult: h.catapult } : {}),
         ...(h.captive && h.captiveT ? { captiveT: Math.round(h.captiveT), clanGarb: h.clanGarb } : {}),
+        ...(h.hung ? { hung: { ...h.hung, x: r(h.hung.x), y: r(h.hung.y), t: r(h.hung.t) } } : {}),
       })),
       tribe: this.tribe.serialize(),
       shifts: this.shifts.serialize(),
@@ -1164,6 +1199,7 @@ export class World {
       cleared: this.cleared.map((c) => [c.i, Math.round(c.at)] as const),
       keepClear: this.keepClear.map((r) => [Math.round(r.x0), Math.round(r.y0), Math.round(r.x1), Math.round(r.y1)] as const),
       clearJobs: serializeClearJobs(this),
+      repairs: Array.from(this.repairs),
       eggs: this.eggs.map((e) => ({ species: e.species, x: r(e.x), y: r(e.y), t: r(e.t), hatchAt: r(e.hatchAt), herd: e.herd, parent: e.parent, genes: e.genes, gen: e.gen })),
       evo: this.evo,
       terrainGen: this.terrain.gen,
@@ -1238,6 +1274,7 @@ export class World {
         family: h.family ?? 0,
         stranger: !!h.stranger,
         ...((h as { captive?: number }).captive ? { captive: (h as { captive?: number }).captive, state: "captive" as const } : {}),
+        ...((h as { hung?: Human["hung"] }).hung ? { hung: { ...(h as { hung: NonNullable<Human["hung"]> }).hung } } : {}),
         ...((h as { partner?: number }).partner ? { partner: (h as { partner?: number }).partner } : {}),
         ...((h as { dragon?: number }).dragon ? { dragon: (h as { dragon?: number }).dragon } : {}),
         ...((h as { sonic?: boolean }).sonic ? { sonic: true } : {}),
@@ -1256,6 +1293,7 @@ export class World {
     w.keepClear = ((data as { keepClear?: (readonly [number, number, number, number])[] }).keepClear ?? []).map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1 }));
     // Clear area jobs under way carry on (and no dino is left limited to a box nobody's clearing)
     loadClearJobs(w, (data as { clearJobs?: ReturnType<typeof serializeClearJobs> }).clearJobs);
+    w.repairs = new Set((data as { repairs?: string[] }).repairs ?? []);
     for (const [kind, x, y, size, food, burnt, fruit, stump] of data.plants) {
       const p = makePlant(w, kind, x, y, size);
       p.food = food;
@@ -1411,6 +1449,12 @@ export class World {
     }
     clearPlantsUnderBuilds(w);
     w.nav.sync(w);
+    // walls left a tile short of a tower, a wall or the water: joined up once (wallLinks.ts)
+    if (!w.flags.has("wallsJoined")) {
+      w.flags.add("wallsJoined");
+      const msg = joinMessage(connectWalls(w, w.tribe.walls, 1));
+      if (msg) w.toast("🧱", msg);
+    }
     return w;
   }
 }

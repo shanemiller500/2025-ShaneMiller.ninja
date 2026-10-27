@@ -44,6 +44,7 @@ export const RES_INFO: Record<Resource, { icon: string; name: string }> = {
   goldBar: { icon: "🟨", name: "Gold bars" },
   silverBar: { icon: "⬜", name: "Silver bars" },
   copperBar: { icon: "🟧", name: "Copper bars" },
+  steel: { icon: "⬛", name: "Steel bars" },
   pearl: { icon: "🦪", name: "Pearls" },
   grapes: { icon: "🍇", name: "Grapes" },
   wine: { icon: "🍷", name: "Wine" },
@@ -89,7 +90,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   winery: { kind: "winery", icon: "🍷", name: "Winery", tip: "A grape press and barrels: cooks and farmers tread the vineyards' grapes into wine (3 grapes → 1 wine). Grown-ups enjoy a cup at the evening fire.", cost: { wood: 6, clay: 4, stone: 4 }, w: 2, h: 2, solid: true, tech: "farming", work: 8, hp: 320 },
   dragonBones: { kind: "dragonBones", icon: "🦴", name: "Dragon bones", tip: "The great skeleton of a dragon that died, laid out on a stone plinth with its name carved in: a monument. Pick people and use the Move tool to carry it wherever it should stand.", cost: {}, w: 4, h: 2, solid: true, work: 1, hp: 3000 },
   riderHall: { kind: "riderHall", icon: "🏛️", name: "Dragon Riders' Colosseum", tip: "A great arena of stone tiers built round the dragon pit: every dragon rider + keeper gets their own room right behind where their dragon sleeps. Dragon-head pillars, a horned gate, stone wings. It grows with the pit and the people in it. Needs a dragon pit (it's always built round it).", cost: { stone: 40, wood: 20, hide: 8, bone: 12 }, w: 3, h: 2, solid: false, tech: "taming", work: 30, hp: 1600 },
-  warChariot: { kind: "warChariot", icon: "🛡️", name: "War chariot", tip: "A great timber fighting wagon for hunting dragons: a tamed Triceratops pulls it (a huge trike skull on the prow), two Scorpions on top shoot by themselves, and ten ride behind its shields (five spearmen a side, egg runners safe inside). It rolls out when it's built. Start a chariot hunt from Your tribe.", cost: { wood: 30, bone: 12, hide: 8, stone: 6 }, w: 3, h: 2, solid: false, tech: "dragonHunting", work: 20, hp: 400 },
+  warChariot: { kind: "warChariot", icon: "🛡️", name: "War chariot", tip: "A great timber fighting wagon for hunting dragons: a tamed Triceratops pulls it (a huge trike skull on the prow), two Scorpions on top shoot by themselves, and ten ride behind its shields (five spearmen a side, egg runners safe inside). It rolls out when it's built. Tap it to rally a raid; builders repair it at home, and it can be upgraded (bone plates, then iron from the blacksmith).", cost: { wood: 30, bone: 12, hide: 8, stone: 6 }, w: 3, h: 2, solid: false, tech: "dragonHunting", work: 20, hp: 400 },
   dragonPit: { kind: "dragonPit", icon: "🏟️", name: "Dragon pit", tip: "A great sunken stone arena: the tribe's dragons live and sleep here, and their keepers put on shows in it (of an evening, or press Put on a show). Everyone comes to watch from the rim. Goes outside the walls.", cost: { stone: 14, wood: 8, hide: 4 }, w: 5, h: 4, solid: false, tech: "taming", work: 14, hp: 900 },
   fireStation: { kind: "fireStation", icon: "🚒", name: "Sonic fire station", tip: "Stores the ultrasonic fire emitters (smiths make them here) and rings the alarm: when fire breaks out near camp or the station, a crew grabs emitters and shakes the flames out from a safe distance. Emitters go back on the rack afterwards.", cost: { stone: 8, wood: 6, copper: 2 }, w: 3, h: 2, solid: true, tech: "sonicFire", work: 9, hp: 520 },
   tack: { kind: "tack", icon: "🧰", name: "Tack + harness station", tip: "Saddles, harnesses + cargo frames. Trainers train 25% faster with it, and rider teams carry more.", cost: { wood: 3, hide: 3, bone: 2 }, w: 2, h: 1, solid: true, tech: "taming", work: 5, hp: 180 },
@@ -190,7 +191,16 @@ export interface WeaponDef {
   at: Station;
   tech?: TechId;
   civ?: CivTechId;
+  /** what its blade / head is made of (how it's drawn); metal weapons without one are iron */
+  metal?: "copper" | "steel";
+  /** runs on its own crystal cell: an energy weapon that doesn't draw on the grid */
+  battery?: boolean;
+  /** carried by everyone as a sidearm (Gear.sidearm), not a fighter's main weapon (territory.ts) */
+  sidearm?: boolean;
 }
+
+/** Blade colours by metal (stone + bone, copper, iron, steel). */
+export const METAL_COLOR = { stone: "#8f8a82", copper: "#d58a52", iron: "#b8c0c8", steel: "#e6ebf1" } as const;
 
 /** Where things get made. */
 export type Station = "camp" | "workshop" | "blacksmith" | "tannery";
@@ -198,21 +208,27 @@ export type Station = "camp" | "workshop" | "blacksmith" | "tannery";
 export const WEAPONS: WeaponDef[] = [
   { id: "spear1", kind: "spear", tier: 1, name: "Wooden spear", icon: "🗡️", melee: false, proj: "spear", range: 120, dmg: 26, cd: 2, speed: 360, prey: 60, cost: { stick: 2, stone: 1 }, at: "camp", tech: "spear" },
   { id: "spearB", kind: "spear", tier: 1, name: "Bone spear", icon: "🦴", melee: false, proj: "spear", range: 125, dmg: 34, cd: 2, speed: 380, prey: 70, cost: { stick: 2, bone: 2 }, at: "camp", tech: "spear" },
-  { id: "spear2", kind: "spear", tier: 2, name: "Metal spear", icon: "🔱", melee: false, proj: "spear", range: 135, dmg: 40, cd: 2, speed: 400, prey: 85, cost: { wood: 1, iron: 2 }, at: "blacksmith" },
-  { id: "spear3", kind: "spear", tier: 3, name: "Heavy war spear", icon: "⚜️", melee: false, proj: "spear", range: 145, dmg: 62, cd: 2.3, speed: 420, prey: 120, cost: { wood: 2, iron: 3, obsidian: 1 }, at: "blacksmith" },
+  { id: "spearC", metal: "copper", kind: "spear", tier: 2, name: "Copper spear", icon: "🗡️", melee: false, proj: "spear", range: 130, dmg: 37, cd: 2, speed: 390, prey: 78, cost: { wood: 1, copperBar: 1 }, at: "blacksmith" },
+  { id: "spear2", kind: "spear", tier: 2, name: "Iron spear", icon: "🔱", melee: false, proj: "spear", range: 135, dmg: 40, cd: 2, speed: 400, prey: 85, cost: { wood: 1, iron: 2 }, at: "blacksmith" },
+  { id: "spear3", metal: "steel", kind: "spear", tier: 3, name: "Heavy war spear", icon: "⚜️", melee: false, proj: "spear", range: 145, dmg: 62, cd: 2.3, speed: 420, prey: 120, cost: { wood: 2, steel: 2, obsidian: 1 }, at: "blacksmith" },
   { id: "sword1", kind: "sword", tier: 1, name: "Flint blade", icon: "🔪", melee: true, range: 34, dmg: 30, cd: 1.1, speed: 0, prey: 55, cost: { stick: 1, flint: 2 }, at: "workshop" },
   { id: "knifeB", kind: "sword", tier: 1, name: "Bone knife", icon: "🔪", melee: true, range: 30, dmg: 24, cd: 0.8, speed: 0, prey: 50, cost: { bone: 2, stick: 1 }, at: "camp", tech: "tools" },
-  { id: "sword2", kind: "sword", tier: 2, name: "Metal sword", icon: "🗡️", melee: true, range: 36, dmg: 46, cd: 1.1, speed: 0, prey: 80, cost: { wood: 1, iron: 3 }, at: "blacksmith" },
-  { id: "sword3", kind: "sword", tier: 3, name: "Battle sword", icon: "⚔️", melee: true, range: 40, dmg: 72, cd: 1.4, speed: 0, prey: 130, cost: { iron: 4, gold: 1 }, at: "blacksmith" },
+  { id: "swordC", metal: "copper", kind: "sword", tier: 2, name: "Copper sword", icon: "🗡️", melee: true, range: 35, dmg: 38, cd: 1.1, speed: 0, prey: 68, cost: { wood: 1, copperBar: 2 }, at: "blacksmith" },
+  { id: "sword2", kind: "sword", tier: 2, name: "Iron sword", icon: "🗡️", melee: true, range: 36, dmg: 46, cd: 1.1, speed: 0, prey: 80, cost: { wood: 1, iron: 3 }, at: "blacksmith" },
+  { id: "sword3", metal: "steel", kind: "sword", tier: 3, name: "Great battle sword", icon: "⚔️", melee: true, range: 40, dmg: 72, cd: 1.4, speed: 0, prey: 130, cost: { steel: 3, gold: 1 }, at: "blacksmith" },
   { id: "axe1", kind: "axe", tier: 1, name: "Stone axe", icon: "🪓", melee: true, range: 32, dmg: 28, cd: 1.3, speed: 0, prey: 55, cost: { stick: 1, stone: 2 }, at: "camp", tech: "axe" },
   { id: "axeB", kind: "axe", tier: 1, name: "Bone-edge axe", icon: "🪓", melee: true, range: 32, dmg: 36, cd: 1.3, speed: 0, prey: 65, cost: { wood: 1, bone: 2, tooth: 1 }, at: "camp", tech: "axe" },
-  { id: "axe2", kind: "axe", tier: 2, name: "Metal axe", icon: "🪓", melee: true, range: 34, dmg: 44, cd: 1.3, speed: 0, prey: 80, cost: { wood: 1, iron: 2 }, at: "blacksmith" },
-  { id: "axe3", kind: "axe", tier: 3, name: "Battle axe", icon: "🪓", melee: true, range: 38, dmg: 70, cd: 1.7, speed: 0, prey: 130, cost: { iron: 4, obsidian: 1 }, at: "blacksmith" },
+  { id: "axeC", metal: "copper", kind: "axe", tier: 2, name: "Copper axe", icon: "🪓", melee: true, range: 33, dmg: 39, cd: 1.3, speed: 0, prey: 72, cost: { wood: 1, copperBar: 1 }, at: "blacksmith" },
+  { id: "axe2", kind: "axe", tier: 2, name: "Iron axe", icon: "🪓", melee: true, range: 34, dmg: 44, cd: 1.3, speed: 0, prey: 80, cost: { wood: 1, iron: 2 }, at: "blacksmith" },
+  { id: "axe3", metal: "steel", kind: "axe", tier: 3, name: "Battle axe", icon: "🪓", melee: true, range: 38, dmg: 70, cd: 1.7, speed: 0, prey: 130, cost: { steel: 3, obsidian: 1 }, at: "blacksmith" },
   { id: "bow1", kind: "bow", tier: 1, name: "Simple bow", icon: "🏹", melee: false, proj: "arrow", range: 250, dmg: 22, cd: 1.3, speed: 620, prey: 95, cost: { stick: 3, grass: 2 }, at: "camp", tech: "bow" },
   { id: "bow2", kind: "bow", tier: 2, name: "Reinforced bow", icon: "🏹", melee: false, proj: "arrow", range: 290, dmg: 31, cd: 1.3, speed: 680, prey: 120, cost: { wood: 2, tar: 1, grass: 2 }, at: "workshop" },
-  { id: "bow3", kind: "bow", tier: 3, name: "Heavy bow", icon: "🎯", melee: false, proj: "bolt", range: 340, dmg: 46, cd: 2, speed: 820, prey: 150, cost: { wood: 2, iron: 1, tar: 1 }, at: "blacksmith" },
+  { id: "bow3", kind: "bow", tier: 3, name: "War bow", icon: "🎯", melee: false, proj: "bolt", range: 340, dmg: 46, cd: 2, speed: 820, prey: 150, cost: { wood: 2, iron: 1, tar: 1 }, at: "blacksmith" },
   // fantasy tech: a crystal-tipped staff that throws a bolt of light
   { id: "lance", kind: "spear", tier: 3, name: "Resonance lance", icon: "🔆", melee: false, proj: "beam", range: 300, dmg: 58, cd: 1.9, speed: 1500, prey: 140, cost: { copper: 2, crystal: 1, wood: 1 }, at: "workshop", civ: "precisionStone" },
+  // sidearms every grown-up carries: they drive wild animals out of the settlement and fight off raiders (territory.ts)
+  { id: "shockStick", kind: "sword", tier: 3, name: "Shock stick", icon: "⚡", melee: true, range: 38, dmg: 50, cd: 0.9, speed: 0, prey: 110, cost: { copperBar: 1, crystal: 1, stick: 1 }, at: "workshop", civ: "energyStorage", battery: true, sidearm: true },
+  { id: "rayGun", kind: "bow", tier: 3, name: "Ray gun", icon: "🔫", melee: false, proj: "beam", range: 280, dmg: 44, cd: 1.5, speed: 1400, prey: 120, cost: { copperBar: 1, crystal: 1, quartz: 1 }, at: "workshop", civ: "energyStorage", battery: true, sidearm: true },
   { id: "nightSidearm", kind: "bow", tier: 3, name: "Night energy sidearm", icon: "⚡", melee: false, proj: "beam", range: 230, dmg: 42, cd: 2.3, speed: 1350, prey: 105, cost: { copper: 3, crystal: 2, quartz: 1 }, at: "workshop", civ: "nightDefenseGear" },
 ];
 
@@ -238,7 +254,8 @@ export interface ShieldDef {
 export const SHIELDS: ShieldDef[] = [
   { id: "shield1", tier: 1, name: "Wood shield", block: 0.18, cost: { wood: 2 }, at: "workshop" },
   { id: "shield2", tier: 2, name: "Reinforced shield", block: 0.3, cost: { wood: 2, tar: 1, stone: 1 }, at: "workshop" },
-  { id: "shield3", tier: 3, name: "Metal shield", block: 0.45, cost: { iron: 3 }, at: "blacksmith" },
+  { id: "shield3", tier: 3, name: "Iron shield", block: 0.45, cost: { iron: 3 }, at: "blacksmith" },
+  { id: "shield4", tier: 4, name: "Steel tower shield", block: 0.55, cost: { steel: 3, hide: 1 }, at: "blacksmith" },
 ];
 
 export const SHIELD_BY_ID: Record<string, ShieldDef> = Object.fromEntries(SHIELDS.map((s) => [s.id, s]));
@@ -316,6 +333,38 @@ export const HELMETS: HelmetDef[] = [
 
 export const HELMET_BY_ID: Record<string, HelmetDef> = Object.fromEntries(HELMETS.map((h) => [h.id, h]));
 
+/* ------------------------------ body armour (worn over the clothes) ------------------------------ */
+
+export interface ArmorDef {
+  id: string;
+  name: string;
+  icon: string;
+  /** 0..1 how good it is (gear.ts turns it into damage taken) */
+  armor: number;
+  /** extra protection up on a mount (rider armour) */
+  mounted?: number;
+  cost: Cost;
+  at: Station;
+  /** how it's drawn: the plates, their edging, and gold trim for the elite set */
+  look: "hide" | "scale" | "mail" | "plate";
+  color: string;
+  trim: string;
+  gilded?: boolean;
+  tip: string;
+}
+
+/** Each set is a breastplate with arm guards + greaves (forearms + shins). */
+export const ARMORS: ArmorDef[] = [
+  { id: "armorHide", name: "Hardened hide armour", icon: "🦺", armor: 0.12, cost: { hide: 3, bone: 1 }, at: "tannery", look: "hide", color: "#7d5233", trim: "#4e3220", tip: "Boiled, hardened hide with bone studs, arm guards and shin wraps. Light: workers can wear it all day." },
+  { id: "armorCopper", name: "Copper scale armour", icon: "🟧", armor: 0.2, cost: { copperBar: 2, hide: 2 }, at: "blacksmith", look: "scale", color: "#d07a42", trim: "#8f4a22", tip: "Overlapping copper scales on hide, copper arm guards and greaves." },
+  { id: "armorIron", name: "Iron mail", icon: "⛓️", armor: 0.28, cost: { iron: 4, hide: 1 }, at: "blacksmith", look: "mail", color: "#9aa3ad", trim: "#5d646d", tip: "Riveted iron rings over a padded jacket, iron vambraces and greaves." },
+  { id: "armorSteel", name: "Reinforced steel plate", icon: "🛡️", armor: 0.36, cost: { steel: 3, iron: 1, hide: 1 }, at: "blacksmith", look: "plate", color: "#c3cad2", trim: "#59616b", tip: "Steel breastplate, shoulder plates, arm guards and greaves. Bites and clubs mostly glance off." },
+  { id: "armorElite", name: "Gold-trimmed elite armour", icon: "👑", armor: 0.42, cost: { steel: 3, goldBar: 1, hide: 1 }, at: "blacksmith", look: "plate", color: "#d3d8de", trim: "#c9972a", gilded: true, tip: "Polished steel plate edged in gold, for the champions of the tribe. The best armour there is." },
+  { id: "armorRider", name: "Heavy rider armour", icon: "🏇", armor: 0.32, mounted: 0.25, cost: { steel: 2, iron: 2, hide: 2 }, at: "blacksmith", look: "plate", color: "#8f969e", trim: "#3f454c", tip: "Steel plate cut for the saddle: tough on foot and much tougher up on a dino or a dragon." },
+];
+
+export const ARMOR_BY_ID: Record<string, ArmorDef> = Object.fromEntries(ARMORS.map((a) => [a.id, a]));
+
 /* ------------------------------ tribe kits (one-time crafts) ------------------------------ */
 
 export interface KitDef {
@@ -346,13 +395,15 @@ export const KITS: KitDef[] = [
   { id: "minerPack", name: "Miner's packs", icon: "🎒", cost: { hide: 3, stick: 2 }, at: "tannery", tip: "Down the mine: every miner carries half as much again before walking back to the lift." },
   { id: "crystalLantern", name: "Crystal lanterns", icon: "🏮", cost: { crystal: 1, copper: 1, tar: 1 }, at: "workshop", tip: "Down the mine: miners light up much more rock and spot what's in it from two cells away." },
   { id: "reinforcedPick", name: "Reinforced picks", icon: "⚒️", cost: { iron: 3, magnetite: 2 }, at: "blacksmith", tip: "Down the mine: iron picks hardened with magnetite. Faster again, and they can chew through granite (slowly) without a drill." },
+  // riders
+  { id: "steelSaddles", name: "Steel saddles + harness", icon: "🐎", cost: { steel: 2, iron: 2, hide: 4 }, at: "blacksmith", tip: "Every dino + dragon rider gets a steel-framed saddle and harness: riders hit a quarter harder from the saddle and are hurt far less up there." },
   // from the Deep
   { id: "diamondDrill", name: "Diamond drill", icon: "💎", cost: { diamond: 2, iron: 2 }, at: "blacksmith", tip: "Down the mine: cuts granite + volcanic rock twice as fast (and counts as a drill)." },
 ];
 
 export const KIT_BY_ID: Record<string, KitDef> = Object.fromEntries(KITS.map((k) => [k.id, k]));
 
-export type ForgeCat = "weapons" | "shields" | "gear" | "kits";
+export type ForgeCat = "weapons" | "shields" | "armor" | "gear" | "kits";
 
 export interface ForgeItem {
   id: string;
@@ -378,6 +429,7 @@ export const FORGE_ITEMS: ForgeItem[] = [
   ...SHIELDS.map((s) => ({ id: s.id, name: s.name, icon: "🛡️", tier: s.tier, cost: s.cost, at: s.at as string, tech: undefined, cat: "shields" as ForgeCat })),
   ...OUTFITS.map((o) => ({ id: o.id, name: o.name, icon: o.icon, tier: 1, cost: o.cost, at: o.at as string, tech: o.tech, civ: o.civ, cat: "gear" as ForgeCat, tip: o.tip })),
   ...HELMETS.map((h) => ({ id: h.id, name: h.name, icon: h.icon, tier: 2, cost: h.cost, at: h.at as string, tech: undefined, civ: h.civ, cat: "gear" as ForgeCat, tip: h.tip })),
+  ...ARMORS.map((a) => ({ id: a.id, name: a.name, icon: a.icon, tier: 2, cost: a.cost, at: a.at as string, tech: undefined, cat: "armor" as ForgeCat, tip: a.tip })),
   ...FIRE_GEAR.map((g) => ({ id: g.id, name: g.name, icon: g.icon, tier: 2, cost: g.cost, at: g.at, tech: g.tech, cat: "gear" as ForgeCat, tip: g.tip })),
   ...KITS.map((k) => ({ id: k.id, name: k.name, icon: k.icon, tier: 1, cost: k.cost, at: k.at as string, tech: undefined, civ: k.civ, cat: "kits" as ForgeCat, tip: k.tip })),
 ];

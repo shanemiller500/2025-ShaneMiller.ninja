@@ -38,6 +38,9 @@ function forestWorld(seed = 4242) {
   w.rivals.clans.length = 0;
   w.rivals.brutes.length = 0;
   w.wildlife.enabled = false;
+  // (the desert + mountain peoples have nothing to do with these tests)
+  w.sandFolk.enabled = false;
+  w.snowFolk.enabled = false;
   w.dinos.length = 0;
   w.elapsed = 300;
   w.forest.update(w, 0.05);

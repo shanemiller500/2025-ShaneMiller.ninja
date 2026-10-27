@@ -35,7 +35,9 @@ import { moveBrute, say, setB } from "./rivals";
 import { fairGame, takeFood } from "./treeFolk";
 import { breathBlast } from "./breath";
 import { flyToward, landAt } from "./dragonKeep";
+import { survived } from "./growth";
 import { repelStep } from "./dragonShield";
+import { duelStep } from "./yetiFeud";
 import { foundingGroups, type FolkGroup, type GroupKind } from "./folkGroups";
 
 /** Our hits are divided by this (Neanderthals take 150, Tree People 70). */
@@ -46,7 +48,12 @@ const REACH = 22;
 /** Seconds for a youngster to grow into a warrior. */
 export const SAND_GROWN = 110;
 export const MAX_SAND_TRIBES = 3;
-const MAX_FOLK = 42;
+const MAX_FOLK = 56;
+/** A Sand settlement's size: 1 camp, 2 a strong camp, 3 a town, 4 a city, 5 a kingdom (growth.ts: the last two need it to have lasted). */
+export const SAND_MAX_TIER = 5;
+export const SAND_TITLES = ["camp", "camp", "strong camp", "town", "city", "kingdom"];
+/** archers on a watchtower see this far (px) */
+const TOWER_RANGE = 320;
 /** They show up a little after the Neanderthals (and well after the start). */
 const START_AT = 300;
 /** A Sand camp never pitches nearer our town than this (px). */
@@ -70,12 +77,16 @@ export const SAND_ROLE_NAMES: Record<Role, string> = { camel: "Camel Rider", arc
 export interface SandTent {
   x: number;
   y: number;
-  kind: "tent" | "bigTent" | "pen" | "roost" | "totem" | "fire";
+  kind: "tent" | "bigTent" | "pen" | "roost" | "totem" | "fire"
+    // a town + a kingdom (growCamp): mud-brick houses, a market, a well, watchtowers, city walls, the palace
+    | "house" | "market" | "well" | "tower" | "wall" | "palace";
   hp: number;
 }
 
 export interface SandTribe {
   id: number;
+  /** when it was founded (growth.ts: settlements that last grow bigger) */
+  since?: number;
   name: string;
   color: string;
   x: number;
@@ -551,17 +562,17 @@ export class SandFolk {
             this.camel(w, t, pen ?? t);
           }
         }
-        // a strong camp grows: more tents, a roost + a dragon
-        if (fs.length > 8 + t.tier * 4 && t.tier < 3) {
+        // a strong camp grows: a roost + a dragon, then a town of mud-brick, a city, and (if it lasts) a kingdom
+        if (fs.length > 8 + t.tier * 3 && t.food > 4 && t.tier < Math.min(SAND_MAX_TIER, 3 + survived(w, t))) {
           t.tier++;
           t.r += 80;
-          if (!t.tents.some((x) => x.kind === "roost")) t.tents.push({ x: t.x - 230, y: t.y - 40, kind: "roost", hp: 1 });
-          if (t.found) w.toast("🏜️", `The ${t.name} Sand People's camp is growing stronger.`, t.x, t.y);
+          t.food -= 3;
+          this.growCamp(w, t);
         }
       }
       // a dragon rider without a dragon (theirs fell): a new one is raised at the roost now and then
       const roost = t.tents.find((x) => x.kind === "roost");
-      if (roost && this.rng() < 0.004 && !w.dragons.list.some((d) => d.sandTribe === t.id)) {
+      if (roost && this.rng() < 0.004 && w.dragons.list.filter((d) => d.sandTribe === t.id).length < 1 + Math.floor(t.tier / 2)) {
         const rider = adults.find((b) => !b.mount && !b.band && b.sandRole !== "camel");
         const dr = this.dragon(w, t, roost);
         if (rider && dr) this.boardDragon(rider, dr);
@@ -581,6 +592,8 @@ export class SandFolk {
         w.toast("🏜️", `A Sand People camp! The ${t.name} tribe: ${fs.length} of them, robed the colour of the dunes. Out on the sand they're hard to spot. They raid on camels and fly Sand Dragons!`, t.x, t.y);
         w.discover("sandPeople", t.x, t.y);
       }
+      // a city's watchtowers keep guard
+      if (t.tier >= 4) this.towersTick(w, t);
       // groups go out: patrols, caravans, and (not when the world's calm) raids
       const free = adults.filter((b) => !b.band && !b.onDragon && b.hp > 0.6 && b.state !== "flee" && b.state !== "fight");
       t.patrolT -= 1;
@@ -608,6 +621,92 @@ export class SandFolk {
         const t = this.settle(w, 1);
         if (t && w.humans.some((h) => dist(h, t) < 900)) w.toast("🏜️", `More Sand People have pitched their tents in the desert: the ${t.name} tribe.`, t.x, t.y);
       }
+    }
+  }
+
+  /** "the Red Dune camp" / "the Red Dune town" / "the Kingdom of the Red Dune" */
+  title(t: SandTribe) {
+    return t.tier >= 5 ? `the Kingdom of the ${t.name}` : `the ${t.name} ${SAND_TITLES[t.tier]}`;
+  }
+
+  /** A free spot round the camp for something new (at about ring r), or null. */
+  private plot(w: World, t: SandTribe, r: number, a0?: number) {
+    for (let k = 0; k < 14; k++) {
+      const a = (a0 ?? this.rng() * Math.PI * 2) + (k ? (this.rng() - 0.5) * 1.2 : 0);
+      const x = Math.round(t.x + Math.cos(a) * r * (0.9 + this.rng() * 0.2));
+      const y = Math.round(t.y + Math.sin(a) * r * 0.62);
+      if (!w.nav.passable("dino", x, y)) continue;
+      if (t.tents.some((s) => Math.abs(s.x - x) < 44 && Math.abs(s.y - y) < 30)) continue;
+      return { x, y };
+    }
+    return null;
+  }
+
+  /**
+   * The settlement has grown a tier: build what that size of place has.
+   *   2 a roost for a Sand Dragon · 3 a town: half the tents rebuilt as mud-brick houses, a market + a well ·
+   *   4 a city: every tent a house, more houses, watchtowers with archers, a second roost ·
+   *   5 a kingdom: the chief's tent becomes a palace, a city wall with gates rings it all.
+   */
+  growCamp(w: World, t: SandTribe) {
+    const add = (kind: SandTent["kind"], r: number, a?: number) => {
+      const p = this.plot(w, t, r, a);
+      if (p) t.tents.push({ ...p, kind, hp: 1 });
+    };
+    if (!t.tents.some((x) => x.kind === "roost")) add("roost", 230, Math.PI);
+    if (t.tier >= 3) {
+      const tents = t.tents.filter((x) => x.kind === "tent");
+      for (const s of tents.slice(0, t.tier >= 4 ? tents.length : Math.ceil(tents.length / 2))) s.kind = "house";
+      if (!t.tents.some((x) => x.kind === "market")) add("market", 110);
+      if (!t.tents.some((x) => x.kind === "well")) add("well", 90);
+    }
+    if (t.tier >= 4) {
+      for (let i = 0; i < 3; i++) add("house", 190 + i * 15);
+      if (t.tents.filter((x) => x.kind === "tower").length < 2) {
+        add("tower", t.r * 0.55, 0.3);
+        add("tower", t.r * 0.55, Math.PI + 0.3);
+      }
+      if (t.tents.filter((x) => x.kind === "roost").length < 2) add("roost", 260, 0);
+    }
+    if (t.tier >= 5) {
+      const big = t.tents.find((x) => x.kind === "bigTent");
+      if (big) big.kind = "palace";
+      if (!t.tents.some((x) => x.kind === "wall")) {
+        // a ring of wall with two gates (east + west)
+        const R = Math.max(300, t.r * 0.62);
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * Math.PI * 2;
+          if (Math.abs(Math.cos(a)) > 0.96) continue;
+          const x = Math.round(t.x + Math.cos(a) * R);
+          const y = Math.round(t.y + Math.sin(a) * R * 0.62);
+          if (w.nav.passable("dino", x, y)) t.tents.push({ x, y, kind: "wall", hp: 1 });
+        }
+        for (let i = 0; i < 2; i++) add("tower", R * 0.95, i ? Math.PI * 0.5 : Math.PI * 1.5);
+      }
+    }
+    if (!t.found) return;
+    const said = t.tier >= 5
+      ? `The ${t.name} Sand People have built a kingdom! ${this.title(t)}: a palace, city walls and watchtowers, and Sand Dragons over the dunes.`
+      : t.tier === 4 ? `The ${t.name} Sand People's town has grown into a walled city of mud-brick, with watchtowers and a second dragon roost.`
+      : t.tier === 3 ? `The ${t.name} Sand People are building a town: mud-brick houses, a market and a well.`
+      : `The ${t.name} Sand People's camp is growing stronger.`;
+    w.toast(t.tier >= 5 ? "👑" : "🏜️", said, t.x, t.y);
+  }
+
+  /** Once a second: archers on each watchtower loose at anyone hostile coming close. */
+  private towersTick(w: World, t: SandTribe) {
+    for (const s of t.tents) {
+      if (s.kind !== "tower" || s.hp <= 0 || this.rng() > 0.5) continue;
+      const f = this.foeNearAt(w, s.x, s.y, TOWER_RANGE, t);
+      if (!f) continue;
+      const p = foeXY(f);
+      const d = dist(s, p);
+      const flight = Math.max(0.25, d / 430);
+      const sz = 46;
+      w.rivals.missiles.push({ x: s.x, y: s.y - 2, z: sz, vx: (p.x - s.x) / flight, vy: (p.y - s.y) / flight, vz: (12 - sz) / flight + 0.5 * 260 * flight, t: 0, dur: flight, target: f.kind === "human" ? f.h.id : 0, dmg: 0.14, kind: "arrow" });
+      if (f.kind === "brute") w.rivals.hit(w, f.b, 0.12, s.x, s.y, true);
+      else if (f.kind === "dino") hitDino(w, f.d, 10, s.x, s.y);
+      w.sfx("whoosh", s.x, s.y, 0.35, 1.6);
     }
   }
 
@@ -653,7 +752,7 @@ export class SandFolk {
     const near = goals.filter((g) => g.d < 5200).sort((a, b) => a.d - b.d).slice(0, 3);
     if (!near.length) return false;
     const g = near[Math.floor(this.rng() * near.length)];
-    const n = Math.min(free.length, 3 + t.tier * 2, 10);
+    const n = Math.min(free.length, 3 + t.tier * 2, t.tier >= 5 ? 13 : 10);
     if (n < 3) return false;
     const party = free.slice().sort((a, b) => (b.mount ? 1 : 0) - (a.mount ? 1 : 0) || dist(a, t) - dist(b, t)).slice(0, n);
     const band = this.newBand(w, t, "raid", party, g.goal, g.x, g.y, n >= 7 ? "war" : "raid");
@@ -857,7 +956,8 @@ export class SandFolk {
     if (foe) return this.engage(w, b, foe);
     if (w.daylight < 0.3) {
       if (b.state !== "sleep") {
-        const tent = t.tents.filter((x) => x.kind === "tent" || x.kind === "bigTent")[b.id % Math.max(1, t.tents.length)] ?? t;
+        const homes = t.tents.filter((x) => x.kind === "tent" || x.kind === "bigTent" || x.kind === "house" || x.kind === "palace");
+        const tent = homes[b.id % Math.max(1, homes.length)] ?? t;
         if (dist(b, tent) < 30) setB(b, "sleep", b.x, b.y);
         else setB(b, "home", tent.x + (this.rng() - 0.5) * 20, tent.y + 14);
       }
@@ -1130,7 +1230,12 @@ export class SandFolk {
     }
     // a Dragon Shield's hum drives it off (dragonShield.ts): it flies away rattled, it isn't hurt
     if (repelStep(w, dr, dt)) return this.saddle(dr, rider, dt);
-    const roost = t.tents.find((x) => x.kind === "roost") ?? t;
+    // a Yeti fight: to the death (yetiFeud.ts)
+    if (duelStep(w, dr, dt)) return this.saddle(dr, rider, dt);
+    // each of the tribe's dragons has its own roost (a city has two)
+    const roosts = t.tents.filter((x) => x.kind === "roost");
+    const mine = w.dragons.list.filter((d) => d.sandTribe === t.id).indexOf(dr);
+    const roost = roosts[Math.max(0, mine) % Math.max(1, roosts.length)] ?? t;
     // a band whose job is over leaves its rider with a stale tag: let it go
     if (rider?.band && !this.bands.some((x) => x.id === rider!.band)) rider.band = undefined;
     const band = rider?.band ? this.bands.find((x) => x.id === rider!.band) : null;

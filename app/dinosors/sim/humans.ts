@@ -4,9 +4,12 @@
 /*  dinosaurs and storms, and sleep in the cave at night.              */
 /* ------------------------------------------------------------------ */
 import { roomOf } from "./riderHall";
+import { shieldedAt } from "./dragonShield";
+import { answersFire, douseAim, dropClaim } from "./firefight";
 import { huntThink } from "./chariots";
 import { feastThink } from "./feast";
 import { cleanupThink } from "./cleanup";
+import { hungTick, rescueHungThink } from "./snowBeasts";
 import { maybeDrink, pressTick } from "./vineyard";
 import { clearThink, clearTick as clearAreaTick } from "./clearArea";
 import { CAVE_NAMES } from "../data/facts";
@@ -33,10 +36,11 @@ import { TALL } from "./plants";
 import { roleAct, roleThink } from "./tribe";
 import { goalKey, nodePos, tileOf, TOWER_Z, WALK_Z, type NavClass } from "./nav";
 import { shelterDone, stagesOf } from "./build";
-import { buildAct, buildThink, deliverToSite, dismount, douseThink, joinTask, leaveScorpion, taskCarrying, taskThink } from "./tasks";
+import { buildAct, buildThink, deliverToSite, dismount, douseThink, joinTask, leaveScorpion, taskCarrying, taskThink, yieldToUrgent } from "./tasks";
 import { healTick, hurtHuman, recover } from "./injury";
 import { autoButcher, type Task } from "./tasks";
 import { COURAGE, bandNear, canFight, courageScore, foesNear, onMission } from "./courage";
+import { repelThink } from "./territory";
 import { cutCarcass, cutTime, hasYield } from "./carcass";
 import { hasCart, pickNeed } from "./carts";
 import { keeperThink } from "./ourCatapults";
@@ -77,6 +81,26 @@ function rescueThink(w: World, h: Human, comrade: boolean): boolean {
     go(h, "walk", best.x + 14, best.y);
   }
   return true;
+}
+
+/** The nearest finished healing hut (within a long walk), or null. */
+function nearestHealer(w: World, h: Human) {
+  let best: import("./types").Building | null = null;
+  let bd = 2600;
+  for (const b of w.colony.buildings) {
+    if (b.kind !== "healer" || b.built < 1 || b.hp <= 0) continue;
+    const d = Math.hypot(b.x - h.x, b.y - h.y);
+    if (d < bd) {
+      bd = d;
+      best = b;
+    }
+  }
+  return best;
+}
+
+/** Something damaged waiting to be repaired (and not waiting on an invention)? */
+function repairWaiting(w: World) {
+  return w.buildSites().some((s) => s.repair && !s.locked);
 }
 
 /** How much rain + wet this person's clothes keep off (0..1). */
@@ -416,13 +440,14 @@ function localDanger(w: World, h: Human): LocalDanger | null {
     }
   });
   for (const b of w.rivals.brutes) if (w.rivals.hostile(w, b) && b.hp > 0 && b.state !== "flee" && b.state !== "home") offer(b.x, b.y, sensitive ? 440 : 340, "raid");
-  for (const dr of w.dragons.list) if (dr.state !== "leave" && dr.state !== "flee" && dr.z < 250) offer(dr.x, dr.y, sensitive ? 680 : 560, "dragon");
+  // under a powered Dragon Shield the field keeps dragons off: nobody there scatters for one
+  if (w.dragons.list.length && !shieldedAt(w, h.x, h.y)) for (const dr of w.dragons.list) if (dr.state !== "leave" && dr.state !== "flee" && dr.z < 250) offer(dr.x, dr.y, sensitive ? 680 : 560, "dragon");
   const tx = Math.floor(h.x / TILE), ty = Math.floor(h.y / TILE);
   // the bucket brigade fights fires instead of fleeing them (unless they're standing in one); lava is never safe
   const role = w.tribe.roleOf(h);
   // (someone holding an ultrasonic emitter works from a distance: flames only matter right on top of them)
   // (a dragon raid doesn't stop for burning grass either)
-  const firefighter = !sensitive && (!!h.sonic || w.tasks.get(h.taskId)?.kind === "dragonRaid" || (w.camp.learned.has("firefighting") && w.tribe.fireAlarm && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook")));
+  const firefighter = !sensitive && (!!h.sonic || w.tasks.get(h.taskId)?.kind === "dragonRaid" || (w.camp.learned.has("firefighting") && w.tribe.fireAlarm && (role === "firefighter" || role === "gatherer" || role === "builder" || role === "farmer" || role === "cook")));
   for (let y = ty - 5; y <= ty + 5; y++) for (let x = tx - 5; x <= tx + 5; x++) {
     if (w.lava.heatAt(x, y) > 0.14) offer((x + 0.5) * TILE, (y + 0.5) * TILE, sensitive ? 210 : 165, "fire");
     else if (w.fire.at(x, y) > 0.24) offer((x + 0.5) * TILE, (y + 0.5) * TILE, firefighter ? 40 : sensitive ? 210 : 165, "fire");
@@ -471,6 +496,7 @@ function emergencySpot(w: World, h: Human, danger: LocalDanger): { x: number; y:
 
 /** A dragon swooping low nearby. */
 function dragonNear(w: World, h: Human): Dragon | null {
+  if (!w.dragons.list.length || shieldedAt(w, h.x, h.y)) return null;
   for (const dr of w.dragons.list) {
     if (dr.z > 230 || dr.state === "leave" || dr.state === "flee") continue;
     if (Math.hypot(dr.x - h.x, dr.y - h.y) < 520) return dr;
@@ -578,7 +604,8 @@ function nearestNode(w: World, x: number, y: number, r: Resource, max: number): 
  * Refill the lowest relative supply first, counting loads already on their way home.
  * `all`: everything we collect, lowest first, even once it's all past its target (keep topping up).
  */
-export function stockPriorities(w: World, all = false): Resource[] {
+/** How much of each everyday supply the camp likes to keep (gatherers top up the lowest first). */
+export function stockGoals(w: World): [Resource, number][] {
   const adults = w.humans.filter((h) => !h.child && !h.stranger).length;
   const target = Math.max(6, Math.ceil(adults * 0.6));
   const goals: [Resource, number][] = [
@@ -593,7 +620,11 @@ export function stockPriorities(w: World, all = false): Resource[] {
     if (!node.found || node.amount <= 0 || !def.gives || (def.needs && !w.camp.learned.has(def.needs))) continue;
     if (!goals.some(([r]) => r === def.gives)) goals.push([def.gives, Math.max(3, Math.ceil(target / 2))]);
   }
-  return goals.map(([r, n]) => ({
+  return goals;
+}
+
+export function stockPriorities(w: World, all = false): Resource[] {
+  return stockGoals(w).map(([r, n]) => ({
     r,
     ratio: (w.camp.stock[r] + w.humans.reduce((sum, h) => sum + (h.carry === r ? h.carryN : h.task === r ? 1 : 0), 0)) / n,
   })).filter((x) => x.ratio < (all ? 4 : 1)).sort((a, b) => a.ratio - b.ratio).map((x) => x.r);
@@ -748,6 +779,10 @@ function think(w: World, h: Human) {
 
   // a comrade on the same job (a raid, the unit) is down and fading: get to them, even mid-fight (death.ts)
   if (rescueThink(w, h, true)) return;
+  // seeing a stray animal off our ground with a shock stick / ray gun (territory.ts) — but never into a dragon's path
+  if (!dragonNear(w, h) && repelThink(w, h)) return;
+  // someone hanging from a Yeti's tree while it's off (or pleased with itself): go and cut them down now (snowBeasts.ts)
+  if (!h.taskId && rescueHungThink(w, h, true)) return;
   // a nest raid that's falling back: everyone breaks off and heads home (dragonRaid.ts)
   const raid = w.tasks.get(h.taskId);
   if (raid?.kind === "dragonRaid" && raid.retreat && h.state !== "heal" && !h.egg) {
@@ -766,16 +801,25 @@ function think(w: World, h: Human) {
   // on a chariot hunt: boarding, marching beside the chariots, fighting, fetching eggs (chariots.ts)
   if (w.colony.hunt && huntThink(w, h)) return;
   const tribe = w.tribe;
-  const role = tribe.roleOf(h);
+  // (a firefighter with nothing burning works as a gatherer)
+  const realRole = tribe.roleOf(h);
+  const role = realRole === "firefighter" ? "gatherer" : realRole;
   const weapon = tribe.weaponFor(w, h);
   const task = w.tasks.get(h.taskId);
   const fightTask = !!task && (task.kind === "hunt" || task.kind === "guard" || task.kind === "defend" || task.kind === "operate");
-  const fighter = !!weapon && (role === "guard" || role === "hunter" || !!h.order || fightTask || h.state === "operate" || (h.shift === "night" && h.gear.weapon === "nightSidearm"));
+  const dutyFighter = !!weapon && (role === "guard" || role === "hunter" || !!h.order || fightTask || h.state === "operate" || (h.shift === "night" && h.gear.weapon === "nightSidearm"));
+  // everyone carrying a shock stick or a ray gun stands and fights too (territory.ts)
+  const sidearmed = !h.child && !h.stranger && !!weapon && !!h.gear.sidearm;
+  const fighter = dutyFighter || sidearmed;
   const battleRider = !!h.riding && role === "guard" && w.flags.has("rallyDinos");
 
   // Each civilian responds to danger around their own position, not an event elsewhere.
   const nearby = localDanger(w, h);
   const dragon = dragonNear(w, h);
+  if (!dragon && !w.flags.has("shieldCalm") && w.dragons.list.some((dr) => dr.state !== "leave" && dr.state !== "flee" && dr.z < 250 && Math.hypot(dr.x - h.x, dr.y - h.y) < 560) && shieldedAt(w, h.x, h.y)) {
+    w.flags.add("shieldCalm");
+    w.toast("🛡️", "A dragon! But the Dragon Shield covers us: everyone under its field keeps working instead of scattering.", h.x, h.y);
+  }
   const safe = nearby?.kind === "raid" && tribe.safeInside(w, h);
   if (safe && !w.flags.has("safeInside")) {
     w.flags.add("safeInside");
@@ -791,8 +835,22 @@ function think(w: World, h: Human) {
   if (nearby && !safe && !task && h.partner && riderCanFight(w, h) && riderDefend(w, h, nearby)) return;
   // a catapult's keeper mans it when enemies come in range (and keeps it repaired)
   if (h.catapult && !h.child && h.hp > 0.35 && !task && keeperThink(w, h)) return;
+  // a sidearm: predators + raiders are faced, not fled (only dragons, fire + the volcano still send them running)
+  const fightable = !!nearby && (nearby.kind === "predator" || nearby.kind === "raid");
+  if (fightable && !safe && sidearmed && !dutyFighter && h.hp >= 0.45 && h.level === 0 && !h.riding && !h.aloft && !(task && task.kind === "douse")) {
+    const foe = foesNear(w, h)[0];
+    if (foe) {
+      const id = foe.kind === "dino" ? foe.d.id : foe.b.id;
+      if (!((h.state === "hunt" || h.state === "aim") && h.targetId === id)) {
+        h.targetId = id;
+        go(h, "hunt", foe.kind === "dino" ? foe.d.x : foe.b.x, foe.kind === "dino" ? foe.d.y : foe.b.y);
+        if (w.rng() < 0.4) say(h, foe.kind === "dino" ? pick(w.rng, ["Get back!", "Zap!", "Off our land!"]) : pick(w.rng, ["Not today!", "Fight!", "Stand together!"]));
+      }
+      return;
+    }
+  }
   // strength in numbers: armed people out on a job size up the fight, and a band that can win stands its ground
-  const courage = nearby && !safe && (nearby.kind === "predator" || nearby.kind === "raid") ? rally(w, h, task, fightTask) : null;
+  const courage = nearby && !safe && fightable ? rally(w, h, task, fightTask) : null;
   if (courage === "fight") return;
   if (h.rally && (!nearby || safe)) {
     // the danger's gone (or the walls have us): back to the job
@@ -800,7 +858,8 @@ function think(w: World, h: Human) {
     if (h.state === "hunt" || h.state === "aim") go(h, "idle", h.x, h.y);
   }
   // (out on a job and badly outnumbered, even a guard or hunter runs for it)
-  const civilian = h.child || h.hp < 0.45 || !fighter || courage === "run";
+  // (a sidearm is for animals + raiders: a dragon, fire or the volcano still means run)
+  const civilian = h.child || h.hp < 0.45 || !fighter || (courage === "run" && !sidearmed) || (!dutyFighter && sidearmed && !fightable);
   if (nearby && !safe && civilian && !(task && (task.kind === "douse" || (task.kind === "dragonRaid" && nearby.kind === "dragon")))) {
     h.dangerUntil = w.elapsed + 3;
     if (!h.interrupted && h.state !== "flee" && h.state !== "hide") h.interrupted = { state: h.state, x: h.x, y: h.y, tx: h.tx, ty: h.ty };
@@ -929,15 +988,19 @@ function think(w: World, h: Human) {
   }
   if ((h.state === "sitFire" || h.state === "hide") && h.warmth < 0.7 && w.snow.chill(w, h.x, h.y) > 0.3) return;
 
-  // 3. hurt → rest up (unless the player says otherwise)
-  if (h.hp < 0.35 && !task && h.state !== "rest") {
-    const hut = w.colony.buildings.find((b) => b.kind === "healer" && b.built >= 1);
+  // 3. hurt → off to the nearest healing hut to get better (home if there isn't one), unless the player says otherwise
+  const hut = h.hp < 0.95 ? nearestHealer(w, h) : null;
+  if (h.hp < 0.5 && !task && !h.child && h.state !== "rest") {
     const spot = hut ? w.colony.door(hut) : shelterSpot(w, h);
     if (Math.hypot(h.x - spot.x, h.y - spot.y) < 14) go(h, "rest", h.x, h.y);
-    else go(h, "walk", spot.x, spot.y);
+    else {
+      if (h.state !== "walk" && w.rng() < 0.3) say(h, pick(w.rng, ["I need the healer.", "Ow… off to get patched up.", "Must rest."]));
+      go(h, "walk", spot.x, spot.y);
+    }
     return;
   }
-  if (h.state === "rest" && h.hp < 0.8 && !task) return;
+  // (at the healing hut they stay till they're nearly well; resting elsewhere, till they're on their feet)
+  if (h.state === "rest" && !task && h.hp < (hut && Math.hypot(hut.x - h.x, hut.y - h.y) < 90 ? 0.92 : 0.8)) return;
 
   // Shift change: an ongoing action finishes its current beat; its task stays on
   // the board for the incoming crew. Workers peel off at different clock times.
@@ -1002,6 +1065,8 @@ function think(w: World, h: Human) {
     }
   }
 
+  // an Urgent building site is waiting: lower-priority site work stops for it right now (tasks.ts)
+  yieldToUrgent(w, h);
   // busy with something that finishes on its own
   if (h.state === "gather" || h.state === "fish" || h.state === "build" || h.state === "eat" || h.state === "heal" || h.state === "tame" || h.state === "train" || h.state === "smith" || h.state === "douse" || h.state === "research" || h.state === "resonate" || h.state === "stargaze" || h.state === "relax" || h.state === "dragonCare" || h.state === "sonic" || h.state === "drill" || h.state === "lift" || h.state === "dragonPlay" || h.state === "show" || h.state === "watch" || h.state === "press" || h.state === "clear") return;
   if (h.state === "hunt" || h.state === "aim" || h.state === "haul" || h.state === "cook" || h.state === "farm" || h.state === "repair") return;
@@ -1025,6 +1090,8 @@ function think(w: World, h: Human) {
   if (h.clearJob && clearThink(w, h)) return;
 
   // the town gets cleaned up first: dead animals + loose bones inside our borders (cleanup.ts)
+  // someone hung up by a Yeti: the nearest free hands go and cut them down (snowBeasts.ts)
+  if (!task && rescueHungThink(w, h)) return;
   if (!task && cleanupThink(w, h)) return;
 
   // 6. the player's orders come before anything the tribe would choose
@@ -1034,9 +1101,13 @@ function think(w: World, h: Human) {
   // 7. a friend is knocked out nearby → help them up (see rescueThink, which runs earlier for comrades on a job)
   if (!h.child && !h.taskId && !nearby && rescueThink(w, h, false)) return;
 
-  // 8. fire near camp → bucket brigade
-  if (!h.child && !h.taskId && (role === "gatherer" || role === "builder" || role === "farmer" || role === "cook") && w.tribe.fireAlarm && Math.hypot(h.x - w.tribe.fireAlarm.x, h.y - w.tribe.fireAlarm.y) < 520 && camp.learned.has("firefighting")) {
-    if (douseThink(w, h, () => undefined)) return;
+  // 8. fire in the camp → firefighters go (worst fire first); regular workers only for a major one (firefight.ts)
+  if (!h.child && !h.taskId && answersFire(w, h)) {
+    if (douseThink(w, h, () => dropClaim(w, h), true)) return;
+  } else if (h.site === "douse" && !h.taskId) {
+    // the fire's out: back to work
+    dropClaim(w, h);
+    h.site = "";
   }
 
   // a dragon show is on: the audience goes to sit round the pit (keepers perform)
@@ -1100,6 +1171,9 @@ function think(w: World, h: Human) {
 
   // an Urgent build (priority.ts): everyone free who isn't on watch drops their usual job to gather, haul and build for it
   if (!h.order && !h.taskId && !URGENT_SKIP.has(role) && urgentSite(w) && buildThink(w, h, (s) => sitePrio(w, s) === URGENT)) return;
+
+  // repairs next: Auto workers fix anything damaged before their usual work (build.ts repair sites)
+  if (h.role === "auto" && !h.order && !h.taskId && !h.child && repairWaiting(w) && buildThink(w, h, (s) => s.repair)) return;
 
   // 5b. the job they've been given (or picked up automatically)
   if (roleThink(w, h)) return;
@@ -1396,6 +1470,19 @@ export function updateHuman(w: World, h: Human, dt: number) {
   }
   if (h.aloft) {
     aloftTick(w, h, dt);
+    return;
+  }
+  // in a Yeti's arms (it carries them), or hanging from its tree by the feet (snowBeasts.ts)
+  if (h.yetiHeld) {
+    if (!w.dinos.some((d) => d.id === h.yetiHeld && d.holding === h.id && d.health > 0)) {
+      // the Yeti's down (or let go): they drop into the snow
+      h.yetiHeld = undefined;
+      h.z = 0;
+      h.think = 0;
+    } else return;
+  }
+  if (h.hung) {
+    hungTick(w, h, dt);
     return;
   }
   if (h.ferry) {
@@ -1787,10 +1874,13 @@ export function updateHuman(w: World, h: Human, dt: number) {
       }
       break;
     case "douse": {
+      // thrown at the fire they're aiming at (from a safe spot beside it), or just ahead
+      const aim = douseAim(w, h) ?? { x: h.x, y: h.y - 26 };
+      h.dir = aim.x >= h.x ? 1 : -1;
       if (h.stateT > 0.8) {
-        w.fire.extinguish(w, h.x, h.y - 26, TILE * 2.2);
-        w.particles.burst(P.Splash, h.x + h.dir * 10, h.y - 20, 10, 70, { vz: 80, g: 220, size: 2.5, max: 0.7 });
-        w.particles.burst(P.Steam, h.x, h.y - 28, 4, 20, { vz: 30, size: 10, max: 1.2, color: "rgba(230,230,230,0.6)" });
+        w.fire.extinguish(w, aim.x, aim.y, TILE * 2.2);
+        w.particles.burst(P.Splash, (h.x + aim.x) / 2, (h.y + aim.y) / 2 - 10, 10, 70, { vz: 80, g: 220, size: 2.5, max: 0.7 });
+        w.particles.burst(P.Steam, aim.x, aim.y - 4, 4, 20, { vz: 30, size: 10, max: 1.2, color: "rgba(230,230,230,0.6)" });
         w.sfx("hiss", h.x, h.y, 0.7);
         h.carryN--;
         if (h.carryN <= 0) {

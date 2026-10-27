@@ -112,3 +112,38 @@ test('nobody free at all: it says so', () => {
   assert.equal(r.ok, false);
   assert.match(r.msg, /Nobody/);
 });
+
+test('a big overgrown area clears quickly: undergrowth swept up together, the crew grows, and what we built stays', () => {
+  const w = world(9994, 8);
+  const x0 = w.camp.x + 220, y0 = w.camp.y + 100;
+  const box = { x0, y0, x1: x0 + 12 * TILE, y1: y0 + 8 * TILE };
+  for (let ty = Math.floor(y0 / TILE); ty <= Math.floor(box.y1 / TILE); ty++) for (let tx = Math.floor(x0 / TILE); tx <= Math.floor(box.x1 / TILE); tx++) w.terrain.setTile(tx, ty, T.Jungle);
+  // a built path tile inside the box: dirt that must stay dirt
+  const ptx = Math.floor(x0 / TILE) + 2, pty = Math.floor(y0 / TILE) + 2;
+  w.terrain.setTile(ptx, pty, T.Dirt);
+  w.colony.buildings.push({ id: w.nextId(), kind: 'path', tx: ptx, ty: pty, x: (ptx + 0.5) * TILE, y: (pty + 0.5) * TILE, built: 1, hp: 1 });
+  const plants = [];
+  for (let gy = 0; gy < 9; gy++) for (let gx = 0; gx < 14; gx++) {
+    const k = (gx + gy) % 7 === 0 ? 'broadleaf' : gx % 3 ? 'fern' : 'bush';
+    const p = makePlant(w, k, x0 + 10 + gx * 26, y0 + 12 + gy * 26, 0.8);
+    if (k === 'bush') p.fruit = 1;
+    w.plants.push(p);
+    plants.push(p);
+  }
+  w.plantsDirty = true;
+  w.nav.sync(w);
+  const stock = { ...w.camp.stock };
+  const r = clear.startClearJob(w, box, w.humans.slice(0, 2), []);
+  assert.ok(r.ok, r.msg);
+  let most = 0;
+  const done = run(w, 240, () => {
+    const j = w.clearJobs[0];
+    if (j) most = Math.max(most, j.people.length);
+    return !w.clearJobs.length;
+  });
+  assert.ok(done, `cleared in time (${clear.plantsIn(w, box).length} of ${plants.length} left)`);
+  assert.ok(most > 2, `spare hands joined in (${most})`);
+  assert.ok(w.camp.stock.berries > stock.berries && w.camp.stock.wood > stock.wood && w.camp.stock.leaves > stock.leaves, 'harvested to the stores');
+  assert.equal(w.terrain.tiles[pty * MAP_W + ptx], T.Dirt, 'the built path is left alone');
+  assert.ok(w.colony.buildings.some((b) => b.kind === 'path'), 'the path is still there');
+});

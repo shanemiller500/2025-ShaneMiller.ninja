@@ -5,20 +5,7 @@
 /* ------------------------------------------------------------------ */
 import type { Farm } from "../sim/types";
 
-/** Union-find over a list: items joined when `near(a, b)`. Returns groups of indices. */
-export function clusters<T>(items: T[], near: (a: T, b: T) => boolean): number[][] {
-  const parent = items.map((_, i) => i);
-  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-  for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) if (near(items[i], items[j])) parent[find(i)] = find(j);
-  const groups = new Map<number, number[]>();
-  items.forEach((_, i) => {
-    const r = find(i);
-    const g = groups.get(r);
-    if (g) g.push(i);
-    else groups.set(r, [i]);
-  });
-  return Array.from(groups.values());
-}
+export { clusters } from "../sim/cluster";
 
 const hash = (n: number) => {
   const s = Math.sin(n * 127.1) * 43758.5453;
@@ -449,5 +436,72 @@ export function drawVineyardField(c: CanvasRenderingContext2D, x0: number, y0: n
     c.font = "10px serif";
     c.textAlign = "center";
     c.fillText("✦", x1 - 10, y0 - 4);
+  }
+}
+
+
+/* ------------------------------ estate vines ------------------------------ */
+
+/**
+ * A wine estate's vines, tile by tile (world coords): two trellis rows across each tile, joined up
+ * with the tiles beside them so neighbouring tiles read as one long row that follows the land's
+ * shape (same posts, wire, leaves + purple bunches as a vineyard field). `set` = every vine tile.
+ */
+export function drawEstateVines(c: CanvasRenderingContext2D, tiles: number[], set: Set<number>, mapW: number, tile: number, t: number, view: { x0: number; y0: number; x1: number; y1: number }) {
+  for (const i of tiles) {
+    const tx = i % mapW;
+    const ty = (i - tx) / mapW;
+    const px = tx * tile;
+    const py = ty * tile;
+    if (px > view.x1 + tile || px + tile < view.x0 - tile || py > view.y1 + tile || py + tile < view.y0 - tile) continue;
+    const left = set.has(i - 1);
+    const right = set.has(i + 1);
+    const xa = px + (left ? 0 : 5);
+    const xb = px + tile - (right ? 0 : 5);
+    for (const ry of [py + 13, py + 28]) {
+      // the furrow
+      c.strokeStyle = "rgba(110,82,51,0.55)";
+      c.lineWidth = 3;
+      c.beginPath();
+      c.moveTo(xa, ry + 2);
+      c.lineTo(xb, ry + 2);
+      c.stroke();
+      // posts (at the row ends and every other tile) + the wire
+      c.strokeStyle = "#8a6a44";
+      c.lineWidth = 1.6;
+      c.beginPath();
+      if (!left || tx % 2 === 0) {
+        c.moveTo(xa + 1, ry + 2);
+        c.lineTo(xa + 1, ry - 10);
+      }
+      if (!right) {
+        c.moveTo(xb - 1, ry + 2);
+        c.lineTo(xb - 1, ry - 10);
+      }
+      c.stroke();
+      c.strokeStyle = "rgba(70,60,50,0.7)";
+      c.lineWidth = 0.8;
+      c.beginPath();
+      c.moveTo(xa, ry - 9);
+      c.lineTo(xb, ry - 9);
+      c.stroke();
+      // the vines along it, hung with bunches
+      for (let x = xa + 3; x < xb - 1; x += 6) {
+        const k = Math.round(x / 6) + ry;
+        const sway = Math.sin(t * 1.6 + k) * 0.8;
+        c.fillStyle = k % 3 === 0 ? "#4f8a32" : "#5f9e3a";
+        c.beginPath();
+        c.ellipse(x + sway, ry - 8 + (k % 2) * 2, 3.4, 2.6, 0.4, 0, Math.PI * 2);
+        c.fill();
+        if (k % 2 === 0) {
+          c.fillStyle = "#6a2c8e";
+          for (let q = 0; q < 4; q++) {
+            c.beginPath();
+            c.arc(x + sway + (q % 2) * 1.6 - 0.8, ry - 4 + Math.floor(q / 2) * 1.6, 1.1, 0, Math.PI * 2);
+            c.fill();
+          }
+        }
+      }
+    }
   }
 }

@@ -88,6 +88,11 @@ export default function SelectionBar({ snap, engine, toolOn = false }: { snap: S
               <button type="button" onClick={() => engine.toggleClearAreaMode()} aria-pressed={engine.clearAreaMode} title="Clear area: drag a box over trees + bushes and these people clear it down to grass" className={`flex min-h-10 items-center gap-1 rounded-xl px-2 transition active:scale-90 ${engine.clearAreaMode ? "bg-emerald-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
                 <span>🪓</span><span className="hidden text-[11px] font-bold sm:inline">Clear area</span>
               </button>
+              {!kidsOnly && (
+                <button type="button" onClick={() => engine.sweepArea()} title="Sweep: these people drive every stray animal out of the settlement with shock sticks + ray guns (animals are chased off, not killed)" className="flex min-h-10 items-center gap-1 rounded-xl bg-cyan-500/25 px-2 transition hover:bg-cyan-500/40 active:scale-90">
+                  <span>⚡</span><span className="hidden text-[11px] font-bold sm:inline">Sweep</span>
+                </button>
+              )}
               {rescueClans.length > 0 && (
                 <div className="relative">
                   <button type="button" onClick={() => setRescueOpen((open) => !open)} title="Choose a clan camp to attack and rescue captives" className="flex min-h-10 items-center gap-1 rounded-xl bg-rose-600 px-2.5 text-xs font-extrabold text-white transition hover:bg-rose-500 active:scale-95">

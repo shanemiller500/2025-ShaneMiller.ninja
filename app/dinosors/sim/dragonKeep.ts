@@ -24,13 +24,14 @@ import { cookThink } from "./feast";
 import { onExpedition } from "./chariots";
 import { raiseBones } from "./dragonBones";
 import { sp } from "../data/species";
-import { BREEDS, GROW_SECONDS, GROWTH, LESSON_BY_ID, LESSONS, growthStage, type DragonCmdKind, type DragonSkill, type DragonStage } from "../data/dragons";
+import { BREEDS, GROW_SECONDS, GROWTH, LESSON_BY_ID, LESSONS, breathOf, growthStage, type DragonCmdKind, type DragonSkill, type DragonStage } from "../data/dragons";
 import { deliver, sites } from "./build";
 import { emote, setState, sizeOf } from "./dinos";
 import { go, say } from "./humans";
 import { hurtHuman } from "./injury";
 import { eggWarmth } from "./dragonNests";
-import { hitScorpionsAt, sideOfDragon } from "./factions";
+import { canHurt, hitScorpionsAt, sideOfDragon } from "./factions";
+import { breathBlast } from "./breath";
 import { hotHours, pitOf, pitShadeSpot, pitSpot, pitWanderSpot } from "./shows";
 import { P } from "./particles";
 import { pick } from "./rng";
@@ -560,6 +561,17 @@ export function startBurst(w: World, dr: Dragon, x: number, y: number) {
   return true;
 }
 
+/** Is anything we've built (a building, home, wall, tower, farm, Scorpion) within r of (x, y)? */
+function nearOurBuilds(w: World, x: number, y: number, r: number) {
+  const near = (o: { x: number; y: number }) => Math.abs(o.x - x) < r && Math.hypot(o.x - x, o.y - y) < r;
+  if (w.colony.buildings.some(near) || w.shelters.some(near) || w.tribe.farms.some(near) || w.tribe.towers.some(near) || w.colony.scorpions.some(near)) return true;
+  const tr = Math.ceil(r / TILE);
+  const tx = Math.floor(x / TILE);
+  const ty = Math.floor(y / TILE);
+  for (let dy = -tr; dy <= tr; dy++) for (let dx = -tr; dx <= tr; dx++) if (w.tribe.wallAt(tx + dx, ty + dy)) return true;
+  return false;
+}
+
 /** Per frame during a burst: the cone of fire from the mouth to the aim point. */
 function burstTick(w: World, dr: Dragon, dt: number) {
   const st = dragonStats(dr);
@@ -578,27 +590,41 @@ function burstTick(w: World, dr: Dragon, dt: number) {
   const k = Math.min(1, reach / dd);
   const ex = mx + (ax - mx) * k;
   const ey = my + (ay - my) * k;
+  const pal = breathOf(dr.breed);
   if (w.inView(ex, ey, 300)) {
     for (let i = 0; i < 4; i++) {
       const t = w.rng();
-      w.particles.spawn(P.Ember, mx + (ex - mx) * t + (w.rng() - 0.5) * 20 * t, my + (ey - my) * t + (w.rng() - 0.5) * 12 * t, { z: dr.z * (1 - t) + 30 * st.scale * (1 - t) + 4, vz: 30 + w.rng() * 40, vx: (ex - mx) * 0.3, size: 4 + w.rng() * 5 * st.fire, max: 0.5 + w.rng() * 0.4, color: w.rng() < 0.4 ? "#fff1a8" : w.rng() < 0.7 ? "#ffb02e" : "#ff5a1f" });
+      w.particles.spawn(P.Ember, mx + (ex - mx) * t + (w.rng() - 0.5) * 20 * t, my + (ey - my) * t + (w.rng() - 0.5) * 12 * t, { z: dr.z * (1 - t) + 30 * st.scale * (1 - t) + 4, vz: 30 + w.rng() * 40, vx: (ex - mx) * 0.3, size: 4 + w.rng() * 5 * st.fire, max: 0.5 + w.rng() * 0.4, color: pal === "frost" ? (w.rng() < 0.5 ? "#f2fbff" : "#9fd8ff") : pal === "sand" ? (w.rng() < 0.5 ? "#e2b46a" : "#ffcf7a") : w.rng() < 0.4 ? "#fff1a8" : w.rng() < 0.7 ? "#ffb02e" : "#ff5a1f" });
     }
     if (w.rng() < dt * 8) w.particles.spawn(P.Smoke, ex, ey - 10, { vz: 40, vx: w.weather.windX * 8, size: 16 + w.rng() * 10, max: 2, color: "rgba(60,55,50,0.4)" });
   }
   w.dragons.pulse -= dt;
   if (w.dragons.pulse > 0) return;
   w.dragons.pulse = 0.15;
+  // an Ice Dragon breathes frost and a Sand Dragon hot sand (breath.ts): no flames, no fires started
+  if (pal !== "fire") {
+    breathBlast(w, dr, ex, ey, pal, Math.max(0.6, st.fire));
+    for (const wd of [...w.dragons.list]) if (Math.hypot(wd.x - ex, wd.y - ey) < 70 && wd.z < dr.z + 120) w.dragons.hit(w, wd, 60 * st.fire);
+    return;
+  }
   const r = 26 + 30 * st.fire;
   const tx = Math.floor(ex / TILE);
   const ty = Math.floor(ey / TILE);
   const tr = Math.ceil(r / TILE);
+  // our own dragon never harms our own camp (factions.ts): nothing of ours scorched, and no fire set on or near
+  // anything we've built (open ground with raiders in it still burns)
+  const ours = !canHurt(sideOfDragon(dr), "us");
+  const home = ours && nearOurBuilds(w, ex, ey, 110);
   for (let y = ty - tr; y <= ty + tr; y++) for (let x = tx - tr; x <= tx + tr; x++) {
     if (Math.hypot(x * TILE + TILE / 2 - ex, y * TILE + TILE / 2 - ey) > r + 8) continue;
+    if (ours && nearOurBuilds(w, x * TILE + TILE / 2, y * TILE + TILE / 2, 100)) continue;
     if (w.rng() < 0.5) w.fire.ignite(w, x, y, 0.6 + 0.3 * Math.min(1, st.fire));
   }
-  // the line of the cone scorches plants on the way
-  w.burnPlantsAt(ex, ey, 0.45 * st.fire);
-  w.burnPlantsAt((mx + ex) / 2, (my + ey) / 2, 0.25 * st.fire);
+  // the line of the cone scorches plants on the way (not our town's)
+  if (!home) {
+    w.burnPlantsAt(ex, ey, 0.45 * st.fire);
+    w.burnPlantsAt((mx + ex) / 2, (my + ey) / 2, 0.25 * st.fire);
+  }
   const hit = (x: number, y: number, rr: number) => Math.hypot(x - ex, y - ey) < r + rr || Math.hypot(x - (mx + ex) / 2, y - (my + ey) / 2) < r * 0.6 + rr;
   for (const d of w.dinos) {
     if (d.owner || d.under || sp(d.species).move === "swim" || !hit(d.x, d.y, sizeOf(d) * 0.3)) continue;
@@ -611,17 +637,19 @@ function burstTick(w: World, dr: Dragon, dt: number) {
   for (const wd of [...w.dragons.list]) if (hit(wd.x, wd.y, 40) && wd.z < dr.z + 120) w.dragons.hit(w, wd, 70 * st.fire);
   for (const h of w.humans) {
     if (h.aloft || h.under || !hit(h.x, h.y, 6)) continue;
+    // (our people: never; only captives held by others or strangers could be caught in it)
+    if (ours && !h.captive && !h.stranger) continue;
     const home = h.state === "hide" || h.state === "sleep" ? w.shelters.find((s) => s.id === h.home) : null;
     if (home && home.tier >= 3) continue;
     hurtHuman(w, h, 0.18 * st.fire, ex, ey, "burn");
   }
-  // wooden things catch: huts, buildings, palisades
-  for (const b of w.colony.buildings) if (hit(b.x, b.y, 20)) b.hp -= (b.kind === "blacksmith" || b.kind === "roost" || b.kind === "hatchery" ? 2 : 12) * st.fire;
-  for (const s of w.shelters) if (s.stage > 0 && hit(s.x, s.y, 20)) s.hp = Math.max(0, s.hp - (s.tier >= 4 ? 0.005 : s.tier >= 3 ? 0.02 : 0.07) * st.fire);
+  // wooden things catch: huts, buildings, palisades (a wild dragon's fire only: ours is trained not to)
+  if (!ours) for (const b of w.colony.buildings) if (hit(b.x, b.y, 20)) b.hp -= (b.kind === "blacksmith" || b.kind === "roost" || b.kind === "hatchery" ? 2 : 12) * st.fire;
+  if (!ours) for (const s of w.shelters) if (s.stage > 0 && hit(s.x, s.y, 20)) s.hp = Math.max(0, s.hp - (s.tier >= 4 ? 0.005 : s.tier >= 3 ? 0.02 : 0.07) * st.fire);
   const wl = w.tribe.wallAt(tx, ty);
-  if (wl && wl.built >= 1) wl.hp -= (wl.kind === "palisade" ? 18 : 3) * st.fire;
+  if (!ours && wl && wl.built >= 1) wl.hp -= (wl.kind === "palisade" ? 18 : 3) * st.fire;
   // Scorpions in the cone: friendly fire is ruled out by side, not by luck (factions.ts)
-  hitScorpionsAt(w, ex, ey, r + 20, 12 * st.fire, sideOfDragon(dr));
+  hitScorpionsAt(w, ex, ey, r + 20, 12 * st.fire, sideOfDragon(dr), "breath");
   // Neanderthal camps: their stores + shelters burn
   for (const c of w.rivals.clans) {
     if (Math.hypot(c.x - ex, c.y - ey) > 140) continue;

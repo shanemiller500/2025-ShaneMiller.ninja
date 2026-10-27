@@ -95,7 +95,7 @@ export function TipCoach({ snap, enabled, busy, onOff, onHelp }: { snap: Snapsho
   // tips tidy themselves away
   useEffect(() => {
     if (!tip) return;
-    const id = window.setTimeout(() => setTip(null), 22_000);
+    const id = window.setTimeout(() => setTip(null), 6000);
     return () => window.clearTimeout(id);
   }, [tip]);
 
@@ -105,11 +105,11 @@ export function TipCoach({ snap, enabled, busy, onOff, onHelp }: { snap: Snapsho
       {tip && enabled && !busy && (
         <motion.div
           key={tip.id}
-          initial={{ opacity: 0, y: 24, scale: 0.96 }}
+          initial={{ opacity: 0, y: -24, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 16, scale: 0.96 }}
+          exit={{ opacity: 0, y: -16, scale: 0.96 }}
           transition={{ type: "spring", stiffness: 360, damping: 28 }}
-          className={`pointer-events-auto absolute left-1 z-30 flex w-[min(420px,calc(100vw-8px))] items-end sm:left-3 ${deep ? "bottom-[160px] sm:bottom-28" : "bottom-[100px] sm:bottom-32"}`}
+          className={`pointer-events-auto absolute left-3 right-3 top-[calc(env(safe-area-inset-top)+84px)] z-30 flex items-end sm:left-3 sm:right-auto sm:top-auto sm:w-[min(420px,calc(100vw-8px))] ${deep ? "sm:bottom-28" : "sm:bottom-32"}`}
           role="status"
         >
           <motion.img
@@ -120,9 +120,9 @@ export function TipCoach({ snap, enabled, busy, onOff, onHelp }: { snap: Snapsho
             initial={{ y: 40, rotate: -8 }}
             animate={{ y: 0, rotate: [0, -4, 3, 0] }}
             transition={{ y: { type: "spring", stiffness: 260, damping: 15 }, rotate: { duration: 1.6, delay: 0.3 } }}
-            className="relative z-20 -mr-1 h-28 w-28 shrink-0 object-contain drop-shadow-[0_5px_0_rgba(36,20,10,0.55)] sm:h-32 sm:w-32"
+            className="relative z-20 -mr-1 hidden h-28 w-28 shrink-0 object-contain drop-shadow-[0_5px_0_rgba(36,20,10,0.55)] sm:block sm:h-32 sm:w-32"
           />
-          <div className="relative mb-6 min-w-0 flex-1">
+          <div className="relative min-w-0 flex-1 sm:mb-6">
             <div className="dl-paper relative rounded-[26px] px-4 pb-3 pt-4">
               <div className="dl-leopard dl-btn absolute -top-3.5 left-4 rounded-full px-3 py-0.5 text-[12px] font-bold uppercase tracking-wider text-[#fff6dd]">
                 <span className="dl-ink">{tip.who} says</span>
@@ -154,7 +154,7 @@ export function TipCoach({ snap, enabled, busy, onOff, onHelp }: { snap: Snapsho
               </button>
             </div>
             {/* speech tail toward the speaker */}
-            <span aria-hidden className="absolute -left-[10px] bottom-6 z-10 h-5 w-5 rotate-45 border-b-[3px] border-l-[3px] border-[#3a2414] bg-[#f8e8c8]" />
+            <span aria-hidden className="absolute -left-[10px] bottom-6 z-10 hidden h-5 w-5 rotate-45 border-b-[3px] border-l-[3px] border-[#3a2414] bg-[#f8e8c8] sm:block" />
           </div>
         </motion.div>
       )}
@@ -219,14 +219,37 @@ export function HintBubbles({ engine, enabled, busy, view }: { engine: Engine; e
   // a view change (surface ↔ Deep) drops the bubble
   useEffect(() => setHint(null), [view]);
 
+  useEffect(() => {
+    if (!hint?.open) return;
+    const id = window.setTimeout(() => setHint(null), 6000);
+    return () => window.clearTimeout(id);
+  }, [hint?.key, hint?.open]);
+
   if (!hint || !enabled || busy) return null;
   const info = BUBBLES[hint.key.split(":")[0]];
   if (!info) return null;
   return (
-    <div ref={ref} className="pointer-events-none absolute left-0 top-0 z-20" style={{ willChange: "transform" }}>
+    <>
+    {hint.open && (
+      <motion.div
+        key={hint.key}
+        initial={{ opacity: 0, y: -24 }}
+        animate={{ opacity: [0, 1, 1, 0], y: [-24, 0, 0, -24] }}
+        transition={{ duration: 6, times: [0, 0.08, 0.92, 1], ease: "easeInOut" }}
+        className="pointer-events-auto absolute inset-x-3 top-[calc(env(safe-area-inset-top)+84px)] z-40 sm:hidden"
+        role="status"
+      >
+        <div className="dl-paper relative mx-auto flex max-w-[30rem] items-start gap-3 rounded-[24px] p-3 pr-11 shadow-2xl">
+          <span aria-hidden="true" className="text-2xl">?</span>
+          <div className="min-w-0"><div className="text-base font-bold leading-tight">{info.title}</div><p className="mt-1 text-sm font-medium leading-snug text-[#3a2414]/85">{info.text}</p></div>
+          <button type="button" aria-label="Close hint" onClick={() => setHint(null)} className="absolute right-2 top-2 rounded-full p-1.5 text-[#3a2414]/60"><X className="h-5 w-5" /></button>
+        </div>
+      </motion.div>
+    )}
+    <div ref={ref} className={`pointer-events-none absolute left-0 top-0 z-20 ${hint.open ? "hidden sm:block" : ""}`} style={{ willChange: "transform" }}>
       <div className={`pointer-events-auto absolute -translate-x-1/2 ${hint.open && below ? "pt-12" : "-translate-y-full pb-3"}`}>
         {hint.open ? (
-          <motion.div initial={{ opacity: 0, scale: 0.8, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: "spring", stiffness: 420, damping: 24 }} className="relative w-[min(360px,calc(100vw-24px))]">
+          <motion.div initial={{ opacity: 0, scale: 0.8, y: 8 }} animate={{ opacity: [0, 1, 1, 0], scale: [0.8, 1, 1, 0.95], y: [8, 0, 0, -12] }} transition={{ duration: 6, times: [0, 0.08, 0.92, 1], ease: "easeInOut" }} className="relative w-[min(360px,calc(100vw-24px))]">
             <div className="dl-paper flex items-start gap-3.5 rounded-[26px] p-4 pr-10">
               <img src={GUIDE_IMG(info.art)} alt="" width={104} height={104} className="-mb-2 -ml-2 -mt-10 h-[104px] w-[104px] shrink-0 object-contain drop-shadow-[0_3px_0_rgba(36,20,10,0.45)]" />
               <div className="min-w-0 flex-1">
@@ -259,5 +282,6 @@ export function HintBubbles({ engine, enabled, busy, view }: { engine: Engine; e
         )}
       </div>
     </div>
+    </>
   );
 }

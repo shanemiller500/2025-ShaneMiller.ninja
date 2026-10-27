@@ -28,6 +28,7 @@ export default function EditModeBar({ engine }: { engine: Engine }) {
             <span className="hidden text-[11px] text-white/55 md:inline">Tap pieces to pick · drag one to move the group · shift-drag a box to add</span>
             <button type="button" className={`${btn} bg-white/10 hover:bg-white/20`} disabled={!n} onClick={() => engine.selectConnectedWalls()} title="Pick every piece joined to the ones you've picked (a whole wall run)">🔗 Connected</button>
             <button type="button" className={`${btn} bg-white/10 hover:bg-white/20`} disabled={!n} onClick={() => engine.clearWallSelection()}>Select none</button>
+            <button type="button" className={`${btn} bg-white/10 hover:bg-white/20`} disabled={!n} onClick={() => engine.rotateWallSelection()} title="Turn the picked pieces a quarter turn (R): they join onto the walls, towers + shields they meet">⟳ Rotate</button>
             <button type="button" className={`${btn} bg-white/10 hover:bg-white/20`} disabled={!engine.wallUndoCount} onClick={() => engine.undoWallMove()} title="Put the last move back (Ctrl+Z)">↶ Undo</button>
             <button type="button" className={`${btn} bg-cyan-300 text-slate-900 hover:bg-cyan-200`} onClick={() => engine.toggleWallEditMode()}>Done</button>
           </motion.div>

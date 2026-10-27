@@ -12,6 +12,7 @@
 /*  go back to running themselves (auto mode) when there are none.     */
 /* ------------------------------------------------------------------ */
 import { NODES, RIDEABLE, TAMEABLE, WEAPON_BY_ID } from "../data/colony";
+import { claimFire, setDouseAim, throwSpot } from "./firefight";
 import { sp } from "../data/species";
 import { deliver, siteByKey, siteKey, siteOnTop, sites, wallMaxHp, wallStretch, work, type Site } from "./build";
 import { isBaby, setState, emote, sizeOf } from "./dinos";
@@ -28,7 +29,7 @@ import { sonicDouse, sonicReady } from "./sonic";
 import { raidThink } from "./dragonRaid";
 import { moveThink } from "./moving";
 import { eggHuntThink, trackThink } from "./dragonNests";
-import type { World } from "./world";import { PRIO_CREW, sitePrio, taskKey } from "./priority";
+import type { World } from "./world";import { PRIO_CREW, sitePrio, taskKey, URGENT } from "./priority";
 
 
 export type TaskKind =
@@ -335,7 +336,7 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
     if (wl.built < 1 || wl.upgrade || wl.boneUp) {
       const group = Array.from(wallStretch(w, wl)).map((id) => `wall:${id}`);
       const site = sites(w).find((k) => k.kind === "wall" && k.id === wl.id);
-      if (site) return { ...buildCmd(site, wl.bone || wl.boneUp ? "🦴" : wl.part === "gate" ? "🚪" : wl.part === "stairs" ? "🪜" : "🧱", `Build this ${wl.part === "wall" ? "wall" : wl.part} (${group.length} piece${group.length > 1 ? "s" : ""})`), group };
+      if (site) return { ...buildCmd(site, wl.mega ? "🦈" : wl.bone || wl.boneUp ? "🦴" : wl.part === "gate" ? "🚪" : wl.part === "stairs" ? "🪜" : "🧱", `Build this ${wl.part === "wall" ? "wall" : wl.part} (${group.length} piece${group.length > 1 ? "s" : ""})`), group };
     }
     if (wl.hp < wallMaxHp(wl) * 0.95) {
       const group = Array.from(wallStretch(w, wl)).filter((id) => {
@@ -1244,6 +1245,38 @@ function crews(w: World, me: Human) {
   return out;
 }
 
+/**
+ * Urgent comes first, the moment it's there: someone working on (or walking to, or fetching for) a
+ * lower-priority building site drops it when an Urgent site still has room for them, and goes to that
+ * instead. They pick the old site back up afterwards, in its turn. (A crew the player sent on a task
+ * keeps to its job.) True = they let go of their old site just now.
+ */
+/** Can this person get on with this site right now? (nothing to bring, or the material is in the stores, in hand, or out there) */
+function workable(w: World, h: Human, s: Site) {
+  if (s.need === null || s.repair || h.carry === s.need || w.camp.stock[s.need] > 0) return true;
+  if (s.need === "shaped") return w.colony.buildings.some((b) => b.kind === "shapingYard" && b.built >= 1 && b.hp > 0);
+  return !!(sourceFor(w, h, s.need, undefined, undefined, 3000) ?? sourceFor(w, h, s.need, s.x, s.y, 3000));
+}
+
+export function yieldToUrgent(w: World, h: Human): boolean {
+  if (!h.site || h.taskId || h.order) return false;
+  const sites = w.buildSites();
+  const cur = sites.find((s) => siteKey(s) === h.site);
+  if (cur && sitePrio(w, cur) >= URGENT) return false;
+  const crew = crews(w, h);
+  // (only for an Urgent job this person can actually get on with: one stuck waiting for a material
+  // nobody can find would otherwise pull them off their own work over and over, and nothing gets built)
+  const open = sites.some((s) => !s.locked && sitePrio(w, s) === URGENT && (crew.get(siteKey(s)) ?? 0) < Math.max(1, Math.round(crewCap(s) * PRIO_CREW[URGENT])) && workable(w, h, s));
+  if (!open) return false;
+  h.site = "";
+  h.task = null;
+  h.wantTop = false;
+  // (what they're carrying goes along: the Urgent site may need it, else it goes back to the stores)
+  if (h.state === "build" || h.state === "repair" || h.state === "walk" || h.state === "gather") go(h, "idle", h.x, h.y);
+  h.think = 0;
+  return true;
+}
+
 export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boolean {
   const camp = w.camp;
   const list = w.buildSites().filter((s) => !s.locked && allow(s));
@@ -1254,7 +1287,8 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
   const room = (s: Site) => siteKey(s) === h.site || !!h.taskId || (crew.get(siteKey(s)) ?? 0) < Math.max(1, Math.round(crewCap(s) * PRIO_CREW[sitePrio(w, s)]));
   // A construction task uses h.task as its temporary material request while
   // the builder walks to and gathers that source. Keep that trip intact.
-  if (h.task && (h.state === "walk" || h.state === "gather") && list.some((s) => siteKey(s) === h.site && s.need === h.task)) return true;
+  // (unless an Urgent site is waiting: then Urgent comes first)
+  if (h.task && (h.state === "walk" || h.state === "gather") && list.some((s) => siteKey(s) === h.site && s.need === h.task) && !yieldToUrgent(w, h)) return true;
   // Repairs and deliverable upgrades count as work too. If one site is short
   // of an unobtainable material, try the next site instead of idling.
   const score = (x: Site) => Math.hypot(x.sx - h.x, x.sy - h.y) - (x.repair ? 300 : 0)
@@ -1263,10 +1297,12 @@ export function buildThink(w: World, h: Human, allow: (s: Site) => boolean): boo
   const preferred = h.site ? list.find((x) => siteKey(x) === h.site) : undefined;
   const autoDefenseFirst = h.role === "auto" && !h.order && !h.taskId;
   const defenseRank = (s: Site) => s.kind === "wall" || s.kind === "tower" ? 0 : 1;
-  // the player's priorities come first (Urgent → High → Normal → Low), then defences, then the nearest
+  // Urgent jobs come first, then repairs (damage gets fixed before anything new goes up), then the
+  // player's other priorities (High → Normal → Low), then defences, then the nearest
   const prio = new Map(list.map((s) => [s, sitePrio(w, s)]));
+  const rank = (s: Site) => (prio.get(s)! >= URGENT ? 10 : s.repair && prio.get(s)! > 0 ? 5 : prio.get(s)!);
   list.sort((a, b) => {
-    const pd = prio.get(b)! - prio.get(a)!;
+    const pd = rank(b) - rank(a);
     if (pd) return pd;
     if (autoDefenseFirst && defenseRank(a) !== defenseRank(b)) return defenseRank(a) - defenseRank(b);
     return a === preferred ? -1 : b === preferred ? 1 : score(a) - score(b);
@@ -1484,20 +1520,27 @@ export function fireNear(w: World, x: number, y: number, r: number): { x: number
   return best;
 }
 
-/** Get water (store or river), run to the nearest flames, throw it. */
-export function douseThink(w: World, h: Human, done: () => void): boolean {
+/**
+ * Get water (store or river), run to the flames, throw it. A player's order goes for the nearest
+ * flames; the camp's own fire crew (auto) takes its claimed fire, worst first (firefight.ts). Either
+ * way they throw from a safe spot beside the fire, never standing in it.
+ */
+export function douseThink(w: World, h: Human, done: () => void, auto = false): boolean {
   // with a sonic fire station + emitters, the crew shakes fires out from a distance
   if (sonicDouse(w, h, done)) return true;
   const c = w.camp;
-  const fire = fireNear(w, h.x, h.y, 900) ?? fireNear(w, c.x, c.y, 900);
+  const fire = auto ? claimFire(w, h) : fireNear(w, h.x, h.y, 900) ?? fireNear(w, c.x, c.y, 900);
   const skins = w.colony.kits.has("waterSkins");
   if (!fire) {
+    setDouseAim(w, h, null);
     done();
     return false;
   }
+  const stand = throwSpot(w, fire, h) ?? { x: fire.x, y: fire.y + 26 };
+  setDouseAim(w, h, fire);
   if (h.carry === "water") {
-    if (near(h, fire.x, fire.y + 26, 22)) go(h, "douse", h.x, h.y);
-    else go(h, "carry", fire.x, fire.y + 26);
+    if (near(h, stand.x, stand.y, 22)) go(h, "douse", h.x, h.y);
+    else go(h, "carry", stand.x, stand.y);
     h.site = "douse";
     return true;
   }
@@ -1506,7 +1549,7 @@ export function douseThink(w: World, h: Human, done: () => void): boolean {
     c.stock.water -= n;
     h.carry = "water";
     h.carryN = n;
-    go(h, "carry", fire.x, fire.y + 26);
+    go(h, "carry", stand.x, stand.y);
     h.site = "douse";
     return true;
   }

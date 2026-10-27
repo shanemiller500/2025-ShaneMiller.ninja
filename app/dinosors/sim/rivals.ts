@@ -15,6 +15,7 @@
 /*  Everyone drops what they carried when they fall.                   */
 /* ------------------------------------------------------------------ */
 import { removeHuman } from "./death";
+import { survived } from "./growth";
 import { sp } from "../data/species";
 import { CAMP_LEVELS, FEMALE_NAMES } from "../data/facts";
 import { findSpawnSpot, isBaby, sizeOf } from "./dinos";
@@ -738,7 +739,7 @@ export class Rivals {
       for (const b of members) b.age = Math.min(GROWN_AGE, (b.age ?? GROWN_AGE) + (clan.food > 0 ? dt : dt * 0.4));
       // Adults at home improve their own camp. A stocked camp can house more children.
       const workers = members.filter((b) => (b.age ?? GROWN_AGE) >= GROWN_AGE && !b.raid && !b.war && !b.ambush && Math.hypot(b.x - clan.x, b.y - clan.y) < 180).length;
-      if (workers && clan.food >= 3 && (clan.campTier ?? 0) < (colorsOf(clan).length > 1 ? MAX_CAMP_TIER : 3)) {
+      if (workers && clan.food >= 3 && (clan.campTier ?? 0) < Math.min(MAX_CAMP_TIER, (colorsOf(clan).length > 1 ? MAX_CAMP_TIER : 3) + survived(w, clan))) {
         clan.campWork = (clan.campWork ?? 0) + workers * dt * 0.025;
         if (clan.campWork >= 12 + (clan.campTier ?? 0) * 6) {
           clan.campWork = 0;
@@ -1488,7 +1489,7 @@ export class Rivals {
         if (m.targetKind === "scorpion") {
           const sc = w.colony.scorpions.find((o) => o.id === m.target && o.built >= 1 && o.hp > 0);
           if (sc && Math.hypot(sc.x - m.x, sc.y - m.y) < 38) {
-            hitScorpion(w, sc, m.dmg, "clan");
+            hitScorpion(w, sc, m.dmg, "clan", "missile");
             w.particles.burst(P.Rock, sc.x, sc.y - 12, 5, 38, { z: 20, size: 3, max: 0.5, color: "#baa77f" });
             w.sfx("thunk", sc.x, sc.y, 0.45, 0.8);
           } else w.particles.burst(P.Dust, m.x, m.y, 3, 20, { size: 3, max: 0.4, color: "rgba(160,140,110,0.6)" });
@@ -1538,7 +1539,7 @@ export class Rivals {
       started: this.started,
       next: this.nextClan,
       arriveT: this.arriveT,
-      clans: this.clans.map((c) => ({ id: c.id, name: c.name, color: c.color, x: r(c.x), y: r(c.y), food: Math.round(c.food * 10) / 10, raidT: r(c.raidT), growT: r(c.growT), smarts: c.smarts ?? 0, intel: c.intel ?? 0, style: c.style, campTier: c.campTier ?? 0, campWork: c.campWork ?? 0, sea: c.sea, fishT: c.fishT, colors: c.colors, bones: c.bones ?? 0, wood: c.wood ?? 0, builds: c.builds ?? {}, buildWork: Math.round((c.buildWork ?? 0) * 10) / 10, favor: c.favor, favorT: r(c.favorT ?? 0), riteT: c.riteT === undefined ? undefined : r(c.riteT), trapT: c.trapT === undefined ? undefined : r(c.trapT), altarBlood: c.altarBlood, science: c.science ? Math.round(c.science * 1000) / 1000 : undefined, tech: c.tech || undefined, merges: c.merges || undefined })),
+      clans: this.clans.map((c) => ({ id: c.id, name: c.name, color: c.color, x: r(c.x), y: r(c.y), food: Math.round(c.food * 10) / 10, raidT: r(c.raidT), growT: r(c.growT), smarts: c.smarts ?? 0, intel: c.intel ?? 0, style: c.style, campTier: c.campTier ?? 0, campWork: c.campWork ?? 0, sea: c.sea, fishT: c.fishT, colors: c.colors, bones: c.bones ?? 0, wood: c.wood ?? 0, builds: c.builds ?? {}, buildWork: Math.round((c.buildWork ?? 0) * 10) / 10, favor: c.favor, favorT: r(c.favorT ?? 0), riteT: c.riteT === undefined ? undefined : r(c.riteT), trapT: c.trapT === undefined ? undefined : r(c.trapT), altarBlood: c.altarBlood, science: c.science ? Math.round(c.science * 1000) / 1000 : undefined, tech: c.tech || undefined, merges: c.merges || undefined, since: c.since })),
       brutes: this.brutes.filter((b) => !b.tree && !b.sea && !b.sand && !b.snow).map((b) => ({ clan: b.clan, name: b.name, x: r(b.x), y: r(b.y), hp: Math.round(b.hp * 100) / 100, weapon: b.weapon, age: b.age ?? GROWN_AGE, forage: b.forage ?? 0, forageKind: b.forageKind ?? "berries", tint: b.tint, skill: b.skill ? Math.round(b.skill * 100) / 100 : undefined, haul: b.haul, hold: b.hold, turned: b.turned || undefined, look: b.look })),
       holds: this.holds.map((h) => ({ ...h, x: r(h.x), y: r(h.y), food: Math.round(h.food * 10) / 10, t: r(h.t) })),
       taken: this.taken.map((c) => ({ ...c, x: r(c.x), y: r(c.y), wear: Math.round(c.wear * 100) / 100, cd: 0, anim: 0 })),

@@ -30,12 +30,14 @@ type Tab = "camp" | "jobs" | "defend" | "invent" | "forge";
 
 function equipmentRecommendations(snap: Snapshot, engine: Engine) {
   const people = engine.world.humans.filter((h) => !h.child && !h.stranger);
-  const choices = snap.forge.items.filter((it) => !it.done && !snap.forge.queue.some((q) => q.id === it.id) && (it.cat === "weapons" || it.cat === "gear") && !it.why?.startsWith("Invent") && !it.why?.startsWith("Research"));
-  const worn = (id: string) => people.filter((h) => h.gear.weapon === id || h.gear.outfit === id || h.gear.helmet === id).length;
+  const choices = snap.forge.items.filter((it) => !it.done && !snap.forge.queue.some((q) => q.id === it.id) && (it.cat === "weapons" || it.cat === "gear" || it.cat === "armor") && !it.why?.startsWith("Invent") && !it.why?.startsWith("Research"));
+  const worn = (id: string) => people.filter((h) => h.gear.weapon === id || h.gear.outfit === id || h.gear.helmet === id || h.gear.armor === id).length;
   const owned = (id: string) => (snap.forge.armory.find((a) => a.id === id)?.n ?? 0) + worn(id);
   const weapon = choices.filter((it) => it.cat === "weapons" && owned(it.id) < people.length).sort((a, b) => b.tier - a.tier)[0];
   const clothes = choices.filter((it) => it.cat === "gear" && owned(it.id) < people.length).sort((a, b) => b.tier - a.tier)[0];
-  return [weapon, clothes].filter((it): it is NonNullable<typeof it> => !!it);
+  // the strongest armour that can be made, while not everyone has a set
+  const armor = choices.filter((it) => it.cat === "armor" && owned(it.id) < people.length && !it.why).sort((a, b) => Object.values(b.cost).reduce((n, v) => n + (v ?? 0), 0) - Object.values(a.cost).reduce((n, v) => n + (v ?? 0), 0))[0];
+  return [weapon, armor, clothes].filter((it): it is NonNullable<typeof it> => !!it);
 }
 
 const RES: [string, string, string][] = Object.entries(RES_INFO).map(([k, v]) => [k, v.icon, v.name]);
@@ -67,6 +69,7 @@ export default function CampPanel({ snap, engine, onClose, onBuildStation, tab: 
       ref={panelRef}
       initial={{ opacity: 0, x: -24, scale: 0.97 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: -18, scale: 0.98 }}
       transition={{ type: "spring", stiffness: 420, damping: 32 }}
       className="dl-glass dl-scroll pointer-events-auto absolute inset-x-2 bottom-[84px] z-20 max-h-[56vh] overflow-y-auto rounded-3xl p-4 shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-4 sm:top-24 sm:max-h-[calc(100vh-200px)] sm:w-[370px]"
     >
@@ -160,13 +163,37 @@ function CampTab({ snap, engine, onForge }: { snap: Snapshot; engine: Engine; on
       ) : (
         <div className="mt-3 rounded-2xl bg-emerald-500/20 p-3 text-sm font-bold">🏰 The biggest camp in Dinosaur Land!</div>
       )}
+      {snap.needs.length > 0 && (
+        <div className="mt-3 rounded-2xl bg-rose-500/15 p-2.5" role="region" aria-label="Supplies needed">
+          <div className="flex items-center justify-between text-sm font-bold">
+            <span>⚠️ Needed</span>
+            <span className="text-[11px] font-semibold text-white/60">what to go and get</span>
+          </div>
+          <div className="mt-1.5 space-y-1">
+            {snap.needs.slice(0, 8).map((n) => (
+              <div key={n.r} className="flex items-start gap-2 rounded-xl bg-black/15 px-2 py-1.5 text-[12px]">
+                <GameIcon id={n.r} fallback={n.icon} size={20} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2 font-bold">
+                    <span>{n.name}</span>
+                    <span className={`tabular-nums ${n.blocking ? "text-rose-300" : "text-amber-200"}`}>{amountLabel(n.have)} / {amountLabel(n.need)}{n.need > n.have ? ` · need ${amountLabel(n.need - n.have)} more` : ""}</span>
+                  </div>
+                  <div className="truncate text-[11px] text-white/65">{n.why.join(" · ")}</div>
+                  <div className="text-[10.5px] leading-snug text-white/50">{n.hint}</div>
+                </div>
+              </div>
+            ))}
+            {snap.needs.length > 8 && <p className="px-1 text-[11px] text-white/55">…and {snap.needs.length - 8} more.</p>}
+          </div>
+        </div>
+      )}
       <div className="mt-3 flex items-center justify-between text-sm font-bold">
         <span>Supplies</span>
         <span className="text-xs text-white/60" title={`${food.toLocaleString("en-US", { maximumFractionDigits: 2 })} meals`}>🍽️ {amountLabel(food)} meals</span>
       </div>
       <div className="mt-1.5 grid grid-cols-6 gap-1">
         {RES.filter(([k]) => (camp.stock[k] ?? 0) > 0 || ["stick", "stone", "wood", "grass", "leaves", "berries", "hide", "bone"].includes(k)).map(([k, icon, label]) => (
-          <div key={k} title={`${label}: ${(camp.stock[k] ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}`} className="flex min-w-0 flex-col items-center rounded-xl bg-white/5 py-1.5">
+          <div key={k} title={`${label}: ${(camp.stock[k] ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}${snap.needs.some((n) => n.r === k) ? " (needed!)" : ""}`} className={`flex min-w-0 flex-col items-center rounded-xl py-1.5 ${snap.needs.some((n) => n.r === k) ? "bg-rose-500/25 ring-1 ring-rose-300/60" : "bg-white/5"}`}>
             <GameIcon id={k} fallback={icon} size={20} />
             <span className="mt-0.5 max-w-full truncate px-0.5 text-[11px] font-bold tabular-nums">{amountLabel(camp.stock[k] ?? 0)}</span>
           </div>
@@ -572,7 +599,7 @@ function DefendTab({ snap, engine }: { snap: Snapshot; engine: Engine }) {
 
 function ForgeTab({ snap, engine, onNavigate, onBuildStation }: { snap: Snapshot; engine: Engine; onNavigate: () => void; onBuildStation: (kind: BuildingKind) => void }) {
   const f = snap.forge;
-  const [kind, setKind] = useState<"weapons" | "shields" | "gear" | "kits">("gear");
+  const [kind, setKind] = useState<"weapons" | "shields" | "armor" | "gear" | "kits">("gear");
   // looking at the forge clears the NEW badges (after a moment, so you see them first)
   useEffect(() => {
     const id = window.setTimeout(() => engine.seenRecipes(), 4000);
@@ -584,7 +611,7 @@ function ForgeTab({ snap, engine, onNavigate, onBuildStation }: { snap: Snapshot
   const station = (at: string) => engine.world.colony.buildings.find((b) => b.built >= 1 && (b.kind === at || (at === "workshop" && b.kind === "blacksmith")));
   return (
     <>
-      {recommended.length > 0 && <div className="mt-3 rounded-2xl bg-amber-400/15 p-2.5 text-[12px]"><div className="font-bold">Recommended equipment</div><div className="mt-1.5 space-y-1">{recommended.map((it) => <div key={it.id} className="flex items-center justify-between gap-2"><span>{it.icon} {it.name}</span><button type="button" className="rounded-lg bg-amber-400 px-2 py-1 font-bold text-slate-900" onClick={() => setKind(it.cat === "weapons" ? "weapons" : "gear")}>View {it.cat === "weapons" ? "weapons" : "clothes"}</button></div>)}</div></div>}
+      {recommended.length > 0 && <div className="mt-3 rounded-2xl bg-amber-400/15 p-2.5 text-[12px]"><div className="font-bold">Recommended equipment</div><div className="mt-1.5 space-y-1">{recommended.map((it) => <div key={it.id} className="flex items-center justify-between gap-2"><span>{it.icon} {it.name}</span><button type="button" className="rounded-lg bg-amber-400 px-2 py-1 font-bold text-slate-900" onClick={() => setKind(it.cat === "weapons" ? "weapons" : it.cat === "armor" ? "armor" : "gear")}>View {it.cat === "weapons" ? "weapons" : it.cat === "armor" ? "armour" : "clothes"}</button></div>)}</div></div>}
       <div className="mt-3 flex flex-wrap gap-1.5 text-[12px] font-bold">
         <span className={`rounded-full px-2.5 py-1 ${f.hasWorkshop ? "bg-emerald-500/30" : "bg-white/10 text-white/50"}`}>🛠️ Workshop {f.hasWorkshop ? "✓" : "—"}</span>
         <span className={`rounded-full px-2.5 py-1 ${f.hasSmith ? "bg-emerald-500/30" : "bg-white/10 text-white/50"}`}>⚒️ Blacksmith {f.hasSmith ? "✓" : "—"}</span>
@@ -624,17 +651,18 @@ function ForgeTab({ snap, engine, onNavigate, onBuildStation }: { snap: Snapshot
           </div>
         ))}
       </div>
-      <div className="mt-3 grid grid-cols-4 gap-1 rounded-2xl bg-white/5 p-1 text-[11.5px] font-bold">
+      <div className="mt-3 grid grid-cols-5 gap-1 rounded-2xl bg-white/5 p-1 text-[11px] font-bold">
         {(
           [
             ["gear", "Clothes"],
             ["weapons", "Weapons"],
+            ["armor", "Armour"],
             ["shields", "Shields"],
             ["kits", "Kits"],
           ] as const
         ).map(([k, label]) => (
           <button key={k} type="button" onClick={() => setKind(k)} className={`relative flex items-center justify-center gap-1 rounded-xl py-1.5 transition ${kind === k ? "bg-amber-400 text-slate-900" : "hover:bg-white/10"}`}>
-            {k === "gear" ? <GameIcon id="rainproof" size={14} /> : <span>{k === "weapons" ? "⚔️" : k === "shields" ? "🛡️" : "🧰"}</span>}
+            {k === "gear" ? <GameIcon id="rainproof" size={14} /> : <span>{k === "weapons" ? "⚔️" : k === "shields" ? "🛡️" : k === "armor" ? "⛓️" : "🧰"}</span>}
             {label}
             {newIn(k) && <span className="absolute -right-1 -top-1 rounded-full bg-rose-500 px-1 text-[9px] font-black text-white">NEW</span>}
           </button>
@@ -642,6 +670,7 @@ function ForgeTab({ snap, engine, onNavigate, onBuildStation }: { snap: Snapshot
       </div>
       {kind === "gear" && <p className="mt-1.5 text-[11px] text-white/60">Hide clothes keep workers going in rain + snow. People put on whatever suits the weather.</p>}
       {kind === "kits" && <p className="mt-1.5 text-[11px] text-white/60">Made once, they help the whole tribe for good.</p>}
+      {kind === "armor" && <p className="mt-1.5 text-[11px] text-white/60">A breastplate with arm guards + greaves: less harm from every bite, kick and blow. Smelt iron + coal into ⬛ steel at the Refinery for the best. Riders take rider armour first, fighters the heaviest.</p>}
       <div className="mt-2 grid grid-cols-3 gap-1.5">
         {items.map((it) => (
           <button

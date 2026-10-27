@@ -126,6 +126,11 @@ export function fieldAt(w: World, x: number, y: number, list = shieldsOf(w)) {
   return { power, near, n };
 }
 
+/** Under a powered Dragon Shield's field here? (people there don't scatter when a dragon comes) */
+export function shieldedAt(w: World, x: number, y: number) {
+  return shieldsPowered(w) && fieldAt(w, x, y).n > 0;
+}
+
 /** Which shields knit together (for the art + the coverage view): pairs whose fields reach each other. */
 export function shieldLinks(w: World, list = shieldsOf(w)) {
   const out: [Building, Building][] = [];
@@ -229,17 +234,27 @@ export function repelStep(w: World, dr: Dragon, dt: number): boolean {
       return false;
     }
   }
+  // only irritated, and out of the field again: it's over, back to its own plan
+  if (!inField && !r.fled) {
+    dr.repel = undefined;
+    return false;
+  }
   // irritated, not yet rattled: slowed + wobbling, but still flying its own plan
-  if (r.k < 1 && inField) {
+  if (r.k < 1 && inField && !r.fled) {
     const slow = 1 - Math.min(0.7, r.k * 0.8) * Math.min(1, dt * 4);
     dr.vx *= slow;
     dr.vy *= slow;
     dr.bank = Math.sin(w.elapsed * 7 + dr.id) * 0.25 * r.k;
     return false;
   }
-  if (r.k < 1 && !inField) return false;
+  // rattled: from now until its avoid time runs out it keeps clear of the town (whatever it was after)
+  if (!r.fled) {
+    r.fled = true;
+    const a0 = Math.atan2(dr.y - w.camp.y, dr.x - w.camp.x);
+    dr.tx = dr.x + Math.cos(a0) * 7000;
+    dr.ty = dr.y + Math.sin(a0) * 7000;
+  }
   // rattled: out of here, the long way round from the pylon, swaying + shaking its head
-  if (dr.prey === undefined && dr.state !== "flee") dr.state = "flee";
   const a = Math.atan2(dr.y - r.y, dr.x - r.x) + Math.sin(w.elapsed * 1.7 + dr.id) * 0.35;
   const far = 900;
   flyToward(w, dr, dr.x + Math.cos(a) * far, dr.y + Math.sin(a) * far * 0.7, Math.max(120, dr.z), dt, inField ? 0.85 : 1);

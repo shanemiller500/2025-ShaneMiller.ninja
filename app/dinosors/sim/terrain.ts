@@ -36,8 +36,8 @@ export const LM = {
   oasis: { x: 187, y: 50 },
   /** the Great Peaks: the big snowy massif in the east */
   peaks: { x: 250, y: 30 },
-  /** a sheltered high valley in the Great Peaks (the Mountain Monks live here) */
-  monastery: { x: 246, y: 46 },
+  /** the Mountain Monks' chapel on a high shoulder of the Great Peaks */
+  monastery: { x: 254, y: 32 },
   /** the high ledge where the monks meet the dragons once a year */
   altar: { x: 257, y: 21 },
   eastLake: { x: 236, y: 95 },

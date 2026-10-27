@@ -344,6 +344,193 @@ export function drawSandTent(c: CanvasRenderingContext2D, s: SandTent, tr: SandT
       if (night) glow(c, 0, -6, 70, "rgba(255,160,60,0.3)");
       break;
     }
+    case "house": {
+      // a flat-roofed mud-brick house: a doorway, a little window, an awning in the tribe's colour
+      shadow(c, 26, 7);
+      c.fillStyle = "#c9a26a";
+      c.fillRect(-22, -26, 44, 26);
+      c.fillStyle = "#b48a55";
+      c.fillRect(-24, -29, 48, 4);
+      c.strokeStyle = "rgba(120,85,45,0.35)";
+      c.lineWidth = 1;
+      for (let y = -22; y < 0; y += 6) {
+        c.beginPath();
+        c.moveTo(-22, y);
+        c.lineTo(22, y);
+        c.stroke();
+      }
+      c.fillStyle = night ? "rgba(255,180,90,0.85)" : "rgba(50,32,16,0.75)";
+      c.beginPath();
+      c.ellipse(-6, 0, 6, 11, 0, Math.PI, 0);
+      c.fill();
+      c.fillRect(8, -19, 6, 5);
+      c.fillStyle = col;
+      c.beginPath();
+      c.moveTo(-14, -16);
+      c.lineTo(2, -16);
+      c.lineTo(0, -11);
+      c.lineTo(-12, -11);
+      c.closePath();
+      c.fill();
+      break;
+    }
+    case "market": {
+      // stalls under striped awnings, baskets of dates + pots
+      shadow(c, 40, 9);
+      for (const sx of [-22, 18]) {
+        c.strokeStyle = "#6b4a28";
+        c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(sx - 12, 0);
+        c.lineTo(sx - 12, -20);
+        c.moveTo(sx + 12, 0);
+        c.lineTo(sx + 12, -20);
+        c.stroke();
+        c.fillStyle = "#e8d4a6";
+        c.fillRect(sx - 15, -24, 30, 6);
+        c.fillStyle = col;
+        for (let i = 0; i < 3; i++) c.fillRect(sx - 15 + i * 10, -24, 5, 6);
+        c.fillStyle = "#8a5a32";
+        c.fillRect(sx - 11, -8, 22, 8);
+        c.fillStyle = sx < 0 ? "#7a3f2a" : "#d9a23a";
+        for (let i = 0; i < 3; i++) {
+          c.beginPath();
+          c.arc(sx - 6 + i * 6, -9, 2.6, 0, Math.PI * 2);
+          c.fill();
+        }
+      }
+      break;
+    }
+    case "well": {
+      shadow(c, 16, 5);
+      c.fillStyle = "#b49a74";
+      c.beginPath();
+      c.ellipse(0, -4, 13, 6, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#2f5a6e";
+      c.beginPath();
+      c.ellipse(0, -5, 8, 3.4, 0, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = "#6b4a28";
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(-11, -4);
+      c.lineTo(-11, -24);
+      c.lineTo(11, -24);
+      c.lineTo(11, -4);
+      c.stroke();
+      c.strokeStyle = "rgba(230,220,200,0.8)";
+      c.lineWidth = 0.8;
+      c.beginPath();
+      c.moveTo(0, -24);
+      c.lineTo(0, -12 + Math.sin(t * 2) * 2);
+      c.stroke();
+      break;
+    }
+    case "tower": {
+      // a tapering mud-brick watchtower with a crenellated top, an archer up on it, a banner
+      shadow(c, 18, 6);
+      c.fillStyle = "#c29a62";
+      c.beginPath();
+      c.moveTo(-14, 0);
+      c.lineTo(-10, -58);
+      c.lineTo(10, -58);
+      c.lineTo(14, 0);
+      c.closePath();
+      c.fill();
+      c.fillStyle = "#a9814c";
+      c.fillRect(-13, -64, 26, 7);
+      for (let i = -12; i <= 8; i += 6) c.fillRect(i, -69, 4, 5);
+      c.fillStyle = "rgba(40,26,12,0.7)";
+      c.fillRect(-3, -40, 6, 8);
+      c.fillRect(-3, -20, 6, 8);
+      // the lookout: a robed archer
+      c.fillStyle = "#d8bd8a";
+      c.fillRect(-3, -76, 6, 9);
+      c.fillStyle = "#e9d8b2";
+      c.beginPath();
+      c.arc(0, -79, 3.4, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = "#6b4a28";
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(0, -64);
+      c.lineTo(0, -92);
+      c.stroke();
+      c.fillStyle = col;
+      c.beginPath();
+      c.moveTo(0, -92);
+      c.lineTo(12, -88 + Math.sin(t * 3 + s.x) * 1.5);
+      c.lineTo(0, -84);
+      c.closePath();
+      c.fill();
+      break;
+    }
+    case "wall": {
+      // a stretch of the city wall: mud brick with crenellations
+      shadow(c, 30, 5);
+      c.fillStyle = "#bf9761";
+      c.fillRect(-28, -20, 56, 20);
+      c.fillStyle = "#a9814c";
+      c.fillRect(-28, -22, 56, 3);
+      for (let i = -28; i < 28; i += 9) c.fillRect(i, -27, 5, 5);
+      c.strokeStyle = "rgba(110,78,40,0.35)";
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(-28, -10);
+      c.lineTo(28, -10);
+      c.stroke();
+      break;
+    }
+    case "palace": {
+      // the king's palace: a great domed hall on a stepped plinth, two minaret towers, gold + banners
+      shadow(c, 74, 16);
+      c.fillStyle = "#b8925c";
+      c.fillRect(-70, -10, 140, 10);
+      c.fillStyle = "#d4b07a";
+      c.fillRect(-58, -52, 116, 42);
+      c.fillStyle = "#e2c48f";
+      c.beginPath();
+      c.ellipse(0, -52, 36, 34, 0, Math.PI, 0);
+      c.fill();
+      c.fillStyle = "#e8c45d";
+      c.beginPath();
+      c.moveTo(0, -94);
+      c.lineTo(4, -86);
+      c.lineTo(-4, -86);
+      c.closePath();
+      c.fill();
+      for (const sx of [-66, 66]) {
+        c.fillStyle = "#cfa86f";
+        c.fillRect(sx - 7, -96, 14, 86);
+        c.fillStyle = "#e2c48f";
+        c.beginPath();
+        c.ellipse(sx, -96, 9, 10, 0, Math.PI, 0);
+        c.fill();
+        c.fillStyle = col;
+        c.beginPath();
+        c.moveTo(sx, -106);
+        c.lineTo(sx + 14, -102 + Math.sin(t * 3 + sx) * 1.5);
+        c.lineTo(sx, -98);
+        c.closePath();
+        c.fill();
+      }
+      // arched doorway + windows that glow at night
+      c.fillStyle = night ? "rgba(255,190,100,0.9)" : "rgba(50,32,16,0.75)";
+      c.beginPath();
+      c.ellipse(0, -10, 12, 22, 0, Math.PI, 0);
+      c.fill();
+      for (const wx of [-38, -22, 22, 38]) {
+        c.beginPath();
+        c.ellipse(wx, -30, 4, 7, 0, Math.PI, 0);
+        c.fill();
+        c.fillRect(wx - 4, -30, 8, 6);
+      }
+      c.fillStyle = col;
+      c.fillRect(-58, -46, 116, 4);
+      if (night) glow(c, 0, -30, 110, "rgba(255,170,80,0.22)");
+      break;
+    }
   }
   c.restore();
 }

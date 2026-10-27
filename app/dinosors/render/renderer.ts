@@ -5,6 +5,7 @@
 /*  entities → flyers → particles → sky FX → light map → UI overlays.  */
 /* ------------------------------------------------------------------ */
 import { dragonFor, hallFolk, hallOf, hallRing, hallTiers, inRoom, roomOf } from "../sim/riderHall";
+import { scorpionMaxHp } from "../sim/scorpionArmor";
 import { drawHallBack, drawHallFront } from "./riderHallArt";
 import { pitOf } from "../sim/shows";
 import { drawChariot } from "./chariotArt";
@@ -31,10 +32,12 @@ import { drawDino, restPose, shade, type DinoPose } from "./drawDino";
 import { lookKey } from "../sim/genetics";
 import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawWinery, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawPlantLod, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
 import { ROLES } from "../data/facts";
-import { BUILDINGS, HOUSING, SCORPION_TIERS } from "../data/colony";
+import { BUILDINGS, HOUSING } from "../data/colony";
 import { drawBar, drawBones, drawBuilding, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
+import { drawMegaGate } from "./megaGateArt";
 import { drawDragon, drawDragonEgg, drawNest, drawPit } from "./dragonArt";
-import { clusters, drawField, drawVineyardField, drawPaddock, drawSeatRing } from "./mergedArt";
+import { clusters, drawEstateVines, drawField, drawVineyardField, drawPaddock, drawSeatRing } from "./mergedArt";
+import { wineryEstates } from "../sim/wineEstate";
 import { RING_R, SHADE, shadeCentre } from "../sim/shade";
 import { moveSpotOk, type MoveRef } from "../sim/moving";
 import { shelterTiles } from "../sim/nav";
@@ -48,18 +51,19 @@ import { carcassStage, harvested } from "../sim/carcass";
 import { feastTable } from "../sim/feast";
 import { drawFeastTable, drawRoastPile } from "./feastArt";
 import { drawDragonBones } from "./dragonBonesArt";
-import { HELMET_BY_ID, OUTFIT_BY_ID } from "../data/colony";
+import { ARMOR_BY_ID, HELMET_BY_ID, METAL_COLOR, OUTFIT_BY_ID } from "../data/colony";
 import { drawRefinery } from "./metalArt";
 import { drawBrute, drawCatapult, drawBruteMissile, drawClanCamp } from "./bruteArt";
 import { drawTreeCanopy, drawTreeFolk, drawTreeGround, drawTreeSign } from "./treeFolkArt";
 import { drawSeaFolk, drawSeaHut, drawSeaSign, drawSeaWalks } from "./seaFolkArt";
 import { drawSandFolk, drawSandTent } from "./sandFolkArt";
-import { drawClearBox, drawClearJobs, drawWallEdit, type WallEditView } from "./editArt";
+import { boxOf, drawAlignGuides, drawClearBox, drawClearJobs, drawWallEdit, type WallEditView } from "./editArt";
+import { alignGuides } from "../sim/wallLinks";
 import { drawShieldFields } from "./shieldArt";
 import { drawSnowFolk, drawSnowLodge } from "./snowFolkArt";
 import type { SnowLodge, SnowTribe } from "../sim/snowFolk";
-import { snowCamo } from "../sim/snowBeasts";
-import { PeaksFx } from "./snowArt";
+import { hangTrees, snowCamo } from "../sim/snowBeasts";
+import { PeaksFx, drawHangTree } from "./snowArt";
 import { shieldView } from "../sim/dragonShield";
 import { drawMonk, drawMonkPlace } from "./monkArt";
 import { strength } from "../sim/breath";
@@ -69,7 +73,7 @@ import { siteKey } from "../sim/build";
 import type { SandTent, SandTribe } from "../sim/sandFolk";
 import { drawClanBuilding, drawClanHold, drawClanTrap } from "./clanLifeArt";
 import { fenceSize, siteOf } from "../sim/clanLife";
-import type { Brute, Clan, ClanBuild, SeaHut, SeaSign, SeaTribe, TreeSign } from "../sim/types";
+import type { Brute, Clan, Wall, ClanBuild, SeaHut, SeaSign, SeaTribe, TreeSign } from "../sim/types";
 import { TerrainRenderer } from "./terrainRenderer";
 import { drawEruptionColumn, drawGhost, drawPyroclastic } from "./civArt";
 import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
@@ -165,6 +169,7 @@ const K_SANDTENT = 55;
 const K_MONK = 56;
 const K_MONKPLACE = 57;
 const K_SNOWLODGE = 58;
+const K_HANGTREE = 59;
 
 interface Drop {
   x: number;
@@ -433,6 +438,9 @@ export class Renderer {
         this.sandTents.push({ s, tr });
       }
     }
+    // the Yetis' hanging trees by their dens
+    this.hangTreeList = hangTrees(w).filter((t) => t.x > x0 - 60 && t.x < x1 + 60 && t.y > y0 && t.y < y1 + 120);
+    for (let i = 0; i < this.hangTreeList.length; i++) list.push({ y: this.hangTreeList[i].y, k: K_HANGTREE, i });
     // Snow People camps: each igloo, the longhouse, the pen… sort on their own
     this.snowLodges.length = 0;
     for (const tr of w.snowFolk.tribes) {
@@ -450,7 +458,7 @@ export class Renderer {
     }
     for (let i = 0; i < mk.places.length; i++) {
       const p = mk.places[i];
-      if (p.x > x0 - 100 && p.x < x1 + 100 && p.y > y0 - 40 && p.y < y1 + 400) list.push({ y: p.kind === "flags" ? p.y - 30 : p.y, k: K_MONKPLACE, i });
+      if (p.x > x0 - 110 && p.x < x1 + 110 && p.y > y0 - (p.kind === "chapel" ? 170 : 40) && p.y < y1 + 400) list.push({ y: p.kind === "flags" ? p.y - 30 : p.y, k: K_MONKPLACE, i });
     }
     // Tree People camps: the village up in the canopy (after its trees), the ground ring, the warning signs
     const fo = w.forest;
@@ -606,7 +614,9 @@ export class Renderer {
       const wl = tribe.walls[i];
       const wx = wl.tx * TILE + TILE / 2;
       const wy = wl.ty * TILE + TILE;
-      if (wx > x0 && wx < x1 && wy > y0 && wy < y1 + 40) list.push({ y: wy - (tribe.walls[i].bone ? 1.5 : 2), k: K_WALL, i });
+      // a bone gate turned in a north-south wall straddles it: drawn over the wall pieces just in front of it
+      const turned = wl.bone && wl.part === "gate" && !tribe.wallAt(wl.tx - 1, wl.ty) && !tribe.wallAt(wl.tx + 1, wl.ty) && (!!tribe.wallAt(wl.tx, wl.ty - 1) || !!tribe.wallAt(wl.tx, wl.ty + 1));
+      if (wx > x0 && wx < x1 && wy > y0 && wy < y1 + 40) list.push({ y: turned ? wy + TILE * 1.6 : wy - (wl.bone ? 1.5 : 2), k: K_WALL, i });
     }
     for (let i = 0; i < tribe.towers.length; i++) {
       const tw = tribe.towers[i];
@@ -656,6 +666,9 @@ export class Renderer {
       c.drawImage(this.shadowSprite, dn.x - r + dn.z * 0.2, dn.y - r * 0.3, r * 2, r * 0.6);
     }
     c.globalAlpha = 1;
+
+    // wine estates: rows of vines on the open land round joined wineries (wineEstate.ts)
+    for (const e of wineryEstates(w)) if (e.vines.length) drawEstateVines(c, e.vines, new Set(e.vines), MAP_W, TILE, this.t, { x0, y0, x1, y1 });
 
     // farm fields (plots next to each other are one big field)
     const farms = w.tribe.farms;
@@ -836,6 +849,15 @@ export class Renderer {
         case K_SANDTENT: {
           const st = this.sandTents[it.i];
           if (st) drawSandTent(c, st.s, st.tr, this.t, night > 0.5);
+          break;
+        }
+        case K_HANGTREE: {
+          const ht = this.hangTreeList[it.i];
+          if (!ht) break;
+          c.save();
+          c.translate(ht.x, ht.y);
+          drawHangTree(c, this.t, w.humans.some((h) => h.hung?.by === ht.id));
+          c.restore();
           break;
         }
         case K_SNOWLODGE: {
@@ -1125,6 +1147,39 @@ export class Renderer {
         }
         case K_WALL: {
           const wl = tribe.walls[it.i];
+          if (wl.mega) {
+            // a Megalodon gate is one shark mouth across the water, drawn from its west (or south) end
+            const mg = (dx: number, dy: number) => !!tribe.wallAt(wl.tx + dx, wl.ty + dy)?.mega;
+            if (mg(-1, 0)) break;
+            let n = 1;
+            let vertical = false;
+            if (mg(1, 0)) while (mg(n, 0)) n++;
+            else {
+              if (mg(0, 1)) break;
+              while (mg(0, -n)) n++;
+              vertical = n > 1;
+            }
+            const span: Wall[] = [];
+            for (let k = 0; k < n; k++) span.push(tribe.wallAt(wl.tx + (vertical ? 0 : k), wl.ty - (vertical ? k : 0))!);
+            const ghost = span.some((o) => o.built < 1);
+            // the jaws gape for our own people (and when the player opens them); shut on everyone else
+            const x0m = wl.tx * TILE - 24;
+            const x1m = (wl.tx + (vertical ? 1 : n)) * TILE + 24;
+            const y0m = (wl.ty - (vertical ? n - 1 : 0)) * TILE - 24;
+            const y1m = (wl.ty + 1) * TILE + 24;
+            const ours = !ghost && w.humans.some((h) => !h.stranger && h.x > x0m && h.x < x1m && h.y > y0m && h.y < y1m);
+            const open = !ghost && (span.some((o) => o.open) || ours);
+            let sw = this.swing.get(wl.id) ?? (open ? 1 : 0);
+            sw += ((open ? 1 : 0) - sw) * Math.min(1, dt * 3);
+            this.swing.set(wl.id, sw);
+            const hp = Math.min(...span.map((o) => (o.built >= 1 ? o.hp / wallMaxHp(o) : 1)));
+            c.save();
+            c.translate(wl.tx * TILE + TILE / 2, wl.ty * TILE + TILE);
+            drawMegaGate(c, n, vertical, sw, this.t, hp, ghost);
+            if (ov.inspect?.kind === "gate" && span.some((o) => o.id === ov.inspect!.id)) this.inspectRing(c, vertical ? 0 : ((n - 1) * TILE) / 2, vertical ? -((n - 1) * TILE) / 2 : -20, 22 + n * 8);
+            c.restore();
+            break;
+          }
           // bone gates side by side are one grand gate, drawn from the west (or south) end
           let run: { n: number; vertical: boolean } | undefined;
           if (wl.part === "gate" && wl.bone && wl.built >= 1) {
@@ -1148,15 +1203,17 @@ export class Renderer {
           const linked = (dx: number, dy: number) => {
             const o = tribe.wallAt(wl.tx + dx, wl.ty + dy);
             if (o && o.part !== "stairs" && (o.built >= 1) === (wl.built >= 1)) return true;
-            // walls join onto towers too
-            return tribe.towers.some((t) => wl.tx + dx >= t.tx && wl.tx + dx <= t.tx + 1 && wl.ty + dy >= t.ty && wl.ty + dy <= t.ty + 1 && t.stage > 0);
+            // walls join onto towers + Dragon Shield pylons too
+            return !!tribe.wallAnchorAt(w, wl.tx + dx, wl.ty + dy);
           };
           const stairsMask = wl.part === "stairs" ? (tribe.wallAt(wl.tx, wl.ty - 1) ? 1 : tribe.wallAt(wl.tx + 1, wl.ty) ? 2 : tribe.wallAt(wl.tx - 1, wl.ty) ? 8 : 4) : 0;
           const mask = wl.part === "stairs" ? stairsMask : (linked(0, -1) ? 1 : 0) | (linked(1, 0) ? 2 : 0) | (linked(0, 1) ? 4 : 0) | (linked(-1, 0) ? 8 : 0);
+          const towerAt = (dx: number, dy: number) => !!tribe.wallAnchorAt(w, wl.tx + dx, wl.ty + dy);
+          const towerMask = wl.part === "stairs" ? 0 : (towerAt(0, -1) ? 1 : 0) | (towerAt(1, 0) ? 2 : 0) | (towerAt(-1, 0) ? 8 : 0);
           let sw = this.swing.get(wl.id) ?? (wl.open ? 1 : 0);
           sw += ((wl.open ? 1 : 0) - sw) * Math.min(1, dt * 4);
           this.swing.set(wl.id, sw);
-          drawWall(c, wl, { mask, hpFrac: wl.built >= 1 ? wl.hp / wallMaxHp(wl) : 1, swing: sw, t: this.t, run });
+          drawWall(c, wl, { mask, tower: towerMask, hpFrac: wl.built >= 1 ? wl.hp / wallMaxHp(wl) : 1, swing: sw, t: this.t, run });
           if (ov.inspect?.kind === "gate" && ov.inspect.id === wl.id) this.inspectRing(c, 0, -10, 22);
           c.restore();
           break;
@@ -1355,15 +1412,29 @@ export class Renderer {
       }
       c.save();
       c.translate(h.x, h.y - h.z);
+      // hung up by a Yeti: a rope from the bough to their feet, dangling head-down (snowBeasts.ts)
+      if (h.hung) {
+        const sw = Math.sin(this.t * 1.6 + h.id) * 0.1;
+        c.strokeStyle = "#a8875a";
+        c.lineWidth = 1.4;
+        c.beginPath();
+        c.moveTo(0, -79);
+        c.lineTo(Math.sin(sw) * 17, -62);
+        c.stroke();
+        c.translate(Math.sin(sw) * 17, -62);
+        c.rotate(Math.PI + sw);
+      }
       if (h.stranger) c.globalAlpha = 0.85;
       const role = tribe.roleOf(h);
       const wp = !h.child ? tribe.weaponFor(w, h) : null;
-      const look: WeaponLook = wp ? (wp.proj === "beam" ? "lance" : wp.kind === "bow" ? (wp.tier >= 3 ? "crossbow" : "bow") : wp.kind) : weapon;
+      const look: WeaponLook = wp ? (wp.id === "shockStick" ? "shock" : wp.id === "rayGun" ? "ray" : wp.proj === "beam" ? "lance" : wp.kind === "bow" ? (wp.tier >= 3 ? "crossbow" : "bow") : wp.kind) : weapon;
       const helmDef = h.gear.helmet ? HELMET_BY_ID[h.gear.helmet] : null;
       const coat = h.gear.outfit ? OUTFIT_BY_ID[h.gear.outfit] : null;
       // everyday clothes get better as the tribe learns
       const garb: GarbLevel = w.civ.polygonAge ? 3 : w.camp.learned.has("smelting") ? 2 : w.camp.learned.has("palisade") ? 1 : 0;
-      drawHuman(c, h, this.t, look, role === "guard" || role === "hunter" || !!h.order || h.taskId > 0 || tribe.raid !== null, h.gear.shield, wp?.tier ?? 1, coat, w.weather.rain, helmDef ? { color: helmDef.color, trim: helmDef.trim, glow: helmDef.glow } : null, garb, w.shifts.poweredOutfit(w, h));
+      const armorDef = h.gear.armor ? ARMOR_BY_ID[h.gear.armor] : null;
+      const metal = wp ? (wp.metal ? METAL_COLOR[wp.metal] : wp.tier >= 2 ? METAL_COLOR.iron : METAL_COLOR.stone) : null;
+      drawHuman(c, h, this.t, look, role === "guard" || role === "hunter" || !!h.order || h.taskId > 0 || tribe.raid !== null, h.gear.shield, wp?.tier ?? 1, coat, w.weather.rain, helmDef ? { color: helmDef.color, trim: helmDef.trim, glow: helmDef.glow } : null, garb, w.shifts.poweredOutfit(w, h), { armor: armorDef, metal });
       if (h.state === "down") {
         const a = this.t * 3;
         c.font = "9px sans-serif";
@@ -1637,6 +1708,7 @@ export class Renderer {
   private sandTents: { s: SandTent; tr: SandTribe }[] = [];
   private snowLodges: { s: SnowLodge; tr: SnowTribe }[] = [];
   private peaksFx = new PeaksFx();
+  private hangTreeList: { id: number; x: number; y: number }[] = [];
   private seaSigns: { s: SeaSign; color: string }[] = [];
 
   /** A dragon (selection ring, the dragon, then whoever is riding it). */
@@ -3118,6 +3190,12 @@ export class Renderer {
       if (!tr.found || tr.x < x0 - 100 || tr.x > x1 + 100 || tr.y < y0 || tr.y > y1 + 200) continue;
       this.speech(c, tr.x, tr.y - 80, `🛶 ${tr.name} Sea People · ${w.seaFolk.members(tr.id).length}`, inv * 0.9, 1);
     }
+    // …over each Sand People settlement we've found (camp, town, city or kingdom)
+    for (const tr of w.sandFolk.tribes) {
+      if (!tr.found || tr.x < x0 - 100 || tr.x > x1 + 100 || tr.y < y0 || tr.y > y1 + 200) continue;
+      const t = w.sandFolk.title(tr);
+      this.speech(c, tr.x, tr.y - (tr.tier >= 5 ? 130 : 90), `${tr.tier >= 5 ? "👑" : "🏜️"} ${t.charAt(0).toUpperCase() + t.slice(1)} · ${w.sandFolk.members(tr.id).length}`, inv * 0.9, 1);
+    }
     // …over each Snow People camp we've found
     for (const tr of w.snowFolk.tribes) {
       if (!tr.found || tr.x < x0 - 100 || tr.x > x1 + 100 || tr.y < y0 || tr.y > y1 + 200) continue;
@@ -3214,7 +3292,7 @@ export class Renderer {
     for (const s of w.colony.scorpions) {
       if (s.built < 1 || s.x < x0 || s.x > x1 || s.y < y0 || s.y > y1) continue;
       const lift = s.mount === "tower" ? TOWER_Z : s.mount === "wall" ? 26 : 0;
-      const maxHp = SCORPION_TIERS[s.tier - 1]?.hp ?? 300;
+      const maxHp = scorpionMaxHp(s);
       if (s.hp < maxHp) drawBar(c, s.x, s.y - lift - 46, 46, Math.max(0, s.hp / maxHp), s.hp < maxHp * 0.3 ? "#ef4444" : "#f59e0b");
       if (!s.crew && (w.tribe.raid || w.dragons.menacing(w))) this.bubbleIcon(c, s.x, s.y - lift - 42, "❔", inv * 0.8, 0.9);
       if (ov.inspect?.kind === "scorpion" && ov.inspect.id === s.id) this.inspectRing(c, s.x, s.y - lift, 26);
@@ -3378,12 +3456,23 @@ export class Renderer {
       const fp = w.colony.footprint(b.kind, p.x, p.y);
       for (let dy = 0; dy < fp.h; dy++) for (let dx = 0; dx < fp.w; dx++) tiles.push([fp.tx + dx, fp.ty + dy]);
     } else if (p.ref.kind === "wall") tiles.push([Math.floor(p.x / TILE), Math.floor(p.y / TILE)]);
+    else if (p.ref.kind === "tower") {
+      const t = w.tribe.towers.find((o) => o.id === p.ref.id);
+      if (!t) return;
+      const s = w.tribe.towerMoveSpot(w, t, p.x, p.y) ?? { tx: Math.floor(p.x / TILE - 0.5), ty: Math.floor(p.y / TILE) - 1 };
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) tiles.push([s.tx + dx, s.ty + dy]);
+    }
     else if (p.ref.kind === "farm") {
       const tx = Math.floor(p.x / TILE);
       const ty = Math.floor(p.y / TILE);
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) tiles.push([tx + dx, ty + dy]);
     } else for (const i of shelterTiles(p.x, p.y)) tiles.push([i % MAP_W, Math.floor(i / MAP_W)]);
     if (!tiles.length) return;
+    // walls + towers: measuring lines to what it lines up with (green in line, red a tile or two off)
+    if (p.ref.kind === "wall" || p.ref.kind === "tower") {
+      const box = boxOf(tiles.map(([tx, ty]) => ({ tx, ty })));
+      drawAlignGuides(c, alignGuides(w, box, p.ref.kind === "wall" ? new Set([p.ref.id]) : new Set(), p.ref.kind === "tower" ? p.ref.id : 0), inv, this.t);
+    }
     c.fillStyle = ok ? "rgba(74,222,128,0.22)" : "rgba(248,113,113,0.25)";
     c.strokeStyle = ok ? "rgba(74,222,128,0.9)" : "rgba(248,113,113,0.95)";
     c.lineWidth = 2 * inv;
@@ -3401,7 +3490,7 @@ export class Renderer {
     c.font = `700 ${12 * inv}px ui-rounded, system-ui, sans-serif`;
     c.textAlign = "center";
     c.fillStyle = ok ? "#bbf7d0" : "#fecaca";
-    c.fillText(ok ? p.ref.kind === "wall" || p.ref.kind === "farm" ? "🔷 Move here" : "🚚 Carry it here" : why ?? "", (tx0 + tw / 2) * TILE, ty0 * TILE - 10 * inv);
+    c.fillText(ok ? p.ref.kind === "wall" || p.ref.kind === "farm" || p.ref.kind === "tower" ? "🔷 Move here" : "🚚 Carry it here" : why ?? "", (tx0 + tw / 2) * TILE, ty0 * TILE - 10 * inv);
   }
 
   /** Snow lying on the ground (per tile, soft edges). */

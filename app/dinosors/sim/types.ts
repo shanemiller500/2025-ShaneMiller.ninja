@@ -8,7 +8,10 @@ import type { DragonBreed, DragonCmdKind, DragonSkill } from "../data/dragons";
 
 export const TILE = 32;
 /** The most people a tribe can grow to. */
-export const MAX_PEOPLE = 100;
+/** The most people a tribe can ever have (it needs to be stable to grow past BASE_PEOPLE: population.ts). */
+export const MAX_PEOPLE = 200;
+/** People a tribe can grow to before it has to be stable (fed, safe, housed) to grow on. */
+export const BASE_PEOPLE = 100;
 /**
  * The map (tiles). The original valley is the top-left 160 × 112; the land east of it (the
  * central desert, the Great Peaks, the south-east lakes) and the deeper sea south of it were
@@ -279,6 +282,8 @@ export interface Dino {
   lastY: number;
   /** remembers predator id while fleeing */
   threat: number;
+  /** driven out of our settlement: runs for the edge until this time (territory.ts; not saved) */
+  shooed?: number;
   sleeping: boolean;
   /** true for whoever started a scuffle (they resolve it) */
   lead: boolean;
@@ -300,6 +305,8 @@ export interface Dino {
   snowTribe?: number;
   /** a Snow Person riding it right now (their id; not saved) */
   snowRider?: number;
+  /** a Yeti carrying off one of our people (their id; not saved) */
+  holding?: number;
   /** the Yeti: seconds until it can hurl another ice boulder (not saved) */
   hurlCd?: number;
   /** dizzy + slow (Dinosaur Scorpion venom, an Ice Dragon's frost): seconds left (not saved) */
@@ -480,6 +487,8 @@ export type Resource =
   | "goldBar"
   | "silverBar"
   | "copperBar"
+  /** iron smelted with coal at the refinery: the toughest metal (gear.ts) */
+  | "steel"
   /** from the Sea People's oyster beds */
   | "pearl"
   /** picked in the vineyards; the winery presses them into wine (vineyard.ts) */
@@ -487,7 +496,7 @@ export type Resource =
   | "wine";
 
 /** What a cave person does. "auto" lets the tribe decide. */
-export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner" | "trainer" | "dragonSlayer" | "eggRunner" | "dragonKeeper";
+export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner" | "trainer" | "dragonSlayer" | "eggRunner" | "dragonKeeper" | "firefighter";
 
 export type HumanOrder = { kind: "hunt"; id: number } | { kind: "guard"; x: number; y: number; top?: boolean } | null;
 
@@ -502,6 +511,10 @@ export interface Gear {
   outfit?: string | null;
   /** metal helmet id ("helmCopper", "helmGold"…) */
   helmet?: string | null;
+  /** body armour id (ARMORS: breastplate + arm guards + greaves) */
+  armor?: string | null;
+  /** the sidearm everyone carries: a shock stick or a ray gun (territory.ts) */
+  sidearm?: string | null;
 }
 
 export interface Human {
@@ -588,8 +601,16 @@ export interface Human {
   fireId?: number;
   /** the dinosaur this person is bonded to as its rider (a Dino Rider team) */
   partner?: number;
+  /** grabbed by a Yeti and being carried off (its id; snowBeasts.ts; not saved) */
+  yetiHeld?: number;
+  /** hung upside down from a Yeti's hanging tree, by the feet (snowBeasts.ts; saved): until someone cuts them down */
+  hung?: { by: number; x: number; y: number; t: number };
   /** the tamed dragon this person is bonded to (a Dragon Rider) */
   dragon?: number;
+  /** a wild animal they're driving out of the settlement (territory.ts; not saved) */
+  repelId?: number;
+  /** on a sweep: driving every stray animal out of the settlement (territory.ts; not saved) */
+  sweep?: boolean;
   /** riding a dragon right now (its id): position follows it, the sim leaves them be */
   aloft?: number;
   /** a passenger on someone's dragon (the dragon's id): carried along like the rider (riderDuty.ts) */
@@ -698,6 +719,15 @@ export interface Chariot {
   anim: number;
   /** flash when it's hit */
   hit: number;
+  /** when the route was last planned (it's re-planned as walls + gates change) */
+  pathT?: number;
+  /** no way through right now (walls, a shut gate): it waits instead of driving through */
+  stuck?: boolean;
+  /** upgrade tier (chariotTiers.ts; 0 = the plain war chariot) */
+  tier?: number;
+  /** an upgrade ordered: builders bring `have` up to the next tier's cost, then fit it */
+  up?: boolean;
+  have?: Partial<Record<Resource, number>>;
 }
 
 export type HuntFormation = "ring" | "pincer" | "wedge";
@@ -710,6 +740,8 @@ export interface DragonHunt {
   t: number;
   /** attacking a Neanderthal clan's camp instead of a nest (its id) */
   clan?: number;
+  /** attacking one of the other peoples' camps: Sand, Snow, Tree or Sea (chariots.ts campKey) */
+  camp?: number;
   /** hunting one wild dragon wherever it goes (its id) instead of a nest */
   dragon?: number;
   /** on the march: stopped to fight a threat on the way (its id), and for how long */
@@ -905,6 +937,8 @@ export interface SeaSign {
 /** Fisher-raiders living on stilts out on the water, friends of the sea reptiles. */
 export interface SeaTribe {
   id: number;
+  /** when it was founded (growth.ts: villages that last grow bigger) */
+  since?: number;
   name: string;
   color: string;
   /** the village's heart (out on the water) */
@@ -953,6 +987,8 @@ export interface SeaBand {
 /** A feral tribe living up in the forest canopy. */
 export interface TreeTribe {
   id: number;
+  /** when it was founded (growth.ts: camps that last grow bigger) */
+  since?: number;
   name: string;
   /** body-paint colour */
   color: string;
@@ -1007,6 +1043,8 @@ export interface TreeBand {
 /** A small Neanderthal band with its own camp. Relations: -1 war, 0 wary, 1 allies. */
 export interface Clan {
   id: number;
+  /** when it was founded (growth.ts: camps that last grow bigger) */
+  since?: number;
   name: string;
   color: string;
   /** every colour it flies: its own + each clan that united with it (see clanTowns.ts) */
@@ -1245,6 +1283,8 @@ export interface Wall {
   bone?: boolean;
   /** a finished piece waiting to be rebuilt as a bone gate (works as before until then) */
   boneUp?: boolean;
+  /** gates: part of a Megalodon water gate (a giant shark mouth spanning a river; shut to all but our people) */
+  mega?: boolean;
 }
 
 export interface Farm {
@@ -1370,6 +1410,11 @@ export interface Scorpion {
   kick: number;
   /** powered by an energy tower: aims + fires on its own (not saved; set every frame) */
   drone?: boolean;
+  /** fitted with the Obsidian Fire Shield (scorpionArmor.ts) / builders are fitting it */
+  obsidian?: boolean;
+  obsidianUp?: boolean;
+  /** heat glinting off the obsidian plates (drawn; not saved) */
+  glint?: number;
 }
 
 export type NodeKind = "stone" | "limestone" | "clay" | "iron" | "coal" | "silver" | "gold" | "obsidian" | "flint" | "salt" | "tar" | "artifact" | "fossil" | "copper" | "quartz" | "magnetite" | "crystal" | "diamond" | "meteorite";
@@ -1568,7 +1613,7 @@ export interface Dragon {
   /** a Sand Dragon's next sky patrol over its tribe's land (sandFolk.ts; not saved) */
   skyT?: number;
   /** caught in a Dragon Shield's frequency (dragonShield.ts; not saved): how rattled it is (0..1), and where the hum comes from */
-  repel?: { k: number; x: number; y: number; t: number; away: number };
+  repel?: { k: number; x: number; y: number; t: number; away: number; fled?: boolean };
   /** come down to the Mountain Monks' yearly offering (monks.ts flies it; protected: nothing may harm it) */
   monkRite?: boolean;
   /** when its rider may take it out on the next job (riderDuty.ts; not saved) */
@@ -1642,6 +1687,8 @@ export interface Projectile {
   hit: boolean;
   /** damage multiplier against dragons */
   big?: number;
+  /** a sidearm shot at a stray animal in our settlement: it jolts + drives it out, never kills (territory.ts) */
+  repel?: boolean;
   /** a glowing energy bolt (from a powered Scorpion) */
   glow?: boolean;
 }

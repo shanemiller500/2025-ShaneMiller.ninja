@@ -29,6 +29,7 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
   useClickAway(!!open, toolbarRef, () => setOpen(null));
 
   const iconFor = (id: ToolId) => {
+    if (tool.id !== id) return TOOLS.find((t) => t.id === id)!.icon;
     switch (id) {
       case "dino":
         return SPECIES.find((s) => s.id === tool.species)?.emoji ?? "🦖";
@@ -47,36 +48,30 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
     }
   };
 
-  // every toy toggles: tap it to switch it on, tap it again to switch it off
+  // Open choice menus with the Hand active so the last choice cannot be used accidentally.
   const press = (id: ToolId) => {
     if (id === "hand") {
       setTool({ id: "hand" });
       setOpen(null);
       return;
     }
-    const active = tool.id === id;
-    if (active || open === id) {
+    if (open === id) {
       setOpen(null);
-      if (active) setTool({ id: "hand" });
       return;
     }
     if (HAS_OPTIONS.has(id)) {
+      setTool({ id: "hand" });
       setOpen(id);
-      // weather + most boom choices act instantly, so don't switch tools until one is picked
-      if (id !== "weather" && id !== "disaster") setTool({ id });
     } else {
-      setTool({ id });
+      setTool({ id: tool.id === id ? "hand" : id });
       setOpen(null);
     }
   };
 
+  /** The open menu only shows a choice once the player has made one this time (the tool is the Hand until then). */
+  const chosen = <V,>(v: V): V | null => (open && tool.id === open ? v : null);
+
   const pick = <K extends keyof ToolState>(key: K, value: ToolState[K], close = true) => {
-    // tapping the option that's already on turns the toy off
-    if (open && open !== "weather" && tool.id === open && tool[key] === value) {
-      setTool({ id: "hand" });
-      setOpen(null);
-      return;
-    }
     setTool({ [key]: value, ...(open ? { id: open } : {}) } as Partial<ToolState>);
     if (close) setOpen(null);
   };
@@ -96,7 +91,7 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
             >
               {(open === "dino" || open === "egg") && (
                 <SpeciesGrid
-                  value={open === "dino" ? tool.species : tool.dragonEgg ? ("" as typeof tool.egg) : tool.egg}
+                  value={chosen(open === "dino" ? tool.species : tool.dragonEgg ? null : tool.egg)}
                   unlocked={unlocked}
                   egg={open === "egg"}
                   onPick={(s) => { if (open === "egg") setTool({ dragonEgg: null }); pick(open === "dino" ? "species" : "egg", s); }}
@@ -124,8 +119,8 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
                   <p className="px-1 pb-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/75">🐉 Dragon eggs (tap near a nest to add to it)</p>
                   <div className="flex flex-wrap justify-center gap-1.5">
                     {BREED_LIST.map((b) => (
-                      <button key={b.id} type="button" onClick={() => setTool({ id: "egg", dragonEgg: b.id })} aria-pressed={tool.dragonEgg === b.id}
-                        className={`flex min-h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition active:scale-95 ${tool.dragonEgg === b.id ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
+                      <button key={b.id} type="button" onClick={() => setTool({ id: "egg", dragonEgg: b.id })} aria-pressed={chosen(tool.dragonEgg) === b.id}
+                        className={`flex min-h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-bold transition active:scale-95 ${chosen(tool.dragonEgg) === b.id ? "bg-amber-400 text-slate-900" : "bg-white/10 hover:bg-white/20"}`}>
                         <span className="inline-block h-4 w-3 rounded-[50%]" style={{ background: b.look.egg, boxShadow: `inset -2px -2px 0 ${b.look.spots}` }} />
                         {b.name.replace(" Dragon", "")}
                       </button>
@@ -133,18 +128,18 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
                   </div>
                 </div>
               )}
-              {open === "food" && <Options opts={FOOD_OPTS} value={tool.food} onPick={(v) => pick("food", v)} />}
-              {open === "plant" && <Options opts={PLANT_OPTS} value={tool.plant} onPick={(v) => pick("plant", v)} />}
+              {open === "food" && <Options opts={FOOD_OPTS} value={chosen(tool.food)} onPick={(v) => pick("food", v)} />}
+              {open === "plant" && <Options opts={PLANT_OPTS} value={chosen(tool.plant)} onPick={(v) => pick("plant", v)} />}
               {open === "land" && <div className="dl-scroll max-h-[min(54vh,470px)] space-y-2 overflow-y-auto pr-1">
                 <p className="px-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/75">Paint terrain</p>
-                <Options opts={LAND_OPTS.slice(0, 4)} value={tool.land} onPick={(v) => pick("land", v)} />
+                <Options opts={LAND_OPTS.slice(0, 4)} value={chosen(tool.land)} onPick={(v) => pick("land", v)} />
                 <p className="px-1 pt-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/75">Place surface materials</p>
-                <Options opts={LAND_OPTS.slice(4)} value={tool.land} onPick={(v) => pick("land", v)} />
+                <Options opts={LAND_OPTS.slice(4)} value={chosen(tool.land)} onPick={(v) => pick("land", v)} />
               </div>}
               {open === "people" && (
                 <>
-                  <Options opts={PEOPLE_OPTS} value={tool.people} onPick={(v) => pick("people", v, !FOLK_PEOPLE.has(v))} />
-                  {FOLK_PEOPLE.has(tool.people) && (
+                  <Options opts={PEOPLE_OPTS} value={chosen(tool.people)} onPick={(v) => pick("people", v, !FOLK_PEOPLE.has(v))} />
+                  {tool.id === "people" && FOLK_PEOPLE.has(tool.people) && (
                     <>
                       <p className="mt-2 px-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/75">They arrive as…</p>
                       <div className="flex flex-wrap gap-1.5">
@@ -159,9 +154,9 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
                   )}
                 </>
               )}
-              {open === "build" && <BuildMenu value={tool.build} farmCrop={tool.farmCrop} onFarmCrop={(v) => setTool({ farmCrop: v })} learned={learned} civDone={civDone} civPath={civPath} stock={stock} onPick={(v) => pick("build", v)} />}
-              {open === "weather" && <Options opts={WEATHER_OPTS} value={tool.weather} onPick={(v) => pick("weather", v)} />}
-              {open === "disaster" && <Options opts={DISASTER_OPTS} value={tool.disaster} onPick={(v) => pick("disaster", v)} />}
+              {open === "build" && <BuildMenu value={chosen(tool.build)} farmCrop={tool.farmCrop} onFarmCrop={(v) => setTool({ farmCrop: v })} learned={learned} civDone={civDone} civPath={civPath} stock={stock} onPick={(v) => pick("build", v)} />}
+              {open === "weather" && <Options opts={WEATHER_OPTS} value={chosen(tool.weather)} onPick={(v) => pick("weather", v)} />}
+              {open === "disaster" && <Options opts={DISASTER_OPTS} value={chosen(tool.disaster)} onPick={(v) => pick("disaster", v)} />}
               <p className="mt-2 px-1 text-center text-xs font-medium text-white/70">
                 {TOOLS.find((t) => t.id === open)!.tip}
                 <span className="text-white/45"> · tap again to turn off</span>
@@ -231,7 +226,7 @@ const CATS: { id: BuildDef["cat"]; icon: string; label: string }[] = [
 ];
 
 /** Icon grid of what the tribe can build right now, by category, with costs. Future eras stay hidden until they're learned. */
-function BuildMenu({ value, farmCrop, onFarmCrop, learned, civDone, stock, onPick }: { value: BuildOpt; farmCrop: ToolState["farmCrop"]; onFarmCrop: (v: ToolState["farmCrop"]) => void; learned: TechId[]; civDone: CivTechId[]; civPath: CivPath; stock: Record<string, number>; onPick: (v: BuildOpt) => void }) {
+function BuildMenu({ value, farmCrop, onFarmCrop, learned, civDone, stock, onPick }: { value: BuildOpt | null; farmCrop: ToolState["farmCrop"]; onFarmCrop: (v: ToolState["farmCrop"]) => void; learned: TechId[]; civDone: CivTechId[]; civPath: CivPath; stock: Record<string, number>; onPick: (v: BuildOpt) => void }) {
   const has = new Set(learned);
   const civ = new Set(civDone);
   const knows = (t: TechId) => has.has(t);
@@ -239,10 +234,10 @@ function BuildMenu({ value, farmCrop, onFarmCrop, learned, civDone, stock, onPic
   // only what can be built now, and only the newest version of it (no wood walls once stone is known)
   const visible = (b: BuildDef) => buildVisible(b, knows, did);
   const cats = CATS.filter((c) => BUILD_DEFS.some((b) => b.cat === c.id && visible(b)));
-  const best = bestBuild(value, knows, did);
-  const [pickedCat, setCat] = useState<BuildDef["cat"]>(BUILD_BY_ID[best]?.cat ?? "homes");
+  const best = value ? bestBuild(value, knows, did) : null;
+  const [pickedCat, setCat] = useState<BuildDef["cat"]>((best && BUILD_BY_ID[best]?.cat) || "homes");
   const cat = cats.some((c) => c.id === pickedCat) ? pickedCat : cats[0]?.id ?? "homes";
-  const cur = visible(BUILD_BY_ID[best]) ? BUILD_BY_ID[best] : null;
+  const cur = best && visible(BUILD_BY_ID[best]) ? BUILD_BY_ID[best] : null;
   return (
     <div className="w-[min(560px,calc(100vw-40px))]">
       <div className="mb-2 grid gap-1 rounded-2xl bg-white/5 p-1 text-[12px] font-bold" style={{ gridTemplateColumns: `repeat(${Math.max(1, cats.length)}, minmax(0, 1fr))` }}>
@@ -296,7 +291,7 @@ function BuildMenu({ value, farmCrop, onFarmCrop, learned, civDone, stock, onPic
   );
 }
 
-function Options<V extends string>({ opts, value, onPick }: { opts: Opt<V>[]; value: V; onPick: (v: V) => void }) {
+function Options<V extends string>({ opts, value, onPick }: { opts: Opt<V>[]; value: V | null; onPick: (v: V) => void }) {
   return (
     <div className="grid grid-cols-4 gap-1.5">
       {opts.map((o) => (
@@ -314,7 +309,7 @@ function Options<V extends string>({ opts, value, onPick }: { opts: Opt<V>[]; va
   );
 }
 
-function SpeciesGrid({ value, unlocked, egg, onPick }: { value: SpeciesId; unlocked: SpeciesId[]; egg: boolean; onPick: (s: SpeciesId) => void }) {
+function SpeciesGrid({ value, unlocked, egg, onPick }: { value: SpeciesId | null; unlocked: SpeciesId[]; egg: boolean; onPick: (s: SpeciesId) => void }) {
   const list = SPECIES.filter((s) => !egg || s.move !== "swim");
   return (
     <div className="dl-scroll grid max-h-[46vh] grid-cols-3 gap-1.5 overflow-y-auto sm:grid-cols-6">

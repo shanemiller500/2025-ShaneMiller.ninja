@@ -1,13 +1,13 @@
 /* ------------------------------------------------------------------ */
 /*  Mountain Monks: a small, completely peaceful order living in a     */
-/*  high valley of the Great Peaks.                                    */
+/*  chapel high on a shoulder of the Great Peaks.                      */
 /*                                                                     */
 /*  • Protected: they are their own kind (never Humans, Brutes or      */
 /*    Dinos), so no fighter, predator, dragon, Scorpion, raid or wild  */
 /*    beast ever picks them as a target, and they never fight anyone.  */
 /*    `isProtected` is the rule anything new should check.             */
-/*  • Up to about ten of them. They live together round a few stone    */
-/*    huts, a shrine with a bell, and lines of prayer flags; they walk */
+/*  • Up to about ten of them. They live together in a stone           */
+/*    chapel, a shrine with a bell, and prayer flags; they walk        */
 /*    the mountain paths in a procession (one leader with a lantern,   */
 /*    the rest following in a line along the trail they leave),       */
 /*    meditate in a ring, and watch the sky at dusk.                   */
@@ -38,7 +38,7 @@ const WALK = 22;
 const PILGRIM_EVERY = [170, 280] as const;
 const MONK_NAMES = ["Tenzin", "Norbu", "Kalsang", "Pema", "Dawa", "Jigme", "Lhamo", "Sonam", "Tashi", "Yeshe", "Karma", "Dorje", "Nima", "Chodak", "Rinchen", "Wangmo"];
 
-export type MonkState = "walk" | "sit" | "meditate" | "gaze" | "sleep" | "kneel" | "ascend" | "chant";
+export type MonkState = "walk" | "sit" | "tea" | "meditate" | "gaze" | "sleep" | "kneel" | "ascend" | "chant";
 
 export interface Monk {
   id: number;
@@ -71,10 +71,10 @@ export interface Monk {
 export interface MonkPlace {
   x: number;
   y: number;
-  kind: "hut" | "shrine" | "flags" | "altar" | "cairn";
+  kind: "chapel" | "hut" | "shrine" | "flags" | "altar" | "cairn";
 }
 
-type Activity = "rest" | "meditate" | "walk" | "gaze" | "sleep" | "rite";
+type Activity = "rest" | "meditate" | "chant" | "tea" | "walk" | "gaze" | "sleep" | "rite";
 
 export interface MonkRite {
   phase: "gather" | "climb" | "call" | "offer" | "depart" | "return";
@@ -85,14 +85,14 @@ export interface MonkRite {
   offered: number;
 }
 
-/** Walks round the high valley (tile coords): out and back along the carved paths. */
+/** Walks from the peak chapel along the carved mountain paths. */
 const ROUTES: [number, number][][] = [
-  [[240, 41], [237, 44], [244, 47]],
-  [[234, 46], [224, 47], [234, 46]],
-  [[245, 55], [244, 63], [245, 54]],
-  [[250, 38], [254, 29], [250, 38]],
+  [[250, 37], [246, 46], [250, 37]],
+  [[254, 28], [257, 23], [254, 28]],
+  [[250, 37], [244, 47], [250, 37]],
+  [[252, 30], [250, 38], [254, 28]],
 ];
-const ALTAR_ROUTE: [number, number][] = [[250, 37], [254, 28], [LM.altar.x, LM.altar.y + 1]];
+const ALTAR_ROUTE: [number, number][] = [[254, 28], [LM.altar.x, LM.altar.y + 1]];
 /** where pilgrims start up the valleys */
 const PILGRIM_FROM: [number, number][] = [[208, 50], [239, 86], [284, 57]];
 
@@ -144,28 +144,30 @@ export class Monks {
 
   /* ------------------------------ setting up ------------------------------ */
 
-  /** The monastery: huts, a shrine, prayer flags, the altar ledge, and the first monks. */
+  /** The chapel, shrine, prayer flags, altar ledge, and first monks. */
   seed(w: World) {
     this.seeded = true;
     if (!this.enabled) return;
+    this.seedPlaces(w);
     const h = this.home;
-    const at = (dx: number, dy: number) => this.groundNear(w, h.x + dx, h.y + dy);
-    this.places = [];
-    for (const [dx, dy] of [[-120, -50], [-30, -80], [70, -60]] as const) {
-      const p = at(dx, dy);
-      if (p) this.places.push({ ...p, kind: "hut" });
-    }
-    const shrine = at(10, 30);
-    if (shrine) this.places.push({ ...shrine, kind: "shrine" });
-    const flags = at(-90, 40);
-    if (flags) this.places.push({ ...flags, kind: "flags" });
-    const cairn = at(140, 10);
-    if (cairn) this.places.push({ ...cairn, kind: "cairn" });
-    const a = this.groundNear(w, this.altar.x, this.altar.y) ?? this.altar;
-    this.places.push({ ...a, kind: "altar" });
     const n = 6 + Math.floor(this.rng() * 2);
     for (let i = 0; i < n; i++) this.add(h.x + (this.rng() - 0.5) * 120, h.y + 30 + (this.rng() - 0.5) * 50, 40 + this.rng() * 40);
     this.restack();
+  }
+
+  private seedPlaces(w: World) {
+    const h = this.home;
+    const at = (dx: number, dy: number) => this.groundNear(w, h.x + dx, h.y + dy);
+    this.places = [];
+    this.places.push({ ...(at(0, 0) ?? h), kind: "chapel" });
+    const shrine = at(130, 12);
+    if (shrine) this.places.push({ ...shrine, kind: "shrine" });
+    const flags = at(-120, 35);
+    if (flags) this.places.push({ ...flags, kind: "flags" });
+    const cairn = at(145, 70);
+    if (cairn) this.places.push({ ...cairn, kind: "cairn" });
+    const a = this.groundNear(w, this.altar.x, this.altar.y) ?? this.altar;
+    this.places.push({ ...a, kind: "altar" });
   }
 
   /** Open ground near a spot (the snowfields + meadows of the valley), or null. */
@@ -250,21 +252,21 @@ export class Monks {
     }
   }
 
-  /** Our people (or a dragon rider overhead) come near: the monastery is found. */
+  /** Our people (or a dragon rider overhead) come near: the chapel is found. */
   private findTick(w: World) {
     if (this.found) return;
     const h = this.home;
     const close = w.humans.some((p) => !p.captive && !p.under && Math.hypot(p.x - h.x, p.y - h.y) < 900) || w.dragons.owned.some((d) => d.rider && Math.hypot(d.x - h.x, d.y - h.y) < 1100);
     if (!close) return;
     this.found = true;
-    w.toast("🏔️", `Mountain Monks! A small, peaceful order lives up here in the Great Peaks: ${this.list.length} of them. They walk the mountain paths together, meditate and watch the sky. Nobody ever harms them, and they harm no one.`, h.x, h.y);
+    w.toast("🛕", `Mountain Monks! ${this.list.length} peaceful monks live in a chapel high in the Great Peaks. Listen for their morning bell, join their tea in the courtyard, or follow their mountain procession. Nobody harms them, and they harm no one.`, h.x, h.y);
     w.discover("monks", h.x, h.y);
   }
 
   /** What the order is doing at this time of day. */
   private schedule(w: World) {
     const hr = w.time;
-    const want: Activity = hr < 5 || hr >= 21 ? "sleep" : hr < 7 ? "meditate" : hr < 11 ? "walk" : hr < 14 ? "rest" : hr < 17 ? "walk" : hr < 19 ? "gaze" : "meditate";
+    const want: Activity = hr < 5 || hr >= 21 ? "sleep" : hr < 7 ? "meditate" : hr < 8 ? "chant" : hr < 11 ? "walk" : hr < 13 ? "tea" : hr < 17 ? "walk" : hr < 19 ? "gaze" : hr < 20 ? "chant" : "tea";
     // a walk runs to its end before the next thing
     if (this.activity === "walk" && this.route.length && this.leg < this.route.length) return;
     if (want === this.activity && !(want === "walk" && this.leg >= this.route.length)) return;
@@ -274,7 +276,7 @@ export class Monks {
       this.lastActivityAt = w.elapsed;
       return;
     }
-    if (want === "walk" && w.elapsed - this.lastActivityAt < 40) return;
+    if (want === "walk" && this.activity === "rest" && w.elapsed - this.lastActivityAt < 40) return;
     this.activity = want;
     this.lastActivityAt = w.elapsed;
     if (want === "walk") this.startWalk(ROUTES[Math.floor(this.rng() * ROUTES.length)].map(T2P));
@@ -308,7 +310,7 @@ export class Monks {
       const s = spots[i % spots.length];
       if (Math.hypot(s.x - m.x, s.y - m.y) > 6) this.walkTo(w, m, s.x, s.y, dt, WALK * 0.9);
       else {
-        const st: MonkState = this.activity === "sleep" ? "sleep" : this.activity === "meditate" ? "meditate" : this.activity === "gaze" ? "gaze" : "sit";
+        const st: MonkState = this.activity === "sleep" ? "sleep" : this.activity === "meditate" ? "meditate" : this.activity === "chant" ? "chant" : this.activity === "tea" ? "tea" : this.activity === "gaze" ? "gaze" : "sit";
         if (m.state !== st) {
           m.state = st;
           m.stateT = 0;
@@ -317,23 +319,35 @@ export class Monks {
         m.anim += dt * 0.5;
       }
     });
-    if (this.activity === "meditate" && w.rng() < dt * 0.15 && w.inView(this.home.x, this.home.y, 400)) w.particles.spawn(P.Note, this.home.x + (w.rng() - 0.5) * 60, this.home.y + 20, { z: 30, vz: 18, size: 7, max: 2, color: "#ffd98a" });
+    if ((this.activity === "meditate" || this.activity === "chant") && w.rng() < dt * (this.activity === "chant" ? 0.55 : 0.15) && w.inView(this.home.x, this.home.y, 400)) w.particles.spawn(P.Note, this.home.x + (w.rng() - 0.5) * 80, this.home.y + 20, { z: 30, vz: 18, size: 7, max: 2, color: "#ffd98a" });
+    if (this.activity === "chant" && w.rng() < dt * 0.09) {
+      const m = settled[Math.floor(w.rng() * settled.length)];
+      if (m) m.bubble = { text: pick(this.rng, ["One breath at a time.", "Listen to the bell.", "Even the snow is listening.", "Om…"]), t: 2.4 };
+    }
+    if (this.activity === "tea" && w.rng() < dt * 0.07) {
+      const m = settled[Math.floor(w.rng() * settled.length)];
+      if (m) m.bubble = { text: pick(this.rng, ["Tea on the peak!", "Warm hands, clear mind.", "Pass the kettle, please.", "The climb was worth it."]), t: 2.4 };
+    }
     if (this.activity === "gaze" && w.rng() < dt * 0.05) {
       const m = settled[Math.floor(w.rng() * settled.length)];
       if (m) m.bubble = { text: pick(this.rng, ["The sky is clear.", "Look… the first star.", "Wind from the west.", "So quiet."]), t: 2.4 };
     }
   }
 
-  /** Where everyone sits for an activity: a ring round the shrine, along the cairn, by the huts. */
+  /** Where everyone sits: inside the chapel, over tea, or around the shrine and cairn. */
   private spotsFor(a: Activity, n: number) {
     const shrine = this.places.find((p) => p.kind === "shrine") ?? this.home;
     const out: { x: number; y: number }[] = [];
     if (a === "sleep") {
-      const huts = this.places.filter((p) => p.kind === "hut");
+      const chapel = this.places.find((p) => p.kind === "chapel") ?? this.home;
       for (let i = 0; i < n; i++) {
-        const hut = huts[i % Math.max(1, huts.length)] ?? this.home;
-        out.push({ x: hut.x - 14 + (Math.floor(i / Math.max(1, huts.length)) % 3) * 14, y: hut.y + 16 });
+        out.push({ x: chapel.x - 42 + (i % 5) * 21, y: chapel.y + 10 + Math.floor(i / 5) * 16 });
       }
+      return out;
+    }
+    if (a === "tea") {
+      const chapel = this.places.find((p) => p.kind === "chapel") ?? this.home;
+      for (let i = 0; i < n; i++) out.push({ x: chapel.x - 55 + (i % 5) * 27, y: chapel.y + 36 + Math.floor(i / 5) * 18 });
       return out;
     }
     if (a === "gaze") {
@@ -343,8 +357,9 @@ export class Monks {
     }
     for (let i = 0; i < n; i++) {
       const ang = (i / Math.max(1, n)) * Math.PI * 2;
-      const r = a === "meditate" ? 46 : 70;
-      out.push({ x: shrine.x + Math.cos(ang) * r, y: shrine.y + 10 + Math.sin(ang) * r * 0.55 });
+      const r = a === "meditate" ? 46 : a === "chant" ? 54 : 70;
+      const center = a === "chant" ? this.places.find((p) => p.kind === "chapel") ?? this.home : shrine;
+      out.push({ x: center.x + Math.cos(ang) * r, y: center.y + 40 + Math.sin(ang) * r * 0.4 });
     }
     return out;
   }
@@ -676,6 +691,21 @@ export class Monks {
     this.ids = Math.max(7e8, d.ids ?? 7e8);
     this.places = (d.places ?? []).map((p) => ({ ...p }));
     for (const m of d.monks ?? []) this.add(m.x, m.y, m.age, { name: m.name, robe: m.robe, pilgrim: !!m.pilgrim });
+    // Older worlds saved the order around stone huts in the lower valley.
+    // Move those residents to the new summit chapel without resetting their names or age.
+    if (this.seeded && !this.places.some((p) => p.kind === "chapel")) {
+      const oldHome = T2P([246, 46]);
+      const dx = this.home.x - oldHome.x;
+      const dy = this.home.y - oldHome.y;
+      for (const m of this.list) {
+        if (!m.pilgrim) { m.x += dx; m.y += dy; }
+        m.tx = m.x;
+        m.ty = m.y;
+        m.path = null;
+      }
+      this.seedPlaces(w);
+      if (this.found) w.atlas.reveal(this.home.x, this.home.y, 180);
+    }
     // a rite cut short by the save: the dragon goes home
     for (const dr of w.dragons.list) if (dr.monkRite) dr.monkRite = undefined;
     this.restack();

@@ -92,7 +92,7 @@ export interface DeepInfo {
 const NAMES: Record<string, string> = { spring: "Underground spring", caveIn: "Weak roof (cave-in!)", gas: "Gas pocket", fossil: "Fossil", artifact: "Buried artifact" };
 /** "Copper · 2/4 left" for a rich deposit that takes several hits. */
 const depositName = (name: string, rem: { left: number; max: number } | null) => (rem && rem.max > 1 ? `${name} · ${rem.left}/${rem.max} left` : name);
-const MINERALS: Resource[] = ["stone", "clay", "flint", "coal", "copper", "iron", "silver", "gold", "salt", "quartz", "magnetite", "crystal", "obsidian", "meteorite", "diamond", "goldBar", "silverBar", "copperBar"];
+const MINERALS: Resource[] = ["stone", "clay", "flint", "coal", "copper", "iron", "silver", "gold", "salt", "quartz", "magnetite", "crystal", "obsidian", "meteorite", "diamond", "goldBar", "silverBar", "copperBar", "steel"];
 
 interface Ptr {
   x: number;

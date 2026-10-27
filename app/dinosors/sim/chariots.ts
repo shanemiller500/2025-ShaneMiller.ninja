@@ -35,14 +35,18 @@ import { eggCapacity, eggsCarried, pickEgg, raidTarget, settleCarried, slayerDam
 import { nestEggs, nestLost, parentOf, revealNest } from "./dragonNests";
 import { canFly, mountDragon, rideable } from "./dragonKeep";
 import { mount } from "./tasks";
+import { chariotTier } from "./chariotTiers";
+import { hitDino } from "./tribe";
 import { partnerOf } from "./riders";
 import { sp } from "../data/species";
-import type { Building, Chariot, Dino, Dragon, DragonEgg, DragonHunt, Human, HuntFormation } from "./types";
+import type { Brute, Building, Chariot, Dino, Dragon, DragonEgg, DragonHunt, Human, HuntFormation } from "./types";
 import type { World } from "./world";
 
 export const SEATS = 10;
-export const CHARIOT_HP = 320;
-const SPEED = 62;
+/** heavily armoured: bone-plated shield walls on a timber frame (it takes a real beating) */
+export const CHARIOT_HP = 900;
+/** a war trike at a charge: quicker than people on foot */
+const SPEED = 92;
 /** how far round the nest the formation stands */
 const RING_R = 300;
 export const MUSTER_FOR = 120;
@@ -76,17 +80,41 @@ export const crewOf = (w: World, c: Chariot) => w.humans.filter((h) => h.chariot
 /** A Triceratops of ours that can pull a chariot. */
 const puller = (w: World) => w.dinos.find((d) => d.owner && d.species === "trike" && !d.chariot && !d.rider && !d.under && d.health > 0.3 && d.growth > 0.7);
 
-/** Drive toward c.to (around obstacles). True once it's there. */
+/** Seconds a planned route is trusted before it's planned again (walls go up, gates shut). */
+const REPLAN = 3;
+
+/** Drive toward c.to (around obstacles). True once it's there. Walls + shut gates stop it like any big dino. */
 function drive(w: World, c: Chariot, dt: number) {
-  if (!c.to) return true;
+  if (!c.to) {
+    c.stuck = false;
+    return true;
+  }
   const trike = trikeOf(w, c);
   if (!trike) return false;
   const key = goalKey(c.to.x, c.to.y);
-  if (c.pathKey !== key) {
+  if (c.pathKey !== key || w.elapsed - (c.pathT ?? -Infinity) > REPLAN) {
+    if (c.pathKey !== key) c.pathI = 0;
     c.pathKey = key;
-    c.pathI = 0;
-    c.path = w.nav.lineClear("bigDino", c.x, c.y, c.to.x, c.to.y) ? null : w.nav.find(w, "bigDino", c.x, c.y, 0, c.to.x, c.to.y, 0, 9000) ?? null;
+    c.pathT = w.elapsed;
+    if (w.nav.lineClear("bigDino", c.x, c.y, c.to.x, c.to.y)) {
+      c.path = null;
+      c.stuck = false;
+    } else {
+      const path = w.nav.find(w, "bigDino", c.x, c.y, 0, c.to.x, c.to.y, 0, 9000);
+      c.pathI = 0;
+      c.path = path ?? null;
+      c.stuck = !path;
+    }
   }
+  // no way through (walled in, a gate shut): wait for one, never roll through the wall
+  if (c.stuck) {
+    if (!w.flags.has(`chariotStuck${c.id}`)) {
+      w.flags.add(`chariotStuck${c.id}`);
+      w.toast("🚧", "A war chariot can't find a way through the walls. Open a gate (or leave a gap) and it'll roll on.", c.x, c.y);
+    }
+    return false;
+  }
+  w.flags.delete(`chariotStuck${c.id}`);
   let tx = c.to.x;
   let ty = c.to.y;
   if (c.path && c.pathI < c.path.length) {
@@ -104,8 +132,15 @@ function drive(w: World, c: Chariot, dt: number) {
     return true;
   }
   const step = Math.min(d, SPEED * dt);
-  c.x += ((tx - c.x) / d) * step;
-  c.y += ((ty - c.y) / d) * step;
+  const nx = c.x + ((tx - c.x) / d) * step;
+  const ny = c.y + ((ty - c.y) / d) * step;
+  // a wall or shut gate in the way (built since the route was planned): plan again, don't drive through
+  if (!w.nav.passable("bigDino", nx, ny) && w.nav.passable("bigDino", c.x, c.y)) {
+    c.pathT = -Infinity;
+    return false;
+  }
+  c.x = nx;
+  c.y = ny;
   if (Math.abs(tx - c.x) > 2) c.dir = tx > c.x ? 1 : -1;
   c.anim += step / 12;
   return false;
@@ -172,6 +207,12 @@ function targetFor(w: World, c: Chariot, range: number): { kind: "dragon"; dr: D
 
 /** The two Scorpions aim + shoot by themselves; the spearmen throw from behind their shields. */
 function fight(w: World, c: Chariot, dt: number) {
+  // scythe-spiked wheels (the steel war fortress): rolling into anything hostile cuts it
+  const spikes = chariotTier(c).spikes ?? 0;
+  if (spikes && c.to) {
+    for (const d of w.dinos) if (w.tribe.hostile(w, d) && Math.abs(d.x - c.x) < 70 && Math.abs(d.y - c.y) < 34) hitDino(w, d, spikes * dt, c.x, c.y);
+    for (const b of w.rivals.brutes) if (b.hp > 0 && !b.captive && w.rivals.hostile(w, b) && Math.abs(b.x - c.x) < 70 && Math.abs(b.y - c.y) < 34) w.rivals.hit(w, b, spikes * dt, c.x, c.y, false, "melee");
+  }
   for (const k of [0, 1] as const) {
     c.cd[k] = Math.max(0, c.cd[k] - dt);
     const t = targetFor(w, c, SC_RANGE);
@@ -181,7 +222,7 @@ function fight(w: World, c: Chariot, dt: number) {
     const ty = t.kind === "dragon" ? t.dr.y - t.dr.z : t.y;
     c.aim[k] = Math.atan2(ty - (c.y - 46), tx - sx);
     if (c.cd[k] > 0) continue;
-    c.cd[k] = SC_RELOAD * (0.85 + w.rng() * 0.3);
+    c.cd[k] = SC_RELOAD * chariotTier(c).reload * (0.85 + w.rng() * 0.3);
     const target = t.kind === "dragon"
       ? { id: t.dr.id, x: t.dr.x, y: t.dr.y, z: t.dr.z, vx: t.dr.vx, vy: t.dr.vy, dragon: true }
       : { id: t.id, x: t.x, y: t.y, z: 18, vx: t.vx, vy: t.vy, dragon: false };
@@ -360,6 +401,10 @@ function targetOf(w: World, hunt: DragonHunt): { x: number; y: number; r: number
     const dr = w.dragons.list.find((d) => d.id === hunt.dragon && d.hp > 0);
     return dr ? { x: dr.x, y: dr.y, r: 260, name: dr.name } : null;
   }
+  if (hunt.camp) {
+    const c = campOf(w, hunt.camp);
+    return c ? { x: c.x, y: c.y, r: c.r, name: c.name } : null;
+  }
   if (hunt.clan) {
     const c = w.rivals.clan(hunt.clan);
     return c ? { x: c.x, y: c.y, r: (c.colors?.length ?? 1) > 1 || (c.campTier ?? 0) >= 4 ? 380 : 270, name: `the ${c.name} camp` } : null;
@@ -390,6 +435,8 @@ export interface ExpeditionOpts {
   people?: Human[];
   /** attack this clan's camp (else a dragon's nest) */
   clan?: number;
+  /** attack one of the other peoples' camps (campKey) */
+  camp?: number;
   nest?: number;
   /** hunt this wild dragon wherever it goes */
   dragon?: number;
@@ -404,6 +451,8 @@ export function startHunt(w: World, formation: HuntFormation, opts: ExpeditionOp
     if (!w.dragons.list.some((d) => d.id === opts.dragon && d.hp > 0)) return "That dragon is gone.";
   } else if (opts.clan) {
     if (!w.rivals.clan(opts.clan)) return "That clan is gone.";
+  } else if (opts.camp) {
+    if (!campOf(w, opts.camp)) return "That camp is gone.";
   } else {
     const nest = opts.nest ? w.dragons.nests.find((n) => n.id === opts.nest) ?? null : raidTarget(w);
     if (!nest) return "No known dragon nest yet. Track a wild dragon home, or send scouts to find one.";
@@ -422,7 +471,7 @@ export function startHunt(w: World, formation: HuntFormation, opts: ExpeditionOp
     band = [...fighters, ...others].slice(0, Math.max(fighters.length, cars.length * SEATS));
   }
   if (!band.length || (!opts.people && band.length < 2)) return "Not enough people to send.";
-  const runners = opts.clan || opts.dragon ? [] : band.filter((h) => role(h) === "eggRunner");
+  const runners = notNest(opts) ? [] : band.filter((h) => role(h) === "eggRunner");
   if (nestId) {
     const nest = w.dragons.nests.find((n) => n.id === nestId)!;
     const eggs = nestEggs(w, nest).length;
@@ -469,7 +518,7 @@ export function startHunt(w: World, formation: HuntFormation, opts: ExpeditionOp
     h.task = null;
     h.taskId = 0;
   }
-  col.hunt = { nest: nestId, ...(opts.clan ? { clan: opts.clan } : {}), ...(opts.dragon ? { dragon: opts.dragon } : {}), formation, phase: "muster", t: 0, crew, start: crew.length, eggs: 0 };
+  col.hunt = { nest: nestId, ...(opts.clan ? { clan: opts.clan } : {}), ...(opts.camp ? { camp: opts.camp } : {}), ...(opts.dragon ? { dragon: opts.dragon } : {}), formation, phase: "muster", t: 0, crew, start: crew.length, eggs: 0 };
   const tgt = targetOf(w, col.hunt)!;
   const n = (k: (m: Member) => boolean) => crew.filter(k).length;
   const parts = [
@@ -485,11 +534,57 @@ export function startHunt(w: World, formation: HuntFormation, opts: ExpeditionOp
 
 /* ------------------------------ a raid set up from a chariot ------------------------------ */
 
-export type RaidTarget = { kind: "nest" | "clan" | "dragon"; id: number };
+export type RaidTarget = { kind: "nest" | "clan" | "dragon" | "camp"; id: number };
+
+/* ------------------------------ the other peoples' camps as targets ------------------------------ */
+
+type CampSide = "sand" | "snow" | "tree" | "sea";
+const SIDES: CampSide[] = ["sand", "snow", "tree", "sea"];
+const SIDE_NAME: Record<CampSide, string> = { sand: "Sand People", snow: "Snow People", tree: "Tree People", sea: "Sea People" };
+const SIDE_ICON: Record<CampSide, string> = { sand: "🐪", snow: "🏔️", tree: "🌿", sea: "🛶" };
+/** One number for "this people's camp" (a raid target id). */
+export const campKey = (side: CampSide, id: number) => (SIDES.indexOf(side) + 1) * 100000 + id;
+
+/** A camp from its key: where it is, its name, and who fights for it. */
+function campOf(w: World, key: number): { side: CampSide; id: number; x: number; y: number; r: number; name: string; folk: Brute[] } | null {
+  const side = SIDES[Math.floor(key / 100000) - 1];
+  const id = key % 100000;
+  if (!side) return null;
+  const list: { id: number; name: string; x: number; y: number }[] = side === "sand" ? w.sandFolk.tribes : side === "snow" ? w.snowFolk.tribes : side === "tree" ? w.forest.tribes : w.seaFolk.tribes;
+  const t = list.find((x) => x.id === id);
+  if (!t) return null;
+  const folk = w.rivals.brutes.filter((b) => b[side] === id);
+  const title = side === "sand" ? w.sandFolk.title(t as Parameters<typeof w.sandFolk.title>[0]) : `the ${t.name} ${SIDE_NAME[side]} camp`;
+  return { side, id, x: t.x, y: side === "sea" ? t.y - 90 : t.y, r: 340, name: title, folk };
+}
+
+/** The nearest of that camp's people still fighting round it. */
+function campFoe(w: World, key: number, x: number, y: number) {
+  const c = campOf(w, key);
+  if (!c) return null;
+  let best: Brute | null = null;
+  let bd = Infinity;
+  for (const b of c.folk) {
+    if (b.hp <= 0 || b.captive || b.snatched || b.falling || b.hidden || b.boat || b.onDragon || Math.hypot(b.x - c.x, b.y - c.y) > 700) continue;
+    const d = Math.hypot(b.x - x, b.y - y);
+    if (d < bd) {
+      bd = d;
+      best = b;
+    }
+  }
+  return best;
+}
+
+/** Not a nest raid (no eggs to fetch): a clan, a camp or a roaming dragon. */
+const notNest = (h: { clan?: number; camp?: number; dragon?: number }) => !!(h.clan || h.camp || h.dragon);
 
 /** The chariot under a tap (its body + shield wall). */
 export function chariotAt(w: World, x: number, y: number) {
-  return w.colony.chariots.find((c) => Math.abs(x - c.x) < 62 && y > c.y - 74 && y < c.y + 16) ?? null;
+  // the whole drawn chariot counts: from the flag at the back to the bone ram up front, wheels to banner tops
+  return w.colony.chariots.find((c) => {
+    const lx = (x - c.x) * (c.dir || 1);
+    return lx > -90 && lx < 108 && y > c.y - 90 && y < c.y + 22;
+  }) ?? null;
 }
 
 /** Somebody who can go out on a raid. */
@@ -526,7 +621,20 @@ export function raidTargets(w: World) {
     const n = w.rivals.members(c.id).filter((b) => b.hp > 0).length;
     return { kind: "clan" as const, id: c.id, icon: "⛺", name: `The ${c.name} camp`, note: `${n} fighter${n === 1 ? "" : "s"}${held ? ` · ${held} of ours held` : ""}`, dist: Math.hypot(c.x - w.camp.x, c.y - w.camp.y) };
   });
-  return [...nests, ...roaming, ...clans].sort((a, b) => a.dist - b.dist);
+  // the other peoples' camps we've found: Sand (towns + kingdoms too), Snow, Tree, Sea
+  const camps: { kind: "camp"; id: number; icon: string; name: string; note: string; dist: number }[] = [];
+  const add = (side: CampSide, t: { id: number; x: number; y: number; found?: boolean }) => {
+    if (!t.found) return;
+    const c = campOf(w, campKey(side, t.id));
+    if (!c) return;
+    const n = c.folk.filter((b) => b.hp > 0).length;
+    camps.push({ kind: "camp", id: campKey(side, t.id), icon: SIDE_ICON[side], name: c.name.charAt(0).toUpperCase() + c.name.slice(1), note: `${n} of them`, dist: Math.hypot(c.x - w.camp.x, c.y - w.camp.y) });
+  };
+  for (const t of w.sandFolk.tribes) add("sand", t);
+  for (const t of w.snowFolk.tribes) add("snow", t);
+  for (const t of w.forest.tribes) add("tree", t);
+  for (const t of w.seaFolk.tribes) add("sea", t);
+  return [...nests, ...roaming, ...clans, ...camps].sort((a, b) => a.dist - b.dist);
 }
 
 /** Pick the unit: the chosen number of dragon + dino riders (strongest first), then every chariot seat filled (fighters first). */
@@ -550,7 +658,7 @@ export function startRaid(w: World, target: RaidTarget, formation: HuntFormation
   const unit = pickUnit(w, dragons, dinos, target);
   if (!unit.cars) return w.colony.chariots.length ? "The war chariots need a tamed Triceratops to pull them (or repairs)." : "Build a war chariot first (Build → Defense).";
   if (unit.people.length < 2) return "Not enough people free to form a unit.";
-  return startHunt(w, formation, { people: unit.people, ...(target.kind === "clan" ? { clan: target.id } : target.kind === "dragon" ? { dragon: target.id } : { nest: target.id }) });
+  return startHunt(w, formation, { people: unit.people, ...(target.kind === "clan" ? { clan: target.id } : target.kind === "camp" ? { camp: target.id } : target.kind === "dragon" ? { dragon: target.id } : { nest: target.id }) });
 }
 
 const huntChariots = (w: World, hunt: DragonHunt) => w.colony.chariots.filter((c) => hunt.crew.some((m) => m.chariot === c.id));
@@ -600,7 +708,7 @@ function huntUpdate(w: World, hunt: DragonHunt, dt: number) {
   const tgt = targetOf(w, hunt);
   const cars = huntChariots(w, hunt);
   const alive = hunt.crew.filter((m) => !!person(w, m));
-  if (!tgt) return endHunt(w, hunt, hunt.clan || hunt.dragon ? "won" : "lost", hunt.clan ? "The clan is broken and scattered!" : hunt.dragon ? "The dragon is dead!" : "The nest is gone.");
+  if (!tgt) return endHunt(w, hunt, notNest(hunt) ? "won" : "lost", hunt.clan || hunt.camp ? "They're broken and scattered!" : hunt.dragon ? "The dragon is dead!" : "The nest is gone.");
   const nest = hunt.nest ? w.dragons.nests.find((n) => n.id === hunt.nest) ?? null : null;
   const parent = nest ? parentOf(w, nest) : null;
   const need = Math.ceil(alive.length * READY_SHARE);
@@ -635,18 +743,32 @@ function huntUpdate(w: World, hunt: DragonHunt, dt: number) {
         hunt.phase = "battle";
         hunt.t = 0;
         w.sfx("drums", tgt.x, tgt.y, 1.3, 0.7);
-        w.toast("⚔️", hunt.clan || hunt.dragon ? `${placed} of ${alive.length} in place round ${tgt.name}: ATTACK!` : parent ? `Surrounded! ${placed} of ${alive.length} in place: spears + Scorpions at ${parent.name} from every side!` : "The nest is unguarded: runners, go!", tgt.x, tgt.y);
+        w.toast("⚔️", notNest(hunt) ? `${placed} of ${alive.length} in place round ${tgt.name}: ATTACK!` : parent ? `Surrounded! ${placed} of ${alive.length} in place: spears + Scorpions at ${parent.name} from every side!` : "The nest is unguarded: runners, go!", tgt.x, tgt.y);
       }
       break;
     }
     case "battle": {
       if (alive.length < Math.ceil(hunt.start * 0.35) || hunt.t > BATTLE_FOR) {
-        endHunt(w, hunt, "lost", hunt.clan ? `The ${w.rivals.clan(hunt.clan)?.name ?? ""} clan drove us off.` : hunt.dragon ? `${tgt.name} beat off the attack.` : parent ? `${parent.name} beat off the attack.` : "The attack fell apart.");
+        endHunt(w, hunt, "lost", hunt.camp ? `${tgt.name.charAt(0).toUpperCase()}${tgt.name.slice(1)} drove us off.` : hunt.clan ? `The ${w.rivals.clan(hunt.clan)?.name ?? ""} clan drove us off.` : hunt.dragon ? `${tgt.name} beat off the attack.` : parent ? `${parent.name} beat off the attack.` : "The attack fell apart.");
         return;
       }
       if (hunt.dragon) {
         const dr = w.dragons.list.find((d) => d.id === hunt.dragon);
         if (dr && (dr.hp < dr.maxHp * 0.2 || dr.state === "flee" || dr.state === "leave")) endHunt(w, hunt, "won", `${dr.name} is beaten and flees!`);
+        break;
+      }
+      if (hunt.camp) {
+        // won when nobody's left fighting round their camp: their stores are ours, the unit comes home
+        if (!campFoe(w, hunt.camp, tgt.x, tgt.y)) {
+          const c = campOf(w, hunt.camp);
+          const t = c ? (c.side === "sand" ? w.sandFolk.tribes : c.side === "snow" ? w.snowFolk.tribes : c.side === "tree" ? w.forest.tribes : w.seaFolk.tribes).find((x) => x.id === c.id) as { food?: number } | undefined : undefined;
+          const got = Math.max(0, Math.floor(t?.food ?? 0));
+          if (t && got) {
+            t.food = 0;
+            w.camp.stock.meat += got;
+          }
+          endHunt(w, hunt, "won", `${tgt.name.charAt(0).toUpperCase()}${tgt.name.slice(1)} is beaten${got ? `: ${got} food carried off` : ""}!`);
+        }
         break;
       }
       if (hunt.clan) {
@@ -857,9 +979,11 @@ export function retargetHunt(w: World, target: RaidTarget): string | null {
   const nest = target.kind === "nest" ? w.dragons.nests.find((n) => n.id === target.id) : null;
   if (target.kind === "nest" && !nest) return "That nest is gone.";
   if (target.kind === "clan" && !w.rivals.clan(target.id)) return "That clan is gone.";
+  if (target.kind === "camp" && !campOf(w, target.id)) return "That camp is gone.";
   if (target.kind === "dragon" && !w.dragons.list.some((d) => d.id === target.id && d.hp > 0)) return "That dragon is gone.";
   hunt.nest = nest ? nest.id : 0;
   hunt.clan = target.kind === "clan" ? target.id : undefined;
+  hunt.camp = target.kind === "camp" ? target.id : undefined;
   hunt.dragon = target.kind === "dragon" ? target.id : undefined;
   hunt.engage = undefined;
   const tgt = targetOf(w, hunt)!;
@@ -915,7 +1039,7 @@ function steerDragons(w: World, hunt: DragonHunt, tgt: { x: number; y: number },
     } else if (hunt.phase === "march" && m.sx !== undefined && m.sy !== undefined) {
       if (!cmd || (cmd.kind !== "flyTo" && cmd.kind !== "stay") || Math.hypot(cmd.x - m.sx, cmd.y - m.sy) > 40) dr.cmd = { kind: "flyTo", x: m.sx, y: m.sy, t: 0, i: 1 };
     } else if (hunt.phase === "battle") {
-      const foe = hunt.clan ? clanFoe(w, hunt.clan, dr.x, dr.y) : hunt.dragon ? w.dragons.list.find((d) => d.id === hunt.dragon) ?? null : parent;
+      const foe = hunt.camp ? campFoe(w, hunt.camp, dr.x, dr.y) : hunt.clan ? clanFoe(w, hunt.clan, dr.x, dr.y) : hunt.dragon ? w.dragons.list.find((d) => d.id === hunt.dragon) ?? null : parent;
       if (foe && (!cmd || cmd.kind !== "attack" || cmd.target !== foe.id)) dr.cmd = { kind: "attack", x: foe.x, y: foe.y, target: foe.id, t: 0, i: 1 };
     } else if (hunt.phase === "collect") {
       if (!cmd || cmd.kind !== "stay") dr.cmd = { kind: "stay", x: dr.x, y: dr.y, t: 0, i: 1 };
@@ -964,7 +1088,7 @@ export function endHunt(w: World, hunt: DragonHunt, result: "won" | "lost", why:
     w.sfx("cheer", w.camp.x, w.camp.y, 1);
     const left = hunt.phase === "collect" ? eggsToCollect(w, hunt).length : 0;
     w.toast("🏆", `VICTORY! ${why} ${left ? `Every egg is ours: the unit gathers up all ${left + eggs} before heading home. ` : eggs ? `${eggs} egg${eggs > 1 ? "s" : ""} coming home. ` : ""}${fell ? `${fell} fell in the fight. ` : ""}${left ? "" : "Everyone heads home."}`, w.camp.x, w.camp.y);
-    if (!hunt.clan) w.discover("dragonRaid", w.camp.x, w.camp.y);
+    if (!hunt.clan && !hunt.camp) w.discover("dragonRaid", w.camp.x, w.camp.y);
   } else {
     w.toast("💀", `DEFEAT. ${why} ${fell ? `${fell} lost. ` : ""}The survivors fall back to camp.`, w.camp.x, w.camp.y);
   }
@@ -1053,6 +1177,11 @@ export function huntThink(w: World, h: Human): boolean {
   // battle
   if (hunt.dragon) {
     h.order = { kind: "hunt", id: hunt.dragon };
+    return false;
+  }
+  if (hunt.camp) {
+    const foe = campFoe(w, hunt.camp, h.x, h.y);
+    if (foe) h.order = { kind: "hunt", id: foe.id };
     return false;
   }
   if (hunt.clan) {

@@ -160,10 +160,10 @@ test('upgrade all queues every eligible structure once and respects unlocks', ()
   const wall = w.tribe.addWall(w, tx, ty, 'palisade');
   assert.ok(wall);
   wall.built = 1; wall.hp = 220;
-  assert.deepEqual(queueUpgrades(w), { homes: 1, towers: 1, scorpions: 0, walls: 1 });
+  assert.deepEqual(queueUpgrades(w), { homes: 1, towers: 1, scorpions: 0, walls: 1, chariots: 0 });
   assert.equal(wall.upTo, 'stone');
-  assert.deepEqual(queueUpgrades(w), { homes: 0, towers: 0, scorpions: 0, walls: 0 }, 'pending work is not queued twice');
+  assert.deepEqual(queueUpgrades(w), { homes: 0, towers: 0, scorpions: 0, walls: 0, chariots: 0 }, 'pending work is not queued twice');
   w.colony.buildings.push({ kind: 'blacksmith', built: 1 });
-  assert.deepEqual(queueUpgrades(w, 'scorpions'), { homes: 0, towers: 0, scorpions: 1, walls: 0 });
+  assert.deepEqual(queueUpgrades(w, 'scorpions'), { homes: 0, towers: 0, scorpions: 1, walls: 0, chariots: 0 });
   assert.equal(scorpion.up, true);
 });

@@ -151,8 +151,20 @@ export class Nav {
     }
     const tribe = w.tribe;
     for (const wl of tribe.walls) {
-      if (wl.built < 0.5 || wl.hp <= 0) continue;
       const i = wl.ty * MAP_W + wl.tx;
+      if (wl.mega) {
+        // a Megalodon gate over water: our people walk the jaw (scaffold while it's going up);
+        // shut, nothing else gets past; open, anyone can cross
+        f[i] &= ~F_TERRAIN;
+        cost[i] = Math.min(cost[i], 1.2);
+        if (wl.built < 0.5 || wl.hp <= 0) f[i] |= F_STAIRS;
+        else {
+          f[i] |= F_GATE | (wl.open ? F_OPEN : 0);
+          if (wl.built >= 1) this.top[i] = 1;
+        }
+        continue;
+      }
+      if (wl.built < 0.5 || wl.hp <= 0) continue;
       if (wl.part === "gate") {
         f[i] |= F_GATE | (wl.open ? F_OPEN : 0);
         if (wl.built >= 1) this.top[i] = 1;
@@ -252,6 +264,8 @@ export class Nav {
   private live(w: World, cls: NavClass, i: number) {
     if (w.lava.heat[i] > 0.15) return -1;
     const fire = w.fire.heat[i];
+    // a raging blaze is all but a wall for people (firefighters go round it, never through)
+    if (fire > 0.6 && cls === "human") return 150;
     if (fire > 0.2) return cls === "human" ? 30 : 18;
     let c = this.cost[i];
     if (cls !== "human" && this.flags[i] & F_TAR) c += 25;

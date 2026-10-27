@@ -7,15 +7,17 @@
 /*  over, build, then move on to the next unfinished piece.            */
 /* ------------------------------------------------------------------ */
 import { BUILDINGS, HOUSING, SCORPION_TIERS, TENT_STAGES, buildingCost, buildingWork, type Cost } from "../data/colony";
+import { DAMAGED, OBSIDIAN_SHIELD, scorpionCost, scorpionMaxHp } from "./scorpionArmor";
+import { CHARIOT_TIERS, chariotParked, chariotUpgradeProblem, finishChariotUpgrade, nextChariotTier, orderChariotUpgrade } from "./chariotTiers";
 import { PYRAMID_STAGES } from "../data/civ";
 import { SHELTER_STAGES } from "../data/facts";
 import { P } from "./particles";
 import { TILE, type Resource, type Shelter, type TechId, type Tower, type Wall } from "./types";
 import type { World } from "./world";
 
-export type SiteKind = "wall" | "tower" | "shelter" | "upgrade" | "building" | "scorpion";
+export type SiteKind = "wall" | "tower" | "shelter" | "upgrade" | "building" | "scorpion" | "chariot";
 
-export type UpgradeKind = "all" | "homes" | "towers" | "scorpions" | "walls";
+export type UpgradeKind = "all" | "homes" | "towers" | "scorpions" | "walls" | "chariots";
 
 /** UI state for bulk upgrades; the same eligibility rules as queueUpgrades. */
 export function upgradeStatus(w: World, kind: UpgradeKind = "all") {
@@ -40,12 +42,16 @@ export function upgradeStatus(w: World, kind: UpgradeKind = "all") {
     if (wall.upgrade) queued++;
     else if (wall.built >= 1 && wall.hp > 0 && (wall.kind === "palisade" && w.camp.learned.has("stonewall") || wall.kind === "stone" && w.civ.polygonAge)) available++;
   }
+  if (kind === "all" || kind === "chariots") for (const c of w.colony.chariots) {
+    if (c.up) queued++;
+    else if (!chariotUpgradeProblem(w, c)) available++;
+  }
   return { available, queued };
 }
 
 /** Queue one available tier per structure; builders collect materials afterward. */
 export function queueUpgrades(w: World, kind: UpgradeKind = "all") {
-  const counts = { homes: 0, towers: 0, scorpions: 0, walls: 0 };
+  const counts = { homes: 0, towers: 0, scorpions: 0, walls: 0, chariots: 0 };
   if (kind === "all" || kind === "homes") for (const s of w.shelters) {
     if (!shelterDone(s) || s.up || !HOUSING[s.tier + 1] || (HOUSING[s.tier + 1].polygon && !w.civ.polygonAge)) continue;
     s.up = true;
@@ -57,7 +63,7 @@ export function queueUpgrades(w: World, kind: UpgradeKind = "all") {
   }
   if (kind === "all" || kind === "scorpions") for (const s of w.colony.scorpions) {
     const next = SCORPION_TIERS[s.tier];
-    if (!next || s.up || s.built < 1 || (next.at === "blacksmith" && !w.colony.finished("blacksmith"))) continue;
+    if (!next || s.up || s.obsidianUp || s.built < 1 || (next.at === "blacksmith" && !w.colony.finished("blacksmith"))) continue;
     s.up = true;
     s.have = {};
     counts.scorpions++;
@@ -71,6 +77,7 @@ export function queueUpgrades(w: World, kind: UpgradeKind = "all") {
     wall.have = 0;
     counts.walls++;
   }
+  if (kind === "all" || kind === "chariots") for (const c of w.colony.chariots) if (!orderChariotUpgrade(w, c)) counts.chariots++;
   if (counts.walls) w.tribe.version++;
   return counts;
 }
@@ -101,11 +108,14 @@ export const WALL_HP = { palisade: 220, stone: 600, polygon: 900 } as const;
 export const STONE_MUL = { v: 1 };
 
 export function wallMaxHp(wl: Wall) {
-  return WALL_HP[wl.kind] * (wl.kind === "palisade" ? 1 : STONE_MUL.v) * (wl.part === "gate" ? (wl.bone ? 1.25 : 0.85) : wl.part === "stairs" ? 0.6 : 1);
+  return WALL_HP[wl.kind] * (wl.kind === "palisade" ? 1 : STONE_MUL.v) * (wl.part === "gate" ? (wl.mega ? 1.6 : wl.bone ? 1.25 : 0.85) : wl.part === "stairs" ? 0.6 : 1);
 }
 
 /** Bones for one grand bone gate. */
 export const BONE_GATE = { r: "bone" as Resource, n: 5 };
+
+/** Bones for each tile of a Megalodon water gate. */
+export const MEGA_GATE = { r: "bone" as Resource, n: 3 };
 
 /** What a piece is (or becomes, once its upgrade is built). */
 export const wallTarget = (wl: Wall) => (wl.upgrade ? wl.upTo ?? "stone" : wl.kind);
@@ -113,6 +123,7 @@ export const wallTarget = (wl: Wall) => (wl.upgrade ? wl.upTo ?? "stone" : wl.ki
 /** Material + units for one wall piece (or its upgrade). */
 export function wallNeed(wl: Wall): { r: Resource; n: number } {
   // a bone gate: planned fresh, or a finished piece being rebuilt as one
+  if (wl.mega && !wl.upgrade) return MEGA_GATE;
   if (wl.boneUp || (wl.bone && wl.built < 1 && wl.hp <= 0 && !wl.upgrade)) return BONE_GATE;
   if (wallTarget(wl) === "polygon") return { r: "shaped", n: wl.part === "gate" ? 3 : 2 };
   const stone = wl.kind === "stone" || wl.upgrade;
@@ -160,9 +171,16 @@ function firstMissing(cost: Cost, have: Partial<Record<Resource, number>>): Reso
 export function sites(w: World): Site[] {
   const out: Site[] = [];
   const L = w.camp.learned;
+  // the player asked for a repair (any damage at all, not just bad damage)
+  const asked = (key: string) => w.repairs.size > 0 && w.repairs.has(key);
+  // once it is bad enough to be fixed on its own, it is fixed all the way (not left at the threshold)
+  const needsFix = (key: string, frac: number, at: number) => {
+    if (frac < at) w.repairs.add(key);
+    return frac < (asked(key) ? 1 : at);
+  };
   for (const wl of w.tribe.walls) {
     const pending = wl.built < 1 || wl.upgrade || !!wl.boneUp;
-    const hurt = wl.built >= 1 && !wl.upgrade && wl.hp < wallMaxHp(wl) * 0.6;
+    const hurt = wl.built >= 1 && !wl.upgrade && (wl.hp < wallMaxHp(wl) * 0.6 || (asked(`wall:${wl.id}`) && wl.hp < wallMaxHp(wl)));
     if (!pending && !hurt) continue;
     const x = wl.tx * TILE + TILE / 2;
     const y = wl.ty * TILE + TILE / 2;
@@ -178,7 +196,7 @@ export function sites(w: World): Site[] {
       out.push({ kind: "tower", id: t.id, x: t.x, y: t.y, sx: t.x, sy: t.y + 22, need: t.have < STONE_TOWER_UP.n ? STONE_TOWER_UP.need : null, repair: false, locked: L.has("stonewall") ? null : "stonewall" });
       continue;
     }
-    const hurt = done && t.hp < towerMaxHp(t) * 0.75;
+    const hurt = done && (t.hp < towerMaxHp(t) * 0.75 || (asked(`tower:${t.id}`) && t.hp < towerMaxHp(t)));
     if (done && !hurt) continue;
     const st = towerStages(t)[t.stage];
     out.push({ kind: "tower", id: t.id, x: t.x, y: t.y, sx: t.x, sy: t.y + 22, need: st && t.have < st.n ? st.need : null, repair: !st, locked: L.has("tower") ? null : "tower" });
@@ -190,13 +208,13 @@ export function sites(w: World): Site[] {
       out.push({ kind: "shelter", id: s.id, x: s.x, y: s.y, sx: s.x + 26, sy: s.y + 8, need: s.have < st.n ? st.need : null, repair: false, locked: needAxe ? "axe" : null });
     } else if (s.up && HOUSING[s.tier + 1]) {
       out.push({ kind: "upgrade", id: s.id, x: s.x, y: s.y, sx: s.x + 26, sy: s.y + 8, need: firstMissing(HOUSING[s.tier + 1].cost, s.upHave), repair: false, locked: null });
-    } else if (s.hp < 0.6) {
+    } else if (s.hp < 0.6 || (asked(`upgrade:${s.id}`) && s.hp < 1)) {
       out.push({ kind: "upgrade", id: s.id, x: s.x, y: s.y, sx: s.x + 26, sy: s.y + 8, need: null, repair: true, locked: null });
     }
   }
   for (const b of w.colony.buildings) {
     const def = BUILDINGS[b.kind];
-    if (b.built >= 1 && b.hp >= def.hp * 0.6) continue;
+    if (b.built >= 1 && !needsFix(`building:${b.id}`, b.hp / def.hp, 0.6)) continue;
     const d = w.colony.door(b);
     const locked = def.tech && !L.has(def.tech) ? def.tech : def.civ && !w.civ.has(def.civ) ? def.civ : null;
     out.push({ kind: "building", id: b.id, x: b.x, y: b.y, sx: d.x, sy: d.y, need: b.built < 1 ? firstMissing(buildingCost(b), b.have) : null, repair: b.built >= 1, locked });
@@ -208,7 +226,85 @@ export function sites(w: World): Site[] {
       const next = SCORPION_TIERS[s.tier];
       const locked = next.at === "blacksmith" && !w.colony.finished("blacksmith");
       out.push({ kind: "scorpion", id: s.id, x: s.x, y: s.y, sx: spot.x, sy: spot.y, need: firstMissing(next.cost, s.have), repair: false, locked: locked ? "smelting" : null });
-    } else if (s.hp < SCORPION_TIERS[s.tier - 1].hp * 0.6) out.push({ kind: "scorpion", id: s.id, x: s.x, y: s.y, sx: spot.x, sy: spot.y, need: null, repair: true, locked: null });
+    } else if (needsFix(`scorpion:${s.id}`, s.hp / scorpionMaxHp(s), DAMAGED)) {
+      // damaged (or knocked out): repaired where it stands, ahead of any upgrade (scorpionArmor.ts)
+      out.push({ kind: "scorpion", id: s.id, x: s.x, y: s.y, sx: spot.x, sy: spot.y, need: null, repair: true, locked: null });
+    } else if (s.obsidianUp) {
+      const locked = !w.colony.finished("blacksmith");
+      out.push({ kind: "scorpion", id: s.id, x: s.x, y: s.y, sx: spot.x, sy: spot.y, need: firstMissing(OBSIDIAN_SHIELD.cost, s.have), repair: false, locked: locked ? "smelting" : null });
+    }
+  }
+  // war chariots: patched up (then upgraded) where they're parked at home (chariotTiers.ts)
+  for (const c of w.colony.chariots) {
+    if (!chariotParked(w, c)) continue;
+    const sx = c.x;
+    const sy = c.y + 34;
+    if (needsFix(`chariot:${c.id}`, c.hp / c.maxHp, DAMAGED)) out.push({ kind: "chariot", id: c.id, x: c.x, y: c.y, sx, sy, need: null, repair: true, locked: null });
+    else if (c.up) {
+      const next = nextChariotTier(c);
+      if (!next) c.up = false;
+      else out.push({ kind: "chariot", id: c.id, x: c.x, y: c.y, sx, sy, need: firstMissing(next.cost, c.have ?? {}), repair: false, locked: next.smith && !w.colony.finished("blacksmith") ? "smelting" : null });
+    }
+  }
+  // asked-for repairs that are done (or whose thing is gone) are forgotten
+  if (w.repairs.size) for (const k of Array.from(w.repairs)) if (!out.some((s) => s.repair && siteKey(s) === k)) w.repairs.delete(k);
+  return out;
+}
+
+/** Everything a site still needs delivered (its current stage), as amounts: what the Camp panel's needs list adds up. */
+export function siteRemaining(w: World, s: Site): Partial<Record<Resource, number>> {
+  const out: Partial<Record<Resource, number>> = {};
+  const left = (cost: Cost, have: Partial<Record<Resource, number>>) => {
+    for (const [r, n] of Object.entries(cost) as [Resource, number][]) {
+      const k = n - (have[r] ?? 0);
+      if (k > 0) out[r] = (out[r] ?? 0) + k;
+    }
+  };
+  if (s.repair || s.need === null) return out;
+  switch (s.kind) {
+    case "wall": {
+      const wl = w.tribe.walls.find((x) => x.id === s.id);
+      if (wl) {
+        const n = wallNeed(wl);
+        if (n.n > wl.have) out[n.r] = n.n - wl.have;
+      }
+      break;
+    }
+    case "tower": {
+      const t = w.tribe.towers.find((x) => x.id === s.id);
+      if (!t) break;
+      const st = t.stage >= towerStages(t).length ? STONE_TOWER_UP : towerStages(t)[t.stage];
+      if (st && st.n > t.have) out[st.need] = st.n - t.have;
+      break;
+    }
+    case "shelter": {
+      const sh = w.shelters.find((x) => x.id === s.id);
+      if (!sh) break;
+      const st = stagesOf(sh)[sh.stage];
+      if (st && st.n > sh.have) out[st.need] = st.n - sh.have;
+      break;
+    }
+    case "upgrade": {
+      const sh = w.shelters.find((x) => x.id === s.id);
+      if (sh && HOUSING[sh.tier + 1]) left(HOUSING[sh.tier + 1].cost, sh.upHave);
+      break;
+    }
+    case "building": {
+      const b = w.colony.buildings.find((x) => x.id === s.id);
+      if (b) left(buildingCost(b), b.have);
+      break;
+    }
+    case "scorpion": {
+      const sc = w.colony.scorpions.find((x) => x.id === s.id);
+      if (sc) left(scorpionCost(sc), sc.have);
+      break;
+    }
+    case "chariot": {
+      const c = w.colony.chariots.find((x) => x.id === s.id);
+      const next = c?.up ? nextChariotTier(c) : null;
+      if (c && next && !s.repair) left(next.cost, c.have ?? {});
+      break;
+    }
   }
   return out;
 }
@@ -294,10 +390,21 @@ export function deliver(w: World, s: Site, r: Resource, n: number, hx: number, h
     case "scorpion": {
       const sc = w.colony.scorpions.find((x) => x.id === s.id);
       if (sc) {
-        const cost = sc.built < 1 ? SCORPION_TIERS[0].cost : SCORPION_TIERS[sc.tier]?.cost ?? {};
+        const cost = scorpionCost(sc);
         const want = (cost[r] ?? 0) - (sc.have[r] ?? 0);
         used = Math.max(0, Math.min(n, want));
         sc.have[r] = (sc.have[r] ?? 0) + used;
+      }
+      break;
+    }
+    case "chariot": {
+      const c = w.colony.chariots.find((x) => x.id === s.id);
+      const next = c?.up ? nextChariotTier(c) : null;
+      if (c && next) {
+        c.have ??= {};
+        const want = (next.cost[r] ?? 0) - (c.have[r] ?? 0);
+        used = Math.max(0, Math.min(n, want));
+        c.have[r] = (c.have[r] ?? 0) + used;
       }
       break;
     }
@@ -391,6 +498,10 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
         if (!w.flags.has("firstWall")) {
           w.flags.add("firstWall");
           w.toast("🪵", "A wall! Dinos can't walk through it (but they can bash it…). Add a gate + stairs!", s.x, s.y);
+        }
+        if (best.mega && !w.flags.has("megaGateDone") && !w.tribe.walls.some((o) => o.mega && o.built < 1)) {
+          w.flags.add("megaGateDone");
+          w.toast("🦈", "The Megalodon gate is up! Its jaws stay shut on dinos and strangers; our people walk the jaw. Tap it to open it for everyone.", s.x, s.y);
         }
         if (best.part === "gate" && !w.flags.has("firstGate")) {
           w.flags.add("firstGate");
@@ -516,8 +627,8 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
       if (!sc) return "done";
       chips(w, sc.x, sc.y - 10, "#a07a4a", dt);
       if (s.repair) {
-        sc.hp = Math.min(SCORPION_TIERS[sc.tier - 1].hp, sc.hp + dt * 40);
-        return sc.hp >= SCORPION_TIERS[sc.tier - 1].hp ? "done" : "work";
+        sc.hp = Math.min(scorpionMaxHp(sc), sc.hp + dt * 40);
+        return sc.hp >= scorpionMaxHp(sc) ? "done" : "work";
       }
       if (sc.built < 1) {
         sc.built = Math.min(1, sc.built + dt / 6);
@@ -531,14 +642,43 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
         }
         return "work";
       }
+      // the Obsidian Fire Shield: black glass plates bolted over the frame
+      if (!sc.up && sc.obsidianUp) {
+        if (!progress(w, s, dt, 7)) return "work";
+        sc.obsidianUp = false;
+        sc.obsidian = true;
+        sc.have = {};
+        sc.hp = scorpionMaxHp(sc);
+        sc.glint = 1;
+        w.toast("🛡️", "Obsidian Fire Shield fitted! Fire and dragon breath glance off its black glass plates (heavy blows still hurt).", sc.x, sc.y);
+        w.sfx("build", sc.x, sc.y, 0.8);
+        return "done";
+      }
       // upgrade
       if (!progress(w, s, dt, 6)) return "work";
       sc.tier++;
       sc.up = false;
       sc.have = {};
-      sc.hp = SCORPION_TIERS[sc.tier - 1].hp;
+      sc.hp = scorpionMaxHp(sc);
       w.toast("🎯", `Upgraded to a ${SCORPION_TIERS[sc.tier - 1].name}!`, sc.x, sc.y);
       w.sfx("build", sc.x, sc.y, 0.8);
+      return "done";
+    }
+    case "chariot": {
+      const c = w.colony.chariots.find((x) => x.id === s.id);
+      if (!c) return "done";
+      chips(w, c.x + (w.rng() - 0.5) * 60, c.y - 14, "#8a6238", dt);
+      if (s.repair) {
+        c.hp = Math.min(c.maxHp, c.hp + dt * 45);
+        if (c.hp < c.maxHp) return "work";
+        w.toast("🔧", "War chariot repaired: good as new.", c.x, c.y);
+        return "done";
+      }
+      if (!progress(w, s, dt, 8)) return "work";
+      finishChariotUpgrade(c);
+      const t = CHARIOT_TIERS[c.tier ?? 0];
+      w.toast(t.icon, `Upgraded to a ${t.name}! ${t.tip}`, c.x, c.y);
+      w.sfx("build", c.x, c.y, 0.9);
       return "done";
     }
   }

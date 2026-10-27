@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { FORMATIONS } from "../sim/chariots";
 import type { HuntFormation } from "../sim/types";
 import type { Engine, InspectInfo, Snapshot } from "../game/engine";
@@ -35,7 +35,8 @@ function Stepper({ icon, label, value, max, onChange }: { icon: string; label: s
   );
 }
 
-export function ChariotRaidCard({ info, snap, engine }: { info: Info; snap: Snapshot; engine: Engine }) {
+/** `children`: the chariot's upkeep (repair + upgrade), shown under its name. */
+export function ChariotRaidCard({ info, snap, engine, children }: { info: Info; snap: Snapshot; engine: Engine; children?: ReactNode }) {
   const [target, setTarget] = useState<string>(info.targets[0] ? `${info.targets[0].kind}:${info.targets[0].id}` : "");
   const [formation, setFormation] = useState<HuntFormation>("ring");
   const [dragons, setDragons] = useState(Math.min(2, info.dragonRiders));
@@ -48,15 +49,22 @@ export function ChariotRaidCard({ info, snap, engine }: { info: Info; snap: Snap
   return (
     <>
       <div className="flex items-center gap-3 pr-8">
-        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-sky-300/25 to-amber-500/20 text-3xl">🛡️</span>
+        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-sky-300/25 to-amber-500/20 text-3xl">{info.icon}</span>
         <div>
-          <div className="text-lg font-bold leading-tight">War chariot</div>
+          <div className="text-lg font-bold leading-tight">{info.name}</div>
           <div className="text-xs text-white/60">
-            {info.hp}% sound · {info.trike ? "🦏 trike harnessed" : "needs a tamed trike"}
+            {info.trike ? "🦏 trike harnessed" : "no trike to pull it"}
             {info.crew ? ` · ${info.crew} aboard` : ""}
           </div>
         </div>
       </div>
+      <div className="mt-2">
+        <div className="h-2 overflow-hidden rounded-full bg-white/10">
+          <div className={`h-full rounded-full transition-[width] duration-300 ${info.hp > 75 ? "bg-gradient-to-r from-emerald-500 to-lime-400" : info.hp > 30 ? "bg-gradient-to-r from-amber-500 to-yellow-300" : "bg-gradient-to-r from-rose-600 to-orange-400"}`} style={{ width: `${info.hp}%` }} />
+        </div>
+        <div className="mt-1 text-[11px] font-semibold text-white/70">{info.hp}% sound{info.hp <= 30 ? " · too damaged to ride out" : info.hp < 75 ? " · builders will repair it" : ""}</div>
+      </div>
+      {children}
 
       {h ? (
         <>
@@ -97,13 +105,11 @@ export function ChariotRaidCard({ info, snap, engine }: { info: Info; snap: Snap
             </>
           )}
         </>
-      ) : !info.cars ? (
-        <p className="mt-3 rounded-xl bg-white/5 p-2.5 text-[12px] text-white/70">Harness a tamed Triceratops to a chariot (one that isn't too badly damaged) to set up a raid.</p>
       ) : (
         <>
-          <div className="mt-3 text-[12px] font-bold text-white/70">Which dragon (or camp) to attack?</div>
+          <div className="mt-3 text-[12px] font-bold text-white/70">Rally the unit: who do we attack?</div>
           {info.targets.length === 0 ? (
-            <p className="mt-1 text-[12px] text-white/55">No known dragon, nest or clan camp yet. Track a wild dragon home or scout the valley.</p>
+            <p className="mt-1 text-[12px] text-white/55">No known dragon, nest or camp yet. Track a wild dragon home, or scout the valley, the desert and the peaks.</p>
           ) : (
             <div className="mt-1 max-h-36 space-y-1 overflow-y-auto">
               {info.targets.map((t) => {
@@ -141,12 +147,13 @@ export function ChariotRaidCard({ info, snap, engine }: { info: Info; snap: Snap
             <Stepper icon="🦖" label="Dino riders" value={n} max={info.dinoRiders} onChange={setDinos} />
           </div>
           <p className="mt-1.5 text-[11px] leading-snug text-white/55">
-            Seats are filled automatically, fighters first{picked?.kind === "nest" ? " (plus egg runners to grab the eggs)" : ""}. Everyone gathers at the camp's edge, and nobody attacks till 98% are in place round the target.
+            Seats are filled automatically, fighters first{picked?.kind === "nest" ? " (plus egg runners to grab the eggs)" : ""}. Everyone gathers at the camp's edge, and nobody attacks till 98% are in place round the target. On the way they fight anything that comes at them (dinos, dragons, raiders), then carry on.
           </p>
-          <button type="button" disabled={!picked}
+          {!info.cars && <p className="mt-2 rounded-xl bg-amber-500/15 p-2 text-[12px] font-semibold text-amber-100">⚠️ {info.why ?? "No war chariot is ready to ride out."}</p>}
+          <button type="button" disabled={!picked || !info.cars}
             onClick={() => picked && engine.chariotRaid({ kind: picked.kind, id: picked.id }, formation, d, n)}
             className="mt-2 w-full rounded-2xl bg-gradient-to-r from-sky-700 to-amber-600 py-2.5 text-sm font-bold transition hover:brightness-110 active:scale-95 disabled:opacity-40">
-            ⚔️ Form the unit · {seated + d + n} go{picked ? ` to ${picked.name.replace(/^(The|An) /, (m) => m.toLowerCase())}` : ""}
+            📣 Rally the unit · {seated + d + n} go{picked ? ` to ${picked.name.replace(/^(The|An) /, (m) => m.toLowerCase())}` : ""}
           </button>
         </>
       )}

@@ -4,6 +4,10 @@
 /*  a tiny event emitter and a polled snapshot (never per-frame state). */
 /* ------------------------------------------------------------------ */
 import { startClearJob, type ClearRect } from "../sim/clearArea";
+import { CONDITION_LABEL, OBSIDIAN_SHIELD, obsidianProblem, obsidianStatus, orderObsidian, orderObsidianAll, scorpionCondition, scorpionCost, scorpionMaxHp, scorpionWorks } from "../sim/scorpionArmor";
+import { connectWalls, joinMessage } from "../sim/wallLinks";
+import { startSweep } from "../sim/territory";
+import { chariotParked, chariotTier, chariotUpgradeProblem, nextChariotTier, orderChariotUpgrade } from "../sim/chariotTiers";
 import { chariotAt, huntFoeName, huntTargetName, MUSTER_FOR, raidPool, raidTargets, retargetHunt, startHunt, startRaid, type RaidTarget } from "../sim/chariots";
 import type { HuntFormation } from "../sim/types";
 import { CLAN_TECH, techOf } from "../sim/clanTech";
@@ -13,6 +17,7 @@ import { CLAN_BUILDS, nextProject } from "../sim/clanLife";
 import type { ClanBuild } from "../sim/types";
 import { FACTS, ROLES } from "../data/facts";
 import { bulkProtected, evenSplit, protectedRole, type JobGuard, type ProtectedRole } from "../sim/duties";
+import { supplyNeeds, type SupplyNeed } from "../sim/supplyNeeds";
 import { SHIELD, SHIELD_UP_ORDER, SHIELD_UPS, shieldLinks, shieldRadius, shieldView, upgradeShield, type ShieldUp } from "../sim/dragonShield";
 import { SPECIES, sp } from "../data/species";
 import { AudioManager } from "../audio/audio";
@@ -36,7 +41,8 @@ import { TALL, shakeFruit } from "../sim/plants";
 import { LM, isWaterTile } from "../sim/terrain";
 import { TILE, WORLD_H, WORLD_W, type Brute, type Danger, type Dino, type DinoState, type Dragon, type Human, type Resource, type Role, type SpeciesId, type TechId, type WeaponKind, type WeatherKind } from "../sim/types";
 import { CAMP_LEVELS } from "../data/facts";
-import { BUILDINGS, FORGE_ITEMS, HOUSING, RIDEABLE, SCORPION_TIERS, WEAPON_BY_ID, type Cost } from "../data/colony";
+import { ARMOR_BY_ID, BUILDINGS, FORGE_ITEMS, HELMET_BY_ID, HOUSING, RIDEABLE, SCORPION_TIERS, SHIELDS, WEAPON_BY_ID, type Cost } from "../data/colony";
+import { protection } from "../sim/gear";
 import { carcassAt, carcassSummary, inferCommand, issue, dismount, leaveScorpion, rallyBattlePets, weaponKindsFor, type Command } from "../sim/tasks";
 import { carcassStage, makeCarcass, STAGE_LABEL } from "../sim/carcass";
 import { OUTFIT_BY_ID, type ForgeCat } from "../data/colony";
@@ -131,6 +137,13 @@ export interface HumanInfo {
   condition: Condition;
   weapon: { id: string; name: string; icon: string } | null;
   shield: number;
+  shieldName: string | null;
+  /** the shock stick / ray gun they carry */
+  sidearm: { name: string; icon: string } | null;
+  armor: { name: string; icon: string } | null;
+  helmet: { name: string; icon: string } | null;
+  /** share of a bite / club their gear blocks (0..0.88) */
+  protection: number;
   home: string;
   task: { icon: string; label: string } | null;
   riding: string | null;
@@ -189,13 +202,17 @@ export type InspectInfo =
   | { kind: "building"; id: number; bkind: BuildingKind; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost; stage?: { n: number; of: number; name: string; next: string | null }; note?: string;
       /** a Dragon Shield: its field, charge + the upgrades on offer (dragonShield.ts) */
       shield?: { r: number; charge: number; powered: boolean; pushing: boolean; linked: number; ups: { key: ShieldUp; icon: string; name: string; tip: string; lvl: number; max: number; cost: Cost; ok: boolean }[] } }
-  | { kind: "scorpion"; id: number; name: string; tier: number; built: number; hp: number; maxHp: number; drone: boolean; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
-  | { kind: "gate"; id: number; open: boolean; auto: boolean; hp: number; maxHp: number; material: string }
+  | { kind: "scorpion"; id: number; condition: string; conditionTone: "good" | "warn" | "bad" | "info"; working: boolean; obsidian: boolean; obsidianOffer: { cost: Cost; fitting: boolean; blocked: string | null } | null; name: string; tier: number; built: number; hp: number; maxHp: number; drone: boolean; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
+  | { kind: "gate"; id: number; open: boolean; auto: boolean; mega: boolean; hp: number; maxHp: number; material: string }
   | { kind: "wall"; id: number; material: string; part: string; built: number; hp: number; maxHp: number }
   | { kind: "farm"; id: number; crop: string; growth: number; planted: boolean }
   | { kind: "tower"; id: number; stage: number; hp: number; maxHp: number; guards: number; stone: boolean; up: boolean; canUpgrade: boolean; upCost: number }
   | { kind: "carcass"; id: number; name: string; stage: string; left: { r: string; n: number; max: number }[]; working: number; burnt: boolean; fresh: number }
-  | { kind: "chariot"; id: number; hp: number; trike: boolean; crew: number; cars: number; seats: number; dragonRiders: number; dinoRiders: number; fillers: number; targets: { kind: "nest" | "clan" | "dragon"; id: number; icon: string; name: string; note: string; dist: number }[]; busy: boolean }
+  | { kind: "chariot"; id: number; hp: number; trike: boolean; crew: number; name: string; icon: string; parked: boolean; repairKey: string;
+      /** why this chariot can't ride out (null = it can) */
+      why: string | null;
+      next: { name: string; icon: string; tip: string; cost: Cost; hp: number } | null; up: boolean; have: Cost; upProblem: string | null;
+      cars: number; seats: number; dragonRiders: number; dinoRiders: number; fillers: number; targets: { kind: "nest" | "clan" | "dragon" | "camp"; id: number; icon: string; name: string; note: string; dist: number }[]; busy: boolean }
   // the Mountain Monks (tap one, or their huts / shrine)
   | { kind: "monks"; id: number; n: number; pilgrims: number; activity: string; rite: string | null; daysToRite: number; names: string[]; found: boolean }
   // a Sand People camp (tap its tents)
@@ -264,6 +281,8 @@ export interface Snapshot {
   inspectPrio: { key: string; p: Prio; what: string; sameCount: number; sameName: string } | null;
   /** every building site waiting on work, most urgent first (CampPanel's build queue) */
   buildQueue: { key: string; icon: string; name: string; need: string | null; repair: boolean; p: Prio }[];
+  /** supplies we're short of, and why (Camp panel: "Needed") */
+  needs: SupplyNeed[];
   tribe: {
     level: number;
     levelName: string;
@@ -372,7 +391,7 @@ interface Ptr {
   grab: Dino | null;
 }
 
-export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️", researcher: "📜", shaper: "🔷", technician: "⚡", miner: "⛏️", trainer: "🐾", dragonSlayer: "⚔️", eggRunner: "🥚", dragonKeeper: "🐉" };
+export const ROLE_ICON: Record<string, string> = { gatherer: "🧺", builder: "🔨", hunter: "🏹", guard: "🛡️", cook: "🍖", farmer: "🌾", smith: "⚒️", researcher: "📜", shaper: "🔷", technician: "⚡", miner: "⛏️", trainer: "🐾", dragonSlayer: "⚔️", eggRunner: "🥚", dragonKeeper: "🐉", firefighter: "🧑‍🚒" };
 export function moodOf(d: Dino): { icon: string; label: string } {
   const s = d.state;
   if (s === "sleep") return { icon: "💤", label: "Sleepy" };
@@ -1051,11 +1070,12 @@ export class Engine {
       return;
     }
     const wp = this.renderer.toWorld(this.cam, sx, sy);
-    if (this.moveAim?.kind === "wall" || this.moveAim?.kind === "farm") {
+    if (this.moveAim?.kind === "wall" || this.moveAim?.kind === "farm" || this.moveAim?.kind === "tower") {
       const ref = this.moveAim;
       const wl = ref.kind === "wall" ? this.world.tribe.walls.find((v) => v.id === ref.id) : null;
       const farm = ref.kind === "farm" ? this.world.tribe.farms.find((v) => v.id === ref.id) : null;
-      if (wl && Math.hypot(wp.x - (wl.tx + 0.5) * TILE, wp.y - (wl.ty + 0.5) * TILE) < TILE || farm && Math.hypot(wp.x - farm.x, wp.y - farm.y) < 44) this.moveDrag = e.pointerId;
+      const tw = ref.kind === "tower" ? this.world.tribe.towers.find((v) => v.id === ref.id) : null;
+      if (wl && Math.hypot(wp.x - (wl.tx + 0.5) * TILE, wp.y - (wl.ty + 0.5) * TILE) < TILE || farm && Math.hypot(wp.x - farm.x, wp.y - farm.y) < 44 || tw && Math.abs(wp.x - tw.x) < TILE * 1.2 && wp.y > tw.y - 110 && wp.y < tw.y + 10) this.moveDrag = e.pointerId;
     }
     // a second finger while a box is being dragged: it's a pinch, not a box (the box is dropped, the mode stays on)
     if (this.box && this.boxPtr !== e.pointerId) {
@@ -1290,6 +1310,23 @@ export class Engine {
     }
   };
 
+  /** Where a stroke of the wall tools started (new pieces have ids from here on). */
+  private strokeFrom = 0;
+  private onStrokeStart = () => {
+    this.strokeFrom = this.world.peekId();
+  };
+  /** A stroke of walls just drawn: join its loose ends onto the tower / wall / water's edge it nearly meets. */
+  private onStrokeEnd = () => {
+    if (this.view === "deep" || !this.strokeFrom) return;
+    const w = this.world;
+    const fresh = w.tribe.walls.filter((wl) => wl.id >= this.strokeFrom && wl.part !== "stairs");
+    this.strokeFrom = 0;
+    if (!fresh.length) return;
+    const joins = connectWalls(w, fresh);
+    const msg = joinMessage(joins);
+    if (msg) w.toast("🧱", msg, (joins[0].tx + 0.5) * TILE, (joins[0].ty + 0.5) * TILE);
+  };
+
   private onLeave = () => {
     this.hover = null;
     this.deep.leave();
@@ -1328,6 +1365,12 @@ export class Engine {
     if (this.wallEditMode && k === "z" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       this.undoWallMove();
+      return;
+    }
+    // wall edit: R turns the picked pieces (Shift+R the other way)
+    if (this.wallEditMode && k === "r" && !e.ctrlKey && !e.metaKey && this.wallSel.size) {
+      e.preventDefault();
+      this.rotateWallSelection(!e.shiftKey);
       return;
     }
     if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"].includes(k)) {
@@ -1380,8 +1423,10 @@ export class Engine {
   private bind() {
     const c = this.canvas;
     c.addEventListener("pointerdown", this.onDown);
+    c.addEventListener("pointerdown", this.onStrokeStart);
     c.addEventListener("pointermove", this.onMove);
     c.addEventListener("pointerup", this.onUp);
+    c.addEventListener("pointerup", this.onStrokeEnd);
     c.addEventListener("pointercancel", this.onUp);
     c.addEventListener("pointerleave", this.onLeave);
     c.addEventListener("wheel", this.onWheel, { passive: false });
@@ -1392,8 +1437,10 @@ export class Engine {
   private unbind() {
     const c = this.canvas;
     c.removeEventListener("pointerdown", this.onDown);
+    c.removeEventListener("pointerdown", this.onStrokeStart);
     c.removeEventListener("pointermove", this.onMove);
     c.removeEventListener("pointerup", this.onUp);
+    c.removeEventListener("pointerup", this.onStrokeEnd);
     c.removeEventListener("pointercancel", this.onUp);
     c.removeEventListener("pointerleave", this.onLeave);
     c.removeEventListener("wheel", this.onWheel);
@@ -1905,6 +1952,28 @@ export class Engine {
     this.emit({ type: "select" });
   }
 
+  /** Has the player asked for this to be repaired (and it's still waiting)? */
+  repairAsked(key: string) {
+    return this.world.repairs.has(key);
+  }
+
+  /** 🔧 Repair now: anything damaged at all gets fixed, by the next free hands, right after Urgent jobs (build.ts). */
+  requestRepair(key: string) {
+    const w = this.world;
+    w.askRepair(key);
+    const site = w.buildSites().find((s) => s.repair && `${s.kind}:${s.id}` === key);
+    if (!site) {
+      w.repairs.delete(key);
+      w.toast("🔧", "Nothing to repair there.");
+    } else {
+      // free hands look again straight away
+      for (const h of w.humans) if (!h.taskId && !h.order) h.think = Math.min(h.think, 0.1);
+      w.toast("🔧", "Repair ordered: the next free builders + Auto workers fix it, right after any Urgent jobs.", site.x, site.y);
+      this.audio.play("click", 0, 0, 0.35);
+    }
+    this.emit({ type: "select" });
+  }
+
   /** Upgrade a Dragon Shield (Inspect card). */
   upgradeDragonShield(id: number, key: ShieldUp) {
     const w = this.world;
@@ -2130,6 +2199,21 @@ export class Engine {
     return !why;
   }
 
+  /** From a chariot's card: order its next upgrade (builders bring the materials, then fit it at home). */
+  upgradeChariot(id: number) {
+    const w = this.world;
+    const c = w.colony.chariots.find((x) => x.id === id);
+    if (!c) return;
+    const why = orderChariotUpgrade(w, c);
+    if (why) w.toast("🛡️", why);
+    else {
+      for (const h of w.humans) if (!h.taskId && !h.order) h.think = Math.min(h.think, 0.1);
+      w.toast("🔨", `Upgrade ordered: builders will bring the materials and fit the ${nextChariotTier(c)?.name ?? "upgrade"} while it's parked at home.`, c.x, c.y);
+      this.audio.play("click", 0, 0, 0.35);
+    }
+    this.emit({ type: "select" });
+  }
+
   /** A unit still gathering or on the march: point it at a different target. */
   retargetRaid(target: RaidTarget) {
     const why = retargetHunt(this.world, target);
@@ -2192,12 +2276,12 @@ export class Engine {
   /** Move: drag the selected wall or farm, or tap a destination. */
   startMoveSelected() {
     const ref = this.inspectRef;
-    if (!ref || !(["building", "shelter", "wall", "farm", "gate"] as string[]).includes(ref.kind)) return;
+    if (!ref || !(["building", "shelter", "wall", "farm", "gate", "tower"] as string[]).includes(ref.kind)) return;
     const kind = ref.kind === "gate" ? "wall" : ref.kind as MoveRef["kind"];
     const why = canMove(this.world, { kind, id: ref.id });
     if (why) return this.world.toast("🚚", why);
     this.moveAim = { kind, id: ref.id };
-    this.world.toast("🔷", kind === "wall" || kind === "farm" ? "Drag it to a new spot, or tap where it should go." : "Tap where it should go.");
+    this.world.toast("🔷", kind === "wall" || kind === "farm" || kind === "tower" ? `Drag it to a new spot, or tap where it should go.${kind === "tower" ? " Its Scorpion comes along." : ""}` : "Tap where it should go.");
     this.emit({ type: "select" });
   }
 
@@ -2223,21 +2307,24 @@ export class Engine {
   }
 
   /** Enter / leave wall edit mode (optionally with one piece already picked). */
-  toggleWallEditMode(startId = 0) {
-    this.wallEditMode = startId ? true : !this.wallEditMode;
+  toggleWallEditMode(open = false) {
+    this.wallEditMode = open ? true : !this.wallEditMode;
     this.wallDrag = null;
+    // the mode always opens (and closes) with nothing picked: the player chooses every piece themselves
+    this.wallSel.clear();
     if (!this.wallEditMode) {
-      this.wallSel.clear();
       this.emit({ type: "select" });
       return;
     }
+    // …and nobody / no dino left selected from before, so a tap can't act on them by surprise
+    this.selection = [];
+    this.selectedId = 0;
     this.clearAreaMode = false;
     this.groupSelectMode = false;
     this.moveAim = null;
     this.box = null;
     this.boxPtr = null;
     if (this.tool.id !== "hand") this.tool = { ...this.tool, id: "hand" };
-    if (startId) this.wallSel.add(startId);
     this.inspectRef = null;
     this.toastOnce("wallEditHow", "✏️", "Edit walls: tap wall pieces to pick them (tap again to drop one). Drag any picked piece to slide the whole group: it keeps its shape and snaps onto the tile grid (and onto walls it lands next to). Green = fits, red = blocked. ↶ Undo puts the last move back.");
     this.emit({ type: "select" });
@@ -2354,7 +2441,31 @@ export class Engine {
       if (this.wallUndo.length > 20) this.wallUndo.shift();
       for (const wl of pieces) if (w.inView(wl.tx * TILE, wl.ty * TILE, 40)) w.particles.burst(P.Dust, (wl.tx + 0.5) * TILE, (wl.ty + 0.8) * TILE, 3, 30, { size: 7, max: 0.6, color: wl.kind === "polygon" ? "rgba(155,185,240,0.8)" : "rgba(160,130,90,0.6)" });
       w.sfx("thud", (pieces[0].tx + 0.5) * TILE, (pieces[0].ty + 0.5) * TILE, 0.6, 0.8);
+      // the moved run snaps onto the tower / wall / water it now nearly meets
+      const msg = joinMessage(connectWalls(w, pieces));
+      if (msg) w.toast("🧱", msg, (pieces[0].tx + 0.5) * TILE, (pieces[0].ty + 0.5) * TILE);
+      // placed: nothing stays picked (pick again to move it some more)
+      this.wallSel.clear();
     }
+    this.emit({ type: "select" });
+  }
+
+  /** Turn the picked pieces a quarter turn; they mould onto the walls, towers + shields they now meet. */
+  rotateWallSelection(clockwise = true) {
+    const w = this.world;
+    const pieces = this.selectedWalls();
+    if (!pieces.length) return w.toast("✏️", "Pick the wall pieces to turn first.");
+    const r = w.tribe.rotateWalls(w, pieces, clockwise);
+    if (typeof r === "string") {
+      w.toast("⟳", r);
+      return this.emit({ type: "select" });
+    }
+    this.wallUndo.push(r.from);
+    if (this.wallUndo.length > 20) this.wallUndo.shift();
+    w.sfx("thud", (pieces[0].tx + 0.5) * TILE, (pieces[0].ty + 0.5) * TILE, 0.6, 0.8);
+    const msg = joinMessage(connectWalls(w, pieces));
+    w.toast("⟳", `Turned ${pieces.length} piece${pieces.length === 1 ? "" : "s"}.${msg ? ` ${msg}` : ""}`, (pieces[0].tx + 0.5) * TILE, (pieces[0].ty + 0.5) * TILE);
+    this.wallSel.clear();
     this.emit({ type: "select" });
   }
 
@@ -2536,8 +2647,20 @@ export class Engine {
   }
 
   /** Stop what the selected people were told to do: back to auto. */
+  /** ⚡ Sweep: the picked people drive every stray animal out of the settlement (territory.ts). */
+  sweepArea() {
+    const w = this.world;
+    const people = this.selectionHumans().filter((h) => !h.child && !h.stranger);
+    if (!people.length) return w.toast("⚡", "Pick some grown-ups first.");
+    const n = startSweep(w, people);
+    const unarmed = people.filter((h) => !w.tribe.weaponFor(w, h)).length;
+    w.toast("⚡", n ? `${people.length} on a sweep: driving ${n} stray animal${n === 1 ? "" : "s"} off our ground.${unarmed ? ` (${unarmed} have nothing to fight with: make shock sticks + ray guns.)` : ""}` : "No stray animals on our ground right now. They'll see off any that come in.", people[0].x, people[0].y);
+    this.emit({ type: "select" });
+  }
+
   cancelOrders() {
     const w = this.world;
+    for (const h of this.selectionHumans()) h.sweep = false;
     for (const h of this.selectionHumans()) {
       if (h.taskId) {
         const t = w.tasks.get(h.taskId);
@@ -2636,7 +2759,7 @@ export class Engine {
   upgradeScorpion(id: number) {
     const w = this.world;
     const s = w.colony.scorpions.find((x) => x.id === id);
-    if (!s || s.up || s.built < 1 || !SCORPION_TIERS[s.tier]) return;
+    if (!s || s.up || s.obsidianUp || s.built < 1 || !SCORPION_TIERS[s.tier]) return;
     const next = SCORPION_TIERS[s.tier];
     if (next.at === "blacksmith" && !w.colony.finished("blacksmith")) {
       w.toast("⚒️", "That upgrade needs a finished Blacksmith.");
@@ -2645,6 +2768,35 @@ export class Engine {
     s.up = true;
     s.have = {};
     w.toast("🎯", `Builders will upgrade it to a ${next.name}.`, s.x, s.y);
+    this.emit({ type: "inspect" });
+  }
+
+  /** Fit a Scorpion with the Obsidian Fire Shield (builders bring the obsidian). */
+  /** Fit the Obsidian Fire Shield on every Scorpion that can take it now. */
+  fitObsidianAll() {
+    const w = this.world;
+    const n = orderObsidianAll(w);
+    w.toast("🛡️", n ? `Builders will bolt obsidian plates onto ${n} Scorpion${n === 1 ? "" : "s"}: fire, breath and catapult boulders will glance off.` : w.colony.finished("blacksmith") ? "Every Scorpion already has the shield (or is mid-upgrade)." : "Build a Blacksmith first.");
+    this.emit({ type: "inspect" });
+    return n;
+  }
+
+  /** For the "Fit on all" button. */
+  obsidianStatus() {
+    return obsidianStatus(this.world);
+  }
+
+  fitObsidian(id: number) {
+    const w = this.world;
+    const s = w.colony.scorpions.find((x) => x.id === id);
+    if (!s) return;
+    const why = obsidianProblem(w, s);
+    if (why) {
+      w.toast("🛡️", `Can't fit the Obsidian Fire Shield: ${why}.`, s.x, s.y);
+      return;
+    }
+    if (!orderObsidian(w, s)) return;
+    w.toast("🛡️", "Builders will bolt black obsidian plates over this Scorpion.", s.x, s.y);
     this.emit({ type: "inspect" });
   }
 
@@ -2669,7 +2821,9 @@ export class Engine {
   toggleGate(id: number) {
     const g = this.world.tribe.walls.find((x) => x.id === id);
     if (g) {
-      this.world.tribe.setGate(g, !g.open, true);
+      // a Megalodon gate's jaws are one piece: the whole span opens or shuts together
+      const open = !g.open;
+      for (const o of g.mega ? this.world.tribe.megaSpan(g) : [g]) this.world.tribe.setGate(o, open, true);
       this.emit({ type: "inspect" });
     }
   }
@@ -2890,7 +3044,8 @@ export class Engine {
   /** The duties that can be split across right now (dragon-raid jobs need Dragon hunting). */
   splitRoleList(): Role[] {
     const hunting = this.world.camp.learned.has("dragonHunting");
-    return ROLES.map((r) => r.id).filter((r) => r !== "auto" && (hunting || (r !== "dragonSlayer" && r !== "eggRunner")));
+    const fire = this.world.camp.learned.has("firefighting");
+    return ROLES.map((r) => r.id).filter((r) => r !== "auto" && (hunting || (r !== "dragonSlayer" && r !== "eggRunner")) && (fire || r !== "firefighter"));
   }
 
   /** Spread every available adult evenly across all the duties (people already in a job keep it where they can). */
@@ -3700,6 +3855,11 @@ export class Engine {
         condition: condition(c),
         weapon: wp ? { id: wp.id, name: wp.name, icon: wp.icon } : null,
         shield: c.gear.shield,
+        shieldName: c.gear.shield ? SHIELDS[c.gear.shield - 1]?.name ?? null : null,
+        sidearm: c.gear.sidearm && WEAPON_BY_ID[c.gear.sidearm] ? { name: WEAPON_BY_ID[c.gear.sidearm].name, icon: WEAPON_BY_ID[c.gear.sidearm].icon } : null,
+        armor: c.gear.armor && ARMOR_BY_ID[c.gear.armor] ? { name: ARMOR_BY_ID[c.gear.armor].name, icon: ARMOR_BY_ID[c.gear.armor].icon } : null,
+        helmet: c.gear.helmet && HELMET_BY_ID[c.gear.helmet] ? { name: HELMET_BY_ID[c.gear.helmet].name, icon: HELMET_BY_ID[c.gear.helmet].icon } : null,
+        protection: protection(w, c),
         home: home ? `${HOUSING[home.tier].icon} ${HOUSING[home.tier].name}` : "🪨 The cave",
         task: task ? { icon: task.icon, label: task.label } : null,
         riding: mount ? `${mount.name} the ${sp(mount.species).nick}` : null,
@@ -3749,7 +3909,7 @@ export class Engine {
         need: w.colony.hunt.need ?? 0,
         left: w.colony.hunt.phase === "muster" ? Math.max(0, Math.ceil(MUSTER_FOR - w.colony.hunt.t)) : 0,
         target: huntTargetName(w),
-        targetKey: w.colony.hunt.dragon ? `dragon:${w.colony.hunt.dragon}` : w.colony.hunt.clan ? `clan:${w.colony.hunt.clan}` : `nest:${w.colony.hunt.nest}`,
+        targetKey: w.colony.hunt.dragon ? `dragon:${w.colony.hunt.dragon}` : w.colony.hunt.camp ? `camp:${w.colony.hunt.camp}` : w.colony.hunt.clan ? `clan:${w.colony.hunt.clan}` : `nest:${w.colony.hunt.nest}`,
         fighting: w.colony.hunt.engage ? huntFoeName(w, w.colony.hunt.engage) : null,
       } : null,
       orphanNests: this.stable("orphanNests", orphanNests(w).map((n) => ({ id: n.id, breed: n.breed, eggs: nestEggs(w, n).length, found: !!n.found }))),
@@ -3847,6 +4007,7 @@ export class Engine {
       inspect: this.inspectInfo(),
       inspectPrio: this.inspectPrio(),
       buildQueue: this.buildQueue(),
+      needs: supplyNeeds(w),
       forge: this.forgeInfo(),
       colony: {
         buildings: w.colony.buildings.filter((b) => b.built >= 1).length,
@@ -3897,7 +4058,7 @@ export class Engine {
     if (!site) return null;
     const key = siteKey(site);
     const matches = this.samePrioritySites(site);
-    const sameName = site.kind === "scorpion" ? "Scorpions" : site.kind === "tower" ? "towers" : site.kind === "wall" ? "walls" : site.kind === "building" ? "buildings of this type" : "homes";
+    const sameName = site.kind === "chariot" ? "war chariots" : site.kind === "scorpion" ? "Scorpions" : site.kind === "tower" ? "towers" : site.kind === "wall" ? "walls" : site.kind === "building" ? "buildings of this type" : "homes";
     return { key, p: this.world.priority.get(key), what: site.repair ? "repair" : site.kind === "upgrade" ? "upgrade" : "build", sameCount: matches.length, sameName };
   }
 
@@ -3917,6 +4078,7 @@ export class Engine {
         return b ? { icon: BUILDINGS[b.kind].icon, name: BUILDINGS[b.kind].name } : { icon: "🏗️", name: "Building" };
       }
       if (s.kind === "scorpion") return { icon: "🎯", name: "Scorpion (war machine)" };
+      if (s.kind === "chariot") return { icon: "🛡️", name: s.repair ? "War chariot repair" : "War chariot upgrade" };
       if (s.kind === "tower") return { icon: "🗼", name: "Watchtower" };
       if (s.kind === "wall") return { icon: "🧱", name: "Wall" };
       return { icon: "🛖", name: s.kind === "upgrade" ? "Home upgrade" : "Home" };
@@ -3946,6 +4108,8 @@ export class Engine {
       if (wall) for (const wid of Array.from(wallStretch(w, wall))) w.priority.set(`wall:${wid}`, p);
       else w.priority.set(key, p);
     }
+    // everyone has a fresh think straight away, so builders switch to an Urgent job now, not when they're done
+    if (p === 3) for (const h of w.humans) h.think = Math.min(h.think, 0.05);
     const info = PRIOS[p];
     if (p >= 2) w.toast(info.icon, scope === "all" && matching.length > 1
       ? `${matching.length} matching jobs set to ${info.name.toLowerCase()} priority.`
@@ -4143,27 +4307,34 @@ export class Engine {
         const t = SCORPION_TIERS[s.tier - 1];
         const next = SCORPION_TIERS[s.tier];
         const crew = s.crew ? w.humans.find((h) => h.id === s.crew) : null;
+        const cond = scorpionCondition(s);
+        const obsBlock = obsidianProblem(w, s);
         return {
           kind: "scorpion",
+          condition: CONDITION_LABEL[cond],
+          conditionTone: cond === "healthy" ? "good" : cond === "damaged" ? "warn" : cond === "blueprint" ? "info" : "bad",
+          working: scorpionWorks(w, s),
+          obsidian: !!s.obsidian,
+          obsidianOffer: s.obsidian ? null : { cost: OBSIDIAN_SHIELD.cost, fitting: !!s.obsidianUp, blocked: s.obsidianUp ? null : s.up ? "Finish the upgrade first" : obsBlock },
           id: s.id,
           drone: !!s.drone,
           name: t.name,
           tier: s.tier,
           built: s.built,
           hp: s.hp,
-          maxHp: t.hp,
+          maxHp: scorpionMaxHp(s),
           crew: crew ? crew.name : null,
           mount: s.mount,
-          cost: s.built < 1 ? SCORPION_TIERS[0].cost : next?.cost ?? {},
+          cost: scorpionCost(s),
           have: s.have,
-          next: next ? { name: next.name, cost: next.cost, locked: next.at === "blacksmith" && !w.colony.finished("blacksmith") } : null,
+          next: next && !s.obsidianUp ? { name: next.name, cost: next.cost, locked: next.at === "blacksmith" && !w.colony.finished("blacksmith") } : null,
           upgrading: s.up,
         };
       }
       case "gate": {
         const g = w.tribe.walls.find((x) => x.id === r.id);
         if (!g) return null;
-        return { kind: "gate", id: g.id, open: g.open, auto: g.auto, hp: g.hp, maxHp: wallMaxHp(g), material: g.bone ? "Bone" : g.kind === "polygon" ? "Polygon" : g.kind === "stone" ? "Stone" : "Wooden" };
+        return { kind: "gate", id: g.id, open: g.open, auto: g.auto, mega: !!g.mega, hp: g.hp, maxHp: wallMaxHp(g), material: g.mega ? "Megalodon" : g.bone ? "Bone" : g.kind === "polygon" ? "Polygon" : g.kind === "stone" ? "Stone" : "Wooden" };
       }
       case "wall": {
         const wl = w.tribe.walls.find((v) => v.id === r.id);
@@ -4186,6 +4357,13 @@ export class Engine {
         const pool = raidPool(w);
         return {
           kind: "chariot", id: c.id, hp: Math.round((c.hp / c.maxHp) * 100), trike: !!c.trike, crew: w.humans.filter((h) => h.chariot === c.id).length,
+          name: chariotTier(c).name, icon: chariotTier(c).icon, parked: chariotParked(w, c), repairKey: `chariot:${c.id}`,
+          why: !c.trike ? "No Triceratops to pull it: tame one and it's harnessed by itself." : c.hp <= c.maxHp * 0.3 ? "Too badly damaged to ride out (it needs over 30%): repair it first." : null,
+          next: (() => {
+            const n = nextChariotTier(c);
+            return n ? { name: n.name, icon: n.icon, tip: n.tip, cost: n.cost, hp: n.hp } : null;
+          })(),
+          up: !!c.up, have: c.have ?? {}, upProblem: chariotUpgradeProblem(w, c),
           cars: pool.cars.length, seats: pool.seats, dragonRiders: pool.dragonRiders.length, dinoRiders: pool.dinoRiders.length, fillers: pool.fillers.length,
           targets: raidTargets(w).map((t) => ({ ...t, dist: Math.round(t.dist) })), busy: !!w.colony.hunt,
         };

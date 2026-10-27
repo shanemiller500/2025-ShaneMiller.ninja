@@ -6,6 +6,11 @@
 /*  back (each aiming at its own target), a banner at the stern, and   */
 /*  harness poles out to the Triceratops pulling it. Battered, it      */
 /*  shows cracks; nearly smashed, it smokes. Origin: ground centre.    */
+/*                                                                     */
+/*  Upgrades show (chariotTiers.ts): bone plates over the shields;     */
+/*  then iron bands, rivets + iron-rimmed wheels; then the steel war   */
+/*  fortress: riveted steel sides with battlements, a steel ram under  */
+/*  the skull, scythe-spiked wheels and a second, taller banner.       */
 /* ------------------------------------------------------------------ */
 import type { Chariot } from "../sim/types";
 
@@ -16,15 +21,48 @@ const HIDE = "#a8835a";
 const BONE = "#e9e0c8";
 const BLUE = "#3a6fb0";
 const GOLD = "#e0b43a";
+const IRON = "#7d858e";
+const STEEL = "#c3cad2";
+const STEEL_D = "#7f8892";
 
-function wheel(c: CanvasRenderingContext2D, x: number, y: number, r: number, spin: number) {
+function wheel(c: CanvasRenderingContext2D, x: number, y: number, r: number, spin: number, tier = 0) {
+  // scythe blades out of the hub (the steel war fortress)
+  if (tier >= 3) {
+    c.fillStyle = STEEL;
+    c.strokeStyle = INK;
+    c.lineWidth = 1;
+    for (let k = 0; k < 2; k++) {
+      const a = spin * 0.5 + k * Math.PI;
+      c.beginPath();
+      c.moveTo(x + Math.cos(a) * r * 0.2, y + Math.sin(a) * r * 0.2);
+      c.quadraticCurveTo(x + Math.cos(a + 0.5) * r * 1.5, y + Math.sin(a + 0.5) * r * 1.5, x + Math.cos(a + 0.15) * r * 1.75, y + Math.sin(a + 0.15) * r * 1.75);
+      c.lineTo(x + Math.cos(a - 0.15) * r * 1.2, y + Math.sin(a - 0.15) * r * 1.2);
+      c.closePath();
+      c.fill();
+      c.stroke();
+    }
+  }
   c.fillStyle = WOOD_D;
-  c.strokeStyle = INK;
-  c.lineWidth = 2;
+  c.strokeStyle = tier >= 2 ? IRON : INK;
+  c.lineWidth = tier >= 2 ? 3.4 : 2;
   c.beginPath();
   c.arc(x, y, r, 0, Math.PI * 2);
   c.fill();
   c.stroke();
+  // studs round the rim (iron + steel), spikes on the tread (steel)
+  if (tier >= 2) {
+    c.fillStyle = tier >= 3 ? STEEL : "#a9b0b8";
+    for (let k = 0; k < 8; k++) {
+      const a = spin + (k * Math.PI) / 4;
+      if (tier >= 3) {
+        c.beginPath();
+        c.moveTo(x + Math.cos(a - 0.12) * r, y + Math.sin(a - 0.12) * r);
+        c.lineTo(x + Math.cos(a) * (r + 5), y + Math.sin(a) * (r + 5));
+        c.lineTo(x + Math.cos(a + 0.12) * r, y + Math.sin(a + 0.12) * r);
+        c.fill();
+      } else c.fillRect(x + Math.cos(a) * r - 1, y + Math.sin(a) * r - 1, 2, 2);
+    }
+  }
   c.strokeStyle = BONE;
   c.lineWidth = 2;
   c.beginPath();
@@ -88,6 +126,90 @@ function scorpion(c: CanvasRenderingContext2D, x: number, y: number, a: number, 
   c.restore();
 }
 
+/** Upgrade plating over the near shield wall + hull (tier 1 bone, 2 iron, 3 steel fortress). */
+function fortify(c: CanvasRenderingContext2D, tier: number) {
+  if (tier >= 1 && tier < 3) {
+    // overlapping bone plates along the top of the shield wall
+    c.fillStyle = BONE;
+    c.strokeStyle = "#8a7c63";
+    c.lineWidth = 1;
+    for (let x = -56; x < 54; x += 9) {
+      c.beginPath();
+      c.ellipse(x + 4.5, -48, 5, 3.4, 0, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+    }
+    // bone spikes on the hull
+    for (const x of [-48, -16, 16, 48]) {
+      c.beginPath();
+      c.moveTo(x - 3, -15);
+      c.lineTo(x, -6);
+      c.lineTo(x + 3, -15);
+      c.fill();
+    }
+  }
+  if (tier === 2) {
+    // iron bands round the hull + shield wall, with rivets
+    c.fillStyle = IRON;
+    for (const y of [-33, -15]) c.fillRect(-62, y - 1.6, 122, 3.2);
+    for (const x of [-44, -14, 16, 44]) c.fillRect(x - 2, -50, 4, 38);
+    c.fillStyle = "#c9ced4";
+    for (const x of [-44, -14, 16, 44]) for (const y of [-46, -38, -26, -18]) c.fillRect(x - 0.8, y - 0.8, 1.6, 1.6);
+  }
+  if (tier >= 3) {
+    // riveted steel plates right down the side, panel by panel
+    for (let i = 0; i < 5; i++) {
+      const x0 = -58 + i * 22.8;
+      const g = c.createLinearGradient(0, -52, 0, -12);
+      g.addColorStop(0, "#dfe4ea");
+      g.addColorStop(0.5, STEEL);
+      g.addColorStop(1, STEEL_D);
+      c.fillStyle = g;
+      c.strokeStyle = "#454c55";
+      c.lineWidth = 1.2;
+      c.beginPath();
+      c.rect(x0 + 0.6, -52, 21.6, 39);
+      c.fill();
+      c.stroke();
+      c.fillStyle = "#4b525b";
+      for (const [rx, ry] of [[x0 + 3, -49], [x0 + 19.6, -49], [x0 + 3, -16], [x0 + 19.6, -16]]) {
+        c.beginPath();
+        c.arc(rx, ry, 1, 0, Math.PI * 2);
+        c.fill();
+      }
+      // the spear slit through the plate
+      c.fillStyle = "#1d2228";
+      c.fillRect(x0 + 9, -47, 4.6, 8);
+    }
+    // battlements along the top: a little fortress wall
+    c.fillStyle = STEEL_D;
+    c.strokeStyle = "#454c55";
+    c.lineWidth = 1;
+    for (let x = -58; x < 56; x += 12) {
+      c.beginPath();
+      c.rect(x, -60, 7, 8);
+      c.fill();
+      c.stroke();
+    }
+    // the gold + blue band of the tribe across the steel
+    c.fillStyle = BLUE;
+    c.fillRect(-58, -34, 114, 3);
+    c.fillStyle = GOLD;
+    c.fillRect(-58, -31, 114, 1.6);
+    // a steel ram under the prow
+    c.fillStyle = STEEL;
+    c.strokeStyle = "#454c55";
+    c.lineWidth = 1.4;
+    c.beginPath();
+    c.moveTo(56, -20);
+    c.lineTo(84, -15);
+    c.lineTo(56, -10);
+    c.closePath();
+    c.fill();
+    c.stroke();
+  }
+}
+
 /** The great trike skull on the prow: frill, three horns, a dark eye socket, the beak. */
 function skull(c: CanvasRenderingContext2D, x: number, y: number) {
   c.fillStyle = BONE;
@@ -134,6 +256,7 @@ function skull(c: CanvasRenderingContext2D, x: number, y: number) {
 
 export function drawChariot(c: CanvasRenderingContext2D, ch: Chariot, t: number) {
   const k = ch.hp / ch.maxHp;
+  const tier = ch.tier ?? 0;
   const bob = Math.abs(Math.sin(ch.anim * 1.2)) * 1.2;
   c.save();
   // shadow
@@ -145,8 +268,8 @@ export function drawChariot(c: CanvasRenderingContext2D, ch: Chariot, t: number)
   if (ch.hit > 0) c.filter = `brightness(${1 + ch.hit * 0.6})`;
   const spin = ch.anim * 1.6;
   // far wheels
-  wheel(c, -40, -12, 15, spin);
-  wheel(c, 38, -12, 15, spin);
+  wheel(c, -40, -12, 15, spin, tier);
+  wheel(c, 38, -12, 15, spin, tier);
   c.translate(0, -bob);
   // harness poles out to the Triceratops
   c.strokeStyle = WOOD_D;
@@ -227,6 +350,30 @@ export function drawChariot(c: CanvasRenderingContext2D, ch: Chariot, t: number)
     c.lineTo(x, -51);
     c.stroke();
   }
+  fortify(c, tier);
+  // a second, taller war banner amidships on the fortress
+  if (tier >= 3) {
+    c.strokeStyle = STEEL_D;
+    c.lineWidth = 2.4;
+    c.beginPath();
+    c.moveTo(0, -60);
+    c.lineTo(0, -104);
+    c.stroke();
+    const f2 = Math.sin(t * 4.4 + ch.id * 2) * 3;
+    c.fillStyle = GOLD;
+    c.beginPath();
+    c.moveTo(0, -104);
+    c.lineTo(-30, -99 + f2);
+    c.lineTo(-24, -92 + f2 * 0.6);
+    c.lineTo(-30, -85 + f2);
+    c.lineTo(0, -88);
+    c.closePath();
+    c.fill();
+    c.fillStyle = BLUE;
+    c.beginPath();
+    c.arc(-12, -95 + f2 * 0.5, 3.2, 0, Math.PI * 2);
+    c.fill();
+  }
   // a banner at the stern
   c.strokeStyle = WOOD_D;
   c.lineWidth = 2.4;
@@ -271,12 +418,13 @@ export function drawChariot(c: CanvasRenderingContext2D, ch: Chariot, t: number)
   }
   // near wheels
   c.filter = "none";
-  wheel(c, -46, -8, 16, spin + 0.3);
-  wheel(c, 44, -8, 16, spin + 0.3);
+  wheel(c, -46, -8, 16, spin + 0.3, tier);
+  wheel(c, 44, -8, 16, spin + 0.3, tier);
   c.restore();
-  // health bar
+  // health bar (above the fortress banner)
+  const hb = tier >= 3 ? -112 : -96;
   c.fillStyle = "rgba(0,0,0,0.45)";
-  c.fillRect(-26, -96, 52, 5);
+  c.fillRect(-26, hb, 52, 5);
   c.fillStyle = k > 0.5 ? "#7ed37e" : k > 0.25 ? "#e0b040" : "#e05040";
-  c.fillRect(-26, -96, 52 * Math.max(0, k), 5);
+  c.fillRect(-26, hb, 52 * Math.max(0, k), 5);
 }

@@ -25,6 +25,7 @@
 /*  out the same whether or not they're about.                         */
 /* ------------------------------------------------------------------ */
 import { sp } from "../data/species";
+import { survived } from "./growth";
 import { isBaby, sizeOf } from "./dinos";
 import { hurtHuman } from "./injury";
 import { P } from "./particles";
@@ -141,9 +142,9 @@ export class Forest {
   territoryAt(x: number, y: number) {
     return this.tribes.find((t) => Math.hypot(t.x - x, t.y - y) < t.r) ?? null;
   }
-  /** How big this camp can grow by itself (unions let it go further). */
-  maxTier(t: TreeTribe) {
-    return Math.min(MAX_TREE_TIER, 3 + (t.merges ?? 0));
+  /** How big this camp can grow by itself (unions, and standing a long time, let it go further: growth.ts). */
+  maxTier(t: TreeTribe, w?: World) {
+    return Math.min(MAX_TREE_TIER, 3 + (t.merges ?? 0) + (w ? survived(w, t) : 0));
   }
   cap(t: TreeTribe) {
     return 5 + t.tier * 3;
@@ -477,7 +478,7 @@ export class Forest {
       // the camp grows: more decks + huts, a wider territory
       t.work += (0.06 + home.length * 0.02) * dt;
       if (t.work >= 70 + t.tier * 45 && t.food >= 4) {
-        if (t.tier < this.maxTier(t)) {
+        if (t.tier < this.maxTier(t, w)) {
           t.work = 0;
           t.tier++;
           t.food -= 3;

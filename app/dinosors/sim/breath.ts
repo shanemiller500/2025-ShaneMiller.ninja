@@ -194,10 +194,11 @@ export function breathBlast(w: World, dr: Dragon, fx: number, fy: number, kind: 
     if (frost) o.stamina = Math.max(0, (o.stamina ?? 1) - 0.02);
   }
   // our Scorpions: an enemy's breath chips them, our own dragons' never does (factions.ts)
-  hitScorpionsAt(w, fx, fy, r * 0.8, (frost ? 6 : 10) * mul, sideOfDragon(dr));
+  hitScorpionsAt(w, fx, fy, r * 0.8, (frost ? 6 : 10) * mul, sideOfDragon(dr), "breath");
   // hot sand scours plants + timber; frost does neither
   if (!frost) {
     w.burnPlantsAt(fx, fy, 0.25);
-    for (const b of w.colony.buildings) if (Math.hypot(b.x - fx, b.y - fy) < 56) b.hp -= 8;
+    // (our own dragon's hot sand never scours our own buildings)
+    if (!ours) for (const b of w.colony.buildings) if (Math.hypot(b.x - fx, b.y - fy) < 56) b.hp -= 8;
   }
 }

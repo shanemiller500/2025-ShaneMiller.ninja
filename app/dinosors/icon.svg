@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="sky" cx="38%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#ffd36b"/>
+      <stop offset="0.65" stop-color="#f59e2a"/>
+      <stop offset="1" stop-color="#c2410c"/>
+    </radialGradient>
+    <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7ccf5a"/>
+      <stop offset="1" stop-color="#3f8f2e"/>
+    </linearGradient>
+  </defs>
+  <!-- a sunset disc -->
+  <circle cx="32" cy="32" r="31" fill="url(#sky)"/>
+  <!-- the volcano behind -->
+  <path d="M6 50 L22 30 L28 34 L34 27 L52 50 Z" fill="#7c2d12" opacity="0.55"/>
+  <!-- T. rex head + neck, facing right, jaws open -->
+  <path d="M10 58 C12 44 14 34 22 26 C27 20 34 15 43 15 C50 15 56 18 58 23 C59.5 26.5 58 29 54 29.5 L47 30.5 L52 33 C55 34.5 55 37.5 51.5 38.5 C46 40 40 39 36 41 C33 43 31 48 30 58 Z" fill="url(#skin)" stroke="#1f3a14" stroke-width="2" stroke-linejoin="round"/>
+  <!-- the open mouth -->
+  <path d="M38 30.5 L47 30.5 L52 33 C48 34.5 42 34 38 33 Z" fill="#7f1d1d"/>
+  <!-- teeth -->
+  <path d="M40 30.5 L41.3 33 L42.6 30.5 M44 30.5 L45.3 33 L46.6 30.5 M42 34 L43 32 L44 34" fill="#fff8e6" stroke="#fff8e6" stroke-width="0.8" stroke-linejoin="round"/>
+  <!-- back stripes -->
+  <path d="M20 31 L25 33 M17 38 L22 39.5 M15 45 L20 46" stroke="#2f6e22" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- brow ridge + eye -->
+  <path d="M38 19.5 C41 17.5 45 17.5 47.5 19.5" fill="none" stroke="#1f3a14" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="43" cy="22.5" r="3" fill="#fffbe8"/>
+  <circle cx="43.8" cy="22.7" r="1.6" fill="#1a1410"/>
+  <!-- nostril -->
+  <circle cx="55" cy="22.5" r="1.1" fill="#1f3a14"/>
+</svg>

@@ -6,6 +6,7 @@
 /*  centre unless noted.                                               */
 /* ------------------------------------------------------------------ */
 import type { Building, ResNode, Scorpion, Shelter, Wall } from "../sim/types";
+import { scorpionMaxHp } from "../sim/scorpionArmor";
 import { HOUSING, NODES } from "../data/colony";
 import { shade } from "./drawDino";
 import { drawCivNode, polyBlocks } from "./civArt";
@@ -20,6 +21,8 @@ const T = 32;
 /** neighbours: N=1, E=2, S=4, W=8 (any wall part except stairs connects) */
 export interface WallLook {
   mask: number;
+  /** the sides (same bits) that join a tower: the wall runs on into the tower's body so there's no gap */
+  tower?: number;
   hpFrac: number;
   /** gate swing 0 (shut) … 1 (open) */
   swing: number;
@@ -78,10 +81,11 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
   const tw = stone ? 16 : 12; // wall thickness
   const cy = -T / 2; // ground centre line of the tile
   // footprint pieces: [x0, x1, y0, y1] on the ground
+  const into = (bit: number) => ((look.tower ?? 0) & bit ? 6 : 0);
   const pieces: [number, number, number, number, boolean][] = [[-tw / 2, tw / 2, cy - tw / 2, cy + tw / 2, !S]];
-  if (E) pieces.push([tw / 2, T / 2, cy - tw / 2, cy + tw / 2, true]);
-  if (W) pieces.push([-T / 2, -tw / 2, cy - tw / 2, cy + tw / 2, true]);
-  if (N) pieces.push([-tw / 2, tw / 2, -T, cy - tw / 2, false]);
+  if (E) pieces.push([tw / 2, T / 2 + into(2), cy - tw / 2, cy + tw / 2, true]);
+  if (W) pieces.push([-T / 2 - into(8), -tw / 2, cy - tw / 2, cy + tw / 2, true]);
+  if (N) pieces.push([-tw / 2, tw / 2, -T - into(1), cy - tw / 2, false]);
   if (S) pieces.push([-tw / 2, tw / 2, cy + tw / 2, 0, false]);
 
   // ---- front faces (south side open) ----
@@ -214,20 +218,20 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
   if (wl.part === "gate" && wl.bone) {
     c.save();
     const run = look.run;
+    // in a north-south wall the gate is turned to match: the way through runs east-west, seen from the side
+    const turned = run ? run.vertical : (N || S) && !E && !W;
     if (run && !run.vertical) {
       // several gate tiles side by side: one grand gate spanning them all
       c.translate(((run.n - 1) * T) / 2, cy + tw / 2);
       c.scale(0.62 + run.n * 0.55, 1 + (run.n - 1) * 0.22);
     } else if (run) {
-      // a north-south run: one bigger monument astride the walkway, centred on the run
+      // a north-south run of gate tiles: one longer gate down the middle of the run
       c.translate(0, cy + 6 - ((run.n - 1) * T) / 2);
-      c.scale(0.72 * (1 + (run.n - 1) * 0.35), 0.72 * (1 + (run.n - 1) * 0.35));
-    } else if (S) {
-      // in a north-south run: a smaller monument astride the walkway
-      c.translate(0, cy + 6);
-      c.scale(0.72, 0.72);
-    } else c.translate(0, cy + tw / 2);
-    drawBoneGate(c, wl, look.swing, look.t, look.hpFrac);
+      c.scale(0.8, 0.8 * (1 + (run.n - 1) * 0.5));
+    } else if (turned) c.translate(0, cy + 6);
+    else c.translate(0, cy + tw / 2);
+    if (turned) drawBoneGateSide(c, wl, look.swing, look.t, look.hpFrac);
+    else drawBoneGate(c, wl, look.swing, look.t, look.hpFrac);
     c.restore();
   } else if (wl.part === "gate") {
     if (!S) {
@@ -554,6 +558,101 @@ export function drawBoneGate(c: CanvasRenderingContext2D, wl: Wall, swing: numbe
   tusk(c, -1, t);
   tusk(c, 1, t);
 
+  // crossed bones crest on top
+  c.save();
+  c.translate(0, -104);
+  bone(c, -14, -10, 14, 10, 4.4);
+  bone(c, -14, 10, 14, -10, 4.4);
+  lashing(c, 0, 0, Math.PI / 2, 9);
+  c.restore();
+  c.restore();
+}
+
+/**
+ * The grand entrance turned to sit in a north-south wall: the way through runs east-west, so it's seen
+ * from the side. The rib cage stands in a row along the passage (each rib's far leg, the spine across
+ * the top, then its near leg), bone-bar doors + posts at both ends, the giant tusks crossing high over
+ * the middle and the crossed-bones crest on top. Origin: base centre.
+ */
+export function drawBoneGateSide(c: CanvasRenderingContext2D, wl: Wall, swing: number, t: number, hpFrac: number) {
+  const seed = wl.tx * 31 + wl.ty * 17;
+  const grow = Math.max(0, Math.min(1, wl.built));
+  c.save();
+  c.scale(1, 0.35 + grow * 0.65);
+  // ground shadow
+  c.fillStyle = "rgba(20,14,8,0.3)";
+  c.beginPath();
+  c.ellipse(0, -4, 44, 9, 0, 0, Math.PI * 2);
+  c.fill();
+  // the passage inside, lighter towards its two open ends
+  const g = c.createLinearGradient(-32, 0, 32, 0);
+  g.addColorStop(0, "#4a3622");
+  g.addColorStop(0.5, "#1d140d");
+  g.addColorStop(1, "#4a3622");
+  c.fillStyle = g;
+  c.beginPath();
+  c.roundRect(-30, -50, 60, 50, [18, 18, 2, 2]);
+  c.fill();
+  // ribs along the way through: far legs first (set back + higher up), the spine, then the near legs
+  const xs = [-24, -12, 0, 12, 24];
+  for (const x of xs) bone(c, x + 2, -14, x + 1, -48, 3, "#bfae8c");
+  for (let k = 0; k <= 8; k++) {
+    const x = -28 + k * 7;
+    c.fillStyle = INK;
+    c.beginPath();
+    c.ellipse(x, -52, 4.6, 3.6, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = k % 2 ? "#e3d6b8" : IVORY;
+    c.beginPath();
+    c.ellipse(x, -52, 3.4, 2.6, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+  xs.forEach((x, i) => {
+    if (hpFrac < 0.45 && i === 1) return; // a rib knocked out
+    c.lineCap = "round";
+    for (const [col, lw] of [[INK, 6.4], [IVORY, 4]] as const) {
+      c.strokeStyle = col;
+      c.lineWidth = lw;
+      c.beginPath();
+      c.moveTo(x, 0);
+      c.bezierCurveTo(x - 1, -18, x - 2, -38, x + 1, -50);
+      c.stroke();
+    }
+    c.fillStyle = INK;
+    c.beginPath();
+    c.arc(x, 0, 4.4, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = IVORY;
+    c.beginPath();
+    c.arc(x, 0, 3.2, 0, Math.PI * 2);
+    c.fill();
+  });
+  // bone-bar doors at both ends of the passage (they swing outward, open)
+  const open = Math.max(0, Math.min(1, swing));
+  for (const side of [-1, 1]) {
+    const x0 = side * 31;
+    const reach = 10 * open;
+    for (let b = 0; b < 3; b++) {
+      bone(c, x0, -2 - b * 4, x0 + side * reach, -34 + b * 2, 2.4, b % 2 ? IVORY_D : IVORY);
+    }
+    c.strokeStyle = "#8a4b22";
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(x0 - 2, -12);
+    c.lineTo(x0 + side * reach + 2, -14);
+    c.moveTo(x0 - 2, -26);
+    c.lineTo(x0 + side * reach + 2, -28);
+    c.stroke();
+  }
+  // posts at the two ends + the giant tusks crossing over the middle
+  gatePost(c, -40, wl.kind, seed);
+  gatePost(c, 40, wl.kind, seed + 5);
+  c.save();
+  c.translate(0, 2);
+  c.scale(1.05, 1);
+  tusk(c, -1, t);
+  tusk(c, 1, t);
+  c.restore();
   // crossed bones crest on top
   c.save();
   c.translate(0, -104);
@@ -1740,6 +1839,89 @@ export function drawScorpion(c: CanvasRenderingContext2D, s: Scorpion) {
     c.beginPath();
     c.arc(hx(len * 0.78 + back), hy(len * 0.78 + back), 2.2, 0, Math.PI * 2);
     c.fill();
+  }
+  // the Obsidian Fire Shield: polished black glass plates round the post + over the bow's base,
+  // a cold violet sheen that flares gold when heat glances off (scorpionArmor.ts)
+  if (s.obsidian && built >= 1) {
+    const glint = s.glint ?? 0;
+    const t = performance.now() / 1000;
+    for (const side of [-1, 1]) {
+      c.save();
+      c.translate(side * 8, -8);
+      c.beginPath();
+      c.moveTo(0, -8);
+      c.lineTo(side * 5, -5);
+      c.lineTo(side * 5, 4);
+      c.lineTo(0, 7);
+      c.lineTo(-side * 3, 3);
+      c.lineTo(-side * 3, -5);
+      c.closePath();
+      const g = c.createLinearGradient(-4, -8, 5, 7);
+      g.addColorStop(0, "#4a4060");
+      g.addColorStop(0.45, "#141019");
+      g.addColorStop(1, "#05040a");
+      c.fillStyle = g;
+      c.fill();
+      c.strokeStyle = "rgba(170,150,230,0.55)";
+      c.lineWidth = 0.8;
+      c.stroke();
+      // the glassy highlight sweeping across
+      const sweep = (Math.sin(t * 1.3 + side) + 1) / 2;
+      c.strokeStyle = `rgba(230,225,255,${0.25 + sweep * 0.35})`;
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(-side * 1, -5 + sweep * 2);
+      c.lineTo(side * 3, -3 + sweep * 2);
+      c.stroke();
+      c.restore();
+    }
+    // a rim plate on the swivel
+    c.strokeStyle = "#17121f";
+    c.lineWidth = 2.2;
+    c.beginPath();
+    c.ellipse(0, -14, 10.5, 4.8, 0, Math.PI * 0.05, Math.PI * 0.95);
+    c.stroke();
+    if (glint > 0.02) {
+      c.save();
+      c.globalCompositeOperation = "lighter";
+      const g = c.createRadialGradient(0, -12, 0, 0, -12, 26);
+      g.addColorStop(0, `rgba(255,214,140,${0.55 * glint})`);
+      g.addColorStop(0.5, `rgba(255,170,90,${0.22 * glint})`);
+      g.addColorStop(1, "rgba(255,150,80,0)");
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc(0, -12, 26, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+    }
+  }
+  // damaged: scorch + cracks; knocked out: a slumped bow and a little smoke (scorpionArmor.ts)
+  if (built >= 1) {
+    const f = s.hp / Math.max(1, scorpionMaxHp(s));
+    if (f < 0.75) {
+      c.strokeStyle = "rgba(20,14,10,0.7)";
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(-5, -12);
+      c.lineTo(-1, -7);
+      c.lineTo(-3, -3);
+      if (f < 0.4) {
+        c.moveTo(4, -13);
+        c.lineTo(2, -8);
+        c.lineTo(5, -4);
+      }
+      c.stroke();
+    }
+    if (f < 0.15) {
+      const t = performance.now() / 1000;
+      for (let i = 0; i < 3; i++) {
+        const k = (t * 0.6 + i / 3) % 1;
+        c.fillStyle = `rgba(70,65,60,${0.4 * (1 - k)})`;
+        c.beginPath();
+        c.arc(Math.sin(t + i) * 3, -18 - k * 22, 3 + k * 5, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
   }
   // tier pips
   for (let i = 0; i < tier; i++) {

@@ -174,3 +174,98 @@ test('the battle: Scorpions + spears wear the dragon down, the runners grab the 
   assert.ok(home, 'the hunt is over');
   assert.ok(!w.humans.some((h) => h.chariot), 'everyone climbed down');
 });
+
+test('tap anywhere on the drawn chariot opens its raid card; the unit can rally against another people\'s camp and win it', () => {
+  const w = world(9311, 12);
+  const t1 = trike(w, w.camp.x + 260, w.camp.y + 120);
+  const c = chariot(w, w.camp.x + 300, w.camp.y + 120);
+  run(w, 2);
+  assert.ok(c.trike, 'harnessed');
+  // the bone ram out front and the flag at the back both count as the chariot
+  assert.equal(ch.chariotAt(w, c.x + c.dir * 95, c.y - 20), c, 'the ram');
+  assert.equal(ch.chariotAt(w, c.x - c.dir * 80, c.y - 80), c, 'the flag');
+  assert.ok(c.maxHp >= 900, 'heavily armoured');
+  // a Snow People camp we've found, out east of camp
+  const t = w.snowFolk.settle(w, 1, { x: w.camp.x + 1300, y: w.camp.y + 100 });
+  assert.ok(t, 'a camp');
+  t.found = true;
+  const targets = ch.raidTargets(w);
+  const camp = targets.find((x) => x.kind === 'camp');
+  assert.ok(camp, 'the camp is on the raid card');
+  assert.equal(ch.startRaid(w, { kind: 'camp', id: camp.id }, 'ring', 0, 0), null, 'the unit forms');
+  assert.equal(w.colony.hunt.camp, camp.id);
+  // their fighters fall; then the camp is ours
+  for (const b of w.snowFolk.folk(w)) b.hp = 0.001;
+  for (const b of [...w.snowFolk.folk(w)]) w.rivals.kill(w, b);
+  const before = w.camp.stock.meat;
+  t.food = 9;
+  const won = run(w, 240, () => w.colony.hunt?.result === 'won' || !w.colony.hunt);
+  assert.ok(won, 'the raid ended');
+  assert.ok(w.camp.stock.meat >= before, 'their stores came home');
+  void t1;
+});
+
+test('a battered chariot is repaired at home by builders, can be upgraded tier by tier, and keeps its tier through a save', () => {
+  const tiers = require(path.join(root, 'sim', 'chariotTiers.ts'));
+  const w = world(9107, 6);
+  for (const h of w.humans) h.role = 'builder';
+  const c = chariot(w, w.camp.x + 300, w.camp.y + 200);
+  c.hp = c.maxHp * 0.06;
+  assert.ok(w.buildSites().some((s) => s.kind === 'chariot' && s.repair), 'a repair job for it');
+  assert.ok(run(w, 120, () => c.hp >= c.maxHp), `repaired to full (${Math.round(c.hp)}/${c.maxHp})`);
+  // upgrade: materials in the stores, then fitted
+  Object.assign(w.camp.stock, { wood: 40, bone: 20, hide: 10, iron: 0, stone: 20 });
+  // "Upgrade all war chariots" queues it (the same as its own Upgrade button)
+  const build = require(path.join(root, 'sim', 'build.ts'));
+  assert.equal(build.upgradeStatus(w, 'chariots').available, 1);
+  assert.equal(build.queueUpgrades(w, 'chariots').chariots, 1);
+  assert.ok(c.up, 'queued');
+  assert.equal(build.upgradeStatus(w, 'chariots').queued, 1);
+  assert.ok(run(w, 180, () => (c.tier ?? 0) >= 1), `upgraded (have ${JSON.stringify(c.have)})`);
+  assert.equal(c.maxHp, tiers.CHARIOT_TIERS[1].hp);
+  assert.equal(c.hp, c.maxHp, 'fitted at full strength');
+  // the next one needs a blacksmith
+  assert.match(tiers.chariotUpgradeProblem(w, c) ?? '', /Blacksmith/);
+  // saved + loaded: same tier, same toughness
+  const back = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  const c2 = back.colony.chariots[0];
+  assert.equal(c2.tier, 1);
+  assert.equal(c2.maxHp, tiers.CHARIOT_TIERS[1].hp);
+});
+
+test('a war chariot never drives through our walls: walled in, it waits; open a gap and it goes round through it', () => {
+  const w = world(9109, 4);
+  w.camp.learned.add('stonewall');
+  const c = chariot(w, w.camp.x + 600, w.camp.y + 200);
+  trike(w, c.x + 80, c.y);
+  run(w, 1.5);
+  assert.ok(c.trike, 'harnessed');
+  const cx = Math.floor(c.x / TILE), cy = Math.floor(c.y / TILE);
+  // a stone ring all round it, no gate
+  const ring = [];
+  for (let y = cy - 4; y <= cy + 4; y++) for (let x = cx - 6; x <= cx + 6; x++) {
+    if (y !== cy - 4 && y !== cy + 4 && x !== cx - 6 && x !== cx + 6) continue;
+    const wl = w.tribe.addWall(w, x, y, 'stone', 'wall');
+    if (wl) { wl.built = 1; wl.hp = 600; ring.push(wl); }
+  }
+  w.tribe.version++;
+  w.nav.sync(w);
+  const inside = (x, y) => Math.abs(Math.floor(x / TILE) - cx) < 6 && Math.abs(Math.floor(y / TILE) - cy) < 4;
+  c.to = { x: c.x + 14 * TILE, y: c.y };
+  let crossed = false;
+  run(w, 15, () => { if (!inside(c.x, c.y)) crossed = true; });
+  assert.ok(!crossed, `stayed inside the walls (${Math.floor(c.x / TILE) - cx}, ${Math.floor(c.y / TILE) - cy})`);
+  assert.ok(c.stuck, 'waiting for a way out');
+  // knock a gap in the west side: it goes round and out that way (still not through the east wall)
+  for (const wl of ring.filter((x) => x.tx === cx - 6 && Math.abs(x.ty - cy) <= 1)) w.tribe.removeWall(wl);
+  w.tribe.version++;
+  w.nav.sync(w);
+  let wallHit = false;
+  const out = run(w, 90, () => {
+    if (w.tribe.wallAt(Math.floor(c.x / TILE), Math.floor(c.y / TILE)) && !wallHit) { wallHit = [Math.floor(c.x / TILE) - cx, Math.floor(c.y / TILE) - cy, c.path ? c.path.length : null, c.stuck]; }
+    return !c.to;
+  });
+  assert.ok(!wallHit, `never on a wall tile ${JSON.stringify(wallHit)}`);
+  assert.ok(out, `got there (${Math.round(c.x)},${Math.round(c.y)})`);
+  assert.ok(!c.stuck);
+});

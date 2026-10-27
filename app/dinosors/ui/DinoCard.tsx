@@ -296,7 +296,11 @@ function HumanBody({ info, engine, onCamp, onClose }: { info: HumanInfo; engine:
             {info.weapon.icon} {info.weapon.name}
           </span>
         )}
-        {info.shield > 0 && <span className="rounded-full bg-white/10 px-2.5 py-1">🛡️ Shield {info.shield}</span>}
+        {info.shield > 0 && <span className="rounded-full bg-white/10 px-2.5 py-1">🛡️ {info.shieldName ?? `Shield ${info.shield}`}</span>}
+        {info.sidearm && <span className="rounded-full bg-cyan-400/20 px-2.5 py-1" title="Everyone carries one: they fight raiders + predators with it instead of running, and drive wild animals off our ground">{info.sidearm.icon} {info.sidearm.name}</span>}
+        {info.helmet && <span className="rounded-full bg-white/10 px-2.5 py-1">{info.helmet.icon} {info.helmet.name}</span>}
+        {info.armor && <span className="rounded-full bg-slate-300/20 px-2.5 py-1">{info.armor.icon} {info.armor.name}</span>}
+        {info.protection > 0.01 && <span className="rounded-full bg-emerald-500/20 px-2.5 py-1" title="How much of a bite or a club blow their gear blocks">🛡️ Blocks {Math.round(info.protection * 100)}%</span>}
         {info.outfit ? (
           <span className="flex items-center gap-1 rounded-full bg-sky-400/20 px-2.5 py-1" title={`Keeps off ${Math.round(info.outfit.rain * 100)}% of the rain, ${Math.round(info.outfit.warmth * 100)}% of the cold`}>
             {info.outfit.id === "raincloak" ? <GameIcon id="rainproof" size={14} /> : info.outfit.icon} {info.outfit.name}

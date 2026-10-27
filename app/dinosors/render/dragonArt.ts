@@ -8,7 +8,7 @@
 /*  climbing. Landing + taking off it drops its legs; on the ground    */
 /*  the wings fold along its back. Scale comes from breed + growth.    */
 /* ------------------------------------------------------------------ */
-import { BREEDS, type DragonBreed } from "../data/dragons";
+import { BREEDS, breathOf, type DragonBreed } from "../data/dragons";
 import { dragonStats } from "../sim/dragonKeep";
 import type { Dragon, DragonEgg, DragonNest } from "../sim/types";
 import { NEST_JOIN } from "../sim/dragonNests";
@@ -378,7 +378,18 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   if (dr.breath > 0.05) drawBreath(c, dr, t, s, hop);
 }
 
-/** The fire cone: from the mouth toward the aim point (or down + ahead for wild dragons). */
+/**
+ * What each breath looks like: fire (orange flame, smoke), frost (an ice-blue blast with a white core
+ * and drifting frost crystals) or hot sand (a glowing amber-and-tan blast of grit and dust).
+ * [outer r,g,b at the mouth, outer r,g,b at the tip, core r,g,b, trail r,g,b + alpha]
+ */
+const BREATH_LOOK = {
+  fire: { o0: [255, 150, 40], o1: [255, 50, 10], core: [255, 250, 200], trail: "60,55,50", ta: 0.25 },
+  frost: { o0: [170, 235, 255], o1: [90, 170, 255], core: [245, 252, 255], trail: "225,245,255", ta: 0.35 },
+  sand: { o0: [255, 190, 90], o1: [205, 150, 80], core: [255, 236, 180], trail: "214,184,128", ta: 0.4 },
+} as const;
+
+/** The breath cone (fire, frost or hot sand by breed): from the mouth toward the aim point (or down + ahead for wild dragons). */
 function drawBreath(c: CanvasRenderingContext2D, dr: Dragon, t: number, s: number, hop: number) {
   const st = dragonStats(dr);
   const mx = dr.dir * MOUTH.x * s;
@@ -406,30 +417,57 @@ function drawBreath(c: CanvasRenderingContext2D, dr: Dragon, t: number, s: numbe
     len = 150;
   }
   const b = dr.breath;
+  const kind = dr.sandTribe ? "sand" : breathOf(dr.breed);
+  const look = BREATH_LOOK[kind];
+  const mix = (k: number, i: number) => Math.round(look.o0[i] + (look.o1[i] - look.o0[i]) * k);
   c.save();
   c.translate(mx, my);
   c.rotate(ang);
   c.globalCompositeOperation = "lighter";
-  // outer flame, inner core
+  // outer blast, inner core
   for (let i = 0; i < 9; i++) {
     const k = i / 9;
     const r = (5 + k * 26) * (0.7 + 0.3 * Math.min(1.4, st.fire));
-    const fl = Math.sin(t * 34 + i * 1.7) * 4 * k;
-    c.fillStyle = `rgba(255,${Math.round(150 - k * 100)},${Math.round(40 - k * 30)},${(1 - k) * 0.55 * b})`;
+    const fl = Math.sin(t * (kind === "frost" ? 22 : 34) + i * 1.7) * 4 * k;
+    c.fillStyle = `rgba(${mix(k, 0)},${mix(k, 1)},${mix(k, 2)},${(1 - k) * 0.55 * b})`;
     c.beginPath();
     c.arc(k * len, fl, r, 0, Math.PI * 2);
     c.fill();
   }
   for (let i = 0; i < 5; i++) {
     const k = i / 5;
-    c.fillStyle = `rgba(255,250,${Math.round(200 - k * 100)},${(1 - k) * 0.6 * b})`;
+    c.fillStyle = `rgba(${look.core[0]},${look.core[1]},${Math.round(look.core[2] - k * (kind === "fire" ? 100 : 30))},${(1 - k) * 0.6 * b})`;
     c.beginPath();
     c.arc(k * len * 0.6, Math.sin(t * 40 + i) * 2, 3 + k * 7, 0, Math.PI * 2);
     c.fill();
   }
   c.globalCompositeOperation = "source-over";
-  // heat shimmer + smoke past the end
-  c.strokeStyle = `rgba(255,230,200,${0.12 * b})`;
+  if (kind === "frost") {
+    // ice crystals glinting in the blast
+    c.fillStyle = `rgba(255,255,255,${0.85 * b})`;
+    for (let i = 0; i < 8; i++) {
+      const k = ((t * 1.8 + i / 8) % 1);
+      const x = k * len;
+      const y = Math.sin(i * 2.3 + t * 6) * (4 + k * 18);
+      const r = 1.2 + (i % 3) * 0.6;
+      c.beginPath();
+      c.moveTo(x, y - r * 2);
+      c.lineTo(x + r * 0.6, y);
+      c.lineTo(x, y + r * 2);
+      c.lineTo(x - r * 0.6, y);
+      c.closePath();
+      c.fill();
+    }
+  } else if (kind === "sand") {
+    // grit: a spray of fine grains
+    c.fillStyle = `rgba(150,105,55,${0.7 * b})`;
+    for (let i = 0; i < 14; i++) {
+      const k = ((t * 2.2 + i / 14) % 1);
+      c.fillRect(k * len, Math.sin(i * 1.9 + t * 9) * (3 + k * 20), 1.6, 1.6);
+    }
+  }
+  // shimmer (heat, or cold mist) + smoke / spray past the end
+  c.strokeStyle = kind === "frost" ? `rgba(220,245,255,${0.18 * b})` : `rgba(255,230,200,${0.12 * b})`;
   c.lineWidth = 1.5;
   for (let i = 0; i < 3; i++) {
     c.beginPath();
@@ -440,7 +478,7 @@ function drawBreath(c: CanvasRenderingContext2D, dr: Dragon, t: number, s: numbe
     }
     c.stroke();
   }
-  c.fillStyle = `rgba(60,55,50,${0.25 * b})`;
+  c.fillStyle = `rgba(${look.trail},${look.ta * b})`;
   for (let i = 0; i < 3; i++) {
     const k = (t * 1.5 + i / 3) % 1;
     c.beginPath();

@@ -12,6 +12,7 @@ require.extensions['.ts'] = (module, filename) => {
 const root = path.join(__dirname, '..', 'app', 'dinosors');
 const { World } = require(path.join(root, 'sim', 'world.ts'));
 const { SPECIES } = require(path.join(root, 'data', 'species.ts'));
+const { SNOW_SPECIES } = require(path.join(root, 'sim', 'snowBeasts.ts'));
 const wl = require(path.join(root, 'sim', 'repopulate.ts'));
 
 const DT = 1 / 30;
@@ -43,7 +44,9 @@ test('every kind of dinosaur is always around: wiped out, a mother comes home an
   w.wildlife.enabled = true;
   w.wildlife.spellT = Infinity;
   run(w, 6);
-  for (const def of SPECIES) {
+  // (the snowy peaks' animals keep their own numbers: snowBeasts.ts SnowLife, tested in dinosors-snowlands)
+  const VALLEY = SPECIES.filter((d) => !SNOW_SPECIES.has(d.id));
+  for (const def of VALLEY) {
     const n = w.wildlife.count(w, def.id);
     assert.ok(n >= wl.MIN_KEEP, `${def.id} came back (${n})`);
     if (def.move === 'swim') assert.ok(!w.eggs.some((e) => e.species === def.id), `${def.id}: no eggs on land`);
@@ -55,7 +58,7 @@ test('every kind of dinosaur is always around: wiped out, a mother comes home an
   const babies = () => w.dinos.filter((d) => d.growth < 0.2).length;
   const clutch = new Set(w.eggs.map((e) => e.id));
   assert.ok(run(w, 130, () => !w.eggs.some((e) => clutch.has(e.id))), 'every clutch hatched');
-  assert.ok(babies() >= SPECIES.filter((d) => d.move !== 'swim').length * 2, `babies (${babies()})`);
+  assert.ok(babies() >= VALLEY.filter((d) => d.move !== 'swim').length * 2, `babies (${babies()})`);
 });
 
 test('a species hunted out of a real valley comes back on its own', () => {

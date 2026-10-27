@@ -10,6 +10,7 @@ import { MAP_H, MAP_W, T, TILE } from "./types";
 import type { World } from "./world";
 import { hurtHuman } from "./injury";
 import { sizeOf } from "./dinos";
+import { bombHits } from "./dragonPeril";
 
 interface LavaHead {
   x: number;
@@ -306,6 +307,8 @@ export class Volcano {
       w.fire.ignite(w, tx, ty, 0.8);
       w.sfx("thud", r.x, r.y, 0.6);
       w.knock(r.x, r.y, 50 + r.size * 2);
+      // a dragon flying low over where it comes down is hit (dragonPeril.ts)
+      bombHits(w, r.x, r.y, r.size);
       // big lava bombs smash structures + hurt anyone underneath
       if (r.size > 7) {
         w.crush(r.x, r.y, 40 + r.size * 3, r.size / 14);

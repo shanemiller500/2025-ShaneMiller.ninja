@@ -14,6 +14,7 @@
 /*  replaced by free hands, and jobs are saved, so a reload carries    */
 /*  on where it left off.                                              */
 /* ------------------------------------------------------------------ */
+import { BUILDINGS } from "../data/colony";
 import { canClear, commandClear } from "./clearing";
 import { go, say } from "./humans";
 import { P } from "./particles";
@@ -46,6 +47,10 @@ const GROWN_OVER = new Set<T>([T.Jungle, T.Forest, T.Swamp, T.Dirt]);
 const REACH_FOR = 20;
 /** seconds a job may sit with nobody on it (and nobody free to take it over) before it's dropped */
 const ABANDON_AFTER = 90;
+/** undergrowth (ferns, bushes, reeds) this close to a plant coming down is swept up with it (px) */
+const SWEEP_R = 26;
+/** the most people on one job (the crew grows as hands come free) */
+const CREW_MAX = 12;
 
 const inRect = (r: ClearRect, x: number, y: number) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
 const sameRect = (a: ClearRect | undefined, b: ClearRect) => !!a && a.x0 === b.x0 && a.y0 === b.y0 && a.x1 === b.x1 && a.y1 === b.y1;
@@ -58,16 +63,42 @@ export function keptClear(w: World, x: number, y: number) {
   return w.keepClear.some((r) => inRect(r, x, y));
 }
 
-/** Plants still standing in a box. */
+/** Wild plants we keep: the bushes an unplanted vineyard will be planted from (buildClear.ts keeps them too). */
+function kept(w: World) {
+  const vines = w.tribe.farms.filter((f) => f.crop === "grape" && !f.planted);
+  return vines.length ? (p: Plant) => vines.some((f) => Math.hypot(p.x - f.x, (p.y - f.y) * 1.4) <= 62) : null;
+}
+
+/** Plants still standing in a box (only nature: trees, bushes, ferns, reeds; never the vineyard's cuttings). */
 export function plantsIn(w: World, r: ClearRect) {
-  return w.plants.filter((p) => inRect(r, p.x, p.y));
+  const keep = kept(w);
+  return w.plants.filter((p) => inRect(r, p.x, p.y) && !keep?.(p));
 }
 
 /** Plants a job still has to clear (not the ones out of reach). */
 export function plantsLeft(w: World, job: ClearJob) {
   const skip = job.skip.length ? new Set(job.skip) : null;
-  return w.plants.filter((p) => inRect(job, p.x, p.y) && !skip?.has(p.id));
+  return plantsIn(w, job).filter((p) => !skip?.has(p.id));
 }
+
+/** Wild ground on this tile back to grass; anything we built (camp floor, paths, under buildings) stays as it is. */
+function toGrass(w: World, tx: number, ty: number, built: Set<number>) {
+  const i = ty * MAP_W + tx;
+  if (i < 0 || i >= w.terrain.tiles.length || built.has(i) || !GROWN_OVER.has(w.terrain.tiles[i] as T)) return;
+  // the trodden camp floor round the cave is ours
+  if (w.terrain.tiles[i] === T.Dirt && Math.abs((tx + 0.5) * TILE - w.camp.x) < 170 && Math.abs((ty + 0.5) * TILE - w.camp.y) < 105) return;
+  w.terrain.setTile(tx, ty, T.Grass);
+}
+
+const builtTiles = (w: World) => {
+  const s = w.colony.occupied(w);
+  for (const b of w.colony.buildings) {
+    if (b.kind !== "path" && b.kind !== "bridge") continue;
+    const d = BUILDINGS[b.kind];
+    for (let dy = 0; dy < d.h; dy++) for (let dx = 0; dx < d.w; dx++) s.add((b.ty + dy) * MAP_W + b.tx + dx);
+  }
+  return s;
+};
 
 /** Where a clearer stands to chop this plant (beside it on open ground), or null when there's nowhere. */
 function standSpot(w: World, h: Pick<Human, "x">, p: Plant) {
@@ -85,11 +116,14 @@ function free(h: Human) {
   return !h.child && !h.stranger && !h.captive && !h.under && !h.aloft && !h.chariot && h.state !== "down" && h.hp > 0.3;
 }
 
-/** Free hands to put on a job nobody's doing: idle grown-ups who aren't on watch. */
-function freeHands(w: World, r: ClearRect, n: number) {
+/**
+ * Free hands to put on a job: grown-ups not on a task, order or watch. `spare` = only the ones with
+ * nothing better on (gatherers, whose work is harvesting the wild anyway, and anyone standing idle).
+ */
+function freeHands(w: World, r: ClearRect, n: number, spare = false) {
   const cx = (r.x0 + r.x1) / 2;
   const cy = (r.y0 + r.y1) / 2;
-  return w.humans.filter((h) => free(h) && !h.taskId && !h.order && !h.clearJob && w.tribe.roleOf(h) !== "guard")
+  return w.humans.filter((h) => free(h) && !h.taskId && !h.order && !h.clearJob && w.tribe.roleOf(h) !== "guard" && (!spare || h.state === "idle" || w.tribe.roleOf(h) === "gatherer"))
     .sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy)).slice(0, n);
 }
 
@@ -105,6 +139,9 @@ function enlist(w: World, job: ClearJob, crew: Human[]) {
     if (!job.people.includes(h.id)) job.people.push(h.id);
   }
 }
+
+/** How many people a job with this many plants left wants. */
+const crewFor = (left: number) => Math.min(CREW_MAX, 3 + Math.ceil(left / 25));
 
 /** Start clearing a box (returns why not, or a short summary). */
 export function startClearJob(w: World, r: ClearRect, people: Human[], dinos: Dino[]): { ok: boolean; msg: string } {
@@ -126,7 +163,7 @@ export function startClearJob(w: World, r: ClearRect, people: Human[], dinos: Di
   if (!crew.length && !beasts.length) {
     const cx = (rect.x0 + rect.x1) / 2;
     const cy = (rect.y0 + rect.y1) / 2;
-    crew = freeHands(w, rect, Math.min(6, 2 + Math.floor(left / 10)));
+    crew = freeHands(w, rect, crewFor(left));
     beasts = w.dinos.filter((d) => canClear(d) && !d.chariot && !(d.work?.job === "clear"))
       .sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy)).slice(0, 2);
   }
@@ -164,15 +201,18 @@ export function clearThink(w: World, h: Human): boolean {
     tries.delete(h);
   }
   const skip = new Set(job.skip);
+  const keep = kept(w);
+  // the plants the rest of the crew are on
+  const taken = new Set<number>();
+  for (const o of w.humans) if (o !== h && o.clearJob === job.id && (o.state === "clear" || o.state === "walk")) taken.add(o.targetId);
   // nearest plant nobody else is on
   let best: Plant | null = null;
   let spot: { x: number; y: number } | null = null;
   let bd = Infinity;
   for (const p of w.plants) {
-    if (!inRect(job, p.x, p.y) || skip.has(p.id)) continue;
-    if (w.humans.some((o) => o !== h && o.clearJob === job.id && o.targetId === p.id && (o.state === "clear" || o.state === "walk"))) continue;
+    if (!inRect(job, p.x, p.y) || skip.has(p.id) || taken.has(p.id)) continue;
     const d = Math.hypot(p.x - h.x, p.y - h.y);
-    if (d >= bd) continue;
+    if (d >= bd || keep?.(p)) continue;
     const s = standSpot(w, h, p);
     // nowhere to stand beside it (in the water, on a cliff): out of reach
     if (!s) {
@@ -207,24 +247,41 @@ export function clearTick(w: World, h: Human, dt: number) {
   const tree = TREES.has(p.kind) && !p.stump;
   if (w.rng() < dt * (tree ? 3 : 5)) w.sfx(tree ? "chop" : "rustle", p.x, p.y, 0.35);
   if (w.rng() < dt * 4) w.particles.spawn(tree ? P.Crumb : P.Leaf, p.x + (w.rng() - 0.5) * 16, p.y - 10, { z: 14, vz: 40, vx: (w.rng() - 0.5) * 50, g: 160, size: 2.5, max: 0.6, color: tree ? "#a07a4a" : "#6b9a3f" });
-  const time = tree ? 1.2 + p.size * 2.6 : 1;
+  const time = tree ? 0.6 + p.size * 1.2 : 0.45;
   if (h.stateT < time) return;
-  // down it comes: what it gives goes to the stores; the ground underneath turns to grass
-  const i = w.plants.indexOf(p);
-  if (i >= 0) w.plants.splice(i, 1);
+  // down it comes, and the ferns + bushes round its foot are pulled up with it: what they give goes to
+  // the stores (timber, sticks, leaves, berries); the ground underneath turns to grass
+  const job = w.clearJobs.find((j) => j.id === h.clearJob);
+  const keep = kept(w);
+  const skip = job?.skip.length ? new Set(job.skip) : null;
+  const down = [p];
+  if (job) for (const o of w.plants) {
+    if (o === p || TREES.has(o.kind) && !o.stump || Math.abs(o.x - p.x) > SWEEP_R || Math.hypot(o.x - p.x, o.y - p.y) > SWEEP_R) continue;
+    if (inRect(job, o.x, o.y) && !skip?.has(o.id) && !keep?.(o)) down.push(o);
+  }
+  const gone = new Set(down);
+  for (let i = w.plants.length - 1; i >= 0; i--) if (gone.has(w.plants[i])) w.plants.splice(i, 1);
   w.plantsDirty = true;
   tries.delete(h);
-  const got: Partial<Record<Resource, number>> = tree
-    ? { wood: 1 + Math.round(p.size * 2), stick: 1 }
-    : { leaves: 1, stick: w.rng() < 0.4 ? 1 : 0, berries: p.kind === "bush" ? Math.max(0, Math.floor(p.fruit ?? 0)) : 0 };
-  if (p.kind === "fruit") got.berries = Math.max(0, Math.floor(p.fruit ?? 0));
-  for (const [r, n] of Object.entries(got) as [Resource, number][]) if (n) w.camp.stock[r] += n;
-  w.particles.burst(P.Leaf, p.x, p.y - 10, tree ? 10 : 5, 60, { z: 14, size: 3, max: 0.9, color: "#6b9a3f" });
+  const got: Partial<Record<Resource, number>> = {};
+  const add = (r: Resource, n: number) => {
+    if (n > 0) got[r] = (got[r] ?? 0) + n;
+  };
+  const built = builtTiles(w);
+  for (const o of down) {
+    if (TREES.has(o.kind) && !o.stump) {
+      add("wood", 1 + Math.round(o.size * 2));
+      add("stick", 1);
+    } else {
+      add("leaves", 1);
+      add("stick", w.rng() < 0.4 ? 1 : 0);
+    }
+    if (o.kind === "bush" || o.kind === "fruit") add("berries", Math.max(0, Math.floor(o.fruit ?? 0)));
+    toGrass(w, Math.floor(o.x / TILE), Math.floor(o.y / TILE), built);
+  }
+  for (const [r, n] of Object.entries(got) as [Resource, number][]) w.camp.stock[r] += n;
+  w.particles.burst(P.Leaf, p.x, p.y - 10, tree ? 10 : 5 + down.length, 60, { z: 14, size: 3, max: 0.9, color: "#6b9a3f" });
   if (tree) w.sfx("timber", p.x, p.y, 0.6);
-  const tx = Math.floor(p.x / TILE);
-  const ty = Math.floor(p.y / TILE);
-  const ti = ty * MAP_W + tx;
-  if (ti >= 0 && ti < w.terrain.tiles.length && GROWN_OVER.has(w.terrain.tiles[ti] as T)) w.terrain.setTile(tx, ty, T.Grass);
   if (w.rng() < 0.15) say(h, pick(w.rng, ["Timber!", "One more down!", "Clearing it!", "Room to build!"]));
   go(h, "idle", h.x, h.y);
   h.think = 0;
@@ -250,6 +307,9 @@ export function clearJobsTick(w: World) {
     job.people = job.people.filter((id) => w.humans.some((h) => h.id === id && h.clearJob === job.id));
     if (job.people.length || job.dinos.length) {
       job.idle = 0;
+      // a big job takes on spare hands as they come free (gatherers, anyone idle), so it goes quicker
+      const want = crewFor(left.length) - job.people.length;
+      if (want > 0) enlist(w, job, freeHands(w, job, Math.min(2, want), true));
       continue;
     }
     // nobody: free hands take it over, so it isn't left half done
@@ -298,11 +358,8 @@ function groundToGrass(w: World, r: ClearRect) {
   const ty0 = Math.max(0, Math.floor(r.y0 / TILE));
   const tx1 = Math.min(MAP_W - 1, Math.floor(r.x1 / TILE));
   const ty1 = Math.floor(r.y1 / TILE);
-  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
-    const i = ty * MAP_W + tx;
-    if (i >= w.terrain.tiles.length) continue;
-    if (GROWN_OVER.has(w.terrain.tiles[i] as T)) w.terrain.setTile(tx, ty, T.Grass);
-  }
+  const built = builtTiles(w);
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) toGrass(w, tx, ty, built);
 }
 
 /** Save form: the box + its progress (the crew re-forms itself on load). */

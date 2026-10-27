@@ -6,6 +6,10 @@
 /*  "gobbled" cave people vanish in a dust cloud.                      */
 /* ------------------------------------------------------------------ */
 import { tendVines, vinesReady, wineThink } from "./vineyard";
+import { peopleCap } from "./population";
+import { crewWanted, fireThreats, PRI_LABEL } from "./firefight";
+import { mountedDamage, wearArmor } from "./gear";
+import { carrySidearm, repelHit, repelsHere } from "./territory";
 import { removeHuman } from "./death";
 import { occupy } from "./clanHolds";
 import { hasVault } from "./deepBuild";
@@ -18,7 +22,7 @@ import { slayerDamage, slayerDrillThink } from "./dragonRaid";
 import { saddleVolley, trainerThink, trainerWork } from "./riders";
 import { SHADE, shadeNear } from "./shade";
 import { sp } from "../data/species";
-import { addDino, dinoMaxHp, emote, findSpawnSpot, isBaby, setState, sizeOf } from "./dinos";
+import { addDino, dinoMaxHp, emote, isBaby, setState, sizeOf } from "./dinos";
 import { addHuman, go, homeArea, moveHuman, say, sourceFor } from "./humans";
 import { P } from "./particles";
 import { pick } from "./rng";
@@ -54,11 +58,15 @@ import {
 } from "./types";
 import type { World } from "./world";
 import { homeSpot, updateZones, type Zone } from "./zones";
+import { raidGathering, raidPackSpots } from "./settlement";
+import { scorpionWorks } from "./scorpionArmor";
 import { season } from "./seasons";
 import { DEFAULT_JOB_GUARD, bulkProtected, type JobGuard } from "./duties";
 
 /** Seconds between the projects Auto plans by itself (it used to be one a day). */
 const IMPROVE_EVERY = 75;
+/** widest stretch of water (tiles) one Megalodon gate spans */
+const MEGA_SPAN = 16;
 
 export { TOWER_STAGES, WALL_HP };
 
@@ -131,6 +139,8 @@ export class Tribe {
     if (!w.colony.footing(w, tx, ty)) return null;
     const ex = this.wallAt(tx, ty);
     if (ex) {
+      // the Megalodon gate's jaws stay as they are
+      if (ex.mega) return null;
       // drawing a stronger kind over a piece upgrades it (the old materials come back when it's swapped)
       const rank = { palisade: 0, stone: 1, polygon: 2 } as const;
       const goal = ex.upgrade ? ex.upTo ?? "stone" : ex.kind;
@@ -153,18 +163,31 @@ export class Tribe {
       }
       return null;
     }
-    // never wall over the cave mouth, the fire, the stockpile or another building
-    const cx = tx * TILE + TILE / 2;
-    const cy = ty * TILE + TILE / 2;
-    const c = w.camp;
-    if (Math.hypot(cx - c.caveX, cy - c.caveY) < 50 || Math.hypot(cx - c.pileX, cy - c.pileY) < 70 || Math.hypot(cx - c.x, cy - c.y) < 60) return null;
-    if (this.towers.some((o) => tx >= o.tx && tx <= o.tx + 1 && ty >= o.ty && ty <= o.ty + 1)) return null;
-    if (w.colony.occupied(w).has(ty * MAP_W + tx)) return null;
+    if (!this.wallSpotOk(w, tx, ty)) return null;
     const wl: Wall = { id: w.nextId(), tx, ty, kind, part, open: part === "gate", auto: true, hp: 0, built: 0, have: 0 };
     this.walls.push(wl);
     this.wallMap.set(ty * MAP_W + tx, wl);
     this.version++;
     return wl;
+  }
+
+  /** A tower or a Dragon Shield pylon on this tile: walls join onto both (drawn + auto-connected). */
+  wallAnchorAt(w: World, tx: number, ty: number): "tower" | "shield" | null {
+    if (this.towers.some((t) => tx >= t.tx && tx <= t.tx + 1 && ty >= t.ty && ty <= t.ty + 1 && t.hp > 0)) return "tower";
+    return w.colony.buildings.some((b) => b.kind === "dragonShield" && !b.lift && b.tx === tx && b.ty === ty) ? "shield" : null;
+  }
+
+  /**
+   * Can a new wall piece stand on this empty tile? Solid footing, not vetoed, and never over the cave
+   * mouth, the fire, the stockpile, a tower or another building.
+   */
+  wallSpotOk(w: World, tx: number, ty: number) {
+    if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1 || this.wallAt(tx, ty) || !w.colony.footing(w, tx, ty)) return false;
+    const x = (tx + 0.5) * TILE;
+    const y = (ty + 0.5) * TILE;
+    const c = w.camp;
+    if (this.vetoed("wall", x, y) || Math.hypot(x - c.caveX, y - c.caveY) < 50 || Math.hypot(x - c.pileX, y - c.pileY) < 70 || Math.hypot(x - c.x, y - c.y) < 60) return false;
+    return !this.towers.some((o) => tx >= o.tx && tx <= o.tx + 1 && ty >= o.ty && ty <= o.ty + 1) && !w.colony.occupied(w).has(ty * MAP_W + tx);
   }
 
   removeWall(wl: Wall) {
@@ -176,12 +199,7 @@ export class Tribe {
   /** Move one existing piece without changing its material or build progress. */
   relocateWall(w: World, wl: Wall, tx: number, ty: number, checkOnly = false) {
     if (tx === wl.tx && ty === wl.ty) return true;
-    if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1 || this.wallAt(tx, ty) || !w.colony.footing(w, tx, ty)) return false;
-    const x = (tx + 0.5) * TILE;
-    const y = (ty + 0.5) * TILE;
-    const c = w.camp;
-    if (this.vetoed("wall", x, y) || Math.hypot(x - c.caveX, y - c.caveY) < 50 || Math.hypot(x - c.pileX, y - c.pileY) < 70 || Math.hypot(x - c.x, y - c.y) < 60) return false;
-    if (this.towers.some((o) => tx >= o.tx && tx <= o.tx + 1 && ty >= o.ty && ty <= o.ty + 1) || w.colony.occupied(w).has(ty * MAP_W + tx)) return false;
+    if (!this.wallSpotOk(w, tx, ty)) return false;
     if (checkOnly) return true;
     for (const h of w.humans) if (h.level === 1 && Math.floor(h.x / TILE) === wl.tx && Math.floor(h.y / TILE) === wl.ty) { h.level = 0; h.wantTop = false; h.think = 0; }
     this.wallMap.delete(wl.ty * MAP_W + wl.tx);
@@ -199,26 +217,7 @@ export class Tribe {
    * Returns one flag per piece (true = that piece's new tile is fine).
    */
   wallMoveFits(w: World, pieces: Wall[], dtx: number, dty: number): boolean[] {
-    const moving = new Set(pieces);
-    const taken = new Set<number>();
-    const c = w.camp;
-    const occ = w.colony.occupied(w);
-    return pieces.map((wl) => {
-      const tx = wl.tx + dtx;
-      const ty = wl.ty + dty;
-      const i = ty * MAP_W + tx;
-      if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1 || taken.has(i)) return false;
-      taken.add(i);
-      const other = this.wallAt(tx, ty);
-      if (other && !moving.has(other)) return false;
-      if (!w.colony.footing(w, tx, ty)) return false;
-      const x = (tx + 0.5) * TILE;
-      const y = (ty + 0.5) * TILE;
-      if (Math.hypot(x - c.caveX, y - c.caveY) < 50 || Math.hypot(x - c.pileX, y - c.pileY) < 70 || Math.hypot(x - c.x, y - c.y) < 60) return false;
-      // (occupied counts every wall tile: one of the moving pieces' own tiles is fine to land on)
-      if (this.towers.some((o) => tx >= o.tx && tx <= o.tx + 1 && ty >= o.ty && ty <= o.ty + 1) || (occ.has(i) && !other)) return false;
-      return true;
-    });
+    return this.wallPlaceFits(w, pieces, pieces.map((wl) => ({ tx: wl.tx + dtx, ty: wl.ty + dty })));
   }
 
   /**
@@ -233,7 +232,7 @@ export class Tribe {
         const nx = wl.tx + ox + ax;
         const ny = wl.ty + oy + ay;
         const o = this.wallAt(nx, ny);
-        if ((o && !moving.has(o)) || this.towers.some((t) => nx >= t.tx && nx <= t.tx + 1 && ny >= t.ty && ny <= t.ty + 1)) n++;
+        if ((o && !moving.has(o)) || this.wallAnchorAt(w, nx, ny)) n++;
       }
       return n;
     };
@@ -259,8 +258,42 @@ export class Tribe {
   moveWalls(w: World, pieces: Wall[], dtx: number, dty: number): { from: { id: number; tx: number; ty: number }[] } | string {
     if (!pieces.length) return "Pick some wall pieces first.";
     if (!dtx && !dty) return { from: [] };
-    const fits = this.wallMoveFits(w, pieces, dtx, dty);
-    const bad = fits.filter((f) => !f).length;
+    return this.placeWalls(w, pieces, pieces.map((wl) => ({ tx: wl.tx + dtx, ty: wl.ty + dty })));
+  }
+
+  /**
+   * Can each piece go to its target tile? (checked as if the picked pieces had already left their own
+   * tiles, so a group can slide or turn over itself). One flag per piece.
+   */
+  wallPlaceFits(w: World, pieces: Wall[], to: { tx: number; ty: number }[]): boolean[] {
+    const moving = new Set(pieces);
+    const taken = new Set<number>();
+    const c = w.camp;
+    const occ = w.colony.occupied(w);
+    return pieces.map((_, k) => {
+      const { tx, ty } = to[k];
+      const i = ty * MAP_W + tx;
+      if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1 || taken.has(i)) return false;
+      taken.add(i);
+      const other = this.wallAt(tx, ty);
+      if (other && !moving.has(other)) return false;
+      if (!w.colony.footing(w, tx, ty)) return false;
+      const x = (tx + 0.5) * TILE;
+      const y = (ty + 0.5) * TILE;
+      if (Math.hypot(x - c.caveX, y - c.caveY) < 50 || Math.hypot(x - c.pileX, y - c.pileY) < 70 || Math.hypot(x - c.x, y - c.y) < 60) return false;
+      // (occupied counts every wall tile: one of the moving pieces' own tiles is fine to land on)
+      if (this.towers.some((o) => tx >= o.tx && tx <= o.tx + 1 && ty >= o.ty && ty <= o.ty + 1) || (occ.has(i) && !other)) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Put each picked piece on its own target tile at once (a slide or a turn). All or nothing.
+   * Scorpions mounted on a piece ride along with it; anyone up on a moved walkway steps down.
+   * Returns where they were (for undo), or why not.
+   */
+  placeWalls(w: World, pieces: Wall[], to: { tx: number; ty: number }[]): { from: { id: number; tx: number; ty: number }[] } | string {
+    const bad = this.wallPlaceFits(w, pieces, to).filter((f) => !f).length;
     if (bad) return `${bad} of the ${pieces.length} piece${pieces.length === 1 ? "" : "s"} would land on blocked ground (another wall, a building, water or a cliff).`;
     const from = pieces.map((wl) => ({ id: wl.id, tx: wl.tx, ty: wl.ty }));
     const moved = new Set(pieces.map((wl) => wl.ty * MAP_W + wl.tx));
@@ -269,32 +302,71 @@ export class Tribe {
       h.wantTop = false;
       h.think = 0;
     }
-    for (const s of w.colony.scorpions) {
-      if (s.mount !== "wall" || !moved.has(s.ty * MAP_W + s.tx)) continue;
-      s.tx += dtx;
-      s.ty += dty;
-      s.x += dtx * TILE;
-      s.y += dty * TILE;
-    }
+    pieces.forEach((wl, k) => {
+      const s = w.colony.scorpions.find((sc) => sc.mount === "wall" && sc.tx === wl.tx && sc.ty === wl.ty);
+      if (!s) return;
+      s.x += (to[k].tx - s.tx) * TILE;
+      s.y += (to[k].ty - s.ty) * TILE;
+      s.tx = to[k].tx;
+      s.ty = to[k].ty;
+    });
     for (const wl of pieces) this.wallMap.delete(wl.ty * MAP_W + wl.tx);
-    for (const wl of pieces) {
-      wl.tx += dtx;
-      wl.ty += dty;
+    pieces.forEach((wl, k) => {
+      wl.tx = to[k].tx;
+      wl.ty = to[k].ty;
       this.wallMap.set(wl.ty * MAP_W + wl.tx, wl);
-    }
+    });
     this.version++;
     w.colony.version++;
     w.nav.sync(w);
     return { from };
   }
 
-  /** Put moved pieces back where they were (undo). All or nothing. */
+  /**
+   * Turn a group of pieces a quarter turn (clockwise, or back) round its middle, then snap it a tile
+   * any way if that joins it onto more walls / towers / shields. Returns where they were, or why not.
+   */
+  rotateWalls(w: World, pieces: Wall[], clockwise = true): { from: { id: number; tx: number; ty: number }[] } | string {
+    if (!pieces.length) return "Pick some wall pieces first.";
+    const cx = Math.round(pieces.reduce((n, wl) => n + wl.tx, 0) / pieces.length);
+    const cy = Math.round(pieces.reduce((n, wl) => n + wl.ty, 0) / pieces.length);
+    const turned = pieces.map((wl) => {
+      const dx = wl.tx - cx;
+      const dy = wl.ty - cy;
+      return clockwise ? { tx: cx - dy, ty: cy + dx } : { tx: cx + dy, ty: cy - dx };
+    });
+    const moving = new Set(pieces);
+    const joins = (ox: number, oy: number) => {
+      let n = 0;
+      for (const p of turned) for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = p.tx + ox + ax;
+        const ny = p.ty + oy + ay;
+        const o = this.wallAt(nx, ny);
+        if ((o && !moving.has(o)) || this.wallAnchorAt(w, nx, ny)) n++;
+      }
+      return n;
+    };
+    let best: { tx: number; ty: number }[] | null = null;
+    let bs = -1;
+    for (const [ox, oy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const to = turned.map((p) => ({ tx: p.tx + ox, ty: p.ty + oy }));
+      if (!this.wallPlaceFits(w, pieces, to).every(Boolean)) continue;
+      // turned in place unless a nudge joins it onto more
+      const s = joins(ox, oy) + (ox || oy ? 0 : 0.5);
+      if (s > bs) {
+        bs = s;
+        best = to;
+      }
+    }
+    if (!best) return "There's no room to turn it there (another wall, a building, water or a cliff is in the way).";
+    return this.placeWalls(w, pieces, best);
+  }
+
+  /** Put moved pieces back where they were (undo: a slide or a turn). All or nothing. */
   restoreWalls(w: World, from: { id: number; tx: number; ty: number }[]): string | null {
-    const pieces = from.map((f) => this.walls.find((wl) => wl.id === f.id)).filter((wl): wl is Wall => !!wl);
-    if (!pieces.length) return "Those wall pieces are gone.";
-    // every piece moved by the same amount, so one offset undoes the lot
-    const f0 = from.find((f) => f.id === pieces[0].id)!;
-    const r = this.moveWalls(w, pieces, f0.tx - pieces[0].tx, f0.ty - pieces[0].ty);
+    const back = from.map((f) => ({ wl: this.walls.find((wl) => wl.id === f.id), tx: f.tx, ty: f.ty })).filter((p): p is { wl: Wall; tx: number; ty: number } => !!p.wl);
+    if (!back.length) return "Those wall pieces are gone.";
+    const r = this.placeWalls(w, back.map((p) => p.wl), back.map((p) => ({ tx: p.tx, ty: p.ty })));
     return typeof r === "string" ? `Can't undo: ${r}` : null;
   }
 
@@ -305,7 +377,7 @@ export class Tribe {
   planBoneGate(w: World, tx: number, ty: number, kind: WallKind) {
     const ex = this.wallAt(tx, ty);
     if (ex) {
-      if (ex.bone || ex.boneUp || ex.part === "stairs") return null;
+      if (ex.bone || ex.boneUp || ex.mega || ex.part === "stairs") return null;
       if (ex.built < 1) {
         ex.part = "gate";
         ex.bone = true;
@@ -318,6 +390,70 @@ export class Tribe {
     const wl = this.addWall(w, tx, ty, kind, "gate");
     if (wl) wl.bone = true;
     return wl;
+  }
+
+  /**
+   * Plan a Megalodon water gate: the whole stretch of water through the tapped tile, bank to bank
+   * (east-west, or north-south when that's the narrower way over), becomes one giant shark mouth.
+   * Shut by default: only our people cross (along the jaw); dinos + everyone else stay out.
+   */
+  planMegaGate(w: World, tx: number, ty: number, kind: WallKind): Wall[] | string {
+    const wet = (x: number, y: number) => x >= 1 && y >= 1 && x < MAP_W - 1 && y < MAP_H - 1 && isWaterTile(w.terrain.tiles[y * MAP_W + x] as T);
+    if (!wet(tx, ty)) return "Tap the water between your walls: the shark mouth spans it bank to bank.";
+    const span = (dx: number, dy: number) => {
+      const out: [number, number][] = [[tx, ty]];
+      for (const s of [-1, 1]) {
+        let x = tx + dx * s;
+        let y = ty + dy * s;
+        while (wet(x, y)) {
+          out.push([x, y]);
+          if (out.length > MEGA_SPAN) return null;
+          x += dx * s;
+          y += dy * s;
+        }
+        // it has to end on a bank, not the map edge
+        if (x < 1 || y < 1 || x >= MAP_W - 1 || y >= MAP_H - 1) return null;
+      }
+      return out;
+    };
+    const opts = [span(1, 0), span(0, 1)].filter((s): s is [number, number][] => !!s);
+    if (!opts.length) return `Too wide: a Megalodon gate spans up to ${MEGA_SPAN} tiles of water.`;
+    const tiles = opts.sort((a, b) => a.length - b.length)[0];
+    const c = w.camp;
+    const out: Wall[] = [];
+    for (const [x, y] of tiles) {
+      if (this.towers.some((o) => x >= o.tx && x <= o.tx + 1 && y >= o.ty && y <= o.ty + 1)) return "A tower stands in the way of the jaws.";
+      if (Math.hypot((x + 0.5) * TILE - c.x, (y + 0.5) * TILE - c.y) > 1600) return "Build closer to camp so the tribe can reach it.";
+    }
+    for (const [x, y] of tiles) {
+      const ex = this.wallAt(x, y);
+      if (ex) {
+        if (ex.mega) continue;
+        Object.assign(ex, { part: "gate", mega: true, bone: false, boneUp: false, upgrade: false, built: 0, hp: 0, have: 0, open: false, auto: false });
+        out.push(ex);
+        continue;
+      }
+      const wl: Wall = { id: w.nextId(), tx: x, ty: y, kind, part: "gate", open: false, auto: false, hp: 0, built: 0, have: 0, mega: true };
+      this.walls.push(wl);
+      this.wallMap.set(y * MAP_W + x, wl);
+      out.push(wl);
+    }
+    if (!out.length) return "That's already a Megalodon gate.";
+    this.version++;
+    return out;
+  }
+
+  /** Every tile of the Megalodon gate this piece belongs to (the straight run of mega gate tiles through it). */
+  megaSpan(wl: Wall): Wall[] {
+    const out = [wl];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      let o = this.wallAt(wl.tx + dx, wl.ty + dy);
+      for (let k = 2; o?.mega; k++) {
+        out.push(o);
+        o = this.wallAt(wl.tx + dx * k, wl.ty + dy * k);
+      }
+    }
+    return out;
   }
 
   /** Every wall ring gets one grand entrance: its front gate (or a straight stretch) becomes a bone gate. */
@@ -348,7 +484,7 @@ export class Tribe {
       let bs = -Infinity;
       for (const g of group) {
         const f = flat(g);
-        if (g.part !== "gate" && !f) continue;
+        if (g.mega || (g.part !== "gate" && !f)) continue;
         const s = (g.part === "gate" ? 10000 : 0) + (f ? 1000 : 0) + g.ty;
         if (s > bs) {
           bs = s;
@@ -465,8 +601,10 @@ export class Tribe {
     if (h.child || h.stranger) return null;
     if (h.gear.weapon && WEAPON_BY_ID[h.gear.weapon]) {
       const equipped = WEAPON_BY_ID[h.gear.weapon];
-      if (equipped.proj !== "beam" || (w.civ.energy >= 1 && (equipped.id !== "nightSidearm" || w.shifts.pyramid(w)))) return equipped;
+      if (equipped.proj !== "beam" || equipped.battery || (w.civ.energy >= 1 && (equipped.id !== "nightSidearm" || w.shifts.pyramid(w)))) return equipped;
     }
+    // everyone's sidearm (a shock stick or a ray gun: its own cell, no grid power)
+    if (h.gear.sidearm && WEAPON_BY_ID[h.gear.sidearm]) return WEAPON_BY_ID[h.gear.sidearm];
     // everyone can make the basic version of what the tribe has invented
     const l = w.camp.learned;
     if (l.has("crossbow")) return WEAPON_BY_ID[LEGACY.crossbow];
@@ -657,6 +795,9 @@ export class Tribe {
 
   private assignJobs(w: World) {
     const c = w.camp;
+    // builders with nothing left to build go back to Auto (they're on the list below straight away)
+    const work = w.buildSites().some((s) => !s.locked) || !!c.activeShelter(w);
+    for (const h of w.humans) if (h.role === "builder") builderDone(w, h, work);
     // people down the mine don't fill surface jobs
     // protected people on Auto (Dino Riders) keep their current pick first: the balancer reshuffles everyone else (duties.ts)
     const autos = w.humans.filter((h) => !h.child && !h.under && h.role === "auto").sort((a, b) => (bulkProtected(w, b) ? 1 : 0) - (bulkProtected(w, a) ? 1 : 0) || a.id - b.id);
@@ -685,6 +826,12 @@ export class Tribe {
     const trainers = adults >= 4 ? trainerWork(w) : 0;
     if (trainers) quota.push(["trainer", trainers]);
     if (w.colony.current(w)) quota.push(["smith", 1]);
+    // firefighters: one on standby once the tribe knows how (a gatherer between fires), more while something burns
+    if (c.learned.has("firefighting") && adults >= 5) {
+      const fires = fireThreats(w);
+      const want = fires.length ? Math.max(1, Math.min(4, crewWanted(w, fires))) : adults >= 10 ? 1 : 0;
+      if (want) quota[fires.length ? "unshift" : "push"](["firefighter", Math.min(want, Math.max(1, autos.length - 2))]);
+    }
     quota.push(...w.civ.quotas(w, adults));
     const free: Human[] = [];
     const counts = new Map<Role, number>();
@@ -707,6 +854,8 @@ export class Tribe {
     for (const h of w.humans) if (!h.stranger) {
       w.colony.dress(w, h);
       w.colony.helm(w, h);
+      wearArmor(w, h);
+      carrySidearm(w, h);
     }
     // fighters grab the best gear in the armory (hunters like bows, guards like spears + shields)
     for (const h of w.humans) {
@@ -727,7 +876,8 @@ export class Tribe {
     // scorpions need crews when danger is near: the closest guards take them (powered ones don't)
     if (!w.colony.dronesPowered(w) && (threat || w.dinos.some((d) => this.hostile(w, d)) || w.rivals.threatNear(w, w.camp.x, w.camp.y, 900))) {
       for (const s of w.colony.scorpions) {
-        if (s.built < 1 || s.crew) continue;
+        // (a knocked-out one needs builders, not a crew)
+        if (s.built < 1 || s.crew || !scorpionWorks(w, s)) continue;
         if (!w.dinos.some((d) => this.hostile(w, d) && Math.hypot(d.x - s.x, d.y - s.y) < 700)
           && !w.rivals.threatNear(w, s.x, s.y, 700)
           && !w.dragons.list.some((d) => d.state !== "leave" && Math.hypot(d.x - s.x, d.y - s.y) < 850)) continue;
@@ -770,26 +920,16 @@ export class Tribe {
       } else if (!danger && !g.open) this.setGate(g, true);
     }
     // the player's manual choice lasts until the next raid ends
-    if (!this.raid) for (const g of this.walls) if (g.part === "gate" && !g.auto && w.elapsed % 120 < 0.1) g.auto = true;
+    if (!this.raid) for (const g of this.walls) if (g.part === "gate" && !g.auto && !g.mega && w.elapsed % 120 < 0.1) g.auto = true;
   }
 
   private updateFireAlarm(w: World) {
-    const c = w.camp;
-    const R = CAMP_LEVELS[this.level].radius + 260;
-    let best: { x: number; y: number } | null = null;
-    let bd = R;
-    w.fire.active.forEach((i) => {
-      const fx = (i % MAP_W) * TILE + TILE / 2;
-      const fy = Math.floor(i / MAP_W) * TILE + TILE / 2;
-      const d = Math.hypot(fx - c.x, fy - c.y);
-      if (d < bd) {
-        bd = d;
-        best = { x: fx, y: fy };
-      }
-    });
-    if (best && !this.fireAlarm) {
-      const b = best as { x: number; y: number };
-      if (w.camp.learned.has("firefighting")) w.toast("🪣", "Fire near camp! Everyone grab water — bucket brigade!", b.x, b.y);
+    // the worst fire anywhere in the settlement's protection area (firefight.ts), not just by the cave
+    const top = fireThreats(w)[0];
+    const best = top ? { x: top.x, y: top.y } : null;
+    if (top && !this.fireAlarm) {
+      const b = top;
+      if (w.camp.learned.has("firefighting")) w.toast("🧑‍🚒", `Fire in the camp (${PRI_LABEL[top.pri]})! Firefighters are on their way${top.pri <= 3 ? ", everyone nearby grab water" : ""}.`, b.x, b.y);
       else w.toast("🔥", "Fire near camp and nobody knows how to fight it! Invent 🪣 Fire fighting in the camp's 💡 Invent tab.", b.x, b.y);
       w.sfx("yelp", b.x, b.y, 0.6);
     }
@@ -809,14 +949,17 @@ export class Tribe {
 
   /** Throw / shoot at a dino or a dragon. */
   shoot(w: World, h: Human, d: Dino | Dragon | Brute, wp: Weapon, bonus = 0) {
-    if (wp.proj === "beam" && !w.civ.spend(wp.id === "nightSidearm" ? 1.5 : 2)) return;
+    if (wp.proj === "beam" && !wp.battery && !w.civ.spend(wp.id === "nightSidearm" ? 1.5 : 2)) return;
+    // a sidearm shot at a stray animal inside the settlement drives it out (territory.ts)
+    const repel = d.kind === "dino" && repelsHere(w, h, d, !!wp.sidearm);
     h.dir = d.x > h.x ? 1 : -1;
     h.cd = wp.cd * (0.85 + w.rng() * 0.3);
     if (wp.melee) {
       // a swing: hits whatever is in reach
       w.sfx("whoosh", h.x, h.y, 0.5, 1.3);
-      const mul = w.civ.dmgMul(w, h, wp.tier, wp.proj);
-      if (d.kind === "dino") hitDino(w, d, wp.dmg * mul, h.x, h.y);
+      const mul = w.civ.dmgMul(w, h, wp.tier, wp.proj) * mountedDamage(w, h);
+      if (d.kind === "dino" && repel) repelHit(w, d, h.x, h.y);
+      else if (d.kind === "dino") hitDino(w, d, wp.dmg * mul, h.x, h.y);
       else if (d.kind === "brute") w.rivals.hit(w, d, wp.dmg * mul, h.x, h.y, false, "melee");
       else w.dragons.hit(w, d, wp.dmg * 0.5 * mul * slayerDamage(h));
       return;
@@ -841,8 +984,9 @@ export class Tribe {
       dur: flight,
       kind: wp.proj ?? "spear",
       target: d.id,
-      dmg: wp.dmg * w.civ.dmgMul(w, h, wp.tier, wp.proj) * (d.kind === "dragon" ? slayerDamage(h) : 1),
+      dmg: wp.dmg * w.civ.dmgMul(w, h, wp.tier, wp.proj) * mountedDamage(w, h) * (d.kind === "dragon" ? slayerDamage(h) : 1),
       hit: false,
+      ...(repel ? { repel: true } : {}),
     });
     w.sfx(wp.kind === "spear" ? "whoosh" : "twang", h.x, h.y, 0.5);
   }
@@ -868,7 +1012,8 @@ export class Tribe {
         const d = w.dinoById(p.target);
         const dr = d ? null : w.dragons.byId(p.target);
         if (d && Math.hypot(d.x - p.x, d.y - p.y) < sizeOf(d) * 0.45 + (p.kind === "scorpion" ? 24 : 14)) {
-          hitDino(w, d, p.dmg, p.x - p.vx * 0.1, p.y - p.vy * 0.1);
+          if (p.repel) repelHit(w, d, p.x - p.vx * 0.1, p.y - p.vy * 0.1);
+          else hitDino(w, d, p.dmg, p.x - p.vx * 0.1, p.y - p.vy * 0.1);
           if (p.kind === "scorpion") w.particles.spawn(P.Ring, d.x, d.y, { z: sizeOf(d) * 0.4, size: 12, max: 0.5, color: "rgba(255,230,180,0.9)" });
           if (p.kind === "beam") {
             // a burst of light where the bolt lands
@@ -918,26 +1063,24 @@ export class Tribe {
       label = "A T. rex war party";
     }
     if (this.danger === "wild") pack.push("raptor", "raptor");
-    // come from a random side that has room to walk
-    let from: { x: number; y: number } | null = null;
-    for (let k = 0; k < 30 && !from; k++) {
-      const a = w.rng() * Math.PI * 2;
-      if (Math.sin(a) < -0.3) continue; // not through the cliffs
-      const x = c.x + Math.cos(a) * 1300;
-      const y = c.y + Math.sin(a) * 1000;
-      from = findSpawnSpot(w, sp("raptor"), x, y, 200);
-    }
+    // they gather well outside the whole settlement (every zone, wall + building, not just the cave),
+    // on open walkable ground away from people, lava, water + other peoples' camps (settlement.ts)
+    const from = raidGathering(w, pack[0]);
     if (!from) return false;
     const ids: number[] = [];
+    const spots = raidPackSpots(w, pack, from);
     for (let i = 0; i < pack.length; i++) {
-      const spot = findSpawnSpot(w, sp(pack[i]), from.x, from.y, 160);
-      if (!spot) continue;
+      const spot = spots[i];
+      if (!Number.isFinite(spot.x)) continue;
       const tier = this.rollTier(w, i === 0);
       const d = addDino(w, pack[i], spot.x, spot.y, { raider: true, tier, hunger: 0.8, thirst: 0, homeX: spot.x, homeY: spot.y });
       setState(d, "idle", d.x, d.y);
+      // facing the camp, as a pack
+      d.dir = c.x > d.x ? 1 : -1;
       d.think = 10;
       ids.push(d.id);
     }
+    if (!ids.length) return false;
     const alpha = ids.some((id) => (w.dinoById(id)?.tier ?? 0) >= 2);
     this.raid = { phase: "warn", t: 0, ids, fromX: from.x, fromY: from.y, breached: false, label };
     w.sfx("drums", c.x, c.y, 1.2);
@@ -973,6 +1116,20 @@ export class Tribe {
     if (r.by === "brute") return this.updateBruteRaid(w, r);
     const alive = r.ids.map((id) => w.dinoById(id)).filter((d): d is Dino => !!d && d.raider);
     if (r.phase === "warn") {
+      // the pack closes in together (seen coming, still well outside), the leader in front
+      const lead = alive[0];
+      if (lead && r.t > 1.5) {
+        const a = Math.atan2(w.camp.y - r.fromY, w.camp.x - r.fromX);
+        const adv = Math.min(1, (r.t - 1.5) / 7.5) * 260;
+        alive.forEach((d, i) => {
+          if (d.state !== "idle" && d.state !== "wander") return;
+          const side = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 34;
+          const gx = r.fromX + Math.cos(a) * (adv - (i ? 40 : 0)) - Math.sin(a) * side;
+          const gy = r.fromY + Math.sin(a) * (adv - (i ? 40 : 0)) + Math.cos(a) * side;
+          if (Math.hypot(d.tx - gx, d.ty - gy) > 30) setState(d, "wander", gx, gy);
+          d.dir = Math.cos(a) >= 0 ? 1 : -1;
+        });
+      }
       if (r.t > 9) {
         r.phase = "attack";
         r.t = 0;
@@ -1054,7 +1211,7 @@ export class Tribe {
       this.birthT = 75 + w.rng() * 40;
       const people = w.humans.length;
       const adults = this.adults(w).length;
-      if (adults >= 2 && people < this.capacity(w) && this.foodTotal(w) >= Math.max(4, people * 0.8) && people < MAX_PEOPLE) {
+      if (adults >= 2 && people < this.capacity(w) && this.foodTotal(w) >= Math.max(4, people * 0.8) && people < peopleCap(w)) {
         // the feast feeds the new arrival
         let pay = 3;
         for (const r of ["cooked", "crop", "fish", "berries"] as Resource[]) {
@@ -1168,6 +1325,59 @@ export class Tribe {
     this.towers.push(tw);
     this.version++;
     return tw;
+  }
+
+  /** Where this tower would stand if moved to (x, y): checked as if it had already left its own tiles. */
+  towerMoveSpot(w: World, t: Tower, x: number, y: number) {
+    const i = this.towers.indexOf(t);
+    if (i >= 0) this.towers.splice(i, 1);
+    const spot = this.vetoed("tower", x, y) ? null : this.towerSpot(w, x, y);
+    if (i >= 0) this.towers.splice(i, 0, t);
+    return spot;
+  }
+
+  /**
+   * Move a tower (built or not) to (x, y), with whatever is on it: its Scorpion rides along on top
+   * (its crew climbs down first), anyone up on the platform steps down, wall pieces where it lands
+   * give way to it. Returns false when it doesn't fit there.
+   */
+  relocateTower(w: World, t: Tower, x: number, y: number, checkOnly = false) {
+    const spot = this.towerMoveSpot(w, t, x, y);
+    if (!spot) return false;
+    if (spot.tx === t.tx && spot.ty === t.ty) return true;
+    if (checkOnly) return true;
+    const dtx = spot.tx - t.tx;
+    const dty = spot.ty - t.ty;
+    const on = (tx: number, ty: number) => tx >= t.tx && tx <= t.tx + 1 && ty >= t.ty && ty <= t.ty + 1;
+    for (const h of w.humans) if (h.level === 1 && on(Math.floor(h.x / TILE), Math.floor(h.y / TILE))) {
+      h.level = 0;
+      h.wantTop = false;
+      h.think = 0;
+    }
+    for (const s of w.colony.scorpions) {
+      if (s.mount !== "tower" || !on(s.tx, s.ty)) continue;
+      if (s.crew) {
+        const h = w.humans.find((o) => o.id === s.crew);
+        if (h && h.state === "operate") h.state = "idle";
+        s.crew = 0;
+      }
+      s.tx += dtx;
+      s.ty += dty;
+      s.x += dtx * TILE;
+      s.y += dty * TILE;
+    }
+    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+      const wl = this.wallAt(spot.tx + dx, spot.ty + dy);
+      if (wl) this.removeWall(wl);
+    }
+    t.tx = spot.tx;
+    t.ty = spot.ty;
+    t.x = (spot.tx + 1) * TILE;
+    t.y = (spot.ty + 2) * TILE - 4;
+    this.version++;
+    w.colony.version++;
+    w.nav.sync(w);
+    return true;
   }
 
   /** Queue a finished wooden tower to be rebuilt in stone. Returns false if it can't be. */
@@ -1555,6 +1765,14 @@ export class Tribe {
     }
     if (this.planZone(w)) return;
     this.planWinterGear(w);
+    for (const kind of ["tannery", "workshop", "blacksmith"] as const) {
+      if (!c.learned.has(BUILDINGS[kind].tech!) || w.colony.buildings.some((b) => b.kind === kind)) continue;
+      const placed = this.placeNear(w, kind, c.x, c.y, [150, 205, 265]);
+      if (placed) {
+        w.toast(BUILDINGS[kind].icon, `Auto planned a ${BUILDINGS[kind].name.toLowerCase()} for camp equipment.`, placed.x, placed.y);
+        return;
+      }
+    }
     if (this.planShade(w, adults)) return;
     if (this.planAnimals(w)) return;
     if (this.planDragons(w)) return;
@@ -1687,7 +1905,7 @@ export class Tribe {
 
   serialize() {
     return {
-      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0), wl.id] as const),
+      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0) | (wl.mega ? 4 : 0), wl.id] as const),
       farms: this.farms.map((f) => [Math.round(f.x), Math.round(f.y), Math.round(f.growth * 100) / 100, f.planted ? 1 : 0, f.crop ?? "wheat"] as const),
       towers: this.towers.map((t) => [Math.round(t.x), Math.round(t.y), t.stage, Math.max(0, t.have), t.tx, t.ty, Math.round(t.hp), (t.stone ? 1 : 0) | (t.up ? 2 : 0), t.id] as const),
       level: this.level,
@@ -1714,6 +1932,10 @@ export class Tribe {
       const bone = row[8] ?? 0;
       if (bone & 1) wl.bone = true;
       if (bone & 2) wl.boneUp = true;
+      if (bone & 4) {
+        wl.mega = true;
+        wl.auto = false;
+      }
       this.walls.push(wl);
       this.wallMap.set(ty * MAP_W + tx, wl);
     }
@@ -2454,6 +2676,39 @@ export function roleAct(w: World, h: Human, dt: number): boolean {
       if (wl.hp >= wallMaxHp(wl)) go(h, "idle", h.x, h.y);
       return true;
     }
+  }
+  return false;
+}
+
+/** When each builder ran out of things to build (not saved). */
+const builderIdle = new WeakMap<Human, number>();
+/** Seconds with nothing left to build before a builder goes back to Auto. */
+const BUILDER_DONE_AFTER = 6;
+
+/**
+ * A builder with no build job left (every site built; only ones waiting on research remain) goes back to
+ * Auto once they are free (not on an order or a task), so they help wherever the
+ * tribe needs them. A site that's only short of materials still counts as work: they keep fetching.
+ */
+function builderDone(w: World, h: Human, work: boolean): boolean {
+  if (h.order || h.taskId || h.child) return false;
+  if (work) {
+    builderIdle.delete(h);
+    return false;
+  }
+  const since = builderIdle.get(h);
+  if (since === undefined) {
+    builderIdle.set(h, w.elapsed);
+    return false;
+  }
+  if (w.elapsed - since < BUILDER_DONE_AFTER) return false;
+  builderIdle.delete(h);
+  h.role = "auto";
+  h.think = 0;
+  say(h, "All built! Back to Auto.");
+  if (!w.flags.has("buildersToAuto")) {
+    w.flags.add("buildersToAuto");
+    w.toast("🔨", "Everything is built, so the builders went back to ✨ Auto. They pick up building again whenever a new job is placed.", h.x, h.y);
   }
   return false;
 }

@@ -38,6 +38,8 @@ import { broodStep } from "./dragonBrood";
 import { fightBack, giveUpAt, rageTick, retaliateStep, youngLost } from "./dragonRage";
 import { hitScorpionsAt, sideOfDragon } from "./factions";
 import { repelStep, shieldsTick } from "./dragonShield";
+import { perilTick } from "./dragonPeril";
+import { duelStep, feudTick } from "./yetiFeud";
 
 const d0 = (dr: Dragon) => Math.hypot(dr.tx - dr.x, dr.ty - dr.y);
 
@@ -194,6 +196,10 @@ export class Dragons {
       else this.step(w, dr, dt, calm);
     }
     this.fallsUpdate(w, dt);
+    // nature: an eruption's fire column, molten lava underfoot (dragonPeril.ts)
+    perilTick(w, dt);
+    // Yetis and dragons: fights to the death (yetiFeud.ts)
+    feudTick(w, dt);
     // Dragon Shields: charge near hostile dragons, rattle the ones in a live field (dragonShield.ts)
     shieldsTick(w, dt);
     nestsUpdate(w, dt);
@@ -235,6 +241,8 @@ export class Dragons {
     dr.breath = Math.max(0, dr.breath - dt * 2);
     // rattled by a Dragon Shield's hum: it flies out of the field and away (dragonShield.ts)
     if (repelStep(w, dr, dt)) return;
+    // locked in a fight with a Yeti (yetiFeud.ts)
+    if (duelStep(w, dr, dt)) return;
     dr.oddsT = Math.max(0, (dr.oddsT ?? 0) - dt);
     // left alone for a bit, a wild dragon's wounds close up
     dr.calmT = (dr.calmT ?? 99) + dt;
@@ -548,7 +556,7 @@ export class Dragons {
     if (dr.fury && w.rng() < 0.3) w.particles.burst(P.Ember, fx, fy, 6, 50, { z: 4, vz: 40, size: 4, max: 0.9, color: "#ff8a2a" });
     for (const s of w.shelters) if (Math.hypot(s.x - fx, s.y - fy) < 60 && s.stage > 0) s.hp = Math.max(0, s.hp - (s.tier >= 4 ? 0.01 : s.tier >= 3 ? 0.04 : 0.12) * (dr.fury ? 4 : 1));
     for (const b of w.colony.buildings) if (Math.hypot(b.x - fx, b.y - fy) < 60) b.hp -= b.kind === "blacksmith" ? 4 : 20;
-    hitScorpionsAt(w, fx, fy, 50, 15, sideOfDragon(dr));
+    hitScorpionsAt(w, fx, fy, 50, 15, sideOfDragon(dr), "breath");
   }
 
   /** A bolt or arrow struck a dragon. */
@@ -585,22 +593,7 @@ export class Dragons {
     w.sfx("thunk", dr.x, dr.y, 0.9, 0.7);
     if (dr.hp <= 0 && dr.young) youngLost(w, dr);
     if (dr.hp <= 0) {
-      // cartoon crash-landing: a poof of smoke, a feast, and a shiny scale
-      w.particles.burst(P.Poof, dr.x, dr.y, 18, 90, { size: 18, max: 1.4, color: "rgba(220,210,200,0.95)" });
-      w.addItem("meat", dr.x, dr.y, { amount: 4 });
-      w.camp.stock.gold += 3;
-      // a wild one leaves just its bones lying where it fell (only our own dragons get a shrine)
-      const piles = dr.young ? 2 : 5;
-      for (let i = 0; i < piles; i++) {
-        const a = (i / piles) * Math.PI * 2 + this.rng();
-        w.addItem("bones", dr.x + Math.cos(a) * 30, dr.y + Math.sin(a) * 16, { amount: dr.young ? 1 : 2 });
-      }
-      w.toast("🏆", `${dr.name} crashed down and fell! The tribe found 3 gold dragon scales, and its bones lie where it fell.`, dr.x, dr.y);
-      w.discover("dragonSlayer", dr.x, dr.y);
-      w.celebrate("Hooray!");
-      this.list.splice(this.list.indexOf(dr), 1);
-      if (dr.nest) nestLost(w, dr);
-      w.events.push({ type: "removed", id: dr.id });
+      this.fall(w, dr, true);
     } else if (dr.sandTribe) {
       // a Sand Dragon: its tribe's brain picks its fights (sandFolk.ts)
     } else if (fightBack(w, dr)) {
@@ -613,6 +606,34 @@ export class Dragons {
         dr.ty = dr.y - 6000;
       }
     }
+  }
+
+  /**
+   * A wild (or Sand People's) dragon is dead: it crashes down, leaving meat, its bones and (brought
+   * down by the tribe) gold scales. Also how nature kills one (dragonPeril.ts: lightning, meteors,
+   * volcanoes), with `byUs` false: no trophy then.
+   */
+  fall(w: World, dr: Dragon, byUs = false) {
+    if (!this.list.includes(dr)) return;
+    // cartoon crash-landing: a poof of smoke, a feast, its bones (and a shiny scale when the tribe brought it down)
+    w.particles.burst(P.Poof, dr.x, dr.y, 18, 90, { size: 18, max: 1.4, color: "rgba(220,210,200,0.95)" });
+    w.addItem("meat", dr.x, dr.y, { amount: 4 });
+    // a wild one leaves just its bones lying where it fell (only our own dragons get a shrine)
+    const piles = dr.young ? 2 : 5;
+    for (let i = 0; i < piles; i++) {
+      const a = (i / piles) * Math.PI * 2 + this.rng();
+      w.addItem("bones", dr.x + Math.cos(a) * 30, dr.y + Math.sin(a) * 16, { amount: dr.young ? 1 : 2 });
+    }
+    if (byUs) {
+      w.camp.stock.gold += 3;
+      w.toast("🏆", `${dr.name} crashed down and fell! The tribe found 3 gold dragon scales, and its bones lie where it fell.`, dr.x, dr.y);
+      w.discover("dragonSlayer", dr.x, dr.y);
+      w.celebrate("Hooray!");
+    }
+    // its rider (a Sand Dragon Rider) falls with it: sandFolk.ts notices the dragon is gone
+    this.list.splice(this.list.indexOf(dr), 1);
+    if (dr.nest) nestLost(w, dr);
+    w.events.push({ type: "removed", id: dr.id });
   }
 
   /** How much the town can throw at a dragon here: Scorpions, our war dragons, armed people. */

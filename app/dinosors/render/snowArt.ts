@@ -164,3 +164,64 @@ export class PeaksFx {
     }
   }
 }
+
+/**
+ * A Yeti's hanging tree (origin = its foot on the snow): a dead, frost-white tree, bare branches with
+ * icicles, one long bough reaching out to the right with a frayed rope tied round it.
+ */
+export function drawHangTree(c: CanvasRenderingContext2D, t: number, inUse: boolean) {
+  c.save();
+  c.fillStyle = "rgba(60,80,110,0.22)";
+  c.beginPath();
+  c.ellipse(0, 1, 18, 5, 0, 0, Math.PI * 2);
+  c.fill();
+  c.lineCap = "round";
+  c.strokeStyle = "#4b4038";
+  c.lineWidth = 7;
+  c.beginPath();
+  c.moveTo(0, 0);
+  c.quadraticCurveTo(-3, -40, 2, -82);
+  c.stroke();
+  c.lineWidth = 4;
+  c.beginPath();
+  // the hanging bough + the bare branches
+  c.moveTo(1, -70);
+  c.quadraticCurveTo(10, -80, 26, -76);
+  c.moveTo(0, -56);
+  c.lineTo(-16, -70);
+  c.moveTo(2, -82);
+  c.lineTo(-6, -96);
+  c.moveTo(2, -84);
+  c.lineTo(12, -94);
+  c.stroke();
+  // frost along the top of every branch
+  c.strokeStyle = "rgba(245,250,255,0.9)";
+  c.lineWidth = 2;
+  c.beginPath();
+  c.moveTo(3, -72);
+  c.quadraticCurveTo(11, -82, 26, -78);
+  c.moveTo(-1, -58);
+  c.lineTo(-16, -72);
+  c.moveTo(2, -84);
+  c.lineTo(-6, -98);
+  c.stroke();
+  c.fillStyle = "rgba(220,240,255,0.9)";
+  for (const [x, y] of [[8, -75], [16, -77], [22, -77], [-9, -64]] as const) {
+    c.beginPath();
+    c.moveTo(x - 1.5, y);
+    c.lineTo(x, y + 6 + Math.sin(t + x) * 0.5);
+    c.lineTo(x + 1.5, y);
+    c.closePath();
+    c.fill();
+  }
+  // the rope knotted round the bough (hanging loose when nobody's on it)
+  if (!inUse) {
+    c.strokeStyle = "#a8875a";
+    c.lineWidth = 1.4;
+    c.beginPath();
+    c.moveTo(20, -77);
+    c.quadraticCurveTo(21 + Math.sin(t * 1.3) * 2, -64, 20, -52);
+    c.stroke();
+  }
+  c.restore();
+}

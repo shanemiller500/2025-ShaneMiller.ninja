@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { trackEvent } from "@/utils/mixpanel";
 import { Modal } from "@/components/ui/modal";
 import { DISCOVERY_BY_ID } from "./data/facts";
@@ -120,7 +121,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
     // pop-ups only if they've been switched on (they collect in the 🔔 list either way)
     if (!popupsRef.current) return;
     // only the newest evolution update is worth keeping on screen
-    setToasts((list) => [...list.filter((x) => x.text !== t.text && !(t.icon === "🧬" && x.icon === "🧬")).slice(-2), { ...t, id }]);
+    setToasts([{ ...t, id }]);
   }, []);
   useEffect(() => {
     popupsRef.current = settings.popups;
@@ -161,9 +162,21 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           pushToast({ icon: "🔓", text: `New in the toy box: ${sp(e.species).nick}!` });
           break;
         case "openCamp":
+          setPanel(null);
+          setCivOpen(false);
+          setEvoOpen(false);
+          setShiftsOpen(false);
+          setTrainOpen(false);
+          setMobileMapOpen(false);
           setCampOpen(true);
           break;
         case "openCiv":
+          setPanel(null);
+          setCampOpen(false);
+          setEvoOpen(false);
+          setShiftsOpen(false);
+          setTrainOpen(false);
+          setMobileMapOpen(false);
           setCivOpen(true);
           break;
         case "confirmEnd":
@@ -260,11 +273,23 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   // stable (so the memoized toolbar doesn't re-render every poll); reads the latest value from a ref
   const trainOpenRef = useRef(trainOpen);
   trainOpenRef.current = trainOpen;
+  const closeNavigation = () => {
+    setPanel(null);
+    setCampOpen(false);
+    setEvoOpen(false);
+    setCivOpen(false);
+    setShiftsOpen(false);
+    setTrainOpen(false);
+    setMobileMapOpen(false);
+  };
   const toggleTrain = useCallback(() => {
     if (!trainOpenRef.current) {
       setCampOpen(false);
       setEvoOpen(false);
       setCivOpen(false);
+      setShiftsOpen(false);
+      setMobileMapOpen(false);
+      setPanel(null);
     }
     setTrainOpen((open) => !open);
   }, []);
@@ -315,7 +340,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             snap={snap}
             engine={engine}
             panel={panel}
-            setPanel={setPanel}
+            setPanel={(next) => { if (next) closeNavigation(); setPanel(next); }}
             log={log}
             unread={unread}
             popups={settings.popups}
@@ -327,23 +352,23 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
               engine.audio.unlock();
               updateSettings({ muted: !settings.muted });
             }}
-            onStickers={() => setStickersOpen(true)}
-            onSaves={() => setSavesOpen(true)}
-            onAbout={() => setAboutOpen(true)}
+            onStickers={() => { closeNavigation(); setStickersOpen(true); }}
+            onSaves={() => { closeNavigation(); setSavesOpen(true); }}
+            onAbout={() => { closeNavigation(); setAboutOpen(true); }}
             onSave={() => {
               engine.save();
               if (cloud.state.status === "signedIn") void cloud.saveNow();
             }}
             cloudStatus={cloud.state.status}
-            onCloud={() => cloud.show(cloud.state.view ? null : cloud.state.status === "signedIn" ? "account" : "welcome")}
+            onCloud={() => { closeNavigation(); cloud.show(cloud.state.view ? null : cloud.state.status === "signedIn" ? "account" : "welcome"); }}
             onLeave={() => cloud.leave(() => router.push("/projects"))}
-            onNew={() => setConfirm("new")}
-            onReset={() => setConfirm("reset")}
-            onCamp={() => setCampOpen((o) => !o)}
-            onEvolution={() => setEvoOpen((o) => !o)}
-            onCiv={() => setCivOpen((o) => !o)}
-            onDeep={() => (engine.view === "deep" ? engine.leaveDeep() : engine.enterDeep())}
-            onHelp={() => setHelp({ open: true })}
+            onNew={() => { closeNavigation(); setConfirm("new"); }}
+            onReset={() => { closeNavigation(); setConfirm("reset"); }}
+            onCamp={() => { const next = !campOpen; closeNavigation(); setCampOpen(next); }}
+            onEvolution={() => { const next = !evoOpen; closeNavigation(); setEvoOpen(next); }}
+            onCiv={() => { const next = !civOpen; closeNavigation(); setCivOpen(next); }}
+            onDeep={() => { closeNavigation(); if (engine.view === "deep") engine.leaveDeep(); else engine.enterDeep(); }}
+            onHelp={() => { closeNavigation(); setHelp({ open: true }); }}
             onTips={() => updateSettings({ tips: !settings.tips })}
             tipsOn={settings.tips}
             onExtinction={() => {
@@ -372,8 +397,8 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           ) : (
             <>
               <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} showQuickActions={snap.selection.length === 0 && tool.id === "hand"} wallsAvailable={snap.tribe.walls.built + snap.tribe.walls.planned > 0} />
-              <Minimap engine={engine} cardOpen={!!snap.selected} mobileOpen={mobileMapOpen} onMobileToggle={() => setMobileMapOpen((o) => !o)} />
-              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} shiftOpen={shiftsOpen} onShifts={() => setShiftsOpen((o) => !o)} orphanNests={snap.orphanNests} onClaimNest={(id) => engineRef.current?.claimNest(id)} mapOpen={mobileMapOpen} onMap={() => setMobileMapOpen((o) => !o)} />
+              <Minimap engine={engine} cardOpen={!!snap.selected} mobileOpen={mobileMapOpen} onMobileToggle={() => { const next = !mobileMapOpen; closeNavigation(); setMobileMapOpen(next); }} />
+              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} shiftOpen={shiftsOpen} onShifts={() => { const next = !shiftsOpen; closeNavigation(); setShiftsOpen(next); }} orphanNests={snap.orphanNests} onClaimNest={(id) => engineRef.current?.claimNest(id)} mapOpen={mobileMapOpen} onMap={() => { const next = !mobileMapOpen; closeNavigation(); setMobileMapOpen(next); }} />
               {trainOpen && <TrainPanel engine={engine} onClose={() => setTrainOpen(false)} />}
               <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
               <EditModeBar engine={engine} />
@@ -385,7 +410,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             <DinoCard
               info={snap.selected}
               engine={engine}
-              onCamp={() => setCampOpen(true)}
+              onCamp={() => { closeNavigation(); setCampOpen(true); }}
               onClose={() => {
                 if (snap.selected?.kind === "human") engine.clearSelection();
                 else engine.select(0);
@@ -393,18 +418,20 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
               }}
             />
           )}
-          {campOpen && <CampPanel snap={snap} engine={engine} onClose={() => setCampOpen(false)} onBuildStation={(kind) => { setTool({ id: "build", build: kind }); setCampOpen(false); }} />}
-          {shiftsOpen && <ShiftsPanel snap={snap} engine={engine} onClose={() => setShiftsOpen(false)} onResearch={() => { setShiftsOpen(false); setCivOpen(true); }} />}
+          <AnimatePresence initial={false} mode="wait">
+            {campOpen && <CampPanel key="camp" snap={snap} engine={engine} onClose={() => setCampOpen(false)} onBuildStation={(kind) => { setTool({ id: "build", build: kind }); setCampOpen(false); }} />}
+            {shiftsOpen && <ShiftsPanel key="shifts" snap={snap} engine={engine} onClose={() => setShiftsOpen(false)} onResearch={() => { closeNavigation(); setCivOpen(true); }} />}
+            {evoOpen && <EvolutionPanel key="evolution" snap={snap} engine={engine} onClose={() => setEvoOpen(false)} />}
+            {civOpen && <CivPanel key="civilization" snap={snap} engine={engine} onClose={() => setCivOpen(false)} onChoose={() => setChoiceOpen(true)} onExtinction={() => setExtOpen(true)} onBuildStation={(kind) => { setTool({ id: "build", build: kind }); setCivOpen(false); }} />}
+          </AnimatePresence>
           <RaidBanner snap={snap} engine={engine} />
           {hatchId !== null && <HatchScene key={hatchId} engine={engine} dragonId={hatchId} onClose={() => setHatchId(null)} />}
-          {evoOpen && <EvolutionPanel snap={snap} engine={engine} onClose={() => setEvoOpen(false)} />}
-          {civOpen && <CivPanel snap={snap} engine={engine} onClose={() => setCivOpen(false)} onChoose={() => setChoiceOpen(true)} onExtinction={() => setExtOpen(true)} onBuildStation={(kind) => { setTool({ id: "build", build: kind }); setCivOpen(false); }} />}
           <CivChoice open={choiceOpen} onClose={() => setChoiceOpen(false)} engine={engine} fontClass={fontClass} />
           <ExtinctionConfirm open={extOpen} cause={extCause} onClose={() => setExtOpen(false)} snap={snap} engine={engine} fontClass={fontClass} onToast={(icon, text) => pushToast({ icon, text })} />
           <ExtinctionBanner snap={snap} />
           {(() => {
             // tips + bubbles stay out of the way while anything else is open
-            const busy = trainOpen || campOpen || shiftsOpen || civOpen || evoOpen || savesOpen || stickersOpen || aboutOpen || help.open || extOpen || choiceOpen || !!confirm || !!snap.selected || !!engine.selectedDragon() || !!engine.selectedEgg || snap.extinction.phase !== "idle" && snap.extinction.phase !== "ruins";
+            const busy = toasts.length > 0 || panel !== null || mobileMapOpen || trainOpen || campOpen || shiftsOpen || civOpen || evoOpen || savesOpen || stickersOpen || aboutOpen || help.open || extOpen || choiceOpen || !!confirm || !!snap.inspect || !!snap.selected || !!engine.selectedDragon() || !!engine.selectedEgg || snap.extinction.phase !== "idle" && snap.extinction.phase !== "ruins";
             return (
               <>
                 <TipCoach snap={snap} enabled={settings.tips} busy={busy} onOff={() => updateSettings({ tips: false })} onHelp={(section) => setHelp({ open: true, section })} />

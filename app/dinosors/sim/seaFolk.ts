@@ -22,6 +22,7 @@
 /*  + ids (5e8 up), so nothing else plays out differently.             */
 /* ------------------------------------------------------------------ */
 import { sp } from "../data/species";
+import { survived } from "./growth";
 import { emote, isBaby, sizeOf } from "./dinos";
 import { hurtHuman } from "./injury";
 import { P } from "./particles";
@@ -519,7 +520,7 @@ export class SeaFolk {
         }
       }
       t.work += (0.06 + home * 0.02) * dt;
-      if (t.work >= 80 + t.tier * 50 && t.food >= 4 && t.tier < this.maxTier(t)) {
+      if (t.work >= 80 + t.tier * 50 && t.food >= 4 && t.tier < this.maxTier(t, w)) {
         t.work = 0;
         t.tier++;
         t.food -= 3;
@@ -1439,8 +1440,8 @@ export class SeaFolk {
 
   /* ------------------------------ unions ------------------------------ */
 
-  maxTier(t: SeaTribe) {
-    return Math.min(MAX_SEA_TIER, 3 + (t.merges ?? 0));
+  maxTier(t: SeaTribe, w?: World) {
+    return Math.min(MAX_SEA_TIER, 3 + (t.merges ?? 0) + (w ? survived(w, t) : 0));
   }
 
   /** All Sea People are friends: two villages within reach may join (always when one's down to a handful). */

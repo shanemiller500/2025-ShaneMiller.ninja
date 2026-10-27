@@ -54,6 +54,7 @@ export default function CivPanel({ snap, engine, onClose, onChoose, onExtinction
       ref={panelRef}
       initial={{ opacity: 0, x: 24, scale: 0.97 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: 18, scale: 0.98 }}
       transition={{ type: "spring", stiffness: 420, damping: 32 }}
       className="dl-glass dl-scroll pointer-events-auto absolute inset-x-2 bottom-[84px] z-20 max-h-[60vh] overflow-y-auto rounded-3xl p-4 shadow-2xl sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-24 sm:max-h-[calc(100vh-200px)] sm:w-[400px]"
     >

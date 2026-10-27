@@ -27,7 +27,7 @@ export function drawMonk(c: CanvasRenderingContext2D, m: Monk, t: number, leader
     c.globalAlpha *= 1 - m.glow * 0.85;
   }
   c.scale(m.dir, 1);
-  const sitting = m.state === "meditate" || m.state === "sit" || m.state === "gaze" || m.state === "sleep" || m.state === "chant";
+  const sitting = m.state === "meditate" || m.state === "sit" || m.state === "tea" || m.state === "gaze" || m.state === "sleep" || m.state === "chant";
   const kneel = m.state === "kneel" || m.state === "ascend";
   const step = m.state === "walk" ? Math.sin(m.anim * 2.2) : 0;
   if (sitting || kneel) {
@@ -47,6 +47,22 @@ export function drawMonk(c: CanvasRenderingContext2D, m: Monk, t: number, leader
     c.beginPath();
     c.ellipse(m.state === "gaze" ? 3 : 1.5, m.state === "meditate" || kneel ? -12 : -6, 1.8, 2.4, 0, 0, Math.PI * 2);
     c.fill();
+    if (m.state === "tea") {
+      c.fillStyle = "#c69b61";
+      c.fillRect(2, -10, 7, 5);
+      c.strokeStyle = "#ead3a2";
+      c.lineWidth = 1;
+      c.strokeRect(2, -10, 7, 5);
+      c.beginPath(); c.arc(10, -8, 2, -Math.PI / 2, Math.PI / 2); c.stroke();
+      c.strokeStyle = "rgba(245,239,221,0.65)";
+      c.beginPath(); c.moveTo(5, -12); c.quadraticCurveTo(3, -15 - Math.sin(t * 2 + m.anim), 6, -18); c.stroke();
+    }
+    if (m.state === "chant") {
+      c.fillStyle = "#f7d99a";
+      c.beginPath(); c.arc(10, -25 + Math.sin(t * 3 + m.anim) * 2, 2, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = "#f7d99a"; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(12, -25); c.lineTo(12, -31); c.lineTo(16, -29); c.stroke();
+    }
   } else {
     // standing / walking: a long robe that swings with each step, sandalled feet
     c.fillStyle = "#4a3324";
@@ -126,6 +142,78 @@ export function drawMonkPlace(c: CanvasRenderingContext2D, p: MonkPlace, t: numb
   c.save();
   c.translate(p.x, p.y);
   switch (p.kind) {
+    case "chapel": {
+      // A stone chapel built into a snowy shelf: warm windows, a bell tower,
+      // roof flags and a small terrace where the order gathers at sunrise.
+      ground(c, 94);
+      c.fillStyle = "#797a7a";
+      c.fillRect(-93, -12, 186, 12);
+      c.fillStyle = "#b9b8b0";
+      for (let i = 0; i < 5; i++) c.fillRect(-30 + i * 12, -4 + i * 1.2, 60 - i * 12, 3);
+      const wall = c.createLinearGradient(-80, -56, 80, 0);
+      wall.addColorStop(0, "#d9d7c9");
+      wall.addColorStop(0.55, "#aaa9a2");
+      wall.addColorStop(1, "#777a7e");
+      c.fillStyle = wall;
+      c.fillRect(-77, -62, 154, 55);
+      c.strokeStyle = "rgba(75,77,80,0.4)";
+      c.lineWidth = 1.2;
+      for (let row = 0; row < 5; row++) {
+        const y = -57 + row * 10;
+        c.beginPath(); c.moveTo(-75, y); c.lineTo(75, y); c.stroke();
+        for (let col = 0; col < 8; col++) {
+          const x = -72 + col * 20 + (row % 2) * 10;
+          c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + 10); c.stroke();
+        }
+      }
+      c.fillStyle = "#454852";
+      c.beginPath();
+      c.moveTo(-88, -61); c.lineTo(0, -105); c.lineTo(88, -61); c.closePath(); c.fill();
+      c.fillStyle = "#e9f1f0";
+      c.beginPath();
+      c.moveTo(-87, -65); c.quadraticCurveTo(-36, -105, 0, -109);
+      c.quadraticCurveTo(38, -105, 87, -65);
+      c.lineTo(83, -61); c.lineTo(0, -100); c.lineTo(-83, -61); c.closePath(); c.fill();
+      c.fillStyle = "#d6dbdd";
+      c.fillRect(-15, -127, 30, 30);
+      c.fillStyle = "#454852";
+      c.beginPath(); c.moveTo(-21, -127); c.lineTo(0, -147); c.lineTo(21, -127); c.closePath(); c.fill();
+      c.strokeStyle = "#f7f4dd";
+      c.lineWidth = 2;
+      c.beginPath(); c.moveTo(0, -148); c.lineTo(0, -159); c.moveTo(-6, -153); c.lineTo(6, -153); c.stroke();
+      c.fillStyle = "#41372f";
+      c.beginPath(); c.arc(0, -114, 8, Math.PI, 0); c.lineTo(8, -103); c.lineTo(-8, -103); c.closePath(); c.fill();
+      c.fillStyle = rite ? "#f7c35c" : "#b99148";
+      c.beginPath(); c.ellipse(0, -109 + Math.sin(t * (rite ? 7 : 1)) * (rite ? 2 : 0.3), 4, 5, 0, 0, Math.PI * 2); c.fill();
+      // Circular coloured glass catches the light above the doorway.
+      c.fillStyle = "#3d5d6b";
+      c.beginPath(); c.arc(0, -70, 11, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = "#e6c875";
+      c.lineWidth = 2;
+      c.beginPath(); c.arc(0, -70, 11, 0, Math.PI * 2); c.moveTo(-10, -70); c.lineTo(10, -70); c.moveTo(0, -80); c.lineTo(0, -60); c.stroke();
+      c.fillStyle = night ? "#ffc874" : "#a0d4d4";
+      for (const x of [-51, 51]) {
+        c.fillRect(x - 8, -45, 16, 22);
+        c.strokeStyle = "#eee1b7"; c.strokeRect(x - 8, -45, 16, 22);
+        c.beginPath(); c.moveTo(x, -45); c.lineTo(x, -23); c.stroke();
+        if (night) glowAt(c, x, -33, 33);
+      }
+      c.fillStyle = "#4e3525";
+      c.beginPath(); c.moveTo(-14, -7); c.lineTo(-14, -28); c.arc(0, -28, 14, Math.PI, 0); c.lineTo(14, -7); c.closePath(); c.fill();
+      c.fillStyle = night ? "#efbd68" : "#8b5d35";
+      c.fillRect(-10, -26, 20, 19);
+      c.fillStyle = "#d5b772";
+      c.beginPath(); c.arc(5, -18, 1.4, 0, Math.PI * 2); c.fill();
+      if (night) glowAt(c, 0, -22, 54);
+      for (const side of [-1, 1]) {
+        const x = side * 98;
+        c.strokeStyle = "#69523b"; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(x, 0); c.lineTo(x, -68); c.stroke();
+        c.fillStyle = "#cfaa50"; c.beginPath(); c.arc(x, -69, 3, 0, Math.PI * 2); c.fill();
+        flagLine(c, side * 70, -78, x, -65, t, side < 0 ? 0 : 2);
+      }
+      break;
+    }
     case "hut": {
       ground(c, 34);
       // dry-stone walls, a flat timber roof weighted with stones, a little door

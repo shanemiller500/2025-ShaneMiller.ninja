@@ -5,6 +5,7 @@
 /*  screen); `act` runs the current state every frame.                 */
 /* ------------------------------------------------------------------ */
 import { warDinoThink } from "./warGuard";
+import { shooedThink } from "./territory";
 import { seaHuntAct, seaHuntThink } from "./seaHunters";
 import { clanDinoThink } from "./clanLife";
 import { FACTS } from "../data/facts";
@@ -578,16 +579,18 @@ function actWarDino(w: World, d: Dino, dt: number) {
   d.warCd = 2.2;
   d.energy = Math.max(0, d.energy - 0.025);
   const training = d.warTraining ?? 0;
+  // a steel-framed saddle + harness (gear.ts) takes some of the blows for a ridden mount
+  const barding = d.rider && w.colony.kits.has("steelSaddles") ? 0.8 : 1;
   const force = (0.12 + training * 0.12 + sp(d.species).attack * 0.08) * Math.max(0.7, Math.min(1.6, sizeOf(d) / 80));
   if (foe.kind === "dino") {
     foe.health -= force * (1 - sp(foe.species).defense * 0.4);
     foe.fear = Math.max(foe.fear, 0.6);
     if (foe.health <= 0) setState(foe, "faint", foe.x, foe.y);
     // Defending has a cost; grown armor makes pets last longer in a fight.
-    d.health -= Math.max(0.005, sp(foe.species).attack * 0.035) * (1 - (d.warArmor ?? 0) * 0.3);
+    d.health -= Math.max(0.005, sp(foe.species).attack * 0.035) * (1 - (d.warArmor ?? 0) * 0.3) * barding;
   } else {
     w.rivals.hit(w, foe, force, d.x, d.y);
-    d.health -= 0.04 * (1 - (d.warArmor ?? 0) * 0.3);
+    d.health -= 0.04 * (1 - (d.warArmor ?? 0) * 0.3) * barding;
   }
   w.sfx("bonk", foe.x, foe.y, 0.7);
 }
@@ -1321,6 +1324,8 @@ export function thinkDino(w: World, d: Dino) {
     setState(d, def.move === "walk" ? "wander" : d.state, t.x, t.y);
     return;
   }
+  // driven out of our settlement: running for the edge (territory.ts)
+  if (shooedThink(w, d)) return;
   // a Dinosaur Scorpion guards its den (dinoScorpions.ts)
   if (isDinoScorpion(d) && scorpionThink(w, d)) return;
   // the snowy peaks' animals keep to the cold; the Yeti guards its cave (snowBeasts.ts)

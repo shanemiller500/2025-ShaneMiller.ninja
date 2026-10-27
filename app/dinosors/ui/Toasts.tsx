@@ -33,10 +33,9 @@ export default function Toasts({ toasts, log, unread, popups, onDismiss, onGo, o
   return (
     <>
       {popups && (
-        // phones: no alert pills over the game (the screen is too small for them)
-        <div className="pointer-events-none absolute inset-x-0 top-20 z-30 hidden flex-col items-center gap-2 px-3 sm:top-4 sm:flex">
-          <AnimatePresence initial={false}>
-            {toasts.map((t) => (
+        <div className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+84px)] z-30 flex flex-col items-center gap-2 px-3 sm:top-4">
+          <AnimatePresence initial={false} mode="wait">
+            {toasts.slice(-1).map((t) => (
               <ToastPill key={t.id} t={t} onDismiss={onDismiss} onGo={onGo} />
             ))}
           </AnimatePresence>
@@ -120,19 +119,19 @@ function ToastPill({ t, onDismiss, onGo }: { t: Toast; onDismiss: (id: number) =
   const dismiss = useRef(onDismiss);
   dismiss.current = onDismiss;
   useEffect(() => {
-    const id = window.setTimeout(() => dismiss.current(t.id), open ? 12000 : t.fact ? 7000 : 4800);
+    const id = window.setTimeout(() => dismiss.current(t.id), 6000);
     return () => window.clearTimeout(id);
-  }, [t.id, t.fact, open]);
+  }, [t.id]);
   const where = t.x !== undefined && t.y !== undefined && t.x >= 0;
   return (
     <motion.div
       ref={pillRef}
       layout
-      initial={{ y: -20, opacity: 0, scale: 0.9 }}
+      initial={{ y: -28, opacity: 0, scale: 0.96 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
-      exit={{ y: -12, opacity: 0, scale: 0.95 }}
+      exit={{ y: -24, opacity: 0, scale: 0.96 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
-      className="dl-glass pointer-events-auto max-w-[min(92vw,30rem)] rounded-3xl px-4 py-2.5 shadow-xl"
+      className="dl-glass pointer-events-auto w-full max-w-[min(92vw,30rem)] rounded-3xl px-4 py-2.5 shadow-xl"
     >
       <div className="flex items-center gap-2.5">
         <span className="text-2xl leading-none">{t.icon}</span>

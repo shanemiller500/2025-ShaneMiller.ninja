@@ -7,6 +7,9 @@
 /*  it floating along over their heads, and set it down where you      */
 /*  picked. Blueprints that aren't built yet just slide over.          */
 /*                                                                     */
+/*  Walls, farms + towers are levitated and set down by a crew; a      */
+/*  tower keeps everything on it (its Scorpion rides along on top).    */
+/*                                                                     */
 /*  While it's in the air the building doesn't block anything; its     */
 /*  real position only changes when it's set down, so a save in the    */
 /*  middle simply keeps it where it was.                               */
@@ -17,10 +20,11 @@ import { shelterTiles } from "./nav";
 import { P } from "./particles";
 import { pick } from "./rng";
 import { issue, type Task } from "./tasks";
-import { TILE, type Building, type BuildingKind, type Human, type Shelter } from "./types";
+import { TILE, type Building, type BuildingKind, type Human, type Shelter, type Tower } from "./types";
 import type { World } from "./world";
+import { connectWalls, joinMessage } from "./wallLinks";
 
-export type MoveRef = { kind: "building" | "shelter" | "wall" | "farm"; id: number };
+export type MoveRef = { kind: "building" | "shelter" | "wall" | "farm" | "tower"; id: number };
 
 interface SiteJob { ref: MoveRef; fromX: number; fromY: number; toX: number; toY: number; phase: "gather" | "shape" | "place"; t: number }
 const siteJobs = new WeakMap<World, Map<number, SiteJob>>();
@@ -55,17 +59,20 @@ function objOf(w: World, ref: MoveRef) {
   if (ref.kind === "building") return w.colony.buildings.find((b) => b.id === ref.id) ?? null;
   if (ref.kind === "shelter") return w.shelters.find((s) => s.id === ref.id) ?? null;
   if (ref.kind === "wall") return w.tribe.walls.find((s) => s.id === ref.id) ?? null;
+  if (ref.kind === "tower") return w.tribe.towers.find((s) => s.id === ref.id) ?? null;
   return w.tribe.farms.find((s) => s.id === ref.id) ?? null;
 }
 
 const at = (w: World, ref: MoveRef) => {
   const o = objOf(w, ref);
+  if (o && ref.kind === "tower") return { x: (o as Tower).x, y: (o as Tower).y - 16 };
   return o && ref.kind === "wall" ? { x: (o as import("./types").Wall).tx * TILE + TILE / 2, y: (o as import("./types").Wall).ty * TILE + TILE / 2 } : o ? { x: (o as Building | Shelter | import("./types").Farm).x, y: (o as Building | Shelter | import("./types").Farm).y } : null;
 };
 
 /** People needed to carry it. */
 export function crewSize(w: World, ref: MoveRef) {
   if (ref.kind === "wall" || ref.kind === "farm") return ref.kind === "wall" ? 2 : 1;
+  if (ref.kind === "tower") return 4;
   if (ref.kind === "shelter") return 4;
   const b = objOf(w, ref) as Building | null;
   if (!b) return 2;
@@ -76,7 +83,7 @@ export function crewSize(w: World, ref: MoveRef) {
 export function canMove(w: World, ref: MoveRef): string | null {
   const o = objOf(w, ref);
   if (!o) return "It's gone.";
-  if (ref.kind === "wall" || ref.kind === "farm") {
+  if (ref.kind === "wall" || ref.kind === "farm" || ref.kind === "tower") {
     if (ref.kind === "wall") {
       const wl = o as import("./types").Wall;
       if (w.colony.scorpions.some((s) => s.mount === "wall" && s.tx === wl.tx && s.ty === wl.ty)) return "Move the Scorpion off this wall first.";
@@ -95,6 +102,7 @@ export function moveSpotOk(w: World, ref: MoveRef, x: number, y: number): string
   if (!o) return "It's gone.";
   if (ref.kind === "wall") return w.tribe.relocateWall(w, o as import("./types").Wall, Math.floor(x / TILE), Math.floor(y / TILE), true) ? null : "That wall needs clear, solid ground.";
   if (ref.kind === "farm") return w.tribe.relocateFarm(w, o as import("./types").Farm, x, y, true) ? null : "That farm needs clear, fertile ground.";
+  if (ref.kind === "tower") return w.tribe.relocateTower(w, o as Tower, x, y, true) ? null : "A tower needs 2×2 squares of clear, solid ground.";
   const movable = o as Building | Shelter;
   const had = movable.lift;
   movable.lift = { x: movable.x, y: movable.y, z: 0 };
@@ -119,7 +127,7 @@ export function startMove(w: World, ref: MoveRef, x: number, y: number, people?:
   const o = objOf(w, ref);
   const no = canMove(w, ref) ?? moveSpotOk(w, ref, x, y);
   if (no || !o) return no ?? "It's gone.";
-  if (ref.kind === "wall" || ref.kind === "farm") {
+  if (ref.kind === "wall" || ref.kind === "farm" || ref.kind === "tower") {
     const origin = at(w, ref)!;
     const target = ref.kind === "wall" ? { x: Math.floor(x / TILE) * TILE + TILE / 2, y: Math.floor(y / TILE) * TILE + TILE / 2 } : { x, y };
     if (Math.hypot(origin.x - target.x, origin.y - target.y) < 8) return null;
@@ -127,11 +135,12 @@ export function startMove(w: World, ref: MoveRef, x: number, y: number, people?:
     const crew = (people?.length ? people : w.humans).filter((h) => !h.child && !h.stranger && !h.captive && !h.under && !h.aloft && !h.riding && h.state !== "down" && h.hp > 0.3)
       .sort((a, b) => (a.taskId ? 400 : 0) - (b.taskId ? 400 : 0) + Math.hypot(a.x - origin.x, a.y - origin.y) - Math.hypot(b.x - origin.x, b.y - origin.y)).slice(0, need);
     if (!crew.length) return "Nobody is free to reshape it.";
-    const label = ref.kind === "wall" ? "Reshape the wall" : "Move the farm";
+    const label = ref.kind === "wall" ? "Reshape the wall" : ref.kind === "tower" ? "Move the tower" : "Move the farm";
     const task = issue(w, crew, { kind: "moveBuilding", icon: "🔷", label, x: target.x, y: target.y, target: ref.id });
     if (!task) return "Nobody is free to reshape it.";
     sitesOf(w).set(task.id, { ref, fromX: origin.x, fromY: origin.y, toX: target.x, toY: target.y, phase: "gather", t: 0 });
-    w.toast("🔷", `${crew.length} ${crew.length === 1 ? "worker is" : "workers are"} on the way to ${ref.kind === "wall" ? "levitate and reshape the stones" : "move the farm"}.`, origin.x, origin.y);
+    const armed = ref.kind === "tower" && w.colony.scorpions.some((s) => s.mount === "tower" && s.tx >= (o as Tower).tx && s.tx <= (o as Tower).tx + 1 && s.ty >= (o as Tower).ty && s.ty <= (o as Tower).ty + 1);
+    w.toast("🔷", `${crew.length} ${crew.length === 1 ? "worker is" : "workers are"} on the way to ${ref.kind === "wall" ? "levitate and reshape the stones" : ref.kind === "tower" ? `lift the tower${armed ? " (its Scorpion rides along on top)" : ""}` : "move the farm"}.`, origin.x, origin.y);
     return null;
   }
   const movable = o as Building | Shelter;
@@ -221,12 +230,16 @@ export function moveTick(w: World, dt: number) {
     else if (job.phase === "place" && (crew.every((p) => Math.hypot(p.x - job.toX, p.y - job.toY) < 38) || job.t > 14)) {
       const o = objOf(w, job.ref);
       const ok = job.ref.kind === "wall" ? !!o && w.tribe.relocateWall(w, o as import("./types").Wall, Math.floor(job.toX / TILE), Math.floor(job.toY / TILE))
+        : job.ref.kind === "tower" ? !!o && w.tribe.relocateTower(w, o as Tower, job.toX, job.toY)
         : !!o && w.tribe.relocateFarm(w, o as import("./types").Farm, job.toX, job.toY);
       if (!ok) w.toast("🔷", "The new spot is blocked; the pieces stayed where they were.", job.toX, job.toY);
       else {
         w.particles.burst(P.Dust, job.toX, job.toY, 18, 65, { size: 9, max: 0.9, color: "rgba(155,185,240,0.8)" });
         w.sfx("thud", job.toX, job.toY, 0.7);
-        w.toast("🔷", job.ref.kind === "wall" ? "Stones reshaped in place." : "Farm moved and replanted.", job.toX, job.toY);
+        // a moved tower: the wall ends near it join onto it where it stands now
+        const near = job.ref.kind === "tower" ? w.tribe.walls.filter((wl) => Math.abs(wl.tx - (o as Tower).tx - 0.5) <= 4 && Math.abs(wl.ty - (o as Tower).ty - 0.5) <= 4) : [];
+        const joined = job.ref.kind === "wall" ? joinMessage(connectWalls(w, [o as import("./types").Wall])) : job.ref.kind === "tower" ? joinMessage(connectWalls(w, near)) : null;
+        w.toast("🔷", job.ref.kind === "wall" ? `Stones reshaped in place.${joined ? ` ${joined}` : ""}` : job.ref.kind === "tower" ? `Tower moved, with everything on it.${joined ? ` ${joined}` : ""}` : "Farm moved and replanted.", job.toX, job.toY);
       }
       sitesOf(w).delete(id);
       for (const p of crew) { p.think = 0; if (p.state === "lift") go(p, "idle", p.x, p.y); }

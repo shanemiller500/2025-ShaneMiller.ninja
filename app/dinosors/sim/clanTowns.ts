@@ -98,8 +98,8 @@ export function boulderLands(w: World, x: number, y: number, target: number, kin
   if (kind === "scorpion") {
     const sc = w.colony.scorpions.find((s) => s.id === target && s.built >= 1);
     if (sc && Math.hypot(sc.x - x, sc.y - y) < 44) {
-      hitScorpion(w, sc, damage, "clan");
-      if (sc.hp <= 0) w.toast("🪨", "A clan catapult smashed one of our Scorpions!", sc.x, sc.y);
+      hitScorpion(w, sc, damage, "clan", "siege");
+      if (sc.built < 1) w.toast("🪨", "A clan catapult smashed one of our Scorpions!", sc.x, sc.y);
     }
   } else if (kind === "tower") {
     const t = w.tribe.towers.find((o) => o.id === target);

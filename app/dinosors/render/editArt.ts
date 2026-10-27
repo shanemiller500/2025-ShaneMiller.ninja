@@ -6,11 +6,15 @@
 /*    marker), the hovered piece gets a thin outline, and while a group */
 /*    is dragged its ghost shows on the tile grid: green where a piece  */
 /*    fits, red where it's blocked.                                     */
+/*  • Measuring lines while walls, gates or towers are moved: green to  */
+/*    the walls / towers it lines up with, red where it's a tile or two */
+/*    out of line (sim/wallLinks.ts alignGuides).                       */
 /*  • 🪓 Clear area: the box being dragged (with every plant inside it  */
 /*    ringed + a count), and each clearing job under way (dashed box,   */
 /*    the plants still to go, a progress label).                        */
 /* ------------------------------------------------------------------ */
 import { plantsLeft, type ClearRect } from "../sim/clearArea";
+import { alignGuides, type AlignGuide, type TileBox } from "../sim/wallLinks";
 import { TILE } from "../sim/types";
 import type { World } from "../sim/world";
 
@@ -34,6 +38,54 @@ function tag(c: CanvasRenderingContext2D, x: number, y: number, text: string, in
   c.fillStyle = "#fff";
   c.fillText(text, x, y + inv * 0.5);
   c.restore();
+}
+
+/**
+ * Measuring lines from a piece being placed to what it lines up with: solid green with the gap in tiles
+ * ("joins" when touching), or dashed red with how far out of line it is.
+ */
+export function drawAlignGuides(c: CanvasRenderingContext2D, guides: AlignGuide[], inv: number, t: number) {
+  if (!guides.length) return;
+  c.save();
+  c.lineCap = "round";
+  for (const g of guides) {
+    const col = g.ok ? "rgba(110,240,150,0.95)" : "rgba(255,95,95,0.95)";
+    // a dark under-line so it reads over grass, sand or snow
+    c.strokeStyle = "rgba(10,20,12,0.55)";
+    c.lineWidth = 4.5 * inv;
+    c.setLineDash(g.ok ? [] : [7 * inv, 5 * inv]);
+    c.lineDashOffset = -t * 20 * inv;
+    c.beginPath();
+    c.moveTo(g.x0, g.y0);
+    c.lineTo(g.x1, g.y1);
+    c.stroke();
+    c.strokeStyle = col;
+    c.lineWidth = 2.4 * inv;
+    c.stroke();
+    c.setLineDash([]);
+    // end ticks across the line, like a tape measure
+    const a = Math.atan2(g.y1 - g.y0, g.x1 - g.x0) + Math.PI / 2;
+    const k = 6 * inv;
+    c.beginPath();
+    for (const [x, y] of [[g.x0, g.y0], [g.x1, g.y1]]) {
+      c.moveTo(x - Math.cos(a) * k, y - Math.sin(a) * k);
+      c.lineTo(x + Math.cos(a) * k, y + Math.sin(a) * k);
+    }
+    c.stroke();
+    const label = g.ok ? (g.gap ? `✓ ${g.gap} tile${g.gap === 1 ? "" : "s"}` : "✓ joins") : `✕ ${g.off} tile${g.off === 1 ? "" : "s"} off`;
+    tag(c, (g.x0 + g.x1) / 2, (g.y0 + g.y1) / 2 - 12 * inv, label, inv, g.ok ? "rgba(30,140,80,0.92)" : "rgba(170,40,40,0.92)");
+  }
+  c.restore();
+}
+
+/** The tile box round a list of tiles. */
+export function boxOf(tiles: { tx: number; ty: number }[]): TileBox {
+  return {
+    tx0: Math.min(...tiles.map((p) => p.tx)),
+    ty0: Math.min(...tiles.map((p) => p.ty)),
+    tx1: Math.max(...tiles.map((p) => p.tx)),
+    ty1: Math.max(...tiles.map((p) => p.ty)),
+  };
 }
 
 /** Picked wall pieces, the hovered one, and the drag ghost. */
@@ -82,6 +134,8 @@ export function drawWallEdit(c: CanvasRenderingContext2D, w: World, v: WallEditV
       c.lineWidth = 2 * inv;
       c.strokeRect(x + 1.5, y + 1.5, TILE - 3, TILE - 3);
     }
+    // measuring lines to the walls + towers the moved group lines up with
+    if (v.ghost.length) drawAlignGuides(c, alignGuides(w, boxOf(v.ghost), v.sel), inv, t);
     const top = v.ghost.reduce((m, g) => (g.ty < m.ty ? g : m), v.ghost[0]);
     if (top) tag(c, (top.tx + 0.5) * TILE, top.ty * TILE - 16 * inv, ok ? `✓ ${v.ghost.length} piece${v.ghost.length === 1 ? "" : "s"} fit` : `✕ ${v.ghost.filter((g) => !g.ok).length} blocked`, inv, ok ? "rgba(30,140,80,0.92)" : "rgba(170,40,40,0.92)");
   }
