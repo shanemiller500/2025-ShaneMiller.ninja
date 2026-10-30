@@ -76,13 +76,16 @@ function hurtYeti(w: World, y: Dino, dmg: number) {
 /** Every frame (from Dragons.update): start fights, trade blows, call the winner. Cheap: a few Yetis × a few dragons. */
 export function feudTick(w: World, dt: number) {
   const list = duels(w);
+  const winter = Math.floor((w.day - 1) / 3) % 4 === 3;
+  const fightRange = winter ? FEUD_R * 1.6 : FEUD_R;
+  const flightLimit = winter ? FEUD_Z * 1.35 : FEUD_Z;
   const yetis = w.dinos.filter((d) => d.species === "yeti" && !d.owner && d.health > 0);
   // new fights
   for (const y of yetis) {
     if (y.holding || list.some((x) => x.yeti === y.id)) continue;
     for (const dr of [...w.dragons.list, ...w.dragons.owned]) {
-      if (dr.hp <= 0 || dr.monkRite || dr.z > FEUD_Z || dragonDuel(w, dr)) continue;
-      if (Math.abs(dr.x - y.x) > FEUD_R || Math.hypot(dr.x - y.x, dr.y - y.y) > FEUD_R) continue;
+      if (dr.hp <= 0 || dr.monkRite || dr.z > flightLimit || dragonDuel(w, dr)) continue;
+      if (Math.abs(dr.x - y.x) > fightRange || Math.hypot(dr.x - y.x, dr.y - y.y) > fightRange) continue;
       // ours never go looking for one: only a Yeti that's right by them starts it
       if (dr.owner && Math.hypot(dr.x - y.x, dr.y - y.y) > 230) continue;
       list.push({ yeti: y.id, dragon: dr.id, iceCd: 0.6, clubCd: 0, breathCd: 1, t: 0, yLuck: 0.75 + w.rng() * 0.55, dLuck: 0.75 + w.rng() * 0.55 });

@@ -309,6 +309,11 @@ export interface Dino {
   holding?: number;
   /** the Yeti: seconds until it can hurl another ice boulder (not saved) */
   hurlCd?: number;
+  /** Yetis that have met keep raiding together; the scarf marks their band. */
+  yetiPack?: number;
+  yetiScarf?: string;
+  /** seconds until a pylon barrier can zap this dinosaur again (not saved) */
+  pylonZapT?: number;
   /** dizzy + slow (Dinosaur Scorpion venom, an Ice Dragon's frost): seconds left (not saved) */
   slowT?: number;
   /** Dinosaur Scorpion attack timers + the strike pose (not saved) */
@@ -1285,6 +1290,8 @@ export interface Wall {
   boneUp?: boolean;
   /** gates: part of a Megalodon water gate (a giant shark mouth spanning a river; shut to all but our people) */
   mega?: boolean;
+  /** pulley fitted to a ladder opening for hauling loads across the wall */
+  pulley?: boolean;
 }
 
 export interface Farm {

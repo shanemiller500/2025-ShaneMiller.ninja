@@ -25,6 +25,7 @@
 import { sp } from "../data/species";
 import { addDino, emote, findSpawnSpot, setState, sizeOf } from "./dinos";
 import { hurtHuman } from "./injury";
+import { dies } from "./death";
 import { P } from "./particles";
 import { makeRng, pick, type Rng } from "./rng";
 import { go, say } from "./humans";
@@ -65,6 +66,27 @@ const AMBUSH_R = 150;
 const LUNGE = 125;
 /** Out of the cold this far from home (px): head back up. */
 const STRAY = 700;
+const YETI_SCARVES = ["#c43d4b", "#2877b8", "#d69a22", "#6947a8", "#38865d"];
+const winter = (w: World) => Math.floor((w.day - 1) / 3) % 4 === 3;
+
+/** Yetis that meet become a lasting raiding band, marked by matching scarves. */
+function yetiBands(w: World) {
+  const ys = w.dinos.filter((d) => d.species === "yeti" && !d.owner);
+  for (const y of ys) {
+    const nearby = ys.filter((o) => o !== y && Math.hypot(o.x - y.x, o.y - y.y) < 420);
+    if (!nearby.length) continue;
+    const packs = new Set([y.yetiPack ?? y.id, ...nearby.map((o) => o.yetiPack ?? o.id)]);
+    const pack = Math.min(...Array.from(packs));
+    const scarf = y.yetiScarf ?? nearby.find((o) => o.yetiScarf)?.yetiScarf ?? YETI_SCARVES[Math.abs(pack) % YETI_SCARVES.length];
+    for (const member of ys) {
+      const memberPack = member.yetiPack ?? member.id;
+      if (member.id === y.id || nearby.includes(member) || packs.has(memberPack)) {
+        member.yetiPack = pack;
+        member.yetiScarf = scarf;
+      }
+    }
+  }
+}
 
 type Prey = { kind: "human"; h: Human } | { kind: "dino"; d: Dino } | { kind: "brute"; b: Brute };
 const posOf = (p: Prey) => (p.kind === "human" ? p.h : p.kind === "dino" ? p.d : p.b);
@@ -147,7 +169,7 @@ function intruder(w: World, d: Dino, r: number, snowOnly = false, sparePeople = 
     }
   }
   for (const o of w.dinos) {
-    if (o === d || o.under || o.species === "yeti" || o.state === "faint" || sp(o.species).move !== "walk" || sizeOf(o) > 150 || !ok(o.x, o.y)) continue;
+    if (o === d || o.under || o.species === "yeti" || o.state === "faint" || !ok(o.x, o.y)) continue;
     const dd = Math.hypot(o.x - hx, o.y - hy);
     if (dd < bd) {
       bd = dd;
@@ -229,6 +251,7 @@ function rexThink(w: World, d: Dino): boolean {
  * the other peoples, dinosaurs) gets clubbed and pelted with ice.
  */
 function yetiThink(w: World, d: Dino): boolean {
+  yetiBands(w);
   // fighting a dragon: nothing else matters till one of them is down (yetiFeud.ts)
   if (yetiDueling(w, d)) return true;
   const home = { x: d.homeX, y: d.homeY };
@@ -262,7 +285,38 @@ function yetiThink(w: World, d: Dino): boolean {
   }
   // pleased with itself after hanging someone up: it leaves people be for a while (a rescue can get in)
   const pleased = (contentUntil.get(d) ?? -1) > w.elapsed;
-  const foe = intruder(w, d, YETI_R, true, pleased, AMBUSH_R);
+  const coldSeason = winter(w);
+  if (d.yetiPack) {
+    const ally = w.dinos.find((o) => o.id !== d.id && o.species === "yeti" && o.yetiPack === d.yetiPack && o.targetId);
+    const shared = ally ? preyById(w, ally.targetId) : null;
+    if (shared && shared.kind !== "human" || (shared && shared.kind === "human" && shared.h.state !== "down")) {
+      const p = shared!;
+      if (Math.hypot(posOf(p).x - d.x, posOf(p).y - d.y) < (coldSeason ? YETI_R * 2 : YETI_R)) {
+        d.targetId = posOf(p).id;
+        if (d.state !== "chase" && d.state !== "roar") setState(d, "roar", d.x, d.y);
+        return true;
+      }
+    }
+  }
+  const foe = intruder(w, d, coldSeason ? YETI_R * 1.8 : YETI_R, true, pleased, coldSeason ? YETI_R * 1.8 : AMBUSH_R);
+  if (!foe && coldSeason) {
+    const lodgeFire = w.snowFolk.tribes.flatMap((t) => t.lodges.filter((l) => l.kind === "fire" && l.hp > 0).map((l) => ({ l, t })))
+      .sort((a, b) => Math.hypot(a.l.x - d.x, a.l.y - d.y) - Math.hypot(b.l.x - d.x, b.l.y - d.y))[0];
+    const campfire = w.campfires.filter((f) => f.lit).sort((a, b) => Math.hypot(a.x - d.x, a.y - d.y) - Math.hypot(b.x - d.x, b.y - d.y))[0];
+    const lodgeDist = lodgeFire ? Math.hypot(lodgeFire.l.x - d.x, lodgeFire.l.y - d.y) : Infinity;
+    const campDist = campfire ? Math.hypot(campfire.x - d.x, campfire.y - d.y) : Infinity;
+    if (Math.min(lodgeDist, campDist) < 620) {
+      const target = lodgeDist <= campDist ? lodgeFire!.l : campfire!;
+      if (Math.hypot(target.x - d.x, target.y - d.y) < 56) {
+        if (lodgeDist <= campDist) lodgeFire!.l.hp = 0;
+        else campfire!.lit = false;
+        w.particles.burst(P.Steam, target.x, target.y, 10, 45, { vz: 28, size: 10, max: 1.2, color: "#dcecf4" });
+        w.sfx("hiss", target.x, target.y, 0.8);
+        emote(d, "❄️", 1.5);
+      } else setState(d, "wander", target.x, target.y);
+      return true;
+    }
+  }
   if (foe) {
     const fp = posOf(foe);
     d.targetId = fp.id;
@@ -306,6 +360,7 @@ function yetiThink(w: World, d: Dino): boolean {
 /** Per frame (actDino hands it over): roaring, charging, grabbing, carrying, hanging. True = it handled the frame. */
 export function snowAct(w: World, d: Dino, dt: number): boolean {
   if (d.species !== "yeti" || d.owner) return false;
+  const coldSeason = winter(w);
   d.hurlCd = Math.max(0, (d.hurlCd ?? 0) - dt);
   d.clawCd = Math.max(0, (d.clawCd ?? 0) - dt);
   d.strike = Math.max(0, (d.strike ?? 0) - dt * 1.4);
@@ -376,16 +431,17 @@ export function snowAct(w: World, d: Dino, dt: number): boolean {
     }
   }
   // one of ours, caught: grabbed and carried off (never a child: it just roars at them)
-  if (p.kind === "human" && dist < sizeOf(d) * 0.45 && !p.h.child) {
+  if (p.kind === "human" && dist < sizeOf(d) * 0.45 && !p.h.child && !coldSeason) {
     grab(w, d, p.h);
     return false;
   }
-  // anything else: a block of ice from range, a clubbing up close
-  if (p.kind !== "human" && !d.hurlCd && dist > HURL.min && dist < HURL.max) {
-    d.hurlCd = HURL.cd;
+  // In winter the Yetis hurl ice at people and animals as well as other beasts.
+  if (!d.hurlCd && dist > HURL.min * 0.55 && dist < HURL.max * (coldSeason ? 1.5 : 1)) {
+    d.hurlCd = coldSeason ? 2.2 : HURL.cd;
     d.strike = 1;
     d.dir = pp.x > d.x ? 1 : -1;
-    hurlIce(w, d, p);
+    if (coldSeason && Math.floor(w.elapsed) % 2 === 0) hurlTree(w, d, p);
+    else hurlIce(w, d, p);
     return false;
   }
   if (dist < sizeOf(d) * 0.5) {
@@ -395,7 +451,10 @@ export function snowAct(w: World, d: Dino, dt: number): boolean {
     if (!d.clawCd) {
       d.clawCd = 1.3;
       d.strike = 0.7;
-      smash(w, d, p);
+      if (p.kind === "human") {
+        const knockedOut = hurtHuman(w, p.h, 0.48, d.x, d.y, "club");
+        if (knockedOut) dies(w, p.h, `${p.h.name} was killed by a Yeti in the snow.`);
+      } else smash(w, d, p);
     }
   }
   if (d.stateT > 28) {
@@ -567,10 +626,30 @@ function hurlIce(w: World, d: Dino, p: Prey) {
   w.hazards.add(w, "frost", tx, ty, 40, false);
   if (Math.hypot(pp.x - tx, pp.y - ty) > 26) return;
   if (p.kind === "human") {
-    hurtHuman(w, p.h, 0.24, d.x, d.y, "rock");
+    const knockedOut = hurtHuman(w, p.h, 0.24, d.x, d.y, "rock");
     p.h.slowT = Math.max(p.h.slowT ?? 0, 2.5);
+    if (knockedOut) dies(w, p.h, `${p.h.name} was killed by a Yeti's ice boulder.`);
   } else if (p.kind === "dino") hitDino(w, p.d, 30, d.x, d.y);
   else w.rivals.hit(w, p.b, 0.22, d.x, d.y, true);
+}
+
+/** A winter-only uprooted snow tree attack: a heavy, broad hit with a falling trunk effect. */
+function hurlTree(w: World, d: Dino, p: Prey) {
+  const pp = posOf(p);
+  const tx = pp.x + (w.rng() - 0.5) * 18;
+  const ty = pp.y + (w.rng() - 0.5) * 12;
+  w.sfx("whoosh", d.x, d.y, 1.1, 0.38);
+  w.particles.spawn(P.Rock, tx, ty, { z: 90, vz: -40, vx: (tx - d.x) * 0.22, vy: (ty - d.y) * 0.22, g: -90, size: 30, max: 0.7, color: "#dbe8ee" });
+  w.particles.burst(P.Rock, tx, ty, 14, 95, { z: 18, vz: 70, g: 180, size: 8, max: 0.9, color: "#f2f8fc" });
+  w.particles.burst(P.Leaf, tx, ty, 10, 75, { z: 30, vz: 50, g: 130, size: 7, max: 1, color: "#e8f1f2" });
+  w.hazards.add(w, "frost", tx, ty, 68, false);
+  if (Math.hypot(pp.x - tx, pp.y - ty) > 42) return;
+  if (p.kind === "human") {
+    const knockedOut = hurtHuman(w, p.h, 0.7, d.x, d.y, "rock");
+    p.h.slowT = Math.max(p.h.slowT ?? 0, 4);
+    if (knockedOut) dies(w, p.h, `${p.h.name} was killed by a Yeti's thrown snow tree.`);
+  } else if (p.kind === "dino") hitDino(w, p.d, 55, d.x, d.y);
+  else w.rivals.hit(w, p.b, 0.42, d.x, d.y, true);
 }
 
 /* ------------------------------ their numbers ------------------------------ */

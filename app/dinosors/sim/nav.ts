@@ -30,9 +30,10 @@ const F_SOLID = 2; // walls, buildings, huts: nobody walks through
 const F_GATE = 4;
 const F_OPEN = 8; // gate is open
 const F_TAR = 16;
-const F_STAIRS = 32; // people only
+const F_STAIRS = 32; // humans climb the ladder; ground dinosaurs can cross its opening
 const F_TOWER = 64; // people climb the ladder; dinos can't pass
 const F_BRIDGE = 128;
+const F_PULLEY = 256; // short, preferred route for a carrier at a ladder
 
 /** how high people stand on walls / towers (px) */
 export const WALK_Z = 28;
@@ -103,7 +104,7 @@ class Heap {
 }
 
 export class Nav {
-  flags = new Uint8Array(NT);
+  flags = new Uint16Array(NT);
   /** base movement cost (terrain, paths, snow) */
   cost = new Float32Array(NT).fill(1);
   /** walkway on top (built wall / gate / tower) */
@@ -168,7 +169,11 @@ export class Nav {
       if (wl.part === "gate") {
         f[i] |= F_GATE | (wl.open ? F_OPEN : 0);
         if (wl.built >= 1) this.top[i] = 1;
-      } else if (wl.part === "stairs") f[i] |= F_STAIRS;
+      } else if (wl.part === "stairs") {
+        if (t === T.Cliff) f[i] &= ~F_TERRAIN;
+        f[i] |= F_STAIRS | (wl.pulley ? F_PULLEY : 0);
+        cost[i] = Math.min(cost[i], wl.pulley ? 0.55 : 1);
+      }
       else {
         f[i] |= F_SOLID;
         if (wl.built >= 1) this.top[i] = 1;
@@ -215,7 +220,7 @@ export class Nav {
     const f = this.flags[i];
     if (f & (F_TERRAIN | F_SOLID)) return false;
     if (cls === "human") return !(f & F_TAR);
-    if (f & (F_STAIRS | F_TOWER)) return false;
+    if (f & F_TOWER) return false;
     if ((cls === "bigDino" || cls === "hugeDino") && f & F_BRIDGE) return false;
     if ((f & F_GATE) && !(f & F_OPEN)) return false;
     if ((cls === "rider" || cls === "hugeDino" || cls === "trainedHugeDino") && f & F_TAR) return false;
@@ -223,13 +228,17 @@ export class Nav {
       const x = i % MAP_W;
       const y = Math.floor(i / MAP_W);
       if (x <= 0 || y <= 0 || x >= MAP_W - 1 || y >= MAP_H - 1) return false;
+      // A built ladder is a deliberately narrow crossing in the wall line.
+      // Let large haulers use the approach tiles as well as the ramp itself.
+      const ladderRoute = !!(f & F_STAIRS) || [-MAP_W, -1, 1, MAP_W].some((o) => this.flags[i + o] & F_STAIRS);
+      if (ladderRoute) return true;
       // On a bridge, a trained giant follows the deck's centre instead of
       // demanding three dry tiles across the water.
       const bridgeApproach = cls === "trainedHugeDino" && ((f & F_BRIDGE) || [-MAP_W, -1, 1, MAP_W].some((offset) => this.flags[i + offset] & F_BRIDGE));
       if (bridgeApproach) {
         for (const offset of [-MAP_W - 1, -MAP_W, -MAP_W + 1, -1, 1, MAP_W - 1, MAP_W, MAP_W + 1]) {
           const around = this.flags[i + offset];
-          if (around & (F_SOLID | F_STAIRS | F_TOWER | F_TAR)) return false;
+          if (around & (F_SOLID | F_TOWER | F_TAR)) return false;
           if ((around & F_GATE) && !(around & F_OPEN)) return false;
         }
         return true;
@@ -237,7 +246,7 @@ export class Nav {
       // Away from the bridge, a sauropod and its cargo still need full clearance.
       for (const offset of [-MAP_W - 1, -MAP_W, -MAP_W + 1, -1, 1, MAP_W - 1, MAP_W, MAP_W + 1]) {
         const around = this.flags[i + offset];
-        if (around & (F_TERRAIN | F_SOLID | F_STAIRS | F_TOWER | F_BRIDGE | F_TAR)) return false;
+        if (around & (F_TERRAIN | F_SOLID | F_TOWER | F_BRIDGE | F_TAR)) return false;
         if ((around & F_GATE) && !(around & F_OPEN)) return false;
       }
     }
@@ -268,6 +277,8 @@ export class Nav {
     if (fire > 0.6 && cls === "human") return 150;
     if (fire > 0.2) return cls === "human" ? 30 : 18;
     let c = this.cost[i];
+    // Haulers choose the fitted winch route when it is available.
+    if (this.flags[i] & F_PULLEY) c *= 0.55;
     if (cls !== "human" && this.flags[i] & F_TAR) c += 25;
     if (cls === "human" && this.flags[i] & F_GATE) c += 0.4;
     return c;
@@ -303,7 +314,7 @@ export class Nav {
       const t = k / steps;
       const i = tileOf(ax + (bx - ax) * t, ay + (by - ay) * t);
       const f = this.flags[i];
-      if (f & (F_SOLID | F_STAIRS | F_TOWER)) return true;
+      if (f & (F_SOLID | F_TOWER)) return true;
       if (f & F_GATE && !(f & F_OPEN)) return true;
     }
     return false;

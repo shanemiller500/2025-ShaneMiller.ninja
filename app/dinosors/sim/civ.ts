@@ -11,7 +11,7 @@ import { BEAM, buildingGen, PYRAMID_CASED_STORE, CIV_ORDER, CIV_TECH, CROSS_AFTE
 import { sp } from "../data/species";
 import { STONE_MUL } from "./build";
 import { scorpionTarget } from "./colony";
-import { emote, setState, sizeOf } from "./dinos";
+import { dinoMaxHp, emote, setState, sizeOf } from "./dinos";
 import { go, say } from "./humans";
 import { P } from "./particles";
 import { hash2 } from "./rng";
@@ -477,9 +477,9 @@ export class Civ {
     if (!ps.length) return;
     const links = this.pylonLinks(w);
     for (const d of w.dinos) {
-      if (d.owner || d.state === "carried" || sp(d.species).move !== "walk") continue;
-      const hostile = d.raider || (sp(d.species).diet !== "herbivore" && (d.state === "chase" || d.state === "stalk"));
-      if (!hostile) continue;
+      // The field protects the player's settlement from every wild or enemy dinosaur,
+      // including calm herbivores and flyers. Player-owned animals pass through safely.
+      if ((d.owner && !d.raider) || d.state === "carried" || d.state === "faint") continue;
       const r = sizeOf(d) * 0.3 + 10;
       let push: { x: number; y: number } | null = null;
       for (const p of ps) {
@@ -504,16 +504,24 @@ export class Civ {
         }
       }
       if (!push) continue;
-      d.x += push.x * 90 * dt;
-      d.y += push.y * 90 * dt;
-      d.vx = push.x * 60;
-      d.vy = push.y * 60;
-      d.health -= dt * 0.04;
-      this.energy = Math.max(0, this.energy - dt * 1.5);
-      if (w.rng() < dt * 8) w.particles.spawn(P.Spark, d.x - push.x * 10, d.y, { z: 14, vz: 40, size: 2, max: 0.35, color: "#9feaff" });
-      if (w.rng() < dt * 2) {
-        w.sfx("zap", d.x, d.y, 0.4, 1.4);
-        emote(d, "⚡", 1);
+      d.x += push.x * 120 * dt;
+      d.y += push.y * 120 * dt;
+      d.vx = push.x * 180;
+      d.vy = push.y * 180;
+      d.pylonZapT = Math.max(0, (d.pylonZapT ?? 0) - dt);
+      if (d.pylonZapT <= 0) {
+        d.pylonZapT = 0.75;
+        hitDino(w, d, dinoMaxHp(d) * 0.045, d.x - push.x * 12, d.y - push.y * 12);
+        if (d.health > 0) {
+          setState(d, "flee", d.x + push.x * 500, d.y + push.y * 500);
+          w.sfx("zap", d.x, d.y, 0.4, 1.4);
+          emote(d, "⚡", 1);
+          if (w.inView(d.x, d.y, 120)) {
+            w.particles.burst(P.Spark, d.x, d.y, 10, 65, { z: d.z + sizeOf(d) * 0.4, vz: 50, size: 4, max: 0.55, color: "#79f4ff" });
+            w.particles.burst(P.Ring, d.x, d.y, 3, 20, { z: d.z, size: 14, max: 0.45, color: "#b7fbff" });
+          }
+        }
+        this.energy = Math.max(0, this.energy - 0.4);
       }
       if (!w.flags.has("barrier")) {
         w.flags.add("barrier");

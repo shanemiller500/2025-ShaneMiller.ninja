@@ -123,6 +123,7 @@ const foeXY = (f: Foe) => (f.kind === "human" ? f.h : f.kind === "brute" ? f.b :
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
 /** game the hunters go after (never the legends) */
 const QUARRY = new Set(["rimeclaw", "frosthorn", "glacierback", "snowLeopard", "camel", "trike", "para", "pachy", "iguano"]);
+const winter = (w: World) => Math.floor((w.day - 1) / 3) % 4 === 3;
 
 export class SnowFolk {
   tribes: SnowTribe[] = [];
@@ -535,21 +536,22 @@ export class SnowFolk {
         }
       }
       const free = adults.filter((b) => !b.band && b.hp > 0.6 && b.state !== "flee" && b.state !== "fight");
+      const coldSeason = winter(w);
       t.huntT -= 1;
       if (t.huntT <= 0) {
-        t.huntT = 160 + this.rng() * 140;
+        t.huntT = coldSeason ? 65 + this.rng() * 65 : 160 + this.rng() * 140;
         if (w.daylight > 0.3) this.startHunt(w, t, free);
       }
       t.patrolT -= 1;
       if (t.patrolT <= 0) {
-        t.patrolT = 130 + this.rng() * 130;
+        t.patrolT = coldSeason ? 55 + this.rng() * 65 : 130 + this.rng() * 130;
         const riders = free.filter((b) => b.mount || b.snowRole === "archer").slice(0, 4);
         if (riders.length >= 2) this.startPatrol(w, t, riders);
       }
       t.raidT -= 1;
       if (t.raidT <= 0) {
-        t.raidT = (t.grudge > 0 ? 500 : 1100) + this.rng() * 500;
-        if (!calm && w.elapsed > 900) this.startRaid(w, t, free);
+        t.raidT = coldSeason ? (t.grudge > 0 ? 220 : 520) + this.rng() * 260 : (t.grudge > 0 ? 500 : 1100) + this.rng() * 500;
+        if ((!calm || coldSeason) && w.elapsed > 900) this.startRaid(w, t, free);
       }
     }
     if (this.tribes.length < MAX_SNOW_TRIBES) {

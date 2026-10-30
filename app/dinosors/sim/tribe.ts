@@ -127,16 +127,17 @@ export class Tribe {
     return this.wallMap.get(ty * MAP_W + tx);
   }
 
-  /** Do finished walls stop a ground dinosaur here? (closed gates + stairs too) */
+  /** Do finished walls stop a ground dinosaur here? Ladder openings stay passable. */
   blocks(tx: number, ty: number) {
     const wl = this.wallMap.get(ty * MAP_W + tx);
-    return !!wl && wl.built >= 0.5 && wl.hp > 0 && !(wl.part === "gate" && wl.open);
+    return !!wl && wl.built >= 0.5 && wl.hp > 0 && wl.part !== "stairs" && !(wl.part === "gate" && wl.open);
   }
 
   addWall(w: World, tx: number, ty: number, kind: WallKind, part: WallPart = "wall") {
     if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1) return null;
     if (!this.wallAt(tx, ty) && this.vetoed("wall", tx * TILE + TILE / 2, ty * TILE + TILE / 2)) return null;
-    if (!w.colony.footing(w, tx, ty)) return null;
+    const cliffLadder = part === "stairs" && w.terrain.tiles[ty * MAP_W + tx] === T.Cliff;
+    if (!w.colony.footing(w, tx, ty) && !cliffLadder) return null;
     const ex = this.wallAt(tx, ty);
     if (ex) {
       // the Megalodon gate's jaws stay as they are
@@ -163,7 +164,7 @@ export class Tribe {
       }
       return null;
     }
-    if (!this.wallSpotOk(w, tx, ty)) return null;
+    if (!this.wallSpotOk(w, tx, ty, part === "stairs")) return null;
     const wl: Wall = { id: w.nextId(), tx, ty, kind, part, open: part === "gate", auto: true, hp: 0, built: 0, have: 0 };
     this.walls.push(wl);
     this.wallMap.set(ty * MAP_W + tx, wl);
@@ -181,8 +182,10 @@ export class Tribe {
    * Can a new wall piece stand on this empty tile? Solid footing, not vetoed, and never over the cave
    * mouth, the fire, the stockpile, a tower or another building.
    */
-  wallSpotOk(w: World, tx: number, ty: number) {
-    if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1 || this.wallAt(tx, ty) || !w.colony.footing(w, tx, ty)) return false;
+  wallSpotOk(w: World, tx: number, ty: number, allowCliffLadder = false) {
+    if (tx < 1 || ty < 1 || tx >= MAP_W - 1 || ty >= MAP_H - 1 || this.wallAt(tx, ty)) return false;
+    const cliffLadder = allowCliffLadder && w.terrain.tiles[ty * MAP_W + tx] === T.Cliff;
+    if (!w.colony.footing(w, tx, ty) && !cliffLadder) return false;
     const x = (tx + 0.5) * TILE;
     const y = (ty + 0.5) * TILE;
     const c = w.camp;
@@ -1907,7 +1910,7 @@ export class Tribe {
 
   serialize() {
     return {
-      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0) | (wl.mega ? 4 : 0), wl.id] as const),
+      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0) | (wl.mega ? 4 : 0) | (wl.pulley ? 8 : 0), wl.id] as const),
       farms: this.farms.map((f) => [Math.round(f.x), Math.round(f.y), Math.round(f.growth * 100) / 100, f.planted ? 1 : 0, f.crop ?? "wheat"] as const),
       towers: this.towers.map((t) => [Math.round(t.x), Math.round(t.y), t.stage, Math.max(0, t.have), t.tx, t.ty, Math.round(t.hp), (t.stone ? 1 : 0) | (t.up ? 2 : 0), t.id] as const),
       level: this.level,
@@ -1938,6 +1941,7 @@ export class Tribe {
         wl.mega = true;
         wl.auto = false;
       }
+      if (bone & 8) wl.pulley = true;
       this.walls.push(wl);
       this.wallMap.set(ty * MAP_W + tx, wl);
     }

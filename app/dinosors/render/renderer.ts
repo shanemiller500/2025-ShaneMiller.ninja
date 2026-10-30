@@ -1954,6 +1954,26 @@ export class Renderer {
       c.stroke();
     }
     drawDino(c, def, L, dn.dir, pose);
+    if (dn.species === "yeti" && dn.yetiScarf) {
+      c.save();
+      if (dn.dir < 0) c.scale(-1, 1);
+      c.fillStyle = dn.yetiScarf;
+      c.beginPath();
+      c.moveTo(-L * 0.105, -L * 0.69);
+      c.lineTo(L * 0.13, -L * 0.71);
+      c.lineTo(L * 0.15, -L * 0.65);
+      c.lineTo(-L * 0.09, -L * 0.63);
+      c.closePath();
+      c.fill();
+      c.beginPath();
+      c.moveTo(L * 0.04, -L * 0.66);
+      c.lineTo(L * 0.13, -L * 0.63);
+      c.lineTo(L * 0.19, -L * 0.53);
+      c.lineTo(L * 0.1, -L * 0.55);
+      c.closePath();
+      c.fill();
+      c.restore();
+    }
     if (cruising) this.swimWater(c, dn, L, true);
     if (dn.clan) this.clanHarness(c, dn, L, def.move === "fly");
     if (dn.work?.partner && !isBaby(dn)) {

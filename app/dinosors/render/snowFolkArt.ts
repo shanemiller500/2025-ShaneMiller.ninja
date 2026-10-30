@@ -364,19 +364,21 @@ export function drawSnowLodge(c: CanvasRenderingContext2D, s: SnowLodge, tr: Sno
         c.ellipse(Math.cos(a) * 12, Math.sin(a) * 5, 4, 2.6, 0, 0, Math.PI * 2);
         c.fill();
       }
-      const f = 0.8 + Math.sin(t * 9) * 0.2;
-      c.fillStyle = "#ff9a2e";
-      c.beginPath();
-      c.moveTo(-6, 0);
-      c.quadraticCurveTo(0, -18 * f, 6, 0);
-      c.closePath();
-      c.fill();
-      c.fillStyle = "#ffe08a";
-      c.beginPath();
-      c.moveTo(-3, 0);
-      c.quadraticCurveTo(0, -10 * f, 3, 0);
-      c.closePath();
-      c.fill();
+      if (s.hp > 0) {
+        const f = 0.8 + Math.sin(t * 9) * 0.2;
+        c.fillStyle = "#ff9a2e";
+        c.beginPath();
+        c.moveTo(-6, 0);
+        c.quadraticCurveTo(0, -18 * f, 6, 0);
+        c.closePath();
+        c.fill();
+        c.fillStyle = "#ffe08a";
+        c.beginPath();
+        c.moveTo(-3, 0);
+        c.quadraticCurveTo(0, -10 * f, 3, 0);
+        c.closePath();
+        c.fill();
+      }
       break;
     }
     case "rack": {

@@ -842,22 +842,22 @@ export function drawPylonLink(c: CanvasRenderingContext2D, ax: number, ay: numbe
   if (!on) return;
   c.save();
   c.globalCompositeOperation = "lighter";
-  for (let i = 0; i < 3; i++) {
-    const h = 10 + i * 9;
-    c.strokeStyle = `rgba(120,220,255,${0.22 + Math.sin(t * 6 + i) * 0.08})`;
-    c.lineWidth = 1.4;
+  for (let i = 0; i < 4; i++) {
+    const h = 9 + i * 8;
+    c.strokeStyle = `rgba(${i % 2 ? "165,125,255" : "100,245,255"},${0.46 + Math.sin(t * 18 + i) * 0.16})`;
+    c.lineWidth = 2 + (i === 0 ? 1.2 : 0);
     c.beginPath();
     const n = 10;
     for (let k = 0; k <= n; k++) {
       const f = k / n;
       const x = ax + (bx - ax) * f;
-      const y = ay + (by - ay) * f - h - 8 + Math.sin(t * 9 + f * 12 + i) * 1.6;
+      const y = ay + (by - ay) * f - h - 8 + Math.sin(t * 34 + f * 22 + i * 2) * 4.2;
       if (k === 0) c.moveTo(x, y);
       else c.lineTo(x, y);
     }
     c.stroke();
   }
-  c.fillStyle = "rgba(120,220,255,0.08)";
+  c.fillStyle = "rgba(95,225,255,0.2)";
   c.beginPath();
   c.moveTo(ax, ay - 6);
   c.lineTo(bx, by - 6);
@@ -865,6 +865,18 @@ export function drawPylonLink(c: CanvasRenderingContext2D, ax: number, ay: numbe
   c.lineTo(ax, ay - 38);
   c.closePath();
   c.fill();
+  // Bright pulses race along the barrier so its vibration reads at game zoom.
+  const dx = bx - ax;
+  const dy = by - ay;
+  for (let i = 0; i < 3; i++) {
+    const f = (t * 0.85 + i / 3) % 1;
+    const x = ax + dx * f;
+    const y = ay + dy * f - 25 + Math.sin(t * 34 + f * 22) * 4.2;
+    c.fillStyle = "rgba(220,255,255,0.95)";
+    c.beginPath();
+    c.arc(x, y, 3.2 + Math.sin(t * 24 + i) * 0.9, 0, Math.PI * 2);
+    c.fill();
+  }
   c.restore();
 }
 

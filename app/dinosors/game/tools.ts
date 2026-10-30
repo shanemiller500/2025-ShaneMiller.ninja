@@ -31,7 +31,7 @@ export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" 
 export type PeopleOpt = "adult" | "child" | "clan" | "treeFolk" | "seaFolk" | "sandFolk" | "snowFolk";
 /** How Tree / Sea / Sand People arrive with the People tool: a whole camp, or a group of them (folkGroups.ts). */
 export type FolkGroupOpt = "camp" | "family" | "patrol" | "raid" | "caravan";
-export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "bonegate" | "megagate" | "levitate" | "gate" | "stairs" | "tower" | "scorpion" | "farm" | "campfire" | "cleanMud" | BuildingKind;
+export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "bonegate" | "megagate" | "levitate" | "gate" | "stairs" | "pulley" | "tower" | "scorpion" | "farm" | "campfire" | "cleanMud" | BuildingKind;
 
 export interface ToolState {
   id: ToolId;
@@ -173,7 +173,8 @@ export const BUILD_DEFS: BuildDef[] = [
   { value: "gate", icon: "🚪", label: "Gate", cat: "defense", cost: { wood: 2 }, stoneCost: { stone: 3 }, tech: "palisade", tip: "Put it in a wall. People use the side door; dinos only get through when it's open. Closes itself when danger comes." },
   { value: "bonegate", icon: "🦴", label: "Bone gate", cat: "defense", cost: { bone: 5 }, tech: "palisade", tip: "The grand entrance: giant crossed tusks, a dino rib-cage arch to walk through and bone doors that shut dinos out. Tap a gap, a wall or an old gate to put one in." },
   { value: "megagate", icon: "🦈", label: "Megalodon gate", cat: "defense", cost: { bone: 3 }, tech: "palisade", tip: "A colossal shark mouth across the water between your walls: tap the river and its jaws span it bank to bank (🦴 3 bones per tile). Shut by default: dinos and strangers can't get past the teeth, our people walk the jaw. Tap it to open it for everyone." },
-  { value: "stairs", icon: "🪜", label: "Stairs", cat: "defense", cost: { stick: 2 }, stoneCost: { stone: 2 }, tech: "palisade", tip: "Next to a wall: lets people climb up and defend from the walkway." },
+  { value: "stairs", icon: "🪜", label: "Ladder", cat: "defense", cost: { stick: 2 }, stoneCost: { stone: 2 }, tech: "palisade", tip: "Build in a wall gap or on a cliff face: people climb the ramp, and dinosaurs can cross the opening." },
+  { value: "pulley", icon: "🪝", label: "Pulley", cat: "defense", cost: { stick: 2, wood: 2 }, tech: "palisade", tip: "Fit onto a finished ladder to help people and hauling dinosaurs carry supplies across walls or cliffs." },
   { value: "tower", icon: "🗼", label: "Watchtower", cat: "defense", cost: { wood: 4, stone: 2 }, stoneCost: { stone: 8 }, tech: "tower", tip: "Guards climb up to see + shoot further. Joins up with walls. Once you know stone walls, towers go up in stone with a Scorpion on top: tap an old wooden tower with this to rebuild it in stone." },
   { value: "scorpion", icon: "🎯", label: "Scorpion", cat: "defense", cost: SCORPION_TIERS[0].cost, tech: "scorpion", tip: "A giant crossbow. Put it on a wall, a tower or the ground. Someone has to crew it." },
   bld("trap", "defense"),
@@ -664,14 +665,37 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
     case "polywall":
     case "polygate":
     case "gate":
+    case "pulley":
     case "stairs": {
+      const tx = Math.floor(x / TILE);
+      const ty = Math.floor(y / TILE);
+      if (opt === "pulley") {
+        const ladder = w.tribe.wallAt(tx, ty);
+        if (!ladder || ladder.part !== "stairs" || ladder.built < 1) {
+          hint(w, "🪝", "Build a ladder beside a wall first, then fit the pulley onto its finished base.");
+          return false;
+        }
+        if (ladder.pulley) {
+          hint(w, "🪝", "This ladder already has a pulley.");
+          return false;
+        }
+        if (c.stock.stick < 2 || c.stock.wood < 2) {
+          hint(w, "🪝", "A pulley needs 2 sticks and 2 wood.");
+          return false;
+        }
+        c.stock.stick -= 2;
+        c.stock.wood -= 2;
+        ladder.pulley = true;
+        w.tribe.version++;
+        w.toast("🪝", "Pulley fitted! Haulers can carry supplies through this ladder opening.", ladder.tx * TILE + TILE / 2, ladder.ty * TILE + TILE / 2);
+        return true;
+      }
       // once stone walls are known everything here is built in stone
       const kind: WallKind = opt === "polywall" || opt === "polygate" ? "polygon" : opt === "stonewall" || c.learned.has("stonewall") ? "stone" : "palisade";
       const part = opt === "gate" || opt === "polygate" ? "gate" : opt === "stairs" ? "stairs" : "wall";
-      const tx = Math.floor(x / TILE);
-      const ty = Math.floor(y / TILE);
-      if (part === "stairs" && ![w.tribe.wallAt(tx + 1, ty), w.tribe.wallAt(tx - 1, ty), w.tribe.wallAt(tx, ty + 1), w.tribe.wallAt(tx, ty - 1)].some((o) => o && o.part !== "stairs")) {
-        hint(w, "🪜", "Stairs go right next to a wall.");
+      const cliff = w.terrain.tiles[ty * MAP_W + tx] === T.Cliff;
+      if (part === "stairs" && !cliff && ![w.tribe.wallAt(tx + 1, ty), w.tribe.wallAt(tx - 1, ty), w.tribe.wallAt(tx, ty + 1), w.tribe.wallAt(tx, ty - 1)].some((o) => o && o.part !== "stairs")) {
+        hint(w, "🪜", "Place a ladder beside a wall or on a cliff face.");
         return false;
       }
       const wl = w.tribe.addWall(w, tx, ty, kind, part);

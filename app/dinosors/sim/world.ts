@@ -1148,6 +1148,8 @@ export class World {
         seaTribe: d.seaTribe,
         sandTribe: d.sandTribe,
         snowTribe: d.snowTribe,
+        yetiPack: d.yetiPack,
+        yetiScarf: d.yetiScarf,
         warTraining: r(d.warTraining ?? 0),
         warArmor: d.warArmor ?? 0,
         rider: d.rider,

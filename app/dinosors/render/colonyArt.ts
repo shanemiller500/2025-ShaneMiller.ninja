@@ -759,6 +759,28 @@ function drawStairs(c: CanvasRenderingContext2D, wl: Wall, look: WallLook, built
     c.lineTo(14 * s, -10 - H);
   }
   c.stroke();
+  if (wl.pulley) {
+    // Small wooden winch, rope and a swinging supply basket on the ladder landing.
+    c.strokeStyle = INK;
+    c.lineWidth = 2.2;
+    c.beginPath();
+    c.moveTo(17, -2);
+    c.lineTo(17, -H - 8);
+    c.stroke();
+    c.fillStyle = stone ? "#8a8173" : "#76502e";
+    c.fillRect(10, -H - 16, 14, 5);
+    c.strokeStyle = INK;
+    c.lineWidth = 1.2;
+    c.strokeRect(10, -H - 16, 14, 5);
+    c.beginPath();
+    c.moveTo(14, -H - 11);
+    c.lineTo(14, -H - 2);
+    c.lineTo(21, -H - 2);
+    c.lineTo(21, -H - 11);
+    c.stroke();
+    c.fillStyle = "#9a7045";
+    c.fillRect(14.5, -H - 8, 6, 5);
+  }
 }
 
 /* ------------------------------ towers ------------------------------ */

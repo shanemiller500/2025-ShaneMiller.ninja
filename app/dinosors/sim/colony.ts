@@ -567,6 +567,14 @@ export class Colony {
       if (kit && !this.kits.has(id) && canMake(id, kit.cost) && (!["copperPick", "shovel", "chisel", "minerPack", "reinforcedPick", "diamondDrill"].includes(id) || w.mine.crew.length > 0) && (id !== "steelSaddles" || people.some(isRider))) return queue(id);
     }
 
+    // In wet weather, make protective cloaks before optional weapons and armour.
+    // `dress()` hands each finished cloak to a worker, and rainGuard keeps them on the job.
+    const raincoat = OUTFIT_BY_ID.raincloak;
+    const raincoats = owned("raincloak", (h) => h.gear.outfit === "raincloak");
+    if ((w.weather.rain > 0.3 || w.weather.storm > 0.2) && raincoat && raincoats < people.length && canMake(raincoat.id, raincoat.cost)) {
+      return queue(raincoat.id);
+    }
+
     const fighters = people.filter((h) => ["guard", "hunter", "dragonSlayer", "eggRunner"].includes(w.tribe.roleOf(h)));
     const fighterTarget = Math.min(people.length, Math.max(fighters.length, Math.ceil(people.length * 0.35)));
     // a sidearm for everyone (a mix of shock sticks + ray guns), before the fighters' main weapons
