@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeParcel, sourcesForBounds, type Bounds, type ParcelSource } from "@/app/land-intelligence/parcel-sources";
+import { parcelMetrics } from "@/app/land-intelligence/parcel-analysis";
+import type { ParcelGeometry } from "@/app/land-intelligence/parcel-inspection";
 
 async function querySource(source: ParcelSource, [west, south, east, north]: Bounds) {
   const params = new URLSearchParams({ where: "1=1", geometry: JSON.stringify({ xmin: west, ymin: south, xmax: east, ymax: north, spatialReference: { wkid: 4326 } }), geometryType: "esriGeometryEnvelope", inSR: "4326", outSR: "4326", spatialRel: "esriSpatialRelIntersects", outFields: source.fields, returnGeometry: "true", maxAllowableOffset: "0.000003", resultRecordCount: "500", f: "geojson" });
@@ -9,10 +11,22 @@ async function querySource(source: ParcelSource, [west, south, east, north]: Bou
   if (raw.length > 6_000_000) throw new Error("Parcel view too dense");
   const json = JSON.parse(raw);
   if (json.error || json.type !== "FeatureCollection" || !Array.isArray(json.features)) throw new Error("Unexpected parcel response");
-  const features = json.features.filter((feature: GeoJSON.Feature) => feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon").map((feature: GeoJSON.Feature) => {
+  const polygons: GeoJSON.Feature[] = json.features.filter((feature: GeoJSON.Feature) => feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon");
+  const records = polygons.map((feature) => normalizeParcel(source, feature.properties ?? {}));
+  // Condominium units are often published as separate records sharing one footprint; value density sums the stack.
+  const stacks = new Map<string, number[]>();
+  polygons.forEach((feature, index) => { const key = JSON.stringify((feature.geometry as ParcelGeometry).coordinates); stacks.set(key, [...(stacks.get(key) ?? []), index]); });
+  const valuePerAcre = new Map<number, number | null>();
+  for (const members of Array.from(stacks.values())) {
+    const total = members.reduce((sum, index) => sum + (records[index].totalValue ?? 0), 0);
+    // Value density: published total ÷ acres (source acreage for a single record, else the mapped polygon area).
+    const acres = (members.length === 1 ? records[members[0]].acres : null) ?? parcelMetrics(polygons[members[0]].geometry as ParcelGeometry).areaMeters2 / 4046.8564224;
+    for (const index of members) valuePerAcre.set(index, total > 0 && acres > 0 ? Math.round(total / acres) : null);
+  }
+  const features = polygons.map((feature, index) => {
     const objectid = feature.properties?.OBJECTID ?? feature.properties?.objectid ?? feature.id;
     const parcelKey = `${source.id}:${objectid}`;
-    return { type: "Feature" as const, id: parcelKey, geometry: feature.geometry, properties: { ...normalizeParcel(source, feature.properties ?? {}), parcelKey } };
+    return { type: "Feature" as const, id: parcelKey, geometry: feature.geometry, properties: { ...records[index], parcelKey, valuePerAcre: valuePerAcre.get(index) ?? null } };
   });
   return { features, limited: !!json.exceededTransferLimit || features.length >= 500 };
 }

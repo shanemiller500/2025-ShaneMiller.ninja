@@ -4,13 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
-function load(file, fetchMock) {
+function load(file, fetchMock, env = { CENSUS_API_KEY: 'test-key' }) {
   const abs = path.resolve(file), exports = {};
-  const requireLocal = (name) => name === 'next/server'
+  const requireLocal = (name) => name.startsWith('node:') ? require(name) : name === 'next/server'
     ? { NextResponse: { json: (body, options = {}) => ({ body, status: options.status ?? 200 }) } }
-    : load(name.startsWith('@/') ? name.slice(2) + '.ts' : path.resolve(path.dirname(abs), name) + '.ts', fetchMock);
+    : load(name.startsWith('@/') ? name.slice(2) + '.ts' : path.resolve(path.dirname(abs), name) + '.ts', fetchMock, env);
   const { outputText } = ts.transpileModule(fs.readFileSync(abs, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
-  vm.runInNewContext(outputText, { exports, require: requireLocal, fetch: fetchMock, URLSearchParams, AbortSignal, URL, Date, Map, Math, JSON, Number, String, Array, Object, Error, Promise }, { filename: abs });
+  vm.runInNewContext(outputText, { exports, require: requireLocal, fetch: fetchMock, process: { env }, URLSearchParams, AbortSignal, URL, Date, Map, Math, JSON, Number, String, Array, Object, Error, Promise }, { filename: abs });
   return exports;
 }
 test('soil map validates bounds and groups returned polygons', async () => {
@@ -74,4 +74,23 @@ test('location report includes sourced tract estimates without treating them as 
   assert.equal(result.body.census.value.population, 3200);
   assert.equal(result.body.census.value.povertyPercent, 11.2);
   assert.match(result.body.census.note, /not the people or households within the site/);
+});
+
+test('location report says a Census key is needed instead of calling the API without one', async () => {
+  const calls = [];
+  const fetchMock = async (input, options = {}) => {
+    const url = String(input), body = String(options.body ?? '');
+    calls.push(url);
+    const json = (value) => ({ ok: true, json: async () => value });
+    if (url.includes('epqs.nationalmap.gov')) return json({ value: 1600 });
+    if (url.includes('/Tabular/post.rest')) return json({ Table: [['mukey', 'musym', 'muname']] });
+    if (body.includes('returnCountOnly=true')) return json({ count: 0 });
+    return json({ features: [] });
+  };
+  const { POST } = load('app/api/land-intelligence/report/route.ts', fetchMock, {});
+  const result = await POST({ json: async () => ({ kind: 'pin', points: [[-104.99, 39.74]] }), headers: { get: () => null } });
+  assert.equal(result.body.census.status, 'unavailable');
+  assert.match(result.body.census.note, /CENSUS_API_KEY/);
+  assert.equal(calls.some((url) => /api\.census\.gov/.test(url)), false, 'no keyless Census Data API request is sent');
+  assert.equal(result.body.soils.status !== undefined, true, 'the rest of the report still builds');
 });

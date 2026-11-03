@@ -17,7 +17,8 @@ export function parcelHeadline(detail: ParcelDetail | null): ParcelHeadline {
   const accounts = county?.accounts ?? [];
   const owners = Array.from(new Set(accounts.flatMap((account) => account.owners).filter(Boolean)));
   const countySales = accounts.flatMap((account) => account.sales.map((sale) => ({ ...sale, account: account.accountNo, shared: (account.linkedParcelCount ?? 1) > 1 })));
-  const pricedCounty = countySales.filter((sale) => sale.price != null && sale.price > 0).sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0))[0];
+  // A deed whose date failed validation cannot be called the latest one.
+  const pricedCounty = countySales.filter((sale) => sale.price != null && sale.price > 0 && !sale.dateIssue).sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0))[0];
   const statewideSale = detail?.sales.filter((sale) => sale.price != null && sale.price > 0).sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0))[0];
   const useStatewidePrice = accounts.length > 1 && !!statewideSale;
   const selectedCountySale = useStatewidePrice ? null : pricedCounty;
@@ -32,6 +33,6 @@ export function parcelHeadline(detail: ParcelDetail | null): ParcelHeadline {
     priceLabel: selectedCountySale ? "Recorded deed price" : "Last reported sale price",
     priceNote: selectedCountySale ? `Assessor account ${selectedCountySale.account}${selectedCountySale.shared ? " links to multiple parcels" : ""}; deed may be a non-market transfer` : statewideSale ? "Statewide parcel field; may be a non-market transfer" : "No price in the connected parcel or assessor records",
     value,
-    valueLabel: accounts.length === 1 && accounts[0].values?.actualTotal != null ? "County appraised value" : detail?.estimatedMarketValue != null ? "Estimated market value" : "Assessed/appraised value",
+    valueLabel: accounts.length === 1 && accounts[0].values?.actualTotal != null ? "County actual value" : detail?.estimatedMarketValue != null ? detail.valueLabels?.market || "Estimated market value" : detail?.valueLabels?.total || "Assessed value",
   };
 }

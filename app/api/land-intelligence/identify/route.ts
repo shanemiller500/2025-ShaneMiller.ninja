@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { wellStatus } from "@/app/land-intelligence/colorado-live";
 
 const SOURCES = {
   flood: { url: "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28", label: "FEMA flood zone", fields: ["FLD_ZONE", "ZONE_SUBTY", "SFHA_TF"] },
@@ -8,6 +9,7 @@ const SOURCES = {
   faults: { url: "https://earthquake.usgs.gov/arcgis/rest/services/haz/Qfaults/MapServer/21", label: "Mapped fault", fields: ["fault_name", "age", "mapped_certainty"] },
   roads: { url: "https://dtdapps.codot.gov/server/rest/services/Webapps/HighwaySegments/MapServer/2", label: "Colorado highway", fields: ["OBJECTID", "ROUTE", "ALIAS", "AADT", "AADTYR", "SPEEDLIM"] },
   facilities: { url: "https://echogeo.epa.gov/arcgis/rest/services/ECHO/Facilities/MapServer/0", label: "EPA facility", fields: ["FAC_NAME", "REGISTRY_ID", "FAC_CITY", "FAC_STATE"] },
+  "oil-gas-wells": { url: "https://gisdnr.state.co.us/arcgis/rest/services/ECMC_Public/Wells_Public_ECMC/MapServer/0", label: "ECMC oil and gas well", fields: ["WellName", "API_Label", "wellstat", "Operator", "field_name", "scout_card_public"] },
 } as const;
 type SourceId = keyof typeof SOURCES;
 
@@ -29,7 +31,7 @@ export async function POST(request: NextRequest) {
       if (!response.ok) throw new Error("Service unavailable");
       const json = await response.json();
       if (json.error || !Array.isArray(json.features)) throw new Error("Unexpected feature response");
-      return { id, label: source.label, url: source.url, status: "ok", features: json.features.map((feature: { attributes?: Record<string, unknown> }) => Object.fromEntries(source.fields.map((key) => [key, feature.attributes?.[key]]).filter(([, value]) => value !== null && value !== undefined && value !== ""))) };
+      return { id, label: source.label, url: source.url, status: "ok", features: json.features.map((feature: { attributes?: Record<string, unknown> }) => Object.fromEntries(source.fields.map((key) => [key, key === "wellstat" ? wellStatus(feature.attributes?.[key]) : feature.attributes?.[key]]).filter(([, value]) => value !== null && value !== undefined && value !== ""))) };
     } catch { return { id, label: source.label, url: source.url, status: "unavailable", features: [] }; }
   }));
   return NextResponse.json({ results });

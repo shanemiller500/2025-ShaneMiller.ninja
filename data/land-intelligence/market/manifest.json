@@ -1,0 +1,124 @@
+{
+ "builtAt": "2026-11-02T14:56:25.080Z",
+ "acsYear": 2024,
+ "tractHpiThrough": 2025,
+ "states": 52,
+ "counties": 3236,
+ "tracts": 85395,
+ "metros": 410,
+ "sources": [
+  {
+   "id": "acs-B01003",
+   "url": "https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b01003.dat",
+   "vintage": "ACS 2020–2024 5-year",
+   "rows": 88657
+  },
+  {
+   "id": "acs-B19013",
+   "url": "https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b19013.dat",
+   "vintage": "ACS 2020–2024 5-year",
+   "rows": 88657
+  },
+  {
+   "id": "acs-B25001",
+   "url": "https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b25001.dat",
+   "vintage": "ACS 2020–2024 5-year",
+   "rows": 88657
+  },
+  {
+   "id": "acs-B25002",
+   "url": "https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b25002.dat",
+   "vintage": "ACS 2020–2024 5-year",
+   "rows": 88657
+  },
+  {
+   "id": "acs-B25003",
+   "url": "https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b25003.dat",
+   "vintage": "ACS 2020–2024 5-year",
+   "rows": 88657
+  },
+  {
+   "id": "acs-B25035",
+   "url": "https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b25035.dat",
+   "vintage": "ACS 2020–2024 5-year",
+   "rows": 88657
+  },
+  {
+   "id": "acs-B25064",
+   "url": "https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b25064.dat",
+   "vintage": "ACS 2020–2024 5-year",
+   "rows": 88657
+  },
+  {
+   "id": "acs-B25071",
+   "url": "https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b25071.dat",
+   "vintage": "ACS 2020–2024 5-year",
+   "rows": 88657
+  },
+  {
+   "id": "acs-B25077",
+   "url": "https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b25077.dat",
+   "vintage": "ACS 2020–2024 5-year",
+   "rows": 88657
+  },
+  {
+   "id": "acs-B17001",
+   "url": "https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b17001.dat",
+   "vintage": "ACS 2020–2024 5-year",
+   "rows": 88657
+  },
+  {
+   "id": "fhfa-tract",
+   "url": "https://www.fhfa.gov/hpi/download/annual/hpi_at_tract.csv",
+   "vintage": "annual through 2025 (developmental)"
+  },
+  {
+   "id": "fhfa-metro",
+   "url": "https://www.fhfa.gov/hpi/download/quarterly_datasets/hpi_at_metro.csv",
+   "vintage": "quarterly through 2026Q2",
+   "series": 410
+  },
+  {
+   "id": "fhfa-state",
+   "url": "https://www.fhfa.gov/hpi/download/quarterly_datasets/hpi_at_state.csv",
+   "vintage": "quarterly through 2026Q2",
+   "series": 51
+  },
+  {
+   "id": "bps-2020",
+   "url": "https://www2.census.gov/econ/bps/County/co2020a.txt",
+   "vintage": "2020 annual",
+   "rows": 3034
+  },
+  {
+   "id": "bps-2021",
+   "url": "https://www2.census.gov/econ/bps/County/co2021a.txt",
+   "vintage": "2021 annual",
+   "rows": 3034
+  },
+  {
+   "id": "bps-2022",
+   "url": "https://www2.census.gov/econ/bps/County/co2022a.txt",
+   "vintage": "2022 annual",
+   "rows": 3033
+  },
+  {
+   "id": "bps-2023",
+   "url": "https://www2.census.gov/econ/bps/County/co2023a.txt",
+   "vintage": "2023 annual",
+   "rows": 3029
+  },
+  {
+   "id": "bps-2024",
+   "url": "https://www2.census.gov/econ/bps/County/co2024a.txt",
+   "vintage": "2024 annual",
+   "rows": 3028
+  },
+  {
+   "id": "bps-2025",
+   "url": "https://www2.census.gov/econ/bps/County/co2025a.txt",
+   "vintage": "2025 annual",
+   "rows": 3029
+  }
+ ]
+}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PARCEL_KEY, queryParcelDetail } from "@/app/land-intelligence/parcel-detail";
 import { loadBoulderProperty } from "@/app/land-intelligence/boulder-property";
+import { coloradoCountyLive } from "@/app/land-intelligence/colorado-live";
 
 export async function GET(request: NextRequest) {
   const key = request.nextUrl.searchParams.get("key") ?? "";
@@ -10,6 +11,8 @@ export async function GET(request: NextRequest) {
     const detail = await queryParcelDetail(key);
     if (!detail) return NextResponse.json({ error: "This parcel record was not found in the public source." }, { status: 404 });
     if (key.startsWith("co:") && detail.parcel.county.toLowerCase() === "boulder") detail.boulder = await loadBoulderProperty(detail.parcel.id);
+    // Denver sales and Adams values are queried live; a slow county service leaves the statewide record in place.
+    if (key.startsWith("co:")) detail.countyLive = await coloradoCountyLive(detail, AbortSignal.timeout(8000));
     return NextResponse.json({ detail }, { headers: { "Cache-Control": "private, max-age=0" } });
   } catch {
     return NextResponse.json({ error: "The public property record could not be loaded. Try the source link below." }, { status: 503 });

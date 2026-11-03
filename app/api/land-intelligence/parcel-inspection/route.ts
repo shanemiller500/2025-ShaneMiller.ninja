@@ -4,13 +4,14 @@ import { createHash } from "node:crypto";
 import { PARCEL_KEY, queryParcelGeometry } from "@/app/land-intelligence/parcel-detail";
 import { parcelBounds, pointToParcelMeters, validParcelGeometry, type InspectionGroup, type ParcelFinding, type ParcelGeometry, type ParcelInspectionReport } from "@/app/land-intelligence/parcel-inspection";
 import { KARST_CLASSES, KARST_SERVICE } from "@/utils/geo/karst";
-import { queryUsminPoints } from "@/utils/geo/usmin-server";
 import { groundwaterSitesGroup, surveyControlGroup } from "./phase2";
 import { arcgisFeatures } from "./arcgis-query";
 import { spatialRelation } from "./spatial-match";
 import { PROVIDER_POLICY, type SourceId } from "./provider-policy";
 import { coloradoTankGroup, denverStormGroup, floridaSubsidenceGroup, unqueriedUtilityGroups } from "./phase3";
 import { coloradoBridgeGroup, coloradoLocalRoadGroup } from "./colorado-transport";
+import { coloradoWellsGroup } from "./colorado-energy";
+import { coloradoAmlGroup, mineGroup, underminedGroup } from "./underground";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,7 @@ const reportCache = new Map<string, { expires: number; report: ParcelInspectionR
 const geometryCache = new Map<string, { expires: number; geometry: ParcelGeometry }>();
 const geometryInFlight = new Map<string, Promise<ParcelGeometry | null>>();
 const reportsInFlight = new Map<string, { promise: Promise<ParcelInspectionReport>; controller: AbortController; users: number }>();
-const INSPECTION_VERSION = "3";
+const INSPECTION_VERSION = "6";
 
 function waitForReport(promise: Promise<ParcelInspectionReport>, signal?: AbortSignal) {
   if (!signal) return promise;
@@ -56,7 +57,7 @@ const service = (id: SourceId) => {
 
 function finding(id: string, feature: GeoJSON.Feature, geometry: ParcelGeometry, tag = ""): ParcelFinding {
   const p = feature.properties ?? {};
-  const recordId = field(p.EPA_ID ?? p.OBJECTID ?? p.objectid ?? p.REGISTRY_ID ?? p.mukey ?? feature.id);
+  const recordId = field(p.EPA_ID ?? p.OBJECTID ?? p.objectid ?? p.FID ?? p.REGISTRY_ID ?? p.mukey ?? feature.id);
   const names: Record<string, string> = {
     flood: `Zone ${field(p.FLD_ZONE) || "unclassified"}`,
     wetlands: field(p.WETLAND_TYPE) || "Mapped wetland",
@@ -109,33 +110,12 @@ async function landGroup(id: SourceId, geometry: ParcelGeometry, isColorado: boo
 
 async function karstGroup(geometry: ParcelGeometry, signal?: AbortSignal): Promise<InspectionGroup> {
   const id = "karst", label = "Karst geology", source = "USGS karst map", sourceUrl = KARST_SERVICE;
-  const settled = await Promise.allSettled(KARST_CLASSES.map((cls) => arcgisFeatures(`${KARST_SERVICE}/${cls.layer}`, geometry, "OBJECTID,KARST_TYPE,UNIT_NAME,UNIT_AGE", 0, signal)));
+  // The USGS karst layers key rows by FID (checked live 2026-11-01); requesting OBJECTID makes every query fail.
+  const settled = await Promise.allSettled(KARST_CLASSES.map((cls) => arcgisFeatures(`${KARST_SERVICE}/${cls.layer}`, geometry, "FID,KARST_TYPE,UNIT_NAME,UNIT_AGE", 0, signal)));
   const findings = settled.flatMap((entry, index) => entry.status === "fulfilled" ? entry.value.features.map((feature) => finding(id, feature, geometry, KARST_CLASSES[index].key)) : []);
   const failed = settled.filter((entry) => entry.status === "rejected").length;
   const capped = settled.some((entry) => entry.status === "fulfilled" && entry.value.capped);
   return { id, label, source, sourceUrl, status: failed === settled.length ? "source_error" : failed || capped ? "partial" : findings.length ? "found" : "no_features", note: "Mapped rock type only. It does not locate caves, voids, or parcel-specific sinkhole risk.", findings };
-}
-
-async function mineGroup(geometry: ParcelGeometry, signal?: AbortSignal): Promise<InspectionGroup> {
-  const id = "mines", label = "Historical mine symbols", source = "USGS USMIN", sourceUrl = "https://mrdata.usgs.gov/usmin/";
-  const [w, s, e, n] = parcelBounds(geometry);
-  const lat = (s + n) / 2;
-  const padY = 0.5 / 111.2, padX = 0.5 / (111.2 * Math.cos(lat * Math.PI / 180));
-  const box: [number, number, number, number] = [w - padX, s - padY, e + padX, n + padY];
-  if (box[2] - box[0] > 0.5 || box[3] - box[1] > 0.5) return { id, label, source, sourceUrl, status: "coverage_unknown", note: "Parcel is too large for the existing USMIN viewport query.", findings: [] };
-  try {
-    const result = await queryUsminPoints(box, 500, signal);
-    const findings = result.points.flatMap((feature) => {
-      if (feature.geometry?.type !== "Point") return [];
-      const distance = pointToParcelMeters(feature.geometry.coordinates as [number, number], geometry);
-      if (distance > 500) return [];
-      const p = feature.properties ?? {};
-      return [{ id: `mines:${feature.id}`, name: field(p.name) || field(p.type) || "Historical mine symbol", detail: [field(p.type), field(p.topo), p.scale ? `Map scale 1:${p.scale}` : ""].filter(Boolean).join(" · "), relationship: distance <= 1 ? "inside" as const : "nearby" as const, distanceMeters: Math.round(distance), sourceId: id, sourceRecordId: field(feature.id), recordUrl: /^https:\/\//.test(field(p.url)) ? field(p.url) : sourceUrl, recordDate: field(p.topoDate), geometry: feature.geometry }];
-    });
-    return { id, label, source, sourceUrl, status: result.truncated ? "partial" : findings.length ? "found" : "no_features", note: "Historical topographic-map symbols within 500 m. These do not delineate underground workings; mapped mine areas are not assessed here.", findings };
-  } catch {
-    return { id, label, source, sourceUrl, status: "source_error", note: "USMIN did not respond; mine records may still exist.", findings: [] };
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -177,10 +157,10 @@ async function buildReport(cacheKey: string, parcelKey: string, geometry: Parcel
   const isColorado = parcelKey.startsWith("co:");
   const groups = await Promise.all([
     ...(Object.keys(PROVIDER_POLICY) as SourceId[]).map((id) => landGroup(id, geometry, isColorado, signal)),
-    karstGroup(geometry, signal), mineGroup(geometry, signal),
+    karstGroup(geometry, signal), mineGroup(geometry, signal), underminedGroup(geometry, parcelKey, signal), coloradoAmlGroup(geometry, parcelKey, signal),
     surveyControlGroup(geometry, signal), groundwaterSitesGroup(geometry, signal),
     coloradoLocalRoadGroup(geometry, parcelKey, signal), coloradoBridgeGroup(geometry, parcelKey, signal),
-    denverStormGroup(geometry, parcelKey, signal), coloradoTankGroup(geometry, parcelKey, signal), floridaSubsidenceGroup(geometry, parcelKey, signal),
+    denverStormGroup(geometry, parcelKey, signal), coloradoTankGroup(geometry, parcelKey, signal), coloradoWellsGroup(geometry, parcelKey, signal), floridaSubsidenceGroup(geometry, parcelKey, signal),
   ]);
   const checkedAt = new Date().toISOString();
   const report: ParcelInspectionReport = { parcelKey, geometry, geometrySource: "Authoritative parcel layer; full-resolution feature", checkedAt, groups: [...groups, ...unqueriedUtilityGroups()].map((group) => ({ ...group, checkedAt, coverage: group.status === "outside_coverage" ? "outside" : "unknown" })) };

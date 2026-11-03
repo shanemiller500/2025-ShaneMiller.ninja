@@ -3,6 +3,11 @@ export type ParcelRecord = {
   id: string; state: string; county: string; address: string; acres: number | null;
   zoning: string; landUse: string; ownerType: string; landValue: number | null;
   received: string; source: string; sourceUrl: string; recordUrl: string; category: ParcelCategory;
+  /** `<state>:<county>:<parcel number>`; stays the same when the source republishes and renumbers OBJECTIDs. Empty when the record has no parcel number. */
+  propertyId: string;
+  /** Total value published by the statewide layer (definition differs by state; see `valueBasis`), for the value-density map. */
+  totalValue?: number | null;
+  valueBasis?: string;
 };
 
 export const PARCEL_CATEGORIES: { id: ParcelCategory; label: string; color: string }[] = [
@@ -15,12 +20,12 @@ export const PARCEL_CATEGORIES: { id: ParcelCategory; label: string; color: stri
 ];
 
 export const PARCEL_SOURCES = [
-  { id: "co", state: "Colorado", bounds: [-109.1, 36.9, -102, 41.1], url: "https://gis.colorado.gov/public/rest/services/Address_and_Parcel/Colorado_Public_Parcels/MapServer/0", source: "Colorado GIS Public Parcels", fields: "OBJECTID,parcel_id,countyName,situsAdd,sitAddCty,landAcres,zoningCode,zoningDesc,landUseDsc,dateReceived,URL" },
+  { id: "co", state: "Colorado", bounds: [-109.1, 36.9, -102, 41.1], url: "https://gis.colorado.gov/public/rest/services/Address_and_Parcel/Colorado_Public_Parcels/MapServer/0", source: "Colorado GIS Public Parcels", fields: "OBJECTID,parcel_id,countyName,situsAdd,sitAddCty,landAcres,zoningCode,zoningDesc,landUseDsc,dateReceived,URL,apprValTot" },
   { id: "ut", state: "Utah", bounds: [-114.1, 36.9, -109, 42.1], url: "https://services1.arcgis.com/99lidPhWCzftIe9K/arcgis/rest/services/UtahStatewideParcels/FeatureServer/0", source: "Utah UGRC Statewide Parcels", fields: "OBJECTID,PARCEL_ID,PARCEL_ADD,PARCEL_CITY,OWN_TYPE,ParcelsCur,County,CoParcel_URL" },
-  { id: "wa", state: "Washington", bounds: [-125, 45.5, -116.8, 49.1], url: "https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services/Current_Parcels/FeatureServer/0", source: "Washington WaTech Parcels 2026", fields: "OBJECTID,PARCEL_ID_NR,ORIG_PARCEL_ID,SITUS_ADDRESS,SITUS_CITY_NM,COUNTY_NM,FIPS_NR,LANDUSE_CD,VALUE_LAND,DATA_LINK" },
-  { id: "fl", state: "Florida", bounds: [-87.7, 24.3, -80, 31.1], url: "https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0", source: "Florida DOR Cadastral 2025", fields: "OBJECTID,PARCEL_ID,ALT_KEY,CO_NO,PHY_ADDR1,PHY_CITY,DOR_UC,LND_SQFOOT,LND_VAL,ASMNT_YR" },
-  { id: "nc", state: "North Carolina", bounds: [-84.4, 33.7, -75.3, 36.7], url: "https://services.nconemap.gov/secure/rest/services/NC1Map_Parcels/MapServer/1", source: "NC OneMap Parcels", fields: "objectid,parno,altparno,cntyname,siteadd,scity,gisacres,parusedesc,owntype,landval,revisedate" },
-  { id: "wi", state: "Wisconsin", bounds: [-92.9, 42.4, -86.2, 47.2], url: "https://services3.arcgis.com/n6uYoouQZW75n5WI/arcgis/rest/services/Wisconsin_Statewide_Parcels_DB/FeatureServer/0", source: "Wisconsin Statewide Parcels V12", fields: "OBJECTID,PARCELID,TAXPARCELID,CONAME,SITEADRESS,GISACRES,PROPCLASS,LNDVALUE,PARCELDATE,TAXROLLYEAR" },
+  { id: "wa", state: "Washington", bounds: [-125, 45.5, -116.8, 49.1], url: "https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services/Current_Parcels/FeatureServer/0", source: "Washington WaTech Parcels 2026", fields: "OBJECTID,PARCEL_ID_NR,ORIG_PARCEL_ID,SITUS_ADDRESS,SITUS_CITY_NM,COUNTY_NM,FIPS_NR,LANDUSE_CD,VALUE_LAND,VALUE_BLDG,DATA_LINK" },
+  { id: "fl", state: "Florida", bounds: [-87.7, 24.3, -80, 31.1], url: "https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0", source: "Florida DOR Cadastral 2025", fields: "OBJECTID,PARCEL_ID,ALT_KEY,CO_NO,PHY_ADDR1,PHY_CITY,DOR_UC,LND_SQFOOT,LND_VAL,ASMNT_YR,JV" },
+  { id: "nc", state: "North Carolina", bounds: [-84.4, 33.7, -75.3, 36.7], url: "https://services.nconemap.gov/secure/rest/services/NC1Map_Parcels/MapServer/1", source: "NC OneMap Parcels", fields: "objectid,parno,altparno,cntyname,siteadd,scity,gisacres,parusedesc,owntype,landval,revisedate,parval" },
+  { id: "wi", state: "Wisconsin", bounds: [-92.9, 42.4, -86.2, 47.2], url: "https://services3.arcgis.com/n6uYoouQZW75n5WI/arcgis/rest/services/Wisconsin_Statewide_Parcels_DB/FeatureServer/0", source: "Wisconsin Statewide Parcels V12", fields: "OBJECTID,PARCELID,TAXPARCELID,CONAME,SITEADRESS,GISACRES,PROPCLASS,LNDVALUE,PARCELDATE,TAXROLLYEAR,CNTASSDVALUE" },
 ] as const;
 
 export type ParcelSource = typeof PARCEL_SOURCES[number];
@@ -62,12 +67,44 @@ export function floridaUse(code: string) {
 }
 
 export function normalizeParcel(source: ParcelSource, a: Record<string, unknown>): ParcelRecord {
-  let record: Omit<ParcelRecord, "state" | "source" | "sourceUrl" | "category">;
+  let record: Omit<ParcelRecord, "state" | "source" | "sourceUrl" | "category" | "propertyId">;
   if (source.id === "co") record = { id: value(a.parcel_id), county: value(a.countyName), address: [value(a.situsAdd), value(a.sitAddCty)].filter(Boolean).join(", "), acres: numeric(a.landAcres), zoning: value(a.zoningDesc) || value(a.zoningCode), landUse: value(a.landUseDsc), ownerType: "", landValue: null, received: value(a.dateReceived), recordUrl: safeUrl(a.URL) };
   else if (source.id === "ut") record = { id: value(a.PARCEL_ID), county: value(a.County), address: [value(a.PARCEL_ADD), value(a.PARCEL_CITY)].filter(Boolean).join(", "), acres: null, zoning: "", landUse: "", ownerType: value(a.OWN_TYPE), landValue: null, received: date(a.ParcelsCur), recordUrl: safeUrl(a.CoParcel_URL) };
   else if (source.id === "wa") record = { id: value(a.PARCEL_ID_NR) || value(a.ORIG_PARCEL_ID), county: /^\d+$/.test(value(a.COUNTY_NM)) ? `County code ${value(a.FIPS_NR) || value(a.COUNTY_NM)}` : value(a.COUNTY_NM), address: [value(a.SITUS_ADDRESS), value(a.SITUS_CITY_NM)].filter(Boolean).join(", "), acres: null, zoning: "", landUse: value(a.LANDUSE_CD), ownerType: "", landValue: numeric(a.VALUE_LAND), received: "2026", recordUrl: safeUrl(a.DATA_LINK) };
   else if (source.id === "nc") record = { id: value(a.parno) || value(a.altparno), county: value(a.cntyname), address: [value(a.siteadd), value(a.scity)].filter(Boolean).join(", "), acres: numeric(a.gisacres), zoning: "", landUse: value(a.parusedesc), ownerType: value(a.owntype), landValue: numeric(a.landval), received: date(a.revisedate), recordUrl: "" };
   else if (source.id === "wi") record = { id: value(a.PARCELID) || value(a.TAXPARCELID), county: value(a.CONAME), address: value(a.SITEADRESS), acres: numeric(a.GISACRES), zoning: "", landUse: value(a.PROPCLASS), ownerType: "", landValue: numeric(a.LNDVALUE), received: value(a.PARCELDATE) || value(a.TAXROLLYEAR), recordUrl: "" };
   else { const sqft = numeric(a.LND_SQFOOT); record = { id: value(a.PARCEL_ID) || value(a.ALT_KEY), county: FLORIDA_COUNTIES[Number(value(a.CO_NO)) - 11] ?? (value(a.CO_NO) ? `County code ${value(a.CO_NO)}` : ""), address: [value(a.PHY_ADDR1), value(a.PHY_CITY)].filter(Boolean).join(", "), acres: sqft != null && sqft > 0 ? sqft / 43560 : null, zoning: "", landUse: floridaUse(value(a.DOR_UC)), ownerType: "", landValue: numeric(a.LND_VAL), received: value(a.ASMNT_YR), recordUrl: "" }; }
-  return { ...record, state: source.state, source: source.source, sourceUrl: source.url, category: parcelCategory(record.landUse, record.ownerType) };
+  return { ...record, state: source.state, source: source.source, sourceUrl: source.url, category: parcelCategory(record.landUse, record.ownerType), propertyId: propertyId(source, record.id, countyKey(source, a)), ...totalValue(source, a) };
+}
+
+// The total each statewide layer publishes, named by what it is. Utah publishes none.
+function totalValue(source: ParcelSource, a: Record<string, unknown>): { totalValue: number | null; valueBasis: string } {
+  const positive = (raw: unknown) => { const n = numeric(String(raw ?? "").replace(/[$,]/g, "")); return n != null && n > 0 ? n : null; };
+  if (source.id === "co") return { totalValue: positive(a.apprValTot), valueBasis: "County actual value" };
+  if (source.id === "fl") return { totalValue: positive(a.JV), valueBasis: "Just value" };
+  if (source.id === "nc") return { totalValue: positive(a.parval), valueBasis: "Assessed total" };
+  // Not ESTFMKVALUE: in Dane County 11–24% of records (checked 2026-11-02) carry the improvement value alone there.
+  if (source.id === "wi") return { totalValue: positive(a.CNTASSDVALUE), valueBasis: "Total assessed value" };
+  if (source.id === "wa") { const land = positive(a.VALUE_LAND), building = positive(a.VALUE_BLDG); return { totalValue: land != null || building != null ? (land ?? 0) + (building ?? 0) : null, valueBasis: "Market land + building value" }; }
+  return { totalValue: null, valueBasis: "" };
+}
+
+// The source's own county code where it has one, so a renamed or reformatted county label cannot change the identifier.
+function countyKey(source: ParcelSource, a: Record<string, unknown>) {
+  if (source.id === "co") return value(a.countyName);
+  if (source.id === "ut") return value(a.County);
+  if (source.id === "wa") return value(a.FIPS_NR) || value(a.COUNTY_NM);
+  if (source.id === "fl") return value(a.CO_NO);
+  if (source.id === "nc") return value(a.cntyname);
+  return value(a.CONAME);
+}
+
+/**
+ * A durable parcel identity: parcel numbers repeat across counties, and OBJECTIDs are only row numbers in one
+ * publication of the service. Several polygons can share one identity (multipart parcels published as separate rows).
+ */
+export function propertyId(source: ParcelSource, parcelNumber: string, county: string) {
+  const id = parcelNumber.trim().toUpperCase().replace(/\s+/g, "");
+  const area = county.trim().toUpperCase().replace(/\s+COUNTY$/, "").replace(/[^A-Z0-9]+/g, "-");
+  return id && area ? `${source.id}:${area}:${id}` : "";
 }

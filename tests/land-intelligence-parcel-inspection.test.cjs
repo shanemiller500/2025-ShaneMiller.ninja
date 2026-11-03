@@ -426,7 +426,7 @@ test('printable property section keeps Boulder account provenance and escapes co
   const detail = { parcel: { address: 'Example Street', landUse: 'Residential', zoning: '', received: '2026-10-24', recordUrl: 'https://example.org/parcel', sourceUrl: 'https://example.org/source' }, assessedTotal: 34000, valueYear: '2026', legalDescription: '', boulder: { status: 'ready', property: { folio: '123', updatedAt: '2026-10-24', sourceDate: '2026-10-24', sourceUrl: 'https://example.org/county', accounts: [account] } } };
   const report = { parcelKey: 'co:1', checkedAt: '2026-10-24T12:00:00Z', groups: [] };
   const html = parcelReportHtml(report, polygon, { name: 'Example parcel', id: '123', locality: 'Boulder', sourceUrl: 'https://example.org/parcel' }, detail);
-  assert.ok(html.indexOf('Property record and site context') < html.indexOf('Map measurements'));
+  assert.ok(html.indexOf('Map measurements') < html.indexOf('2. Ownership and legal') && html.indexOf('2. Ownership and legal') < html.indexOf('Assessor account R12'));
   assert.match(html, /Tax year: 2026/);
   assert.match(html, /reception &lt;img src=x&gt;/);
   assert.match(html, /category REMODEL/);

@@ -1,19 +1,16 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Cable, ChevronDown, Download, Factory, FileCheck2, House, Leaf, Map, MapPinned, Mountain, RotateCcw, Route, Ruler, Scale, ShieldAlert, Waves, type LucideIcon } from "lucide-react";
+import { Cable, ChevronDown, Factory, FileCheck2, House, Leaf, Map, MapPinned, Mountain, RotateCcw, Route, Ruler, Scale, ShieldAlert, Waves, type LucideIcon } from "lucide-react";
 import { crossSourceObservations, lineInsideParcelMeters, parcelDisciplineSummary, parcelMetrics } from "./parcel-analysis";
 import { PARCEL_INSPECTION_GROUPS, type InspectionGroup, type ParcelFinding, type ParcelGeometry, type ParcelInspectionReport } from "./parcel-inspection";
-import { downloadParcelReport } from "./export-parcel-report";
 import { RoadSegmentDetails } from "./RoadSegmentDetails";
 import type { ParcelDetail } from "./parcel-detail";
 
-type Heading = { name: string; id: string; locality: string; sourceUrl: string };
 type Props = {
   report: ParcelInspectionReport | null;
   geometry: ParcelGeometry | null;
   propertyDetail: ParcelDetail | null;
-  heading: Heading;
   loading: boolean;
   error: string;
   visible: Record<string, boolean>;
@@ -39,7 +36,7 @@ const statusLabel = (status: InspectionGroup["status"]) => ({
   source_error: "Source error",
 })[status];
 
-export function ParcelFindings({ report, geometry, propertyDetail, heading, loading, error, visible, selectedId, onToggle, onSetVisible, onSelect, openSection, onOpenSection, propertyArea }: Props) {
+export function ParcelFindings({ report, geometry, propertyDetail, loading, error, visible, selectedId, onToggle, onSetVisible, onSelect, openSection, onOpenSection, propertyArea }: Props) {
   const [localSection, setLocalSection] = useState<string | null>(null);
   const openDiscipline = onOpenSection ? openSection ?? null : localSection;
   const setOpenDiscipline = onOpenSection ?? setLocalSection;
@@ -69,7 +66,7 @@ export function ParcelFindings({ report, geometry, propertyDetail, heading, load
   }, [selectedId, openGroup]);
 
   return <section className="li-inspection rounded-xl border border-cyan-300/20 p-3" aria-busy={loading}>
-    <div className="flex items-center justify-between gap-2"><h3 className="flex items-center gap-1.5 text-xs font-semibold text-white"><MapPinned className="h-4 w-4 text-cyan-300" />Parcel map findings</h3>{loading && <RotateCcw className="h-3.5 w-3.5 animate-spin text-cyan-200" />}</div>
+    <div className="flex items-center justify-between gap-2"><h4 className="flex items-center gap-1.5 text-xs font-semibold text-white"><MapPinned aria-hidden="true" className="h-4 w-4 text-cyan-300" />Parcel map findings</h4>{loading && <RotateCcw className="h-3.5 w-3.5 animate-spin text-cyan-200" />}</div>
     <p className="mt-2 text-[11px] leading-relaxed text-slate-300"><span className="inline-block h-2.5 w-2.5 rounded-sm border border-slate-800 bg-yellow-300 align-middle" /> Yellow outlines the selected GIS parcel. Colored dots, lines, and areas are public map records. Tap one to open its source below. Some records are nearby rather than inside the parcel.</p>
     {loading && <p role="status" className="mt-2 text-[11px] text-cyan-200">Checking parcel sources…</p>}
     {error && <p role="alert" className="mt-2 text-[11px] text-amber-200">{error}</p>}
@@ -94,14 +91,13 @@ export function ParcelFindings({ report, geometry, propertyDetail, heading, load
           </button>
           {expanded && <div className="border-t border-white/10 px-2 pb-2 pt-2">
             <p className="mb-2 px-1 text-[10px] leading-relaxed text-slate-300">{discipline.note}</p>
-            {discipline.property && (propertyArea ? propertyArea(discipline.id) : <button type="button" onClick={() => document.querySelector(".li-property-details")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="li-inspection-action mb-2 rounded-md px-2 py-1 text-[10px] font-medium">Open property record above</button>)}
+            {discipline.property && (propertyArea ? propertyArea(discipline.id) : <button type="button" onClick={() => document.getElementById("li-section-ownership")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="li-inspection-action mb-2 rounded-md px-2 py-1 text-[10px] font-medium">Open property record above</button>)}
             {discipline.id === "water" && observations.length > 0 && <section className="mb-2 rounded-lg border border-cyan-300/20 p-2.5"><h4 className="text-[11px] font-semibold text-white">Combined source observations</h4>{observations.map((observation) => <div key={observation.id} className="mt-2 text-[10px] leading-relaxed text-slate-300"><p>{observation.text}</p><p className="mt-1 text-slate-400">Rule: {observation.rule}</p><div className="mt-1 flex flex-wrap gap-x-3">{observation.sources.map((source) => <a key={source.label} href={source.url} target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">{source.label} ↗</a>)}</div></div>)}</section>}
             {groupIds.length > 0 && <div className="mb-2 flex items-center justify-between px-1 text-[10px] text-slate-300"><span>{visibleCount} of {groupIds.length} mapped sources visible</span><button type="button" onClick={() => onSetVisible(groupIds, visibleCount !== groupIds.length)} className="li-inspection-action rounded-md px-2 py-1 font-medium">{visibleCount === groupIds.length ? "Hide discipline" : "Show discipline"}</button></div>}
             <div className="space-y-1.5">{discipline.groups.map((group) => <SourceGroup key={group.id} group={group} geometry={geometry} visible={visible[group.id] !== false} expanded={openGroup === group.id} showAll={showAllGroup === group.id} selectedId={selectedId} onToggle={onToggle} onExpand={() => setOpenGroup(openGroup === group.id ? null : group.id)} onShowAll={() => setShowAllGroup(group.id)} onSelect={onSelect} />)}</div>
           </div>}
         </section>;
       })}</div>
-      {geometry && <button type="button" onClick={() => downloadParcelReport(report, geometry, heading, propertyDetail)} className="li-inspection-download mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold"><Download className="h-3.5 w-3.5" />Download printable parcel report</button>}
       <p className="mt-3 text-[10px] leading-relaxed text-slate-400">Public GIS screening only. Empty, unavailable, or unqueried results do not prove absence. Confirm utility locations with the owner and a field locate before design or excavation.</p>
     </>}
   </section>;

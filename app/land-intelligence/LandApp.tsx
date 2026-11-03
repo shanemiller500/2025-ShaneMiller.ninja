@@ -1,5 +1,6 @@
 "use client";
 
+import type { RecentMonths } from "./recent-sales";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
@@ -10,6 +11,7 @@ import { useAtlasTheme } from "@/components/atlas/Hud";
 import type { AtlasLayer, Basemap } from "@/components/atlas/types";
 import { areaSquareMeters, lengthMeters, shapeCenter, shapeGeoJSON, validShape, type AnalysisShape, type Coord, type ShapeKind } from "./geometry";
 import { LAND_LAYERS, LAND_OVERLAYS } from "./layers";
+import { MARKET_LAYERS, PARCEL_VALUE_LAYER, type MarketLayerId } from "./market-layers";
 import { MapInspection } from "./MapInspection";
 import { PARCEL_INSPECTION_GROUPS, pointInParcel, type ParcelFinding, type ParcelGeometry, type ParcelInspectionReport } from "./parcel-inspection";
 import { MapKey } from "./MapKey";
@@ -21,6 +23,12 @@ import type { EpaFacility } from "./facility";
 import { downloadReport } from "./export-report";
 import { EvidenceSummary, TerrainCard } from "./SiteAnalysis";
 import type { Facility, Finding, Report, FeatureSet, Parcel, Road, TerrainResult } from "./report-types";
+
+const MARKET_LAYER_IDS = Object.keys(MARKET_LAYERS) as MarketLayerId[];
+const isMarketLayer = (id: string): id is MarketLayerId => id in MARKET_LAYERS;
+// Overlays with their own GeoJSON data; everything else is a raster answered by /identify.
+const VECTOR_OVERLAYS = new Set<string>(["soils", "parcels", "parcel-value", "crashes", "facilities", "comps", "recent-sales", "underground", ...MARKET_LAYER_IDS]);
+const EMPTY_COLLECTION: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 type Mode = "browse" | "road" | ShapeKind;
 type SearchResult = { label: string; detail?: string; provider?: string; precisionType?: "address" | "street" | "place" | "coordinate"; center: Coord };
@@ -52,6 +60,10 @@ const FOCUS_LAYER: AtlasLayer = {
     return ["report-focus-fill", "report-focus-halo", "report-focus-line"];
   },
 };
+
+// Soil map units cover every parcel, so their inspection shading stays off until the user turns it on in Map Inspection.
+const FINDINGS_HIDDEN_BY_DEFAULT = new Set(["soils"]);
+const findingShown = (visible: Record<string, boolean>, id: string) => visible[`parcel-inspection-${id}`] ?? !FINDINGS_HIDDEN_BY_DEFAULT.has(id);
 
 const INSPECTION_LAYERS: AtlasLayer[] = PARCEL_INSPECTION_GROUPS.map((group) => ({
   id: `parcel-inspection-${group.id}`, label: group.label, group: "Parcel findings", citation: { label: "Source details in Map Inspection", href: "#" },
@@ -119,7 +131,7 @@ export default function LandApp() {
   const [terrainLoading, setTerrainLoading] = useState(false);
   const [terrainNonce, setTerrainNonce] = useState(0);
   const [showLayers, setShowLayers] = useState(false);
-  const [visibleLayers, setVisibleLayers] = useState<Record<string, boolean>>({ "study-shape": true, "report-focus": true, "land-soils": true, "land-parcels": true, "land-crashes": true, "land-contours": true });
+  const [visibleLayers, setVisibleLayers] = useState<Record<string, boolean>>({ "study-shape": true, "report-focus": true, "land-parcels": true, "land-crashes": true, "land-oil-gas-wells": true, "land-comps": true });
   const [soilData, setSoilData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [soilStatus, setSoilStatus] = useState("Zoom in to level 12 to see colored soil map units.");
   const [parcelData, setParcelData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
@@ -133,6 +145,16 @@ export default function LandApp() {
   const [crashStatus, setCrashStatus] = useState("Zoom in to level 8 to see 2024 fatal crash points.");
   const [facilityData, setFacilityData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [facilityStatus, setFacilityStatus] = useState("Zoom in to level 10 to see EPA regulated facilities.");
+  const [marketData, setMarketData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
+  const [marketStatus, setMarketStatus] = useState("");
+  const [recentData, setRecentData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
+  const [recentStatus, setRecentStatus] = useState("");
+  const [recentMonths, setRecentMonths] = useState<RecentMonths>(12);
+  const [undergroundData, setUndergroundData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
+  const [undergroundStatus, setUndergroundStatus] = useState("");
+  // Comparable-sale markers for the selected parcel, set by Map Inspection once its comparables are loaded.
+  const [compsData, setCompsData] = useState<GeoJSON.FeatureCollection>({ type: "FeatureCollection", features: [] });
+  const activeMarket = MARKET_LAYER_IDS.find((id) => visibleLayers[`land-${id}`]) ?? null;
   const [reportFocus, setReportFocus] = useState<keyof Report | null>(null);
   const [focusScope, setFocusScope] = useState<FocusScope>("inside");
   const [inspection, setInspection] = useState<Inspection | null>(null);
@@ -147,9 +169,11 @@ export default function LandApp() {
   const data = useMemo(() => {
     const currentInspection = inspection?.kind === "parcel" && parcelInspection?.parcelKey === inspection.properties.parcelKey && selectedParcel?.properties?.parcelKey === inspection.properties.parcelKey ? parcelInspection : null;
     const findingData = Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [`parcel-inspection-${group.id}-source`, { type: "FeatureCollection", features: (currentInspection?.groups.find((item) => item.id === group.id)?.findings ?? []).map((finding) => ({ type: "Feature", id: finding.id, properties: { id: finding.id, name: finding.name }, geometry: finding.geometry })) } as GeoJSON.FeatureCollection]));
-    const selectedFinding = currentInspection?.groups.filter((group) => visibleLayers[`parcel-inspection-${group.id}`] !== false).flatMap((group) => group.findings).find((finding) => finding.id === selectedFindingId);
-    return { ...findingData, "parcel-inspection-selected-source": { type: "FeatureCollection", features: selectedFinding ? [{ type: "Feature", properties: {}, geometry: selectedFinding.geometry }] : [] } as GeoJSON.FeatureCollection, "study-shape-source": shape ? shapeGeoJSON(shape) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, "report-focus-source": focusData, "land-soils-source": soilData, "land-parcels-source": parcelData, "land-parcels-selected-source": { type: "FeatureCollection", features: selectedParcel ? [{ ...selectedParcel, geometry: currentInspection?.geometry ?? selectedParcel.geometry }] : [] } as GeoJSON.FeatureCollection, "land-crashes-source": crashData, "land-facilities-source": facilityData };
-  }, [shape, soilData, parcelData, selectedParcel, crashData, facilityData, focusData, parcelInspection, selectedFindingId, visibleLayers, inspection]);
+    const selectedFinding = currentInspection?.groups.filter((group) => findingShown(visibleLayers, group.id)).flatMap((group) => group.findings).find((finding) => finding.id === selectedFindingId);
+    return { ...findingData, "parcel-inspection-selected-source": { type: "FeatureCollection", features: selectedFinding ? [{ type: "Feature", properties: {}, geometry: selectedFinding.geometry }] : [] } as GeoJSON.FeatureCollection, "study-shape-source": shape ? shapeGeoJSON(shape) : { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection, "report-focus-source": focusData, "land-soils-source": soilData, "land-parcels-source": parcelData, "land-parcels-selected-source": { type: "FeatureCollection", features: selectedParcel ? [{ ...selectedParcel, geometry: currentInspection?.geometry ?? selectedParcel.geometry }] : [] } as GeoJSON.FeatureCollection, "land-crashes-source": crashData, "land-facilities-source": facilityData,
+      // Only the active market overlay's source holds polygons; the others stay empty.
+      ...Object.fromEntries(MARKET_LAYER_IDS.map((id) => [`land-${id}-source`, id === activeMarket ? marketData : EMPTY_COLLECTION])), "land-comps-source": compsData, "land-recent-sales-source": recentData, "land-underground-source": undergroundData };
+  }, [shape, soilData, parcelData, selectedParcel, crashData, facilityData, focusData, parcelInspection, selectedFindingId, visibleLayers, inspection, activeMarket, marketData, compsData, recentData, undergroundData]);
   const onMapReady = useCallback((instance: MlMap) => setMap(instance), []);
 
   const propertyKey = inspection?.kind === "parcel" ? inspection.properties.parcelKey : null;
@@ -213,7 +237,7 @@ export default function LandApp() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const loadParcels = () => {
       controller?.abort();
-      if (!visibleLayers["land-parcels"] || map.getZoom() < 14) {
+      if (!(visibleLayers["land-parcels"] || visibleLayers["land-parcel-value"]) || map.getZoom() < 14) {
         setParcelData({ type: "FeatureCollection", features: [] });
         setParcelStatus(visibleLayers["land-parcels"] ? "Zoom in to level 14 to see parcel boundaries in connected states." : "Parcel layer is off.");
         return;
@@ -291,6 +315,86 @@ export default function LandApp() {
   }, [map, visibleLayers]);
 
   useEffect(() => {
+    if (!map) return;
+    let controller: AbortController | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const loadMarket = () => {
+      controller?.abort();
+      const def = activeMarket ? MARKET_LAYERS[activeMarket] : null;
+      const minZoom = def?.level === "county" ? 5 : 9;
+      if (!def || map.getZoom() < minZoom) {
+        setMarketData(EMPTY_COLLECTION);
+        setMarketStatus(def ? `Zoom in to level ${minZoom} to see ${def.level === "county" ? "counties" : "census tracts"}.` : "");
+        return;
+      }
+      const bounds = map.getBounds();
+      const coords = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+      const current = new AbortController(); controller = current;
+      setMarketStatus(`Loading ${def.level === "county" ? "counties" : "census tracts"}…`);
+      fetch(`/api/land-intelligence/market-map?level=${def.level}&bbox=${coords.map((value) => value.toFixed(5)).join(",")}`, { signal: current.signal })
+        .then(async (response) => { const json = await response.json(); if (!response.ok) throw new Error(json.error ?? "Market overlay unavailable."); return json; })
+        .then((json) => { setMarketData({ type: "FeatureCollection", features: json.features }); const shaded = json.features.filter((feature: GeoJSON.Feature) => feature.properties?.[def.property] != null).length; setMarketStatus(`${shaded} of ${json.features.length} ${def.level === "county" ? "counties" : "tracts"} in view have a value${json.limited ? "; zoom in for every boundary" : ""}.`); })
+        .catch((error) => { if (!current.signal.aborted) { setMarketData(EMPTY_COLLECTION); setMarketStatus(error.message); } });
+    };
+    const schedule = () => { if (timer) clearTimeout(timer); timer = setTimeout(loadMarket, 260); };
+    map.on("moveend", schedule); schedule();
+    return () => { map.off("moveend", schedule); if (timer) clearTimeout(timer); controller?.abort(); };
+  }, [map, activeMarket]);
+
+  // Recent home sales in view (Colorado). The route caps the view; the layer draws from zoom 15.
+  const recentVisible = !!visibleLayers["land-recent-sales"];
+  useEffect(() => {
+    if (!map) return;
+    let controller: AbortController | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const loadRecent = () => {
+      controller?.abort();
+      if (!recentVisible || map.getZoom() < 15) { setRecentData(EMPTY_COLLECTION); setRecentStatus(recentVisible ? "Zoom in to level 15 to see recent sales." : ""); return; }
+      const bounds = map.getBounds();
+      const current = new AbortController(); controller = current;
+      setRecentStatus("Loading recent sales…");
+      fetch(`/api/land-intelligence/recent-sales?months=${recentMonths}&bbox=${[bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].map((value) => value.toFixed(5)).join(",")}`, { signal: current.signal })
+        .then(async (response) => { const json = await response.json(); if (!response.ok) throw new Error(json.error ?? "Recent sales unavailable."); return json; })
+        .then((json) => {
+          setRecentData({ type: "FeatureCollection", features: json.features });
+          const denver = json.features.filter((feature: GeoJSON.Feature) => feature.properties?.source === "denver").length;
+          setRecentStatus(json.coverage === "outside" ? "Recent sales are connected for Colorado only." : `${json.features.length} sales since ${json.since} in view (${denver} Denver live, ${json.features.length - denver} statewide last sales)${json.denver === "unavailable" ? "; Denver's service did not respond" : ""}${json.limited ? "; zoom in for every parcel" : ""}.`);
+        })
+        .catch((error) => { if (!current.signal.aborted) { setRecentData(EMPTY_COLLECTION); setRecentStatus(error.message); } });
+    };
+    const schedule = () => { if (timer) clearTimeout(timer); timer = setTimeout(loadRecent, 300); };
+    map.on("moveend", schedule); schedule();
+    return () => { map.off("moveend", schedule); if (timer) clearTimeout(timer); controller?.abort(); };
+  }, [map, recentVisible, recentMonths]);
+
+  // Underground & mines (DRMS undermined areas, USGS USMIN, CGS openings) for the view from zoom 11.
+  const undergroundVisible = !!visibleLayers["land-underground"];
+  useEffect(() => {
+    if (!map) return;
+    let controller: AbortController | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const loadUnderground = () => {
+      controller?.abort();
+      if (!undergroundVisible || map.getZoom() < 11) { setUndergroundData(EMPTY_COLLECTION); setUndergroundStatus(undergroundVisible ? "Zoom in to level 11 to see underground features." : ""); return; }
+      const bounds = map.getBounds();
+      const current = new AbortController(); controller = current;
+      setUndergroundStatus("Loading underground features…");
+      fetch(`/api/land-intelligence/underground?bbox=${[bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].map((value) => value.toFixed(5)).join(",")}`, { signal: current.signal })
+        .then(async (response) => { const json = await response.json(); if (!response.ok) throw new Error(json.error ?? "Underground layer unavailable."); return json; })
+        .then((json) => {
+          setUndergroundData({ type: "FeatureCollection", features: json.features });
+          const count = (layer: string) => json.features.filter((feature: GeoJSON.Feature) => feature.properties?.layer === layer).length;
+          const failed = Object.entries(json.parts as Record<string, string>).filter(([, status]) => status === "rejected").map(([part]) => ({ undermined: "DRMS undermined areas", usmin: "USGS mine symbols", openings: "CGS openings" } as Record<string, string>)[part]);
+          setUndergroundStatus(`${count("undermined")} undermined areas, ${count("usmin") + count("usmin-area")} mine symbols and areas, ${count("opening")} inventoried openings in view${json.truncated ? "; zoom in for every symbol" : ""}${failed.length ? `. Did not respond: ${failed.join(", ")}` : ""}.`);
+        })
+        .catch((error) => { if (!current.signal.aborted) { setUndergroundData(EMPTY_COLLECTION); setUndergroundStatus(error.message); } });
+    };
+    const schedule = () => { if (timer) clearTimeout(timer); timer = setTimeout(loadUnderground, 300); };
+    map.on("moveend", schedule); schedule();
+    return () => { map.off("moveend", schedule); if (timer) clearTimeout(timer); controller?.abort(); };
+  }, [map, undergroundVisible]);
+
+  useEffect(() => {
     if (inspection?.kind !== "soil") { setSoilComponents(null); setSoilDetailError(""); return; }
     const key = String(inspection.properties.mukey ?? "");
     const controller = new AbortController();
@@ -307,7 +411,7 @@ export default function LandApp() {
     if (!map) return;
     setShowReport(false);
     identifyController.current?.abort();
-    const layers = roadsOnly ? ["roads"] : LAND_OVERLAYS.filter((layer) => layer.id !== "soils" && layer.id !== "parcels" && layer.id !== "crashes" && layer.id !== "facilities" && visibleLayers[`land-${layer.id}`] && map.getZoom() >= layer.minzoom).map((layer) => layer.id);
+    const layers = roadsOnly ? ["roads"] : LAND_OVERLAYS.filter((layer) => !VECTOR_OVERLAYS.has(layer.id) && visibleLayers[`land-${layer.id}`] && map.getZoom() >= layer.minzoom).map((layer) => layer.id);
     if (!layers.length) { setInspection({ kind: "overlay", results: [] }); setInspectionLoading(false); return; }
     const controller = new AbortController();
     identifyController.current = controller;
@@ -331,7 +435,7 @@ export default function LandApp() {
         // Small points get a finger-sized target: anything within 10 px of the tap.
         const touch: [maplibregl.PointLike, maplibregl.PointLike] = [[event.point.x - 10, event.point.y - 10], [event.point.x + 10, event.point.y + 10]];
         const parcelHit = visibleLayers["land-parcels"] && map.getLayer("land-parcels-fill") ? map.queryRenderedFeatures(event.point, { layers: ["land-parcels-fill"] })[0] : null;
-        const findingLayers = PARCEL_INSPECTION_GROUPS.filter((group) => visibleLayers[`parcel-inspection-${group.id}`] !== false).flatMap((group) => [`parcel-inspection-${group.id}-source-point`, `parcel-inspection-${group.id}-source-line`, `parcel-inspection-${group.id}-source-fill`]).filter((id) => map.getLayer(id));
+        const findingLayers = PARCEL_INSPECTION_GROUPS.filter((group) => findingShown(visibleLayers, group.id)).flatMap((group) => [`parcel-inspection-${group.id}-source-point`, `parcel-inspection-${group.id}-source-line`, `parcel-inspection-${group.id}-source-fill`]).filter((id) => map.getLayer(id));
         const findingHit = findingLayers.length ? map.queryRenderedFeatures(touch, { layers: findingLayers })[0] : null;
         if (findingHit?.properties?.id && inspection?.kind === "parcel") { setSelectedFindingId(String(findingHit.properties.id)); return; }
         const crashHit = visibleLayers["land-crashes"] && map.getLayer("land-crashes-points") ? map.queryRenderedFeatures(touch, { layers: ["land-crashes-points"] })[0] : null;
@@ -568,7 +672,7 @@ export default function LandApp() {
       ? `${shape.points[0][1].toFixed(5)}, ${shape.points[0][0].toFixed(5)}` : null;
 
   return <div className={`li-app fixed inset-0 overflow-hidden ${dark ? "dark bg-slate-950 text-white" : "bg-slate-50 text-slate-900"}`}>
-    <AtlasMap layers={[...LAND_LAYERS, ...INSPECTION_LAYERS, INSPECTION_SELECTED_LAYER, DRAW_LAYER, FOCUS_LAYER]} visible={{ ...Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [`parcel-inspection-${group.id}`, true])), "parcel-inspection-selected": true, ...visibleLayers }} data={data} basemap={basemap} terrain="flat" dark={dark} initialView={{ center: [-105.5, 39.1], zoom: 6.5 }} atmosphere onMapReady={onMapReady} flyTo={flyTo} emptyCursor={mode === "browse" ? "grab" : "crosshair"} controls={false} className="absolute inset-0 h-full w-full" />
+    <AtlasMap layers={[...LAND_LAYERS, ...INSPECTION_LAYERS, INSPECTION_SELECTED_LAYER, DRAW_LAYER, FOCUS_LAYER]} visible={{ ...Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [`parcel-inspection-${group.id}`, findingShown(visibleLayers, group.id)])), "parcel-inspection-selected": true, ...visibleLayers }} data={data} basemap={basemap} terrain="flat" dark={dark} initialView={{ center: [-105.5, 39.1], zoom: 6.5 }} atmosphere onMapReady={onMapReady} flyTo={flyTo} emptyCursor={mode === "browse" ? "grab" : "crosshair"} controls={false} className="absolute inset-0 h-full w-full" />
     <div className="li-map-wash pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950/45 via-transparent to-slate-950/30" />
 
     {showWelcome && <div className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/55 p-3 backdrop-blur-sm [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))] [padding-top:max(0.75rem,env(safe-area-inset-top))] sm:p-6">
@@ -619,13 +723,13 @@ export default function LandApp() {
       {showLayers && <div className="border-t border-white/10 pt-2">
         <div className="mb-2 flex items-center justify-between"><h2 className="text-xs font-semibold">Map filters &amp; key</h2><button type="button" aria-label="Close map filters and key" onClick={() => setShowLayers(false)} className="rounded-lg p-1 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button></div>
         <p className="mb-3 text-[11px] leading-relaxed text-slate-400">Turn on source maps to explore. Layers appear as you zoom into their supported scale.</p>
-        {LAND_OVERLAYS.map((layer) => <label key={layer.id} className="flex cursor-pointer items-start gap-2 border-t border-white/10 py-2.5"><input type="checkbox" checked={!!visibleLayers[`land-${layer.id}`]} onChange={(event) => setVisibleLayers((current) => ({ ...current, [`land-${layer.id}`]: event.target.checked }))} className="mt-0.5 accent-cyan-400" /><span className="min-w-0"><span className="block text-xs font-medium text-white">{layer.label}</span><span className="block text-[10px] text-slate-400">{layer.scope} · zoom {layer.minzoom}+</span><a href={layer.url} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="text-[10px] text-cyan-300 underline underline-offset-2">{layer.source}</a></span></label>)}
+        {LAND_OVERLAYS.map((layer) => <label key={layer.id} className="flex cursor-pointer items-start gap-2 border-t border-white/10 py-2.5"><input type="checkbox" checked={!!visibleLayers[`land-${layer.id}`]} onChange={(event) => { const checked = event.target.checked; setVisibleLayers((current) => ({ ...current, ...(checked && isMarketLayer(layer.id) ? Object.fromEntries(MARKET_LAYER_IDS.map((id) => [`land-${id}`, false])) : {}), [`land-${layer.id}`]: checked })); }} className="mt-0.5 accent-cyan-400" /><span className="min-w-0"><span className="block text-xs font-medium text-white">{layer.label}</span><span className="block text-[10px] text-slate-400">{layer.scope} · zoom {layer.minzoom}+</span><a href={layer.url} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="text-[10px] text-cyan-300 underline underline-offset-2">{layer.source}</a></span></label>)}
         <div className="border-t border-white/10 pt-3 text-[10px] leading-relaxed text-slate-400">Reference guides: <a href="https://www.nrcs.usda.gov/resources/data-and-reports/soil-survey-geographic-database-ssurgo" target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">SSURGO</a> · <a href="https://www.fws.gov/program/national-wetlands-inventory" target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">NWI</a> · <a href="https://www.nae.usace.army.mil/Missions/Regulatory/Jurisdiction-and-Wetlands/Wetland-Delineation-Manual/" target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">USACE delineation</a> · <a href="https://highways.dot.gov/environment/noise" target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">FHWA noise</a>. USACE and FHWA provide guidance rather than map data here.</div>
-        <MapKey soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} facilities={!!visibleLayers["land-facilities"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} facilityStatus={facilityStatus} />
+        <MapKey underground={undergroundVisible ? undergroundStatus || "Loading underground features…" : null} recentSales={recentVisible ? { months: recentMonths, onMonths: setRecentMonths, status: recentStatus } : null} wells={!!visibleLayers["land-oil-gas-wells"]} soils={!!visibleLayers["land-soils"]} parcels={!!visibleLayers["land-parcels"]} crashes={!!visibleLayers["land-crashes"]} facilities={!!visibleLayers["land-facilities"]} soilStatus={soilStatus} parcelStatus={parcelStatus} crashStatus={crashStatus} facilityStatus={facilityStatus} market={activeMarket ? MARKET_LAYERS[activeMarket] : null} marketStatus={marketStatus} parcelValue={visibleLayers["land-parcel-value"] ? PARCEL_VALUE_LAYER : null} comps={!!visibleLayers["land-comps"] && compsData.features.length > 0} />
       </div>}
     </aside>
     {mode === "road" && <div role="status" className="pointer-events-none absolute bottom-5 left-1/2 z-20 w-[min(360px,calc(100vw-24px))] -translate-x-1/2 rounded-xl border border-cyan-300/30 li-panel bg-slate-950/95 px-3 py-2 text-center text-[11px] font-medium text-cyan-200 shadow-xl">Tap a Colorado highway line to inspect that segment. Zoom in to level 9+ to see the road layer.</div>}
-    <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} parcelInspection={parcelInspection} parcelGeometry={inspection?.kind === "parcel" && selectedParcel?.properties?.parcelKey === inspection.properties.parcelKey && (selectedParcel.geometry.type === "Polygon" || selectedParcel.geometry.type === "MultiPolygon") ? (parcelInspection?.parcelKey === inspection.properties.parcelKey ? parcelInspection.geometry : null) ?? selectedParcel.geometry as ParcelGeometry : null} parcelInspectionLoading={parcelInspectionLoading} parcelInspectionError={parcelInspectionError} visibleFindingGroups={Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [group.id, visibleLayers[`parcel-inspection-${group.id}`] !== false]))} selectedFindingId={selectedFindingId} onToggleFindingGroup={(id) => setVisibleLayers((current) => ({ ...current, [`parcel-inspection-${id}`]: current[`parcel-inspection-${id}`] === false }))} onSetFindingGroupsVisible={(ids, shown) => setVisibleLayers((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [`parcel-inspection-${id}`, shown])) }))} onSelectFinding={(finding: ParcelFinding) => setSelectedFindingId(finding.id)} onInspectOther={inspectOtherAt} onClose={() => { addressParcelController.current?.abort(); addressParcelController.current = null; identifyController.current?.abort(); setInspection(null); setSelectedParcel(null); setSelectedFindingId(null); setInspectionLoading(false); }} />
+    <MapInspection inspection={inspection} loading={inspectionLoading} components={soilComponents} error={soilDetailError} propertyDetail={propertyDetailResult?.key === propertyKey ? propertyDetailResult.detail : null} propertyLoading={propertyLoading} propertyError={propertyError} parcelInspection={parcelInspection} parcelGeometry={inspection?.kind === "parcel" && selectedParcel?.properties?.parcelKey === inspection.properties.parcelKey && (selectedParcel.geometry.type === "Polygon" || selectedParcel.geometry.type === "MultiPolygon") ? (parcelInspection?.parcelKey === inspection.properties.parcelKey ? parcelInspection.geometry : null) ?? selectedParcel.geometry as ParcelGeometry : null} parcelInspectionLoading={parcelInspectionLoading} parcelInspectionError={parcelInspectionError} visibleFindingGroups={Object.fromEntries(PARCEL_INSPECTION_GROUPS.map((group) => [group.id, findingShown(visibleLayers, group.id)]))} selectedFindingId={selectedFindingId} onToggleFindingGroup={(id) => setVisibleLayers((current) => ({ ...current, [`parcel-inspection-${id}`]: current[`parcel-inspection-${id}`] === false }))} onSetFindingGroupsVisible={(ids, shown) => setVisibleLayers((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [`parcel-inspection-${id}`, shown])) }))} onSelectFinding={(finding: ParcelFinding) => { setSelectedFindingId(finding.id); setVisibleLayers((current) => ({ ...current, [`parcel-inspection-${finding.sourceId}`]: true })); }} onInspectOther={inspectOtherAt} onComparablesMap={setCompsData} onClose={() => { setCompsData(EMPTY_COLLECTION); addressParcelController.current?.abort(); addressParcelController.current = null; identifyController.current?.abort(); setInspection(null); setSelectedParcel(null); setSelectedFindingId(null); setInspectionLoading(false); }} />
 
     {shape && complete && <div className={`pointer-events-auto absolute z-20 overflow-hidden rounded-2xl border border-white/15 li-panel bg-slate-950/95 shadow-2xl backdrop-blur-xl transition-all ${showReport ? "bottom-0 left-0 right-0 max-h-[45dvh] rounded-b-none border-x-0 border-b-0 md:bottom-5 md:left-auto md:right-5 md:max-h-[calc(100vh-130px)] md:w-[380px] md:rounded-2xl md:border" : "bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-3 w-auto md:bottom-5 md:right-5"}`}>
       <button type="button" onClick={() => setShowReport((value) => !value)} className="flex w-full items-center justify-between gap-4 border-b border-white/10 px-4 py-3 text-left text-sm font-semibold"><span>Location report</span>{showReport ? <Minus className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>

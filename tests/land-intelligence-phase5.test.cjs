@@ -10,7 +10,7 @@ function load(file, fetchMock) {
     ? { NextResponse: { json: (body, options = {}) => ({ body, status: options.status ?? 200 }) } }
     : load(name.startsWith('@/') ? name.slice(2) + '.ts' : path.resolve(path.dirname(abs), name) + '.ts', fetchMock);
   const { outputText } = ts.transpileModule(fs.readFileSync(abs, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
-  vm.runInNewContext(outputText, { exports, require: requireLocal, fetch: fetchMock, URL, URLSearchParams, AbortSignal, Date, Map, Math, Number, String, Array, Object, JSON, Promise, Error }, { filename: abs });
+  vm.runInNewContext(outputText, { exports, require: requireLocal, fetch: fetchMock, process: { env: {} }, URL, URLSearchParams, AbortSignal, Date, Map, Math, Number, String, Array, Object, JSON, Promise, Error }, { filename: abs });
   return exports;
 }
 
@@ -138,8 +138,13 @@ test('clicked property details distinguish sale price and assessment', () => {
   assert.equal(co.block, '2');
   assert.equal(co.lot, '7');
   assert.equal(co.sales[0].price, 425000);
-  assert.equal(co.assessedTotal, 510000);
+  // apprValTot is the county actual value, not an assessed total; asedValTot keeps the publisher's "Taxable Value" name with a caution.
+  assert.equal(co.estimatedMarketValue, 510000);
+  assert.equal(co.assessedTotal, null);
+  assert.equal(co.valueLabels.market, 'County actual value');
   assert.equal(co.taxableValue, 36000);
+  assert.equal(co.valueLabels.taxable, 'Statewide taxable value');
+  assert.match(co.valueNote, /county assessor/);
   const fl = normalizeParcelDetail(PARCEL_SOURCES[3], { OWN_NAME: 'Example LLC', SALE_PRC1: 350000, SALE_YR1: 2021, SALE_MO1: '04', SALE_PRC2: 0, SALE_YR2: 0, JV: 500000, ACT_YR_BLT: 1998 });
   assert.equal(fl.sales.length, 1);
   assert.equal(fl.sales[0].date, '2021-04');

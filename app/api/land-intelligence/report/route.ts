@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { areaSquareMeters, lengthMeters, shapeCenter, validShape, type AnalysisShape, type Coord } from "@/app/land-intelligence/geometry";
 import type { CensusContext, Facility, FatalCrash, Finding, FeatureSet, NamedFeature, Parcel, Report, Road, SoilUnit } from "@/app/land-intelligence/report-types";
 import { normalizeParcel, sourcesForBounds } from "@/app/land-intelligence/parcel-sources";
+import { tractAcsAt } from "@/app/land-intelligence/market-data";
 import { CRASH_FIELDS, CRASH_SOURCE, normalizeCrash } from "@/app/land-intelligence/crash";
 
 export const runtime = "nodejs";
@@ -164,6 +165,18 @@ async function census(shape: AnalysisShape): Promise<BaseFinding<CensusContext>>
   const source = "U.S. Census Bureau · 2024 ACS 5-year data profiles";
   const url = "https://api.census.gov/data/2024/acs/acs5/profile.html";
   const [lng, lat] = shapeCenter(shape.points);
+  const note = "Estimates for the tract containing the drawing centre, not the people or households within the site itself. ACS estimates have sampling error and may not describe the whole route or area.";
+  // First the imported ACS summary files (no key; market-import.mjs). The keyed API below is only a fallback.
+  const local = await tractAcsAt(lng, lat).catch(() => undefined);
+  if (local === null) return { status: "outside", value: null, note: "No census tract was found at the drawing centre.", source, url };
+  if (local?.profile) {
+    const p = local.profile;
+    const value: CensusContext = { tract: local.name, population: p.population.value, medianHouseholdIncome: p.medianIncome.value, povertyPercent: p.povertyRate.value == null ? null : Math.round(p.povertyRate.value * 1000) / 10, year: 2024 };
+    return { status: "found", value, note, source: `U.S. Census Bureau · ${local.vintage} (table-based summary files)`, url: "https://www.census.gov/programs-surveys/acs/data/summary-file.html" };
+  }
+  // Checked 2026-11-01: the Census Data API redirects keyless requests to a "missing key" page. Keys are free.
+  const key = process.env.CENSUS_API_KEY?.trim();
+  if (!key) return { status: "unavailable", value: null, note: "Census ACS estimates need a free Census Data API key on this server (CENSUS_API_KEY).", source, url };
   try {
     const geographyUrl = new URL("https://geocoding.geo.census.gov/geocoder/geographies/coordinates");
     for (const [key, value] of Object.entries({ x: lng.toFixed(6), y: lat.toFixed(6), benchmark: "Public_AR_Current", vintage: "Current_Current", format: "json" })) geographyUrl.searchParams.set(key, value);
@@ -179,14 +192,15 @@ async function census(shape: AnalysisShape): Promise<BaseFinding<CensusContext>>
     dataUrl.searchParams.set("get", "NAME,DP05_0001E,DP03_0062E,DP03_0128PE");
     dataUrl.searchParams.set("for", `tract:${tract}`);
     dataUrl.searchParams.set("in", `state:${state} county:${county}`);
-    const dataResponse = await fetch(dataUrl, { signal: AbortSignal.timeout(12000), cache: "no-store" });
+    dataUrl.searchParams.set("key", key);
+    const dataResponse = await fetch(dataUrl, { signal: AbortSignal.timeout(12000), cache: "no-store", redirect: "error" });
     if (!dataResponse.ok) throw new Error("ACS data unavailable");
     const rows: unknown = await dataResponse.json();
     if (!Array.isArray(rows) || !Array.isArray(rows[0]) || !Array.isArray(rows[1])) throw new Error("Unexpected ACS response");
     const row = Object.fromEntries((rows[0] as string[]).map((key, index) => [key, (rows[1] as unknown[])[index]]));
     const estimate = (raw: unknown) => raw == null || raw === "" || !Number.isFinite(Number(raw)) || Number(raw) < 0 ? null : Number(raw);
     const value: CensusContext = { tract: String(row.NAME ?? `Tract ${tract}`), population: estimate(row.DP05_0001E), medianHouseholdIncome: estimate(row.DP03_0062E), povertyPercent: estimate(row.DP03_0128PE), year: 2024 };
-    return { status: "found", value, note: "Estimates for the tract containing the drawing centre, not the people or households within the site itself. ACS estimates have sampling error and may not describe the whole route or area.", source, url };
+    return { status: "found", value, note, source, url };
   } catch { return { status: "unavailable", value: null, note: "Census geography or ACS estimates did not respond for this location.", source, url }; }
 }
 

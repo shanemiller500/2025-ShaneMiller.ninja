@@ -14,8 +14,8 @@ async function layer(type: "points" | "polygons", [w, s, e, n]: [number, number,
   return parseUsminGml(xml, type);
 }
 
-export async function queryUsmin(box: [number, number, number, number], limits = { points: 5000, polygons: 2000 }) {
-  const [points, polygons] = await Promise.all([layer("points", box, limits.points), layer("polygons", box, limits.polygons)]);
+export async function queryUsmin(box: [number, number, number, number], limits = { points: 5000, polygons: 2000 }, signal?: AbortSignal) {
+  const [points, polygons] = await Promise.all([layer("points", box, limits.points, signal), layer("polygons", box, limits.polygons, signal)]);
   return { points, polygons, truncated: points.length >= limits.points || polygons.length >= limits.polygons };
 }
 

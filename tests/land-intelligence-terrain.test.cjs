@@ -11,7 +11,7 @@ function load(file) {
   if (loaded.has(abs)) return loaded.get(abs);
   const exports = {};
   loaded.set(abs, exports);
-  const requireLocal = (name) => load(path.resolve(path.dirname(abs), name) + '.ts');
+  const requireLocal = (name) => name.startsWith('node:') ? require(name) : load(name.startsWith('@/') ? name.slice(2) + '.ts' : path.resolve(path.dirname(abs), name) + '.ts');
   const { outputText } = ts.transpileModule(fs.readFileSync(abs, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
   vm.runInNewContext(outputText, { exports, require: requireLocal, Math, Number, Array, JSON }, { filename: abs });
   return exports;
@@ -64,7 +64,7 @@ test('terrain API returns a sourced profile and rejects invalid shapes before qu
   const file = path.resolve('app/api/land-intelligence/terrain/route.ts');
   const exports = {};
   let calls = 0;
-  const requireApi = (name) => name === 'next/server'
+  const requireApi = (name) => name.startsWith('node:') ? require(name) : name === 'next/server'
     ? { NextResponse: { json: (body, options = {}) => ({ body, status: options.status || 200 }) } }
     : name.startsWith('@/') ? load(name.slice(2) + '.ts') : load(path.resolve(path.dirname(file), name) + '.ts');
   const { outputText } = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
@@ -73,7 +73,7 @@ test('terrain API returns a sourced profile and rejects invalid shapes before qu
     const x = Number(new URL(input).searchParams.get('x'));
     return { ok: true, json: async () => ({ value: 100 + (x + 105) * 1000 }) };
   };
-  vm.runInNewContext(outputText, { exports, require: requireApi, fetch: fetchMock, URL, URLSearchParams, AbortSignal, Date, Map, Math, Number, Array, JSON, Promise, Error }, { filename: file });
+  vm.runInNewContext(outputText, { exports, require: requireApi, fetch: fetchMock, process: { env: {} }, URL, URLSearchParams, AbortSignal, Date, Map, Math, Number, Array, JSON, Promise, Error }, { filename: file });
   const request = (shape) => ({ json: async () => shape, headers: { get: () => null } });
   const invalid = await exports.POST(request({ kind: 'area', points: [[0, 0], [1, 1], [0, 1], [1, 0]] }));
   assert.equal(invalid.status, 400);
@@ -92,7 +92,7 @@ test('terrain API returns a sourced profile and rejects invalid shapes before qu
 test('report API normalizes USDA soil and EPA facility records with source limits', async () => {
   const file = path.resolve('app/api/land-intelligence/report/route.ts');
   const exports = {};
-  const requireApi = (name) => name === 'next/server'
+  const requireApi = (name) => name.startsWith('node:') ? require(name) : name === 'next/server'
     ? { NextResponse: { json: (body, options = {}) => ({ body, status: options.status || 200 }) } }
     : name.startsWith('@/') ? load(name.slice(2) + '.ts') : load(path.resolve(path.dirname(file), name) + '.ts');
   const { outputText } = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
@@ -116,7 +116,7 @@ test('report API normalizes USDA soil and EPA facility records with source limit
     if (body.includes('returnCountOnly=true')) return json({ count: 0 });
     return json({ features: [] });
   };
-  vm.runInNewContext(outputText, { exports, require: requireApi, fetch: fetchMock, URLSearchParams, AbortSignal, Date, Map, Math, Number, String, Array, JSON, Promise, Error }, { filename: file });
+  vm.runInNewContext(outputText, { exports, require: requireApi, fetch: fetchMock, process: { env: {} }, URLSearchParams, AbortSignal, Date, Map, Math, Number, String, Array, JSON, Promise, Error }, { filename: file });
   const response = await exports.POST({ json: async () => ({ kind: 'pin', points: [[-104.99, 39.74]] }), headers: { get: () => null } });
   assert.equal(response.status, 200);
   assert.equal(response.body.soils.status, 'found');
