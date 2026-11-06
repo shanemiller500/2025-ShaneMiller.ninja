@@ -139,9 +139,12 @@ export function feudTick(w: World, dt: number) {
       f.iceCd = ICE.cd;
       y.strike = 1;
       w.sfx("whoosh", y.x, y.y, 0.8, 0.55);
-      if (w.inView(dr.x, dr.y, 200)) w.particles.burst(P.Spark, dr.x, dr.y, 10, 80, { z: dr.z + 20, vz: 40, g: 200, size: 4, max: 0.7, color: "#d9f4ff" });
-      // the higher and further it is, the likelier the block misses
-      if (w.rng() < 0.85 - (dr.z / FEUD_Z) * 0.35 - (d / ICE.r) * 0.2) harmDragon(w, dr, dr.maxHp * ICE.dmg * might, "yeti");
+      // a block of ice, a boulder, or a whole uprooted tree (the heavier, the harder it hits)
+      const roll = w.rng();
+      const [heft, color] = roll < 0.25 ? [1.6, "#e8f1f2"] : roll < 0.55 ? [1.25, "#8f8a82"] : [1, "#d9f4ff"];
+      if (w.inView(dr.x, dr.y, 200)) w.particles.burst(heft > 1.5 ? P.Leaf : heft > 1 ? P.Rock : P.Spark, dr.x, dr.y, 10, 80, { z: dr.z + 20, vz: 40, g: 200, size: heft > 1 ? 6 : 4, max: 0.7, color });
+      // the higher and further it is, the likelier it misses
+      if (w.rng() < 0.85 - (dr.z / FEUD_Z) * 0.35 - (d / ICE.r) * 0.2) harmDragon(w, dr, dr.maxHp * ICE.dmg * heft * might, "yeti");
     }
     if (dr.hp <= 0) continue;
     // the dragon's breath (ours too: it fights back from wherever it is)

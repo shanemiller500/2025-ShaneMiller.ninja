@@ -32,6 +32,7 @@ import { go, say } from "./humans";
 import { EAST_CAVES, REGION } from "./terrain";
 import { hitDino } from "./tribe";
 import { yetiDueling } from "./yetiFeud";
+import { raidChaseOk, raidOf, raidThink, raidTick } from "./yetiRaid";
 import { MAP_W, T, TILE, type Brute, type Dino, type Human, type SpeciesId } from "./types";
 import type { World } from "./world";
 
@@ -252,6 +253,8 @@ function rexThink(w: World, d: Dino): boolean {
  */
 function yetiThink(w: World, d: Dino): boolean {
   yetiBands(w);
+  // bands of two or more raid the Snow People now and then (yetiRaid.ts)
+  raidTick(w);
   // fighting a dragon: nothing else matters till one of them is down (yetiFeud.ts)
   if (yetiDueling(w, d)) return true;
   const home = { x: d.homeX, y: d.homeY };
@@ -276,13 +279,17 @@ function yetiThink(w: World, d: Dino): boolean {
     const best = closing.get(d);
     if (!best || gap < best.gap - 8) closing.set(d, { gap, t: w.elapsed });
     const stalled = !!best && w.elapsed - best.t > 5;
-    if (p && pp && !stalled && snowPath(w, d, pp) && Math.hypot(pp.x - home.x, pp.y - home.y) < YETI_R * 2.2 && fromHome < YETI_LEASH) return true;
+    // (on a raid it goes wherever the camp's people run, snow or not)
+    const raiding = !!raidOf(w, d);
+    if (p && pp && !stalled && (raiding ? raidChaseOk(w, d, pp.x, pp.y) : snowPath(w, d, pp) && Math.hypot(pp.x - home.x, pp.y - home.y) < YETI_R * 2.2 && fromHome < YETI_LEASH)) return true;
     closing.delete(d);
     d.targetId = 0;
     setState(d, "wander", home.x, home.y);
     emote(d, "😤", 1.6);
     return true;
   }
+  // out raiding with its band: the Snow People's camp comes first
+  if (raidThink(w, d)) return true;
   // pleased with itself after hanging someone up: it leaves people be for a while (a rescue can get in)
   const pleased = (contentUntil.get(d) ?? -1) > w.elapsed;
   const coldSeason = winter(w);
@@ -364,8 +371,9 @@ export function snowAct(w: World, d: Dino, dt: number): boolean {
   d.hurlCd = Math.max(0, (d.hurlCd ?? 0) - dt);
   d.clawCd = Math.max(0, (d.clawCd ?? 0) - dt);
   d.strike = Math.max(0, (d.strike ?? 0) - dt * 1.4);
-  // a step off the snow is a step it won't take: back onto it
-  if (!snowGround(w, d.x, d.y) && d.state !== "roar") {
+  // a step off the snow is a step it won't take: back onto it (except on a raid with its band)
+  const raiding = !!raidOf(w, d);
+  if (!raiding && !snowGround(w, d.x, d.y) && d.state !== "roar") {
     d.x -= d.vx * dt * 1.5;
     d.y -= d.vy * dt * 1.5;
     if (!d.holding) {
@@ -422,7 +430,7 @@ export function snowAct(w: World, d: Dino, dt: number): boolean {
     const k = Math.min(1, (LUNGE * dt) / Math.max(1, dist));
     const nx = d.x + (pp.x - d.x) * k;
     const ny = d.y + (pp.y - d.y) * k;
-    if (snowGround(w, nx, ny) && w.nav.passable("dino", nx, ny)) {
+    if ((raiding || snowGround(w, nx, ny)) && w.nav.passable("dino", nx, ny)) {
       d.x = nx;
       d.y = ny;
       d.dir = pp.x > d.x ? 1 : -1;
@@ -435,12 +443,17 @@ export function snowAct(w: World, d: Dino, dt: number): boolean {
     grab(w, d, p.h);
     return false;
   }
-  // In winter the Yetis hurl ice at people and animals as well as other beasts.
-  if (!d.hurlCd && dist > HURL.min * 0.55 && dist < HURL.max * (coldSeason ? 1.5 : 1)) {
-    d.hurlCd = coldSeason ? 2.2 : HURL.cd;
+  // Yetis throw at everyone (people, animals, the other peoples): snowballs + ice, rocks, and whole
+  // uprooted trees; in winter (and on a raid) faster and further
+  const fierce = coldSeason || raiding;
+  if (!d.hurlCd && dist > HURL.min * 0.55 && dist < HURL.max * (fierce ? 1.5 : 1)) {
+    d.hurlCd = fierce ? 2.2 : HURL.cd;
     d.strike = 1;
     d.dir = pp.x > d.x ? 1 : -1;
-    if (coldSeason && Math.floor(w.elapsed) % 2 === 0) hurlTree(w, d, p);
+    // (one of ours it's about to lunge for and carry off only gets snow + ice: it wants them whole)
+    const roll = p.kind === "human" && !fierce && dist < 260 ? 1 : w.rng();
+    if (roll < 0.3) hurlTree(w, d, p);
+    else if (roll < 0.6) hurlRock(w, d, p);
     else hurlIce(w, d, p);
     return false;
   }
@@ -633,7 +646,25 @@ function hurlIce(w: World, d: Dino, p: Prey) {
   else w.rivals.hit(w, p.b, 0.22, d.x, d.y, true);
 }
 
-/** A winter-only uprooted snow tree attack: a heavy, broad hit with a falling trunk effect. */
+/** A boulder prised off the mountain: a hard, narrow hit. */
+function hurlRock(w: World, d: Dino, p: Prey) {
+  const pp = posOf(p);
+  const tx = pp.x + (w.rng() - 0.5) * 20;
+  const ty = pp.y + (w.rng() - 0.5) * 14;
+  w.sfx("whoosh", d.x, d.y, 1, 0.45);
+  w.particles.spawn(P.Rock, tx, ty, { z: 70, vz: -30, vx: (tx - d.x) * 0.2, vy: (ty - d.y) * 0.2, g: -80, size: 16, max: 0.6, color: "#8f8a82" });
+  w.particles.burst(P.Rock, tx, ty, 10, 80, { z: 12, vz: 60, g: 200, size: 5, max: 0.8, color: "#7d776f" });
+  w.particles.burst(P.Dust, tx, ty, 5, 40, { size: 10, max: 0.7, color: "rgba(200,190,175,0.6)" });
+  w.sfx("thud", tx, ty, 0.8, 0.7);
+  if (Math.hypot(pp.x - tx, pp.y - ty) > 30) return;
+  if (p.kind === "human") {
+    const knockedOut = hurtHuman(w, p.h, 0.4, d.x, d.y, "rock");
+    if (knockedOut) dies(w, p.h, `${p.h.name} was killed by a boulder a Yeti threw.`);
+  } else if (p.kind === "dino") hitDino(w, p.d, 42, d.x, d.y);
+  else w.rivals.hit(w, p.b, 0.34, d.x, d.y, true);
+}
+
+/** An uprooted snow tree: a heavy, broad hit with a falling trunk effect. */
 function hurlTree(w: World, d: Dino, p: Prey) {
   const pp = posOf(p);
   const tx = pp.x + (w.rng() - 0.5) * 18;
