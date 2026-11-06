@@ -97,7 +97,7 @@ export function MapInspection({ inspection, loading, components, error, property
       <ParcelHeadlineCard detail={propertyDetail} loading={propertyLoading} error={propertyError} />
       <InspectionPanel id="overview" open={activeSection === "overview"} onToggle={toggleSection} status={coverage.length ? `${coverage.filter((row) => row.level !== "no").length} of ${coverage.length} record types published here` : undefined}>{() => <>
         <PropertyFacts part="overview" summary={inspection.properties} detail={propertyDetail} loading={propertyLoading} error={propertyError} fill={parcelFill} />
-        {coverage.length > 0 && <CoverageProfile rows={coverage} />}
+       
         {propertyDetail && propertyDetail.boulder?.status !== "ready" && <PropertyFillBar parcelKey={inspection.properties.parcelKey} point={inspection.point} detail={propertyDetail} fill={parcelFill} onFill={(data) => setFill({ key: inspection.properties.parcelKey, data })} />}
       </>}</InspectionPanel>
       <InspectionPanel id="ownership" open={activeSection === "ownership"} onToggle={toggleSection}>{() => <PropertyFacts part="ownership" summary={inspection.properties} detail={propertyDetail} loading={propertyLoading} error={propertyError} fill={parcelFill} />}</InspectionPanel>

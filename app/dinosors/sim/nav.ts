@@ -170,7 +170,7 @@ export class Nav {
         f[i] |= F_GATE | (wl.open ? F_OPEN : 0);
         if (wl.built >= 1) this.top[i] = 1;
       } else if (wl.part === "stairs") {
-        if (t === T.Cliff) f[i] &= ~F_TERRAIN;
+        if (tiles[i] === T.Cliff) f[i] &= ~F_TERRAIN;
         f[i] |= F_STAIRS | (wl.pulley ? F_PULLEY : 0);
         cost[i] = Math.min(cost[i], wl.pulley ? 0.55 : 1);
       }
