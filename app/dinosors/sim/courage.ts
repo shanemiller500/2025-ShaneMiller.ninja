@@ -62,6 +62,7 @@ export function foesNear(w: World, h: Human, r = COURAGE.threatR): Foe[] {
   w.creatureHash.each(h.x, h.y, r, (e) => {
     if (e.kind !== "dino") return;
     const d = e as Dino;
+    if (w.diplomacy.protectedDino(d)) return;
     if (d.owner || d.state === "sleep" || d.state === "knocked" || d.state === "carried" || d.state === "stuck") return;
     const def = sp(d.species);
     const predator = def.diet !== "herbivore" && sizeOf(d) > 30 && def.move !== "swim" && !(def.move === "fly" && d.z > 10);

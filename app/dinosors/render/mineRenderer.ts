@@ -7,6 +7,9 @@
 /*  rock is a faint grid, charted rock gets real texture.             */
 /* ------------------------------------------------------------------ */
 import { BANDS, DEEP_DEFS, FLOODED, LAMP_REACH, LIFT_X, M, MAGMA_FROM, MATERIALS, MILESTONES, MINE_H, MINE_W, type Content, type DeepKind } from "../data/mine";
+import { fist, storyFace } from "./figureArt";
+import { grain as materialGrain } from "./litSprites";
+import { Q } from "./quality";
 import type { DeepBuilding } from "../sim/deepBuild";
 import { idx, type Mine } from "../sim/mine";
 import { fbm, hash2 } from "../sim/rng";
@@ -15,6 +18,7 @@ import type { SpeciesId } from "../sim/types";
 import { drawDino, restPose, type DinoPose } from "./drawDino";
 
 export const CELL = 32;
+const MINER_INK = "rgba(30,20,14,0.9)";
 /** rows of sky + ground drawn above the barrier */
 export const SKY_ROWS = 6;
 const CHUNK = 16;
@@ -212,6 +216,16 @@ export class MineRenderer {
       const y = k * CHUNK + ry;
       if (y >= MINE_H) break;
       for (let x = 0; x < MINE_W; x++) this.bakeCell(g, mine, x, y, x * CELL, ry * CELL);
+    }
+    if (Q.shading) {
+      // a fine grit over the baked rock and earth (only where something was painted), so it reads as stone
+      const pat = g.createPattern(materialGrain(), "repeat");
+      if (pat) {
+        g.globalCompositeOperation = "source-atop";
+        g.fillStyle = pat;
+        g.fillRect(0, 0, c.width, c.height);
+        g.globalCompositeOperation = "source-over";
+      }
     }
     this.chunks.set(k, { v: mine.version, sig, c });
     // keep memory in check: drop chunks far from this one
@@ -541,6 +555,14 @@ export class MineRenderer {
     const c = this.ctx;
     const d = this.dpr;
     const z = cam.zoom;
+    // (the surface view shrinks the canvas when it's zoomed far out: down here it's always full size)
+    const cw = Math.round(this.w * d);
+    const ch = Math.round(this.h * d);
+    const cv = c.canvas;
+    if (cv.width !== cw || cv.height !== ch) {
+      cv.width = cw;
+      cv.height = ch;
+    }
     c.setTransform(d, 0, 0, d, 0, 0);
     c.fillStyle = "#040506";
     c.fillRect(0, 0, this.w, this.h);
@@ -1511,52 +1533,162 @@ export class MineRenderer {
     c.fillStyle = glow;
     c.fillRect(px - 34, feet - 46, 68, 68);
     c.restore();
-    // legs
-    c.strokeStyle = "#3a2a1c";
-    c.lineWidth = 2.6;
+    // the miner: one of the cave people in miniature (big head, bushy hair, leopard hide), under a hard hat
+    c.save();
+    c.translate(px, feet);
+    c.scale(f, 1);
     c.lineCap = "round";
-    c.beginPath();
-    c.moveTo(px - 2, feet - 8);
-    c.lineTo(px - 2 - step * 3, feet);
-    c.moveTo(px + 2, feet - 8);
-    c.lineTo(px + 2 + step * 3, feet);
-    c.stroke();
+    c.lineJoin = "round";
+    const skinDark = "rgba(0,0,0,0.18)";
+    // legs: short and sturdy, sandals on their feet
+    for (const [k, ph] of [[-1, step], [1, -step]] as const) {
+      const fx = k * 2.2 + ph * 3;
+      c.beginPath();
+      c.moveTo(k * 2.2, -8.5);
+      c.lineTo(fx, -1.6);
+      c.strokeStyle = MINER_INK;
+      c.lineWidth = 5;
+      c.stroke();
+      c.strokeStyle = m.skin;
+      c.lineWidth = 3.4;
+      c.stroke();
+      if (k < 0) {
+        c.strokeStyle = skinDark;
+        c.stroke();
+      }
+      c.fillStyle = "#4a2f1a";
+      c.beginPath();
+      c.ellipse(fx + 1, -0.5, 3.1, 1.2, 0, 0, Math.PI * 2);
+      c.fill();
+    }
     // sack on the back
     if (m.load > 0) {
       c.fillStyle = "#a07a4a";
+      c.strokeStyle = MINER_INK;
+      c.lineWidth = 0.8;
       c.beginPath();
-      c.ellipse(px - f * 6, feet - 13, 5 + Math.min(3, m.load * 0.5), 6, 0, 0, Math.PI * 2);
+      c.ellipse(-6.5, -13.5, 5 + Math.min(3, m.load * 0.5), 6, 0, 0, Math.PI * 2);
       c.fill();
+      c.stroke();
+      c.strokeStyle = "#d3ae74";
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(-9, -18);
+      c.lineTo(-4, -17.4);
+      c.stroke();
     }
-    // body
-    c.fillStyle = m.fur;
+    // the far arm
     c.beginPath();
-    c.roundRect(px - 4.5, feet - 17, 9, 10, 3);
+    c.moveTo(-3.4, -16.4);
+    c.lineTo(-4.6 - step * 2, -9.6);
+    c.strokeStyle = MINER_INK;
+    c.lineWidth = 4.2;
+    c.stroke();
+    c.strokeStyle = m.skin;
+    c.lineWidth = 2.8;
+    c.stroke();
+    c.strokeStyle = skinDark;
+    c.stroke();
+    // body: a leopard hide tied with rope
+    c.fillStyle = m.fur;
+    c.strokeStyle = MINER_INK;
+    c.lineWidth = 0.9;
+    c.beginPath();
+    c.roundRect(-5, -18.2, 10, 11.8, 3.6);
     c.fill();
+    c.stroke();
+    c.fillStyle = "rgba(70,36,12,0.75)";
+    c.beginPath();
+    c.ellipse(-2.2, -14.8, 1.2, 0.9, 0.4, 0, Math.PI * 2);
+    c.ellipse(1.8, -12.4, 1.1, 0.8, -0.3, 0, Math.PI * 2);
+    c.ellipse(-1.4, -8.6, 1, 0.8, 0.2, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = "#d3ae74";
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(-5, -10.6);
+    c.lineTo(5, -10.9);
+    c.stroke();
     if (m.nightGear) {
       c.fillStyle = m.powered ? "#9ceff5" : "#647c88";
-      c.fillRect(px - 1, feet - 15, 2, 3);
-      c.fillRect(px - 5, feet - 17, 3, 1.5); c.fillRect(px + 2, feet - 17, 3, 1.5);
-      c.fillStyle = "#ad875a"; c.fillRect(px - 5, feet - 10, 10, 1.5);
-      c.fillStyle = "#101e2d"; c.fillRect(px - 5, feet - 4, 4, 3); c.fillRect(px + 1, feet - 4, 4, 3);
+      c.fillRect(-1, -16, 2, 3);
+      c.fillRect(-5, -18, 3, 1.5);
+      c.fillRect(2, -18, 3, 1.5);
+      c.fillStyle = "#101e2d";
+      c.fillRect(-5, -4.6, 4, 3);
+      c.fillRect(1, -4.6, 4, 3);
     }
-    // head
+    // head: wild hair behind, a round face, a beard on some
+    const bearded = m.id % 2 === 0;
+    c.fillStyle = m.hair;
+    c.strokeStyle = MINER_INK;
+    c.lineWidth = 0.8;
+    c.beginPath();
+    for (let k = 0; k <= 8; k++) {
+      const a = ((150 + (165 * k) / 8) * Math.PI) / 180;
+      const rr = k % 2 ? 5.2 : 6.6;
+      const hx = -0.8 + Math.cos(a) * rr;
+      const hy = -21.4 + Math.sin(a) * rr;
+      if (k) c.lineTo(hx, hy);
+      else c.moveTo(hx, hy);
+    }
+    c.lineTo(-3.4, -17.8);
+    c.closePath();
+    c.fill();
+    c.stroke();
     c.fillStyle = m.skin;
     c.beginPath();
-    c.arc(px, feet - 21, 4, 0, Math.PI * 2);
+    c.ellipse(0.5, -20.6, 4.7, 4.5, 0, 0, Math.PI * 2);
     c.fill();
-    c.fillStyle = m.hair;
-    c.fillRect(px - 4 - (f > 0 ? 0 : -5), feet - 22, 3, 4);
+    c.stroke();
+    if (bearded) {
+      c.fillStyle = m.hair;
+      c.beginPath();
+      c.moveTo(-3.6, -20.4);
+      c.quadraticCurveTo(-4, -15.4, 0.6, -14.8);
+      c.quadraticCurveTo(5.4, -15.6, 5.2, -19.4);
+      c.quadraticCurveTo(1.6, -18.4, -3.6, -20.4);
+      c.fill();
+      c.stroke();
+    }
+    storyFace(c, 0.4, -20.9, { r: 4, skin: m.skin, brow: m.hair, mood: m.mode === "flee" ? "scared" : m.mode === "rest" || m.mode === "sleep" ? "asleep" : m.mode === "dig" || m.mode === "build" ? "calm" : "happy", id: m.id, t: performance.now() / 1000, ink: MINER_INK });
     // hard hat + lamp
     c.fillStyle = m.nightGear ? "#334b5b" : "#f2b33d";
+    c.strokeStyle = MINER_INK;
+    c.lineWidth = 0.8;
     c.beginPath();
-    c.ellipse(px, feet - 24, 5.5, 3.2, 0, Math.PI, 0);
+    c.ellipse(0.2, -24.2, 6.2, 4, 0, Math.PI, 0);
+    c.closePath();
     c.fill();
-    c.fillRect(px - 6, feet - 24.5, 12, 1.6);
+    c.stroke();
+    c.beginPath();
+    c.roundRect(-6.8, -24.8, 14, 1.9, 0.9);
+    c.fill();
+    c.stroke();
+    c.fillStyle = "rgba(255,255,255,0.4)";
+    c.beginPath();
+    c.ellipse(-1.8, -26.4, 2, 1, -0.3, 0, Math.PI * 2);
+    c.fill();
     c.fillStyle = m.powered ? "#b9f8ff" : "#fffbe0";
     c.beginPath();
-    c.arc(px + f * 4.5, feet - 25, 1.6, 0, Math.PI * 2);
+    c.arc(5, -25.6, 1.8, 0, Math.PI * 2);
     c.fill();
+    c.stroke();
+    // the near arm, reaching for the work
+    const working = m.mode === "dig" || m.mode === "build" || m.mode === "plant" || m.mode === "pump";
+    const ax = working ? 5.4 : 4.4 + step * 2;
+    const ay = working ? -13.4 : -9.6;
+    c.beginPath();
+    c.moveTo(3.2, -16.4);
+    c.lineTo(ax, ay);
+    c.strokeStyle = MINER_INK;
+    c.lineWidth = 4.2;
+    c.stroke();
+    c.strokeStyle = m.skin;
+    c.lineWidth = 2.8;
+    c.stroke();
+    fist(c, ax, ay, 1.9, m.skin, MINER_INK);
+    c.restore();
     // tool by job
     c.save();
     c.translate(px + f * 4, feet - 14);
@@ -1627,7 +1759,6 @@ export class MineRenderer {
     c.save();
     c.translate(px, feet);
     c.scale(f, 1);
-    if (t.hit > 0) c.filter = "brightness(2)";
     // tail
     c.strokeStyle = "#cfc7d8";
     c.lineWidth = 4;
@@ -1662,6 +1793,15 @@ export class MineRenderer {
     c.restore();
     c.save();
     c.globalCompositeOperation = "lighter";
+    if (t.hit > 0) {
+      // struck: it flashes white (a glow laid over it: a canvas `filter` would stall the graphics card)
+      const hg = c.createRadialGradient(px, feet - 6, 1, px, feet - 6, 17);
+      hg.addColorStop(0, "rgba(255,255,255,0.8)");
+      hg.addColorStop(0.55, "rgba(255,255,255,0.4)");
+      hg.addColorStop(1, "rgba(255,255,255,0)");
+      c.fillStyle = hg;
+      c.fillRect(px - 17, feet - 23, 34, 34);
+    }
     const ex = px + f * 13;
     const g = c.createRadialGradient(ex, feet - 8, 0, ex, feet - 8, 9);
     g.addColorStop(0, "rgba(255,80,60,0.9)");

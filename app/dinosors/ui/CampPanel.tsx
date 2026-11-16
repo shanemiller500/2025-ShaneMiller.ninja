@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
-import { CAMP_LEVELS, ROLES, SHELTER_STAGES, TECH, TECH_ORDER } from "../data/facts";
+import { CAMP_LEVELS, ROLES, TECH, TECH_ORDER } from "../data/facts";
 import { RES_INFO } from "../data/colony";
 import { GameIcon } from "./GameIcon";
 import { CRAFT_STEPS } from "../sim/camp";
-import { shelterDone } from "../sim/build";
+import { shelterDone, stagesOf } from "../sim/build";
 import type { Engine, Snapshot } from "../game/engine";
 import { TILE, type Danger, type HuntFormation, type Role, type TechId } from "../sim/types";
 import { FORMATIONS } from "../sim/chariots";
@@ -64,6 +64,7 @@ export default function CampPanel({ snap, engine, onClose, onBuildStation, tab: 
   const [tab, setTab] = useState<Tab>(initial);
   useEffect(() => setTab(initial), [initial]);
   const tribe = snap.tribe;
+  const residents = snap.humans - snap.colony.strangers;
   return (
     <motion.aside
       ref={panelRef}
@@ -71,7 +72,7 @@ export default function CampPanel({ snap, engine, onClose, onBuildStation, tab: 
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: -18, scale: 0.98 }}
       transition={{ type: "spring", stiffness: 420, damping: 32 }}
-      className="dl-glass dl-scroll pointer-events-auto absolute inset-x-2 bottom-[84px] z-20 max-h-[56vh] overflow-y-auto rounded-3xl p-4 shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-4 sm:top-24 sm:max-h-[calc(100vh-200px)] sm:w-[370px]"
+      className="dl-glass dl-scroll pointer-events-auto absolute inset-x-2 bottom-[84px] z-20 max-h-[56vh] overflow-y-auto rounded-3xl p-4 shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-4 sm:top-[122px] sm:max-h-[calc(100vh-226px)] sm:w-[370px]"
     >
       <div className="sticky -top-4 z-10 -mx-4 -mt-4 rounded-t-3xl border-b border-white/10 bg-[#392315]/95 px-4 pb-2 pt-4 backdrop-blur-xl">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute right-3 top-3 rounded-full p-1.5 text-white/60 hover:bg-white/10 hover:text-white">
@@ -82,10 +83,12 @@ export default function CampPanel({ snap, engine, onClose, onBuildStation, tab: 
         <div>
           <h2 className="text-xl font-bold leading-tight">{tribe.levelName}</h2>
           <p className="text-xs text-white/60">
-            {snap.humans} people · room for {tribe.capacity} · {tribe.raidsWon} raids beaten
+            {residents} residents · {tribe.capacity} beds · {tribe.raidsWon} raids beaten
           </p>
         </div>
       </div>
+
+      <p className="mt-2 rounded-xl bg-white/5 px-3 py-2 text-[11px] text-white/70">{residents > tribe.capacity ? (residents - tribe.capacity) + " people need a bed. Existing residents stay." : Math.max(0, tribe.capacity - residents) + " free beds. Growth pauses when every bed is taken."} Tap a stone home and choose Add wing to expand.</p>
 
       <div className="mt-3 grid grid-cols-5 gap-1 rounded-2xl bg-white/5 p-1 text-[11.5px] font-bold">
         {(
@@ -340,7 +343,7 @@ function CampTab({ snap, engine, onForge }: { snap: Snapshot; engine: Engine; on
                   <div className={c.wear >= 100 ? "font-bold text-rose-300" : "text-white/65"}>{c.wear >= 100 ? "Worn out: needs repairing (wood)" : `Wear ${c.wear}%`}{c.cost ? ` · upgrade: ${c.cost}` : " · fully upgraded"}</div>
                 </div>
                 {c.cost && (
-                  <button type="button" onClick={() => engine.upgradeCatapult(c.id)} className="shrink-0 rounded-xl bg-amber-400/90 px-2.5 py-1.5 font-bold text-[#3a2414] hover:bg-amber-300 active:scale-95">
+                  <button type="button" onClick={() => engine.upgradeCatapult(c.id)} className="shrink-0 rounded-xl bg-amber-400/90 px-2.5 py-1.5 font-bold text-[#0f172a] hover:bg-amber-300 active:scale-95">
                     ⬆️ Upgrade
                   </button>
                 )}
@@ -353,27 +356,27 @@ function CampTab({ snap, engine, onForge }: { snap: Snapshot; engine: Engine; on
       {snap.colony.strangers > 0 && <p className="mt-2 rounded-xl bg-sky-500/20 p-2 text-[12px] font-semibold">🚶 {snap.colony.strangers} newcomer{snap.colony.strangers > 1 ? "s are" : " is"} on the way to camp.</p>}
       {camp.shelters.length > 0 && (
         <>
-          <div className="mt-3 text-sm font-bold">Huts</div>
+          <div className="mt-3 text-sm font-bold">Homes and castle wings</div>
           <div className="mt-1.5 space-y-1.5">
-            {camp.shelters.map((s, i) => (
+            {camp.shelters.map((s, i) => { const stages = stagesOf(s); return (
               <div key={i} className="rounded-2xl bg-white/5 p-2 text-[12px]">
                 <div className="flex gap-1">
-                  {SHELTER_STAGES.map((st, k) => (
+                  {stages.map((st, k) => (
                     <span key={st.label} className={`flex-1 rounded-lg px-1 py-1 text-center font-semibold ${k < s.stage ? "bg-emerald-500/40" : k === s.stage ? "bg-amber-400/30" : "bg-white/5 text-white/40"}`}>
                       {st.label}
                     </span>
                   ))}
                 </div>
-                {s.stage < SHELTER_STAGES.length ? (
+                {s.stage < stages.length ? (
                   <div className="mt-1 text-white/70">
-                    Needs {RES_ICON[SHELTER_STAGES[s.stage].need]} {s.have}/{SHELTER_STAGES[s.stage].n}
-                    {SHELTER_STAGES[s.stage].need === "wood" && !camp.learned.includes("axe") ? " — invent the 🪓 axe first!" : ""}
+                    Needs {RES_ICON[stages[s.stage].need]} {s.have}/{stages[s.stage].n}
+                    {stages[s.stage].need === "wood" && !camp.learned.includes("axe") ? " — invent the 🪓 axe first!" : ""}
                   </div>
                 ) : (
-                  <div className="mt-1 text-emerald-300">🛖 Finished — room for 3 more people</div>
+                  <div className="mt-1 text-emerald-300">Finished - {s.beds} beds</div>
                 )}
               </div>
-            ))}
+            ); })}
           </div>
         </>
       )}

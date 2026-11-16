@@ -22,6 +22,7 @@
 /*  + ids (5e8 up), so nothing else plays out differently.             */
 /* ------------------------------------------------------------------ */
 import { sp } from "../data/species";
+import { nationOf } from "./diplomacy";
 import { survived } from "./growth";
 import { emote, isBaby, sizeOf } from "./dinos";
 import { hurtHuman } from "./injury";
@@ -82,7 +83,7 @@ const foeXY = (f: Foe) => (f.kind === "human" ? f.h : f.b);
  * A canoe route (tile indexes) from one point to another: anywhere but mountains, cliffs and our walls,
  * with water three times cheaper than land, so they paddle up rivers as far as they go before landing.
  */
-export function seaRoute(w: World, x0: number, y0: number, x1: number, y1: number, budget = 30000): number[] | null {
+export function seaRoute(w: World, x0: number, y0: number, x1: number, y1: number, budget = 30000, overland = false): number[] | null {
   const N = MAP_W * MAP_H;
   const s = tileOf(x0, y0);
   const g = tileOf(x1, y1);
@@ -153,8 +154,9 @@ export function seaRoute(w: World, x0: number, y0: number, x1: number, y1: numbe
         const j = ny * MAP_W + nx;
         if (closed[j]) continue;
         const t = tiles[j] as T;
+        if (overland && isWaterTile(t) && !w.colony.bridgeAt(nx, ny)) continue;
         if (j !== g && (BLOCK.has(t) || w.tribe.blocks(nx, ny))) continue;
-        const step = (isWaterTile(t) ? 1 : 3) * (dx && dy ? 1.414 : 1);
+        const step = (overland ? 1 : isWaterTile(t) ? 1 : 3) * (dx && dy ? 1.414 : 1);
         const c = cost[i] + step;
         if (c < cost[j]) {
           cost[j] = c;
@@ -665,7 +667,7 @@ export class SeaFolk {
 
   /** A war party sets out: our town (not in a calm world), a Neanderthal camp, or the Tree People. */
   startRaid(w: World, t: SeaTribe, calm = w.tribe.danger === "calm"): boolean {
-    const free = this.members(t.id).filter((b) => (b.age ?? SEA_GROWN) >= SEA_GROWN && !b.band && b.hp > 0.6 && b.state !== "flee");
+    const free = this.members(t.id).filter((b) => (b.age ?? SEA_GROWN) >= SEA_GROWN && !b.band && !w.diplomacy.committed(b) && b.hp > 0.6 && b.state !== "flee");
     if (free.length < 4) return false;
     const goals: { goal: SeaBand["goal"]; x: number; y: number }[] = [];
     if (!calm && w.elapsed > 700) goals.push({ goal: { kind: "town", id: 0 }, x: w.camp.pileX, y: w.camp.pileY });
@@ -674,7 +676,9 @@ export class SeaFolk {
     const tree = w.forest.tribes.filter((c) => dist(c, t) < 3400).sort((a, b) => dist(a, t) - dist(b, t))[0];
     if (tree) goals.push({ goal: { kind: "tree", id: tree.id }, x: tree.x, y: tree.y + 40 });
     if (!goals.length) return false;
-    const g = goals[Math.floor(this.rng() * goals.length)];
+    const allowed = goals.filter((g) => w.diplomacy.allowsGoal(`sea:${t.id}`, g.goal));
+    if (!allowed.length) return false;
+    const g = allowed[Math.floor(this.rng() * allowed.length)];
     return this.launch(w, t, free, g.goal, g.x, g.y);
   }
 
@@ -964,7 +968,7 @@ export class SeaFolk {
     let bd = r;
     if (humans && w.tribe.danger !== "calm") {
       for (const h of w.humans) {
-        if (!fairGame(h)) continue;
+        if (!fairGame(h) || !w.diplomacy.hostile(`sea:${t.id}`, "us")) continue;
         const d = Math.hypot(h.x - x, h.y - y);
         if (d < bd) {
           bd = d;
@@ -973,6 +977,7 @@ export class SeaFolk {
       }
     }
     for (const o of w.rivals.brutes) {
+      if (!w.diplomacy.hostile(`sea:${t.id}`, nationOf(o))) continue;
       if (o.sea || o.hp <= 0 || o.captive || o.snatched || o.falling || o.weapon === "catapult") continue;
       if (o.tree && (o.hidden || (o.age ?? 100) < 100 || (tree && o.tree !== tree && Math.hypot(o.x - t.x, o.y - t.y) > 1200))) continue;
       const d = Math.hypot(o.x - x, o.y - y);
@@ -1052,6 +1057,7 @@ export class SeaFolk {
   }
 
   private act(w: World, b: Brute, dt: number) {
+    w.diplomacy.blockAction(w, b);
     const t = this.tribe(b.sea);
     const steed = this.steed(w, b);
     const deck = !steed && this.onDeck(b) && (b.state === "idle" || b.state === "sleep" || b.state === "rally");
@@ -1204,6 +1210,8 @@ export class SeaFolk {
   }
 
   /** Straight there, at canoe speed on water and running speed on land (round mountains + walls). */
+  diplomaticMove(w: World, b: Brute, dt: number) { if (b.mount && !waterAt(w, b.tx, b.ty)) this.dismount(w, b); this.move(w, b, dt, 1); if (b.mount) this.ride(w, b); }
+
   private move(w: World, b: Brute, dt: number, mul: number) {
     const dx = b.tx - b.x;
     const dy = b.ty - b.y;
@@ -1256,6 +1264,8 @@ export class SeaFolk {
   }
 
   private strike(w: World, b: Brute, f: Foe) {
+    if (!w.diplomacy.canTarget(w, b, foeXY(f).id)) return;
+    if (!w.diplomacy.canTarget(w, b, foeXY(f).id)) return;
     const arms = armsOf(b);
     let mul = w.daylight < 0.3 && !((b.spotT ?? 0) > 0) ? 1.25 : 1;
     b.spotT = 3;
@@ -1268,6 +1278,7 @@ export class SeaFolk {
   }
 
   private throwAt(w: World, b: Brute, f: Foe) {
+    if (!w.diplomacy.canTarget(w, b, foeXY(f).id)) return;
     const arms = armsOf(b);
     const p = foeXY(f);
     b.spotT = 2;
@@ -1462,6 +1473,7 @@ export class SeaFolk {
 
   /** `from` paddles over to `into` with everything it has: one bigger village, its sea dragons + farms' riches. */
   unite(w: World, from: SeaTribe, into: SeaTribe) {
+    w.diplomacy.merge(w, `sea:${from.id}`, `sea:${into.id}`);
     if (from === into || !this.tribes.includes(from) || !this.tribes.includes(into)) return;
     const was = into.name;
     w.groups.retribe("sea", from.id, into.id);

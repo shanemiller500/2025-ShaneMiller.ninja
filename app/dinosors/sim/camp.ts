@@ -138,7 +138,7 @@ export class Camp {
   }
 
   addShelter(w: World, x: number, y: number, plan: ShelterPlan = "hut") {
-    const s: Shelter = { id: w.nextId(), x, y, stage: 0, have: 0, plan, tier: plan === "tent" ? 0 : 2, hp: 1, up: false, upHave: {} };
+    const s: Shelter = { id: w.nextId(), x, y, stage: 0, have: 0, plan, tier: plan === "castle" ? 4 : plan === "tent" ? 0 : 2, hp: 1, up: false, upHave: {} };
     w.shelters.push(s);
     w.shelterVersion++;
     return s;
@@ -308,6 +308,7 @@ export class Camp {
       const first = !this.learned.has("shelter");
       this.learned.add("shelter");
       s.hp = 1;
+      w.population.assignHomes(w);
       w.celebrate("Home!");
       w.discover("shelterDone", s.x, s.y);
       if (first) w.toast(HOUSING[s.tier].icon, `A ${HOUSING[s.tier].name.toLowerCase()}! Now they can stay dry in storms. Tap it to see who lives there.`, s.x, s.y, TECH.shelter.fact);

@@ -37,6 +37,7 @@ import { captivesSlow, captivesUpdate } from "./clanCaptives";
 import { holdThink, holdsTick } from "./clanHolds";
 import { ourCatapultsUpdate, seizeTick, type OurShot } from "./ourCatapults";
 import { hitScorpion } from "./factions";
+import { nationOf } from "./diplomacy";
 
 const WORLD_W = MAP_W * TILE;
 const WORLD_H = MAP_H * TILE;
@@ -137,6 +138,7 @@ export class Rivals {
   /** Should our guards + defenses shoot this one? Always (the clans and us never get along), once they can see it:
    *  a Tree Person hidden up in the leaves isn't a target until it shows itself. */
   hostile(w: World, b: Brute) {
+    if (!w.diplomacy.hostileUnit(b)) return false;
     // (nor are their little ones up on the decks: TREE_GROWN, written out so this never waits on treeFolk.ts loading)
     // after dark a Tree Person (or a Sea Person out in a canoe) is a shadow: only seen up close, by firelight,
     // or once they strike (treeFolk.ts / seaFolk.ts set spotT)
@@ -146,7 +148,6 @@ export class Rivals {
     // a Sand Person still out on the sand blends right in: only seen up close or once they strike (sandFolk.ts)
     if (b.sand && !w.sandFolk.seen(w, b)) return false;
     // the Snow People are neighbours, not enemies, until they're at odds with us (snowFolk.ts)
-    if (b.snow && !w.snowFolk.hostileToUs(w, b)) return false;
     return !!w && !!b;
   }
   /** "Thog the Neanderthal" / "Kit of the Moss Eye Tree People" / "Nalu of the Salt Fin Sea People" */
@@ -298,6 +299,11 @@ export class Rivals {
 
   /** Our spear / arrow / bolt (or another Neanderthal's club) lands. */
   hit(w: World, b: Brute, dmg: number, fx: number, fy: number, byBrute = false, proj?: string) {
+    if (byBrute) w.diplomacy.clearPlayerStrike(b);
+    if (!byBrute && proj) {
+      if (!w.diplomacy.hostileUnit(b)) return;
+      w.diplomacy.playerHit(w, b);
+    }
     // the Tree People take hits their own way (lighter; they scatter or swarm whoever did it); so do the Sea People
     if (b.tree) return w.forest.hit(w, b, dmg, fx, fy, byBrute, proj);
     if (b.sea) return w.seaFolk.hit(w, b, dmg, fx, fy, byBrute, proj);
@@ -336,6 +342,7 @@ export class Rivals {
   }
 
   kill(w: World, b: Brute) {
+    w.diplomacy.casualty(w, b);
     this.dropCaptive(w, b, true);
     // whatever he stole comes back; and every Neanderthal drops a little something
     if (b.loot) {
@@ -416,6 +423,7 @@ export class Rivals {
 
   /** A clan (and any allies who fancy it) marches on our camp. */
   startRaid(w: World, clan: Clan) {
+    if (!w.diplomacy.hostile(`clan:${clan.id}`, "us")) return false;
     const t = w.tribe;
     if (t.raid || !clan) return false;
     const own = this.members(clan.id).filter((b) => (b.age ?? GROWN_AGE) >= GROWN_AGE && b.hp > 0.5 && !b.captive && !b.war);
@@ -424,7 +432,7 @@ export class Rivals {
     const party = own.slice(0, own.length - stay);
     let allies = 0;
     for (const o of this.clans) {
-      if (o === clan || this.relation(o.id, clan.id) !== 1 || allies >= 4) continue;
+      if (o === clan || this.relation(o.id, clan.id) !== 1 || allies >= 4 || !w.diplomacy.hostile(`clan:${o.id}`, "us")) continue;
       const help = this.members(o.id).filter((b) => (b.age ?? GROWN_AGE) >= GROWN_AGE && b.hp > 0.6 && !b.war && !b.captive && b.weapon !== "catapult").slice(0, 2);
       party.push(...help);
       allies += help.length;
@@ -614,6 +622,7 @@ export class Rivals {
 
   /** One clan joins another (members, food + captives move over). */
   merge(w: World, from: Clan, into: Clan) {
+    w.diplomacy.merge(w, `clan:${from.id}`, `clan:${into.id}`);
     for (const b of this.members(from.id)) {
       b.clan = into.id;
       b.war = 0;
@@ -689,7 +698,8 @@ export class Rivals {
       const ox = b.x;
       const oy = b.y;
       // the Tree, Sea + Sand People have their own brains (treeFolk.ts, seaFolk.ts, sandFolk.ts)
-      if (b.tree) w.forest.step(w, b, dt);
+      if (w.diplomacy.missionStep(w, b, dt)) { /* political expedition owns this step */ }
+      else if (b.tree) w.forest.step(w, b, dt);
       else if (b.sea) w.seaFolk.step(w, b, dt);
       else if (b.sand) w.sandFolk.step(w, b, dt);
       else if (b.snow) w.snowFolk.step(w, b, dt);
@@ -1019,9 +1029,10 @@ export class Rivals {
     let best: Brute | null = null;
     let bd = r;
     for (const o of this.brutes) {
+      if (!w.diplomacy.hostile(nationOf(b), nationOf(o))) continue;
       // feuding clans, any Tree Person who's shown themselves, and the Sea People
       // (and any Sand Person they can see: out on the open sand they're hard to make out)
-      if (o === b || (o.tree ? o.hidden || o.hp <= 0 : o.sea ? o.hp <= 0 || !!o.boat : o.sand ? o.hp <= 0 || !!o.onDragon || !w.sandFolk.seen(w, o) : o.snow ? o.hp <= 0 : this.relation(o.clan, b.clan) !== -1)) continue;
+      if (o === b || (o.tree ? o.hidden || o.hp <= 0 : o.sea ? o.hp <= 0 || !!o.boat : o.sand ? o.hp <= 0 || !!o.onDragon || !w.sandFolk.seen(w, o) : o.snow ? o.hp <= 0 : o.hp <= 0)) continue;
       const d = Math.hypot(o.x - b.x, o.y - b.y);
       if (d < bd) {
         bd = d;
@@ -1033,6 +1044,7 @@ export class Rivals {
 
   /** Someone of ours worth going after (not hidden, not up on a wall unless we can throw). */
   private preyFor(w: World, b: Brute, r: number, near: { x: number; y: number; r: number } | null): Human | null {
+    if (!w.diplomacy.hostileUnit(b)) return null;
     const wp = BRUTE_WEAPONS[b.weapon];
     const raid = w.tribe.raid;
     const inside = !!raid && raid.by === "brute" && (raid.breached || !w.tribe.walls.some((x) => x.built >= 1 && x.hp > 0) || !w.tribe.enclosed(w, w.camp.x, w.camp.y + 30));
@@ -1092,6 +1104,7 @@ export class Rivals {
   /* ------------------------------ bodies ------------------------------ */
 
   private actBrute(w: World, b: Brute, dt: number) {
+    w.diplomacy.blockAction(w, b);
     const clan = this.clan(b.clan);
     const wp = BRUTE_WEAPONS[b.weapon];
     // a catapult rolls up and fires once it is dug in
@@ -1200,7 +1213,7 @@ export class Rivals {
           // clubbing a war dino in grown bone armour: the spikes bite back
           if (d.owner && (d.warArmor ?? 0) > 0) {
             boneSpikes(w, b.x, b.y);
-            this.hit(w, b, 60 + (d.warArmor ?? 0) * 50, d.x, d.y, false, "tusk");
+            this.hit(w, b, 60 + (d.warArmor ?? 0) * 50, d.x, d.y, !d.owner, "tusk");
             if (b.hp <= 0) return;
           }
           if (d.health <= 0 && clan) {
@@ -1390,7 +1403,7 @@ export class Rivals {
     const mount = h.riding ? w.dinoById(h.riding) : null;
     if (mount && mount.owner && (mount.warArmor ?? 0) > 0) {
       boneSpikes(w, b.x, b.y);
-      this.hit(w, b, 50 + (mount.warArmor ?? 0) * 45, mount.x, mount.y, false, "tusk");
+      this.hit(w, b, 50 + (mount.warArmor ?? 0) * 45, mount.x, mount.y, !mount.owner, "tusk");
       if (b.hp <= 0) return;
     }
     if (b.raid && (isFemale(h) || h.child) && !b.captive && h.level === 0 && !h.riding) {

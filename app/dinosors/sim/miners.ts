@@ -102,7 +102,7 @@ const NB = (i: number) => {
 
 /** Can this person go down the mine? */
 export function canSend(h: Human) {
-  return !h.child && !h.stranger && !h.under && !h.captive && h.state !== "down" && h.hp > 0.35;
+  return !h.child && !h.stranger && !h.under && !h.captive && !h.selfHealing && h.state !== "down" && h.hp >= 0.5;
 }
 
 /** Ask someone to walk to the cave and go down. */
@@ -281,8 +281,9 @@ export function updateCrew(w: World, dt: number) {
   if (mine.pending.size) {
     for (const [id, t] of Array.from(mine.pending)) {
       const h = w.humans.find((x) => x.id === id);
-      if (!h || h.under || h.state === "down" || h.child) {
+      if (!h || h.under || h.state === "down" || h.child || h.selfHealing || h.hp < 0.5) {
         mine.pending.delete(id);
+        if (h && !h.under && !mine.recall && (h.selfHealing || h.hp < 0.5)) mine.healing.add(id);
         continue;
       }
       const d = Math.hypot(h.x - w.camp.caveX, h.y - w.camp.caveY);
@@ -322,12 +323,16 @@ export function updateCrew(w: World, dt: number) {
     if (!mine.crew.includes(m)) continue;
     eat(w, m, h, dt);
     if (!mine.crew.includes(m)) continue;
-    if (w.shifts.mode === "split" && h.shift && !w.shifts.active(w, h) && !m.job && !m.path.length) {
+    if (w.shifts.mode === "split" && h.shift && !w.shifts.active(w, h) && !m.job && !m.path.length && h.hp >= 0.5) {
       m.mode = "idle";
       h.energy = Math.min(1, h.energy + dt * 0.03);
       continue;
     }
     h.energy = Math.max(0.08, h.energy - dt * 0.002);
+    // Injuries interrupt even an assigned dig or a long walk to another job.
+    if (h.hp < 0.5 && m.job?.kind !== "heal" && m.job?.kind !== "exit" && m.job?.kind !== "flee") {
+      m.job = null; m.path = []; m.pi = 0; m.thinkT = 0;
+    }
     // move along the path
     if (m.path.length && m.pi < m.path.length) {
       m.mode = m.job?.kind === "flee" ? "flee" : "walk";
@@ -459,7 +464,7 @@ function think(w: World, m: Miner, h: Human) {
     const r = search(mine, here, (s) => (cells.has(s) ? { kind: "heal", cell: s, stand: s } : null));
     if (r) return plan(w, m, r, "Need a sit-down.");
   }
-  if (mine.recall || h.hp < 0.3) {
+  if (mine.recall || h.hp < 0.5) {
     // hurt (not called up): they'll be back once they've healed
     if (!mine.recall) mine.healing.add(h.id);
     const out = search(mine, here, (s) => (s === LANDING ? { kind: "exit", cell: s, stand: s } : null));

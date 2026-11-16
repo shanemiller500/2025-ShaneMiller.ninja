@@ -11,6 +11,7 @@
 /*  they look for other unfinished player tasks to help with, and only */
 /*  go back to running themselves (auto mode) when there are none.     */
 /* ------------------------------------------------------------------ */
+import type { NationId } from "./diplomacy";
 import { NODES, RIDEABLE, TAMEABLE, WEAPON_BY_ID } from "../data/colony";
 import { bucketBrigade, claimFire, setDouseAim, throwSpot } from "./firefight";
 import { sp } from "../data/species";
@@ -490,6 +491,8 @@ export function issue(w: World, people: Human[], c: Command, weapon?: WeaponKind
     // fighters only: kids head home instead
     for (const h of crew) if (h.child) say(h, "I'll stay safe!");
   }
+  const nation: NationId | null = c.kind === "hunt" ? w.diplomacy.nationTarget(w, c.target) : c.kind === "raid" ? `clan:${c.target}` : c.kind === "treeRaid" ? `tree:${c.target}` : c.kind === "seaRaid" ? `sea:${c.target}` : null;
+  if (nation && nation !== "us") { w.diplomacy.known.add(nation); w.diplomacy.war(w, "us", nation); }
   const t = w.tasks.add(w, c, workers, weapon);
   const more = c.kind === "build" ? growBuild(w, t) : 0;
   if (more) t.label = `${c.label} + ${more} more nearby`;

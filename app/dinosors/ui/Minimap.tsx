@@ -50,12 +50,12 @@ export function Minimap({ engine, cardOpen, mobileOpen, onMobileToggle }: { engi
       return !o;
     });
   };
-  const place = `pointer-events-auto absolute bottom-[292px] z-20 hidden transition-[right] duration-300 ${cardOpen ? "sm:right-[362px]" : "sm:right-4"}`;
+  const place = `pointer-events-auto absolute bottom-[284px] z-20 hidden transition-[right] duration-300 ${cardOpen ? "sm:right-[362px]" : "sm:right-4"}`;
   return (
     <>
     {open ? <div className={`${place} dl-glass rounded-2xl p-1.5 sm:block`}>
       <div className="flex items-center justify-between px-1 pb-1">
-        <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-amber-100/85">
+        <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/55">
           <MapIcon className="h-3.5 w-3.5" /> Map
         </span>
         <button type="button" onClick={toggle} aria-label="Hide the map" title="Hide the map" className="rounded-full p-0.5 text-white/60 hover:bg-white/10 hover:text-white">
@@ -70,7 +70,7 @@ export function Minimap({ engine, cardOpen, mobileOpen, onMobileToggle }: { engi
           const r = e.currentTarget.getBoundingClientRect();
           engine.minimapJump((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
         }}
-        className="block h-auto w-[156px] cursor-crosshair rounded-lg ring-1 ring-black/40 sm:w-[216px]"
+        className="block h-auto w-[156px] cursor-crosshair rounded-xl ring-1 ring-white/10 sm:w-[216px]"
         aria-label="World map: tap to fly there"
       />
     </div> : <button type="button" onClick={toggle} aria-label="Show the map" title="Show the map" className={`${place} dl-glass h-11 w-11 items-center justify-center rounded-2xl text-white sm:flex`}>

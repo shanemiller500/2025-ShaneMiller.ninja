@@ -4,6 +4,7 @@
 /*  plates, sails…). Local space: facing +x, feet at y=0, up is -y.    */
 /* ------------------------------------------------------------------ */
 import type { BodyPlan, SpeciesDef } from "../sim/types";
+import { Q } from "./quality";
 
 export interface DinoPose {
   /** walk cycle phase (radians) */
@@ -64,6 +65,75 @@ export function shade(hex: string, amt: number) {
 }
 
 const OUTLINE = "rgba(35,28,22,0.55)";
+/** the softer contour used when bodies are shaded (the form does the work, not the line) */
+const OUTLINE_SOFT = "rgba(30,22,18,0.4)";
+
+const toneCache = new Map<string, string>();
+/** Lighten (+) or darken (-) a colour given as #hex or rgb(). */
+function tone(col: string, amt: number) {
+  const key = col + "|" + amt;
+  const hit = toneCache.get(key);
+  if (hit) return hit;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (col.charCodeAt(0) === 35) {
+    const n = parseInt(col.slice(1), 16);
+    r = (n >> 16) & 255;
+    g = (n >> 8) & 255;
+    b = n & 255;
+  } else {
+    const m = col.match(/[\d.]+/g);
+    if (!m || m.length < 3) return col;
+    r = +m[0];
+    g = +m[1];
+    b = +m[2];
+  }
+  const f = (c: number) => Math.max(0, Math.min(255, Math.round(amt < 0 ? c * (1 + amt) : c + (255 - c) * amt)));
+  const out = `rgb(${f(r)},${f(g)},${f(b)})`;
+  if (toneCache.size > 4000) toneCache.clear();
+  toneCache.set(key, out);
+  return out;
+}
+
+/** Device pixels per world pixel in the main view right now (1 for portraits and films). */
+let viewDensity = 1;
+/**
+ * The world renderer says how big things are on screen while it draws a frame (and puts it back to 1 after):
+ * a dinosaur a few pixels tall skips the gradient shading and scale texture nobody could see.
+ */
+export function setDinoView(density: number) {
+  viewDensity = density;
+}
+
+/** Top-lit body gradients, per canvas (a gradient belongs to the context that made it), keyed by colour + size. */
+const gradCache = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasGradient>>();
+
+/**
+ * The fill for a body part of this colour: lit from above, falling into shade toward the ground.
+ * It spans the whole animal (feet at 0, back at -top), so the back, flanks and legs shade as one form.
+ */
+function lit(k: Ctx2, color: string): string | CanvasGradient {
+  if (!k.shaded || color.charCodeAt(0) !== 35 && color.charCodeAt(0) !== 114) return color;
+  let m = gradCache.get(k.c);
+  if (!m) {
+    m = new Map();
+    gradCache.set(k.c, m);
+  }
+  const Lq = Math.max(4, Math.round(k.L / 3) * 3);
+  const key = color + "|" + Lq + "|" + k.top;
+  let g = m.get(key);
+  if (!g) {
+    if (m.size > 600) m.clear();
+    g = k.c.createLinearGradient(0, -Lq * k.top, 0, Lq * 0.02);
+    g.addColorStop(0, tone(color, 0.2));
+    g.addColorStop(0.38, tone(color, 0.04));
+    g.addColorStop(0.72, tone(color, -0.1));
+    g.addColorStop(1, tone(color, -0.3));
+    m.set(key, g);
+  }
+  return g;
+}
 
 interface Ctx2 {
   c: CanvasRenderingContext2D;
@@ -75,12 +145,19 @@ interface Ctx2 {
   belly: string;
   accent: string;
   lw: number;
+  /** gradient shading on (quality) */
+  shaded: boolean;
+  /** the contour line is wide enough on screen to be seen (small animals skip it, and the toes, and the like) */
+  fine: boolean;
+  /** how tall the animal stands, as a fraction of its length (where the light falls off from) */
+  top: number;
 }
 
 function fillStroke(k: Ctx2, fill: string) {
-  k.c.fillStyle = fill;
+  k.c.fillStyle = lit(k, fill);
   k.c.fill();
-  k.c.strokeStyle = OUTLINE;
+  if (!k.fine) return;
+  k.c.strokeStyle = k.shaded ? OUTLINE_SOFT : OUTLINE;
   k.c.lineWidth = k.lw;
   k.c.stroke();
 }
@@ -89,7 +166,18 @@ function limb(k: Ctx2, x0: number, y0: number, x1: number, y1: number, x2: numbe
   const c = k.c;
   c.lineCap = "round";
   c.lineJoin = "round";
-  c.strokeStyle = OUTLINE;
+  if (!k.fine) {
+    // small on screen: the whole limb in one stroke
+    c.strokeStyle = lit(k, color);
+    c.lineWidth = (w0 + w1) * 0.5;
+    c.beginPath();
+    c.moveTo(x0, y0);
+    c.lineTo(x1, y1);
+    c.lineTo(x2, y2);
+    c.stroke();
+    return;
+  }
+  c.strokeStyle = k.shaded ? OUTLINE_SOFT : OUTLINE;
   c.lineWidth = w0 + k.lw * 2;
   c.beginPath();
   c.moveTo(x0, y0);
@@ -100,7 +188,7 @@ function limb(k: Ctx2, x0: number, y0: number, x1: number, y1: number, x2: numbe
   c.moveTo(x1, y1);
   c.lineTo(x2, y2);
   c.stroke();
-  c.strokeStyle = color;
+  c.strokeStyle = lit(k, color);
   c.lineWidth = w0;
   c.beginPath();
   c.moveTo(x0, y0);
@@ -140,51 +228,79 @@ function pillarLeg(k: Ctx2, hx: number, hy: number, legH: number, phase: number,
   k.c.beginPath();
   k.c.ellipse(footX + thick * 0.1, -lift - thick * 0.1, thick * 0.55, thick * 0.22, 0, 0, Math.PI * 2);
   k.c.fill();
+  // (toes are a tenth of the leg's width: on a small animal there's nothing to see)
+  if (thick * viewDensity < 7) return;
   // Separate toes and short pale claws make the foot read as a heavy planted limb.
   k.c.strokeStyle = shade(k.def.look.body, -0.48);
   k.c.lineWidth = Math.max(0.8, thick * 0.07);
-  for (const toe of [-0.25, 0.05, 0.32]) {
-    k.c.beginPath();
+  k.c.beginPath();
+  for (const toe of TOES) {
     k.c.moveTo(footX + thick * toe, -lift - thick * 0.08);
     k.c.lineTo(footX + thick * (toe + 0.12), -lift - thick * 0.015);
-    k.c.stroke();
   }
+  k.c.stroke();
   k.c.fillStyle = "#e5d9b9";
-  for (const toe of [-0.25, 0.05, 0.32]) {
-    k.c.beginPath();
+  k.c.beginPath();
+  for (const toe of TOES) {
     k.c.moveTo(footX + thick * (toe + 0.11), -lift - thick * 0.02);
     k.c.lineTo(footX + thick * (toe + 0.22), -lift + thick * 0.015);
     k.c.lineTo(footX + thick * (toe + 0.1), -lift + thick * 0.01);
-    k.c.closePath(); k.c.fill();
+    k.c.closePath();
   }
+  k.c.fill();
 }
+const TOES = [-0.25, 0.05, 0.32];
 
 function skinTexture(k: Ctx2) {
-  if (k.L < 48 || k.def.move !== "walk") return;
+  if (k.L < 48 || k.L * viewDensity < 46 || k.def.move !== "walk") return;
   const { c, L, def, p } = k;
   const sauropod = def.plan === "sauropod";
   c.save();
   c.beginPath();
   c.ellipse(0, -L * (sauropod ? 0.41 : 0.36), L * (sauropod ? 0.39 : 0.31), L * (sauropod ? 0.18 : 0.15), 0, 0, Math.PI * 2);
   c.clip();
+  if (k.shaded) {
+    // light rolling over the back, shade pooling under the belly
+    const cy = -L * (sauropod ? 0.41 : 0.36);
+    const ry = L * (sauropod ? 0.18 : 0.15);
+    const sheen = c.createLinearGradient(0, cy - ry, 0, cy + ry);
+    sheen.addColorStop(0, "rgba(255,255,245,0.26)");
+    sheen.addColorStop(0.3, "rgba(255,255,245,0.05)");
+    sheen.addColorStop(0.62, "rgba(0,0,0,0)");
+    sheen.addColorStop(1, "rgba(10,8,20,0.2)");
+    c.fillStyle = sheen;
+    c.fillRect(-L * 0.45, cy - ry, L * 0.9, ry * 2);
+  }
   c.globalAlpha = 0.26;
   c.strokeStyle = shade(def.look.body, -0.43);
   c.lineWidth = Math.max(0.7, L * 0.007);
   const rows = L > 95 ? 5 : 4;
+  const sway = Math.sin(p.t * 2.4) * L * 0.002;
+  const sr = L * 0.018;
+  // (every scale in one path: one stroke for the lot)
+  c.beginPath();
   for (let row = 0; row < rows; row++) for (let col = -5; col <= 5; col++) {
     const x = (col + (row % 2) * 0.45) * L * 0.07;
-    const y = -L * (sauropod ? 0.49 : 0.44) + row * L * 0.047;
-    const sway = Math.sin(p.t * 2.4) * L * 0.002;
-    c.beginPath();
-    c.arc(x, y + sway, L * 0.018, 0.2, Math.PI - 0.2);
-    c.stroke();
+    const y = -L * (sauropod ? 0.49 : 0.44) + row * L * 0.047 + sway;
+    c.moveTo(x + Math.cos(0.2) * sr, y + Math.sin(0.2) * sr);
+    c.arc(x, y, sr, 0.2, Math.PI - 0.2);
   }
+  c.stroke();
   c.restore();
 }
 
 function eye(k: Ctx2, x: number, y: number, r: number, angry: boolean) {
   const c = k.c;
   const big = r * (1 + k.p.baby * 0.6);
+  if (big * viewDensity < 1.2) {
+    // a pixel or two across: one dark dot says "eye"
+    if (k.p.eyesClosed) return;
+    c.fillStyle = "#1d1813";
+    c.beginPath();
+    c.arc(x + big * 0.15, y, big * 0.8, 0, Math.PI * 2);
+    c.fill();
+    return;
+  }
   if (k.p.eyesClosed) {
     c.strokeStyle = "#1d1813";
     c.lineWidth = Math.max(1, big * 0.45);
@@ -224,26 +340,29 @@ function pattern(k: Ctx2, cx: number, cy: number, rx: number, ry: number, rot: n
   c.clip();
   c.fillStyle = def.look.accent;
   c.globalAlpha *= 0.32;
+  // (all the stripes / spots in one path: one fill for the lot)
+  c.beginPath();
   if (def.look.pattern === "stripes" || def.look.pattern === "bands") {
     const n = def.look.pattern === "stripes" ? 6 : 4;
     const w = def.look.pattern === "stripes" ? rx * 0.12 : rx * 0.2;
     for (let i = 0; i < n; i++) {
       const x = cx - rx + ((i + 0.6) / n) * rx * 2;
-      c.beginPath();
       c.moveTo(x - w, cy - ry);
       c.lineTo(x + w, cy - ry);
       c.lineTo(x + w * 0.3, cy + ry * 0.2);
       c.lineTo(x - w * 0.6, cy + ry * 0.2);
       c.closePath();
-      c.fill();
     }
   } else {
     for (let i = 0; i < 7; i++) {
-      c.beginPath();
-      c.arc(cx - rx * 0.7 + ((i * 37) % 10) / 10 * rx * 1.4, cy - ry * 0.6 + ((i * 53) % 10) / 10 * ry * 0.8, ry * (0.12 + ((i * 7) % 3) * 0.05), 0, Math.PI * 2);
-      c.fill();
+      const sx = cx - rx * 0.7 + ((i * 37) % 10) / 10 * rx * 1.4;
+      const sy = cy - ry * 0.6 + ((i * 53) % 10) / 10 * ry * 0.8;
+      const sr = ry * (0.12 + ((i * 7) % 3) * 0.05);
+      c.moveTo(sx + sr, sy);
+      c.arc(sx, sy, sr, 0, Math.PI * 2);
     }
   }
+  c.fill();
   c.restore();
 }
 
@@ -251,11 +370,13 @@ function mud(k: Ctx2, cx: number, cy: number, rx: number, ry: number) {
   if (k.p.muddy < 0.15) return;
   const c = k.c;
   c.fillStyle = `rgba(100,70,40,${0.55 * k.p.muddy})`;
+  c.beginPath();
   for (let i = 0; i < 6; i++) {
-    c.beginPath();
-    c.ellipse(cx + (((i * 41) % 13) / 13 - 0.5) * rx * 1.6, cy + (((i * 29) % 7) / 7 - 0.3) * ry, rx * 0.16, ry * 0.2, 0, 0, Math.PI * 2);
-    c.fill();
+    const mx = cx + (((i * 41) % 13) / 13 - 0.5) * rx * 1.6;
+    c.moveTo(mx + rx * 0.16, cy + (((i * 29) % 7) / 7 - 0.3) * ry);
+    c.ellipse(mx, cy + (((i * 29) % 7) / 7 - 0.3) * ry, rx * 0.16, ry * 0.2, 0, 0, Math.PI * 2);
   }
+  c.fill();
 }
 
 function tail(k: Ctx2, x0: number, yTop: number, yBot: number, tipX: number, tipY: number) {
@@ -1772,8 +1893,12 @@ export function drawDino(c: CanvasRenderingContext2D, def: SpeciesDef, L: number
     dark: shade(def.look.body, -0.22),
     belly: def.look.belly,
     accent: def.look.accent,
-    lw: Math.max(0.8, L * 0.012),
+    lw: Q.shading ? Math.max(0.7, L * 0.009) : Math.max(0.8, L * 0.012),
+    shaded: Q.shading && L * viewDensity > 26,
+    fine: true,
+    top: def.plan === "sauropod" ? 0.95 : def.plan === "pterosaur" ? 0.5 : 0.72,
   };
+  k.fine = k.lw * viewDensity >= 0.5;
   c.save();
   c.scale(dir, 1);
   if (p.flip > 0) {

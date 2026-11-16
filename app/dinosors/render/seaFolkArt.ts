@@ -16,6 +16,7 @@
 import type { Brute, SeaHut, SeaSign, SeaTribe } from "../sim/types";
 import { shade } from "./drawDino";
 import { drawFlame } from "./sprites";
+import { fist, scaleAbout, shadeEllipse, storyFace, type Mood } from "./figureArt";
 
 const INK = "#132230";
 const SKINS = ["#a9714a", "#8d5a37", "#b98157", "#7a4c2e", "#c08e64"];
@@ -60,6 +61,9 @@ export function drawSeaFolk(c: CanvasRenderingContext2D, b: Brute, t: number, pa
 /** Head + hair + crown (origin: centre of the face). */
 function head(c: CanvasRenderingContext2D, b: Brute, t: number, paint: string, skin: string, moving: boolean) {
   const hair = pickOf(HAIRS, b.id * 7);
+  // (a big head, like the rest of the cast: it grows up from the neck)
+  c.save();
+  scaleAbout(c, 0, 6, 1.28);
   // long hair braided with kelp, streaming back
   c.fillStyle = hair;
   c.beginPath();
@@ -95,20 +99,11 @@ function head(c: CanvasRenderingContext2D, b: Brute, t: number, paint: string, s
   c.moveTo(-0.5, -3.5);
   c.quadraticCurveTo(2.5, -5.2, 5.8, -3.2);
   c.stroke();
-  c.fillStyle = "#fff8ea";
-  c.beginPath();
-  c.ellipse(4.3, -1.5, 1.3, 0.85, 0, 0, Math.PI * 2);
-  c.fill();
-  c.fillStyle = "#1c4a6e";
-  c.beginPath();
-  c.arc(4.7, -1.5, 0.6, 0, Math.PI * 2);
-  c.fill();
-  c.strokeStyle = INK;
-  c.lineWidth = 0.9;
-  c.beginPath();
-  c.moveTo(3, 3);
-  c.lineTo(5.4, 2.7);
-  c.stroke();
+  {
+    const st = b.state;
+    const mood: Mood = st === "sleep" ? "asleep" : st === "fight" || st === "rally" || st === "hunt" ? "fierce" : st === "flee" ? "scared" : "calm";
+    storyFace(c, 1.3, 0.6, { r: 4.5, skin, brow: hair, mood, id: b.id, t, eye: "#1c4a6e", ink: INK });
+  }
   // a crown: coral sprigs, a starfish, or a ring of shells
   const crown = b.id % 3;
   if (crown === 0) {
@@ -154,6 +149,7 @@ function head(c: CanvasRenderingContext2D, b: Brute, t: number, paint: string, s
       c.fill();
     }
   }
+  c.restore();
 }
 
 function standing(c: CanvasRenderingContext2D, b: Brute, t: number, paint: string) {
@@ -231,6 +227,7 @@ function standing(c: CanvasRenderingContext2D, b: Brute, t: number, paint: strin
     c.beginPath();
     for (let k = 0; k <= 6; k++) c.lineTo(Math.sin(k * 1.4) * 1.3, H * 0.05 + k * H * 0.04);
     c.stroke();
+    fist(c, 0, H * 0.345, 2.4, back ? shade(skin, -0.2) : skin, INK);
     c.restore();
   };
   arm(b.state === "rally" ? -2.6 + Math.sin(b.anim * 3) * 0.3 : run * 0.6 + 0.2, true);
@@ -243,6 +240,7 @@ function standing(c: CanvasRenderingContext2D, b: Brute, t: number, paint: strin
   c.beginPath();
   c.ellipse(0, -torso * 0.5, 7, torso * 0.56, 0, 0, Math.PI * 2);
   c.fill();
+  shadeEllipse(c, 0, -torso * 0.5, 7, torso * 0.56);
   c.strokeStyle = paint;
   c.lineWidth = 1.3;
   c.beginPath();
@@ -331,6 +329,7 @@ function standing(c: CanvasRenderingContext2D, b: Brute, t: number, paint: strin
   c.stroke();
   c.translate(0, H * 0.34);
   weapon(c, b, t);
+  fist(c, 0, 0.3, 2.5, skin, INK);
   c.restore();
   c.restore();
   if (b.loot || b.forage) {

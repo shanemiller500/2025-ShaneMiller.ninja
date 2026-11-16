@@ -23,6 +23,7 @@ import { issue, type Task } from "./tasks";
 import { TILE, type Building, type BuildingKind, type Human, type Shelter, type Tower } from "./types";
 import type { World } from "./world";
 import { connectWalls, joinMessage } from "./wallLinks";
+import { compoundOf, wingUnits } from "./castleCompound";
 
 export type MoveRef = { kind: "building" | "shelter" | "wall" | "farm" | "tower"; id: number };
 
@@ -368,8 +369,11 @@ function place(w: World, ref: MoveRef, o: Building | Shelter, x: number, y: numb
     b.x = (fp.tx + fp.w / 2) * TILE;
     b.y = (fp.ty + fp.h) * TILE - (def.solid ? 0 : TILE / 2);
   } else {
-    o.x = x;
-    o.y = y;
+    const units = wingUnits(w, o as Shelter);
+    for (const unit of units) { unit.x = x; unit.y = y; }
+    const compound = compoundOf(w, o.id);
+    const wing = compound?.wings.find((g) => g.ids.includes(o.id));
+    if (wing) { wing.x = x; wing.y = y; }
   }
   w.colony.version++;
   w.shelterVersion++;

@@ -15,6 +15,7 @@
 /*  on where it left off.                                              */
 /* ------------------------------------------------------------------ */
 import { BUILDINGS } from "../data/colony";
+import { castleReserved } from "./castleCompound";
 import { canClear, commandClear } from "./clearing";
 import { go, say } from "./humans";
 import { P } from "./particles";
@@ -60,7 +61,7 @@ const tries = new WeakMap<Human, { id: number; since: number }>();
 
 /** Is (x, y) in an area the tribe keeps clear (nothing sprouts there)? */
 export function keptClear(w: World, x: number, y: number) {
-  return w.keepClear.some((r) => inRect(r, x, y));
+  return castleReserved(w, x, y) || w.keepClear.some((r) => inRect(r, x, y));
 }
 
 /** Wild plants we keep: the bushes an unplanted vineyard will be planted from (buildClear.ts keeps them too). */

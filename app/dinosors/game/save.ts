@@ -9,6 +9,7 @@
 /* ------------------------------------------------------------------ */
 import { safeSetItem } from "@/utils/storageJanitor";
 import { SAVE_VERSION, World, type SaveData } from "../sim/world";
+import type { QualityId } from "../render/quality";
 
 const WORLD_KEY = "dinosors:world:v1";
 const IDB_MARK = "dinosors:world:idb";
@@ -25,9 +26,11 @@ export interface Settings {
   tips: boolean;
   /** messages pop up over the game (off: they just collect in the 🔔 list) */
   popups: boolean;
+  /** graphics quality ("auto" picks for the device) */
+  quality: QualityId;
 }
 
-export const DEFAULT_SETTINGS: Settings = { muted: false, volume: 0.8, welcomed: false, tips: true, popups: false };
+export const DEFAULT_SETTINGS: Settings = { muted: false, volume: 0.8, welcomed: false, tips: true, popups: false, quality: "auto" };
 
 /** Any save version this build understands (v1 = before the colony upgrade). */
 export function readSave(raw: string | null): World | null {

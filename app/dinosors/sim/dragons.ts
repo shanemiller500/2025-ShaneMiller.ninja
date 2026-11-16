@@ -132,7 +132,7 @@ export class Dragons {
 
   /** Is a wild dragon a threat to the settlement right now (not one asleep on its far-off nest)? */
   menacing(w: World) {
-    return this.list.some((d) => d.state !== "leave" && d.state !== "flee" && (d.state !== "perch" && d.state !== "home" ? Math.hypot(d.x - w.camp.x, d.y - w.camp.y) < 1800 : false));
+    return this.list.some((d) => w.diplomacy.hostileDragon(d) && d.state !== "leave" && d.state !== "flee" && (d.state !== "perch" && d.state !== "home" ? Math.hypot(d.x - w.camp.x, d.y - w.camp.y) < 1800 : false));
   }
 
   /** Bring a dragon in from the edge of the world. */

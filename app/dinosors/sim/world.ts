@@ -15,6 +15,7 @@ import { Shifts } from "./shifts";
 import { P, Particles } from "./particles";
 import { burnPlantsAt, generatePlants, makePlant, plantFuelNear, tallestNear, updatePlants, PLANT_H } from "./plants";
 import { clearPlantsUnderBuilds } from "./buildClear";
+import { organizeCastles, type CastleCompound } from "./castleCompound";
 import { connectWalls, joinMessage } from "./wallLinks";
 import { territoryTick } from "./territory";
 import { announceEstates } from "./wineEstate";
@@ -57,6 +58,7 @@ import { Sky } from "./sky";
 import { Almanac } from "./almanac";
 import { Mine } from "./mine";
 import { updateCrew } from "./miners";
+import { hospitalTick } from "./hospital";
 import { updatePacks } from "./packs";
 import { updateDeepBuilds } from "./deepBuild";
 import { updateDeepLife } from "./deepLife";
@@ -65,6 +67,7 @@ import { Dragons } from "./dragons";
 import { regrowTick } from "./clearing";
 import { moveTick } from "./moving";
 import { Rivals } from "./rivals";
+import { Diplomacy } from "./diplomacy";
 import { Forest } from "./treeFolk";
 import { SeaFolk } from "./seaFolk";
 import { SandFolk } from "./sandFolk";
@@ -190,6 +193,7 @@ export class World {
   plants: Plant[] = [];
   props: Prop[] = [];
   shelters: Shelter[] = [];
+  castleCompounds: CastleCompound[] = [];
   campfires: Campfire[] = [];
   schools: FishSchool[] = [];
   meteors: Meteor[] = [];
@@ -215,6 +219,7 @@ export class World {
   rivals = new Rivals();
   /** the Tree People: feral tribes up in the forest canopy (treeFolk.ts) */
   forest: Forest;
+  diplomacy = new Diplomacy();
   /** the Sea People: stilt villages out on the water, canoe raiders, friends of the sea reptiles (seaFolk.ts) */
   seaFolk: SeaFolk;
   /** the Sand People of the central desert: camel riders, archers, Sand Dragon Riders (sandFolk.ts) */
@@ -812,6 +817,7 @@ export class World {
     this.buildClearT -= dt;
     if (this.buildClearT <= 0) {
       this.buildClearT = 1;
+      organizeCastles(this);
       clearPlantsUnderBuilds(this);
       announceEstates(this);
     }
@@ -884,6 +890,7 @@ export class World {
       this.regrowT = 2;
       regrowTick(this);
     }
+    this.diplomacy.update(this, dt);
     this.rivals.update(this, dt);
     this.forest.update(this, dt);
     this.seaFolk.update(this, dt);
@@ -906,6 +913,7 @@ export class World {
     this.healLand(dt);
     this.mine.update(this, dt);
     updateCrew(this, dt);
+    hospitalTick(this);
     updatePacks(this, dt);
     updateDeepBuilds(this, dt);
     updateDeepLife(this, dt);
@@ -1172,6 +1180,7 @@ export class World {
         riding: h.riding,
         age: Math.round(h.age),
         hp: r(Math.max(0.05, h.hp)),
+        selfHealing: h.selfHealing || undefined,
         warmth: r(h.warmth),
         gear: h.gear,
         home: h.home,
@@ -1189,6 +1198,7 @@ export class World {
       tribe: this.tribe.serialize(),
       shifts: this.shifts.serialize(),
       rivals: this.rivals.serialize(),
+      diplomacy: this.diplomacy.serialize(),
       forest: this.forest.serialize(this),
       seaFolk: this.seaFolk.serialize(this),
       sandFolk: this.sandFolk.serialize(this),
@@ -1217,6 +1227,7 @@ export class World {
       props: this.props.map((p) => ({ kind: p.kind, x: r(p.x), y: r(p.y), size: r(p.size), found: p.found })),
       shelters: this.shelters.map((s) => ({ id: s.id, x: r(s.x), y: r(s.y), stage: s.stage, have: s.have, plan: s.plan, tier: s.tier, hp: r(s.hp), up: s.up, upHave: s.upHave })),
       colony: this.colony.serialize(),
+      castleCompounds: this.castleCompounds.map((c) => ({ ...c, wings: c.wings.map((g) => ({ ...g, ids: [...g.ids] })), pads: c.pads.map((p) => ({ ...p })) })),
       population: this.population.serialize(),
       wildlife: this.wildlife.serialize(),
       civ: this.civ.serialize(),
@@ -1273,6 +1284,7 @@ export class World {
         riding: h.riding ?? 0,
         age: h.age ?? (h.child ? 0 : 400),
         hp: h.hp ?? 1,
+        selfHealing: h.selfHealing,
         warmth: h.warmth ?? 1,
         gear: (h.gear as Gear | undefined) ?? { weapon: null, shield: 0 },
         home: h.home ?? 0,
@@ -1318,6 +1330,7 @@ export class World {
       w.shelters.push({ id: s.id ?? w.nextId(), x: s.x, y: s.y, stage: s.stage, have: s.have, plan, tier: s.tier ?? (plan === "tent" ? 0 : 2), hp: s.hp ?? 1, up: !!s.up, upHave: s.upHave ?? {} });
     }
     w.colony.load(w, data.colony);
+    w.castleCompounds = (data.castleCompounds ?? []).filter((c) => c.wings.some((g) => g.ids.some((id) => w.shelters.some((s) => s.id === id))));
     w.population.load(data.population);
     w.wildlife.load((data as { wildlife?: Parameters<Wildlife["load"]>[0] }).wildlife);
     w.civ.load(data.civ);
@@ -1348,6 +1361,7 @@ export class World {
     w.groups.load(more.groups);
     w.sandFolk.load(w, more.sandFolk);
     w.snowFolk.load(w, more.snowFolk);
+    w.diplomacy.load((data as { diplomacy?: ReturnType<Diplomacy["serialize"]> }).diplomacy, w);
     w.snowLife.load(more.snowLife);
     w.monks.load(w, more.monks);
     w.hazards.load(more.hazards);

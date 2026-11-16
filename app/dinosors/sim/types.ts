@@ -312,6 +312,10 @@ export interface Dino {
   /** Yetis that have met keep raiding together; the scarf marks their band. */
   yetiPack?: number;
   yetiScarf?: string;
+  /** a captured beast living in a zoo enclosure (the building's id; zoo.ts; saved) */
+  caged?: number;
+  /** netted by a capture party and being hauled home (zoo.ts; not saved) */
+  netted?: boolean;
   /** seconds until a pylon barrier can zap this dinosaur again (not saved) */
   pylonZapT?: number;
   /** dizzy + slow (Dinosaur Scorpion venom, an Ice Dragon's frost): seconds left (not saved) */
@@ -557,6 +561,10 @@ export interface Human {
   downT?: number;
   fading?: boolean;
   helpedAt?: number;
+  /** Health below half pauses work until recovery; saved so a reload cannot end treatment. */
+  selfHealing?: boolean;
+  /** the healing hut / infirmary / hospital they hold a bed in (its id; hospital.ts; not saved: they're re-admitted on load) */
+  bed?: number;
   anim: number;
   bubble: { text: string; t: number } | null;
   hair: string;
@@ -749,6 +757,12 @@ export interface DragonHunt {
   camp?: number;
   /** hunting one wild dragon wherever it goes (its id) instead of a nest */
   dragon?: number;
+  /** hunting one of the great beasts at its den, a Yeti or a Dinosaur Scorpion (its id; beasts.ts) */
+  beast?: number;
+  /** …to bring it back alive for the zoo (else to kill it) */
+  capture?: boolean;
+  /** the beast is netted: the unit is hauling it home */
+  haul?: boolean;
   /** on the march: stopped to fight a threat on the way (its id), and for how long */
   engage?: number;
   engageT?: number;
@@ -1191,7 +1205,7 @@ export interface Prop {
   found?: boolean;
 }
 
-export type ShelterPlan = "tent" | "hut";
+export type ShelterPlan = "tent" | "hut" | "castle";
 
 export interface Shelter {
   id: number;
@@ -1339,6 +1353,9 @@ export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" |
   | "dragonBones"
   /** presses the vineyards' grapes into wine (vineyard.ts) */
   | "winery"
+  | "tradingPost"
+  /** an iron-barred enclosure for one captured great beast (zoo.ts) */
+  | "zoo"
   | "warChariot"
   | "riderHall"
   // the Old Ways' last-resort project
@@ -1391,6 +1408,8 @@ export interface Building {
   ours?: boolean;
   /** a Dragon Shield's upgrades (dragonShield.ts; saved) */
   shield?: import("./dragonShield").ShieldLevels;
+  /** a healing hut's tier: 1 hut, 2 infirmary, 3 hospital (hospital.ts; saved) */
+  level?: number;
 }
 
 /** A giant crossbow. Sits on a wall tile, a tower or the ground. */

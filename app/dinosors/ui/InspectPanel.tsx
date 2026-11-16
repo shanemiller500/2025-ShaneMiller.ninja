@@ -138,6 +138,15 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
             <span className="text-[11px] font-semibold text-white/55">{info.residents.filter((r) => r.inside).length} inside now</span>
           </div>
           <div className="mt-1.5 space-y-1">
+            {info.built && <div className="mb-2 grid grid-cols-4 gap-1" aria-label="Assigned beds">
+              {Array.from({ length: info.cap }, (_, i) => {
+                const resident = info.residents[i];
+                return <div key={i} title={resident ? `Bed ${i + 1}: ${resident.name}` : `Bed ${i + 1}: free`} className={`rounded-lg px-1 py-2 text-center text-[10px] ${resident ? "bg-amber-300/15 text-amber-100" : "bg-emerald-300/10 text-emerald-100/70"}`}>
+                  <span className="block text-base" aria-hidden="true">🛏️</span>
+                  <span className="block truncate">{resident?.name ?? "Free bed"}</span>
+                </div>;
+              })}
+            </div>}
             {info.residents.length === 0 && <p className="text-[12px] text-white/55">Nobody yet — people move in automatically.</p>}
             {info.residents.map((r) => (
               <button key={r.id} type="button" onClick={() => engine.selectPeople([r.id])} className="flex w-full items-center justify-between rounded-xl bg-white/5 px-2.5 py-1.5 text-left text-[13px] transition hover:bg-white/10">
@@ -148,6 +157,10 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
               </button>
             ))}
           </div>
+          {info.built && info.tier >= 4 && <div className="mt-3 rounded-2xl bg-sky-300/10 p-2.5">
+            <button type="button" onClick={() => engine.expandHome(info.id)} className="w-full rounded-xl bg-sky-200 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-sky-100 active:scale-95">🏰 Add wing · {info.addBeds} beds</button>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-white/65">18 stone · 6 wood · 6 leaves. Builders finish the rooms before anyone moves in. No free bed = no population growth.</p>
+          </div>}
           {info.residents.some((r) => !r.child) && (
             <button type="button" onClick={() => engine.selectResidents(info.id)} className="mt-2 w-full rounded-2xl bg-amber-400 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-amber-300 active:scale-95">
               👥 Send them out to work
@@ -217,6 +230,40 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
           {info.note && <p className="mt-2 rounded-xl bg-cyan-500/10 px-2.5 py-1.5 text-[12px] text-cyan-100">{info.note}</p>}
           {info.built >= 1 && info.bkind === "hatchery" && <IncubatorSection engine={engine} id={info.id} />}
           {info.built >= 1 && info.bkind === "dragonPit" && <PitSection engine={engine} />}
+          {info.ward && (
+            <div className="mt-2 rounded-2xl bg-emerald-400/10 p-2.5">
+              <div className="flex items-center justify-between text-[11.5px] font-semibold text-emerald-50">
+                <span>🛏️ Beds {info.ward.patients.length}/{info.ward.beds}</span>
+                <span className="text-emerald-100/70">{info.ward.waiting ? `${info.ward.waiting} waiting at home` : "nobody waiting"}</span>
+              </div>
+              <div className="mt-1.5 flex gap-1" aria-label="Beds">
+                {Array.from({ length: info.ward.beds }, (_, i) => (
+                  <span key={i} className={`h-1.5 flex-1 rounded-full ${i < info.ward!.patients.length ? "bg-emerald-300" : "bg-white/10"}`} />
+                ))}
+              </div>
+              {info.ward.patients.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {info.ward.patients.map((p) => (
+                    <li key={p.id} className="flex items-center gap-2 text-[11.5px]">
+                      <button type="button" onClick={() => engine.selectPeople([p.id])} className="min-w-0 flex-1 truncate text-left text-white/85 hover:text-white">{p.name}</button>
+                      <span className="text-[10.5px] text-white/50">{p.here ? "in bed" : "on the way"}</span>
+                      <span className="w-14"><Bar value={p.hp} color="linear-gradient(90deg,#fb923c,#4ade80)" /></span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {info.ward.next ? (
+                <button type="button" disabled={!info.ward.next.ok} onClick={() => engine.upgradeHealer(info.id)} title={info.ward.next.tip}
+                  className="mt-2 flex w-full items-center gap-2 rounded-xl bg-white/[0.07] px-2 py-1.5 text-left text-[11.5px] transition hover:bg-white/15 disabled:opacity-45">
+                  <span className="text-base">{info.ward.next.icon}</span>
+                  <span className="min-w-0 flex-1"><b>Make it {info.ward.next.name === "Infirmary" ? "an" : "a"} {info.ward.next.name}</b><br /><span className="text-[10.5px] text-white/55">{info.ward.next.beds} beds · {info.ward.next.tip}</span></span>
+                  <CostChips cost={info.ward.next.cost} stock={stock} />
+                </button>
+              ) : (
+                <p className="mt-2 text-[10.5px] text-emerald-200/80">As big as it gets. Need more beds? Build another.</p>
+              )}
+            </div>
+          )}
           {info.shield && (
             <div className="mt-2 rounded-2xl bg-cyan-400/10 p-2.5">
               <div className="flex items-center justify-between text-[11.5px] font-semibold text-cyan-50">
@@ -442,7 +489,7 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
               {!info.rite && ` Next: ${info.daysToRite === 0 ? "today, around midday" : `in ${info.daysToRite} day${info.daysToRite === 1 ? "" : "s"}`}.`}
             </p>
             {!info.rite && info.n >= 3 && (
-              <button type="button" onClick={() => engine.startMonkRite()} className="mt-2 w-full rounded-xl bg-amber-400/90 py-2 text-sm font-bold text-[#3a2414] transition hover:bg-amber-300 active:scale-95">
+              <button type="button" onClick={() => engine.startMonkRite()} className="mt-2 w-full rounded-xl bg-amber-400/90 py-2 text-sm font-bold text-[#0f172a] transition hover:bg-amber-300 active:scale-95">
                 🔔 Watch the offering now
               </button>
             )}

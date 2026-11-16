@@ -431,7 +431,7 @@ export default function HatchScene({ engine, dragonId, onClose }: { engine: Engi
         <button type="button" onClick={replay} className="flex min-h-11 items-center gap-2 rounded-2xl bg-white/15 px-4 font-bold text-white backdrop-blur hover:bg-white/25 active:scale-95">
           <RotateCcw size={18} /> Replay
         </button>
-        <button type="button" onClick={close} className="flex min-h-11 items-center gap-2 rounded-2xl bg-amber-400/90 px-4 font-bold text-[#3a2414] hover:bg-amber-300 active:scale-95">
+        <button type="button" onClick={close} className="flex min-h-11 items-center gap-2 rounded-2xl bg-amber-400/90 px-4 font-bold text-[#0f172a] hover:bg-amber-300 active:scale-95">
           <X size={18} /> {done ? "Close" : "Skip"}
         </button>
       </div>

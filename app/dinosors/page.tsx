@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import DinosorsClient from "./DinosorsClient";
 
-const fredoka = localFont({ src: "../../public/fonts/Fredoka-latin.woff2", weight: "400 700", display: "swap" });
+// a clean, modern UI face (the same Inter the rest of the site uses)
+const inter = localFont({ src: "../../public/fonts/Inter-latin.woff2", weight: "100 900", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Dinosaur Land | A prehistoric sandbox for kids",
@@ -10,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function DinosorsPage() {
-  return <DinosorsClient fontClass={fredoka.className} />;
+  return <DinosorsClient fontClass={inter.className} />;
 }

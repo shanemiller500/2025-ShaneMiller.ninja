@@ -4,10 +4,14 @@
 /*  a tiny event emitter and a polled snapshot (never per-frame state). */
 /* ------------------------------------------------------------------ */
 import { startClearJob, type ClearRect } from "../sim/clearArea";
+import { ownedBuildCounts } from "./buildCounts";
+import { planWing } from "../sim/estate";
+import { wingUnits } from "../sim/castleCompound";
 import { CONDITION_LABEL, OBSIDIAN_SHIELD, obsidianProblem, obsidianStatus, orderObsidian, orderObsidianAll, scorpionCondition, scorpionCost, scorpionMaxHp, scorpionWorks } from "../sim/scorpionArmor";
 import { connectWalls, joinMessage } from "../sim/wallLinks";
 import { startSweep } from "../sim/territory";
 import { chariotParked, chariotTier, chariotUpgradeProblem, nextChariotTier, orderChariotUpgrade } from "../sim/chariotTiers";
+import { HEALER_TIERS, upgradeHealer, wardView } from "../sim/hospital";
 import { chariotAt, huntFoeName, huntTargetName, MUSTER_FOR, raidPool, raidTargets, retargetHunt, startHunt, startRaid, type RaidTarget } from "../sim/chariots";
 import type { HuntFormation } from "../sim/types";
 import { CLAN_TECH, techOf } from "../sim/clanTech";
@@ -62,11 +66,12 @@ import { canClear, commandClear } from "../sim/clearing";
 import { canMove, startMove, type MoveRef } from "../sim/moving";
 import { callKeeper, keeperOf, makeKeeper, stoke } from "../sim/keepers";
 import { startShow } from "../sim/shows";
-import type { BuildingKind, DragonEgg, DragonNest } from "../sim/types";
+import type { BuildingKind, DragonEgg, DragonNest, ShelterPlan } from "../sim/types";
 import { SAVE_VERSION } from "../sim/world";
 import { evolveWorld, speciesStats, traitsOf, type Mutation } from "../sim/genetics";
 import { World, type SaveData } from "../sim/world";
-import { Renderer, type Camera } from "../render/renderer";
+import { Renderer, type Camera, type Overlay } from "../render/renderer";
+import { Q, pickedQuality, setQuality, stepQualityDown, type QualityId, type QualityLevel } from "../render/quality";
 import { loadWorld, saveWorld } from "./save";
 import { newId, putSlot, type Slot, type SlotKind } from "./slots";
 import { DEFAULT_TOOL, TOOL_BY_ID, applyTool, toolCursor, type ToolState } from "./tools";
@@ -82,6 +87,10 @@ export type UIEvent =
   | { type: "select" }
   | { type: "saved" }
   | { type: "inspect" }
+  /** Auto quality just stepped down a preset */
+  | { type: "quality" }
+  /** the first frame of this world is on screen (the loading screen can go) */
+  | { type: "ready" }
   /** play a dragon's hatching scene (ui/HatchScene.tsx) */
   | { type: "hatchScene"; dragon: number };
 
@@ -198,10 +207,12 @@ export interface CommandInfo {
 
 /** Tapped a building: what's inside, what it needs, what you can do. */
 export type InspectInfo =
-  | { kind: "shelter"; id: number; icon: string; name: string; tier: number; cap: number; built: boolean; progress: string; hp: number; hearth: boolean; warmth: number; residents: { id: number; name: string; child: boolean; inside: boolean; state: string }[]; upgrade: { icon: string; name: string; cost: Cost; have: Cost; started: boolean } | null }
+  | { kind: "shelter"; id: number; icon: string; name: string; tier: number; cap: number; addBeds: number; built: boolean; progress: string; hp: number; hearth: boolean; warmth: number; residents: { id: number; name: string; child: boolean; inside: boolean; state: string }[]; upgrade: { icon: string; name: string; cost: Cost; have: Cost; started: boolean } | null }
   | { kind: "building"; id: number; bkind: BuildingKind; icon: string; name: string; tip: string; built: number; hp: number; maxHp: number; cost: Cost; have: Cost; stage?: { n: number; of: number; name: string; next: string | null }; note?: string;
       /** a Dragon Shield: its field, charge + the upgrades on offer (dragonShield.ts) */
-      shield?: { r: number; charge: number; powered: boolean; pushing: boolean; linked: number; ups: { key: ShieldUp; icon: string; name: string; tip: string; lvl: number; max: number; cost: Cost; ok: boolean }[] } }
+      shield?: { r: number; charge: number; powered: boolean; pushing: boolean; linked: number; ups: { key: ShieldUp; icon: string; name: string; tip: string; lvl: number; max: number; cost: Cost; ok: boolean }[] };
+      /** a healing hut / infirmary / hospital: its beds, who's in them and the next size up (hospital.ts) */
+      ward?: ReturnType<typeof wardView> }
   | { kind: "scorpion"; id: number; condition: string; conditionTone: "good" | "warn" | "bad" | "info"; working: boolean; obsidian: boolean; obsidianOffer: { cost: Cost; fitting: boolean; blocked: string | null } | null; name: string; tier: number; built: number; hp: number; maxHp: number; drone: boolean; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
   | { kind: "gate"; id: number; open: boolean; auto: boolean; mega: boolean; hp: number; maxHp: number; material: string }
   | { kind: "wall"; id: number; material: string; part: string; built: number; hp: number; maxHp: number }
@@ -234,11 +245,12 @@ export interface Snapshot {
   eggs: number;
   volcano: string;
   camp: {
+    ownedBuilds: ReturnType<typeof ownedBuildCounts>;
     stock: Record<string, number>;
     learned: TechId[];
     goal: TechId | null;
     crafting: { tech: TechId; prog: number } | null;
-    shelters: { stage: number; have: number }[];
+    shelters: { stage: number; have: number; plan: ShelterPlan; beds: number }[];
   };
   discoveries: string[];
   /** war chariots, and the chariot dragon hunt under way */
@@ -464,6 +476,8 @@ const ACTIVITY: Partial<Record<Human["state"], string>> = {
 /** The hatching film without a real dragon: a demo with a random baby (About panel). */
 export const DEMO_HATCH = -1;
 
+const easeInOut = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+
 export class Engine {
   world: World;
   renderer: Renderer;
@@ -504,7 +518,20 @@ export class Engine {
   private ptrs = new Map<number, Ptr>();
   private pinch: { d: number; zoom: number; cx: number; cy: number } | null = null;
   private vel = { x: 0, y: 0 };
-  private fly: { x: number; y: number; zoom: number; t: number } | null = null;
+  /** a camera move in progress: eased from where it started to where it's going */
+  private fly: { x: number; y: number; zoom: number; t: number; fx: number; fy: number; fz: number; dur: number; dip: number } | null = null;
+  /** keyboard pan speed (eases in and out instead of starting and stopping dead) */
+  private keyVel = { x: 0, y: 0 };
+  /** how fast the followed creature is moving (the camera leads it a little) */
+  private lead = { x: 0, y: 0, px: 0, py: 0, id: 0 };
+  /** a brief push-in on a big impact */
+  private punch = 0;
+  /** what the last frame was drawn with (to draw it again at once when the canvas is re-sized) */
+  private lastView: { cam: Camera; ov: Overlay } | null = null;
+  /** has anything been drawn yet? */
+  private drawn = false;
+  /** seconds the frame cost has stayed too high (Auto quality steps down after a while) */
+  private heavyT = 0;
   private wheelZoom: { target: number; x: number; y: number } | null = null;
   private shake = { amt: 0, t: 0 };
   private flash = { a: 0, color: "#fff" };
@@ -580,9 +607,52 @@ export class Engine {
   resize(w: number, h: number) {
     this.w = w;
     this.h = h;
-    this.renderer.resize(w, h, Math.min(2, window.devicePixelRatio || 1));
-    this.deep.resize(w, h, Math.min(2, window.devicePixelRatio || 1));
+    // sharp on high-DPI screens: the real pixel ratio, up to what the quality preset allows
+    const dpr = Math.max(1, Math.min(Q.dprCap, window.devicePixelRatio || 1));
+    const wiped = this.renderer.resize(w, h, dpr);
+    this.deep.resize(w, h, dpr);
     this.clampCam();
+    // re-sizing a canvas wipes it to black: paint the picture back in the same breath, so it never shows
+    if (wiped) this.repaint();
+  }
+
+  /** Draw the last frame again, now (nothing moves: no time passes). */
+  private repaint() {
+    if (!this.drawn) return;
+    try {
+      if (this.view === "deep") this.deep.render(this.world, 0, 0);
+      else if (this.lastView) this.renderer.render(this.lastView.cam, this.lastView.ov, 0);
+    } catch {
+      /* the next frame will draw it */
+    }
+  }
+
+  /** The first frame is up: let the page know (once per engine). */
+  private firstFrame() {
+    if (this.drawn) return;
+    this.drawn = true;
+    this.emit({ type: "ready" });
+  }
+
+  /** Graphics quality: "auto" picks for the device (and eases off if frames get heavy). */
+  setQuality(id: QualityId) {
+    setQuality(id);
+    this.applyQuality();
+  }
+
+  get quality(): { picked: QualityId; level: QualityLevel } {
+    return { picked: pickedQuality(), level: Q.id };
+  }
+
+  /** The live graphics config (handy when tuning from devtools). */
+  get qualityConfig() {
+    return Q;
+  }
+
+  private applyQuality() {
+    this.heavyT = 0;
+    this.renderer.restyle();
+    this.resize(this.w, this.h);
   }
 
   on(fn: (e: UIEvent) => void) {
@@ -627,7 +697,13 @@ export class Engine {
     }
 
     this.shake.t = Math.max(0, this.shake.t - dt);
-    const sk = this.shake.t > 0 ? this.shake.amt * Math.min(1, this.shake.t * 2) : 0;
+    // shake: a smooth rumble that dies away (never a jitter), the same size on screen at any zoom, and capped
+    const ease = Math.min(1, this.shake.t * 2);
+    const sk = this.shake.t > 0 ? (Math.min(11, this.shake.amt) * ease * ease) / this.cam.zoom : 0;
+    const st = performance.now() / 1000;
+    const shakeX = (Math.sin(st * 43) * 0.6 + Math.sin(st * 71 + 1.3) * 0.4) * sk;
+    const shakeY = (Math.sin(st * 37 + 2.1) * 0.6 + Math.sin(st * 59 + 0.4) * 0.4) * sk;
+    this.punch *= Math.pow(0.004, dt);
     this.flash.a = Math.max(0, this.flash.a - dt * 2.5);
     const cursor = this.hover ? toolCursor(this.tool) : null;
     this.updateHoverHint(dt);
@@ -662,12 +738,14 @@ export class Engine {
       this.deep.update(dt);
       const r0 = performance.now();
       this.deep.render(w, dt, fade);
+      this.firstFrame();
       this.perf.render = this.perf.render * 0.9 + (performance.now() - r0) * 0.1;
       this.deepAudio(dt);
       this.tickSave(dt);
       return;
     }
-    this.renderer.render(this.cam, {
+    const viewCam = this.punch > 0.0005 ? { x: this.cam.x, y: this.cam.y, zoom: this.cam.zoom * (1 + this.punch) } : this.cam;
+    const viewOv: Overlay = {
       selectedId: this.selectedId,
       followId: this.followId,
       selection: this.selection,
@@ -682,17 +760,28 @@ export class Engine {
       buildPreview: this.tool.id === "build" && this.hover ? { x: this.hover.x, y: this.hover.y, build: this.tool.build } : null,
       movePreview: this.moveAim && this.hover ? { x: this.hover.x, y: this.hover.y, ref: this.moveAim } : null,
       hover: cursor && this.hover ? { ...this.hover, ...cursor } : null,
-      shakeX: (Math.random() - 0.5) * sk * 2,
-      shakeY: (Math.random() - 0.5) * sk * 2,
+      shakeX,
+      shakeY,
       flash: this.flash.a,
       flashColor: this.flash.color,
-    }, dt);
+    };
+    this.renderer.render(viewCam, viewOv, dt);
+    this.lastView = { cam: viewCam, ov: viewOv };
+    this.firstFrame();
     if (fade > 0) this.deep.renderer.fade(fade);
     this.perf.render = this.renderer.cost;
 
     // adaptive quality: fewer cosmetic particles if frames get heavy
     const cost = this.renderer.cost;
-    w.particles.budget = cost > 22 ? 0.35 : cost > 14 ? 0.65 : 1;
+    w.particles.budget = (cost > 22 ? 0.35 : cost > 14 ? 0.65 : 1) * Math.min(1, Q.particles);
+    // …and on Auto, if drawing stays slow for a few seconds, drop to the next preset down
+    // (only judged in close and middle views: zoomed right out, the cost is the sheer number of things
+    // in view, and a lower preset wouldn't buy it back)
+    this.heavyT = cost > 23 && this.cam.zoom >= 0.6 ? this.heavyT + dt : Math.max(0, this.heavyT - dt * 2);
+    if (this.heavyT > 5 && stepQualityDown()) {
+      this.applyQuality();
+      this.emit({ type: "quality" });
+    }
 
     // ambience + listener
     this.audio.listener = { x: this.cam.x, y: this.cam.y, zoom: this.cam.zoom, span: this.w / 2 / this.cam.zoom };
@@ -741,6 +830,8 @@ export class Engine {
         case "shake":
           this.shake.amt = Math.max(this.shake.t > 0 ? this.shake.amt : 0, e.amount);
           this.shake.t = Math.max(this.shake.t, e.time);
+          // the big ones (eruptions, impacts, a dragon landing) also push the camera in for a beat
+          if (e.amount >= 8) this.punch = Math.max(this.punch, Math.min(0.04, e.amount * 0.0022));
           break;
         case "flash":
           this.flash.a = Math.max(this.flash.a, e.amount);
@@ -780,18 +871,34 @@ export class Engine {
       const d = this.world.dinoById(this.followId) ?? this.world.humans.find((h) => h.id === this.followId) ?? this.world.dragons.anyById(this.followId) ?? null;
       if (!d) this.followId = 0;
       else {
-        const k = Math.min(1, dt * 3);
-        cam.x += (d.x - cam.x) * k;
-        cam.y += (d.y - d.z - (d.kind === "dino" ? sizeOf(d) * 0.3 : d.kind === "dragon" ? 30 : 14) - cam.y) * k;
+        // ease toward a point a little ahead of where it's heading: the subject stays framed with room to move into
+        const ld = this.lead;
+        if (ld.id !== d.id) {
+          ld.id = d.id;
+          ld.px = d.x;
+          ld.py = d.y;
+          ld.x = ld.y = 0;
+        }
+        const inv = 1 / Math.max(0.001, dt);
+        const sm = 1 - Math.exp(-dt * 2.5);
+        ld.x += (Math.max(-260, Math.min(260, (d.x - ld.px) * inv)) - ld.x) * sm;
+        ld.y += (Math.max(-260, Math.min(260, (d.y - ld.py) * inv)) - ld.y) * sm;
+        ld.px = d.x;
+        ld.py = d.y;
+        const k = 1 - Math.exp(-dt * 4.2);
+        const ty = d.y - d.z - (d.kind === "dino" ? sizeOf(d) * 0.3 : d.kind === "dragon" ? 30 : 14);
+        cam.x += (d.x + ld.x * 0.45 - cam.x) * k;
+        cam.y += (ty + ld.y * 0.45 - cam.y) * k;
       }
     } else if (this.fly) {
       const f = this.fly;
       f.t += dt;
-      const k = Math.min(1, dt * 3.2);
-      cam.x += (f.x - cam.x) * k;
-      cam.y += (f.y - cam.y) * k;
-      cam.zoom += (f.zoom - cam.zoom) * k;
-      if (f.t > 2.5 || (Math.hypot(f.x - cam.x, f.y - cam.y) < 2 && Math.abs(f.zoom - cam.zoom) < 0.01)) this.fly = null;
+      const k = easeInOut(Math.min(1, f.t / f.dur));
+      cam.x = f.fx + (f.x - f.fx) * k;
+      cam.y = f.fy + (f.y - f.fy) * k;
+      // a long trip pulls back in the middle, so you see where you're going
+      cam.zoom = Math.exp(Math.log(f.fz) + (Math.log(f.zoom) - Math.log(f.fz)) * k) * (1 - f.dip * Math.sin(Math.PI * k));
+      if (f.t >= f.dur) this.fly = null;
     } else if (!this.ptrs.size && (Math.abs(this.vel.x) > 1 || Math.abs(this.vel.y) > 1)) {
       // pan inertia
       cam.x -= (this.vel.x * dt) / cam.zoom;
@@ -828,8 +935,21 @@ export class Engine {
   flyTo(x: number, y: number, zoom = this.cam.zoom) {
     this.followId = 0;
     this.wheelZoom = null;
-    this.fly = { x, y, zoom, t: 0 };
+    const cam = this.cam;
+    // how far, in screens: a hop next door is quick, a trip across the map takes its time and pulls back
+    const screens = Math.hypot(x - cam.x, y - cam.y) / Math.max(1, this.w / cam.zoom);
+    const dz = Math.abs(Math.log(zoom / cam.zoom));
+    const dur = Math.max(0.35, Math.min(1.5, 0.4 + screens * 0.22 + dz * 0.35));
+    this.fly = { x, y, zoom, t: 0, fx: cam.x, fy: cam.y, fz: cam.zoom, dur, dip: Math.max(0, Math.min(0.32, (screens - 1.2) * 0.09)) };
     this.vel.x = this.vel.y = 0;
+  }
+
+  /** Zoom by a factor about the middle of the screen, eased (the +/- buttons and keys). */
+  zoomSmooth(f: number) {
+    const base = this.wheelZoom?.target ?? this.cam.zoom;
+    const minZ = Math.max(MIN_ZOOM, Math.min(this.w / WORLD_W, this.h / WORLD_H) * 0.9);
+    this.fly = null;
+    this.wheelZoom = { target: Math.max(minZ, Math.min(MAX_ZOOM, base * f)), x: this.w / 2, y: this.h / 2 };
   }
 
   goHome() {
@@ -1377,8 +1497,8 @@ export class Engine {
       this.keys.add(k);
       this.followId = 0;
       e.preventDefault();
-    } else if (k === "+" || k === "=") this.zoomBy(1.2);
-    else if (k === "-" || k === "_") this.zoomBy(1 / 1.2);
+    } else if (k === "+" || k === "=") this.zoomSmooth(1.25);
+    else if (k === "-" || k === "_") this.zoomSmooth(1 / 1.25);
     else if (k === "h") this.goHome();
     else if (k === "escape") {
       this.dragonAim = null;
@@ -1407,12 +1527,25 @@ export class Engine {
   };
 
   private keyboardPan(dt: number) {
-    if (!this.keys.size) return;
-    const s = (700 * dt) / this.cam.zoom;
-    if (this.keys.has("arrowleft") || this.keys.has("a")) this.cam.x -= s;
-    if (this.keys.has("arrowright") || this.keys.has("d")) this.cam.x += s;
-    if (this.keys.has("arrowup") || this.keys.has("w")) this.cam.y -= s;
-    if (this.keys.has("arrowdown") || this.keys.has("s")) this.cam.y += s;
+    const kv = this.keyVel;
+    if (!this.keys.size && Math.abs(kv.x) < 1 && Math.abs(kv.y) < 1) {
+      kv.x = kv.y = 0;
+      return;
+    }
+    const has = (a: string, b: string) => this.keys.has(a) || this.keys.has(b);
+    const ax = (has("arrowright", "d") ? 1 : 0) - (has("arrowleft", "a") ? 1 : 0);
+    const ay = (has("arrowdown", "s") ? 1 : 0) - (has("arrowup", "w") ? 1 : 0);
+    // ease up to speed and glide to a stop (diagonals aren't faster)
+    const n = Math.hypot(ax, ay) || 1;
+    const k = 1 - Math.exp(-dt * (ax || ay ? 9 : 7));
+    kv.x += ((ax / n) * 760 - kv.x) * k;
+    kv.y += ((ay / n) * 760 - kv.y) * k;
+    if (ax || ay) {
+      this.fly = null;
+      this.followId = 0;
+    }
+    this.cam.x += (kv.x * dt) / this.cam.zoom;
+    this.cam.y += (kv.y * dt) / this.cam.zoom;
   }
 
   private local(e: { clientX: number; clientY: number }) {
@@ -1886,7 +2019,7 @@ export class Engine {
     if (wl) return this.inspect({ kind: "wall", id: wl.id });
     const farm = w.tribe.farms.find((f) => Math.hypot(f.x - x, (f.y - y) * 1.6) < 40);
     if (farm) return this.inspect({ kind: "farm", id: farm.id });
-    const s = w.shelters.find((sh) => Math.abs(sh.x - x) < 32 && y < sh.y + 8 && y > sh.y - 58);
+    const s = w.shelters.find((sh) => Math.abs(sh.x - x) < 32 && y < sh.y + 8 && y > sh.y - Math.max(58, (wingUnits(w, sh).length + 1) * 26 + 12));
     if (s) return this.inspect({ kind: "shelter", id: s.id });
     const b = w.colony.buildings.find((bd) => x > bd.tx * TILE && x < (bd.tx + BUILDINGS[bd.kind].w) * TILE && y > bd.ty * TILE - 30 && y < bd.y + 6);
     if (b) return this.inspect({ kind: "building", id: b.id });
@@ -1971,6 +2104,17 @@ export class Engine {
       w.toast("🔧", "Repair ordered: the next free builders + Auto workers fix it, right after any Urgent jobs.", site.x, site.y);
       this.audio.play("click", 0, 0, 0.35);
     }
+    this.emit({ type: "select" });
+  }
+
+  /** Healing hut → infirmary → hospital (Inspect card). */
+  upgradeHealer(id: number) {
+    const w = this.world;
+    const b = w.colony.buildings.find((x) => x.id === id);
+    if (!b) return;
+    const why = upgradeHealer(w, b);
+    if (why) w.toast("🏥", why, b.x, b.y);
+    else this.audio.play("pop", 0, 0, 0.5);
     this.emit({ type: "select" });
   }
 
@@ -2733,7 +2877,7 @@ export class Engine {
     if (wl) return { x: (wl.tx + 0.5) * TILE, y: (wl.ty + 0.5) * TILE, radius: 20, icon: "🔷", label: `${wl.kind} ${wl.part} · tap to edit` };
     const farm = w.tribe.farms.find((f) => Math.hypot(f.x - x, (f.y - y) * 1.6) < 40);
     if (farm) return { x: farm.x, y: farm.y, radius: 38, icon: "🌾", label: "Farm · tap to edit" };
-    const shelter = w.shelters.find((s) => Math.abs(s.x - x) < 32 && y < s.y + 8 && y > s.y - 58);
+    const shelter = w.shelters.find((s) => Math.abs(s.x - x) < 32 && y < s.y + 8 && y > s.y - Math.max(58, (wingUnits(w, s).length + 1) * 26 + 12));
     if (shelter) return { x: shelter.x, y: shelter.y - 18, radius: 34, icon: "🏠", label: "Home · tap to inspect" };
     const building = w.colony.buildings.find((b) => x > b.tx * TILE && x < (b.tx + BUILDINGS[b.kind].w) * TILE && y > b.ty * TILE - 30 && y < b.y + 6);
     if (building) return { x: building.x, y: building.y - 8, radius: BUILDINGS[building.kind].w * 18, icon: BUILDINGS[building.kind].icon, label: `${BUILDINGS[building.kind].name} · tap to inspect` };
@@ -2745,6 +2889,17 @@ export class Engine {
   upgradeHome(id: number) {
     const s = this.world.shelters.find((x) => x.id === id);
     if (s && this.world.camp.startUpgrade(this.world, s)) this.emit({ type: "inspect" });
+  }
+
+  expandHome(id: number) {
+    const result = planWing(this.world, id);
+    if (typeof result === "string") {
+      this.world.toast("🏰", result);
+      return;
+    }
+    this.world.toast("🏰", `Castle wing planned: builders will bring stone, timber and bedding. ${HOUSING[result.tier].cap + (this.world.civ.has("greatHalls") ? 2 : 0)} beds open when it is finished.`, result.x, result.y);
+    this.inspectRef = { kind: "shelter", id: result.id };
+    this.emit({ type: "inspect" });
   }
 
   /** Rebuild a finished wooden watchtower in stone (it gets a Scorpion on top). */
@@ -2867,7 +3022,9 @@ export class Engine {
 
   /** Select whoever lives in a home (and wake them up: there's work to do). */
   selectResidents(id: number) {
-    const ids = this.world.humans.filter((h) => h.home === id && !h.child && h.state !== "down").map((h) => h.id);
+    const home = this.world.shelters.find((s) => s.id === id);
+    const homeIds = new Set(home ? wingUnits(this.world, home).map((s) => s.id) : [id]);
+    const ids = this.world.humans.filter((h) => homeIds.has(h.home) && !h.child && h.state !== "down").map((h) => h.id);
     for (const h of this.world.humans) if (ids.includes(h.id) && (h.state === "hide" || h.state === "sleep" || h.state === "rest")) {
       h.state = "idle";
       h.think = 0;
@@ -3837,7 +3994,6 @@ export class Engine {
       } else if (c.order?.kind === "guard") activity = c.order.top ? "Defending from the wall" : "Guarding the spot you picked";
       const task = w.tasks.get(c.taskId);
       const wp = w.tribe.weaponFor(w, c);
-      const home = c.home ? w.shelters.find((s) => s.id === c.home) : null;
       const mount = c.riding ? w.dinoById(c.riding) : null;
       const kinds = new Set<WeaponKind>();
       for (const [id, n] of Object.entries(w.colony.armory)) if (n > 0 && WEAPON_BY_ID[id]) kinds.add(WEAPON_BY_ID[id].kind);
@@ -3860,7 +4016,7 @@ export class Engine {
         armor: c.gear.armor && ARMOR_BY_ID[c.gear.armor] ? { name: ARMOR_BY_ID[c.gear.armor].name, icon: ARMOR_BY_ID[c.gear.armor].icon } : null,
         helmet: c.gear.helmet && HELMET_BY_ID[c.gear.helmet] ? { name: HELMET_BY_ID[c.gear.helmet].name, icon: HELMET_BY_ID[c.gear.helmet].icon } : null,
         protection: protection(w, c),
-        home: home ? `${HOUSING[home.tier].icon} ${HOUSING[home.tier].name}` : "🪨 The cave",
+        home: w.population.bedLabel(w, c),
         task: task ? { icon: task.icon, label: task.label } : null,
         riding: mount ? `${mount.name} the ${sp(mount.species).nick}` : null,
         canEquip: Array.from(kinds),
@@ -3892,11 +4048,12 @@ export class Engine {
       eggs: w.eggs.length,
       volcano: w.volcano.phase,
       camp: {
+        ownedBuilds: this.stable("ownedBuilds", ownedBuildCounts(w)),
         stock: this.stable("stock", { ...w.camp.stock }),
         learned: this.stable("learned", Array.from(w.camp.learned)),
         goal: w.camp.goal,
         crafting: cr ? { tech: cr.tech, prog: Math.min(1, cr.t / cr.dur) } : null,
-        shelters: w.shelters.map((s) => ({ stage: s.stage, have: s.have })),
+        shelters: w.shelters.map((s) => ({ stage: s.stage, have: s.have, plan: s.plan, beds: HOUSING[s.tier].cap + (w.civ.has("greatHalls") ? 2 : 0) })),
       },
       discoveries: this.stable("discoveries", Array.from(w.discoveries)),
       chariots: w.colony.chariots.map((c) => ({ id: c.id, hp: Math.round((c.hp / c.maxHp) * 100), trike: !!c.trike })),
@@ -4251,6 +4408,8 @@ export class Engine {
         const s = w.shelters.find((x) => x.id === r.id);
         if (!s) return null;
         const done = shelterDone(s);
+        const units = wingUnits(w, s);
+        const unitIds = new Set(units.map((u) => u.id));
         const t = HOUSING[s.tier];
         const next = HOUSING[s.tier + 1];
         const stages = stagesOf(s);
@@ -4259,15 +4418,16 @@ export class Engine {
           kind: "shelter",
           id: s.id,
           icon: t.icon,
-          name: done ? t.name : `${s.plan === "tent" ? "Tent" : "Hut"} (building)`,
+          name: done ? s.tier >= 4 ? "Castle wing" : t.name : `${s.plan === "castle" ? "Castle wing" : s.plan === "tent" ? "Tent" : "Hut"} (building)`,
           tier: s.tier,
-          cap: t.cap,
+          cap: units.reduce((n, u) => n + HOUSING[u.tier].cap + (w.civ.has("greatHalls") ? 2 : 0), 0),
+          addBeds: HOUSING[4].cap + (w.civ.has("greatHalls") ? 2 : 0),
           built: done,
           progress: done ? "" : `${st.label}: ${s.have}/${st.n} ${st.need}`,
           hp: s.hp,
           hearth: t.hearth,
           warmth: t.warmth,
-          residents: w.humans.filter((h) => h.home === s.id).map((h) => ({ id: h.id, name: h.name, child: h.child, inside: (h.state === "hide" || h.state === "sleep" || h.state === "rest") && Math.hypot(h.x - s.x, h.y - s.y - 6) < 30, state: ACTIVITY[h.state] ?? h.state })),
+          residents: w.humans.filter((h) => unitIds.has(h.home)).map((h) => ({ id: h.id, name: h.name, child: h.child, inside: (h.state === "hide" || h.state === "sleep" || h.state === "rest") && Math.hypot(h.x - s.x, h.y - s.y - 6) < 30, state: ACTIVITY[h.state] ?? h.state })),
           upgrade: done && next ? { icon: next.icon, name: next.name, cost: next.cost, have: s.upHave, started: s.up } : null,
         };
       }
@@ -4298,6 +4458,12 @@ export class Engine {
           };
           const shNote = !sv.powered ? "🔌 No energy: the field is down. Dragons fly straight through until the grid recharges." : shield.pushing ? "〰️ Humming hard: pushing a dragon away." : shield.charge > 0 ? "⚡ Charging: a dragon is coming in." : "🛡️ On watch: the field wakes when a dragon comes near.";
           return { kind: "building", id: b.id, bkind: b.kind, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage, note: shNote, shield };
+        }
+        if (b.kind === "healer" && b.built >= 1) {
+          const ward = wardView(w, b);
+          const full = ward.patients.length >= ward.beds;
+          return { kind: "building", id: b.id, bkind: b.kind, icon: ward.icon, name: ward.name, tip: `Hurt people take a bed here for a short stay (about ${ward.stay}s from badly hurt) and walk out mended. ${HEALER_TIERS[ward.level - 1].tip}`, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage,
+            note: full && ward.waiting ? `🛏️ Full: ${ward.waiting} more waiting at home. Make it bigger or build another.` : undefined, ward };
         }
         return { kind: "building", id: b.id, bkind: b.kind, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage, note };
       }

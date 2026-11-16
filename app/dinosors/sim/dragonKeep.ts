@@ -20,6 +20,7 @@
 /*  weak in young or untrained dragons.                                */
 /* ------------------------------------------------------------------ */
 import { threatAt } from "./warGuard";
+import { castleDragonPad } from "./castleCompound";
 import { cookThink } from "./feast";
 import { onExpedition } from "./chariots";
 import { raiseBones } from "./dragonBones";
@@ -389,6 +390,8 @@ export function landAt(w: World, dr: Dragon, tx: number, ty: number, dt: number)
 
 /** Where it rests: its roost (any roost), else the incubation shelter, else camp. */
 export function roostOf(w: World, dr: Dragon) {
+  const pad = castleDragonPad(w, dr);
+  if (pad) return { ...pad, roost: true };
   // the dragon pit is home (each dragon has its own spot in the arena)
   const pit = pitOf(w);
   if (pit) {
@@ -613,7 +616,7 @@ function burstTick(w: World, dr: Dragon, dt: number) {
   const tr = Math.ceil(r / TILE);
   // our own dragon never harms our own camp (factions.ts): nothing of ours scorched, and no fire set on or near
   // anything we've built (open ground with raiders in it still burns)
-  const ours = !canHurt(sideOfDragon(dr), "us");
+  const ours = !canHurt(sideOfDragon(dr), "us", w);
   const home = ours && nearOurBuilds(w, ex, ey, 110);
   for (let y = ty - tr; y <= ty + tr; y++) for (let x = tx - tr; x <= tx + tr; x++) {
     if (Math.hypot(x * TILE + TILE / 2 - ex, y * TILE + TILE / 2 - ey) > r + 8) continue;
@@ -893,7 +896,7 @@ function grow(w: World, dr: Dragon, dt: number) {
   } else if (w.rng() < dt * 0.05) newDragonStats(dr);
 }
 
-const nearRoost = (w: World, dr: Dragon) => w.colony.buildings.some((b) => b.kind === "roost" && b.built >= 1 && Math.hypot(b.x - dr.x, b.y - dr.y) < 120);
+const nearRoost = (w: World, dr: Dragon) => { const pad = castleDragonPad(w, dr); return !!(pad && Math.hypot(pad.x - dr.x, pad.y - dr.y) < 45) || w.colony.buildings.some((b) => b.kind === "roost" && b.built >= 1 && Math.hypot(b.x - dr.x, b.y - dr.y) < 120); };
 
 /** Hold still (hovering if airborne). */
 function idle(w: World, dr: Dragon, dt: number) {

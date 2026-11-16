@@ -56,12 +56,12 @@ function spoken(w: World, d: Dino) {
 
 /** Strays standing on our ground right now (not one somebody's taming or hunting). */
 export function straysIn(w: World) {
-  return w.dinos.filter((d) => isStray(d) && inTerritory(w, d.x, d.y) && !spoken(w, d));
+  return w.dinos.filter((d) => !w.diplomacy.protectedDino(d) && isStray(d) && inTerritory(w, d.x, d.y) && !spoken(w, d));
 }
 
 /** Should this shot drive the animal out rather than hurt it? A sidearm (or someone seeing it off) on our ground; a hunt still hunts. */
 export function repelsHere(w: World, h: Human, d: Dino, sidearm = false) {
-  if (!isStray(d) || !inTerritory(w, d.x, d.y)) return false;
+  if (w.diplomacy.protectedDino(d) || !isStray(d) || !inTerritory(w, d.x, d.y)) return false;
   const task = w.tasks.get(h.taskId);
   if (h.order?.kind === "hunt" || task?.kind === "hunt") return false;
   return sidearm || h.repelId === d.id;

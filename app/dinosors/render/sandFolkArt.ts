@@ -9,6 +9,7 @@
 /* ------------------------------------------------------------------ */
 import type { Brute } from "../sim/types";
 import type { SandTent, SandTribe } from "../sim/sandFolk";
+import { fist, scaleAbout, shadeCurrentPath, storyFace, type Mood } from "./figureArt";
 
 const ROBE = "#d8bd8a";
 const ROBE_DARK = "#b39463";
@@ -66,6 +67,7 @@ export function drawSandFolk(c: CanvasRenderingContext2D, b: Brute, t: number, s
   c.quadraticCurveTo(8, -14, 5, -30);
   c.closePath();
   c.fill();
+  shadeCurrentPath(c, -9, -30, 9, hem, INK, 0.9);
   c.fillStyle = ROBE_DARK;
   c.beginPath();
   c.moveTo(-1, -26);
@@ -85,12 +87,16 @@ export function drawSandFolk(c: CanvasRenderingContext2D, b: Brute, t: number, s
   // arm + weapon
   const role = b.sandRole ?? "fighter";
   const swing = fighting ? Math.max(0, 1 - (b.cd ?? 0)) : 0;
-  c.strokeStyle = ROBE;
-  c.lineWidth = 3.4;
+  c.strokeStyle = INK;
+  c.lineWidth = 4.8;
   c.beginPath();
   c.moveTo(3, -26);
   c.lineTo(8 + swing * 4, -19 - swing * 3);
   c.stroke();
+  c.strokeStyle = ROBE;
+  c.lineWidth = 3.4;
+  c.stroke();
+  fist(c, 8.4 + swing * 4, -18.6 - swing * 3, 2.1, skin, INK);
   if (role === "archer") {
     c.strokeStyle = "#6e4a26";
     c.lineWidth = 1.6;
@@ -138,23 +144,44 @@ export function drawSandFolk(c: CanvasRenderingContext2D, b: Brute, t: number, s
     c.fill();
     c.restore();
   }
-  // head: wrapped, only the eyes showing; a hood + a trailing tail of cloth
+  // head: wrapped, only the eyes showing; a hood + a trailing tail of cloth (a big head, like the rest of the cast)
+  c.save();
+  scaleAbout(c, 0.5, -28, 1.22);
   c.fillStyle = WRAP;
-  c.beginPath();
-  c.ellipse(0.5, -34, 5.6, 6, 0, 0, Math.PI * 2);
-  c.fill();
+  c.strokeStyle = INK;
+  c.lineWidth = 0.9;
   c.beginPath();
   c.moveTo(-4, -37);
   c.quadraticCurveTo(-11, -34 + Math.sin(t * 3 + b.id) * 2, -12, -27);
   c.lineTo(-8, -30);
   c.closePath();
   c.fill();
+  c.stroke();
+  c.beginPath();
+  c.ellipse(0.5, -34, 5.6, 6, 0, 0, Math.PI * 2);
+  c.fill();
+  shadeCurrentPath(c, -5, -40, 6, -28, INK, 0.9);
+  // folds in the wrap
+  c.strokeStyle = "rgba(150,120,80,0.55)";
+  c.lineWidth = 0.7;
+  c.beginPath();
+  c.moveTo(-3.5, -31);
+  c.quadraticCurveTo(1, -29.4, 5.2, -31.4);
+  c.moveTo(-4.2, -37.6);
+  c.quadraticCurveTo(0.5, -39.4, 5, -37.4);
+  c.stroke();
+  // the gap in the wrap: a band of face, two watchful eyes
   c.fillStyle = skin;
-  c.fillRect(-0.5, -36.2, 6, 2.6);
-  c.fillStyle = INK;
-  c.fillRect(2.4, -35.6, 1.3, 1.3);
+  c.beginPath();
+  c.roundRect(-1.2, -37.2, 7.4, 4.6, 2);
+  c.fill();
+  {
+    const mood: Mood = b.state === "sleep" ? "asleep" : fighting ? "fierce" : b.state === "flee" ? "scared" : "calm";
+    storyFace(c, 1.6, -34.6, { r: 4.2, skin, brow: "#2a1a10", mood, id: b.id, t, nose: 0, mouth: false, ink: INK });
+  }
   c.fillStyle = sash;
   c.fillRect(-5, -40, 10, 1.6);
+  c.restore();
   c.restore();
 }
 

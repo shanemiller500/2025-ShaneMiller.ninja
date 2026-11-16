@@ -231,6 +231,7 @@ function fight(w: World, c: Chariot, dt: number) {
   }
   for (const h of crewOf(w, c)) {
     if (w.colony.hunt?.crew.some((m) => m.id === h.id && m.runner)) continue;
+    if (h.selfHealing || h.hp < 0.5) continue;
     h.cd = Math.max(0, (h.cd ?? 0) - dt);
     if (h.cd > 0) continue;
     const t = targetFor(w, c, SPEAR_RANGE);

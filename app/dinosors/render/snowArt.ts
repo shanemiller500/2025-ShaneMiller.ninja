@@ -23,14 +23,22 @@ interface Print {
   s: number;
   kind: 0 | 1 | 2;
   t: number;
+  /** pressed into sand or mud rather than snow (a darker, shorter-lived print) */
+  soft?: boolean;
 }
 
-const MAX_PRINTS = 420;
+const MAX_PRINTS = 520;
 const PRINT_LIFE = 28;
 
 const snowy = (w: World, x: number, y: number) => {
   const t = w.terrain.tileAt(x, y);
   return t === T.Snow || t === T.Ice || w.snow.at(x, y) > 0.45;
+};
+
+/** sand, dunes and mud take a print too (it doesn't last as long as one in snow) */
+const softGround = (w: World, x: number, y: number) => {
+  const t = w.terrain.tileAt(x, y);
+  return t === T.Sand || t === T.Dune || t === T.Mud;
 };
 
 export class PeaksFx {
@@ -66,10 +74,11 @@ export class PeaksFx {
       l.y = y;
       return;
     }
-    if (snowy(w, x, y)) {
+    const snow = snowy(w, x, y);
+    if (snow || softGround(w, x, y)) {
       const a = Math.atan2(y - l.y, x - l.x);
       const side = l.foot ? 1 : -1;
-      const p: Print = { x: x + Math.cos(a + Math.PI / 2) * s * 0.5 * side, y: y + Math.sin(a + Math.PI / 2) * s * 0.3 * side, a, s, kind, t: w.elapsed };
+      const p: Print = { x: x + Math.cos(a + Math.PI / 2) * s * 0.5 * side, y: y + Math.sin(a + Math.PI / 2) * s * 0.3 * side, a, s, kind, t: w.elapsed, soft: !snow };
       if (this.prints.length < MAX_PRINTS) this.prints.push(p);
       else this.prints[(this.head = (this.head + 1) % MAX_PRINTS)] = p;
     }
@@ -81,8 +90,8 @@ export class PeaksFx {
   /** Footprints + spindrift (world space, under everything that stands up). */
   draw(c: CanvasRenderingContext2D, w: World, x0: number, y0: number, x1: number, y1: number, t: number, z: number) {
     const cold = this.coldness(w, x0, y0, x1, y1);
-    if (cold <= 0 && !this.prints.length) return;
-    if (cold > 0 && z > 0.3) {
+    // (close up, tracks are laid anywhere: they only show where the ground takes a print)
+    if ((cold > 0 && z > 0.3) || z > 0.55) {
       // lay new prints for whatever's walking in view
       for (const h of w.humans) if (!h.under && !h.aloft && h.level === 0 && h.x > x0 && h.x < x1 && h.y > y0 && h.y < y1) this.step(w, h.id, h.x, h.y, 3.2, 0, 9);
       for (const b of w.rivals.brutes) if (!b.mount && b.z < 4 && b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1) this.step(w, b.id, b.x, b.y, 3.4, 0, 9);
@@ -98,9 +107,10 @@ export class PeaksFx {
     c.save();
     for (const p of this.prints) {
       const age = w.elapsed - p.t;
-      if (age > life || age < 0 || p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
-      const a = (1 - age / life) * 0.45;
-      c.fillStyle = `rgba(95,125,165,${a})`;
+      const lasts = p.soft ? life * 0.55 : life;
+      if (age > lasts || age < 0 || p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
+      const a = (1 - age / lasts) * (p.soft ? 0.3 : 0.45);
+      c.fillStyle = p.soft ? `rgba(92,64,36,${a})` : `rgba(95,125,165,${a})`;
       c.save();
       c.translate(p.x, p.y);
       c.rotate(p.a);

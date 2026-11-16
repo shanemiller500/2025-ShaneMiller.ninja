@@ -4,7 +4,7 @@ import { BREED_LIST } from "../data/dragons";
 import { type CivPath, type CivTechId } from "../data/civ";
 import { memo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Map as MapIcon } from "lucide-react";
+import { CloudSun, Drumstick, Dumbbell, Egg, Eraser, Flag, Flame, Hammer, Hand, Map as MapIcon, Mountain, SunMoon, TreePine, Users, X, Zap, type LucideIcon } from "lucide-react";
 import { SPECIES } from "../data/species";
 import { BUILD_BY_ID, BUILD_DEFS, bestBuild, buildCost, buildVisible, DISASTER_OPTS, FARM_CROP_OPTS, FOLK_GROUP_OPTS, FOLK_PEOPLE, FOOD_OPTS, LAND_OPTS, PEOPLE_OPTS, PLANT_OPTS, TOOLS, WEATHER_OPTS, type BuildDef, type BuildOpt, type Opt, type ToolId, type ToolState } from "../game/tools";
 import type { Resource, SpeciesId, TechId } from "../sim/types";
@@ -17,34 +17,48 @@ import { useClickAway } from "./useClickAway";
 /*  choices pop a little drawer of options above the bar.              */
 /* ------------------------------------------------------------------ */
 
+/** A long-necked dinosaur in the same line style as the other icons. */
+const DinoGlyph = (({ className, strokeWidth = 2 }: { className?: string; strokeWidth?: number | string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+    <path d="M1.5 17c2.300-.2 3.900-1.400 5-3.300C7.600 11.800 9.300 11 11.300 11h1.200c1.700 0 2.900-1 3.300-2.600l.6-2.600C16.800 4.100 18 3 19.500 3h.7a1.800 1.800 0 0 1 0 3.600h-1l-.8 4.300c-.4 2-1.300 3.300-2.900 4V20" />
+    <path d="M8 14.700V20" />
+    <path d="M8 15h7.500" />
+  </svg>
+)) as unknown as LucideIcon;
+
+const TOOL_ICON: Record<ToolId, LucideIcon> = { hand: Hand, build: Hammer, people: Users, dino: DinoGlyph, food: Drumstick, egg: Egg, plant: TreePine, land: Mountain, fire: Flame, weather: CloudSun, disaster: Zap, erase: Eraser };
+/** the order along the bar, in groups (a hairline between them): look · run the tribe · make life · shape the world */
+const BAR: (ToolId | "map" | "train" | "shifts" | "|")[] = ["hand", "map", "|", "train", "shifts", "build", "people", "|", "dino", "food", "egg", "plant", "land", "|", "fire", "weather", "disaster", "erase"];
+
 const HAS_OPTIONS = new Set<ToolId>(["dino", "egg", "food", "plant", "land", "weather", "disaster", "people", "build"]);
 
 export default memo(Toolbar);
 
 /** The toy box: memoized, so it only re-renders when the tool, unlocks, techs or stock actually change. */
-function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = [], civPath = "none", trainOpen = false, onTrain, shiftOpen = false, onShifts, orphanNests = [], onClaimNest, mapOpen, onMap }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void; shiftOpen?: boolean; onShifts?: () => void; orphanNests?: { id: number; breed: string; eggs: number; found: boolean }[]; onClaimNest?: (id: number) => void; mapOpen: boolean; onMap: () => void }) {
+function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, ownedBuilds = {}, civDone = [], civPath = "none", trainOpen = false, onTrain, shiftOpen = false, onShifts, orphanNests = [], onClaimNest, mapOpen, onMap }: { tool: ToolState; setTool: (t: Partial<ToolState>) => void; unlocked: SpeciesId[]; learned?: TechId[]; stock?: Record<string, number>; ownedBuilds?: Partial<Record<BuildOpt, number>>; civDone?: CivTechId[]; civPath?: CivPath; trainOpen?: boolean; onTrain?: () => void; shiftOpen?: boolean; onShifts?: () => void; orphanNests?: { id: number; breed: string; eggs: number; found: boolean }[]; onClaimNest?: (id: number) => void; mapOpen: boolean; onMap: () => void }) {
   const [open, setOpen] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<ToolId | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   useClickAway(!!open, toolbarRef, () => setOpen(null));
 
-  const iconFor = (id: ToolId) => {
-    if (tool.id !== id) return TOOLS.find((t) => t.id === id)!.icon;
+  /** While a tool with choices is on, its button shows what you picked (the dino, the food…). */
+  const pickedIcon = (id: ToolId): string | null => {
+    if (tool.id !== id) return null;
     switch (id) {
       case "dino":
-        return SPECIES.find((s) => s.id === tool.species)?.emoji ?? "🦖";
+        return SPECIES.find((s) => s.id === tool.species)?.emoji ?? null;
       case "food":
-        return FOOD_OPTS.find((o) => o.value === tool.food)!.icon;
+        return FOOD_OPTS.find((o) => o.value === tool.food)?.icon ?? null;
       case "plant":
-        return PLANT_OPTS.find((o) => o.value === tool.plant)!.icon;
+        return PLANT_OPTS.find((o) => o.value === tool.plant)?.icon ?? null;
       case "land":
-        return LAND_OPTS.find((o) => o.value === tool.land)!.icon;
+        return LAND_OPTS.find((o) => o.value === tool.land)?.icon ?? null;
       case "people":
-        return PEOPLE_OPTS.find((o) => o.value === tool.people)!.icon;
+        return PEOPLE_OPTS.find((o) => o.value === tool.people)?.icon ?? null;
       case "build":
         return BUILD_BY_ID[bestBuild(tool.build, (t) => learned.includes(t), (c) => civDone.includes(c))].icon;
       default:
-        return TOOLS.find((t) => t.id === id)!.icon;
+        return null;
     }
   };
 
@@ -77,7 +91,7 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
   };
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+8px)] z-20 flex justify-center px-2 sm:bottom-4">
+    <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+8px)] z-[31] flex justify-center px-2 sm:bottom-4">
       <div ref={toolbarRef} className="pointer-events-auto relative max-w-full">
         <AnimatePresence>
           {open && (
@@ -87,7 +101,7 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
               animate={{ y: 0, opacity: 1, scale: 1 }}
               exit={{ y: 10, opacity: 0, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 460, damping: 32 }}
-              className="dl-glass pointer-events-auto w-max max-w-full rounded-3xl p-2.5 shadow-2xl"
+              className="dl-glass pointer-events-auto w-max max-w-full rounded-3xl p-3 shadow-2xl"
             >
               {(open === "dino" || open === "egg") && (
                 <SpeciesGrid
@@ -154,7 +168,7 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
                   )}
                 </>
               )}
-              {open === "build" && <BuildMenu value={chosen(tool.build)} farmCrop={tool.farmCrop} onFarmCrop={(v) => setTool({ farmCrop: v })} learned={learned} civDone={civDone} civPath={civPath} stock={stock} onPick={(v) => pick("build", v)} />}
+              {open === "build" && <BuildMenu value={chosen(tool.build)} farmCrop={tool.farmCrop} onFarmCrop={(v) => setTool({ farmCrop: v })} learned={learned} civDone={civDone} civPath={civPath} stock={stock} ownedBuilds={ownedBuilds} onPick={(v) => pick("build", v)} />}
               {open === "weather" && <Options opts={WEATHER_OPTS} value={chosen(tool.weather)} onPick={(v) => pick("weather", v)} />}
               {open === "disaster" && <Options opts={DISASTER_OPTS} value={chosen(tool.disaster)} onPick={(v) => pick("disaster", v)} />}
               <p className="mt-2 px-1 text-center text-xs font-medium text-white/70">
@@ -166,47 +180,65 @@ function Toolbar({ tool, setTool, unlocked, learned = [], stock = {}, civDone = 
           )}
         </AnimatePresence>
 
-        <div className="dl-glass dl-scroll flex max-w-[calc(100vw-16px)] gap-1 overflow-x-auto rounded-[28px] p-1.5 shadow-2xl">
-          {[...TOOLS].sort((a, b) => (["hand", "build", "people", "dino", "food", "egg", "plant", "land", "fire", "weather", "disaster", "erase"].indexOf(a.id) - ["hand", "build", "people", "dino", "food", "egg", "plant", "land", "fire", "weather", "disaster", "erase"].indexOf(b.id))).map((t) => {
-            const active = tool.id === t.id || open === t.id;
-            return (
-              <div key={t.id} className="relative shrink-0" style={{ order: t.id === "hand" ? 0 : t.id === "build" ? 2 : 3 }}>
-                <button
-                  type="button"
-                  onClick={() => press(t.id)}
-                  onMouseEnter={() => setTip(t.id)}
-                  onMouseLeave={() => setTip(null)}
-                  aria-label={t.label}
-                  aria-pressed={active}
-                  title={active && t.id !== "hand" ? `${t.label} is on — tap to turn off` : t.label}
-                  className={`group flex h-16 w-14 flex-col items-center justify-center rounded-[22px] transition duration-150 active:scale-90 sm:h-16 sm:w-16 ${
-                    active ? "dl-btn bg-gradient-to-b from-amber-300 to-amber-500 text-[#3a2414]" : "hover:-translate-y-1 hover:bg-white/15"
-                  }`}
-                >
-                  <span className={`text-[26px] leading-none transition group-hover:scale-110 sm:text-[30px] ${active ? "drop-shadow" : ""}`}>{iconFor(t.id)}</span>
-                  <span className={`mt-0.5 text-[9px] font-semibold sm:text-[10px] ${active ? "text-[#3a2414]/80" : "text-[#fde9c4]/85"}`}>{tool.id === t.id && t.id !== "hand" ? "ON ✕" : t.label}</span>
+        <div className="dl-glass dl-scroll flex max-w-[calc(100vw-16px)] items-stretch gap-0.5 overflow-x-auto rounded-[22px] px-1.5 pb-2 pt-1.5" role="toolbar" aria-label="Tools">
+          {BAR.map((id, i) => {
+            const cell = "dl-tool group flex h-[54px] w-[52px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl text-white/70 sm:w-[58px]";
+            const label = "text-[10px] font-semibold leading-none tracking-wide";
+            if (id === "|") return <span key={`sep${i}`} className="dl-sep" aria-hidden />;
+            if (id === "map")
+              return (
+                <button key={id} type="button" onClick={() => { setOpen(null); onMap(); }} aria-label="Map" aria-pressed={mapOpen} title="Show the world map" className={`${cell} sm:hidden`}>
+                  <MapIcon className="h-[22px] w-[22px]" strokeWidth={1.9} />
+                  <span className={label}>Map</span>
                 </button>
-              </div>
+              );
+            if (id === "train")
+              return (
+                <button key={id} type="button" onClick={() => { setOpen(null); setTool({ id: "hand" }); onTrain?.(); }} aria-label="Train dinosaurs" aria-pressed={trainOpen} title="Train dinosaurs and manage hauling" className={cell}>
+                  <Dumbbell className="h-[22px] w-[22px]" strokeWidth={1.9} />
+                  <span className={label}>Train</span>
+                </button>
+              );
+            if (id === "shifts")
+              return (
+                <button key={id} type="button" onClick={() => { setOpen(null); setTool({ id: "hand" }); onShifts?.(); }} aria-label="Shifts" aria-pressed={shiftOpen} title="Day and night shifts" className={cell}>
+                  <SunMoon className="h-[22px] w-[22px]" strokeWidth={1.9} />
+                  <span className={label}>Shifts</span>
+                </button>
+              );
+            const t = TOOLS.find((x) => x.id === id)!;
+            // with a drawer open, only that tool is lit (the Hand is just what's held meanwhile)
+            const active = open ? open === t.id : tool.id === t.id;
+            const on = tool.id === t.id && t.id !== "hand";
+            const Icon = TOOL_ICON[t.id];
+            const emoji = pickedIcon(t.id);
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => press(t.id)}
+                onMouseEnter={() => setTip(t.id)}
+                onMouseLeave={() => setTip(null)}
+                aria-label={on ? `${t.label} is on: tap to turn off` : t.label}
+                aria-pressed={active}
+                title={on ? `${t.label} is on: tap to turn off` : t.label}
+                className={cell}
+              >
+                {emoji ? <span className="text-[21px] leading-none">{emoji}</span> : <Icon className="h-[22px] w-[22px] transition-transform duration-150 group-hover:scale-110" strokeWidth={1.9} />}
+                <span className={label}>{t.label}</span>
+                {on && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-white ring-2 ring-amber-400" aria-hidden>
+                    <X className="h-2.5 w-2.5" strokeWidth={3} />
+                  </span>
+                )}
+              </button>
             );
           })}
-          <button type="button" onClick={() => { setOpen(null); onMap(); }} aria-label="Map" aria-pressed={mapOpen} title="Show the world map"
-            className={`order-1 group flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-[22px] transition active:scale-90 sm:hidden ${mapOpen ? "dl-btn bg-gradient-to-b from-amber-300 to-amber-500 text-[#3a2414]" : "hover:-translate-y-1 hover:bg-white/15"}`}>
-            <MapIcon className="h-7 w-7" />
-            <span className="mt-0.5 text-[10px] font-bold">Map</span>
-          </button>
-          <button type="button" onClick={() => { setOpen(null); setTool({ id: "hand" }); onTrain?.(); }} aria-label="Train dinosaurs" aria-pressed={trainOpen} title="Train dinosaurs and manage hauling" className={`order-1 group flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-[22px] transition active:scale-90 sm:h-16 sm:w-16 ${trainOpen ? "dl-btn bg-gradient-to-b from-amber-300 to-amber-500 text-[#3a2414]" : "hover:-translate-y-1 hover:bg-white/15"}`}>
-            <span className="text-[26px] leading-none group-hover:scale-110 sm:text-[30px]">🦕</span>
-            <span className="mt-0.5 text-[10px] font-bold">Train</span>
-          </button>
-          <button type="button" onClick={() => { setOpen(null); setTool({ id: "hand" }); onShifts?.(); }} aria-label="Shifts" aria-pressed={shiftOpen} title="Day and night shifts" className={`order-1 group flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-[22px] transition active:scale-90 sm:h-16 sm:w-16 ${shiftOpen ? "dl-btn bg-gradient-to-b from-indigo-300 to-cyan-400 text-slate-900" : "hover:-translate-y-1 hover:bg-white/15"}`}>
-            <span className="text-[26px] leading-none group-hover:scale-110 sm:text-[30px]">🌗</span>
-            <span className="mt-0.5 text-[10px] font-bold">Shifts</span>
-          </button>
         </div>
         <AnimatePresence>
           {tip && !open && (
             <div className="pointer-events-none absolute bottom-[calc(100%+8px)] left-0 right-0 hidden justify-center sm:flex">
-              <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="dl-paper whitespace-nowrap rounded-2xl px-3 py-1.5 text-sm font-semibold">
+              <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="dl-glass max-w-[min(560px,calc(100vw-24px))] rounded-xl px-3 py-1.5 text-center text-[13px] font-medium text-white/90">
                 {TOOLS.find((t) => t.id === tip)!.tip}
               </motion.div>
             </div>
@@ -226,7 +258,7 @@ const CATS: { id: BuildDef["cat"]; icon: string; label: string }[] = [
 ];
 
 /** Icon grid of what the tribe can build right now, by category, with costs. Future eras stay hidden until they're learned. */
-function BuildMenu({ value, farmCrop, onFarmCrop, learned, civDone, stock, onPick }: { value: BuildOpt | null; farmCrop: ToolState["farmCrop"]; onFarmCrop: (v: ToolState["farmCrop"]) => void; learned: TechId[]; civDone: CivTechId[]; civPath: CivPath; stock: Record<string, number>; onPick: (v: BuildOpt) => void }) {
+function BuildMenu({ value, farmCrop, onFarmCrop, learned, civDone, stock, ownedBuilds, onPick }: { value: BuildOpt | null; farmCrop: ToolState["farmCrop"]; onFarmCrop: (v: ToolState["farmCrop"]) => void; learned: TechId[]; civDone: CivTechId[]; civPath: CivPath; stock: Record<string, number>; ownedBuilds: Partial<Record<BuildOpt, number>>; onPick: (v: BuildOpt) => void }) {
   const has = new Set(learned);
   const civ = new Set(civDone);
   const knows = (t: TechId) => has.has(t);
@@ -252,6 +284,8 @@ function BuildMenu({ value, farmCrop, onFarmCrop, learned, civDone, stock, onPic
         {BUILD_DEFS.filter((b) => b.cat === cat && visible(b)).map((b) => {
           const cost = buildCost(b, knows);
           const afford = (Object.entries(cost) as [Resource, number][]).every(([r, n]) => (stock[r] ?? 0) >= n);
+          const isAction = b.value === "cleanMud" || b.value === "levitate";
+          const owned = ownedBuilds[b.value] ?? 0;
           const stoneTower = b.value === "tower" && knows("stonewall");
           return (
             <button
@@ -259,8 +293,15 @@ function BuildMenu({ value, farmCrop, onFarmCrop, learned, civDone, stock, onPic
               type="button"
               onClick={() => onPick(b.value)}
               title={b.tip}
-              className={`relative flex flex-col items-center rounded-2xl px-1 pb-1.5 pt-2 transition active:scale-95 ${b.value === best ? "dl-btn bg-amber-400/90 text-[#3a2414]" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"}`}
+              className={`relative flex flex-col items-center rounded-2xl px-1 pb-1.5 pt-2 transition active:scale-95 ${b.value === best ? "dl-btn bg-amber-400/90 text-[#0f172a]" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"}`}
             >
+              <span className="mb-0.5 flex h-3.5 w-full items-center justify-end gap-1 text-[10px] font-bold leading-none">
+                {!afford && <span title="Not enough yet: gatherers will fetch it">&#9203;</span>}
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-black/15 px-1 py-0.5" title={isAction ? "Action: no structure to own" : owned + " owned (finished)"} aria-label={isAction ? "Action: no owned count" : owned + " owned (finished)"}>
+                  <Flag className="h-2.5 w-2.5" aria-hidden="true" />
+                  {isAction ? "-" : owned}
+                </span>
+              </span>
               {["spikes", "barricade", "totem", "tannery"].includes(b.value) ? <GameIcon id={b.value} size={30} /> : <span className="text-[28px] leading-none">{stoneTower ? "🏰" : b.icon}</span>}
               <span className="mt-1 text-center text-[11px] font-semibold leading-tight">{stoneTower ? "Stone tower" : b.label}</span>
               <span className="mt-1 flex flex-wrap justify-center gap-0.5">
@@ -271,11 +312,11 @@ function BuildMenu({ value, farmCrop, onFarmCrop, learned, civDone, stock, onPic
                   </span>
                 ))}
               </span>
-              {!afford && <span className="absolute right-1 top-1 text-[10px]" title="Not enough yet: gatherers will fetch it">⏳</span>}
             </button>
           );
         })}
       </div>
+      <p className="mt-2 flex items-center justify-center gap-1 text-[11px] text-white/70"><Flag className="h-3 w-3" aria-hidden="true" /> Owned (finished)</p>
       {cur ? (
         <p className="mt-2 px-1 text-center text-[12px] leading-snug text-white/75">
           <span className="font-bold text-white">
@@ -299,7 +340,7 @@ function Options<V extends string>({ opts, value, onPick }: { opts: Opt<V>[]; va
           key={o.value}
           type="button"
           onClick={() => onPick(o.value)}
-          className={`flex h-[72px] w-[clamp(62px,18vw,72px)] min-w-0 flex-col items-center justify-center rounded-2xl px-1 transition active:scale-90 ${o.value === value ? "dl-btn bg-amber-400/90 text-[#3a2414]" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"}`}
+          className={`flex h-[72px] w-[clamp(62px,18vw,72px)] min-w-0 flex-col items-center justify-center rounded-2xl px-1 transition active:scale-90 ${o.value === value ? "dl-btn bg-amber-400/90 text-[#0f172a]" : "bg-white/5 hover:-translate-y-0.5 hover:bg-white/15"}`}
         >
           <span className="text-3xl leading-none">{o.icon}</span>
           <span className="mt-1 text-center text-[10px] font-semibold leading-tight text-white/85 sm:text-[11px]">{o.label}</span>
@@ -321,7 +362,7 @@ function SpeciesGrid({ value, unlocked, egg, onPick }: { value: SpeciesId | null
             type="button"
             onClick={() => onPick(s.id)}
             title={ok ? s.name : "Find this dino in the world to unlock it!"}
-            className={`relative flex w-[92px] flex-col items-center rounded-2xl px-1 pb-1.5 pt-1 transition active:scale-95 ${s.id === value ? "dl-btn bg-amber-400/90 text-[#3a2414]" : "bg-white/5 hover:bg-white/15"}`}
+            className={`relative flex w-[92px] flex-col items-center rounded-2xl px-1 pb-1.5 pt-1 transition active:scale-95 ${s.id === value ? "dl-btn bg-amber-400/90 text-[#0f172a]" : "bg-white/5 hover:bg-white/15"}`}
           >
             <Portrait species={s.id} locked={!ok} baby={egg} w={84} h={58} />
             <span className={`text-[12px] font-semibold ${ok ? "" : "text-white/50"}`}>{ok ? s.nick : "???"}</span>

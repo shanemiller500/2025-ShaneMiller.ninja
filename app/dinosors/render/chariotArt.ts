@@ -265,7 +265,6 @@ export function drawChariot(c: CanvasRenderingContext2D, ch: Chariot, t: number)
   c.ellipse(0, 3, 74, 13, 0, 0, Math.PI * 2);
   c.fill();
   c.scale(ch.dir, 1);
-  if (ch.hit > 0) c.filter = `brightness(${1 + ch.hit * 0.6})`;
   const spin = ch.anim * 1.6;
   // far wheels
   wheel(c, -40, -12, 15, spin, tier);
@@ -416,8 +415,20 @@ export function drawChariot(c: CanvasRenderingContext2D, ch: Chariot, t: number)
       c.fill();
     }
   }
+  // struck: a pale flash over the wagon. (A soft glow laid over it, not a canvas `filter`: a filter runs on the
+  // graphics card for every stroke under it, and a wagon is hundreds of strokes: the whole game stuttered.)
+  if (ch.hit > 0) {
+    const g = c.createRadialGradient(0, -34, 4, 0, -34, 78);
+    const a = Math.min(0.5, ch.hit * 0.5);
+    g.addColorStop(0, `rgba(255,246,220,${a})`);
+    g.addColorStop(0.6, `rgba(255,240,205,${a * 0.5})`);
+    g.addColorStop(1, "rgba(255,240,205,0)");
+    c.globalCompositeOperation = "lighter";
+    c.fillStyle = g;
+    c.fillRect(-80, -100, 160, 110);
+    c.globalCompositeOperation = "source-over";
+  }
   // near wheels
-  c.filter = "none";
   wheel(c, -46, -8, 16, spin + 0.3, tier);
   wheel(c, 44, -8, 16, spin + 0.3, tier);
   c.restore();

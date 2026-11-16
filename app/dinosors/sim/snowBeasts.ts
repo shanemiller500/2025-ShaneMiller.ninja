@@ -33,7 +33,7 @@ import { EAST_CAVES, REGION } from "./terrain";
 import { hitDino } from "./tribe";
 import { yetiDueling } from "./yetiFeud";
 import { raidChaseOk, raidOf, raidThink, raidTick } from "./yetiRaid";
-import { MAP_W, T, TILE, type Brute, type Dino, type Human, type SpeciesId } from "./types";
+import { MAP_H, MAP_W, T, TILE, type Brute, type Dino, type Human, type SpeciesId } from "./types";
 import type { World } from "./world";
 
 const SNOW_LIST: SpeciesId[] = ["snowLeopard", "yeti", "snowRex", "frosthorn", "rimeclaw", "glacierback"];
@@ -91,6 +91,80 @@ function yetiBands(w: World) {
 
 type Prey = { kind: "human"; h: Human } | { kind: "dino"; d: Dino } | { kind: "brute"; b: Brute };
 const posOf = (p: Prey) => (p.kind === "human" ? p.h : p.kind === "dino" ? p.d : p.b);
+
+/* ------------------------------ the Yetis' caves ------------------------------ */
+
+const densOf = new WeakMap<World, { x: number; y: number }[]>();
+/** A Yeti counts as living in a den when its home is this close to one (px). */
+const AT_DEN = 40;
+
+/**
+ * The Yetis' ice caves: one near each of their haunts, as high up the mountain as a Yeti can stand
+ * (the highest walkable snow around, best of all right under a rock face the cave is cut into).
+ * Always the same spots for a world, so there's a cave to see whether or not anything lives in it.
+ */
+export function yetiDens(w: World): { x: number; y: number }[] {
+  let list = densOf.get(w);
+  if (list) return list;
+  list = [];
+  const t = w.terrain;
+  for (const [bx, by] of SNOW_HOMES.yeti) {
+    let best: { x: number; y: number } | null = null;
+    let bs = -Infinity;
+    for (let dy = -10; dy <= 10; dy++) {
+      for (let dx = -10; dx <= 10; dx++) {
+        const tx = bx + dx;
+        const ty = by + dy;
+        if (tx < 2 || ty < 2 || tx >= MAP_W - 2 || ty >= MAP_H - 2) continue;
+        const x = tx * TILE + TILE / 2;
+        const y = ty * TILE + TILE / 2;
+        if (!snowGround(w, x, y) || !w.nav.passable("dino", x, y) || !w.nav.passable("human", x, y + TILE)) continue;
+        if (list.some((d) => Math.hypot(d.x - x, d.y - y) < 340)) continue;
+        const north = t.tiles[(ty - 1) * MAP_W + tx];
+        const face = north === T.Mountain || north === T.Rock || !w.nav.passable("dino", x, y - TILE) ? 1.5 : 0;
+        const score = t.elev[ty * MAP_W + tx] * 12 + face - Math.hypot(dx, dy) * 0.08;
+        if (score > bs) {
+          bs = score;
+          best = { x, y };
+        }
+      }
+    }
+    if (best) list.push(best);
+  }
+  densOf.set(w, list);
+  return list;
+}
+
+/** The cave this Yeti lives in (null = it has none: a stray, or one of ours). */
+export function yetiDenOf(w: World, d: Pick<Dino, "homeX" | "homeY">) {
+  for (const den of yetiDens(w)) if (Math.hypot(den.x - d.homeX, den.y - d.homeY) < AT_DEN) return den;
+  return null;
+}
+
+/** A Yeti of the peaks without a cave (an older save: its den was a patch of snow) moves into the nearest empty one. */
+function takeDen(w: World, d: Dino) {
+  if (yetiDenOf(w, d)) return;
+  const i = Math.floor(d.homeY / TILE) * MAP_W + Math.floor(d.homeX / TILE);
+  if (w.terrain.region[i] !== REGION.peaks) return;
+  let best: { x: number; y: number } | null = null;
+  let bd = 900;
+  for (const den of yetiDens(w)) {
+    if (w.dinos.some((o) => o !== d && o.species === "yeti" && !o.owner && Math.hypot(o.homeX - den.x, o.homeY - den.y) < AT_DEN)) continue;
+    const dist = Math.hypot(den.x - d.homeX, den.y - d.homeY);
+    if (dist < bd) {
+      bd = dist;
+      best = den;
+    }
+  }
+  if (!best) return;
+  d.homeX = best.x;
+  d.homeY = best.y;
+}
+
+/** Asleep in its cave for the night (the art shows only its eyes in the dark). */
+export function inCave(w: World, d: Dino) {
+  return d.species === "yeti" && !d.owner && d.state === "sleep" && !!yetiDenOf(w, d) && Math.hypot(d.x - d.homeX, d.y - d.homeY) < AT_DEN;
+}
 
 /** Cold ground: snow, ice, the bare peaks, the high rock (or anywhere deep snow has fallen). */
 export function snowGround(w: World, x: number, y: number) {
@@ -253,6 +327,7 @@ function rexThink(w: World, d: Dino): boolean {
  */
 function yetiThink(w: World, d: Dino): boolean {
   yetiBands(w);
+  takeDen(w, d);
   // bands of two or more raid the Snow People now and then (yetiRaid.ts)
   raidTick(w);
   // fighting a dragon: nothing else matters till one of them is down (yetiFeud.ts)
@@ -342,6 +417,13 @@ function yetiThink(w: World, d: Dino): boolean {
         w.discover("yeti", d.x, d.y);
       }
     }
+    return true;
+  }
+  // night: back up to its cave to sleep (it howls from the mouth: beasts.ts). Winter nights it stays out, prowling.
+  const den = yetiDenOf(w, d);
+  if (den && w.daylight < 0.22 && !coldSeason) {
+    if (Math.hypot(d.x - den.x, d.y - den.y) > 22) setState(d, "wander", den.x, den.y);
+    else if (d.state !== "sleep") setState(d, "sleep", d.x, d.y);
     return true;
   }
   if (d.state === "sleep") setState(d, "idle", d.x, d.y);
@@ -729,7 +811,7 @@ export class SnowLife {
     }
     for (const s of SNOW_LIST) {
       let n = 0;
-      for (const d of w.dinos) if (d.species === s && !d.under) n++;
+      for (const d of w.dinos) if (d.species === s && !d.under && !d.caged) n++;
       for (const e of w.eggs) if (e.species === s) n++;
       const keep = SNOW_KEEP[s] ?? 2;
       if (n >= (ONLY_ONE.has(s) ? 1 : s === "yeti" ? keep : Math.min(keep, 2))) continue;
@@ -746,11 +828,12 @@ export class SnowLife {
     const homes = SNOW_HOMES[s] ?? [[240, 30]];
     const out: Dino[] = [];
     // a Yeti takes a den no other Yeti has; everyone else any of their homes
-    const taken = (x: number, y: number) => s === "yeti" && w.dinos.some((o) => o.species === "yeti" && Math.hypot(o.homeX - (x * TILE + TILE / 2), o.homeY - (y * TILE + TILE / 2)) < 300);
-    const open = homes.filter(([x, y]) => !taken(x, y));
+    const taken = (x: number, y: number) => s === "yeti" && w.dinos.some((o) => o.species === "yeti" && !o.owner && Math.hypot(o.homeX - x, o.homeY - y) < 300);
+    // (a Yeti moves into one of the ice caves high on the mountain)
+    const spots = s === "yeti" ? yetiDens(w) : homes.map(([x, y]) => ({ x: x * TILE + TILE / 2, y: y * TILE + TILE / 2 }));
+    const open = spots.filter((p) => !taken(p.x, p.y));
     if (!open.length) return [];
-    const [hx, hy] = open[Math.floor(this.rng() * open.length)];
-    const base = { x: hx * TILE + TILE / 2, y: hy * TILE + TILE / 2 };
+    const base = open[Math.floor(this.rng() * open.length)];
     const herd = def.herd > 0.3 && n > 1 ? w.nextId() : 0;
     for (let i = 0; i < n; i++) {
       let spot: { x: number; y: number } | null = null;
@@ -761,7 +844,7 @@ export class SnowLife {
         if (p && w.nav.passable("dino", p.x, p.y) && (s !== "yeti" || snowGround(w, p.x, p.y)) && (k > 3 || !w.inView(p.x, p.y, 80))) spot = p;
       }
       if (!spot) continue;
-      const home = s === "yeti" ? spot : base;
+      const home = base;
       const d = addDino(w, s, spot.x, spot.y, { growth: 1, herd, homeX: home.x, homeY: home.y, hunger: 0.25, thirst: 0.2 });
       if (RARE.has(s)) d.layT = 1e9;
       out.push(d);

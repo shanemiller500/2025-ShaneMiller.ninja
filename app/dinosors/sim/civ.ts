@@ -477,6 +477,7 @@ export class Civ {
     if (!ps.length) return;
     const links = this.pylonLinks(w);
     for (const d of w.dinos) {
+      if (w.diplomacy.protectedDino(d)) continue;
       // The field protects the player's settlement from every wild or enemy dinosaur,
       // including calm herbivores and flyers. Player-owned animals pass through safely.
       if ((d.owner && !d.raider) || d.state === "carried" || d.state === "faint") continue;

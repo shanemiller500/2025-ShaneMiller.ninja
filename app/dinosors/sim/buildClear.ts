@@ -1,6 +1,7 @@
 import { BUILDINGS } from "../data/colony";
 import { MAP_H, MAP_W, TILE } from "./types";
 import { wineryEstates } from "./wineEstate";
+import { castleGroundRects } from "./castleCompound";
 import type { World } from "./world";
 
 type Footprint = { x0: number; y0: number; x1: number; y1: number };
@@ -8,6 +9,7 @@ type Footprint = { x0: number; y0: number; x1: number; y1: number };
 /** Ground covered by placed camp work. Keep unplanted vineyards until their bushes become cuttings. */
 function footprints(w: World): Footprint[] {
   const areas: Footprint[] = [];
+  for (const r of castleGroundRects(w)) areas.push({ x0: r.x - r.rx, y0: r.y - r.ry, x1: r.x + r.rx, y1: r.y + r.ry });
   const tileRect = (tx: number, ty: number, width = 1, height = 1) =>
     areas.push({ x0: tx * TILE, y0: ty * TILE, x1: (tx + width) * TILE, y1: (ty + height) * TILE });
 

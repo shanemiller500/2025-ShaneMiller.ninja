@@ -9,6 +9,8 @@ import type { Stock } from "../sim/camp";
 import { PLANT_H } from "../sim/plants";
 import type { Egg, FarmCrop, Human, Item, Plant, Prop, Shelter } from "../sim/types";
 import { shade } from "./drawDino";
+import { Q } from "./quality";
+import { grain as materialGrain } from "./litSprites";
 
 const OUT = "rgba(35,28,22,0.5)";
 /** People get the storybook look: a dark ink outline round limbs, head + clothes. */
@@ -20,6 +22,29 @@ function mix(a: string, b: string, t: number) {
   const ch = (s: number) => Math.round(((pa >> s) & 255) * (1 - t) + ((pb >> s) & 255) * t);
   return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
 }
+
+const blendCache = new Map<string, string>();
+/** Mix two #rrggbb colours (t = how much of b), as #rrggbb again so it can be shaded further. */
+function blendHex(a: string, b: string, t: number) {
+  if (a.charCodeAt(0) !== 35 || a.length !== 7) return a;
+  const key = a + b + t;
+  let out = blendCache.get(key);
+  if (out) return out;
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const ch = (sh: number) => Math.round(((pa >> sh) & 255) * (1 - t) + ((pb >> sh) & 255) * t);
+  out = "#" + ((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1);
+  if (blendCache.size > 2000) blendCache.clear();
+  blendCache.set(key, out);
+  return out;
+}
+/** A person's own colours, pulled toward the cave-people artwork: warm peachy skin, a golden leopard hide. */
+const artSkin = (c: string) => blendHex(c, "#f6b078", 0.52);
+const artFur = (c: string) => blendHex(c, "#eda02c", 0.5);
+/** …and rich brown hair that stands out against the skin (fair hair goes chestnut rather than sandy) */
+const artHair = (c: string) => blendHex(c, "#55311a", 0.42);
+const ROPE = "#d3ae74";
+const ROPE_DARK = "#7d5b31";
 
 /** Steps in a precomputed colour ramp (finer than the eye can tell on a plant). */
 const RAMP_STEPS = 32;
@@ -37,6 +62,9 @@ function ramp(a: string, b: string, t: number) {
 
 const LEAF = ["#3f7a34", "#4b8a3a", "#5a9a42", "#356b2e"];
 const LEAF_LIGHT = ["#5a9a4a", "#68aa52", "#78ba5a", "#4c8a42"];
+/** the shaded underside of a canopy, and the sunlit tips */
+const LEAF_DARK = ["#2a5628", "#31652c", "#3b7231", "#234a22"];
+const LEAF_HI = ["#86c868", "#96d672", "#a8e07c", "#74b65e"];
 
 /* ------------------------------- plants ------------------------------- */
 
@@ -56,13 +84,236 @@ export function drawPlantLod(c: CanvasRenderingContext2D, p: Plant, x: number, y
   c.fill();
 }
 
-export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind: number, lod: boolean) {
+/* A plant is many strokes and fills; a forest is hundreds of plants. So each look a plant can have
+   (kind, colours, size, how full, how burnt) is painted once into a texture atlas and stamped from then on:
+   one image draw per plant, swaying as a whole. Sharing a few big atlas pages (rather than an image each)
+   lets the browser batch the whole forest. Only the handful of plants in a close-up are painted live. */
+interface AtlasSprite {
+  page: HTMLCanvasElement;
+  /** the cell in the atlas page (page pixels) */
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
+  /** where the sprite's foot sits inside the cell, and the cell's size (world px) */
+  ox: number;
+  oy: number;
+  w: number;
+  h: number;
+}
+interface AtlasPage {
+  cv: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  /** shelf packing: the next free spot on the current row, and that row's height */
+  x: number;
+  y: number;
+  rowH: number;
+  /** the sprites painted on this page (forgotten together when the page is reused) */
+  keys: string[];
+}
+
+/**
+ * A few big shared pictures ("pages") that sprites are painted into once and stamped from ever after.
+ * When every page is full, only the OLDEST page starts over: the sprites on it that are still in use are
+ * painted again (onto the newest page) as they're next drawn, a few a frame; everything else stays put.
+ * So filling up costs a handful of re-paints, never a wipe of the whole forest.
+ */
+class Atlas {
+  private pages: AtlasPage[] = [];
+  private map = new Map<string, AtlasSprite>();
+  /** sprites painted so far, and pages started over to make room (for tuning) */
+  private baked = 0;
+  private recycled = 0;
+  /** milliseconds this frame has spent painting new sprites, and how many it may */
+  spent = 0;
+  allow = 4;
+
+  constructor(private readonly size: number, private readonly maxPages: number) {}
+
+  get(key: string) {
+    return this.map.get(key);
+  }
+
+  /** May another sprite be painted this frame? */
+  get open() {
+    return this.spent <= this.allow;
+  }
+
+  stats() {
+    return { sprites: this.map.size, pages: this.pages.length, baked: this.baked, recycled: this.recycled };
+  }
+
+  /** Forget everything (the look of things changed: a new graphics quality). */
+  clear() {
+    this.map.clear();
+    this.pages.length = 0;
+  }
+
+  /** A free cell of w x h pixels (on a new row, a new page, or the oldest page started over, as needed). */
+  private cell(w: number, h: number) {
+    const pad = 2;
+    let pg = this.pages[this.pages.length - 1];
+    if (pg && pg.x + w + pad > this.size) {
+      pg.x = 0;
+      pg.y += pg.rowH + pad;
+      pg.rowH = 0;
+    }
+    if (!pg || pg.y + h + pad > this.size) {
+      if (this.pages.length >= this.maxPages) {
+        pg = this.pages.shift()!;
+        for (const k of pg.keys) this.map.delete(k);
+        pg.keys.length = 0;
+        pg.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        pg.ctx.clearRect(0, 0, this.size, this.size);
+        this.recycled++;
+      } else {
+        const cv = document.createElement("canvas");
+        cv.width = cv.height = this.size;
+        pg = { cv, ctx: cv.getContext("2d")!, x: 0, y: 0, rowH: 0, keys: [] };
+      }
+      this.pages.push(pg);
+      pg.x = 0;
+      pg.y = 0;
+      pg.rowH = 0;
+    }
+    const cell = { pg, x: pg.x, y: pg.y };
+    pg.x += w + pad;
+    pg.rowH = Math.max(pg.rowH, h);
+    return cell;
+  }
+
+  /**
+   * Paint a new sprite and remember it under `key`. `paint` draws it with its foot at the origin, inside a box
+   * halfW either side, `top` up and `bottom` down (world px), at `res` page pixels per world pixel.
+   */
+  bake(key: string, res: number, halfW: number, top: number, bottom: number, paint: (x: CanvasRenderingContext2D) => void, grainy = false) {
+    const t0 = performance.now();
+    const sw = Math.min(this.size - 4, Math.max(2, Math.ceil(halfW * 2 * res)));
+    const sh = Math.min(this.size - 4, Math.max(2, Math.ceil((top + bottom) * res)));
+    const cell = this.cell(sw, sh);
+    const a = cell.pg.ctx;
+    a.save();
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    a.beginPath();
+    a.rect(cell.x, cell.y, sw, sh);
+    a.clip();
+    a.clearRect(cell.x, cell.y, sw, sh);
+    a.setTransform(res, 0, 0, res, cell.x + halfW * res, cell.y + top * res);
+    paint(a);
+    if (grainy && res >= 1 && Q.shading) {
+      // a fine material grain over whatever was just painted (wood, stone, rock)
+      const pat = a.createPattern(materialGrain(), "repeat");
+      if (pat) {
+        a.setTransform(1, 0, 0, 1, 0, 0);
+        a.globalAlpha = 1;
+        a.globalCompositeOperation = "source-atop";
+        a.fillStyle = pat;
+        a.fillRect(cell.x, cell.y, sw, sh);
+        a.globalCompositeOperation = "source-over";
+      }
+    }
+    a.restore();
+    const sp: AtlasSprite = { page: cell.pg.cv, sx: cell.x, sy: cell.y, sw, sh, ox: halfW, oy: top, w: sw / res, h: sh / res };
+    cell.pg.keys.push(key);
+    this.map.set(key, sp);
+    this.baked++;
+    this.spent += performance.now() - t0;
+    return sp;
+  }
+}
+
+/**
+ * The scenery: plants, peaks, wall pieces, carcasses. About 100 MB at the very most. (Only things that hold
+ * still belong here. Animals were tried, pose by pose: a herd on the move asks for hundreds of new poses a
+ * second, which costs more than simply painting them.)
+ */
+const scenery = new Atlas(2048, 6);
+
+/**
+ * Once per frame: how long this frame may spend painting new atlas sprites. Past that, callers fall back to
+ * something cheap for the moment (a plain blob for a plant, live painting for a wall) and try again
+ * next frame, so a freshly loaded world fills in over a few frames instead of stalling on one.
+ */
+export function atlasBeginFrame(ms = 4) {
+  scenery.spent = 0;
+  scenery.allow = ms;
+}
+
+/** Throw every cached sprite away (after a change of graphics quality: they'd keep the old look). */
+export function atlasClear() {
+  scenery.clear();
+}
+
+/** How full the atlases are (for tuning and tests). */
+export function atlasStats() {
+  return scenery.stats();
+}
+
+/**
+ * Anything that never changes (a mountain peak, say): painted once into the shared atlas, stamped ever after.
+ * `paint` draws it with its foot at the origin, inside a box halfW either side, `top` up and `bottom` down.
+ * Returns false if it isn't painted yet and this frame's painting budget is spent (draw it some other way).
+ */
+export function atlasStamp(c: CanvasRenderingContext2D, key: string, res: number, halfW: number, top: number, bottom: number, x: number, y: number, paint: (x: CanvasRenderingContext2D) => void, grainy = false): boolean {
+  const k = key + "|" + res;
+  let sp = scenery.get(k);
+  if (!sp) {
+    if (!scenery.open) return false;
+    sp = scenery.bake(k, res, halfW, top, bottom, paint, grainy);
+  }
+  c.drawImage(sp.page, sp.sx, sp.sy, sp.sw, sp.sh, x - sp.ox, y - sp.oy, sp.w, sp.h);
+  return true;
+}
+
+/** The pixel scale to bake plants at for this many device pixels per world pixel. */
+export function plantSpriteRes(density: number, cap: number) {
+  return Math.min(cap, density < 0.7 ? 0.5 : density < 1.3 ? 1 : density < 2.5 ? 2 : 3);
+}
+
+/**
+ * Draw a plant from its cached image at (p.x, p.y), swaying in the wind. `res` from plantSpriteRes.
+ * `still`: no sway (small on screen, where it can't be seen): a single image draw.
+ * Returns false if its image isn't painted yet and this frame's atlas budget is spent.
+ */
+export function drawPlantFast(c: CanvasRenderingContext2D, p: Plant, t: number, wind: number, res: number, still = false): boolean {
+  const base = PLANT_H[p.kind];
+  const Hq = Math.max(6, Math.round((base * (0.35 + p.size * 0.65)) / 3) * 3);
+  const fullq = Math.round(p.food * 3);
+  const burntq = Math.round(p.burnt * 4);
+  const jit = ((Math.floor(p.x * 0.37 + p.y * 0.23) % 3) + 3) % 3;
+  const fruit = p.kind === "fruit" ? p.fruit : 0;
+  const key = p.kind + "|" + (p.variant % 4) + "|" + Hq + "|" + fullq + "|" + burntq + "|" + fruit + "|" + jit + "|" + res;
+  let sp = scenery.get(key);
+  if (!sp) {
+    if (!scenery.open) return false;
+    const halfW = Hq * (p.kind === "fern" ? 1.3 : p.kind === "cycad" ? 0.8 : p.kind === "palm" ? 0.78 : 0.64) + 4;
+    const top = Hq * (p.kind === "palm" ? 1.36 : 1.14) + 4;
+    // the same plant, at this bucket's size / fullness / scorch, standing still
+    const fake: Plant = { ...p, size: (Hq / base - 0.35) / 0.65, food: fullq / 3, burnt: burntq / 4, x: jit * 1.13, y: jit * 2.31, shake: 0, stump: false };
+    sp = scenery.bake(key, res, halfW, top, 8, (x) => drawPlant(x, fake, 0, 0, false, true));
+  }
+  if (still && p.shake <= 0) {
+    c.drawImage(sp.page, sp.sx, sp.sy, sp.sw, sp.sh, p.x - sp.ox, p.y - sp.oy, sp.w, sp.h);
+    return true;
+  }
+  const sway = Math.sin(t * 1.6 + p.x * 0.013 + p.variant) * (0.02 + wind * 0.06) + Math.sin(t * 28) * p.shake * 0.1;
+  // rotate about the foot, then put the transform back by hand (cheaper than save / restore, hundreds of times a frame)
+  const ca = Math.cos(sway);
+  const sa = Math.sin(sway);
+  c.transform(ca, sa, -sa, ca, p.x, p.y);
+  c.drawImage(sp.page, sp.sx, sp.sy, sp.sw, sp.sh, -sp.ox, -sp.oy, sp.w, sp.h);
+  c.transform(ca, -sa, sa, ca, 0, 0);
+  c.translate(-p.x, -p.y);
+  return true;
+}
+
+export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind: number, lod: boolean, still = false) {
   const H = PLANT_H[p.kind] * (0.35 + p.size * 0.65);
   const burnt = p.burnt;
   const leaf = ramp(LEAF[p.variant % 4], "#2f2a27", burnt);
   const leafLight = ramp(LEAF_LIGHT[p.variant % 4], "#3a3330", burnt);
   const trunk = ramp("#7a5534", "#2a2421", burnt);
-  const sway = Math.sin(t * 1.6 + p.x * 0.013 + p.variant) * (0.02 + wind * 0.06) + Math.sin(t * 28) * p.shake * 0.1;
+  const sway = still ? 0 : Math.sin(t * 1.6 + p.x * 0.013 + p.variant) * (0.02 + wind * 0.06) + Math.sin(t * 28) * p.shake * 0.1;
   const full = 0.65 + 0.35 * p.food;
 
   if (p.stump) {
@@ -109,193 +360,414 @@ export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind
 
   c.save();
   c.rotate(sway);
+  const leafDark = ramp(LEAF_DARK[p.variant % 4], "#211c1a", burnt);
+  const leafHi = ramp(LEAF_HI[p.variant % 4], "#453c38", burnt);
+  const trunkDark = ramp("#553a22", "#1c1715", burnt);
+  const trunkLight = ramp("#9a7248", "#3a322d", burnt);
+  // every plant differs a little: a stable wobble from where it grows
+  const v1 = ((p.x * 0.37 + p.variant * 1.7) % 1 + 1) % 1;
+  const v2 = ((p.y * 0.23 + p.variant * 0.9) % 1 + 1) % 1;
+  // the canopy breathes in the wind (each lobe a beat apart)
+  const breeze = (i: number) => (still ? 0 : Math.sin(t * 1.9 + p.x * 0.02 + i * 1.3) * (0.012 + wind * 0.03));
   switch (p.kind) {
     case "conifer": {
+      // trunk
+      c.fillStyle = trunkDark;
+      c.fillRect(-H * 0.04, -H * 0.3, H * 0.08, H * 0.3);
       c.fillStyle = trunk;
-      c.fillRect(-H * 0.035, -H * 0.3, H * 0.07, H * 0.3);
-      for (let i = 0; i < 3; i++) {
-        const y0 = -H * (0.2 + i * 0.25);
-        const w = H * (0.3 - i * 0.07) * full;
+      c.fillRect(-H * 0.04, -H * 0.3, H * 0.045, H * 0.3);
+      // four tiers of boughs, drooping at the edges: shaded on the right, sunlit along the left
+      const tiers = 4;
+      for (let i = 0; i < tiers; i++) {
+        const y0 = -H * (0.14 + i * 0.2);
+        const w = H * (0.3 - i * 0.06) * full * (0.94 + v1 * 0.12);
+        const tip = y0 - H * (0.34 - i * 0.02);
+        const droop = H * 0.035;
+        const bx = breeze(i) * H;
+        c.fillStyle = leafDark;
         c.beginPath();
-        c.moveTo(-w, y0);
-        c.lineTo(0, y0 - H * 0.38);
-        c.lineTo(w, y0);
+        c.moveTo(bx, tip);
+        c.lineTo(w + bx, y0 + droop);
+        c.lineTo(w * 0.6 + bx, y0 - droop * 0.4);
+        c.lineTo(w * 0.3 + bx, y0 + droop * 0.7);
+        c.lineTo(bx, y0 - droop * 0.2);
+        c.lineTo(-w * 0.3 + bx, y0 + droop * 0.7);
+        c.lineTo(-w * 0.6 + bx, y0 - droop * 0.4);
+        c.lineTo(-w + bx, y0 + droop);
         c.closePath();
-        c.fillStyle = i % 2 ? leaf : leafLight;
         c.fill();
-        c.strokeStyle = OUT;
-        c.lineWidth = 1;
-        c.stroke();
+        c.fillStyle = leaf;
+        c.beginPath();
+        c.moveTo(bx, tip);
+        c.lineTo(w * 0.22 + bx, y0 - droop * 0.1);
+        c.lineTo(bx, y0 - droop * 0.2);
+        c.lineTo(-w * 0.3 + bx, y0 + droop * 0.7);
+        c.lineTo(-w * 0.6 + bx, y0 - droop * 0.4);
+        c.lineTo(-w + bx, y0 + droop);
+        c.closePath();
+        c.fill();
+        c.fillStyle = i >= 2 ? leafHi : leafLight;
+        c.beginPath();
+        c.moveTo(bx, tip);
+        c.lineTo(-w * 0.34 + bx, y0 - H * 0.1);
+        c.lineTo(-w * 0.74 + bx, y0 + droop * 0.1);
+        c.lineTo(-w * 0.5 + bx, y0 - H * 0.13);
+        c.closePath();
+        c.fill();
       }
       break;
     }
     case "palm": {
-      c.strokeStyle = trunk;
-      c.lineWidth = H * 0.07;
+      const topX = H * 0.08 + (v1 - 0.5) * H * 0.08;
+      const bendX = H * (0.14 + v2 * 0.1);
+      // trunk: a dark body, a lit strip, ringed scars
       c.lineCap = "round";
+      c.strokeStyle = trunkDark;
+      c.lineWidth = H * 0.085;
       c.beginPath();
       c.moveTo(0, 0);
-      c.quadraticCurveTo(H * 0.18, -H * 0.5, H * 0.08, -H);
+      c.quadraticCurveTo(bendX, -H * 0.5, topX, -H);
       c.stroke();
-      c.strokeStyle = shade("#7a5534", -0.3);
-      c.lineWidth = 1;
-      for (let i = 1; i < 6; i++) {
-        const y = -H * (i / 6);
+      c.strokeStyle = trunk;
+      c.lineWidth = H * 0.05;
+      c.beginPath();
+      c.moveTo(-H * 0.012, 0);
+      c.quadraticCurveTo(bendX - H * 0.014, -H * 0.5, topX - H * 0.01, -H);
+      c.stroke();
+      c.strokeStyle = trunkLight;
+      c.lineWidth = Math.max(0.8, H * 0.012);
+      c.beginPath();
+      c.moveTo(-H * 0.026, -H * 0.05);
+      c.quadraticCurveTo(bendX - H * 0.03, -H * 0.5, topX - H * 0.026, -H * 0.96);
+      c.stroke();
+      c.strokeStyle = trunkDark;
+      c.lineWidth = 0.9;
+      for (let i = 1; i < 7; i++) {
+        const k = i / 7;
+        const tx = 2 * (1 - k) * k * bendX + k * k * topX;
+        const y = -H * k;
         c.beginPath();
-        c.moveTo(H * 0.06 - 3, y);
-        c.lineTo(H * 0.1 + 3, y + 2);
+        c.moveTo(tx - H * 0.04, y + 1);
+        c.lineTo(tx + H * 0.04, y - 1);
         c.stroke();
       }
-      c.strokeStyle = leaf;
-      c.lineWidth = H * 0.05 * full;
-      for (let i = 0; i < 6; i++) {
-        const a = -Math.PI / 2 + (i - 2.5) * 0.55;
+      // fronds: the far ones dark, the near ones bright with a pale midrib
+      const frond = (a: number, len: number, fill: string, rib: string | null, i: number) => {
+        const droop = H * 0.2 + Math.abs(Math.cos(a)) * H * 0.1;
+        const sw = breeze(i) * H * 1.6;
+        const ex = topX + Math.cos(a) * len + sw;
+        const ey = -H + Math.sin(a) * len * 0.45 + droop;
+        const mx = topX + Math.cos(a) * len * 0.55 + sw * 0.5;
+        const my = -H + Math.sin(a) * len * 0.5 - H * 0.1;
+        c.fillStyle = fill;
         c.beginPath();
-        c.moveTo(H * 0.08, -H);
-        c.quadraticCurveTo(H * 0.08 + Math.cos(a) * H * 0.3, -H + Math.sin(a) * H * 0.25 - H * 0.08, H * 0.08 + Math.cos(a) * H * 0.42, -H + Math.sin(a) * H * 0.12 + H * 0.12);
-        c.stroke();
-      }
+        c.moveTo(topX, -H);
+        c.quadraticCurveTo(mx, my - H * 0.05, ex, ey);
+        c.quadraticCurveTo(mx, my + H * 0.11 * full, topX, -H + H * 0.03);
+        c.closePath();
+        c.fill();
+        if (rib) {
+          c.strokeStyle = rib;
+          c.lineWidth = Math.max(0.7, H * 0.011);
+          c.beginPath();
+          c.moveTo(topX, -H);
+          c.quadraticCurveTo(mx, my + H * 0.02, ex, ey);
+          c.stroke();
+        }
+      };
+      const L = H * 0.46 * (0.75 + full * 0.25);
+      for (let i = 0; i < 4; i++) frond(-Math.PI / 2 + (i - 1.5) * 0.95 + 0.1, L * 0.92, leafDark, null, i);
+      for (let i = 0; i < 5; i++) frond(-Math.PI / 2 + (i - 2) * 0.72, L, i % 2 ? leaf : leafLight, leafHi, i + 4);
       if (burnt < 0.5) {
-        c.fillStyle = "#6b4a2a";
+        c.fillStyle = "#5a3d22";
         c.beginPath();
-        c.arc(H * 0.04, -H * 0.95, H * 0.035, 0, Math.PI * 2);
-        c.arc(H * 0.12, -H * 0.94, H * 0.035, 0, Math.PI * 2);
+        c.arc(topX - H * 0.035, -H * 0.955, H * 0.036, 0, Math.PI * 2);
+        c.arc(topX + H * 0.04, -H * 0.945, H * 0.036, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = "rgba(255,230,190,0.35)";
+        c.beginPath();
+        c.arc(topX - H * 0.045, -H * 0.965, H * 0.012, 0, Math.PI * 2);
+        c.arc(topX + H * 0.03, -H * 0.955, H * 0.012, 0, Math.PI * 2);
         c.fill();
       }
       break;
     }
     case "broadleaf":
     case "fruit": {
+      // trunk: flared roots, a shaded side, a couple of boughs into the crown
+      c.fillStyle = trunkDark;
+      c.beginPath();
+      c.moveTo(-H * 0.075, 0);
+      c.quadraticCurveTo(-H * 0.035, -H * 0.06, -H * 0.032, -H * 0.62);
+      c.lineTo(H * 0.032, -H * 0.62);
+      c.quadraticCurveTo(H * 0.035, -H * 0.06, H * 0.08, 0);
+      c.closePath();
+      c.fill();
       c.fillStyle = trunk;
       c.beginPath();
-      c.moveTo(-H * 0.05, 0);
-      c.lineTo(-H * 0.03, -H * 0.6);
-      c.lineTo(H * 0.03, -H * 0.6);
-      c.lineTo(H * 0.05, 0);
+      c.moveTo(-H * 0.075, 0);
+      c.quadraticCurveTo(-H * 0.035, -H * 0.06, -H * 0.032, -H * 0.62);
+      c.lineTo(H * 0.004, -H * 0.62);
+      c.quadraticCurveTo(H * 0.004, -H * 0.06, H * 0.02, 0);
+      c.closePath();
       c.fill();
-      const r = H * 0.26 * full;
+      c.strokeStyle = trunkLight;
+      c.lineWidth = Math.max(0.7, H * 0.008);
+      c.beginPath();
+      c.moveTo(-H * 0.02, -H * 0.06);
+      c.lineTo(-H * 0.018, -H * 0.5);
+      c.stroke();
+      c.strokeStyle = trunkDark;
+      c.lineWidth = H * 0.03;
+      c.lineCap = "round";
+      c.beginPath();
+      c.moveTo(0, -H * 0.5);
+      c.lineTo(-H * 0.12, -H * 0.66);
+      c.moveTo(0, -H * 0.52);
+      c.lineTo(H * 0.13, -H * 0.68);
+      c.stroke();
+      const r = H * 0.25 * full;
+      const jx = (v1 - 0.5) * r * 0.3;
+      const jy = (v2 - 0.5) * r * 0.2;
+      // [x, y, size]: a crown of overlapping lobes
       const blobs: [number, number, number][] = [
-        [0, -H * 0.72, 1],
-        [-r * 0.8, -H * 0.62, 0.8],
-        [r * 0.8, -H * 0.62, 0.8],
-        [-r * 0.45, -H * 0.85, 0.75],
-        [r * 0.45, -H * 0.86, 0.75],
+        [jx * 0.4, -H * 0.58, 0.8],
+        [-r * 0.9 + jx, -H * 0.63 + jy, 0.8],
+        [r * 0.9 + jx, -H * 0.63 - jy, 0.8],
+        [jx, -H * 0.73, 1],
+        [-r * 0.5 - jx, -H * 0.85 + jy, 0.74],
+        [r * 0.5 - jx, -H * 0.86 - jy, 0.74],
       ];
-      c.fillStyle = OUT;
-      for (const [x, y, s] of blobs) {
-        c.beginPath();
-        c.arc(x, y + 1, r * s + 1, 0, Math.PI * 2);
-        c.fill();
+      // underside in shade
+      c.fillStyle = leafDark;
+      c.beginPath();
+      for (let i = 0; i < blobs.length; i++) {
+        const [x, y, s] = blobs[i];
+        const bx = x + breeze(i) * H + r * 0.1;
+        c.moveTo(bx + r * s * 1.04, y + r * 0.13);
+        c.arc(bx, y + r * 0.13, r * s * 1.04, 0, Math.PI * 2);
       }
-      for (const [x, y, s] of blobs) {
-        c.fillStyle = y < -H * 0.8 ? leafLight : leaf;
+      c.fill();
+      // the body of the crown
+      c.fillStyle = leaf;
+      c.beginPath();
+      for (let i = 0; i < blobs.length; i++) {
+        const [x, y, s] = blobs[i];
+        const bx = x + breeze(i) * H;
+        c.moveTo(bx + r * s * 0.95, y);
+        c.arc(bx, y, r * s * 0.95, 0, Math.PI * 2);
+      }
+      c.fill();
+      // sunlit shoulders
+      c.fillStyle = leafLight;
+      c.beginPath();
+      for (let i = 1; i < blobs.length; i++) {
+        const [x, y, s] = blobs[i];
+        const bx = x + breeze(i) * H - r * s * 0.2;
+        c.moveTo(bx + r * s * 0.66, y - r * s * 0.22);
+        c.arc(bx, y - r * s * 0.22, r * s * 0.66, 0, Math.PI * 2);
+      }
+      c.fill();
+      // bright tips where the sun lands
+      c.fillStyle = leafHi;
+      c.beginPath();
+      for (let i = 3; i < blobs.length; i++) {
+        const [x, y, s] = blobs[i];
+        const bx = x + breeze(i) * H - r * s * 0.34;
+        c.moveTo(bx + r * s * 0.3, y - r * s * 0.42);
+        c.arc(bx, y - r * s * 0.42, r * s * 0.3, 0, Math.PI * 2);
+      }
+      c.fill();
+      // leafy texture: little scallops of shade across the crown
+      if (H > 26) {
+        c.strokeStyle = leafDark;
+        c.globalAlpha *= 0.45;
+        c.lineWidth = Math.max(0.8, r * 0.045);
+        c.lineCap = "round";
         c.beginPath();
-        c.arc(x, y, r * s, 0, Math.PI * 2);
-        c.fill();
+        for (let i = 0; i < 9; i++) {
+          const a = i * 2.4 + v1 * 6;
+          const d = r * (0.25 + ((i * 37) % 10) / 10 * 0.75);
+          const lx = jx + Math.cos(a) * d * 1.2;
+          const ly = -H * 0.72 + Math.sin(a) * d * 0.75;
+          c.moveTo(lx - r * 0.1, ly);
+          c.quadraticCurveTo(lx, ly + r * 0.11, lx + r * 0.1, ly);
+        }
+        c.stroke();
+        c.globalAlpha /= 0.45;
       }
       if (p.kind === "fruit" && burnt < 0.4) {
-        c.fillStyle = p.variant % 2 ? "#e2462d" : "#f2a03a";
+        const red = p.variant % 2 === 1;
         for (let i = 0; i < p.fruit; i++) {
+          const fx = -r * 0.7 + i * r * 0.5;
+          const fy = -H * 0.6 + ((i * 7) % 3) * r * 0.2;
+          c.fillStyle = red ? "#b8321f" : "#cf7f22";
           c.beginPath();
-          c.arc(-r * 0.7 + i * r * 0.5, -H * 0.6 + ((i * 7) % 3) * r * 0.2, r * 0.13, 0, Math.PI * 2);
+          c.arc(fx + 0.4, fy + 0.5, r * 0.14, 0, Math.PI * 2);
+          c.fill();
+          c.fillStyle = red ? "#e9503a" : "#f6ab45";
+          c.beginPath();
+          c.arc(fx, fy, r * 0.125, 0, Math.PI * 2);
+          c.fill();
+          c.fillStyle = "rgba(255,255,255,0.55)";
+          c.beginPath();
+          c.arc(fx - r * 0.04, fy - r * 0.045, r * 0.035, 0, Math.PI * 2);
           c.fill();
         }
       }
       break;
     }
     case "cycad": {
+      c.fillStyle = trunkDark;
+      c.beginPath();
+      c.roundRect(-H * 0.1, -H * 0.42, H * 0.2, H * 0.42, H * 0.04);
+      c.fill();
       c.fillStyle = trunk;
-      c.fillRect(-H * 0.09, -H * 0.4, H * 0.18, H * 0.4);
-      c.strokeStyle = leaf;
-      c.lineWidth = Math.max(1.5, H * 0.06);
+      c.beginPath();
+      c.roundRect(-H * 0.1, -H * 0.42, H * 0.12, H * 0.42, H * 0.04);
+      c.fill();
+      // diamond scars up the stout trunk
+      c.strokeStyle = trunkDark;
+      c.lineWidth = 0.9;
+      c.beginPath();
+      for (let i = 1; i < 4; i++) {
+        c.moveTo(-H * 0.1, -H * 0.1 * i);
+        c.lineTo(H * 0.1, -H * 0.1 * i - H * 0.05);
+      }
+      c.stroke();
       c.lineCap = "round";
-      for (let i = 0; i < 7; i++) {
-        const a = -Math.PI / 2 + (i - 3) * 0.42;
+      for (const [col, lw, lift] of [[leafDark, Math.max(1.8, H * 0.075), 0], [leafLight, Math.max(0.9, H * 0.03), H * 0.012]] as const) {
+        c.strokeStyle = col;
+        c.lineWidth = lw;
         c.beginPath();
-        c.moveTo(0, -H * 0.42);
-        c.quadraticCurveTo(Math.cos(a) * H * 0.4, -H * 0.42 + Math.sin(a) * H * 0.5, Math.cos(a) * H * 0.6 * full, -H * 0.42 + Math.sin(a) * H * 0.45 + H * 0.15);
+        for (let i = 0; i < 7; i++) {
+          const a = -Math.PI / 2 + (i - 3) * 0.42 + breeze(i) * 2;
+          c.moveTo(0, -H * 0.42);
+          c.quadraticCurveTo(Math.cos(a) * H * 0.4, -H * 0.42 + Math.sin(a) * H * 0.5 - lift, Math.cos(a) * H * 0.6 * full, -H * 0.42 + Math.sin(a) * H * 0.45 + H * 0.15 - lift);
+        }
         c.stroke();
       }
       break;
     }
     case "fern": {
-      c.strokeStyle = leaf;
-      c.lineWidth = Math.max(1.4, H * 0.12);
       c.lineCap = "round";
-      for (let i = 0; i < 6; i++) {
-        const a = -Math.PI / 2 + (i - 2.5) * 0.45;
+      for (const [col, lw, lift] of [[leafDark, Math.max(1.6, H * 0.14), 0], [leafLight, Math.max(0.8, H * 0.055), H * 0.03]] as const) {
+        c.strokeStyle = col;
+        c.lineWidth = lw;
         c.beginPath();
-        c.moveTo(0, 0);
-        c.quadraticCurveTo(Math.cos(a) * H * 0.6, Math.sin(a) * H * 1.1, Math.cos(a) * H * 1.1 * full, Math.sin(a) * H * 0.5);
+        for (let i = 0; i < 6; i++) {
+          const a = -Math.PI / 2 + (i - 2.5) * 0.45 + breeze(i) * 2;
+          c.moveTo(0, 0);
+          c.quadraticCurveTo(Math.cos(a) * H * 0.6, Math.sin(a) * H * 1.1 - lift, Math.cos(a) * H * 1.1 * full, Math.sin(a) * H * 0.5 - lift);
+        }
         c.stroke();
       }
       break;
     }
     case "bush": {
       const r = H * 0.38 * full;
-      c.fillStyle = OUT;
+      const lobes: [number, number, number][] = [
+        [-r * 0.62, -r * 0.68, 1],
+        [r * 0.62, -r * 0.68, 1],
+        [0, -r * 1.18, 1],
+        [0, -r * 0.6, 0.9],
+      ];
+      c.fillStyle = leafDark;
       c.beginPath();
-      c.arc(-r * 0.6, -r * 0.7, r + 1, 0, Math.PI * 2);
-      c.arc(r * 0.6, -r * 0.7, r + 1, 0, Math.PI * 2);
-      c.arc(0, -r * 1.2, r + 1, 0, Math.PI * 2);
+      for (const [x, y, s] of lobes) {
+        c.moveTo(x + r * 0.08 + r * s * 1.05, y + r * 0.12);
+        c.arc(x + r * 0.08, y + r * 0.12, r * s * 1.05, 0, Math.PI * 2);
+      }
       c.fill();
       c.fillStyle = leaf;
       c.beginPath();
-      c.arc(-r * 0.6, -r * 0.7, r, 0, Math.PI * 2);
-      c.arc(r * 0.6, -r * 0.7, r, 0, Math.PI * 2);
+      for (let i = 0; i < lobes.length; i++) {
+        const [x, y, s] = lobes[i];
+        const bx = x + breeze(i) * H;
+        c.moveTo(bx + r * s * 0.95, y);
+        c.arc(bx, y, r * s * 0.95, 0, Math.PI * 2);
+      }
       c.fill();
       c.fillStyle = leafLight;
       c.beginPath();
-      c.arc(0, -r * 1.2, r, 0, Math.PI * 2);
+      for (let i = 0; i < 3; i++) {
+        const [x, y, s] = lobes[i];
+        const bx = x + breeze(i) * H - r * 0.2;
+        c.moveTo(bx + r * s * 0.6, y - r * 0.22);
+        c.arc(bx, y - r * 0.22, r * s * 0.6, 0, Math.PI * 2);
+      }
+      c.fill();
+      c.fillStyle = leafHi;
+      c.beginPath();
+      c.arc(-r * 0.22, -r * 1.42, r * 0.3, 0, Math.PI * 2);
       c.fill();
       if (p.food > 0.5 && burnt < 0.3) {
-        c.fillStyle = "#7b3fa0";
         for (let i = 0; i < 5; i++) {
+          const bx = -r + ((i * 37) % 10) / 10 * r * 2;
+          const by = -r * 0.5 - ((i * 53) % 10) / 10 * r * 1.1;
+          const br = Math.max(1.2, r * 0.13);
+          c.fillStyle = "#5f2f80";
           c.beginPath();
-          c.arc(-r + ((i * 37) % 10) / 10 * r * 2, -r * 0.5 - ((i * 53) % 10) / 10 * r * 1.1, Math.max(1.2, r * 0.13), 0, Math.PI * 2);
+          c.arc(bx, by, br, 0, Math.PI * 2);
+          c.fill();
+          c.fillStyle = "#b98ad6";
+          c.beginPath();
+          c.arc(bx - br * 0.3, by - br * 0.3, br * 0.4, 0, Math.PI * 2);
           c.fill();
         }
       }
       break;
     }
     case "reeds": {
-      c.strokeStyle = leaf;
-      c.lineWidth = 1.4;
+      c.lineCap = "round";
       for (let i = 0; i < 5; i++) {
         const x = (i - 2) * 3;
+        c.strokeStyle = i % 2 ? leafDark : leaf;
+        c.lineWidth = 1.5;
         c.beginPath();
         c.moveTo(x, 0);
-        c.lineTo(x + Math.sin(t * 2 + i) * 2, -H * (0.7 + (i % 2) * 0.3));
+        c.quadraticCurveTo(x, -H * 0.4, x + Math.sin(t * 2 + i) * 2, -H * (0.7 + (i % 2) * 0.3));
         c.stroke();
       }
-      c.fillStyle = "#6b4528";
       for (let i = 0; i < 5; i += 2) {
         const x = (i - 2) * 3 + Math.sin(t * 2 + i) * 2;
-        c.fillRect(x - 1.5, -H * (0.7 + (i % 2) * 0.3) - 1, 3, 6);
+        const y = -H * (0.7 + (i % 2) * 0.3);
+        c.fillStyle = "#553620";
+        c.beginPath();
+        c.roundRect(x - 1.6, y - 1, 3.2, 6.5, 1.4);
+        c.fill();
+        c.fillStyle = "#8a5d38";
+        c.fillRect(x - 1.4, y - 0.4, 1.1, 5);
       }
       break;
     }
     case "horsetail": {
-      c.strokeStyle = leaf;
-      c.lineWidth = 2.4;
       for (let i = 0; i < 3; i++) {
         const x = (i - 1) * 5;
+        const top = -H * (0.75 + i * 0.12);
+        c.strokeStyle = leafDark;
+        c.lineWidth = 2.8;
         c.beginPath();
         c.moveTo(x, 0);
-        c.lineTo(x, -H * (0.75 + i * 0.12));
+        c.lineTo(x, top);
         c.stroke();
-      }
-      c.strokeStyle = shade("#3f7a34", -0.4);
-      c.lineWidth = 1;
-      for (let i = 0; i < 3; i++) {
+        c.strokeStyle = leafLight;
+        c.lineWidth = 1.1;
+        c.beginPath();
+        c.moveTo(x - 0.6, 0);
+        c.lineTo(x - 0.6, top);
+        c.stroke();
+        // whorls of fine branches at each joint
+        c.strokeStyle = leaf;
+        c.lineWidth = 0.9;
+        c.beginPath();
         for (let j = 1; j < 5; j++) {
-          const x = (i - 1) * 5;
-          const y = -H * (0.75 + i * 0.12) * (j / 5);
-          c.beginPath();
-          c.moveTo(x - 2.5, y);
-          c.lineTo(x + 2.5, y);
-          c.stroke();
+          const y = top * (j / 5);
+          c.moveTo(x - 3.2, y - 1.6);
+          c.lineTo(x, y);
+          c.lineTo(x + 3.2, y - 1.6);
         }
+        c.stroke();
       }
       break;
     }
@@ -466,50 +938,83 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
   const bend = ride ? 0.06 : st === "gather" || st === "farm" ? 0.5 : st === "build" || st === "repair" || st === "heal" ? 0.2 : st === "haul" || st === "loadDino" ? -0.25 : st === "hunt" ? 0.25 : st === "tame" || st === "train" ? 0.15 : 0;
   // a rider bobs with the animal's stride
   const bob = ride ? -Math.abs(Math.sin(h.anim * 2.4)) * H * 0.025 : 0;
-  const hipY = ride ? -H * 0.05 + bob : sit ? -H * 0.22 : -H * 0.42;
+  // on foot: the body dips as each foot lands and rises over the standing leg; standing still, it just breathes
+  const cw = moving ? Math.cos(h.anim * 2.2) : 0;
+  const stepBob = moving ? Math.abs(cw) * H * 0.028 - H * 0.014 : st === "idle" || st === "guard" || st === "talk" ? Math.sin(t * 2.1 + h.id) * H * 0.006 : 0;
+  const hipY = ride ? -H * 0.05 + bob : sit ? -H * 0.22 : -H * 0.42 - stepBob;
+  // the swinging foot lifts clear of the ground on its way forward
+  const liftA = moving ? Math.max(0, cw) * H * 0.07 : 0;
+  const liftB = moving ? Math.max(0, -cw) * H * 0.07 : 0;
 
-  // legs
-  const feet: [number, number][] = ride ? [[H * 0.1, hipY + H * 0.3]] : sit ? [[H * 0.22, 0], [H * 0.3, 0]] : [[-H * 0.04 + sw * H * 0.18, 0], [H * 0.04 - sw * H * 0.18, 0]];
+  // legs: sturdy and thick like the artwork, the far one a shade darker
+  const feet: [number, number][] = ride ? [[H * 0.1, hipY + H * 0.3]] : sit ? [[H * 0.22, 0], [H * 0.3, 0]] : [[-H * 0.04 + sw * H * 0.18, -liftA], [H * 0.04 - sw * H * 0.18, -liftB]];
+  const skin = artSkin(h.skin);
+  const skinDark = shade(skin, -0.2);
+  const fur = artFur(h.fur);
+  /** hip → knee → ankle for each leg */
+  const legs: number[][] = ride
+    ? // thigh forward along the back, shin down the flank (the far leg is hidden on the other side)
+      [[H * 0.02, hipY, H * 0.17, hipY + H * 0.07, feet[0][0], feet[0][1]]]
+    : sit
+      ? [[-H * 0.05, hipY, H * 0.2, hipY + H * 0.05, feet[0][0], 0], [H * 0.02, hipY, H * 0.26, hipY + H * 0.02, feet[1][0], 0]]
+      : // a knee in each leg: it bends forward as the foot comes off the ground
+        [
+          [-H * 0.05, hipY, (-H * 0.05 + feet[0][0]) / 2 + liftA * 1.1 + H * 0.012, (hipY + feet[0][1]) / 2, feet[0][0], feet[0][1]],
+          [H * 0.05, hipY, (H * 0.05 + feet[1][0]) / 2 + liftB * 1.1 + H * 0.012, (hipY + feet[1][1]) / 2, feet[1][0], feet[1][1]],
+        ];
   c.lineCap = "round";
-  c.beginPath();
-  if (ride) {
-    // thigh forward along the back, shin down the flank (the far leg is hidden on the other side)
-    c.moveTo(H * 0.02, hipY);
-    c.lineTo(H * 0.17, hipY + H * 0.07);
-    c.lineTo(feet[0][0], feet[0][1]);
-  } else if (sit) {
-    c.moveTo(-H * 0.05, hipY);
-    c.lineTo(H * 0.2, hipY + H * 0.05);
-    c.lineTo(feet[0][0], 0);
-    c.moveTo(H * 0.02, hipY);
-    c.lineTo(H * 0.26, hipY + H * 0.02);
-    c.lineTo(feet[1][0], 0);
-  } else {
-    c.moveTo(-H * 0.04, hipY);
-    c.lineTo(feet[0][0], 0);
-    c.moveTo(H * 0.04, hipY);
-    c.lineTo(feet[1][0], 0);
+  c.lineJoin = "round";
+  const legW = H * 0.15;
+  for (let i = 0; i < legs.length; i++) {
+    const L = legs[i];
+    c.beginPath();
+    c.moveTo(L[0], L[1]);
+    c.lineTo(L[2], L[3]);
+    c.lineTo(L[4], L[5] - H * 0.045);
+    c.strokeStyle = INK;
+    c.lineWidth = legW + 1.3;
+    c.stroke();
+    c.strokeStyle = i === 0 && legs.length > 1 ? skinDark : skin;
+    c.lineWidth = legW;
+    c.stroke();
   }
-  c.strokeStyle = INK;
-  c.lineWidth = H * 0.11 + 1.1;
-  c.stroke();
-  c.strokeStyle = shade(h.skin, -0.15);
-  c.lineWidth = H * 0.11;
-  c.stroke();
-  // rope-wrapped ankles + flat wooden sandals, like the storybook art
-  for (const [fx, fy] of feet) {
-    c.fillStyle = "#6b4a2a";
+  // big bare feet on flat sandals, rope wound round the ankles (as in the artwork)
+  for (let i = 0; i < feet.length; i++) {
+    const [fx, fy] = feet[i];
+    const rot = ride ? 0.5 : 0;
+    c.fillStyle = "#4a2f1a";
     c.beginPath();
-    c.ellipse(fx + H * 0.03, fy - H * 0.005, H * 0.09, H * 0.03, ride ? 0.5 : 0, 0, Math.PI * 2);
+    c.ellipse(fx + H * 0.045, fy - H * 0.006, H * 0.125, H * 0.032, rot, 0, Math.PI * 2);
     c.fill();
-    c.strokeStyle = "#b08a5a";
-    c.lineWidth = H * 0.035;
-    c.lineCap = "butt";
+    c.fillStyle = i === 0 && feet.length > 1 ? skinDark : skin;
+    c.strokeStyle = INK;
+    c.lineWidth = 0.7;
     c.beginPath();
-    c.moveTo(fx - H * 0.065, fy - H * 0.06);
-    c.lineTo(fx + H * 0.065, fy - H * 0.08);
-    c.moveTo(fx - H * 0.065, fy - H * 0.11);
-    c.lineTo(fx + H * 0.065, fy - H * 0.13);
+    c.ellipse(fx + H * 0.05, fy - H * 0.05, H * 0.1, H * 0.046, rot, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+    // the strap over the toes
+    c.strokeStyle = "#6b4a2a";
+    c.lineWidth = H * 0.03;
+    c.beginPath();
+    c.moveTo(fx + H * 0.075, fy - H * 0.092);
+    c.lineTo(fx + H * 0.1, fy - H * 0.012);
+    c.stroke();
+    // rope round the ankle: a dark band with two pale turns
+    c.lineCap = "butt";
+    c.strokeStyle = ROPE_DARK;
+    c.lineWidth = H * 0.085;
+    c.beginPath();
+    c.moveTo(fx - H * 0.088, fy - H * 0.118);
+    c.lineTo(fx + H * 0.088, fy - H * 0.128);
+    c.stroke();
+    c.strokeStyle = ROPE;
+    c.lineWidth = H * 0.028;
+    c.beginPath();
+    c.moveTo(fx - H * 0.085, fy - H * 0.098);
+    c.lineTo(fx + H * 0.085, fy - H * 0.108);
+    c.moveTo(fx - H * 0.085, fy - H * 0.137);
+    c.lineTo(fx + H * 0.085, fy - H * 0.147);
     c.stroke();
     c.lineCap = "round";
   }
@@ -518,14 +1023,14 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     for (const [fx, fy] of feet) {
       c.fillStyle = outfit.winter >= 4 ? "#4a4f57" : "#5a3e26";
       c.beginPath();
-      c.roundRect(fx - H * 0.07, fy - H * 0.17, H * 0.14, H * 0.17, H * 0.03);
+      c.roundRect(fx - H * 0.09, fy - H * 0.18, H * 0.18, H * 0.18, H * 0.03);
       c.fill();
       c.beginPath();
       c.ellipse(fx + H * 0.03, fy - H * 0.01, H * 0.1, H * 0.035, 0, 0, Math.PI * 2);
       c.fill();
       c.fillStyle = outfit.trim;
       c.beginPath();
-      c.ellipse(fx, fy - H * 0.17, H * 0.085, H * 0.035, 0, 0, Math.PI * 2);
+      c.ellipse(fx, fy - H * 0.18, H * 0.105, H * 0.04, 0, 0, Math.PI * 2);
       c.fill();
     }
   }
@@ -536,43 +1041,103 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
       ? [[H * 0.17, hipY + H * 0.07, feet[0][0], feet[0][1]]]
       : sit
         ? [[H * 0.2, hipY + H * 0.05, feet[0][0], 0], [H * 0.26, hipY + H * 0.02, feet[1][0], 0]]
-        : [[-H * 0.04, hipY, feet[0][0], 0], [H * 0.04, hipY, feet[1][0], 0]];
+        : [[-H * 0.04, hipY, feet[0][0], feet[0][1]], [H * 0.04, hipY, feet[1][0], feet[1][1]]];
     for (const [ax, ay, bx, by] of shins) {
       const k0 = ride || sit ? 0.1 : 0.5;
       const k1 = ride || sit ? 0.85 : 0.86;
-      armorStrip(c, ax + (bx - ax) * k0, ay + (by - ay) * k0, ax + (bx - ax) * k1, ay + (by - ay) * k1, H * 0.15, armor);
+      armorStrip(c, ax + (bx - ax) * k0, ay + (by - ay) * k0, ax + (bx - ax) * k1, ay + (by - ay) * k1, H * 0.19, armor);
     }
   }
 
   c.save();
   c.translate(0, hipY);
   c.rotate(bend + (st === "celebrate" ? Math.sin(t * 10) * 0.1 : 0));
-  // tunic
+  // the body: a barrel chest in a one-shoulder leopard skin, tied with a rope belt and a tooth (as in the artwork)
+  c.lineJoin = "round";
   c.beginPath();
-  c.moveTo(-H * 0.16, -H * 0.4);
-  c.lineTo(H * 0.16, -H * 0.4);
-  c.lineTo(H * 0.2, H * 0.06);
-  for (let i = 0; i < 5; i++) c.lineTo(H * (0.2 - i * 0.1) - H * 0.05, H * (i % 2 ? 0.02 : 0.1));
-  c.lineTo(-H * 0.2, H * 0.06);
+  c.moveTo(-H * 0.18, H * 0.03);
+  c.quadraticCurveTo(-H * 0.24, -H * 0.2, -H * 0.19, -H * 0.38);
+  c.quadraticCurveTo(0, -H * 0.47, H * 0.19, -H * 0.38);
+  c.quadraticCurveTo(H * 0.24, -H * 0.2, H * 0.18, H * 0.03);
   c.closePath();
-  c.fillStyle = h.fur;
+  c.fillStyle = skin;
   c.fill();
+  if (Q.shading) {
+    // a round chest: light on the front, shade down the back
+    const g = c.createLinearGradient(H * 0.2, -H * 0.4, -H * 0.2, 0);
+    g.addColorStop(0, "rgba(255,244,222,0.3)");
+    g.addColorStop(0.5, "rgba(255,244,222,0)");
+    g.addColorStop(1, "rgba(92,36,18,0.26)");
+    c.fillStyle = g;
+    c.fill();
+  }
   c.strokeStyle = INK;
   c.lineWidth = 0.9;
   c.stroke();
-  // leopard-print spots (dark rosettes on the light furs)
-  c.fillStyle = shade(h.fur, -0.55);
+  // the hide: up over the back shoulder, sweeping down under the front arm, a ragged hem
   c.beginPath();
-  for (const [sx, sy, sr] of [[-0.09, -0.3, 0.035], [0.06, -0.24, 0.03], [-0.02, -0.15, 0.032], [0.1, -0.08, 0.028], [-0.12, -0.05, 0.03], [0.02, -0.02, 0.026]] as [number, number, number][]) {
-    c.moveTo(H * sx + H * sr, H * sy);
-    c.arc(H * sx, H * sy, H * sr, 0, Math.PI * 2);
+  c.moveTo(-H * 0.21, -H * 0.36);
+  c.lineTo(-H * 0.07, -H * 0.42);
+  c.quadraticCurveTo(0, -H * 0.2, H * 0.21, -H * 0.16);
+  c.lineTo(H * 0.22, H * 0.06);
+  for (let i = 0; i < 6; i++) c.lineTo(H * (0.22 - (i + 0.5) * 0.073), H * (i % 2 ? 0.045 : 0.125));
+  c.lineTo(-H * 0.22, H * 0.06);
+  c.closePath();
+  c.fillStyle = fur;
+  c.fill();
+  if (Q.shading) {
+    const g = c.createLinearGradient(H * 0.2, -H * 0.4, -H * 0.2, H * 0.1);
+    g.addColorStop(0, "rgba(255,246,214,0.26)");
+    g.addColorStop(0.45, "rgba(255,246,214,0)");
+    g.addColorStop(1, "rgba(70,30,8,0.3)");
+    c.fillStyle = g;
+    c.fill();
+  }
+  c.strokeStyle = INK;
+  c.lineWidth = 0.9;
+  c.stroke();
+  // leopard spots: dark brown blotches, a few with a paler middle
+  c.fillStyle = "#5b3211";
+  c.beginPath();
+  for (const [sx, sy, rx, ry, ro] of [[-0.125, -0.27, 0.036, 0.027, 0.4], [-0.03, -0.2, 0.03, 0.022, -0.3], [0.085, -0.105, 0.034, 0.025, 0.5], [-0.13, -0.11, 0.032, 0.025, 0], [0.15, 0.005, 0.026, 0.02, 0.2], [-0.1, 0.03, 0.03, 0.021, -0.4], [0.035, 0.04, 0.028, 0.02, 0.3], [-0.035, -0.1, 0.024, 0.019, 0.8]] as const) {
+    c.moveTo(H * sx + H * rx, H * sy);
+    c.ellipse(H * sx, H * sy, H * rx, H * ry, ro, 0, Math.PI * 2);
   }
   c.fill();
-  c.fillStyle = shade(h.fur, -0.25);
+  c.fillStyle = shade(fur, -0.28);
   c.beginPath();
-  c.arc(-H * 0.05, -H * 0.15, H * 0.04, 0, Math.PI * 2);
-  c.arc(H * 0.08, -H * 0.05, H * 0.035, 0, Math.PI * 2);
+  c.arc(-H * 0.125, -H * 0.27, H * 0.013, 0, Math.PI * 2);
+  c.arc(H * 0.085, -H * 0.105, H * 0.012, 0, Math.PI * 2);
   c.fill();
+  // the rope belt, and the tooth that toggles it
+  c.lineCap = "round";
+  c.beginPath();
+  c.moveTo(-H * 0.205, -H * 0.045);
+  c.quadraticCurveTo(0, -H * 0.012, H * 0.21, -H * 0.05);
+  c.strokeStyle = INK;
+  c.lineWidth = H * 0.06 + 0.9;
+  c.stroke();
+  c.strokeStyle = ROPE;
+  c.lineWidth = H * 0.06;
+  c.stroke();
+  c.strokeStyle = ROPE_DARK;
+  c.lineWidth = 0.6;
+  c.beginPath();
+  for (let k = -3; k <= 3; k++) {
+    c.moveTo(k * H * 0.055 - H * 0.012, -H * 0.052);
+    c.lineTo(k * H * 0.055 + H * 0.012, -H * 0.006);
+  }
+  c.stroke();
+  c.fillStyle = "#fbf3df";
+  c.strokeStyle = INK;
+  c.lineWidth = 0.6;
+  c.beginPath();
+  c.moveTo(H * 0.075, -H * 0.02);
+  c.lineTo(H * 0.125, -H * 0.022);
+  c.lineTo(H * 0.105, H * 0.075);
+  c.closePath();
+  c.fill();
+  c.stroke();
   if (garb > 0) drawGarb(c, H, garb, h.child);
   if (outfit) drawOutfit(c, H, outfit, t, wet, st === "walk" || st === "carry" || st === "flee");
   if (armor) drawBreastplate(c, H, armor);
@@ -591,73 +1156,100 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.fillRect(H * 0.11, -H * 0.39, H * 0.08, H * 0.025);
   }
 
-  // arms
-  c.strokeStyle = h.skin;
-  c.lineWidth = H * 0.09;
-  c.beginPath();
+  // arms: sturdy, with rope-wound wrists and round fists (the far arm a shade darker)
   const shY = -H * 0.36;
+  const showWeapon = weapon && !h.child && !h.carry && (st === "aim" || (armed && (st === "idle" || st === "walk" || st === "flee" || st === "talk" || st === "guard" || st === "hunt")));
+  /** shoulder → hand for the far arm, then the near one */
+  let arms: [number, number, number, number][];
   if (st === "celebrate" || st === "lookUp" || st === "tossed" || st === "douse" || st === "lift" || st === "show") {
-    c.moveTo(-H * 0.12, shY);
-    c.lineTo(-H * 0.22, shY - H * 0.32);
-    c.moveTo(H * 0.12, shY);
-    c.lineTo(H * 0.24, shY - H * 0.3);
+    arms = [[-H * 0.12, shY, -H * 0.22, shY - H * 0.32], [H * 0.12, shY, H * 0.24, shY - H * 0.3]];
   } else if (st === "aim" || st === "operate" || st === "tame") {
     // both arms forward, holding the weapon level
-    c.moveTo(-H * 0.1, shY);
-    c.lineTo(H * 0.32, shY + H * 0.04);
-    c.moveTo(H * 0.1, shY);
-    c.lineTo(H * 0.42, shY + H * 0.02);
+    arms = [[-H * 0.1, shY, H * 0.32, shY + H * 0.04], [H * 0.1, shY, H * 0.42, shY + H * 0.02]];
   } else if (st === "haul" || st === "loadDino") {
     // leaning forward, pulling a rope behind
-    c.moveTo(-H * 0.1, shY);
-    c.lineTo(-H * 0.36, shY + H * 0.22);
-    c.moveTo(H * 0.1, shY);
-    c.lineTo(-H * 0.3, shY + H * 0.26);
+    arms = [[-H * 0.1, shY, -H * 0.36, shY + H * 0.22], [H * 0.1, shY, -H * 0.3, shY + H * 0.26]];
   } else if (st === "cook") {
     const a = Math.sin(t * 5) * 0.4;
-    c.moveTo(H * 0.1, shY);
-    c.lineTo(H * 0.38, shY + H * 0.12 + a * H * 0.1);
-    c.moveTo(-H * 0.1, shY);
-    c.lineTo(H * 0.1, shY + H * 0.3);
+    arms = [[-H * 0.1, shY, H * 0.1, shY + H * 0.3], [H * 0.1, shY, H * 0.38, shY + H * 0.12 + a * H * 0.1]];
   } else if (st === "build" || st === "craft" || st === "gather" || st === "farm" || st === "repair" || st === "heal" || st === "smith") {
     const a = Math.sin(t * 12) * 0.6;
-    c.moveTo(H * 0.1, shY);
-    c.lineTo(H * 0.1 + Math.cos(a) * H * 0.3, shY + Math.sin(a) * H * 0.3 + H * 0.1);
-    c.moveTo(-H * 0.1, shY);
-    c.lineTo(H * 0.05, shY + H * 0.3);
+    arms = [[-H * 0.1, shY, H * 0.05, shY + H * 0.3], [H * 0.1, shY, H * 0.1 + Math.cos(a) * H * 0.3, shY + Math.sin(a) * H * 0.3 + H * 0.1]];
   } else if (h.carry) {
-    c.moveTo(-H * 0.12, shY);
-    c.lineTo(-H * 0.14, shY - H * 0.3);
-    c.moveTo(H * 0.12, shY);
-    c.lineTo(H * 0.14, shY - H * 0.3);
+    arms = [[-H * 0.16, shY, -H * 0.15, shY - H * 0.36], [H * 0.16, shY, H * 0.15, shY - H * 0.36]];
   } else {
-    c.moveTo(-H * 0.12, shY);
-    c.lineTo(-H * 0.12 - sw * H * 0.15, shY + H * 0.32);
-    c.moveTo(H * 0.12, shY);
-    c.lineTo(H * 0.12 + sw * H * 0.15, shY + H * 0.32);
+    // hanging a little out from the body (they swing with the stride); the front hand comes up to grip a weapon
+    arms = [
+      [-H * 0.17, shY + H * 0.02, -H * 0.215 - sw * H * 0.15, shY + H * 0.3],
+      showWeapon ? [H * 0.17, shY + H * 0.02, H * 0.215, shY + H * 0.15] : [H * 0.17, shY + H * 0.02, H * 0.215 + sw * H * 0.15, shY + H * 0.3],
+    ];
   }
-  c.strokeStyle = INK;
-  c.lineWidth = H * 0.09 + 1;
-  c.stroke();
-  c.strokeStyle = h.skin;
-  c.lineWidth = H * 0.09;
-  c.stroke();
+  const armW = H * 0.125;
+  c.lineCap = "round";
+  for (let i = 0; i < 2; i++) {
+    const [ax, ay, bx, by] = arms[i];
+    c.beginPath();
+    c.moveTo(ax, ay);
+    c.lineTo(bx, by);
+    c.strokeStyle = INK;
+    c.lineWidth = armW + 1.2;
+    c.stroke();
+    c.strokeStyle = i === 0 ? skinDark : skin;
+    c.lineWidth = armW;
+    c.stroke();
+  }
   if (armor) {
     // arm guards: the same arm strokes, but only down the forearm (the dash restarts at each shoulder)
     c.save();
+    c.beginPath();
+    for (const [ax, ay, bx, by] of arms) {
+      c.moveTo(ax, ay);
+      c.lineTo(bx, by);
+    }
     c.lineCap = "butt";
     c.setLineDash([H * 0.22, H * 0.4]);
     c.lineDashOffset = H * 0.48;
     c.strokeStyle = INK;
-    c.lineWidth = H * 0.13 + 0.8;
+    c.lineWidth = H * 0.165 + 0.8;
     c.stroke();
     c.strokeStyle = armor.color;
-    c.lineWidth = H * 0.13;
+    c.lineWidth = H * 0.165;
     c.stroke();
     c.strokeStyle = armor.gilded ? "#f1c24a" : armor.trim;
     c.lineWidth = H * 0.03;
     c.stroke();
     c.restore();
+  } else {
+    // rope wound round each wrist
+    c.lineCap = "butt";
+    for (const [ax, ay, bx, by] of arms) {
+      const x0 = ax + (bx - ax) * 0.6;
+      const y0 = ay + (by - ay) * 0.6;
+      const x1 = ax + (bx - ax) * 0.8;
+      const y1 = ay + (by - ay) * 0.8;
+      c.beginPath();
+      c.moveTo(x0, y0);
+      c.lineTo(x1, y1);
+      c.strokeStyle = ROPE_DARK;
+      c.lineWidth = armW + 1;
+      c.stroke();
+      c.strokeStyle = ROPE;
+      c.lineWidth = armW - 0.4;
+      c.setLineDash([H * 0.022, H * 0.016]);
+      c.stroke();
+      c.setLineDash([]);
+    }
+    c.lineCap = "round";
+  }
+  // fists
+  for (let i = 0; i < 2; i++) {
+    c.fillStyle = i === 0 ? skinDark : skin;
+    c.strokeStyle = INK;
+    c.lineWidth = 0.8;
+    c.beginPath();
+    c.arc(arms[i][2], arms[i][3], H * 0.07, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
   }
   // shoulder pieces over the arms: fur tufts → leather + studs → gold-trimmed cloth
   if (garb > 0 && !h.child) {
@@ -703,7 +1295,6 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     }
   }
   // weapons, roasting stick, hoe or fishing pole
-  const showWeapon = weapon && !h.child && !h.carry && (st === "aim" || (armed && (st === "idle" || st === "walk" || st === "flee" || st === "talk" || st === "guard" || st === "hunt")));
   // shield on the off-arm
   if (shield >= 4 && !h.child && st !== "sleep" && st !== "down" && st !== "rest") {
     // the steel tower shield: tall, riveted, a gold rim + boss
@@ -990,25 +1581,84 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
     c.fillRect(x + H * 0.44, y - 1, H * 0.12, 2);
   }
 
-  // head
+  // head: big and round like the cave-people artwork, seen three-quarters on. Hair, beard, hood, headband
+  // and helmet all scale with it, growing upward from the chin.
   const headY = -H * 0.52 + (st === "lookUp" || st === "stargaze" ? -H * 0.02 : 0);
-  c.fillStyle = h.skin;
+  const hk = h.child ? 1.14 : 1.22;
+  const headXf = () => {
+    c.translate(0, headY + H * 0.15);
+    c.scale(hk, hk);
+    c.translate(0, -(headY + H * 0.15));
+  };
+  const woman = !h.child && FEMALE_NAMES.has(h.name);
+  const man = !h.child && !woman;
+  const hooded = !!outfit?.hood;
+  const hair = artHair(h.hair);
+  const hairDark = shade(hair, -0.3);
+  const hairLight = shade(hair, 0.24);
+  c.save();
+  headXf();
+  c.lineJoin = "round";
+  c.lineCap = "round";
+  if (!hooded) {
+    // the hair behind the head: a dark mass down the neck (long down the back for the women)
+    c.fillStyle = hairDark;
+    c.strokeStyle = INK;
+    c.lineWidth = 0.8;
+    c.beginPath();
+    if (woman) {
+      c.ellipse(-H * 0.13, headY + H * 0.14, H * 0.12, H * 0.25, 0.2, 0, Math.PI * 2);
+      c.moveTo(-H * 0.1, headY + H * 0.34);
+      c.arc(-H * 0.17, headY + H * 0.34, H * 0.07, 0, Math.PI * 2);
+    } else c.ellipse(-H * 0.085, headY + H * 0.03, H * 0.15, H * 0.17, 0.2, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+  }
+  // the face
+  c.fillStyle = skin;
   c.beginPath();
-  c.arc(0, headY, H * 0.15, 0, Math.PI * 2);
+  c.ellipse(H * 0.012, headY, H * 0.155, H * 0.15, 0, 0, Math.PI * 2);
   c.fill();
   c.strokeStyle = INK;
   c.lineWidth = 0.9;
   c.stroke();
-  const man = !h.child && !FEMALE_NAMES.has(h.name);
-  if (man && !helmet && st !== "sleep") {
-    // a big bushy beard round the jaw
-    c.fillStyle = shade(h.hair, 0.05);
+  if (Q.shading) {
+    // shade under the jaw + at the back of the head, a soft light on the brow
+    c.fillStyle = "rgba(120,44,20,0.18)";
     c.beginPath();
-    c.moveTo(-H * 0.08, headY - H * 0.02);
-    c.quadraticCurveTo(-H * 0.06, headY + H * 0.2, H * 0.06, headY + H * 0.19);
-    c.quadraticCurveTo(H * 0.17, headY + H * 0.14, H * 0.15, headY + H * 0.03);
-    c.quadraticCurveTo(H * 0.06, headY + H * 0.06, -H * 0.08, headY - H * 0.02);
+    c.arc(H * 0.012, headY, H * 0.146, Math.PI * 0.12, Math.PI * 1.02);
+    c.quadraticCurveTo(-H * 0.02, headY + H * 0.07, H * 0.15, headY + H * 0.05);
     c.fill();
+    c.fillStyle = "rgba(255,240,214,0.22)";
+    c.beginPath();
+    c.ellipse(H * 0.05, headY - H * 0.07, H * 0.075, H * 0.045, -0.3, 0, Math.PI * 2);
+    c.fill();
+  }
+  if (man) {
+    // a great bushy beard right round the jaw, scalloped along the bottom
+    c.fillStyle = shade(hair, 0.04);
+    c.beginPath();
+    c.moveTo(-H * 0.135, headY - H * 0.005);
+    c.quadraticCurveTo(-H * 0.17, headY + H * 0.13, -H * 0.085, headY + H * 0.2);
+    c.quadraticCurveTo(-H * 0.045, headY + H * 0.255, H * 0.015, headY + H * 0.215);
+    c.quadraticCurveTo(H * 0.06, headY + H * 0.265, H * 0.11, headY + H * 0.2);
+    c.quadraticCurveTo(H * 0.185, headY + H * 0.16, H * 0.17, headY + H * 0.055);
+    c.quadraticCurveTo(H * 0.1, headY + H * 0.09, H * 0.03, headY + H * 0.055);
+    c.quadraticCurveTo(-H * 0.06, headY + H * 0.045, -H * 0.135, headY - H * 0.005);
+    c.fill();
+    c.strokeStyle = INK;
+    c.lineWidth = 0.8;
+    c.stroke();
+    c.strokeStyle = hairLight;
+    c.lineWidth = Math.max(0.5, H * 0.015);
+    c.beginPath();
+    c.moveTo(-H * 0.085, headY + H * 0.09);
+    c.quadraticCurveTo(-H * 0.075, headY + H * 0.15, -H * 0.045, headY + H * 0.195);
+    c.moveTo(-H * 0.005, headY + H * 0.13);
+    c.quadraticCurveTo(H * 0.005, headY + H * 0.17, H * 0.03, headY + H * 0.2);
+    c.moveTo(H * 0.115, headY + H * 0.14);
+    c.quadraticCurveTo(H * 0.125, headY + H * 0.165, H * 0.105, headY + H * 0.185);
+    c.stroke();
   }
   if (outfit?.hood) {
     // hood up: hide over the hair, trimmed edge round the face
@@ -1031,48 +1681,102 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
       c.stroke();
     }
   } else {
-    c.fillStyle = h.hair;
-    if (!h.child && FEMALE_NAMES.has(h.name)) {
-      // long wild hair down the back, like Oona in the art
+    c.fillStyle = hair;
+    const hx = -H * 0.02;
+    const hy = headY - H * 0.03;
+    if (h.child || woman) {
+      // a big mop of curls (piled high for the women, with a bone to tie it)
+      const curls: [number, number, number][] = h.child
+        ? [[-0.15, -0.1, 0.075], [-0.07, -0.18, 0.08], [0.03, -0.2, 0.075], [0.11, -0.15, 0.065], [-0.19, 0.0, 0.065], [0.15, -0.09, 0.045]]
+        : [[-0.18, -0.06, 0.085], [-0.13, -0.18, 0.09], [-0.02, -0.235, 0.095], [0.09, -0.19, 0.08], [0.155, -0.11, 0.055], [-0.22, 0.06, 0.075], [-0.19, 0.17, 0.07], [-0.07, -0.33, 0.085]];
       c.beginPath();
-      c.ellipse(-H * 0.11, headY + H * 0.12, H * 0.1, H * 0.22, 0.18, 0, Math.PI * 2);
-      c.fill();
-      c.beginPath();
-      c.arc(-H * 0.16, headY + H * 0.28, H * 0.06, 0, Math.PI * 2);
-      c.fill();
-    }
-    c.beginPath();
-    c.arc(-H * 0.02, headY - H * 0.04, H * 0.16, Math.PI * 0.9, Math.PI * 2.05);
-    c.fill();
-    c.beginPath();
-    c.ellipse(-H * 0.12, headY + H * 0.04, H * 0.06, H * 0.13, 0.3, 0, Math.PI * 2);
-    c.fill();
-    if (h.child) {
-      // a mop of tight curls
-      c.beginPath();
-      for (const [cx, cy] of [[-0.14, -0.1], [-0.07, -0.17], [0.02, -0.19], [0.1, -0.14], [-0.17, -0.01]] as [number, number][]) {
-        c.moveTo(H * cx + H * 0.065, headY + H * cy);
-        c.arc(H * cx, headY + H * cy, H * 0.065, 0, Math.PI * 2);
-      }
-      c.fill();
-    } else if (FEMALE_NAMES.has(h.name)) {
-      // big curly hair piled up, with a bone tie
-      c.beginPath();
-      for (const [cx, cy, r] of [[-0.17, -0.06, 0.08], [-0.12, -0.17, 0.085], [-0.02, -0.22, 0.085], [0.08, -0.18, 0.07], [-0.21, 0.06, 0.07], [-0.17, 0.17, 0.065]] as [number, number, number][]) {
+      c.arc(hx, hy - H * 0.01, H * 0.165, Math.PI * 0.9, Math.PI * 2.05);
+      for (const [cx, cy, r] of curls) {
         c.moveTo(H * cx + H * r, headY + H * cy);
         c.arc(H * cx, headY + H * cy, H * r, 0, Math.PI * 2);
       }
       c.fill();
-    } else {
-      // wild, messy tufts sticking up and back
+      // each curl catches a little light on top and falls into shade underneath
+      c.strokeStyle = "rgba(43,28,18,0.5)";
+      c.lineWidth = 0.7;
       c.beginPath();
-      c.moveTo(-H * 0.19, headY + H * 0.02);
-      const tufts: [number, number][] = [[-0.26, -0.08], [-0.17, -0.12], [-0.22, -0.22], [-0.1, -0.2], [-0.08, -0.3], [0.0, -0.21], [0.07, -0.29], [0.1, -0.18], [0.19, -0.2], [0.15, -0.1]];
-      for (const [tx, ty] of tufts) c.lineTo(H * tx, headY + H * ty);
-      c.lineTo(H * 0.12, headY - H * 0.06);
-      c.lineTo(-H * 0.05, headY - H * 0.1);
+      for (const [cx, cy, r] of curls) {
+        c.moveTo(H * cx + H * r * Math.cos(0.2), headY + H * cy + H * r * Math.sin(0.2));
+        c.arc(H * cx, headY + H * cy, H * r, 0.2, Math.PI * 0.95);
+      }
+      c.stroke();
+      c.strokeStyle = hairLight;
+      c.lineWidth = Math.max(0.5, H * 0.016);
+      c.beginPath();
+      for (const [cx, cy, r] of curls) {
+        c.moveTo(H * cx + H * r * 0.6 * Math.cos(Math.PI * 1.15), headY + H * cy + H * r * 0.6 * Math.sin(Math.PI * 1.15));
+        c.arc(H * cx, headY + H * cy, H * r * 0.6, Math.PI * 1.15, Math.PI * 1.6);
+      }
+      c.stroke();
+    } else {
+      // a wild mane: tufts sticking out all the way round, from the nape over the crown to the brow
+      const N = 11;
+      c.beginPath();
+      for (let i = 0; i <= N; i++) {
+        const a = ((150 + (195 * i) / N) * Math.PI) / 180;
+        const r = (i % 2 ? 0.195 : 0.262 + (((h.id * 7 + i * 13) % 10) / 10) * 0.045) * H;
+        const px = hx + Math.cos(a) * r;
+        const py = hy + Math.sin(a) * r * 0.95;
+        if (i) c.lineTo(px, py);
+        else c.moveTo(px, py);
+      }
+      c.lineTo(H * 0.14, headY - H * 0.075);
+      c.quadraticCurveTo(H * 0.02, headY - H * 0.175, -H * 0.09, headY - H * 0.06);
+      c.lineTo(-H * 0.135, headY + H * 0.01);
       c.closePath();
       c.fill();
+      c.strokeStyle = INK;
+      c.lineWidth = 0.8;
+      c.stroke();
+      // strands catching the light along the tufts
+      c.strokeStyle = hairLight;
+      c.lineWidth = Math.max(0.5, H * 0.017);
+      c.beginPath();
+      for (let i = 2; i < N; i += 2) {
+        const a = ((150 + (195 * i) / N) * Math.PI) / 180;
+        c.moveTo(hx + Math.cos(a) * H * 0.13, hy + Math.sin(a) * H * 0.125);
+        c.lineTo(hx + Math.cos(a - 0.08) * H * 0.215, hy + Math.sin(a - 0.08) * H * 0.205);
+      }
+      c.stroke();
+    }
+    // an ear peeping out of the hair
+    c.fillStyle = skin;
+    c.strokeStyle = INK;
+    c.lineWidth = 0.7;
+    c.beginPath();
+    c.ellipse(-H * 0.105, headY + H * 0.025, H * 0.038, H * 0.048, -0.15, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+    c.fillStyle = skinDark;
+    c.beginPath();
+    c.ellipse(-H * 0.1, headY + H * 0.03, H * 0.016, H * 0.024, -0.15, 0, Math.PI * 2);
+    c.fill();
+    if ((woman || h.id % 3 === 0) && !helmet) {
+      // a bone tied in the hair
+      c.fillStyle = "#f6efe0";
+      c.strokeStyle = "rgba(60,40,20,0.6)";
+      c.lineWidth = 0.5;
+      const bx = woman ? -H * 0.07 : -H * 0.05;
+      const by = headY - (woman ? H * 0.255 : H * 0.2);
+      c.save();
+      c.translate(bx, by);
+      c.rotate(-0.25);
+      c.beginPath();
+      c.roundRect(-H * 0.085, -H * 0.017, H * 0.17, H * 0.034, H * 0.012);
+      for (const ex of [-1, 1]) {
+        c.moveTo(ex * H * 0.09 + H * 0.026, -H * 0.018);
+        c.arc(ex * H * 0.09, -H * 0.018, H * 0.026, 0, Math.PI * 2);
+        c.moveTo(ex * H * 0.09 + H * 0.026, H * 0.018);
+        c.arc(ex * H * 0.09, H * 0.018, H * 0.026, 0, Math.PI * 2);
+      }
+      c.fill();
+      c.stroke();
+      c.restore();
     }
   }
   if (garb > 0 && !helmet && !outfit?.hood) {
@@ -1089,79 +1793,151 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
       c.fill();
     }
   }
-  if (st !== "sleep") {
-    // big friendly cartoon eye + a round nose + a grin
-    const ey = headY + (st === "lookUp" || st === "stargaze" ? -H * 0.05 : -H * 0.01);
-    c.fillStyle = "#fffaf0";
-    c.beginPath();
-    c.ellipse(H * 0.075, ey, H * 0.042, H * 0.05, 0, 0, Math.PI * 2);
-    c.fill();
-    c.fillStyle = "#1d1813";
-    c.beginPath();
-    c.arc(H * 0.088, ey + H * 0.005, H * 0.026, 0, Math.PI * 2);
-    c.fill();
-    c.strokeStyle = shade(h.hair, -0.2);
+  {
+    // the face: two big bright eyes, heavy brows, a round nose and a wide toothy grin
+    const up = st === "lookUp" || st === "stargaze";
+    const ey = headY + (up ? -H * 0.05 : -H * 0.012);
+    const scared = st === "flee" || st === "tossed";
+    const asleep = st === "sleep";
+    // they blink now and then (everyone on their own beat)
+    const blink = asleep || st === "down" || ((t * 0.9 + h.id * 0.37) % 3.7 < 0.11 && !scared);
+    const eyes: [number, number, number][] = [[0.034, 0.036, 0.048], [0.106, 0.04, 0.052]];
+    if (blink) {
+      c.strokeStyle = "#1d1813";
+      c.lineWidth = H * 0.02;
+      c.beginPath();
+      for (const [ex, rx] of eyes) {
+        c.moveTo(H * (ex - rx), ey + H * 0.005);
+        c.quadraticCurveTo(H * ex, ey + H * 0.03, H * (ex + rx), ey + H * 0.005);
+      }
+      c.stroke();
+    } else {
+      for (const [ex, rx, ry] of eyes) {
+        c.fillStyle = "#fffdf6";
+        c.strokeStyle = INK;
+        c.lineWidth = 0.55;
+        c.beginPath();
+        c.ellipse(H * ex, ey, H * rx, H * ry, 0, 0, Math.PI * 2);
+        c.fill();
+        c.stroke();
+        c.fillStyle = "#1d1813";
+        c.beginPath();
+        c.arc(H * (ex + 0.011), ey + (up ? -H * 0.012 : H * 0.006), H * (scared ? 0.014 : 0.023), 0, Math.PI * 2);
+        c.fill();
+        // a glint of light in the eye
+        c.fillStyle = "#ffffff";
+        c.beginPath();
+        c.arc(H * (ex + 0.019), ey - H * 0.008, H * 0.008, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+    // brows (shooting up in a fright)
+    const lift = scared ? H * 0.025 : 0;
+    c.strokeStyle = hairDark;
     c.lineWidth = H * 0.03;
     c.beginPath();
-    c.moveTo(H * 0.03, ey - H * 0.07);
-    c.lineTo(H * 0.12, ey - H * 0.075);
+    c.moveTo(H * 0.0, ey - H * 0.068 - lift);
+    c.lineTo(H * 0.062, ey - H * 0.082 - lift * 1.4);
+    c.moveTo(H * 0.084, ey - H * 0.086 - lift * 1.4);
+    c.lineTo(H * 0.148, ey - H * 0.068 - lift);
     c.stroke();
-    c.fillStyle = shade(h.skin, -0.12);
+    // the nose: big, round and a little ruddy
+    c.fillStyle = blendHex(skin, "#e2733f", 0.32);
+    c.strokeStyle = INK;
+    c.lineWidth = 0.6;
     c.beginPath();
-    c.arc(H * 0.15, headY + H * 0.035, H * 0.04, 0, Math.PI * 2);
+    c.arc(H * 0.158, headY + H * 0.032, H * 0.046, 0, Math.PI * 2);
     c.fill();
-    if (st !== "flee" && st !== "tossed" && st !== "down") {
-      c.fillStyle = "#fffaf0";
+    c.stroke();
+    c.fillStyle = "rgba(255,246,230,0.55)";
+    c.beginPath();
+    c.arc(H * 0.168, headY + H * 0.018, H * 0.013, 0, Math.PI * 2);
+    c.fill();
+    if (!man && !hooded) {
+      // rosy cheeks
+      c.fillStyle = "rgba(226,96,70,0.26)";
+      c.beginPath();
+      c.ellipse(H * 0.055, headY + H * 0.06, H * 0.035, H * 0.022, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+    if (man) {
+      // the moustache, sweeping out from under the nose
+      c.fillStyle = shade(hair, 0.04);
       c.strokeStyle = INK;
       c.lineWidth = 0.6;
       c.beginPath();
-      c.moveTo(H * 0.03, headY + H * 0.08);
-      c.quadraticCurveTo(H * 0.09, headY + H * 0.15, H * 0.14, headY + H * 0.08);
-      c.closePath();
+      c.ellipse(H * 0.082, headY + H * 0.076, H * 0.064, H * 0.03, 0.2, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.beginPath();
+      c.ellipse(H * 0.15, headY + H * 0.074, H * 0.04, H * 0.026, -0.25, 0, Math.PI * 2);
       c.fill();
       c.stroke();
     }
+    const my = headY + (man ? H * 0.012 : 0);
+    if (scared) {
+      c.fillStyle = "#4a1d1d";
+      c.beginPath();
+      c.ellipse(H * 0.1, my + H * 0.115, H * 0.034, H * 0.045, 0, 0, Math.PI * 2);
+      c.fill();
+    } else if (asleep || st === "down") {
+      c.strokeStyle = "#4a1d1d";
+      c.lineWidth = H * 0.018;
+      c.beginPath();
+      c.moveTo(H * 0.07, my + H * 0.105);
+      c.lineTo(H * 0.12, my + H * 0.105);
+      c.stroke();
+    } else {
+      // a wide open grin, a row of white teeth along the top
+      c.fillStyle = "#5a1c16";
+      c.strokeStyle = INK;
+      c.lineWidth = 0.55;
+      c.beginPath();
+      c.moveTo(H * 0.038, my + H * 0.09);
+      c.quadraticCurveTo(H * 0.095, my + H * 0.18, H * 0.152, my + H * 0.086);
+      c.quadraticCurveTo(H * 0.095, my + H * 0.104, H * 0.038, my + H * 0.09);
+      c.fill();
+      c.stroke();
+      c.fillStyle = "#fffaf0";
+      c.beginPath();
+      c.moveTo(H * 0.052, my + H * 0.097);
+      c.quadraticCurveTo(H * 0.095, my + H * 0.112, H * 0.14, my + H * 0.093);
+      c.quadraticCurveTo(H * 0.125, my + H * 0.122, H * 0.095, my + H * 0.127);
+      c.quadraticCurveTo(H * 0.068, my + H * 0.124, H * 0.052, my + H * 0.097);
+      c.fill();
+    }
   }
-  if (st === "flee" || st === "tossed") {
-    c.fillStyle = "#4a1d1d";
+  c.restore();
+  // a tooth necklace for the women (the men wear their tooth on the belt)
+  if (woman && st !== "sleep" && st !== "down" && st !== "rest") {
+    c.strokeStyle = ROPE_DARK;
+    c.lineWidth = 0.7;
     c.beginPath();
-    c.ellipse(H * 0.1, headY + H * 0.07, H * 0.03, H * 0.04, 0, 0, Math.PI * 2);
-    c.fill();
-  }
-  // carried stuff
-  // a tooth necklace, and (for some) a bone clipped in the hair, like the cave-people art
-  if (!h.child && st !== "sleep" && st !== "down" && st !== "rest") {
+    c.moveTo(-H * 0.09, headY + H * 0.16);
+    c.quadraticCurveTo(0, headY + H * 0.22, H * 0.1, headY + H * 0.16);
+    c.stroke();
     c.fillStyle = "#f4ead2";
     for (let k = -1; k <= 1; k++) {
       c.beginPath();
-      c.moveTo(k * H * 0.06 - H * 0.02, headY + H * 0.16);
-      c.lineTo(k * H * 0.06 + H * 0.02, headY + H * 0.16);
-      c.lineTo(k * H * 0.06, headY + H * 0.22);
+      c.moveTo(k * H * 0.06 - H * 0.02, headY + H * 0.185);
+      c.lineTo(k * H * 0.06 + H * 0.02, headY + H * 0.185);
+      c.lineTo(k * H * 0.06, headY + H * 0.245);
       c.closePath();
       c.fill();
-    }
-    if (!helmet && !outfit?.hood && h.id % 3 === 0) {
-      c.fillStyle = "#f6efe0";
-      c.strokeStyle = "rgba(60,40,20,0.5)";
-      c.lineWidth = 0.5;
-      const bx = -H * 0.05;
-      const by = headY - H * 0.19;
-      c.fillRect(bx - H * 0.08, by - H * 0.015, H * 0.16, H * 0.03);
-      for (const ex of [-1, 1]) {
-        c.beginPath();
-        c.arc(bx + ex * H * 0.09, by - H * 0.015, H * 0.025, 0, Math.PI * 2);
-        c.arc(bx + ex * H * 0.09, by + H * 0.015, H * 0.025, 0, Math.PI * 2);
-        c.fill();
-      }
     }
   }
   if (helmet && !h.child && st !== "sleep" && st !== "down" && st !== "rest") {
     // a domed metal helmet with a rim + nose guard
+    c.save();
+    headXf();
     c.fillStyle = helmet.color;
     c.beginPath();
     c.arc(-H * 0.01, headY - H * 0.02, H * 0.165, Math.PI * 1.02, Math.PI * 1.98);
     c.closePath();
     c.fill();
+    c.strokeStyle = INK;
+    c.lineWidth = 0.7;
+    c.stroke();
     c.fillStyle = helmet.trim;
     c.fillRect(-H * 0.2, headY - H * 0.035, H * 0.38, H * 0.045);
     c.fillRect(H * 0.08, headY - H * 0.03, H * 0.035, H * 0.11);
@@ -1186,8 +1962,9 @@ export function drawHuman(c: CanvasRenderingContext2D, h: Human, t: number, weap
       c.closePath();
       c.fill();
     }
+    c.restore();
   }
-  if (h.carry) drawResource(c, h.carry, 0, headY - H * 0.32, H * 0.5);
+  if (h.carry) drawResource(c, h.carry, 0, headY - H * 0.46, H * 0.5);
   c.restore();
   c.restore();
 }

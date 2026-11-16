@@ -8,17 +8,17 @@ import type { Engine } from "../game/engine";
 /** Zoom, return-home and the "following" chip. Big targets for small fingers. */
 export default function ViewControls({ engine, followId, cardOpen, showQuickActions, wallsAvailable }: { engine: Engine; followId: number; cardOpen: boolean; showQuickActions: boolean; wallsAvailable: boolean }) {
   const [quickOpen, setQuickOpen] = useState(false);
-  const b = "dl-glass h-12 w-12 items-center justify-center rounded-2xl shadow-lg transition hover:bg-slate-800/80 active:scale-90";
+  const b = "dl-glass h-11 w-11 items-center justify-center rounded-xl text-white/80 transition hover:text-white hover:brightness-125 active:scale-90";
   const followed = followId ? engine.world.dinoById(followId) : null;
   const act = (callback: () => void) => { callback(); setQuickOpen(false); };
   return (
     <>
       <div className={`pointer-events-auto absolute bottom-[calc(env(safe-area-inset-bottom)+96px)] z-20 flex-col gap-2 transition-[right] duration-300 sm:bottom-28 ${cardOpen ? "hidden right-2 sm:flex sm:right-[362px]" : "flex right-2 sm:right-4"}`}>
-        <button type="button" className={`${b} hidden sm:flex`} onClick={() => engine.zoomBy(1.3)} aria-label="Zoom in" title="Zoom in">
-          <Plus className="h-6 w-6" />
+        <button type="button" className={`${b} hidden sm:flex`} onClick={() => engine.zoomSmooth(1.3)} aria-label="Zoom in" title="Zoom in">
+          <Plus className="h-5 w-5" />
         </button>
-        <button type="button" className={`${b} hidden sm:flex`} onClick={() => engine.zoomBy(1 / 1.3)} aria-label="Zoom out" title="Zoom out">
-          <Minus className="h-6 w-6" />
+        <button type="button" className={`${b} hidden sm:flex`} onClick={() => engine.zoomSmooth(1 / 1.3)} aria-label="Zoom out" title="Zoom out">
+          <Minus className="h-5 w-5" />
         </button>
         {showQuickActions && (
           <div className="relative sm:hidden">
@@ -37,7 +37,7 @@ export default function ViewControls({ engine, followId, cardOpen, showQuickActi
           </div>
         )}
         <button type="button" className={`${b} flex`} onClick={() => engine.goHome()} aria-label="Go home" title="Back home (H)">
-          <Home className="h-6 w-6" />
+          <Home className="h-5 w-5" />
         </button>
       </div>
       {followed && (

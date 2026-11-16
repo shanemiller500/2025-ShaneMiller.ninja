@@ -96,7 +96,7 @@ export function shieldsOf(w: World) {
 export const shieldsPowered = (w: World) => w.civ.energy > 0.5;
 
 /** Hostile to the town: a wild dragon (not one at the monks' rite) or a Sand People war dragon. */
-const hostile = (dr: Dragon) => !dr.owner && !dr.monkRite && dr.state !== "offering";
+const hostile = (w: World, dr: Dragon) => (!dr.sandTribe || w.diplomacy.hostile("us", `sand:${dr.sandTribe}`)) && !dr.owner && !dr.monkRite && dr.state !== "offering";
 
 /** How hard a dragon is to rattle (1 = an ordinary adult). */
 export function resistOf(dr: Dragon) {
@@ -179,7 +179,7 @@ export function shieldsTick(w: World, dt: number) {
   const hot = new Set<number>();
   if (powered) {
     for (const dr of w.dragons.list) {
-      if (!hostile(dr)) continue;
+      if (!hostile(w, dr)) continue;
       for (const b of list) {
         // the pylons wake as one comes near (a little beyond the field's edge)
         if (Math.hypot(b.x - dr.x, b.y - dr.y) < shieldRadius(b) * 1.18) hot.add(b.id);
@@ -192,7 +192,7 @@ export function shieldsTick(w: World, dt: number) {
   }
   if (!powered) return;
   for (const dr of w.dragons.list) {
-    if (!hostile(dr)) continue;
+    if (!hostile(w, dr)) continue;
     const f = fieldAt(w, dr.x, dr.y, list);
     if (!f.near || (st.charge.get(f.near.id) ?? 0) < 1) continue;
     // in a live field: it gets more and more rattled (a weak hum barely bothers a strong dragon)

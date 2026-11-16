@@ -33,11 +33,13 @@ import CivPanel, { CivChoice } from "./ui/CivPanel";
 import DeepHud from "./ui/DeepHud";
 import { HintBubbles, TipCoach } from "./ui/Guide";
 import HelpPanel from "./ui/HelpPanel";
+import DiplomacyPanel from "./ui/DiplomacyPanel";
 import { AgeEnds, ExtinctionBanner, ExtinctionConfirm } from "./ui/Extinction";
 import { newestSlot, putSlot } from "./game/slots";
 import { hasDinoProgress, useCloud } from "./ui/useCloud";
 import { useRouter } from "next/navigation";
 import { tidyStorage } from "@/utils/storageJanitor";
+import { QUALITY_INFO } from "./render/quality";
 
 /* ------------------------------------------------------------------ */
 /*  DinosorsClient: mounts the canvas game engine and the floating     */
@@ -97,6 +99,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [hatchId, setHatchId] = useState<number | null>(null);
   const [panel, setPanel] = useState<TopPanel>(null);
   const [campOpen, setCampOpen] = useState(false);
+  const [diplomacyOpen, setDiplomacyOpen] = useState(false);
   const [shiftsOpen, setShiftsOpen] = useState(false);
   const [trainOpen, setTrainOpen] = useState(false);
   const [evoOpen, setEvoOpen] = useState(false);
@@ -110,6 +113,8 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const [extCause, setExtCause] = useState<"asteroid" | "supervolcano">("asteroid");
   const [confirm, setConfirm] = useState<null | "new" | "reset">(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  /** the world's first frame is on screen (until then the loading screen covers the empty canvas) */
+  const [ready, setReady] = useState(false);
   const [sticker, setSticker] = useState<string | null>(null);
   const toastId = useRef(1);
   const router = useRouter();
@@ -132,6 +137,10 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
+    // Building the world (reading the save, growing the land) takes a moment. Doing it straight away would hold
+    // up the very first paint, so the loading screen goes up first and the world is built a frame or two later.
+    const boot = () => {
+    setReady(false);
     // the site's shared storage can fill up with other pages' caches: make room first
     tidyStorage();
     const s = loadSettings();
@@ -142,6 +151,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
     if (process.env.NODE_ENV !== "production") (window as unknown as { __dinosors?: Engine }).__dinosors = engine;
     engine.audio.setMuted(s.muted);
     engine.audio.setVolume(s.volume);
+    engine.setQuality(s.quality);
 
     const fit = () => engine.resize(wrap.clientWidth, wrap.clientHeight);
     fit();
@@ -192,6 +202,13 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           break;
         case "saved":
           pushToast({ icon: "💾", text: "World saved!" });
+          break;
+        case "ready":
+          setReady(true);
+          break;
+        case "quality":
+          pushToast({ icon: "🎚️", text: `Graphics eased to ${QUALITY_INFO[engine.quality.level].name} to keep things smooth. Change it any time in the menu.` });
+          setSnap(engine.snapshot());
           break;
         case "hatchScene":
           setHatchId(e.dragon);
@@ -268,12 +285,35 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
       engine.destroy();
       engineRef.current = null;
     };
+    };
+    let dispose: (() => void) | null = null;
+    let started = false;
+    let cancelled = false;
+    const start = () => {
+      if (started || cancelled) return;
+      started = true;
+      dispose = boot();
+    };
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(start);
+    });
+    // (a tab opened in the background gets no animation frames: start anyway after a moment)
+    const fallback = window.setTimeout(start, 500);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      window.clearTimeout(fallback);
+      dispose?.();
+    };
   }, [pushToast]);
 
   // stable (so the memoized toolbar doesn't re-render every poll); reads the latest value from a ref
   const trainOpenRef = useRef(trainOpen);
   trainOpenRef.current = trainOpen;
   const closeNavigation = () => {
+    setDiplomacyOpen(false);
     setPanel(null);
     setCampOpen(false);
     setEvoOpen(false);
@@ -284,6 +324,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   };
   const toggleTrain = useCallback(() => {
     if (!trainOpenRef.current) {
+      setDiplomacyOpen(false);
       setCampOpen(false);
       setEvoOpen(false);
       setCivOpen(false);
@@ -311,6 +352,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
     if (e) {
       e.audio.setMuted(next.muted);
       e.audio.setVolume(next.volume);
+      if (s.quality) e.setQuality(next.quality);
     }
   };
 
@@ -329,11 +371,17 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
   const disc = sticker ? DISCOVERY_BY_ID[sticker] : null;
 
   return (
-    <div ref={uiRef} className={`fixed inset-0 z-40 select-none overflow-hidden bg-[#1f5f8a] text-white ${fontClass}`} style={{ touchAction: "none" }}>
+    <div ref={uiRef} className={`dl-root fixed inset-0 z-40 select-none overflow-hidden bg-[#1f5f8a] text-white ${fontClass}`} style={{ touchAction: "none" }}>
       <div ref={wrapRef} className="absolute inset-0">
         <canvas ref={canvasRef} data-dl-world-canvas className="block h-full w-full cursor-grab active:cursor-grabbing" aria-label="Dinosaur Land world. Drag to explore, tap to interact." />
       </div>
 
+      {/* the loading screen: up until the world's first frame is actually on the canvas, then it fades away
+          (an empty canvas is black, so taking it down any sooner shows a black flash) */}
+      <div className={`dl-loading pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-[radial-gradient(120%_90%_at_50%_30%,#2a7fb0,#143e5c)] ${engine && snap && ready ? "dl-loading-done" : ""}`} role="status" aria-live="polite" aria-hidden={!!(engine && snap && ready)}>
+        <span className="dl-spinner" aria-hidden />
+        <span className="text-[15px] font-semibold tracking-wide text-white/85">Waking up Dinosaur Land…</span>
+      </div>
       {engine && snap && (
         <>
           <TopBar
@@ -364,6 +412,8 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             onLeave={() => cloud.leave(() => router.push("/projects"))}
             onNew={() => { closeNavigation(); setConfirm("new"); }}
             onReset={() => { closeNavigation(); setConfirm("reset"); }}
+            onDiplomacy={() => { const next = !diplomacyOpen; closeNavigation(); setDiplomacyOpen(next); }}
+            diplomacyOpen={diplomacyOpen}
             onCamp={() => { const next = !campOpen; closeNavigation(); setCampOpen(next); }}
             onEvolution={() => { const next = !evoOpen; closeNavigation(); setEvoOpen(next); }}
             onCiv={() => { const next = !civOpen; closeNavigation(); setCivOpen(next); }}
@@ -371,6 +421,8 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             onHelp={() => { closeNavigation(); setHelp({ open: true }); }}
             onTips={() => updateSettings({ tips: !settings.tips })}
             tipsOn={settings.tips}
+            quality={settings.quality}
+            onQuality={(quality) => updateSettings({ quality })}
             onExtinction={() => {
               setExtCause("asteroid");
               setExtOpen(true);
@@ -398,7 +450,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             <>
               <ViewControls engine={engine} followId={snap.followId} cardOpen={!!snap.selected} showQuickActions={snap.selection.length === 0 && tool.id === "hand"} wallsAvailable={snap.tribe.walls.built + snap.tribe.walls.planned > 0} />
               <Minimap engine={engine} cardOpen={!!snap.selected} mobileOpen={mobileMapOpen} onMobileToggle={() => { const next = !mobileMapOpen; closeNavigation(); setMobileMapOpen(next); }} />
-              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} shiftOpen={shiftsOpen} onShifts={() => { const next = !shiftsOpen; closeNavigation(); setShiftsOpen(next); }} orphanNests={snap.orphanNests} onClaimNest={(id) => engineRef.current?.claimNest(id)} mapOpen={mobileMapOpen} onMap={() => { const next = !mobileMapOpen; closeNavigation(); setMobileMapOpen(next); }} />
+              <Toolbar tool={tool} setTool={setTool} unlocked={snap.unlocked} learned={snap.camp.learned} stock={snap.camp.stock} ownedBuilds={snap.camp.ownedBuilds} civDone={snap.civ.done} civPath={snap.civ.path} trainOpen={trainOpen} onTrain={toggleTrain} shiftOpen={shiftsOpen} onShifts={() => { const next = !shiftsOpen; closeNavigation(); setShiftsOpen(next); }} orphanNests={snap.orphanNests} onClaimNest={(id) => engineRef.current?.claimNest(id)} mapOpen={mobileMapOpen} onMap={() => { const next = !mobileMapOpen; closeNavigation(); setMobileMapOpen(next); }} />
               {trainOpen && <TrainPanel engine={engine} onClose={() => setTrainOpen(false)} />}
               <SelectionBar snap={snap} engine={engine} toolOn={tool.id !== "hand"} />
               <EditModeBar engine={engine} />
@@ -419,6 +471,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
             />
           )}
           <AnimatePresence initial={false} mode="wait">
+            {diplomacyOpen && <DiplomacyPanel engine={engine} snap={snap} onClose={() => setDiplomacyOpen(false)} onBuild={() => { setTool({ id: "build", build: "tradingPost" }); setDiplomacyOpen(false); }} />}
             {campOpen && <CampPanel key="camp" snap={snap} engine={engine} onClose={() => setCampOpen(false)} onBuildStation={(kind) => { setTool({ id: "build", build: kind }); setCampOpen(false); }} />}
             {shiftsOpen && <ShiftsPanel key="shifts" snap={snap} engine={engine} onClose={() => setShiftsOpen(false)} onResearch={() => { closeNavigation(); setCivOpen(true); }} />}
             {evoOpen && <EvolutionPanel key="evolution" snap={snap} engine={engine} onClose={() => setEvoOpen(false)} />}
@@ -431,7 +484,7 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
           <ExtinctionBanner snap={snap} />
           {(() => {
             // tips + bubbles stay out of the way while anything else is open
-            const busy = toasts.length > 0 || panel !== null || mobileMapOpen || trainOpen || campOpen || shiftsOpen || civOpen || evoOpen || savesOpen || stickersOpen || aboutOpen || help.open || extOpen || choiceOpen || !!confirm || !!snap.inspect || !!snap.selected || !!engine.selectedDragon() || !!engine.selectedEgg || snap.extinction.phase !== "idle" && snap.extinction.phase !== "ruins";
+            const busy = diplomacyOpen || toasts.length > 0 || panel !== null || mobileMapOpen || trainOpen || campOpen || shiftsOpen || civOpen || evoOpen || savesOpen || stickersOpen || aboutOpen || help.open || extOpen || choiceOpen || !!confirm || !!snap.inspect || !!snap.selected || !!engine.selectedDragon() || !!engine.selectedEgg || snap.extinction.phase !== "idle" && snap.extinction.phase !== "ruins";
             return (
               <>
                 <TipCoach snap={snap} enabled={settings.tips} busy={busy} onOff={() => updateSettings({ tips: false })} onHelp={(section) => setHelp({ open: true, section })} />
@@ -527,38 +580,52 @@ export default function DinosorsClient({ fontClass }: { fontClass: string }) {
       <style>{`
         @keyframes dl-pop { 0% { transform: translate(-50%, 30px) scale(.6); opacity: 0 } 60% { transform: translate(-50%, -6px) scale(1.06); opacity: 1 } 100% { transform: translate(-50%, 0) scale(1) } }
         .dl-pop { animation: dl-pop .55s cubic-bezier(.2,1.4,.4,1) both }
-        /* cartoon stone-age chrome, after the cave people art: warm hide/wood, bold ink outline, sticker shadow */
+        /* the loading ring: a transform animation, so it keeps turning even while the world is being built */
+        @keyframes dl-spin { to { transform: rotate(360deg) } }
+        .dl-loading { opacity: 1; visibility: visible; transition: opacity .3s ease, visibility 0s linear 0s }
+        .dl-loading-done { opacity: 0; visibility: hidden; transition: opacity .3s ease, visibility 0s linear .3s }
+        .dl-loading-done .dl-spinner { animation: none }
+        .dl-spinner { width: 44px; height: 44px; border-radius: 9999px; border: 3px solid rgba(255,255,255,.2); border-top-color: #fbbf24; animation: dl-spin .9s linear infinite; will-change: transform }
+        /* the HUD: dark frosted glass, hairline edges, soft depth. One accent (amber) marks what's on. */
+        .dl-root {
+          --dl-accent: #fbbf24;
+          font-feature-settings: "cv11", "ss01", "calt";
+          letter-spacing: -0.006em;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
+        }
+        .dl-root button { -webkit-tap-highlight-color: transparent }
+        .dl-root button:focus-visible, .dl-root [role="radio"]:focus-visible, .dl-root input:focus-visible { outline: 2px solid var(--dl-accent); outline-offset: 2px }
         .dl-glass {
-          background:
-            radial-gradient(ellipse 9px 7px at 18% 22%, rgba(26,14,6,.16) 60%, transparent 62%),
-            radial-gradient(ellipse 7px 6px at 62% 70%, rgba(26,14,6,.14) 60%, transparent 62%),
-            radial-gradient(ellipse 8px 6px at 85% 30%, rgba(26,14,6,.12) 60%, transparent 62%),
-            linear-gradient(180deg, rgba(92,58,33,.95), rgba(61,37,20,.96));
-          background-size: 64px 52px, 58px 64px, 70px 58px, 100% 100%;
-          backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-          border: 3px solid #24140a;
-          box-shadow: inset 0 2px 0 rgba(255,214,150,.22), inset 0 -3px 0 rgba(0,0,0,.18), 0 5px 0 #24140a, 0 14px 28px rgba(20,10,4,.35) !important;
+          background: linear-gradient(180deg, rgba(26,32,44,.80), rgba(13,17,26,.86));
+          backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5);
+          border: 1px solid rgba(255,255,255,.09);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 12px 32px -8px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.28) !important;
         }
         .dl-paper {
-          color: #3a2414;
-          background: radial-gradient(120% 80% at 50% 0%, #fff8e6, #f6e4bd);
-          border: 3px solid #3a2414;
-          box-shadow: inset 0 2px 0 #fffdf5, inset 0 -4px 0 rgba(150,95,40,.18), 0 5px 0 #3a2414, 0 16px 30px rgba(20,10,4,.35);
+          color: #0f172a;
+          background: rgba(248,250,252,.97);
+          backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+          border: 1px solid rgba(15,23,42,.08);
+          box-shadow: 0 14px 36px -10px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.18);
         }
-        .dl-leopard {
-          background-color: #f2a43a;
-          background-image:
-            radial-gradient(ellipse 5px 4px at 25% 30%, #6b3a12 55%, transparent 60%),
-            radial-gradient(ellipse 4px 5px at 70% 65%, #6b3a12 55%, transparent 60%),
-            radial-gradient(ellipse 3px 3px at 80% 20%, #6b3a12 55%, transparent 60%);
-          background-size: 26px 20px, 24px 22px, 30px 26px;
-        }
-        .dl-btn { border: 2.5px solid #3a2414; box-shadow: inset 0 2px 0 rgba(255,255,255,.45), 0 3px 0 #3a2414; transition: transform .1s, box-shadow .1s }
-        .dl-btn:active { transform: translateY(2px); box-shadow: inset 0 2px 0 rgba(255,255,255,.45), 0 1px 0 #3a2414 }
-        .dl-ink { text-shadow: 0 2px 0 #24140a, 2px 0 0 #24140a, -2px 0 0 #24140a, 0 -2px 0 #24140a, 2px 2px 0 #24140a, -2px 2px 0 #24140a }
-        .dl-modal { border: 4px solid #3a2414 !important; box-shadow: 0 8px 0 #3a2414, 0 30px 60px rgba(20,10,4,.5) !important; background: #fdf3dc !important }
-        .dark .dl-modal { background: #2b1d12 !important }
-        .dl-modal.dl-modal-paper, .dark .dl-modal.dl-modal-paper { background: #f6e4bd !important }
+        .dl-leopard { background: linear-gradient(135deg, #f59e0b, #ea580c) }
+        .dl-btn { box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 6px 16px -6px rgba(245,158,11,.6), 0 1px 2px rgba(0,0,0,.25); transition: transform .12s, box-shadow .12s, filter .12s }
+        .dl-btn:hover { filter: brightness(1.06) }
+        .dl-btn:active { transform: scale(.97) }
+        .dl-ink { text-shadow: 0 1px 2px rgba(0,0,0,.35) }
+        .dl-modal { border: 1px solid rgba(15,23,42,.08) !important; border-radius: 24px !important; box-shadow: 0 32px 80px -12px rgba(0,0,0,.65), 0 4px 14px rgba(0,0,0,.25) !important; background: #f8fafc !important }
+        .dark .dl-modal { background: #131a26 !important; border-color: rgba(255,255,255,.08) !important }
+        .dl-modal.dl-modal-paper, .dark .dl-modal.dl-modal-paper { background: #f8fafc !important }
+        /* the bottom bar's selected tool: a lit pill with a marker under it */
+        .dl-tool { position: relative; transition: background-color .15s, color .15s, transform .12s }
+        .dl-tool[aria-pressed="true"] { background: var(--dl-accent); color: #0f172a; box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 8px 20px -8px rgba(251,191,36,.75) }
+        .dl-tool[aria-pressed="true"]::after { content: ""; position: absolute; left: 50%; bottom: -5px; width: 14px; height: 3px; margin-left: -7px; border-radius: 3px; background: var(--dl-accent) }
+        @media (hover: hover) { .dl-tool[aria-pressed="false"]:hover { background: rgba(255,255,255,.1); color: #fff } }
+        .dl-tool:active { transform: scale(.94) }
+        .dl-sep { width: 1px; align-self: stretch; margin: 10px 3px; background: rgba(255,255,255,.1); flex: none }
+        @media (prefers-reduced-motion: reduce) { .dl-root *, .dl-root *::before, .dl-root *::after { transition-duration: .01ms !important; animation-duration: .01ms !important } }
         .dl-scroll::-webkit-scrollbar { display: none }
         .dl-scroll { scrollbar-width: none; touch-action: pan-x pan-y; overscroll-behavior: contain }
         .dl-noscroll::-webkit-scrollbar { display: none }

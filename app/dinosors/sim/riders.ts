@@ -18,6 +18,7 @@
 /*  mount/passenger code, war-dino behaviour, deposit discovery.       */
 /* ------------------------------------------------------------------ */
 import { warRiderThink } from "./warGuard";
+import { castleDinoRest } from "./castleCompound";
 import { TAMEABLE } from "../data/colony";
 import { WEAPON_BY_ID } from "../data/colony";
 import { warTarget } from "./behavior";
@@ -530,7 +531,7 @@ export function partnerThink(w: World, d: Dino): boolean {
   if (d.hunger > 0.75 || d.thirst > 0.75 || d.energy < 0.15) return false;
   // night: rest at the stable
   if (w.daylight < 0.25) {
-    const st = w.colony.buildings.find((b) => b.kind === "stable" && b.built >= 1);
+    const st = castleDinoRest(w, d) ?? w.colony.buildings.find((b) => b.kind === "stable" && b.built >= 1);
     if (st && Math.hypot(st.x - d.x, st.y - d.y) > 40) {
       setState(d, "wander", st.x + ((d.id % 3) - 1) * 30, st.y + 10);
       return true;

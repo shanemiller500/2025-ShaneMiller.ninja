@@ -4,6 +4,7 @@
 /*  farms and raids stay in tribe.ts; huts stay in camp.ts.            */
 /* ------------------------------------------------------------------ */
 import { hallTick } from "./riderHall";
+import { castleReservedTiles } from "./castleCompound";
 import { armourHit, scorpionMaxHp, scorpionWorks } from "./scorpionArmor";
 import { feastTick } from "./feast";
 import { CHARIOT_HP, chariotsUpdate } from "./chariots";
@@ -127,6 +128,7 @@ export class Colony {
   /** Tiles used by walls, towers, huts, buildings + ground Scorpions (bridge decks are free to build on). */
   occupied(w: World, allowPath = false) {
     const s = new Set<number>();
+    for (const i of castleReservedTiles(w)) s.add(i);
     for (const wl of w.tribe.walls) s.add(wl.ty * MAP_W + wl.tx);
     for (const t of w.tribe.towers) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) s.add((t.ty + dy) * MAP_W + t.tx + dx);
     for (const b of this.buildings) {
@@ -1093,7 +1095,7 @@ export class Colony {
   serialize() {
     const r = (n: number) => Math.round(n * 100) / 100;
     return {
-      buildings: this.buildings.map((b) => ({ id: b.id, kind: b.kind, tx: b.tx, ty: b.ty, built: r(b.built), have: b.have, hp: Math.round(b.hp), ...(b.stage ? { stage: b.stage } : {}), ...(b.grow ? { grow: Math.round(b.grow * 100) / 100 } : {}), ...(b.merged ? { merged: b.merged } : {}), ...(b.label ? { label: b.label, breed: b.breed, size: b.size, ours: b.ours } : {}), ...(b.shield ? { shield: { ...b.shield } } : {}) })),
+      buildings: this.buildings.map((b) => ({ id: b.id, kind: b.kind, tx: b.tx, ty: b.ty, built: r(b.built), have: b.have, hp: Math.round(b.hp), ...(b.stage ? { stage: b.stage } : {}), ...(b.grow ? { grow: Math.round(b.grow * 100) / 100 } : {}), ...(b.merged ? { merged: b.merged } : {}), ...(b.label ? { label: b.label, breed: b.breed, size: b.size, ours: b.ours } : {}), ...(b.shield ? { shield: { ...b.shield } } : {}), ...(b.level && b.level > 1 ? { level: b.level } : {}) })),
       scorpions: this.scorpions.map((s) => ({ id: s.id, tx: s.tx, ty: s.ty, x: r(s.x), y: r(s.y), tier: s.tier, built: r(s.built), have: s.have, up: s.up, hp: Math.round(s.hp), mount: s.mount, ...(s.obsidian ? { obsidian: true } : {}), ...(s.obsidianUp ? { obsidianUp: true } : {}) })),
       nodes: this.nodes.map((n) => [n.kind, Math.round(n.x), Math.round(n.y), n.amount, n.max, n.found ? 1 : 0] as const),
       armory: this.armory,
@@ -1119,7 +1121,7 @@ export class Colony {
       const oldFinishedPyramid = b.kind === "pyramid" && (b as { stage?: number }).stage === 5 && b.built >= 1 && !(d as { limestoneNodes?: number }).limestoneNodes;
       const id = (b as { id?: number }).id ?? w.nextId();
       w.reserveIds(id);
-      this.buildings.push({ id, kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: oldFinishedPyramid ? 0.4 : b.built, have: oldFinishedPyramid ? {} : b.have ?? {}, hp: b.hp ?? def.hp, ...((b as { stage?: number }).stage ? { stage: oldFinishedPyramid ? 6 : (b as { stage?: number }).stage } : {}), ...((b as { grow?: number }).grow ? { grow: (b as { grow?: number }).grow } : {}), ...((b as { merged?: number }).merged ? { merged: (b as { merged?: number }).merged } : {}), ...((b as { label?: string }).label ? { label: (b as { label?: string }).label, breed: (b as { breed?: string }).breed, size: (b as { size?: number }).size, ours: (b as { ours?: boolean }).ours } : {}), ...((b as { shield?: ShieldLevels }).shield ? { shield: { ...(b as { shield: ShieldLevels }).shield } } : {}) });
+      this.buildings.push({ id, kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: oldFinishedPyramid ? 0.4 : b.built, have: oldFinishedPyramid ? {} : b.have ?? {}, hp: b.hp ?? def.hp, ...((b as { stage?: number }).stage ? { stage: oldFinishedPyramid ? 6 : (b as { stage?: number }).stage } : {}), ...((b as { grow?: number }).grow ? { grow: (b as { grow?: number }).grow } : {}), ...((b as { merged?: number }).merged ? { merged: (b as { merged?: number }).merged } : {}), ...((b as { label?: string }).label ? { label: (b as { label?: string }).label, breed: (b as { breed?: string }).breed, size: (b as { size?: number }).size, ours: (b as { ours?: boolean }).ours } : {}), ...((b as { shield?: ShieldLevels }).shield ? { shield: { ...(b as { shield: ShieldLevels }).shield } } : {}), ...((b as { level?: number }).level ? { level: (b as { level?: number }).level } : {}) });
     }
     this.feast.food = (d as { feast?: number }).feast ?? 0;
     // chariots park at home after a load (a hunt in progress is called off)
@@ -1176,6 +1178,7 @@ export function scorpionTarget(w: World, x: number, y: number, range: number): T
   let best: Target | null = null;
   let bs = Infinity;
   for (const dr of w.dragons.list) {
+    if (!w.diplomacy.hostileDragon(dr)) continue;
     if (dr.state === "leave" && dr.z > 150) continue;
     const dist = Math.hypot(dr.x - x, dr.y - y);
     if (dist > range) continue;

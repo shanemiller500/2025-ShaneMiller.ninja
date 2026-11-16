@@ -14,6 +14,7 @@ import type { World } from "./world";
 import { burnGuard, rollsClear } from "./dragonRaid";
 import { DOWN_FOR, dies, downTick, upAgain } from "./death";
 import { armorGuard, MIN_HARM } from "./gear";
+import { bedRate, claimBedAtDoor, inBed } from "./hospital";
 
 export type Condition = "healthy" | "injured" | "badly" | "down";
 
@@ -78,6 +79,7 @@ export function hurtHuman(w: World, h: Human, dmg: number, fx: number, fy: numbe
     dmg *= 0.5 - (mount.warArmor ?? 0) * 0.08;
   }
   h.hp = Math.max(0, h.hp - dmg);
+  if (h.hp > 0 && h.hp < 0.5 && !h.stranger) { h.selfHealing = true; h.think = 0; }
   h.fear = 1;
   if (cause !== "cold") {
     w.particles.spawn(P.Star, h.x, h.y, { z: 22 + h.z, size: 6, max: 0.9 });
@@ -142,16 +144,17 @@ export function healTick(w: World, patient: Human, dt: number) {
 }
 
 /** Slow natural recovery (faster resting, in houses, in the healing hut). */
-export function recover(w: World, h: Human, dt: number) {
+export function recover(w: World, h: Human, dt: number, seated = false) {
   if (h.hp >= 1) return;
-  const resting = h.state === "sleep" || h.state === "hide" || h.state === "rest" || h.state === "sitFire";
+  const resting = seated || h.state === "sleep" || h.state === "hide" || h.state === "rest" || h.state === "sitFire";
   let rate = resting ? 0.008 : 0.0015;
-  if (h.state === "rest") {
-    const hut = w.colony.buildings.some((b) => b.kind === "healer" && b.built >= 1 && Math.hypot(b.x - h.x, b.y - h.y) < 80);
-    if (hut) rate *= 3;
-  }
   if (w.camp.learned.has("medicine")) rate *= 1.4;
   if (w.civ.has("herbalism")) rate *= 2;
+  // in a bed at the healing hut / infirmary / hospital: a short stay does it (hospital.ts)
+  if (h.state === "rest") {
+    const ward = inBed(w, h) ?? claimBedAtDoor(w, h);
+    if (ward) rate = Math.max(rate, bedRate(w, ward));
+  }
   if (h.state === "down") {
     rate = 0.004;
     // nobody's come: the clock runs out (death.ts). Only in Calm do they come round by themselves.

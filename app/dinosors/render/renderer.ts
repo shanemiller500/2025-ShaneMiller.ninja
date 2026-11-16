@@ -1,3 +1,4 @@
+import { drawCaravan } from "./diplomacyArt";
 /* ------------------------------------------------------------------ */
 /*  Renderer: reads the World and paints a frame. No sim state lives   */
 /*  here except cosmetic stuff (rain streaks, cloud drift, fireflies). */
@@ -28,14 +29,14 @@ function toHex(rgb: string) {
   return "#" + m.slice(0, 3).map((v) => (+v).toString(16).padStart(2, "0")).join("");
 }
 import type { World } from "../sim/world";
-import { drawDino, restPose, shade, type DinoPose } from "./drawDino";
+import { drawDino, restPose, setDinoView, shade, type DinoPose } from "./drawDino";
 import { lookKey } from "../sim/genetics";
-import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawWinery, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawPlantLod, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
+import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawWinery, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawPlantFast, drawPlantLod, plantSpriteRes, atlasStamp, atlasBeginFrame, atlasClear, atlasStats, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
 import { ROLES } from "../data/facts";
 import { BUILDINGS, HOUSING } from "../data/colony";
 import { drawBar, drawBones, drawBuilding, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
 import { drawMegaGate } from "./megaGateArt";
-import { drawDragon, drawDragonEgg, drawNest, drawPit } from "./dragonArt";
+import { drawDragon, drawDragonEgg, drawDragonTiny, drawNest, drawPit } from "./dragonArt";
 import { clusters, drawEstateVines, drawField, drawVineyardField, drawPaddock, drawSeatRing } from "./mergedArt";
 import { wineryEstates } from "../sim/wineEstate";
 import { RING_R, SHADE, shadeCentre } from "../sim/shade";
@@ -79,6 +80,14 @@ import { drawEruptionColumn, drawGhost, drawPyroclastic } from "./civArt";
 import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
 import { EXT_TIMES } from "../sim/extinction";
 import { LIFT, pyramidAwake, pyramidCased } from "../data/civ";
+import { Q } from "./quality";
+import { Feedback, boxShadowPath, drawParticle, selectRing, sunAt, type Sun } from "./fx";
+import { causticSheet } from "./terrainTex";
+import { LitSprites } from "./litSprites";
+import { awningLayout, type AwningSpan } from "./awningLayout";
+import { estates, type Estate } from "../sim/estate";
+import { drawAwningLink, drawCastleSite, drawCastleWing, drawCompoundGrounds, drawCompoundWing, drawCourtyard, drawGallery } from "./castleArt";
+import { wingUnits } from "../sim/castleCompound";
 
 export interface Camera {
   x: number;
@@ -153,6 +162,8 @@ const K_FEAST = 48;
 /** Zoomed out past these, people / dinos are drawn as quick little stand-ins (they're tiny on screen anyway). */
 const PEOPLE_LOD = 0.35;
 const DINO_LOD = 0.27;
+/** …and at any zoom, an animal shorter than this on screen (CSS px) is a silhouette too */
+const TINY_DINO_PX = 14;
 /** Zoomed out past this: no chatter / emote bubbles (except for whoever's picked). */
 const BUBBLE_LOD = 0.5;
 /** Speech bubbles shown at once (besides the people you've picked). */
@@ -170,6 +181,9 @@ const K_MONK = 56;
 const K_MONKPLACE = 57;
 const K_SNOWLODGE = 58;
 const K_HANGTREE = 59;
+const K_CARAVAN = 60;
+const K_GALLERY = 61;
+const K_AWNING_LINK = 62;
 
 interface Drop {
   x: number;
@@ -196,6 +210,9 @@ const radial = (inner: string, outer: string) =>
   });
 
 export class Renderer {
+  private estateKey = "";
+  private estateGroups: Estate[] = [];
+  private awningLinks: AwningSpan[] = [];
   private ctx: CanvasRenderingContext2D;
   private terrainR: TerrainRenderer;
   private light: HTMLCanvasElement;
@@ -208,6 +225,9 @@ export class Renderer {
   private t = 0;
   private drops: Drop[] = [];
   private drawables: Drawable[] = [];
+  /** the same few thousand list entries reused every frame (so sorting the scene makes no garbage) */
+  private drawPool: Drawable[] = [];
+  private drawN = 0;
   private visPlants: Plant[] = [];
   /** finished healer huts' doors (people resting there aren't drawn); rebuilt when the colony changes */
   private healerDoors: { v: number; n: number; doors: { x: number; y: number }[] } = { v: -1, n: -1, doors: [] };
@@ -219,6 +239,26 @@ export class Renderer {
   private cloudX = 0;
   private cloudY = 0;
   private warmLight = radial("rgba(255,170,90,1)", "rgba(255,150,70,0)");
+  private lavaLight = radial("rgba(255,96,40,1)", "rgba(255,70,20,0)");
+  private boltLight = radial("rgba(214,228,255,1)", "rgba(170,196,255,0)");
+  private moonLight = radial("rgba(120,150,220,0.55)", "rgba(90,120,200,0)");
+  /** floating numbers, hit flashes, "built!" rings (render/fx.ts) */
+  feedback = new Feedback();
+  /** buildings + camps, painted a few times a second into lit images and stamped (render/litSprites.ts) */
+  private lit = new LitSprites();
+  private litOn = false;
+  private litRes = 1;
+  private litFps = 8;
+  /** where the light comes from this frame */
+  private sun: Sun = sunAt(12, 1, 0);
+  /** light map pixels per screen pixel (from the quality preset) */
+  private ls = 0.5;
+  /** the animated water light, composed off-screen then laid over the water */
+  private waterCv: HTMLCanvasElement | null = null;
+  private waterPat: CanvasPattern | null = null;
+  /** how much of the view is snow country (0..1), for falling snow */
+  private cold = 0;
+  private flakes: { x: number; y: number; s: number; r: number; p: number }[] = [];
   private warmSprite = radial("rgba(255,170,70,0.9)", "rgba(255,120,40,0)");
   private cloudSprite = radial("rgba(255,255,255,0.95)", "rgba(255,255,255,0)");
   private shadowSprite = radial("rgba(20,30,40,0.55)", "rgba(20,30,40,0)");
@@ -263,7 +303,41 @@ export class Renderer {
   setWorld(w: World) {
     this.world = w;
     this.terrainR = new TerrainRenderer(w.terrain);
+    this.feedback.reset(w);
+    this.lit.clear();
     this.buildPeaks();
+  }
+
+  /** The graphics quality changed: re-bake the ground in the new style (the engine re-sizes the canvas). */
+  restyle() {
+    this.terrainR.restyle();
+    this.waterCv = null;
+    this.lit.clear();
+    // the cached scenery sprites only look different when shading goes on or off (their material grain):
+    // any other change of quality keeps them, so the forest doesn't blink while it's re-painted
+    if (this.atlasShading !== Q.shading) {
+      this.atlasShading = Q.shading;
+      atlasClear();
+    }
+  }
+  /** whether the scenery sprites in the atlas were painted with shading on */
+  private atlasShading = Q.shading;
+
+  /** How full the sprite atlases are (for tuning and tests). */
+  get atlas() {
+    return atlasStats();
+  }
+
+  /**
+   * Draw a structure at (x, y) as a lit image (see litSprites.ts); `paint` draws it around the origin.
+   * `id` staggers the repaints so a whole town never refreshes on the same frame.
+   */
+  private stamp(c: CanvasRenderingContext2D, key: string, id: number, shape: string, x: number, y: number, paint: (c: CanvasRenderingContext2D) => void) {
+    if (this.litOn && this.lit.draw(c, key, Math.floor(this.t * this.litFps + (Math.abs(id) % 16) / 16), shape, this.litRes, x, y, paint, this.sun.side)) return;
+    c.save();
+    c.translate(x, y);
+    paint(c);
+    c.restore();
   }
 
   private buildPeaks() {
@@ -284,16 +358,36 @@ export class Renderer {
     }
   }
 
+  /**
+   * The view's size (CSS px) + pixel ratio. Returns true if the canvas itself was re-sized: that wipes it to
+   * black, so the caller must draw a frame straight away (see Engine.resize). Setting a canvas's size wipes it
+   * even when the size is the same, so it's only ever touched when it really changes.
+   */
   resize(w: number, h: number, dpr: number) {
     this.w = w;
     this.h = h;
     this.baseDpr = dpr;
     dpr = this.zoomDpr(dpr, this.lastZoom);
     this.dpr = dpr;
-    this.canvas.width = Math.round(w * dpr);
-    this.canvas.height = Math.round(h * dpr);
-    this.light.width = Math.max(1, Math.round(w / 2));
-    this.light.height = Math.max(1, Math.round(h / 2));
+    const wiped = this.fitCanvas(dpr);
+    this.ls = Q.lightScale;
+    const lw = Math.max(1, Math.round(w * this.ls));
+    const lh = Math.max(1, Math.round(h * this.ls));
+    if (this.light.width !== lw || this.light.height !== lh) {
+      this.light.width = lw;
+      this.light.height = lh;
+    }
+    return wiped;
+  }
+
+  /** Make the canvas the right number of pixels for this ratio. True if it had to change (which wipes it). */
+  private fitCanvas(dpr: number) {
+    const cw = Math.round(this.w * dpr);
+    const ch = Math.round(this.h * dpr);
+    if (this.canvas.width === cw && this.canvas.height === ch) return false;
+    this.canvas.width = cw;
+    this.canvas.height = ch;
+    return true;
   }
 
   private lastZoom = 1;
@@ -328,13 +422,11 @@ export class Renderer {
     const c = this.ctx;
     const z = cam.zoom;
     this.lastZoom = z;
-    // zoomed out: drop the pixel ratio (a canvas resize only when it actually changes)
+    // zoomed out: drop the pixel ratio (a canvas resize only when it actually changes; and whatever size the
+    // mine view left it at, it's put right here, in the same breath as the frame that fills it)
     const want = this.zoomDpr(this.baseDpr, z);
-    if (Math.abs(want - this.dpr) > 0.01) {
-      this.dpr = want;
-      this.canvas.width = Math.round(this.w * want);
-      this.canvas.height = Math.round(this.h * want);
-    }
+    if (Math.abs(want - this.dpr) > 0.01) this.dpr = want;
+    this.fitCanvas(this.dpr);
     const cx = cam.x + ov.shakeX;
     const cy = cam.y + ov.shakeY;
     const d = this.dpr;
@@ -349,9 +441,15 @@ export class Renderer {
     const x1 = v.x1 + pad;
     const y1 = v.y1 + pad * 2;
 
-    this.terrainR.draw(c, v.x0, v.y0, v.x1, v.y1, z);
+    // (plain bilinear smoothing every frame: the "high" setting costs far too much when the view is zoomed out;
+    // the sharpness comes from baking terrain and plants at the screen's own resolution instead)
+    c.imageSmoothingQuality = "low";
+    this.feedback.update(w, dt, z);
+    setDinoView(z * d);
+    this.terrainR.draw(c, v.x0, v.y0, v.x1, v.y1, z, z * d);
     this.trailFx(c, v.x0, v.y0, v.x1, v.y1);
     this.groundFx(c, v.x0, v.y0, v.x1, v.y1, z);
+    this.waterLight(c, cx, cy, z, v);
     this.snowFx(c, v.x0, v.y0, v.x1, v.y1, z);
     // the peaks: footprints in the snow + spindrift (render/snowArt.ts)
     this.peaksFx.draw(c, w, v.x0, v.y0, v.x1, v.y1, this.t, z);
@@ -360,14 +458,52 @@ export class Renderer {
 
     const lod = z < 0.5;
     const night = 1 - w.daylight;
+    const estateKey = `${w.shelterVersion}|${w.colony.version}|${w.tribe.version}|${w.terrain.version}|${w.campfires.map((f) => f.x + ":" + f.y).join(",")}|${w.tribe.farms.length}|${w.shelters.map((s) => `${s.id}:${s.x}:${s.y}:${s.tier}:${s.stage}:${s.hp > 0}:${!!s.lift}`).join(",")}`;
+    if (estateKey !== this.estateKey) {
+      this.estateKey = estateKey;
+      this.estateGroups = estates(w);
+      this.awningLinks = awningLayout(w);
+    }
+    const joinedCanopies = new Set(this.awningLinks.flatMap((l) => [l.aId, l.bId]));
+    const galleries = this.estateGroups.flatMap((e) => e.compound ? [] : e.links);
+    const sharedRooms = new Map<number, ReturnType<typeof wingUnits>>();
+    const castleCorners = new Map<number, number>();
+    for (const e of this.estateGroups) if (e.compound) {
+      drawCompoundGrounds(c, e.compound, this.t);
+      const wings = e.compound.wings.map((g) => e.homes.filter((s) => g.ids.includes(s.id)).sort((a, b) => a.id - b.id)).filter((g) => g.length);
+      for (const units of wings) for (const s of units) sharedRooms.set(s.id, units);
+      const xs = wings.map((g) => g[0].x), ys = wings.map((g) => g[0].y);
+      const left = Math.min(...xs), right = Math.max(...xs), back = Math.min(...ys), front = Math.max(...ys);
+      for (const units of wings) {
+        const s = units[0];
+        if ((s.x === left || s.x === right) && (s.y === back || s.y === front)) castleCorners.set(s.id, s.x === left ? -1 : 1);
+      }
+    }
+    const castleNeighbours = new Map<number, number>();
+    for (const l of galleries) { castleNeighbours.set(l.a.id, (castleNeighbours.get(l.a.id) ?? 0) + 1); castleNeighbours.set(l.b.id, (castleNeighbours.get(l.b.id) ?? 0) + 1); }
+    for (const e of this.estateGroups) if (e.garden && e.garden.x > x0 && e.garden.x < x1 && e.garden.y > y0 && e.garden.y < y1) drawCourtyard(c, e, this.t);
 
     // collect drawables
     const list = this.drawables;
     list.length = 0;
+    this.drawN = 0;
+    const pool = this.drawPool;
+    /** add something to the scene (sorted by y before it's drawn) */
+    const add = (y: number, k: number, i: number) => {
+      let it = pool[this.drawN];
+      if (!it) pool[this.drawN] = it = { y, k, i };
+      else {
+        it.y = y;
+        it.k = k;
+        it.i = i;
+      }
+      this.drawN++;
+      list.push(it);
+    };
     this.visPlants.length = 0;
     w.plantHash.rect(x0, y0, x1, y1 + 120, this.visPlants);
     w.visiblePlants = this.visPlants;
-    for (let i = 0; i < this.visPlants.length; i++) list.push({ y: this.visPlants[i].y, k: K_PLANT, i });
+    for (let i = 0; i < this.visPlants.length; i++) add(this.visPlants[i].y, K_PLANT, i);
     for (let i = 0; i < w.dinos.length; i++) {
       const dn = w.dinos[i];
       // an airborne flyer is drawn in the sky pass, unless it carries a rider: then it goes last
@@ -375,7 +511,7 @@ export class Renderer {
       const aloft = sp(dn.species).move === "fly" && dn.z > 6;
       if (dn.under || (aloft && !dn.rider && !dn.passengers?.length)) continue;
       if (dn.x < x0 || dn.x > x1 || dn.y < y0 || dn.y > y1 + 150) continue;
-      list.push({ y: aloft ? SKY_Y + dn.y : dn.y, k: K_DINO, i });
+      add(aloft ? SKY_Y + dn.y : dn.y, K_DINO, i);
     }
     for (let i = 0; i < w.humans.length; i++) {
       const h = w.humans[i];
@@ -384,41 +520,45 @@ export class Renderer {
       // up on a wall / tower: draw after the structure underneath; riders after their mount
       const mount = h.riding ? w.dinoById(h.riding) : null;
       const sky = !!mount && sp(mount.species).move === "fly" && mount.z > 6;
-      list.push({ y: h.level === 1 ? h.y + 44 : sky ? SKY_Y + mount!.y + 0.5 : h.riding ? h.y + 0.5 : h.y, k: K_HUMAN, i });
+      add(h.level === 1 ? h.y + 44 : sky ? SKY_Y + mount!.y + 0.5 : h.riding ? h.y + 0.5 : h.y, K_HUMAN, i);
     }
     const col = w.colony;
     for (let i = 0; i < col.buildings.length; i++) {
       const b = col.buildings[i];
       if (b.kind === "path" || b.kind === "bridge" || b.kind === "pen" || b.kind === "trap" || ((b.kind === "seatRing" || b.kind === "dragonPit" || b.kind === "riderHall") && b.built >= 1)) continue;
       const by = b.lift ? b.lift.y + 4 : b.y;
-      if ((b.lift?.x ?? b.x) > x0 - 80 && (b.lift?.x ?? b.x) < x1 + 80 && by > y0 && by < y1 + 80) list.push({ y: by - 1, k: K_BUILDING, i });
+      if ((b.lift?.x ?? b.x) > x0 - 80 && (b.lift?.x ?? b.x) < x1 + 80 && by > y0 && by < y1 + 80) add(by - 1, K_BUILDING, i);
     }
     for (let i = 0; i < col.scorpions.length; i++) {
       const s = col.scorpions[i];
-      if (s.x > x0 && s.x < x1 && s.y > y0 && s.y < y1 + 80) list.push({ y: s.mount === "ground" ? s.y : s.y + 46, k: K_SCORPION, i });
+      if (s.x > x0 && s.x < x1 && s.y > y0 && s.y < y1 + 80) add(s.mount === "ground" ? s.y : s.y + 46, K_SCORPION, i);
     }
     for (let i = 0; i < col.nodes.length; i++) {
       const n = col.nodes[i];
-      if (n.found && n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1) list.push({ y: n.y, k: K_NODE, i });
+      if (n.found && n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1) add(n.y, K_NODE, i);
     }
     this.drs = w.dragons.all();
     for (let i = 0; i < this.drs.length; i++) {
       const dr = this.drs[i];
-      if (dr.z <= 6 && dr.x > x0 - 100 && dr.x < x1 + 100 && dr.y > y0 && dr.y < y1 + 100) list.push({ y: dr.y, k: K_DRAGON, i });
+      if (dr.z <= 6 && dr.x > x0 - 100 && dr.x < x1 + 100 && dr.y > y0 && dr.y < y1 + 100) add(dr.y, K_DRAGON, i);
     }
     for (let i = 0; i < w.dragons.nests.length; i++) {
       const n = w.dragons.nests[i];
-      if (n.x > x0 - 60 && n.x < x1 + 60 && n.y > y0 && n.y < y1 + 40) list.push({ y: n.y - 6, k: K_NEST, i });
+      if (n.x > x0 - 60 && n.x < x1 + 60 && n.y > y0 && n.y < y1 + 40) add(n.y - 6, K_NEST, i);
     }
     for (let i = 0; i < w.dragons.eggs.length; i++) {
       const e = w.dragons.eggs[i];
-      if ((e.at === "ground" || e.at === "camp") && e.x > x0 && e.x < x1 && e.y > y0 && e.y < y1 + 20) list.push({ y: e.y, k: K_DEGG, i });
+      if ((e.at === "ground" || e.at === "camp") && e.x > x0 && e.x < x1 && e.y > y0 && e.y < y1 + 20) add(e.y, K_DEGG, i);
     }
     // Neanderthals, their camps and anything they've thrown
     const rv = w.rivals;
+    for (let i = 0; i < w.diplomacy.caravans.length; i++) {
+      const caravan = w.diplomacy.caravans[i];
+      if (caravan.x > x0 - 50 && caravan.x < x1 + 50 && caravan.y > y0 && caravan.y < y1 + 80) add(caravan.y, K_CARAVAN, i);
+    }
     for (let i = 0; i < rv.clans.length; i++) {
       const cl = rv.clans[i];
-      if (cl.x > x0 - 210 && cl.x < x1 + 210 && cl.y > y0 - 70 && cl.y < y1 + 110) list.push({ y: cl.y - 40, k: K_CLAN, i });
+      if (cl.x > x0 - 210 && cl.x < x1 + 210 && cl.y > y0 - 70 && cl.y < y1 + 110) add(cl.y - 40, K_CLAN, i);
     }
     for (let i = 0; i < rv.brutes.length; i++) {
       const b = rv.brutes[i];
@@ -426,26 +566,26 @@ export class Renderer {
       // …and a Sea Person riding a sea dragon goes straight after the dragon (sitting on its back)
       // (a Sand Dragon Rider is drawn on their dragon, with it)
       if (b.onDragon) continue;
-      if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1 + 160) list.push({ y: b.tree && b.z > 8 ? b.y + 70 : b.mount ? b.y + 1 : b.y, k: K_BRUTE, i });
+      if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1 + 160) add(b.tree && b.z > 8 ? b.y + 70 : b.mount ? b.y + 1 : b.y, K_BRUTE, i);
     }
     // Sand People camps: each tent, the pen, the roost sort on their own
     this.sandTents.length = 0;
     for (const tr of w.sandFolk.tribes) {
       if (tr.x + 320 < x0 || tr.x - 320 > x1 || tr.y + 200 < y0 || tr.y - 200 > y1 + 200) continue;
       for (const s of tr.tents) {
-        list.push({ y: s.kind === "pen" ? s.y - 34 : s.y, k: K_SANDTENT, i: this.sandTents.length });
+        add(s.kind === "pen" ? s.y - 34 : s.y, K_SANDTENT, this.sandTents.length);
         this.sandTents.push({ s, tr });
       }
     }
     // the Yetis' hanging trees by their dens
     this.hangTreeList = hangTrees(w).filter((t) => t.x > x0 - 60 && t.x < x1 + 60 && t.y > y0 && t.y < y1 + 120);
-    for (let i = 0; i < this.hangTreeList.length; i++) list.push({ y: this.hangTreeList[i].y, k: K_HANGTREE, i });
+    for (let i = 0; i < this.hangTreeList.length; i++) add(this.hangTreeList[i].y, K_HANGTREE, i);
     // Snow People camps: each igloo, the longhouse, the pen… sort on their own
     this.snowLodges.length = 0;
     for (const tr of w.snowFolk.tribes) {
       if (tr.x + 320 < x0 || tr.x - 320 > x1 || tr.y + 200 < y0 || tr.y - 200 > y1 + 200) continue;
       for (const s of tr.lodges) {
-        list.push({ y: s.kind === "pen" ? s.y - 34 : s.y, k: K_SNOWLODGE, i: this.snowLodges.length });
+        add(s.kind === "pen" ? s.y - 34 : s.y, K_SNOWLODGE, this.snowLodges.length);
         this.snowLodges.push({ s, tr });
       }
     }
@@ -453,11 +593,11 @@ export class Renderer {
     const mk = w.monks;
     for (let i = 0; i < mk.list.length; i++) {
       const m = mk.list[i];
-      if (m.x > x0 && m.x < x1 && m.y > y0 && m.y < y1 + 60) list.push({ y: m.y, k: K_MONK, i });
+      if (m.x > x0 && m.x < x1 && m.y > y0 && m.y < y1 + 60) add(m.y, K_MONK, i);
     }
     for (let i = 0; i < mk.places.length; i++) {
       const p = mk.places[i];
-      if (p.x > x0 - 110 && p.x < x1 + 110 && p.y > y0 - (p.kind === "chapel" ? 170 : 40) && p.y < y1 + 400) list.push({ y: p.kind === "flags" ? p.y - 30 : p.y, k: K_MONKPLACE, i });
+      if (p.x > x0 - 110 && p.x < x1 + 110 && p.y > y0 - (p.kind === "chapel" ? 170 : 40) && p.y < y1 + 400) add(p.kind === "flags" ? p.y - 30 : p.y, K_MONKPLACE, i);
     }
     // Tree People camps: the village up in the canopy (after its trees), the ground ring, the warning signs
     const fo = w.forest;
@@ -467,8 +607,8 @@ export class Renderer {
       if (tr.x + R < x0 || tr.x - R > x1 || tr.y + R < y0 || tr.y - R > y1 + 200) continue;
       let maxY = tr.y;
       for (const p of tr.pods) maxY = Math.max(maxY, p.y);
-      list.push({ y: maxY + 4, k: K_TREECAMP, i });
-      list.push({ y: tr.y - 60, k: K_TREEGROUND, i });
+      add(maxY + 4, K_TREECAMP, i);
+      add(tr.y - 60, K_TREEGROUND, i);
     }
     // Sea People villages out on the water
     const sf = w.seaFolk;
@@ -482,14 +622,14 @@ export class Renderer {
       for (const h of tr.huts) {
         minY = Math.min(minY, h.y);
         if (h.x > x0 - 80 && h.x < x1 + 80 && h.y > y0 - 20 && h.y < y1 + 120) {
-          list.push({ y: h.y, k: K_SEAHUT, i: this.seaHuts.length });
+          add(h.y, K_SEAHUT, this.seaHuts.length);
           this.seaHuts.push({ h, tr });
         }
       }
-      list.push({ y: minY - 40, k: K_SEAWALK, i });
+      add(minY - 40, K_SEAWALK, i);
       for (const s of tr.signs) {
         if (s.x < x0 - 40 || s.x > x1 + 40 || s.y < y0 || s.y > y1 + 80) continue;
-        list.push({ y: s.y, k: K_SEASIGN, i: this.seaSigns.length });
+        add(s.y, K_SEASIGN, this.seaSigns.length);
         this.seaSigns.push({ s, color: tr.color });
       }
     }
@@ -497,7 +637,7 @@ export class Renderer {
     for (const tr of fo.tribes) {
       for (const s of tr.signs) {
         if (s.x < x0 - 40 || s.x > x1 + 40 || s.y < y0 || s.y > y1 + 80) continue;
-        list.push({ y: s.y, k: K_TREESIGN, i: this.signs.length });
+        add(s.y, K_TREESIGN, this.signs.length);
         this.signs.push({ s, color: tr.color });
       }
     }
@@ -512,14 +652,14 @@ export class Renderer {
           const f = fenceSize(cl);
           if (s.x + f.rx > x0 && s.x - f.rx < x1 && s.y + f.ry > y0 - 60 && s.y - f.ry < y1 + 60) {
             for (const part of ["back", "front"] as const) {
-              list.push({ y: s.y + (part === "back" ? -f.ry : f.ry), k: K_CBUILD, i: this.cbs.length });
+              add(s.y + (part === "back" ? -f.ry : f.ry), K_CBUILD, this.cbs.length);
               this.cbs.push({ clan: cl, kind, lv, x: s.x, y: s.y, part });
             }
           }
           continue;
         }
         if (s.x > x0 - 140 && s.x < x1 + 140 && s.y > y0 - 30 && s.y < y1 + 140) {
-          list.push({ y: s.y, k: K_CBUILD, i: this.cbs.length });
+          add(s.y, K_CBUILD, this.cbs.length);
           this.cbs.push({ clan: cl, kind, lv, x: s.x, y: s.y });
         }
       }
@@ -530,71 +670,72 @@ export class Renderer {
     if (hallB && hallPit) {
       const r = hallRing(hallPit);
       if (r.cx + r.rx + 120 > x0 && r.cx - r.rx - 120 < x1 && r.cy + r.ry + 60 > y0 && r.cy - r.ry - 200 < y1) {
-        list.push({ y: r.cy - r.ry - 30, k: K_HALL_BACK, i: 0 });
-        list.push({ y: r.cy + r.ry + 26, k: K_HALL_FRONT, i: 0 });
+        add(r.cy - r.ry - 30, K_HALL_BACK, 0);
+        add(r.cy + r.ry + 26, K_HALL_FRONT, 0);
       }
     }
     for (let i = 0; i < w.colony.chariots.length; i++) {
       const chr = w.colony.chariots[i];
-      if (chr.x > x0 - 140 && chr.x < x1 + 140 && chr.y > y0 - 40 && chr.y < y1 + 120) list.push({ y: chr.y, k: K_CHARIOT, i });
+      if (chr.x > x0 - 140 && chr.x < x1 + 140 && chr.y > y0 - 40 && chr.y < y1 + 120) add(chr.y, K_CHARIOT, i);
     }
     for (let i = 0; i < rv.holds.length; i++) {
       const hd = rv.holds[i];
-      if (hd.x > x0 - hd.r && hd.x < x1 + hd.r && hd.y > y0 - 60 && hd.y < y1 + 60) list.push({ y: hd.y, k: K_HOLD, i });
+      if (hd.x > x0 - hd.r && hd.x < x1 + hd.r && hd.y > y0 - 60 && hd.y < y1 + 60) add(hd.y, K_HOLD, i);
     }
     for (let i = 0; i < rv.taken.length; i++) {
       const tc = rv.taken[i];
-      if (tc.x > x0 - 60 && tc.x < x1 + 60 && tc.y > y0 && tc.y < y1 + 40) list.push({ y: tc.y, k: K_OURCAT, i });
+      if (tc.x > x0 - 60 && tc.x < x1 + 60 && tc.y > y0 && tc.y < y1 + 40) add(tc.y, K_OURCAT, i);
     }
     for (let i = 0; i < rv.ourShots.length; i++) {
       const sh = rv.ourShots[i];
-      if (sh.x > x0 && sh.x < x1 && sh.y > y0 && sh.y < y1) list.push({ y: sh.y, k: K_OURSHOT, i });
+      if (sh.x > x0 && sh.x < x1 && sh.y > y0 && sh.y < y1) add(sh.y, K_OURSHOT, i);
     }
     for (let i = 0; i < rv.traps.length; i++) {
       const tr = rv.traps[i];
-      if (tr.x > x0 && tr.x < x1 && tr.y > y0 && tr.y < y1 + 20) list.push({ y: tr.y - 30, k: K_CTRAP, i });
+      if (tr.x > x0 && tr.x < x1 && tr.y > y0 && tr.y < y1 + 20) add(tr.y - 30, K_CTRAP, i);
     }
     for (let i = 0; i < rv.missiles.length; i++) {
       const m = rv.missiles[i];
-      if (m.x > x0 && m.x < x1 && m.y > y0 && m.y < y1) list.push({ y: m.y, k: K_BMISSILE, i });
+      if (m.x > x0 && m.x < x1 && m.y > y0 && m.y < y1) add(m.y, K_BMISSILE, i);
     }
     for (let i = 0; i < w.items.length; i++) {
       const it = w.items[i];
-      if (it.x > x0 && it.x < x1 && it.y > y0 && it.y < y1) list.push({ y: it.y, k: K_ITEM, i });
+      if (it.x > x0 && it.x < x1 && it.y > y0 && it.y < y1) add(it.y, K_ITEM, i);
     }
     for (let i = 0; i < w.eggs.length; i++) {
       const e = w.eggs[i];
-      if (e.x > x0 && e.x < x1 && e.y > y0 && e.y < y1) list.push({ y: e.y, k: K_EGG, i });
+      if (e.x > x0 && e.x < x1 && e.y > y0 && e.y < y1) add(e.y, K_EGG, i);
     }
     for (let i = 0; i < w.props.length; i++) {
       const p = w.props[i];
       if (p.kind === "nest") continue;
-      if (p.x > x0 && p.x < x1 && p.y > y0 && p.y < y1) list.push({ y: p.y, k: K_PROP, i });
+      if (p.x > x0 && p.x < x1 && p.y > y0 && p.y < y1) add(p.y, K_PROP, i);
     }
     for (let i = 0; i < w.shelters.length; i++) {
       const s = w.shelters[i];
+      if (sharedRooms.has(s.id) && sharedRooms.get(s.id)![0].id !== s.id) continue;
       const sx = s.lift?.x ?? s.x;
       const sy = s.lift ? s.lift.y + 4 : s.y;
-      if (sx > x0 && sx < x1 && sy > y0 && sy < y1 + 60) list.push({ y: sy, k: K_SHELTER, i });
+      if (sx > x0 && sx < x1 && sy > y0 && sy < y1 + 60) add(sy, K_SHELTER, i);
     }
     for (let i = 0; i < w.campfires.length; i++) {
       const f = w.campfires[i];
       if (f.x > x0 - 80 && f.x < x1 + 80 && f.y > y0 - 80 && f.y < y1 + 80) {
-        list.push({ y: f.y, k: K_CAMPFIRE, i });
+        add(f.y, K_CAMPFIRE, i);
       }
     }
-    if (w.camp.pileX > x0 && w.camp.pileX < x1 && w.camp.pileY > y0 && w.camp.pileY < y1) list.push({ y: w.camp.pileY, k: K_PILE, i: 0 });
+    if (w.camp.pileX > x0 && w.camp.pileX < x1 && w.camp.pileY > y0 && w.camp.pileY < y1) add(w.camp.pileY, K_PILE, 0);
     // the feast table by the fire (once a dragon has roasted anything)
     if (w.colony.feast.food > 0 || w.colony.feast.eaten > 0 || w.flags.has("dragonCook")) {
       const ft = feastTable(w);
-      if (ft.x > x0 - 80 && ft.x < x1 + 80 && ft.y > y0 - 60 && ft.y < y1 + 60) list.push({ y: ft.y, k: K_FEAST, i: 0 });
+      if (ft.x > x0 - 80 && ft.x < x1 + 80 && ft.y > y0 - 60 && ft.y < y1 + 60) add(ft.y, K_FEAST, 0);
     }
-    if (Object.values(w.mineLoads).some((n) => (n ?? 0) > 0) && w.camp.caveX > x0 - 100 && w.camp.caveX < x1 + 100 && w.camp.caveY > y0 - 80 && w.camp.caveY < y1 + 80) list.push({ y: w.camp.caveY + 36, k: K_MINE_LOAD, i: 0 });
+    if (Object.values(w.mineLoads).some((n) => (n ?? 0) > 0) && w.camp.caveX > x0 - 100 && w.camp.caveX < x1 + 100 && w.camp.caveY > y0 - 80 && w.camp.caveY < y1 + 80) add(w.camp.caveY + 36, K_MINE_LOAD, 0);
     const vo = w.volcano;
-    if (vo.x + 450 > x0 && vo.x - 450 < x1 && vo.y - 400 < y1 && vo.y + 200 > y0) list.push({ y: vo.y + 150, k: K_VOLCANO, i: 0 });
+    if (vo.x + 450 > x0 && vo.x - 450 < x1 && vo.y - 400 < y1 && vo.y + 200 > y0) add(vo.y + 150, K_VOLCANO, 0);
     for (let i = 0; i < this.peaks.length; i++) {
       const p = this.peaks[i];
-      if (p.x > x0 && p.x < x1 && p.y > y0 && p.y < y1 + 120) list.push({ y: p.y, k: K_PEAK, i });
+      if (p.x > x0 && p.x < x1 && p.y > y0 && p.y < y1 + 120) add(p.y, K_PEAK, i);
     }
     // fire cells (flames are tall, so they sort with everything else)
     let fires = 0;
@@ -602,12 +743,12 @@ export class Renderer {
       const fx = (idx % MAP_W) * TILE + TILE / 2;
       const fy = Math.floor(idx / MAP_W) * TILE + TILE / 2;
       if (fx > x0 && fx < x1 && fy > y0 && fy < y1) {
-        list.push({ y: fy + 8, k: K_FIRE, i: idx });
+        add(fy + 8, K_FIRE, idx);
         fires++;
       }
     });
     this.fireInView = fires;
-    for (let i = 0; i < vo.rocks.length; i++) list.push({ y: vo.rocks[i].y, k: K_ROCK, i });
+    for (let i = 0; i < vo.rocks.length; i++) add(vo.rocks[i].y, K_ROCK, i);
     const tribe = w.tribe;
     for (let i = 0; i < tribe.walls.length; i++) {
       const wl = tribe.walls[i];
@@ -615,40 +756,116 @@ export class Renderer {
       const wy = wl.ty * TILE + TILE;
       // a bone gate turned in a north-south wall straddles it: drawn over the wall pieces just in front of it
       const turned = wl.bone && wl.part === "gate" && !tribe.wallAt(wl.tx - 1, wl.ty) && !tribe.wallAt(wl.tx + 1, wl.ty) && (!!tribe.wallAt(wl.tx, wl.ty - 1) || !!tribe.wallAt(wl.tx, wl.ty + 1));
-      if (wx > x0 && wx < x1 && wy > y0 && wy < y1 + 40) list.push({ y: turned ? wy + TILE * 1.6 : wy - (wl.bone ? 1.5 : 2), k: K_WALL, i });
+      if (wx > x0 && wx < x1 && wy > y0 && wy < y1 + 40) add(turned ? wy + TILE * 1.6 : wy - (wl.bone ? 1.5 : 2), K_WALL, i);
     }
     for (let i = 0; i < tribe.towers.length; i++) {
       const tw = tribe.towers[i];
-      if (tw.x > x0 && tw.x < x1 && tw.y > y0 && tw.y < y1 + 160) list.push({ y: tw.y, k: K_TOWER, i });
+      if (tw.x > x0 && tw.x < x1 && tw.y > y0 && tw.y < y1 + 160) add(tw.y, K_TOWER, i);
     }
 
-    // shadows first (cheap sprite stamps), offset by the sun
-    const sunX = (w.time - 12) * -3;
-    const shadowA = 0.25 + w.daylight * 0.55;
-    c.globalAlpha = shadowA * (1 - w.weather.cloud * 0.5);
-    for (const it of list) {
-      let sx = 0;
-      let sy = 0;
-      let r = 0;
-      if (it.k === K_PLANT) {
-        const p = this.visPlants[it.i];
-        if (p.stump) continue;
-        sx = p.x;
-        sy = p.y;
-        r = TALL.has(p.kind) ? PLANT_H[p.kind] * p.size * 0.32 : 10;
-      } else if (it.k === K_DINO) {
-        const dn = w.dinos[it.i];
-        if (sp(dn.species).move === "swim") continue;
-        sx = dn.x;
-        sy = dn.y;
-        r = sizeOf(dn) * 0.42;
-      } else if (it.k === K_HUMAN) {
-        const h = w.humans[it.i];
-        sx = h.x;
-        sy = h.y;
-        r = 8;
-      } else continue;
-      c.drawImage(this.shadowSprite, sx - r + sunX * (r / 40), sy - r * 0.35, r * 2, r * 0.7);
+    // shadows first: cast away from the sun, long at dawn and dusk, faint and blue under the moon
+    const sun = (this.sun = sunAt(w.time, w.daylight, w.weather.cloud));
+    const shadowA = Math.min(1, sun.alpha * 1.7);
+    const sunX = sun.dx * 14;
+    if (Q.shadows === 0 || z < 0.3) {
+      // far out (or Low): a plain blob under each thing
+      c.globalAlpha = shadowA;
+      for (const it of list) {
+        let sx = 0;
+        let sy = 0;
+        let r = 0;
+        if (it.k === K_PLANT) {
+          const p = this.visPlants[it.i];
+          if (p.stump) continue;
+          sx = p.x;
+          sy = p.y;
+          r = TALL.has(p.kind) ? PLANT_H[p.kind] * p.size * 0.32 : 10;
+        } else if (it.k === K_DINO) {
+          const dn = w.dinos[it.i];
+          if (sp(dn.species).move === "swim") continue;
+          sx = dn.x;
+          sy = dn.y;
+          r = sizeOf(dn) * 0.42;
+        } else if (it.k === K_HUMAN) {
+          const h = w.humans[it.i];
+          sx = h.x;
+          sy = h.y;
+          r = 8;
+        } else continue;
+        c.drawImage(this.shadowSprite, sx - r + sunX * (r / 40), sy - r * 0.35, r * 2, r * 0.7);
+      }
+    } else {
+      const ang = Math.atan2(sun.dy, sun.dx);
+      const ca = Math.cos(ang);
+      const sa = Math.sin(ang);
+      if (Q.shadows >= 2 && z > 0.36) {
+        // walls, towers, homes and solid buildings: one path, filled once, so neighbours never double up
+        c.beginPath();
+        for (const it of list) {
+          if (it.k === K_WALL) {
+            const wl = tribe.walls[it.i];
+            if (wl.built < 0.5 || wl.mega) continue;
+            boxShadowPath(c, wl.tx * TILE + 1, wl.ty * TILE + TILE * 0.4, (wl.tx + 1) * TILE - 1, (wl.ty + 1) * TILE, wl.kind === "palisade" ? 22 : 28, sun);
+          } else if (it.k === K_TOWER) {
+            const tw = tribe.towers[it.i];
+            if (tw.stage < 1) continue;
+            boxShadowPath(c, tw.x - 24, tw.y - 20, tw.x + 24, tw.y, 22 * tw.stage, sun);
+          } else if (it.k === K_BUILDING) {
+            const b = col.buildings[it.i];
+            const def = BUILDINGS[b.kind];
+            if (!def.solid || b.built < 0.6 || b.lift || b.kind === "riderHall" || b.kind === "dragonBones" || b.kind === "pyramid") continue;
+            boxShadowPath(c, b.x - def.w * 13, b.y - def.h * 12, b.x + def.w * 13, b.y, 12 + Math.min(def.w, def.h) * 7, sun);
+          } else if (it.k === K_SHELTER) {
+            const s = w.shelters[it.i];
+            if (s.stage < 2 || s.lift) continue;
+            const half = 17 + s.tier * 2.5;
+            boxShadowPath(c, s.x - half, s.y - 13, s.x + half, s.y, 15 + s.tier * 4, sun);
+          }
+        }
+        c.fillStyle = `rgba(14,20,36,${(sun.alpha * 0.62).toFixed(3)})`;
+        c.fill();
+      }
+      c.globalAlpha = shadowA;
+      // every shadow leans the same way, so the canvas is turned once and each shadow is a single image draw
+      // (placed by turning its spot the other way), not a save / transform / restore apiece
+      c.save();
+      c.rotate(ang);
+      const shadowImg = this.shadowSprite;
+      const cast = (x: number, y: number, r: number, h: number) => {
+        const L = h * sun.len;
+        const major = r + L * 0.5;
+        const minor = Math.max(2, r * 0.42);
+        const wx = x + sun.dx * L * 0.5;
+        const wy = y + sun.dy * L * 0.5;
+        c.drawImage(shadowImg, wx * ca + wy * sa - major, wy * ca - wx * sa - minor, major * 2, minor * 2);
+      };
+      for (const it of list) {
+        if (it.k === K_PLANT) {
+          const p = this.visPlants[it.i];
+          if (p.stump) continue;
+          if (TALL.has(p.kind)) {
+            const H = PLANT_H[p.kind] * (0.35 + p.size * 0.65);
+            cast(p.x, p.y, H * 0.26, H * 0.55);
+          } else cast(p.x, p.y, 9, 5);
+        } else if (it.k === K_DINO) {
+          const dn = w.dinos[it.i];
+          const def = sp(dn.species);
+          if (def.move === "swim") continue;
+          const L = sizeOf(dn);
+          cast(dn.x, dn.y, L * 0.36, L * (def.plan === "sauropod" ? 0.42 : 0.26));
+        } else if (it.k === K_HUMAN) {
+          const h = w.humans[it.i];
+          cast(h.x, h.y, 6.5, h.child ? 13 : 20);
+        } else if (it.k === K_BRUTE) {
+          const b = w.rivals.brutes[it.i];
+          if (b.boat || b.z > 8 || b.hidden) continue;
+          cast(b.x, b.y, 7.5, 22);
+        } else if (it.k === K_MONK) {
+          const m = w.monks.list[it.i];
+          if (m) cast(m.x, m.y, 6.5, 20);
+        }
+      }
+      c.restore();
     }
     for (const dr of w.dragons.all()) {
       if (dr.x < x0 - 200 || dr.x > x1 + 200 || dr.y < y0 || dr.y > y1 + 200) continue;
@@ -717,27 +934,51 @@ export class Renderer {
       c.globalAlpha = 1;
     }
 
+    galleries.forEach((l, i) => { if (Math.max(l.a.x, l.b.x) > x0 && Math.min(l.a.x, l.b.x) < x1 && Math.max(l.a.y, l.b.y) > y0 && Math.min(l.a.y, l.b.y) < y1) add(Math.max(l.a.y, l.b.y) - 14, K_GALLERY, i); });
+    this.awningLinks.forEach((l, i) => { if (Math.max(l.ax, l.bx) > x0 && Math.min(l.ax, l.bx) < x1 && Math.max(l.ay, l.by) > y0 && Math.min(l.ay, l.by) < y1) add(Math.max(l.ay, l.by) - 2, K_AWNING_LINK, i); });
     list.sort((a, b) => a.y - b.y);
+    // plants: live-painted (leaves stirring one by one) only when a few fill the screen; otherwise cached images
+    const plantsLive = z >= 1.5 && this.visPlants.length < 70;
+    const plantRes = plantSpriteRes(z * d, Q.id === "low" ? 1 : Q.id === "medium" ? 2 : 3);
+    // (small on screen, a plant's sway can't be seen: it's stamped without turning the canvas)
+    const plantStill = z * d < 0.9;
+    atlasBeginFrame(4);
+    // structures: lit images, re-painted a few times a second (more often up close, where their motion shows)
+    this.lit.begin();
+    this.litOn = Q.shading;
+    this.litRes = plantRes;
+    this.litFps = z >= 0.8 ? 8 : 4;
     const learned = w.camp.learned;
     const weapon: WeaponLook = learned.has("crossbow") ? "crossbow" : learned.has("bow") ? "bow" : learned.has("spear") ? "spear" : null;
     for (const it of list) {
       switch (it.k) {
+        case K_GALLERY: drawGallery(c, galleries[it.i], night > 0.5); break;
+        case K_AWNING_LINK: drawAwningLink(c, this.awningLinks[it.i]); break;
         case K_PLANT: {
           const p = this.visPlants[it.i];
-          // zoomed out: a plain blob drawn in place (no save/translate/restore per plant)
-          if (lod && !p.stump) {
-            drawPlantLod(c, p, p.x, p.y);
-            break;
+          if (!p.stump) {
+            // Low zoomed out, or anyone zoomed right out (a tree is a few pixels): a plain blob drawn in place
+            if (lod && (Q.id === "low" || z * d < 0.34)) {
+              drawPlantLod(c, p, p.x, p.y);
+              break;
+            }
+            // everything but a close-up of a few plants: stamped from a cached image (see drawPlantFast)
+            if (!plantsLive) {
+              // (its picture may not be painted yet in the first frames of a world: a plain blob stands in)
+              if (!drawPlantFast(c, p, this.t, w.weather.wind, plantRes, plantStill)) drawPlantLod(c, p, p.x, p.y);
+              break;
+            }
           }
           c.save();
           c.translate(p.x, p.y);
-          drawPlant(c, p, this.t, w.weather.wind, lod);
+          drawPlant(c, p, this.t, w.weather.wind, false);
           c.restore();
           break;
         }
         case K_DINO: {
           const dn = w.dinos[it.i];
-          if (z < DINO_LOD && dn.id !== ov.selectedId && dn.id !== ov.followId) this.drawTinyDino(c, dn);
+          // far out, or an animal only a dozen pixels long at this zoom: a quick silhouette does
+          if ((z < DINO_LOD || sizeOf(dn) * z < TINY_DINO_PX) && dn.id !== ov.selectedId && dn.id !== ov.followId && dn.state !== "carried") this.drawTinyDino(c, dn);
           else this.drawDinoAt(c, dn, ov);
           break;
         }
@@ -751,8 +992,7 @@ export class Renderer {
           const b = col.buildings[it.i];
           const def = BUILDINGS[b.kind];
           if (b.lift) this.liftShadow(c, b.lift, def.w * TILE * 0.5);
-          c.save();
-          c.translate(b.lift?.x ?? b.x, (b.lift?.y ?? b.y) - (b.lift?.z ?? 0));
+          const paintB = (c: CanvasRenderingContext2D) => {
           if (b.kind === "spikes") drawSpikes(c, Math.atan2(b.y - (w.camp.y + 30), b.x - w.camp.x), b.built, b.hp / def.hp, b.tx * 7 + b.ty);
           else if (b.kind === "barricade") drawBarricade(c, b.built, b.hp / def.hp);
           else if (b.kind === "totem") drawTotem(c, b.built, this.t);
@@ -761,7 +1001,7 @@ export class Renderer {
           else if (b.kind === "tannery") drawTannery(c, def.w * TILE, b.built, w.camp.stock.hide, this.t);
           else if (b.kind === "refinery" && b.built >= 1) drawRefinery(c, def.w * TILE, w.camp.stock, this.t, night > 0.5);
           else if (CIV_KINDS.has(b.kind)) drawCivBuilding(c, b, def.w, def.h, { power: w.civ.energy > 1, night: night > 0.5, storm: w.weather.storm, t: this.t, charge: b.kind === "dragonShield" ? shieldView(w).charge.get(b.id) ?? 0 : 0 });
-          else drawBuilding(c, b, def.w, def.h, night > 0.5, this.t);
+          else drawBuilding(c, b, def.w, def.h, night > 0.5, this.t, 0, joinedCanopies.has(b.id));
           if (b.built < 1 && (b.kind === "spikes" || b.kind === "barricade" || b.kind === "totem" || b.kind === "tannery")) {
             c.strokeStyle = "rgba(255,255,255,0.75)";
             c.setLineDash([4, 3]);
@@ -770,7 +1010,14 @@ export class Renderer {
             c.setLineDash([]);
           }
           if (b.built >= 1 && b.hp < def.hp * 0.6) this.damageBadge(c, 0, -46);
-          c.restore();
+          };
+          if (b.lift) {
+            // being carried: painted directly, up in the air
+            c.save();
+            c.translate(b.lift.x, b.lift.y - b.lift.z);
+            paintB(c);
+            c.restore();
+          } else this.stamp(c, "b" + b.id, b.id, `${b.kind}|${b.built >= 1 ? 1 : 0}|${b.stage ?? 0}|${b.merged ?? 0}|${b.level ?? 0}|${joinedCanopies.has(b.id)}`, b.x, b.y, paintB);
           break;
         }
         case K_SCORPION: {
@@ -802,10 +1049,7 @@ export class Renderer {
         }
         case K_NODE: {
           const n = col.nodes[it.i];
-          c.save();
-          c.translate(n.x, n.y);
-          drawNode(c, n, this.t);
-          c.restore();
+          this.stamp(c, "n" + n.id, n.id, `node|${n.kind}|${n.variant}|${Math.ceil((n.amount / Math.max(1, n.max)) * 4)}`, n.x, n.y, (c) => drawNode(c, n, this.t));
           break;
         }
         case K_CLAN: {
@@ -816,8 +1060,14 @@ export class Renderer {
           c.restore();
           break;
         }
+        case K_CARAVAN: {
+          const caravan = w.diplomacy.caravans[it.i];
+          if (caravan) drawCaravan(c, w, caravan, this.t);
+          break;
+        }
         case K_BRUTE: {
           const b = w.rivals.brutes[it.i];
+          if (z < PEOPLE_LOD && this.tinyFolk(c, b, night)) break;
           c.save();
           c.translate(b.x, b.y - b.z);
           const bc = w.rivals.clan(b.clan);
@@ -847,7 +1097,13 @@ export class Renderer {
         }
         case K_SANDTENT: {
           const st = this.sandTents[it.i];
-          if (st) drawSandTent(c, st.s, st.tr, this.t, night > 0.5);
+          if (st) {
+            const s = st.s;
+            this.stamp(c, `sd${st.tr.id}:${s.x | 0}:${s.y | 0}`, (s.x + s.y) | 0, `sand|${s.kind}|${st.tr.tier}|${s.hp > 0 ? 1 : 0}`, s.x, s.y, (c) => {
+              c.translate(-s.x, -s.y);
+              drawSandTent(c, s, st.tr, this.t, night > 0.5);
+            });
+          }
           break;
         }
         case K_HANGTREE: {
@@ -861,12 +1117,28 @@ export class Renderer {
         }
         case K_SNOWLODGE: {
           const sl = this.snowLodges[it.i];
-          if (sl) drawSnowLodge(c, sl.s, sl.tr, this.t, night > 0.5);
+          if (sl) {
+            const s = sl.s;
+            this.stamp(c, `sn${sl.tr.id}:${s.x | 0}:${s.y | 0}`, (s.x + s.y) | 0, `snow|${s.kind}|${sl.tr.tier}|${s.hp > 0 ? 1 : 0}`, s.x, s.y, (c) => {
+              c.translate(-s.x, -s.y);
+              drawSnowLodge(c, s, sl.tr, this.t, night > 0.5);
+            });
+          }
           break;
         }
         case K_MONK: {
           const m = w.monks.list[it.i];
           if (!m) break;
+          if (z < PEOPLE_LOD && m.glow <= 0) {
+            const y = m.y - m.z;
+            c.fillStyle = "rgba(0,0,0,0.2)";
+            c.fillRect(m.x - 5, y - 1, 10, 3);
+            c.fillStyle = ["#e0902a", "#c8642c", "#8e2b2b"][m.robe % 3];
+            c.fillRect(m.x - 5, y - 17, 10, 16);
+            c.fillStyle = "#c99a6c";
+            c.fillRect(m.x - 4, y - 24, 8, 7);
+            break;
+          }
           c.save();
           c.translate(m.x, m.y - m.z);
           drawMonk(c, m, this.t, m.slot === 0 && !m.pilgrim, night > 0.45);
@@ -875,7 +1147,16 @@ export class Renderer {
         }
         case K_MONKPLACE: {
           const p = w.monks.places[it.i];
-          if (p) drawMonkPlace(c, p, this.t, night > 0.45, !!w.monks.rite && (w.monks.rite.phase !== "gather" || p.kind === "shrine"));
+          if (p) {
+            const rite = !!w.monks.rite && (w.monks.rite.phase !== "gather" || p.kind === "shrine");
+            // (the rite's light and the long lines of flags are painted directly: they glow and reach far)
+            if (rite || p.kind === "flags") drawMonkPlace(c, p, this.t, night > 0.45, rite);
+            else
+              this.stamp(c, `mk${it.i}`, it.i * 5, `monk|${p.kind}`, p.x, p.y, (c) => {
+                c.translate(-p.x, -p.y);
+                drawMonkPlace(c, p, this.t, night > 0.45, false);
+              });
+          }
           break;
         }
         case K_SEAWALK: {
@@ -885,7 +1166,13 @@ export class Renderer {
         }
         case K_SEAHUT: {
           const sh = this.seaHuts[it.i];
-          if (sh) drawSeaHut(c, sh.h, sh.tr, this.t, night > 0.5);
+          if (sh) {
+            const h = sh.h;
+            this.stamp(c, `se${sh.tr.id}:${h.x | 0}:${h.y | 0}`, (h.x + h.y) | 0, `sea|${h.kind}|${sh.tr.tier}|${h.hp > 0 ? 1 : 0}`, h.x, h.y, (c) => {
+              c.translate(-h.x, -h.y);
+              drawSeaHut(c, h, sh.tr, this.t, night > 0.5);
+            });
+          }
           break;
         }
         case K_SEASIGN: {
@@ -909,10 +1196,7 @@ export class Renderer {
         }
         case K_CBUILD: {
           const cb = this.cbs[it.i];
-          c.save();
-          c.translate(cb.x, cb.y);
-          drawClanBuilding(c, cb.clan, cb.kind, cb.lv, this.t, night > 0.5, cb.part);
-          c.restore();
+          this.stamp(c, `cb${cb.clan.id}|${cb.kind}|${cb.part ?? ""}`, cb.clan.id * 7 + cb.kind.length, `clan|${cb.kind}|${cb.lv}|${cb.part ?? ""}|${cb.clan.campTier ?? 0}`, cb.x, cb.y, (c) => drawClanBuilding(c, cb.clan, cb.kind, cb.lv, this.t, night > 0.5, cb.part));
           break;
         }
         case K_HALL_BACK:
@@ -1021,7 +1305,16 @@ export class Renderer {
             const stage = carcassStage(cc);
             if (stage !== "gone") {
               const def = sp(item.species);
-              drawCarcass(c, cc.size, cc.dir, { body: def.look.body, belly: def.look.belly, plan: def.plan, carnivore: def.diet !== "herbivore", horned: !!def.shape.horns, plates: !!def.shape.plates, k: harvested(cc), stage, burnt: cc.burnt, rot: cc.rot }, this.t);
+              const look = { body: def.look.body, belly: def.look.belly, plan: def.plan, carnivore: def.diet !== "herbivore", horned: !!def.shape.horns, plates: !!def.shape.plates, k: harvested(cc), stage, burnt: cc.burnt, rot: cc.rot };
+              // (a carcass hardly changes: unless you're close enough to see the flies, it's a stamped picture)
+              const still = z * d < 0.9;
+              const kq = Math.round(look.k * 6) / 6;
+              const bq = !!cc.burnt;
+              const rq = Math.round((cc.rot ?? 0) * 3) / 3;
+              const sq = Math.round(cc.size / 8) * 8;
+              const half = sq * 1.3 * 0.62 + 14;
+              if (!still || !atlasStamp(c, `carc|${item.species}|${sq}|${cc.dir}|${stage}|${kq}|${bq}|${rq}`, plantRes, half, sq * 0.75 + 20, 14, 0, 0, (a) => drawCarcass(a, sq, cc.dir, { ...look, k: kq, burnt: bq, rot: rq }, 0)))
+                drawCarcass(c, cc.size, cc.dir, look, this.t);
             }
             if (cc.roast) drawRoastPile(c, cc.roast, cc.size, this.t);
           } else if (item.kind === "bones") drawBones(c, item.amount);
@@ -1050,11 +1343,19 @@ export class Renderer {
         case K_SHELTER: {
           const s = w.shelters[it.i];
           if (s.lift) this.liftShadow(c, s.lift, 34);
-          c.save();
-          c.translate(s.lift?.x ?? s.x, (s.lift?.y ?? s.y) - (s.lift?.z ?? 0));
           const done = shelterDone(s);
           const inside = done ? this.restingIn(s.id) : 0;
-          if (!drawHome(c, s, done, night > 0.5, this.t, inside)) {
+          const units = sharedRooms.get(s.id) ?? [s];
+          const unitIds = new Set(units.map((u) => u.id));
+          const cutaway = ov.inspect?.kind === "shelter" && unitIds.has(ov.inspect.id);
+          const neighbours = castleNeighbours.get(s.id) ?? 0;
+          const beds = units.reduce((n, u) => n + HOUSING[u.tier].cap + (w.civ.has("greatHalls") ? 2 : 0), 0);
+          const occupants = cutaway ? w.humans.filter((h) => unitIds.has(h.home)).length : 0;
+          const paintS = (c: CanvasRenderingContext2D) => {
+          if (done && sharedRooms.has(s.id)) drawCompoundWing(c, units.length, beds, occupants, night > 0.5, cutaway, castleCorners.get(s.id) ?? 0);
+          else if (done && s.tier >= 4) drawCastleWing(c, s, neighbours, night > 0.5, this.t, beds, occupants, cutaway);
+          else if (!done && s.plan === "castle") drawCastleSite(c, s);
+          else if (!drawHome(c, s, done, night > 0.5, this.t, inside)) {
             if (s.plan === "tent" && !done) {
               // tent going up: dashed footprint, then poles
               c.strokeStyle = "rgba(255,255,255,0.75)";
@@ -1078,7 +1379,13 @@ export class Renderer {
           }
           if (s.up) drawScaffold(c, Object.values(s.upHave).reduce((a, b) => a + (b ?? 0), 0) / Math.max(1, Object.values(HOUSING[s.tier + 1]?.cost ?? {}).reduce((a, b) => a + (b ?? 0), 0)));
           if (done && s.hp < 0.6) this.damageBadge(c, 0, -60);
-          c.restore();
+          };
+          if (s.lift) {
+            c.save();
+            c.translate(s.lift.x, s.lift.y - s.lift.z);
+            paintS(c);
+            c.restore();
+          } else this.stamp(c, "s" + s.id, s.id, `home|${s.plan}|${s.tier}|${s.stage}|${done ? 1 : 0}|${s.up ? 1 : 0}|${neighbours}|${cutaway}|${beds}|${occupants}`, s.x, s.y, paintS);
           break;
         }
         case K_FEAST: {
@@ -1130,7 +1437,13 @@ export class Renderer {
           break;
         case K_PEAK: {
           const p = this.peaks[it.i];
-          this.drawPeak(c, p.x, p.y, p.s, p.snow, p.v);
+          // peaks never change: each look (size, snow line, shape) is painted once into the atlas and stamped
+          const sq = Math.max(0.5, Math.round(p.s * 6) / 6);
+          const nq = Math.round(p.snow * 4) / 4;
+          const vq = Math.round(p.v * 5) / 5;
+          const pw = 46 * sq;
+          const ph = 70 * sq * (0.85 + vq * 0.35);
+          if (!atlasStamp(c, `peak|${sq.toFixed(2)}|${nq}|${vq}`, plantRes, pw * 1.22 + 4, ph + 6, pw * 0.26 + 6, p.x, p.y, (a) => this.drawPeak(a, 0, 0, sq, nq, vq), true)) this.drawPeak(c, p.x, p.y, sq, nq, vq);
           break;
         }
         case K_FIRE: {
@@ -1197,8 +1510,6 @@ export class Renderer {
               if (nn > 0) run = { n: nn + 1, vertical: true };
             }
           }
-          c.save();
-          c.translate(wl.tx * TILE + TILE / 2, wl.ty * TILE + TILE);
           const linked = (dx: number, dy: number) => {
             const o = tribe.wallAt(wl.tx + dx, wl.ty + dy);
             if (o && o.part !== "stairs" && (o.built >= 1) === (wl.built >= 1)) return true;
@@ -1209,21 +1520,28 @@ export class Renderer {
           const mask = wl.part === "stairs" ? stairsMask : (linked(0, -1) ? 1 : 0) | (linked(1, 0) ? 2 : 0) | (linked(0, 1) ? 4 : 0) | (linked(-1, 0) ? 8 : 0);
           const towerAt = (dx: number, dy: number) => !!tribe.wallAnchorAt(w, wl.tx + dx, wl.ty + dy);
           const towerMask = wl.part === "stairs" ? 0 : (towerAt(0, -1) ? 1 : 0) | (towerAt(1, 0) ? 2 : 0) | (towerAt(-1, 0) ? 8 : 0);
+          const hpFrac = wl.built >= 1 ? wl.hp / wallMaxHp(wl) : 1;
+          if (wl.part === "wall" && wl.built >= 1 && !wl.upgrade && !wl.boneUp && !wl.pulley) {
+            // a plain finished wall piece never changes: painted once per look into the atlas and stamped
+            // (a long wall is hundreds of pieces, each a dozen gradients if drawn live)
+            const hs = hpFrac < 0.45 ? 0 : hpFrac < 0.6 ? 1 : 2;
+            if (atlasStamp(c, `wall|${wl.kind}|${mask}|${towerMask}|${hs}|${wl.tx % 4}|${wl.ty % 4}`, plantRes, 28, 74, 6, wl.tx * TILE + TILE / 2, wl.ty * TILE + TILE, (a) => drawWall(a, { ...wl, tx: wl.tx % 4, ty: wl.ty % 4 }, { mask, tower: towerMask, hpFrac: hs === 0 ? 0.3 : hs === 1 ? 0.52 : 1, swing: 0, t: 0 }), true)) break;
+          }
+          c.save();
+          c.translate(wl.tx * TILE + TILE / 2, wl.ty * TILE + TILE);
           let sw = this.swing.get(wl.id) ?? (wl.open ? 1 : 0);
           sw += ((wl.open ? 1 : 0) - sw) * Math.min(1, dt * 4);
           this.swing.set(wl.id, sw);
-          drawWall(c, wl, { mask, tower: towerMask, hpFrac: wl.built >= 1 ? wl.hp / wallMaxHp(wl) : 1, swing: sw, t: this.t, run });
+          drawWall(c, wl, { mask, tower: towerMask, hpFrac, swing: sw, t: this.t, run });
           if (ov.inspect?.kind === "gate" && ov.inspect.id === wl.id) this.inspectRing(c, 0, -10, 22);
           c.restore();
           break;
         }
         case K_TOWER: {
           const tw = tribe.towers[it.i];
-          c.save();
-          c.translate(tw.x, tw.y);
-          drawTower2(c, tw.stage, tw.hp / towerMaxHp(tw), this.t, w.camp.learned.has("stonewall"), !!tw.stone);
-          if (ov.inspect?.kind === "tower" && ov.inspect.id === tw.id) this.inspectRing(c, 0, -4, 40);
-          c.restore();
+          const stoneKnown = w.camp.learned.has("stonewall");
+          this.stamp(c, "t" + tw.id, tw.id, `tower|${tw.stage}|${tw.stone ? 1 : 0}|${stoneKnown ? 1 : 0}`, tw.x, tw.y, (c) => drawTower2(c, tw.stage, tw.hp / towerMaxHp(tw), this.t, stoneKnown, !!tw.stone));
+          if (ov.inspect?.kind === "tower" && ov.inspect.id === tw.id) this.inspectRing(c, tw.x, tw.y - 4, 40);
           break;
         }
         case K_ROCK: {
@@ -1327,6 +1645,7 @@ export class Renderer {
     }
 
     this.drawParticles(c, x0, y0, x1, y1);
+    this.feedback.drawFlashes(c);
     this.heatHaze(c, v.x0, v.y0, v.x1, v.y1);
     this.skyWorld(c, v, z);
     if (ex.phase === "incoming") drawAsteroid(c, ex.x, ex.y, Math.min(1, ex.t / EXT_TIMES.incoming), this.t);
@@ -1340,8 +1659,10 @@ export class Renderer {
     // screen-space passes
     c.setTransform(d, 0, 0, d, 0, 0);
     this.lighting(c, { x: cx, y: cy, zoom: z });
-    this.peaksFx.coldLight(c, w, this.peaksFx.coldness(w, v.x0, v.y0, v.x1, v.y1), this.w, this.h);
+    this.cold = this.peaksFx.coldness(w, v.x0, v.y0, v.x1, v.y1);
+    this.peaksFx.coldLight(c, w, this.cold, this.w, this.h);
     this.screenWeather(c, dt);
+    this.post(c, z);
 
     // overlays that should stay readable at night
     c.setTransform(d * z, 0, 0, d * z, d * (this.w / 2 - cx * z), d * (this.h / 2 - cy * z));
@@ -1358,6 +1679,7 @@ export class Renderer {
       if (ov.wallEdit) drawWallEdit(c, w, ov.wallEdit, this.t, inv);
     }
     this.priorityBadges(c, x0, y0, x1, y1);
+    this.feedback.drawFloaters(c, 1 / Math.max(0.5, z));
     // the supervolcano glows through the darkness: drawn after the lighting pass
     const exv = w.extinction;
     if (exv.cause === "supervolcano" && (exv.phase === "impact" || exv.phase === "aftermath")) {
@@ -1383,6 +1705,7 @@ export class Renderer {
       c.fillRect(Math.min(b.x0, b.x1), Math.min(b.y0, b.y1), Math.abs(b.x1 - b.x0), Math.abs(b.y1 - b.y0));
       c.strokeRect(Math.min(b.x0, b.x1), Math.min(b.y0, b.y1), Math.abs(b.x1 - b.x0), Math.abs(b.y1 - b.y0));
     }
+    setDinoView(1);
     this.cost = this.cost * 0.92 + (performance.now() - t0) * 0.08;
   }
 
@@ -1397,18 +1720,7 @@ export class Renderer {
       c.restore();
     }
       const picked = ov.selection.includes(h.id);
-      if (picked || h.id === ov.followId) {
-        c.save();
-        c.strokeStyle = picked ? "rgba(255,214,80,0.95)" : "rgba(255,255,255,0.8)";
-        c.lineWidth = 2;
-        c.setLineDash([5, 4]);
-        c.lineDashOffset = -this.t * 16;
-        c.beginPath();
-        c.ellipse(h.x, h.y - h.z + 1, 12, 5, 0, 0, Math.PI * 2);
-        c.stroke();
-        c.setLineDash([]);
-        c.restore();
-      }
+      if (picked || h.id === ov.followId) selectRing(c, h.x, h.y - h.z + 1, 12, 5, this.t + h.id, picked ? "#ffd650" : "#ffffff", picked);
       c.save();
       c.translate(h.x, h.y - h.z);
       // hung up by a Yeti: a rope from the bough to their feet, dangling head-down (snowBeasts.ts)
@@ -1641,7 +1953,6 @@ export class Renderer {
   }
 
   private looks = new Map<string, SpeciesDef>();
-
   /** The species' look, tweaked by this individual's genes (colour, mutations). */
   private lookFor(dn: Dino): SpeciesDef {
     const base = sp(dn.species);
@@ -1730,7 +2041,10 @@ export class Renderer {
     const w = this.world;
     const rider = dr.sandRider ? w.rivals.byId(dr.sandRider) : null;
     if (dr.breed === "sand" && dr.z < 70 && isSandTile(w.terrain.tileAt(dr.x, dr.y)) && !((rider?.spotT ?? 0) > 0)) c.globalAlpha = 0.55;
-    drawDragon(c, dr, this.t);
+    // far out (and not the one you're watching), a quick silhouette does
+    const tiny = this.lastZoom < DINO_LOD && dr.id !== ov.selectedId && dr.id !== ov.followId && !(dr.breath > 0.05);
+    if (tiny) drawDragonTiny(c, dr, this.t);
+    else drawDragon(c, dr, this.t);
     c.restore();
     // someone getting a lift sits behind the rider
     for (const p of w.humans) if (p.ferry === dr.id) this.drawPerson(c, p, ov, weapon);
@@ -1851,6 +2165,49 @@ export class Renderer {
     c.fillRect(h.x - 4 * s, y - 24 * s, 8 * s, 3 * s);
   }
 
+  /**
+   * Far out: one of the other peoples as a few blocks in their own colours (robe / furs / paint, a head).
+   * Returns false for the ones that keep their full drawing (riders, canoes, catapults, folk up in the trees,
+   * hidden ambushers) so their silhouette still reads.
+   */
+  private tinyFolk(c: CanvasRenderingContext2D, b: Brute, night: number) {
+    if (b.boat || b.mount || b.onDragon || b.hidden || b.look || b.weapon === "catapult" || b.z > 4) return false;
+    const w = this.world;
+    const young = (b.age ?? 400) < 100;
+    const s = young ? 0.65 : 1;
+    const y = b.y - b.z;
+    let body = "#6e5f50";
+    let head = "#a87552";
+    let a = 1;
+    if (b.sand) {
+      body = "#d8bd8a";
+      head = "#e9d8b2";
+      if (!w.sandFolk.seen(w, b)) a = 0.3;
+    } else if (b.snow) {
+      body = "#eceff1";
+      head = "#c3cbd2";
+    } else if (b.sea) {
+      body = "#2c5d8f";
+      head = "#8d5a37";
+    } else if (b.tree) {
+      body = "#4f7a33";
+      head = "#7d5636";
+      if (night > 0.7 && !((b.spotT ?? 0) > 0)) a = 0.4;
+    }
+    const prev = c.globalAlpha;
+    c.globalAlpha = prev * a;
+    c.fillStyle = "rgba(0,0,0,0.2)";
+    c.fillRect(b.x - 5 * s, y - 1, 10 * s, 3);
+    c.fillStyle = body;
+    c.fillRect(b.x - 5 * s, y - 16 * s, 10 * s, 15 * s);
+    c.fillStyle = b.tint ?? w.rivals.clan(b.clan)?.color ?? "#c0392b";
+    c.fillRect(b.x - 5 * s, y - 10 * s, 10 * s, 3 * s);
+    c.fillStyle = head;
+    c.fillRect(b.x - 4 * s, y - 24 * s, 8 * s, 8 * s);
+    c.globalAlpha = prev;
+    return true;
+  }
+
   /** Far out: a dino is a quick silhouette in its colours (body, belly, head, legs), sized + facing right. */
   private drawTinyDino(c: CanvasRenderingContext2D, dn: Dino) {
     const def = this.lookFor(dn);
@@ -1927,16 +2284,7 @@ export class Renderer {
       c.globalAlpha = 0.3;
     }
     if (cruising) this.swimWater(c, dn, L, false);
-    if (dn.id === ov.selectedId || dn.id === ov.followId) {
-      c.strokeStyle = dn.id === ov.followId ? "rgba(255,215,90,0.95)" : "rgba(255,255,255,0.9)";
-      c.lineWidth = 2.5;
-      c.setLineDash([6, 5]);
-      c.lineDashOffset = -this.t * 20;
-      c.beginPath();
-      c.ellipse(0, dn.z, L * 0.5, L * 0.18, 0, 0, Math.PI * 2);
-      c.stroke();
-      c.setLineDash([]);
-    }
+    if (dn.id === ov.selectedId || dn.id === ov.followId) selectRing(c, 0, dn.z, L * 0.5, L * 0.18, this.t, dn.id === ov.followId ? "#ffd75a" : "#ffffff");
     if (dn.genes?.mut === "glow" && this.world.daylight < 0.5) {
       c.globalCompositeOperation = "lighter";
       c.globalAlpha = (0.5 - this.world.daylight) * (0.8 + Math.sin(this.t * 2 + dn.id) * 0.2);
@@ -2134,9 +2482,9 @@ export class Renderer {
   }
 
   /**
-   * A mountain peak: a jagged silhouette with a sunlit west face and a shaded east face, a ridge line,
-   * a few rock bands, and a snowcap that comes further down the higher the mountain (with snow
-   * streaking down the gullies). `v` varies the shape so no two peaks match.
+   * A mountain peak: a jagged silhouette with a sunlit west face and a shaded east face, spurs and gullies,
+   * rock bands, scree at the foot, and a snowcap that comes further down the higher the mountain. `v` varies
+   * the shape so no two peaks match. Painted once per look into the atlas (see the K_PEAK case).
    */
   private drawPeak(c: CanvasRenderingContext2D, x: number, y: number, s: number, snow = 0.3, v = 0.5) {
     const W = 46 * s;
@@ -2146,27 +2494,32 @@ export class Renderer {
     // the outline: shoulders + notches down each side
     const left: [number, number][] = [[x - W, y], [x - W * 0.66, y - H * (0.32 + v * 0.1)], [x - W * 0.5, y - H * 0.38], [tipX - W * 0.18, y - H * 0.78], [tipX, tipY]];
     const right: [number, number][] = [[tipX, tipY], [tipX + W * 0.2, y - H * 0.74], [x + W * 0.34, y - H * (0.5 - v * 0.1)], [x + W * 0.5, y - H * 0.44], [x + W, y]];
+    const outline = () => {
+      c.beginPath();
+      c.moveTo(left[0][0], left[0][1]);
+      for (const [px, py] of left.slice(1)) c.lineTo(px, py);
+      for (const [px, py] of right.slice(1)) c.lineTo(px, py);
+      c.closePath();
+    };
     // a soft shadow at the foot
-    c.fillStyle = "rgba(30,26,34,0.18)";
+    c.fillStyle = "rgba(30,26,34,0.2)";
     c.beginPath();
-    c.ellipse(x, y - 2, W * 1.05, W * 0.22, 0, 0, Math.PI * 2);
+    c.ellipse(x + W * 0.12, y - 2, W * 1.08, W * 0.2, 0, 0, Math.PI * 2);
     c.fill();
-    // the shaded east face (the whole body)
+    // the shaded east face (the whole body): cool and dark, warmer toward the foot
     const dark = c.createLinearGradient(x, tipY, x, y);
-    dark.addColorStop(0, "#5e5866");
-    dark.addColorStop(1, "#4a443f");
+    dark.addColorStop(0, "#5b566a");
+    dark.addColorStop(0.6, "#514a4c");
+    dark.addColorStop(1, "#4a4138");
     c.fillStyle = dark;
-    c.beginPath();
-    c.moveTo(left[0][0], left[0][1]);
-    for (const [px, py] of left.slice(1)) c.lineTo(px, py);
-    for (const [px, py] of right.slice(1)) c.lineTo(px, py);
-    c.closePath();
+    outline();
     c.fill();
     // the sunlit west face, down to the ridge line
     const ridgeX = tipX + W * 0.08;
     const lit = c.createLinearGradient(x - W, y, tipX, tipY);
-    lit.addColorStop(0, "#8a7f72");
-    lit.addColorStop(1, "#a69d92");
+    lit.addColorStop(0, "#857a6b");
+    lit.addColorStop(0.55, "#a09686");
+    lit.addColorStop(1, "#b9b1a6");
     c.fillStyle = lit;
     c.beginPath();
     c.moveTo(left[0][0], left[0][1]);
@@ -2176,23 +2529,84 @@ export class Renderer {
     c.lineTo(x + W * 0.05, y);
     c.closePath();
     c.fill();
-    // rock bands (strata) across both faces
-    c.strokeStyle = "rgba(40,34,38,0.28)";
-    c.lineWidth = Math.max(1, s);
+    // everything below stays inside the mountain
+    c.save();
+    outline();
+    c.clip();
+    // spurs: a second ridge running down each face, one side of it catching the light, the other in shade
+    c.fillStyle = "rgba(255,244,226,0.16)";
     c.beginPath();
-    for (let k = 1; k <= 2; k++) {
-      const by = y - H * (0.18 + k * 0.17);
-      const half = W * (1 - (y - by) / H) * 0.9;
+    c.moveTo(tipX - W * 0.12, y - H * 0.7);
+    c.lineTo(x - W * 0.62, y);
+    c.lineTo(x - W * 0.34, y);
+    c.closePath();
+    c.fill();
+    c.fillStyle = "rgba(34,28,44,0.2)";
+    c.beginPath();
+    c.moveTo(tipX - W * 0.12, y - H * 0.7);
+    c.lineTo(x - W * 0.34, y);
+    c.lineTo(x - W * 0.12, y);
+    c.closePath();
+    c.fill();
+    c.fillStyle = "rgba(255,240,224,0.1)";
+    c.beginPath();
+    c.moveTo(tipX + W * 0.16, y - H * 0.66);
+    c.lineTo(x + W * 0.3, y);
+    c.lineTo(x + W * 0.52, y);
+    c.closePath();
+    c.fill();
+    c.fillStyle = "rgba(24,20,34,0.22)";
+    c.beginPath();
+    c.moveTo(tipX + W * 0.16, y - H * 0.66);
+    c.lineTo(x + W * 0.52, y);
+    c.lineTo(x + W * 0.78, y);
+    c.closePath();
+    c.fill();
+    // rock bands (strata) across both faces, each with a lit lip
+    for (let k = 1; k <= 3; k++) {
+      const by = y - H * (0.12 + k * 0.15);
+      const half = W * (1 - (y - by) / H) * 0.95;
+      c.strokeStyle = "rgba(40,34,38,0.3)";
+      c.lineWidth = Math.max(1, s * 1.1);
+      c.beginPath();
       c.moveTo(tipX - half, by + 2);
-      c.quadraticCurveTo(tipX, by - 3, tipX + half, by + 3);
+      c.quadraticCurveTo(tipX - half * 0.2, by - 3 - v * 3, tipX + half, by + 3);
+      c.stroke();
+      c.strokeStyle = "rgba(255,246,230,0.16)";
+      c.lineWidth = Math.max(0.6, s * 0.6);
+      c.beginPath();
+      c.moveTo(tipX - half, by + 0.6);
+      c.quadraticCurveTo(tipX - half * 0.2, by - 4.4 - v * 3, tipX, by - 1);
+      c.stroke();
+    }
+    // gullies: thin dark cracks running down from the shoulders
+    c.strokeStyle = "rgba(30,26,34,0.3)";
+    c.lineWidth = Math.max(0.7, s * 0.7);
+    c.beginPath();
+    for (let k = 0; k < 4; k++) {
+      const gx = x - W * 0.55 + k * W * 0.36 + v * W * 0.12;
+      const gy = y - H * (0.5 - Math.abs(k - 1.5) * 0.12);
+      c.moveTo(gx, gy);
+      c.lineTo(gx + W * (0.03 - k * 0.02), gy + H * 0.14);
+      c.lineTo(gx - W * 0.02, gy + H * 0.3);
     }
     c.stroke();
+    // the foot sinks into shade and scree
+    const foot = c.createLinearGradient(0, y - H * 0.2, 0, y);
+    foot.addColorStop(0, "rgba(40,32,30,0)");
+    foot.addColorStop(1, "rgba(40,32,30,0.3)");
+    c.fillStyle = foot;
+    c.fillRect(x - W, y - H * 0.2, W * 2, H * 0.2);
+    c.restore();
     // the snowcap: further down on high peaks, with streaks down the gullies
     if (snow > 0.05) {
       const d = 0.22 + snow * 0.42;
       const sy = y - H * (1 - d);
       const half = W * d * 0.92;
-      c.fillStyle = "#f4f7fc";
+      const cap = c.createLinearGradient(tipX - half, tipY, tipX + half, sy);
+      cap.addColorStop(0, "#ffffff");
+      cap.addColorStop(1, "#e6edf7");
+      c.fillStyle = cap;
       c.beginPath();
       c.moveTo(tipX, tipY);
       c.lineTo(tipX - half, sy);
@@ -2206,7 +2620,7 @@ export class Renderer {
       c.closePath();
       c.fill();
       // the shaded side of the snow is blue
-      c.fillStyle = "rgba(150,175,215,0.55)";
+      c.fillStyle = "rgba(140,168,214,0.6)";
       c.beginPath();
       c.moveTo(tipX, tipY);
       c.lineTo(ridgeX + W * 0.04, sy + H * 0.02);
@@ -2214,13 +2628,28 @@ export class Renderer {
       c.lineTo(tipX + half, sy);
       c.closePath();
       c.fill();
+      // snow lying on the ledges lower down
+      c.fillStyle = "rgba(246,249,253,0.85)";
+      for (let k = 0; k < 3; k++) {
+        const ly = sy + H * (0.1 + k * 0.11) * (0.6 + snow * 0.4);
+        const lx = tipX - half * (0.9 + k * 0.5) + v * W * 0.2;
+        c.beginPath();
+        c.ellipse(lx, ly, W * (0.11 - k * 0.02), H * 0.014, -0.25, 0, Math.PI * 2);
+        c.fill();
+      }
     }
-    // a crisp lit ridge line
-    c.strokeStyle = "rgba(255,255,255,0.35)";
+    // a crisp lit ridge line, and a darker edge down the shaded side
+    c.strokeStyle = "rgba(255,255,255,0.4)";
     c.lineWidth = Math.max(1, 1.2 * s);
     c.beginPath();
     c.moveTo(tipX, tipY);
     c.lineTo(ridgeX + W * 0.06, y - H * 0.55);
+    c.lineTo(ridgeX - W * 0.05, y - H * 0.25);
+    c.stroke();
+    c.strokeStyle = "rgba(36,30,40,0.5)";
+    c.lineWidth = Math.max(0.8, 0.9 * s);
+    c.lineJoin = "round";
+    outline();
     c.stroke();
   }
 
@@ -2709,6 +3138,7 @@ export class Renderer {
   }
 
   private particle(c: CanvasRenderingContext2D, p: Particle, k: number) {
+    if (Q.softParticles && drawParticle(c, p, k, this.t)) return;
     const x = p.x;
     const y = p.y - p.z;
     switch (p.k) {
@@ -2864,10 +3294,9 @@ export class Renderer {
   private drawBolt(c: CanvasRenderingContext2D, x: number, y: number, seed: number, a: number) {
     let px = x + ((seed % 100) - 50) * 3;
     let py = y - 900;
-    c.strokeStyle = `rgba(210,225,255,${a})`;
-    c.lineWidth = 6;
-    c.shadowColor = "rgba(150,180,255,0.9)";
-    c.shadowBlur = 20;
+    c.save();
+    c.lineCap = "round";
+    c.lineJoin = "round";
     c.beginPath();
     c.moveTo(px, py);
     for (let i = 1; i <= 12; i++) {
@@ -2876,11 +3305,21 @@ export class Renderer {
       py = y - 900 + 900 * k;
       c.lineTo(px, py);
     }
+    // its glow: the same path stroked wide and faint, then narrower and brighter (a canvas blur here made the
+    // graphics card stall for the length of the flash)
+    c.strokeStyle = `rgba(150,180,255,${a * 0.1})`;
+    c.lineWidth = 34;
+    c.stroke();
+    c.strokeStyle = `rgba(160,190,255,${a * 0.18})`;
+    c.lineWidth = 18;
+    c.stroke();
+    c.strokeStyle = `rgba(210,225,255,${a})`;
+    c.lineWidth = 6;
     c.stroke();
     c.strokeStyle = `rgba(255,255,255,${a})`;
     c.lineWidth = 2.5;
     c.stroke();
-    c.shadowBlur = 0;
+    c.restore();
     c.fillStyle = `rgba(255,255,240,${a * 0.6})`;
     c.beginPath();
     c.ellipse(x, y, 40, 16, 0, 0, Math.PI * 2);
@@ -2916,14 +3355,89 @@ export class Renderer {
     c.fill();
   }
 
+  /**
+   * Animated light on the water: two webs of caustics sliding over each other, drifting sky reflections
+   * and sun glitter, composed off-screen, cut to the water's shape (soft at the shore), then added on top.
+   */
+  private waterLight(c: CanvasRenderingContext2D, cx: number, cy: number, z: number, v: { x0: number; y0: number; x1: number; y1: number }) {
+    if (Q.water === 0 || this.waterInView <= 0.002) return;
+    const w = this.world;
+    const light = Math.max(0.12, w.daylight) * (1 - w.weather.cloud * 0.45);
+    const ws = Q.water >= 2 ? 0.5 : 0.34;
+    const W = Math.max(2, Math.round(this.w * ws));
+    const H = Math.max(2, Math.round(this.h * ws));
+    if (!this.waterCv) {
+      this.waterCv = document.createElement("canvas");
+      this.waterPat = null;
+    }
+    const cv = this.waterCv;
+    if (cv.width !== W || cv.height !== H) {
+      cv.width = W;
+      cv.height = H;
+    }
+    const X = cv.getContext("2d")!;
+    if (!this.waterPat) this.waterPat = X.createPattern(causticSheet(), "repeat");
+    const pat = this.waterPat;
+    if (!pat) return;
+    X.setTransform(1, 0, 0, 1, 0, 0);
+    X.globalCompositeOperation = "source-over";
+    X.globalAlpha = 1;
+    X.clearRect(0, 0, W, H);
+    // world space, at the off-screen canvas's scale
+    X.setTransform(ws * z, 0, 0, ws * z, ws * (this.w / 2 - cx * z), ws * (this.h / 2 - cy * z));
+    const t = this.t;
+    const wind = w.weather.windX;
+    const vw = v.x1 - v.x0;
+    const vh = v.y1 - v.y0;
+    X.fillStyle = pat;
+    if (z > 0.3) {
+      pat.setTransform(new DOMMatrix().translate(t * (9 + wind * 4), t * 5).scale(1.9));
+      X.globalAlpha = 0.42;
+      X.fillRect(v.x0, v.y0, vw, vh);
+      pat.setTransform(new DOMMatrix().translate(-t * 7, t * 8.5).scale(3.1));
+      X.globalAlpha = 0.3;
+      X.fillRect(v.x0, v.y0, vw, vh);
+    }
+    if (Q.water >= 2) {
+      // the sky in the water: slow pale shapes drifting with the clouds (the moon's glow by night)
+      X.globalAlpha = 0.16 + w.weather.cloud * 0.16;
+      for (let i = 0; i < 9; i++) {
+        const s = 220 + hash2(i, 4, 19) * 320;
+        const bx = ((hash2(i, 1, 19) * WORLD_W + this.cloudX * 0.5 + t * 4) % WORLD_W + WORLD_W) % WORLD_W;
+        const by = ((hash2(i, 3, 19) * WORLD_H + this.cloudY * 0.5) % WORLD_H + WORLD_H) % WORLD_H;
+        if (bx + s < v.x0 || bx - s > v.x1 || by + s < v.y0 || by - s > v.y1) continue;
+        X.drawImage(this.cloudSprite, bx - s, by - s * 0.45, s * 2, s * 0.9);
+      }
+    }
+    // cut to the water (the mask is soft at the shore and thinner in the shallows)
+    X.globalCompositeOperation = "destination-in";
+    X.globalAlpha = 1;
+    X.imageSmoothingEnabled = true;
+    X.drawImage(this.terrainR.waterMask, 0, 0, WORLD_W, WORLD_H);
+    const d = this.dpr;
+    c.save();
+    c.setTransform(d, 0, 0, d, 0, 0);
+    c.globalCompositeOperation = "lighter";
+    c.globalAlpha = (0.09 + this.sun.warm * 0.06) * light + 0.015;
+    c.imageSmoothingEnabled = true;
+    c.drawImage(cv, 0, 0, this.w, this.h);
+    c.restore();
+  }
+
   private lighting(c: CanvasRenderingContext2D, cam: Camera) {
     const w = this.world;
+    const sun = this.sun;
     const night = 1 - w.daylight;
     const dusk = w.time > 16.5 && w.time < 21 ? Math.max(0, 1 - Math.abs(w.time - 19) / 2) : w.time > 4.5 && w.time < 8 ? Math.max(0, 1 - Math.abs(w.time - 6) / 1.5) : 0;
     const dark = Math.min(0.78, night * 0.66 + w.weather.storm * 0.28 + w.weather.cloud * 0.06 + w.volcano.ash * 0.3 + w.weather.rain * 0.08 + w.extinction.ash * 0.35);
-    // warm sunrise / sunset wash
+    // golden hour: warm light raking in from the sun's side, the far side sliding into violet
     if (dusk > 0.02) {
-      c.fillStyle = `rgba(255,120,60,${dusk * 0.16})`;
+      const east = sun.side > 0;
+      const g = c.createLinearGradient(east ? this.w : 0, 0, east ? 0 : this.w, this.h * 0.6);
+      g.addColorStop(0, `rgba(255,170,84,${dusk * 0.15})`);
+      g.addColorStop(0.55, `rgba(255,116,70,${dusk * 0.1})`);
+      g.addColorStop(1, `rgba(124,76,160,${dusk * 0.1})`);
+      c.fillStyle = g;
       c.fillRect(0, 0, this.w, this.h);
     }
     if (w.weather.temp > 0.8) {
@@ -2934,12 +3448,13 @@ export class Renderer {
     const L = this.lctx;
     const lw = this.light.width;
     const lh = this.light.height;
+    const ls = this.ls;
     const ash = w.volcano.ash;
     const k = dark / 0.78;
     // the tint we multiply the world by: white → moonlit blue (or ashy brown)
-    const nr = 62 + ash * 60 + w.weather.storm * 20;
-    const ng = 84 + ash * 20 + w.weather.storm * 20;
-    const nb = 158 - ash * 60;
+    const nr = 56 + ash * 60 + w.weather.storm * 20;
+    const ng = 80 + ash * 20 + w.weather.storm * 20;
+    const nb = 160 - ash * 60;
     const mr = Math.round(255 + (nr - 255) * k);
     const mg = Math.round(255 + (ng - 255) * k);
     const mb = Math.round(255 + (nb - 255) * k);
@@ -2948,58 +3463,81 @@ export class Renderer {
     L.fillStyle = `rgb(${mr},${mg},${mb})`;
     L.fillRect(0, 0, lw, lh);
     L.globalCompositeOperation = "lighter";
-    const lights: [number, number, number, number, boolean?][] = [];
+    // moonlight pools in from the north-west on a clear night
+    if (night > 0.45 && Q.post >= 1) {
+      L.globalAlpha = (night - 0.45) * 0.26 * (1 - w.weather.cloud * 0.7) * (1 - ash);
+      L.drawImage(this.moonLight, -lw * 0.35, -lh * 0.6, lw * 1.5, lh * 1.7);
+    }
+    /** [x, y, radius, strength, kind]: 0 fire · 1 crystal / energy · 2 lava · 3 lightning */
+    const lights: [number, number, number, number, number][] = [];
     const z = cam.zoom;
-    const add = (wx: number, wy: number, rad: number, a: number, cool = false) => {
-      const sx = ((wx - cam.x) * z + this.w / 2) / 2;
-      const sy = ((wy - cam.y) * z + this.h / 2) / 2;
-      const rr = (rad * z) / 2;
+    const t = this.t;
+    const add = (wx: number, wy: number, rad: number, a: number, kind: boolean | number = 0) => {
+      const sx = ((wx - cam.x) * z + this.w / 2) * ls;
+      const sy = ((wy - cam.y) * z + this.h / 2) * ls;
+      const rr = rad * z * ls;
       if (sx + rr < 0 || sy + rr < 0 || sx - rr > lw || sy - rr > lh) return;
-      lights.push([sx, sy, rr, a, cool]);
+      lights.push([sx, sy, rr, a, kind === true ? 1 : kind === false ? 0 : kind]);
     };
-    for (const f of w.campfires) if (f.lit) add(f.x, f.y - 10, 240 + Math.sin(this.t * 9) * 8, 1);
-    for (const b of w.colony.buildings) if (b.kind === "boneTorch" && b.built >= 1 && b.hp > 0) add(b.x, b.y - 43, 135 + Math.sin(this.t * 11 + b.id) * 5, 0.9);
+    /** a flame never burns evenly: two slow wobbles and a fast shiver, different for every fire */
+    const flick = (seed: number) => 1 + Math.sin(t * 7.3 + seed) * 0.035 + Math.sin(t * 13.1 + seed * 1.7) * 0.025 + Math.sin(t * 31 + seed * 0.3) * 0.012;
+    for (const f of w.campfires) if (f.lit) add(f.x, f.y - 10, 238 * flick(f.x), 0.95);
+    for (const b of w.colony.buildings) if (b.kind === "boneTorch" && b.built >= 1 && b.hp > 0) add(b.x, b.y - 43, 132 * flick(b.id), 0.85);
     for (const [a, b] of w.trails.builtLinks(w)) {
       const count = Math.max(2, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 28));
       for (let i = 1; i < count; i++) {
-        const t = i / count;
-        add(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t - 37 + Math.sin(Math.PI * t) * 11, 80, 0.7);
+        const u = i / count;
+        add(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u - 37 + Math.sin(Math.PI * u) * 11, 80, 0.7);
       }
     }
     let n = 0;
     w.fire.active.forEach((i) => {
       if (n++ % 3) return;
-      add((i % MAP_W) * TILE + 16, Math.floor(i / MAP_W) * TILE + 10, 170, 0.8);
+      add((i % MAP_W) * TILE + 16, Math.floor(i / MAP_W) * TILE + 10, 168 * flick(i), 0.75);
     });
     n = 0;
     w.lava.active.forEach((i) => {
       if (n++ % 4) return;
-      add((i % MAP_W) * TILE + 16, Math.floor(i / MAP_W) * TILE + 16, 150, 0.7 * Math.min(1, w.lava.heat[i]));
+      add((i % MAP_W) * TILE + 16, Math.floor(i / MAP_W) * TILE + 16, 150, 0.68 * Math.min(1, w.lava.heat[i]), 2);
     });
-    add(w.volcano.x, w.volcano.y - 150, 160 + w.volcano.glow * 240, 0.4 + w.volcano.glow * 0.5);
-    for (const s of w.shelters) if (s.stage >= 2) add(s.x, s.y - 8, HOUSING[s.tier]?.hearth && shelterDone(s) ? 120 : 80, HOUSING[s.tier]?.hearth && shelterDone(s) ? 0.85 : 0.6);
-    for (const b of w.colony.buildings) if (b.kind === "blacksmith" && b.built >= 1) add(b.x - 10, b.y - 12, 110, 0.75);
+    add(w.volcano.x, w.volcano.y - 150, 160 + w.volcano.glow * 240, 0.38 + w.volcano.glow * 0.48, 2);
+    for (const s of w.shelters) if (s.stage >= 2) add(s.x, s.y - 8, HOUSING[s.tier]?.hearth && shelterDone(s) ? 118 : 78, (HOUSING[s.tier]?.hearth && shelterDone(s) ? 0.78 : 0.55) * flick(s.id));
+    for (const b of w.colony.buildings) if (b.kind === "blacksmith" && b.built >= 1) add(b.x - 10, b.y - 12, 108 * flick(b.id), 0.72);
+    // rival camps keep fires burning too
+    for (const cl of w.rivals.clans) add(cl.x, cl.y - 6, 170 * flick(cl.id), 0.65);
+    for (const tr of w.sandFolk.tribes) for (const s of tr.tents) if (s.kind !== "pen") add(s.x, s.y - 12, 58, 0.4);
+    for (const tr of w.snowFolk.tribes) for (const s of tr.lodges) if (s.kind !== "pen") add(s.x, s.y - 12, 62, 0.42);
     // Sea People villages: firelit doorways over the water + the shrine's fire bowl
-    for (const tr of w.seaFolk.tribes) for (const h of tr.huts) if (h.hp > 0 && (h.kind === "hut" || h.kind === "longhouse" || h.kind === "shrine")) add(h.x, h.y - 24, h.kind === "longhouse" ? 90 : 60, 0.6 + Math.sin(this.t * 5 + h.x) * 0.06);
+    for (const tr of w.seaFolk.tribes) for (const h of tr.huts) if (h.hp > 0 && (h.kind === "hut" || h.kind === "longhouse" || h.kind === "shrine")) add(h.x, h.y - 24, h.kind === "longhouse" ? 90 : 60, 0.6 + Math.sin(t * 5 + h.x) * 0.06);
     // Tree People camps: the ritual fire below, firelit doorways + the fire bowl up in the canopy
     for (const tr of w.forest.tribes) {
-      add(tr.x, tr.y + 10, 200 + Math.sin(this.t * 8 + tr.id) * 10, 0.85);
-      for (const p of tr.pods) if (p.hp > 0 && (p.kind === "hut" || p.kind === "ritual")) add(p.x + (p.kind === "ritual" ? 9 : 2), p.y - p.h - 6, p.kind === "ritual" ? 70 : 55, 0.6 + Math.sin(this.t * 6 + p.x) * 0.06);
+      add(tr.x, tr.y + 10, 198 * flick(tr.id), 0.82);
+      for (const p of tr.pods) if (p.hp > 0 && (p.kind === "hut" || p.kind === "ritual")) add(p.x + (p.kind === "ritual" ? 9 : 2), p.y - p.h - 6, p.kind === "ritual" ? 70 : 55, 0.6 + Math.sin(t * 6 + p.x) * 0.06);
     }
     // crystals light up the night (brighter in storms)
-    if (w.civ.energy > 1) for (const b of w.colony.buildings) if ((b.built >= 1 || pyramidAwake(b)) && (b.kind === "energyTower" || b.kind === "chamber" || b.kind === "beamTower" || b.kind === "obelisk" || b.kind === "pyramid" || b.kind === "resShield")) add(b.x, b.y - (b.kind === "pyramid" ? 120 : 50), b.kind === "pyramid" ? (pyramidCased(b) ? 340 : 260) : 90, 0.55 + w.weather.storm * 0.3);
-    for (const h of w.humans) if (!h.under && h.state !== "sleep" && h.state !== "hide" && w.shifts.poweredOutfit(w, h)) add(h.x, h.y - h.z - 14, 135, 0.58, true);
-    if (w.civ.chamberX && w.civ.path !== "traditional") add(w.civ.chamberX, w.civ.chamberY - 14, 70, 0.6);
-    for (const b of w.civ.beams) add(b.x1, b.y1, 160, 1 - b.t / 0.35);
-    for (const dr of w.dragons.all()) if (dr.breath > 0.1) add(dr.burst && dr.aimX !== undefined ? dr.aimX : dr.x + dr.dir * 80, dr.burst && dr.aimY !== undefined ? dr.aimY : dr.y - dr.z * 0.5, 260, dr.breath);
+    if (w.civ.energy > 1) for (const b of w.colony.buildings) if ((b.built >= 1 || pyramidAwake(b)) && (b.kind === "energyTower" || b.kind === "chamber" || b.kind === "beamTower" || b.kind === "obelisk" || b.kind === "pyramid" || b.kind === "resShield" || b.kind === "pylon" || b.kind === "condenser" || b.kind === "dragonShield")) add(b.x, b.y - (b.kind === "pyramid" ? 120 : 50), b.kind === "pyramid" ? (pyramidCased(b) ? 340 : 260) : 95 + Math.sin(t * 2.2 + b.id) * 6, 0.55 + w.weather.storm * 0.3, 1);
+    for (const s of w.colony.scorpions) if (s.drone && s.built >= 1) add(s.x, s.y - 30, 60, 0.5, 1);
+    for (const h of w.humans) if (!h.under && h.state !== "sleep" && h.state !== "hide" && w.shifts.poweredOutfit(w, h)) add(h.x, h.y - h.z - 14, 135, 0.58, 1);
+    if (w.civ.chamberX && w.civ.path !== "traditional") add(w.civ.chamberX, w.civ.chamberY - 14, 70, 0.6, 1);
+    for (const b of w.civ.beams) add(b.x1, b.y1, 160, 1 - b.t / 0.35, 1);
+    for (const dr of w.dragons.all()) if (dr.breath > 0.1) add(dr.burst && dr.aimX !== undefined ? dr.aimX : dr.x + dr.dir * 80, dr.burst && dr.aimY !== undefined ? dr.aimY : dr.y - dr.z * 0.5, 270 * flick(dr.id), dr.breath);
     for (const e of w.dragons.eggs) if (e.at === "camp" && e.heat > 0.55) add(e.x, e.y - 8, 40, 0.4);
     for (const m of w.meteors) add(m.x + (1 - m.t / m.dur) * 900, m.y - (1 - m.t / m.dur) * 1300, 300, 1);
-    for (const b of w.bolts) add(b.x, b.y, 900, 1 - b.t / 0.6);
-    for (const [sx, sy, rr, a, cool] of lights) {
-      L.globalAlpha = a;
-      L.drawImage(cool ? this.glowSprite : this.warmLight, sx - rr, sy - rr, rr * 2, rr * 2);
+    for (const b of w.bolts) add(b.x, b.y, 900, 1 - b.t / 0.6, 3);
+    const spriteFor = (kind: number) => (kind === 1 ? this.glowSprite : kind === 2 ? this.lavaLight : kind === 3 ? this.boltLight : this.warmLight);
+    for (const [sx, sy, rr, a, kind] of lights) {
+      L.globalAlpha = Math.min(1, a) * 0.85;
+      L.drawImage(spriteFor(kind), sx - rr, sy - rr, rr * 2, rr * 2);
     }
     L.globalAlpha = 1;
+    // a ceiling on the light: however many fires and lit windows overlap, the ground under them is firelit
+    // (warm, a little under daylight), never bleached white. Lightning alone may go all the way.
+    if (!w.bolts.length) {
+      L.globalCompositeOperation = "darken";
+      const top = Math.round(214 + (255 - 214) * (1 - k));
+      L.fillStyle = `rgb(${Math.min(255, top + 18)},${top},${Math.round(top * 0.86)})`;
+      L.fillRect(0, 0, lw, lh);
+    }
     L.globalCompositeOperation = "source-over";
     c.imageSmoothingEnabled = true;
     c.globalCompositeOperation = "multiply";
@@ -3013,41 +3551,146 @@ export class Renderer {
       c.globalAlpha = 1;
     }
     c.globalCompositeOperation = "source-over";
-    // warm additive glow around fire sources
+    // bloom: every light source bleeds a little colour into the air around it
     c.globalCompositeOperation = "lighter";
-    for (const [sx, sy, rr, a, cool] of lights) {
-      c.globalAlpha = a * dark * 0.55;
-      c.drawImage(cool ? this.glowSprite : this.warmSprite, sx * 2 - rr * 1.2, sy * 2 - rr * 1.2, rr * 2.4, rr * 2.4);
+    // (the more lights share the screen, the less each one adds: a town glows, it doesn't flare)
+    const bloom = (Q.post >= 2 ? 0.4 : 0.34) * Math.min(1, 2.4 / Math.sqrt(Math.max(1, lights.length)));
+    for (const [sx, sy, rr, a, kind] of lights) {
+      c.globalAlpha = Math.min(1, a) * dark * bloom;
+      const img = kind === 0 ? this.warmSprite : spriteFor(kind);
+      c.drawImage(img, (sx - rr * 0.85) / ls, (sy - rr * 0.85) / ls, (rr * 1.7) / ls, (rr * 1.7) / ls);
+      if (Q.id === "ultra" && kind !== 3 && rr / ls > 14) {
+        // a tight warm core, so flames and crystals read as the brightest things on screen
+        c.globalAlpha = Math.min(1, a) * dark * 0.1;
+        c.drawImage(img, (sx - rr * 0.32) / ls, (sy - rr * 0.32) / ls, (rr * 0.64) / ls, (rr * 0.64) / ls);
+      }
     }
     c.globalCompositeOperation = "source-over";
     c.globalAlpha = 1;
   }
 
+  /** The last screen pass: sun shafts at golden hour, a touch of haze far out, a gentle filmic grade. */
+  private post(c: CanvasRenderingContext2D, z: number) {
+    if (Q.post === 0) return;
+    const w = this.world;
+    const sun = this.sun;
+    const clear = (1 - w.weather.cloud) * (1 - w.weather.rain) * (1 - w.weather.fog) * (1 - w.extinction.ash);
+    // far out, the land sits under a thin veil of air: the map reads as a place, not a diagram
+    if (z < 0.5) {
+      c.fillStyle = `rgba(196,216,238,${((0.5 - z) * 0.08 * Math.max(0.25, w.daylight)).toFixed(3)})`;
+      c.fillRect(0, 0, this.w, this.h);
+    }
+    if (Q.post >= 2 && sun.warm > 0.12 && clear > 0.3 && w.daylight > 0.3) {
+      // low sun: soft shafts of light slanting across the screen from the sun's side
+      const a = Math.min(1, (sun.warm - 0.12) * 1.6) * clear;
+      const east = sun.side > 0;
+      c.save();
+      c.globalCompositeOperation = "lighter";
+      c.translate(east ? this.w : 0, 0);
+      c.scale(east ? -1 : 1, 1);
+      c.rotate(0.5);
+      const span = Math.hypot(this.w, this.h);
+      for (let i = 0; i < 5; i++) {
+        const y = -span * 0.25 + (i / 5) * span * 0.75 + Math.sin(this.t * 0.11 + i * 1.7) * 30;
+        const th = span * (0.04 + hash2(i, 7, 3) * 0.06);
+        const g = c.createLinearGradient(0, y - th, 0, y + th);
+        g.addColorStop(0, "rgba(255,214,150,0)");
+        g.addColorStop(0.5, `rgba(255,214,150,${(a * (0.02 + hash2(i, 9, 3) * 0.02)).toFixed(3)})`);
+        g.addColorStop(1, "rgba(255,214,150,0)");
+        c.fillStyle = g;
+        c.fillRect(-span * 0.2, y - th, span * 1.6, th * 2);
+      }
+      c.restore();
+    }
+    // grade: a little warmth by day, without lifting the exposure (soft-light with a colour just under mid-grey)
+    if (w.daylight > 0.35) {
+      c.save();
+      c.globalCompositeOperation = "soft-light";
+      c.fillStyle = `rgba(150,128,96,${(0.14 * (w.daylight - 0.35) * (0.5 + clear * 0.5)).toFixed(3)})`;
+      c.fillRect(0, 0, this.w, this.h);
+      c.restore();
+    }
+  }
+
   private screenWeather(c: CanvasRenderingContext2D, dt: number) {
     const w = this.world;
     const wt = w.weather;
-    // rain streaks
-    const want = Math.round(wt.rain * 420 * Math.min(1, w.particles.budget + 0.3));
+    // rain: a far layer of fine streaks, and a near layer of longer, brighter ones
+    // (how many: by how hard it's raining, the quality preset, and how big the screen is)
+    const area = Math.max(0.3, Math.min(2.2, (this.w * this.h) / (1440 * 810)));
+    const want = Math.round(wt.rain * 380 * area * Math.min(1, w.particles.budget + 0.3) * Math.min(1.3, 0.5 + Q.particles * 0.6));
     while (this.drops.length < want) this.drops.push({ x: Math.random() * this.w, y: Math.random() * this.h, s: 700 + Math.random() * 500, l: 10 + Math.random() * 12 });
     if (this.drops.length > want) this.drops.length = want;
     if (this.drops.length) {
       const slant = wt.windX * 18;
-      c.strokeStyle = wt.storm > 0.5 ? "rgba(200,215,240,0.5)" : "rgba(200,220,255,0.42)";
-      c.lineWidth = 1.2;
-      c.beginPath();
-      for (const d of this.drops) {
-        d.y += d.s * dt;
-        d.x += slant * dt * 6;
-        if (d.y > this.h) {
-          d.y = -20;
-          d.x = Math.random() * (this.w + 200) - 100;
+      for (let layer = 0; layer < 2; layer++) {
+        const near = layer === 1;
+        // (dimmer after dark: rain only shows where there's light to catch)
+        const lit = 0.5 + w.daylight * 0.5;
+        c.strokeStyle = near ? `rgba(214,228,250,${((wt.storm > 0.5 ? 0.5 : 0.42) * lit).toFixed(3)})` : `rgba(190,210,240,${(0.26 * lit).toFixed(3)})`;
+        c.lineWidth = near ? 1.3 : 0.9;
+        c.beginPath();
+        for (let i = layer; i < this.drops.length; i += 2) {
+          const d = this.drops[i];
+          const sp = near ? 1.25 : 0.8;
+          d.y += d.s * dt * sp;
+          d.x += slant * dt * 6 * sp;
+          if (d.y > this.h) {
+            d.y = -20;
+            d.x = Math.random() * (this.w + 200) - 100;
+          }
+          if (d.x > this.w + 50) d.x -= this.w + 100;
+          if (d.x < -50) d.x += this.w + 100;
+          const len = d.l * (near ? 1.3 : 0.85);
+          c.moveTo(d.x, d.y);
+          c.lineTo(d.x + slant * 0.04 * len, d.y + len);
         }
-        if (d.x > this.w + 50) d.x -= this.w + 100;
-        if (d.x < -50) d.x += this.w + 100;
-        c.moveTo(d.x, d.y);
-        c.lineTo(d.x + slant * 0.04 * d.l, d.y + d.l);
+        c.stroke();
       }
-      c.stroke();
+      // heavy rain greys the air a touch
+      if (wt.rain > 0.3) {
+        c.fillStyle = `rgba(150,170,195,${((wt.rain - 0.3) * 0.12).toFixed(3)})`;
+        c.fillRect(0, 0, this.w, this.h);
+      }
+    }
+    // snow: big slow flakes swaying down (a snowstorm anywhere; a few always over the high peaks)
+    const snow = Math.max(wt.snow, this.cold * 0.3 * (1 - wt.rain));
+    const wantFlakes = Math.round(snow * 300 * area * Math.min(1.4, 0.5 + Q.particles * 0.6));
+    while (this.flakes.length < wantFlakes) this.flakes.push({ x: Math.random() * this.w, y: Math.random() * this.h, s: 40 + Math.random() * 90, r: 0.8 + Math.random() * 2.2, p: Math.random() * 6.3 });
+    if (this.flakes.length > wantFlakes) this.flakes.length = wantFlakes;
+    if (this.flakes.length) {
+      const push = wt.windX * 60 + 12;
+      c.fillStyle = "rgba(255,255,255,0.9)";
+      c.beginPath();
+      for (const f of this.flakes) {
+        f.y += f.s * dt * (0.6 + f.r * 0.3);
+        f.x += (push + Math.sin(this.t * 1.3 + f.p) * 22) * dt;
+        if (f.y > this.h + 6) {
+          f.y = -6;
+          f.x = Math.random() * (this.w + 200) - 100;
+        }
+        if (f.x > this.w + 20) f.x -= this.w + 40;
+        if (f.x < -20) f.x += this.w + 40;
+        c.moveTo(f.x + f.r, f.y);
+        c.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      }
+      c.fill();
+    }
+    // sunny and still: motes of pollen and dust catching the light
+    if (Q.ambient > 0 && w.daylight > 0.55 && wt.rain < 0.05 && snow < 0.05) {
+      const n = Math.round(46 * Q.ambient * Math.min(1.6, area));
+      const a = (w.daylight - 0.55) * 1.6 * (1 - wt.cloud * 0.6);
+      c.fillStyle = "#fff6d0";
+      for (let i = 0; i < n; i++) {
+        const tw = (Math.sin(this.t * (0.7 + (i % 5) * 0.21) + i * 2.4) + 1) / 2;
+        if (tw < 0.25) continue;
+        const x = (i * 197.3 + this.t * (5 + (i % 7) * 2.2) + Math.sin(this.t * 0.31 + i) * 26) % (this.w + 40) - 20;
+        const y = (i * 113.9 - this.t * (2 + (i % 4)) + Math.cos(this.t * 0.27 + i * 1.3) * 22 + this.h * 4) % (this.h + 40) - 20;
+        c.globalAlpha = tw * 0.26 * a;
+        const s = 1.2 + (i % 3) * 0.6;
+        c.fillRect(x, y, s, s);
+      }
+      c.globalAlpha = 1;
     }
     // fog banks
     if (wt.fog > 0.02) {
@@ -3169,7 +3812,7 @@ export class Renderer {
       if (!picked) others++;
       shown.push({ x: h.x, y: h.y });
       const k = Math.min(1, h.bubble!.t * 3);
-      this.speech(c, h.x, h.y - h.z - 34, h.bubble!.text, inv, k);
+      this.speech(c, h.x, h.y - h.z - 40, h.bubble!.text, inv, k);
     }
     // …and over Neanderthals, plus a name plate over each clan camp
     for (const b of w.rivals.brutes) {
@@ -3211,14 +3854,19 @@ export class Renderer {
       const step = steps[Math.min(steps.length - 1, Math.floor(prog * steps.length))];
       const x = w.camp.craftX;
       const y = w.camp.craftY - 46;
-      c.strokeStyle = "rgba(255,255,255,0.35)";
-      c.lineWidth = 4 * inv;
+      c.fillStyle = "rgba(10,16,26,0.62)";
       c.beginPath();
-      c.arc(x, y, 12 * inv, 0, Math.PI * 2);
+      c.arc(x, y, 15.500 * inv, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = "rgba(255,255,255,0.22)";
+      c.lineWidth = 3.500 * inv;
+      c.lineCap = "round";
+      c.beginPath();
+      c.arc(x, y, 11.500 * inv, 0, Math.PI * 2);
       c.stroke();
       c.strokeStyle = "#ffd447";
       c.beginPath();
-      c.arc(x, y, 12 * inv, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2);
+      c.arc(x, y, 11.5 * inv, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2);
       c.stroke();
       this.speech(c, x, y - 18 * inv, step, inv, 1);
     }
@@ -3247,7 +3895,7 @@ export class Renderer {
         if (role === "gatherer" && h.role === "auto") continue;
         const icon = h.order ? "🎯" : ROLES.find((r) => r.id === role)?.icon ?? "";
         c.globalAlpha = 0.9;
-        c.fillText(icon, h.x, h.y - h.z - 34);
+        c.fillText(icon, h.x, h.y - h.z - 41);
         c.globalAlpha = 1;
       }
     }
@@ -3256,7 +3904,7 @@ export class Renderer {
       for (const h of w.humans) {
         if (h.hp >= 0.95 || h.x < x0 || h.x > x1 || h.y < y0 || h.y > y1 || this.hidden(h)) continue;
         const cnd = condition(h);
-        drawBar(c, h.x, h.y - h.z - 40, 18 * inv, h.hp, CONDITION_LABEL[cnd].color);
+        drawBar(c, h.x, h.y - h.z - 46, 18 * inv, h.hp, CONDITION_LABEL[cnd].color);
       }
     }
     // dragons: a big health bar
@@ -3300,11 +3948,21 @@ export class Renderer {
     if (ov.marker) {
       const m = ov.marker;
       const k = m.t / 1.6;
+      const e = 1 - Math.pow(1 - k, 3);
       c.strokeStyle = `rgba(255,214,80,${1 - k})`;
-      c.lineWidth = 3 * inv;
+      c.lineWidth = (3 - k * 2) * inv;
       c.beginPath();
-      c.ellipse(m.x, m.y, 10 + k * 26, (10 + k * 26) * 0.45, 0, 0, Math.PI * 2);
+      c.ellipse(m.x, m.y, 8 + e * 30, (8 + e * 30) * 0.45, 0, 0, Math.PI * 2);
       c.stroke();
+      c.strokeStyle = `rgba(255,255,255,${(1 - k) * 0.7})`;
+      c.lineWidth = 1.4 * inv;
+      c.beginPath();
+      c.ellipse(m.x, m.y, 4 + e * 14, (4 + e * 14) * 0.45, 0, 0, Math.PI * 2);
+      c.stroke();
+      c.fillStyle = `rgba(255,214,80,${(1 - k) * 0.22})`;
+      c.beginPath();
+      c.ellipse(m.x, m.y, 8 + e * 30, (8 + e * 30) * 0.45, 0, 0, Math.PI * 2);
+      c.fill();
       this.bubbleIcon(c, m.x, m.y - 30 - k * 12, m.icon, inv, 1 - k * 0.6);
     }
     // build ghost: footprint in green (ok) or red (blocked)
@@ -3349,14 +4007,7 @@ export class Renderer {
   }
 
   private inspectRing(c: CanvasRenderingContext2D, x: number, y: number, r: number) {
-    c.strokeStyle = `rgba(125,211,252,${0.7 + Math.sin(this.t * 5) * 0.25})`;
-    c.lineWidth = 2.5;
-    c.setLineDash([7, 5]);
-    c.lineDashOffset = -this.t * 18;
-    c.beginPath();
-    c.ellipse(x, y, r, r * 0.42, 0, 0, Math.PI * 2);
-    c.stroke();
-    c.setLineDash([]);
+    selectRing(c, x, y, r, r * 0.42, this.t, "#7dd3fc");
   }
 
   private damageBadge(c: CanvasRenderingContext2D, x: number, y: number) {
@@ -3420,11 +4071,34 @@ export class Renderer {
     } else if (p.build === "farm") return;
     if (def.tech && !w.camp.learned.has(def.tech)) ok = false;
     if (bdef?.civ && !w.civ.has(bdef.civ)) ok = false;
-    c.fillStyle = ok ? "rgba(74,222,128,0.22)" : "rgba(248,113,113,0.25)";
-    c.strokeStyle = ok ? "rgba(74,222,128,0.9)" : "rgba(248,113,113,0.95)";
-    c.lineWidth = 2 * inv;
-    c.fillRect(tx * TILE, ty * TILE, tw * TILE, th * TILE);
-    c.strokeRect(tx * TILE, ty * TILE, tw * TILE, th * TILE);
+    {
+      // the footprint breathes; corner brackets mark exactly which squares it takes
+      const pulse = 0.5 + Math.sin(this.t * 5) * 0.5;
+      const gx = tx * TILE;
+      const gy = ty * TILE;
+      const gw = tw * TILE;
+      const gh = th * TILE;
+      c.fillStyle = ok ? `rgba(74,222,128,${0.14 + pulse * 0.12})` : `rgba(248,113,113,${0.18 + pulse * 0.12})`;
+      c.strokeStyle = ok ? "rgba(74,222,128,0.85)" : "rgba(248,113,113,0.95)";
+      c.lineWidth = 1.5 * inv;
+      c.beginPath();
+      c.roundRect(gx, gy, gw, gh, 5);
+      c.fill();
+      c.stroke();
+      c.strokeStyle = ok ? "#dcfce7" : "#fee2e2";
+      c.lineWidth = 2.5 * inv;
+      c.lineCap = "round";
+      const k = Math.min(10, gw * 0.25);
+      const o = 3 + pulse * 2;
+      c.beginPath();
+      for (const [ax, ay, sx, sy] of [[gx - o, gy - o, 1, 1], [gx + gw + o, gy - o, -1, 1], [gx + gw + o, gy + gh + o, -1, -1], [gx - o, gy + gh + o, 1, -1]] as const) {
+        c.moveTo(ax + sx * k, ay);
+        c.lineTo(ax, ay);
+        c.lineTo(ax, ay + sy * k);
+      }
+      c.stroke();
+      c.lineCap = "butt";
+    }
     if (p.build === "scorpion") {
       const spot = w.colony.scorpionSpot(w, p.x, p.y);
       const label = spot.why ?? (ok ? `Place on ${spot.mount === "tower" ? "tower" : spot.mount === "wall" ? "wall" : "ground"}` : "Too far from camp");

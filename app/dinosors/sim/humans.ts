@@ -38,6 +38,7 @@ import { goalKey, nodePos, tileOf, TOWER_Z, WALK_Z, type NavClass } from "./nav"
 import { shelterDone, stagesOf } from "./build";
 import { buildAct, buildThink, deliverToSite, dismount, douseThink, joinTask, leaveScorpion, taskCarrying, taskThink, yieldToUrgent } from "./tasks";
 import { healTick, hurtHuman, recover } from "./injury";
+import { bedFor, discharge, wardInReach } from "./hospital";
 import { autoButcher, type Task } from "./tasks";
 import { COURAGE, bandNear, canFight, courageScore, foesNear, onMission } from "./courage";
 import { repelThink } from "./territory";
@@ -81,21 +82,6 @@ function rescueThink(w: World, h: Human, comrade: boolean): boolean {
     go(h, "walk", best.x + 14, best.y);
   }
   return true;
-}
-
-/** The nearest finished healing hut (within a long walk), or null. */
-function nearestHealer(w: World, h: Human) {
-  let best: import("./types").Building | null = null;
-  let bd = 2600;
-  for (const b of w.colony.buildings) {
-    if (b.kind !== "healer" || b.built < 1 || b.hp <= 0) continue;
-    const d = Math.hypot(b.x - h.x, b.y - h.y);
-    if (d < bd) {
-      bd = d;
-      best = b;
-    }
-  }
-  return best;
 }
 
 /** Something damaged waiting to be repaired (and not waiting on an invention)? */
@@ -404,6 +390,7 @@ function dangerNear(w: World, h: Human): Dino | null {
   const reach = h.child || h.hp < 0.45 ? 320 : 230;
   w.creatureHash.each(h.x, h.y, reach, (e, d2) => {
     if (e.kind !== "dino") return;
+    if (w.diplomacy.protectedDino(e)) return;
     const def = sp(e.species);
     if (def.move === "swim" || (def.move === "fly" && e.z > 10)) return;
     if (e.owner || e.state === "ridden") return;
@@ -432,6 +419,7 @@ function localDanger(w: World, h: Human): LocalDanger | null {
     if (d < r && d / r < distance) { distance = d / r; best = { x, y, kind }; }
   };
   w.creatureHash.each(h.x, h.y, sensitive ? 460 : 380, (e) => {
+    if (e.kind === "dino" && w.diplomacy.protectedDino(e)) return;
     if (e.kind !== "dino" || e.owner || e.state === "sleep" || e.state === "knocked" || e.state === "carried" || e.state === "stuck") return;
     const def = sp(e.species);
     if (e.raider) offer(e.x, e.y, sensitive ? 460 : 380, "raid");
@@ -441,7 +429,7 @@ function localDanger(w: World, h: Human): LocalDanger | null {
   });
   for (const b of w.rivals.brutes) if (w.rivals.hostile(w, b) && b.hp > 0 && b.state !== "flee" && b.state !== "home") offer(b.x, b.y, sensitive ? 440 : 340, "raid");
   // under a powered Dragon Shield the field keeps dragons off: nobody there scatters for one
-  if (w.dragons.list.length && !shieldedAt(w, h.x, h.y)) for (const dr of w.dragons.list) if (dr.state !== "leave" && dr.state !== "flee" && dr.z < 250) offer(dr.x, dr.y, sensitive ? 680 : 560, "dragon");
+  if (w.dragons.list.length && !shieldedAt(w, h.x, h.y)) for (const dr of w.dragons.list) if (w.diplomacy.hostileDragon(dr) && dr.state !== "leave" && dr.state !== "flee" && dr.z < 250) offer(dr.x, dr.y, sensitive ? 680 : 560, "dragon");
   const tx = Math.floor(h.x / TILE), ty = Math.floor(h.y / TILE);
   // the bucket brigade fights fires instead of fleeing them (unless they're standing in one); lava is never safe
   const role = w.tribe.roleOf(h);
@@ -498,6 +486,7 @@ function emergencySpot(w: World, h: Human, danger: LocalDanger): { x: number; y:
 function dragonNear(w: World, h: Human): Dragon | null {
   if (!w.dragons.list.length || shieldedAt(w, h.x, h.y)) return null;
   for (const dr of w.dragons.list) {
+    if (!w.diplomacy.hostileDragon(dr)) continue;
     if (dr.z > 230 || dr.state === "leave" || dr.state === "flee") continue;
     if (Math.hypot(dr.x - h.x, dr.y - h.y) < 520) return dr;
   }
@@ -771,9 +760,50 @@ function rally(w: World, h: Human, task: Task | null | undefined, fightTask: boo
   return "fight";
 }
 
+/** Personal recovery takes priority over work, orders, guard duty and helping others. */
+function selfCareThink(w: World, h: Human): boolean {
+  if (h.stranger || h.captive || h.under || h.state === "down") return false;
+  if (h.hp < 0.5) h.selfHealing = true;
+  if (!h.selfHealing) return false;
+  if (h.hp >= 0.9) {
+    h.selfHealing = false;
+    h.dangerUntil = 0;
+    h.refuge = undefined;
+    go(h, "idle", h.x, h.y);
+    discharge(w, h);
+    return false;
+  }
+  if (h.state === "operate") leaveScorpion(w, h);
+  // Keep the assignment and carried goods, but stop the action currently in progress.
+  h.task = null;
+  h.targetId = 0;
+  h.site = "";
+  h.interrupted = undefined;
+  h.wantTop = false;
+  const danger = localDanger(w, h);
+  if (danger && !(danger.kind === "raid" && w.tribe.safeInside(w, h))) {
+    const escape = emergencySpot(w, h, danger);
+    h.refuge = escape;
+    go(h, Math.hypot(h.x - escape.x, h.y - escape.y) < 14 && !escape.open ? "hide" : "flee", escape.x, escape.y);
+    return true;
+  }
+  // a bed at the healing hut / infirmary / hospital if one's free (hospital.ts); else home, where it takes longer
+  const hut = bedFor(w, h);
+  const spot = hut ? w.colony.door(hut) : shelterSpot(w, h);
+  if (Math.hypot(h.x - spot.x, h.y - spot.y) < 14) {
+    if (h.riding) dismount(w, h);
+    if (h.state !== "rest") { go(h, "rest", h.x, h.y); say(h, "Resting until I'm better."); }
+  } else if (h.state !== "walk" || Math.hypot(h.tx - spot.x, h.ty - spot.y) > 14) {
+    go(h, "walk", spot.x, spot.y);
+    say(h, hut ? "I need the healer." : wardInReach(w, h) ? "No beds left… I'll rest at home." : "I need to rest.");
+  }
+  return true;
+}
+
 function think(w: World, h: Human) {
   const camp = w.camp;
   h.think = 0.4 + w.rng() * 0.5;
+  if (h.state !== "tossed" && h.state !== "lookUp" && selfCareThink(w, h)) return;
   if (h.state === "tossed" || h.state === "lookUp" || h.state === "celebrate" || h.state === "down") return;
   if (h.state === "craft" && camp.crafting?.by === h.id && (w.shifts.active(w, h) || h.stateT < 3)) return;
 
@@ -835,6 +865,33 @@ function think(w: World, h: Human) {
   if (nearby && !safe && !task && h.partner && riderCanFight(w, h) && riderDefend(w, h, nearby)) return;
   // a catapult's keeper mans it when enemies come in range (and keeps it repaired)
   if (h.catapult && !h.child && h.hp > 0.35 && !task && keeperThink(w, h)) return;
+  // A Yeti attacking one of ours brings nearby adults to their defense, even off duty.
+  // Its winter throws reach almost 500px: answer those attacks before it reaches us.
+  if (!dragon && (!nearby || nearby.kind === "predator" || nearby.kind === "raid") && h.hp >= 0.45 && canFight(w, h) && weapon
+    && !h.hung && !h.yetiHeld && !h.chariot && !w.colony.scorpions.some((s) => s.crew === h.id)) {
+    let attacker: Dino | null = null;
+    let nearest = Infinity;
+    w.creatureHash.each(h.x, h.y, 520, (e, d2) => {
+      if (e.kind !== "dino" || e.species !== "yeti" || e.owner || e.health <= 0) return;
+      const attacking = e.state === "roar" || e.state === "chase" || e.state === "defend";
+      const victim = w.humans.find((o) => !o.stranger && (o.id === e.holding || (attacking && o.id === e.targetId)));
+      if (!victim || d2 >= nearest || w.nav.wallBetween(e.x, e.y, h.x, h.y)) return;
+      nearest = d2;
+      attacker = e;
+    });
+    const yeti = attacker as Dino | null;
+    if (yeti) {
+      h.dangerUntil = 0;
+      h.refuge = undefined;
+      if (!((h.state === "hunt" || h.state === "aim") && h.targetId === yeti.id)) {
+        h.targetId = yeti.id;
+        const reach = weapon.melee ? weapon.range + sizeOf(yeti) * 0.35 : weapon.range * 0.8;
+        go(h, Math.sqrt(nearest) < reach ? "aim" : "hunt", yeti.x, yeti.y);
+        say(h, "Stand together! Yeti!");
+      }
+      return;
+    }
+  }
   // a sidearm: predators + raiders are faced, not fled (only dragons, fire + the volcano still send them running)
   const fightable = !!nearby && (nearby.kind === "predator" || nearby.kind === "raid");
   if (fightable && !safe && sidearmed && !dutyFighter && h.hp >= 0.45 && h.level === 0 && !h.riding && !h.aloft && !(task && task.kind === "douse")) {
@@ -987,20 +1044,6 @@ function think(w: World, h: Human) {
     }
   }
   if ((h.state === "sitFire" || h.state === "hide") && h.warmth < 0.7 && w.snow.chill(w, h.x, h.y) > 0.3) return;
-
-  // 3. hurt → off to the nearest healing hut to get better (home if there isn't one), unless the player says otherwise
-  const hut = h.hp < 0.95 ? nearestHealer(w, h) : null;
-  if (h.hp < 0.5 && !task && !h.child && h.state !== "rest") {
-    const spot = hut ? w.colony.door(hut) : shelterSpot(w, h);
-    if (Math.hypot(h.x - spot.x, h.y - spot.y) < 14) go(h, "rest", h.x, h.y);
-    else {
-      if (h.state !== "walk" && w.rng() < 0.3) say(h, pick(w.rng, ["I need the healer.", "Ow… off to get patched up.", "Must rest."]));
-      go(h, "walk", spot.x, spot.y);
-    }
-    return;
-  }
-  // (at the healing hut they stay till they're nearly well; resting elsewhere, till they're on their feet)
-  if (h.state === "rest" && !task && h.hp < (hut && Math.hypot(hut.x - h.x, hut.y - h.y) < 90 ? 0.92 : 0.8)) return;
 
   // Shift change: an ongoing action finishes its current beat; its task stays on
   // the board for the incoming crew. Workers peel off at different clock times.
@@ -1459,7 +1502,15 @@ export function saddleZ(d: Dino) {
 }
 
 export function updateHuman(w: World, h: Human, dt: number) {
+  if (!h.stranger && h.hp > 0 && h.hp < 0.5) { if (!h.selfHealing) h.think = 0; h.selfHealing = true; }
   const passengerMount = h.riding ? w.dinoById(h.riding) : null;
+  // Passengers recover in their seat without interrupting their transport's movement.
+  const seated = h.aloft || h.ferry || h.chariot || (passengerMount && h.id !== passengerMount.rider && passengerMount.passengers?.includes(h.id));
+  if (seated && h.selfHealing && h.hp > 0 && h.state !== "down") {
+    recover(w, h, dt, true);
+    h.energy = Math.min(1, h.energy + dt * 0.015);
+    if (h.hp >= 0.9) h.selfHealing = false;
+  }
   if (passengerMount && h.id !== passengerMount.rider && passengerMount.passengers?.includes(h.id)) {
     const seat = passengerMount.passengers.indexOf(h.id);
     h.x = passengerMount.x + (seat === 0 ? -15 : 15) * passengerMount.dir;
@@ -1542,7 +1593,7 @@ export function updateHuman(w: World, h: Human, dt: number) {
   }
   h.stateT += dt;
   h.hunger = clamp(h.hunger + dt * 0.0025, 0, 1);
-  h.energy = clamp(h.energy + (h.state === "sleep" ? dt * 0.03 : -dt * 0.002), 0, 1);
+  h.energy = clamp(h.energy + (h.state === "sleep" ? dt * 0.03 : h.state === "rest" ? dt * 0.015 : -dt * 0.002), 0, 1);
   h.fear = Math.max(0, h.fear - dt * 0.2);
   if (h.bubble) {
     h.bubble.t -= dt;
@@ -1630,6 +1681,7 @@ export function updateHuman(w: World, h: Human, dt: number) {
     case "flee":
     case "explore":
       if (moveHuman(w, h, dt)) {
+        if (h.selfHealing && h.state === "walk") { go(h, "rest", h.x, h.y); break; }
         if (h.state === "flee") {
           // cover hides you; open ground doesn't — stand there and let the danger check decide (run on, or get back to work)
           if (h.refuge?.open && Math.hypot(h.x - h.refuge.x, h.y - h.refuge.y) < 20) go(h, "idle", h.x, h.y);

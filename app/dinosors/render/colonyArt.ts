@@ -1182,7 +1182,7 @@ export function drawScaffold(c: CanvasRenderingContext2D, k: number) {
 
 /* ------------------------------ buildings ------------------------------ */
 
-export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number, h: number, night: boolean, t: number, bridgeMask = 0) {
+export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number, h: number, night: boolean, t: number, bridgeMask = 0, canopyJoined = false) {
   const built = Math.max(0, Math.min(1, b.built));
   const W = w * T;
   if (built < 1) {
@@ -1211,6 +1211,15 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
   }
   const glow = night ? "rgba(255,190,90,0.95)" : "#2b1e14";
   switch (b.kind) {
+    case "tradingPost": {
+      c.fillStyle = "#775239"; c.fillRect(-39, -30, 5, 31); c.fillRect(34, -30, 5, 31);
+      c.fillStyle = "#a77546"; c.fillRect(-42, -10, 84, 10);
+      c.fillStyle = "#458b77"; c.beginPath(); c.moveTo(-48, -28); c.lineTo(-35, -48); c.lineTo(35, -48); c.lineTo(48, -28); c.closePath(); c.fill();
+      c.strokeStyle = "#d7b968"; c.lineWidth = 5; c.beginPath(); c.moveTo(-24, -46); c.lineTo(-32, -29); c.moveTo(0, -46); c.lineTo(0, -29); c.moveTo(24, -46); c.lineTo(32, -29); c.stroke();
+      for (const x of [-25, 0, 24]) { c.fillStyle = x === 0 ? "#d0ac6a" : "#82613e"; c.fillRect(x - 8, -24, 16, 14); c.strokeStyle = "#ead49b"; c.lineWidth = 1; c.strokeRect(x - 8, -24, 16, 14); }
+      c.fillStyle = "#f3e3b4"; c.font = "bold 10px sans-serif"; c.textAlign = "center"; c.fillText("TRADE", 0, -35);
+      break;
+    }
     case "boneTorch": {
       c.fillStyle = "rgba(42,28,15,0.25)";
       c.beginPath();
@@ -1428,6 +1437,11 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
       break;
     }
     case "healer": {
+      // it grows with its tier (hospital.ts): leafy hut → timber infirmary with a wing → two-storey stone hospital
+      if ((b.level ?? 1) >= 2) {
+        drawWard(c, W, b.level ?? 2, glow, night);
+        break;
+      }
       // leafy round hut with a herb garden
       c.fillStyle = "#6f9a3c";
       c.beginPath();
@@ -1681,6 +1695,7 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
       c.beginPath(); c.ellipse(9, -2, 5, 3, 0, 0, Math.PI * 2); c.fill();
       c.strokeStyle = "#5e3f24"; c.lineWidth = 2;
       for (const x of [-17, 17]) { c.beginPath(); c.moveTo(x, 2); c.lineTo(x, -30); c.stroke(); }
+      if (canopyJoined) break; // the shared roof is drawn once across neighbouring modules
       c.fillStyle = "#c79a64";
       c.beginPath();
       c.moveTo(-22, -28); c.quadraticCurveTo(0, -38 + Math.sin(t * 1.6) * 1.2, 22, -28);
@@ -2089,10 +2104,20 @@ export function drawNode(c: CanvasRenderingContext2D, n: ResNode, t: number) {
 
 /** HP bar for dragons + hurt fighters (screen-ish units passed in). */
 export function drawBar(c: CanvasRenderingContext2D, x: number, y: number, w: number, frac: number, color: string) {
-  c.fillStyle = "rgba(15,23,42,0.7)";
-  c.fillRect(x - w / 2 - 1, y - 1, w + 2, 5);
-  c.fillStyle = color;
-  c.fillRect(x - w / 2, y, w * Math.max(0, Math.min(1, frac)), 3);
+  // a rounded track, a filled bar with a glossy top edge
+  const f = Math.max(0, Math.min(1, frac));
+  c.fillStyle = "rgba(10,16,26,0.74)";
+  c.beginPath();
+  c.roundRect(x - w / 2 - 1, y - 1, w + 2, 5.4, 2.7);
+  c.fill();
+  if (f > 0.01) {
+    c.fillStyle = color;
+    c.beginPath();
+    c.roundRect(x - w / 2, y, Math.max(3.4, w * f), 3.4, 1.7);
+    c.fill();
+    c.fillStyle = "rgba(255,255,255,0.38)";
+    c.fillRect(x - w / 2 + 1, y + 0.5, Math.max(0.5, w * f - 2), 0.9);
+  }
 }
 
 /** A charred cartoon skeleton (fire/lava victims). */
@@ -2134,3 +2159,105 @@ export function drawBones(c: CanvasRenderingContext2D, size: number) {
 }
 
 export { HOUSING };
+
+/** The healing hut's bigger tiers: 2 = timber infirmary with a side wing, 3 = two-storey stone hospital. */
+function drawWard(c: CanvasRenderingContext2D, W: number, level: number, glow: string, night: boolean) {
+  const big = level >= 3;
+  const half = W / 2 + (big ? 12 : 6);
+  const wallH = big ? 46 : 30;
+  const wall = big ? "#b9b2a3" : "#9a6f45";
+  const wallDark = big ? "#8f887a" : "#7a5433";
+  const roof = big ? "#7d4a3a" : "#6f9a3c";
+  const roofDark = big ? "#5f3529" : "#557a2c";
+  const pane = night ? "rgba(255,206,120,0.95)" : "#3b4a52";
+  // side wing (the extra beds)
+  c.fillStyle = wallDark;
+  c.fillRect(half - 26, -wallH + 14, 26, wallH - 14);
+  c.fillStyle = roofDark;
+  c.beginPath();
+  c.moveTo(half - 30, -wallH + 14);
+  c.lineTo(half - 13, -wallH + 2);
+  c.lineTo(half + 4, -wallH + 14);
+  c.closePath();
+  c.fill();
+  c.fillStyle = pane;
+  c.fillRect(half - 18, -wallH + 22, 9, 8);
+  // main block
+  c.fillStyle = wall;
+  c.fillRect(-half, -wallH, half * 2 - 24, wallH);
+  if (big) {
+    // stone courses
+    c.strokeStyle = "rgba(60,54,46,0.35)";
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let y = -wallH + 8; y < 0; y += 9) {
+      c.moveTo(-half, y);
+      c.lineTo(half - 24, y);
+    }
+    c.stroke();
+  } else {
+    // timber frame
+    c.strokeStyle = "#5c3e24";
+    c.lineWidth = 2;
+    c.beginPath();
+    for (const x of [-half + 1, -half / 3, half / 3 - 8, half - 25]) {
+      c.moveTo(x, 0);
+      c.lineTo(x, -wallH);
+    }
+    c.stroke();
+  }
+  // roof
+  c.fillStyle = roof;
+  c.beginPath();
+  c.moveTo(-half - 5, -wallH);
+  c.lineTo(-12, -wallH - (big ? 22 : 18));
+  c.lineTo(half - 19, -wallH);
+  c.closePath();
+  c.fill();
+  c.strokeStyle = roofDark;
+  c.lineWidth = 1.5;
+  c.beginPath();
+  for (let i = 1; i < 5; i++) {
+    const f = i / 5;
+    c.moveTo(-half - 5 + (half - 7) * f, -wallH - (big ? 22 : 18) * f);
+    c.lineTo(-half - 5 + (half - 7) * f + 6, -wallH);
+  }
+  c.stroke();
+  // windows: one row for the infirmary, two for the hospital (lit at night: someone's always on watch)
+  c.fillStyle = pane;
+  const cols = big ? [-half + 8, -half + 26, half - 44] : [-half + 9, half - 42];
+  for (const x of cols) {
+    c.fillRect(x, -wallH + 7, 10, 9);
+    if (big) c.fillRect(x, -wallH + 26, 10, 9);
+  }
+  c.strokeStyle = big ? "#6f6a5e" : "#5c3e24";
+  c.lineWidth = 1;
+  for (const x of cols) {
+    c.strokeRect(x, -wallH + 7, 10, 9);
+    if (big) c.strokeRect(x, -wallH + 26, 10, 9);
+  }
+  // door
+  c.fillStyle = glow;
+  c.beginPath();
+  c.moveTo(-9, 0);
+  c.lineTo(-9, -15);
+  c.arc(0, -15, 9, Math.PI, 0);
+  c.lineTo(9, 0);
+  c.closePath();
+  c.fill();
+  // the healer's sign: a white board with a green herb cross (a red one for the hospital), on a post above the door
+  c.fillStyle = "#f4f0e4";
+  c.fillRect(-10, -wallH - (big ? 36 : 30), 20, 16);
+  c.strokeStyle = "#5c3e24";
+  c.strokeRect(-10, -wallH - (big ? 36 : 30), 20, 16);
+  c.fillStyle = big ? "#c8402f" : "#3f8a4a";
+  c.fillRect(-2.5, -wallH - (big ? 34 : 28), 5, 12);
+  c.fillRect(-6, -wallH - (big ? 30.5 : 24.5), 12, 5);
+  // herb beds by the door
+  c.fillStyle = "#4f8a3a";
+  for (const x of [-half + 6, -half + 14, -22]) {
+    c.beginPath();
+    c.ellipse(x, -2, 5, 3, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+}

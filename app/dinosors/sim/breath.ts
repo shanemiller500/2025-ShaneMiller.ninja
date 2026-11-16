@@ -22,6 +22,7 @@ import type { World } from "./world";
 import { hitChariot } from "./chariots";
 import { hitDino } from "./tribe";
 import { hitScorpionsAt, sideOfDragon } from "./factions";
+import { nationOf, type NationId } from "./diplomacy";
 
 export type HazardKind = "hotSand" | "frost";
 
@@ -36,6 +37,7 @@ export interface Hazard {
   life: number;
   /** a dragon of ours made it (it doesn't hurt our own people) */
   ours?: boolean;
+  source?: NationId;
 }
 
 /** how many patches can be about at once (the oldest goes first) */
@@ -52,19 +54,19 @@ export class Hazards {
   list: Hazard[] = [];
   private tickT = 0;
 
-  add(w: World, kind: HazardKind, x: number, y: number, r: number, ours = false) {
+  add(w: World, kind: HazardKind, x: number, y: number, r: number, ours = false, source?: NationId) {
     if (isWaterTile(w.terrain.tileAt(x, y)) && kind === "hotSand") {
       // hot sand hissing into water: just steam
       w.particles.burst(P.Steam, x, y, 5, 30, { size: 14, max: 1.2, color: "rgba(235,235,230,0.6)" });
       return null;
     }
-    const near = this.list.find((h) => h.kind === kind && Math.abs(h.x - x) < MERGE && Math.abs(h.y - y) < MERGE);
+    const near = this.list.find((h) => h.kind === kind && h.source === source && h.ours === ours && Math.abs(h.x - x) < MERGE && Math.abs(h.y - y) < MERGE);
     if (near) {
       near.t = Math.min(near.t, near.life * 0.15);
       near.r = Math.min(near.r + 4, r * 1.6);
       return near;
     }
-    const h: Hazard = { kind, x, y, r, t: 0, life: kind === "hotSand" ? HOT_LIFE : FROST_LIFE, ...(ours ? { ours } : {}) };
+    const h: Hazard = { kind, x, y, r, t: 0, life: kind === "hotSand" ? HOT_LIFE : FROST_LIFE, ...(ours ? { ours } : {}), ...(source ? { source } : {}) };
     if (this.list.length >= MAX_PATCHES) this.expire(w, this.list.shift()!);
     this.list.push(h);
     return h;
@@ -98,6 +100,7 @@ export class Hazards {
     const r2 = h.r * h.r;
     const inside = (p: { x: number; y: number }) => (p.x - h.x) ** 2 + (p.y - h.y) ** 2 < r2;
     for (const p of w.humans) {
+      if (h.source && !w.diplomacy.hostile(h.source, "us")) continue;
       if (p.under || p.aloft || p.ferry || p.level || !inside(p)) continue;
       if (h.ours && !p.captive && !p.stranger) continue;
       if (h.kind === "hotSand") hurtHuman(w, p, 0.05 * s, h.x, h.y, "burn");
@@ -107,12 +110,14 @@ export class Hazards {
       }
     }
     for (const b of w.rivals.brutes) {
+      if (h.source && !w.diplomacy.hostile(h.source, nationOf(b))) continue;
       if (b.z > 10 || b.snatched || !inside(b)) continue;
       // the Sand People's thick wrappings + sandals: hot sand barely bothers them
       if (h.kind === "hotSand") w.rivals.hit(w, b, (b.sand ? 0.01 : 0.05) * s, h.x, h.y, true, "fire");
       else b.slowT = Math.max(b.slowT ?? 0, 1.2);
     }
     for (const d of w.dinos) {
+      if (h.source && d.owner && !w.diplomacy.hostile(h.source, "us")) continue;
       if (d.under || d.z > 10 || !inside(d)) continue;
       if (h.kind === "hotSand") {
         d.health -= 0.025 * s;
@@ -133,11 +138,11 @@ export class Hazards {
 
   serialize() {
     const r = Math.round;
-    return this.list.map((h) => [h.kind === "hotSand" ? 0 : 1, r(h.x), r(h.y), r(h.r), Math.round(h.t * 10) / 10, h.ours ? 1 : 0] as const);
+    return this.list.map((h) => [h.kind === "hotSand" ? 0 : 1, r(h.x), r(h.y), r(h.r), Math.round(h.t * 10) / 10, h.ours ? 1 : 0, h.source ?? null] as const);
   }
 
   load(d: ReturnType<Hazards["serialize"]> | undefined) {
-    this.list = (d ?? []).map(([k, x, y, r, t, ours]) => ({ kind: k === 0 ? ("hotSand" as const) : ("frost" as const), x, y, r, t, life: k === 0 ? HOT_LIFE : FROST_LIFE, ...(ours ? { ours: true } : {}) }));
+    this.list = (d ?? []).map(([k, x, y, r, t, ours, source]) => ({ kind: k === 0 ? ("hotSand" as const) : ("frost" as const), x, y, r, t, life: k === 0 ? HOT_LIFE : FROST_LIFE, ...(ours ? { ours: true } : {}), ...(source ? { source } : {}) }));
   }
 }
 
@@ -146,7 +151,8 @@ export class Hazards {
  * how hard, softened), and lays a patch on the ground. `mul` = how hot / cold it runs.
  */
 export function breathBlast(w: World, dr: Dragon, fx: number, fy: number, kind: BreathKind, mul = 1) {
-  const ours = !!dr.owner;
+  const source: NationId | undefined = dr.owner ? "us" : dr.sandTribe ? `sand:${dr.sandTribe}` : undefined;
+  const ours = !!dr.owner || (!!source && !w.diplomacy.hostile(source, "us"));
   const r = 66;
   const frost = kind === "frost";
   if (w.inView(fx, fy, 220)) {
@@ -157,7 +163,7 @@ export function breathBlast(w: World, dr: Dragon, fx: number, fy: number, kind: 
     w.particles.spawn(P.Smoke, fx, fy, { z: 10, vz: 18, size: 30, max: 1.6, color: frost ? "rgba(225,245,255,0.55)" : "rgba(222,190,130,0.6)" });
   }
   w.sfx(frost ? "whoosh" : "ignite", fx, fy, 0.6, frost ? 1.5 : 0.5);
-  w.hazards.add(w, frost ? "frost" : "hotSand", fx, fy, r * 0.75, ours);
+  w.hazards.add(w, frost ? "frost" : "hotSand", fx, fy, r * 0.75, ours, source);
   // a frosty blast ices over still shallow water for a while
   const dmgH = (frost ? 0.18 : 0.26) * mul;
   for (const h of w.humans) {
@@ -173,10 +179,11 @@ export function breathBlast(w: World, dr: Dragon, fx: number, fy: number, kind: 
     }
   }
   for (const b of [...w.rivals.brutes]) {
+    if (source && !w.diplomacy.hostile(source, nationOf(b))) continue;
     if (b.snatched || b.onDragon || Math.hypot(b.x - fx, b.y - fy) > r) continue;
     // a Sand Dragon never scorches its own people
     if (dr.sandTribe && b.sand === dr.sandTribe) continue;
-    w.rivals.hit(w, b, (frost ? 0.16 : 0.22) * mul, fx, fy, true, "fire");
+    w.rivals.hit(w, b, (frost ? 0.16 : 0.22) * mul, fx, fy, !dr.owner, "fire");
     if (frost) b.slowT = Math.max(b.slowT ?? 0, 3.5);
   }
   for (const d of w.dinos) {

@@ -127,15 +127,15 @@ export function TipCoach({ snap, enabled, busy, onOff, onHelp }: { snap: Snapsho
               <div className="dl-leopard dl-btn absolute -top-3.5 left-4 rounded-full px-3 py-0.5 text-[12px] font-bold uppercase tracking-wider text-[#fff6dd]">
                 <span className="dl-ink">{tip.who} says</span>
               </div>
-              <button type="button" aria-label="Close tip" onClick={() => setTip(null)} className="absolute right-2.5 top-2.5 rounded-full p-1 text-[#3a2414]/50 hover:bg-[#3a2414]/10 hover:text-[#3a2414]">
+              <button type="button" aria-label="Close tip" onClick={() => setTip(null)} className="absolute right-2.5 top-2.5 rounded-full p-1 text-[#0f172a]/50 hover:bg-[#0f172a]/10 hover:text-[#0f172a]">
                 <X className="h-4 w-4" strokeWidth={3} />
               </button>
               <p className="pr-5 text-[15px] font-semibold leading-snug">{tip.text}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button type="button" onClick={() => setTip(null)} className="dl-btn rounded-full bg-amber-400 px-3.5 py-1 text-[13px] font-bold text-[#3a2414] hover:bg-amber-300">
+                <button type="button" onClick={() => setTip(null)} className="dl-btn rounded-full bg-amber-400 px-3.5 py-1 text-[13px] font-bold text-[#0f172a] hover:bg-amber-300">
                   Got it!
                 </button>
-                <button type="button" onClick={() => show(choose(true))} className="dl-btn rounded-full bg-[#fffaf0] px-3 py-1 text-[13px] font-bold text-[#3a2414] hover:bg-white">
+                <button type="button" onClick={() => show(choose(true))} className="dl-btn rounded-full bg-[#fffaf0] px-3 py-1 text-[13px] font-bold text-[#0f172a] hover:bg-white">
                   Another tip
                 </button>
                 <button
@@ -144,17 +144,17 @@ export function TipCoach({ snap, enabled, busy, onOff, onHelp }: { snap: Snapsho
                     setTip(null);
                     onHelp(tip.help);
                   }}
-                  className="dl-btn flex items-center gap-1 rounded-full bg-[#fffaf0] px-3 py-1 text-[13px] font-bold text-[#3a2414] hover:bg-white"
+                  className="dl-btn flex items-center gap-1 rounded-full bg-[#fffaf0] px-3 py-1 text-[13px] font-bold text-[#0f172a] hover:bg-white"
                 >
                   <BookOpen className="h-3.5 w-3.5" strokeWidth={2.5} /> Help
                 </button>
               </div>
-              <button type="button" onClick={onOff} className="mt-2 text-[11.5px] font-semibold text-[#3a2414]/55 underline-offset-2 hover:text-[#3a2414] hover:underline">
+              <button type="button" onClick={onOff} className="mt-2 text-[11.5px] font-semibold text-[#0f172a]/55 underline-offset-2 hover:text-[#0f172a] hover:underline">
                 Turn tips off
               </button>
             </div>
             {/* speech tail toward the speaker */}
-            <span aria-hidden className="absolute -left-[10px] bottom-6 z-10 hidden h-5 w-5 rotate-45 border-b-[3px] border-l-[3px] border-[#3a2414] bg-[#f8e8c8] sm:block" />
+            <span aria-hidden className="absolute -left-[10px] bottom-6 z-10 hidden h-5 w-5 rotate-45 border-b-[3px] border-l-[3px] border-[#0f172a] bg-[#f8e8c8] sm:block" />
           </div>
         </motion.div>
       )}
@@ -241,8 +241,8 @@ export function HintBubbles({ engine, enabled, busy, view }: { engine: Engine; e
       >
         <div className="dl-paper relative mx-auto flex max-w-[30rem] items-start gap-3 rounded-[24px] p-3 pr-11 shadow-2xl">
           <span aria-hidden="true" className="text-2xl">?</span>
-          <div className="min-w-0"><div className="text-base font-bold leading-tight">{info.title}</div><p className="mt-1 text-sm font-medium leading-snug text-[#3a2414]/85">{info.text}</p></div>
-          <button type="button" aria-label="Close hint" onClick={() => setHint(null)} className="absolute right-2 top-2 rounded-full p-1.5 text-[#3a2414]/60"><X className="h-5 w-5" /></button>
+          <div className="min-w-0"><div className="text-base font-bold leading-tight">{info.title}</div><p className="mt-1 text-sm font-medium leading-snug text-[#0f172a]/85">{info.text}</p></div>
+          <button type="button" aria-label="Close hint" onClick={() => setHint(null)} className="absolute right-2 top-2 rounded-full p-1.5 text-[#0f172a]/60"><X className="h-5 w-5" /></button>
         </div>
       </motion.div>
     )}
@@ -254,14 +254,14 @@ export function HintBubbles({ engine, enabled, busy, view }: { engine: Engine; e
               <img src={GUIDE_IMG(info.art)} alt="" width={104} height={104} className="-mb-2 -ml-2 -mt-10 h-[104px] w-[104px] shrink-0 object-contain drop-shadow-[0_3px_0_rgba(36,20,10,0.45)]" />
               <div className="min-w-0 flex-1">
                 <div className="text-[18px] font-bold leading-tight">{info.title}</div>
-                <p className="mt-1.5 text-[15.5px] font-medium leading-snug text-[#3a2414]/85">{info.text}</p>
+                <p className="mt-1.5 text-[15.5px] font-medium leading-snug text-[#0f172a]/85">{info.text}</p>
               </div>
-              <button type="button" aria-label="Close" onClick={() => setHint(null)} className="absolute right-2.5 top-2.5 rounded-full p-1.5 text-[#3a2414]/50 hover:bg-[#3a2414]/10 hover:text-[#3a2414]">
+              <button type="button" aria-label="Close" onClick={() => setHint(null)} className="absolute right-2.5 top-2.5 rounded-full p-1.5 text-[#0f172a]/50 hover:bg-[#0f172a]/10 hover:text-[#0f172a]">
                 <X className="h-5 w-5" strokeWidth={3} />
               </button>
             </div>
             {/* tail down to the thing */}
-            <span aria-hidden className={`absolute left-1/2 h-6 w-6 -translate-x-1/2 rotate-45 border-[#3a2414] ${below ? "-top-[11px] border-l-[3px] border-t-[3px] bg-[#fff6e0]" : "-bottom-[11px] border-b-[3px] border-r-[3px] bg-[#f6e4bd]"}`} />
+            <span aria-hidden className={`absolute left-1/2 h-6 w-6 -translate-x-1/2 rotate-45 border-[#0f172a] ${below ? "-top-[11px] border-l-[3px] border-t-[3px] bg-[#fff6e0]" : "-bottom-[11px] border-b-[3px] border-r-[3px] bg-[#f6e4bd]"}`} />
           </motion.div>
         ) : (
           <div className="relative flex flex-col items-center">
@@ -273,11 +273,11 @@ export function HintBubbles({ engine, enabled, busy, view }: { engine: Engine; e
               initial={{ scale: 0, y: 8 }}
               animate={{ scale: 1, y: [0, -5, 0] }}
               transition={{ scale: { type: "spring", stiffness: 400, damping: 14 }, y: { duration: 1.8, repeat: Infinity, ease: "easeInOut" } }}
-              className="dl-btn relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-b from-amber-300 to-amber-500 text-2xl font-black text-[#3a2414] hover:from-amber-200"
+              className="dl-btn relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-b from-amber-300 to-amber-500 text-2xl font-black text-[#0f172a] hover:from-amber-200"
             >
               ?
             </motion.button>
-            <span aria-hidden className="mt-0.5 h-0 w-0 border-x-[7px] border-t-[9px] border-x-transparent border-t-[#3a2414]" />
+            <span aria-hidden className="mt-0.5 h-0 w-0 border-x-[7px] border-t-[9px] border-x-transparent border-t-[#0f172a]" />
           </div>
         )}
       </div>

@@ -23,6 +23,7 @@ import { T, TILE, WORLD_H, WORLD_W, type Brute, type Dino, type DinoState, type 
 import type { World } from "./world";
 import { season } from "./seasons";
 import { thinkWorkDino } from "./workDinos";
+import { castleDinoRest } from "./castleCompound";
 import { meetRider, partnerThink } from "./riders";
 import { leaveWalls, outsideSpot } from "./dinoBounds";
 import { isDinoScorpion, scorpionAct, scorpionThink } from "./dinoScorpions";
@@ -392,7 +393,12 @@ function thinkWalker(w: World, d: Dino, def: SpeciesDef) {
 
   // 6. sleep
   if (d.energy < 0.12 || (!awakeTime && d.energy < 0.85) || (def.nocturnal && !night && d.energy < 0.5)) {
-    if (d.owner && (d.warTraining ?? 0) >= 0.35) {
+    const yard = !w.tribe.raid ? castleDinoRest(w, d) : null;
+    if (yard && dd(d, yard) > 18) {
+      setState(d, "wander", yard.x, yard.y);
+      return;
+    }
+    if (!yard && d.owner && (d.warTraining ?? 0) >= 0.35) {
       const home = battleHome(w, d);
       if (home.pen && dd(d, home) > 16) {
         setState(d, "wander", home.x, home.y);

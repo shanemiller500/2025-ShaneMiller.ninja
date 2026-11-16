@@ -11,6 +11,7 @@ import { DAMAGED, OBSIDIAN_SHIELD, scorpionCost, scorpionMaxHp } from "./scorpio
 import { CHARIOT_TIERS, chariotParked, chariotUpgradeProblem, finishChariotUpgrade, nextChariotTier, orderChariotUpgrade } from "./chariotTiers";
 import { PYRAMID_STAGES } from "../data/civ";
 import { SHELTER_STAGES } from "../data/facts";
+import { WING_STAGES } from "./estate";
 import { P } from "./particles";
 import { TILE, type Resource, type Shelter, type TechId, type Tower, type Wall } from "./types";
 import type { World } from "./world";
@@ -156,8 +157,8 @@ export function armTower(w: World, t: Tower) {
   if (typeof s !== "string") w.toast("🎯", "A Scorpion is planned on top of the stone tower!", t.x, t.y - 60);
 }
 
-export function stagesOf(s: Shelter) {
-  return s.plan === "tent" ? TENT_STAGES : SHELTER_STAGES;
+export function stagesOf(s: Pick<Shelter, "plan">) {
+  return s.plan === "castle" ? WING_STAGES : s.plan === "tent" ? TENT_STAGES : SHELTER_STAGES;
 }
 export const shelterDone = (s: Shelter) => s.stage >= stagesOf(s).length;
 

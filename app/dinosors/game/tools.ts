@@ -185,6 +185,7 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("mill", "work"),
   bld("bakery", "work"),
   bld("storage", "work"),
+  bld("tradingPost", "work"),
   bld("foodStore", "work"),
   bld("waterStore", "work"),
   bld("well", "land"),
@@ -565,11 +566,16 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
         return true;
       }
       const cap = peopleCap(w);
+      if (w.humans.filter((h) => !h.stranger).length >= w.population.capacity(w)) {
+        hint(w, "🛏️", "Every bed is taken. Add a home or a castle wing and finish building it first.");
+        return false;
+      }
       if (w.humans.length >= cap) {
         hint(w, "🛖", cap < MAX_PEOPLE ? `The camp is full at ${cap}! It can grow to ${MAX_PEOPLE} once it's stable: well fed, safe, and a home for everyone.` : "The camp is full!");
         return false;
       }
       const h = addHuman(w, x, y, tool.people === "child");
+      w.population.assignHomes(w);
       h.bubble = { text: "Hello!", t: 2 };
       w.sfx("babble", x, y, 0.7);
       return true;

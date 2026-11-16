@@ -14,6 +14,7 @@ import { findSpawnSpot } from "./dinos";
 import { shelterDone } from "./build";
 import { addHuman, say } from "./humans";
 import { sp } from "../data/species";
+import { wingUnits } from "./castleCompound";
 import type { Human } from "./types";
 import type { World } from "./world";
 
@@ -43,10 +44,29 @@ export class Population {
   capacity(w: World) {
     let n = CAVE_ROOM;
     const hall = w.civ.has("greatHalls") ? 2 : 0;
-    for (const s of w.shelters) if (shelterDone(s)) n += HOUSING[s.tier].cap + hall;
+    for (const s of w.shelters) if (shelterDone(s) && s.hp > 0) n += HOUSING[s.tier].cap + hall;
     // burrow homes down in the Deep
     n += deepRoom(w.mine);
     return n;
+  }
+
+  /** Each finished capacity slot is one bed, including the six starter cave beds. */
+  bedLabel(w: World, person: Human) {
+    if (person.stranger) return "Visitor - waiting to join";
+    const home = w.shelters.find((s) => s.id === person.home && shelterDone(s) && s.hp > 0);
+    if (home) {
+      const roommates = w.humans.filter((h) => !h.stranger && h.home === home.id);
+      const slot = roommates.findIndex((h) => h.id === person.id) + 1;
+      const cap = HOUSING[home.tier].cap + (w.civ.has("greatHalls") ? 2 : 0);
+      const rooms = wingUnits(w, home);
+      const label = rooms.length > 1 ? `Castle floor ${rooms.findIndex((s) => s.id === home.id) + 1}` : home.tier >= 4 ? "Castle wing" : HOUSING[home.tier].name;
+      if (slot <= cap) return `${label} - bed ${slot}/${cap}`;
+    }
+    const unhoused = w.humans.filter((h) => !h.stranger && !w.shelters.some((s) => s.id === h.home && shelterDone(s) && s.hp > 0));
+    const slot = unhoused.findIndex((h) => h.id === person.id) + 1;
+    if (slot > 0 && slot <= CAVE_ROOM) return `The cave - bed ${slot}/${CAVE_ROOM}`;
+    if (slot > CAVE_ROOM && slot <= CAVE_ROOM + deepRoom(w.mine)) return `Deep home - bed ${slot - CAVE_ROOM}/${deepRoom(w.mine)}`;
+    return "Waiting for a bed - add a home or castle wing";
   }
 
   update(w: World, dt: number) {
@@ -72,7 +92,7 @@ export class Population {
     const fed = w.tribe.foodTotal(w) >= 3;
     if (!safe || !fed || strangers > 0 || residents < 2 || residents >= peopleCap(w)) return;
     // full up: no newcomers till there's room, and the player is told (again every few minutes)
-    if (residents >= this.capacity(w) + 2) return this.needHomes(w, residents);
+    if (residents >= this.capacity(w)) return this.needHomes(w, residents);
     this.spawnWanderers(w);
   }
 
@@ -98,10 +118,11 @@ export class Population {
     if (fresh.length < 2) {
       const at = fresh[0] ?? { x: w.camp.x, y: w.camp.y + 600 };
       const fam = fresh[0]?.family ?? w.nextId();
-      while (w.humans.length - before < 2) addHuman(w, at.x + (w.humans.length % 3) * 16, at.y + 10, false, { family: fam });
+      while (w.humans.length - before < 2 && w.humans.filter((h) => !h.stranger).length < this.capacity(w)) addHuman(w, at.x + (w.humans.length % 3) * 16, at.y + 10, false, { family: fam });
     }
     const n = w.humans.length - before;
     this.joined += n;
+    this.assignHomes(w);
     if (n) w.toast("🏕️", residents ? `A family of ${n} wanderers joins the last of the tribe: together they'll build the community up again.` : `A family of ${n} wanderers found the empty camp and moved in. Build the community up again!`, w.camp.x, w.camp.y);
   }
 
@@ -118,7 +139,9 @@ export class Population {
     }
     if (!spot) return [];
     const family = w.rng() < 0.55;
-    const n = family ? 2 + (w.rng() < 0.5 ? 1 : 0) : 1;
+    const available = Math.max(0, Math.min(this.capacity(w), peopleCap(w)) - w.humans.filter((h) => !h.stranger).length);
+    const n = Math.min(available, family ? 2 + (w.rng() < 0.5 ? 1 : 0) : 1);
+    if (!n) return [];
     const fam = w.nextId();
     const out: Human[] = [];
     for (let i = 0; i < n; i++) {
@@ -134,9 +157,10 @@ export class Population {
   /** A wanderer reached camp. */
   arrived(w: World, h: Human) {
     const residents = w.humans.filter((o) => !o.stranger).length;
-    const room = residents < this.capacity(w) + 2;
     const family = w.humans.filter((o) => o.stranger && o.family === h.family);
-    if (!room) {
+    if (!family.length) return;
+    const available = Math.min(this.capacity(w), peopleCap(w)) - residents;
+    if (family.length > available) {
       this.needHomes(w, residents);
       say(h, "No room…");
       h.think = 8;
@@ -148,6 +172,7 @@ export class Population {
       say(o, o.child ? "Yay, friends!" : "Thank you!");
     }
     this.joined += family.length;
+    this.assignHomes(w);
     w.celebrate("Welcome!");
     w.discover("family", h.x, h.y);
     w.toast(family.length > 1 ? "👨‍👩‍👧" : "🙋", family.length > 1 ? `A family of ${family.length} joined the tribe!` : `${h.name} joined the tribe!`, h.x, h.y);
@@ -155,7 +180,7 @@ export class Population {
 
   /** Give everyone a bed: families stay together, nicest houses first. */
   assignHomes(w: World) {
-    const homes = w.shelters.filter((s) => shelterDone(s)).sort((a, b) => b.tier - a.tier);
+    const homes = w.shelters.filter((s) => shelterDone(s) && s.hp > 0).sort((a, b) => b.tier - a.tier);
     const free = new Map(homes.map((s) => [s.id, HOUSING[s.tier].cap + (w.civ.has("greatHalls") ? 2 : 0)]));
     const people = w.humans.filter((h) => !h.stranger);
     // Once a distant settlement has homes, seed it with residents instead of

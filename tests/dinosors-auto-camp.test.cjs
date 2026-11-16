@@ -49,7 +49,7 @@ test('Auto restocking prioritizes supplies that are low relative to the camp tar
 
 
 
-test('Auto plans a home upgrade when the daily building queue is clear', () => {
+test('Auto leaves bed capacity to the player; a requested home upgrade enters the build queue', () => {
   const { stagesOf } = require(path.join(root, 'build.ts'));
   const w = new World(7805, false);
   addHuman(w, w.camp.x, w.camp.y, false, { role: 'auto' });
@@ -59,6 +59,8 @@ test('Auto plans a home upgrade when the daily building queue is clear', () => {
   home.hp = 1;
   w.day = 2;
   w.tribe.autoImprove(w);
+  assert.equal(home.up, false);
+  assert.equal(w.camp.startUpgrade(w, home), true);
   assert.equal(home.up, true);
   w.elapsed += 1;
   assert.equal(w.buildSites().find((site) => site.id === home.id)?.kind, 'upgrade');

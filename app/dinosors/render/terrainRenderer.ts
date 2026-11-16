@@ -2,10 +2,16 @@
 /*  Terrain painter. A 1px-per-tile color map (hillshaded) is upscaled */
 /*  with smoothing for soft biome blends, then each 512px chunk gets   */
 /*  baked texture details once and is cached (LRU) until it changes.   */
+/*                                                                     */
+/*  Nothing here blocks: a new world shows a quick one-pixel-per-tile  */
+/*  preview at once, and the full-quality colour map is painted a few  */
+/*  chunks a frame (what's in view first, the rest in the background). */
 /* ------------------------------------------------------------------ */
 import { hash2, valueNoise } from "../sim/rng";
 import { CHUNKS_X, CHUNKS_Y, CHUNK_TILES, REGION, type Terrain } from "../sim/terrain";
 import { MAP_H, MAP_W, T, TILE } from "../sim/types";
+import { Q } from "./quality";
+import { STAMP, grainSheet, terrainStamps } from "./terrainTex";
 
 export const TILE_RGB: Record<T, [number, number, number]> = {
   [T.Deep]: [38, 104, 146],
@@ -55,7 +61,11 @@ const NB2: [number, number][] = [
   [1, -1],
   [-1, 1],
 ];
-const MAX_CACHED = 42;
+/** baked chunks kept at least (more when the view needs them: a 4K screen shows a lot of ground) */
+const MIN_CACHED = 28;
+/** milliseconds a frame may spend painting the colour map: for chunks in view / for the rest of the map */
+const PAINT_VIEW_MS = 6;
+const PAINT_BACKGROUND_MS = 2.5;
 
 type Canvas = HTMLCanvasElement;
 
@@ -68,7 +78,11 @@ function makeCanvas(w: number, h: number): Canvas {
 
 export class TerrainRenderer {
   private colorMap: Canvas;
+  /** baked chunks, keyed by chunk + bake scale (close-up chunks are baked at twice the pixels) */
   private chunks = new Map<number, { canvas: Canvas; version: number; used: number }>();
+  private bakeScale = 1;
+  /** where the water is (alpha = how deep), one pixel per map pixel: masks the animated water light */
+  waterMask: Canvas;
   private colorVersion = new Uint32Array(CHUNKS_X * CHUNKS_Y).fill(0xffffffff);
   private frame = 0;
   /** water/shore tiles per chunk for animated overlays */
@@ -80,10 +94,69 @@ export class TerrainRenderer {
   /** sub-tile terrain id per map pixel (organic, domain-warped edges) */
   private sub = new Uint8Array(MAP_W * RES * MAP_H * RES);
 
+  /** where the background painter got to (it walks the whole map round and round) */
+  private paintCursor = 0;
+
   constructor(private terrain: Terrain) {
     this.colorMap = makeCanvas(MAP_W * RES, MAP_H * RES);
-    this.refreshRegion(0, 0, MAP_W - 1, MAP_H - 1);
-    this.colorVersion.set(this.terrain.chunkVersion);
+    this.waterMask = makeCanvas(MAP_W * RES, MAP_H * RES);
+    // an instant rough picture of the whole map; every chunk starts "dirty" and is painted properly as frames go by
+    this.quickPaint();
+  }
+
+  /**
+   * The whole map in a couple of milliseconds: one flat, hill-shaded pixel per tile, scaled up soft. Stands in
+   * (for the ground, the minimap and the water mask) until the real painting reaches each chunk.
+   */
+  private quickPaint() {
+    const t = this.terrain;
+    const SW = MAP_W * RES;
+    const small = makeCanvas(MAP_W, MAP_H);
+    const sc = small.getContext("2d")!;
+    const img = sc.createImageData(MAP_W, MAP_H);
+    const smallMask = makeCanvas(MAP_W, MAP_H);
+    const mc = smallMask.getContext("2d")!;
+    const mask = mc.createImageData(MAP_W, MAP_H);
+    const H = (x: number, y: number) => t.height[Math.max(0, Math.min(MAP_H - 1, y)) * MAP_W + Math.max(0, Math.min(MAP_W - 1, x))];
+    for (let ty = 0; ty < MAP_H; ty++) {
+      for (let tx = 0; tx < MAP_W; tx++) {
+        const ti = ty * MAP_W + tx;
+        const k = t.tiles[ti] as T;
+        // (until its chunk is painted, every map pixel of a tile simply is that tile)
+        for (let sy = 0; sy < RES; sy++) {
+          const row = (ty * RES + sy) * SW + tx * RES;
+          for (let sx = 0; sx < RES; sx++) this.sub[row + sx] = k;
+        }
+        let [r, g, b] = TILE_RGB[k];
+        const e = t.elev[ti];
+        const water = k === T.Deep || k === T.Shallow || k === T.River;
+        if (k === T.Sand && t.region[ti] === REGION.desert) [r, g, b] = DESERT_SAND;
+        if ((k === T.Mountain || k === T.Rock || k === T.Cliff) && e > 0.55) {
+          const snow = Math.min(1, (e - 0.55) * (k === T.Mountain ? 3.2 : 1.6) * 0.85);
+          r += (SNOWCAP[0] - r) * snow;
+          g += (SNOWCAP[1] - g) * snow;
+          b += (SNOWCAP[2] - b) * snow;
+        }
+        const shade = water ? 0 : (H(tx - 1, ty) - H(tx + 1, ty) + H(tx, ty - 1) - H(tx, ty + 1)) * 135;
+        const o = ti * 4;
+        img.data[o] = clamp255(r + shade);
+        img.data[o + 1] = clamp255(g + shade);
+        img.data[o + 2] = clamp255(b + shade);
+        img.data[o + 3] = 255;
+        mask.data[o] = mask.data[o + 1] = mask.data[o + 2] = 255;
+        mask.data[o + 3] = k === T.Deep ? 255 : k === T.River ? 190 : k === T.Shallow ? 165 : 0;
+      }
+    }
+    sc.putImageData(img, 0, 0);
+    mc.putImageData(mask, 0, 0);
+    const ctx = this.colorMap.getContext("2d")!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(small, 0, 0, MAP_W, MAP_H, 0, 0, MAP_W * RES, MAP_H * RES);
+    const mctx = this.waterMask.getContext("2d")!;
+    mctx.clearRect(0, 0, MAP_W * RES, MAP_H * RES);
+    mctx.imageSmoothingEnabled = true;
+    mctx.drawImage(smallMask, 0, 0, MAP_W, MAP_H, 0, 0, MAP_W * RES, MAP_H * RES);
   }
 
   /** The painted map image (also used by the minimap). */
@@ -134,6 +207,8 @@ export class TerrainRenderer {
     // pass 2: colors + shading + shoreline
     const ctx = this.colorMap.getContext("2d")!;
     const img = ctx.createImageData(pw, ph);
+    const mctx = this.waterMask.getContext("2d")!;
+    const mask = mctx.createImageData(pw, ph);
     const isW = (k: number) => k === T.Deep || k === T.Shallow || k === T.River;
     const at = (x: number, y: number) => this.sub[Math.max(0, Math.min(MAP_H * RES - 1, y)) * SW + Math.max(0, Math.min(SW - 1, x))];
     const H = (x: number, y: number) => t.height[Math.max(0, Math.min(MAP_H - 1, y)) * MAP_W + Math.max(0, Math.min(MAP_W - 1, x))];
@@ -174,7 +249,7 @@ export class TerrainRenderer {
           const h11 = H(x + 1, y + 1);
           return h00 * (1 - ax) * (1 - ay) + h10 * ax * (1 - ay) + h01 * (1 - ax) * ay + h11 * ax * ay;
         };
-        const shade = water ? 0 : (hAt(ix - 1, iy) - hAt(ix + 1, iy) + hAt(ix, iy - 1) - hAt(ix, iy + 1)) * 110;
+        const shade = water ? 0 : (hAt(ix - 1, iy) - hAt(ix + 1, iy) + hAt(ix, iy - 1) - hAt(ix, iy + 1)) * 135;
         const patch = (valueNoise(fx * 0.3, fy * 0.3, seed + 21) - 0.5) * (water ? 10 : 20);
         const grain = (hash2(px, py, seed + 5) - 0.5) * (water ? 3 : 7);
         if (water) {
@@ -186,6 +261,11 @@ export class TerrainRenderer {
           // foam where water touches land
           let shore = 0;
           for (const [dx, dy] of NB) if (!isW(at(px + dx, py + dy))) shore++;
+          let near = 0;
+          if (!shore) for (const [dx, dy] of NB2) if (!isW(at(px + dx, py + dy))) near++;
+          const mo = ((py - py0) * pw + (px - px0)) * 4;
+          mask.data[mo] = mask.data[mo + 1] = mask.data[mo + 2] = 255;
+          mask.data[mo + 3] = (k === T.Deep ? 255 : k === T.River ? 190 : 165) * (shore ? 0.25 : near ? 0.6 : 1);
           if (shore) {
             const m = Math.min(1, shore / 3) * 0.7;
             r += (236 - r) * m;
@@ -218,25 +298,75 @@ export class TerrainRenderer {
     blur(img.data, pw, ph);
     // keep the outer margin un-blurred-in so neighbouring repaints line up
     ctx.putImageData(img, px0, py0, px0 === 0 ? 0 : RES, py0 === 0 ? 0 : RES, pw - (px0 === 0 ? 0 : RES) * 2, ph - (py0 === 0 ? 0 : RES) * 2);
+    mctx.putImageData(mask, px0, py0, px0 === 0 ? 0 : RES, py0 === 0 ? 0 : RES, pw - (px0 === 0 ? 0 : RES) * 2, ph - (py0 === 0 ? 0 : RES) * 2);
   }
 
-  /** Repaint chunks whose ground changed since we last painted them. */
-  private refreshDirty() {
-    const cv = this.terrain.chunkVersion;
-    for (let i = 0; i < cv.length; i++) {
-      if (cv[i] === this.colorVersion[i]) continue;
-      const cx = i % CHUNKS_X;
-      const cy = Math.floor(i / CHUNKS_X);
-      this.refreshRegion(cx * CHUNK_TILES, cy * CHUNK_TILES, cx * CHUNK_TILES + CHUNK_TILES - 1, cy * CHUNK_TILES + CHUNK_TILES - 1);
-      this.colorVersion[i] = cv[i];
-      // neighbours share painted borders: re-bake them too
-      for (const [dx, dy] of NB) {
-        const nx = cx + dx;
-        const ny = cy + dy;
-        if (nx < 0 || ny < 0 || nx >= CHUNKS_X || ny >= CHUNKS_Y) continue;
-        const n = this.chunks.get(ny * CHUNKS_X + nx);
+  /** Paint one chunk of the colour map properly, and have it (and the chunks sharing its edges) re-baked. */
+  private repaintChunk(i: number) {
+    const cx = i % CHUNKS_X;
+    const cy = Math.floor(i / CHUNKS_X);
+    this.refreshRegion(cx * CHUNK_TILES, cy * CHUNK_TILES, cx * CHUNK_TILES + CHUNK_TILES - 1, cy * CHUNK_TILES + CHUNK_TILES - 1);
+    this.colorVersion[i] = this.terrain.chunkVersion[i];
+    for (const [dx, dy] of [[0, 0], ...NB]) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= CHUNKS_X || ny >= CHUNKS_Y) continue;
+      for (const S of [1, 2]) {
+        const n = this.chunks.get(chunkKey(ny * CHUNKS_X + nx, S));
         if (n) n.version = -1;
       }
+    }
+  }
+
+  /** Is this chunk's colour painted and current? */
+  private painted(i: number) {
+    return this.colorVersion[i] === this.terrain.chunkVersion[i];
+  }
+
+  /**
+   * Catch the colour map up with the terrain, a few chunks at a time: whatever is in view first (nearest the
+   * middle of the screen first), then the rest of the map in the background. A fresh world or a loaded save
+   * starts with every chunk waiting; a terrain edit makes one or two wait.
+   */
+  private refine(x0: number, y0: number, x1: number, y1: number) {
+    const n = CHUNKS_X * CHUNKS_Y;
+    let waiting = false;
+    for (let i = 0; i < n; i++) {
+      if (!this.painted(i)) {
+        waiting = true;
+        break;
+      }
+    }
+    if (!waiting) return;
+    const t0 = performance.now();
+    // in view (and one chunk beyond: baking a chunk needs its neighbours' colours too)
+    const c0 = Math.max(0, Math.floor(x0 / CHUNK_PX) - 1);
+    const c1 = Math.min(CHUNKS_X - 1, Math.floor(x1 / CHUNK_PX) + 1);
+    const r0 = Math.max(0, Math.floor(y0 / CHUNK_PX) - 1);
+    const r1 = Math.min(CHUNKS_Y - 1, Math.floor(y1 / CHUNK_PX) + 1);
+    const mx = (x0 + x1) / 2 / CHUNK_PX - 0.5;
+    const my = (y0 + y1) / 2 / CHUNK_PX - 0.5;
+    const inView: [number, number][] = [];
+    for (let cy = r0; cy <= r1; cy++) {
+      for (let cx = c0; cx <= c1; cx++) {
+        const i = cy * CHUNKS_X + cx;
+        if (!this.painted(i)) inView.push([(cx - mx) * (cx - mx) + (cy - my) * (cy - my), i]);
+      }
+    }
+    if (inView.length) {
+      inView.sort((a, b) => a[0] - b[0]);
+      for (const [, i] of inView) {
+        this.repaintChunk(i);
+        if (performance.now() - t0 > PAINT_VIEW_MS) return;
+      }
+    }
+    // nothing (left) to do in view: a little of the rest of the map each frame
+    for (let k = 0; k < n; k++) {
+      if (performance.now() - t0 > PAINT_BACKGROUND_MS) return;
+      const i = (this.paintCursor + k) % n;
+      if (this.painted(i)) continue;
+      this.repaintChunk(i);
+      this.paintCursor = i + 1;
     }
   }
 
@@ -262,20 +392,20 @@ export class TerrainRenderer {
     this.listsVersion = t.version;
   }
 
-  /** Make sure lists + color map reflect terrain edits. */
+  /** Make sure the water / shore lists reflect terrain edits (the colour map catches up in refine()). */
   sync() {
-    if (this.listsVersion !== this.terrain.version) {
-      this.refreshDirty();
-      this.buildLists();
-    }
+    if (this.listsVersion !== this.terrain.version) this.buildLists();
   }
 
-  private bake(cx: number, cy: number): Canvas {
-    const key = cy * CHUNKS_X + cx;
+  private bake(cx: number, cy: number, S: number): Canvas {
+    const key = chunkKey(cy * CHUNKS_X + cx, S);
     const old = this.chunks.get(key);
-    const canvas = old?.canvas ?? makeCanvas(CHUNK_PX, CHUNK_PX);
+    const canvas = old?.canvas ?? makeCanvas(CHUNK_PX * S, CHUNK_PX * S);
     const ctx = canvas.getContext("2d")!;
     const t = this.terrain;
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     // 1 tile of margin on each side so the smooth blends line up across chunks
@@ -284,13 +414,42 @@ export class TerrainRenderer {
     ctx.clearRect(0, 0, CHUNK_PX, CHUNK_PX);
     ctx.drawImage(this.colorMap, sx * RES, sy * RES, (CHUNK_TILES + 2) * RES, (CHUNK_TILES + 2) * RES, -TILE, -TILE, CHUNK_PX + TILE * 2, CHUNK_PX + TILE * 2);
 
+    const tileOf = (gx: number, gy: number): T => {
+      const raw = t.tiles[gy * MAP_W + gx] as T;
+      return raw === T.Cliff || raw === T.Cave ? raw : this.paintedAt(gx * TILE + TILE / 2, gy * TILE + TILE / 2);
+    };
+
+    if (Q.id !== "low") {
+      // fine grain over everything: the ground stops looking like flat paint (the sheet tiles across chunks)
+      const pat = ctx.createPattern(grainSheet(), "repeat");
+      if (pat) {
+        pat.setTransform(new DOMMatrix().scale(1 / S));
+        ctx.globalCompositeOperation = "soft-light";
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = pat;
+        ctx.fillRect(0, 0, CHUNK_PX, CHUNK_PX);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      }
+      // texture stamps, one tile past each edge too (a tuft that spills over the border is drawn by both chunks)
+      const st = terrainStamps();
+      for (let ty = -1; ty <= CHUNK_TILES; ty++) {
+        for (let tx = -1; tx <= CHUNK_TILES; tx++) {
+          const gx = cx * CHUNK_TILES + tx;
+          const gy = cy * CHUNK_TILES + ty;
+          if (gx < 0 || gy < 0 || gx >= MAP_W || gy >= MAP_H) continue;
+          stampTile(ctx, st, tileOf(gx, gy), tx * TILE, ty * TILE, (k) => hash2(gx, gy, t.seed + k), t, gy * MAP_W + gx);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
     for (let ty = 0; ty < CHUNK_TILES; ty++) {
       for (let tx = 0; tx < CHUNK_TILES; tx++) {
         const gx = cx * CHUNK_TILES + tx;
         const gy = cy * CHUNK_TILES + ty;
         if (gx >= MAP_W || gy >= MAP_H) continue;
-        const raw = t.tiles[gy * MAP_W + gx] as T;
-        const tile = raw === T.Cliff || raw === T.Cave ? raw : this.paintedAt(gx * TILE + TILE / 2, gy * TILE + TILE / 2);
+        const tile = tileOf(gx, gy);
         const px = tx * TILE;
         const py = ty * TILE;
         const h = (k: number) => hash2(gx, gy, t.seed + k);
@@ -300,31 +459,52 @@ export class TerrainRenderer {
     return canvas;
   }
 
-  /** Draw visible terrain in world space (ctx already camera-transformed). */
-  draw(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, zoom: number) {
+  /**
+   * Draw visible terrain in world space (ctx already camera-transformed).
+   * `density` = device pixels per world pixel: past ~1, chunks are baked at twice the resolution (High / Ultra).
+   */
+  draw(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, zoom: number, density = zoom) {
     this.sync();
+    this.refine(x0, y0, x1, y1);
     this.frame++;
     if (zoom < 0.42) {
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(this.colorMap, 0, 0, MAP_W * RES, MAP_H * RES, 0, 0, MAP_W * TILE, MAP_H * TILE);
       return;
     }
+    // sharp close-up chunks only when the screen can show them (with a gap, so it doesn't flip back and forth)
+    if (Q.terrainScale < 2) this.bakeScale = 1;
+    else if (density > 1.12) this.bakeScale = 2;
+    else if (density < 0.96) this.bakeScale = 1;
+    const S = this.bakeScale;
     const c0 = Math.max(0, Math.floor(x0 / CHUNK_PX));
     const c1 = Math.min(CHUNKS_X - 1, Math.floor(x1 / CHUNK_PX));
     const r0 = Math.max(0, Math.floor(y0 / CHUNK_PX));
     const r1 = Math.min(CHUNKS_Y - 1, Math.floor(y1 / CHUNK_PX));
     let baked = 0;
+    const perFrame = S > 1 ? 2 : 3;
+    ctx.imageSmoothingEnabled = true;
     for (let cy = r0; cy <= r1; cy++) {
       for (let cx = c0; cx <= c1; cx++) {
-        const key = cy * CHUNKS_X + cx;
-        const v = this.terrain.chunkVersion[key];
+        const base = cy * CHUNKS_X + cx;
+        const key = chunkKey(base, S);
+        const v = this.terrain.chunkVersion[base] + this.styleVersion;
         let entry = this.chunks.get(key);
         if (!entry || entry.version !== v) {
-          // bake at most a few per frame so panning never hitches
-          if (baked >= 3 && entry) {
-            entry.used = this.frame;
+          // bake at most a few per frame so panning never hitches; and only once this chunk's colours (and the
+          // neighbours' it blends with) are painted, so nothing is baked twice while a world is still loading in
+          const ready =
+            this.painted(base) &&
+            (cx === 0 || this.painted(base - 1)) &&
+            (cx === CHUNKS_X - 1 || this.painted(base + 1)) &&
+            (cy === 0 || this.painted(base - CHUNKS_X)) &&
+            (cy === CHUNKS_Y - 1 || this.painted(base + CHUNKS_X));
+          if (baked >= perFrame || !ready) {
+            // meanwhile: the stale bake, or the same chunk at the other scale, beats bare paint
+            const other = this.chunks.get(chunkKey(base, S > 1 ? 1 : 2));
+            if (!entry && other) entry = other;
           } else {
-            const canvas = this.bake(cx, cy);
+            const canvas = this.bake(cx, cy, S);
             entry = { canvas, version: v, used: this.frame };
             this.chunks.set(key, entry);
             baked++;
@@ -339,15 +519,118 @@ export class TerrainRenderer {
         ctx.drawImage(entry.canvas, cx * CHUNK_PX, cy * CHUNK_PX, CHUNK_PX + 0.6, CHUNK_PX + 0.6);
       }
     }
-    if (this.chunks.size > MAX_CACHED) {
+    const keep = Math.max(MIN_CACHED, Math.ceil((c1 - c0 + 1) * (r1 - r0 + 1) * 1.4));
+    if (this.chunks.size > keep) {
       const sorted = Array.from(this.chunks.entries()).sort((a, b) => a[1].used - b[1].used);
-      for (let i = 0; i < sorted.length - MAX_CACHED; i++) this.chunks.delete(sorted[i][0]);
+      for (let i = 0; i < sorted.length - keep; i++) this.chunks.delete(sorted[i][0]);
     }
+  }
+
+  /** bumped when the graphics quality changes: every chunk re-bakes in the new style */
+  private styleVersion = 0;
+  restyle() {
+    this.styleVersion += 1e6;
   }
 
   invalidateAll() {
     this.chunks.clear();
     this.listsVersion = -1;
+  }
+}
+
+const chunkKey = (base: number, S: number) => base * 4 + S;
+
+type Stamps = ReturnType<typeof terrainStamps>;
+
+/** Scatter this tile's ground texture (see terrainTex.ts). Positions come from the tile's own hash, so they never move. */
+function stampTile(ctx: CanvasRenderingContext2D, st: Stamps, tile: T, px: number, py: number, h: (k: number) => number, tr: Terrain, ti: number) {
+  const put = (set: HTMLCanvasElement[], k: number, scale = 1, alpha = 1) => {
+    const img = set[Math.floor(h(k) * set.length) % set.length];
+    const x = px + h(k + 1) * TILE;
+    const y = py + h(k + 2) * TILE;
+    const s = STAMP * scale * (0.8 + h(k + 3) * 0.45);
+    ctx.globalAlpha = alpha;
+    if (h(k + 4) > 0.5) {
+      // mirrored (never rotated: grass has to stay upright)
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, -s / 2, -s / 2, s, s);
+      ctx.restore();
+    } else ctx.drawImage(img, x - s / 2, y - s / 2, s, s);
+  };
+  const desert = tr.region[ti] === REGION.desert;
+  const elev = tr.elev[ti];
+  switch (tile) {
+    case T.Grass:
+      put(st.grass, 100);
+      put(st.grass, 110);
+      if (h(120) > 0.45) put(st.clover, 121, 1.15);
+      if (h(130) > 0.7) put(st.tallGrass, 131);
+      if (h(140) > 0.955) put(st.flowers, 141);
+      if (h(150) > 0.955) put(st.pebbles, 151, 0.85);
+      if (h(160) > 0.93) put(st.dryGrass, 161, 1, 0.8);
+      break;
+    case T.Nest:
+      put(st.straw, 100);
+      put(st.straw, 110);
+      break;
+    case T.Jungle:
+      put(st.jungle, 100);
+      put(st.jungle, 110, 1.1);
+      if (h(120) > 0.5) put(st.moss, 121);
+      break;
+    case T.Forest:
+      put(st.litter, 100);
+      put(st.moss, 110);
+      if (h(120) > 0.5) put(st.litter, 121);
+      if (h(130) > 0.7) put(st.grass, 131, 0.85, 0.6);
+      break;
+    case T.Swamp:
+      put(st.swamp, 100);
+      if (h(110) > 0.4) put(st.swamp, 111);
+      break;
+    case T.Sand:
+      put(st.sand, 100);
+      if (h(110) > 0.5) put(st.sand, 111);
+      if (!desert && h(120) > 0.93) put(st.beach, 121);
+      if (desert && h(130) > 0.955) put(st.dryGrass, 131, 0.9, 0.85);
+      if (desert && h(140) > 0.97) put(st.pebbles, 141, 0.8);
+      break;
+    case T.Dune:
+      put(st.sand, 100, 1.25, 0.55);
+      break;
+    case T.Rock:
+      put(st.rock, 100);
+      if (h(110) > 0.5) put(st.rock, 111);
+      if (h(120) > 0.75) put(st.pebbles, 121);
+      if (elev < 0.5 && h(130) > 0.9) put(st.crag, 131);
+      break;
+    case T.Mountain:
+      put(st.rock, 100);
+      if (elev < 0.62 && h(110) > 0.55) put(st.crag, 111, 1.25);
+      break;
+    case T.Basalt:
+    case T.Volcano:
+      put(st.basalt, 100);
+      if (h(110) > 0.5) put(st.basalt, 111);
+      break;
+    case T.Dirt:
+      put(st.dirt, 100);
+      if (h(110) > 0.5) put(st.dirt, 111);
+      if (h(120) > 0.88) put(st.dryGrass, 121, 0.9, 0.8);
+      if (h(130) > 0.92) put(st.pebbles, 131, 0.8);
+      break;
+    case T.Mud:
+      put(st.mud, 100);
+      put(st.mud, 110);
+      break;
+    case T.Snow:
+      put(st.snow, 100);
+      if (h(110) > 0.6) put(st.snow, 111);
+      break;
+    default:
+      break;
   }
 }
 

@@ -9,6 +9,7 @@ import type { Brute, Clan } from "../sim/types";
 import { CATAPULT_RELOAD } from "../sim/clanTowns";
 import { shade } from "./drawDino";
 import { drawFlame } from "./sprites";
+import { fist, healthBar, scaleAbout, shadeEllipse, storyFace, type Mood } from "./figureArt";
 
 const INK = "#24170e";
 const SKINS = ["#b98560", "#a87552", "#c79470", "#956547"];
@@ -107,10 +108,7 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
     c.moveTo(0, 0);
     c.lineTo(0, H * 0.36);
     c.stroke();
-    c.fillStyle = back ? shade(skin, -0.18) : skin;
-    c.beginPath();
-    c.arc(0, H * 0.37, 3.4, 0, Math.PI * 2);
-    c.fill();
+    fist(c, 0, H * 0.37, 3.5, back ? shade(skin, -0.18) : skin, INK);
     c.restore();
   };
   const carrying = st === "carry";
@@ -126,6 +124,7 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
   c.beginPath();
   c.ellipse(0, -H * 0.2, 11, H * 0.24, 0, 0, Math.PI * 2);
   c.fill();
+  shadeEllipse(c, 0, -H * 0.2, 11, H * 0.24);
   // body hair on the chest
   c.strokeStyle = shade(hair, 0.1);
   c.lineWidth = 0.8;
@@ -198,9 +197,11 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
     c.stroke();
   }
 
-  // head: low + forward, heavy brow, big nose, shaggy hair + beard
+  // head: low + forward, heavy brow, big nose, shaggy hair + beard (big, like the rest of the cast)
   const hy = -H * 0.5;
   const hx = 5;
+  c.save();
+  scaleAbout(c, hx - 3, hy + 7, 1.2);
   c.fillStyle = INK;
   c.beginPath();
   c.ellipse(hx, hy, 8.6, 8, 0, 0, Math.PI * 2);
@@ -226,32 +227,21 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
   c.quadraticCurveTo(hx + 8.5, hy + 4, hx + 7.4, hy + 1.5);
   c.closePath();
   c.fill();
-  // brow ridge
-  c.fillStyle = shade(skin, -0.28);
-  c.beginPath();
-  c.ellipse(hx + 3.2, hy - 2.6, 4.6, 1.8, -0.08, 0, Math.PI * 2);
-  c.fill();
-  c.fillStyle = hair;
-  c.fillRect(hx + 0.6, hy - 4.2, 6, 1.4);
-  // wide nose
-  c.fillStyle = shade(skin, -0.12);
-  c.beginPath();
-  c.ellipse(hx + 7, hy + 0.6, 2.4, 2.2, 0, 0, Math.PI * 2);
-  c.fill();
-  c.strokeStyle = INK;
+  // beard strands catching the light
+  c.strokeStyle = shade(hair, 0.28);
   c.lineWidth = 0.7;
+  c.beginPath();
+  c.moveTo(hx + 1.5, hy + 4);
+  c.quadraticCurveTo(hx + 2, hy + 7.5, hx + 4, hy + 9);
+  c.moveTo(hx + 4.5, hy + 4.5);
+  c.quadraticCurveTo(hx + 5.2, hy + 6.5, hx + 6.2, hy + 7.6);
   c.stroke();
-  // eye (squinty, angry when fighting)
-  if (st !== "sleep") {
-    c.fillStyle = "#120c08";
-    c.beginPath();
-    c.arc(hx + 4.4, hy - 0.8, 1, 0, Math.PI * 2);
-    c.fill();
-    if (st === "fight" || st === "bash" || st === "rally") {
-      c.fillStyle = "#3d0f0a";
-      c.fillRect(hx + 4.5, hy + 3.4, 3, 1.4);
-    }
+  // the face: a heavy brow over big eyes, a wide nose, teeth bared in a fight
+  {
+    const mood: Mood = st === "sleep" ? "asleep" : st === "fight" || st === "bash" || st === "rally" || st === "hunt" ? "fierce" : st === "flee" ? "scared" : st === "dance" || st === "cheer" ? "happy" : "calm";
+    storyFace(c, hx - 0.4, hy - 0.2, { r: 6.3, skin, brow: hair, mood, id: b.id, t, ridge: true, nose: 1.15, ink: INK });
   }
+  c.restore();
 
   // weapon arm (front)
   const up = windup(b);
@@ -275,10 +265,7 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
     c.translate(0, H * 0.37);
     drawBruteWeapon(c, b.weapon);
   }
-  c.fillStyle = skin;
-  c.beginPath();
-  c.arc(0, carrying ? H * 0.37 : 0, 3.6, 0, Math.PI * 2);
-  c.fill();
+  fist(c, 0, carrying ? H * 0.37 : 0, 3.7, skin, INK);
   c.restore();
   if (shield && !carrying && st !== "sleep") {
     // a round hide shield on a wicker frame, daubed in the clan's colour
@@ -317,13 +304,7 @@ export function drawBrute(c: CanvasRenderingContext2D, b: Brute, t: number, colo
 
   // health bar when hurt
   c.restore();
-  if (b.hp < 0.98) {
-    c.fillStyle = "rgba(0,0,0,0.55)";
-    c.fillRect(-12, -H - 10, 24, 4);
-    c.fillStyle = b.hp > 0.5 ? "#facc15" : "#ef4444";
-    c.fillRect(-11, -H - 9, 22 * Math.max(0, b.hp), 2);
-  }
-  void t;
+  if (b.hp < 0.98) healthBar(c, -H - 14, b.hp);
 }
 
 /** In the hand, pointing "down" the arm (+y). */

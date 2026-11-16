@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { Bell } from "lucide-react";
 import { useClickAway } from "./useClickAway";
 
 export interface Toast {
@@ -41,14 +42,14 @@ export default function Toasts({ toasts, log, unread, popups, onDismiss, onGo, o
           </AnimatePresence>
         </div>
       )}
-      <div ref={boxRef} className="pointer-events-none absolute left-4 top-[100px] z-30 hidden sm:block">
+      <div ref={boxRef} className="pointer-events-none absolute left-4 top-[74px] z-30 hidden sm:block">
         <button type="button" aria-label={`Messages${unread ? ` (${unread} new)` : ""}`} aria-expanded={open}
           onClick={() => {
             setOpen((o) => !o);
             onRead();
           }}
-          className="dl-glass pointer-events-auto relative flex h-10 items-center gap-1.5 rounded-2xl px-3 text-sm font-bold shadow-lg transition hover:brightness-110 active:scale-95">
-          <span className="text-lg leading-none">🔔</span>
+          className="dl-glass pointer-events-auto relative flex h-9 items-center gap-2 rounded-xl px-3 text-[13px] font-semibold text-white/85 transition hover:text-white hover:brightness-110 active:scale-95">
+          <Bell className="h-4 w-4" />
           <span className="hidden sm:inline">Messages</span>
           {unread > 0 && <span className="absolute -right-1.5 -top-1.5 min-w-5 rounded-full bg-amber-400 px-1.5 text-center text-[11px] font-black text-slate-900">{unread > 99 ? "99+" : unread}</span>}
         </button>

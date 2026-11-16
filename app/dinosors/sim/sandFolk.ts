@@ -35,6 +35,7 @@ import { moveBrute, say, setB } from "./rivals";
 import { fairGame, takeFood } from "./treeFolk";
 import { breathBlast } from "./breath";
 import { flyToward, landAt } from "./dragonKeep";
+import { nationOf } from "./diplomacy";
 import { survived } from "./growth";
 import { repelStep } from "./dragonShield";
 import { duelStep } from "./yetiFeud";
@@ -524,6 +525,8 @@ export class SandFolk {
   }
 
   /** Riding: the camel goes where its rider goes. */
+  diplomaticRide(w: World, b: Brute) { this.ride(w, b); }
+
   private ride(w: World, b: Brute) {
     const d = this.dinoOf(w, b.mount);
     if (!d || d.health <= 0 || d.sandRider !== b.id) {
@@ -749,7 +752,7 @@ export class SandFolk {
     for (const o of w.forest.tribes) goals.push({ goal: { kind: "tree", id: o.id }, x: o.x, y: o.y, d: dist(o, t) * 1.2 });
     for (const o of w.seaFolk.tribes) goals.push({ goal: { kind: "sea", id: o.id }, x: o.x, y: o.y - 90, d: dist(o, t) * 1.3 });
     for (const o of this.tribes) if (o !== t && this.rng() < 0.25) goals.push({ goal: { kind: "sand", id: o.id }, x: o.x, y: o.y, d: dist(o, t) * 1.5 });
-    const near = goals.filter((g) => g.d < 5200).sort((a, b) => a.d - b.d).slice(0, 3);
+    const near = goals.filter((g) => w.diplomacy.allowsGoal(`sand:${t.id}`, g.goal) && g.d < 5200).sort((a, b) => a.d - b.d).slice(0, 3);
     if (!near.length) return false;
     const g = near[Math.floor(this.rng() * near.length)];
     const n = Math.min(free.length, 3 + t.tier * 2, t.tier >= 5 ? 13 : 10);
@@ -1009,7 +1012,7 @@ export class SandFolk {
     let bd = r;
     if (w.tribe.danger !== "calm") {
       for (const h of w.humans) {
-        if (!fairGame(h)) continue;
+        if (!fairGame(h) || !w.diplomacy.hostile(`sand:${t.id}`, "us")) continue;
         const d = Math.hypot(h.x - x, h.y - y);
         if (d < bd) {
           bd = d;
@@ -1018,6 +1021,7 @@ export class SandFolk {
       }
     }
     for (const o of w.rivals.brutes) {
+      if (!w.diplomacy.hostile(`sand:${t.id}`, nationOf(o))) continue;
       if (o.hp <= 0 || o.captive || o.snatched || o.falling || o.onDragon || o.weapon === "catapult") continue;
       if (o.sand === t.id) continue;
       if (o.tree && o.hidden) continue;
@@ -1046,6 +1050,7 @@ export class SandFolk {
   /* ------------------------------ bodies ------------------------------ */
 
   private act(w: World, b: Brute, dt: number) {
+    w.diplomacy.blockAction(w, b);
     const t = this.tribe(b.sand);
     const quick = b.state === "fight" || b.state === "hunt" || b.state === "dart" || !!b.band || w.inView(b.x, b.y, 300);
     const pace = b.mount ? CAMEL_SPEED : SPEED;
@@ -1166,6 +1171,7 @@ export class SandFolk {
   }
 
   private strike(w: World, b: Brute, f: Foe, mul: number) {
+    if (!w.diplomacy.canTarget(w, b, foeId(f))) return;
     const arms = ARMS[b.sandRole ?? "fighter"];
     // out of the dunes, unseen: the first blow lands hard
     if (!this.seen(w, b)) mul *= 1.35;
@@ -1177,6 +1183,7 @@ export class SandFolk {
   }
 
   private throwAt(w: World, b: Brute, f: Foe) {
+    if (!w.diplomacy.canTarget(w, b, foeId(f))) return;
     const arms = ARMS[b.sandRole ?? "fighter"];
     b.spotT = 3;
     const p = foeXY(f);
@@ -1240,7 +1247,7 @@ export class SandFolk {
     if (rider?.band && !this.bands.some((x) => x.id === rider!.band)) rider.band = undefined;
     const band = rider?.band ? this.bands.find((x) => x.id === rider!.band) : null;
     const grp = band ? w.groups.get(band.grp) : null;
-    const lead = grp ? w.groups.leader(w, grp) : null;
+    const lead = (rider ? w.diplomacy.missionDestination(w, rider) : null) ?? (grp ? w.groups.leader(w, grp) : null);
     const hurt = dr.hp < dr.maxHp * 0.3;
     const night = w.daylight < 0.28;
     // something to fight: near the dragon, its band, or its camp

@@ -620,6 +620,7 @@ export class Forest {
 
   /** `from` leaves its trees and moves in with `into`: one bigger tribe, more paint, a bigger canopy village. */
   unite(w: World, from: TreeTribe, into: TreeTribe) {
+    w.diplomacy.merge(w, `tree:${from.id}`, `tree:${into.id}`);
     if (from === into || !this.tribes.includes(from) || !this.tribes.includes(into)) return;
     const was = into.name;
     // their groups (families, patrols) move in with them
@@ -671,7 +672,7 @@ export class Forest {
     if (!spot) return;
     const t = this.settle(w, 0, spot, from);
     if (!t) return;
-    const go = this.members(from.id).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && b.hp > 0.6).slice(0, 3);
+    const go = this.members(from.id).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && !w.diplomacy.committed(b) && b.hp > 0.6).slice(0, 3);
     for (const b of go) {
       b.tree = t.id;
       b.hidden = false;
@@ -777,7 +778,7 @@ export class Forest {
   }
 
   private setAmbush(w: World, t: TreeTribe) {
-    const free = this.members(t.id).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && b.hp > 0.6 && b.state !== "flee");
+    const free = this.members(t.id).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && !w.diplomacy.committed(b) && b.hp > 0.6 && b.state !== "flee");
     if (free.length < 3) return;
     const spot = this.ambushSpot(w, t);
     if (!spot) return;
@@ -910,7 +911,7 @@ export class Forest {
   /** A raiding party: the edge of our town, a lone worker, or a Neanderthal camp. */
   /** A raid (`only`: these folk, e.g. a raiding party placed with the People tool). */
   startRaid(w: World, t: TreeTribe, only?: Brute[]): boolean {
-    const free = (only ?? this.members(t.id)).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && b.hp > 0.6 && b.state !== "flee");
+    const free = (only ?? this.members(t.id)).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && !w.diplomacy.committed(b) && b.hp > 0.6 && b.state !== "flee");
     if (free.length < 4) return false;
     const goals: NonNullable<TreeBand["goal"]>[] = [];
     const spots: { x: number; y: number }[] = [];
@@ -948,7 +949,9 @@ export class Forest {
       spots.push({ x: clan.x, y: clan.y });
     }
     if (!goals.length) return false;
-    const k = Math.floor(this.rng() * goals.length);
+    const allowed = goals.map((g, i) => i).filter((i) => w.diplomacy.allowsGoal(`tree:${t.id}`, goals[i]));
+    if (!allowed.length) return false;
+    const k = allowed[Math.floor(this.rng() * allowed.length)];
     const n = only ? free.length : Math.min(free.length - 1, 3 + t.tier * 2, 9 + (t.merges ?? 0) * 2);
     if (n < 3) return false;
     const party = free.sort((a, b) => dist(a, t) - dist(b, t)).slice(0, n);
@@ -1013,7 +1016,7 @@ export class Forest {
 
   /** A few slip out of the trees after dark: half to empty our stores, half to carry people off. */
   startNightRaid(w: World, t: TreeTribe): boolean {
-    const free = this.members(t.id).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && b.hp > 0.6 && b.state !== "flee");
+    const free = this.members(t.id).filter((b) => (b.age ?? TREE_GROWN) >= TREE_GROWN && !b.band && !w.diplomacy.committed(b) && b.hp > 0.6 && b.state !== "flee");
     if (free.length < 3 || Math.hypot(w.camp.pileX - t.x, w.camp.pileY - t.y) > 3600) return false;
     const n = Math.min(free.length - 1, 3 + t.tier, 7);
     if (n < 2) return false;
@@ -1034,6 +1037,7 @@ export class Forest {
 
   /** One night raider's mind: creep in, do the job, slip away; fight only if they're seen. */
   private nightThink(w: World, b: Brute, t: TreeTribe, bd: TreeBand) {
+    if (!w.diplomacy.hostileUnit(b)) { w.diplomacy.blockAction(w, b); return; }
     if (b.state === "carry") return;
     if (b.loot) {
       if (b.state !== "home" && b.state !== "flee") setB(b, "home", t.x, t.y);
@@ -1101,6 +1105,7 @@ export class Forest {
 
   /** Take one of ours: over the shoulder and off to the trees. */
   snatch(w: World, b: Brute, h: Human, t: TreeTribe) {
+    if (!w.diplomacy.hostileUnit(b)) return;
     if (h.riding) return;
     for (const task of w.tasks.list) task.people = task.people.filter((id) => id !== h.id);
     h.captive = -t.id;
@@ -1518,6 +1523,7 @@ export class Forest {
   /* ------------------------------ bodies ------------------------------ */
 
   private act(w: World, b: Brute, dt: number) {
+    w.diplomacy.blockAction(w, b);
     // anything but sitting in a tree: they leap down first
     const aloft = b.state === "perch" || b.state === "climb" || b.state === "sleep" || b.state === "drop";
     if (!aloft && b.z > 0) b.z = Math.max(0, b.z - 150 * dt);
@@ -1728,6 +1734,7 @@ export class Forest {
 
   /** A blow (×mul for a leap from the trees). */
   private strike(w: World, b: Brute, f: Foe, mul: number) {
+    if (!w.diplomacy.canTarget(w, b, foeId(f))) return;
     const arms = armsOf(b);
     // out of the dark, unseen: the first blow lands hard
     if (w.daylight < 0.3 && !((b.spotT ?? 0) > 0)) mul *= 1.3;
@@ -1769,6 +1776,7 @@ export class Forest {
   }
 
   private throwAt(w: World, b: Brute, f: Foe) {
+    if (!w.diplomacy.canTarget(w, b, foeId(f))) return;
     const arms = armsOf(b);
     b.spotT = 2;
     const p = foeXY(f);

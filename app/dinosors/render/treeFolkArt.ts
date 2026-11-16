@@ -15,6 +15,7 @@
 import type { Brute, TreePod, TreeSign, TreeTribe } from "../sim/types";
 import { shade } from "./drawDino";
 import { drawFlame } from "./sprites";
+import { fist, scaleAbout, shadeEllipse, storyFace, type Mood } from "./figureArt";
 
 const INK = "#1d150e";
 const SKINS = ["#9c7048", "#b58457", "#7d5636", "#a6774c", "#8a6a3e"];
@@ -169,6 +170,7 @@ export function drawTreeFolk(c: CanvasRenderingContext2D, b: Brute, t: number, p
     c.moveTo(-1.8, H * 0.22);
     c.lineTo(1.8, H * 0.25);
     c.stroke();
+    fist(c, 0, H * 0.345, 2.3, back ? shade(skin, -0.2) : skin, INK);
     c.restore();
   };
   // the far arm: reaching up the trunk, out in a leap, or swinging
@@ -183,6 +185,7 @@ export function drawTreeFolk(c: CanvasRenderingContext2D, b: Brute, t: number, p
   c.beginPath();
   c.ellipse(0, -torso * 0.5, 6.4, torso * 0.56, 0, 0, Math.PI * 2);
   c.fill();
+  shadeEllipse(c, 0, -torso * 0.5, 6.4, torso * 0.56);
   // body paint: tribe stripes down the chest + white dots
   c.strokeStyle = paint;
   c.lineWidth = 1.6;
@@ -236,6 +239,8 @@ export function drawTreeFolk(c: CanvasRenderingContext2D, b: Brute, t: number, p
   // head: wild hair, maybe a bark mask, painted face
   c.save();
   c.translate(1.5, -torso - 6.5);
+  // (a big head, like the rest of the cast: it grows up from the neck)
+  scaleAbout(c, 0, 6, 1.28);
   const masked = b.id % 3 === 0;
   // spiky hair with leaves + a feather
   c.fillStyle = hair;
@@ -306,29 +311,8 @@ export function drawTreeFolk(c: CanvasRenderingContext2D, b: Brute, t: number, p
     c.globalAlpha = 0.85;
     c.fillRect(-1.6, -2.8, 7.4, 2.4);
     c.globalAlpha = 1;
-    c.fillStyle = "#fff8e0";
-    c.beginPath();
-    c.ellipse(4.3, -1.6, 1.3, 0.85, 0, 0, Math.PI * 2);
-    c.fill();
-    c.fillStyle = INK;
-    c.beginPath();
-    c.arc(4.7, -1.6, 0.6, 0, Math.PI * 2);
-    c.fill();
-    const fierce = st === "fight" || st === "drop" || st === "rally" || st === "hunt";
-    c.strokeStyle = INK;
-    c.lineWidth = 0.9;
-    c.beginPath();
-    if (fierce) {
-      c.moveTo(2.8, 2.6);
-      c.lineTo(5.6, 2.2);
-      c.stroke();
-      c.fillStyle = "#fff";
-      c.fillRect(3.2, 2.2, 2, 0.8);
-    } else {
-      c.moveTo(3.3, 2.8);
-      c.lineTo(5.2, 2.6);
-      c.stroke();
-    }
+    const mood: Mood = sleeping ? "asleep" : st === "fight" || st === "drop" || st === "rally" || st === "hunt" ? "fierce" : st === "flee" ? "scared" : "calm";
+    storyFace(c, 1.3, 0.6, { r: 4.5, skin, brow: hair, mood, id: b.id, t, ink: INK });
   }
   if (sleeping) {
     c.fillStyle = "rgba(255,255,255,0.7)";
@@ -354,6 +338,7 @@ export function drawTreeFolk(c: CanvasRenderingContext2D, b: Brute, t: number, p
   c.stroke();
   c.translate(0, H * 0.34);
   if (!climbing) drawWeapon(c, b, t);
+  fist(c, 0, 0.3, 2.4, skin, INK);
   c.restore();
   c.restore();
 

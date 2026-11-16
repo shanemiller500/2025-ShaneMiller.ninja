@@ -22,13 +22,109 @@ function shade(hex: string, k: number) {
   return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
+type Look = (typeof BREEDS)[DragonBreed]["look"];
+const tintedLooks = new Map<string, Look>();
+
+/**
+ * A breed's colours in this dragon's own shade: turned `tint` degrees round the colour wheel, and brightened
+ * by `bright` while it flashes from a hit. It's the same sum the canvas filters `hue-rotate()` + `brightness()`
+ * do, worked out once per shade here. (Filters looked the same but ran on the graphics card for every single
+ * stroke of the dragon: one tinted dragon in view cost a quarter of a second a frame.)
+ */
+function lookOf(breed: DragonBreed, tint: number, bright: number): Look {
+  const base = BREEDS[breed].look;
+  tint = Math.round(tint);
+  bright = Math.round(bright * 10) / 10;
+  if (!tint && bright <= 1) return base;
+  const key = breed + "|" + tint + "|" + bright;
+  const hit = tintedLooks.get(key);
+  if (hit) return hit;
+  const a = (tint * Math.PI) / 180;
+  const co = Math.cos(a);
+  const si = Math.sin(a);
+  // the hue-rotate matrix (CSS filter effects), then brightness
+  const m = [
+    0.213 + co * 0.787 - si * 0.213, 0.715 - co * 0.715 - si * 0.715, 0.072 - co * 0.072 + si * 0.928,
+    0.213 - co * 0.213 + si * 0.143, 0.715 + co * 0.285 + si * 0.14, 0.072 - co * 0.072 - si * 0.283,
+    0.213 - co * 0.213 - si * 0.787, 0.715 - co * 0.715 + si * 0.715, 0.072 + co * 0.928 + si * 0.072,
+  ];
+  const turn = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16);
+    const r = (n >> 16) & 255;
+    const g = (n >> 8) & 255;
+    const b = n & 255;
+    const ch = (i: number) => Math.max(0, Math.min(255, Math.round((m[i] * r + m[i + 1] * g + m[i + 2] * b) * bright)));
+    return "#" + ((1 << 24) | (ch(0) << 16) | (ch(3) << 8) | ch(6)).toString(16).slice(1);
+  };
+  const look: Look = { body: turn(base.body), belly: turn(base.belly), wing: turn(base.wing), horn: turn(base.horn), egg: turn(base.egg), spots: turn(base.spots) };
+  if (tintedLooks.size > 600) tintedLooks.clear();
+  tintedLooks.set(key, look);
+  return look;
+}
+
 /** Where the mouth is, relative to the body origin (unscaled, facing right). */
 const MOUTH = { x: 66, y: -38 };
+
+/**
+ * Far out, a dragon is a few pixels across: a quick silhouette in its colours (body, neck + head, tail, two
+ * beating wings) instead of the full painting. Origin at its body, already raised by z.
+ */
+export function drawDragonTiny(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
+  const breed = dr.breed ?? LEGACY[dr.hue % LEGACY.length];
+  const L = lookOf(breed, dr.tint ?? 0, 1);
+  const s = dragonStats(dr).scale;
+  const flying = dr.z > 6;
+  const flap = flying ? Math.sin(dr.anim * 1.6) : 0;
+  c.save();
+  c.scale(dr.dir * s, s);
+  if (!flying) {
+    c.fillStyle = "rgba(0,0,0,0.18)";
+    c.fillRect(-28, -2, 56, 4);
+  }
+  c.fillStyle = L.wing;
+  c.beginPath();
+  c.moveTo(-6, -24);
+  c.lineTo(-48, -40 - (flying ? flap * 30 : 2));
+  c.lineTo(-30, -16);
+  c.closePath();
+  c.fill();
+  c.fillStyle = L.body;
+  c.beginPath();
+  c.ellipse(0, -19, 30, 13, -0.08, 0, Math.PI * 2);
+  c.fill();
+  c.lineWidth = 9;
+  c.lineCap = "round";
+  c.strokeStyle = L.body;
+  c.beginPath();
+  c.moveTo(-24, -18);
+  c.lineTo(-80, -14);
+  c.moveTo(20, -22);
+  c.lineTo(42, -40);
+  c.stroke();
+  c.beginPath();
+  c.ellipse(50, -42, 12, 7, 0.15, 0, Math.PI * 2);
+  c.fill();
+  if (!flying) {
+    c.fillStyle = shade(L.body, -0.25);
+    c.fillRect(-14, -10, 7, 10);
+    c.fillRect(10, -10, 7, 10);
+  }
+  c.fillStyle = L.wing;
+  c.beginPath();
+  c.moveTo(-2, -26);
+  c.lineTo(-40, -46 - (flying ? flap * 36 : 4));
+  c.lineTo(-22, -18);
+  c.closePath();
+  c.fill();
+  c.restore();
+  void t;
+}
 
 /** A dragon; origin at its body, already raised by z. */
 export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   const breed = dr.breed ?? LEGACY[dr.hue % LEGACY.length];
-  const L = BREEDS[breed].look;
+  // its own shade of the breed's colours (and a flash when it's hit)
+  const L = lookOf(breed, dr.tint ?? 0, dr.hit > 0 ? 1 + dr.hit * 0.8 : 1);
   const st = dragonStats(dr);
   const s = st.scale;
   const flying = dr.z > 6;
@@ -49,10 +145,9 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   c.translate(0, -hop * 14 * s);
   c.rotate((dr.bank ?? 0) * 0.6);
   c.scale(dr.dir * s, s);
-  // its own shade of the breed's colours (and a flash when it's hit)
-  const fx = `${dr.tint ? `hue-rotate(${dr.tint}deg)` : ""}${dr.hit > 0 ? ` brightness(${1 + dr.hit * 0.8})` : ""}`.trim();
-  if (fx) c.filter = fx;
 
+  /** the contour line: the dragon's own colour, very dark (so every breed keeps its hue) */
+  const ink = shade(L.body, -0.62);
   const wing = (near: boolean) => {
     // flung wide (the clans' altar rite) or folded at rest
     const spread = dr.spread ?? 0;
@@ -86,6 +181,10 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
     c.quadraticCurveTo(-30, -12, -8, -14);
     c.closePath();
     c.fill();
+    c.strokeStyle = ink;
+    c.lineWidth = 1.1;
+    c.lineJoin = "round";
+    c.stroke();
     // bones
     c.strokeStyle = shade(L.body, -0.15);
     c.lineCap = "round";
@@ -136,7 +235,12 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
     const k = i / 8;
     pts.push([-18 - k * 70, -18 + k * 4 + Math.sin(t * (asleep ? 0.8 : 2.6) + dr.id + k * 2.2) * k * (asleep ? 3 : 10) + (flying ? k * 6 : asleep ? k * 8 : 0)]);
   }
-  c.fillStyle = L.body;
+  {
+    const tg = c.createLinearGradient(0, -30, 0, -4);
+    tg.addColorStop(0, shade(L.body, 0.16));
+    tg.addColorStop(1, shade(L.body, -0.24));
+    c.fillStyle = tg;
+  }
   c.beginPath();
   for (let i = 0; i < pts.length; i++) {
     const wdt = 8 * (1 - i / pts.length) + 1.5;
@@ -150,6 +254,10 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   }
   c.closePath();
   c.fill();
+  c.strokeStyle = ink;
+  c.lineWidth = 1.2;
+  c.lineJoin = "round";
+  c.stroke();
   const [tx, ty] = pts[pts.length - 1];
   c.fillStyle = L.wing;
   c.beginPath();
@@ -159,6 +267,7 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   c.lineTo(tx - 10, ty + 9 - sway * 0.2);
   c.closePath();
   c.fill();
+  c.stroke();
   // tail spikes
   c.fillStyle = L.horn;
   for (let i = 1; i < 6; i++) {
@@ -169,6 +278,9 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
     c.lineTo(x, y - 6 - h);
     c.lineTo(x - 3, y - 6 + i * 0.4);
     c.fill();
+    c.strokeStyle = ink;
+    c.lineWidth = 0.7;
+    c.stroke();
   }
 
   // legs: tucked in flight, dropped for landing, planted on the ground
@@ -184,6 +296,12 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
       const step = !flying && (dr.state === "walk") ? Math.sin(dr.anim * 2 + (near ? 0 : Math.PI)) * 5 : 0;
       c.quadraticCurveTo(x + 6, -4, x + 2 + step, legsDown ? 6 : 2);
     }
+    const legCol = c.strokeStyle;
+    c.strokeStyle = ink;
+    c.lineWidth = 8;
+    c.stroke();
+    c.strokeStyle = legCol;
+    c.lineWidth = 6;
     c.stroke();
     // claws
     c.fillStyle = L.horn;
@@ -202,12 +320,41 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
 
   // body
   const bg = c.createLinearGradient(0, -38, 0, -4);
-  bg.addColorStop(0, shade(L.body, 0.14));
-  bg.addColorStop(1, shade(L.body, -0.18));
+  bg.addColorStop(0, shade(L.body, 0.22));
+  bg.addColorStop(0.45, L.body);
+  bg.addColorStop(1, shade(L.body, -0.28));
   c.fillStyle = bg;
   c.beginPath();
   c.ellipse(0, -19 + (dr.gravid ? 2 : 0), 30 + (dr.gravid ? 3 : 0), (15 + (young ? 2 : 0) + (dr.gravid ? 4 : 0)) * (1 + breathe * (flying ? 0 : 0.035)), -0.08, 0, Math.PI * 2);
   c.fill();
+  c.strokeStyle = ink;
+  c.lineWidth = 1.3;
+  c.stroke();
+  {
+    // scales over the flanks (rows of little overlapping arcs), and the light sliding along the back
+    c.save();
+    c.clip();
+    c.strokeStyle = shade(L.body, -0.3);
+    c.globalAlpha *= 0.42;
+    c.lineWidth = 0.8;
+    c.beginPath();
+    for (let row = 0; row < 4; row++) {
+      for (let col = -5; col <= 5; col++) {
+        const sx = col * 5.4 + (row % 2) * 2.7;
+        const sy = -31 + row * 4.4;
+        c.moveTo(sx - 2.5, sy);
+        c.quadraticCurveTo(sx, sy + 3.4, sx + 2.5, sy);
+      }
+    }
+    c.stroke();
+    c.globalAlpha /= 0.42;
+    const sheen = c.createLinearGradient(0, -36, 0, -22);
+    sheen.addColorStop(0, "rgba(255,255,240,0.3)");
+    sheen.addColorStop(1, "rgba(255,255,240,0)");
+    c.fillStyle = sheen;
+    c.fillRect(-34, -38, 68, 18);
+    c.restore();
+  }
   // its own markings: stripes, spots, or a pale blaze along the back
   if (dr.marks === 1) {
     c.fillStyle = shade(L.body, -0.32);
@@ -252,6 +399,9 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
     c.lineTo(x, y - 8 + Math.abs(i - 2.5));
     c.lineTo(x + 3, y + 1);
     c.fill();
+    c.strokeStyle = ink;
+    c.lineWidth = 0.7;
+    c.stroke();
   }
   // golden flecks (a rare egg's dragon)
   if (dr.rare) {
@@ -294,16 +444,38 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   const ng = c.createLinearGradient(20, -22, 44, -44);
   ng.addColorStop(0, L.body);
   ng.addColorStop(1, shade(L.body, 0.08));
-  c.strokeStyle = ng;
-  c.lineWidth = 11;
   c.lineCap = "round";
   c.beginPath();
   c.moveTo(20, -22);
   c.quadraticCurveTo(34, -36 + nod, 42, -40 + nod);
+  c.strokeStyle = ink;
+  c.lineWidth = 13.4;
   c.stroke();
+  c.strokeStyle = ng;
+  c.lineWidth = 11;
+  c.stroke();
+  // the pale throat, plate by plate
+  c.strokeStyle = L.belly;
+  c.lineWidth = 3.4;
+  c.setLineDash([2.6, 1.6]);
+  c.beginPath();
+  c.moveTo(23, -18);
+  c.quadraticCurveTo(37, -31 + nod, 44, -36 + nod);
+  c.stroke();
+  c.setLineDash([]);
   // head: skull, snout, lower jaw (open while breathing / calling)
   const open = Math.max(dr.breath, dr.state === "defend" || dr.state === "chase" ? 0.35 : 0);
-  c.fillStyle = L.body;
+  c.fillStyle = ink;
+  c.beginPath();
+  c.ellipse(47, -42 + nod, (young ? 13 : 12) + 1.2, (young ? 9 : 7.5) + 1.2, 0.15, 0, Math.PI * 2);
+  c.ellipse(57, -40 + nod, (young ? 7 : 10) + 1.2, 5.8, 0.18, 0, Math.PI * 2);
+  c.fill();
+  {
+    const hg = c.createLinearGradient(0, -50 + nod, 0, -34 + nod);
+    hg.addColorStop(0, shade(L.body, 0.2));
+    hg.addColorStop(1, shade(L.body, -0.12));
+    c.fillStyle = hg;
+  }
   c.beginPath();
   c.ellipse(47, -42 + nod, young ? 13 : 12, young ? 9 : 7.5, 0.15, 0, Math.PI * 2);
   c.fill();
@@ -318,6 +490,9 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   c.quadraticCurveTo(54, -36 + nod, 46, -39 + nod);
   c.closePath();
   c.fill();
+  c.strokeStyle = ink;
+  c.lineWidth = 0.9;
+  c.stroke();
   if (open > 0.05) {
     c.fillStyle = "#5a1410";
     c.beginPath();
@@ -325,6 +500,17 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
     c.lineTo(65, -36 + nod + open * 4);
     c.lineTo(63, -34 + nod + open * 8);
     c.closePath();
+    c.fill();
+    // teeth along the upper jaw
+    c.fillStyle = "#fff8e6";
+    c.beginPath();
+    for (let k = 0; k < 4; k++) {
+      const tx0 = 53 + k * 3;
+      const ty0 = -37.6 + nod + k * 0.45 + open * k * 0.9;
+      c.moveTo(tx0 - 1, ty0);
+      c.lineTo(tx0 + 0.2, ty0 + 2.2);
+      c.lineTo(tx0 + 1.2, ty0 + 0.1);
+    }
     c.fill();
   }
   // horns, brow ridge, nostril, eye
@@ -346,11 +532,28 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   c.arc(64, -42 + nod, 1.1, 0, Math.PI * 2);
   c.fill();
   c.fillStyle = dr.fury || (dr.rage ?? 0) >= 1 ? "#ff2a1a" : dr.eye ?? (dr.owner ? "#9be36b" : "#ffe066");
+  c.strokeStyle = ink;
+  c.lineWidth = 0.8;
   c.beginPath();
-  c.arc(49, -45 + nod, young ? 3 : 2.3, 0, Math.PI * 2);
+  c.arc(49, -45 + nod, young ? 3.4 : 2.8, 0, Math.PI * 2);
   c.fill();
+  c.stroke();
   c.fillStyle = "#111";
-  c.fillRect(48.5, -46.6 + nod, 1.1, 3.2);
+  c.beginPath();
+  c.ellipse(49.3, -45 + nod, young ? 1.1 : 0.75, young ? 2.4 : 2.1, 0, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = "rgba(255,255,255,0.9)";
+  c.beginPath();
+  c.arc(50.1, -46 + nod, 0.6, 0, Math.PI * 2);
+  c.fill();
+  // a heavy brow over the eye
+  c.strokeStyle = shade(L.body, -0.4);
+  c.lineWidth = 1.6;
+  c.lineCap = "round";
+  c.beginPath();
+  c.moveTo(45.5, -48.2 + nod);
+  c.quadraticCurveTo(49.5, -49.6 + nod, 53, -46.6 + nod);
+  c.stroke();
   if (dr.state === "sleep") {
     c.strokeStyle = shade(L.body, -0.3);
     c.lineWidth = 1.5;
@@ -364,7 +567,6 @@ export function drawDragon(c: CanvasRenderingContext2D, dr: Dragon, t: number) {
   leg(14, true);
   wing(true);
   c.restore();
-  c.filter = "none";
 
   // smoke curling from the nostrils at rest
   if (!flying && dr.state !== "sleep" && Math.sin(t * 1.3 + dr.id) > 0.85) {

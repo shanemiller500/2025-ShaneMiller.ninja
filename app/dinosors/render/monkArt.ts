@@ -6,6 +6,9 @@
 /*  Gentle and ceremonial: nothing is ever shown being harmed.         */
 /* ------------------------------------------------------------------ */
 import type { Monk, MonkPlace } from "../sim/monks";
+import { shadeCurrentPath, storyFace, type Mood } from "./figureArt";
+
+const INK = "rgba(58,36,20,0.8)";
 
 const ROBES = ["#e0902a", "#c8642c", "#8e2b2b"];
 const SKIN = "#c99a6c";
@@ -42,6 +45,7 @@ export function drawMonk(c: CanvasRenderingContext2D, m: Monk, t: number, leader
     c.quadraticCurveTo(6, -18, 6, -4);
     c.closePath();
     c.fill();
+    shadeCurrentPath(c, -6, -20, 6, -3, INK, 0.8);
     // hands together (meditating / praying) or resting on the knees
     c.fillStyle = SKIN;
     c.beginPath();
@@ -78,6 +82,7 @@ export function drawMonk(c: CanvasRenderingContext2D, m: Monk, t: number, leader
     c.quadraticCurveTo(7, -10, 4.5, -24);
     c.closePath();
     c.fill();
+    shadeCurrentPath(c, -7, -24, 7, -1, INK, 0.8);
     // the draped shoulder cloth (the other colour)
     c.fillStyle = ROBES[(m.robe + 1) % ROBES.length];
     c.beginPath();
@@ -118,22 +123,27 @@ export function drawMonk(c: CanvasRenderingContext2D, m: Monk, t: number, leader
   const hy = sitting || kneel ? -24 : -28;
   const bow = m.state === "kneel" || m.state === "meditate" ? 1.5 : m.state === "gaze" ? -1.5 : 0;
   c.fillStyle = SKIN;
-  c.beginPath();
-  c.arc(0.8, hy + bow, 4.2, 0, Math.PI * 2);
-  c.fill();
-  c.fillStyle = "rgba(255,255,255,0.25)";
-  c.beginPath();
-  c.arc(-0.6, hy - 1.6 + bow, 1.6, 0, Math.PI * 2);
-  c.fill();
-  // eyes: closed (meditating, asleep, kneeling) or open, looking up at dusk
-  c.strokeStyle = "#3a2414";
+  c.strokeStyle = INK;
   c.lineWidth = 0.8;
   c.beginPath();
-  if (m.state === "meditate" || m.state === "sleep" || m.state === "kneel" || m.state === "ascend" || m.state === "chant") {
-    c.moveTo(2.2, hy + 0.4 + bow);
-    c.lineTo(4, hy + 0.4 + bow);
-  } else c.arc(3.2, hy - (m.state === "gaze" ? 0.8 : 0) + bow, 0.6, 0, Math.PI * 2);
+  c.arc(0.8, hy - 1 + bow, 5.2, 0, Math.PI * 2);
+  c.fill();
   c.stroke();
+  // an ear, and the light on a shaved crown
+  c.beginPath();
+  c.ellipse(-2.6, hy + bow, 1.3, 1.7, 0, 0, Math.PI * 2);
+  c.fill();
+  c.stroke();
+  c.fillStyle = "rgba(255,255,255,0.28)";
+  c.beginPath();
+  c.ellipse(-0.4, hy - 3.6 + bow, 2.4, 1.5, -0.3, 0, Math.PI * 2);
+  c.fill();
+  // a calm face: eyes closed in meditation, a small smile otherwise
+  {
+    const closed = m.state === "meditate" || m.state === "sleep" || m.state === "kneel" || m.state === "ascend" || m.state === "chant";
+    const mood: Mood = closed ? "asleep" : m.state === "tea" || m.state === "gaze" ? "happy" : "calm";
+    storyFace(c, 1.4, hy - 0.6 + bow - (m.state === "gaze" ? 0.6 : 0), { r: 4.1, skin: SKIN, brow: "#5a3a22", mood, id: m.id, t, nose: 0.9, ink: INK });
+  }
   c.restore();
 }
 

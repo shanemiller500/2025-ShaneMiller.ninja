@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { BookOpen, FolderOpen, Info, Lightbulb, LogOut, Menu, RefreshCw, Save, Sparkles, Trophy, Volume2, VolumeX, Map as MapIcon, Pause, Play, X } from "lucide-react";
+import { Handshake, Cloud, Dna, Flame, Gem, Landmark, Pickaxe, Sun, Tent, BookOpen, FolderOpen, Info, Lightbulb, LogOut, Menu, MonitorCog, RefreshCw, Save, Sparkles, Trophy, Volume2, VolumeX, Map as MapIcon, Pause, Play, X } from "lucide-react";
 import { DISCOVERIES } from "../data/facts";
 import { Engine, type Snapshot } from "../game/engine";
 import { WEATHER_LABEL } from "../sim/weather";
 import { WORLD_H, WORLD_W } from "../sim/types";
 import { useClickAway } from "./useClickAway";
 import { MessageFeed, type Toast } from "./Toasts";
+import { QUALITY_INFO, type QualityId } from "../render/quality";
 
 export type TopPanel = null | "time" | "places" | "menu";
 
@@ -26,12 +27,16 @@ interface Props {
   onNew: () => void;
   onReset: () => void;
   onCamp: () => void;
+  onDiplomacy: () => void;
+  diplomacyOpen: boolean;
   onEvolution: () => void;
   onCiv: () => void;
   onDeep: () => void;
   onHelp: () => void;
   onTips: () => void;
   tipsOn: boolean;
+  quality: QualityId;
+  onQuality: (q: QualityId) => void;
   onExtinction: () => void;
   civOpen: boolean;
   onCloud: () => void;
@@ -54,7 +59,9 @@ const fmtTime = (h: number) => {
   return `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, "0")} ${am}`;
 };
 
-const btn = "dl-glass flex h-12 w-12 items-center justify-center rounded-2xl shadow-lg transition hover:-translate-y-0.5 hover:bg-slate-800/80 active:scale-90 sm:h-14 sm:w-14";
+/** one button in the top-right strip (the strip itself is the glass) */
+const btn = "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/75 transition hover:bg-white/10 hover:text-white active:scale-90";
+const ico = "h-[21px] w-[21px]";
 
 export default function TopBar(p: Props) {
   const { snap, panel, setPanel } = p;
@@ -81,23 +88,22 @@ export default function TopBar(p: Props) {
             {p.unread > 0 && panel !== "menu" && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-amber-400 px-1 text-center text-[10px] font-black text-slate-900">{p.unread > 99 ? "99+" : p.unread}</span>}
           </button>
           {/* phones: the buttons scroll sideways (panels sit outside the strip so they aren't clipped) */}
-          <div className="dl-noscroll hidden min-w-0 items-center gap-1.5 overflow-x-auto pb-1 pl-1 pr-1.5 pt-1.5 sm:flex sm:gap-2 sm:overflow-visible sm:p-0">
-          <span aria-hidden className="ml-auto" />
+          <div className="dl-glass hidden min-w-0 items-center gap-0.5 rounded-2xl p-1 sm:flex">
           {p.cloudStatus !== "off" && (
             <button type="button" className={`${btn} relative`} title={p.cloudStatus === "signedIn" ? "Cloud save: on" : "Save to the cloud"} aria-label="Cloud save" onClick={p.onCloud}>
-              <span className="text-2xl leading-none">☁️</span>
-              <span className={`absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-slate-900 ${p.cloudStatus === "signedIn" ? "bg-emerald-400" : p.cloudStatus === "linkSent" ? "bg-amber-400" : "bg-slate-400"}`} />
+              <Cloud className={ico} />
+              <span className={`absolute right-1.5 top-1.5 h-2 w-2 rounded-full ring-2 ring-slate-900 ${p.cloudStatus === "signedIn" ? "bg-emerald-400" : p.cloudStatus === "linkSent" ? "bg-amber-400" : "bg-slate-400"}`} />
             </button>
           )}
-          <button type="button" className={`${btn} relative ${p.evoOpen ? "!bg-cyan-500/60" : ""}`} title="Evolution" aria-label="Evolution" aria-pressed={p.evoOpen} onClick={p.onEvolution}>
-            <span className="text-2xl leading-none">🧬</span>
+          <button type="button" className={`${btn} relative ${p.evoOpen ? "!bg-white/15 !text-cyan-300" : ""}`} title="Evolution" aria-label="Evolution" aria-pressed={p.evoOpen} onClick={p.onEvolution}>
+            <Dna className={ico} />
           </button>
-          <button type="button" className={`${btn} relative ${snap.view === "deep" ? "!bg-cyan-600/70" : ""}`} title={snap.view === "deep" ? "Back to the surface" : "The Deep: the mine under the cave"} aria-label="The Deep" aria-pressed={snap.view === "deep"} onClick={p.onDeep}>
-            <span className="text-2xl leading-none">{snap.view === "deep" ? "🌤️" : "⛏️"}</span>
+          <button type="button" className={`${btn} relative ${snap.view === "deep" ? "!bg-white/15 !text-cyan-300" : ""}`} title={snap.view === "deep" ? "Back to the surface" : "The Deep: the mine under the cave"} aria-label="The Deep" aria-pressed={snap.view === "deep"} onClick={p.onDeep}>
+            {snap.view === "deep" ? <Sun className={ico} /> : <Pickaxe className={ico} />}
             {snap.view === "surface" && snap.crew > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-cyan-400 px-1.5 text-[11px] font-bold text-slate-900">{snap.crew}</span>}
           </button>
-          <button type="button" className={`${btn} relative ${p.civOpen ? "!bg-cyan-500/60" : ""}`} title="Civilization" aria-label="Civilization" aria-pressed={p.civOpen} onClick={p.onCiv}>
-            <span className="text-2xl leading-none">{snap.civ.path === "resonance" ? "💠" : snap.civ.path === "traditional" ? "🔥" : "🏛️"}</span>
+          <button type="button" className={`${btn} relative ${p.civOpen ? "!bg-white/15 !text-cyan-300" : ""}`} title="Civilization" aria-label="Civilization" aria-pressed={p.civOpen} onClick={p.onCiv}>
+            {snap.civ.path === "resonance" ? <Gem className={ico} /> : snap.civ.path === "traditional" ? <Flame className={ico} /> : <Landmark className={ico} />}
             {(snap.civ.pending || (snap.civ.chamber && !snap.civ.found)) && <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-ping rounded-full bg-cyan-300" />}
             {snap.civ.path === "resonance" && snap.civ.cap > 0 && (
               <span className="absolute inset-x-2 bottom-1.5 h-1 overflow-hidden rounded-full bg-white/15">
@@ -105,24 +111,26 @@ export default function TopBar(p: Props) {
               </span>
             )}
           </button>
-          <button type="button" className={`${btn} relative ${p.campOpen ? "!bg-amber-500/60" : ""}`} title="Your tribe" aria-label="Your tribe" aria-pressed={p.campOpen} onClick={p.onCamp}>
-            <span className="text-2xl leading-none">{snap.tribe.levelIcon}</span>
+          <button type="button" className={`${btn} relative ${p.campOpen ? "!bg-white/15 !text-amber-300" : ""}`} title="Your tribe" aria-label="Your tribe" aria-pressed={p.campOpen} onClick={p.onCamp}>
+            <Tent className={ico} />
             {snap.tribe.raid && <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-ping rounded-full bg-rose-500" />}
           </button>
+          <button type="button" className={`${btn} !w-auto gap-1.5 px-2 ${p.diplomacyOpen ? "!bg-white/15 !text-emerald-300" : ""}`} title="Diplomacy" aria-label="Diplomacy" aria-pressed={p.diplomacyOpen} onClick={p.onDiplomacy}><Handshake className={ico} /><span className="hidden text-xs lg:inline">Diplomacy</span></button>
           <button type="button" data-dl-top-trigger className={btn} title="Places" aria-label="Places" onClick={() => toggle("places")}>
-            <MapIcon className="h-6 w-6" />
+            <MapIcon className={ico} />
           </button>
-          <button type="button" className={`${btn} relative`} title="Sticker book" aria-label="Sticker book" onClick={p.onStickers}>
-            <Trophy className="h-6 w-6 text-amber-300" />
-            <span className="absolute -right-1 -top-1 rounded-full bg-amber-400 px-1.5 text-[11px] font-bold text-slate-900">
-              {snap.discoveries.length}/{DISCOVERIES.length}
+          <button type="button" className={`${btn} relative !w-auto gap-1.5 px-2.5`} title={`Sticker book: ${snap.discoveries.length} of ${DISCOVERIES.length} found`} aria-label="Sticker book" onClick={p.onStickers}>
+            <Trophy className={`${ico} text-amber-300`} />
+            <span className="text-[12px] font-semibold tabular-nums text-white/70">
+              {snap.discoveries.length}<span className="text-white/35">/{DISCOVERIES.length}</span>
             </span>
           </button>
+          <span className="mx-0.5 h-6 w-px bg-white/10" aria-hidden />
           <button type="button" className={btn} title={p.muted ? "Sound on" : "Mute"} aria-label={p.muted ? "Sound on" : "Mute"} onClick={p.onMute}>
-            {p.muted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
+            {p.muted ? <VolumeX className={ico} /> : <Volume2 className={ico} />}
           </button>
-          <button type="button" data-dl-top-trigger className={btn} title="Menu" aria-label="Menu" onClick={() => toggle("menu")}>
-            <Menu className="h-6 w-6" />
+          <button type="button" data-dl-top-trigger className={`${btn} ${panel === "menu" ? "!bg-white/15 !text-white" : ""}`} title="Menu" aria-label="Menu" aria-expanded={panel === "menu"} onClick={() => toggle("menu")}>
+            <Menu className={ico} />
           </button>
           </div>
           <AnimatePresence>
@@ -147,8 +155,8 @@ function SkyDial({ snap, onClick }: { snap: Snapshot; onClick: () => void }) {
   const bottom = d > 0.5 ? "#bfe6ff" : d > 0.1 ? "#ffd29a" : "#28306b";
   const w = WEATHER_LABEL[snap.weather];
   return (
-    <button type="button" data-dl-top-trigger onClick={onClick} className="dl-glass flex items-center gap-2 rounded-[22px] p-1.5 pr-3 shadow-lg transition hover:-translate-y-0.5 active:scale-95" aria-label="Time and weather">
-      <span className="relative block h-12 w-12 overflow-hidden rounded-[16px] sm:h-14 sm:w-14" style={{ background: `linear-gradient(${top}, ${bottom})` }}>
+    <button type="button" data-dl-top-trigger onClick={onClick} className="dl-glass flex items-center gap-2.5 rounded-2xl p-1 pr-3.5 transition hover:brightness-110 active:scale-95" aria-label="Time and weather">
+      <span className="relative block h-11 w-11 overflow-hidden rounded-xl ring-1 ring-white/10" style={{ background: `linear-gradient(${top}, ${bottom})` }}>
         {d < 0.3 &&
           [12, 30, 70, 84, 50, 22].map((sx, i) => (
             <span key={i} className="absolute h-[2px] w-[2px] rounded-full bg-white" style={{ left: `${sx}%`, top: `${10 + ((i * 37) % 40)}%`, opacity: 0.5 + ((i * 13) % 5) / 10 }} />
@@ -160,8 +168,8 @@ function SkyDial({ snap, onClick }: { snap: Snapshot; onClick: () => void }) {
         {snap.weather !== "clear" && <span className="absolute bottom-0.5 right-0.5 text-base">{w.icon}</span>}
       </span>
       <span className="text-left leading-tight">
-        <span className="block text-sm font-bold sm:text-base">{fmtTime(h)}</span>
-        <span className="block text-[11px] font-medium text-white/70 sm:text-xs">
+        <span className="block text-[15px] font-semibold tabular-nums tracking-tight">{fmtTime(h)}</span>
+        <span className="block text-[11px] font-medium text-white/55">
           {snap.season.icon} Day {snap.day} · {w.label}
           {snap.paused ? " · ⏸" : ""}
         </span>
@@ -348,6 +356,7 @@ function MobileActionsPanel(p: Props & { close: () => void; openPlaces: () => vo
         {action(p.snap.view === "deep" ? "Surface" : "The Deep", p.snap.view === "deep" ? "🌤️" : "⛏️", run(p.onDeep), p.snap.view === "deep")}
         {action("Civilization", p.snap.civ.path === "resonance" ? "💠" : p.snap.civ.path === "traditional" ? "🔥" : "🏛️", run(p.onCiv), p.civOpen)}
         {action("Your tribe", p.snap.tribe.levelIcon, run(p.onCamp), p.campOpen)}
+        {action("Diplomacy", <Handshake className="h-5 w-5" />, run(p.onDiplomacy), p.diplomacyOpen)}
         {action("Places", <MapIcon className="h-5 w-5" />, p.openPlaces)}
         {action("Stickers", <Trophy className="h-5 w-5 text-amber-300" />, run(p.onStickers))}
         {action(p.muted ? "Sound on" : "Mute", p.muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />, p.onMute, p.muted)}
@@ -369,7 +378,7 @@ function MobileActionsPanel(p: Props & { close: () => void; openPlaces: () => vo
 function MenuPanel(p: Props & { close: () => void; embedded?: boolean }) {
   const item = "flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-[15px] font-semibold transition hover:bg-white/15 active:scale-[0.98]";
   return (
-    <motion.div {...(p.embedded ? {} : pop)} data-dl-top-panel className={p.embedded ? "rounded-2xl bg-white/[0.04] p-1" : "dl-glass absolute right-0 top-[calc(100%+8px)] hidden w-60 rounded-3xl p-2 shadow-2xl sm:block"}>
+    <motion.div {...(p.embedded ? {} : pop)} data-dl-top-panel className={p.embedded ? "rounded-2xl bg-white/[0.04] p-1" : "dl-glass absolute right-0 top-[calc(100%+8px)] hidden w-72 rounded-3xl p-2 shadow-2xl sm:block"}>
       <button type="button" className={item} onClick={() => { p.onSave(); p.close(); }}>
         <Save className="h-5 w-5 text-emerald-300" /> Save now
       </button>
@@ -391,6 +400,21 @@ function MenuPanel(p: Props & { close: () => void; embedded?: boolean }) {
       <button type="button" className={item} onClick={() => { p.onAbout(); p.close(); }}>
         <Info className="h-5 w-5 text-amber-300" /> About Dinosaur Land
       </button>
+      <div className="px-3 pb-1 pt-2">
+        <div className="flex items-center justify-between text-[12px] font-semibold text-white/60">
+          <span className="flex items-center gap-1.5"><MonitorCog className="h-4 w-4" /> Graphics</span>
+          <span className="text-white/45">{p.quality === "auto" ? `Auto · ${QUALITY_INFO[p.engine.quality.level].name}` : QUALITY_INFO[p.quality].name}</span>
+        </div>
+        <div role="radiogroup" aria-label="Graphics quality" className="mt-1.5 grid grid-cols-5 gap-1 rounded-xl bg-black/25 p-1">
+          {(["auto", "low", "medium", "high", "ultra"] as const).map((q) => (
+            <button key={q} type="button" role="radio" aria-checked={p.quality === q} title={QUALITY_INFO[q].hint} onClick={() => p.onQuality(q)}
+              className={`rounded-lg px-0.5 py-1.5 text-[11px] font-bold transition active:scale-95 ${p.quality === q ? "bg-white text-slate-900 shadow" : "text-white/70 hover:bg-white/10 hover:text-white"}`}>
+              {q === "medium" ? "Med" : QUALITY_INFO[q].name}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] leading-snug text-white/45">{QUALITY_INFO[p.quality].hint}</p>
+      </div>
       <button type="button" className={item} disabled={p.snap.extinction.phase !== "idle" && p.snap.extinction.phase !== "ruins"} onClick={() => { p.onExtinction(); p.close(); }}>
         <span className="w-5 text-center text-lg leading-none">☄️</span> End of an age…
       </button>

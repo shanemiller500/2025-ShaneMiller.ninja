@@ -9,6 +9,7 @@
 /* ------------------------------------------------------------------ */
 import type { Brute } from "../sim/types";
 import type { SnowLodge, SnowTribe } from "../sim/snowFolk";
+import { fist, scaleAbout, shadeCurrentPath, storyFace, type Mood } from "./figureArt";
 
 const FUR = "#eceff1";
 const FUR_D = "#c3cbd2";
@@ -75,6 +76,7 @@ export function drawSnowFolk(c: CanvasRenderingContext2D, b: Brute, t: number, t
   c.quadraticCurveTo(9, -18, 6, -30);
   c.closePath();
   c.fill();
+  shadeCurrentPath(c, -10, -30, 10, hem, "rgba(42,36,32,0.75)", 0.9);
   c.fillStyle = FUR_D;
   for (let i = -8; i <= 8; i += 3) {
     c.beginPath();
@@ -90,16 +92,17 @@ export function drawSnowFolk(c: CanvasRenderingContext2D, b: Brute, t: number, t
   c.fillRect(-1, -29, 2, 13);
   // arm + weapon
   const swing = fighting ? Math.max(0, 1 - (b.cd ?? 0)) : 0;
-  c.strokeStyle = FUR_D;
-  c.lineWidth = 3.6;
+  c.strokeStyle = "rgba(42,36,32,0.75)";
+  c.lineWidth = 4.9;
   c.beginPath();
   c.moveTo(3, -26);
   c.lineTo(8 + swing * 4, -19 - swing * 3);
   c.stroke();
-  c.fillStyle = HIDE;
-  c.beginPath();
-  c.arc(8 + swing * 4, -19 - swing * 3, 1.9, 0, Math.PI * 2);
-  c.fill();
+  c.strokeStyle = FUR_D;
+  c.lineWidth = 3.6;
+  c.stroke();
+  // a hide mitt
+  fist(c, 8.3 + swing * 4, -18.7 - swing * 3, 2.2, HIDE, INK);
   if (role === "archer") {
     c.strokeStyle = "#5a4330";
     c.lineWidth = 1.6;
@@ -177,24 +180,55 @@ export function drawSnowFolk(c: CanvasRenderingContext2D, b: Brute, t: number, t
     }
     c.restore();
   }
-  // the hood with its fur ruff, a face in the opening, bone slit-goggles
+  // the hood with its fur ruff, a face in the opening, bone snow-goggles pushed up on the brow
+  // (a big head, like the rest of the cast)
+  c.save();
+  scaleAbout(c, 0.5, -28, 1.2);
   c.fillStyle = FUR_D;
+  c.strokeStyle = "rgba(42,36,32,0.75)";
+  c.lineWidth = 0.9;
   c.beginPath();
   c.ellipse(0.5, -35, 7.4, 7.6, 0, 0, Math.PI * 2);
   c.fill();
+  c.stroke();
+  // tufts of the ruff
   c.fillStyle = FUR;
+  c.beginPath();
+  for (let k = 0; k < 9; k++) {
+    const a = (k / 9) * Math.PI * 2;
+    c.moveTo(0.5 + Math.cos(a) * 6.6 + 1.5, -35 + Math.sin(a) * 6.8);
+    c.arc(0.5 + Math.cos(a) * 6.6, -35 + Math.sin(a) * 6.8, 1.5, 0, Math.PI * 2);
+  }
+  c.fill();
   c.beginPath();
   c.ellipse(0.5, -35, 6.2, 6.4, 0, 0, Math.PI * 2);
   c.fill();
-  c.fillStyle = SKIN[b.id % SKIN.length];
-  c.beginPath();
-  c.ellipse(2, -34.5, 3.6, 4, 0, 0, Math.PI * 2);
-  c.fill();
+  {
+    const skin = SKIN[b.id % SKIN.length];
+    c.fillStyle = skin;
+    c.beginPath();
+    c.ellipse(2, -34.5, 4, 4.4, 0, 0, Math.PI * 2);
+    c.fill();
+    // cheeks pink with cold
+    c.fillStyle = "rgba(232,104,84,0.3)";
+    c.beginPath();
+    c.ellipse(3, -32.6, 1.6, 1, 0, 0, Math.PI * 2);
+    c.fill();
+    const mood: Mood = b.state === "sleep" ? "asleep" : fighting ? "fierce" : b.state === "flee" ? "scared" : "calm";
+    storyFace(c, 1.9, -34.2, { r: 3.6, skin, brow: "#4a3626", mood, id: b.id, t, nose: 1.1, ink: INK });
+  }
+  // the goggles: a strip of bone with two slits
   c.fillStyle = "#e9dfc9";
-  c.fillRect(-0.6, -36.4, 6.4, 1.9);
+  c.strokeStyle = INK;
+  c.lineWidth = 0.5;
+  c.beginPath();
+  c.roundRect(-1.4, -40.6, 7.4, 2.1, 1);
+  c.fill();
+  c.stroke();
   c.fillStyle = INK;
-  c.fillRect(1.2, -35.9, 1.6, 0.8);
-  c.fillRect(3.8, -35.9, 1.6, 0.8);
+  c.fillRect(0.6, -39.9, 1.7, 0.7);
+  c.fillRect(3.4, -39.9, 1.7, 0.7);
+  c.restore();
   // breath steaming in the cold
   const puff = (t * 0.7 + b.id * 0.13) % 1;
   if (puff < 0.5) {

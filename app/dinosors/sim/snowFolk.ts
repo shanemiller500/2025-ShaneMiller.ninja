@@ -40,6 +40,7 @@ import type { World } from "./world";
 import { moveBrute, say, setB } from "./rivals";
 import { fairGame, takeFood } from "./treeFolk";
 import { foundingGroups, type FolkGroup, type GroupKind } from "./folkGroups";
+import { nationOf } from "./diplomacy";
 import { survived } from "./growth";
 
 /** Our hits are divided by this (Neanderthals take 150, Sand People 105). */
@@ -460,6 +461,8 @@ export class SnowFolk {
   }
 
   /** Riding: the Frosthorn goes where its rider goes. */
+  diplomaticRide(w: World, b: Brute) { this.ride(w, b); }
+
   private ride(w: World, b: Brute) {
     const d = this.dinoOf(w, b.mount);
     if (!d || d.health <= 0 || d.snowRider !== b.id) {
@@ -535,7 +538,7 @@ export class SnowFolk {
           if (this.rng() < 0.3) say(b, pick(this.rng, ["Dragon!", "Shoot it down!", "Away from the lodges!"]), 1.2);
         }
       }
-      const free = adults.filter((b) => !b.band && b.hp > 0.6 && b.state !== "flee" && b.state !== "fight");
+      const free = adults.filter((b) => !b.band && !w.diplomacy.committed(b) && b.hp > 0.6 && b.state !== "flee" && b.state !== "fight");
       const coldSeason = winter(w);
       t.huntT -= 1;
       if (t.huntT <= 0) {
@@ -657,7 +660,7 @@ export class SnowFolk {
     if (town && bd < 6000) goals.push({ goal: { kind: "town", id: 0 }, x: town.x, y: town.y, d: bd * (t.grudge > 0 ? 0.5 : 1.1) });
     for (const c of w.rivals.clans) goals.push({ goal: { kind: "clan", id: c.id }, x: c.x, y: c.y, d: dist(c, t) });
     for (const o of w.sandFolk.tribes) goals.push({ goal: { kind: "sand", id: o.id }, x: o.x, y: o.y, d: dist(o, t) * 0.8 });
-    const near = goals.filter((g) => g.d < 6000).sort((a, b) => a.d - b.d).slice(0, 2);
+    const near = goals.filter((g) => w.diplomacy.allowsGoal(`snow:${t.id}`, g.goal) && g.d < 6000).sort((a, b) => a.d - b.d).slice(0, 2);
     if (!near.length) return false;
     const g = near[Math.floor(this.rng() * near.length)];
     const n = Math.min(free.length, 3 + t.tier * 2, 9);
@@ -872,7 +875,7 @@ export class SnowFolk {
     const theirLand = Math.hypot(x - t.x, y - t.y) < t.r * 1.15;
     if (w.tribe.danger !== "calm" && (theirLand || raiding || t.grudge > 0)) {
       for (const h of w.humans) {
-        if (!fairGame(h)) continue;
+        if (!fairGame(h) || !w.diplomacy.hostile(`snow:${t.id}`, "us")) continue;
         // (out in the open, beyond their land, only a grudge or a raid makes one of ours a target)
         if (!raiding && t.grudge <= 0 && Math.hypot(h.x - t.x, h.y - t.y) > t.r * 1.15) continue;
         const d = Math.hypot(h.x - x, h.y - y);
@@ -883,6 +886,7 @@ export class SnowFolk {
       }
     }
     for (const o of w.rivals.brutes) {
+      if (!w.diplomacy.hostile(`snow:${t.id}`, nationOf(o))) continue;
       if (o.hp <= 0 || o.captive || o.snatched || o.falling || o.onDragon || o.weapon === "catapult" || o.snow) continue;
       if (o.tree && o.hidden) continue;
       if (o.sea && o.boat) continue;
@@ -909,6 +913,7 @@ export class SnowFolk {
   /* ------------------------------ bodies ------------------------------ */
 
   private act(w: World, b: Brute, dt: number) {
+    w.diplomacy.blockAction(w, b);
     const t = this.tribe(b.snow);
     const quick = b.state === "fight" || b.state === "hunt" || b.state === "dart" || !!b.band || w.inView(b.x, b.y, 300);
     const pace = b.mount ? MOUNT_SPEED : SPEED;
@@ -1025,6 +1030,7 @@ export class SnowFolk {
   }
 
   private strike(w: World, b: Brute, f: Foe, mul: number) {
+    if (!w.diplomacy.canTarget(w, b, foeXY(f).id)) return;
     const arms = ARMS[b.snowRole ?? "hunter"];
     b.spotT = 4;
     w.sfx("whoosh", b.x, b.y, 0.4, 1.05);
@@ -1034,6 +1040,7 @@ export class SnowFolk {
   }
 
   private throwAt(w: World, b: Brute, f: Foe) {
+    if (!w.diplomacy.canTarget(w, b, foeXY(f).id)) return;
     const arms = ARMS[b.snowRole ?? "hunter"];
     b.spotT = 3;
     const p = foeXY(f);

@@ -57,7 +57,7 @@ import {
   type WallPart,
 } from "./types";
 import type { World } from "./world";
-import { homeSpot, updateZones, type Zone } from "./zones";
+import { updateZones, type Zone } from "./zones";
 import { raidGathering, raidPackSpots } from "./settlement";
 import { scorpionWorks } from "./scorpionArmor";
 import { season } from "./seasons";
@@ -945,6 +945,7 @@ export class Tribe {
 
   /** Is this dino a threat the guards should shoot at? */
   hostile(w: World, d: Dino) {
+    if (w.diplomacy.protectedDino(d)) return false;
     if (d.raider) return true;
     if (d.owner) return false;
     const def = sp(d.species);
@@ -954,6 +955,9 @@ export class Tribe {
 
   /** Throw / shoot at a dino or a dragon. */
   shoot(w: World, h: Human, d: Dino | Dragon | Brute, wp: Weapon, bonus = 0) {
+    if (d.kind === "dino" && w.diplomacy.protectedDino(d)) return;
+    if (d.kind === "brute" && !w.diplomacy.hostileUnit(d)) return;
+    if (d.kind === "dragon" && !w.diplomacy.hostileDragon(d)) return;
     if (wp.proj === "beam" && !wp.battery && !w.civ.spend(wp.id === "nightSidearm" ? 1.5 : 2)) return;
     // a sidearm shot at a stray animal inside the settlement drives it out (territory.ts)
     const repel = d.kind === "dino" && repelsHere(w, h, d, !!wp.sidearm);
@@ -1033,7 +1037,9 @@ export class Tribe {
           if (p.kind === "scorpion") w.particles.spawn(P.Ring, b.x, b.y, { z: 18, size: 12, max: 0.5, color: p.glow ? "rgba(150,240,255,0.95)" : "rgba(255,230,180,0.9)" });
         } else if (dr && Math.hypot(dr.x - p.x, dr.y - p.y) < 70) {
           // arrows mostly bounce off dragon scales; Scorpion bolts punch through
+          const rescued = dr.prey ? w.rivals.byId(dr.prey) : null;
           w.dragons.hit(w, dr, p.dmg * (p.big ?? 0.5));
+          if (rescued && dr.hp <= 0 && rescued.hp > 0) w.diplomacy.rescued(w, rescued);
           if (p.kind === "beam") w.particles.burst(P.Spark, dr.x, dr.y, 10, 100, { z: dr.z * 0.5, vz: 60, g: 120, size: 2, max: 0.5, color: "#b9f8ff" });
         } else {
           w.particles.burst(P.Dust, p.x, p.y, 3, 20, { size: 3, max: 0.4, color: "rgba(160,140,110,0.6)" });
@@ -1226,6 +1232,7 @@ export class Tribe {
         }
         const parent = this.adults(w).find((a) => a.family) ?? this.adults(w)[0];
         const baby = addHuman(w, w.camp.caveX + (w.rng() - 0.5) * 40, w.camp.caveY + 30, true, { family: parent?.family || parent?.id || 0 });
+        w.population.assignHomes(w);
         if (parent && !parent.family) parent.family = parent.id;
         say(baby, "Waaah!", 3);
         w.celebrate("A baby!");
@@ -1429,35 +1436,13 @@ export class Tribe {
     return this.erased.some((e) => e.kind === kind && Math.hypot(e.x - x, e.y - y) < r);
   }
 
-  /** A spot for Auto's next home: the usual one, or (if the player cleared it) the next free one round camp. */
-  private freeHomeSpot(w: World, x: number, y: number, n: number, radius: number) {
-    if (!this.vetoed("shelter", x, y)) return { x, y };
-    const c = w.camp;
-    for (let k = 1; k < 12; k++) {
-      const a = -0.4 + (n + k) * 0.9;
-      const px = c.x + Math.cos(a) * radius * (1 + Math.floor(k / 6) * 0.4);
-      const py = c.y + 50 + Math.sin(a) * radius * 0.6 * (1 + Math.floor(k / 6) * 0.4);
-      if (!this.vetoed("shelter", px, py)) return { x: px, y: py };
-    }
-    return null;
-  }
-
   /** What an un-bossed tribe decides to build next (each plan happens once; kids can erase/redo). */
   private autoPlan(w: World) {
     const c = w.camp;
     const f = w.flags;
     // animal pens, stables + perches belong outside the walls
     moveAnimalBuildingsOut(w);
-    // full camp → another hut
-    if (c.learned.has("shelter") && w.humans.length >= this.capacity(w) && !c.activeShelter(w) && w.shelters.length < 30) {
-      const n = w.shelters.length;
-      const a = -0.4 + n * 0.9;
-      const R = CAMP_LEVELS[this.level].radius * 0.5;
-      const spot = homeSpot(w);
-      const at = this.freeHomeSpot(w, spot?.x ?? c.x + Math.cos(a) * R, spot?.y ?? c.y + 50 + Math.sin(a) * R * 0.6, n, R);
-      if (at) c.addShelter(w, at.x, at.y);
-      if (at) w.toast("🛖", spot?.founded ? "The camp is full: the tribe is starting a new neighbourhood out in the land!" : "The tribe planned a new hut so the camp can grow!", spot?.x, spot?.y);
-    }
+    // Housing expansion is a player decision: builders finish requested rooms.
     if (c.learned.has("farming") && !f.has("planFarms")) {
       const a = this.addFarm(w, c.x - 120, c.y + 150);
       const b = this.addFarm(w, c.x - 30, c.y + 165);
@@ -1746,17 +1731,6 @@ export class Tribe {
     this.improvedAt = w.elapsed;
     const c = w.camp;
     const adults = w.humans.filter((h) => !h.child && !h.stranger).length;
-    if (c.learned.has("shelter") && adults >= this.capacity(w) * 0.8 && !c.activeShelter(w) && w.shelters.length < 30) {
-      const n = w.shelters.length;
-      const a = -0.4 + n * 0.9;
-      const radius = CAMP_LEVELS[this.level].radius * 0.5;
-      const spot = homeSpot(w);
-      const at = this.freeHomeSpot(w, spot?.x ?? c.x + Math.cos(a) * radius, spot?.y ?? c.y + 50 + Math.sin(a) * radius * 0.6, n, radius);
-      if (!at) return;
-      c.addShelter(w, at.x, at.y);
-      w.toast("🛖", spot?.founded ? "Auto started a new neighbourhood out in the land: a first home, then a fire and a store." : "Auto planned another home for the growing camp.", spot?.x, spot?.y);
-      return;
-    }
     if (c.learned.has("farming") && this.foodTotal(w) < adults * 2 && this.farms.length < Math.min(8, Math.ceil(adults / 8))) {
       for (let i = 0; i < 16; i++) {
         const a = i * Math.PI / 8;
@@ -1800,8 +1774,7 @@ export class Tribe {
     if (c.learned.has("fire") && !w.colony.buildings.some((b) => b.kind === "waterStore") && plan("waterStore")) return;
     if (c.learned.has("axe") && !w.colony.buildings.some((b) => b.kind === "storage") && plan("storage")) return;
     if (c.learned.has("medicine") && !w.colony.buildings.some((b) => b.kind === "healer") && plan("healer")) return;
-    const home = w.shelters.filter((s) => shelterDone(s) && !s.up && HOUSING[s.tier + 1] && (!HOUSING[s.tier + 1].polygon || w.civ.polygonAge)).sort((a, b) => a.tier - b.tier)[0];
-    if (home && c.startUpgrade(w, home)) return;
+    // Bed capacity only increases when the player orders an addition or upgrade.
     const tower = this.towers.find((t) => t.stage >= TOWER_STAGES.length && t.hp > 0 && !t.stone && !t.up);
     if (tower && c.learned.has("stonewall") && this.upgradeTower(w, tower)) return;
     const wall = this.walls.find((wl) => wl.built >= 1 && wl.hp > 0 && wl.kind === "palisade" && !wl.upgrade);
@@ -2194,7 +2167,7 @@ export function roleThink(w: World, h: Human): boolean {
   switch (role) {
     case "dragonSlayer": {
       // a wild dragon troubling the camp: go after it; otherwise drill
-      const dr = w.dragons.list.find((d) => d.state !== "leave" && d.state !== "flee" && d.state !== "perch" && Math.hypot(d.x - w.camp.x, d.y - w.camp.y) < 900);
+      const dr = w.dragons.list.find((d) => w.diplomacy.hostileDragon(d) && d.state !== "leave" && d.state !== "flee" && d.state !== "perch" && Math.hypot(d.x - w.camp.x, d.y - w.camp.y) < 900);
       if (dr && wp) {
         h.order = { kind: "hunt", id: dr.id };
         return false;
@@ -2412,6 +2385,7 @@ function guardAt(w: World, h: Human, x: number, y: number, wp: Weapon | null, to
   }
   if (wp && !wp.melee) {
     for (const dr of w.dragons.list) {
+    if (!w.diplomacy.hostileDragon(dr)) continue;
       if (dr.z > 260) continue;
       const dist = Math.hypot(dr.x - h.x, dr.y - h.y);
       if (dist < bd + 60) {
