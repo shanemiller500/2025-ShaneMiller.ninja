@@ -20,7 +20,7 @@ import { sizeOf } from "./dinos";
 import { shelterTiles, tileOf, TOWER_Z, WALK_Z } from "./nav";
 import { P } from "./particles";
 import { hash2 } from "./rng";
-import { LM, REGION, isWalkTile, isWaterTile } from "./terrain";
+import { LM, RANGES, REGION, isWalkTile, isWaterTile } from "./terrain";
 import { type Chariot, type DragonHunt, MAP_H, MAP_W, OLD_MAP_H, OLD_MAP_W, PREV_MAP_W, T, TILE, type Building, type BuildingKind, type Dino, type Human, type NodeKind, type ResNode, type Resource, type Scorpion, type WaterWagon } from "./types";
 import type { World } from "./world";
 import type { ShieldLevels } from "./dragonShield";
@@ -354,6 +354,18 @@ export class Colony {
     place("iron", 3, (t) => walk(t), { x: frost.x, y: frost.y, r: 11 });
     place("gold", 2, (t, tx, ty) => walk(t) && nextTo(tx, ty, (o) => o === T.Mountain));
     place("gold", 1, (t) => walk(t), { x: frost.x, y: frost.y, r: 9 });
+    // the mountain ranges (terrain generation 5): ore up on their slopes (iron + stone everywhere, silver
+    // high on the snowy ones, gold now and then), worth a trek over the pass
+    for (let k = 0; k < RANGES.length; k++) {
+      if (w.terrain.gen < 5) break;
+      const rg = RANGES[k];
+      const mid = rg.pts[Math.floor(rg.pts.length / 2)];
+      const up = (min: number) => (t: T, tx: number, ty: number) => walk(t) && w.terrain.range[ty * MAP_W + tx] === k + 1 && w.terrain.rangeHeight[ty * MAP_W + tx] > min;
+      place("iron", 2, up(0.4), { x: mid[0], y: mid[1], r: 46 });
+      place("stone", 2, up(0.3), { x: mid[0], y: mid[1], r: 46 });
+      place(rg.snowy ? "silver" : "copper", 1, up(0.5), { x: mid[0], y: mid[1], r: 46 });
+      if (k % 2 === 1) place("gold", 1, up(0.55), { x: mid[0], y: mid[1], r: 46 });
+    }
     place("obsidian", 4, (t) => t === T.Basalt || t === T.Volcano);
     place("salt", 3, (t, tx, ty) => t === T.Sand && w.terrain.salt[ty * MAP_W + tx + 1] + w.terrain.salt[(ty + 1) * MAP_W + tx] > 0);
     place("tar", 3, (t, tx, ty) => walk(t) && nextTo(tx, ty, (o) => o === T.Tar));

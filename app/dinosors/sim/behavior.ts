@@ -29,6 +29,7 @@ import { meetRider, partnerThink } from "./riders";
 import { leaveWalls, outsideSpot } from "./dinoBounds";
 import { isDinoScorpion, scorpionAct, scorpionThink } from "./dinoScorpions";
 import { isSnowBeast, snowAct, snowThink } from "./snowBeasts";
+import { homeRange, isMountainBeast, mountainThink, rangeWander } from "./mountainLife";
 import { zooAct, zooThink } from "./zoo";
 import { coolDown, isLavaFolk, lavaAct, lavaThink } from "./lavaFolk";
 import { isRiverBeast, riverAct, riverThink } from "./riverBeasts";
@@ -165,6 +166,11 @@ function awayFrom(w: World, d: Dino, fx: number, fy: number, dist = 360) {
 }
 
 function wanderTarget(w: World, d: Dino, def: SpeciesDef) {
+  // the mountain animals roam their own range, round home (mountainLife.ts)
+  if (isMountainBeast(d) && !d.owner) {
+    const spot = rangeWander(w, d);
+    if (spot) return spot;
+  }
   // befriended dinos potter about near home (the pen, or just outside camp)
   if (d.owner) {
     const home = battleHome(w, d);
@@ -418,8 +424,8 @@ function thinkWalker(w: World, d: Dino, def: SpeciesDef) {
   }
   if (d.state === "sleep") return;
 
-  // 7. storms + blizzards → huddle under trees
-  if ((w.weather.storm > 0.5 || w.weather.snow > 0.7) && def.diet === "herbivore" && d.state !== "shelter" && !d.owner) {
+  // 7. storms + blizzards → huddle under trees (not the mountain goats + bighorns: they're made for it)
+  if ((w.weather.storm > 0.5 || w.weather.snow > 0.7) && def.diet === "herbivore" && d.state !== "shelter" && !d.owner && !isMountainBeast(d)) {
     const t = w.terrain.tileAt(d.x, d.y);
     if (t !== T.Forest && t !== T.Jungle) {
       const spot = w.terrain.findTile(d.x, d.y, 700, (t) => t === T.Forest || t === T.Jungle, w.rng, 30);
@@ -446,8 +452,12 @@ function thinkWalker(w: World, d: Dino, def: SpeciesDef) {
   // 8. eggs
   if (!baby && d.layT <= 0 && d.hunger < 0.5 && d.thirst < 0.5 && d.health > 0.7 && w.canLayEgg(d.species) && !d.migrant) {
     const a = w.rng() * Math.PI * 2;
-    const r = w.rng() * 3 * TILE;
-    setState(d, "nest", LM.nest.x * TILE + Math.cos(a) * r, LM.nest.y * TILE + Math.sin(a) * r);
+    // the mountain animals raise their young up on their own range, at home (mountainLife.ts)
+    const mtn = isMountainBeast(d) && homeRange(w, d) >= 0;
+    const r = w.rng() * (mtn ? 1 : 3) * TILE;
+    const nx = mtn ? d.homeX : LM.nest.x * TILE;
+    const ny = mtn ? d.homeY : LM.nest.y * TILE;
+    setState(d, "nest", nx + Math.cos(a) * r, ny + Math.sin(a) * r);
     return;
   }
 
@@ -1358,6 +1368,8 @@ export function thinkDino(w: World, d: Dino) {
   if (isDinoScorpion(d) && scorpionThink(w, d)) return;
   // the snowy peaks' animals keep to the cold; the Yeti guards its cave (snowBeasts.ts)
   if (isSnowBeast(d) && snowThink(w, d)) return;
+  // the mountain ranges' goats, bighorns + lions keep to their own range (mountainLife.ts)
+  if (isMountainBeast(d) && mountainThink(w, d)) return;
   // a Neanderthal clan's tamed beast lives in their pen (clanLife.ts)
   if (d.clan && !d.raider && clanDinoThink(w, d)) return;
   if (d.raider) {

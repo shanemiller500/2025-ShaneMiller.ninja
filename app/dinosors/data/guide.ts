@@ -237,6 +237,8 @@ export const HELP: HelpSection[] = [
       "The desert: dunes, a dry riverbed, oases with palms, rock outcrops with caves. Camels live here, and so do the Sand People.",
       "🦂 Dinosaur Scorpions (a fantasy beast, not the war machine!) guard rocky dens in the desert + by the lava fields. Their sting leaves you dizzy.",
       "🏔️ The Great Peaks: bare rock crests, snowfields, glaciers, cliffs, waterfalls and passes. It's cold up there: bring furs.",
+      "⛰️ In new worlds, mountain ranges divide the lands: the rocky Mossback Ridge (west of camp), the snow-capped Sentinel Range (past the volcano), the red Redrock Range (past the desert) and the snow-capped Icefang Range (before the far east). Their crests can't be climbed: cross at the passes (a worn trail over the saddle), or follow a stream's gorge. Pine forests cloak their lower slopes.",
+      "🐐 Up on the ranges live mountain goats (the snowy ones), bighorn sheep (the rocky ones) and mountain lions (all of them), and there's iron, stone, copper, silver and gold on their slopes. Every range is white in winter; the snow-capped ones stay white all year.",
       "❄️ Ice Dragons nest high in the snow. Their frost slows and chills. Steal an egg (or use the 🥚 Eggs tool) and raise one like any dragon.",
       "🛕 Mountain Monks walk the high paths in a line. They're peaceful and nobody ever harms them. Once a year they make an offering to the dragons.",
       "Caves out east hide things: walk someone up to one.",

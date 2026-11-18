@@ -2,6 +2,7 @@
 /*  Dinosaur entities: spawning, needs, steering + per-frame motion.   */
 /*  Decisions live in behavior/*; this file only moves bodies.         */
 /* ------------------------------------------------------------------ */
+import { sureFooted } from "./mountainLife";
 import { DINO_NAMES } from "../data/facts";
 import { sp } from "../data/species";
 import { P } from "./particles";
@@ -325,7 +326,7 @@ function steer(w: World, d: Dino, speed: number, dt: number) {
   if (def.move === "walk") {
     const ground = w.terrain.tileAt(d.x, d.y);
     // camels stride over soft sand that slows everyone else
-    mul = (d.species === "camel" && isSandTile(ground) ? 1.15 : groundSpeed(ground)) * (1 - w.snow.at(d.x, d.y) * 0.3) * (w.nav.cost[tileOf(d.x, d.y)] < 0.9 ? 1.1 : 1);
+    mul = (d.species === "camel" && isSandTile(ground) ? 1.15 : sureFooted(d, ground) ? 1.05 : groundSpeed(ground)) * (1 - w.snow.at(d.x, d.y) * 0.3) * (w.nav.cost[tileOf(d.x, d.y)] < 0.9 ? 1.1 : 1);
   }
   // dizzy from a Dinosaur Scorpion's sting, or frozen stiff by an Ice Dragon
   if (d.slowT) mul *= 0.45;

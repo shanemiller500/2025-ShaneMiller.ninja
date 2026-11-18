@@ -1616,10 +1616,17 @@ function cat(k: Ctx2) {
     c.quadraticCurveTo(cx - rx - tl * 0.55, cy + ry * 1.4 + sw * 0.4, cx - rx - tl * 0.95, cy - ry * 0.4 + sw);
     c.stroke();
   }
-  // dark rings on the tail
+  // dark rings on a spotted cat's tail; a plain one (the mountain lion) has a dark tip
+  const spotted = def.look.pattern === "spots";
+  if (!spotted) {
+    c.fillStyle = k.accent;
+    c.beginPath();
+    c.arc(cx - rx - tl * 0.95, cy - ry * 0.4 + sw, L * 0.045, 0, Math.PI * 2);
+    c.fill();
+  }
   c.strokeStyle = k.accent;
   c.lineWidth = L * 0.014;
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= (spotted ? 4 : 0); i++) {
     const f = i / 5;
     const x = cx - rx - tl * 0.95 * f;
     const y = cy + ry * (1.1 * Math.sin(f * Math.PI)) + sw * f;
@@ -1638,7 +1645,7 @@ function cat(k: Ctx2) {
   // rosettes: open dark rings, the snow leopard's smoky spots
   c.strokeStyle = shade(def.look.accent, 0.1);
   c.lineWidth = Math.max(0.8, L * 0.01);
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < (spotted ? 9 : 0); i++) {
     const x = cx - rx * 0.75 + ((i * 37) % 10) / 10 * rx * 1.5;
     const y = cy - ry * 0.55 + ((i * 53) % 10) / 10 * ry * 0.85;
     c.beginPath();
@@ -1680,6 +1687,144 @@ function cat(k: Ctx2) {
   }
   // pale green-grey eyes
   eye(k, hx + hs * 0.35, hy - hs * 0.15, hs * 0.17, p.mouth > 0.3);
+}
+
+/**
+ * A mountain goat / bighorn sheep (the mountain ranges, mountainLife.ts): a stocky climber on short sturdy
+ * legs with a deep chest, a flick of a tail, a beard + shaggy woolly skirt (`fur`), a white rump patch
+ * (pattern "bands") and horns: short black daggers swept back (`goat`) or great curling coils (`ram`).
+ */
+function goat(k: Ctx2) {
+  const { c, L, def, p } = k;
+  const s = def.shape;
+  const legH = L * 0.26 * (s.legs ?? 1) * (1 - p.lie * 0.78);
+  const rx = L * 0.25;
+  const ry = L * 0.14;
+  const cy = -legH - ry * 0.5;
+  const thick = L * 0.055;
+  // far legs
+  pillarLeg(k, -rx * 0.6, cy + ry * 0.2, legH + ry * 0.3, p.walk + Math.PI, k.dark, thick);
+  pillarLeg(k, rx * 0.55, cy + ry * 0.2, legH + ry * 0.3, p.walk, k.dark, thick);
+  // a short tail, flicking
+  c.beginPath();
+  c.ellipse(-rx * 1.0, cy - ry * 0.55 + Math.sin(p.t * 4) * L * 0.006, L * 0.03, L * 0.045, -0.5, 0, Math.PI * 2);
+  fillStroke(k, k.body);
+  // body: a deep chest, higher at the shoulders
+  c.beginPath();
+  c.moveTo(-rx, cy);
+  c.quadraticCurveTo(-rx * 0.9, cy - ry * 1.05, 0, cy - ry * 1.05);
+  c.quadraticCurveTo(rx * 0.85, cy - ry * 1.4, rx * 1.02, cy - ry * 0.2);
+  c.quadraticCurveTo(rx * 0.95, cy + ry * 1.05, 0, cy + ry * 0.95);
+  c.quadraticCurveTo(-rx * 0.95, cy + ry * 0.95, -rx, cy);
+  c.closePath();
+  fillStroke(k, k.body);
+  c.fillStyle = k.belly;
+  c.beginPath();
+  c.ellipse(rx * 0.05, cy + ry * 0.5, rx * 0.62, ry * 0.35, 0, 0, Math.PI * 2);
+  c.fill();
+  // a bighorn's white rump patch
+  if (def.look.pattern === "bands") {
+    c.beginPath();
+    c.ellipse(-rx * 0.82, cy - ry * 0.05, rx * 0.22, ry * 0.6, 0.15, 0, Math.PI * 2);
+    c.fill();
+  }
+  // a mountain goat's shaggy woolly skirt + a hump of wool on the shoulders
+  if (s.fur) {
+    c.fillStyle = shade(def.look.body, -0.08);
+    c.beginPath();
+    for (let i = 0; i < 7; i++) {
+      const x = -rx * 0.75 + (i / 6) * rx * 1.45;
+      c.moveTo(x, cy + ry * 0.7);
+      c.lineTo(x + L * 0.018, cy + ry * 1.25 + (i % 2) * L * 0.012);
+      c.lineTo(x + L * 0.036, cy + ry * 0.7);
+    }
+    c.fill();
+    c.beginPath();
+    c.ellipse(rx * 0.5, cy - ry * 1.05, rx * 0.36, ry * 0.42, -0.15, 0, Math.PI * 2);
+    fillStroke(k, shade(def.look.body, 0.04));
+  }
+  mud(k, 0, cy, rx, ry);
+  // near legs
+  pillarLeg(k, -rx * 0.48, cy + ry * 0.45, legH, p.walk, k.body, thick * 1.05);
+  pillarLeg(k, rx * 0.62, cy + ry * 0.45, legH, p.walk + Math.PI, k.body, thick * 1.05);
+  // neck + head (down to graze, up to look round)
+  const graze = p.headDown;
+  const hs = L * 0.075 * (s.head ?? 1) * (1 + p.baby * 0.4);
+  const hx = rx * 1.25 + graze * L * 0.05;
+  const hy = cy - ry * 1.35 + graze * (legH + ry * 1.2) - p.headUp * L * 0.05;
+  c.lineCap = "round";
+  c.strokeStyle = OUTLINE;
+  c.lineWidth = L * 0.09 + k.lw * 2;
+  c.beginPath();
+  c.moveTo(rx * 0.72, cy - ry * 0.55);
+  c.lineTo(hx - hs * 0.3, hy + hs * 0.2);
+  c.stroke();
+  c.strokeStyle = k.body;
+  c.lineWidth = L * 0.09;
+  c.stroke();
+  // horns, behind the head
+  const hornA = def.look.accent;
+  if (s.horns === "ram") {
+    // great curling coils round the ear
+    for (const [wid, col] of [[hs * 0.5 + k.lw * 2, OUTLINE], [hs * 0.5, hornA]] as const) {
+      c.strokeStyle = col;
+      c.lineWidth = wid;
+      c.beginPath();
+      c.moveTo(hx - hs * 0.1, hy - hs * 0.5);
+      c.bezierCurveTo(hx - hs * 1.3, hy - hs * 1.55, hx - hs * 1.95, hy + hs * 0.15, hx - hs * 0.95, hy + hs * 0.75);
+      c.quadraticCurveTo(hx - hs * 0.35, hy + hs * 0.95, hx - hs * 0.25, hy + hs * 0.4);
+      c.stroke();
+    }
+    // ridges across the horn
+    c.strokeStyle = shade(hornA, -0.25);
+    c.lineWidth = Math.max(0.6, hs * 0.06);
+    for (let i = 1; i < 6; i++) {
+      const a = 2.4 + i * 0.55;
+      const cxr = hx - hs * 0.95;
+      const cyr = hy - hs * 0.15;
+      c.beginPath();
+      c.moveTo(cxr + Math.cos(a) * hs * 0.55, cyr + Math.sin(a) * hs * 0.55);
+      c.lineTo(cxr + Math.cos(a) * hs * 0.95, cyr + Math.sin(a) * hs * 0.95);
+      c.stroke();
+    }
+  } else if (s.horns === "goat") {
+    // short black daggers, swept back
+    for (const off of [0, 0.16]) {
+      for (const [wid, col] of [[hs * 0.2 + k.lw * 2, OUTLINE], [hs * 0.2, hornA]] as const) {
+        c.strokeStyle = col;
+        c.lineWidth = wid;
+        c.beginPath();
+        c.moveTo(hx - hs * 0.05 + off * hs, hy - hs * 0.45);
+        c.quadraticCurveTo(hx - hs * 0.45 + off * hs, hy - hs * 1.45, hx - hs * 0.95 + off * hs, hy - hs * 1.3);
+        c.stroke();
+      }
+    }
+  }
+  // the head: long + narrow, a soft muzzle
+  c.beginPath();
+  c.ellipse(hx, hy, hs, hs * 0.62, 0.35 + graze * 0.6, 0, Math.PI * 2);
+  fillStroke(k, k.body);
+  c.beginPath();
+  c.ellipse(hx + hs * 0.75, hy + hs * 0.38 + graze * hs * 0.2, hs * 0.38, hs * 0.3, 0.4, 0, Math.PI * 2);
+  fillStroke(k, shade(def.look.body, 0.05));
+  c.fillStyle = "#3b302a";
+  c.beginPath();
+  c.ellipse(hx + hs * 1.02, hy + hs * 0.35 + graze * hs * 0.2, hs * 0.09, hs * 0.07, 0, 0, Math.PI * 2);
+  c.fill();
+  // a goat's beard
+  if (s.fur) {
+    c.beginPath();
+    c.moveTo(hx + hs * 0.4, hy + hs * 0.5);
+    c.lineTo(hx + hs * 0.55, hy + hs * 1.4);
+    c.lineTo(hx + hs * 0.82, hy + hs * 0.6);
+    c.closePath();
+    fillStroke(k, shade(def.look.body, -0.06));
+  }
+  // ear
+  c.beginPath();
+  c.ellipse(hx - hs * 0.45, hy - hs * 0.3, hs * 0.32, hs * 0.13, -0.5, 0, Math.PI * 2);
+  fillStroke(k, k.body);
+  eye(k, hx + hs * 0.12, hy - hs * 0.12, hs * 0.16, false);
 }
 
 /**
@@ -1885,6 +2030,7 @@ const PAINTERS: Record<BodyPlan, (k: Ctx2) => void> = {
   camel,
   scorpion,
   cat,
+  goat,
   yeti,
   sauropod,
   ceratopsian,

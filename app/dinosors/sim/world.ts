@@ -81,6 +81,7 @@ import { SeaFolk } from "./seaFolk";
 import { SandFolk } from "./sandFolk";
 import { SnowFolk } from "./snowFolk";
 import { SNOW_SPECIES, SnowLife, snowMayLay } from "./snowBeasts";
+import { MOUNTAIN_SPECIES, MountainLife, mountainMayLay } from "./mountainLife";
 import { FolkGroups } from "./folkGroups";
 import { Hazards } from "./breath";
 import { Monks } from "./monks";
@@ -243,6 +244,8 @@ export class World {
   snowFolk: SnowFolk;
   /** the peaks' animals' numbers: snow leopards, Rimeclaws, Frosthorns, Glacierbacks, the Snow Rex + the Yeti (snowBeasts.ts) */
   snowLife: SnowLife;
+  /** the mountain ranges' animals: mountain lions, mountain goats + bighorn sheep (mountainLife.ts) */
+  mountainLife: MountainLife;
   /** how the Tree, Sea + Sand People keep together: families, patrols, raiding parties, caravans (folkGroups.ts) */
   groups = new FolkGroups();
   /** hot sand + frost left on the ground by dragon breath (breath.ts) */
@@ -317,6 +320,7 @@ export class World {
     this.sandFolk = new SandFolk(seed);
     this.snowFolk = new SnowFolk(seed);
     this.snowLife = new SnowLife(seed);
+    this.mountainLife = new MountainLife(seed);
     this.monks = new Monks(seed);
     this.groups = new FolkGroups(seed);
     this.fire.initFuel(this);
@@ -330,6 +334,7 @@ export class World {
       this.sandFolk.enabled = false;
       this.snowFolk.enabled = false;
       this.snowLife.enabled = false;
+      this.mountainLife.enabled = false;
       this.monks.enabled = false;
     }
   }
@@ -583,6 +588,8 @@ export class World {
   canLayEgg(s: SpeciesId) {
     // the snow animals: the legends never lay, the rest up to the peaks' number (snowBeasts.ts)
     if (SNOW_SPECIES.has(s)) return snowMayLay(this, s);
+    // the mountain ranges' animals, up to the ranges' number (mountainLife.ts)
+    if (MOUNTAIN_SPECIES.has(s)) return mountainMayLay(this, s);
     let n = 0;
     for (const d of this.dinos) if (d.species === s) n++;
     for (const e of this.eggs) if (e.species === s) n++;
@@ -948,6 +955,7 @@ export class World {
     this.population.update(this, dt);
     this.wildlife.update(this, dt);
     this.snowLife.update(this, dt);
+    this.mountainLife.update(this, dt);
     beastsTick(this, dt);
     lavaTick(this, dt);
     lavaBallsTick(this, dt);
@@ -1293,6 +1301,7 @@ export class World {
       sandFolk: this.sandFolk.serialize(this),
       snowFolk: this.snowFolk.serialize(this),
       snowLife: this.snowLife.serialize(),
+      mountainLife: this.mountainLife.serialize(),
       groups: this.groups.serialize(),
       monks: this.monks.serialize(),
       hazards: this.hazards.serialize(),
@@ -1460,6 +1469,7 @@ export class World {
     w.snowFolk.load(w, more.snowFolk);
     w.diplomacy.load((data as { diplomacy?: ReturnType<Diplomacy["serialize"]> }).diplomacy, w);
     w.snowLife.load(more.snowLife);
+    w.mountainLife.load((data as { mountainLife?: { seeded?: boolean } }).mountainLife);
     w.monks.load(w, more.monks);
     w.hazards.load(more.hazards);
     w.atlas.load(more.atlas);

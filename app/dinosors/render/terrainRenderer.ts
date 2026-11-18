@@ -8,7 +8,7 @@
 /*  chunks a frame (what's in view first, the rest in the background). */
 /* ------------------------------------------------------------------ */
 import { hash2, valueNoise } from "../sim/rng";
-import { CHUNKS_X, CHUNKS_Y, CHUNK_TILES, REGION, type Terrain } from "../sim/terrain";
+import { CHUNKS_X, CHUNKS_Y, CHUNK_TILES, RANGES, REGION, type Terrain } from "../sim/terrain";
 import { MAP_H, MAP_W, T, TILE } from "../sim/types";
 import { Q } from "./quality";
 import { STAMP, grainSheet, seasonTerrainStamps, terrainStamps } from "./terrainTex";
@@ -144,6 +144,7 @@ export class TerrainRenderer {
         const e = t.elev[ti];
         const water = k === T.Deep || k === T.Shallow || k === T.River;
         if (k === T.Sand && t.region[ti] === REGION.desert) [r, g, b] = seasonalTerrainColor(k, DESERT_SAND, this.season);
+        [r, g, b] = rangeRock(t, ti, k, r, g, b, 1);
         if ((k === T.Mountain || k === T.Rock || k === T.Cliff) && e > 0.55) {
           const snow = Math.min(1, (e - 0.55) * (k === T.Mountain ? 3.2 : 1.6) * 0.85);
           r += (SNOWCAP[0] - r) * snow;
@@ -243,6 +244,8 @@ export class TerrainRenderer {
           g += lit * 0.9;
           b += lit * 0.6;
         }
+        // a rocky range's own stone: mossy brown-grey, or the Redrock Range's red sandstone (banded)
+        [r, g, b] = rangeRock(t, ti, k, r, g, b, 0.8 + valueNoise(fx * 0.9, fy * 0.35, seed + 37) * 0.4);
         // high up, the rock goes grey and the snow comes down onto it
         if ((k === T.Mountain || k === T.Rock || k === T.Cliff) && e > 0.55) {
           const snow = Math.min(1, (e - 0.55) * (k === T.Mountain ? 3.2 : 1.6)) * (0.55 + valueNoise(fx * 0.7, fy * 0.7, seed + 33) * 0.6);
@@ -1088,4 +1091,15 @@ function detailTile(ctx: CanvasRenderingContext2D, tile: T, px: number, py: numb
       break;
     }
   }
+}
+
+/** Rocky mountain ranges' stone (terrain generation 5): warm brown-grey, the dry Redrock Range red sandstone. */
+const RANGE_STONE = { rock: [132, 112, 92], red: [168, 98, 66] } as const;
+function rangeRock(t: Terrain, i: number, k: T, r: number, g: number, b: number, amt: number): [number, number, number] {
+  const ri = t.range[i];
+  if (!ri || t.region[i] !== REGION.crags || (k !== T.Mountain && k !== T.Rock && k !== T.Cliff)) return [r, g, b];
+  const dry = !!RANGES[ri - 1]?.dry;
+  const c = dry ? RANGE_STONE.red : RANGE_STONE.rock;
+  const m = Math.min(1, (dry ? 0.72 : 0.5) * amt);
+  return [r + (c[0] - r) * m, g + (c[1] - g) * m, b + (c[2] - b) * m];
 }

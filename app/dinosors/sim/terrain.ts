@@ -147,7 +147,109 @@ const WADI: [number, number][] = [
 const EAST_LAKE = { x: 236, y: 95, rx: 7, ry: 4.5 };
 
 /** Big named regions (Terrain.region). 0 = the old valley + ordinary open country. */
-export const REGION = { none: 0, desert: 1, peaks: 2, oasis: 3 } as const;
+export const REGION = { none: 0, desert: 1, peaks: 2, oasis: 3, crags: 4, alps: 5 } as const;
+
+/* ------------------------------ the mountain ranges (generation 5) ------------------------------ */
+
+/**
+ * Mountain ranges between the map's sections (terrain generation 5). Each is a long ridge: an unbroken
+ * crest of bare mountain nobody can climb, steep slopes with cliff runs, scree + alpine meadows, then a
+ * pine-forest belt down its flanks. The only ways across are its passes (a worn trail over a saddle) and
+ * the gorges its streams cut. Snow-capped ones rise above the snow line and stay white all year; rocky ones
+ * stay just under it (bare rock, white only in winter, like the rest of the map). Each runs into the
+ * northern mountains or out into the sea (as sea cliffs), so there's no walking round the end.
+ */
+export interface MountainRange {
+  id: string;
+  name: string;
+  /** the crest line (tiles) */
+  pts: [number, number][];
+  /** half-width to the foot of the foothills (tiles) */
+  w: number;
+  /** above the snow line: white peaks + snowfields all year */
+  snowy: boolean;
+  /** dry country: scrub + bare rock lower down, not pine forest */
+  dry?: boolean;
+  /** the ways over: a line across the range (tiles) + how wide the saddle is */
+  passes: { name: string; pts: [number, number][]; r: number }[];
+}
+
+export const RANGES: MountainRange[] = [
+  {
+    id: "mossback", name: "Mossback Ridge", snowy: false, w: 7,
+    pts: [[42, 6], [42, 22], [40, 36], [37, 50], [40, 64], [38, 78], [39, 94], [38, 106]],
+    passes: [{ name: "Glade Pass", pts: [[32, 22], [50, 22]], r: 2.6 }, { name: "Jungle Pass", pts: [[30, 56], [47, 56]], r: 2.6 }, { name: "Beach Pass", pts: [[30, 84], [47, 84]], r: 3 }],
+  },
+  {
+    id: "sentinel", name: "Sentinel Range", snowy: true, w: 10,
+    pts: [[150, 6], [152, 22], [151, 38], [154, 56], [151, 72], [152, 88], [158, 99], [160, 108]],
+    passes: [{ name: "Ashfall Pass", pts: [[142, 42], [159, 42]], r: 2.8 }, { name: "Fossil Pass", pts: [[140, 64], [158, 64]], r: 3 }, { name: "Gull Pass", pts: [[141, 92], [158, 92]], r: 2.8 }],
+  },
+  {
+    id: "redrock", name: "Redrock Range", snowy: false, dry: true, w: 7,
+    pts: [[205, 54], [207, 68], [204, 82], [206, 96], [205, 110]],
+    passes: [{ name: "Red Gate", pts: [[197, 74], [214, 74]], r: 2.8 }, { name: "Saltwind Pass", pts: [[197, 95], [214, 95]], r: 3 }],
+  },
+  {
+    id: "icefang", name: "Icefang Range", snowy: true, w: 9,
+    pts: [[285, 4], [286, 24], [282, 44], [279, 64], [277, 84], [276, 108]],
+    passes: [{ name: "Pilgrim Pass", pts: [[273, 57], [293, 57]], r: 3 }, { name: "Southwind Pass", pts: [[268, 86], [286, 86]], r: 3 }],
+  },
+];
+
+/** The gorges: streams + rivers cut through any range they cross. */
+const GORGES = (gen: number) => [...STREAMS.filter((st) => gen >= st.gen).map((st) => st.pts), RIVER_EAST, RIVER_EAST_OUT];
+
+/** How high a mountain range stands at a tile: 0 off every range, ~1 on a crest. `crest` = the unclimbable ridge line. */
+export function rangeElev(x: number, y: number, seed: number, gen: number): { e: number; k: number; crest: boolean; raw: number; trail: boolean } {
+  let best = { e: 0, k: -1, crest: false, raw: 0, trail: false };
+  for (let k = 0; k < RANGES.length; k++) {
+    const r = RANGES[k];
+    const d0 = distToPolyline(x, y, r.pts);
+    if (d0 > r.w + 4) continue;
+    // ragged edges: the foothills wander in and out
+    const d = d0 + (fbm(x / 6, y / 6, seed + 71 + k * 13) - 0.5) * r.w * 0.55;
+    if (d >= r.w) continue;
+    // a broad high shoulder either side of the crest, falling away to the foothills
+    const core = smooth(r.w, 0, d) ** 0.55;
+    // knobbly crests + side spurs
+    const noise = fbm(x / 4, y / 4, seed + 81 + k * 7);
+    const spur = (1 - Math.abs(fbm(x / 5, y / 5, seed + 91 + k * 5) * 2 - 1)) ** 2;
+    const raw = core * (0.8 + 0.25 * noise) + spur * 0.12 * core;
+    // the passes: a saddle across the ridge
+    let carve = 1;
+    let trail = false;
+    for (const p of r.passes) {
+      const dp = distToPolyline(x, y, p.pts);
+      carve *= 1 - 0.9 * Math.exp(-((dp / p.r) ** 2));
+      if (dp < 0.9) trail = true;
+    }
+    // the gorges: water cuts right through
+    for (const g of GORGES(gen)) {
+      const ds = distToPolyline(x, y, g);
+      if (ds < 7) carve *= 1 - 0.95 * Math.exp(-((ds / 2.3) ** 2));
+    }
+    const e = raw * carve;
+    if (e <= best.e) continue;
+    best = { e, k, crest: d < 1.6 && carve > 0.5, raw, trail: trail && raw > 0.35 };
+  }
+  return best;
+}
+
+/** The pass a tile is in (right on its saddle), with its range: or null. (tiles) */
+export function passAt(x: number, y: number): { range: MountainRange; pass: MountainRange["passes"][number] } | null {
+  for (const r of RANGES) {
+    if (distToPolyline(x, y, r.pts) > r.w * 0.6) continue;
+    for (const p of r.passes) if (distToPolyline(x, y, p.pts) < p.r) return { range: r, pass: p };
+  }
+  return null;
+}
+
+/** Is (x, y) within a range's pass, where nothing must block the way? (tiles) */
+export function inPass(x: number, y: number, pad = 3.5) {
+  for (const r of RANGES) for (const p of r.passes) if (distToPolyline(x, y, p.pts) < p.r + pad) return true;
+  return false;
+}
 
 const smooth = (a: number, b: number, v: number) => {
   const k = Math.max(0, Math.min(1, (v - a) / (b - a)));
@@ -247,9 +349,10 @@ export const cliffY = (x: number, seed: number) => 30 + (fbm(x / 9, 5.1, seed + 
  */
 /**
  * The newest map generator: worlds started in the game use it (engine.ts). Generation 4 adds the small
- * streams through the old lands (STREAMS); the far east (the second volcano's land) is in every generation.
+ * streams through the old lands (STREAMS); generation 5 the mountain ranges between the sections (RANGES),
+ * with their passes, pine forests + mountain animals. The far east (the second volcano's land) is in every generation.
  */
-export const TERRAIN_GEN = 4;
+export const TERRAIN_GEN = 5;
 /**
  * What `new World(seed)` builds when no generation is given: the layout before the old lands' streams, so
  * every scripted / seeded world (the tests' worlds) keeps exactly the land it was written for.
@@ -283,6 +386,10 @@ export class Terrain {
   rapids = new Uint8Array(MAP_W * MAP_H);
   /** which big region a tile belongs to (REGION): the desert, the Great Peaks, an oasis */
   region = new Uint8Array(MAP_W * MAP_H);
+  /** which mountain range a tile is part of (RANGES index + 1; 0 = none), generation 5 */
+  range = new Uint8Array(MAP_W * MAP_H);
+  /** how high its range stands there (0..1; for the cliffs + the animals' slopes) */
+  rangeHeight = new Float32Array(MAP_W * MAP_H);
   /** bumps whenever a chunk's ground changes (renderer re-bakes it) */
   chunkVersion = new Uint32Array(CHUNKS_X * CHUNKS_Y);
   version = 0;
@@ -408,6 +515,13 @@ export class Terrain {
           }
         }
 
+        // the mountain ranges between the sections (generation 5)
+        if (this.gen >= 5) {
+          const rg = this.rangeTile(x, y, i, t, h, n2);
+          t = rg.t;
+          h = rg.h;
+        }
+
         // small streams (with rapids) running down to the sea
         for (const st of STREAMS) {
           if (this.gen < st.gen) continue;
@@ -422,13 +536,16 @@ export class Terrain {
           } else if ((t === T.Grass || t === T.Jungle || t === T.Forest) && n2 > 0.55) t = T.Sand;
         }
 
-        // ocean
-        if (y > cy + 1.5) {
+        // ocean (a mountain range runs on out into the shallows as sea stacks: no wading round its end)
+        if (this.gen >= 5 && y > cy + 1.5 && this.range[i] && this.rangeHeight[i] > 0.72 && y < cy + 6) {
+          t = T.Mountain;
+        } else if (y > cy + 1.5) {
           t = y > cy + 5 + (n2 - 0.5) * 4 ? T.Deep : T.Shallow;
           this.salt[i] = 1;
           h = -0.2;
         } else if (y > cy - 3 + (n2 - 0.5) * 2) {
-          if (t !== T.River) t = T.Sand;
+          // (a mountain range meets the sea in cliffs, not a beach to walk round it on)
+          if (t !== T.River && !(this.range[i] && (t === T.Mountain || t === T.Cliff || t === T.Rock || t === T.Snow))) t = T.Sand;
         }
 
         // camp + nesting area + caves
@@ -457,6 +574,78 @@ export class Terrain {
       }
     }
     this.carveEast();
+    if (this.gen >= 5) this.carveRanges();
+  }
+
+  /** One tile of a mountain range (generation 5): crest, slopes, scree, meadows, the forest belt, a pass's trail. */
+  private rangeTile(x: number, y: number, i: number, t: T, h: number, n2: number) {
+    // water, the volcanoes + their lava, tar and caves keep their ground
+    if (t === T.Deep || t === T.Shallow || t === T.River || t === T.Volcano || t === T.Basalt || t === T.Tar || t === T.Cave || t === T.Nest) return { t, h };
+    const r = rangeElev(x, y, this.seed, this.gen);
+    // (a pass's trail runs right over the low saddle, where the range has all but dipped away)
+    if (r.k < 0 || (r.e < 0.12 && !r.trail)) return { t, h };
+    const def = RANGES[r.k];
+    const e = r.e;
+    // (the northern mountains + the old cliffs stay as they are: a range never opens a way round its end)
+    const keep = (t === T.Mountain || t === T.Cliff) && !r.trail;
+    this.range[i] = r.k + 1;
+    this.rangeHeight[i] = e;
+    if (this.region[i] !== REGION.peaks) this.region[i] = def.snowy ? REGION.alps : REGION.crags;
+    h += e * 1.4;
+    const lift = (v: number) => (this.elev[i] = Math.max(this.elev[i], v));
+    if (keep) return { t, h };
+    if (r.crest || e > 0.8) {
+      t = T.Mountain;
+      lift(def.snowy ? Math.min(0.95, 0.62 + e * 0.33) : 0.5);
+    } else if (r.trail) {
+      // a worn trail over the saddle
+      t = T.Dirt;
+      lift(def.snowy ? Math.min(0.58, e) : Math.min(0.42, e * 0.6));
+    } else if (def.snowy) {
+      if (e > 0.64) t = n2 < 0.6 ? T.Snow : T.Rock;
+      else if (e > 0.5) t = n2 < 0.4 ? T.Grass : T.Rock;
+      else if (e > 0.3) t = n2 > 0.76 ? T.Grass : T.Forest;
+      else t = n2 > 0.45 ? T.Forest : T.Grass;
+      lift(e > 0.64 ? Math.max(0.62, e) : e > 0.5 ? e : e * 0.85);
+    } else {
+      // (rocky ranges stay under the snow line: no snow on them but winter's)
+      if (e > 0.6) t = T.Rock;
+      else if (e > 0.45) t = n2 > 0.45 ? T.Rock : T.Grass;
+      else if (def.dry) t = e > 0.28 ? (n2 > 0.55 ? T.Rock : T.Grass) : n2 > 0.6 ? T.Sand : T.Grass;
+      else if (e > 0.28) t = n2 > 0.78 ? T.Grass : T.Forest;
+      else t = n2 > 0.5 ? T.Forest : T.Grass;
+      lift(Math.min(0.5, e * 0.62));
+    }
+    return { t, h };
+  }
+
+  /** Cliff runs on a range's steepest slopes (never in a pass), after the main pass. */
+  private carveRanges() {
+    const s = this.seed;
+    const { tiles, rangeHeight: E0, range } = this;
+    const E = (x: number, y: number) => E0[Math.max(0, Math.min(MAP_H - 1, y)) * MAP_W + Math.max(0, Math.min(MAP_W - 1, x))];
+    for (let y = 1; y < MAP_H - 1; y++) {
+      for (let x = 1; x < MAP_W - 1; x++) {
+        const i = y * MAP_W + x;
+        if (!range[i]) continue;
+        const t = tiles[i] as T;
+        if (t !== T.Rock && t !== T.Snow && t !== T.Grass) continue;
+        const e = E0[i];
+        if (e < 0.5 || e > 0.8) continue;
+        const grad = Math.hypot(E(x + 1, y) - E(x - 1, y), E(x, y + 1) - E(x, y - 1));
+        if (grad < 0.22 || hash2(x, y, s + 67) < 0.5 || inPass(x, y)) continue;
+        tiles[i] = T.Cliff;
+      }
+    }
+    for (let y = 1; y < MAP_H - 1; y++) {
+      for (let x = 1; x < MAP_W - 1; x++) {
+        const i = y * MAP_W + x;
+        if (tiles[i] !== T.Cliff || !range[i]) continue;
+        let run = 0;
+        for (const j of [i - 1, i + 1, i - MAP_W, i + MAP_W, i - MAP_W - 1, i - MAP_W + 1, i + MAP_W - 1, i + MAP_W + 1]) if (tiles[j] === T.Cliff || tiles[j] === T.Mountain) run++;
+        if (run < 2) tiles[i] = T.Rock;
+      }
+    }
   }
 
   /**
@@ -549,7 +738,7 @@ export class Terrain {
         if (e < 0.46 || e > 0.79) continue;
         const grad = Math.hypot(E(x + 1, y) - E(x - 1, y), E(x, y + 1) - E(x, y - 1));
         // keep the passes open
-        if (grad < 0.2 || hash2(x, y, s + 61) < 0.45 || VALLEYS.some((v) => distToPolyline(x, y, v.pts) < 3.5)) continue;
+        if (grad < 0.2 || hash2(x, y, s + 61) < 0.45 || VALLEYS.some((v) => distToPolyline(x, y, v.pts) < 3.5) || (this.gen >= 5 && inPass(x, y))) continue;
         tiles[i] = T.Cliff;
       }
     }

@@ -81,7 +81,9 @@ export type BodyPlan =
   | "hippo"
   | "snake"
   // giant beavers + their dams (beavers.ts)
-  | "beaver";
+  | "beaver"
+  // the mountain ranges' goats + bighorn sheep (mountainLife.ts)
+  | "goat";
 
 export type SpeciesId =
   | "trex"
@@ -109,6 +111,10 @@ export type SpeciesId =
   | "dinoScorpion"
   // the snowy Great Peaks (snowBeasts.ts): a big cat, the rare Yeti, and cold-adapted (made-up) dinosaurs
   | "snowLeopard"
+  /** the mountain ranges' animals (mountainLife.ts) */
+  | "mountainLion"
+  | "mountainGoat"
+  | "bighorn"
   | "yeti"
   | "snowRex"
   | "frosthorn"
@@ -136,7 +142,7 @@ export interface DinoShape {
   arms?: number;
   snout?: number;
   crest?: "double" | "tube" | "ptera" | "small";
-  horns?: "trike" | "carno" | "nose";
+  horns?: "trike" | "carno" | "nose" | "goat" | "ram";
   frill?: boolean;
   plates?: boolean;
   club?: boolean;

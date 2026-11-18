@@ -14,6 +14,7 @@ import { SPECIES, sp } from "../data/species";
 import { addDino, findSpawnSpot, setState } from "./dinos";
 import { inTown } from "./feast";
 import { SNOW_SPECIES } from "./snowBeasts";
+import { MOUNTAIN_SPECIES } from "./mountainLife";
 import { RIVER_BEASTS } from "./riverBeasts";
 import { TILE, WORLD_W, type SpeciesId } from "./types";
 import type { World } from "./world";
@@ -103,7 +104,7 @@ export class Wildlife {
       const s = def.id;
       // the snowy peaks keep their own numbers (snowBeasts.ts SnowLife), and the volcano its Lava Monsters (lavaFolk.ts)
       // (and the river beasts theirs: riverBeasts.ts)
-      if (SNOW_SPECIES.has(s) || s === "lavaFolk" || RIVER_BEASTS.has(s) || s === "beaver") continue;
+      if (SNOW_SPECIES.has(s) || MOUNTAIN_SPECIES.has(s) || s === "lavaFolk" || RIVER_BEASTS.has(s) || s === "beaver") continue;
       const n = this.count(w, s);
       // gone (or nearly): a mother comes home and lays a clutch
       if (n < MIN_KEEP && (this.backT[s] ?? 0) <= 0) {
@@ -136,7 +137,7 @@ export class Wildlife {
   /** A new spell: a couple of species boom, a couple go lean, the rest settle back to normal. */
   shuffle(w: World) {
     this.spellT = SPELL[0] + w.rng() * (SPELL[1] - SPELL[0]);
-    const ids = SPECIES.map((d) => d.id).filter((s) => !SNOW_SPECIES.has(s) && s !== "lavaFolk" && !RIVER_BEASTS.has(s) && s !== "beaver");
+    const ids = SPECIES.map((d) => d.id).filter((s) => !SNOW_SPECIES.has(s) && !MOUNTAIN_SPECIES.has(s) && s !== "lavaFolk" && !RIVER_BEASTS.has(s) && s !== "beaver");
     for (const s of ids) this.boom[s] = 1;
     const pickOut = (n: number) => {
       const out: SpeciesId[] = [];
