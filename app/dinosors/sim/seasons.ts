@@ -76,6 +76,14 @@ export function season(w: World) {
   return seasonAt(w.day).def;
 }
 
+/** Move the calendar forward to a chosen season, retaining the day when it is already active. */
+export function dayForSeason(day: number, id: SeasonId) {
+  const current = seasonAt(day);
+  const target = SEASONS.findIndex((s) => s.id === id);
+  const ahead = (target - (current.index % 4) + 4) % 4;
+  return ahead === 0 ? day : (current.index + ahead) * SEASON_DAYS + 1;
+}
+
 /** Game hours since the world began (the calendar the almanac + forecasts use). */
 export const hoursOf = (w: World) => (w.day - 1) * 24 + w.time;
 /** Game hours when season number n starts. */

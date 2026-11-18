@@ -450,11 +450,17 @@ export class Feedback {
     const inView = (x: number, y: number) => x > v.x0 - 40 && x < v.x1 + 40 && y > v.y0 - 40 && y < v.y1 + 80;
 
     // hits: anything in view that just lost health flashes and sheds a few specks
-    const hit = (id: number, hp: number, x: number, y: number, r: number, blood: boolean) => {
+    const hit = (id: number, hp: number, x: number, y: number, r: number, blood: boolean, hot = false) => {
       const was = this.hp.get(id);
       this.hp.set(id, hp);
       if (was === undefined || hp >= was - 0.004 || !inView(x, y) || zoom < 0.3) return;
       const big = was - hp > 0.12;
+      // burning (lava): an orange flare and sparks, not a white flash and blood
+      if (hot) {
+        this.flash(x, y - r * 0.6, r * (big ? 1.4 : 1.05), "#ff8a2a", 0.18);
+        w.particles.burst(P.Spark, x, y - r * 0.6, Math.round((big ? 5 : 2) * Q.particles), 70, { z: r * 0.6, vz: 50, g: 120, size: 1.8, max: 0.4, color: "#ffb03a" });
+        return;
+      }
       this.flash(x, y - r * 0.6, r * (big ? 1.5 : 1.15), "#ffffff");
       if (blood) w.particles.burst(P.Crumb, x, y - r * 0.6, Math.round((big ? 7 : 3) * Q.particles), 60, { z: r * 0.6, vz: 50, g: 320, size: 1.5, max: 0.55, color: "#b3261e" });
       else w.particles.burst(P.Dust, x, y - r * 0.5, Math.round(4 * Q.particles), 40, { size: 5, max: 0.5, color: "rgba(230,220,200,0.6)" });
@@ -463,9 +469,9 @@ export class Feedback {
     this.scanT -= dt;
     if (this.scanT <= 0) {
       this.scanT = 0.08;
-      for (const h of w.humans) if (!h.under) hit(h.id, h.hp, h.x, h.y - h.z, 14, true);
-      for (const d of w.dinos) if (!d.under) hit(d.id, d.health, d.x, d.y - d.z, 22, true);
-      for (const b of w.rivals.brutes) hit(b.id, b.hp, b.x, b.y - b.z, 16, true);
+      for (const h of w.humans) if (!h.under) hit(h.id, h.hp, h.x, h.y - h.z, 14, true, (h.aflame ?? 0) > 0);
+      for (const d of w.dinos) if (!d.under) hit(d.id, d.health, d.x, d.y - d.z, 22, true, (d.aflame ?? 0) > 0);
+      for (const b of w.rivals.brutes) hit(b.id, b.hp, b.x, b.y - b.z, 16, true, (b.aflame ?? 0) > 0);
       if (this.hp.size > 4000) this.hp.clear();
     }
 

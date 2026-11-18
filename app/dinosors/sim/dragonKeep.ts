@@ -630,7 +630,7 @@ function burstTick(w: World, dr: Dragon, dt: number) {
   }
   const hit = (x: number, y: number, rr: number) => Math.hypot(x - ex, y - ey) < r + rr || Math.hypot(x - (mx + ex) / 2, y - (my + ey) / 2) < r * 0.6 + rr;
   for (const d of w.dinos) {
-    if (d.owner || d.under || sp(d.species).move === "swim" || !hit(d.x, d.y, sizeOf(d) * 0.3)) continue;
+    if (d.owner || d.under || sp(d.species).move === "swim" || d.species === "lavaFolk" || !hit(d.x, d.y, sizeOf(d) * 0.3)) continue;
     d.health -= 0.1 * st.fire;
     d.fear = 1;
     emote(d, "🔥", 1.2);
@@ -650,7 +650,7 @@ function burstTick(w: World, dr: Dragon, dt: number) {
   if (!ours) for (const b of w.colony.buildings) if (hit(b.x, b.y, 20)) b.hp -= (b.kind === "blacksmith" || b.kind === "roost" || b.kind === "hatchery" ? 2 : 12) * st.fire;
   if (!ours) for (const s of w.shelters) if (s.stage > 0 && hit(s.x, s.y, 20)) s.hp = Math.max(0, s.hp - (s.tier >= 4 ? 0.005 : s.tier >= 3 ? 0.02 : 0.07) * st.fire);
   const wl = w.tribe.wallAt(tx, ty);
-  if (!ours && wl && wl.built >= 1) wl.hp -= (wl.kind === "palisade" ? 18 : 3) * st.fire;
+  if (!ours && wl && wl.built >= 1) wl.hp -= (wl.kind === "palisade" ? 18 : wl.kind === "lava" ? 0.5 : 3) * st.fire;
   // Scorpions in the cone: friendly fire is ruled out by side, not by luck (factions.ts)
   hitScorpionsAt(w, ex, ey, r + 20, 12 * st.fire, sideOfDragon(dr), "breath");
   // Neanderthal camps: their stores + shelters burn

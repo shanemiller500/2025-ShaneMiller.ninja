@@ -3,7 +3,7 @@
 /*  landmarks kids can learn) + seeded noise for natural edges.        */
 /* ------------------------------------------------------------------ */
 import { fbm, hash2 } from "./rng";
-import { MAP_H, MAP_W, OLD_MAP_W, T, TILE } from "./types";
+import { MAP_H, MAP_W, OLD_MAP_W, PREV_MAP_W, T, TILE } from "./types";
 
 export const CHUNK_TILES = 16;
 export const CHUNKS_X = Math.ceil(MAP_W / CHUNK_TILES);
@@ -41,7 +41,50 @@ export const LM = {
   /** the high ledge where the monks meet the dragons once a year */
   altar: { x: 257, y: 21 },
   eastLake: { x: 236, y: 95 },
+  /** the second volcano, out in the far east (the land added at the map's east edge) + its old lava field */
+  volcano2: { x: 318, y: 50 },
+  lavaField2: { x: 322, y: 66 },
 } as const;
+
+/* ------------------------------ streams ------------------------------ */
+
+/**
+ * Small streams: narrow, wadeable water (River tiles) running down to the sea, with stretches of rapids
+ * (white water over rocks: `rapids` on the segments listed). The far-east ones are in every world (that
+ * land is new for everyone); the rest only in worlds made since (terrain generation 4), so no older
+ * save finds a stream running through its buildings.
+ */
+export const STREAMS: { pts: [number, number][]; rapids: number[]; gen: number }[] = [
+  // the far east: down from the northern mountains, past the second volcano, to the sea
+  { pts: [[298, 12], [296, 30], [298, 46], [300, 62], [304, 80], [306, 96], [308, 107]], rapids: [0, 1, 4], gen: 0 },
+  // a brook along the far east's western edge
+  { pts: [[289, 66], [291, 80], [288, 94], [290, 106]], rapids: [1], gen: 0 },
+  // through the western jungle
+  { pts: [[14, 34], [16, 50], [22, 66], [30, 80], [35, 93]], rapids: [0, 2], gen: 4 },
+  // south of the volcano, through the grassland
+  { pts: [[132, 52], [136, 66], [134, 80], [138, 96], [140, 103]], rapids: [1, 3], gen: 4 },
+  // the eastern lake country
+  { pts: [[212, 60], [214, 76], [218, 92], [222, 105]], rapids: [0, 2], gen: 4 },
+];
+
+/** Distance from a point to a polyline, and which segment is nearest. */
+function nearSeg(px: number, py: number, pts: [number, number][]) {
+  let best = Infinity;
+  let seg = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i];
+    const [bx, by] = pts[i + 1];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+    const d = Math.hypot(ax + dx * t - px, ay + dy * t - py);
+    if (d < best) {
+      best = d;
+      seg = i;
+    }
+  }
+  return { d: best, seg };
+}
 
 /* ------------------------------ the eastern lands ------------------------------ */
 
@@ -202,7 +245,16 @@ export const cliffY = (x: number, seed: number) => 30 + (fbm(x / 9, 5.1, seed + 
  *      Great Peaks (a real snowy massif) rise beyond it. Older worlds keep their own valley
  *      exactly as it was and get the new eastern lands beside it.
  */
-export const TERRAIN_GEN = 3;
+/**
+ * The newest map generator: worlds started in the game use it (engine.ts). Generation 4 adds the small
+ * streams through the old lands (STREAMS); the far east (the second volcano's land) is in every generation.
+ */
+export const TERRAIN_GEN = 4;
+/**
+ * What `new World(seed)` builds when no generation is given: the layout before the old lands' streams, so
+ * every scripted / seeded world (the tests' worlds) keeps exactly the land it was written for.
+ */
+export const BASE_TERRAIN_GEN = 3;
 /** where the two passes cut through the bigger range (map columns) */
 const PASSES = [63, 97];
 
@@ -227,6 +279,8 @@ export class Terrain {
   elev = new Float32Array(MAP_W * MAP_H);
   /** the desert's dry riverbed (drawn as cracked mud) */
   wadi = new Uint8Array(MAP_W * MAP_H);
+  /** white water: a stream's rapids (STREAMS) */
+  rapids = new Uint8Array(MAP_W * MAP_H);
   /** which big region a tile belongs to (REGION): the desert, the Great Peaks, an oasis */
   region = new Uint8Array(MAP_W * MAP_H);
   /** bumps whenever a chunk's ground changes (renderer re-bakes it) */
@@ -341,6 +395,31 @@ export class Terrain {
           const east = this.eastLands(x, y, i, t, h, n, n2);
           t = east.t;
           h = east.h;
+        }
+
+        // the far east's volcano: its old lava field, then the cone
+        if (x >= PREV_MAP_W - 20) {
+          if (Math.hypot(x - LM.lavaField2.x, y - LM.lavaField2.y) < 9 + (n2 - 0.5) * 5) t = T.Basalt;
+          const vd2 = Math.hypot(x - LM.volcano2.x, (y - LM.volcano2.y) * 1.15);
+          if (vd2 < vRad) {
+            t = vd2 < 2.6 ? T.Mountain : T.Volcano;
+            h += (1 - vd2 / (vRad + 3)) * 1.6;
+            this.elev[i] = Math.max(this.elev[i], 0.3);
+          }
+        }
+
+        // small streams (with rapids) running down to the sea
+        for (const st of STREAMS) {
+          if (this.gen < st.gen) continue;
+          const ns = nearSeg(x, y, st.pts);
+          const sw = 0.7 + n * 0.5;
+          if (ns.d >= sw + 1.3) continue;
+          if (t === T.Mountain || t === T.Cliff || t === T.Cave || t === T.Volcano || t === T.Tar || t === T.Deep) continue;
+          if (ns.d < sw) {
+            t = T.River;
+            h -= 0.05;
+            if (st.rapids.includes(ns.seg)) this.rapids[i] = 1;
+          } else if ((t === T.Grass || t === T.Jungle || t === T.Forest) && n2 > 0.55) t = T.Sand;
         }
 
         // ocean

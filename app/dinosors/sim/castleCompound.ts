@@ -1,22 +1,24 @@
 import { BUILDINGS } from "../data/colony";
 import { sp } from "../data/species";
 import { shelterDone } from "./build";
+import { canMove } from "./moving";
 import { MAP_W, TILE, type Dino, type Dragon, type Shelter } from "./types";
 import type { World } from "./world";
 
 export interface CastlePoint { x: number; y: number }
 export interface CastleWing extends CastlePoint { ids: number[] }
 export interface CastleCompound {
+  layout?: "keep";
+  halfWidth?: number;
   id: number;
   origin: CastlePoint;
   wings: CastleWing[];
   garden: CastlePoint;
   pads: CastlePoint[];
-  rest: CastlePoint;
+  rest: CastlePoint | null;
 }
 interface Rect { x: number; y: number; rx: number; ry: number }
 const scheduler = new WeakMap<World, { signature: string; next: number }>();
-const DX = 64, DY = 96, ROOMS_PER_WING = 3;
 
 /** Apartment ids remain intact: families, beds, upgrades and construction retain their identity. */
 export function wingUnits(w: World, s: Shelter): Shelter[] {
@@ -30,11 +32,8 @@ export function compoundOf(w: World, id: number) {
   return w.castleCompounds?.find((c) => c.wings.some((g) => g.ids.includes(id))) ?? null;
 }
 
-function slots(n: number): CastlePoint[] {
-  const out = [{ x: 0, y: 0 }, { x: DX, y: 0 }, { x: DX * 2, y: 0 }, { x: DX * 3, y: 0 }];
-  for (let row = 1; out.length < Math.max(n, 10); row++) out.push({ x: 0, y: row * DY }, { x: DX * 3, y: row * DY });
-  return out.slice(0, n);
-}
+export const keepHeight = (rooms: number) => Math.min(6, 3 + Math.ceil(rooms / 8)) * 24;
+const keepRect = (c: CastleCompound): Rect => ({ x: c.origin.x, y: c.origin.y - 16, rx: c.halfWidth ?? 64, ry: 24 });
 
 function fixedRects(w: World, moving: Set<number>): Rect[] {
   const rects: Rect[] = [];
@@ -49,8 +48,9 @@ function fixedRects(w: World, moving: Set<number>): Rect[] {
   for (const f of w.tribe.farms) rects.push({ x: f.x, y: f.y, rx: 38, ry: 26 });
   for (const f of w.campfires) rects.push({ x: f.x, y: f.y, rx: 24, ry: 20 });
   for (const s of w.colony.scorpions) if (s.mount === "ground") rects.push({ x: s.x, y: s.y, rx: 25, ry: 22 });
+  for (const p of w.props) rects.push({ x: p.x, y: p.y, rx: p.kind === "chamber" ? 56 : 24, ry: p.kind === "chamber" ? 48 : 24 });
   for (const c of w.castleCompounds ?? []) if (!c.wings.some((g) => g.ids.some((id) => moving.has(id)))) {
-    rects.push({ ...c.garden, rx: 54, ry: 46 }, ...c.pads.map((p) => ({ ...p, rx: 43, ry: 36 })), { ...c.rest, rx: 64, ry: 38 });
+    rects.push(...compoundRects(c));
   }
   return rects;
 }
@@ -59,6 +59,10 @@ const overlaps = (a: Rect, b: Rect) => Math.abs(a.x - b.x) < a.rx + b.rx && Math
 function courtyardRect(origin: CastlePoint, wings: CastleWing[]): Rect {
   const bottom = Math.max(origin.y + 202, ...wings.map((g) => g.y + 20));
   return { x: origin.x + 96, y: (origin.y + 16 + bottom) / 2, rx: 63, ry: (bottom - origin.y - 16) / 2 };
+}
+
+function compoundRects(c: CastleCompound): Rect[] {
+  return [c.layout === "keep" ? keepRect(c) : courtyardRect(c.origin, c.wings), ...(c.layout === "keep" ? [{ x: c.origin.x, y: c.origin.y + 30, rx: (c.halfWidth ?? 64) + 12, ry: 26 }] : []), ...c.pads.map((p) => ({ ...p, rx: 43, ry: 36 })), ...(c.rest ? [{ ...c.rest, rx: 64, ry: 38 }] : [])];
 }
 
 function safe(w: World, r: Rect, obstacles: Rect[]) {
@@ -80,41 +84,31 @@ function facility(w: World, target: CastlePoint, rx: number, ry: number, obstacl
   return null;
 }
 
-function plan(w: World, homes: Shelter[], origin: CastlePoint): CastleCompound | null {
+function plan(w: World, homes: Shelter[], origin: CastlePoint, halfWidth: number): CastleCompound | null {
   const obstacles = fixedRects(w, new Set(homes.map((s) => s.id)));
-  const wings: CastleWing[] = [];
-  const offsets = slots(Math.ceil(homes.length / ROOMS_PER_WING));
   const protectedCamp = homes.some((s) => w.tribe.walledIn(w, s.x, s.y));
-  for (let i = 0; i < offsets.length; i++) {
-    const p = { x: origin.x + offsets[i].x, y: origin.y + offsets[i].y };
-    if (protectedCamp && !w.tribe.walledIn(w, p.x, p.y)) return null;
-    const r = { x: p.x, y: p.y - 15, rx: 31, ry: 28 };
-    if (!safe(w, r, obstacles)) return null;
-    wings.push({ ...p, ids: homes.slice(i * ROOMS_PER_WING, (i + 1) * ROOMS_PER_WING).map((s) => s.id) });
-    obstacles.push(r);
-  }
-  const garden = { x: origin.x + DX * 1.5, y: origin.y + DY * 1.5 };
-  const gardenRect = { ...garden, rx: 54, ry: 46 };
-  const court = courtyardRect(origin, wings);
-  if (!safe(w, gardenRect, obstacles) || !safe(w, court, obstacles)) return null;
-  obstacles.push(court);
-  // A broad open approach stays clear between the residential wings and animal grounds.
+  if (protectedCamp && !w.tribe.walledIn(w, origin.x, origin.y)) return null;
+  const body = { x: origin.x, y: origin.y - 16, rx: halfWidth, ry: 24 };
+  if (!safe(w, body, obstacles) || !safe(w, { x: origin.x, y: origin.y + 24, rx: 14, ry: 12 }, obstacles)) return null;
+  obstacles.push(body);
+  const wings: CastleWing[] = [{ ...origin, ids: homes.map((s) => s.id) }];
+  // The garden is part of the roof, so a packed camp does not need an empty courtyard first.
+  const garden = { ...origin };
   const pads: CastlePoint[] = [];
-  for (const x of [origin.x + 16, origin.x + DX * 3 - 16]) {
-    const p = facility(w, { x, y: origin.y + Math.max(240, Math.ceil(offsets.length / 2) * 44) }, 43, 36, obstacles);
-    if (!p) return null;
+  for (const x of [origin.x - 72, origin.x + 72]) {
+    const p = facility(w, { x, y: origin.y + 92 }, 43, 36, obstacles);
+    if (!p) continue;
     pads.push(p); obstacles.push({ ...p, rx: 47, ry: 40 });
   }
-  const rest = facility(w, { x: garden.x, y: Math.max(...pads.map((p) => p.y)) + 94 }, 64, 38, obstacles, true);
-  if (!rest) return null;
-  return { id: homes[0].id, origin, wings, garden, pads, rest };
+  const rest = facility(w, { x: origin.x, y: Math.max(origin.y + 170, ...pads.map((p) => p.y + 94)) }, 64, 38, obstacles, true);
+  return { id: homes[0].id, layout: "keep", halfWidth, origin, wings, garden, pads, rest };
 }
 
 /** One bounded cleanup after housing changes; never shuffle the camp every frame. */
 export function organizeCastles(w: World, force = false) {
-  if (w.extinction.wasteland || w.tribe.raid || w.shelters.some((s) => s.lift || s.up)) return 0;
+  if (w.extinction.wasteland) return 0;
   w.castleCompounds = w.castleCompounds.filter((c) => c.wings.some((g) => g.ids.some((id) => w.shelters.some((s) => s.id === id))));
-  const eligible = w.shelters.filter((s) => s.tier >= 4 && shelterDone(s) && s.hp > 0 && !s.lift && !s.up).sort((a, b) => a.id - b.id);
+  const eligible = w.shelters.filter((s) => s.tier >= 4 && shelterDone(s) && s.hp > 0).sort((a, b) => a.id - b.id);
   const signature = eligible.map((s) => `${s.id}:${s.tier}`).join(",");
   const previous = scheduler.get(w);
   if (!force && previous && (previous.next > w.elapsed || previous.signature === signature)) return 0;
@@ -128,17 +122,25 @@ export function organizeCastles(w: World, force = false) {
       if (Math.hypot(other.x - homes[i].x, other.y - homes[i].y) <= 360) { remaining.delete(other); homes.push(other); }
     }
     homes.sort((a, b) => a.id - b.id);
-    if (homes.length < 3) continue;
+    if (homes.length < 2) continue;
+    if (homes.some((s) => s.lift || canMove(w, { kind: "shelter", id: s.id }))) {
+      scheduler.set(w, { signature: "", next: w.elapsed + 5 });
+      continue;
+    }
     const old = compoundOf(w, seed.id);
-    if (old && old.wings.flatMap((g) => g.ids).length === homes.length && homes.every((s) => old.wings.some((g) => g.ids.includes(s.id)))) continue;
-    const mean = { x: homes.reduce((n, s) => n + s.x, 0) / homes.length - DX * 1.5, y: homes.reduce((n, s) => n + s.y, 0) / homes.length - DY };
+    if (old?.layout === "keep" && homes.every((s) => old.wings[0].ids.includes(s.id))) continue;
+    const mean = { x: homes.reduce((n, s) => n + s.x, 0) / homes.length, y: homes.reduce((n, s) => n + s.y, 0) / homes.length };
     const candidates: CastlePoint[] = old ? [old.origin] : [];
+    candidates.push(...[...homes].sort((a, b) => Math.hypot(a.x - mean.x, a.y - mean.y) - Math.hypot(b.x - mean.x, b.y - mean.y)).map((s) => ({ x: s.x, y: s.y })));
     for (let ring = 0; ring <= 8; ring++) for (let k = 0; k < (ring ? 12 : 1); k++) {
       const a = k * Math.PI / 6;
       candidates.push({ x: Math.round((mean.x + Math.cos(a) * ring * 48) / TILE) * TILE + TILE / 2, y: Math.round((mean.y + Math.sin(a) * ring * 48) / TILE) * TILE });
     }
     let result: CastleCompound | null = null;
-    for (const p of candidates) { result = plan(w, homes, p); if (result) break; }
+    for (const width of [64, 48, 32]) {
+      for (const p of candidates) { result = plan(w, homes, p, width); if (result) break; }
+      if (result) break;
+    }
     if (!result) { scheduler.set(w, { signature: "", next: w.elapsed + 30 }); continue; }
     // Commit together only after every room, garden and animal space has a valid location.
     for (const wing of result.wings) for (const id of wing.ids) {
@@ -156,14 +158,14 @@ export function organizeCastles(w: World, force = false) {
   if (moved) {
     w.shelterVersion++; w.tribe.zoneT = 0;
     w.population.assignHomes(w);
-    w.toast("🏰", "Castle tidied: shared residential wings, a garden, dragon landing pads and a dinosaur rest yard. Every resident keeps their bed.");
+    w.toast("🏰", "Homes combined into one castle. Every resident keeps their room and bed.");
   }
   return moved;
 }
 
 /** Reserved spaces participate in placement checks and stay free of wild regrowth. */
 export function castleGroundRects(w: World): Rect[] {
-  return (w.castleCompounds ?? []).flatMap((c) => [courtyardRect(c.origin, c.wings), ...c.pads.map((p) => ({ ...p, rx: 43, ry: 36 })), { ...c.rest, rx: 64, ry: 38 }]);
+  return (w.castleCompounds ?? []).flatMap(compoundRects);
 }
 export function castleReserved(w: World, x: number, y: number) { return castleGroundRects(w).some((r) => Math.abs(r.x - x) < r.rx && Math.abs(r.y - y) < r.ry); }
 
@@ -178,7 +180,7 @@ export function castleDragonPad(w: World, dr: Dragon): CastlePoint | null {
 
 export function castleDinoRest(w: World, d: Dino): CastlePoint | null {
   if (!d.owner || d.rider || d.raider || d.under || sp(d.species).move !== "walk") return null;
-  const yard = [...(w.castleCompounds ?? [])].sort((a, b) => Math.hypot(a.rest.x - d.x, a.rest.y - d.y) - Math.hypot(b.rest.x - d.x, b.rest.y - d.y))[0]?.rest;
+  const yard = (w.castleCompounds ?? []).map((c) => c.rest).filter((p): p is CastlePoint => !!p).sort((a, b) => Math.hypot(a.x - d.x, a.y - d.y) - Math.hypot(b.x - d.x, b.y - d.y))[0];
   if (!yard || w.tribe.walledIn(w, yard.x, yard.y)) return null;
   const pets = w.dinos.filter((o) => o.owner && !o.rider && !o.raider && !o.under && sp(o.species).move === "walk").sort((a, b) => a.id - b.id);
   const i = pets.findIndex((o) => o.id === d.id);
@@ -192,4 +194,20 @@ export function castleReservedTiles(w: World): number[] {
   const out: number[] = [];
   for (const r of castleGroundRects(w)) for (let ty = Math.floor((r.y - r.ry) / TILE); ty <= Math.floor((r.y + r.ry) / TILE); ty++) for (let tx = Math.floor((r.x - r.rx) / TILE); tx <= Math.floor((r.x + r.rx) / TILE); tx++) out.push(ty * MAP_W + tx);
   return out;
+}
+
+/** Physical ground under the single keep, separate from the walkable garden and animal spaces. */
+export function castleBodyTiles(w: World): number[] {
+  const out: number[] = [];
+  for (const c of w.castleCompounds ?? []) if (c.layout === "keep") {
+    const r = keepRect(c);
+    for (let ty = Math.floor((r.y - r.ry) / TILE); ty < Math.floor((c.origin.y + 6) / TILE); ty++)
+      for (let tx = Math.floor((r.x - r.rx) / TILE); tx <= Math.floor((r.x + r.rx) / TILE); tx++) out.push(ty * MAP_W + tx);
+  }
+  return out;
+}
+
+export function keepMoveFits(w: World, id: number, x: number, y: number): boolean {
+  const c = compoundOf(w, id);
+  return !!c && safe(w, { ...keepRect(c), x, y: y - 16 }, fixedRects(w, new Set(c.wings.flatMap((g) => g.ids))));
 }

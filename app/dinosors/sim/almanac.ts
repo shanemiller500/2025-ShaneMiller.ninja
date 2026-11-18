@@ -100,6 +100,18 @@ export class Almanac {
     return this.events.some((e) => e.kind === kind && e.state === 1);
   }
 
+  /** A player's season jump skips the old forecasts, while ongoing events keep their time remaining. */
+  jumpCalendar(w: World, hoursSkipped: number) {
+    if (hoursSkipped <= 0) return;
+    this.events = this.events.filter((e) => e.state === 1);
+    for (const e of this.events) e.at += hoursSkipped;
+    for (const meteor of this.falling) meteor.at += hoursSkipped;
+    const current = seasonAt(w.day).index;
+    this.planned = current - 1;
+    this.lastSeason = current;
+    this.toldSeason = -1;
+  }
+
   /** Plant regrowth under the current events. */
   plantsMul() {
     return (this.active("drought") ? 0.15 : 1) * (this.active("floodRains") ? 1.5 : 1);

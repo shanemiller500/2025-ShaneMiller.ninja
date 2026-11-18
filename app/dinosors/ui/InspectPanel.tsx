@@ -131,6 +131,10 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
               <Bar value={info.hp} color="linear-gradient(90deg,#f97316,#facc15)" />
             </div>
           )}
+          {info.built && info.tier >= 4 && <div className="mt-3 rounded-2xl bg-sky-300/10 p-2.5">
+            <button type="button" onClick={() => engine.expandHome(info.id)} className="w-full rounded-xl bg-sky-200 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-sky-100 active:scale-95">🏰 Add rooms · {info.addBeds} beds</button>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-white/65">18 stone · 6 wood · 6 leaves. Builders finish the rooms before anyone moves in. No free bed = no population growth.</p>
+          </div>}
           <div className="mt-3 flex items-center justify-between text-sm font-bold">
             <span>
               Lives here ({info.residents.length}/{info.cap})
@@ -139,7 +143,7 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
           </div>
           <div className="mt-1.5 space-y-1">
             {info.built && <div className="mb-2 grid grid-cols-4 gap-1" aria-label="Assigned beds">
-              {Array.from({ length: info.cap }, (_, i) => {
+              {Array.from({ length: Math.min(24, info.cap) }, (_, i) => {
                 const resident = info.residents[i];
                 return <div key={i} title={resident ? `Bed ${i + 1}: ${resident.name}` : `Bed ${i + 1}: free`} className={`rounded-lg px-1 py-2 text-center text-[10px] ${resident ? "bg-amber-300/15 text-amber-100" : "bg-emerald-300/10 text-emerald-100/70"}`}>
                   <span className="block text-base" aria-hidden="true">🛏️</span>
@@ -147,6 +151,7 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
                 </div>;
               })}
             </div>}
+            {info.cap > 24 && <p className="py-1 text-[11px] text-white/60">Showing 24 of {info.cap} beds. All residents are listed below.</p>}
             {info.residents.length === 0 && <p className="text-[12px] text-white/55">Nobody yet — people move in automatically.</p>}
             {info.residents.map((r) => (
               <button key={r.id} type="button" onClick={() => engine.selectPeople([r.id])} className="flex w-full items-center justify-between rounded-xl bg-white/5 px-2.5 py-1.5 text-left text-[13px] transition hover:bg-white/10">
@@ -157,10 +162,6 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
               </button>
             ))}
           </div>
-          {info.built && info.tier >= 4 && <div className="mt-3 rounded-2xl bg-sky-300/10 p-2.5">
-            <button type="button" onClick={() => engine.expandHome(info.id)} className="w-full rounded-xl bg-sky-200 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-sky-100 active:scale-95">🏰 Add wing · {info.addBeds} beds</button>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-white/65">18 stone · 6 wood · 6 leaves. Builders finish the rooms before anyone moves in. No free bed = no population growth.</p>
-          </div>}
           {info.residents.some((r) => !r.child) && (
             <button type="button" onClick={() => engine.selectResidents(info.id)} className="mt-2 w-full rounded-2xl bg-amber-400 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-amber-300 active:scale-95">
               👥 Send them out to work
@@ -194,6 +195,47 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
         </button>
       )}
       {info.kind !== "chariot" && <RepairButton info={info} engine={engine} />}
+      {info.kind === "wagon" && (
+        <>
+          <div className="flex items-center gap-3 pr-8">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-400/15 text-3xl">💦</span>
+            <div>
+              <div className="text-lg font-bold leading-tight">Water wagon</div>
+              <div className="text-xs text-white/60">{info.mode}{info.target ? `: ${info.target}` : ""}</div>
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            <div>
+              <div className="mb-1 flex justify-between text-[11px] text-white/60"><span>💧 Tank</span><span>{info.tank} / {info.tankMax}</span></div>
+              <Bar value={info.tank / info.tankMax} color={info.tank / info.tankMax < 0.2 ? "linear-gradient(90deg,#f97316,#fb923c)" : "linear-gradient(90deg,#0ea5e9,#7dd3fc)"} />
+            </div>
+            <div>
+              <div className="mb-1 flex justify-between text-[11px] text-white/60"><span>🪵 Sound</span><span>{info.hp}%</span></div>
+              <Bar value={info.hp / 100} color="linear-gradient(90deg,#22c55e,#a3e635)" />
+            </div>
+          </div>
+          <div className="mt-3 rounded-2xl bg-white/5 p-3 text-[12px]">
+            <div className="font-bold">👥 Crew {info.crew.length}/{info.crewNeed}</div>
+            <p className="mt-0.5 text-white/60">{info.crew.length ? info.crew.join(", ") : "Nobody on it: a crew of 3 is called up when it's needed (firefighters first)."}</p>
+            <p className="mt-1.5 text-white/60">🗿 Lava Monsters turned to stone: <span className="font-bold text-white">{info.stoned}</span> · 🌋 about now: {info.lava} · 💧 in the stores: {info.water}</p>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" disabled={info.lava === 0} onClick={() => engine.sendWagon(info.id)}
+              className="rounded-xl bg-sky-400 py-2 text-sm font-bold text-slate-900 transition hover:bg-sky-300 active:scale-95 disabled:bg-white/10 disabled:text-white/50">
+              🚨 Send out
+            </button>
+            <button type="button" onClick={() => engine.recallWagon(info.id)}
+              className="rounded-xl bg-white/10 py-2 text-sm font-bold transition hover:bg-white/20 active:scale-95">
+              🏠 Call home
+            </button>
+          </div>
+          <label className="mt-2 flex cursor-pointer items-center justify-between rounded-xl bg-white/5 px-3 py-2 text-[12px]">
+            <span><span className="font-bold">Auto</span> <span className="text-white/60">· roll out whenever a Lava Monster comes near</span></span>
+            <input type="checkbox" checked={info.auto} onChange={(e) => engine.setWagonAuto(info.id, e.target.checked)} className="h-4 w-4 accent-sky-400" />
+          </label>
+          <p className="mt-2 text-[11px] leading-snug text-white/55">Two push and pump, one aims the hose. It soaks a Lava Monster until it sets solid into a statue: send miners to dig it for 🌋 lava stone (Lava-stone walls). The tank refills at home from the water stores, or for free from a river beside its yard.</p>
+        </>
+      )}
       {info.kind === "wall" && (
         <div className="pr-8">
           <div className="text-lg font-bold">🔷 {info.material} {info.part}</div>
@@ -205,8 +247,9 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
       )}
       {info.kind === "farm" && (
         <div className="pr-8">
-          <div className="text-lg font-bold">🌾 {info.crop} farm</div>
-          <p className="mt-1 text-xs text-white/60">{info.planted ? `Growing · ${Math.round(info.growth * 100)}%` : "Ready to plant"} · Choose Move, then drag the field or tap a new spot.</p>
+          <div className="text-lg font-bold">🌾 {info.crop} {info.crop.includes("berries") ? "plantation" : "farm"}</div>
+          <p className="mt-1 text-xs text-white/60">{info.planted ? info.growth >= 1 ? "Ripe · ready to harvest" : `Growing · ${Math.round(info.growth * 100)}%` : "Ready to plant"} · Choose Move, then drag the field or tap a new spot.</p>
+          {info.crop.includes("berries") && <p className="mt-2 text-xs text-white/70">Plant with 1 berry. Farmers pick 5 berries each harvest; the bushes stay and fruit again.</p>}
         </div>
       )}
       {info.kind === "building" && (
@@ -230,6 +273,30 @@ export default function InspectPanel({ info, snap, engine }: { info: InspectInfo
           {info.note && <p className="mt-2 rounded-xl bg-cyan-500/10 px-2.5 py-1.5 text-[12px] text-cyan-100">{info.note}</p>}
           {info.built >= 1 && info.bkind === "hatchery" && <IncubatorSection engine={engine} id={info.id} />}
           {info.built >= 1 && info.bkind === "dragonPit" && <PitSection engine={engine} />}
+          {info.zoo && (
+            <div className="mt-2 rounded-2xl bg-amber-400/10 p-2.5 text-[11.5px]">
+              {info.zoo.beast ? (
+                <>
+                  <div className="flex items-center justify-between font-semibold text-amber-50">
+                    <span>{info.zoo.beast.emoji} {info.zoo.beast.name}</span>
+                    <span className={info.zoo.beast.hungry ? "text-rose-300" : "text-amber-100/70"}>{info.zoo.beast.hungry ? "hungry!" : `eats in ${info.zoo.beast.nextMeal}s`}</span>
+                  </div>
+                  <div className="mt-1.5"><Bar value={info.zoo.beast.health} color="linear-gradient(90deg,#fb923c,#4ade80)" /></div>
+                  <p className="mt-2 text-[10.5px] leading-snug text-white/60">Eats {info.zoo.meal} meat (or fish) a meal from the stores. Miss a few and it breaks the bars. Visiting caravans marvel at it: better relations and a gift of gold.</p>
+                </>
+              ) : (
+                <>
+                  <div className="font-semibold text-amber-50">Empty: waiting for a beast</div>
+                  <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-[11px] leading-snug text-white/70">
+                    <li className={info.zoo.nets ? "text-emerald-300" : ""}>{info.zoo.nets ? "Capture nets + chains: made ✓" : "Make Capture nets + chains at the blacksmith (iron, hide, grass)"}</li>
+                    <li>Pick 3 or more armed people and tap a Yeti (the ice caves on the peaks) or a Dinosaur Scorpion (desert dens)</li>
+                    <li>Choose “Capture it alive”: they wear it down, net it and haul it back here</li>
+                  </ol>
+                </>
+              )}
+              <p className="mt-2 text-[10.5px] text-white/50">The camp is: {info.zoo.dread} (Yeti howls frighten people; killing or caging a beast ends the dread)</p>
+            </div>
+          )}
           {info.ward && (
             <div className="mt-2 rounded-2xl bg-emerald-400/10 p-2.5">
               <div className="flex items-center justify-between text-[11.5px] font-semibold text-emerald-50">

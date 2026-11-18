@@ -30,7 +30,10 @@ import { sonicDouse, sonicReady } from "./sonic";
 import { raidThink } from "./dragonRaid";
 import { moveThink } from "./moving";
 import { eggHuntThink, trackThink } from "./dragonNests";
-import type { World } from "./world";import { PRIO_CREW, sitePrio, taskKey, URGENT } from "./priority";
+import type { World } from "./world";
+import { beastName, wildBeast } from "./beasts";
+import { captureBlock } from "./zoo";
+import { PRIO_CREW, sitePrio, taskKey, URGENT } from "./priority";
 
 
 export type TaskKind =
@@ -119,6 +122,8 @@ export interface Command {
   weapons?: WeaponKind[];
   /** other things this click could mean */
   alts?: Command[];
+  /** a hunt on a great beast that goes out as one expedition: to kill it, or to net it for the zoo (chariots.ts) */
+  beast?: "kill" | "capture";
 }
 
 const PER_PERSON = new Set<TaskKind>(["chop", "mine", "forage", "water", "fish", "dig", "move", "tend", "rest", "haul"]);
@@ -274,8 +279,18 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
       if (L.has("taming")) return { ...tame, alts: armed ? [hunt] : undefined };
       return armed ? { ...hunt, alts: [tame] } : tame;
     }
-    if (d.owner) return { kind: "move", icon: "💚", label: `${d.name} is a friend`, x: d.x, y: d.y, target: 0 };
+    if (d.owner) return { kind: "move", icon: d.caged ? "🎪" : "💚", label: d.caged ? `The ${beastName(d)} is safe behind bars` : `${d.name} is a friend`, x: d.x, y: d.y, target: 0 };
     if (!armed) return { kind: "move", icon: "😬", label: "Nobody has a weapon yet!", x: d.x, y: d.y, target: 0 };
+    // a Yeti or a Dinosaur Scorpion: a proper expedition, to kill it or to bring it back alive (beasts.ts, zoo.ts)
+    if (wildBeast(d)) {
+      const name = beastName(d);
+      const why = captureBlock(w);
+      const kill: Command = { ...hunt, icon: "🏹", label: `Hunt the ${name}: ${adults.length} go as one party`, beast: "kill" };
+      const capture: Command = { ...hunt, icon: "🕸️", label: why ? `Capture it alive (${why})` : `Capture the ${name} alive for the zoo`, beast: "capture" };
+      const lone: Command = { ...hunt, label: `Just attack the ${name} (no party)` };
+      if (adults.length < 3) return { ...hunt, label: `Fight the ${name} (it's deadly: send 3 or more for a proper hunt)` };
+      return why ? { ...kill, alts: [capture, lone] } : { ...capture, alts: [kill, lone] };
+    }
     return hunt;
   }
   if (picked.human && !people.includes(picked.human)) {
@@ -427,7 +442,7 @@ export function inferCommand(w: World, people: Human[], x: number, y: number, pi
   return armed ? { kind: "guard", icon: "🛡️", label: "Stand guard here", x, y, target: 0, alts: [{ kind: "move", icon: "👣", label: "Just go here", x, y, target: 0 }] } : { kind: "move", icon: "👣", label: "Go here", x, y, target: 0 };
 }
 
-const bw = (k: string) => ({ storage: 2, workshop: 2, blacksmith: 2, foodStore: 2, waterStore: 1, healer: 2, pen: 3, post: 1, trap: 1, bridge: 1, path: 1 })[k] ?? 1;
+const bw = (k: string) => ({ zoo: 8, storage: 2, workshop: 2, blacksmith: 2, foodStore: 2, waterStore: 1, healer: 2, pen: 3, post: 1, trap: 1, bridge: 1, path: 1 })[k] ?? 1;
 
 function buildCmd(site: Site, icon: string, label: string): Command {
   return { kind: "build", icon, label: site.locked ? `${label} (needs an invention)` : label, x: site.sx, y: site.sy, target: site.id, group: [siteKey(site)] };

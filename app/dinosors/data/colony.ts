@@ -48,6 +48,7 @@ export const RES_INFO: Record<Resource, { icon: string; name: string }> = {
   pearl: { icon: "🦪", name: "Pearls" },
   grapes: { icon: "🍇", name: "Grapes" },
   wine: { icon: "🍷", name: "Wine" },
+  lavaStone: { icon: "🌋", name: "Lava stone" },
 };
 
 /* ------------------------------ buildings ------------------------------ */
@@ -73,6 +74,7 @@ export interface BuildingDef {
 
 export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   tradingPost: { kind: "tradingPost", icon: "🤝", name: "Trading Post", tip: "Receive caravans, exchange cargo and meet other factions. Upgrade in Diplomacy for better prices and larger shipments.", cost: { wood: 12, stone: 6, hide: 2 }, w: 3, h: 2, solid: true, work: 12, hp: 400 },
+  zoo: { kind: "zoo", icon: "🎪", name: "Zoo enclosure", tip: "An iron-barred enclosure for ONE captured great beast: a Yeti or a Dinosaur Scorpion. Make capture nets at the blacksmith, then send a party to bring one back alive (pick people, tap the beast). It has to be fed meat or fish; visiting caravans marvel at it.", cost: { wood: 14, stone: 12, iron: 8, hide: 2 }, w: 8, h: 5, solid: false, tech: "smelting", work: 16, hp: 700 },
   storage: { kind: "storage", icon: "📦", name: "Storage", tip: "A drop-off point: gatherers unload here instead of walking back to camp.", cost: { wood: 3, stick: 4 }, w: 2, h: 1, solid: true, tech: "axe", work: 5, hp: 260 },
   workshop: { kind: "workshop", icon: "🛠️", name: "Workshop", tip: "Crafts blades, reinforced bows and shields.", cost: { wood: 5, stone: 4 }, w: 2, h: 2, solid: true, tech: "tools", work: 7, hp: 320 },
   blacksmith: { kind: "blacksmith", icon: "⚒️", name: "Blacksmith", tip: "Forges metal weapons, metal shields and Scorpion parts.", cost: { stone: 8, wood: 4, clay: 4 }, w: 2, h: 2, solid: true, tech: "smelting", work: 9, hp: 420 },
@@ -93,6 +95,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   riderHall: { kind: "riderHall", icon: "🏛️", name: "Dragon Riders' Colosseum", tip: "A great arena of stone tiers built round the dragon pit: every dragon rider + keeper gets their own room right behind where their dragon sleeps. Dragon-head pillars, a horned gate, stone wings. It grows with the pit and the people in it. Needs a dragon pit (it's always built round it).", cost: { stone: 40, wood: 20, hide: 8, bone: 12 }, w: 3, h: 2, solid: false, tech: "taming", work: 30, hp: 1600 },
   warChariot: { kind: "warChariot", icon: "🛡️", name: "War chariot", tip: "A great timber fighting wagon for hunting dragons: a tamed Triceratops pulls it (a huge trike skull on the prow), two Scorpions on top shoot by themselves, and ten ride behind its shields (five spearmen a side, egg runners safe inside). It rolls out when it's built. Tap it to rally a raid; builders repair it at home, and it can be upgraded (bone plates, then iron from the blacksmith).", cost: { wood: 30, bone: 12, hide: 8, stone: 6 }, w: 3, h: 2, solid: false, tech: "dragonHunting", work: 20, hp: 400 },
   dragonPit: { kind: "dragonPit", icon: "🏟️", name: "Dragon pit", tip: "A great sunken stone arena: the tribe's dragons live and sleep here, and their keepers put on shows in it (of an evening, or press Put on a show). Everyone comes to watch from the rim. Goes outside the walls.", cost: { stone: 14, wood: 8, hide: 4 }, w: 5, h: 4, solid: false, tech: "taming", work: 14, hp: 900 },
+  waterWagon: { kind: "waterWagon", icon: "💦", name: "Water wagon", tip: "A hand-pushed cart with a big water tank and a pump gun. When a Lava Monster comes near, a crew of 3 rolls it out (two push + pump, one aims the hose) and soaks it till it sets solid into a lava-stone statue. The tank empties as it sprays, so it rolls home to refill from the water stores. Dig the statues for lava stone, the toughest wall there is.", cost: { wood: 14, hide: 6, bone: 4, clay: 4 }, w: 2, h: 2, solid: false, tech: "firefighting", work: 14, hp: 300 },
   fireStation: { kind: "fireStation", icon: "🚒", name: "Sonic fire station", tip: "Stores the ultrasonic fire emitters (smiths make them here) and rings the alarm: when fire breaks out near camp or the station, a crew grabs emitters and shakes the flames out from a safe distance. Emitters go back on the rack afterwards.", cost: { stone: 8, wood: 6, copper: 2 }, w: 3, h: 2, solid: true, tech: "sonicFire", work: 9, hp: 520 },
   tack: { kind: "tack", icon: "🧰", name: "Tack + harness station", tip: "Saddles, harnesses + cargo frames. Trainers train 25% faster with it, and rider teams carry more.", cost: { wood: 3, hide: 3, bone: 2 }, w: 2, h: 1, solid: true, tech: "taming", work: 5, hp: 180 },
   healer: { kind: "healer", icon: "🌿", name: "Healing hut", tip: "Hurt people take one of its two beds for a short stay and walk out mended. Tap it later to grow it into an infirmary (copper bars), then a hospital (silver bars + salt) with more beds.", cost: { wood: 4, leaves: 6 }, w: 2, h: 2, solid: true, tech: "medicine", work: 6, hp: 280 },
@@ -398,6 +401,8 @@ export const KITS: KitDef[] = [
   { id: "minerPack", name: "Miner's packs", icon: "🎒", cost: { hide: 3, stick: 2 }, at: "tannery", tip: "Down the mine: every miner carries half as much again before walking back to the lift." },
   { id: "crystalLantern", name: "Crystal lanterns", icon: "🏮", cost: { crystal: 1, copper: 1, tar: 1 }, at: "workshop", tip: "Down the mine: miners light up much more rock and spot what's in it from two cells away." },
   { id: "reinforcedPick", name: "Reinforced picks", icon: "⚒️", cost: { iron: 3, magnetite: 2 }, at: "blacksmith", tip: "Down the mine: iron picks hardened with magnetite. Faster again, and they can chew through granite (slowly) without a drill." },
+  // the zoo (zoo.ts)
+  { id: "beastNets", name: "Capture nets + chains", icon: "🕸️", cost: { iron: 3, hide: 3, grass: 4 }, at: "blacksmith", tip: "Weighted rope nets and iron chains. With them a hunting party can take a Yeti or a Dinosaur Scorpion alive (once it's worn down) and haul it home to a zoo enclosure." },
   // riders
   { id: "steelSaddles", name: "Steel saddles + harness", icon: "🐎", cost: { steel: 2, iron: 2, hide: 4 }, at: "blacksmith", tip: "Every dino + dragon rider gets a steel-framed saddle and harness: riders hit a quarter harder from the saddle and are hurt far less up there." },
   // from the Deep
@@ -491,6 +496,8 @@ export const NODES: Record<NodeKind, { icon: string; name: string; gives: Resour
   crystal: { icon: "🔮", name: "Crystal shards", gives: "crystal", per: 1, amount: [4, 7], hidden: true, color: "#8fe3ff", needs: "tools" },
   diamond: { icon: "💎", name: "Raw diamonds", gives: "diamond", per: 1, amount: [3, 5], hidden: true, color: "#b7f4ef", needs: "tools" },
   meteorite: { icon: "☄️", name: "Meteor fragments", gives: "meteorite", per: 1, amount: [2, 4], hidden: false, color: "#5d4d70", needs: "tools" },
+  // a Lava Monster that set solid (lavaFolk.ts): its stone statue, dense fire-proof lava stone to dig
+  lavaStone: { icon: "🗿", name: "Lava stone statue", gives: "lavaStone", per: 1, amount: [6, 6], hidden: false, color: "#3b3340", needs: "tools" },
 };
 
 /** Deposits the civilization paths care about (older saves get them scattered on load). */

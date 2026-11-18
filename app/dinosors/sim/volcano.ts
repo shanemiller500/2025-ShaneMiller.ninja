@@ -5,6 +5,7 @@
 /* ------------------------------------------------------------------ */
 import { FACTS } from "../data/facts";
 import { P } from "./particles";
+import { makeRng, type Rng } from "./rng";
 import { LM, VEG_TILES, isWaterTile } from "./terrain";
 import { MAP_H, MAP_W, T, TILE } from "./types";
 import type { World } from "./world";
@@ -24,6 +25,17 @@ export class LavaSystem {
   active = new Set<number>();
   heads: LavaHead[] = [];
   version = 0;
+  /** tiles held molten on purpose (the Lava Monsters' pool, lavaFolk.ts): not "lava still flowing" */
+  held = new Set<number>();
+
+  /**
+   * Put lava down on one tile (a Lava Monster's thrown ball, their pool): it glows, burns, and cools into basalt
+   * like any lava. `hold` marks it as kept hot on purpose.
+   */
+  warm(w: World, tx: number, ty: number, amt: number, hold = false) {
+    if (hold && tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H) this.held.add(ty * MAP_W + tx);
+    this.deposit(w, tx, ty, amt);
+  }
 
   heatAt(tx: number, ty: number) {
     if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return 0;
@@ -117,7 +129,7 @@ export class LavaSystem {
     }
     if (cooled.length) {
       this.version++;
-      if (this.active.size === 0 && w.flags.has("lavaFlowed") && !w.flags.has("lavaCool")) {
+      if (Array.from(this.active).every((i) => this.held.has(i)) && w.flags.has("lavaFlowed") && !w.flags.has("lavaCool")) {
         w.flags.add("lavaCool");
         w.toast("🪨", "The lava cooled into new rock!", undefined, undefined, FACTS.lavaCool);
       }
@@ -127,6 +139,7 @@ export class LavaSystem {
   clear() {
     this.heat.fill(0);
     this.active.clear();
+    this.held.clear();
     this.heads = [];
   }
 }
@@ -157,8 +170,25 @@ export class Volcano {
   /** 0..1 glowing cracks down the cone (mega only) */
   crack = 0;
   private puffT = 0;
-  readonly x = LM.volcano.x * TILE + TILE / 2;
-  readonly y = LM.volcano.y * TILE + TILE / 2;
+  /** its crater (tiles) */
+  readonly tx: number;
+  readonly ty: number;
+  readonly x: number;
+  readonly y: number;
+
+  /**
+   * Its own dice (the far east's volcano): the first volcano rolls the world's, as it always has, so
+   * adding a second one changed nothing about how the rest of the world turns out.
+   */
+  private readonly dice: Rng | null;
+
+  constructor(at: { x: number; y: number } = LM.volcano) {
+    this.tx = at.x;
+    this.ty = at.y;
+    this.x = at.x * TILE + TILE / 2;
+    this.y = at.y * TILE + TILE / 2;
+    this.dice = at === LM.volcano ? null : makeRng(at.x * 7919 + at.y * 104729);
+  }
   /** crater sits up the cone, visually */
   readonly craterZ = 150;
 
@@ -194,7 +224,7 @@ export class Volcano {
   update(w: World, dt: number) {
     this.t += dt;
     this.cooldown = Math.max(0, this.cooldown - dt);
-    const rng = w.rng;
+    const rng = this.dice ?? w.rng;
     const cx = this.x;
     const cy = this.y;
 
@@ -295,7 +325,7 @@ export class Volcano {
       r.y += r.vy * dt;
       r.z += r.vz * dt;
       r.vz -= 260 * dt;
-      if (w.rng() < dt * 20) w.particles.spawn(P.Smoke, r.x, r.y, { z: r.z, vz: 5, size: 5, max: 0.8, color: "rgba(80,70,70,0.4)" });
+      if ((this.dice ?? w.rng)() < dt * 20) w.particles.spawn(P.Smoke, r.x, r.y, { z: r.z, vz: 5, size: 5, max: 0.8, color: "rgba(80,70,70,0.4)" });
     }
     const landed = this.rocks.filter((r) => r.z <= 0);
     this.rocks = this.rocks.filter((r) => r.z > 0);
@@ -315,7 +345,7 @@ export class Volcano {
         w.particles.spawn(P.Ring, r.x, r.y, { size: r.size * 2, max: 0.6, color: "rgba(255,180,90,0.8)" });
       }
       for (const h of w.humans) if (Math.hypot(h.x - r.x, h.y - r.y) < 34 + r.size && h.level === 0 && h.state !== "hide") hurtHuman(w, h, 0.18 + r.size * 0.02, r.x, r.y, "rock");
-      for (const d of w.dinos) if (Math.hypot(d.x - r.x, d.y - r.y) < 30 + r.size * 2 + sizeOf(d) * 0.3) {
+      for (const d of w.dinos) if (d.species !== "lavaFolk" && Math.hypot(d.x - r.x, d.y - r.y) < 30 + r.size * 2 + sizeOf(d) * 0.3) {
         d.health -= 0.15;
         d.burn = 0;
       }
@@ -324,12 +354,12 @@ export class Volcano {
 
   /** Ash settles: grass + forest near the cone turn grey (temporarily ruined ground). */
   private ashFall(w: World) {
-    const rng = w.rng;
+    const rng = this.dice ?? w.rng;
     for (let k = 0; k < 6; k++) {
       const a = rng() * Math.PI * 2;
       const rr = 10 + rng() * 26;
-      const tx = Math.round(LM.volcano.x + Math.cos(a) * rr);
-      const ty = Math.round(LM.volcano.y + 4 + Math.sin(a) * rr * 0.8);
+      const tx = Math.round(this.tx + Math.cos(a) * rr);
+      const ty = Math.round(this.ty + 4 + Math.sin(a) * rr * 0.8);
       if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) continue;
       const t = w.terrain.tiles[ty * MAP_W + tx] as T;
       if (VEG_TILES.has(t)) {
@@ -340,10 +370,10 @@ export class Volcano {
   }
 
   private pourLava(w: World, n: number, vol: number) {
-    const rng = w.rng;
+    const rng = this.dice ?? w.rng;
     for (let k = 0; k < n; k++) {
       const a = Math.PI * 0.5 + (rng() - 0.5) * Math.PI * 1.7;
-      w.lava.spawn(Math.round(LM.volcano.x + Math.cos(a) * 3), Math.round(LM.volcano.y + Math.sin(a) * 3), vol + rng() * 0.8);
+      w.lava.spawn(Math.round(this.tx + Math.cos(a) * 3), Math.round(this.ty + Math.sin(a) * 3), vol + rng() * 0.8);
     }
   }
 
@@ -358,7 +388,7 @@ export class Volcano {
     if (mega) w.particles.spawn(P.Ring, this.x, this.y, { size: 120, max: 2.6, color: "rgba(255,240,210,0.7)" });
     for (let k = 0; k < (mega ? 24 : 6); k++) this.launchRock(w, mega ? 2.4 : 1);
     // lava pours over the rim, mostly downhill
-    const rng = w.rng;
+    const rng = this.dice ?? w.rng;
     this.pourLava(w, mega ? 9 : 3 + Math.floor(rng() * 2), mega ? 1.8 : 1);
     w.flags.add("lavaFlowed");
     w.flags.delete("lavaCool");
@@ -372,7 +402,7 @@ export class Volcano {
   }
 
   private launchRock(w: World, power = 1) {
-    const rng = w.rng;
+    const rng = this.dice ?? w.rng;
     const a = rng() * Math.PI * 2;
     const s = (120 + rng() * 260) * (power > 1 ? 0.7 + rng() * power * 0.6 : power);
     this.rocks.push({ x: this.x, y: this.y, z: this.craterZ, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.7, vz: 200 + rng() * 160 * Math.min(2, power), size: 5 + rng() * (power > 1 ? 9 : 6) });

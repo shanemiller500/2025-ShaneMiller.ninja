@@ -59,7 +59,8 @@ function quiet(seed = 7) {
 
 test('the world is bigger and the old valley is where it always was', () => {
   const w = new World(1234, false);
-  assert.equal(MAP_W, 288);
+  // (288 wide, then the far east added on: the second volcano's land)
+  assert.equal(MAP_W, 336);
   assert.ok(MAP_H >= 112);
   assert.equal(tileAt(w, LM.camp.x, LM.camp.y), T.Dirt);
   assert.equal(tileAt(w, LM.lake.x, LM.lake.y), T.Deep);
@@ -75,6 +76,9 @@ test('the world is bigger and the old valley is where it always was', () => {
   assert.ok(counts[T.Snow] > 150 && counts[T.Mountain] > 300 && counts[T.Ice] > 0 && counts[T.Cliff] > 20 && counts[T.Cave] > 0, JSON.stringify(counts));
   assert.ok(w.terrain.elev[LM.peaks.y * MAP_W + LM.peaks.x] > 0.5, 'the peaks are high');
   assert.ok(w.snow.chill(w, LM.peaks.x * TILE, LM.peaks.y * TILE) > w.snow.chill(w, LM.camp.x * TILE, LM.camp.y * TILE) + 0.2, 'colder up high');
+  // the far east: a second volcano (its cone + an old lava field)
+  assert.equal(tileAt(w, LM.volcano2.x + 4, LM.volcano2.y), T.Volcano);
+  assert.equal(tileAt(w, LM.lavaField2.x, LM.lavaField2.y), T.Basalt);
 });
 
 test('the monks can walk from their valley up to the high ledge (the passes are open)', () => {

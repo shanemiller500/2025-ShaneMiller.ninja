@@ -5,6 +5,7 @@
 import { removeHuman } from "../sim/death";
 import { placeHall } from "../sim/riderHall";
 import { TECH } from "../data/facts";
+import { BERRIES } from "../data/berries";
 import { CIV_TECH, LIFT, type CivTechId } from "../data/civ";
 import { BUILDINGS, HOUSING, NODES, SCORPION_TIERS, TENT_STAGES, type Cost } from "../data/colony";
 import { SHELTER_STAGES } from "../data/facts";
@@ -20,6 +21,7 @@ import { makePlant } from "../sim/plants";
 import { clearPlantsUnderBuilds } from "../sim/buildClear";
 import { peopleCap } from "../sim/population";
 import { isWaterTile, isWalkTile } from "../sim/terrain";
+import { placeLavaFolk } from "../sim/lavaFolk";
 import { MAP_W, MAX_PEOPLE, T, TILE, type BuildingKind, type FarmCrop, type NodeKind, type PlantKind, type SpeciesId, type TechId, type WallKind, type WeatherKind } from "../sim/types";
 import type { World } from "../sim/world";
 import { GROUP_INFO } from "../sim/folkGroups";
@@ -28,10 +30,10 @@ export type ToolId = "hand" | "dino" | "egg" | "food" | "plant" | "land" | "fire
 export type FoodOpt = "meat" | "fish" | "fruit" | "berries";
 export type LandOpt = "water" | "rock" | "mud" | "grass" | NodeKind;
 export type DisasterOpt = "lightning" | "meteor" | "volcano" | "quake" | "raid" | "dragon" | "supervolcano";
-export type PeopleOpt = "adult" | "child" | "clan" | "treeFolk" | "seaFolk" | "sandFolk" | "snowFolk";
+export type PeopleOpt = "adult" | "child" | "clan" | "treeFolk" | "seaFolk" | "sandFolk" | "snowFolk" | "lavaFolk";
 /** How Tree / Sea / Sand People arrive with the People tool: a whole camp, or a group of them (folkGroups.ts). */
 export type FolkGroupOpt = "camp" | "family" | "patrol" | "raid" | "caravan";
-export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "bonegate" | "megagate" | "levitate" | "gate" | "stairs" | "pulley" | "tower" | "scorpion" | "farm" | "campfire" | "cleanMud" | BuildingKind;
+export type BuildOpt = "tent" | "hut" | "wall" | "stonewall" | "polywall" | "polygate" | "lavawall" | "lavagate" | "bonegate" | "megagate" | "levitate" | "gate" | "stairs" | "pulley" | "tower" | "scorpion" | "farm" | "campfire" | "cleanMud" | BuildingKind;
 
 export interface ToolState {
   id: ToolId;
@@ -89,6 +91,7 @@ export const PLANT_OPTS: Opt<PlantKind>[] = [
   { value: "reeds", icon: "🌾", label: "Reeds" },
 ];
 export const FARM_CROP_OPTS: Opt<NonNullable<ToolState["farmCrop"]>>[] = [
+  ...BERRIES.map((b) => ({ value: b.crop, icon: "🫐", label: b.name })),
   { value: "flower", icon: "🌼", label: "Flowers" },
   { value: "wheat", icon: "🌾", label: "Wheat" },
   { value: "barley", icon: "🌿", label: "Barley" },
@@ -130,6 +133,7 @@ export const PEOPLE_OPTS: Opt<PeopleOpt>[] = [
   { value: "seaFolk", icon: "🛶", label: "Sea People" },
   { value: "sandFolk", icon: "🐪", label: "Sand People" },
   { value: "snowFolk", icon: "🏔️", label: "Snow People" },
+  { value: "lavaFolk", icon: "🌋", label: "Lava Monsters" },
 ];
 /** (only for the Tree, Sea + Sand People) */
 export const FOLK_GROUP_OPTS: Opt<FolkGroupOpt>[] = [
@@ -194,6 +198,7 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("blacksmith", "work"),
   bld("refinery", "work"),
   bld("pen", "work"),
+  bld("zoo", "work"),
   bld("stable", "work"),
   bld("tack", "work"),
   bld("perch", "work"),
@@ -203,6 +208,7 @@ export const BUILD_DEFS: BuildDef[] = [
   bld("winery", "work"),
   bld("riderHall", "homes"),
   bld("warChariot", "defense"),
+  bld("waterWagon", "defense"),
   bld("roost", "work"),
   bld("feedPit", "work"),
   bld("dragonYard", "work"),
@@ -214,6 +220,9 @@ export const BUILD_DEFS: BuildDef[] = [
   // civilization projects (each needs its research)
   { value: "polywall", icon: "🔷", label: "Polygon wall", cat: "defense", cost: { shaped: 2 }, civ: "precisionStone", tip: "Drag to draw. Many-sided shaped blocks that lock together: the toughest wall. Draw over old walls to upgrade them (their materials come back).", line: true },
   { value: "polygate", icon: "⛩️", label: "Monumental gate", cat: "defense", cost: { shaped: 3 }, civ: "precisionStone", tip: "A shaped-stone gate. Put it in a wall (or draw over an old gate)." },
+  // lava stone: dug from the statues the water wagons + Scorpions leave of Lava Monsters
+  { value: "lavawall", icon: "🌋", label: "Lava-stone wall", cat: "defense", cost: { lavaStone: 2 }, tech: "firefighting", tip: "Drag to draw. Polygon blocks of dense black lava stone with glowing seams: the toughest wall there is (1500), dragon fire barely marks it and Lava Monsters can't burn through it. Lava stone comes from the statues left when Lava Monsters are turned to stone: send miners to dig them. Draw over old walls to upgrade them.", line: true },
+  { value: "lavagate", icon: "🔥", label: "Lava-stone gate", cat: "defense", cost: { lavaStone: 3 }, tech: "firefighting", tip: "A great gate of black lava stone. Put it in a wall (or draw over an old gate)." },
   bld("beamTower", "defense"),
   bld("pylon", "defense"),
   bld("dragonShield", "defense"),
@@ -375,6 +384,10 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
   switch (tool.id) {
     case "dino": {
       if (drag) return false;
+      if (tool.species === "lavaFolk") {
+        hint(w, "🌋", "Lava Monsters are placed with the People tool.");
+        return false;
+      }
       if (!w.unlocked.has(tool.species)) {
         hint(w, "🔒", `Find a ${sp(tool.species).nick} in the world to unlock it!`);
         return false;
@@ -429,6 +442,7 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
       });
       if (crowded) return false;
       const p = makePlant(w, tool.plant, x, y, 0.25);
+      p.planted = true;
       w.plants.push(p);
       w.plantsDirty = true;
       w.particles.burst(P.Leaf, x, y, 4, 30, { z: 6, vz: 30, g: 60, size: 3, max: 0.8, color: "#6f9a3c" });
@@ -498,6 +512,18 @@ export function applyTool(w: World, tool: ToolState, x: number, y: number, drag:
     }
     case "people": {
       if (drag) return false;
+      // a few Lava Monsters where you tap: they make it their home, and hate everything round about (lavaFolk.ts)
+      if (tool.people === "lavaFolk") {
+        const r = placeLavaFolk(w, x, y);
+        if (typeof r === "string") {
+          hint(w, "🌋", r);
+          return false;
+        }
+        w.meet("lavaFolk");
+        w.sfx("lava2", x, y, 1, 0.95);
+        w.toast("🌋", `${r.length} Lava Monsters heave themselves up out of the ground here! They hate everything alive and burn what they touch. Fire can't hurt them: water, snow and ice can.`, x, y);
+        return true;
+      }
       // a group of Tree / Sea / Sand People (a family, a patrol, a raiding party, a caravan) where you tap
       if (FOLK_PEOPLE.has(tool.people) && tool.folkGroup !== "camp") return placeFolkGroup(w, tool, x, y);
       // a Snow People camp goes up on the high snowfields where you tap
@@ -670,6 +696,8 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
     case "stonewall":
     case "polywall":
     case "polygate":
+    case "lavawall":
+    case "lavagate":
     case "gate":
     case "pulley":
     case "stairs": {
@@ -697,8 +725,8 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
         return true;
       }
       // once stone walls are known everything here is built in stone
-      const kind: WallKind = opt === "polywall" || opt === "polygate" ? "polygon" : opt === "stonewall" || c.learned.has("stonewall") ? "stone" : "palisade";
-      const part = opt === "gate" || opt === "polygate" ? "gate" : opt === "stairs" ? "stairs" : "wall";
+      const kind: WallKind = opt === "lavawall" || opt === "lavagate" ? "lava" : opt === "polywall" || opt === "polygate" ? "polygon" : opt === "stonewall" || c.learned.has("stonewall") ? "stone" : "palisade";
+      const part = opt === "gate" || opt === "polygate" || opt === "lavagate" ? "gate" : opt === "stairs" ? "stairs" : "wall";
       const cliff = w.terrain.tiles[ty * MAP_W + tx] === T.Cliff;
       if (part === "stairs" && !cliff && ![w.tribe.wallAt(tx + 1, ty), w.tribe.wallAt(tx - 1, ty), w.tribe.wallAt(tx, ty + 1), w.tribe.wallAt(tx, ty - 1)].some((o) => o && o.part !== "stairs")) {
         hint(w, "🪜", "Place a ladder beside a wall or on a cliff face.");
@@ -747,7 +775,10 @@ function build(w: World, tool: ToolState, x: number, y: number, drag: boolean): 
     }
     case "farm": {
       const f = w.tribe.addFarm(w, x, y, tool.farmCrop);
-      if (f) w.toast(f.crop === "grape" ? "🍇" : f.crop === "flower" ? "🌼" : "🌾", f.crop === "grape" ? "New vineyard! A farmer clears the wild growth here and plants trellised vines (wild berry bushes become the cuttings, else 2 berries)." : `New ${f.crop ?? "wheat"} field! Farmers plant it with grass seeds.`);
+      if (f) {
+        const berry = BERRIES.find((b) => b.crop === f.crop);
+        w.toast(berry ? "🫐" : f.crop === "grape" ? "🍇" : f.crop === "flower" ? "🌼" : "🌾", berry ? `${berry.name} plantation planned! A farmer uses 1 berry for cuttings. The bushes fruit again after each harvest.` : f.crop === "grape" ? "New vineyard! A farmer clears the wild growth here and plants trellised vines (wild berry bushes become the cuttings, else 2 berries)." : `New ${f.crop ?? "wheat"} field! Farmers plant it with grass seeds.`);
+      }
       else hint(w, "🌾", "Fields need open soil (and a little space).");
       return !!f;
     }
@@ -840,10 +871,10 @@ function erase(w: World, x: number, y: number, drag: boolean) {
     w.colony.version++;
     return true;
   }
-  // things built on a bridge go before the bridge itself
+  // Structures go before the paving or bridge deck underneath them.
   const hit = (bd: (typeof w.colony.buildings)[number]) => x > bd.tx * TILE && x < (bd.tx + BUILDINGS[bd.kind].w) * TILE && y > bd.ty * TILE - 24 && y < bd.y + 6;
-  const onDeck = w.colony.bridgeAt(Math.floor(x / TILE), Math.floor(y / TILE)) && (w.shelters.some((s) => Math.hypot(s.x - x, s.y - 16 - y) < 40) || w.campfires.some((f) => Math.hypot(f.x - x, f.y - y) < R));
-  const b = w.colony.buildings.find((bd) => bd.kind !== "bridge" && hit(bd)) ?? (onDeck ? undefined : w.colony.buildings.find(hit));
+  const covered = w.shelters.some((s) => Math.hypot(s.x - x, s.y - 16 - y) < 40) || w.campfires.some((f) => Math.hypot(f.x - x, f.y - y) < R) || w.tribe.farms.some((f) => Math.hypot(f.x - x, (f.y - y) * 1.6) < 40);
+  const b = w.colony.buildings.find((bd) => bd.kind !== "bridge" && bd.kind !== "path" && hit(bd)) ?? (covered ? undefined : w.colony.buildings.find(hit));
   if (b) {
     w.tribe.noteErased(b.kind, b.x, b.y);
     w.colony.removeBuilding(b);

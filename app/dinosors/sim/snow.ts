@@ -7,6 +7,7 @@
 import { FROST_RIDGE } from "./terrain";
 import { MAP_H, MAP_W, T, TILE } from "./types";
 import type { World } from "./world";
+import { seasonAt } from "./seasons";
 
 const NT = MAP_W * MAP_H;
 const ROWS_PER_STEP = 8;
@@ -34,6 +35,7 @@ export function altitudeCold(w: World, x: number, y: number) {
 }
 
 export class Snow {
+  private seasonIndex = -1;
   depth = new Float32Array(NT);
   /** permanent snowcaps (high peaks) */
   cap = new Uint8Array(NT);
@@ -57,6 +59,21 @@ export class Snow {
         this.depth[i] = peak ? 0.85 : 0;
       }
     }
+    this.applySeason(w);
+  }
+
+  /** A winter blanket covers all land; selecting another season thaws the lowlands. */
+  applySeason(w: World, immediate = false) {
+    const current = seasonAt(w.day);
+    this.seasonIndex = current.index;
+    for (let i = 0; i < NT; i++) {
+      const tile = w.terrain.tiles[i] as T;
+      if (!snowLand(tile) || w.lava.heat[i] > 0.05 || w.fire.heat[i] > 0.1) this.depth[i] = 0;
+      else if (this.cap[i]) this.depth[i] = Math.max(0.75, this.depth[i]);
+      else if (current.def.id === "winter") this.depth[i] = Math.max(this.depth[i], 0.55);
+      else if (immediate) this.depth[i] = 0;
+    }
+    this.navVersion++;
   }
 
   at(x: number, y: number) {
@@ -73,6 +90,8 @@ export class Snow {
   }
 
   update(w: World, dt: number) {
+    const current = seasonAt(w.day);
+    if (current.index !== this.seasonIndex) this.applySeason(w);
     this.acc += dt;
     const steps = Math.ceil(MAP_H / ROWS_PER_STEP);
     const span = this.acc;
@@ -87,12 +106,13 @@ export class Snow {
         const i = y * MAP_W + x;
         const t = tiles[i] as T;
         let d = this.depth[i];
-        if (t === T.Deep || t === T.Shallow || t === T.River || t === T.Tar) {
+        if (!snowLand(t)) {
           d = 0;
         } else if (w.lava.heat[i] > 0.05 || w.fire.heat[i] > 0.1) {
           d = 0;
         } else {
           d += (fall * (t === T.Forest || t === T.Jungle ? 0.6 : 1) - melt) * span * steps;
+          if (current.def.id === "winter") d += (0.7 - d) * Math.min(1, span * steps * 0.035);
           if (this.cap[i]) d = Math.max(d, 0.75);
         }
         this.depth[i] = Math.max(0, Math.min(1, d));
@@ -111,4 +131,8 @@ export class Snow {
     }
     this.acc = 0;
   }
+}
+
+function snowLand(tile: T) {
+  return tile !== T.Deep && tile !== T.Shallow && tile !== T.River && tile !== T.Tar && tile !== T.Volcano && tile !== T.Basalt;
 }

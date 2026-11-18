@@ -33,7 +33,7 @@ function footprints(w: World): Footprint[] {
       const a = farms[group[head]];
       for (let j = 0; j < farms.length; j++) {
         const b = farms[j];
-        if (seen.has(j) || (a.crop === "grape") !== (b.crop === "grape") || Math.abs(a.x - b.x) >= 100 || Math.abs(a.y - b.y) >= 62) continue;
+        if (seen.has(j) || (a.crop ?? "wheat") !== (b.crop ?? "wheat") || Math.abs(a.x - b.x) >= 100 || Math.abs(a.y - b.y) >= 62) continue;
         seen.add(j);
         group.push(j);
       }

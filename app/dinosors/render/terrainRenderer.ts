@@ -11,7 +11,9 @@ import { hash2, valueNoise } from "../sim/rng";
 import { CHUNKS_X, CHUNKS_Y, CHUNK_TILES, REGION, type Terrain } from "../sim/terrain";
 import { MAP_H, MAP_W, T, TILE } from "../sim/types";
 import { Q } from "./quality";
-import { STAMP, grainSheet, terrainStamps } from "./terrainTex";
+import { STAMP, grainSheet, seasonTerrainStamps, terrainStamps } from "./terrainTex";
+import type { SeasonId } from "../sim/seasons";
+import { seasonalTerrainColor } from "./seasonStyle";
 
 export const TILE_RGB: Record<T, [number, number, number]> = {
   [T.Deep]: [38, 104, 146],
@@ -77,6 +79,8 @@ function makeCanvas(w: number, h: number): Canvas {
 }
 
 export class TerrainRenderer {
+  private season: SeasonId = "spring";
+  private colors = TILE_RGB;
   private colorMap: Canvas;
   /** baked chunks, keyed by chunk + bake scale (close-up chunks are baked at twice the pixels) */
   private chunks = new Map<number, { canvas: Canvas; version: number; used: number }>();
@@ -104,6 +108,15 @@ export class TerrainRenderer {
     this.quickPaint();
   }
 
+  setSeason(season: SeasonId) {
+    if (season === this.season && this.colors !== TILE_RGB) return;
+    this.season = season;
+    this.colors = Object.fromEntries(Object.entries(TILE_RGB).map(([tile, rgb]) => [tile, seasonalTerrainColor(Number(tile) as T, rgb, season)])) as typeof TILE_RGB;
+    this.chunks.clear();
+    this.colorVersion.fill(0xffffffff);
+    this.quickPaint();
+  }
+
   /**
    * The whole map in a couple of milliseconds: one flat, hill-shaded pixel per tile, scaled up soft. Stands in
    * (for the ground, the minimap and the water mask) until the real painting reaches each chunk.
@@ -127,10 +140,10 @@ export class TerrainRenderer {
           const row = (ty * RES + sy) * SW + tx * RES;
           for (let sx = 0; sx < RES; sx++) this.sub[row + sx] = k;
         }
-        let [r, g, b] = TILE_RGB[k];
+        let [r, g, b] = this.colors[k];
         const e = t.elev[ti];
         const water = k === T.Deep || k === T.Shallow || k === T.River;
-        if (k === T.Sand && t.region[ti] === REGION.desert) [r, g, b] = DESERT_SAND;
+        if (k === T.Sand && t.region[ti] === REGION.desert) [r, g, b] = seasonalTerrainColor(k, DESERT_SAND, this.season);
         if ((k === T.Mountain || k === T.Rock || k === T.Cliff) && e > 0.55) {
           const snow = Math.min(1, (e - 0.55) * (k === T.Mountain ? 3.2 : 1.6) * 0.85);
           r += (SNOWCAP[0] - r) * snow;
@@ -217,12 +230,12 @@ export class TerrainRenderer {
         const k = at(px, py) as T;
         const fx = (px + 0.5) / RES;
         const fy = (py + 0.5) / RES;
-        let [r, g, b] = TILE_RGB[k];
+        let [r, g, b] = this.colors[k];
         const water = isW(k);
         const ti = Math.floor(fy) * MAP_W + Math.floor(fx);
         const e = t.elev[ti];
         // the desert's sand is warmer; dunes get long wind-blown ridges (they read even zoomed right out)
-        if (k === T.Sand && t.region[ti] === REGION.desert) [r, g, b] = DESERT_SAND;
+        if (k === T.Sand && t.region[ti] === REGION.desert) [r, g, b] = seasonalTerrainColor(k, DESERT_SAND, this.season);
         if (k === T.Dune) {
           const ridge = Math.sin((fx * 1.25 + fy * 0.42 + valueNoise(fx * 0.25, fy * 0.25, seed + 31) * 3.2) * Math.PI * 2);
           const lit = ridge > 0.55 ? 14 : ridge < -0.6 ? -16 : ridge * 4;
@@ -432,7 +445,7 @@ export class TerrainRenderer {
         ctx.globalAlpha = 1;
       }
       // texture stamps, one tile past each edge too (a tuft that spills over the border is drawn by both chunks)
-      const st = terrainStamps();
+      const st = seasonTerrainStamps(this.season);
       for (let ty = -1; ty <= CHUNK_TILES; ty++) {
         for (let tx = -1; tx <= CHUNK_TILES; tx++) {
           const gx = cx * CHUNK_TILES + tx;
@@ -660,8 +673,54 @@ function clamp255(v: number) {
   return v < 0 ? 0 : v > 255 ? 255 : v;
 }
 
+/** Where a river tile's boulder sits (same numbers the renderer uses for its foam), or null. */
+export function riverRock(tr: Terrain, gx: number, gy: number) {
+  const i = gy * MAP_W + gx;
+  if (tr.tiles[i] !== T.River) return null;
+  const h = (k: number) => hash2(gx, gy, tr.seed + k);
+  const rapid = tr.rapids[i] === 1;
+  if (h(60) >= (rapid ? 0.55 : 0.07)) return null;
+  return { x: gx * TILE + 6 + h(61) * (TILE - 12), y: gy * TILE + 6 + h(62) * (TILE - 12), r: 4 + h(63) * (rapid ? 6 : 5), rapid };
+}
+
+/** A rounded boulder: a wet one (in a river: dark waterline, a sheen) or a dry, mossy one. */
+function boulder(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, wet: boolean, moss: number) {
+  ctx.fillStyle = wet ? "rgba(20,40,50,0.35)" : "rgba(40,34,26,0.28)";
+  ctx.beginPath();
+  ctx.ellipse(x + r * 0.15, y + r * 0.45, r * 1.15, r * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = wet ? "#6c7377" : "#8d877d";
+  ctx.beginPath();
+  ctx.ellipse(x, y - r * 0.15, r, r * 0.78, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = wet ? "#4c5357" : "#6d675e";
+  ctx.beginPath();
+  ctx.ellipse(x + r * 0.2, y + r * 0.1, r * 0.75, r * 0.45, 0, 0, Math.PI);
+  ctx.fill();
+  ctx.fillStyle = wet ? "rgba(235,248,255,0.55)" : "rgba(255,250,235,0.4)";
+  ctx.beginPath();
+  ctx.ellipse(x - r * 0.3, y - r * 0.5, r * 0.4, r * 0.2, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  if (!wet && moss > 0.5) {
+    ctx.fillStyle = "rgba(92,128,58,0.7)";
+    ctx.beginPath();
+    ctx.ellipse(x - r * 0.2, y - r * 0.62, r * 0.55, r * 0.22, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function detailTile(ctx: CanvasRenderingContext2D, tile: T, px: number, py: number, h: (k: number) => number, gx: number, gy: number, tileAt: (i: number) => T, tr: Terrain) {
   const elev = tr.elev[gy * MAP_W + gx];
+  // rocks in the rivers (thick in the rapids), and the odd boulder lying about on the land
+  if (tile === T.River) {
+    const rock = riverRock(tr, gx, gy);
+    if (rock) {
+      boulder(ctx, rock.x - gx * TILE + px, rock.y - gy * TILE + py, rock.r, true, 0);
+      if (rock.rapid && h(64) < 0.45) boulder(ctx, px + 4 + h(65) * (TILE - 8), py + 4 + h(66) * (TILE - 8), 2.5 + h(67) * 3, true, 0);
+    }
+  } else if ((tile === T.Grass || tile === T.Dirt || tile === T.Forest || tile === T.Jungle || tile === T.Sand) && h(68) > 0.987) {
+    boulder(ctx, px + 6 + h(69) * (TILE - 12), py + 8 + h(70) * (TILE - 14), 4 + h(71) * 6, false, h(72));
+  }
   switch (tile) {
     case T.Dune: {
       // wind ripples: shallow arcs across the slope, a sun-lit crest + a shaded lee

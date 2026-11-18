@@ -6,6 +6,12 @@
 /*                                                                     */
 /*  Stages (what the renderer shows):                                  */
 /*    fresh → partial → mostly → bones → gone                          */
+/*                                                                     */
+/*  Animals eat a body whole: bones, hide and all go down with the     */
+/*  meat, so whatever they finish leaves nothing behind. A big kill is */
+/*  more than one hunter can eat: it eats its fill and leaves the rest */
+/*  (an animal kill: `wild`) for meat-eaters that come past to finish. */
+/*  Left alone, an animal kill fades away whole: never a skeleton.     */
 /* ------------------------------------------------------------------ */
 import { carcassYield } from "../data/colony";
 import { sp } from "../data/species";
@@ -19,7 +25,7 @@ export type CarcassStage = "fresh" | "partial" | "mostly" | "bones" | "gone";
 /** Order people take things off a body. */
 const CUT_ORDER: Resource[] = ["meat", "hide", "tooth", "bone"];
 
-export function makeCarcass(w: World, d: Dino, opts: { burnt?: boolean } = {}): Item {
+export function makeCarcass(w: World, d: Dino, opts: { burnt?: boolean; wild?: boolean } = {}): Item {
   const def = sp(d.species);
   const size = sizeOf(d);
   const y = carcassYield(size, def.diet !== "herbivore", !!def.shape.horns || !!def.shape.spikes || !!def.shape.club);
@@ -34,6 +40,7 @@ export function makeCarcass(w: World, d: Dino, opts: { burnt?: boolean } = {}): 
     dir: d.dir,
     burnt,
     rot: 0,
+    ...(opts.wild && !burnt ? { wild: true } : {}),
   };
   const it = w.addItem("carcass", d.x, d.y, { species: d.species, amount: c.meat, carcass: c, z: def.move === "fly" ? Math.max(0, d.z) : 0 });
   return it;
@@ -52,7 +59,8 @@ export function carcassStage(c: Carcass): CarcassStage {
   const k = harvested(c);
   if (k < 0.15) return "fresh";
   if (k < 0.5) return "partial";
-  if (k < 0.92) return "mostly";
+  // an animal kill is eaten bones and all: never a bare skeleton
+  if (k < 0.92 || c.wild) return "mostly";
   return "bones";
 }
 
@@ -110,16 +118,28 @@ export function clearCarcass(w: World, it: Item) {
   w.removeItem(it);
 }
 
-/** A predator tearing at the meat (amount in "meat units"). Returns true if the meat's all gone. */
+/**
+ * An animal eating a body (amount in "meat units"). It eats the lot, not just the meat: bones, hide
+ * and teeth go down in step with the meat, so a body it finishes is gone (no skeleton left).
+ * Returns true once it's all eaten (the caller clears it away).
+ */
 export function eatCarcass(it: Item, units: number) {
   const c = it.carcass;
   if (!c) return true;
-  c.meat = Math.max(0, c.meat - units);
-  // tearing at a body ruins some of the hide too
-  if (c.hide > 0 && c.meat < c.max.meat * 0.5) c.hide = Math.max(0, c.hide - units * 0.25);
+  const before = c.meat;
+  if (before <= 0) return true;
+  c.meat = Math.max(0, before - units);
+  const k = c.meat / before;
+  c.hide *= k;
+  c.bone *= k;
+  c.tooth *= k;
+  if (c.meat <= 0.01) c.meat = c.hide = c.bone = c.tooth = 0;
   it.amount = c.meat;
   return c.meat <= 0;
 }
+
+/** Seconds an animal kill keeps fresh for scavengers (longer than a body left by people). */
+const WILD_FRESH = 300;
 
 /** Bodies spoil if nobody harvests them: meat, then hide; bones last a long time. */
 export function updateCarcass(w: World, it: Item, dt: number) {
@@ -129,6 +149,22 @@ export function updateCarcass(w: World, it: Item, dt: number) {
   if (c.town) it.t = Math.min(it.t, 80);
   const t = it.t;
   // after a couple of minutes the meat starts to go off, then the hide
+  if (c.wild) {
+    // an animal kill: it keeps a good while for passing meat-eaters, then fades away whole (the
+    // scavengers + beetles take the lot): bones go with the meat, never a bare skeleton
+    const cap = c.max.meat * Math.max(0, Math.min(1, 1 - (t - WILD_FRESH) / 200));
+    if (c.meat > cap && c.meat > 0) {
+      const k = cap / c.meat;
+      c.meat = cap;
+      c.hide *= k;
+      c.bone *= k;
+      c.tooth *= k;
+    }
+    c.rot = Math.max(0, Math.min(1, (t - WILD_FRESH * 0.6) / 260));
+    it.amount = c.meat;
+    if (c.meat <= 0.01 && !c.roast) clearCarcass(w, it);
+    return;
+  }
   const meatCap = c.max.meat * Math.max(0, Math.min(1, 1 - (t - 120) / 150));
   const hideCap = c.max.hide * Math.max(0, Math.min(1, 1 - (t - 240) / 220));
   if (c.meat > meatCap) c.meat = meatCap;

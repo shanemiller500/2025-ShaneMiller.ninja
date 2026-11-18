@@ -59,7 +59,7 @@ export class Population {
       const slot = roommates.findIndex((h) => h.id === person.id) + 1;
       const cap = HOUSING[home.tier].cap + (w.civ.has("greatHalls") ? 2 : 0);
       const rooms = wingUnits(w, home);
-      const label = rooms.length > 1 ? `Castle floor ${rooms.findIndex((s) => s.id === home.id) + 1}` : home.tier >= 4 ? "Castle wing" : HOUSING[home.tier].name;
+      const label = rooms.length > 1 ? `Castle room ${rooms.findIndex((s) => s.id === home.id) + 1}` : home.tier >= 4 ? "Castle wing" : HOUSING[home.tier].name;
       if (slot <= cap) return `${label} - bed ${slot}/${cap}`;
     }
     const unhoused = w.humans.filter((h) => !h.stranger && !w.shelters.some((s) => s.id === h.home && shelterDone(s) && s.hp > 0));

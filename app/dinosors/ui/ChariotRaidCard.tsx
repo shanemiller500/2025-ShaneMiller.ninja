@@ -14,7 +14,7 @@ import type { Engine, InspectInfo, Snapshot } from "../game/engine";
 
 type Info = Extract<InspectInfo, { kind: "chariot" }>;
 
-const PHASE: Record<string, string> = { muster: "Mustering", march: "On the march", battle: "Battle!", collect: "🥚 Gathering the eggs", return: "Heading home" };
+const PHASE: Record<string, string> = { muster: "Mustering", march: "On the march", battle: "Battle!", collect: "🥚 Gathering the eggs", clear: "🪓 Destroying the nest", return: "Heading home" };
 
 function Stepper({ icon, label, value, max, onChange }: { icon: string; label: string; value: number; max: number; onChange: (n: number) => void }) {
   return (
@@ -39,6 +39,7 @@ function Stepper({ icon, label, value, max, onChange }: { icon: string; label: s
 export function ChariotRaidCard({ info, snap, engine, children }: { info: Info; snap: Snapshot; engine: Engine; children?: ReactNode }) {
   const [target, setTarget] = useState<string>(info.targets[0] ? `${info.targets[0].kind}:${info.targets[0].id}` : "");
   const [formation, setFormation] = useState<HuntFormation>("ring");
+  const [nestsOnly, setNestsOnly] = useState(false);
   const [dragons, setDragons] = useState(Math.min(2, info.dragonRiders));
   const [dinos, setDinos] = useState(Math.min(3, info.dinoRiders));
   const d = Math.min(dragons, info.dragonRiders);
@@ -108,11 +109,16 @@ export function ChariotRaidCard({ info, snap, engine, children }: { info: Info; 
       ) : (
         <>
           <div className="mt-3 text-[12px] font-bold text-white/70">Rally the unit: who do we attack?</div>
+          <div className="mt-1 flex gap-1" role="group" aria-label="Mission targets">
+            <button type="button" aria-pressed={!nestsOnly} onClick={() => setNestsOnly(false)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${!nestsOnly ? "bg-amber-400 text-slate-950" : "bg-white/10"}`}>All targets</button>
+            <button type="button" aria-pressed={nestsOnly} onClick={() => { setNestsOnly(true); const nest = info.targets.find((t) => t.kind === "nest"); setTarget(nest ? `nest:${nest.id}` : ""); }} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${nestsOnly ? "bg-amber-400 text-slate-950" : "bg-white/10"}`}>🪓 Clear a nest</button>
+          </div>
+          {nestsOnly && !info.targets.some((t) => t.kind === "nest") && <p className="mt-2 text-xs text-white/60">No known nests to clear. Send scouts to find one.</p>}
           {info.targets.length === 0 ? (
             <p className="mt-1 text-[12px] text-white/55">No known dragon, nest or camp yet. Track a wild dragon home, or scout the valley, the desert and the peaks.</p>
           ) : (
             <div className="mt-1 max-h-36 space-y-1 overflow-y-auto">
-              {info.targets.map((t) => {
+              {info.targets.filter((t) => !nestsOnly || t.kind === "nest").map((t) => {
                 const id = `${t.kind}:${t.id}`;
                 return (
                   <button key={id} type="button" aria-pressed={target === id} onClick={() => setTarget(id)}
@@ -149,11 +155,12 @@ export function ChariotRaidCard({ info, snap, engine, children }: { info: Info; 
           <p className="mt-1.5 text-[11px] leading-snug text-white/55">
             Seats are filled automatically, fighters first{picked?.kind === "nest" ? " (plus egg runners to grab the eggs)" : ""}. Everyone gathers at the camp's edge, and nobody attacks till 98% are in place round the target. On the way they fight anything that comes at them (dinos, dragons, raiders), then carry on.
           </p>
+          {picked?.kind === "nest" && <p className="mt-2 rounded-xl bg-amber-400/15 p-2 text-xs font-semibold text-amber-100">🪓 Defeat the defenders, collect the eggs, then destroy the nest. An empty nest is cleared as soon as the crew reaches it.</p>}
           {!info.cars && <p className="mt-2 rounded-xl bg-amber-500/15 p-2 text-[12px] font-semibold text-amber-100">⚠️ {info.why ?? "No war chariot is ready to ride out."}</p>}
           <button type="button" disabled={!picked || !info.cars}
             onClick={() => picked && engine.chariotRaid({ kind: picked.kind, id: picked.id }, formation, d, n)}
             className="mt-2 w-full rounded-2xl bg-gradient-to-r from-sky-700 to-amber-600 py-2.5 text-sm font-bold transition hover:brightness-110 active:scale-95 disabled:opacity-40">
-            📣 Rally the unit · {seated + d + n} go{picked ? ` to ${picked.name.replace(/^(The|An) /, (m) => m.toLowerCase())}` : ""}
+            {picked?.kind === "nest" ? "🪓 Clear nest" : "📣 Rally the unit"} · {seated + d + n} go{picked ? ` to ${picked.name.replace(/^(The|An) /, (m) => m.toLowerCase())}` : ""}
           </button>
         </>
       )}

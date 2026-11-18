@@ -5,13 +5,18 @@
 /* ------------------------------------------------------------------ */
 import { startClearJob, type ClearRect } from "../sim/clearArea";
 import { ownedBuildCounts } from "./buildCounts";
+import { BERRIES } from "../data/berries";
 import { planWing } from "../sim/estate";
-import { wingUnits } from "../sim/castleCompound";
+import { compoundOf, keepHeight, wingUnits } from "../sim/castleCompound";
 import { CONDITION_LABEL, OBSIDIAN_SHIELD, obsidianProblem, obsidianStatus, orderObsidian, orderObsidianAll, scorpionCondition, scorpionCost, scorpionMaxHp, scorpionWorks } from "../sim/scorpionArmor";
 import { connectWalls, joinMessage } from "../sim/wallLinks";
 import { startSweep } from "../sim/territory";
 import { chariotParked, chariotTier, chariotUpgradeProblem, nextChariotTier, orderChariotUpgrade } from "../sim/chariotTiers";
 import { HEALER_TIERS, upgradeHealer, wardView } from "../sim/hospital";
+import { zooView } from "../sim/zoo";
+import { isLavaFolk, lavaSpeak } from "../sim/lavaFolk";
+import { dreadLabel, dreadOf } from "../sim/beasts";
+import { recallWagon, sendWagon, wagonAt, WAGON_CREW, WAGON_MODE_LABEL } from "../sim/waterWagons";
 import { chariotAt, huntFoeName, huntTargetName, MUSTER_FOR, raidPool, raidTargets, retargetHunt, startHunt, startRaid, type RaidTarget } from "../sim/chariots";
 import type { HuntFormation } from "../sim/types";
 import { CLAN_TECH, techOf } from "../sim/clanTech";
@@ -30,7 +35,7 @@ import { DeepView, type DeepInfo } from "./deepView";
 import { canSend, pickMiners, recallAll, resetMine, sendDown, setOrder, type OrderKind } from "../sim/miners";
 import { demolishDeep } from "../sim/deepBuild";
 import { SKY_LEVELS } from "../sim/sky";
-import { SEASON_DAYS, seasonAt } from "../sim/seasons";
+import { dayForSeason, SEASON_DAYS, seasonAt, type SeasonId } from "../sim/seasons";
 import { canSendPack, packCap, recallPacks, sendPack } from "../sim/packs";
 import type { DeepKind } from "../data/mine";
 import { CIV_TECH, ENERGY_GEN, PYRAMID_STAGES, buildingGen, SHIELD_HOLD, type CivPath, type CivTechId } from "../data/civ";
@@ -42,7 +47,7 @@ import { pokeDino } from "../sim/behavior";
 import { canStand, emote, findSpawnSpot, isBaby, setState, sizeOf } from "../sim/dinos";
 import { P } from "../sim/particles";
 import { TALL, shakeFruit } from "../sim/plants";
-import { LM, isWaterTile } from "../sim/terrain";
+import { LM, TERRAIN_GEN, isWaterTile } from "../sim/terrain";
 import { TILE, WORLD_H, WORLD_W, type Brute, type Danger, type Dino, type DinoState, type Dragon, type Human, type Resource, type Role, type SpeciesId, type TechId, type WeaponKind, type WeatherKind } from "../sim/types";
 import { CAMP_LEVELS } from "../data/facts";
 import { ARMOR_BY_ID, BUILDINGS, FORGE_ITEMS, HELMET_BY_ID, HOUSING, RIDEABLE, SCORPION_TIERS, SHIELDS, WEAPON_BY_ID, type Cost } from "../data/colony";
@@ -212,18 +217,21 @@ export type InspectInfo =
       /** a Dragon Shield: its field, charge + the upgrades on offer (dragonShield.ts) */
       shield?: { r: number; charge: number; powered: boolean; pushing: boolean; linked: number; ups: { key: ShieldUp; icon: string; name: string; tip: string; lvl: number; max: number; cost: Cost; ok: boolean }[] };
       /** a healing hut / infirmary / hospital: its beds, who's in them and the next size up (hospital.ts) */
-      ward?: ReturnType<typeof wardView> }
+      ward?: ReturnType<typeof wardView>;
+      /** a zoo enclosure: what's in it and when it eats next (zoo.ts) */
+      zoo?: ReturnType<typeof zooView> & { dread: string } }
   | { kind: "scorpion"; id: number; condition: string; conditionTone: "good" | "warn" | "bad" | "info"; working: boolean; obsidian: boolean; obsidianOffer: { cost: Cost; fitting: boolean; blocked: string | null } | null; name: string; tier: number; built: number; hp: number; maxHp: number; drone: boolean; crew: string | null; mount: string; cost: Cost; have: Cost; next: { name: string; cost: Cost; locked: boolean } | null; upgrading: boolean }
   | { kind: "gate"; id: number; open: boolean; auto: boolean; mega: boolean; hp: number; maxHp: number; material: string }
   | { kind: "wall"; id: number; material: string; part: string; built: number; hp: number; maxHp: number }
   | { kind: "farm"; id: number; crop: string; growth: number; planted: boolean }
   | { kind: "tower"; id: number; stage: number; hp: number; maxHp: number; guards: number; stone: boolean; up: boolean; canUpgrade: boolean; upCost: number }
   | { kind: "carcass"; id: number; name: string; stage: string; left: { r: string; n: number; max: number }[]; working: number; burnt: boolean; fresh: number }
+  | { kind: "wagon"; id: number; hp: number; tank: number; tankMax: number; mode: string; auto: boolean; crew: string[]; crewNeed: number; stoned: number; lava: number; water: number; target: string | null }
   | { kind: "chariot"; id: number; hp: number; trike: boolean; crew: number; name: string; icon: string; parked: boolean; repairKey: string;
       /** why this chariot can't ride out (null = it can) */
       why: string | null;
       next: { name: string; icon: string; tip: string; cost: Cost; hp: number } | null; up: boolean; have: Cost; upProblem: string | null;
-      cars: number; seats: number; dragonRiders: number; dinoRiders: number; fillers: number; targets: { kind: "nest" | "clan" | "dragon" | "camp"; id: number; icon: string; name: string; note: string; dist: number }[]; busy: boolean }
+      cars: number; seats: number; dragonRiders: number; dinoRiders: number; fillers: number; targets: { kind: RaidTarget["kind"]; id: number; icon: string; name: string; note: string; dist: number }[]; busy: boolean }
   // the Mountain Monks (tap one, or their huts / shrine)
   | { kind: "monks"; id: number; n: number; pilgrims: number; activity: string; rite: string | null; daysToRite: number; names: string[]; found: boolean }
   // a Sand People camp (tap its tents)
@@ -502,7 +510,7 @@ export class Engine {
   /** last command + its alternatives (for the "instead…" chip) */
   private lastCmd: { cmd: Command; people: number[]; at: number; weapon: WeaponKind | null } | null = null;
   /** tapped building being looked at */
-  inspectRef: { kind: "shelter" | "building" | "scorpion" | "gate" | "wall" | "farm" | "tower" | "carcass" | "chariot" | "monks" | "sandCamp"; id: number } | null = null;
+  inspectRef: { kind: "shelter" | "building" | "scorpion" | "gate" | "wall" | "farm" | "tower" | "carcass" | "chariot" | "wagon" | "monks" | "sandCamp"; id: number } | null = null;
   /** shift-drag selection box (screen px) */
   private box: { x0: number; y0: number; x1: number; y1: number } | null = null;
   private hoverHint: { x: number; y: number; icon: string; label: string } | null = null;
@@ -567,7 +575,8 @@ export class Engine {
     this.canvas = canvas;
     const saved = opts.fresh ? null : loadWorld();
     this.startedFresh = !saved;
-    this.world = saved ?? new World(opts.seed ?? Math.floor(Math.random() * 1e9));
+    // (a brand new game gets the newest map: the old lands' streams too)
+    this.world = saved ?? new World(opts.seed ?? Math.floor(Math.random() * 1e9), true, TERRAIN_GEN);
     this.renderer = new Renderer(canvas, this.world);
     this.deep = new DeepView(canvas);
     this.deep.world = () => this.world;
@@ -788,7 +797,8 @@ export class Engine {
     this.bedT -= dt;
     if (this.bedT <= 0) {
       this.bedT = 0.25;
-      const vd = Math.hypot(w.volcano.x - this.cam.x, w.volcano.y - this.cam.y);
+      // (the nearer of the two volcanoes that's awake)
+      const vd = Math.min(...w.volcanoes.filter((v) => v.active).map((v) => Math.hypot(v.x - this.cam.x, v.y - this.cam.y)), 1e9);
       this.audio.updateBeds({
         rain: w.weather.rain,
         wind: w.weather.wind,
@@ -796,7 +806,7 @@ export class Engine {
         fire: this.renderer.fireInView + w.campfires.filter((f) => f.lit && Math.hypot(f.x - this.cam.x, f.y - this.cam.y) < 600).length * 2,
         night: Math.max(0, 0.7 - w.daylight) * (1 - w.weather.rain),
         day: w.daylight,
-        volcano: w.volcano.active ? Math.max(0, 1 - vd / 3000) : 0,
+        volcano: Math.max(0, 1 - vd / 3000),
       }, 0.25);
     }
 
@@ -1821,6 +1831,12 @@ export class Engine {
       }
       return;
     }
+    // a water wagon (its crew are part of it): its card
+    const wagon = wagonAt(w, x, y);
+    if (wagon) {
+      this.inspect({ kind: "wagon", id: wagon.id });
+      return;
+    }
     // a war chariot (its trike + crew are part of it): its card, to set up a raid
     const car = chariotAt(w, x, y);
     if (car) {
@@ -1854,6 +1870,8 @@ export class Engine {
       }
       this.select(d.id);
       pokeDino(w, d);
+      // a Lava Monster moans "LAVA… lava…" (lavaFolk.ts)
+      if (isLavaFolk(d)) lavaSpeak(w, d);
       w.meet(d.species);
       this.emit({ type: "select" });
       return;
@@ -1878,16 +1896,17 @@ export class Engine {
       this.audio.play("pop", 0, 0, 0.4);
       return;
     }
-    // volcano: grumble on tap, erupt on a second tap
-    if (Math.hypot(x - w.volcano.x, (y - w.volcano.y) * 1.4) < 360) {
-      if (w.volcano.phase === "idle") {
+    // volcano (either of them): grumble on tap, erupt on a second tap
+    const tappedVolcano = w.volcanoes.find((v) => Math.hypot(x - v.x, (y - v.y) * 1.4) < 360);
+    if (tappedVolcano) {
+      if (tappedVolcano.phase === "idle") {
         this.volcanoTaps++;
         if (this.volcanoTaps >= 2) {
           this.volcanoTaps = 0;
-          w.volcano.trigger(w);
+          tappedVolcano.trigger(w);
         } else {
           w.shake(3, 0.6);
-          w.sfx("rumble", w.volcano.x, w.volcano.y, 0.7);
+          w.sfx("rumble", tappedVolcano.x, tappedVolcano.y, 0.7);
           w.toast("🌋", "The volcano grumbles… (tap again if you dare!)");
         }
       }
@@ -1947,8 +1966,10 @@ export class Engine {
       if (Math.hypot(p.x - x, p.y - 8 - y) > r) continue;
       if (p.kind === "goldEgg" && !p.found) {
         p.found = true;
-        const locked = SPECIES.filter((s) => !w.unlocked.has(s.id) && s.move === "walk");
-        const pick = (locked.length ? locked : SPECIES.filter((s) => s.move === "walk"))[Math.floor(w.rng() * (locked.length || 1))];
+        // (Lava Monsters don't come from eggs: the volcano makes them)
+        const hatchable = (s: (typeof SPECIES)[number]) => s.move === "walk" && s.id !== "lavaFolk" && s.id !== "croc" && s.id !== "hippo" && s.id !== "snake" && s.id !== "beaver";
+        const locked = SPECIES.filter((s) => !w.unlocked.has(s.id) && hatchable(s));
+        const pick = (locked.length ? locked : SPECIES.filter(hatchable))[Math.floor(w.rng() * (locked.length || 1))];
         const egg = w.placeEgg(pick.id, p.x, p.y);
         egg.hatchAt = 2.5;
         w.discover("goldEgg", p.x, p.y);
@@ -1996,6 +2017,8 @@ export class Engine {
     const w = this.world;
     const body = carcassAt(w, x, y);
     if (body) return this.inspect({ kind: "carcass", id: body.id });
+    const wagon = wagonAt(w, x, y);
+    if (wagon) return this.inspect({ kind: "wagon", id: wagon.id });
     const car = chariotAt(w, x, y);
     if (car) return this.inspect({ kind: "chariot", id: car.id });
     const tx = Math.floor(x / TILE);
@@ -2019,9 +2042,9 @@ export class Engine {
     if (wl) return this.inspect({ kind: "wall", id: wl.id });
     const farm = w.tribe.farms.find((f) => Math.hypot(f.x - x, (f.y - y) * 1.6) < 40);
     if (farm) return this.inspect({ kind: "farm", id: farm.id });
-    const s = w.shelters.find((sh) => Math.abs(sh.x - x) < 32 && y < sh.y + 8 && y > sh.y - Math.max(58, (wingUnits(w, sh).length + 1) * 26 + 12));
+    const s = this.shelterAt(x, y);
     if (s) return this.inspect({ kind: "shelter", id: s.id });
-    const b = w.colony.buildings.find((bd) => x > bd.tx * TILE && x < (bd.tx + BUILDINGS[bd.kind].w) * TILE && y > bd.ty * TILE - 30 && y < bd.y + 6);
+    const b = w.colony.buildingAt(x, y);
     if (b) return this.inspect({ kind: "building", id: b.id });
     return false;
   }
@@ -2283,6 +2306,19 @@ export class Engine {
     const w = this.world;
     const wpn = weapon ?? (cmd.weapons && cmd.weapons.length > 1 ? null : cmd.weapons?.[0] ?? null);
     // an attack on a clan camp or a dragon's nest goes out as one force: chariots filled, riders mounted, 98% in place first
+    // a Yeti or a Dinosaur Scorpion: the party goes as one expedition, to kill it or to net it for the zoo
+    if (cmd.beast) {
+      if (wpn) for (const h of people) if (!h.child) w.colony.equipKind(h, wpn);
+      const why = startHunt(w, this.huntFormation, { people, beast: cmd.target, capture: cmd.beast === "capture" });
+      if (why) w.toast(cmd.beast === "capture" ? "🕸️" : "🏹", why, cmd.x, cmd.y);
+      else {
+        this.marker = { x: cmd.x, y: cmd.y, t: 0, icon: cmd.icon };
+        this.audio.play("pop", 0, 0, 0.5);
+        this.selectedId = 0;
+      }
+      this.emit({ type: "select" });
+      return;
+    }
     if ((cmd.kind === "raid" || cmd.kind === "dragonRaid") && !w.colony.hunt) {
       if (wpn) for (const h of people) if (!h.child) w.colony.equipKind(h, wpn);
       const why = startHunt(w, this.huntFormation, cmd.kind === "raid" ? { people, clan: cmd.target } : { people, nest: cmd.target });
@@ -2341,6 +2377,33 @@ export class Engine {
     else this.closeInspect();
     this.emit({ type: "select" });
     return !why;
+  }
+
+  /** From a water wagon's card: send it after the nearest Lava Monster. */
+  sendWagon(id: number) {
+    const w = this.world;
+    const g = w.colony.wagons.find((x) => x.id === id);
+    if (!g) return;
+    const why = sendWagon(w, g);
+    if (why) w.toast("💦", why, g.x, g.y);
+    else this.audio.play("click", 0, 0, 0.35);
+    this.emit({ type: "select" });
+  }
+
+  /** From a water wagon's card: call it home to refill. */
+  recallWagon(id: number) {
+    const g = this.world.colony.wagons.find((x) => x.id === id);
+    if (!g) return;
+    recallWagon(this.world, g);
+    this.emit({ type: "select" });
+  }
+
+  /** From a water wagon's card: roll out by itself whenever a Lava Monster comes near (or only when sent). */
+  setWagonAuto(id: number, on: boolean) {
+    const g = this.world.colony.wagons.find((x) => x.id === id);
+    if (!g) return;
+    g.auto = on;
+    this.emit({ type: "select" });
   }
 
   /** From a chariot's card: order its next upgrade (builders bring the materials, then fit it at home). */
@@ -2863,6 +2926,8 @@ export class Engine {
 
   private hoverStructure(x: number, y: number) {
     const w = this.world;
+    const wagon = wagonAt(w, x, y);
+    if (wagon) return { x: wagon.x, y: wagon.y - 24, radius: 44, icon: "💦", label: `Water wagon · ${Math.round((wagon.tank / wagon.tankMax) * 100)}% full · tap to inspect` };
     const car = chariotAt(w, x, y);
     if (car) return { x: car.x, y: car.y - 24, radius: 52, icon: "🛡️", label: "War chariot · tap to set up a raid" };
     const grove = w.forest.campAt(x, y, 120);
@@ -2877,11 +2942,21 @@ export class Engine {
     if (wl) return { x: (wl.tx + 0.5) * TILE, y: (wl.ty + 0.5) * TILE, radius: 20, icon: "🔷", label: `${wl.kind} ${wl.part} · tap to edit` };
     const farm = w.tribe.farms.find((f) => Math.hypot(f.x - x, (f.y - y) * 1.6) < 40);
     if (farm) return { x: farm.x, y: farm.y, radius: 38, icon: "🌾", label: "Farm · tap to edit" };
-    const shelter = w.shelters.find((s) => Math.abs(s.x - x) < 32 && y < s.y + 8 && y > s.y - Math.max(58, (wingUnits(w, s).length + 1) * 26 + 12));
+    const shelter = this.shelterAt(x, y);
     if (shelter) return { x: shelter.x, y: shelter.y - 18, radius: 34, icon: "🏠", label: "Home · tap to inspect" };
-    const building = w.colony.buildings.find((b) => x > b.tx * TILE && x < (b.tx + BUILDINGS[b.kind].w) * TILE && y > b.ty * TILE - 30 && y < b.y + 6);
+    const building = w.colony.buildingAt(x, y);
     if (building) return { x: building.x, y: building.y - 8, radius: BUILDINGS[building.kind].w * 18, icon: BUILDINGS[building.kind].icon, label: `${BUILDINGS[building.kind].name} · tap to inspect` };
     return null;
+  }
+
+  private shelterAt(x: number, y: number) {
+    const matches = this.world.shelters.filter((s) => {
+      const castle = compoundOf(this.world, s.id);
+      const width = castle?.layout === "keep" ? (castle.halfWidth ?? 64) + 8 : 32;
+      const height = castle?.layout === "keep" ? keepHeight(wingUnits(this.world, s).length) + 56 : 58;
+      return Math.abs(s.x - x) < width && y < s.y + 8 && y > s.y - height;
+    });
+    return matches.find((s) => shelterDone(s)) ?? matches[0];
   }
 
   /* ----------------------------- building actions ----------------------------- */
@@ -2897,7 +2972,7 @@ export class Engine {
       this.world.toast("🏰", result);
       return;
     }
-    this.world.toast("🏰", `Castle wing planned: builders will bring stone, timber and bedding. ${HOUSING[result.tier].cap + (this.world.civ.has("greatHalls") ? 2 : 0)} beds open when it is finished.`, result.x, result.y);
+    this.world.toast("🏰", `Castle rooms planned: builders will bring stone, timber and bedding. ${HOUSING[result.tier].cap + (this.world.civ.has("greatHalls") ? 2 : 0)} beds open when it is finished.`, result.x, result.y);
     this.inspectRef = { kind: "shelter", id: result.id };
     this.emit({ type: "inspect" });
   }
@@ -3340,6 +3415,19 @@ export class Engine {
   setTime(h: number) {
     this.world.time = ((h % 24) + 24) % 24;
   }
+
+  setSeason(id: SeasonId) {
+    const w = this.world;
+    const previousDay = w.day;
+    w.day = dayForSeason(w.day, id);
+    w.almanac.jumpCalendar(w, (w.day - previousDay) * 24);
+    w.weather.set(w, id === "winter" ? "snow" : id === "autumn" ? "windy" : "clear");
+    w.weather.settle(w);
+    w.snow.applySeason(w, true);
+    const s = seasonAt(w.day).def;
+    w.toast(s.icon, `${s.name}: ${s.arrives}`);
+    this.emit({ type: "inspect" });
+  }
   setSpeed(s: number) {
     this.world.timeSpeed = s;
     this.world.timePaused = s === 0;
@@ -3572,6 +3660,7 @@ export class Engine {
     const body = w.items.find((it) => it.kind === "carcass" && inView(it.x, it.y));
     if (body) add(`carcass:${body.id}`, body.x, body.y - 30);
     add("volcano", w.volcano.x, w.volcano.y - 160);
+    add("volcano2", w.volcano2.x, w.volcano2.y - 160);
     const egg = w.eggs.find((e) => inView(e.x, e.y));
     if (egg) add(`egg:${egg.id}`, egg.x, egg.y - 20);
     const dino = w.dinos.find((d) => inView(d.x, d.y) && d.state !== "carried");
@@ -3907,7 +3996,7 @@ export class Engine {
 
   newWorld(seed = Math.floor(Math.random() * 1e9)) {
     const keep = { discoveries: this.world.discoveries, unlocked: this.world.unlocked, seen: this.world.seen };
-    this.world = new World(seed);
+    this.world = new World(seed, true, TERRAIN_GEN);
     // stickers + unlocked species are the player's, not the world's
     this.world.discoveries = keep.discoveries;
     this.world.unlocked = keep.unlocked;
@@ -4408,7 +4497,7 @@ export class Engine {
         const s = w.shelters.find((x) => x.id === r.id);
         if (!s) return null;
         const done = shelterDone(s);
-        const units = wingUnits(w, s);
+        const units = done ? wingUnits(w, s) : [s];
         const unitIds = new Set(units.map((u) => u.id));
         const t = HOUSING[s.tier];
         const next = HOUSING[s.tier + 1];
@@ -4417,8 +4506,8 @@ export class Engine {
         return {
           kind: "shelter",
           id: s.id,
-          icon: t.icon,
-          name: done ? s.tier >= 4 ? "Castle wing" : t.name : `${s.plan === "castle" ? "Castle wing" : s.plan === "tent" ? "Tent" : "Hut"} (building)`,
+          icon: compoundOf(w, s.id)?.layout === "keep" ? "🏰" : t.icon,
+          name: done ? compoundOf(w, s.id)?.layout === "keep" ? "Castle" : s.tier >= 4 ? "Castle wing" : t.name : `${compoundOf(w, s.id)?.layout === "keep" ? "Castle rooms" : s.plan === "castle" ? "Castle wing" : s.plan === "tent" ? "Tent" : "Hut"} (building)`,
           tier: s.tier,
           cap: units.reduce((n, u) => n + HOUSING[u.tier].cap + (w.civ.has("greatHalls") ? 2 : 0), 0),
           addBeds: HOUSING[4].cap + (w.civ.has("greatHalls") ? 2 : 0),
@@ -4458,6 +4547,11 @@ export class Engine {
           };
           const shNote = !sv.powered ? "🔌 No energy: the field is down. Dragons fly straight through until the grid recharges." : shield.pushing ? "〰️ Humming hard: pushing a dragon away." : shield.charge > 0 ? "⚡ Charging: a dragon is coming in." : "🛡️ On watch: the field wakes when a dragon comes near.";
           return { kind: "building", id: b.id, bkind: b.kind, icon: d.icon, name: d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage, note: shNote, shield };
+        }
+        if (b.kind === "zoo" && b.built >= 1) {
+          const zoo = { ...zooView(w, b), dread: dreadLabel(dreadOf(w)) };
+          return { kind: "building", id: b.id, bkind: b.kind, icon: d.icon, name: zoo.beast ? `Zoo: the ${zoo.beast.name}` : d.name, tip: d.tip, built: b.built, hp: b.hp, maxHp: d.hp, cost: buildingCost(b), have: b.have, stage,
+            note: zoo.beast?.hungry ? "🍖 It's hungry and there's no meat or fish in the stores. A starving beast breaks out." : undefined, zoo };
         }
         if (b.kind === "healer" && b.built >= 1) {
           const ward = wardView(w, b);
@@ -4500,15 +4594,15 @@ export class Engine {
       case "gate": {
         const g = w.tribe.walls.find((x) => x.id === r.id);
         if (!g) return null;
-        return { kind: "gate", id: g.id, open: g.open, auto: g.auto, mega: !!g.mega, hp: g.hp, maxHp: wallMaxHp(g), material: g.mega ? "Megalodon" : g.bone ? "Bone" : g.kind === "polygon" ? "Polygon" : g.kind === "stone" ? "Stone" : "Wooden" };
+        return { kind: "gate", id: g.id, open: g.open, auto: g.auto, mega: !!g.mega, hp: g.hp, maxHp: wallMaxHp(g), material: g.mega ? "Megalodon" : g.bone ? "Bone" : g.kind === "lava" ? "Lava-stone" : g.kind === "polygon" ? "Polygon" : g.kind === "stone" ? "Stone" : "Wooden" };
       }
       case "wall": {
         const wl = w.tribe.walls.find((v) => v.id === r.id);
-        return wl ? { kind: "wall", id: wl.id, material: wl.kind, part: wl.part, built: wl.built, hp: wl.hp, maxHp: wallMaxHp(wl) } : null;
+        return wl ? { kind: "wall", id: wl.id, material: wl.kind === "lava" ? "Lava-stone" : wl.kind, part: wl.part, built: wl.built, hp: wl.hp, maxHp: wallMaxHp(wl) } : null;
       }
       case "farm": {
         const f = w.tribe.farms.find((v) => v.id === r.id);
-        return f ? { kind: "farm", id: f.id, crop: f.crop ?? "wheat", growth: f.growth, planted: f.planted } : null;
+        return f ? { kind: "farm", id: f.id, crop: BERRIES.find((b) => b.crop === f.crop)?.name ?? f.crop ?? "wheat", growth: f.growth, planted: f.planted } : null;
       }
       case "carcass": {
         const it = w.items.find((x) => x.id === r.id);
@@ -4516,6 +4610,16 @@ export class Engine {
         const cc = it.carcass;
         const left = (["meat", "hide", "bone", "tooth"] as const).filter((k) => cc.max[k] > 0).map((k) => ({ r: k, n: Math.round(cc[k]), max: cc.max[k] }));
         return { kind: "carcass", id: it.id, name: sp(it.species).nick, stage: STAGE_LABEL[carcassStage(cc)], left, working: w.humans.filter((h) => h.targetId === -it.id).length, burnt: cc.burnt, fresh: Math.max(0, Math.round(120 - it.t)) };
+      }
+      case "wagon": {
+        const g = w.colony.wagons.find((x) => x.id === r.id);
+        if (!g) return null;
+        const foe = g.target ? w.dinoById(g.target) : null;
+        return {
+          kind: "wagon", id: g.id, hp: Math.round((g.hp / g.maxHp) * 100), tank: Math.round(g.tank), tankMax: g.tankMax, mode: WAGON_MODE_LABEL[g.mode], auto: g.auto,
+          crew: g.crew.map((id) => w.humans.find((h) => h.id === id)?.name).filter((n): n is string => !!n), crewNeed: WAGON_CREW, stoned: g.stoned,
+          lava: w.dinos.filter(isLavaFolk).length, water: Math.floor(w.camp.stock.water), target: foe ? foe.name : null,
+        };
       }
       case "chariot": {
         const c = w.colony.chariots.find((x) => x.id === r.id);

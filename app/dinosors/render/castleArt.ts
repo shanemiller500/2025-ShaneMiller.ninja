@@ -1,6 +1,6 @@
 import type { Shelter } from "../sim/types";
 import type { Estate, HomeLink } from "../sim/estate";
-import type { CastleCompound } from "../sim/castleCompound";
+import { keepHeight, type CastleCompound } from "../sim/castleCompound";
 
 type Ctx = CanvasRenderingContext2D;
 const STONE = "#b9b8aa", EDGE = "#626f75", LIGHT = "#e2deca", ROOF = "#466976";
@@ -99,8 +99,11 @@ export function drawCompoundGrounds(c: Ctx, compound: CastleCompound, t: number)
   // A small shared garden and open stone walks, rather than a solid slab over the whole site.
   const g = compound.garden;
   c.strokeStyle = "#b2af93"; c.lineWidth = 9; c.lineCap = "round";
-  c.beginPath(); c.moveTo(g.x, g.y); c.lineTo(g.x, compound.rest.y - 40); c.stroke();
-  for (const p of compound.pads) { c.beginPath(); c.moveTo(g.x, p.y); c.lineTo(p.x, p.y); c.stroke(); }
+  if (compound.layout !== "keep") {
+    if (compound.rest) { c.beginPath(); c.moveTo(g.x, g.y + 14); c.lineTo(g.x, compound.rest.y - 40); c.stroke(); }
+    for (const p of compound.pads) { c.beginPath(); c.moveTo(g.x, p.y); c.lineTo(p.x, p.y); c.stroke(); }
+  }
+  if (compound.layout !== "keep") {
   c.save(); c.translate(g.x, g.y);
   c.fillStyle = "#b5b69c"; c.fillRect(-54, -46, 108, 92);
   c.strokeStyle = "#ded7b9"; c.lineWidth = 3; c.strokeRect(-52, -44, 104, 88);
@@ -113,6 +116,7 @@ export function drawCompoundGrounds(c: Ctx, compound: CastleCompound, t: number)
   c.strokeStyle = "#d4e3c9"; c.lineWidth = 1;
   c.beginPath(); c.ellipse(0, -2, 5 + (t % 1) * 7, 2 + (t % 1) * 4, 0, 0, Math.PI * 2); c.stroke();
   statue(c, -43, 43); statue(c, 43, 43, -1); c.restore();
+  }
   compound.pads.forEach((p, i) => {
     c.save(); c.translate(p.x, p.y);
     c.fillStyle = "#8e9b90"; c.beginPath(); c.ellipse(0, 0, 43, 36, 0, 0, Math.PI * 2); c.fill();
@@ -122,6 +126,7 @@ export function drawCompoundGrounds(c: Ctx, compound: CastleCompound, t: number)
     c.fillStyle = "#e1d9bb"; c.font = "bold 7px sans-serif"; c.textAlign = "center"; c.fillText(`LANDING ${i + 1}`, 0, 24); c.restore();
   });
   const r = compound.rest;
+  if (!r) return;
   c.save(); c.translate(r.x, r.y);
   c.fillStyle = "#6d875f"; c.beginPath(); c.roundRect(-64, -38, 128, 76, 12); c.fill();
   c.strokeStyle = "#b6ad83"; c.lineWidth = 2; c.stroke();
@@ -133,6 +138,65 @@ export function drawCompoundGrounds(c: Ctx, compound: CastleCompound, t: number)
   }
   c.fillStyle = "#738e88"; c.fillRect(-24, 28, 48, 7); c.fillStyle = "#93babb"; c.fillRect(-21, 29, 42, 3);
   c.restore();
+}
+
+/** One closed silhouette and entrance for the whole residence, rather than repeated house sprites. */
+export function drawCastleKeep(c: Ctx, rooms: number, beds: number, occupied: number, night: boolean, cutaway: boolean, halfWidth = 64, projects = 0) {
+  const w = halfWidth, h = keepHeight(rooms), glow = night ? "#f7d28e" : "#314d57";
+  c.fillStyle = "rgba(20,36,37,.22)"; c.beginPath(); c.ellipse(0, 4, w + 8, 13, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = "#83928b"; c.fillRect(-w - 3, -4, w * 2 + 6, 8);
+  masonry(c, -w, -h, w * 2, h);
+  const columns = Math.max(2, Math.floor((w * 2 - 30) / 19));
+  for (let floor = 0; floor < h / 24; floor++) {
+    const y = -floor * 24;
+    c.fillStyle = "#dfdac5"; c.fillRect(-w, y - 24, w * 2, 2);
+    for (let col = 0; col < columns; col++) {
+      const x = -w + 20 + col * (w * 2 - 40) / Math.max(1, columns - 1);
+      if (floor === 0 && Math.abs(x) < 14) continue;
+      arch(c, x - 5, y - 7, 10, 15, "#e8e0c5"); arch(c, x - 4, y - 8, 8, 12, glow);
+    }
+  }
+  // The roof garden is enclosed by the same parapet as the main walls.
+  c.fillStyle = "#8b9b8e"; c.fillRect(-w + 8, -h - 25, w * 2 - 16, 25);
+  c.fillStyle = "#6f8d66"; c.fillRect(-w + 20, -h - 22, w * 2 - 40, 15);
+  for (const x of [-w + 25, w - 33]) { c.fillStyle = "#456b50"; c.fillRect(x, -h - 21, 8, 11); c.fillStyle = "#ddb99d"; c.fillRect(x + 2, -h - 18, 3, 2); }
+  c.fillStyle = "#d1cfb6"; c.beginPath(); c.ellipse(0, -h - 14, 8, 5, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = "#87b7b5"; c.beginPath(); c.ellipse(0, -h - 15, 5, 2.5, 0, 0, Math.PI * 2); c.fill();
+  rail(c, -w + 7, -h - 9, w * 2 - 14);
+  // Only the two outer towers rise above the shared roofline.
+  for (const side of [-1, 1]) {
+    const x = side * (w - 7);
+    masonry(c, x - 9, -h - 14, 18, h + 14);
+    c.fillStyle = "#e3deca"; c.fillRect(x - 11, -h - 15, 22, 4);
+    for (let y = -20; y > -h + 4; y -= 28) arch(c, x - 2.5, y, 5, 10, glow);
+    c.fillStyle = ROOF; c.beginPath(); c.moveTo(x - 13, -h - 16); c.lineTo(x, -h - 43); c.lineTo(x + 13, -h - 16); c.closePath(); c.fill();
+    c.fillStyle = "#7c9998"; c.beginPath(); c.moveTo(x, -h - 43); c.lineTo(x + 13, -h - 16); c.lineTo(x + 3, -h - 16); c.fill();
+    c.strokeStyle = "#c8b274"; c.lineWidth = 1; c.beginPath(); c.moveTo(x, -h - 43); c.lineTo(x, -h - 55); c.stroke();
+    c.fillStyle = "#d5ab60"; c.beginPath(); c.moveTo(x, -h - 55); c.lineTo(x + 12, -h - 52); c.lineTo(x, -h - 48); c.fill();
+  }
+  if (cutaway) {
+    const left = -w + 18, width = w * 2 - 36, cols = Math.max(4, Math.floor(width / 7));
+    const rows = Math.max(1, Math.ceil(beds / cols)), cellW = width / cols, cellH = Math.min(11, (h - 36) / rows);
+    c.fillStyle = "#b6a583"; c.fillRect(left, -h + 3, width, h - 35);
+    for (let i = 0; i < beds; i++) {
+      const x = left + (i % cols) * cellW + 0.5, y = -h + 5 + Math.floor(i / cols) * cellH;
+      c.fillStyle = "#69543c"; c.fillRect(x, y, cellW - 1, cellH - 1);
+      c.fillStyle = i < occupied ? "#6b9998" : "#c2bc9c"; c.fillRect(x + 1, y + 2, cellW - 3, Math.max(2, cellH - 4));
+      c.fillStyle = "#efe6cc"; c.fillRect(x + 1, y + 1, cellW - 3, 1.5);
+    }
+  } else if (w >= 48) {
+    rail(c, -w + 18, -43, w - 30); rail(c, 12, -43, w - 30);
+  }
+  arch(c, -13, 0, 26, 32, "#dcd6bd"); arch(c, -10, 0, 20, 27, "#304448");
+  c.fillStyle = "#b99a60"; c.fillRect(-9, -18, 18, 2);
+  c.fillStyle = "#d3d0b9"; c.fillRect(-16, 0, 32, 3); c.fillRect(-20, 3, 40, 3);
+  if (w >= 48) { statue(c, -27, 0); statue(c, 27, 0, -1); }
+  if (projects) {
+    c.strokeStyle = "#bd9866"; c.lineWidth = 2;
+    for (const x of [w - 20, w + 3]) { c.beginPath(); c.moveTo(x, 1); c.lineTo(x, -h + 12); c.stroke(); }
+    for (let y = -12; y > -h + 12; y -= 16) { c.beginPath(); c.moveTo(w - 23, y); c.lineTo(w + 6, y); c.stroke(); }
+    c.strokeStyle = "#e2c284"; c.lineWidth = 1; c.beginPath(); c.moveTo(w - 20, -6); c.lineTo(w + 3, -h + 12); c.stroke();
+  }
 }
 
 /** A wing remains a real home. The selected wing opens to show its actual bed capacity. */

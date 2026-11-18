@@ -11,6 +11,12 @@ import type { Egg, FarmCrop, Human, Item, Plant, Prop, Shelter } from "../sim/ty
 import { shade } from "./drawDino";
 import { Q } from "./quality";
 import { grain as materialGrain } from "./litSprites";
+import type { SeasonId } from "../sim/seasons";
+import { seasonalLeaves } from "./seasonStyle";
+import { BERRIES, berryCropVariant } from "../data/berries";
+
+let plantSeason: SeasonId = "spring";
+export function setPlantSeason(season: SeasonId) { plantSeason = season; }
 
 const OUT = "rgba(35,28,22,0.5)";
 /** People get the storybook look: a dark ink outline round limbs, head + clothes. */
@@ -74,7 +80,7 @@ const LEAF_HI = ["#86c868", "#96d672", "#a8e07c", "#74b65e"];
  */
 export function drawPlantLod(c: CanvasRenderingContext2D, p: Plant, x: number, y: number) {
   const H = PLANT_H[p.kind] * (0.35 + p.size * 0.65);
-  c.fillStyle = ramp(LEAF[p.variant % 4], "#2f2a27", p.burnt);
+  c.fillStyle = ramp(seasonalLeaves(p.kind, p.variant, plantSeason)?.[1] ?? LEAF[p.variant % 4], "#2f2a27", p.burnt);
   c.beginPath();
   if (p.kind === "conifer") {
     c.moveTo(x - H * 0.25, y - H * 0.15);
@@ -82,6 +88,10 @@ export function drawPlantLod(c: CanvasRenderingContext2D, p: Plant, x: number, y
     c.lineTo(x + H * 0.25, y - H * 0.15);
   } else c.arc(x, y - H * 0.6, H * 0.3 * (0.65 + 0.35 * p.food), 0, Math.PI * 2);
   c.fill();
+  if (p.kind === "bush" && p.food > .5 && p.burnt < .3) {
+    c.fillStyle = BERRIES[p.variant % 4].color;
+    for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(x + (i - 1) * H * .14, y - H * .6 - (i % 2) * H * .12, Math.max(.8, H * .07), 0, Math.PI * 2); c.fill(); }
+  }
 }
 
 /* A plant is many strokes and fills; a forest is hundreds of plants. So each look a plant can have
@@ -282,7 +292,7 @@ export function drawPlantFast(c: CanvasRenderingContext2D, p: Plant, t: number, 
   const burntq = Math.round(p.burnt * 4);
   const jit = ((Math.floor(p.x * 0.37 + p.y * 0.23) % 3) + 3) % 3;
   const fruit = p.kind === "fruit" ? p.fruit : 0;
-  const key = p.kind + "|" + (p.variant % 4) + "|" + Hq + "|" + fullq + "|" + burntq + "|" + fruit + "|" + jit + "|" + res;
+  const key = plantSeason + "|" + p.kind + "|" + (p.variant % 4) + "|" + Hq + "|" + fullq + "|" + burntq + "|" + fruit + "|" + jit + "|" + res;
   let sp = scenery.get(key);
   if (!sp) {
     if (!scenery.open) return false;
@@ -310,8 +320,9 @@ export function drawPlantFast(c: CanvasRenderingContext2D, p: Plant, t: number, 
 export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind: number, lod: boolean, still = false) {
   const H = PLANT_H[p.kind] * (0.35 + p.size * 0.65);
   const burnt = p.burnt;
-  const leaf = ramp(LEAF[p.variant % 4], "#2f2a27", burnt);
-  const leafLight = ramp(LEAF_LIGHT[p.variant % 4], "#3a3330", burnt);
+  const colors = seasonalLeaves(p.kind, p.variant, plantSeason);
+  const leaf = ramp(colors?.[1] ?? LEAF[p.variant % 4], "#2f2a27", burnt);
+  const leafLight = ramp(colors?.[2] ?? LEAF_LIGHT[p.variant % 4], "#3a3330", burnt);
   const trunk = ramp("#7a5534", "#2a2421", burnt);
   const sway = still ? 0 : Math.sin(t * 1.6 + p.x * 0.013 + p.variant) * (0.02 + wind * 0.06) + Math.sin(t * 28) * p.shake * 0.1;
   const full = 0.65 + 0.35 * p.food;
@@ -360,8 +371,8 @@ export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind
 
   c.save();
   c.rotate(sway);
-  const leafDark = ramp(LEAF_DARK[p.variant % 4], "#211c1a", burnt);
-  const leafHi = ramp(LEAF_HI[p.variant % 4], "#453c38", burnt);
+  const leafDark = ramp(colors?.[0] ?? LEAF_DARK[p.variant % 4], "#211c1a", burnt);
+  const leafHi = ramp(colors?.[3] ?? LEAF_HI[p.variant % 4], "#453c38", burnt);
   const trunkDark = ramp("#553a22", "#1c1715", burnt);
   const trunkLight = ramp("#9a7248", "#3a322d", burnt);
   // every plant differs a little: a stable wobble from where it grows
@@ -706,11 +717,11 @@ export function drawPlant(c: CanvasRenderingContext2D, p: Plant, t: number, wind
           const bx = -r + ((i * 37) % 10) / 10 * r * 2;
           const by = -r * 0.5 - ((i * 53) % 10) / 10 * r * 1.1;
           const br = Math.max(1.2, r * 0.13);
-          c.fillStyle = "#5f2f80";
+          c.fillStyle = BERRIES[p.variant % 4].color;
           c.beginPath();
           c.arc(bx, by, br, 0, Math.PI * 2);
           c.fill();
-          c.fillStyle = "#b98ad6";
+          c.fillStyle = BERRIES[p.variant % 4].shine;
           c.beginPath();
           c.arc(bx - br * 0.3, by - br * 0.3, br * 0.4, 0, Math.PI * 2);
           c.fill();
@@ -2931,6 +2942,7 @@ export function drawVolcano(c: CanvasRenderingContext2D, glow: number, lavaOn: b
 
 export function drawFarm(c: CanvasRenderingContext2D, growth: number, planted: boolean, t: number, crop: FarmCrop = "wheat") {
   if (crop === "grape") return drawVineyard(c, growth, planted, t);
+  if (berryCropVariant(crop) >= 0) return drawBerryPlot(c, growth, planted, t, berryCropVariant(crop));
   const W = 72;
   const H = 40;
   c.fillStyle = "#7a5a3a";
@@ -2975,6 +2987,24 @@ export function drawFarm(c: CanvasRenderingContext2D, growth: number, planted: b
     c.textAlign = "center";
     c.fillText("✦", W / 2 - 4, -H / 2 - 6);
   }
+}
+
+/** Low berry rows, a walking aisle and corner stakes use the same bushes as the wild plants. */
+export function drawBerryPlot(c: CanvasRenderingContext2D, growth: number, planted: boolean, t: number, variant: number) {
+  c.fillStyle = "#775c42"; c.fillRect(-40, -24, 80, 48);
+  c.strokeStyle = "#b39c75"; c.lineWidth = 2; c.strokeRect(-40, -24, 80, 48);
+  c.fillStyle = "#ae956b"; c.fillRect(-3, -23, 6, 46);
+  for (const y of [-13, 2, 17]) {
+    c.strokeStyle = "#584532"; c.lineWidth = 3; c.beginPath(); c.moveTo(-36, y + 3); c.lineTo(36, y + 3); c.stroke();
+    if (!planted) continue;
+    for (const x of [-29, -12, 12, 29]) {
+      const p: Plant = { id: 0, kind: "bush", variant, x, y, size: .32 + growth * .36, food: growth >= .7 ? 1 : .35, burnt: 0, fruit: 0, shake: 0, stump: false };
+      if (!drawPlantFast(c, p, t, 0, 1, true)) { c.save(); c.translate(x, y); drawPlant(c, p, t, 0, false, true); c.restore(); }
+    }
+  }
+  c.fillStyle = "#9c7952";
+  for (const x of [-40, 38]) for (const y of [-24, 22]) c.fillRect(x, y - 6, 2, 8);
+  c.fillStyle = BERRIES[variant].color; c.fillRect(33, 13, 9, 6);
 }
 
 /** A vineyard: tilled rows with trellis posts + wires, vines that leaf out as they grow, purple grapes when ripe. */

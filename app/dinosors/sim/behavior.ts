@@ -14,9 +14,10 @@ import { emote, isBaby, scaleOf, setState, sizeOf, walkable } from "./dinos";
 import { toss } from "./humans";
 import { actRaider, bite, hitDino, thinkRaider } from "./tribe";
 import { CAMP_LEVELS } from "../data/facts";
-import { eatCarcass, makeCarcass } from "./carcass";
+import { clearCarcass, eatCarcass, makeCarcass } from "./carcass";
 import { P } from "./particles";
-import { canReach, shakeFruit, TALL } from "./plants";
+import { canReach, consumePlant, shakeFruit, TALL } from "./plants";
+import { passedSeed, swallowSeed } from "./plantCycle";
 import { pick } from "./rng";
 import { LM } from "./terrain";
 import { T, TILE, WORLD_H, WORLD_W, type Brute, type Dino, type DinoState, type Human, type Item, type SpeciesDef } from "./types";
@@ -28,6 +29,10 @@ import { meetRider, partnerThink } from "./riders";
 import { leaveWalls, outsideSpot } from "./dinoBounds";
 import { isDinoScorpion, scorpionAct, scorpionThink } from "./dinoScorpions";
 import { isSnowBeast, snowAct, snowThink } from "./snowBeasts";
+import { zooAct, zooThink } from "./zoo";
+import { coolDown, isLavaFolk, lavaAct, lavaThink } from "./lavaFolk";
+import { isRiverBeast, riverAct, riverThink } from "./riverBeasts";
+import { beaverAct, beaverThink, isBeaver } from "./beavers";
 
 /** States that run to completion; `think` leaves them alone. */
 const LOCKED = new Set<DinoState>([
@@ -58,6 +63,8 @@ function canEat(pred: Dino, prey: Dino) {
   const pd = sp(pred.species);
   const qd = sp(prey.species);
   if (pd.diet === "herbivore" || prey.id === pred.id || prey.species === pred.species) return false;
+  // nothing eats a Lava Monster, and a Lava Monster eats nothing (it just burns)
+  if (isLavaFolk(prey) || isLavaFolk(pred)) return false;
   if (qd.move === "swim" || (qd.move === "fly" && prey.z > 6)) return false;
   if (prey.state === "carried" || prey.state === "faint") return false;
   const max = (pd.preyMax ?? 0) * scaleOf(pred);
@@ -640,8 +647,8 @@ function resolveTussle(w: World, d: Dino) {
     if (other.health < 0.5) p += 0.2;
     p = Math.max(0.12, Math.min(0.9, p));
     if (w.rng() < p) {
-      // the prey goes down; its body stays (meat for the hunter, hide + bones for people)
-      const meat = sizeOf(other) > 28 ? makeCarcass(w, other) : w.addItem("meat", other.x, other.y, { amount: Math.max(0.5, sizeOf(other) / 45) });
+      // the prey goes down: the hunter eats it whole, and what's left of a big one waits for other meat-eaters
+      const meat = sizeOf(other) > 28 ? makeCarcass(w, other, { wild: true }) : w.addItem("meat", other.x, other.y, { amount: Math.max(0.5, sizeOf(other) / 45) });
       w.particles.burst(P.Poof, other.x, other.y, 10, 60, { size: 14, max: 1, color: "rgba(230,220,200,0.9)" });
       w.removeDino(other);
       meat.claimed = d.id;
@@ -730,9 +737,14 @@ function actWalker(w: World, d: Dino, def: SpeciesDef, dt: number) {
       const item = w.itemById(d.targetId);
       const plant = item ? null : d.targetId ? w.plantById(d.targetId) : null;
       if (item && item.kind === "carcass") {
-        // tearing meat off a body: hide + bones stay behind for people
+        // eating a body: bones and all (what's left of a big one waits for the next meat-eater by)
         item.claimed = d.id;
         const done = eatCarcass(item, dt * 0.5 * (def.size / 80 + 0.5));
+        if (done) {
+          // all gone: not a scrap or a bone left
+          clearCarcass(w, item);
+          d.targetId = 0;
+        }
         d.hunger = Math.max(0, d.hunger - dt * 0.12);
         if (w.rng() < dt * 1.5) w.sfx("chomp", d.x, d.y, 0.5);
         if (w.rng() < dt * 3) w.particles.spawn(P.Crumb, item.x, item.y, { z: 6, vz: 30, vx: (w.rng() - 0.5) * 40, g: 150, size: 2, max: 0.5, color: "#c98a6a" });
@@ -743,6 +755,7 @@ function actWalker(w: World, d: Dino, def: SpeciesDef, dt: number) {
           else setState(d, "idle");
         }
       } else if (item) {
+        if (item.kind === "fruit" || item.kind === "berries") swallowSeed(w, d, { kind: item.kind === "berries" ? "bush" : "fruit", variant: item.seed?.variant ?? d.id % 4, x: item.x, y: item.y });
         item.claimed = d.id;
         const bite = dt * 0.18 * (def.size / 80 + 0.5);
         item.amount -= bite / Math.max(0.6, item.amount > 1 ? 1 : 1);
@@ -756,7 +769,8 @@ function actWalker(w: World, d: Dino, def: SpeciesDef, dt: number) {
           else setState(d, "idle");
         }
       } else if (plant) {
-        plant.food = Math.max(0, plant.food - dt * 0.07);
+        swallowSeed(w, d, plant);
+        consumePlant(w, plant, dt * 0.07);
         plant.shake = Math.max(plant.shake, 0.4);
         d.hunger = Math.max(0, d.hunger - dt * 0.06);
         if (w.rng() < dt * 2 && w.inView(plant.x, plant.y, 40)) w.particles.spawn(P.Leaf, plant.x + (w.rng() - 0.5) * 20, plant.y, { z: TALL.has(plant.kind) ? 50 : 10, vz: -5, vx: (w.rng() - 0.5) * 20, size: 3, max: 1.5, color: "#6f9a3c" });
@@ -1330,6 +1344,14 @@ export function thinkDino(w: World, d: Dino) {
     setState(d, def.move === "walk" ? "wander" : d.state, t.x, t.y);
     return;
   }
+  // a captured beast in its zoo enclosure (zoo.ts)
+  if (d.caged && zooThink(w, d)) return;
+  // the Lava Monsters hate everything and fear nothing: nobody shoos them anywhere (lavaFolk.ts)
+  if (isLavaFolk(d) && lavaThink(w, d)) return;
+  // crocodiles, hippos + giant snakes eat anything that comes near (riverBeasts.ts)
+  if (isRiverBeast(d) && riverThink(w, d)) return;
+  // giant beavers build their dam, then fish their pond (beavers.ts)
+  if (isBeaver(d) && beaverThink(w, d)) return;
   // driven out of our settlement: running for the edge (territory.ts)
   if (shooedThink(w, d)) return;
   // a Dinosaur Scorpion guards its den (dinoScorpions.ts)
@@ -1372,6 +1394,12 @@ export function thinkDino(w: World, d: Dino) {
 }
 
 function actFaint(w: World, d: Dino) {
+  // a Lava Monster has no bones: it turns to stone (lavaFolk.ts)
+  if (isLavaFolk(d)) {
+    coolDown(w, d);
+    w.removeDino(d);
+    return;
+  }
   if (d.stateT <= 2) return;
   // died in fire or lava: a charred skeleton (cartoon, not gory); otherwise a fossil for later
   if (d.burn < 4) {
@@ -1403,12 +1431,16 @@ export function actDino(w: World, d: Dino, dt: number) {
     d.poopT -= dt;
     if (d.poopT <= 0) {
       d.poopT = 90 + w.rng() * 150;
-      w.addItem("poop", d.x - d.dir * sizeOf(d) * 0.4, d.y + 2, { amount: Math.min(1.5, 0.4 + sizeOf(d) / 120) });
+      w.addItem("poop", d.x - d.dir * sizeOf(d) * 0.4, d.y + 2, { amount: Math.min(1.5, 0.4 + sizeOf(d) / 120), seed: passedSeed(w, d) });
       emote(d, "💩", 1.4);
       w.sfx("plop", d.x, d.y, 0.5);
       if (w.inView(d.x, d.y)) w.discover("poop", d.x, d.y);
     }
   }
+  if (d.caged && zooAct(w, d, dt)) return;
+  if (isLavaFolk(d) && lavaAct(w, d, dt)) return;
+  if (isRiverBeast(d) && riverAct(w, d, dt)) return;
+  if (isBeaver(d) && beaverAct(w, d, dt)) return;
   if (d.raider && actRaider(w, d, dt)) return;
   if (isDinoScorpion(d) && scorpionAct(w, d, dt)) return;
   if (d.species === "yeti" && snowAct(w, d, dt)) return;

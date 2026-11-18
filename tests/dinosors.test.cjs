@@ -351,7 +351,8 @@ test('a Scorpion crew drives off a dragon', () => {
   assert.ok(dr, 'dragon summoned');
   dr.x = w.camp.x + 800; dr.y = w.camp.y;
   let shots = 0;
-  const t = run(w, 120, (w) => { shots += w.tribe.projectiles.filter((p) => p.kind === 'scorpion' && p.t === 0).length; return !w.dragons.list.includes(dr) || dr.state === 'flee'; });
+  // (driven off = running, or already on its way out: the map's edge is further away now it's wider)
+  const t = run(w, 120, (w) => { shots += w.tribe.projectiles.filter((p) => p.kind === 'scorpion' && p.t === 0).length; return !w.dragons.list.includes(dr) || dr.state === 'flee' || dr.state === 'leave'; });
   assert.ok(s.crew || shots > 0, 'somebody crewed the Scorpion');
   assert.ok(t >= 0, `dragon driven off (hp ${Math.round(dr.hp)}, state ${dr.state})`);
   assert.ok(w.discoveries.has('dragon'));

@@ -11,6 +11,7 @@ import { groundSpeed, isSandTile, isSwimTile, isWalkTile } from "./terrain";
 import { T, TILE, WORLD_H, WORLD_W, type Dino, type DinoState, type SpeciesDef, type SpeciesId } from "./types";
 import { goalKey, nodePos, tileOf, type NavClass } from "./nav";
 import type { World } from "./world";
+import { lavaWalkable } from "./lavaFolk";
 import { blockedForDino } from "./dinoBounds";
 
 export const scaleOf = (d: Dino) => 0.42 + 0.58 * d.growth;
@@ -223,6 +224,8 @@ export function isMoving(d: Dino) {
 /** Can a walker step onto this point? Walls, closed gates, buildings block; avoids lava + fire unless panicking. */
 export function walkable(w: World, d: Dino, x: number, y: number) {
   if (x < 6 || y < 6 || x > WORLD_W - 6 || y > WORLD_H - 6) return d.migrant;
+  // a Lava Monster walks through fire + lava as if they weren't there, but never into water (lavaFolk.ts)
+  if (d.species === "lavaFolk") return lavaWalkable(w, x, y) && !blockedForDino(w, d, x, y);
   const t = w.terrain.tileAt(x, y);
   if (!isWalkTile(t) && !w.nav.passable(navClassOf(d), x, y)) return false;
   const i = tileOf(x, y);
@@ -485,7 +488,8 @@ export function moveDino(w: World, d: Dino, dt: number) {
     const stomp = w.fire.extinguish(w, d.x, d.y, Math.max(TILE * 1.2, Math.min(TILE * 2.2, sizeOf(d) * 0.06)));
     if (stomp && w.rng() < dt * 5) w.particles.burst(P.Dust, d.x, d.y + 5, 5, 30, { vz: 22, size: 3, max: 0.5, color: "rgba(170,145,110,0.6)" });
   }
-  if (d.z < 4 && (w.lava.heatAt(tx, ty) > 0.15 || w.fire.at(tx, ty) > 0.3)) {
+  // (lava + fire burn every animal… except the Lava Monsters, who swim in it: lavaFolk.ts)
+  if (d.z < 4 && d.species !== "lavaFolk" && (w.lava.heatAt(tx, ty) > 0.15 || w.fire.at(tx, ty) > 0.3)) {
     d.health -= dt * 0.25;
     d.burn = 0;
     d.fear = 1;

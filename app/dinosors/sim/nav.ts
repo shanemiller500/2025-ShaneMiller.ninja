@@ -20,6 +20,7 @@ import { Trails } from "./trails";
 import { MAP_H, MAP_W, T, TILE } from "./types";
 import type { World } from "./world";
 import { hallKey, hallTiles } from "./riderHall";
+import { castleBodyTiles } from "./castleCompound";
 
 export const NT = MAP_W * MAP_H;
 /** Wild large dinosaurs avoid narrow bridges; trained mounts can use them. */
@@ -211,6 +212,7 @@ export class Nav {
       for (const i of shelterTiles(s.x, s.y)) if (i >= 0 && i < NT) f[i] |= F_SOLID;
     }
     // the Dragon Riders' Colosseum: a ring of walls round the pit, in only through the great gate
+    for (const i of castleBodyTiles(w)) if (i >= 0 && i < NT) f[i] |= F_SOLID;
     for (const i of hallTiles(w)) f[i] |= F_SOLID;
     this.version++;
   }

@@ -3,7 +3,9 @@
 /*  paddock, neighbouring farm plots as one big field. Each piece      */
 /*  still works on its own in the sim; only the drawing merges them.   */
 /* ------------------------------------------------------------------ */
-import type { Farm } from "../sim/types";
+import type { Farm, Plant } from "../sim/types";
+import { berryCropVariant } from "../data/berries";
+import { drawPlant, drawPlantFast } from "./sprites";
 
 export { clusters } from "../sim/cluster";
 
@@ -240,6 +242,7 @@ export function drawSeatRing(c: CanvasRenderingContext2D, R: number, n: number, 
  * is growing (at that plot's stage), so the separate plots read as one field.
  */
 export function drawField(c: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, farms: Farm[], t: number) {
+  const berries = berryCropVariant(farms[0]?.crop ?? "wheat");
   const W = x1 - x0;
   const H = y1 - y0;
   // bed
@@ -261,8 +264,8 @@ export function drawField(c: CanvasRenderingContext2D, x0: number, y0: number, x
     c.stroke();
   }
   // crops
-  for (let y = y0 + 7; y < y1 - 3; y += 9) {
-    for (let x = x0 + 8; x < x1 - 6; x += 9) {
+  for (let y = y0 + 7; y < y1 - 3; y += berries >= 0 ? 16 : 9) {
+    for (let x = x0 + 8; x < x1 - 6; x += berries >= 0 ? 18 : 9) {
       let f: Farm | null = null;
       let bd = 70;
       for (const o of farms) {
@@ -274,6 +277,13 @@ export function drawField(c: CanvasRenderingContext2D, x0: number, y0: number, x
       }
       if (!f || !f.planted) continue;
       const g = f.growth;
+      if (berries >= 0) {
+        // Shared rows keep neighbouring plots one plantation, with a single central aisle.
+        if (Math.abs(x - (x0 + x1) / 2) < 5) continue;
+        const p: Plant = { id: 0, kind: "bush", variant: berries, x, y, size: .32 + g * .36, food: g >= .7 ? 1 : .35, burnt: 0, fruit: 0, shake: 0, stump: false };
+        if (!drawPlantFast(c, p, t, 0, 1, true)) { c.save(); c.translate(x, y); drawPlant(c, p, t, 0, false, true); c.restore(); }
+        continue;
+      }
       const crop = f.crop ?? "wheat";
       const i = Math.round(x / 9);
       const r = Math.round(y / 9);

@@ -13,7 +13,9 @@ import { FireSystem } from "./fire";
 import { addHuman, say, setHumanState, updateHuman } from "./humans";
 import { Shifts } from "./shifts";
 import { P, Particles } from "./particles";
-import { burnPlantsAt, generatePlants, makePlant, plantFuelNear, tallestNear, updatePlants, PLANT_H } from "./plants";
+import { burnPlantsAt, generatePlants, makePlant, naturalizePlants, sproutWildPlant, plantFuelNear, tallestNear, updatePlants, PLANT_H } from "./plants";
+import { compostDeposit } from "./plantCycle";
+import type { SeedBed } from "./types";
 import { clearPlantsUnderBuilds } from "./buildClear";
 import { organizeCastles, type CastleCompound } from "./castleCompound";
 import { connectWalls, joinMessage } from "./wallLinks";
@@ -21,12 +23,13 @@ import { territoryTick } from "./territory";
 import { announceEstates } from "./wineEstate";
 import { makeRng, type Rng } from "./rng";
 import { SpatialHash } from "./spatial";
-import { LM, TERRAIN_GEN, Terrain, VEG_TILES, cliffY, isWaterTile } from "./terrain";
+import { BASE_TERRAIN_GEN, LM, Terrain, VEG_TILES, cliffY, isWaterTile } from "./terrain";
 import {
   MAP_H,
   MAP_W,
   OLD_MAP_H,
   OLD_MAP_W,
+  PREV_MAP_W,
   T,
   TILE,
   WORLD_H,
@@ -59,6 +62,11 @@ import { Almanac } from "./almanac";
 import { Mine } from "./mine";
 import { updateCrew } from "./miners";
 import { hospitalTick } from "./hospital";
+import { beastsTick } from "./beasts";
+import { zooTick } from "./zoo";
+import { lavaBallsTick, lavaTick } from "./lavaFolk";
+import { riverLifeTick } from "./riverBeasts";
+import { beaverTick } from "./beavers";
 import { updatePacks } from "./packs";
 import { updateDeepBuilds } from "./deepBuild";
 import { updateDeepLife } from "./deepLife";
@@ -191,6 +199,8 @@ export class World {
   }
   private regrowT = 0;
   plants: Plant[] = [];
+  seedBeds: SeedBed[] = [];
+  seedGrowthAt = 0;
   props: Prop[] = [];
   shelters: Shelter[] = [];
   castleCompounds: CastleCompound[] = [];
@@ -205,6 +215,11 @@ export class World {
   fire = new FireSystem();
   lava = new LavaSystem();
   volcano = new Volcano();
+  /** the second volcano, out in the far east: it wakes when the first one does (twinTick) */
+  volcano2 = new Volcano(LM.volcano2);
+  /** when the far-east volcano follows the first one up (elapsed s; 0 = not due) */
+  private twinAt = 0;
+  private twinPrev: string = "idle";
   weather = new Weather();
   camp: Camp;
   tribe = new Tribe();
@@ -291,7 +306,7 @@ export class World {
   private plantIndex = new IdIndex<Plant>();
 
   /** a saved world keeps the map generation it was made with (new worlds get the latest) */
-  constructor(seed: number, populate = true, terrainGen = TERRAIN_GEN) {
+  constructor(seed: number, populate = true, terrainGen = BASE_TERRAIN_GEN) {
     this.seed = seed;
     this.rng = makeRng(seed);
     this.terrain = new Terrain(seed, terrainGen);
@@ -416,6 +431,7 @@ export class World {
     ];
     for (const [x, y] of fishSpots) this.addSchool(x * TILE, y * TILE);
     this.populateEast();
+    this.populateFarEast();
   }
 
   /**
@@ -448,6 +464,35 @@ export class World {
     herd("ptera", 236, 36, 3);
     this.addSchool(LM.eastLake.x * TILE, LM.eastLake.y * TILE);
     this.addSchool(230 * TILE, 112 * TILE);
+  }
+
+  /**
+   * The far east (the second volcano's land): a few herds on its grassland, and fish off its coast. Rolled
+   * with its own dice, so adding this land didn't change how anything else in the world turns out.
+   */
+  populateFarEast() {
+    const shared = this.rng;
+    this.rng = makeRng(this.seed * 613 + 29);
+    try {
+      this.fillFarEast();
+    } finally {
+      this.rng = shared;
+    }
+  }
+
+  private fillFarEast() {
+    const herd = (s: SpeciesId, tx: number, ty: number, n: number) => {
+      const list = spawnGroup(this, s, tx * TILE, ty * TILE, n);
+      for (const d of list) {
+        d.homeX = tx * TILE;
+        d.homeY = ty * TILE;
+      }
+      return list;
+    };
+    herd("trike", 312, 86, 3);
+    herd("para", 296, 24, 4);
+    herd("stego", 326, 92, 2);
+    this.addSchool(316 * TILE, 113 * TILE);
   }
 
   addProp(kind: Prop["kind"], x: number, y: number, size = 1) {
@@ -778,8 +823,7 @@ export class World {
       this.terrain.setTile(i % MAP_W, Math.floor(i / MAP_W), base[i] as T);
       // and something sprouts there
       if (this.rng() < 0.4) {
-        this.plants.push(makePlant(this, this.rng() < 0.5 ? "fern" : "bush", x + (this.rng() - 0.5) * 20, y + (this.rng() - 0.5) * 20, 0.15));
-        this.plantsDirty = true;
+        sproutWildPlant(this, x + (this.rng() - 0.5) * 20, y + (this.rng() - 0.5) * 20);
       }
     }
   }
@@ -789,7 +833,7 @@ export class World {
     for (const wl of this.tribe.walls) {
       if (wl.built < 1) continue;
       const d = Math.hypot(wl.tx * TILE + 16 - x, wl.ty * TILE + 16 - y);
-      if (d < r) wl.hp -= (1 - d / r) * power * 500 * (wl.kind === "polygon" ? 0.35 : wl.kind === "stone" ? 0.5 : 1);
+      if (d < r) wl.hp -= (1 - d / r) * power * 500 * (wl.kind === "lava" ? 0.22 : wl.kind === "polygon" ? 0.35 : wl.kind === "stone" ? 0.5 : 1);
     }
     for (const t of this.tribe.towers) if (Math.hypot(t.x - x, t.y - y) < r) t.hp -= power * 260;
     for (const s of this.shelters) if (s.stage > 0 && Math.hypot(s.x - x, s.y - y) < r) s.hp -= power * (1 - HOUSING[s.tier].protect * 0.6);
@@ -817,6 +861,7 @@ export class World {
     this.buildClearT -= dt;
     if (this.buildClearT <= 0) {
       this.buildClearT = 1;
+      naturalizePlants(this);
       organizeCastles(this);
       clearPlantsUnderBuilds(this);
       announceEstates(this);
@@ -903,6 +948,12 @@ export class World {
     this.population.update(this, dt);
     this.wildlife.update(this, dt);
     this.snowLife.update(this, dt);
+    beastsTick(this, dt);
+    lavaTick(this, dt);
+    lavaBallsTick(this, dt);
+    riverLifeTick(this, dt);
+    beaverTick(this, dt);
+    zooTick(this);
     if (this.clearJobs.length && Math.floor(this.elapsed) !== Math.floor(this.elapsed - dt)) clearJobsTick(this);
     // strays on our ground get seen off (territory.ts)
     if (Math.floor(this.elapsed) !== Math.floor(this.elapsed - dt)) territoryTick(this);
@@ -932,6 +983,8 @@ export class World {
     this.hazards.update(this, dt);
     this.lava.update(this, dt);
     this.volcano.update(this, dt);
+    this.volcano2.update(this, dt);
+    this.twinTick();
     this.updateFish(dt);
     this.updateDisasters(dt);
     this.randomEvents.update(this, dt);
@@ -973,15 +1026,14 @@ export class World {
       const life = it.kind === "fossil" ? 900 : it.kind === "poop" ? 45 : it.kind === "meat" ? 160 : 130;
       if (it.t > life) {
         gone.push(it);
-        // poop feeds the soil: a little plant sprouts
+        // Compost feeds nearby plants; only viable dispersed seeds enter the soil seed bank.
         if (it.kind === "poop") {
           const t = this.terrain.tileAt(it.x, it.y);
           if ((VEG_TILES.has(t) || t === T.Dirt || t === T.Sand) && !keptClear(this, it.x, it.y)) {
-            this.plants.push(makePlant(this, this.rng() < 0.6 ? "fern" : "bush", it.x, it.y, 0.15));
-            this.plantsDirty = true;
-            if (!this.flags.has("poopFact") && this.inView(it.x, it.y)) {
+            compostDeposit(this, it);
+            if (it.seed && !this.flags.has("poopFact") && this.inView(it.x, it.y)) {
               this.flags.add("poopFact");
-              this.toast("🌱", "Dino poop helped a new plant grow!", it.x, it.y, FACTS.poop);
+              this.toast("🌱", "Compost returned nutrients and a travelling seed to the soil!", it.x, it.y, FACTS.poop);
             }
           }
         }
@@ -1027,8 +1079,18 @@ export class World {
     for (const s of this.schools) {
       s.t += dt;
       const a = Math.sin(s.t * 0.3 + s.id) * Math.PI;
-      s.vx += (Math.cos(a) * 18 - s.vx) * dt * 0.5;
-      s.vy += (Math.sin(a * 1.3) * 10 - s.vy) * dt * 0.5;
+      // a beaver pond's fish: slow, they keep to the pond, and come back on their own clock (beavers.ts)
+      const pond = s.pond !== undefined;
+      const pace = pond ? 0.5 : 1;
+      s.vx += (Math.cos(a) * 18 * pace - s.vx) * dt * 0.5;
+      s.vy += (Math.sin(a * 1.3) * 10 * pace - s.vy) * dt * 0.5;
+      if (pond) {
+        s.regrow = (s.regrow ?? 0) + dt;
+        if (s.regrow > 30) {
+          s.regrow = 0;
+          if (s.n < 8) s.n++;
+        }
+      }
       const nx = s.x + s.vx * dt;
       const ny = s.y + s.vy * dt;
       if (isWaterTile(this.terrain.tileAt(nx, ny)) && this.terrain.tileAt(nx, ny) !== T.River) {
@@ -1039,7 +1101,7 @@ export class World {
         s.vy *= -1;
         s.t += 3;
       }
-      if (s.n < 10 && this.rng() < dt * 0.02) s.n++;
+      if (!pond && s.n < 10 && this.rng() < dt * 0.02) s.n++;
     }
   }
 
@@ -1097,11 +1159,35 @@ export class World {
     return d;
   }
 
+  /** When one volcano erupts, the other follows it up a little later (and the reverse). */
+  private twinTick() {
+    const a = this.volcano.phase;
+    if (this.twinPrev === "idle" && a !== "idle" && this.volcano2.phase === "idle") this.twinAt = this.elapsed + 12;
+    this.twinPrev = a;
+    if (this.twinAt && this.elapsed >= this.twinAt) {
+      this.twinAt = 0;
+      if (this.volcano2.trigger(this, this.volcano.rumbleOnly) && !this.volcano.rumbleOnly) this.toast("🌋", "The far-east volcano is erupting too!", this.volcano2.x, this.volcano2.y);
+    }
+  }
+
+  /** Both volcanoes (the first one, and the far east's). */
+  get volcanoes() {
+    return [this.volcano, this.volcano2];
+  }
+
   /** An older, smaller world loaded into the bigger map: plants, deposits + animals for the new lands. */
   settleNewLands(oldW = OLD_MAP_W) {
-    generatePlants(this, (tx, ty) => tx >= oldW || ty >= OLD_MAP_H);
-    this.colony.generateEastNodes(this);
-    this.populateEast();
+    if (oldW < PREV_MAP_W) {
+      // from the original valley: everything east of it (and the strip along the south) is new
+      generatePlants(this, (tx, ty) => tx >= oldW || ty >= OLD_MAP_H);
+      this.colony.generateEastNodes(this);
+      this.populateEast();
+    } else {
+      // from the 288-wide world: only the far east (the second volcano's land) is new
+      generatePlants(this, (tx) => tx >= oldW);
+    }
+    this.colony.generateFarEastNodes(this);
+    this.populateFarEast();
   }
 
   /** Tallest point a plant reaches (for picking + lightning). */
@@ -1158,12 +1244,14 @@ export class World {
         snowTribe: d.snowTribe,
         yetiPack: d.yetiPack,
         yetiScarf: d.yetiScarf,
+        caged: d.caged,
         warTraining: r(d.warTraining ?? 0),
         warArmor: d.warArmor ?? 0,
         rider: d.rider,
         passengers: [...(d.passengers ?? [])],
         under: d.under || undefined,
         work: d.work ? { ...d.work, skills: { ...d.work.skills }, targetX: r(d.work.targetX), targetY: r(d.work.targetY) } : undefined,
+        seedMeal: d.seedMeal, nextSeedMeal: d.nextSeedMeal,
       })),
       humans: this.humans.map((h) => ({
         id: h.id,
@@ -1185,6 +1273,7 @@ export class World {
         gear: h.gear,
         home: h.home,
         family: h.family,
+        seedMeal: h.seedMeal, nextSeedMeal: h.nextSeedMeal,
         stranger: h.stranger,
         ...(h.under ? { under: true } : {}),
         ...(h.captive ? { captive: h.captive } : {}),
@@ -1210,7 +1299,7 @@ export class World {
       atlas: this.atlas.serialize(),
       priority: this.priority.serialize(),
       dragons: this.dragons.serialize(),
-      items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass })),
+      items: this.items.map((i) => ({ kind: i.kind, x: r(i.x), y: r(i.y), amount: r(i.amount), t: r(i.t), species: i.species, carcass: i.carcass, seed: i.seed })),
       cleared: this.cleared.map((c) => [c.i, Math.round(c.at)] as const),
       keepClear: this.keepClear.map((r) => [Math.round(r.x0), Math.round(r.y0), Math.round(r.x1), Math.round(r.y1)] as const),
       clearJobs: serializeClearJobs(this),
@@ -1223,7 +1312,9 @@ export class World {
       almanac: this.almanac.serialize(),
       evoLeaps: this.evoLeaps,
       evoAuto: this.evoAuto,
-      plants: this.plants.map((p) => [p.kind, r(p.x), r(p.y), r(p.size), r(p.food), r(p.burnt), p.fruit, p.stump ? 1 : 0] as const),
+      plants: this.plants.map((p) => [p.kind, r(p.x), r(p.y), r(p.size), r(p.food), r(p.burnt), p.fruit, p.stump ? 1 : 0, p.planted ? 1 : 0, p.variant, p.vigor, p.decay] as const),
+      seedBeds: this.seedBeds.map((bed) => ({ ...bed, seed: { ...bed.seed } })),
+      seedGrowthAt: this.seedGrowthAt,
       props: this.props.map((p) => ({ kind: p.kind, x: r(p.x), y: r(p.y), size: r(p.size), found: p.found })),
       shelters: this.shelters.map((s) => ({ id: s.id, x: r(s.x), y: r(s.y), stage: s.stage, have: s.have, plan: s.plan, tier: s.tier, hp: r(s.hp), up: s.up, upHave: s.upHave })),
       colony: this.colony.serialize(),
@@ -1299,11 +1390,12 @@ export class World {
         ...((h as { captiveT?: number }).captiveT ? { captiveT: (h as { captiveT?: number }).captiveT, clanGarb: (h as { clanGarb?: number }).clanGarb } : {}),
       });
       hu.id = h.id;
+      hu.seedMeal = h.seedMeal; hu.nextSeedMeal = h.nextSeedMeal;
     }
     for (const i of data.items) {
       const carcass = (i as { carcass?: Carcass }).carcass;
       if (i.kind === "carcass" && !carcass) continue;
-      w.addItem(i.kind, i.x, i.y, { amount: i.amount, t: i.t, species: i.species, ...(carcass ? { carcass: { ...carcass, max: { ...carcass.max } } } : {}) });
+      w.addItem(i.kind, i.x, i.y, { amount: i.amount, t: i.t, species: i.species, seed: i.seed, ...(carcass ? { carcass: { ...carcass, max: { ...carcass.max } } } : {}) });
     }
     for (const e of data.eggs) w.eggs.push({ id: w.nextId(), ...e });
     w.cleared = ((data as { cleared?: (readonly [number, number])[] }).cleared ?? []).map(([i, at]) => ({ i: re(i), at }));
@@ -1311,15 +1403,20 @@ export class World {
     // Clear area jobs under way carry on (and no dino is left limited to a box nobody's clearing)
     loadClearJobs(w, (data as { clearJobs?: ReturnType<typeof serializeClearJobs> }).clearJobs);
     w.repairs = new Set((data as { repairs?: string[] }).repairs ?? []);
-    for (const [kind, x, y, size, food, burnt, fruit, stump] of data.plants) {
+    for (const [kind, x, y, size, food, burnt, fruit, stump, planted, variant, vigor, decay] of data.plants) {
       const p = makePlant(w, kind, x, y, size);
       p.food = food;
       p.burnt = burnt;
       p.fruit = fruit;
       p.stump = !!stump;
+      p.planted = !!planted;
+      if (variant !== undefined) p.variant = variant;
+      p.vigor = vigor ?? undefined; p.decay = decay ?? undefined;
       w.plants.push(p);
     }
     w.plantsDirty = true;
+    w.seedBeds = (data.seedBeds ?? []).slice(0, 48).map((bed) => ({ ...bed, seed: { ...bed.seed } }));
+    w.seedGrowthAt = data.seedGrowthAt ?? 0;
     for (const p of data.props) {
       const pr = w.addProp(p.kind, p.x, p.y, p.size);
       pr.found = p.found;
@@ -1466,6 +1563,7 @@ export class World {
         placedTorches.push(torch);
       }
     }
+    naturalizePlants(w);
     clearPlantsUnderBuilds(w);
     w.nav.sync(w);
     // walls left a tile short of a tower, a wall or the water: joined up once (wallLinks.ts)

@@ -17,7 +17,9 @@ export const BASE_PEOPLE = 100;
  * central desert, the Great Peaks, the south-east lakes) and the deeper sea south of it were
  * added later. Saves record the width their tile indexes were written with (see world.ts).
  */
-export const MAP_W = 288;
+export const MAP_W = 336;
+/** the map's width before the far east (the second volcano's land) was added: saves at this width get it filled in */
+export const PREV_MAP_W = 288;
 export const MAP_H = 120;
 /** the original valley's size (older saves wrote tile indexes with this width) */
 export const OLD_MAP_W = 160;
@@ -71,7 +73,15 @@ export type BodyPlan =
   | "scorpion"
   // the mountains' snow leopard, and the Yeti
   | "cat"
-  | "yeti";
+  | "yeti"
+  // the Lava Monsters: walking lumps of molten rock (lavaFolk.ts)
+  | "lava"
+  // the river beasts (riverBeasts.ts)
+  | "croc"
+  | "hippo"
+  | "snake"
+  // giant beavers + their dams (beavers.ts)
+  | "beaver";
 
 export type SpeciesId =
   | "trex"
@@ -103,7 +113,15 @@ export type SpeciesId =
   | "snowRex"
   | "frosthorn"
   | "rimeclaw"
-  | "glacierback";
+  | "glacierback"
+  /** the Lava Monsters of the volcano (lavaFolk.ts): not people, walking lumps of lava that hate everything */
+  | "lavaFolk"
+  // the river beasts (riverBeasts.ts): they eat anything
+  | "croc"
+  | "hippo"
+  | "snake"
+  /** giant beavers (beavers.ts): they dam the small streams into ponds and fish them */
+  | "beaver";
 
 export type SoundKind = "roar" | "bellow" | "honk" | "chirp" | "screech" | "hiss" | "grunt";
 
@@ -237,7 +255,7 @@ export interface Emote {
   t: number;
 }
 
-export interface Dino {
+export interface Dino extends SeedCarrier {
   id: number;
   kind: "dino";
   species: SpeciesId;
@@ -314,6 +332,14 @@ export interface Dino {
   yetiScarf?: string;
   /** a captured beast living in a zoo enclosure (the building's id; zoo.ts; saved) */
   caged?: number;
+  /** a Lava Monster (lavaFolk.ts, none saved): how hot it is (1 molten … 0 set solid), seconds till its next lava
+   *  ball, how far it's got balling one up, and what it's saying when tapped */
+  lavaHeat?: number;
+  lavaCd?: number;
+  lavaWind?: number;
+  /** cheering (the volcano's erupting!) or sliding down a lava flow: seconds of it left */
+  lavaJoy?: number;
+  speech?: { text: string; t: number };
   /** netted by a capture party and being hauled home (zoo.ts; not saved) */
   netted?: boolean;
   /** seconds until a pylon barrier can zap this dinosaur again (not saved) */
@@ -394,6 +420,8 @@ export interface Dino {
   };
   /** seconds since fire/lava last hurt it (charred bones if it dies hot) */
   burn: number;
+  /** set alight (a Lava Monster's touch, a lava ball): seconds of burning left (lavaFolk.ts; not saved) */
+  aflame?: number;
   /** nav path (tile indices) + the goal it was planned for */
   path: number[] | null;
   pathI: number;
@@ -502,7 +530,9 @@ export type Resource =
   | "pearl"
   /** picked in the vineyards; the winery presses them into wine (vineyard.ts) */
   | "grapes"
-  | "wine";
+  | "wine"
+  /** dug from a Lava Monster that set solid: dense, fire-proof volcanic stone (lavaFolk.ts) */
+  | "lavaStone";
 
 /** What a cave person does. "auto" lets the tribe decide. */
 export type Role = "auto" | "gatherer" | "builder" | "hunter" | "guard" | "cook" | "farmer" | "smith" | "researcher" | "shaper" | "technician" | "miner" | "trainer" | "dragonSlayer" | "eggRunner" | "dragonKeeper" | "firefighter";
@@ -526,7 +556,7 @@ export interface Gear {
   sidearm?: string | null;
 }
 
-export interface Human {
+export interface Human extends SeedCarrier {
   id: number;
   kind: "human";
   name: string;
@@ -563,6 +593,8 @@ export interface Human {
   helpedAt?: number;
   /** Health below half pauses work until recovery; saved so a reload cannot end treatment. */
   selfHealing?: boolean;
+  /** set alight by lava: seconds of burning left (lavaFolk.ts; not saved) */
+  aflame?: number;
   /** the healing hut / infirmary / hospital they hold a bed in (its id; hospital.ts; not saved: they're re-admitted on load) */
   bed?: number;
   anim: number;
@@ -671,6 +703,10 @@ export interface Human {
   chore?: { x: number; y: number; r: "food" | "wood" | "bones"; t: number; back: boolean } | null;
   /** riding in a war chariot (its id): the chariot moves them (chariots.ts) */
   chariot?: number;
+  /** crewing a water wagon (its id): walking to it, then pushing / pumping / aiming it (waterWagons.ts) */
+  wagon?: number;
+  /** at their place on the water wagon (it moves them; not saved) */
+  wagonOn?: boolean;
 }
 
 /* ------------------------------ Neanderthals ------------------------------ */
@@ -706,6 +742,48 @@ export interface ClanHold {
   t: number;
   /** surrounded by our people: no supplies get through */
   cut: boolean;
+}
+
+/** A water wagon: a hand-pushed cart with a big water tank + a pump gun that hoses Lava Monsters into stone (waterWagons.ts). */
+export interface WaterWagon {
+  id: number;
+  x: number;
+  y: number;
+  dir: 1 | -1;
+  hp: number;
+  maxHp: number;
+  /** water in the tank now / what it holds */
+  tank: number;
+  tankMax: number;
+  /** where it parks at home (it refills there) */
+  homeX: number;
+  homeY: number;
+  /** home: parked; muster: crew coming; out: rolling to / hosing a Lava Monster; back: going home to refill */
+  mode: "home" | "muster" | "out" | "back";
+  /** the Lava Monster it's after (dino id; 0 = none) */
+  target: number;
+  /** crew (human ids): [0] gunner up top, the rest push + pump */
+  crew: number[];
+  /** set off by itself whenever a Lava Monster comes near (false = only when it's sent) */
+  auto: boolean;
+  to: { x: number; y: number } | null;
+  path: number[] | null;
+  pathI: number;
+  pathKey: number;
+  pathT?: number;
+  stuck?: boolean;
+  /** the gun's aim (radians), seconds to the next squirt, how hard it's spraying (drawn) */
+  aim: number;
+  cd: number;
+  spray: number;
+  /** wheels + pump handle */
+  anim: number;
+  /** flash when it's hit */
+  hit: number;
+  /** seconds in the current mode */
+  modeT: number;
+  /** Lava Monsters it has turned to stone */
+  stoned: number;
 }
 
 /** A war chariot: a Triceratops-drawn fighting wagon with two Scorpions and 10 seats (chariots.ts). */
@@ -749,7 +827,11 @@ export type HuntFormation = "ring" | "pincer" | "wedge";
 export interface DragonHunt {
   nest: number;
   formation: HuntFormation;
-  phase: "muster" | "march" | "surround" | "battle" | "collect" | "return";
+  phase: "muster" | "march" | "surround" | "battle" | "collect" | "clear" | "return";
+  /** Seconds spent dismantling the defeated nest by a crew member on site. */
+  clearWork?: number;
+  clearer?: number;
+  nestCleared?: boolean;
   t: number;
   /** attacking a Neanderthal clan's camp instead of a nest (its id) */
   clan?: number;
@@ -814,6 +896,8 @@ export interface Brute {
   kind: "brute";
   name: string;
   clan: number;
+  /** set alight by lava: seconds of burning left (lavaFolk.ts; not saved) */
+  aflame?: number;
   x: number;
   y: number;
   z: number;
@@ -1137,9 +1221,13 @@ export interface Carcass {
   roast?: number;
   /** a dragon roasted it (drawn browned + steaming) */
   cooked?: boolean;
+  /** an animal's kill (carcass.ts): eaten whole, bones and all; the leftovers of a big one wait for
+   *  passing meat-eaters, and it never lies around as a bare skeleton */
+  wild?: boolean;
 }
 
 export interface Item {
+  seed?: PlantSeed;
   id: number;
   kind: ItemKind;
   x: number;
@@ -1174,9 +1262,33 @@ export interface Egg {
 
 export type PlantKind = "conifer" | "palm" | "cycad" | "broadleaf" | "fruit" | "fern" | "bush" | "reeds" | "horsetail";
 
+export interface PlantSeed {
+  kind: PlantKind;
+  variant: number;
+  originX: number;
+  originY: number;
+  readyAt: number;
+}
+export interface SeedCarrier {
+  seedMeal?: PlantSeed;
+  nextSeedMeal?: number;
+}
+export interface SeedBed {
+  seed: PlantSeed;
+  x: number;
+  y: number;
+  readyAt: number;
+  expiresAt: number;
+}
+
 export interface Plant {
+  /** Compost gives a small, bounded growth and mature-size bonus. */
+  vigor?: number;
+  decay?: number;
   id: number;
   kind: PlantKind;
+  /** Placed with the plant brush; natural vegetation cleanup preserves it. */
+  planted?: boolean;
   x: number;
   y: number;
   /** 0..1 grown */
@@ -1247,6 +1359,9 @@ export interface FishSchool {
   vy: number;
   n: number;
   t: number;
+  /** lives in a beaver pond (that dam's id): stays in it, and comes back on its own (beavers.ts) */
+  pond?: number;
+  regrow?: number;
 }
 
 export type WeatherKind = "clear" | "cloudy" | "rain" | "heavyRain" | "storm" | "fog" | "windy" | "hot" | "snow" | "blizzard";
@@ -1275,7 +1390,7 @@ export type TechId =
   /** dragon slayers, egg runners + dragon raids (see dragonRaid.ts) */
   | "dragonHunting";
 
-export type WallKind = "palisade" | "stone" | "polygon";
+export type WallKind = "palisade" | "stone" | "polygon" | "lava";
 /** wall pieces: plain wall, a gate, or stairs up to the walkway */
 export type WallPart = "wall" | "gate" | "stairs";
 
@@ -1319,7 +1434,7 @@ export interface Farm {
 }
 
 /** What a field grows: flowers, wheat, barley, or grape vines (a vineyard, vineyard.ts). */
-export type FarmCrop = "flower" | "wheat" | "barley" | "grape";
+export type FarmCrop = "flower" | "wheat" | "barley" | "grape" | "berries" | "redBerries" | "blueBerries" | "goldBerries";
 
 export interface Tower {
   id: number;
@@ -1357,6 +1472,7 @@ export type BuildingKind = "storage" | "workshop" | "blacksmith" | "foodStore" |
   /** an iron-barred enclosure for one captured great beast (zoo.ts) */
   | "zoo"
   | "warChariot"
+  | "waterWagon"
   | "riderHall"
   // the Old Ways' last-resort project
   | "shelterDeep"
@@ -1441,9 +1557,11 @@ export interface Scorpion {
   obsidianUp?: boolean;
   /** heat glinting off the obsidian plates (drawn; not saved) */
   glint?: number;
+  /** aimed at a Lava Monster: it's a water cannon right now (colony.aimAndFire; drawn; not saved) */
+  water?: boolean;
 }
 
-export type NodeKind = "stone" | "limestone" | "clay" | "iron" | "coal" | "silver" | "gold" | "obsidian" | "flint" | "salt" | "tar" | "artifact" | "fossil" | "copper" | "quartz" | "magnetite" | "crystal" | "diamond" | "meteorite";
+export type NodeKind = "stone" | "limestone" | "clay" | "iron" | "coal" | "silver" | "gold" | "obsidian" | "flint" | "salt" | "tar" | "artifact" | "fossil" | "copper" | "quartz" | "magnetite" | "crystal" | "diamond" | "meteorite" | "lavaStone";
 
 /** A resource deposit. Rare ones stay hidden until someone walks by. */
 export interface ResNode {

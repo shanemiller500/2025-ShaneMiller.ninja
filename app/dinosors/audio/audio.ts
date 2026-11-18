@@ -38,6 +38,8 @@ interface Beds {
 }
 
 const RATE: Record<string, number> = {
+  lava1: 0.6,
+  lava2: 0.6,
   step: 0.09,
   chomp: 0.12,
   munch: 0.2,
@@ -63,6 +65,8 @@ const RATE: Record<string, number> = {
 };
 
 const CATEGORY: Record<string, Category> = {
+  lava1: "creatures",
+  lava2: "creatures",
   roar: "creatures",
   bellow: "creatures",
   honk: "creatures",
@@ -400,6 +404,60 @@ export class AudioManager {
         lfo.start(at);
         lfo.stop(at + 1.6);
         noise("bandpass", 500 * p, 200 * p, 1.2, 1.3, 0.35, 0.1);
+        break;
+      }
+      case "lava1":
+      case "lava2": {
+        // a Lava Monster: a slow, gurgling zombie moan of "LAAA-vaaa" (once or twice), through "ah" vowel formants
+        const words = sound === "lava2" ? 2 : 1;
+        const mixer = ctx.createGain();
+        mixer.gain.value = 1;
+        mixer.connect(out);
+        const f1 = ctx.createBiquadFilter();
+        f1.type = "bandpass";
+        f1.frequency.value = 680 * p;
+        f1.Q.value = 4;
+        const f2 = ctx.createBiquadFilter();
+        f2.type = "bandpass";
+        f2.frequency.value = 1150 * p;
+        f2.Q.value = 6;
+        const lo = ctx.createBiquadFilter();
+        lo.type = "lowpass";
+        lo.frequency.value = 420 * p;
+        f1.connect(mixer);
+        f2.connect(mixer);
+        lo.connect(mixer);
+        for (let k = 0; k < words; k++) {
+          const w0 = at + k * 1.3;
+          const sylls: [number, number, number, number, number][] = [
+            [0, 96, 80, 0.55, 0.6],
+            [0.64, 86, 62, 0.62, 0.55],
+          ];
+          for (const [s, fa, fb, len, vol] of sylls) {
+            const o = ctx.createOscillator();
+            o.type = "sawtooth";
+            o.frequency.setValueAtTime(fa * p, w0 + s);
+            o.frequency.exponentialRampToValueAtTime(fb * p, w0 + s + len);
+            const vib = ctx.createOscillator();
+            vib.frequency.value = 5.5;
+            const vg = ctx.createGain();
+            vg.gain.value = 3 * p;
+            vib.connect(vg).connect(o.frequency);
+            const g = ctx.createGain();
+            this.env(g, w0 + s, 0.1, vol, len);
+            o.connect(g);
+            g.connect(f1);
+            g.connect(f2);
+            g.connect(lo);
+            o.start(w0 + s);
+            o.stop(w0 + s + len + 0.2);
+            vib.start(w0 + s);
+            vib.stop(w0 + s + len + 0.2);
+          }
+          // the "v": a breathy rasp between the syllables, and lava gurgling under it all
+          noise("bandpass", 900 * p, 500 * p, 1.5, 0.12, 0.14, 0.01, k * 1.3 + 0.52);
+          noise("lowpass", 260, 140, 3, 1.0, 0.2, 0.05, k * 1.3 + 0.05);
+        }
         break;
       }
       case "bellow": {

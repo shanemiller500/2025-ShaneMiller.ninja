@@ -10,6 +10,7 @@ import { scorpionMaxHp } from "../sim/scorpionArmor";
 import { drawHallBack, drawHallFront } from "./riderHallArt";
 import { pitOf } from "../sim/shows";
 import { drawChariot } from "./chariotArt";
+import { drawWaterWagon } from "./wagonArt";
 import { pitScale } from "../sim/shows";
 import { hasCart } from "../sim/carts";
 import { drawCart } from "./cartArt";
@@ -31,7 +32,7 @@ function toHex(rgb: string) {
 import type { World } from "../sim/world";
 import { drawDino, restPose, setDinoView, shade, type DinoPose } from "./drawDino";
 import { lookKey } from "../sim/genetics";
-import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawWinery, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawPlantFast, drawPlantLod, plantSpriteRes, atlasStamp, atlasBeginFrame, atlasClear, atlasStats, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
+import { drawCampfire, drawEgg, type GarbLevel, drawFarm, drawWinery, drawFish, drawFlame, drawHuman, drawItem, drawPlant, drawPlantFast, drawPlantLod, setPlantSeason, plantSpriteRes, atlasStamp, atlasBeginFrame, atlasClear, atlasStats, drawProp, drawShelter, drawStockpile, drawVolcano, type WeaponLook } from "./sprites";
 import { ROLES } from "../data/facts";
 import { BUILDINGS, HOUSING } from "../data/colony";
 import { drawBar, drawBones, drawBuilding, drawHome, drawNode, drawScaffold, drawScorpion, drawTower2, drawWall } from "./colonyArt";
@@ -63,7 +64,14 @@ import { alignGuides } from "../sim/wallLinks";
 import { drawShieldFields } from "./shieldArt";
 import { drawSnowFolk, drawSnowLodge } from "./snowFolkArt";
 import type { SnowLodge, SnowTribe } from "../sim/snowFolk";
-import { hangTrees, snowCamo } from "../sim/snowBeasts";
+import { hangTrees, inCave, snowCamo } from "../sim/snowBeasts";
+import { beastDens, type Den } from "../sim/beasts";
+import { inWater } from "../sim/riverBeasts";
+import { beaverDams, beaverDiving, beaverHolding, DAM_STICKS, lodgeOf, type DamSite } from "../sim/beavers";
+import { drawDam, drawLodge } from "./beaverArt";
+import { aflameNow, coneUnder, inTub, isRidingLava, lavaBalls, lavaSplashes, lavaStatues, lavaTub, THROW, type Statue } from "../sim/lavaFolk";
+import { drawLavaTub, paintLava } from "./lavaArt";
+import { drawNet, drawScorpionDen, drawYetiCave } from "./denArt";
 import { PeaksFx, drawHangTree } from "./snowArt";
 import { shieldView } from "../sim/dragonShield";
 import { drawMonk, drawMonkPlace } from "./monkArt";
@@ -75,7 +83,7 @@ import type { SandTent, SandTribe } from "../sim/sandFolk";
 import { drawClanBuilding, drawClanHold, drawClanTrap } from "./clanLifeArt";
 import { fenceSize, siteOf } from "../sim/clanLife";
 import type { Brute, Clan, Wall, ClanBuild, SeaHut, SeaSign, SeaTribe, TreeSign } from "../sim/types";
-import { TerrainRenderer } from "./terrainRenderer";
+import { riverRock, TerrainRenderer } from "./terrainRenderer";
 import { drawEruptionColumn, drawGhost, drawPyroclastic } from "./civArt";
 import { CIV_KINDS, drawAsteroid, drawBeam, drawBeamBolt, drawChamber, drawCivBuilding, drawLift, drawLiftGhost, drawMegalith, drawPylonLink, drawShieldDome, drawShockwave } from "./civArt";
 import { EXT_TIMES } from "../sim/extinction";
@@ -86,8 +94,9 @@ import { causticSheet } from "./terrainTex";
 import { LitSprites } from "./litSprites";
 import { awningLayout, type AwningSpan } from "./awningLayout";
 import { estates, type Estate } from "../sim/estate";
-import { drawAwningLink, drawCastleSite, drawCastleWing, drawCompoundGrounds, drawCompoundWing, drawCourtyard, drawGallery } from "./castleArt";
-import { wingUnits } from "../sim/castleCompound";
+import { drawAwningLink, drawCastleSite, drawCastleWing, drawCastleKeep, drawCompoundGrounds, drawCompoundWing, drawCourtyard, drawGallery } from "./castleArt";
+import { compoundOf, keepHeight, wingUnits } from "../sim/castleCompound";
+import { seasonAt } from "../sim/seasons";
 
 export interface Camera {
   x: number;
@@ -156,6 +165,7 @@ const K_HOLD = 42;
 const K_OURCAT = 43;
 const K_OURSHOT = 44;
 const K_CHARIOT = 45;
+const K_WAGON = 163;
 const K_HALL_BACK = 46;
 const K_HALL_FRONT = 47;
 const K_FEAST = 48;
@@ -181,6 +191,12 @@ const K_MONK = 56;
 const K_MONKPLACE = 57;
 const K_SNOWLODGE = 58;
 const K_HANGTREE = 59;
+/** a great beast's den: a Yeti's ice cave, a Dinosaur Scorpion's burrow (beasts.ts) */
+const K_DEN = 71;
+/** a Lava Monster that set solid: a stone statue on its lump of obsidian (lavaFolk.ts) */
+const K_STATUE = 72;
+const K_DAM = 73;
+const K_LODGE = 74;
 const K_CARAVAN = 60;
 const K_GALLERY = 61;
 const K_AWNING_LINK = 62;
@@ -446,6 +462,9 @@ export class Renderer {
     c.imageSmoothingQuality = "low";
     this.feedback.update(w, dt, z);
     setDinoView(z * d);
+    const season = seasonAt(w.day).def.id;
+    this.terrainR.setSeason(season);
+    setPlantSeason(season);
     this.terrainR.draw(c, v.x0, v.y0, v.x1, v.y1, z, z * d);
     this.trailFx(c, v.x0, v.y0, v.x1, v.y1);
     this.groundFx(c, v.x0, v.y0, v.x1, v.y1, z);
@@ -465,13 +484,19 @@ export class Renderer {
       this.awningLinks = awningLayout(w);
     }
     const joinedCanopies = new Set(this.awningLinks.flatMap((l) => [l.aId, l.bId]));
-    const galleries = this.estateGroups.flatMap((e) => e.compound ? [] : e.links);
+    const galleries: import("../sim/estate").HomeLink[] = [];
     const sharedRooms = new Map<number, ReturnType<typeof wingUnits>>();
     const castleCorners = new Map<number, number>();
+    const castleProjects = new Map<number, number>();
     for (const e of this.estateGroups) if (e.compound) {
       drawCompoundGrounds(c, e.compound, this.t);
       const wings = e.compound.wings.map((g) => e.homes.filter((s) => g.ids.includes(s.id)).sort((a, b) => a.id - b.id)).filter((g) => g.length);
-      for (const units of wings) for (const s of units) sharedRooms.set(s.id, units);
+      for (const units of wings) {
+        const ids = e.compound.wings.find((g) => g.ids.includes(units[0].id))!.ids;
+        const all = w.shelters.filter((s) => ids.includes(s.id));
+        for (const s of all) sharedRooms.set(s.id, units);
+        castleProjects.set(units[0].id, all.filter((s) => !shelterDone(s) || s.up).length);
+      }
       const xs = wings.map((g) => g[0].x), ys = wings.map((g) => g[0].y);
       const left = Math.min(...xs), right = Math.max(...xs), back = Math.min(...ys), front = Math.max(...ys);
       for (const units of wings) {
@@ -511,6 +536,14 @@ export class Renderer {
       const aloft = sp(dn.species).move === "fly" && dn.z > 6;
       if (dn.under || (aloft && !dn.rider && !dn.passengers?.length)) continue;
       if (dn.x < x0 || dn.x > x1 || dn.y < y0 || dn.y > y1 + 150) continue;
+      // a Yeti asleep in its cave: only its eyes show (the den's art draws them)
+      if (dn.species === "yeti" && dn.state === "sleep" && inCave(w, dn)) continue;
+      // a Lava Monster up on the volcano's cone stands ON it (the cone is one picture sorted by its base)
+      const cone = dn.species === "lavaFolk" ? coneUnder(w, dn.x, dn.y) : null;
+      if (cone) {
+        add(cone.y + 151 + (dn.y - cone.y) * 0.001, K_DINO, i);
+        continue;
+      }
       add(aloft ? SKY_Y + dn.y : dn.y, K_DINO, i);
     }
     for (let i = 0; i < w.humans.length; i++) {
@@ -580,6 +613,19 @@ export class Renderer {
     // the Yetis' hanging trees by their dens
     this.hangTreeList = hangTrees(w).filter((t) => t.x > x0 - 60 && t.x < x1 + 60 && t.y > y0 && t.y < y1 + 120);
     for (let i = 0; i < this.hangTreeList.length; i++) add(this.hangTreeList[i].y, K_HANGTREE, i);
+    // the great beasts' dens (a little behind where the beast stands at home, so it's drawn in front of its cave)
+    this.denList = beastDens(w).filter((d) => d.x > x0 - 170 && d.x < x1 + 170 && d.y > y0 - 40 && d.y < y1 + 190);
+    for (let i = 0; i < this.denList.length; i++) add(this.denList[i].y - (this.denList[i].kind === "yeti" ? 8 : 30), K_DEN, i);
+    this.statueList = lavaStatues(w).filter((s) => s.x > x0 - 80 && s.x < x1 + 80 && s.y > y0 && s.y < y1 + 150);
+    for (let i = 0; i < this.statueList.length; i++) add(this.statueList[i].y + 1, K_STATUE, i);
+    // beaver dams across the small streams, and the lodge in each finished pond (beavers.ts)
+    this.damList = beaverDams(w).filter((s) => s.sticks > 0 || s.done).filter((s) => s.px > x0 - 200 && s.px < x1 + 200 && s.py > y0 - 200 && s.py < y1 + 300);
+    for (let i = 0; i < this.damList.length; i++) {
+      const s = this.damList[i];
+      add(s.ty * TILE + TILE / 2 + 2, K_DAM, i);
+      const lodge = lodgeOf(s);
+      if (lodge) add(lodge.y, K_LODGE, i);
+    }
     // Snow People camps: each igloo, the longhouse, the pen… sort on their own
     this.snowLodges.length = 0;
     for (const tr of w.snowFolk.tribes) {
@@ -678,6 +724,10 @@ export class Renderer {
       const chr = w.colony.chariots[i];
       if (chr.x > x0 - 140 && chr.x < x1 + 140 && chr.y > y0 - 40 && chr.y < y1 + 120) add(chr.y, K_CHARIOT, i);
     }
+    for (let i = 0; i < w.colony.wagons.length; i++) {
+      const wg = w.colony.wagons[i];
+      if (wg.x > x0 - 90 && wg.x < x1 + 90 && wg.y > y0 - 30 && wg.y < y1 + 90) add(wg.y, K_WAGON, i);
+    }
     for (let i = 0; i < rv.holds.length; i++) {
       const hd = rv.holds[i];
       if (hd.x > x0 - hd.r && hd.x < x1 + hd.r && hd.y > y0 - 60 && hd.y < y1 + 60) add(hd.y, K_HOLD, i);
@@ -731,8 +781,11 @@ export class Renderer {
       if (ft.x > x0 - 80 && ft.x < x1 + 80 && ft.y > y0 - 60 && ft.y < y1 + 60) add(ft.y, K_FEAST, 0);
     }
     if (Object.values(w.mineLoads).some((n) => (n ?? 0) > 0) && w.camp.caveX > x0 - 100 && w.camp.caveX < x1 + 100 && w.camp.caveY > y0 - 80 && w.camp.caveY < y1 + 80) add(w.camp.caveY + 36, K_MINE_LOAD, 0);
-    const vo = w.volcano;
-    if (vo.x + 450 > x0 && vo.x - 450 < x1 && vo.y - 400 < y1 && vo.y + 200 > y0) add(vo.y + 150, K_VOLCANO, 0);
+    // both volcanoes (the first, and the far east's)
+    for (let vi = 0; vi < 2; vi++) {
+      const vo = vi ? w.volcano2 : w.volcano;
+      if (vo.x + 450 > x0 && vo.x - 450 < x1 && vo.y - 400 < y1 && vo.y + 200 > y0) add(vo.y + 150, K_VOLCANO, vi);
+    }
     for (let i = 0; i < this.peaks.length; i++) {
       const p = this.peaks[i];
       if (p.x > x0 && p.x < x1 && p.y > y0 && p.y < y1 + 120) add(p.y, K_PEAK, i);
@@ -748,7 +801,9 @@ export class Renderer {
       }
     });
     this.fireInView = fires;
-    for (let i = 0; i < vo.rocks.length; i++) add(vo.rocks[i].y, K_ROCK, i);
+    // rocks flung by either volcano (index + 10000 = the far east's)
+    for (let i = 0; i < w.volcano.rocks.length; i++) add(w.volcano.rocks[i].y, K_ROCK, i);
+    for (let i = 0; i < w.volcano2.rocks.length; i++) add(w.volcano2.rocks[i].y, K_ROCK, i + 10000);
     const tribe = w.tribe;
     for (let i = 0; i < tribe.walls.length; i++) {
       const wl = tribe.walls[i];
@@ -818,8 +873,10 @@ export class Renderer {
           } else if (it.k === K_SHELTER) {
             const s = w.shelters[it.i];
             if (s.stage < 2 || s.lift) continue;
-            const half = 17 + s.tier * 2.5;
-            boxShadowPath(c, s.x - half, s.y - 13, s.x + half, s.y, 15 + s.tier * 4, sun);
+            const castle = compoundOf(w, s.id);
+            const half = castle?.layout === "keep" ? castle.halfWidth ?? 64 : 17 + s.tier * 2.5;
+            const height = castle?.layout === "keep" ? keepHeight(sharedRooms.get(s.id)?.length ?? 1) : 15 + s.tier * 4;
+            boxShadowPath(c, s.x - half, s.y - 13, s.x + half, s.y, height, sun);
           }
         }
         c.fillStyle = `rgba(14,20,36,${(sun.alpha * 0.62).toFixed(3)})`;
@@ -889,7 +946,7 @@ export class Renderer {
     // farm fields (plots next to each other are one big field)
     const farms = w.tribe.farms;
     // (vineyards join up with other vineyards, fields with fields)
-    for (const g of clusters(farms, (a, b) => (a.crop === "grape") === (b.crop === "grape") && Math.abs(a.x - b.x) < 100 && Math.abs(a.y - b.y) < 62)) {
+    for (const g of clusters(farms, (a, b) => (a.crop ?? "wheat") === (b.crop ?? "wheat") && Math.abs(a.x - b.x) < 100 && Math.abs(a.y - b.y) < 62)) {
       if (g.length > 1) {
         const fs = g.map((i) => farms[i]);
         const fx0 = Math.min(...fs.map((f) => f.x)) - 38;
@@ -1106,6 +1163,53 @@ export class Renderer {
           }
           break;
         }
+        case K_STATUE: {
+          const st = this.statueList[it.i];
+          if (!st) break;
+          c.save();
+          c.translate(st.x, st.y);
+          c.scale(st.dir, 1);
+          this.statuePose.t = 1.3 + (st.id % 7);
+          paintLava(c, st.L, this.statuePose, true);
+          c.restore();
+          break;
+        }
+        case K_DAM: {
+          const s = this.damList[it.i];
+          if (!s) break;
+          c.save();
+          c.translate(((s.tx0 + s.tx1 + 1) / 2) * TILE, s.ty * TILE + TILE / 2);
+          drawDam(c, (s.tx1 - s.tx0 + 1) * TILE + 22, s.done ? 1 : s.sticks / DAM_STICKS, this.t, z > 0.6);
+          c.restore();
+          break;
+        }
+        case K_LODGE: {
+          const s = this.damList[it.i];
+          const lodge = s && lodgeOf(s);
+          if (!lodge) break;
+          c.save();
+          c.translate(lodge.x, lodge.y);
+          drawLodge(c, this.t, z > 0.6);
+          c.restore();
+          break;
+        }
+        case K_DEN: {
+          const den = this.denList[it.i];
+          if (!den) break;
+          c.save();
+          c.translate(den.x, den.y - (den.kind === "yeti" ? 8 : 30));
+          const look = { lived: !!den.beast, asleep: den.asleep, night };
+          if (den.kind === "yeti") {
+            c.scale(1.25, 1.25);
+            drawYetiCave(c, this.t, look);
+          } else {
+            // (a burrow big enough for a beast ten metres long)
+            c.scale(2.3, 2.3);
+            drawScorpionDen(c, this.t, look);
+          }
+          c.restore();
+          break;
+        }
         case K_HANGTREE: {
           const ht = this.hangTreeList[it.i];
           if (!ht) break;
@@ -1212,6 +1316,14 @@ export class Renderer {
           c.translate(r.cx, r.cy);
           if (it.k === K_HALL_BACK) drawHallBack(c, r.rx, r.ry, hallTiers(w), rooms, this.t, night > 0.5);
           else drawHallFront(c, r.rx, r.ry, rooms, this.t, night > 0.5);
+          c.restore();
+          break;
+        }
+        case K_WAGON: {
+          const wg = w.colony.wagons[it.i];
+          c.save();
+          c.translate(wg.x, wg.y);
+          drawWaterWagon(c, wg, this.t, w.daylight * (1 - w.weather.rain));
           c.restore();
           break;
         }
@@ -1352,7 +1464,9 @@ export class Renderer {
           const beds = units.reduce((n, u) => n + HOUSING[u.tier].cap + (w.civ.has("greatHalls") ? 2 : 0), 0);
           const occupants = cutaway ? w.humans.filter((h) => unitIds.has(h.home)).length : 0;
           const paintS = (c: CanvasRenderingContext2D) => {
-          if (done && sharedRooms.has(s.id)) drawCompoundWing(c, units.length, beds, occupants, night > 0.5, cutaway, castleCorners.get(s.id) ?? 0);
+          const castle = compoundOf(w, s.id);
+          if (done && castle?.layout === "keep") drawCastleKeep(c, units.length, beds, occupants, night > 0.5, cutaway, castle.halfWidth, castleProjects.get(s.id) ?? 0);
+          else if (done && sharedRooms.has(s.id)) drawCompoundWing(c, units.length, beds, occupants, night > 0.5, cutaway, castleCorners.get(s.id) ?? 0);
           else if (done && s.tier >= 4) drawCastleWing(c, s, neighbours, night > 0.5, this.t, beds, occupants, cutaway);
           else if (!done && s.plan === "castle") drawCastleSite(c, s);
           else if (!drawHome(c, s, done, night > 0.5, this.t, inside)) {
@@ -1385,7 +1499,7 @@ export class Renderer {
             c.translate(s.lift.x, s.lift.y - s.lift.z);
             paintS(c);
             c.restore();
-          } else this.stamp(c, "s" + s.id, s.id, `home|${s.plan}|${s.tier}|${s.stage}|${done ? 1 : 0}|${s.up ? 1 : 0}|${neighbours}|${cutaway}|${beds}|${occupants}`, s.x, s.y, paintS);
+          } else this.stamp(c, "s" + s.id, s.id, `home|${s.plan}|${s.tier}|${s.stage}|${done ? 1 : 0}|${s.up ? 1 : 0}|${neighbours}|${cutaway}|${beds}|${occupants}|${castleProjects.get(s.id) ?? 0}|${compoundOf(w, s.id)?.halfWidth ?? 0}`, s.x, s.y, paintS);
           break;
         }
         case K_FEAST: {
@@ -1428,13 +1542,15 @@ export class Renderer {
           c.restore();
           break;
         }
-        case K_VOLCANO:
+        case K_VOLCANO: {
+          const vo = it.i ? w.volcano2 : w.volcano;
           c.save();
           c.translate(vo.x, vo.y);
           drawVolcano(c, vo.glow, vo.phase === "erupt" || vo.phase === "ash", this.t);
           if (vo.crack > 0.01) this.volcanoCracks(c, vo.crack);
           c.restore();
           break;
+        }
         case K_PEAK: {
           const p = this.peaks[it.i];
           // peaks never change: each look (size, snow line, shape) is painted once into the atlas and stamped
@@ -1545,7 +1661,8 @@ export class Renderer {
           break;
         }
         case K_ROCK: {
-          const r = vo.rocks[it.i];
+          const r = it.i >= 10000 ? w.volcano2.rocks[it.i - 10000] : w.volcano.rocks[it.i];
+          if (!r) break;
           c.fillStyle = "#3a2a24";
           c.beginPath();
           c.arc(r.x, r.y - r.z, r.size, 0, Math.PI * 2);
@@ -1580,6 +1697,66 @@ export class Renderer {
       c.moveTo(h.x - h.dir * 6, h.y - 10);
       c.quadraticCurveTo((h.x + it.x) / 2, (h.y + it.y) / 2 - 2, it.x, it.y - 6);
       c.stroke();
+    }
+    // buckets of water + snowballs our people throw at Lava Monsters (lavaFolk.ts)
+    for (const s of lavaSplashes(w)) {
+      if (s.x < x0 - 40 || s.x > x1 + 40 || s.y < y0 - 40 || s.y > y1 + 40) continue;
+      const sy = s.y - s.z;
+      if (s.kind === "snow") {
+        c.fillStyle = "#f6fbff";
+        c.strokeStyle = "rgba(140,170,200,0.9)";
+        c.lineWidth = 1;
+        c.beginPath();
+        c.arc(s.x, sy, 4.5, 0, Math.PI * 2);
+        c.fill();
+        c.stroke();
+      } else {
+        // a slosh of water: a blob stretched along its flight, a few drops trailing
+        const a = Math.atan2(s.vy - s.vz, s.vx);
+        c.save();
+        c.translate(s.x, sy);
+        c.rotate(a);
+        c.fillStyle = "rgba(110,180,240,0.85)";
+        c.beginPath();
+        c.ellipse(0, 0, s.kind === "cannon" ? 18 : s.kind === "hose" ? 11 : 8, s.kind === "cannon" ? 5.5 : 4.5, 0, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = "rgba(220,240,255,0.9)";
+        c.beginPath();
+        c.ellipse(2, -1.5, 3, 1.4, 0, 0, Math.PI * 2);
+        c.arc(-11, 2, 1.6, 0, Math.PI * 2);
+        c.arc(-16, -1, 1.2, 0, Math.PI * 2);
+        if (s.kind === "cannon") {
+          // a Scorpion's water cannon: a longer jet, spray streaming off behind it
+          c.arc(-22, 1.5, 1.8, 0, Math.PI * 2);
+          c.arc(-28, -2, 1.4, 0, Math.PI * 2);
+          c.arc(-34, 1, 1.1, 0, Math.PI * 2);
+        }
+        c.fill();
+        c.restore();
+      }
+    }
+    // the Lava Monsters' lava balls (lavaFolk.ts): a shadow on the ground, a glowing ball in the air
+    for (const b of lavaBalls(w)) {
+      if (b.x < x0 - 40 || b.x > x1 + 40 || b.y < y0 - 40 || b.y > y1 + 40) continue;
+      c.fillStyle = `rgba(30,18,10,${Math.max(0.08, 0.32 - b.z / 900).toFixed(3)})`;
+      c.beginPath();
+      c.ellipse(b.x, b.y, b.r * 1.2, b.r * 0.45, 0, 0, Math.PI * 2);
+      c.fill();
+      const by = b.y - b.z;
+      const bg = c.createRadialGradient(b.x - b.r * 0.3, by - b.r * 0.3, b.r * 0.1, b.x, by, b.r);
+      bg.addColorStop(0, "#fff6c0");
+      bg.addColorStop(0.45, "#ffb238");
+      bg.addColorStop(1, "#c9330f");
+      c.fillStyle = bg;
+      c.beginPath();
+      c.arc(b.x, by, b.r, 0, Math.PI * 2);
+      c.fill();
+      // a couple of dark crust flecks so it reads as a lump of lava, not a sun
+      c.fillStyle = "rgba(40,22,16,0.8)";
+      c.beginPath();
+      c.arc(b.x + b.r * 0.35, by + b.r * 0.2, b.r * 0.28, 0, Math.PI * 2);
+      c.arc(b.x - b.r * 0.4, by + b.r * 0.35, b.r * 0.18, 0, Math.PI * 2);
+      c.fill();
     }
     for (const p of tribe.projectiles) {
       if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
@@ -1949,6 +2126,35 @@ export class Renderer {
       p.walk = this.t * 12;
       p.stride = 1;
     }
+    // a Lava Monster: how hot it is, swimming in a lava pool, balling up a lava ball (lavaArt.ts)
+    if (dn.species === "lavaFolk") {
+      const riding = isRidingLava(dn);
+      p.heat = dn.lavaHeat ?? 1;
+      // in the hot tub it sits in up to its chest; anywhere else (a lava flow it's riding too) it stands on top
+      p.sink = !riding && inTub(this.world, dn.x, dn.y) ? 0.8 : 0;
+      p.wind = dn.lavaWind ? Math.min(1, dn.lavaWind / THROW.wind) : 0;
+      p.joy = riding || (dn.lavaJoy ?? 0) > 0 ? 1 : 0;
+      p.stone = false;
+    } else {
+      p.heat = undefined;
+      p.sink = undefined;
+      p.wind = undefined;
+      p.joy = undefined;
+      p.stone = undefined;
+      // a crocodile / hippo sits low in the water (a lurking croc shows just its eyes + back); jaws open to bite
+      if (dn.species === "croc" || dn.species === "hippo" || dn.species === "snake") {
+        if (dn.species !== "snake" && inWater(this.world, dn.x, dn.y)) p.sink = dn.species === "croc" ? (st === "stalk" || st === "idle" ? 0.78 : 0.5) : st === "chase" ? 0.4 : 0.75;
+        p.mouth = Math.max(p.mouth, dn.strike ?? 0, st === "chase" && dn.species === "hippo" ? 0.7 : 0);
+      }
+      // a beaver swims low (head + back showing), vanishes diving for a fish; gnaws, carries a stick, nibbles a fish (beaverArt.ts)
+      p.hold = undefined;
+      if (dn.species === "beaver") {
+        if (beaverDiving(dn)) p.sink = 1;
+        else if (inWater(this.world, dn.x, dn.y)) p.sink = 0.6;
+        p.hold = beaverHolding(dn) ?? undefined;
+        p.mouth = Math.max(p.mouth, dn.strike ?? 0);
+      }
+    }
     return p;
   }
 
@@ -2019,6 +2225,10 @@ export class Renderer {
   private snowLodges: { s: SnowLodge; tr: SnowTribe }[] = [];
   private peaksFx = new PeaksFx();
   private hangTreeList: { id: number; x: number; y: number }[] = [];
+  private denList: Den[] = [];
+  private statueList: readonly Statue[] = [];
+  private damList: DamSite[] = [];
+  private statuePose: DinoPose = { ...restPose(), stone: true, heat: 0 };
   private seaSigns: { s: SeaSign; color: string }[] = [];
 
   /** A dragon (selection ring, the dragon, then whoever is riding it). */
@@ -2322,6 +2532,8 @@ export class Renderer {
       c.fill();
       c.restore();
     }
+    // netted and bound by a capture party (zoo.ts)
+    if (dn.netted) drawNet(c, L);
     if (cruising) this.swimWater(c, dn, L, true);
     if (dn.clan) this.clanHarness(c, dn, L, def.move === "fly");
     if (dn.work?.partner && !isBaby(dn)) {
@@ -2857,12 +3069,36 @@ export class Renderer {
           const py = y * TILE;
           const tile = w.terrain.tiles[i];
           if (tile === T.River) {
-            const off = (t * 30 + hsh * TILE) % TILE;
+            const rapid = w.terrain.rapids[i] === 1;
+            if (rapid) {
+              // white water: soft patches of foam tumbling downstream, swelling and breaking up as they go
+              c.fillStyle = "#ffffff";
+              for (let f = 0; f < 3; f++) {
+                const ph = (t * 1.5 + hsh * 3 + f / 3) % 1;
+                c.globalAlpha = 0.6 * Math.sin(ph * Math.PI);
+                c.beginPath();
+                c.ellipse(px + 5 + ((hsh * 97 + f * 41) % 22), py + ph * TILE, 3.5 + f * 1.2 + ph * 2, 2 + f * 0.6, 0, 0, Math.PI * 2);
+                c.fill();
+              }
+              c.globalAlpha = 1;
+            } else {
+              const off = (t * 30 + hsh * TILE) % TILE;
+              c.strokeStyle = "rgba(255,255,255,0.22)";
+              c.beginPath();
+              c.moveTo(px + hsh * 20 + 4, py + off);
+              c.lineTo(px + hsh * 20 + 4, py + off + 7);
+              c.stroke();
+            }
+            // foam swirling round the rocks in it
+            const rock = riverRock(w.terrain, x, y);
+            if (rock) {
+              const ph = (t * (rock.rapid ? 2.4 : 1.2) + hsh * 5) % 1;
+              c.strokeStyle = `rgba(255,255,255,${((rock.rapid ? 0.75 : 0.45) * (1 - ph)).toFixed(3)})`;
+              c.beginPath();
+              c.ellipse(rock.x, rock.y + rock.r * 0.2, rock.r * (1.1 + ph * 0.8), rock.r * (0.55 + ph * 0.4), 0, 0, Math.PI * 2);
+              c.stroke();
+            }
             c.strokeStyle = "rgba(255,255,255,0.22)";
-            c.beginPath();
-            c.moveTo(px + hsh * 20 + 4, py + off);
-            c.lineTo(px + hsh * 20 + 4, py + off + 7);
-            c.stroke();
           } else if (hsh < 0.3) {
             const a = (Math.sin(t * 1.5 + hsh * 20) + 1) / 2;
             c.strokeStyle = `rgba(255,255,255,${0.08 + a * 0.16})`;
@@ -2996,6 +3232,14 @@ export class Renderer {
     c.globalAlpha = 1;
 
     this.drawLava(c);
+    // the Lava Monsters' hot tub, flat on the ground (sim/lavaFolk.ts)
+    const tub = w.lava.held.size ? lavaTub(w) : null;
+    if (tub && tub.x + tub.rx * 1.4 > tx0 * TILE && tub.x - tub.rx * 1.4 < (tx1 + 1) * TILE && tub.y + tub.ry * 4 > ty0 * TILE && tub.y - tub.ry * 1.4 < (ty1 + 1) * TILE) {
+      c.save();
+      c.translate(tub.x, tub.y);
+      drawLavaTub(c, tub.rx, tub.ry, t);
+      c.restore();
+    }
 
     // puddles after rain
     const wet = w.weather.wet;
@@ -3033,6 +3277,9 @@ export class Renderer {
   private drawLava(c: CanvasRenderingContext2D) {
     const lava = this.world.lava;
     if (!lava.active.size) return;
+    // (the Lava Monsters' hot tub is drawn as itself, not as loose lava)
+    const held = lava.held;
+    if (held.size && Array.from(lava.active).every((i) => held.has(i))) return;
     const R = 4;
     if (!this.lavaCv) {
       this.lavaCv = document.createElement("canvas");
@@ -3061,7 +3308,7 @@ export class Renderer {
     const img = lc.createImageData(w, h);
     const d = img.data;
     const heat = lava.heat;
-    const H = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? 0 : Math.min(1.1, heat[y * MAP_W + x]));
+    const H = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H || held.has(y * MAP_W + x) ? 0 : Math.min(1.1, heat[y * MAP_W + x]));
     const t = this.t;
     for (let py = 0; py < h; py++) {
       for (let px = 0; px < w; px++) {
@@ -3286,7 +3533,7 @@ export class Renderer {
       if (t === T.Jungle || t === T.Forest || t === T.Swamp || t === T.Grass) w.particles.spawn(P.Firefly, x, y, { z: 10 + Math.random() * 30, vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 6, max: 4 + Math.random() * 4, size: 2 });
     }
     // falling ash when the volcano has been busy
-    if (w.volcano.ash > 0.15 && Math.random() < w.volcano.ash) {
+    if (Math.max(w.volcano.ash, w.volcano2.ash) > 0.15 && Math.random() < Math.max(w.volcano.ash, w.volcano2.ash)) {
       w.particles.spawn(P.Ash, v.x0 + Math.random() * (v.x1 - v.x0), v.y0 + Math.random() * (v.y1 - v.y0), { z: 120, vz: -30, vx: wt.windX * 3, size: 2, max: 4, color: "rgba(90,85,80,0.8)" });
     }
   }
@@ -3429,7 +3676,7 @@ export class Renderer {
     const sun = this.sun;
     const night = 1 - w.daylight;
     const dusk = w.time > 16.5 && w.time < 21 ? Math.max(0, 1 - Math.abs(w.time - 19) / 2) : w.time > 4.5 && w.time < 8 ? Math.max(0, 1 - Math.abs(w.time - 6) / 1.5) : 0;
-    const dark = Math.min(0.78, night * 0.66 + w.weather.storm * 0.28 + w.weather.cloud * 0.06 + w.volcano.ash * 0.3 + w.weather.rain * 0.08 + w.extinction.ash * 0.35);
+    const dark = Math.min(0.78, night * 0.66 + w.weather.storm * 0.28 + w.weather.cloud * 0.06 + Math.max(w.volcano.ash, w.volcano2.ash) * 0.3 + w.weather.rain * 0.08 + w.extinction.ash * 0.35);
     // golden hour: warm light raking in from the sun's side, the far side sliding into violet
     if (dusk > 0.02) {
       const east = sun.side > 0;
@@ -3449,7 +3696,7 @@ export class Renderer {
     const lw = this.light.width;
     const lh = this.light.height;
     const ls = this.ls;
-    const ash = w.volcano.ash;
+    const ash = Math.max(w.volcano.ash, w.volcano2.ash);
     const k = dark / 0.78;
     // the tint we multiply the world by: white → moonlit blue (or ashy brown)
     const nr = 56 + ash * 60 + w.weather.storm * 20;
@@ -3501,6 +3748,14 @@ export class Renderer {
       add((i % MAP_W) * TILE + 16, Math.floor(i / MAP_W) * TILE + 16, 150, 0.68 * Math.min(1, w.lava.heat[i]), 2);
     });
     add(w.volcano.x, w.volcano.y - 150, 160 + w.volcano.glow * 240, 0.38 + w.volcano.glow * 0.48, 2);
+    add(w.volcano2.x, w.volcano2.y - 150, 160 + w.volcano2.glow * 240, 0.38 + w.volcano2.glow * 0.48, 2);
+    // the Lava Monsters glow like the lava they are
+    for (const d of w.dinos) if (d.species === "lavaFolk" && !d.under) add(d.x, d.y - 26, (60 + 70 * (d.lavaHeat ?? 1)) * flick(d.id), 0.3 + 0.45 * (d.lavaHeat ?? 1), 2);
+    for (const b of lavaBalls(w)) add(b.x, b.y - b.z, 80, 0.6, 2);
+    const burning = aflameNow(w);
+    if (burning) for (const e of Array.from(burning.keys())) if (e.aflame) add(e.x, e.y - 20, 90 * flick(e.x), 0.6, 2);
+    const hotTub = w.lava.held.size ? lavaTub(w) : null;
+    if (hotTub) add(hotTub.x, hotTub.y - 6, 150 * flick(7), 0.7, 2);
     for (const s of w.shelters) if (s.stage >= 2) add(s.x, s.y - 8, HOUSING[s.tier]?.hearth && shelterDone(s) ? 118 : 78, (HOUSING[s.tier]?.hearth && shelterDone(s) ? 0.78 : 0.55) * flick(s.id));
     for (const b of w.colony.buildings) if (b.kind === "blacksmith" && b.built >= 1) add(b.x - 10, b.y - 12, 108 * flick(b.id), 0.72);
     // rival camps keep fires burning too
@@ -3705,8 +3960,8 @@ export class Renderer {
       c.globalAlpha = 1;
     }
     // volcanic haze
-    if (w.volcano.ash > 0.02) {
-      c.fillStyle = `rgba(110,90,70,${w.volcano.ash * 0.22})`;
+    if (Math.max(w.volcano.ash, w.volcano2.ash) > 0.02) {
+      c.fillStyle = `rgba(110,90,70,${Math.max(w.volcano.ash, w.volcano2.ash) * 0.22})`;
       c.fillRect(0, 0, this.w, this.h);
     }
     // the end of an age: a blood-red omen sky, then choking ash
@@ -3796,6 +4051,32 @@ export class Renderer {
       const k = Math.min(1, dn.emote.t * 3);
       const hy = dn.y - dn.z - L * (sp(dn.species).plan === "sauropod" ? 0.85 : 0.6) - 10 - (1 - k) * 8;
       this.bubbleIcon(c, dn.x + dn.dir * L * 0.2, hy, dn.emote.icon, inv * 0.9, k);
+    }
+    // flames on anything set alight by lava (lavaFolk.ts)
+    const fires = aflameNow(w);
+    if (fires && fires.size) {
+      for (const [e, kind] of Array.from(fires)) {
+        if (!e.aflame || e.x < x0 - 60 || e.x > x1 + 60 || e.y < y0 - 60 || e.y > y1 + 120) continue;
+        const k = Math.min(1, e.aflame / 1.2);
+        if (kind === "dino") {
+          const dn = e as Dino;
+          const L = sizeOf(dn);
+          const s = Math.max(0.5, L / 55) * k;
+          const top = dn.y - dn.z - L * 0.32;
+          drawFlame(c, dn.x - L * 0.22, top + L * 0.05, s * 0.8, this.t + 1);
+          drawFlame(c, dn.x + L * 0.05, top - L * 0.04, s, this.t);
+          drawFlame(c, dn.x + L * 0.28 * dn.dir, top + L * 0.02, s * 0.75, this.t + 2.3);
+        } else {
+          const z = (e as Human | Brute).z ?? 0;
+          drawFlame(c, e.x - 4, e.y - z - 16, 0.55 * k, this.t + e.x);
+          drawFlame(c, e.x + 4, e.y - z - 24, 0.7 * k, this.t + e.x * 1.3);
+        }
+      }
+    }
+    // a tapped Lava Monster moaning "LAVA… lava…"
+    for (const dn of w.dinos) {
+      if (!dn.speech || dn.x < x0 || dn.x > x1 || dn.y < y0 || dn.y > y1) continue;
+      this.speech(c, dn.x, dn.y - dn.z - sizeOf(dn) * 1.15 - 12, dn.speech.text, inv, Math.min(1, dn.speech.t * 3));
     }
     // speech bubbles over people: whoever's picked always, plus only the few newest elsewhere (and never piled
     // on top of each other), so a busy town doesn't turn into a wall of chatter
@@ -4158,29 +4439,61 @@ export class Renderer {
     c.fillText(ok ? p.ref.kind === "wall" || p.ref.kind === "farm" || p.ref.kind === "tower" ? "🔷 Move here" : "🚚 Carry it here" : why ?? "", (tx0 + tw / 2) * TILE, ty0 * TILE - 10 * inv);
   }
 
-  /** Snow lying on the ground (per tile, soft edges). */
-  private snowFx(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number, z: number) {
+  /** the snow blanket: one pixel a tile (white, alpha = how deep), redrawn a couple of times a second */
+  private snowMask: { cv: HTMLCanvasElement; ctx: CanvasRenderingContext2D; img: ImageData; at: number; nav: number; day: number } | null = null;
+
+  private snowLayer() {
     const w = this.world;
-    const d = w.snow.depth;
-    const tx0 = Math.max(0, Math.floor(vx0 / TILE));
-    const ty0 = Math.max(0, Math.floor(vy0 / TILE));
-    const tx1 = Math.min(MAP_W - 1, Math.ceil(vx1 / TILE));
-    const ty1 = Math.min(MAP_H - 1, Math.ceil(vy1 / TILE));
-    const step = z < 0.4 ? 2 : 1;
-    const R = TILE * step * 1.55;
-    for (let ty = ty0; ty <= ty1; ty += step) {
-      for (let tx = tx0; tx <= tx1; tx += step) {
-        const s = d[ty * MAP_W + tx];
-        if (s < 0.06) continue;
-        // overlapping soft drifts so no tile edges show
-        const h = hash2(tx, ty, 77);
-        const jx = (h - 0.5) * 10;
-        const jy = (hash2(ty, tx, 78) - 0.5) * 8;
-        c.globalAlpha = Math.min(0.85, s * 0.9);
-        c.drawImage(this.snowSprite, tx * TILE + (TILE * step) / 2 - R + jx, ty * TILE + (TILE * step) / 2 - R * 0.8 + jy, R * 2, R * 1.6);
-      }
+    let m = this.snowMask;
+    if (!m) {
+      const cv = document.createElement("canvas");
+      cv.width = MAP_W;
+      cv.height = MAP_H;
+      const ctx = cv.getContext("2d")!;
+      m = this.snowMask = { cv, ctx, img: ctx.createImageData(MAP_W, MAP_H), at: -9, nav: -1, day: -1 };
     }
-    c.globalAlpha = 1;
+    // (snow builds + melts a strip of rows at a time: twice a second keeps up; a season change shows at once)
+    if (this.t - m.at < 0.5 && this.t >= m.at && m.nav === w.snow.navVersion && m.day === w.day) return m.cv;
+    m.at = this.t;
+    m.nav = w.snow.navVersion;
+    m.day = w.day;
+    const d = w.snow.depth;
+    const tiles = w.terrain.tiles;
+    const px = m.img.data;
+    for (let i = 0, n = MAP_W * MAP_H; i < n; i++) {
+      const s = d[i];
+      let a = s < 0.06 ? 0 : Math.min(0.94, s * 1.15);
+      // snow doesn't lie on a cliff face or in a cave mouth: they stay readable in the whiteout
+      const k = tiles[i];
+      if (k === T.Cliff || k === T.Cave) a *= 0.18;
+      const o = i * 4;
+      px[o] = 246;
+      px[o + 1] = 249;
+      px[o + 2] = 255;
+      px[o + 3] = a * 255;
+    }
+    m.ctx.putImageData(m.img, 0, 0);
+    return m.cv;
+  }
+
+  /**
+   * Snow lying on the ground. The whole map's snow is one small image (a pixel a tile) stretched over the
+   * view with smoothing, so drifts have soft edges and a winter that covers everything costs one draw
+   * (it used to be a sprite per snowy tile: thousands a frame in winter).
+   */
+  private snowFx(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number, z: number) {
+    void z;
+    const tx0 = Math.max(0, Math.floor(vx0 / TILE) - 1);
+    const ty0 = Math.max(0, Math.floor(vy0 / TILE) - 1);
+    const tx1 = Math.min(MAP_W, Math.ceil(vx1 / TILE) + 1);
+    const ty1 = Math.min(MAP_H, Math.ceil(vy1 / TILE) + 1);
+    if (tx1 <= tx0 || ty1 <= ty0) return;
+    const mask = this.snowLayer();
+    const smooth = c.imageSmoothingEnabled;
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = "high";
+    c.drawImage(mask, tx0, ty0, tx1 - tx0, ty1 - ty0, tx0 * TILE, ty0 * TILE, (tx1 - tx0) * TILE, (ty1 - ty0) * TILE);
+    c.imageSmoothingEnabled = smooth;
   }
 
   /** Paths, bridges, pens + traps lie flat under everything. */

@@ -104,7 +104,8 @@ export const siteKey = (s: { kind: SiteKind; id: number }) => `${s.kind}:${s.id}
 
 /* ------------------------------ walls ------------------------------ */
 
-export const WALL_HP = { palisade: 220, stone: 600, polygon: 900 } as const;
+/** Lava-stone polygon walls: the toughest there is (fire-proof, and a Lava Monster can't burn through them). */
+export const WALL_HP = { palisade: 220, stone: 600, polygon: 900, lava: 1500 } as const;
 /** Dressed masonry (Old Ways) toughens every stone piece. Set by the civ system each tick. */
 export const STONE_MUL = { v: 1 };
 
@@ -126,6 +127,7 @@ export function wallNeed(wl: Wall): { r: Resource; n: number } {
   // a bone gate: planned fresh, or a finished piece being rebuilt as one
   if (wl.mega && !wl.upgrade) return MEGA_GATE;
   if (wl.boneUp || (wl.bone && wl.built < 1 && wl.hp <= 0 && !wl.upgrade)) return BONE_GATE;
+  if (wallTarget(wl) === "lava") return { r: "lavaStone", n: wl.part === "gate" ? 3 : 2 };
   if (wallTarget(wl) === "polygon") return { r: "shaped", n: wl.part === "gate" ? 3 : 2 };
   const stone = wl.kind === "stone" || wl.upgrade;
   if (wl.part === "gate") return stone ? { r: "stone", n: 3 } : { r: "wood", n: 2 };
@@ -188,7 +190,7 @@ export function sites(w: World): Site[] {
     const target = wallTarget(wl);
     const tech: TechId = target === "palisade" ? "palisade" : "stonewall";
     const { r, n } = wallNeed(wl);
-    const locked = target === "polygon" ? (w.civ.polygonAge ? null : "precisionStone") : L.has(tech) ? null : tech;
+    const locked = target === "lava" ? null : target === "polygon" ? (w.civ.polygonAge ? null : "precisionStone") : L.has(tech) ? null : tech;
     out.push({ kind: "wall", id: wl.id, x, y, sx: x, sy: y + 20, need: pending && wl.have < n ? r : null, repair: !pending, locked });
   }
   for (const t of w.tribe.towers) {

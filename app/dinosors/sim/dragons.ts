@@ -519,7 +519,8 @@ export class Dragons {
     w.burnPlantsAt(fx, fy, 0.6);
     const r = 70;
     for (const d of w.dinos) {
-      if (Math.hypot(d.x - fx, d.y - fy) > r + sizeOf(d) * 0.3 || sp(d.species).move === "swim") continue;
+      // (fire can't hurt a Lava Monster: it basks in it)
+      if (Math.hypot(d.x - fx, d.y - fy) > r + sizeOf(d) * 0.3 || sp(d.species).move === "swim" || d.species === "lavaFolk") continue;
       d.health -= 0.18;
       d.burn = 0;
       d.fear = 1;
@@ -552,7 +553,7 @@ export class Dragons {
     const i = tileOf(fx, fy);
     const wl = w.tribe.wallAt(i % MAP_W, Math.floor(i / MAP_W));
     // a furious dragon's fire melts stone
-    if (wl && wl.built >= 1) wl.hp -= (wl.kind === "polygon" ? 4 : wl.kind === "stone" ? 6 : 28) * (dr.fury ? 8 : 1);
+    if (wl && wl.built >= 1) wl.hp -= (wl.kind === "lava" ? 1 : wl.kind === "polygon" ? 4 : wl.kind === "stone" ? 6 : 28) * (dr.fury ? 8 : 1);
     if (dr.fury && w.rng() < 0.3) w.particles.burst(P.Ember, fx, fy, 6, 50, { z: 4, vz: 40, size: 4, max: 0.9, color: "#ff8a2a" });
     for (const s of w.shelters) if (Math.hypot(s.x - fx, s.y - fy) < 60 && s.stage > 0) s.hp = Math.max(0, s.hp - (s.tier >= 4 ? 0.01 : s.tier >= 3 ? 0.04 : 0.12) * (dr.fury ? 4 : 1));
     for (const b of w.colony.buildings) if (Math.hypot(b.x - fx, b.y - fy) < 60) b.hp -= b.kind === "blacksmith" ? 4 : 20;

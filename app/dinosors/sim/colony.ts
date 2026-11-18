@@ -8,6 +8,7 @@ import { castleReservedTiles } from "./castleCompound";
 import { armourHit, scorpionMaxHp, scorpionWorks } from "./scorpionArmor";
 import { feastTick } from "./feast";
 import { CHARIOT_HP, chariotsUpdate } from "./chariots";
+import { loadWagon, serializeWagon, wagonsUpdate } from "./waterWagons";
 import { CHARIOT_TIERS } from "./chariotTiers";
 import { armorWanted, isRider } from "./gear";
 import { sidearmWanted } from "./territory";
@@ -20,10 +21,11 @@ import { shelterTiles, tileOf, TOWER_Z, WALK_Z } from "./nav";
 import { P } from "./particles";
 import { hash2 } from "./rng";
 import { LM, REGION, isWalkTile, isWaterTile } from "./terrain";
-import { type Chariot, type DragonHunt, MAP_H, MAP_W, OLD_MAP_H, OLD_MAP_W, T, TILE, type Building, type BuildingKind, type Dino, type Human, type NodeKind, type ResNode, type Resource, type Scorpion } from "./types";
+import { type Chariot, type DragonHunt, MAP_H, MAP_W, OLD_MAP_H, OLD_MAP_W, PREV_MAP_W, T, TILE, type Building, type BuildingKind, type Dino, type Human, type NodeKind, type ResNode, type Resource, type Scorpion, type WaterWagon } from "./types";
 import type { World } from "./world";
 import type { ShieldLevels } from "./dragonShield";
 import { ANIMAL_KINDS, insideWalls } from "./dinoBounds";
+import { isLavaFolk } from "./lavaFolk";
 
 export interface DropOff {
   x: number;
@@ -47,6 +49,8 @@ export class Colony {
   scorpions: Scorpion[] = [];
   /** war chariots (chariots.ts) and the chariot dragon hunt under way */
   chariots: Chariot[] = [];
+  /** water wagons: hand-pushed tanks that hose Lava Monsters into stone (waterWagons.ts) */
+  wagons: WaterWagon[] = [];
   hunt: DragonHunt | null = null;
   /** the feast table by the fire (feast.ts): roast on it, who's carrying it over, who's in line */
   feast = { food: 0, server: 0, queue: [] as number[], frontId: 0, frontAt: 0, eaten: 0 };
@@ -98,11 +102,17 @@ export class Colony {
     return t !== T.Tar && t !== T.Cave;
   }
 
+  /** Select the structure above its paving or bridge deck. */
+  buildingAt(x: number, y: number, roofMargin = 30) {
+    const hit = (b: Building) => !b.lift && x > b.tx * TILE && x < (b.tx + BUILDINGS[b.kind].w) * TILE && y > b.ty * TILE - roofMargin && y < b.y + 6;
+    return this.buildings.find((b) => b.kind !== "path" && b.kind !== "bridge" && hit(b)) ?? this.buildings.find(hit);
+  }
+
   canPlace(w: World, kind: BuildingKind, x: number, y: number): string | null {
     if (ANIMAL_KINDS.has(kind) && insideWalls(w, x, y)) return "Animals live outside the walls: put it outside the gates.";
     const def = BUILDINGS[kind];
     const fp = this.footprint(kind, x, y);
-    const occupied = this.occupied(w, kind === "boneTorch");
+    const occupied = this.occupied(w, kind !== "path");
     for (let dy = 0; dy < fp.h; dy++)
       for (let dx = 0; dx < fp.w; dx++) {
         const tx = fp.tx + dx;
@@ -125,8 +135,8 @@ export class Colony {
     return null;
   }
 
-  /** Tiles used by walls, towers, huts, buildings + ground Scorpions (bridge decks are free to build on). */
-  occupied(w: World, allowPath = false) {
+  /** Construction blockers. Paths and bridge decks can have structures placed on top. */
+  occupied(w: World, allowPath = true) {
     const s = new Set<number>();
     for (const i of castleReservedTiles(w)) s.add(i);
     for (const wl of w.tribe.walls) s.add(wl.ty * MAP_W + wl.tx);
@@ -352,6 +362,40 @@ export class Colony {
     this.generateCivNodes(w, salt + 40);
     place("limestone", 5, (t, tx, ty) => walk(t) && (t === T.Rock || nextTo(tx, ty, (o) => o === T.Cliff || o === T.Rock)));
     this.generateEastNodes(w);
+    this.generateFarEastNodes(w);
+  }
+
+  /** Deposits in the far east (the second volcano's land): obsidian + stone round the volcano, clay + flint by its streams. */
+  generateFarEastNodes(w: World) {
+    const seed = w.seed + 9191;
+    const tiles = w.terrain.tiles;
+    const walk = (t: T) => isWalkTile(t) && !isWaterTile(t) && t !== T.Tar && t !== T.Cave;
+    const nextTo = (tx: number, ty: number, pred: (t: T) => boolean) => [tiles[ty * MAP_W + tx + 1], tiles[ty * MAP_W + tx - 1], tiles[(ty + 1) * MAP_W + tx], tiles[(ty - 1) * MAP_W + tx]].some((t) => pred(t as T));
+    let salt = 700;
+    const place = (kind: NodeKind, n: number, ok: (t: T, tx: number, ty: number) => boolean) => {
+      let placed = 0;
+      for (let k = 0; k < 4000 && placed < n; k++) {
+        const tx = Math.floor(PREV_MAP_W + hash2(k, salt * 23 + n, seed) * (MAP_W - PREV_MAP_W - 2));
+        const ty = Math.floor(4 + hash2(k * 3 + 5, salt * 11, seed + 7) * (MAP_H - 8));
+        if (tx < PREV_MAP_W || tx >= MAP_W - 2 || ty >= MAP_H - 2) continue;
+        const t = tiles[ty * MAP_W + tx] as T;
+        if (!walk(t) || !ok(t, tx, ty)) continue;
+        const x = tx * TILE + TILE / 2;
+        const y = ty * TILE + TILE / 2;
+        if (this.nodes.some((o) => Math.abs(o.x - x) < 130 && Math.abs(o.y - y) < 130 && Math.hypot(o.x - x, o.y - y) < 130)) continue;
+        const def = NODES[kind];
+        const amt = Math.round(def.amount[0] + hash2(tx, ty, seed + 5) * (def.amount[1] - def.amount[0]));
+        this.nodes.push({ id: w.nextId(), kind, x, y, amount: amt, max: amt, found: !def.hidden, variant: Math.floor(hash2(ty, tx, seed) * 4) });
+        placed++;
+      }
+      salt++;
+    };
+    const lavaLand = (t: T) => t === T.Basalt || t === T.Volcano;
+    place("obsidian", 3, (t, tx, ty) => lavaLand(t) || nextTo(tx, ty, lavaLand));
+    place("stone", 3, (t) => t === T.Rock || t === T.Basalt);
+    place("iron", 1, (t, tx, ty) => nextTo(tx, ty, (o) => o === T.Mountain));
+    place("clay", 2, (t, tx, ty) => (t === T.Sand || t === T.Grass) && nextTo(tx, ty, (o) => o === T.River));
+    place("flint", 2, (t, tx, ty) => nextTo(tx, ty, (o) => o === T.River || o === T.Rock));
   }
 
   /**
@@ -889,6 +933,7 @@ export class Colony {
 
   update(w: World, dt: number) {
     chariotsUpdate(w, dt);
+    wagonsUpdate(w, dt);
     if (Math.floor(w.elapsed) !== Math.floor(w.elapsed - dt)) {
       hallTick(w);
       feastTick(w);
@@ -1047,6 +1092,9 @@ export class Colony {
       const siege = w.civ.has("siegecraft");
       const range = tier.range + (s.mount === "tower" ? 60 : s.mount === "wall" ? 25 : 0) + (siege ? 50 : 0);
       const target = scorpionTarget(w, s.x, s.y, range);
+      // a Lava Monster in its sights: it swings round as a water cannon (the shot itself: tribe.fireBolt)
+      const lava = target && !target.dragon ? w.dinoById(target.id) : null;
+      s.water = !!lava && isLavaFolk(lava);
       if (!target) {
         // drones sweep slowly while they watch
         s.aim += s.drone ? dt * 0.6 : angleTo(s.aim, Math.PI / 2) * Math.min(1, dt);
@@ -1106,6 +1154,7 @@ export class Colony {
       civNodes: 1,
       limestoneNodes: 1,
       feast: this.feast.food,
+      wagons: this.wagons.map(serializeWagon),
       chariots: this.chariots.map((c) => ({ x: r(c.x), y: r(c.y), homeX: r(c.homeX), homeY: r(c.homeY), hp: Math.round(c.hp), trike: c.trike, dir: c.dir, tier: c.tier ?? 0, up: c.up ? 1 : 0, have: c.have ?? {} })),
     };
   }
@@ -1124,6 +1173,8 @@ export class Colony {
       this.buildings.push({ id, kind: b.kind, tx: b.tx, ty: b.ty, x: (b.tx + def.w / 2) * TILE, y: (b.ty + def.h) * TILE - (def.solid ? 0 : TILE / 2), built: oldFinishedPyramid ? 0.4 : b.built, have: oldFinishedPyramid ? {} : b.have ?? {}, hp: b.hp ?? def.hp, ...((b as { stage?: number }).stage ? { stage: oldFinishedPyramid ? 6 : (b as { stage?: number }).stage } : {}), ...((b as { grow?: number }).grow ? { grow: (b as { grow?: number }).grow } : {}), ...((b as { merged?: number }).merged ? { merged: (b as { merged?: number }).merged } : {}), ...((b as { label?: string }).label ? { label: (b as { label?: string }).label, breed: (b as { breed?: string }).breed, size: (b as { size?: number }).size, ours: (b as { ours?: boolean }).ours } : {}), ...((b as { shield?: ShieldLevels }).shield ? { shield: { ...(b as { shield: ShieldLevels }).shield } } : {}), ...((b as { level?: number }).level ? { level: (b as { level?: number }).level } : {}) });
     }
     this.feast.food = (d as { feast?: number }).feast ?? 0;
+    // water wagons park at home, crew + targets start fresh
+    this.wagons = ((d as { wagons?: ReturnType<typeof serializeWagon>[] }).wagons ?? []).map((s) => loadWagon(w, s));
     // chariots park at home after a load (a hunt in progress is called off)
     for (const c of (d as { chariots?: { x: number; y: number; homeX: number; homeY: number; hp: number; trike: number; dir: 1 | -1; tier?: number; up?: number; have?: Partial<Record<Resource, number>> }[] }).chariots ?? []) {
       const tier = c.tier ?? 0;
@@ -1189,10 +1240,12 @@ export function scorpionTarget(w: World, x: number, y: number, range: number): T
     }
   }
   for (const d of w.dinos) {
-    if (!w.tribe.hostile(w, d)) continue;
+    // a Lava Monster in range is always a target, wherever it is (the Scorpion turns water cannon on it)
+    const lava = isLavaFolk(d) && d.health > 0;
+    if (!lava && !w.tribe.hostile(w, d)) continue;
     const dist = Math.hypot(d.x - x, d.y - y);
     if (dist > range) continue;
-    const s = dist - (d.raider ? 150 : 0) - sizeOf(d);
+    const s = dist - (d.raider ? 150 : 0) - sizeOf(d) - (lava ? 120 : 0);
     if (s < bs) {
       bs = s;
       best = { id: d.id, x: d.x, y: d.y, z: d.z + sizeOf(d) * 0.2, vx: d.vx, vy: d.vy, dragon: false };

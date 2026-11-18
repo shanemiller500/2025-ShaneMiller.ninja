@@ -53,7 +53,8 @@ export function strikeGround(w: World, x: number, y: number) {
     }
   }
   for (const d of w.dinos.slice()) {
-    if (d.state === "carried" || sp(d.species).move === "swim") continue;
+    // (a Lava Monster is molten rock: lightning just crackles off it)
+    if (d.state === "carried" || sp(d.species).move === "swim" || d.species === "lavaFolk") continue;
     const dist = Math.hypot(d.x - x, d.y - y);
     // bigger animals stand taller: the bolt reaches them from further off
     if (dist <= KILL_R + sizeOf(d) * 0.3) {

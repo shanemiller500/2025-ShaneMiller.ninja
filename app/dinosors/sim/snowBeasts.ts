@@ -32,6 +32,7 @@ import { go, say } from "./humans";
 import { EAST_CAVES, REGION } from "./terrain";
 import { hitDino } from "./tribe";
 import { yetiDueling } from "./yetiFeud";
+import { coolLava } from "./lavaFolk";
 import { raidChaseOk, raidOf, raidThink, raidTick } from "./yetiRaid";
 import { MAP_H, MAP_W, T, TILE, type Brute, type Dino, type Human, type SpeciesId } from "./types";
 import type { World } from "./world";
@@ -107,6 +108,8 @@ export function yetiDens(w: World): { x: number; y: number }[] {
   let list = densOf.get(w);
   if (list) return list;
   list = [];
+  // (walkability comes from the nav grid: make sure it's been built before anything is judged by it)
+  if (!w.nav.version) w.nav.sync(w);
   const t = w.terrain;
   for (const [bx, by] of SNOW_HOMES.yeti) {
     let best: { x: number; y: number } | null = null;
@@ -120,9 +123,17 @@ export function yetiDens(w: World): { x: number; y: number }[] {
         const y = ty * TILE + TILE / 2;
         if (!snowGround(w, x, y) || !w.nav.passable("dino", x, y) || !w.nav.passable("human", x, y + TILE)) continue;
         if (list.some((d) => Math.hypot(d.x - x, d.y - y) < 340)) continue;
+        // open snow round the door: it needs room to ambush, and a hunting party has to be able to get at it
+        let open = 0;
+        for (let k = 0; k < 12; k++) {
+          const a = (k / 12) * Math.PI * 2;
+          const p = { x: x + Math.cos(a) * 150, y: y + Math.sin(a) * 90 };
+          if (snowPath(w, { x, y }, p) && w.nav.passable("human", p.x, p.y)) open++;
+        }
+        if (open < 5) continue;
         const north = t.tiles[(ty - 1) * MAP_W + tx];
         const face = north === T.Mountain || north === T.Rock || !w.nav.passable("dino", x, y - TILE) ? 1.5 : 0;
-        const score = t.elev[ty * MAP_W + tx] * 12 + face - Math.hypot(dx, dy) * 0.08;
+        const score = t.elev[ty * MAP_W + tx] * 12 + face + open * 0.12 - Math.hypot(dx, dy) * 0.08;
         if (score > bs) {
           bs = score;
           best = { x, y };
@@ -449,6 +460,8 @@ function yetiThink(w: World, d: Dino): boolean {
 /** Per frame (actDino hands it over): roaring, charging, grabbing, carrying, hanging. True = it handled the frame. */
 export function snowAct(w: World, d: Dino, dt: number): boolean {
   if (d.species !== "yeti" || d.owner) return false;
+  // netted and bound by a capture party (zoo.ts): it does nothing
+  if (d.netted) return true;
   const coldSeason = winter(w);
   d.hurlCd = Math.max(0, (d.hurlCd ?? 0) - dt);
   d.clawCd = Math.max(0, (d.clawCd ?? 0) - dt);
@@ -724,7 +737,11 @@ function hurlIce(w: World, d: Dino, p: Prey) {
     const knockedOut = hurtHuman(w, p.h, 0.24, d.x, d.y, "rock");
     p.h.slowT = Math.max(p.h.slowT ?? 0, 2.5);
     if (knockedOut) dies(w, p.h, `${p.h.name} was killed by a Yeti's ice boulder.`);
-  } else if (p.kind === "dino") hitDino(w, p.d, 30, d.x, d.y);
+  } else if (p.kind === "dino") {
+    // a block of ice on a Lava Monster: a great hiss of steam, and it cools right down (lavaFolk.ts)
+    if (p.d.species === "lavaFolk") coolLava(w, p.d, 0.35);
+    else hitDino(w, p.d, 30, d.x, d.y);
+  }
   else w.rivals.hit(w, p.b, 0.22, d.x, d.y, true);
 }
 
@@ -836,7 +853,8 @@ export class SnowLife {
     const base = open[Math.floor(this.rng() * open.length)];
     const herd = def.herd > 0.3 && n > 1 ? w.nextId() : 0;
     for (let i = 0; i < n; i++) {
-      let spot: { x: number; y: number } | null = null;
+      // (a Yeti turns up at the mouth of its cave)
+      let spot: { x: number; y: number } | null = s === "yeti" && w.nav.passable("dino", base.x, base.y) ? { x: base.x, y: base.y } : null;
       // (a Yeti only ever stands on snow: its den is on the snowfield itself)
       const tries = s === "yeti" ? 40 : 6;
       for (let k = 0; k < tries && !spot; k++) {

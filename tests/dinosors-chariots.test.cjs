@@ -169,10 +169,11 @@ test('the battle: Scorpions + spears wear the dragon down, the runners grab the 
   assert.ok(hurt, 'the dragon took hits');
   assert.ok(result === 'won' || result === 'lost', `a result: ${result}`);
   if (result === 'won') assert.ok(grabbed || parent.hp < parent.maxHp * 0.35, 'won by eggs or by beating it');
-  // and everyone comes home + climbs down
-  const home = run(w, 300, () => w.colony.hunt === null);
+  // Victory includes egg collection and dismantling before the return trip.
+  const home = run(w, 480, () => w.colony.hunt === null);
   assert.ok(home, 'the hunt is over');
   assert.ok(!w.humans.some((h) => h.chariot), 'everyone climbed down');
+  if (result === 'won') assert.ok(!w.dragons.nests.some((nest) => nest.id === n.id), 'victory clears the nest before coming home');
 });
 
 test('tap anywhere on the drawn chariot opens its raid card; the unit can rally against another people\'s camp and win it', () => {

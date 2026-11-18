@@ -1,3 +1,6 @@
+import { paintCroc, paintHippo, paintSnake } from "./riverArt";
+import { paintLava } from "./lavaArt";
+import { paintBeaver } from "./beaverArt";
 /* ------------------------------------------------------------------ */
 /*  Procedural dinosaur sprites. One painter per body plan; species    */
 /*  only supply proportions, colors and feature flags (crests, horns,  */
@@ -30,6 +33,16 @@ export interface DinoPose {
   baby: number;
   muddy: number;
   tailSwing: number;
+  /** a Lava Monster (lavaArt.ts): how hot it is, how deep it sits in a lava pool, how far it's wound up to throw */
+  heat?: number;
+  sink?: number;
+  wind?: number;
+  /** cheering / sliding down a lava flow (arms up, bouncing) */
+  joy?: number;
+  /** set solid: a stone statue of itself */
+  stone?: boolean;
+  /** a beaver (beaverArt.ts): a stick in its teeth, or a fish in its paws */
+  hold?: "stick" | "fish";
 }
 
 export const restPose = (): DinoPose => ({
@@ -1863,6 +1876,11 @@ function winterCoat(k: Ctx2) {
 }
 
 const PAINTERS: Record<BodyPlan, (k: Ctx2) => void> = {
+  lava: (k) => paintLava(k.c, k.L, k.p, k.fine),
+  croc: (k) => paintCroc(k.c, k.L, k.p, k, k.fine),
+  hippo: (k) => paintHippo(k.c, k.L, k.p, k, k.fine),
+  snake: (k) => paintSnake(k.c, k.L, k.p, k, k.fine),
+  beaver: (k) => paintBeaver(k.c, k.L, k.p, k, k.fine),
   theropod,
   camel,
   scorpion,
@@ -1911,8 +1929,8 @@ export function drawDino(c: CanvasRenderingContext2D, def: SpeciesDef, L: number
   const breathe = 1 + Math.sin(p.t * 2.4) * 0.012;
   c.scale(1, breathe);
   PAINTERS[def.plan](k);
-  if (def.plan === "cat" || def.plan === "yeti") {
-    // fur, not scales
+  if (def.plan === "cat" || def.plan === "yeti" || def.plan === "lava" || def.plan === "croc" || def.plan === "hippo" || def.plan === "snake" || def.plan === "beaver") {
+    // fur (or molten rock), not scales
     c.restore();
     return;
   }

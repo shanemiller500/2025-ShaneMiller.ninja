@@ -101,6 +101,12 @@ export class Weather implements Params {
   private boltT = 6;
   private wasRaining = false;
 
+  /** Used by an explicit calendar jump so the new season is visible immediately. */
+  settle(w: World) {
+    Object.assign(this, PRESETS[this.kind]);
+    this.temp = Math.max(0, Math.min(1, PRESETS[this.kind].temp + season(w).temp));
+  }
+
   set(w: World, kind: WeatherKind, manual = true, forced = false) {
     this.kind = kind;
     this.changes++;

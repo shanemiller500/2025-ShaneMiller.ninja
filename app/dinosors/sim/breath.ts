@@ -21,6 +21,7 @@ import { MAP_W, T, TILE, type Dragon } from "./types";
 import type { World } from "./world";
 import { hitChariot } from "./chariots";
 import { hitDino } from "./tribe";
+import { coolLava } from "./lavaFolk";
 import { hitScorpionsAt, sideOfDragon } from "./factions";
 import { nationOf, type NationId } from "./diplomacy";
 
@@ -119,6 +120,11 @@ export class Hazards {
     for (const d of w.dinos) {
       if (h.source && d.owner && !w.diplomacy.hostile(h.source, "us")) continue;
       if (d.under || d.z > 10 || !inside(d)) continue;
+      // a Lava Monster: hot sand is nothing to it; frost on the ground cools it (lavaFolk.ts)
+      if (d.species === "lavaFolk") {
+        if (h.kind !== "hotSand" && w.rng() < 0.25) coolLava(w, d, 0.05 * s);
+        continue;
+      }
       if (h.kind === "hotSand") {
         d.health -= 0.025 * s;
         d.fear = Math.min(1, d.fear + 0.3);
@@ -133,7 +139,7 @@ export class Hazards {
     const tx = Math.floor(h.x / TILE);
     const ty = Math.floor(h.y / TILE);
     const t = w.terrain.tiles[ty * MAP_W + tx] as T;
-    if ((t === T.Grass || t === T.Dirt || t === T.Rock) && !w.colony.occupied(w).has(ty * MAP_W + tx)) w.terrain.setTile(tx, ty, T.Sand);
+    if ((t === T.Grass || t === T.Dirt || t === T.Rock) && !w.colony.occupied(w, false).has(ty * MAP_W + tx)) w.terrain.setTile(tx, ty, T.Sand);
   }
 
   serialize() {
@@ -188,6 +194,11 @@ export function breathBlast(w: World, dr: Dragon, fx: number, fy: number, kind: 
   }
   for (const d of w.dinos) {
     if (d.under || (ours && d.owner) || Math.hypot(d.x - fx, d.y - fy) > r + sizeOf(d) * 0.3) continue;
+    // a Lava Monster: an Ice Dragon's frost cools it hard; hot sand does nothing
+    if (d.species === "lavaFolk") {
+      if (frost) coolLava(w, d, 0.4 * mul);
+      continue;
+    }
     hitDino(w, d, (frost ? 12 : 16) * mul, fx, fy);
     if (frost) {
       d.slowT = Math.max(d.slowT ?? 0, 4);

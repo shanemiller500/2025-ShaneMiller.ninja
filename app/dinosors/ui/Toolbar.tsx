@@ -351,7 +351,8 @@ function Options<V extends string>({ opts, value, onPick }: { opts: Opt<V>[]; va
 }
 
 function SpeciesGrid({ value, unlocked, egg, onPick }: { value: SpeciesId | null; unlocked: SpeciesId[]; egg: boolean; onPick: (s: SpeciesId) => void }) {
-  const list = SPECIES.filter((s) => !egg || s.move !== "swim");
+  // Lava Monsters aren't dinos: they're placed with the People tool
+  const list = SPECIES.filter((s) => s.id !== "lavaFolk" && (!egg || s.move !== "swim"));
   return (
     <div className="dl-scroll grid max-h-[46vh] grid-cols-3 gap-1.5 overflow-y-auto sm:grid-cols-6">
       {list.map((s) => {

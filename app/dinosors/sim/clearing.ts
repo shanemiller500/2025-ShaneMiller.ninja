@@ -159,7 +159,7 @@ export function regrowTick(w: World) {
     }
     const tx = c.i % MAP_W;
     const ty = Math.floor(c.i / MAP_W);
-    if (w.terrain.tiles[c.i] === T.Dirt && !w.colony.occupied(w).has(c.i)) {
+    if (w.terrain.tiles[c.i] === T.Dirt && !w.colony.occupied(w, false).has(c.i)) {
       w.terrain.setTile(tx, ty, T.Grass);
       w.fire.fuel[c.i] = baseFuel(T.Grass);
     }

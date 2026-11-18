@@ -176,7 +176,8 @@ test('they fight the Neanderthals and the Tree People, and each side fights back
   // and the Sea People go for clan brutes they meet
   const t = w.seaFolk.tribes[0];
   const f = w.seaFolk['foeNearAt'](w, sp.x, sp.y, 150, false, t);
-  assert.ok(f && f.kind === 'brute' && f.b === brute);
+  // (whichever of that clan's people stands nearest: on a bigger map the clan settles a little differently)
+  assert.ok(f && f.kind === 'brute' && f.b.clan === clan.id);
   assert.equal(toughness({ kind: 'brute', b: sp, dist: 0 }), SEA_TOUGH * sp.hp);
 });
 

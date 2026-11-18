@@ -31,7 +31,41 @@ export interface WallLook {
   run?: { n: number; vertical: boolean };
 }
 
-const WALL_H = { palisade: 30, stone: 26, polygon: 30 } as const;
+const WALL_H = { palisade: 30, stone: 26, polygon: 30, lava: 32 } as const;
+/** black volcanic lava stone (the toughest walls) */
+const LAVA_STONE = "#3d3542";
+
+/** Glowing seams between lava-stone blocks: faint embers that breathe slowly (kept subtle). */
+function lavaSeams(c: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, seed: number) {
+  const t = performance.now() / 1000;
+  const glow = 0.28 + 0.14 * Math.sin(t * 1.3 + seed * 0.7);
+  c.save();
+  c.globalCompositeOperation = "lighter";
+  c.strokeStyle = `rgba(255,120,40,${glow.toFixed(3)})`;
+  c.lineWidth = 0.9;
+  const rows = Math.max(1, Math.round((y1 - y0) / 9));
+  const rh = (y1 - y0) / rows;
+  c.beginPath();
+  for (let r = 1; r < rows; r++) {
+    const yy = y0 + r * rh + (seeded(seed + r) - 0.5) * 1.5;
+    c.moveTo(x0 + 1, yy);
+    c.lineTo(x1 - 1, yy + (seeded(seed + r * 7) - 0.5) * 2);
+  }
+  for (let k = 0; k < 3; k++) {
+    const xx = x0 + (x1 - x0) * seeded(seed + k * 11);
+    const ya = y0 + rh * Math.floor(seeded(seed + k * 5) * rows);
+    c.moveTo(xx, ya + 1);
+    c.lineTo(xx + (seeded(seed + k) - 0.5) * 4, ya + rh - 1);
+  }
+  c.stroke();
+  // a warm glow pooled at the foot (where it's hottest)
+  const g = c.createLinearGradient(0, y1 - 6, 0, y1);
+  g.addColorStop(0, "rgba(255,110,30,0)");
+  g.addColorStop(1, `rgba(255,110,30,${(glow * 0.45).toFixed(3)})`);
+  c.fillStyle = g;
+  c.fillRect(x0, y1 - 6, x1 - x0, 6);
+  c.restore();
+}
 
 function seeded(n: number) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -47,7 +81,8 @@ function seeded(n: number) {
  */
 export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) {
   const stone = wl.kind !== "palisade";
-  const poly = wl.kind === "polygon";
+  const lavaW = wl.kind === "lava";
+  const poly = wl.kind === "polygon" || lavaW;
   const built = Math.max(0, Math.min(1, wl.built));
   if (built < 1) {
     // blueprint: a faint ghost of the wall, marked out with stakes + string
@@ -93,7 +128,8 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
     if (!front) continue;
     const fy = y1;
     if (poly) {
-      polyBlocks(c, x0, fy - h, x1, fy, seed + Math.round(x0) * 3);
+      polyBlocks(c, x0, fy - h, x1, fy, seed + Math.round(x0) * 3, ...(lavaW ? [LAVA_STONE] : []));
+      if (lavaW) lavaSeams(c, x0, fy - h, x1, fy, seed + Math.round(x0));
       if (broken) {
         c.fillStyle = "rgba(40,35,30,0.5)";
         c.fillRect(x0 + (x1 - x0) * 0.3, fy - h, (x1 - x0) * 0.25, h * 0.4);
@@ -158,7 +194,7 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
   }
   // ---- walkway on top ----
   for (const [x0, x1, y0, y1] of pieces) {
-    c.fillStyle = poly ? "#d3cbbd" : stone ? "#c4bdb1" : "#9b7448";
+    c.fillStyle = lavaW ? "#4c4352" : poly ? "#d3cbbd" : stone ? "#c4bdb1" : "#9b7448";
     c.fillRect(x0, y0 - h, x1 - x0, y1 - y0);
   }
   // planks / flagstones + edge lines
@@ -178,7 +214,7 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
     c.stroke();
   }
   // parapet: battlements (stone) or sharpened log tips (palisade) along the outer edges
-  const edge = stone ? "#d8d2c6" : "#7a5230";
+  const edge = lavaW ? "#5f5566" : stone ? "#d8d2c6" : "#7a5230";
   c.fillStyle = edge;
   const bump = (x: number, y: number) => {
     if (poly) {
@@ -261,7 +297,7 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
     c.globalAlpha = 0.6 + Math.sin(look.t * 4) * 0.3;
     c.font = "11px sans-serif";
     c.textAlign = "center";
-    c.fillText(wl.boneUp ? "🦴" : wl.upTo === "polygon" ? "🔷" : "🧱", 0, cy - h - 10);
+    c.fillText(wl.boneUp ? "🦴" : wl.upTo === "lava" ? "🌋" : wl.upTo === "polygon" ? "🔷" : "🧱", 0, cy - h - 10);
     c.globalAlpha = 1;
   }
 }
@@ -1436,6 +1472,10 @@ export function drawBuilding(c: CanvasRenderingContext2D, b: Building, w: number
       c.fillRect(-4, -20, 8, 6);
       break;
     }
+    case "zoo": {
+      drawZoo(c, W, h * T, night);
+      break;
+    }
     case "healer": {
       // it grows with its tier (hospital.ts): leafy hut → timber infirmary with a wing → two-storey stone hospital
       if ((b.level ?? 1) >= 2) {
@@ -1843,9 +1883,39 @@ export function drawScorpion(c: CanvasRenderingContext2D, s: Scorpion) {
   c.moveTo(hx(-len * 0.45 + back), hy(-len * 0.45 + back));
   c.lineTo(hx(len * 0.55 + back), hy(len * 0.55 + back));
   c.stroke();
-  // bow arms (perpendicular) + string
   const px = -sa / 0.55;
   const py = ca * 0.55;
+  if (s.water && built >= 1) {
+    // turned water cannon (a Lava Monster in its sights): the bow folds back, a hide water bag sits on
+    // the stock and a bronze nozzle points down the barrel, dripping
+    c.fillStyle = "#6b8fb0";
+    c.strokeStyle = "#3d5873";
+    c.lineWidth = 1.2;
+    c.beginPath();
+    c.ellipse(hx(-len * 0.1 + back), hy(-len * 0.1 + back) - 4, 9, 6, 0, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+    c.fillStyle = "rgba(220,240,255,0.7)";
+    c.beginPath();
+    c.ellipse(hx(-len * 0.1 + back) - 3, hy(-len * 0.1 + back) - 7, 3, 1.6, 0, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = "#b07a3a";
+    c.lineWidth = 3.4;
+    c.beginPath();
+    c.moveTo(hx(len * 0.2 + back), hy(len * 0.2 + back));
+    c.lineTo(hx(len * 0.72 + back), hy(len * 0.72 + back));
+    c.stroke();
+    c.fillStyle = "#d8a456";
+    c.beginPath();
+    c.arc(hx(len * 0.74 + back), hy(len * 0.74 + back), 2.8, 0, Math.PI * 2);
+    c.fill();
+    const drip = (performance.now() / 600) % 1;
+    c.fillStyle = `rgba(140,200,250,${(0.9 - drip * 0.8).toFixed(3)})`;
+    c.beginPath();
+    c.arc(hx(len * 0.74 + back), hy(len * 0.74 + back) + 3 + drip * 9, 1.4, 0, Math.PI * 2);
+    c.fill();
+  } else {
+  // bow arms (perpendicular) + string
   const ax = hx(len * 0.42 + back);
   const ay = hy(len * 0.42 + back);
   const arm = 16 + tier * 3;
@@ -1876,6 +1946,7 @@ export function drawScorpion(c: CanvasRenderingContext2D, s: Scorpion) {
     c.beginPath();
     c.arc(hx(len * 0.78 + back), hy(len * 0.78 + back), 2.2, 0, Math.PI * 2);
     c.fill();
+  }
   }
   // the Obsidian Fire Shield: polished black glass plates round the post + over the bow's base,
   // a cold violet sheen that flares gold when heat glances off (scorpionArmor.ts)
@@ -1986,9 +2057,10 @@ export function drawNode(c: CanvasRenderingContext2D, n: ResNode, t: number) {
     case "gold":
     case "diamond":
     case "flint":
+    case "lavaStone":
     case "obsidian": {
       const base = def.color;
-      const angular = n.kind === "flint" || n.kind === "obsidian" || n.kind === "diamond";
+      const angular = n.kind === "flint" || n.kind === "obsidian" || n.kind === "diamond" || n.kind === "lavaStone";
       const small = n.kind === "gold" || n.kind === "diamond";
       const rocks: [number, number, number][] = [
         [-10, -2, 11],
@@ -2260,4 +2332,101 @@ function drawWard(c: CanvasRenderingContext2D, W: number, level: number, glow: s
     c.ellipse(x, -2, 5, 3, 0, 0, Math.PI * 2);
     c.fill();
   }
+}
+
+/**
+ * A zoo enclosure (sim/zoo.ts): stone corner pillars, iron bars all round, a gate and a sign.
+ * Only posts + bars are painted (no floor): the beast inside is drawn first, and shows through them.
+ */
+function drawZoo(c: CanvasRenderingContext2D, W: number, H: number, night: boolean) {
+  const x0 = -W / 2 + 6;
+  const x1 = W / 2 - 6;
+  const yTop = -H + 22;
+  const yBot = 12;
+  const barH = 30;
+  const iron = night ? "#59606b" : "#3f454e";
+  const rail = night ? "#737b88" : "#5b626d";
+  // trampled ground just inside the bars (a thin rim: the middle stays clear)
+  c.strokeStyle = "rgba(120,96,62,0.35)";
+  c.lineWidth = 6;
+  c.strokeRect(x0 + 5, yTop + 4, x1 - x0 - 10, yBot - yTop - 8);
+  // back fence
+  c.strokeStyle = iron;
+  c.lineWidth = 1.6;
+  c.beginPath();
+  for (let x = x0 + 8; x < x1 - 4; x += 8) {
+    c.moveTo(x, yTop);
+    c.lineTo(x, yTop - barH);
+  }
+  c.stroke();
+  // side fences (seen end-on: short bars stepping down the side)
+  c.beginPath();
+  for (let y = yTop + 10; y < yBot - 4; y += 10) {
+    c.moveTo(x0, y);
+    c.lineTo(x0, y - barH * 0.8);
+    c.moveTo(x1, y);
+    c.lineTo(x1, y - barH * 0.8);
+  }
+  c.stroke();
+  // front fence, with a gap of heavier bars for the gate
+  c.lineWidth = 2;
+  c.beginPath();
+  for (let x = x0 + 8; x < x1 - 4; x += 8) {
+    c.moveTo(x, yBot);
+    c.lineTo(x, yBot - barH);
+  }
+  c.stroke();
+  // rails
+  c.strokeStyle = rail;
+  c.lineWidth = 2.6;
+  c.beginPath();
+  for (const y of [yTop - barH + 3, yTop - 6]) {
+    c.moveTo(x0, y);
+    c.lineTo(x1, y);
+  }
+  for (const y of [yBot - barH + 3, yBot - 6]) {
+    c.moveTo(x0, y);
+    c.lineTo(x1, y);
+  }
+  c.moveTo(x0, yTop - barH * 0.8 + 6);
+  c.lineTo(x0, yBot - barH * 0.8);
+  c.moveTo(x1, yTop - barH * 0.8 + 6);
+  c.lineTo(x1, yBot - barH * 0.8);
+  c.stroke();
+  // spear points along the top of the front fence
+  c.fillStyle = rail;
+  c.beginPath();
+  for (let x = x0 + 8; x < x1 - 4; x += 8) {
+    c.moveTo(x - 2, yBot - barH);
+    c.lineTo(x, yBot - barH - 5);
+    c.lineTo(x + 2, yBot - barH);
+  }
+  c.fill();
+  // stone corner pillars
+  for (const [x, y] of [[x0, yTop], [x1, yTop], [x0, yBot], [x1, yBot]] as const) {
+    c.fillStyle = "#9c968a";
+    c.fillRect(x - 6, y - barH - 8, 12, barH + 10);
+    c.fillStyle = "#b9b3a6";
+    c.fillRect(x - 7, y - barH - 11, 14, 5);
+    c.fillStyle = "rgba(50,46,40,0.25)";
+    c.fillRect(x + 2, y - barH - 6, 4, barH + 8);
+  }
+  // the gate: two posts and a crossbar with a padlock
+  c.fillStyle = "#6b4a2c";
+  c.fillRect(-15, yBot - barH - 6, 4, barH + 7);
+  c.fillRect(11, yBot - barH - 6, 4, barH + 7);
+  c.fillStyle = "#d8b24a";
+  c.fillRect(-3, yBot - barH * 0.55, 6, 6);
+  // the sign
+  c.fillStyle = "#6b4a2c";
+  c.fillRect(x1 + 2, yBot - 30, 3, 32);
+  c.fillStyle = "#e9dcb8";
+  c.fillRect(x1 - 9, yBot - 44, 26, 14);
+  c.strokeStyle = "#6b4a2c";
+  c.lineWidth = 1;
+  c.strokeRect(x1 - 9, yBot - 44, 26, 14);
+  c.fillStyle = "#5a3a1e";
+  c.font = "bold 9px sans-serif";
+  c.textAlign = "center";
+  c.fillText("ZOO", x1 + 4, yBot - 33.5);
 }

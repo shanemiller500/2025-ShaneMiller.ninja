@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Handshake, X, MapPin, Swords, Package, Shield } from "lucide-react";
 import type { Engine, Snapshot } from "../game/engine";
-import { TRADE_GOODS, type DiplomacyAction, type Good, type NationId } from "../sim/diplomacy";
+import { goodName, MARKET, TRADE_GOODS, type DiplomacyAction, type Good, type NationId } from "../sim/diplomacy";
 
 const button = "rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40";
 const input = "min-w-0 rounded-xl border border-white/20 bg-slate-900 px-3 py-2 text-sm text-white";
@@ -80,11 +80,21 @@ export default function DiplomacyPanel({ engine, snap, onClose, onBuild }: { eng
             {warConfirm && <div className="rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm"><p>Declare war on {faction.name}? This ends your agreements and recalls caravans.</p><div className="mt-2 flex gap-2"><button className={`${button} text-rose-200`} onClick={() => { action("war"); setWarConfirm(false); }}>Declare War</button><button className={button} onClick={() => setWarConfirm(false)}>Cancel</button></div></div>}
             <div className="rounded-2xl border border-white/10 p-3 sm:p-4">
               <h4 className="mb-3 flex items-center gap-2 font-bold"><Package className="h-4 w-4 text-amber-200" /> Trade & gifts</h4>
+              <div className="mb-3 grid gap-2 text-xs sm:grid-cols-2">
+                <button type="button" className="rounded-xl border border-emerald-300/25 bg-emerald-300/10 p-2 text-left hover:bg-emerald-300/15" onClick={() => { setGive(faction.market.want); if (receive === faction.market.want) setReceive("gold"); }} title="Offer this">
+                  <span className="font-semibold text-emerald-200">Today they want: {goodName(faction.market.want)}</span><br /><span className="text-slate-400">pays {Math.round((MARKET.hot - 1) * 100)}% more · we own {diplomacy.owned(w, faction.market.want)}</span>
+                </button>
+                <button type="button" className="rounded-xl border border-amber-300/25 bg-amber-300/10 p-2 text-left hover:bg-amber-300/15" onClick={() => { setReceive(faction.market.glut); if (give === faction.market.glut) setGive("gold"); }} title="Ask for this">
+                  <span className="font-semibold text-amber-200">Plenty to spare: {goodName(faction.market.glut)}</span><br /><span className="text-slate-400">{Math.round((1 - MARKET.glut) * 100)}% cheaper · {faction.stock[faction.market.glut] ?? 0} available</span>
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-2"><label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">We offer<select className={input} value={give} onChange={(e) => setGive(e.target.value as Good)}>{TRADE_GOODS.map((g) => <option key={g.id} value={g.id}>{g.name} ({diplomacy.owned(w, g.id)} owned)</option>)}</select></label>
                 <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-400">We receive<select className={input} value={receive} onChange={(e) => setReceive(e.target.value as Good)}>{TRADE_GOODS.map((g) => <option key={g.id} value={g.id}>{g.name} ({faction.stock[g.id] ?? 0} available)</option>)}</select></label></div>
               <label className="mt-2 flex items-center gap-3 text-xs text-slate-400">Offer quantity<input className={`${input} w-24`} type="number" min={1} max={data.postLevel * 40 || 40} value={amount} onChange={(e) => setAmount(Number(e.target.value))} /></label>
               <p className="mt-2 text-sm text-emerald-200">{amount || 0} {TRADE_GOODS.find((g) => g.id === give)?.name} → {quote} {TRADE_GOODS.find((g) => g.id === receive)?.name}</p>
-              <p className="mt-1 text-xs text-slate-400">Prices reflect their needs, remaining stock, your alliance and post level. Goods arrive with the caravan; your offer is reserved until delivery.</p>
+              <p className="mt-1 text-xs text-slate-400">Here, today: 1 {goodName(give)} is worth {diplomacy.goldPrice(w, faction.id, give).toFixed(2)} gold, 1 {goodName(receive)} costs {diplomacy.goldPrice(w, faction.id, receive).toFixed(2)} gold.</p>
+              <div className="mt-2 flex flex-wrap gap-2"><button type="button" className={button} onClick={() => setReceive("gold")} disabled={give === "gold"}>Sell for gold</button><button type="button" className={button} onClick={() => setGive("gold")} disabled={receive === "gold"}>Pay in gold</button></div>
+              <p className="mt-2 text-xs text-slate-400">Markets change every day. Smelted bars, steel and gems from the mine are worth far more than raw ore. Prices also reflect their needs, remaining stock, your alliance and post level. Goods arrive with the caravan; your offer is reserved until delivery.</p>
               <div className="mt-3 flex flex-wrap gap-2"><button className={button} disabled={!canTrade || !Number.isSafeInteger(amount) || amount <= 0} onClick={() => run(() => diplomacy.trade(w, faction.id, give, amount, receive))}>Send trade caravan</button><button className={button} disabled={faction.war || !data.postLevel || amount <= 0} onClick={() => run(() => diplomacy.trade(w, faction.id, give, amount, receive, true))}>Offer Gift</button></div>
             </div>
             {faction.allied && <div className="rounded-2xl border border-cyan-300/20 p-3"><h4 className="mb-2 font-bold text-cyan-200">Alliance support</h4><p className="mb-3 text-xs text-slate-400">Allies keep defenders at home. Help is limited by trust, available fighters and recovery time.</p><div className="flex flex-wrap gap-2"><button className={button} onClick={() => action("help")}>Ask for Help</button><button className={button} onClick={() => action("supplies")}>Ask for Supplies</button></div>{wars.length > 0 && <div className="mt-3 flex flex-wrap gap-2"><select aria-label="Enemy to join war against" className={input} value={enemyId} onChange={(e) => setEnemy(e.target.value as NationId)}>{wars.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select><button className={button} onClick={() => action("join")}>Ask to Join War</button></div>}</div>}

@@ -4,7 +4,8 @@ import { MAP_W, TILE } from "./types";
 import { moveBrute, setB } from "./rivals";
 import { seaRoute } from "./seaFolk";
 import { hurtHuman } from "./injury";
-import { ARMORS, OUTFITS, WEAPONS } from "../data/colony";
+import { ARMORS, OUTFITS, RES_INFO, WEAPONS } from "../data/colony";
+import { zooBeasts } from "./zoo";
 
 export type NationKind = "clan" | "sea" | "sand" | "tree" | "snow";
 export type NationId = "us" | `${NationKind}:${number}`;
@@ -19,15 +20,33 @@ type Mission = { faction: NationId; target: NationId; ids: number[]; until: numb
 export type Offer = { id: number; from: NationId; kind: "trade" | "peace" | "join"; target?: NationId; expires: number };
 export type DiplomacySave = { pairs: Pact[]; history: Chronicle[]; caravans: Caravan[]; missions: Mission[]; offers: Offer[]; known: NationId[]; inventory: [NationId, Partial<Record<Good, number>>][]; next: number; aiAt: number; restockAt: number; postLevels: [number, number][]; supportAt?: [NationId, number][] };
 export const PERSONALITIES: Record<NationKind, { name: string; icon: string; aggression: number; trust: number; trade: number; loyalty: number; needs: string[]; exports: Resource[] }> = {
-  sea: { name: "Sea People", icon: "🌊", aggression: 0.35, trust: 0.7, trade: 1.2, loyalty: 0.7, needs: ["iron", "wood", "gear:"], exports: ["fish", "salt", "pearl", "silver"] },
-  sand: { name: "Sand People", icon: "🏜️", aggression: 0.8, trust: 0.35, trade: 0.7, loyalty: 0.45, needs: ["water", "cooked", "iron"], exports: ["gold", "copper", "quartz", "stone"] },
-  tree: { name: "Tree People", icon: "🌳", aggression: 0.55, trust: 0.4, trade: 0.8, loyalty: 0.65, needs: ["stone", "iron", "gear:"], exports: ["wood", "berries", "hide", "bone"] },
-  snow: { name: "Snow People", icon: "❄️", aggression: 0.2, trust: 0.6, trade: 0.8, loyalty: 1.2, needs: ["cooked", "wood", "coal", "iron", "gear:furs"], exports: ["hide", "iron", "crystal", "silver"] },
-  clan: { name: "Clans", icon: "🏕️", aggression: 0.6, trust: 0.5, trade: 0.7, loyalty: 0.65, needs: ["cooked", "wood", "gear:"], exports: ["bone", "stone", "copper", "hide"] },
+  sea: { name: "Sea People", icon: "🌊", aggression: 0.35, trust: 0.7, trade: 1.2, loyalty: 0.7, needs: ["iron", "wood", "steel", "copperBar", "gear:"], exports: ["fish", "salt", "pearl", "silver"] },
+  sand: { name: "Sand People", icon: "🏜️", aggression: 0.8, trust: 0.35, trade: 0.7, loyalty: 0.45, needs: ["water", "cooked", "iron", "wine", "silverBar"], exports: ["gold", "copper", "quartz", "stone", "obsidian"] },
+  tree: { name: "Tree People", icon: "🌳", aggression: 0.55, trust: 0.4, trade: 0.8, loyalty: 0.65, needs: ["stone", "iron", "copperBar", "gear:"], exports: ["wood", "berries", "hide", "bone", "tar"] },
+  snow: { name: "Snow People", icon: "❄️", aggression: 0.2, trust: 0.6, trade: 0.8, loyalty: 1.2, needs: ["cooked", "wood", "coal", "iron", "steel", "gear:furs"], exports: ["hide", "iron", "crystal", "silver"] },
+  clan: { name: "Clans", icon: "🏕️", aggression: 0.6, trust: 0.5, trade: 0.7, loyalty: 0.65, needs: ["cooked", "wood", "wine", "goldBar", "gear:"], exports: ["bone", "stone", "copper", "hide", "flint"] },
 };
 const VALUES: Partial<Record<Good, number>> = { wood: 2, stone: 2, cooked: 3, water: 1, hide: 4, bone: 3, copper: 6, iron: 8, gold: 12, silver: 10, quartz: 6, crystal: 14, coal: 3, fish: 2, salt: 3, pearl: 12, berries: 1 };
+/**
+ * Everything else the tribe digs up, smelts or makes is worth something to somebody too. Smelted bars are worth
+ * more than twice their ore (the refinery pays for itself), steel and gems most of all.
+ */
+const MORE_VALUES: Partial<Record<Good, number>> = { copperBar: 14, silverBar: 22, goldBar: 26, steel: 20, diamond: 30, meteorite: 24, obsidian: 9, magnetite: 8, flint: 3, clay: 2, tar: 5, limestone: 3, shaped: 6, tooth: 6, wine: 7, flour: 3, crop: 2 };
+Object.assign(VALUES, MORE_VALUES);
+/** A settlement's opening stock of something it doesn't make itself: the dear things are rare. */
+const scarce = (good: Good, value: number) => (good in MORE_VALUES ? (value >= 20 ? 2 : value >= 8 ? 5 : 12) : 12);
+/** Goods anybody might be short of on a given day (besides what their own people always need). */
+const WANTED: Good[] = ["cooked", "wood", "iron", "hide", "salt", "coal", "stone", "copperBar", "silverBar", "goldBar", "steel", "wine", "flour", "obsidian"];
+/** Today's market at a settlement: one thing they're crying out for, one they have too much of. */
+export const MARKET = { hot: 1.6, glut: 0.7 } as const;
+const hash = (s: string, n: number) => {
+  let h = 2166136261 ^ n;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return (h >>> 0) / 4294967296;
+};
+export const goodName = (id: Good) => (id === "cooked" ? "Food" : id.startsWith("gear:") ? TRADE_GOODS.find((g) => g.id === id)?.name ?? id : RES_INFO[id as Resource]?.name ?? id);
 export const TRADE_GOODS: { id: Good; name: string; value: number }[] = [
-  ...Object.entries(VALUES).map(([id, value]) => ({ id: id as Good, name: id === "cooked" ? "Food" : id[0].toUpperCase() + id.slice(1), value: value ?? 1 })),
+  ...Object.entries(VALUES).map(([id, value]) => ({ id: id as Good, name: id === "cooked" ? "Food" : id in MORE_VALUES ? RES_INFO[id as Resource].name : id[0].toUpperCase() + id.slice(1), value: value ?? 1 })),
   ...[...WEAPONS, ...ARMORS, ...OUTFITS].map((g) => ({ id: `gear:${g.id}` as Good, name: g.name, value: Math.max(8, Object.values(g.cost).reduce((a, n) => a + (n ?? 0), 0) * 3) })),
 ];
 const key = (a: NationId, b: NationId) => [a, b].sort().join("|");
@@ -238,22 +257,39 @@ export class Diplomacy {
     let stock = this.inventory.get(id);
     if (!stock) {
       stock = {};
-      for (const good of TRADE_GOODS) stock[good.id] = good.id.startsWith("gear:") ? 2 : PERSONALITIES[kindOf(id)].exports.includes(good.id as Resource) ? 40 : 12;
+      for (const good of TRADE_GOODS) stock[good.id] = good.id.startsWith("gear:") ? 2 : PERSONALITIES[kindOf(id)].exports.includes(good.id as Resource) ? 40 : scarce(good.id, good.value);
       this.inventory.set(id, stock);
     }
     return stock;
+  }
+  /**
+   * What a settlement is short of today and what it has too much of. It changes every day (the same for
+   * everyone who looks: no dice): sell them what they want for 60% more, buy their surplus 30% cheaper.
+   */
+  market(w: World, id: NationId): { want: Good; glut: Good } {
+    const p = PERSONALITIES[kindOf(id)];
+    const pool = WANTED.filter((g) => !p.exports.includes(g as Resource));
+    const want = pool[Math.floor(hash(id, w.day * 2 + 1) * pool.length)] ?? "cooked";
+    const glut = p.exports[Math.floor(hash(id, w.day * 2) * p.exports.length)] ?? p.exports[0];
+    return { want, glut };
   }
   owned(w: World, good: Good) { return good.startsWith("gear:") ? w.colony.armory[good.slice(5)] ?? 0 : w.camp.stock[good as Resource] ?? 0; }
   private add(w: World, good: Good, n: number) {
     if (good.startsWith("gear:")) w.colony.armory[good.slice(5)] = (w.colony.armory[good.slice(5)] ?? 0) + n;
     else w.camp.stock[good as Resource] = (w.camp.stock[good as Resource] ?? 0) + n;
   }
-  value(id: NationId, good: Good) {
+  /** What one unit is worth to them (with `w`: at today's market). */
+  value(id: NationId, good: Good, w?: World) {
     const base = TRADE_GOODS.find((g) => g.id === good)?.value ?? 1;
     const p = PERSONALITIES[kindOf(id)];
     const need = p.needs.some((r) => good === r || (r === "gear:" && good.startsWith(r))) ? 1.5 : 1;
     const scarcity = Math.max(0.8, Math.min(1.5, 1.4 - (this.stock(id)[good] ?? 0) / 60));
-    return base * need * scarcity;
+    const today = w ? this.market(w, id) : null;
+    return base * need * scarcity * (today?.want === good ? MARKET.hot : today?.glut === good ? MARKET.glut : 1);
+  }
+  /** What one unit fetches in gold nuggets there today (for the panel). */
+  goldPrice(w: World, id: NationId, good: Good) {
+    return this.value(id, good, w) / this.value(id, "gold", w);
   }
   post(w: World) { return w.colony.buildings.find((b) => b.kind === "tradingPost" && b.built >= 1 && b.hp > 0); }
   postLevel(w: World) { const p = this.post(w); return p ? this.postLevels.get(p.id) ?? 1 : 0; }
@@ -268,7 +304,7 @@ export class Diplomacy {
   quote(w: World, id: NationId, give: Good, amount: number, receive: Good) {
     const p = this.relation("us", id);
     const rate = (p.allied ? 0.95 : 0.8) + this.postLevel(w) * 0.03;
-    return Math.max(0, Math.floor(amount * this.value(id, give) / this.value(id, receive) * rate));
+    return Math.max(0, Math.floor(amount * this.value(id, give, w) / this.value(id, receive, w) * rate));
   }
   trade(w: World, id: NationId, give: Good, amount: number, receive: Good, gift = false): string {
     if (!this.known.has(id) || !this.location(w, id)) return "Meet this faction first.";
@@ -320,7 +356,13 @@ export class Diplomacy {
         const gain = c.supplies ? 2 : c.gift ? Math.min(15, 2 + Math.floor(c.amount * this.value(c.faction, c.give) / 12)) : 3 + this.postLevel(w);
         this.change(w, "us", c.faction, gain, c.supplies ? "Ally delivered supplies" : c.gift ? "Gift delivered" : "Trade completed");
         this.relation("us", c.faction).trade = true;
-        this.announce(w, "us", c.faction, c.gift ? "Gift delivered. Relations improved." : "Caravan arrived. Goods exchanged.");
+        // the zoo (zoo.ts): traders stop to stare at a caged Yeti or Dinosaur Scorpion, and leave gold for the sight
+        const beasts = zooBeasts(w).length;
+        if (beasts) {
+          this.add(w, "gold", beasts * 2);
+          this.change(w, "us", c.faction, beasts * 2, "Marvelled at the beasts in our zoo");
+        }
+        this.announce(w, "us", c.faction, `${c.gift ? "Gift delivered. Relations improved." : "Caravan arrived. Goods exchanged."}${beasts ? ` The traders marvelled at the zoo and left ${beasts * 2} gold.` : ""}`);
         c.phase = "returning"; c.route.reverse(); c.step = 0;
         continue;
       }
@@ -502,7 +544,7 @@ export class Diplomacy {
       factions: all.filter((s) => this.known.has(s.id)).map((s) => ({ ...s, icon: PERSONALITIES[s.kind].icon, personality: PERSONALITIES[s.kind], status: this.status("us", s.id), ...this.relation("us", s.id),
         allies: all.filter((o) => o.id !== s.id && this.relation(s.id, o.id).allied).map((o) => ({ id: o.id, name: o.name })),
         enemies: all.filter((o) => this.relation(s.id, o.id).war).map((o) => ({ id: o.id, name: o.name })),
-        history: this.history.filter((h) => h.a === s.id || h.b === s.id).slice(0, 6), stock: { ...this.stock(s.id) },
+        history: this.history.filter((h) => h.a === s.id || h.b === s.id).slice(0, 6), stock: { ...this.stock(s.id) }, market: this.market(w, s.id),
       })), history: this.history.slice(0, 15) };
   }
   serialize(): DiplomacySave {
@@ -522,6 +564,7 @@ export class Diplomacy {
     this.pairs = new Map(data.pairs.map((p) => [key(p.a, p.b), p])); this.history = data.history.slice(0, 100);
     this.caravans = data.caravans; this.missions = data.missions; this.offers = data.offers; this.known = new Set(data.known);
     this.inventory = new Map(data.inventory); this.next = data.next; this.aiAt = data.aiAt; this.restockAt = data.restockAt;
+    for (const [id, stock] of Array.from(this.inventory)) for (const good of TRADE_GOODS) if (stock[good.id] === undefined && good.id in MORE_VALUES) stock[good.id] = PERSONALITIES[kindOf(id)].exports.includes(good.id as Resource) ? 40 : scarce(good.id, good.value);
     this.postLevels = new Map(data.postLevels ?? []);
     this.supportAt = new Map(data.supportAt ?? []);
   }

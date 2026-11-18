@@ -7,6 +7,8 @@ import { roomOf } from "./riderHall";
 import { shieldedAt } from "./dragonShield";
 import { answersFire, bucketBrigade, douseAim, dropClaim } from "./firefight";
 import { huntThink } from "./chariots";
+import { wagonCrewTick } from "./waterWagons";
+import { isLavaFolk } from "./lavaFolk";
 import { feastThink } from "./feast";
 import { cleanupThink } from "./cleanup";
 import { hungTick, rescueHungThink } from "./snowBeasts";
@@ -32,13 +34,15 @@ import { insideWalls, outsideSpot } from "./dinoBounds";
 import { playTick } from "./keepers";
 import { watchThink } from "./shows";
 import { partnerOf, riderCanFight, riderDefend, riderThink, riderType, trainBoost } from "./riders";
-import { TALL } from "./plants";
+import { consumePlant, TALL } from "./plants";
+import { humanSeedTick, swallowSeed } from "./plantCycle";
 import { roleAct, roleThink } from "./tribe";
 import { goalKey, nodePos, tileOf, TOWER_Z, WALK_Z, type NavClass } from "./nav";
 import { shelterDone, stagesOf } from "./build";
 import { buildAct, buildThink, deliverToSite, dismount, douseThink, joinTask, leaveScorpion, taskCarrying, taskThink, yieldToUrgent } from "./tasks";
 import { healTick, hurtHuman, recover } from "./injury";
 import { bedFor, discharge, wardInReach } from "./hospital";
+import { dreadThink } from "./beasts";
 import { autoButcher, type Task } from "./tasks";
 import { COURAGE, bandNear, canFight, courageScore, foesNear, onMission } from "./courage";
 import { repelThink } from "./territory";
@@ -53,7 +57,7 @@ import { OUTFIT_BY_ID } from "../data/colony";
  * unit) who's been down a while, but then even in the thick of a fight. True = on their way / patching them up.
  */
 function rescueThink(w: World, h: Human, comrade: boolean): boolean {
-  if (h.child || h.riding || h.aloft || h.chariot || h.captive || h.under || h.state === "down" || h.state === "heal") return false;
+  if (h.child || h.riding || h.aloft || h.chariot || h.wagon || h.captive || h.under || h.state === "down" || h.state === "heal") return false;
   const unit = (o: Human) => !!w.colony.hunt?.crew.some((m) => m.id === o.id) && !!w.colony.hunt?.crew.some((m) => m.id === h.id);
   let best: Human | null = null;
   let bd = comrade ? 450 : 500;
@@ -440,7 +444,7 @@ function localDanger(w: World, h: Human): LocalDanger | null {
     if (w.lava.heatAt(x, y) > 0.14) offer((x + 0.5) * TILE, (y + 0.5) * TILE, sensitive ? 210 : 165, "fire");
     else if (w.fire.at(x, y) > 0.24) offer((x + 0.5) * TILE, (y + 0.5) * TILE, firefighter ? 40 : sensitive ? 210 : 165, "fire");
   }
-  if (w.volcano.phase !== "idle" && w.volcano.phase !== "rumble") offer(w.volcano.x, w.volcano.y, w.volcano.megaOn ? 1800 : 850, "volcano");
+  for (const v of w.volcanoes) if (v.phase !== "idle" && v.phase !== "rumble") offer(v.x, v.y, v.megaOn ? 1800 : 850, "volcano");
   return best;
 }
 
@@ -830,6 +834,8 @@ function think(w: World, h: Human) {
   }
   // on a chariot hunt: boarding, marching beside the chariots, fighting, fetching eggs (chariots.ts)
   if (w.colony.hunt && huntThink(w, h)) return;
+  // nobody with nothing to do there goes near a Yeti's cave or a Dinosaur Scorpion's den (beasts.ts)
+  if (dreadThink(w, h)) return;
   const tribe = w.tribe;
   // (a firefighter with nothing burning works as a gatherer)
   const realRole = tribe.roleOf(h);
@@ -970,10 +976,23 @@ function think(w: World, h: Human) {
   }
 
   // a scorpion crew stays put while there's anything to shoot
+  const myScorpion = w.colony.scorpions.find((s) => s.crew === h.id && s.built >= 1);
+  // a Lava Monster within reach of it keeps them on the water cannon
+  const lavaAtGun = !!myScorpion && w.dinos.some((d) => isLavaFolk(d) && d.health > 0 && Math.hypot(d.x - myScorpion.x, d.y - myScorpion.y) < 520);
   if (h.state === "operate") {
     if (task?.kind === "operate") return;
-    if (tribe.raid || w.dragons.menacing(w) || h.stateT < 30) return;
+    if (tribe.raid || w.dragons.menacing(w) || h.stateT < 30 || lavaAtGun) return;
     leaveScorpion(w, h);
+  }
+  // called to a Scorpion but not a guard (guards walk there from their post: tribe.guardAt): go and man it
+  if (myScorpion && !task && tribe.roleOf(h) !== "guard" && h.state !== "operate") {
+    const spot = w.colony.crewSpot(myScorpion);
+    if (Math.hypot(h.x - spot.x, h.y - spot.y) < 10 && (h.level === 1) === spot.top) go(h, "operate", h.x, h.y);
+    else {
+      h.wantTop = spot.top;
+      go(h, "walk", spot.x, spot.y);
+    }
+    return;
   }
 
   // 1. danger → fight (if armed + on duty) or run for the cave. Scorpion crews head for their Scorpion.
@@ -1422,7 +1441,7 @@ function finishGather(w: World, h: Human) {
       for (let i = 0; i < 6; i++) w.particles.spawn(P.Leaf, plant.x, plant.y, { z: 30 + w.rng() * 50, vx: (w.rng() - 0.5) * 60, vz: 20, g: 40, size: 4, max: 1.6, color: "#6b8f3c" });
     }
   } else if (plant && (r === "leaves" || r === "berries")) {
-    plant.food = Math.max(0, plant.food - 0.3);
+    consumePlant(w, plant, 0.3);
     plant.shake = 0.6;
   } else if (plant && r === "stick") plant.shake = 0.5;
   if (r === "stone" && h.targetId > 0) {
@@ -1502,6 +1521,7 @@ export function saddleZ(d: Dino) {
 }
 
 export function updateHuman(w: World, h: Human, dt: number) {
+  humanSeedTick(w, h, dt);
   if (!h.stranger && h.hp > 0 && h.hp < 0.5) { if (!h.selfHealing) h.think = 0; h.selfHealing = true; }
   const passengerMount = h.riding ? w.dinoById(h.riding) : null;
   // Passengers recover in their seat without interrupting their transport's movement.
@@ -1546,6 +1566,8 @@ export function updateHuman(w: World, h: Human, dt: number) {
     // aboard a war chariot: it carries them (chariots.ts)
     return;
   }
+  // crewing a water wagon: running to it, or pushing / pumping / aiming it (waterWagons.ts)
+  if (h.wagon && wagonCrewTick(w, h, dt)) return;
   if (h.falling) {
     // dropped from a dragon's claws: falling (the dragons move the body)
     h.vx = h.vy = 0;
@@ -1756,6 +1778,7 @@ export function updateHuman(w: World, h: Human, dt: number) {
         // best food first: roast > fish > crops > berries > (raw meat if starving)
         const pickFood = (["cooked", "fish", "crop", "berries", "meat"] as Resource[]).find((r) => s[r] > 0);
         if (pickFood) {
+          if (pickFood === "berries") swallowSeed(w, h, { kind: "bush", variant: h.id % 4, x: h.x, y: h.y }, true);
           s[pickFood]--;
           h.hunger = pickFood === "cooked" ? -0.3 : pickFood === "meat" ? 0.3 : 0;
           if (pickFood === "cooked") h.energy = Math.min(1, h.energy + 0.2);

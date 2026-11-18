@@ -23,7 +23,8 @@ import { issue, type Task } from "./tasks";
 import { TILE, type Building, type BuildingKind, type Human, type Shelter, type Tower } from "./types";
 import type { World } from "./world";
 import { connectWalls, joinMessage } from "./wallLinks";
-import { compoundOf, wingUnits } from "./castleCompound";
+import { compoundOf, keepMoveFits, wingUnits } from "./castleCompound";
+import { shelterDone } from "./build";
 
 export type MoveRef = { kind: "building" | "shelter" | "wall" | "farm" | "tower"; id: number };
 
@@ -84,6 +85,7 @@ export function crewSize(w: World, ref: MoveRef) {
 export function canMove(w: World, ref: MoveRef): string | null {
   const o = objOf(w, ref);
   if (!o) return "It's gone.";
+  if (ref.kind === "shelter" && compoundOf(w, ref.id)?.layout === "keep" && !shelterDone(o as Shelter)) return "These rooms are part of the castle. Move the finished castle instead.";
   if (ref.kind === "wall" || ref.kind === "farm" || ref.kind === "tower") {
     if (ref.kind === "wall") {
       const wl = o as import("./types").Wall;
@@ -104,6 +106,7 @@ export function moveSpotOk(w: World, ref: MoveRef, x: number, y: number): string
   if (ref.kind === "wall") return w.tribe.relocateWall(w, o as import("./types").Wall, Math.floor(x / TILE), Math.floor(y / TILE), true) ? null : "That wall needs clear, solid ground.";
   if (ref.kind === "farm") return w.tribe.relocateFarm(w, o as import("./types").Farm, x, y, true) ? null : "That farm needs clear, fertile ground.";
   if (ref.kind === "tower") return w.tribe.relocateTower(w, o as Tower, x, y, true) ? null : "A tower needs 2×2 squares of clear, solid ground.";
+  if (ref.kind === "shelter" && compoundOf(w, ref.id)?.layout === "keep") return keepMoveFits(w, ref.id, x, y) ? null : "The castle needs clear ground for its whole footprint.";
   const movable = o as Building | Shelter;
   const had = movable.lift;
   movable.lift = { x: movable.x, y: movable.y, z: 0 };
@@ -374,6 +377,7 @@ function place(w: World, ref: MoveRef, o: Building | Shelter, x: number, y: numb
     const compound = compoundOf(w, o.id);
     const wing = compound?.wings.find((g) => g.ids.includes(o.id));
     if (wing) { wing.x = x; wing.y = y; }
+    if (compound?.layout === "keep") { compound.origin = { x, y }; compound.garden = { x, y }; }
   }
   w.colony.version++;
   w.shelterVersion++;

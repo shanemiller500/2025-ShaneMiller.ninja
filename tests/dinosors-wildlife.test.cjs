@@ -44,8 +44,10 @@ test('every kind of dinosaur is always around: wiped out, a mother comes home an
   w.wildlife.enabled = true;
   w.wildlife.spellT = Infinity;
   run(w, 6);
-  // (the snowy peaks' animals keep their own numbers: snowBeasts.ts SnowLife, tested in dinosors-snowlands)
-  const VALLEY = SPECIES.filter((d) => !SNOW_SPECIES.has(d.id));
+  // (the snowy peaks' animals keep their own numbers: snowBeasts.ts SnowLife, tested in dinosors-snowlands;
+  //  the Lava Monsters lay no eggs, the volcano makes them: lavaFolk.ts, tested in sim/lavaFolk.test.cjs;
+  //  the crocodiles, hippos + snakes keep their own numbers: riverBeasts.ts, tested in sim/riverBeasts.test.cjs)
+  const VALLEY = SPECIES.filter((d) => !SNOW_SPECIES.has(d.id) && d.id !== 'lavaFolk' && !['croc', 'hippo', 'snake', 'beaver'].includes(d.id));
   for (const def of VALLEY) {
     const n = w.wildlife.count(w, def.id);
     assert.ok(n >= wl.MIN_KEEP, `${def.id} came back (${n})`);

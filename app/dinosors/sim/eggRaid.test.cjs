@@ -15,8 +15,8 @@ require.extensions['.ts'] = (module, filename) => {
 const { World } = require('./world.ts');
 const { addHuman } = require('./humans.ts');
 const { addDino } = require('./dinos.ts');
-const { seedNests, layEgg, nestEggs, eggHuntThink, eggDropOff } = require('./dragonNests.ts');
-const { startHunt, chariotsUpdate } = require('./chariots.ts');
+const { seedNests, layEgg, nestEggs, eggHuntThink, eggDropOff, nestsUpdate, parentOf } = require('./dragonNests.ts');
+const { startHunt, chariotsUpdate, endHunt, raidTargets, huntThink } = require('./chariots.ts');
 const { eggCapacity, eggsCarried } = require('./dragonRaid.ts');
 const { T, TILE } = require('./types.ts');
 
@@ -100,4 +100,81 @@ test('ten person raid brings the five egg clutch home', () => {
   for (let i = 0; i < 90 * 30 && w.dragons.eggs.filter((e) => e.at === 'camp' && e.nest === nest.id).length < 5; i++) w.update(1 / 30);
   assert.equal(nestEggs(w, nest).length, 0);
   assert.equal(w.dragons.eggs.filter((e) => e.at === 'camp' && e.nest === nest.id).length, 5);
+  assert.ok(!w.dragons.nests.some((n) => n.id === nest.id), 'the expedition demolished the nest before returning');
+});
+
+test('an empty nest is cleared on site, stays gone after loading, and cannot be cleared remotely', () => {
+  const { w, nest, people } = party(5815);
+  w.dragons.eggs = w.dragons.eggs.filter((e) => e.nest !== nest.id);
+  assert.equal(startHunt(w, 'ring', { people, nest: nest.id }), null);
+  const hunt = w.colony.hunt;
+  hunt.phase = 'march';
+  chariotsUpdate(w, .1);
+  assert.equal(hunt.phase, 'clear', 'unguarded nests skip combat');
+  for (const h of people) { h.x = w.camp.x - 1000; h.y = w.camp.y; }
+  chariotsUpdate(w, 9);
+  assert.ok(w.dragons.nests.includes(nest), 'being victorious is insufficient from a distance');
+  people[0].x = nest.x; people[0].y = nest.y;
+  chariotsUpdate(w, 4);
+  const restored = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  assert.equal(restored.colony.hunt, null, 'loading calls off expeditions, as before');
+  assert.ok(restored.dragons.nests.some((n) => n.id === nest.id), 'unfinished demolition leaves a real nest');
+  chariotsUpdate(w, 4.1);
+  assert.equal(hunt.phase, 'return');
+  assert.ok(!w.dragons.nests.some((n) => n.id === nest.id));
+  assert.ok(!raidTargets(w).some((t) => t.kind === 'nest' && t.id === nest.id));
+  const reopened = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+  assert.ok(!reopened.dragons.nests.some((n) => n.id === nest.id));
+});
+
+test('a victorious raid preserves eggs before demolition; defeat leaves the nest standing', () => {
+  const { w, nest, people } = party(5816);
+  assert.equal(startHunt(w, 'ring', { people, nest: nest.id }), null);
+  const hunt = w.colony.hunt;
+  endHunt(w, hunt, 'won', 'The dragon was driven off.');
+  chariotsUpdate(w, 160);
+  assert.equal(hunt.phase, 'collect', 'collection cannot time out and demolish uncollected eggs');
+  assert.equal(nestEggs(w, nest).length, 5);
+  assert.ok(w.dragons.nests.includes(nest));
+  endHunt(w, hunt, 'lost', 'Retreat.');
+  chariotsUpdate(w, 10);
+  assert.ok(w.dragons.nests.includes(nest));
+  assert.equal(nestEggs(w, nest).length, 5);
+});
+
+test('after defeating a guarded nest, eggs survive and the driven-off dragon survives demolition', () => {
+  const { w, nest, people } = party(5817);
+  w.elapsed = 1000; nest.emptyT = 0;
+  nestsUpdate(w, .1);
+  const parent = parentOf(w, nest);
+  assert.ok(parent);
+  assert.equal(startHunt(w, 'ring', { people, nest: nest.id }), null);
+  const hunt = w.colony.hunt;
+  endHunt(w, hunt, 'won', 'The defender is beaten.');
+  assert.equal(parent.state, 'flee');
+  assert.equal(hunt.phase, 'collect');
+  for (const h of people) huntThink(w, h);
+  assert.equal(nestEggs(w, nest).length, 0);
+  assert.equal(people.reduce((n, h) => n + eggsCarried(h), 0), 5);
+  chariotsUpdate(w, .1);
+  assert.equal(hunt.phase, 'clear');
+  chariotsUpdate(w, 8.1);
+  assert.equal(hunt.phase, 'return');
+  assert.ok(!w.dragons.nests.includes(nest));
+  assert.ok(w.dragons.list.includes(parent), 'demolition removes the structure, not living dragons');
+  assert.equal(people.reduce((n, h) => n + eggsCarried(h), 0), 5);
+});
+
+test('a small crew makes extra egg trips, then clears the nest instead of getting stuck with full hands', () => {
+  const { w, nest, people } = party(5818, 2);
+  w.humans = people; w.dinos.length = 0;
+  nest.layT = Infinity; nest.emptyT = Infinity;
+  w.dragons.timer = Infinity; w.randomEvents.enabled = false; w.tribe.planT = Infinity;
+  assert.equal(startHunt(w, 'ring', { people, nest: nest.id }), null);
+  endHunt(w, w.colony.hunt, 'won', 'The nest is unguarded.');
+  for (let i = 0; i < 120 * 30 && w.dragons.nests.some((n) => n.id === nest.id); i++) w.update(1 / 30);
+  assert.ok(!w.dragons.nests.some((n) => n.id === nest.id));
+  const saved = w.dragons.eggs.filter((e) => e.nest === nest.id);
+  assert.equal(saved.length, 5);
+  assert.ok(saved.every((e) => e.at === 'camp' || e.at === 'carried'));
 });

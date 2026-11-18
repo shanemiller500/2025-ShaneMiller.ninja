@@ -6,6 +6,8 @@
 /*  ground stays crisp when the camera is close.                       */
 /* ------------------------------------------------------------------ */
 
+import type { SeasonId } from "../sim/seasons";
+
 type Canvas = HTMLCanvasElement;
 type Ctx = CanvasRenderingContext2D;
 type Rand = () => number;
@@ -160,6 +162,28 @@ export interface TerrainStamps {
 }
 
 let stamps: TerrainStamps | null = null;
+const seasonalStamps = new Map<SeasonId, TerrainStamps>();
+
+/** Tint each small vegetation image once; avoid expensive filters on every terrain stamp. */
+export function seasonTerrainStamps(season: SeasonId): TerrainStamps {
+  const original = terrainStamps();
+  if (season === "spring") return original;
+  const cached = seasonalStamps.get(season);
+  if (cached) return cached;
+  const result = { ...original };
+  const tone = season === "winter" ? "#e3ebe6" : season === "autumn" ? "#b58a4e" : "#c1b96d";
+  const opacity = season === "winter" ? 0.85 : season === "autumn" ? 0.65 : 0.18;
+  for (const key of ["grass", "tallGrass", "clover", "dryGrass", "litter", "moss", "jungle", "swamp", "straw"] as const) {
+    result[key] = original[key].map((source) => {
+      const cv = document.createElement("canvas"); cv.width = source.width; cv.height = source.height;
+      const c = cv.getContext("2d")!; c.drawImage(source, 0, 0);
+      c.globalCompositeOperation = "source-atop"; c.globalAlpha = opacity; c.fillStyle = tone; c.fillRect(0, 0, cv.width, cv.height);
+      return cv;
+    });
+  }
+  seasonalStamps.set(season, result);
+  return result;
+}
 
 export function terrainStamps(): TerrainStamps {
   if (stamps) return stamps;

@@ -10,6 +10,7 @@ import { WORLD_H, WORLD_W } from "../sim/types";
 import { useClickAway } from "./useClickAway";
 import { MessageFeed, type Toast } from "./Toasts";
 import { QUALITY_INFO, type QualityId } from "../render/quality";
+import { SEASONS } from "../sim/seasons";
 
 export type TopPanel = null | "time" | "places" | "menu";
 
@@ -170,7 +171,7 @@ function SkyDial({ snap, onClick }: { snap: Snapshot; onClick: () => void }) {
       <span className="text-left leading-tight">
         <span className="block text-[15px] font-semibold tabular-nums tracking-tight">{fmtTime(h)}</span>
         <span className="block text-[11px] font-medium text-white/55">
-          {snap.season.icon} Day {snap.day} · {w.label}
+          {snap.season.icon} {snap.season.name} - Day {snap.day} · {w.label}
           {snap.paused ? " · ⏸" : ""}
         </span>
       </span>
@@ -220,6 +221,10 @@ function TimePanel({ snap, engine }: Props) {
         </span>
         <span className="text-white/55">Year {snap.season.year}</span>
       </div>
+      <div className="mt-2 grid grid-cols-4 gap-1" role="group" aria-label="Choose a season">
+        {SEASONS.map((s) => <button key={s.id} type="button" aria-pressed={snap.season.name === s.name} onClick={() => engine.setSeason(s.id)} className={"flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition active:scale-95 " + (snap.season.name === s.name ? "bg-amber-300 text-slate-900" : "bg-white/10 hover:bg-white/20")}><span className="text-lg" aria-hidden="true">{s.icon}</span>{s.name}</button>)}
+      </div>
+      <p className="mt-1 text-[10px] text-white/50">Choose a season to move the calendar forward. Seasons also change naturally.</p>
       <div className="mt-2 rounded-xl bg-white/5 px-3 py-2 text-xs text-white/75">
         <div className="flex items-center justify-between font-semibold text-white/90">
           <span>

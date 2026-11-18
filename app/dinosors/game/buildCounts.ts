@@ -14,8 +14,8 @@ export function ownedBuildCounts(w: World): Partial<Record<BuildOpt, number>> {
       add("stairs");
       if (wall.pulley) add("pulley");
     } else if (wall.part === "gate") {
-      add(wall.mega ? "megagate" : wall.bone ? "bonegate" : wall.kind === "polygon" ? "polygate" : "gate");
-    } else add(wall.kind === "polygon" ? "polywall" : wall.kind === "stone" ? "stonewall" : "wall");
+      add(wall.mega ? "megagate" : wall.bone ? "bonegate" : wall.kind === "lava" ? "lavagate" : wall.kind === "polygon" ? "polygate" : "gate");
+    } else add(wall.kind === "lava" ? "lavawall" : wall.kind === "polygon" ? "polywall" : wall.kind === "stone" ? "stonewall" : "wall");
   }
   for (const t of w.tribe.towers) if (t.stage >= 3 && t.hp > 0) add("tower");
   for (const s of w.colony.scorpions) if (s.built >= 1 && s.hp > 0) add("scorpion");

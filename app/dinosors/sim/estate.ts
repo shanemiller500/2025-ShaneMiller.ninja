@@ -3,7 +3,7 @@ import type { World } from "./world";
 import { MAP_W, TILE } from "./types";
 import { shelterDone } from "./build";
 import { clearPlantsUnderBuilds } from "./buildClear";
-import { wingUnits, type CastleCompound } from "./castleCompound";
+import { compoundOf, wingUnits, type CastleCompound } from "./castleCompound";
 
 export const WING_STAGES = [
   { label: "Stone foundations", need: "stone" as const, n: 8 },
@@ -96,6 +96,12 @@ export function wingSpot(w: World, home: Shelter) {
 export function planWing(w: World, homeId: number): Shelter | string {
   const home = w.shelters.find((s) => s.id === homeId && shelterDone(s) && s.hp > 0 && !s.lift);
   if (!home || home.tier < 4) return "Choose a finished stone home to extend.";
+  const castle = compoundOf(w, homeId);
+  if (castle?.layout === "keep") {
+    const room = w.camp.addShelter(w, castle.origin.x, castle.origin.y, "castle");
+    castle.wings[0].ids.push(room.id);
+    return room;
+  }
   const spot = wingSpot(w, home);
   if (!spot) return "No room beside this castle. Clear space around its wings first.";
   const wing = w.camp.addShelter(w, spot.x, spot.y, "castle");

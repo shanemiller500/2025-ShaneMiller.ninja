@@ -546,7 +546,7 @@ export class Extinction {
       if (this.hit.has(-wl.id - 1e6) || Math.hypot(x - this.x, y - this.y) > R) continue;
       this.hit.add(-wl.id - 1e6);
       if (dome(x, y)) continue;
-      wl.hp -= wl.kind === "palisade" ? 9999 : wl.kind === "stone" ? 500 : 350;
+      wl.hp -= wl.kind === "palisade" ? 9999 : wl.kind === "stone" ? 500 : wl.kind === "lava" ? 200 : 350;
     }
     for (const s of w.shelters) {
       if (this.hit.has(-s.id - 2e6) || Math.hypot(s.x - this.x, s.y - this.y) > R) continue;

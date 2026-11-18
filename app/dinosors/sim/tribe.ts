@@ -6,6 +6,7 @@
 /*  "gobbled" cave people vanish in a dust cloud.                      */
 /* ------------------------------------------------------------------ */
 import { tendVines, vinesReady, wineThink } from "./vineyard";
+import { berryCropVariant } from "../data/berries";
 import { peopleCap } from "./population";
 import { bucketBrigade, crewWanted, fireThreats, PRI_LABEL } from "./firefight";
 import { mountedDamage, wearArmor } from "./gear";
@@ -57,6 +58,9 @@ import {
   type WallPart,
 } from "./types";
 import type { World } from "./world";
+import { beastDown } from "./beasts";
+import { captureHit } from "./zoo";
+import { coolDown, isLavaFolk, lavaFightAct, lavaHit, scorpionWaterJet } from "./lavaFolk";
 import { updateZones, type Zone } from "./zones";
 import { raidGathering, raidPackSpots } from "./settlement";
 import { scorpionWorks } from "./scorpionArmor";
@@ -143,7 +147,7 @@ export class Tribe {
       // the Megalodon gate's jaws stay as they are
       if (ex.mega) return null;
       // drawing a stronger kind over a piece upgrades it (the old materials come back when it's swapped)
-      const rank = { palisade: 0, stone: 1, polygon: 2 } as const;
+      const rank = { palisade: 0, stone: 1, polygon: 2, lava: 3 } as const;
       const goal = ex.upgrade ? ex.upTo ?? "stone" : ex.kind;
       if (rank[kind] > rank[goal] && (part === "wall" || part === ex.part)) {
         ex.upgrade = true;
@@ -878,11 +882,15 @@ export class Tribe {
       }
     }
     // scorpions need crews when danger is near: the closest guards take them (powered ones don't)
-    if (!w.colony.dronesPowered(w) && (threat || w.dinos.some((d) => this.hostile(w, d)) || w.rivals.threatNear(w, w.camp.x, w.camp.y, 900))) {
+    // a Lava Monster near any Scorpion counts too (they're met out on the walls, not just at camp)
+    const lavaNear = (s: { x: number; y: number }, r: number) => w.dinos.some((d) => isLavaFolk(d) && d.health > 0 && Math.hypot(d.x - s.x, d.y - s.y) < r);
+    const lavaAny = w.colony.scorpions.some((s) => s.built >= 1 && lavaNear(s, 700));
+    if (!w.colony.dronesPowered(w) && (threat || lavaAny || w.dinos.some((d) => this.hostile(w, d)) || w.rivals.threatNear(w, w.camp.x, w.camp.y, 900))) {
       for (const s of w.colony.scorpions) {
         // (a knocked-out one needs builders, not a crew)
         if (s.built < 1 || s.crew || !scorpionWorks(w, s)) continue;
-        if (!w.dinos.some((d) => this.hostile(w, d) && Math.hypot(d.x - s.x, d.y - s.y) < 700)
+        const lavaHere = lavaNear(s, 700);
+        if (!lavaHere && !w.dinos.some((d) => this.hostile(w, d) && Math.hypot(d.x - s.x, d.y - s.y) < 700)
           && !w.rivals.threatNear(w, s.x, s.y, 700)
           && !w.dragons.list.some((d) => d.state !== "leave" && Math.hypot(d.x - s.x, d.y - s.y) < 850)) continue;
         let best: Human | null = null;
@@ -897,9 +905,21 @@ export class Tribe {
             best = h;
           }
         }
+        // against a Lava Monster with no guard free: any free hand mans the water cannon
+        if (!best && lavaHere) {
+          for (const h of w.humans) {
+            if (h.child || h.stranger || h.taskId || h.state === "operate" || h.state === "down" || h.wagon || h.chariot || h.riding || h.aloft || h.hp < 0.5) continue;
+            if (w.colony.scorpions.some((o) => o.crew === h.id)) continue;
+            const d = Math.hypot(h.x - s.x, h.y - s.y);
+            if (d < bd) {
+              bd = d;
+              best = h;
+            }
+          }
+        }
         if (best) {
           s.crew = best.id;
-          say(best, "To the Scorpion!");
+          say(best, lavaHere ? "Water cannon! To the Scorpion!" : "To the Scorpion!");
           best.think = 0;
         }
       }
@@ -1002,6 +1022,12 @@ export class Tribe {
 
   /** A Scorpion bolt: heavy, fast, extra nasty to dragons. */
   fireBolt(w: World, x: number, y: number, z: number, t: Target, dmg: number, speed: number, big: number, glow = false) {
+    // a bolt just melts in a Lava Monster: the Scorpion turns water cannon and soaks it instead (lavaFolk.ts)
+    const lava = t.dragon ? null : w.dinoById(t.id);
+    if (lava && isLavaFolk(lava)) {
+      scorpionWaterJet(w, x, y, z, lava, glow ? 1.25 : 1);
+      return;
+    }
     const dist = Math.hypot(t.x - x, t.y - y);
     const flight = Math.max(0.15, dist / speed);
     const tx = t.x + t.vx * flight;
@@ -1495,7 +1521,8 @@ export class Tribe {
     if (w.civ.polygonAge) {
       let n = 0;
       for (const wl of this.walls) {
-        if (wl.kind === "polygon" || wl.upTo === "polygon") continue;
+        // (lava-stone walls are better still: they stay as they are)
+        if (wl.kind === "polygon" || wl.upTo === "polygon" || wl.kind === "lava" || wl.upTo === "lava") continue;
         if (wl.built < 1 && wl.hp <= 0) wl.kind = "polygon";
         else {
           wl.upgrade = true;
@@ -1883,7 +1910,7 @@ export class Tribe {
 
   serialize() {
     return {
-      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0) | (wl.mega ? 4 : 0) | (wl.pulley ? 8 : 0), wl.id] as const),
+      walls: this.walls.map((wl) => [wl.tx, wl.ty, KIND_CODE[wl.kind], Math.round(wl.hp), Math.round(wl.built * 100) / 100, wl.upgrade ? (wl.upTo === "lava" ? 3 : wl.upTo === "polygon" ? 2 : 1) : 0, wl.part === "gate" ? 1 : wl.part === "stairs" ? 2 : 0, wl.open ? 1 : 0, (wl.bone ? 1 : 0) | (wl.boneUp ? 2 : 0) | (wl.mega ? 4 : 0) | (wl.pulley ? 8 : 0), wl.id] as const),
       farms: this.farms.map((f) => [Math.round(f.x), Math.round(f.y), Math.round(f.growth * 100) / 100, f.planted ? 1 : 0, f.crop ?? "wheat"] as const),
       towers: this.towers.map((t) => [Math.round(t.x), Math.round(t.y), t.stage, Math.max(0, t.have), t.tx, t.ty, Math.round(t.hp), (t.stone ? 1 : 0) | (t.up ? 2 : 0), t.id] as const),
       level: this.level,
@@ -1903,10 +1930,10 @@ export class Tribe {
     for (const row of d.walls) {
       const [tx, ty, stone, hp, built, up] = row;
       const part: WallPart = row[6] === 1 ? "gate" : row[6] === 2 ? "stairs" : "wall";
-      const kind: WallKind = stone === 2 ? "polygon" : stone ? "stone" : "palisade";
+      const kind: WallKind = stone === 3 ? "lava" : stone === 2 ? "polygon" : stone ? "stone" : "palisade";
       const id = (row as readonly number[])[9] ?? w.nextId();
       w.reserveIds(id);
-      const wl: Wall = { id, tx, ty, kind, part, open: row[7] === undefined ? true : !!row[7], auto: true, hp, built, have: 0, upgrade: !!up, ...(up === 2 ? { upTo: "polygon" as WallKind } : {}) };
+      const wl: Wall = { id, tx, ty, kind, part, open: row[7] === undefined ? true : !!row[7], auto: true, hp, built, have: 0, upgrade: !!up, ...(up === 3 ? { upTo: "lava" as WallKind } : up === 2 ? { upTo: "polygon" as WallKind } : {}) };
       const bone = row[8] ?? 0;
       if (bone & 1) wl.bone = true;
       if (bone & 2) wl.boneUp = true;
@@ -1947,12 +1974,25 @@ export class Tribe {
 /* ======================================================================= */
 
 /** A spear/arrow/bolt struck a dinosaur. */
-const KIND_CODE: Record<WallKind, number> = { palisade: 0, stone: 1, polygon: 2 };
+const KIND_CODE: Record<WallKind, number> = { palisade: 0, stone: 1, polygon: 2, lava: 3 };
 
 export function hitDino(w: World, d: Dino, dmg: number, fx: number, fy: number) {
+  // in the zoo, or netted and bound: nothing more happens to it (zoo.ts)
+  if (d.caged || d.netted) return;
+  // a Lava Monster: weapons + teeth just melt in it (a scratch at most). Water, snow + ice are what beat it (lavaFolk.ts)
+  if (isLavaFolk(d)) {
+    d.health -= (dmg * 0.12) / dinoMaxHp(d);
+    w.particles.burst(P.Ember, d.x, d.y, 4, 40, { z: sizeOf(d) * 0.5, size: 3, max: 0.6, color: "#ffb03a" });
+    w.sfx("thunk", d.x, d.y, 0.7);
+    if (d.health <= 0) downDino(w, d);
+    else lavaHit(w, d, fx, fy);
+    return;
+  }
   const def = sp(d.species);
   const bulk = Math.max(0.6, Math.pow(sizeOf(d) / 60, 1.1));
   d.health -= dmg / dinoMaxHp(d);
+  // a capture party's quarry is netted once it's worn down, never killed
+  if (captureHit(w, d)) return;
   // big animals barely flinch
   d.fear = Math.min(1, d.fear + 0.35 / Math.max(1, bulk));
   w.particles.burst(P.Star, d.x, d.y, 2, 30, { z: sizeOf(d) * 0.5, size: 5, max: 0.6 });
@@ -1999,8 +2039,16 @@ function nearestHuman(w: World, x: number, y: number, r: number): Human | null {
 
 /** Down: stars, a dust poof, and a body to harvest for meat, hide, bone + teeth. */
 export function downDino(w: World, d: Dino) {
+  // a Lava Monster leaves no body: it cools into obsidian (lavaFolk.ts)
+  if (isLavaFolk(d)) {
+    coolDown(w, d);
+    w.discover("hunted", d.x, d.y);
+    w.removeDino(d);
+    return;
+  }
   const def = sp(d.species);
-  const body = makeCarcass(w, d);
+  // killed while it burned (fire, lava): charred remains
+  const body = makeCarcass(w, d, { burnt: d.burn < 4 || (d.aflame ?? 0) > 0 });
   body.claimed = 0;
   w.particles.burst(P.Poof, d.x, d.y, 10, 60, { size: 12, max: 0.9, color: "rgba(235,228,210,0.95)" });
   w.particles.burst(P.Star, d.x, d.y, 3, 30, { z: 10, size: 6, max: 1 });
@@ -2013,6 +2061,7 @@ export function downDino(w: World, d: Dino) {
     w.toast("🏹", `The hunters got a ${def.nick}! Harvest it for meat, hide and bones.`, d.x, d.y, FACTS.foodChain);
   }
   w.discover("hunted", d.x, d.y);
+  beastDown(w, d);
   w.removeDino(d);
 }
 
@@ -2210,10 +2259,10 @@ export function roleThink(w: World, h: Human): boolean {
       return true;
     }
     case "farmer": {
-      const f = tribe.farms.find((f) => !f.planted && (f.crop === "grape" ? vinesReady(w, f) : camp.stock.grass > 0)) ?? tribe.farms.find((f) => f.planted && f.growth >= 1);
+      const f = tribe.farms.find((f) => !f.planted && (f.crop === "grape" ? vinesReady(w, f) : berryCropVariant(f.crop ?? "wheat") >= 0 ? camp.stock.berries > 0 : camp.stock.grass > 0)) ?? tribe.farms.find((f) => f.planted && f.growth >= 1);
       if (!f) {
         // vineyards waiting for cuttings: bring berries
-        if (tribe.farms.some((f) => !f.planted && f.crop === "grape") && camp.stock.berries < 2) {
+        if ((tribe.farms.some((f) => !f.planted && f.crop === "grape") && camp.stock.berries < 2) || (tribe.farms.some((f) => !f.planted && berryCropVariant(f.crop ?? "wheat") >= 0) && camp.stock.berries < 1)) {
           const src = sourceFor(w, h, "berries");
           if (src) {
             h.task = "berries";
@@ -2224,7 +2273,7 @@ export function roleThink(w: World, h: Human): boolean {
         }
         // nothing to sow or reap: press the grapes into wine
         if (wineThink(w, h)) return true;
-        if (tribe.farms.some((f) => !f.planted)) {
+        if (tribe.farms.some((f) => !f.planted && f.crop !== "grape" && berryCropVariant(f.crop ?? "wheat") < 0)) {
           // need seed grass
           const src = sourceFor(w, h, "grass");
           if (src) {
@@ -2484,6 +2533,8 @@ function haulSomething(w: World, h: Human) {
 export function roleAct(w: World, h: Human, dt: number): boolean {
   const tribe = w.tribe;
   h.cd = Math.max(0, h.cd - dt);
+  // fighting a Lava Monster: buckets of water + snowballs, from out of its reach (lavaFolk.ts)
+  if (lavaFightAct(w, h, dt)) return true;
   if (h.riding && h.cd <= 0) saddleVolley(w, h);
   if (h.riding && w.flags.has("rallyDinos") && tribe.roleOf(h) === "guard" && h.cd <= 0) {
     const target = w.dinoById(h.targetId) ?? w.rivals.byId(h.targetId);
@@ -2623,18 +2674,21 @@ export function roleAct(w: World, h: Human, dt: number): boolean {
         return true;
       }
       if (h.stateT > 2.5) {
-        if (!f.planted && w.camp.stock.grass > 0) {
-          w.camp.stock.grass--;
+        const berry = berryCropVariant(f.crop ?? "wheat") >= 0;
+        const seedStock = berry ? "berries" : "grass";
+        if (!f.planted && w.camp.stock[seedStock] > 0) {
+          w.camp.stock[seedStock]--;
           f.planted = true;
           f.growth = 0;
           say(h, "Grow, grow!");
         } else if (f.planted && f.growth >= 1) {
-          f.planted = false;
+          f.planted = berry;
           f.growth = 0;
           const crop = f.crop ?? "wheat";
-          if (crop === "flower") w.camp.stock.berries += 2;
+          if (berry) w.camp.stock.berries += 5;
+          else if (crop === "flower") w.camp.stock.berries += 2;
           else w.camp.stock.crop += 4;
-          say(h, crop === "flower" ? "Flowers! +berries" : `${crop === "barley" ? "Barley" : "Wheat"}! +4`);
+          say(h, berry ? "Ripe berries! +5" : crop === "flower" ? "Flowers! +berries" : `${crop === "barley" ? "Barley" : "Wheat"}! +4`);
           w.discover("harvest", f.x, f.y);
         }
         go(h, "idle", h.x, h.y);
