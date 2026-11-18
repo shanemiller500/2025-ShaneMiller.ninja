@@ -72,7 +72,7 @@ export function rangeHomes(w: World, k: number, high = true): { x: number; y: nu
   const r = RANGES[k];
   const t = w.terrain;
   if (!w.nav.version) w.nav.sync(w);
-  if (r && t.gen >= 5) {
+  if (r && t.hasRanges) {
     const [lo, hi] = high ? [0.45, 0.8] : [0.25, 0.6];
     // walk the crest; on each stretch, take the best open slope spot either side
     for (let s = 0; s < r.pts.length - 1; s++) {
@@ -188,7 +188,7 @@ export class MountainLife {
   }
 
   update(w: World, dt: number) {
-    if (!this.enabled || w.terrain.gen < 5) return;
+    if (!this.enabled || !w.terrain.hasRanges) return;
     this.passT -= dt;
     if (this.passT <= 0) {
       this.passT = 2;

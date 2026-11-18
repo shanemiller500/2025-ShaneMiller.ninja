@@ -76,7 +76,7 @@ import { PeaksFx, drawHangTree } from "./snowArt";
 import { shieldView } from "../sim/dragonShield";
 import { drawMonk, drawMonkPlace } from "./monkArt";
 import { strength } from "../sim/breath";
-import { REGION, isSandTile } from "../sim/terrain";
+import { LM, RANGES, REGION, isSandTile } from "../sim/terrain";
 import { PRIOS } from "../sim/priority";
 import { siteKey } from "../sim/build";
 import type { SandTent, SandTribe } from "../sim/sandFolk";
@@ -251,7 +251,7 @@ export class Renderer {
   private insideCount = new Map<number, number>();
   private insideFrame = -1;
   /** mountain peaks to draw: where, how big, how snowy (0..1), a shape seed */
-  private peaks: { x: number; y: number; s: number; snow: number; v: number }[] = [];
+  private peaks: { x: number; y: number; s: number; snow: number; v: number; tint: PeakTint; wide: number }[] = [];
   private cloudX = 0;
   private cloudY = 0;
   private warmLight = radial("rgba(255,170,90,1)", "rgba(255,150,70,0)");
@@ -359,19 +359,97 @@ export class Renderer {
   private buildPeaks() {
     this.peaks = [];
     const t = this.world.terrain;
+    const nearVolcano = (x: number, y: number) => Math.hypot(x - LM.volcano.x, y - LM.volcano.y) < 15 || Math.hypot(x - LM.volcano2.x, y - LM.volcano2.y) < 15;
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
         const i = y * MAP_W + x;
         if (t.tiles[i] !== T.Mountain) continue;
         const e = t.elev[i];
-        // the Great Peaks crowd together (the bigger the higher); the old ridges stay sparse
-        if (hash2(x, y, t.seed + 31) > (e > 0.8 ? 0.22 : 0.16)) continue;
+        // the Great Peaks crowd together (the bigger the higher); the old ridges stay sparse; a range's own
+        // crest gets its big peaks below, so only a few small ones fill in between
+        if (hash2(x, y, t.seed + 31) > (t.range[i] ? 0.07 : e > 0.8 ? 0.22 : 0.16)) continue;
         if (Math.hypot(x - 128, y - 20) < 4) continue;
-        const s = (0.7 + hash2(x, y, t.seed + 32) * 0.7) * (e > 0.8 ? 1 + (e - 0.8) * 3 : 1);
+        const s = (0.7 + hash2(x, y, t.seed + 32) * 0.7) * (e > 0.8 ? 1 + (e - 0.8) * 3 : 1) * (e > 0.8 && !t.range[i] ? 1.45 : 1);
         const snow = e > 0.84 ? 1 : e > 0.6 ? 0.55 + (e - 0.6) * 1.8 : y < 8 ? 0.5 : 0.3;
-        this.peaks.push({ x: x * TILE + TILE / 2, y: y * TILE + TILE, s, snow: Math.min(1, snow), v: hash2(y, x, t.seed + 33) });
+        this.peaks.push({ x: x * TILE + TILE / 2, y: y * TILE + TILE, s, snow: Math.min(1, snow), v: hash2(y, x, t.seed + 33), tint: this.peakTint(i), wide: 1 });
       }
     }
+    // big towering peaks along every mountain range's crest, with lower shoulders either side
+    if (t.hasRanges) {
+      for (let k = 0; k < RANGES.length; k++) {
+        const r = RANGES[k];
+        const tint: PeakTint = r.snowy ? "grey" : r.dry ? "red" : "moss";
+        for (let sg = 0; sg < r.pts.length - 1; sg++) {
+          const [ax, ay] = r.pts[sg];
+          const [bx, by] = r.pts[sg + 1];
+          const len = Math.hypot(bx - ax, by - ay);
+          const nx = -(by - ay) / len;
+          const ny = (bx - ax) / len;
+          for (let d = 0; d < len; d += 3.4) {
+            const f = d / len;
+            const h = hash2(Math.round(ax + d), Math.round(ay + d), t.seed + 41 + k);
+            const cx = ax + (bx - ax) * f + (h - 0.5) * 1.6;
+            const cy = ay + (by - ay) * f;
+            const foot = this.crestTile(cx, cy, k + 1, 1.6);
+            if (foot < 0) continue;
+            const fx = foot % MAP_W;
+            const fy = Math.floor(foot / MAP_W);
+            const s = r.snowy ? 2.4 + h * 1.0 : 1.9 + h * 0.8;
+            this.peaks.push({ x: fx * TILE + TILE / 2, y: fy * TILE + TILE, s, snow: r.snowy ? 0.8 + h * 0.2 : 0, v: hash2(fy, fx, t.seed + 43), tint, wide: 0.72 });
+            // shoulders: lower peaks either side, on the high ground
+            for (const side of [-1, 1]) {
+              const sx = Math.round(cx + nx * side * 2.6);
+              const sy = Math.round(cy + ny * side * 2.6);
+              if (sx < 0 || sy < 0 || sx >= MAP_W || sy >= MAP_H) continue;
+              const j = sy * MAP_W + sx;
+              const tt = t.tiles[j] as T;
+              if (t.range[j] !== k + 1 || t.rangeHeight[j] < 0.62 || (tt !== T.Mountain && tt !== T.Rock && tt !== T.Snow && tt !== T.Cliff)) continue;
+              if (hash2(sx, sy, t.seed + 47) < 0.35) continue;
+              this.peaks.push({ x: sx * TILE + TILE / 2, y: sy * TILE + TILE, s: 1.3 + h * 0.5, snow: r.snowy ? 0.55 : 0, v: hash2(sy, sx, t.seed + 49), tint, wide: 0.8 });
+            }
+          }
+        }
+      }
+    }
+    // the northern mountains: a wall of big snowy peaks along the whole top of the map (two rows deep)
+    for (let x = 1; x < MAP_W - 1; x += 3.6) {
+      const tx = Math.round(x + (hash2(Math.round(x), 3, t.seed + 51) - 0.5) * 1.4);
+      const line = Math.floor(t.mountLine(tx));
+      for (const [row, scale] of [[1, 1], [4, 0.85]] as const) {
+        const ty = line - row;
+        if (ty < 1) continue;
+        if (nearVolcano(tx, ty) || t.tiles[ty * MAP_W + tx] !== T.Mountain) continue;
+        const h = hash2(tx, ty, t.seed + 53);
+        this.peaks.push({ x: tx * TILE + TILE / 2, y: ty * TILE + TILE, s: (2.1 + h * 1.2) * scale, snow: 0.65 + h * 0.35, v: hash2(ty, tx, t.seed + 55), tint: this.peakTint(ty * MAP_W + tx), wide: 0.8 });
+      }
+    }
+  }
+
+  /** The stone a peak is made of: a rocky range's own (mossy brown-grey, or Redrock's red), else grey. */
+  private peakTint(i: number): PeakTint {
+    const t = this.world.terrain;
+    const r = t.range[i] ? RANGES[t.range[i] - 1] : null;
+    return !r || r.snowy ? "grey" : r.dry ? "red" : "moss";
+  }
+
+  /** The crest (mountain) tile of range `ri` nearest (cx, cy) within `r` tiles, or -1 (a pass, a gorge, kept clear). */
+  private crestTile(cx: number, cy: number, ri: number, r: number) {
+    const t = this.world.terrain;
+    let best = -1;
+    let bd = Infinity;
+    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
+      for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+        if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
+        const i = y * MAP_W + x;
+        if (t.tiles[i] !== T.Mountain || t.range[i] !== ri) continue;
+        const d = Math.hypot(x - cx, y - cy);
+        if (d < bd) {
+          bd = d;
+          best = i;
+        }
+      }
+    }
+    return best;
   }
 
   /**
@@ -997,6 +1075,8 @@ export class Renderer {
     // plants: live-painted (leaves stirring one by one) only when a few fill the screen; otherwise cached images
     const plantsLive = z >= 1.5 && this.visPlants.length < 70;
     const plantRes = plantSpriteRes(z * d, Q.id === "low" ? 1 : Q.id === "medium" ? 2 : 3);
+    // in winter every peak wears snow (the rocky ranges' too)
+    const winterPeaks = seasonAt(w.day).def.id === "winter";
     // (small on screen, a plant's sway can't be seen: it's stamped without turning the canvas)
     const plantStill = z * d < 0.9;
     atlasBeginFrame(4);
@@ -1553,13 +1633,15 @@ export class Renderer {
         }
         case K_PEAK: {
           const p = this.peaks[it.i];
-          // peaks never change: each look (size, snow line, shape) is painted once into the atlas and stamped
-          const sq = Math.max(0.5, Math.round(p.s * 6) / 6);
-          const nq = Math.round(p.snow * 4) / 4;
+          // peaks never change: each look (size, snow line, shape, stone) is painted once into the atlas and stamped
+          // (the big ones in coarser steps, so there aren't too many looks to keep)
+          const sq = p.s > 1.6 ? Math.round(p.s * 2) / 2 : Math.max(0.5, Math.round(p.s * 6) / 6);
+          // winter: snow down every peak, even the rocky ranges' (they thaw again in spring)
+          const nq = Math.round((winterPeaks ? Math.max(p.snow, 0.7) : p.snow) * 4) / 4;
           const vq = Math.round(p.v * 5) / 5;
-          const pw = 46 * sq;
+          const pw = 46 * sq * p.wide;
           const ph = 70 * sq * (0.85 + vq * 0.35);
-          if (!atlasStamp(c, `peak|${sq.toFixed(2)}|${nq}|${vq}`, plantRes, pw * 1.22 + 4, ph + 6, pw * 0.26 + 6, p.x, p.y, (a) => this.drawPeak(a, 0, 0, sq, nq, vq), true)) this.drawPeak(c, p.x, p.y, sq, nq, vq);
+          if (!atlasStamp(c, `peak|${sq.toFixed(2)}|${nq}|${vq}|${p.tint}|${p.wide}`, plantRes, pw * 1.22 + 4, ph + 6, pw * 0.26 + 6, p.x, p.y, (a) => this.drawPeak(a, 0, 0, sq, nq, vq, p.tint, p.wide), true)) this.drawPeak(c, p.x, p.y, sq, nq, vq, p.tint, p.wide);
           break;
         }
         case K_FIRE: {
@@ -2698,8 +2780,9 @@ export class Renderer {
    * rock bands, scree at the foot, and a snowcap that comes further down the higher the mountain. `v` varies
    * the shape so no two peaks match. Painted once per look into the atlas (see the K_PEAK case).
    */
-  private drawPeak(c: CanvasRenderingContext2D, x: number, y: number, s: number, snow = 0.3, v = 0.5) {
-    const W = 46 * s;
+  private drawPeak(c: CanvasRenderingContext2D, x: number, y: number, s: number, snow = 0.3, v = 0.5, tint: PeakTint = "grey", wide = 1) {
+    const W = 46 * s * wide;
+    const pal = PEAK_STONE[tint];
     const H = 70 * s * (0.85 + v * 0.35);
     const tipX = x - W * (0.25 - v * 0.3);
     const tipY = y - H;
@@ -2720,18 +2803,18 @@ export class Renderer {
     c.fill();
     // the shaded east face (the whole body): cool and dark, warmer toward the foot
     const dark = c.createLinearGradient(x, tipY, x, y);
-    dark.addColorStop(0, "#5b566a");
-    dark.addColorStop(0.6, "#514a4c");
-    dark.addColorStop(1, "#4a4138");
+    dark.addColorStop(0, pal.dark[0]);
+    dark.addColorStop(0.6, pal.dark[1]);
+    dark.addColorStop(1, pal.dark[2]);
     c.fillStyle = dark;
     outline();
     c.fill();
     // the sunlit west face, down to the ridge line
     const ridgeX = tipX + W * 0.08;
     const lit = c.createLinearGradient(x - W, y, tipX, tipY);
-    lit.addColorStop(0, "#857a6b");
-    lit.addColorStop(0.55, "#a09686");
-    lit.addColorStop(1, "#b9b1a6");
+    lit.addColorStop(0, pal.lit[0]);
+    lit.addColorStop(0.55, pal.lit[1]);
+    lit.addColorStop(1, pal.lit[2]);
     c.fillStyle = lit;
     c.beginPath();
     c.moveTo(left[0][0], left[0][1]);
@@ -4689,3 +4772,13 @@ export function paintPortrait(cv: HTMLCanvasElement, speciesId: Parameters<typeo
   drawDino(ctx, def, L, 1, pose);
   ctx.restore();
 }
+
+/** What a peak is made of (render: drawPeak). */
+type PeakTint = "grey" | "red" | "moss";
+const PEAK_STONE: Record<PeakTint, { dark: [string, string, string]; lit: [string, string, string] }> = {
+  grey: { dark: ["#5b566a", "#514a4c", "#4a4138"], lit: ["#857a6b", "#a09686", "#b9b1a6"] },
+  // the Redrock Range: red sandstone
+  red: { dark: ["#6a3f35", "#5d3329", "#4e2b22"], lit: ["#a8643f", "#c27a4e", "#d99a6a"] },
+  // Mossback Ridge: mossy brown-grey stone
+  moss: { dark: ["#4f5248", "#454639", "#3d3a2f"], lit: ["#7d7a62", "#958f74", "#ada68a"] },
+};

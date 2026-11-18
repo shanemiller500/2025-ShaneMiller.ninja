@@ -7,12 +7,15 @@
 /*  tiny marker remembers that, so the next visit loads it from there. */
 /*  Cloud saves (Firebase) sit on top of this, debounced, in useCloud. */
 /* ------------------------------------------------------------------ */
+import { raiseRanges } from "../sim/raiseRanges";
 import { safeSetItem } from "@/utils/storageJanitor";
 import { SAVE_VERSION, World, type SaveData } from "../sim/world";
 import type { QualityId } from "../render/quality";
 
 const WORLD_KEY = "dinosors:world:v1";
 const IDB_MARK = "dinosors:world:idb";
+/** A copy of an older world from just before the mountain ranges were raised into it. */
+export const PRE_MOUNTAINS_KEY = "dinosors:world:pre-mountains";
 const SETTINGS_KEY = "dinosors:settings:v1";
 const DB = "dinosors";
 const STORE = "saves";
@@ -37,7 +40,17 @@ export function readSave(raw: string | null): World | null {
   if (!raw) return null;
   const data = JSON.parse(raw) as SaveData;
   if (!data || typeof data.v !== "number" || data.v < 1 || data.v > SAVE_VERSION) return null;
-  return World.deserialize(data);
+  const w = World.deserialize(data);
+  // an older world gets the mountain ranges raised into it, once, round everything it has built (raiseRanges.ts);
+  // the world as it was is kept as a backup first, if there's room
+  if (raiseRanges(w) > 0) {
+    try {
+      localStorage.setItem(PRE_MOUNTAINS_KEY, raw);
+    } catch {
+      // no room for a second copy: the rise itself never touches anything that was built
+    }
+  }
+  return w;
 }
 
 /** Set when the local save existed but couldn't be read (it's kept safe as a rescue slot). */

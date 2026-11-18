@@ -11,6 +11,7 @@ import { compoundOf, keepHeight, wingUnits } from "../sim/castleCompound";
 import { CONDITION_LABEL, OBSIDIAN_SHIELD, obsidianProblem, obsidianStatus, orderObsidian, orderObsidianAll, scorpionCondition, scorpionCost, scorpionMaxHp, scorpionWorks } from "../sim/scorpionArmor";
 import { connectWalls, joinMessage } from "../sim/wallLinks";
 import { startSweep } from "../sim/territory";
+import { raiseRanges } from "../sim/raiseRanges";
 import { chariotParked, chariotTier, chariotUpgradeProblem, nextChariotTier, orderChariotUpgrade } from "../sim/chariotTiers";
 import { HEALER_TIERS, upgradeHealer, wardView } from "../sim/hospital";
 import { zooView } from "../sim/zoo";
@@ -3579,6 +3580,8 @@ export class Engine {
       const data = JSON.parse(json) as SaveData;
       if (!data || typeof data.v !== "number" || data.v < 1 || data.v > SAVE_VERSION) return false;
       const w = World.deserialize(data);
+      // an older world gets the mountain ranges raised into it, once (raiseRanges.ts)
+      raiseRanges(w);
       this.world = w;
       this.renderer.setWorld(w);
       this.selectedId = 0;

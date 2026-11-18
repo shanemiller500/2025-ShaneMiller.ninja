@@ -206,3 +206,41 @@ test('the first time one of ours goes over a pass, it is announced by name', () 
   w.mountainLife.update(w, 2.1);
   assert.ok(!w.events.some((e) => e.type === 'toast' && e.text.includes(p.name)), 'only the first time');
 });
+
+test('an older saved world gets the ranges raised once, round everything it has built, and keeps them on reload', () => {
+  const { raiseRanges } = require(path.join(root, 'sim', 'raiseRanges.ts'));
+  const { BUILDINGS } = require(path.join(root, 'data', 'colony.ts'));
+  for (const gen of [2, 4]) {
+    const w0 = new World(5150 + gen, true, gen);
+    for (let t = 0; t < 120; t += DT) { w0.update(DT); w0.events.length = 0; }
+    // some of our own things right where ranges run: a wall on Mossback's line, a storage on Sentinel's
+    w0.tribe.addWall(w0, 39, 66, 'stone', 'wall');
+    w0.colony.addBuilding(w0, 'storage', 151 * TILE, 70 * TILE);
+    const w = World.deserialize(JSON.parse(JSON.stringify(w0.serialize())));
+    const before = w.terrain.tiles.slice();
+    const ours = [];
+    for (const b of w.colony.buildings) { const d = BUILDINGS[b.kind]; for (let y = b.ty - 2; y < b.ty + (d?.h ?? 2) + 2; y++) for (let x = b.tx - 2; x < b.tx + (d?.w ?? 2) + 2; x++) ours.push(y * MAP_W + x); }
+    for (const wl of w.tribe.walls) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) ours.push((wl.ty + dy) * MAP_W + wl.tx + dx);
+    for (const s of w.shelters) ours.push(Math.floor(s.y / TILE) * MAP_W + Math.floor(s.x / TILE));
+    const rose = raiseRanges(w);
+    assert.ok(rose > 1500, `gen ${gen}: the ranges rose (${rose} tiles)`);
+    assert.ok(w.terrain.hasRanges && w.terrain.raised);
+    assert.equal(ours.filter((i) => w.terrain.tiles[i] !== before[i]).length, 0, 'nothing we built (or the ground round it) was touched');
+    assert.ok(w.humans.every((h) => (h.z ?? 0) > 4 || ter.isWalkTile(w.terrain.tileAt(h.x, h.y))), 'nobody left standing in rock');
+    assert.ok(w.events.some((e) => e.type === 'toast' && e.text.includes('mountains have risen')), 'announced');
+    assert.equal(raiseRanges(w), 0, 'only ever once');
+    // saved + loaded: the same ground, the same heights, and not raised again
+    const back = World.deserialize(JSON.parse(JSON.stringify(w.serialize())));
+    assert.equal(raiseRanges(back), 0);
+    assert.ok(back.terrain.raised);
+    for (let i = 0; i < back.terrain.tiles.length; i++) {
+      if (back.terrain.tiles[i] !== w.terrain.tiles[i] || back.terrain.range[i] !== w.terrain.range[i] || Math.abs(back.terrain.elev[i] - w.terrain.elev[i]) > 1e-3) assert.fail(`tile ${i} differs after reload`);
+    }
+    // and the mountain animals come to live on them
+    back.mountainLife.enabled = true;
+    back.wildlife.enabled = true;
+    back.elapsed = Math.max(back.elapsed, 150);
+    back.mountainLife.update(back, 6);
+    assert.ok(back.dinos.some(ml.isMountainBeast), 'mountain animals arrive');
+  }
+});

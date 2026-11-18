@@ -34,8 +34,15 @@ function mixFor(t: T, tx: number, ty: number, region = 0): { density: number; mi
   // the desert: a scrubby bush here and there; palms + ferns crowd round an oasis
   if (region === REGION.oasis && (t === T.Grass || t === T.Jungle || t === T.Sand)) return { density: 0.3, mix: [["palm", 0.55], ["fern", 0.25], ["fruit", 0.1], ["reeds", 0.1]] };
   if (region === REGION.desert) return t === T.Sand || t === T.Dune || t === T.Rock ? { density: t === T.Dune ? 0.006 : 0.014, mix: [["bush", 0.7], ["cycad", 0.3]] } : null;
-  // the Great Peaks: pines, a few hardy bushes on the meadows, nothing on the snow
-  if (region === REGION.peaks) {
+  // the Red Rock Range + Mossback (rocky): pines in the forest belt, scrub on the bare slopes
+  if (region === REGION.crags) {
+    if (t === T.Forest) return { density: 0.26, mix: [["conifer", 0.78], ["broadleaf", 0.12], ["bush", 0.06], ["fern", 0.04]] };
+    if (t === T.Grass) return { density: 0.04, mix: [["conifer", 0.4], ["bush", 0.45], ["cycad", 0.15]] };
+    if (t === T.Rock || t === T.Sand) return { density: 0.012, mix: [["bush", 0.6], ["conifer", 0.4]] };
+    return null;
+  }
+  // the Great Peaks + the snow-capped ranges: pines, a few hardy bushes on the meadows, nothing on the snow
+  if (region === REGION.peaks || region === REGION.alps) {
     if (t === T.Forest) return { density: 0.24, mix: [["conifer", 0.85], ["bush", 0.1], ["fern", 0.05]] };
     if (t === T.Grass) return { density: 0.03, mix: [["conifer", 0.45], ["bush", 0.45], ["fern", 0.1]] };
     if (t === T.Rock) return { density: 0.008, mix: [["conifer", 1]] };

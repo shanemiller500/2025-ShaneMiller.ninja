@@ -399,6 +399,15 @@ export class Terrain {
 
   /** which map generator shaped this world (see TERRAIN_GEN) */
   readonly gen: number;
+  /** an older world that has had the mountain ranges raised into it (raiseRanges.ts): saved */
+  raised = false;
+  /** in a raised world: the tiles the ranges were kept off (the settlement, camps, roads…), so they can be rebuilt on load */
+  rangeKeep: Uint8Array | null = null;
+
+  /** Does this world have the mountain ranges (generation 5, or raised into an older one)? */
+  get hasRanges() {
+    return this.gen >= 5 || this.raised;
+  }
 
   constructor(seed: number, gen = 1) {
     this.seed = seed;
@@ -592,21 +601,28 @@ export class Terrain {
     this.rangeHeight[i] = e;
     if (this.region[i] !== REGION.peaks) this.region[i] = def.snowy ? REGION.alps : REGION.crags;
     h += e * 1.4;
-    const lift = (v: number) => (this.elev[i] = Math.max(this.elev[i], v));
+    // how high up it is depends only on the range's shape (never on what the tile is now), so a raised world's
+    // heights come back exactly on load (raiseRanges.ts)
+    const crest = r.crest || e > 0.8;
+    const high = crest
+      ? (def.snowy ? Math.min(0.95, 0.62 + e * 0.33) : 0.5)
+      : r.trail
+        ? (def.snowy ? Math.min(0.58, e) : Math.min(0.42, e * 0.6))
+        : def.snowy
+          ? (e > 0.64 ? Math.max(0.62, e) : e > 0.5 ? e : e * 0.85)
+          : Math.min(0.5, e * 0.62);
+    this.elev[i] = Math.max(this.elev[i], high);
     if (keep) return { t, h };
-    if (r.crest || e > 0.8) {
+    if (crest) {
       t = T.Mountain;
-      lift(def.snowy ? Math.min(0.95, 0.62 + e * 0.33) : 0.5);
     } else if (r.trail) {
       // a worn trail over the saddle
       t = T.Dirt;
-      lift(def.snowy ? Math.min(0.58, e) : Math.min(0.42, e * 0.6));
     } else if (def.snowy) {
       if (e > 0.64) t = n2 < 0.6 ? T.Snow : T.Rock;
       else if (e > 0.5) t = n2 < 0.4 ? T.Grass : T.Rock;
       else if (e > 0.3) t = n2 > 0.76 ? T.Grass : T.Forest;
       else t = n2 > 0.45 ? T.Forest : T.Grass;
-      lift(e > 0.64 ? Math.max(0.62, e) : e > 0.5 ? e : e * 0.85);
     } else {
       // (rocky ranges stay under the snow line: no snow on them but winter's)
       if (e > 0.6) t = T.Rock;
@@ -614,9 +630,56 @@ export class Terrain {
       else if (def.dry) t = e > 0.28 ? (n2 > 0.55 ? T.Rock : T.Grass) : n2 > 0.6 ? T.Sand : T.Grass;
       else if (e > 0.28) t = n2 > 0.78 ? T.Grass : T.Forest;
       else t = n2 > 0.5 ? T.Forest : T.Grass;
-      lift(Math.min(0.5, e * 0.62));
     }
     return { t, h };
+  }
+
+  /**
+   * Raise the mountain ranges into a world that already exists (raiseRanges.ts), or, on loading such a world,
+   * rebuild their heights (`write` false: the tiles themselves come back in its saved edits). `keep` marks the
+   * tiles no range may touch. Returns how many tiles changed.
+   */
+  applyRanges(keep: Uint8Array | null, write: boolean) {
+    const s = this.seed;
+    let changed = 0;
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) {
+        const i = y * MAP_W + x;
+        if (keep && keep[i]) continue;
+        const t0 = this.tiles[i] as T;
+        let t = t0;
+        if (this.salt[i]) {
+          // out into the shallows as sea stacks (no wading round the end); the deep stays deep
+          const re = rangeElev(x, y, s, this.gen);
+          if (re.k < 0 || re.e <= 0.72 || (t0 !== T.Shallow && t0 !== T.Mountain)) continue;
+          this.range[i] = re.k + 1;
+          this.rangeHeight[i] = re.e;
+          this.elev[i] = Math.max(this.elev[i], RANGES[re.k].snowy ? Math.min(0.95, 0.62 + re.e * 0.33) : 0.5);
+          t = T.Mountain;
+        } else {
+          const r = this.rangeTile(x, y, i, t0, this.height[i], fbm(x / 5, y / 5, s + 7));
+          if (!this.range[i]) continue;
+          this.height[i] = r.h;
+          t = r.t;
+        }
+        if (write && t !== t0) {
+          this.setTile(x, y, t);
+          changed++;
+        }
+      }
+    }
+    if (write) {
+      const before = this.tiles.slice();
+      this.carveRanges();
+      for (let i = 0; i < this.tiles.length; i++) {
+        if (this.tiles[i] === before[i]) continue;
+        const t = this.tiles[i] as T;
+        this.tiles[i] = before[i];
+        this.setTile(i % MAP_W, Math.floor(i / MAP_W), t);
+        changed++;
+      }
+    }
+    return changed;
   }
 
   /** Cliff runs on a range's steepest slopes (never in a pass), after the main pass. */

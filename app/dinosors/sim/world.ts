@@ -1341,6 +1341,7 @@ export class World {
       // Inventing restarts after load; return its reserved supplies to the saved stock.
       camp: { stock: this.camp.savedStock(), learned: Array.from(this.camp.learned), goal: this.camp.goal, manualGoal: this.camp.manualGoal },
       edits: this.terrain.edits(),
+      ...(this.terrain.raised ? { ranges: { keep: rleEncode(this.terrain.rangeKeep) } } : {}),
       discoveries: Array.from(this.discoveries),
       unlocked: Array.from(this.unlocked),
       seen: Array.from(this.seen),
@@ -1364,6 +1365,13 @@ export class World {
     const grew = oldW !== MAP_W;
     const re = (i: number) => (grew ? (i % oldW) + Math.floor(i / oldW) * MAP_W : i);
     w.terrain.applyEdits((data.edits ?? []).map(([i, t]) => [re(i), t] as [number, number]));
+    // an older world the mountain ranges were raised into: their heights (the tiles came back in the edits)
+    const ranges = (data as { ranges?: { keep: number[] } }).ranges;
+    if (ranges && w.terrain.gen < 5) {
+      w.terrain.raised = true;
+      w.terrain.rangeKeep = rleDecode(ranges.keep, MAP_W * MAP_H);
+      w.terrain.applyRanges(w.terrain.rangeKeep, false);
+    }
     w.fire.initFuel(w);
     w.snow.init(w);
     w.idCounter = Math.max(data.idCounter ?? 1, 1);
@@ -1597,3 +1605,23 @@ export function daylightAt(h: number) {
 }
 
 export { WORLD_H, WORLD_W };
+
+/** Run-length code a 0/1 tile mask: [start, length, start, length, …] of its 1s. */
+export function rleEncode(m: Uint8Array | null): number[] {
+  const out: number[] = [];
+  if (!m) return out;
+  for (let i = 0; i < m.length; i++) {
+    if (!m[i]) continue;
+    let j = i;
+    while (j < m.length && m[j]) j++;
+    out.push(i, j - i);
+    i = j;
+  }
+  return out;
+}
+
+export function rleDecode(runs: number[], n: number): Uint8Array {
+  const m = new Uint8Array(n);
+  for (let k = 0; k + 1 < runs.length; k += 2) m.fill(1, runs[k], Math.min(n, runs[k] + runs[k + 1]));
+  return m;
+}
