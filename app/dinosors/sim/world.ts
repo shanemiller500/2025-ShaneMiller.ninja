@@ -67,6 +67,7 @@ import { zooTick } from "./zoo";
 import { lavaBallsTick, lavaTick } from "./lavaFolk";
 import { riverLifeTick } from "./riverBeasts";
 import { beaverTick } from "./beavers";
+import { grazeTick } from "./grazing";
 import { updatePacks } from "./packs";
 import { updateDeepBuilds } from "./deepBuild";
 import { updateDeepLife } from "./deepLife";
@@ -961,6 +962,7 @@ export class World {
     lavaBallsTick(this, dt);
     riverLifeTick(this, dt);
     beaverTick(this, dt);
+    grazeTick(this, dt);
     zooTick(this);
     if (this.clearJobs.length && Math.floor(this.elapsed) !== Math.floor(this.elapsed - dt)) clearJobsTick(this);
     // strays on our ground get seen off (territory.ts)

@@ -34,6 +34,7 @@ import { zooAct, zooThink } from "./zoo";
 import { coolDown, isLavaFolk, lavaAct, lavaThink } from "./lavaFolk";
 import { isRiverBeast, riverAct, riverThink } from "./riverBeasts";
 import { beaverAct, beaverThink, isBeaver } from "./beavers";
+import { browse, cropGrass, grazeable, guardKill, hasBerries } from "./grazing";
 
 /** States that run to completion; `think` leaves them alone. */
 const LOCKED = new Set<DinoState>([
@@ -337,14 +338,22 @@ function thinkWalker(w: World, d: Dino, def: SpeciesDef) {
         return;
       }
       const reach = def.reach ?? "low";
-      const plant = w.plantHash.nearest(d.x, d.y, def.sense * 1.4, (p) => canReach(p, reach));
+      // berries first (a bush still with berries on it close by), else whatever leaves are in reach (grazing.ts)
+      // (the low grazers spend about half their meals on the grass itself, cropping it short)
+      const berries = w.plantHash.nearest(d.x, d.y, def.sense * 0.9, (p) => hasBerries(p) && canReach(p, reach));
+      if (!berries && reach !== "high" && (d.id + Math.floor(w.elapsed / 45)) % 2 === 0 && grazeable(w, d, d.x, d.y)) {
+        d.targetId = 0;
+        setState(d, "eat", d.x, d.y);
+        return;
+      }
+      const plant = berries ?? w.plantHash.nearest(d.x, d.y, def.sense * 1.4, (p) => canReach(p, reach));
       if (plant) {
         d.targetId = plant.id;
         setState(d, "seekFood", plant.x + (d.x < plant.x ? -1 : 1) * sizeOf(d) * 0.35, plant.y + 4);
         return;
       }
-      const t = w.terrain.tileAt(d.x, d.y);
-      if (t === T.Grass || t === T.Jungle || t === T.Swamp) {
+      // graze the grass (goats + bighorns the thin mountain turf too)
+      if (grazeable(w, d, d.x, d.y)) {
         d.targetId = 0;
         setState(d, "eat", d.x, d.y);
         return;
@@ -749,6 +758,8 @@ function actWalker(w: World, d: Dino, def: SpeciesDef, dt: number) {
       if (item && item.kind === "carcass") {
         // eating a body: bones and all (what's left of a big one waits for the next meat-eater by)
         item.claimed = d.id;
+        // anything smaller that comes sniffing round gets chased off (grazing.ts)
+        guardKill(w, d, item);
         const done = eatCarcass(item, dt * 0.5 * (def.size / 80 + 0.5));
         if (done) {
           // all gone: not a scrap or a bone left
@@ -767,6 +778,7 @@ function actWalker(w: World, d: Dino, def: SpeciesDef, dt: number) {
       } else if (item) {
         if (item.kind === "fruit" || item.kind === "berries") swallowSeed(w, d, { kind: item.kind === "berries" ? "bush" : "fruit", variant: item.seed?.variant ?? d.id % 4, x: item.x, y: item.y });
         item.claimed = d.id;
+        if (item.kind === "meat") guardKill(w, d, item);
         const bite = dt * 0.18 * (def.size / 80 + 0.5);
         item.amount -= bite / Math.max(0.6, item.amount > 1 ? 1 : 1);
         d.hunger = Math.max(0, d.hunger - dt * 0.12);
@@ -781,14 +793,17 @@ function actWalker(w: World, d: Dino, def: SpeciesDef, dt: number) {
       } else if (plant) {
         swallowSeed(w, d, plant);
         consumePlant(w, plant, dt * 0.07);
+        // berries off first, then it trims the plant down (grazing.ts)
+        browse(w, d, plant, dt, d.stateT);
         plant.shake = Math.max(plant.shake, 0.4);
         d.hunger = Math.max(0, d.hunger - dt * 0.06);
         if (w.rng() < dt * 2 && w.inView(plant.x, plant.y, 40)) w.particles.spawn(P.Leaf, plant.x + (w.rng() - 0.5) * 20, plant.y, { z: TALL.has(plant.kind) ? 50 : 10, vz: -5, vx: (w.rng() - 0.5) * 20, size: 3, max: 1.5, color: "#6f9a3c" });
         if (w.rng() < dt * 0.4) w.sfx("munch", d.x, d.y, 0.4);
         if (plant.food < 0.08 || d.hunger < 0.05) setState(d, "idle");
       } else {
-        // grazing ground cover
+        // grazing ground cover: it crops the grass short where it eats (grazing.ts)
         d.hunger = Math.max(0, d.hunger - dt * 0.035);
+        if (def.diet === "herbivore" && Math.floor(d.stateT * 0.9) !== Math.floor((d.stateT - dt) * 0.9)) cropGrass(w, d);
         if (d.stateT > 7 || d.hunger < 0.1) setState(d, "idle");
       }
       if (d.stateT > 30) setState(d, "idle");

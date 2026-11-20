@@ -152,7 +152,7 @@ test('Lava-stone walls: built from lava stone, the toughest wall, and the polygo
   const tx = Math.floor(w.camp.x / TILE) + 12, ty = Math.floor(w.camp.y / TILE) + 8;
   const wl = w.tribe.addWall(w, tx, ty, 'lava', 'wall');
   assert.ok(wl, 'planned');
-  assert.deepEqual(build.wallNeed(wl), { r: 'lavaStone', n: 2 });
+  assert.deepEqual(build.wallNeed(wl), { r: 'lavaStone', n: 1 });
   wl.built = 1;
   wl.hp = build.wallMaxHp(wl);
   assert.ok(build.WALL_HP.lava > build.WALL_HP.polygon, 'tougher than polygon stone');

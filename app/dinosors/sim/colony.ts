@@ -17,7 +17,7 @@ import { TECH } from "../data/facts";
 import { hitDino } from "./tribe";
 import { sp } from "../data/species";
 import { sizeOf } from "./dinos";
-import { shelterTiles, tileOf, TOWER_Z, WALK_Z } from "./nav";
+import { LAVA_WALK_LIFT, shelterTiles, tileOf, TOWER_Z, WALK_Z } from "./nav";
 import { P } from "./particles";
 import { hash2 } from "./rng";
 import { LM, RANGES, REGION, isWalkTile, isWaterTile } from "./terrain";
@@ -299,8 +299,9 @@ export class Colony {
   }
 
   /** Height the bolt leaves from. */
-  scorpionZ(s: Scorpion) {
-    return s.mount === "tower" ? TOWER_Z + 10 : s.mount === "wall" ? WALK_Z + 8 : 12;
+  scorpionZ(s: Scorpion, w?: World) {
+    const lava = s.mount === "wall" && w?.tribe.wallAt(s.tx, s.ty)?.kind === "lava";
+    return s.mount === "tower" ? TOWER_Z + 10 : s.mount === "wall" ? WALK_Z + 8 + (lava ? LAVA_WALK_LIFT : 0) : 12;
   }
 
   /** Where the operator stands (and on which level). */
@@ -1119,19 +1120,19 @@ export class Colony {
       s.aim += angleTo(s.aim, want) * Math.min(1, dt * (s.drone ? 4 : 2.6));
       if (crew) crew.dir = ax > crew.x ? 1 : -1;
       if (s.reload <= 0 && Math.abs(angleTo(s.aim, want)) < 0.12) {
-        w.tribe.fireBolt(w, s.x + Math.cos(s.aim) * 16, s.y + Math.sin(s.aim) * 8, this.scorpionZ(s), target, tier.dmg * (siege ? 1.4 : 1) * (s.drone ? 1.15 : 1), tier.speed * (s.drone ? 1.4 : 1), tier.big, !!s.drone);
+        w.tribe.fireBolt(w, s.x + Math.cos(s.aim) * 16, s.y + Math.sin(s.aim) * 8, this.scorpionZ(s, w), target, tier.dmg * (siege ? 1.4 : 1) * (s.drone ? 1.15 : 1), tier.speed * (s.drone ? 1.4 : 1), tier.big, !!s.drone);
         s.reload = tier.reload * (siege ? 0.75 : 1) * (s.drone ? 0.8 : 1);
         s.kick = 1;
         if (s.drone) {
           w.civ.energy = Math.max(0, w.civ.energy - DRONE_SHOT);
           w.sfx("zap", s.x, s.y, 0.7, 0.8);
-          w.particles.burst(P.Spark, s.x, s.y, 5, 50, { z: this.scorpionZ(s) + 8, vz: 40, g: 120, size: 2, max: 0.4, color: "#9feaff" });
+          w.particles.burst(P.Spark, s.x, s.y, 5, 50, { z: this.scorpionZ(s, w) + 8, vz: 40, g: 120, size: 2, max: 0.4, color: "#9feaff" });
           if (!w.flags.has("droneShot")) {
             w.flags.add("droneShot");
             w.toast("🎯", "Powered Scorpions! The energy towers aim and fire them on their own — nobody has to crew them now.", s.x, s.y);
           }
         } else w.sfx("twang", s.x, s.y, 0.9, 0.55);
-        w.particles.burst(P.Dust, s.x, s.y, 3, 30, { z: this.scorpionZ(s), size: 5, max: 0.4, color: "rgba(220,210,190,0.6)" });
+        w.particles.burst(P.Dust, s.x, s.y, 3, 30, { z: this.scorpionZ(s, w), size: 5, max: 0.4, color: "rgba(220,210,190,0.6)" });
         if (!w.flags.has("scorpionShot")) {
           w.flags.add("scorpionShot");
           w.discover("scorpion", s.x, s.y);

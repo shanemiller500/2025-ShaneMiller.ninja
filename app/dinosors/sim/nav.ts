@@ -38,6 +38,8 @@ const F_PULLEY = 256; // short, preferred route for a carrier at a ladder
 
 /** how high people stand on walls / towers (px) */
 export const WALK_Z = 28;
+/** A lava-stone wall stands taller (render: WALL_H.lava): its walkway is this much higher. */
+export const LAVA_WALK_LIFT = 12;
 export const TOWER_Z = 46;
 
 const SQ2 = Math.SQRT2;

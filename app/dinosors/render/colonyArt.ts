@@ -31,7 +31,7 @@ export interface WallLook {
   run?: { n: number; vertical: boolean };
 }
 
-const WALL_H = { palisade: 30, stone: 26, polygon: 30, lava: 32 } as const;
+const WALL_H = { palisade: 30, stone: 26, polygon: 30, lava: 40 } as const;
 /** black volcanic lava stone (the toughest walls) */
 const LAVA_STONE = "#3d3542";
 
@@ -113,7 +113,7 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
   const W = (mask & 8) !== 0;
   const seed = wl.tx * 31 + wl.ty * 17;
   const broken = look.hpFrac < 0.45;
-  const tw = stone ? 16 : 12; // wall thickness
+  const tw = lavaW ? 20 : stone ? 16 : 12; // wall thickness (lava stone: a broad wall with a real walkway)
   const cy = -T / 2; // ground centre line of the tile
   // footprint pieces: [x0, x1, y0, y1] on the ground
   const into = (bit: number) => ((look.tower ?? 0) & bit ? 6 : 0);
@@ -197,10 +197,41 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
     c.fillStyle = lavaW ? "#4c4352" : poly ? "#d3cbbd" : stone ? "#c4bdb1" : "#9b7448";
     c.fillRect(x0, y0 - h, x1 - x0, y1 - y0);
   }
+  // lava stone: a paved walkway of big black flagstones, faint embers glowing in the joints
+  if (lavaW) {
+    for (const [x0, x1, y0, y1] of pieces) {
+      const vertical = y1 - y0 > x1 - x0;
+      c.fillStyle = "rgba(255,255,255,0.05)";
+      c.fillRect(x0 + 2, y0 - h + 2, x1 - x0 - 4, y1 - y0 - 4);
+      c.strokeStyle = "rgba(20,16,24,0.55)";
+      c.lineWidth = 0.9;
+      c.beginPath();
+      if (vertical) for (let yy = y0 + 6; yy < y1; yy += 6) {
+        c.moveTo(x0 + 2, yy - h);
+        c.lineTo(x1 - 2, yy - h);
+      }
+      else for (let xx = x0 + 6; xx < x1; xx += 6) {
+        c.moveTo(xx, y0 - h + 2);
+        c.lineTo(xx, y1 - h - 2);
+      }
+      // a running joint down the middle of the path
+      if (vertical) {
+        c.moveTo((x0 + x1) / 2, y0 - h + 1);
+        c.lineTo((x0 + x1) / 2, y1 - h - 1);
+      } else {
+        c.moveTo(x0 + 1, (y0 + y1) / 2 - h);
+        c.lineTo(x1 - 1, (y0 + y1) / 2 - h);
+      }
+      c.stroke();
+      c.strokeStyle = `rgba(255,120,40,${(0.12 + 0.06 * Math.sin(look.t * 1.3 + seed)).toFixed(3)})`;
+      c.lineWidth = 0.6;
+      c.stroke();
+    }
+  }
   // planks / flagstones + edge lines
   c.strokeStyle = stone ? "rgba(90,82,72,0.35)" : "rgba(60,40,22,0.5)";
   c.lineWidth = 0.8;
-  for (const [x0, x1, y0, y1] of pieces) {
+  for (const [x0, x1, y0, y1] of (lavaW ? [] : pieces)) {
     const vertical = y1 - y0 > x1 - x0;
     c.beginPath();
     if (vertical) for (let yy = y0 + 4; yy < y1; yy += 4) {
@@ -217,7 +248,16 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
   const edge = lavaW ? "#5f5566" : stone ? "#d8d2c6" : "#7a5230";
   c.fillStyle = edge;
   const bump = (x: number, y: number) => {
-    if (poly) {
+    if (lavaW) {
+      // a tall black merlon, lit along its top, with a slit glowing in it
+      c.fillStyle = "#2f2935";
+      c.fillRect(x - 2.6, y - 7, 5.2, 7);
+      c.fillStyle = "#6a5f72";
+      c.fillRect(x - 2.6, y - 7, 5.2, 1.2);
+      c.fillStyle = `rgba(255,140,60,${(0.55 + 0.2 * Math.sin(look.t * 2 + x * 0.3)).toFixed(3)})`;
+      c.fillRect(x - 0.5, y - 5.4, 1, 3.2);
+      c.fillStyle = edge;
+    } else if (poly) {
       // smooth, slightly rounded capstones
       c.beginPath();
       c.ellipse(x, y - 1.5, 2.6, 2, 0, Math.PI, 0);
@@ -232,12 +272,19 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
       c.fill();
     }
   };
-  const step = stone ? 6 : 5;
+  const step = lavaW ? 7 : stone ? 6 : 5;
   // north edges of E/W runs + centre (when nothing above)
   for (const [x0, x1, y0, , front] of pieces) {
     if (y0 === -T) continue;
     if (!front && !(x0 === -tw / 2 && !N)) continue;
     for (let xx = x0 + step / 2; xx < x1; xx += step) bump(xx, y0 - h);
+  }
+  // lava stone: a parapet along the front of the walkway too, so the guards walk between two rows of battlements
+  if (lavaW) {
+    for (const [x0, x1, , y1, front] of pieces) {
+      if (!front) continue;
+      for (let xx = x0 + step / 2; xx < x1; xx += step) bump(xx, y1 - h + 1);
+    }
   }
   // side edges of N/S runs
   if (N || S) {
@@ -274,7 +321,15 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
       c.save();
       c.translate(0, cy + tw / 2);
       drawGateDoors(c, stone, h, look.swing, look.t);
+      if (lavaW) lavaGateTrim(c, h, look.t, seed);
       c.restore();
+    } else if (lavaW) {
+      // a lava-stone hatch across the walkway: black iron-bound, an ember line round it
+      c.fillStyle = look.swing > 0.5 ? "rgba(20,14,18,0.75)" : "#2f2935";
+      c.fillRect(-tw / 2 + 2, cy - 10 - h, tw - 4, 20);
+      c.strokeStyle = "rgba(255,130,50,0.7)";
+      c.lineWidth = 1.1;
+      c.strokeRect(-tw / 2 + 2, cy - 10 - h, tw - 4, 20);
     } else {
       // gate in a north-south run: a hatch across the walkway
       c.fillStyle = look.swing > 0.5 ? "rgba(30,20,12,0.7)" : "#6b4a2a";
@@ -284,6 +339,8 @@ export function drawWall(c: CanvasRenderingContext2D, wl: Wall, look: WallLook) 
       c.strokeRect(-tw / 2 + 1, cy - 10 - h, tw - 2, 20);
     }
   }
+  // a lava lantern on every third piece: an obsidian post with an ember bowl that burns all night
+  if (lavaW && built >= 1 && wl.part === "wall" && (wl.tx * 7 + wl.ty * 13) % 3 === 0) lavaLantern(c, 0, cy - h, look.t, seed);
   if (look.hpFrac < 0.6 && stone) {
     c.strokeStyle = "rgba(30,25,20,0.75)";
     c.lineWidth = 1.2;
@@ -2429,4 +2486,67 @@ function drawZoo(c: CanvasRenderingContext2D, W: number, H: number, night: boole
   c.font = "bold 9px sans-serif";
   c.textAlign = "center";
   c.fillText("ZOO", x1 + 4, yBot - 33.5);
+}
+
+/** A lava-stone wall's lantern (render: drawWall): an obsidian post on the walkway, an iron bowl of embers + a flame. */
+function lavaLantern(c: CanvasRenderingContext2D, x: number, y: number, t: number, seed: number) {
+  // the post
+  c.fillStyle = "#231e28";
+  c.fillRect(x - 1.6, y - 13, 3.2, 13);
+  c.fillStyle = "#5c5266";
+  c.fillRect(x - 1.6, y - 13, 1, 13);
+  // the bowl
+  c.fillStyle = "#3a3440";
+  c.beginPath();
+  c.moveTo(x - 5, y - 14);
+  c.lineTo(x + 5, y - 14);
+  c.lineTo(x + 3, y - 11);
+  c.lineTo(x - 3, y - 11);
+  c.closePath();
+  c.fill();
+  // a soft glow, then the flame (two tongues that never burn evenly)
+  const f = 1 + Math.sin(t * 7.3 + seed) * 0.08 + Math.sin(t * 13.1 + seed * 1.7) * 0.05;
+  const g = c.createRadialGradient(x, y - 17, 0, x, y - 17, 13 * f);
+  g.addColorStop(0, "rgba(255,190,90,0.55)");
+  g.addColorStop(1, "rgba(255,120,40,0)");
+  c.fillStyle = g;
+  c.beginPath();
+  c.arc(x, y - 17, 13 * f, 0, Math.PI * 2);
+  c.fill();
+  for (const [col, hgt, wid] of [["#ff7a2a", 9, 3.6], ["#ffd36a", 6, 2]] as const) {
+    c.fillStyle = col;
+    c.beginPath();
+    c.moveTo(x - wid, y - 14);
+    c.quadraticCurveTo(x - wid * 0.6, y - 14 - hgt * 0.6 * f, x + Math.sin(t * 5 + seed) * 0.8, y - 14 - hgt * f);
+    c.quadraticCurveTo(x + wid * 0.6, y - 14 - hgt * 0.6 * f, x + wid, y - 14);
+    c.closePath();
+    c.fill();
+  }
+}
+
+/** A lava-stone gate's dressing (render: drawWall): a glowing arch over the doors + iron studs. */
+function lavaGateTrim(c: CanvasRenderingContext2D, h: number, t: number, seed: number) {
+  const W = 22;
+  const glow = 0.55 + 0.2 * Math.sin(t * 1.6 + seed);
+  c.strokeStyle = `rgba(255,130,50,${glow.toFixed(3)})`;
+  c.lineWidth = 1.4;
+  c.beginPath();
+  c.moveTo(-W / 2 - 1, -1);
+  c.lineTo(-W / 2 - 1, -h * 0.7);
+  c.quadraticCurveTo(0, -h * 0.98, W / 2 + 1, -h * 0.7);
+  c.lineTo(W / 2 + 1, -1);
+  c.stroke();
+  // a keystone with a glowing rune
+  c.fillStyle = "#2a2430";
+  c.fillRect(-3, -h * 0.9 - 3, 6, 6);
+  c.fillStyle = `rgba(255,170,70,${(glow + 0.2).toFixed(3)})`;
+  c.fillRect(-0.7, -h * 0.9 - 2, 1.4, 4);
+  c.fillRect(-2, -h * 0.9 - 0.7, 4, 1.4);
+  // iron studs on the doors
+  c.fillStyle = "#c9a24a";
+  for (const sx of [-7, -3, 3, 7]) for (const sy of [0.25, 0.45]) {
+    c.beginPath();
+    c.arc(sx, -h * sy, 0.9, 0, Math.PI * 2);
+    c.fill();
+  }
 }

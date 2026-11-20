@@ -28,7 +28,7 @@ import { addHuman, go, homeArea, moveHuman, say, sourceFor } from "./humans";
 import { P } from "./particles";
 import { pick } from "./rng";
 import { isWalkTile, isWaterTile } from "./terrain";
-import { TOWER_STAGES, WALL_HP, towerMaxHp, wallMaxHp, shelterDone } from "./build";
+import { TOWER_STAGES, WALL_HP, lavaUpgradable, towerMaxHp, wallMaxHp, shelterDone } from "./build";
 import { buildAct, buildThink } from "./tasks";
 import type { Target } from "./colony";
 import type { Brute } from "./types";
@@ -63,7 +63,7 @@ import { captureHit } from "./zoo";
 import { coolDown, isLavaFolk, lavaFightAct, lavaHit, scorpionWaterJet } from "./lavaFolk";
 import { updateZones, type Zone } from "./zones";
 import { raidGathering, raidPackSpots } from "./settlement";
-import { scorpionWorks } from "./scorpionArmor";
+import { scorpionMaxHp, scorpionWorks } from "./scorpionArmor";
 import { season } from "./seasons";
 import { DEFAULT_JOB_GUARD, bulkProtected, type JobGuard } from "./duties";
 
@@ -485,7 +485,8 @@ export class Tribe {
             }
           }
       }
-      if (group.length < 10 || group.some((g) => g.bone || g.boneUp)) continue;
+      // (a lava-stone wall ring has its own great black gates: no bone entrance)
+      if (group.length < 10 || group.some((g) => g.bone || g.boneUp || g.kind === "lava" || g.upTo === "lava")) continue;
       // the front (south-most) gate, best in a straight east-west stretch; else a straight bit of wall
       let best: Wall | null = null;
       let bs = -Infinity;
@@ -922,6 +923,37 @@ export class Tribe {
           say(best, lavaHere ? "Water cannon! To the Scorpion!" : "To the Scorpion!");
           best.think = 0;
         }
+      }
+    }
+  }
+
+  /**
+   * Every Scorpion on a finished lava-stone wall (or right beside one: a tower in the wall line) is
+   * fully upgraded for free: the top tier, the Obsidian Fire Shield, and mended to full.
+   */
+  private lavaScorpions(w: World) {
+    const top = SCORPION_TIERS.length;
+    for (const s of w.colony.scorpions) {
+      if (s.built < 1 || (s.tier >= top && s.obsidian && !s.up && !s.obsidianUp)) continue;
+      let lava = false;
+      for (let dy = -2; dy <= 2 && !lava; dy++) for (let dx = -2; dx <= 2 && !lava; dx++) {
+        const wl = this.wallAt(s.tx + dx, s.ty + dy);
+        if (wl && wl.kind === "lava" && wl.built >= 1) lava = true;
+      }
+      if (!lava) continue;
+      s.tier = top;
+      s.obsidian = true;
+      s.up = false;
+      s.obsidianUp = false;
+      s.have = {};
+      s.hp = scorpionMaxHp(s);
+      s.glint = 1;
+      w.colony.version++;
+      w.particles.burst(P.Spark, s.x, s.y, 16, 80, { z: 30, vz: 90, g: 160, size: 2.6, max: 0.9, color: "#ffb25a" });
+      w.sfx("build", s.x, s.y, 0.6, 0.8);
+      if (!w.flags.has("lavaScorpion")) {
+        w.flags.add("lavaScorpion");
+        w.toast("🎯", "A Scorpion on the lava-stone wall was fully upgraded for free: heavy siege bolts and the Obsidian Fire Shield!", s.x, s.y);
       }
     }
   }
@@ -1538,6 +1570,33 @@ export class Tribe {
           w.toast("🔷", "Polygon age! Builders will rebuild every wall in shaped polygon stone (fire can't touch it).", c.x, c.y);
         }
       }
+    }
+    // lava stone: once there's some to build with, every wall goes up in it, the next step past polygon stone
+    // (builders swap each piece over as the lava stone comes in; the old stone goes back on the stockpile)
+    if (!f.has("lavaWalls") && c.stock.lavaStone >= 1) {
+      f.add("lavaWalls");
+      w.toast("🌋", "Lava stone! Builders will rebuild every wall in it: taller black walls with glowing seams, a paved walkway for the guards on top and lanterns that burn all night. Every Scorpion on a lava-stone wall is fully upgraded for free. Keep the lava stone coming: send miners to the Lava Monster statues.", c.x, c.y);
+    }
+    if (f.has("lavaWalls")) {
+      let n = 0;
+      for (const wl of this.walls) {
+        if (!lavaUpgradable(wl)) continue;
+        // a half-delivered polygon upgrade: its shaped stone goes back on the stockpile
+        if (wl.upgrade && wl.upTo === "polygon" && wl.have > 0) c.stock.shaped += wl.have;
+        if (wl.built < 1 && wl.hp <= 0) {
+          wl.kind = "lava";
+          wl.bone = false;
+          wl.boneUp = false;
+        } else {
+          wl.upgrade = true;
+          wl.upTo = "lava";
+          wl.boneUp = false;
+        }
+        wl.have = 0;
+        n++;
+      }
+      if (n) this.version++;
+      this.lavaScorpions(w);
     }
     if (w.civ.polygonAge && !w.colony.buildings.some((b) => b.kind === "shapingYard")) {
       for (const radius of [160, 210, 260]) {
@@ -2374,7 +2433,9 @@ function guardPost(w: World, h: Human): { x: number; y: number; tower?: Tower; t
   // the rest line the walls, if there's a walkway (and stairs) to stand on
   const walk = tribe.walls.filter((x) => x.part === "wall" && x.built >= 1 && x.hp > 0);
   if (walk.length && tribe.walls.some((x) => x.part === "stairs" && x.built >= 1)) {
-    const base = tribe.raid ? Math.atan2(tribe.raid.fromY - c.y, tribe.raid.fromX - c.x) : (idx * 2.4) % (Math.PI * 2);
+    // on lava-stone walls the guards patrol: each walks its stretch of the walkway, back and forth (not in a raid)
+    const patrol = !tribe.raid && walk.some((x) => x.kind === "lava") ? Math.sin((w.elapsed + h.id * 37) / 9) * 0.16 : 0;
+    const base = (tribe.raid ? Math.atan2(tribe.raid.fromY - c.y, tribe.raid.fromX - c.x) : (idx * 2.4) % (Math.PI * 2)) + patrol;
     let best = walk[0];
     let bs = Infinity;
     for (const wl of walk) {

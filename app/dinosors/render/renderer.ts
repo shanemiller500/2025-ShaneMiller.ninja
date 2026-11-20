@@ -46,7 +46,7 @@ import { shelterTiles } from "../sim/nav";
 import { dragonStats } from "../sim/dragonKeep";
 import { shelterDone, stagesOf, towerMaxHp, wallMaxHp } from "../sim/build";
 import { BUILD_BY_ID } from "../game/tools";
-import { TOWER_Z } from "../sim/nav";
+import { LAVA_WALK_LIFT, TOWER_Z } from "../sim/nav";
 import { condition, CONDITION_LABEL } from "../sim/injury";
 import { drawBarricade, drawCarcass, drawSpikes, drawTannery, drawTotem } from "./boneArt";
 import { carcassStage, harvested } from "../sim/carcass";
@@ -69,6 +69,7 @@ import { beastDens, type Den } from "../sim/beasts";
 import { inWater } from "../sim/riverBeasts";
 import { beaverDams, beaverDiving, beaverHolding, DAM_STICKS, lodgeOf, type DamSite } from "../sim/beavers";
 import { drawDam, drawLodge } from "./beaverArt";
+import { grazedPatches } from "../sim/grazing";
 import { aflameNow, coneUnder, inTub, isRidingLava, lavaBalls, lavaSplashes, lavaStatues, lavaTub, THROW, type Statue } from "../sim/lavaFolk";
 import { drawLavaTub, paintLava } from "./lavaArt";
 import { drawNet, drawScorpionDen, drawYetiCave } from "./denArt";
@@ -546,6 +547,7 @@ export class Renderer {
     this.terrainR.draw(c, v.x0, v.y0, v.x1, v.y1, z, z * d);
     this.trailFx(c, v.x0, v.y0, v.x1, v.y1);
     this.groundFx(c, v.x0, v.y0, v.x1, v.y1, z);
+    this.grazeFx(c, v.x0, v.y0, v.x1, v.y1, z);
     this.waterLight(c, cx, cy, z, v);
     this.snowFx(c, v.x0, v.y0, v.x1, v.y1, z);
     // the peaks: footprints in the snow + spindrift (render/snowArt.ts)
@@ -1160,7 +1162,7 @@ export class Renderer {
         case K_SCORPION: {
           const s = col.scorpions[it.i];
           c.save();
-          const lift = s.mount === "tower" ? TOWER_Z : s.mount === "wall" ? 26 : 0;
+          const lift = s.mount === "tower" ? TOWER_Z : s.mount === "wall" ? 26 + (w.tribe.wallAt(s.tx, s.ty)?.kind === "lava" ? LAVA_WALK_LIFT : 0) : 0;
           c.translate(s.x, s.y - lift);
           drawScorpion(c, s);
           if (s.drone) {
@@ -3117,6 +3119,46 @@ export class Renderer {
     }
   }
 
+  /** Grass the grazers have cropped short (sim/grazing.ts): a paler, nibbled patch with stubble, growing back. */
+  private grazeFx(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number, z: number) {
+    const list = grazedPatches(this.world);
+    if (!list.length) return;
+    const fine = z > 0.6;
+    for (const g of list) {
+      if (g.x < vx0 - 40 || g.x > vx1 + 40 || g.y < vy0 - 40 || g.y > vy1 + 40) continue;
+      const a = (1 - g.age) * (1 - g.age);
+      if (a < 0.03) continue;
+      // the cropped turf: paler + yellower, a little earth showing in the middle
+      c.globalAlpha = a * 0.62;
+      c.fillStyle = "#bdb662";
+      c.beginPath();
+      c.ellipse(g.x, g.y, g.r, g.r * 0.55, 0, 0, Math.PI * 2);
+      c.fill();
+      c.globalAlpha = a * 0.35;
+      c.fillStyle = "#8a7448";
+      c.beginPath();
+      c.ellipse(g.x + Math.sin(g.seed) * 2, g.y, g.r * 0.5, g.r * 0.26, 0, 0, Math.PI * 2);
+      c.fill();
+      if (fine) {
+        // stubble: short bitten-off blades
+        c.globalAlpha = a * 0.7;
+        c.strokeStyle = "#6f8a36";
+        c.lineWidth = 1;
+        c.beginPath();
+        for (let k = 0; k < 9; k++) {
+          const ang = g.seed * 0.37 + k * 2.4;
+          const rr = g.r * (0.25 + ((g.seed * (k + 3)) % 7) / 10);
+          const x = g.x + Math.cos(ang) * rr;
+          const y = g.y + Math.sin(ang) * rr * 0.5;
+          c.moveTo(x, y);
+          c.lineTo(x + 0.6, y - 2.5);
+        }
+        c.stroke();
+      }
+    }
+    c.globalAlpha = 1;
+  }
+
   private groundFx(c: CanvasRenderingContext2D, vx0: number, vy0: number, vx1: number, vy1: number, z: number) {
     const w = this.world;
     const t = this.t;
@@ -3813,6 +3855,11 @@ export class Renderer {
     const flick = (seed: number) => 1 + Math.sin(t * 7.3 + seed) * 0.035 + Math.sin(t * 13.1 + seed * 1.7) * 0.025 + Math.sin(t * 31 + seed * 0.3) * 0.012;
     for (const f of w.campfires) if (f.lit) add(f.x, f.y - 10, 238 * flick(f.x), 0.95);
     for (const b of w.colony.buildings) if (b.kind === "boneTorch" && b.built >= 1 && b.hp > 0) add(b.x, b.y - 43, 132 * flick(b.id), 0.85);
+    // the lava-stone walls' lanterns (one every third piece: colonyArt lavaLantern)
+    for (const wl of w.tribe.walls) {
+      if (wl.kind !== "lava" || wl.built < 1 || wl.part !== "wall" || (wl.tx * 7 + wl.ty * 13) % 3 !== 0) continue;
+      add(wl.tx * TILE + TILE / 2, wl.ty * TILE + TILE / 2 - 40 - 17, 104 * flick(wl.id), 0.8);
+    }
     for (const [a, b] of w.trails.builtLinks(w)) {
       const count = Math.max(2, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 28));
       for (let i = 1; i < count; i++) {

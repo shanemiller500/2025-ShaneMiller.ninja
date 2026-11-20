@@ -37,7 +37,7 @@ import { partnerOf, riderCanFight, riderDefend, riderThink, riderType, trainBoos
 import { consumePlant, TALL } from "./plants";
 import { humanSeedTick, swallowSeed } from "./plantCycle";
 import { roleAct, roleThink } from "./tribe";
-import { goalKey, nodePos, tileOf, TOWER_Z, WALK_Z, type NavClass } from "./nav";
+import { goalKey, LAVA_WALK_LIFT, nodePos, tileOf, TOWER_Z, WALK_Z, type NavClass } from "./nav";
 import { shelterDone, stagesOf } from "./build";
 import { buildAct, buildThink, deliverToSite, dismount, douseThink, joinTask, leaveScorpion, taskCarrying, taskThink, yieldToUrgent } from "./tasks";
 import { healTick, hurtHuman, recover } from "./injury";
@@ -561,6 +561,8 @@ export function sourceFor(w: World, h: Human, r: Resource, cx = homeArea(w, h).x
     case "magnetite":
     case "crystal":
     case "meteorite":
+    // (a Lava Monster that set solid: its statue is a lava-stone deposit to dig: lavaFolk.ts)
+    case "lavaStone":
       return nearestNode(w, cx, cy, r, maxDistance);
     case "grass": {
       const t = w.terrain.findTile(cx, cy, maxDistance, (t) => t === T.Grass, w.rng, 60);
@@ -1674,7 +1676,8 @@ export function updateHuman(w: World, h: Human, dt: number) {
     const onTower = h.level === 1 && w.nav.isTower(tileOf(h.x, h.y));
     const mount = h.riding ? w.dinoById(h.riding) : null;
     // on its back (up in the air with it, on a flyer)
-    const z = mount ? saddleZ(mount) : h.level === 1 ? (onTower ? TOWER_Z : WALK_Z) : 0;
+    const lavaTop = h.level === 1 && !onTower && w.tribe.wallAt(Math.floor(h.x / TILE), Math.floor(h.y / TILE))?.kind === "lava";
+    const z = mount ? saddleZ(mount) : h.level === 1 ? (onTower ? TOWER_Z : WALK_Z + (lavaTop ? LAVA_WALK_LIFT : 0)) : 0;
     h.z += (z - h.z) * Math.min(1, dt * 10);
   }
   if (h.riding) {

@@ -41,7 +41,7 @@ export function upgradeStatus(w: World, kind: UpgradeKind = "all") {
   }
   if (kind === "all" || kind === "walls") for (const wall of w.tribe.walls) {
     if (wall.upgrade) queued++;
-    else if (wall.built >= 1 && wall.hp > 0 && (wall.kind === "palisade" && w.camp.learned.has("stonewall") || wall.kind === "stone" && w.civ.polygonAge)) available++;
+    else if (wall.built >= 1 && wall.hp > 0 && ((lavaWallsReady(w) && lavaUpgradable(wall)) || wall.kind === "palisade" && w.camp.learned.has("stonewall") || wall.kind === "stone" && w.civ.polygonAge)) available++;
   }
   if (kind === "all" || kind === "chariots") for (const c of w.colony.chariots) {
     if (c.up) queued++;
@@ -71,7 +71,7 @@ export function queueUpgrades(w: World, kind: UpgradeKind = "all") {
   }
   if (kind === "all" || kind === "walls") for (const wall of w.tribe.walls) {
     if (wall.built < 1 || wall.hp <= 0 || wall.upgrade) continue;
-    const next = wall.kind === "palisade" && w.camp.learned.has("stonewall") ? "stone" : wall.kind === "stone" && w.civ.polygonAge ? "polygon" : null;
+    const next = lavaWallsReady(w) && lavaUpgradable(wall) ? "lava" : wall.kind === "palisade" && w.camp.learned.has("stonewall") ? "stone" : wall.kind === "stone" && w.civ.polygonAge ? "polygon" : null;
     if (!next) continue;
     wall.upgrade = true;
     wall.upTo = next;
@@ -105,7 +105,12 @@ export const siteKey = (s: { kind: SiteKind; id: number }) => `${s.kind}:${s.id}
 /* ------------------------------ walls ------------------------------ */
 
 /** Lava-stone polygon walls: the toughest there is (fire-proof, and a Lava Monster can't burn through them). */
-export const WALL_HP = { palisade: 220, stone: 600, polygon: 900, lava: 1500 } as const;
+export const WALL_HP = { palisade: 220, stone: 600, polygon: 900, lava: 1600 } as const;
+
+/** Once the tribe has had lava stone, every wall is (re)built in it: the next step up from polygon stone. */
+export const lavaWallsReady = (w: World) => w.flags.has("lavaWalls");
+/** Is this piece one the lava-stone upgrade applies to? (not already lava, not the Megalodon water gates) */
+export const lavaUpgradable = (wl: Wall) => wl.kind !== "lava" && wl.upTo !== "lava" && !wl.mega;
 /** Dressed masonry (Old Ways) toughens every stone piece. Set by the civ system each tick. */
 export const STONE_MUL = { v: 1 };
 
@@ -127,7 +132,8 @@ export function wallNeed(wl: Wall): { r: Resource; n: number } {
   // a bone gate: planned fresh, or a finished piece being rebuilt as one
   if (wl.mega && !wl.upgrade) return MEGA_GATE;
   if (wl.boneUp || (wl.bone && wl.built < 1 && wl.hp <= 0 && !wl.upgrade)) return BONE_GATE;
-  if (wallTarget(wl) === "lava") return { r: "lavaStone", n: wl.part === "gate" ? 3 : 2 };
+  // (one block a piece, two for a gate: each Lava Monster's statue gives several)
+  if (wallTarget(wl) === "lava") return { r: "lavaStone", n: wl.part === "gate" ? 2 : 1 };
   if (wallTarget(wl) === "polygon") return { r: "shaped", n: wl.part === "gate" ? 3 : 2 };
   const stone = wl.kind === "stone" || wl.upgrade;
   if (wl.part === "gate") return stone ? { r: "stone", n: 3 } : { r: "wood", n: 2 };
@@ -490,10 +496,15 @@ export function work(w: World, s: Site, dt: number): "done" | "work" | "wait" {
         best.upTo = undefined;
         best.upgrade = false;
         best.built = 0.01;
+        // a lava-stone gate is a gate of black stone: the old bone dressing comes off
+        if (best.kind === "lava") {
+          best.bone = false;
+          best.boneUp = false;
+        }
       }
       const fast = (w.colony.kits.has("torch") ? 1.5 : 1) * (best.kind === "polygon" && w.colony.kits.has("precision") ? 1.5 : 1);
       best.built = Math.min(1, best.built + dt * 0.9 * fast * (best.kind === "polygon" ? 0.7 : 1));
-      chips(w, best.tx * TILE + 16, best.ty * TILE + 16, best.kind === "palisade" ? "#a07a4a" : best.kind === "polygon" ? "#b9b1a2" : "#9a958c", dt);
+      chips(w, best.tx * TILE + 16, best.ty * TILE + 16, best.kind === "palisade" ? "#a07a4a" : best.kind === "lava" ? "#3d3542" : best.kind === "polygon" ? "#b9b1a2" : "#9a958c", dt);
       if (best.built >= 1) {
         best.hp = wallMaxHp(best);
         best.have = 0;
